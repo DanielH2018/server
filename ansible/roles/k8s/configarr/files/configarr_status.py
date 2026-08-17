@@ -2,8 +2,8 @@
 
 Written for the Docker-era host cron, whose I/O shell was retired with the k3s migration; the
 caller is now configarr_health_logic.py, reading the last CronJob's exit code + logs. Kept
-stdlib-only and host-Python-floor clean (runs under the deploy host's /usr/bin/python3,
-currently 3.12 — see ansible/tests/test_host_scripts_py312.py), and unit-testable without a
+stdlib-only (runs via `uv run --no-project --python <pin>`, host_python_version in
+ansible/inventory/group_vars/all.yml), and unit-testable without a
 cluster: the caller hands it an exit code plus combined output and it returns the verdict.
 
 Why not trust the exit code alone: recyclarr's healthcheck watched only the supercronic PROCESS, so

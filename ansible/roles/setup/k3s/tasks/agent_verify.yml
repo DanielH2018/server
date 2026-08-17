@@ -59,9 +59,11 @@
   # landing there is the goal.
   when: not k3s_agent_longhorn_scheduling
   ansible.builtin.command:
+    # Single-quoted deliberately: the command module shlex-splits cmd, which would
+    # otherwise strip the quotes around the nodeID comparison and leave an invalid jsonpath.
     cmd: >-
       k3s kubectl -n longhorn-system get replicas.longhorn.io
-      -o jsonpath={.items[?(@.spec.nodeID=="{{ k3s_join_node }}")].metadata.name}
+      -o jsonpath='{.items[?(@.spec.nodeID=="{{ k3s_join_node }}")].metadata.name}'
   become: true
   register: k3s_join_longhorn_replicas
   changed_when: false

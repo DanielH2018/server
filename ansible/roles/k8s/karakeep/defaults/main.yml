@@ -1,15 +1,24 @@
 ---
-# Same images the Docker role runs, digests included — both copies stay identical through
-# coexistence so a difference in behaviour between them is never the image. The karakeep app and
-# the uv base keep their repo:tag@sha256 form so Renovate's docker manager still tracks them;
-# see the compose template for why the tag must be kept alongside the digest.
+# These were kept identical to the Docker role's images, digests included, so that during
+# coexistence a difference in behaviour between the two was never the image. Coexistence ended with
+# the migration (2026-08-14) and roles/containers/archive/karakeep is now a frozen historical copy,
+# so this file is the only live source — it is free to move ahead of the archived compose template
+# and has (see the tagger's 3.14 bump below). The karakeep app and the uv base keep their
+# repo:tag@sha256 form so Renovate's docker manager still tracks them; see the compose template for
+# why the tag must be kept alongside the digest.
 karakeep_k8s_image: ghcr.io/karakeep-app/karakeep:release@sha256:64d6a9bbf2d37b5c808cf06b5d87f1f1c7846fdd3844724145a9741aeb06fd31
 karakeep_k8s_chrome_image: zenika/alpine-chrome:124  # moved off gcr.io/zenika-hub/alpine-chrome
 # (2026-08-13): permanent Renovate lookup failure there ("Repository Problems" on the dashboard) —
 # switched to the Docker Hub mirror, verified to carry the same :124 tag before the swap. No digest
 # pin: a registry mirror doesn't guarantee an identical index digest to the gcr.io original.
 karakeep_k8s_meili_image: getmeili/meilisearch:v1.41.0
-karakeep_k8s_tagger_image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58
+# 3.12 -> 3.14 (2026-08-16): the last interpreter in the repo still off the 3.14 the workflows,
+# .python-version and every other python image pin. The digest moves WITH the tag — a runtime
+# resolves repo:tag@sha256 by digest, so bumping only the tag would read 3.14 here and still run
+# 3.12 in the pod. Index digest for python3.14-bookworm-slim, and all five pinned pip deps below
+# resolve wheel-only under 3.14 (bookworm-slim has no compiler, so an sdist fallback would
+# crashloop the boot-time `uv pip install`).
+karakeep_k8s_tagger_image: ghcr.io/astral-sh/uv:python3.14-bookworm-slim@sha256:7cf77f594be8042dab6daa9fe326f90962252268b4f120a7f5dccce4d947e6c1
 
 # Mirrors resources('2.0', '2048M', '0.10', '128M') in the compose template.
 karakeep_k8s_cpu_limit: "2"

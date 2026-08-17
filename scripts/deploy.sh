@@ -20,6 +20,12 @@
 #
 # Usage: scripts/deploy.sh --tags "<service>" [-e target=daniel-pi] [...]
 #   --check runs unlocked; a dry run writes nothing worth serializing.
+#   --dry-run validates the k8s manifests against the live API server without applying them
+#     (-e k8s_dry_run=true). Also unlocked, and for a stronger reason than --check: it mutates
+#     nothing at all, on the cluster or on the staging tree. See k8s_dry_run in
+#     inventory/group_vars/all.yml, including the 19 roles it refuses to cover.
+#   --list-services prints every valid --tags value and exits.
+#   --skip-tag-check deploys a tag this wrapper does not recognise.
 
 set -u
 
@@ -32,11 +38,85 @@ LOCK_BUSY=75
 repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root" || exit 1
 
+# Ansible exits 0 on a tag that matches nothing, so a typo'd service name deploys
+# nothing and reports success -- see scripts/deploy_tags.py for why the play behaves
+# that way. Catch it here, before the lock is taken and before --check, since a dry run
+# against a nonexistent tag is just as misleading. --skip-tag-check bypasses, and is
+# stripped so it never reaches ansible-playbook.
+args=()
+tags=()
+next_is_tags=0
+skip_tag_check=0
+dry_run=0
+
+for arg in "$@"; do
+    if [[ "$next_is_tags" == 1 ]]; then
+        next_is_tags=0
+        tags+=("$arg")
+        args+=("$arg")
+        continue
+    fi
+    case "$arg" in
+        --skip-tag-check)
+            skip_tag_check=1
+            ;;
+        --dry-run)
+            # Translated, not passed through: ansible-playbook has no --dry-run of its own
+            # (--check is the Ansible-level one, and it is a different mode entirely).
+            dry_run=1
+            args+=(-e k8s_dry_run=true)
+            ;;
+        --list-services)
+            exec uv run python scripts/deploy_tags.py list
+            ;;
+        --tags | -t)
+            next_is_tags=1
+            args+=("$arg")
+            ;;
+        --tags=*)
+            tags+=("${arg#--tags=}")
+            args+=("$arg")
+            ;;
+        *)
+            args+=("$arg")
+            ;;
+    esac
+done
+
+if [[ "$skip_tag_check" == 0 && ${#tags[@]} -gt 0 ]]; then
+    # Ansible accepts comma-separated tags in one argument (--tags "a,b"), so split
+    # each argument before checking. Done with an explicit IFS swap around the
+    # expansion rather than a prefix assignment on `read`, whose effect on a
+    # herestring expansion is not worth relying on.
+    split_tags=()
+    old_ifs=$IFS
+    for tag_arg in "${tags[@]}"; do
+        IFS=','
+        # shellcheck disable=SC2086  # unquoted on purpose: this IS the comma split
+        for tag in $tag_arg; do
+            split_tags+=("$tag")
+        done
+        IFS=$old_ifs
+    done
+    if ! uv run python scripts/deploy_tags.py validate "${split_tags[@]}"; then
+        exit 2
+    fi
+fi
+
+set -- "${args[@]}"
+
 for arg in "$@"; do
     if [[ "$arg" == "--check" ]]; then
         exec uv run ansible-playbook ansible/deploy.yml "$@"
     fi
 done
+
+# Same reasoning as --check, and a stronger case for it: a k8s dry run renders to a temp dir it
+# then deletes and applies with --dry-run=server, so it writes neither the cluster nor the
+# staging tree. Nothing for the lock to serialize against.
+if [[ "$dry_run" == 1 ]]; then
+    exec uv run ansible-playbook ansible/deploy.yml "$@"
+fi
 
 flock -w "$LOCK_WAIT" -E "$LOCK_BUSY" "$LOCK" uv run ansible-playbook ansible/deploy.yml "$@"
 status=$?

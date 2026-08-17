@@ -71,6 +71,15 @@ gitops_deploy_k8s_autodeploy_denylist:
   - radarr
   - jellyfin
   - zigbee2mqtt
+  # Same class, added 2026-08-16 when the pilot list was cleared: all three are Recreate + RWO
+  # Longhorn, identical in shape to their denylisted siblings above, and were eligible only
+  # because the slice-1 pilot happened to name neither. qbittorrent is the sharpest of the three
+  # — its WireGuard sidecar's kill-switch lives in the pod netns and outlives the container that
+  # owns it, so a failed image swap does not merely crashloop, it deadlocks the pod behind a
+  # fence nothing in the rollout gate can see (9h / 107 restarts, 2026-08-16).
+  - qbittorrent
+  - bazarr
+  - tdarr
   # dependency edges — this deployer models no intra-tick ordering. registry is the image-supply
   # path for n8n, n8n-runners, homelab-mcp, ical-proxy, nut, pi-peer-backup and code-server
   # (homelab-mcp pulls with imagePullPolicy: Always); mosquitto is the broker for zigbee2mqtt
@@ -87,6 +96,9 @@ gitops_deploy_k8s_autodeploy_denylist:
   - scrutiny
   - karakeep
   - n8n
+  # livesync is a CouchDB instance (Recreate + RWO) — a database, in the same class as the
+  # pinned influxdb above. Added 2026-08-16 with the pilot clearing.
+  - livesync
   # nothing for `rollout status` to gate — CronJob / Job / volume / DaemonSet
   - configarr
   - pi-peer-backup
@@ -109,8 +121,12 @@ gitops_deploy_k8s_autodeploy_denylist:
   - janitorr
   - nut
   - terraria
+  # valheim renders no readinessProbe at all — the same shape as terraria directly above, and
+  # missed for the same reason the two below were (added 2026-08-16 with the pilot clearing).
+  - valheim
   # games
   - terraria-stats
+  - valheim-stats
 
 # Wall-clock cap for one `ansible-playbook` invocation on the k8s path, in seconds. Sized as
 # (max rollout wait + stabilise soak) x 2 so a forward rollout AND its rollback redeploy both fit

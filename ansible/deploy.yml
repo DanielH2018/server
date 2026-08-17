@@ -146,6 +146,32 @@
         containers_list: "{{ containers_list_unfiltered | filter_by_platform('k8s') }}"
       tags: always
 
+    # k8s_dry_run suppresses mutation inside roles/k8s/manifests, which is where 35 of the 54
+    # k8s roles do all of theirs. The other 19 also mutate from their OWN tasks — sidecar
+    # ConfigMaps built with `kubectl create`, netpol-probe Jobs deleted and recreated, `exec -i`
+    # piping config into a live pod, image builds pushed to the registry, seed-volume scaling
+    # Deployments to zero. Dry-running one of those half-applies: the manifest apply is
+    # suppressed while the side-car mutation fires anyway, which is worse than either doing it
+    # or not. Refuse instead, and name what to do about it.
+    - name: Refuse a dry run that includes a role dry-run cannot cover
+      ansible.builtin.assert:
+        that: _deploy_dry_run_unsupported_hit | length == 0
+        fail_msg: >-
+          k8s_dry_run cannot cover {{ _deploy_dry_run_unsupported_hit | join(', ') }} — {{
+          'a full deploy always includes them' if 'all' in ansible_run_tags
+          else 'these roles mutate the cluster outside roles/k8s/manifests' }}.
+          Deploy them for real, or name only covered services with --tags.
+          Covered services: `uv run python scripts/deploy_tags.py list` minus
+          k8s_dry_run_unsupported in group_vars/all.yml.
+        quiet: true
+      vars:
+        # A full deploy runs every role, so `all` means the whole unsupported list is in scope.
+        _deploy_dry_run_unsupported_hit: >-
+          {{ k8s_dry_run_unsupported if 'all' in ansible_run_tags
+             else (k8s_dry_run_unsupported | intersect(ansible_run_tags)) }}
+      when: k8s_dry_run | bool
+      tags: always
+
     - name: Create the workload namespace
       ansible.builtin.command:
         cmd: "k3s kubectl create namespace {{ k8s_namespace }} --dry-run=client -o yaml"
@@ -162,7 +188,12 @@
       register: deploy_k8s_ns_apply
       become: true
       changed_when: "'created' in deploy_k8s_ns_apply.stdout"
-      when: containers_list | length > 0
+      # Skipped under dry-run for the same reason as everything else: it is a write. The
+      # namespace already exists on any cluster a dry run is worth running against, so the
+      # manifests below have somewhere to be validated into regardless.
+      when:
+        - not k8s_dry_run | bool
+        - containers_list | length > 0
       tags: always
 
     - name: Start with an empty rollout queue

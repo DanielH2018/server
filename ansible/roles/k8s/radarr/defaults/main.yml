@@ -35,3 +35,10 @@ radarr_k8s_cpu_limit: "1"
 radarr_k8s_mem_limit: 1024Mi
 radarr_k8s_cpu_request: "100m"
 radarr_k8s_mem_request: 128Mi
+
+# See roles/k8s/sonarr/defaults/main.yml for the full rationale: upstream defaults are
+# LogLevel=debug / Rotate=50 / SizeLimit=1MB, and the churn that produces is what inflates the
+# backup, not the capped size. Bound via RADARR__LOG__* — Radarr's Bootstrap.cs binds
+# LogOptions to the "Radarr:Log" section and registers AddEnvironmentVariables() unprefixed.
+radarr_k8s_log_level: info
+radarr_k8s_log_rotate: "10"

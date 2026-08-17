@@ -50,6 +50,12 @@ spec:
               value: "{{ pgid }}"
             - name: TZ
               value: "{{ tz }}"
+            # Sonarr:Log, reached through the unprefixed environment-variable provider.
+            # Upstream defaults are debug / 50 files; see defaults/main.yml.
+            - name: SONARR__LOG__LEVEL
+              value: "{{ sonarr_k8s_log_level }}"
+            - name: SONARR__LOG__ROTATE
+              value: "{{ sonarr_k8s_log_rotate }}"
 {% if not sonarr_k8s_rehearsal %}
             - name: DOCKER_MODS
               value: "{{ sonarr_k8s_docker_mods }}"

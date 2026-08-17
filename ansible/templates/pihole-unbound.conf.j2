@@ -16,6 +16,29 @@ server:
     # so the compose service raises nofile to match (default ~8k only covers one thread).
     num-threads: 2
 
+    # ── Caching ──────────────────────────────────────────────────────────────
+    # DO NOT add prefetch / prefetch-key / msg-cache-size / rrset-cache-size /
+    # serve-expired here. The klutchell/unbound base config this file is included
+    # INTO (include-toplevel: /etc/unbound/custom.conf.d/*.conf) already sets every
+    # one of them, and at the values a tuning pass would land on anyway:
+    #   prefetch: yes            prefetch-key: yes
+    #   msg-cache-size: 64m      rrset-cache-size: 128m
+    #   serve-expired: yes       serve-expired-ttl: 86400
+    #   serve-expired-client-timeout: 1800
+    # Verified against rootfs_overlay/etc/unbound/unbound.conf at the pinned tag
+    # (pihole_k8s_unbound_image, klutchell/unbound v1.25.2). Restating them here
+    # would fork the values from the image's on the next bump — this file is an
+    # OVERLAY, so only genuine divergences belong in it. That is what the whole
+    # cache block reduced to: one knob.
+    #
+    # cache-min-ttl is the exception — unset in the base, so unbound's default of 0
+    # applies and a CDN's 30-60s TTL is honoured literally. Every one of those
+    # expiries is a fresh recursion for a name the house asks for constantly.
+    # 60s floors that without meaningfully blunting DNS-based failover, which is
+    # what a larger value (300+) would cost: a provider steering traffic away from
+    # a dead endpoint expects its short TTL to be respected.
+    cache-min-ttl: 60
+
     # Set to 0 to use system default and avoid startup warnings
     so-sndbuf: 0
 

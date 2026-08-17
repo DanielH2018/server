@@ -124,7 +124,16 @@ stay).
     and defer-and-alerts, which posts a Discord message naming the services to deploy by hand.
     **It is not retried on a later tick**: the ff-merge runs before the deploy, so a successful
     tick leaves `local == origin` and every subsequent `next_action()` is a noop. The pilot list
-    happens to bound this at one service today; the cap is what survives the pilot being cleared.
+    used to bound this at one service; since it was cleared (2026-08-16) the cap is the only
+    bound, which is what it was written for.
+  - **The pilot list is empty, so the denylist alone decides.** `gitops_deploy_k8s_autodeploy_pilot`
+    scoped eligibility to `speedtest` from 2026-08-14 until slice 3 cleared it. An empty list means
+    "every non-denylisted service", not "none" — the opposite of the empty-denylist guard right
+    above it, which disarms the feature. Six services were added to the denylist in the same commit
+    (qbittorrent/bazarr/tdarr, livesync, valheim, valheim-stats): each matched a published exclusion
+    class already, and was outside the list only because the pilot made the list non-binding.
+    `ansible/tests/test_k8s_autodeploy_guard.py` now enforces the three role shapes that must never
+    be eligible — more than one Deployment, `manifests_rollout: ''`, and no `readinessProbe`.
   - **The deploy is time-bounded by `K8S_DEPLOY_TIMEOUT_S`, not `RUN_BUDGET_S`.** The latter feeds
     `gate_services()` — the Docker gate — and is inert here, so without an explicit timeout the
     only bound is systemd's `TimeoutStartSec` SIGTERM, which can land mid-rollback.

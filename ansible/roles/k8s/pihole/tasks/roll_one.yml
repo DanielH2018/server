@@ -1,0 +1,52 @@
+---
+# One instance: restart, then block until it is serving again. Included per instance so the
+# next Pi-hole is never taken down while this one is still coming back.
+#
+# Skipped entirely when this run just created the Deployment (mirrors the guard at
+# roles/k8s/manifests/tasks/main.yml:156): its pod has not appeared yet, so a `rollout
+# restart` here races the initial rollout instead of following it.
+- name: Roll instance if this run did not just create it {{ pihole_instance }}
+  tags: [deploy]
+  when: not (manifests_apply.stdout is search('deployment.apps/' ~ pihole_instance ~ ' created'))
+  block:
+    - name: Determine the sibling of {{ pihole_instance }}
+      ansible.builtin.set_fact:
+        pihole_sibling_instance: "{{ 'pihole-2' if pihole_instance == 'pihole' else 'pihole' }}"
+
+    # Restarting {{ pihole_instance }} with no ready sibling is a LAN-wide DNS outage: both
+    # Deployments use Recreate (RWO Longhorn volume), so there is a gap with zero ready pods
+    # behind pihole-dns. Fail loudly rather than proceed — the alternative is a household DNS
+    # outage that this play would report as a success.
+    # A freshly-created sibling Deployment is still provisioning a Longhorn PVC when the
+    # first-ever deploy reaches this task — retry rather than fail instantly, matching the
+    # 300s budget rollout status below waits with. Failing loudly once retries are exhausted
+    # is still correct: proceeding would knowingly cause a household DNS outage.
+    - name: Verify the sibling instance is ready before restarting {{ pihole_instance }}
+      ansible.builtin.command:
+        # Single-quoted deliberately: the command module shlex-splits cmd, which would
+        # otherwise strip the quotes around "Ready" and leave an invalid jsonpath.
+        cmd: >-
+          k3s kubectl -n {{ k8s_namespace }} get pod -l instance={{ pihole_sibling_instance }}
+          --field-selector=status.phase=Running
+          -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}'
+      become: true
+      register: pihole_sibling_ready
+      changed_when: false
+      failed_when: pihole_sibling_ready.stdout != "True"
+      retries: 30
+      delay: 10
+      until: pihole_sibling_ready.stdout == "True"
+
+    - name: Restart Pi-hole instance {{ pihole_instance }}
+      ansible.builtin.command:
+        cmd: "k3s kubectl -n {{ k8s_namespace }} rollout restart deploy/{{ pihole_instance }}"
+      become: true
+      changed_when: true
+
+    - name: Wait for serving Pi-hole instance {{ pihole_instance }}
+      ansible.builtin.command:
+        cmd: >-
+          k3s kubectl -n {{ k8s_namespace }} rollout status deploy/{{ pihole_instance }}
+          --timeout=300s
+      become: true
+      changed_when: false

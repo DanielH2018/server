@@ -64,6 +64,15 @@ spec:
                 - upsc {{ nut_ups_name | default('apc-ups') }}@localhost battery.charge
             initialDelaySeconds: 30
             periodSeconds: 30
+          # upsd binds 3493 only after it has enumerated the USB UPS, which takes a few
+          # seconds. Without this the Service publishes the pod immediately and peanut and
+          # Home Assistant's NUT integration get connection-refused on every deploy.
+          readinessProbe:
+            tcpSocket:
+              port: 3493
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
           resources:
             limits:
               cpu: {{ nut_k8s_cpu_limit }}

@@ -37,13 +37,19 @@
     name: k8s/manifests
   vars:
     manifests_service: prowlarr
+    # flaresolverr now rolls under maxUnavailable: 0 instead of Recreate, so a rollout that
+    # never goes Ready leaves the OLD pod serving indefinitely — the failure is invisible
+    # unless something actually runs `rollout status` on it. manifests_rollout above only
+    # watches the Deployment named `prowlarr`; without this entry flaresolverr is never
+    # queued into k8s_pending_rollouts and the batch drain never checks it.
+    manifests_extra_rollouts:
+      - name: flaresolverr
     manifests_files:
       # The policy is listed FIRST so it exists before flaresolverr can be scheduled. Within a
       # single `kubectl apply -f <dir>` that ordering is not guaranteed, which is why the pod
       # also cannot be reached in the gap: it takes seconds to pull and start, and the policy is
       # applied in the same call.
       - networkpolicy.yaml
-      - pvc-flaresolverr.yaml
       - deployment-flaresolverr.yaml
       - service-flaresolverr.yaml
       - deployment.yaml
@@ -51,6 +57,24 @@
       - ingressroute.yaml
       # The query-only door for monitor-bridge on daniel-server (slice 4, B4c).
       - ingressroute-monitoring.yaml
+
+# flaresolverr's config PVC was retired when the Deployment moved to an emptyDir. Dropping
+# pvc-flaresolverr.yaml from manifests_files stops it being staged but does not remove the
+# live object, so it is deleted here. --ignore-not-found makes this idempotent, which is what
+# lets it stay in the role rather than being a one-shot play someone has to remember to run.
+- name: Retire the flaresolverr config PVC
+  tags: [deploy]
+  when: prowlarr_k8s_enabled | bool
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} delete pvc {{ prowlarr_k8s_flaresolverr_claim }}
+      --ignore-not-found --wait=false
+  become: true
+  register: prowlarr_k8s_pvc_retire
+  # ansible.builtin.command is skipped entirely under --check, which leaves stdout undefined —
+  # the | default('') keeps this task from erroring under the repo's mandated --check preview
+  # instead of just showing nothing for the only task on this branch that destroys a volume.
+  changed_when: "'deleted' in prowlarr_k8s_pvc_retire.stdout | default('')"
 
 # ── prove the flaresolverr isolation survived the move ──────────────────────────────────────
 # Its own directory: `kubectl apply -f <dir>` reads every file in the directory it is given, and
@@ -100,11 +124,19 @@
 
 - name: Wait for the flaresolverr isolation probe
   tags: [deploy]
+  # 300s, up from 120s: the probe's control now retries for up to 150s to ride out prowlarr's
+  # own restart, and the Job's activeDeadlineSeconds is 240s. This wait must outlive that
+  # deadline, so a genuine failure surfaces as the probe's own message in the next task rather
+  # than as an opaque wait timeout with no explanation.
+  #
+  # Known wart, pre-existing and unchanged in kind: `--for=condition=complete` cannot also watch
+  # for `failed`, so a Job that fails fast still burns this whole timeout before the play stops.
+  # Raising the timeout makes that slower (was ~2min, now ~5min) on the failure path only.
   when: prowlarr_k8s_enabled | bool
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
-      job/flaresolverr-netpol-probe --timeout=120s
+      job/flaresolverr-netpol-probe --timeout=300s
   become: true
   changed_when: false
   register: prowlarr_k8s_netpol_probe

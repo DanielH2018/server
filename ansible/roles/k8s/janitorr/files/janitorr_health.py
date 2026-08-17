@@ -6,8 +6,8 @@ tab-separated line, `up<TAB>msg` or `down<TAB>msg`, for the wrapper to push to K
 nonzero on a bad verdict: a DOWN is data to report, not a crash, and the wrapper needs the message
 either way.
 
-Runs under daniel-box's /usr/bin/python3 (3.12 floor — keep 3.12-clean, see
-ansible/tests/test_host_scripts_py312.py). The push URL carries a token, so it stays in the
+Runs on daniel-box via `uv run --no-project --python <pin>` (host_python_version in
+ansible/inventory/group_vars/all.yml). The push URL carries a token, so it stays in the
 templated wrapper and never appears here; this file is plaintext in git.
 """
 

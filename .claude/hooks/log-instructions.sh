@@ -4,9 +4,11 @@
 # path_glob_match vs nested_traversal, plus the trigger file) to
 # .claude/logs/instructions.log, so path-scoped rule loading can be verified.
 #
-# The Python is pure stdlib, so we run system python3 directly rather than routing
-# through uv — InstructionsLoaded fires once per instruction file on the session-start
-# critical path, so the uv-env reconcile isn't worth the latency. `; exit 0` guarantees
-# the hook never surfaces an error (even if python3 were missing); it cannot block.
-python3 "$(dirname "$(readlink -f "$0")")/log-instructions.py" 2>/dev/null
+# Routed through uv like every other host-run Python here: one way to run Python
+# on these hosts, and the system 3.12 is no longer a viable interpreter for these
+# scripts. `--no-project` because uv resolves a project from the cwd and a hook's
+# cwd is arbitrary. `2>/dev/null` + `exit 0` guarantee the hook never surfaces an
+# error (even if uv were missing); it cannot block.
+/home/ubuntu/.local/bin/uv run --no-project --no-python-downloads --python 3.14.6 \
+  "$(dirname "$(readlink -f "$0")")/log-instructions.py" 2>/dev/null
 exit 0

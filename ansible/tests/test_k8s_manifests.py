@@ -16,6 +16,8 @@ from pathlib import Path
 import yaml
 from jinja2 import Environment, FileSystemLoader
 
+from validate_k8s_manifests import ansible_bool
+
 ANSIBLE = Path(__file__).resolve().parents[1]
 K3S = ANSIBLE / "roles" / "setup" / "k3s"
 K8S = ANSIBLE / "roles" / "k8s"
@@ -57,6 +59,9 @@ def _role_defaults(role: str) -> dict:
         **yaml.safe_load((K8S / role / "defaults" / "main.yml").read_text()),
     }
     env = Environment(loader=FileSystemLoader([str(ANSIBLE / "templates")]))
+    # `bool` is an Ansible filter, not a Jinja builtin — a group_var using it (k8s_no_mutate)
+    # would fail this loop with "No filter named 'bool'". Same shim scripts/ registers.
+    env.filters["bool"] = ansible_bool
     for _ in range(5):
         pending = {k: v for k, v in values.items() if isinstance(v, str) and "{{" in v}
         if not pending:
@@ -251,20 +256,21 @@ def test_nothing_mounts_over_the_serviceaccount_token_path():
         tpl = K8S / entry["name"] / "templates" / "deployment.yaml.j2"
         if not tpl.exists():
             continue
-        doc = yaml.safe_load(
-            _render(
-                tpl,
-                container_item=entry,
-                **_DEPLOYMENT_STUBS,
-                **_role_defaults(entry["name"]),
-            )
+        rendered = _render(
+            tpl,
+            container_item=entry,
+            **_DEPLOYMENT_STUBS,
+            **_role_defaults(entry["name"]),
         )
-        for container in doc["spec"]["template"]["spec"]["containers"]:
-            for mount in container.get("volumeMounts", []):
-                path = mount["mountPath"].rstrip("/")
-                assert not any(
-                    path == r or path.startswith(r + "/") for r in reserved
-                ), f"{entry['name']} mounts {path}, shadowing the ServiceAccount token"
+        for doc in yaml.safe_load_all(rendered):
+            for container in doc["spec"]["template"]["spec"]["containers"]:
+                for mount in container.get("volumeMounts", []):
+                    path = mount["mountPath"].rstrip("/")
+                    assert not any(
+                        path == r or path.startswith(r + "/") for r in reserved
+                    ), (
+                        f"{entry['name']} mounts {path}, shadowing the ServiceAccount token"
+                    )
 
 
 def test_no_template_names_a_mount_under_run_secrets():
@@ -305,17 +311,16 @@ def test_every_deployment_disables_service_link_env_vars():
         tpl = K8S / entry["name"] / "templates" / "deployment.yaml.j2"
         if not tpl.exists():
             continue
-        doc = yaml.safe_load(
-            _render(
-                tpl,
-                container_item=entry,
-                **_DEPLOYMENT_STUBS,
-                **_role_defaults(entry["name"]),
+        rendered = _render(
+            tpl,
+            container_item=entry,
+            **_DEPLOYMENT_STUBS,
+            **_role_defaults(entry["name"]),
+        )
+        for doc in yaml.safe_load_all(rendered):
+            assert doc["spec"]["template"]["spec"].get("enableServiceLinks") is False, (
+                f"{entry['name']} inherits Docker-link env vars for every Service in the namespace"
             )
-        )
-        assert doc["spec"]["template"]["spec"].get("enableServiceLinks") is False, (
-            f"{entry['name']} inherits Docker-link env vars for every Service in the namespace"
-        )
 
 
 # --- 3. protected services are actually protected -------------------------------------------

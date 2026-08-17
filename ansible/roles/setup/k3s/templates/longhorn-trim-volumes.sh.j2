@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# Hand freed filesystem blocks back to Longhorn — managed by Ansible; edits overwritten.
+#
+# WHY THIS EXISTS. Longhorn backs up allocated device BLOCKS, not live files. ext4 marks a
+# deleted file's blocks free in its own metadata, but the block device never learns unless a
+# discard is issued — and nothing in this homelab issued one: no fstrim cron, no `discard` mount
+# option on any PVC. So every volume accumulated the high-water mark of everything it had ever
+# held, and both the backup size and the per-prune block GC scaled with that instead of with the
+# data. Measured 2026-08-16, live `du` vs the Completed Backup CRs: 1527 MiB of files across ten
+# volumes against 4508 MiB backed up, worst case zigbee2mqtt-data at 2.7 MiB live / 274 MiB
+# backed up.
+#
+# SAFE, AND CHEAP ENOUGH TO CRON. A trim discards blocks the filesystem has already freed; it
+# cannot touch live data, and it costs no B2 transactions — it is entirely local.
+#
+# WHAT IT WILL NOT DO. Trim reaches "the volume head and the followed continuous removed or
+# system snapshots only" (longhorn-manager types/setting.go). A single retained snapshot pins
+# every block beneath it, so on a volume carrying stranded snapshots this reclaims only what was
+# freed since the newest one. That is why longhorn-reap-orphan-snapshots.sh exists and why it
+# should be run first; this script is the second half of that pair, not a substitute for it.
+set -uo pipefail
+
+# Cron's PATH (/usr/bin:/bin) omits /usr/local/bin, where the k3s install script puts the binary,
+# and cron exports no KUBECONFIG. Both are set explicitly: without the first this exits "command
+# not found", and without the second kubectl reports an EMPTY cluster rather than failing — so
+# the sweep would report "trimmed 0, skipped 0" and look like a clean no-op.
+export PATH="/usr/local/bin:${PATH}"
+export KUBECONFIG=/home/{{ sys_user }}/.kube/config
+KUBECTL="k3s kubectl -n longhorn-system"
+
+# The manager API, not kubectl: trim is an action rather than a field, so there is nothing on the
+# Volume CR to set.
+#
+# THE POD ON THIS NODE, NOT THE longhorn-backend ClusterIP. The Service has one endpoint per node
+# and kube-proxy picks between them per connection, but a process in the HOST netns can only
+# reach the pod CIDR of its own node — so roughly three quarters of the calls landed on
+# daniel-server's manager and died with "Failed to connect ... port 9500". Measured on the first
+# real run, 2026-08-16: trimmed 10, failed 27. Direct probe confirms it is the routing and not
+# the service: daniel-box's manager pod answers 200, daniel-server's times out from the same
+# shell. Nothing retries its way out of that, so resolve the local endpoint and use it.
+NODE=$(hostname)
+BACKEND=$($KUBECTL get pods -l app=longhorn-manager -o json 2>/dev/null \
+  | jq -r --arg node "$NODE" '.items[]
+      | select(.spec.nodeName == $node)
+      | select(.status.phase == "Running")
+      | select([.status.containerStatuses[].ready] | all)
+      | .status.podIP' | head -1)
+if [[ -z "$BACKEND" ]]; then
+  echo "ABORT: no ready longhorn-manager pod on ${NODE}; nothing local to send trims to." >&2
+  exit 1
+fi
+
+TRIMMED=0
+SKIPPED=0
+FAILED=0
+
+# Only attached+healthy volumes are candidates. Trim goes through the running engine to the
+# mounted filesystem, so a detached volume — every volume behind a workload scaled to zero — has
+# nothing to trim and returns an error that would otherwise read as a real failure.
+while IFS='|' read -r NAME STATE ROBUSTNESS PVC; do
+  [[ -z "$NAME" ]] && continue
+  if [[ "$STATE" != "attached" || "$ROBUSTNESS" != "healthy" ]]; then
+    echo "skip  ${PVC:-$NAME}  (${STATE}/${ROBUSTNESS})"
+    SKIPPED=$(( SKIPPED + 1 ))
+    continue
+  fi
+  if curl -sS -m 60 -X POST -H 'Content-Type: application/json' -d '{}' \
+      "http://${BACKEND}:9500/v1/volumes/${NAME}?action=trimFilesystem" >/dev/null; then
+    echo "trim  ${PVC:-$NAME}"
+    TRIMMED=$(( TRIMMED + 1 ))
+  else
+    echo "FAIL  ${PVC:-$NAME}" >&2
+    FAILED=$(( FAILED + 1 ))
+  fi
+done < <($KUBECTL get volumes.longhorn.io \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.status.state}{"|"}{.status.robustness}{"|"}{.status.kubernetesStatus.pvcName}{"\n"}{end}' 2>/dev/null)
+
+echo "trimmed ${TRIMMED}, skipped ${SKIPPED}, failed ${FAILED}."
+
+# WHY THIS NOTE EXISTS. Everything above can succeed against a volume whose blocks are entirely
+# pinned by a retained snapshot, reclaiming nothing and exiting 0 — so a nightly cron prints
+# "trimmed 21, skipped 3, failed 0" forever while the backup sizes never move. That is the same
+# shape as the reaper bug this repo already shipped once, where a Forbidden delete loop announced
+# success having deleted nothing. A count of the volumes still carrying a stranded snapshot turns
+# a silent no-op into a line that says what to do about it.
+#
+# Read-only and best-effort: this is a diagnostic, so it must never change the exit status.
+PINNED=$($KUBECTL get snapshots.longhorn.io \
+  -o jsonpath='{range .items[*]}{.spec.volume}{"|"}{.status.labels.RecurringJob}{"|"}{.status.markRemoved}{"\n"}{end}' 2>/dev/null \
+  | awk -F'|' '$2 != "" && $3 != "true" { print $1 }' | sort -u | grep -c . || true)
+if (( PINNED > 0 )); then
+  echo "NOTE: ${PINNED} volume(s) still carry a recurring-job snapshot. Trim reaches only the"
+  echo "      volume head and continuous removed/system snapshots, so blocks beneath a retained"
+  echo "      snapshot are NOT reclaimed by the run above. To reclaim them:"
+  echo "        /usr/local/bin/longhorn-reap-orphan-snapshots.sh          # dry run, read it"
+  echo "        sudo /usr/local/bin/longhorn-reap-orphan-snapshots.sh --apply"
+fi
+# A failure here is worth a non-zero exit so a cron mail or a Kuma push notices, but it is never
+# urgent: the next run retries from scratch and nothing accumulates in the meantime.
+(( FAILED > 0 )) && exit 1
+exit 0

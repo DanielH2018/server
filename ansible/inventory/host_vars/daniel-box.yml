@@ -54,8 +54,14 @@ containers_list:
   # Slice 6, B1. BEFORE traefik deliberately: the traefik pod carries a crowdsec agent
   # sidecar that logs into this engine's LAPI, and the machine credential is registered by
   # a post-deploy task in this role — so the engine must be up (and the machine exist)
-  # before a traefik rollout starts the sidecar. Safe on fresh bring-up: this role uses no
-  # Traefik CRDs (the LAPI IngressRoute arrives at B2, after traefik has installed them).
+  # before a traefik rollout starts the sidecar. This ordering is asserted by
+  # ansible/tests/test_containers_list_ordering.py, which also holds the reason.
+  #
+  # The claim this comment used to make -- "safe on fresh bring-up: this role uses no
+  # Traefik CRDs" -- stopped being true when the LAPI IngressRoute landed at B2 and moved
+  # into this role. It renders one, ahead of traefik installing the CRDs. Harmless on the
+  # running cluster, where they already exist; on a rebuild this role's apply is the one
+  # first-run ordering cost we accept, because the credential constraint above outranks it.
   - name: crowdsec
     platform: k8s
     # B2 (D3): the LAPI's LAN face — daniel-server's demoted agent + its traefik bouncer
@@ -637,15 +643,29 @@ containers_list:
 # gitops_deploy handler shells a full deploy at the end of initial_setup.yml and fails the
 # play with it, so a single bad service would take down the whole OS-hardening run.
 has_gitops: true
-# k8s auto-deploy, slice-1 pilot (2026-08-14). Eligibility is an image-only diff to a
-# non-denylisted service's defaults/main.yml — see roles/setup/gitops_deploy/defaults/main.yml,
-# where every denylist entry carries its reason. Scoped to one service until the induced-failure
-# drill has proven rollback + hold clearing; slice 3 clears the pilot list.
-# speedtest is the pilot: a real HTTP readinessProbe, no PVC, no dependents, so a failed rollout
-# costs nothing and the gate genuinely proves something.
+# k8s auto-deploy. Eligibility is an image-only diff to a non-denylisted service's
+# defaults/main.yml — see roles/setup/gitops_deploy/defaults/main.yml, where every denylist entry
+# carries its reason.
+#
+# Pilot list CLEARED 2026-08-16 (design slice 3), so the denylist alone governs. That handed the
+# denylist safety work the pilot had been doing incidentally, and it was not complete: six
+# services matched an existing exclusion class while sitting outside the list purely because the
+# pilot named neither them nor anything else. They were added in the same commit — qbittorrent /
+# bazarr / tdarr (migrating state), livesync (stateful), valheim (probe-less), valheim-stats
+# (games). Clearing the pilot without that audit would have armed all six.
+#
+# What is eligible now: bento-pdf, headlamp, homepage, littlelink, peanut and speedtest — every
+# one stateless or throwaway-state, with a real readinessProbe and no dependents. code-server,
+# homelab-mcp and ical-proxy are absent from the denylist deliberately: their pins are Jinja
+# registry refs Renovate cannot reach, so they can never qualify (design §7).
+#
+# NOT yet proven end-to-end: no real Renovate PR has ever traversed this path. The 2026-08-14
+# drill covered deploy → gate → restore; the deployer's git plumbing around it (detect → ff-merge
+# → deploy → catch → hold → reset → redeploy → Discord) has never run. Widening to six stateless
+# leaves is the cheapest way to get that first real transit, on the workloads where a failed
+# rollout costs least.
 gitops_deploy_k8s_autodeploy_enabled: true
-gitops_deploy_k8s_autodeploy_pilot:
-  - speedtest
+gitops_deploy_k8s_autodeploy_pilot: []
 # This is the k3s node — it must NOT have Docker. k3s brings its own containerd and its
 # flannel/kube-proxy iptables rules; daniel-box was chosen to go first precisely because it
 # had no container runtime. A bare `initial_setup.yml` (no --tags) installed Docker here on

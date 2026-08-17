@@ -189,7 +189,28 @@ k3s_longhorn_backup_prefix: longhorn
 # retry-stormed LISTs at ~60/min into the exhausted Class-C cap. Re-armed 2026-08-16
 # 00:05 UTC on fresh caps, with the structural fix (backupstore-poll-interval 0) already
 # landed and the four rate-limit-sensitive volumes moved to the R2 target.
-k3s_longhorn_backup_armed: true
+#
+# DISARMED AGAIN 2026-08-16 ~20:45 UTC — seventh cap event, and the re-arm above is what set it
+# up: fresh caps at 00:05, the daily run completed normally 03:33-03:37 (14 volumes), and the
+# legitimate per-block HEAD/LIST spend then exhausted the cap during the morning. Everything
+# after that is the same death spiral, now measured precisely rather than estimated:
+#
+#   BackupVolumeController.reconcile runs `longhorn backup ls --volume <vol>` — ONE LIST PER
+#   BackupVolume CR, and there are 36. B2 answers `AccessDenied Transaction cap exceeded`. A
+#   FAILED reconcile is requeued; a successful one is not. So the loop is driven purely by
+#   failure, and pollInterval is already 0s on both targets — the poll interval was never the
+#   thing driving it. Rate: 64-192 req/min, i.e. 92k-276k/day against a 2,500/day cap.
+#
+# That is 40-110x the entire daily allowance, which is why it cannot recover on its own and why
+# the reset alone is not a fix.
+#
+# DO NOT RE-ARM ON A TIMER. Re-arming at 00:05 on fresh caps is exactly what produced this event,
+# and doing it again reproduces it a third time: steady-state spend genuinely exceeds 2,500/day
+# (a prune round alone measured ~2,738 LISTs). Re-arm only after the spend is below the cap, or
+# after the caps are raised. The R2 target stays armed independently (k3s_longhorn_r2_armed), so
+# traefik-acme, authelia-config, home-assistant-config and zigbee2mqtt-data keep backing up
+# while this is off.
+k3s_longhorn_backup_armed: false
 
 # Daily volume backup to that target. 03:30 keeps it clear of the Kopia run and of the daily
 # secret-rotation cron. 14 retained backups per volume is two weeks of daily recovery points
@@ -315,6 +336,31 @@ k3s_longhorn_weekly_backup_max_age_hours: 198
 # and nothing here changes faster than the daily backup it watches. The Kuma monitor's heartbeat
 # interval must stay above this (see the uptime-kuma role) so a dead cron trips the watchdog.
 k3s_longhorn_backup_health_cron_minute: "*/10"
+
+# Filesystem trim (templates/longhorn-trim-volumes.sh.j2). 06:10 daily: after BOTH backup windows
+# (03:30 daily, 04:30 weekly) and clear of the 05:15 manifest-prune check. The ordering is the
+# constraint, not the hour — trimming BEFORE the day's snapshot hands back blocks that the
+# snapshot then pins again, so the sweep has to follow the snapshot, not precede it.
+k3s_longhorn_trim_cron_hour: "6"
+k3s_longhorn_trim_cron_minute: "10"
+
+# How old a stranded snapshot must be before the reaper (templates/longhorn-reap-orphan-snapshots.sh.j2)
+# will offer it. A tier move leaves a window where the new job has not run yet, so a snapshot from
+# two days ago may still be a volume's most useful local restore point even though the job that
+# made it no longer owns the volume. Three days clears that window; the 2026-08-16 strays that
+# motivated the script were four to seven days old.
+k3s_longhorn_snapshot_reap_min_age_days: 3
+
+# Deadline on each individual `kubectl delete` in the reaper. `kubectl delete` waits for the
+# finalizer with NO deadline by default, and on 2026-08-16 that reaped 21 of 24 snapshots and
+# then hung on the 22nd for 23 minutes — the process holding no socket to the API server at all,
+# so the target CR never even gained a deletionTimestamp. Unbounded, the failure mode is a run
+# that neither finishes nor reports, and since the purge only runs after the delete loop, a hang
+# also means nothing that WAS deleted gets reclaimed until someone notices and kills it.
+#
+# 120s matches the one-shot BackupVolume play's timeout. A healthy delete here returns in well
+# under a second, so this is a wedge detector, not a work budget.
+k3s_longhorn_snapshot_reap_delete_timeout: 120s
 
 # Daily-backup-volume budget, added 2026-08-08 after B2's TRANSACTION cap fired for the second
 # time (docs/b2-transaction-cap-monitoring-gaps.md, gap G2 — bytes were monitored, transactions

@@ -10,8 +10,30 @@ metadata:
   namespace: {{ k8s_namespace }}
 spec:
   replicas: 1
+  # No authoritative state: /config is a browser profile cache the app rebuilds on first use
+  # (see the note in tasks/main.yml), so it moved to an emptyDir and the RWO constraint that
+  # forced Recreate is gone. maxUnavailable 0 and maxSurge 1 are what SHOULD make this
+  # zero-downtime — on a single replica maxUnavailable 0 forces the new pod Ready before the
+  # old one is removed, where the 25% default would round down to 0 anyway but says nothing
+  # about intent. This is unverified until the slice-1 measurement (measure_rollout_gap.py)
+  # actually runs against a live deploy — no deploy has been authorised on this branch, so
+  # "zero-downtime" here is intent, not a measured result.
+  #
+  # Conversion-gate note: only the write-model half of the gate was confirmed against
+  # FlareSolverr's behaviour (the /config cache claim above, from this role's own prior
+  # investigation). The multi-instance half was NOT confirmed — maxSurge: 1 means two
+  # flaresolverr pods can run behind one Service simultaneously for the duration of a rollout,
+  # and nothing here confirms from FlareSolverr's own docs that this is safe. Assessed risk is
+  # low: Prowlarr drives FlareSolverr with sessionless `request.get`/`request.post` calls (a
+  # throwaway browser per request), not `sessions.create`, so there is no per-pod session state
+  # for a second pod to diverge from or lose. That is an inference from how Prowlarr's indexer
+  # proxy integration is used here, not a documented confirmation from FlareSolverr's own API
+  # docs — recorded honestly as a waiver, not papered over.
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: flaresolverr
@@ -77,5 +99,10 @@ spec:
               memory: {{ prowlarr_k8s_fs_mem_request }}
       volumes:
         - name: config
-          persistentVolumeClaim:
-            claimName: {{ prowlarr_k8s_flaresolverr_claim }}
+          # sizeLimit preserves the cap the retired 1Gi PVC used to provide. Most siblings here
+          # use a bare `emptyDir: {}`, but this one holds a Chrome profile: uncapped, runaway
+          # growth becomes node ephemeral-storage pressure and the kubelet evicts OTHER pods on
+          # the node, turning one browser's disk leak into someone else's outage. Capped, the
+          # blast radius is the pod that caused it.
+          emptyDir:
+            sizeLimit: 1Gi

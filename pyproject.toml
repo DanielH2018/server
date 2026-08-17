@@ -52,8 +52,14 @@ testpaths = [                        # single source of truth for WHAT runs; exc
 addopts = "-q -n auto"
 # filter_plugins: lets test_toposort import toposort. setup/common/files: host_lib is a cross-role
 # shared module (deployed INTO each setup script's /opt dir as a sibling) — on pythonpath so the
-# import-tested renovate_notify.py + test_host_lib.py resolve it in CI.
-pythonpath = ["ansible/filter_plugins", "ansible/roles/setup/common/files"]
+# import-tested renovate_notify.py + test_host_lib.py resolve it in CI. scripts: the k8s manifest
+# tests import the render guards from there — _k8s_render.py did it with a sys.path insert, which
+# only worked for modules importing _k8s_render first.
+pythonpath = [
+  "ansible/filter_plugins",
+  "ansible/roles/setup/common/files",
+  "scripts",
+]
 
 [tool.ruff]
 extend-exclude = ["ansible/collections"]  # never lint or format the vendored third-party collections

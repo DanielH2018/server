@@ -15,6 +15,29 @@
     manifests_secret_files:
       - config-secret.yaml
 
+- name: Wait for the crowdsec rollout before talking to the LAPI
+  tags: [deploy]
+  # THE ONE ROLE THAT MUST WAIT INLINE. k8s/manifests deliberately does NOT wait — it queues
+  # the rollout for k8s/rollout-drain at the end of the batch (see that role's header for the
+  # 1386s-to-max() rationale). Every other role tolerates that, because nothing else in them
+  # touches the workload they just rolled. This role does: the tasks below `exec` into
+  # deploy/crowdsec to reach the LAPI, and the batch drain runs long after them.
+  #
+  # Without this gate a manifest change makes the role fail against the pod it just restarted
+  # — and `no_log` on the task below censors the body, so it surfaces as a bare "Module
+  # failed: non-zero return code" that reads like a credential problem. Bit a 2026-08-16
+  # deploy: 2 of 4 loop items registered, then the pod went down mid-loop.
+  #
+  # `rollout status`, not `wait --for=condition=Available`: this Deployment is single-replica,
+  # so the OLD pod satisfies Available and the wait returns instantly. Returns immediately when
+  # nothing rolled, so the no-change deploy pays nothing. 300s covers the worst measured roll
+  # (~3.5 min, cold metabase image pull; 73s warm).
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} rollout status deploy/crowdsec --timeout=300s
+  become: true
+  changed_when: false
+
 - name: Register the remote agent machines on the LAPI
   tags: [deploy]
   # The image entrypoint only registers ITS OWN pod's agent (AGENT_USERNAME env); the
@@ -112,4 +135,18 @@
   become: true
 
 - name: Enforcement gate (opt-in via --tags b1-gate)
+  # NOT UNDER --check. The gate proves enforcement by mutating real state — it bans a real
+  # LAN host, then probes from that host expecting 403. Check mode skips `command`, so the
+  # ban never happens; but the probe carries retries/until, and a skipped task has no stdout
+  # for `until: ... == "403"` to match. It therefore burned all 8 retries and failed the run,
+  # every time, on a task that had correctly changed nothing.
+  #
+  # Skipping is the only honest option: the gate is unprovable in check mode BY CONSTRUCTION,
+  # since you cannot demonstrate a ban is enforced without taking the ban. Making it run
+  # anyway (check_mode: false) would have a dry run ban a host and reach out over ssh, which
+  # is exactly what --check exists to promise it will not do.
+  #
+  # `when` on an import_tasks propagates to every task in the file, so this one line covers
+  # all four. Nothing is lost: the gate carries no persistent state for --check to drift-detect.
+  when: not ansible_check_mode
   ansible.builtin.import_tasks: verify.yml

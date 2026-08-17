@@ -18,7 +18,18 @@ ProtectHome=read-only
 PrivateTmp=true
 ReadWritePaths=/var/lib/renovate-notify
 Environment=PYTHONDONTWRITEBYTECODE=1
-ExecStart=/usr/bin/python3 /opt/renovate-notify/renovate_notify.py
+# uv opens its cache for WRITE at startup on every invocation, warm or cold, and the cache
+# defaults to $HOME/.cache/uv — which ProtectHome=read-only above makes unwritable. Without this
+# the unit dies with exit 2 before Python starts, at every tick, and OnFailure pages for it.
+# Point the cache at the private /tmp that PrivateTmp already gives this unit, rather than at
+# ReadWritePaths: this is the unit that parses attacker-influenceable API JSON, so a cache that
+# survives between runs is state one compromised run could poison for the next. PrivateTmp is
+# destroyed at exit, and a cold cache costs nothing here — the script is stdlib-only and
+# --no-project means there are no packages to fetch (measured: 28K, 56ms).
+# NB the interpreter itself lives under $HOME (~/.local/share/uv/python) and is only *read*,
+# which ProtectHome=read-only permits.
+Environment=UV_CACHE_DIR=/tmp/uv-cache
+ExecStart=/usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /opt/renovate-notify/renovate_notify.py
 # Runs only when ExecStart succeeded — the direct "alive" beat that replaced the
 # monitor-bridge renovate_alive check (host flip 2, 2026-08-14). Failure still pages
 # twice: OnFailure hits Discord immediately, and the missed beat reds the Kuma monitor

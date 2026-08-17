@@ -37,6 +37,7 @@ Route to the source of truth by what you're doing, before reading linearly:
 | Adding / changing a service (k3s — the default) | `## Adding a New Service` below · a sibling role in `ansible/roles/k8s/` |
 | Adding / changing a Docker service (the Pi only) | `## Adding a New Service` → *Adding a Docker service* · `/new-container` skill |
 | Deploying or redeploying a service | `/deploy` skill · `## Common Commands` |
+| Checking a k8s manifest change without deploying it | `## Common Commands` → *Checking a k8s change without deploying it* (`--dry-run` vs `--check` — they check different things) |
 | Adding / rotating a secret | `/add-secret` skill · `docs/secret-rotation.md` · `## Secrets Management` |
 | A Bash command keeps prompting for approval | `## Shell Commands — Shape Them to Auto-Approve` |
 | Editing HA automations / lighting / fans | `ansible/roles/k8s/home-assistant/CLAUDE.md` (config and workload both live there; it routes to `docs/` for per-topic behaviour) · `/ha-edit-automation` |
@@ -96,8 +97,14 @@ deploy can't interleave with the automated pipeline or with another Claude sessi
 lock guards the local git tree every deploy reads its templates from (gitops-deploy
 rewrites it with a `git pull` mid-run), so a `-e target=daniel-pi` deploy takes it too. Exit
 **75** means the lock stayed busy and *nothing was deployed*; it is not a playbook failure.
-`--check` runs unlocked. The bare `ansible-playbook` forms below still work and are what
-the wrapper runs; use them only when you deliberately want no lock.
+`--check` runs unlocked. Exit **2** means a `--tags` value matched no service and *nothing
+was deployed* — Ansible itself exits 0 on an unmatched tag, so the wrapper checks the tags
+against `containers_list` first (`scripts/deploy_tags.py`); `--list-services` prints every
+valid value and `--skip-tag-check` bypasses. `--dry-run` validates the k8s manifests against
+the live API server without applying them, and runs unlocked because it mutates nothing —
+see *Checking a k8s change without deploying it* below. The bare `ansible-playbook` forms
+below still work and are what the wrapper runs, but they have neither the lock nor the tag
+check; use them only when you deliberately want that.
 
 ```bash
 # Deploy a specific container
@@ -113,6 +120,9 @@ uv run ansible-playbook ansible/deploy.yml
 # Dry run
 uv run ansible-playbook ansible/deploy.yml --tags "<service-name>" --check
 
+# Validate a k8s change against the live API server without applying it
+./scripts/deploy.sh --tags "<service-name>" --dry-run
+
 # Config-only: render dirs/templates/host config WITHOUT touching the container
 # (every container-role task is block-tagged config/deploy/cron; tags union in
 # Ansible, so scope with --skip-tags. --skip-tags config is NOT supported — the
@@ -122,9 +132,36 @@ uv run ansible-playbook ansible/deploy.yml --tags "<service-name>" --skip-tags d
 # Edit encrypted secrets
 sops ansible/vars/secrets.yml
 
+# List the services --dry-run refuses to cover (k8s_dry_run_unsupported)
+grep -A20 "^k8s_dry_run_unsupported:" ansible/inventory/group_vars/all.yml
+
 # Initial server setup — first-host bring-up ORDER (uv → SOPS onboarding → this) is in ansible/README.md
 uv run ansible-playbook ansible/initial_setup.yml
 ```
+
+### Checking a k8s change without deploying it
+Three modes, and they check genuinely different things — reaching for the wrong one is how a
+manifest bug reaches production.
+
+| Mode | What sees the manifests | Catches |
+|---|---|---|
+| `prek run --all-files` | nothing (renders + parses YAML locally) | Jinja indent bugs, invalid YAML, duplicate keys |
+| `--check` | nothing — the apply is **skipped**, so no API server is involved | task-level wiring; not the manifests themselves |
+| `--dry-run` | the **live API server**, via `kubectl apply --dry-run=server` | bad apiVersions and field names, schema drift, CRD-ordering mistakes, admission rejections |
+
+`--dry-run` renders to a temp dir, applies with `--dry-run=server`, and discards the temp dir.
+Nothing is staged, applied, patched or rolled. It does **not** catch scheduling, PVC binding,
+probe or rollout behaviour — those need a real deploy.
+
+Two limits worth knowing before you trust a green dry run:
+- **It refuses ~17 services.** Roles that mutate outside `roles/k8s/manifests` (sidecar
+  ConfigMaps built with `kubectl create`, netpol-probe Jobs, `exec -i` into a live pod) would
+  half-apply, so `deploy.yml` fails fast and names them. `k8s_dry_run_unsupported` in
+  `group_vars/all.yml` is the list; `ansible/tests/test_k8s_dry_run.py` re-derives it from the
+  role sources so it cannot drift.
+- **A brand-new service is only half-checked.** `seed-volume` is skipped (it is a dependency of
+  25 roles and mutates), and nothing at admission verifies that a referenced PVC exists — so
+  the Deployment validates while the volume is never proven provisionable.
 
 ## Shell Commands — Shape Them to Auto-Approve
 A PreToolUse hook (`.claude/hooks/auto-approve-readonly.py`) auto-approves Bash it can
@@ -251,8 +288,15 @@ Hand-running an auto-approved *write* verb creates drift from the Ansible source
   alerts | scrutiny | pi <path> | cert <host> | health <svc> | ha <state|automation|get> …>`.
   `alerts [--days N --check X]` reconstructs monitor-bridge's DOWN alert history from Loki (Kuma
   keeps only current state) — one row per firing episode; the same view is the "Alert History"
-  Grafana board (Infrastructure folder). `health <svc>`
-  exits 0 only when the container is running + healthy — usable as a post-deploy gate. `ha …`
+  Grafana board (Infrastructure folder). `health <svc>` is a k8s post-deploy gate: it exits 0 only
+  when the Deployment **or DaemonSet** is fully rolled out (observed generation caught up, every
+  replica updated + ready + available) **and** no container restarted in the last 180s. An
+  unreadable restart time counts as recent, so it fails closed. Both halves matter — readiness
+  flips a Deployment to Available before a bad liveness probe starts killing it, so a rollout check
+  alone reports green on a crashlooping pod. `--docker` inspects the Pi's container over ssh
+  instead; that was the only mode until 2026-08-16, which is why it died with
+  `FileNotFoundError: 'docker'` on both cluster nodes for the two days after the Docker
+  retirement. `ha …`
   reads live Home Assistant state (authed with the SOPS `claude_ha_token`); `ha automation
   <id-or-alias>` resolves the alias-slug≠id trap. See the home-assistant role's CLAUDE.md.
 - **block-protected-edits** (PreToolUse) — *denies* direct edits to (a) anything under
