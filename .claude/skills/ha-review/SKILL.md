@@ -42,14 +42,19 @@ one line. End with a **3-bullet top-priorities** summary. Be specific and skepti
 
 ## 4. Adversarially verify High/Medium findings (before they reach the report)
 Reviews here have a misfire history — a wrong finding costs the operator more than a missed one. For
-each High/Medium finding dispatch one skeptic — `general-purpose`, **`model: sonnet`**, all in one
-parallel message — whose ONLY job is to try to **refute** it against: the home-assistant role's
-CLAUDE.md (accepted trade-offs + verification traps), the role's tasks/templates and
-`sanctioned_writers.yml`, the don't-re-flag memories, and live state via `scripts/probe.py ha …`
-(mind the recorder-stale and alias-slug traps — the `ha-verify-state` skill encodes them).
-Verdict per finding: **CONFIRMED** (refutation failed), **REFUTED** (cite the disproving evidence), or
-**UNCERTAIN**. Refuted findings drop to a one-line "refuted in verification" appendix; UNCERTAIN ones
-stay but are marked unverified. Lows skip verification.
+each High/Medium finding dispatch one **`skeptic`** agent, all in one parallel message. That agent
+carries the refutation contract — where to look, the rule that a comment or a reassuring name is not
+evidence, and the three verdicts — so don't restate it; give it the finding, its `file:line`, and
+the HA-specific evidence it would not otherwise know to consult: the home-assistant role's CLAUDE.md
+(accepted trade-offs + verification traps), the role's tasks/templates and `sanctioned_writers.yml`,
+and live state via `scripts/probe.py ha …` (mind the recorder-stale and alias-slug traps — the
+`ha-verify-state` skill encodes them).
+
+`skeptic` pins no `model`, so set it per dispatch, at least the tier of the reviewer that raised the
+finding — the HA reviewer runs opus, so its Highs get `model: opus`. Verdicts: **CONFIRMED**
+(refutation failed), **REFUTED** (cite the disproving evidence), **UNCERTAIN**. Refuted findings drop
+to a one-line "refuted in verification" appendix; UNCERTAIN ones stay but are marked unverified.
+Lows skip verification.
 
 ## 5. Report
 Present the findings grouped by severity with a top-priorities shortlist, citing each finding's ansible
