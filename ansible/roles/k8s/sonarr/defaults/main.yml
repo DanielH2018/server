@@ -22,40 +22,8 @@ sonarr_k8s_source_path: /home/ubuntu/server/containers/sonarr/config
 # wrong does not fail at startup; it fails as a library that looks intact until an import.
 sonarr_k8s_media_claim: media-data
 
-# ── B3 rehearsal isolation ──────────────────────────────────────────────────────────────────
-# TRUE UNTIL B4. This copy runs the REAL sonarr database, so it knows the indexers, the download
-# client and the release profiles of the live instance. Acting on any of them would be bad: it
-# would grab into the live qbittorrent, fail to import (the completed files are on daniel-server,
-# not in this volume), and sonarr removes downloads it has given up on — deleting a torrent the
-# AUTHORITATIVE copy is still waiting for.
-#
-# What stops it is that every outbound target in its database is a DOCKER NETWORK NAME
-# (`wireguard:8080`, `prowlarr:9696`) which does not resolve in the cluster. That boundary is
-# asserted on every deploy by isolation-probe-job.yaml.j2 — see its header for why a
-# NetworkPolicy is NOT what does this, and for the measurement behind that.
-#
-# Set false at B4, when this copy becomes the authoritative one.
-sonarr_k8s_rehearsal: false  # flipped 2026-08-07 by B4c — the Docker copy is stopped and unmanaged
-
-# The hostnames that must NOT resolve while the rehearsal is running, read off the seeded
-# database's download-client and indexer configuration. B4-B7 bring both into the cluster under
-# these exact Service names, at which point this list is what fails the deploy instead of letting
-# a rehearsing sonarr quietly find them.
-# BOTH OF THESE NOW RESOLVE — `prowlarr` since B5, `wireguard` since 2026-08-09, when it was
-# added as an alias Service for qbittorrent (the *arr databases address the download client by
-# its Compose name; see qbittorrent/templates/service-wireguard.yaml.j2). The probe is gated on
-# `sonarr_k8s_rehearsal`, which is false, so this list is inert — but it is no longer a boundary
-# that exists. Re-running a rehearsal needs a different isolation mechanism, not this list.
-sonarr_k8s_isolation_hosts:
-  - prowlarr
-  - wireguard
-
 # TheCaptain989's striptracks mod, as the compose template runs it (there is no separate
 # `sonarr-striptracks` — the radarr-named image auto-detects which app it is in).
-#
-# Applied only when the fence is OFF. LSIO downloads mods at container start, which needs
-# egress the rehearsal deliberately does not have — leaving it set would trade a clean startup
-# for a mod that cannot affect anything while the copy is unable to import.
 sonarr_k8s_docker_mods: linuxserver/mods:radarr-striptracks
 
 # Mirrors resources('1.0', '1024M', '0.10', '128M') in the compose template.
@@ -64,7 +32,9 @@ sonarr_k8s_mem_limit: 1024Mi
 sonarr_k8s_cpu_request: "100m"
 sonarr_k8s_mem_request: 128Mi
 
-# busybox nslookup is all the isolation probe needs.
+# Kept after the isolation-probe harness was retired (2026-08-17): qbittorrent's verify.yml
+# consumes this var for its own probe pod, with its own alpine:3.22 fallback if this role's
+# defaults are not loaded.
 sonarr_k8s_probe_image: alpine:3.24
 
 # Logging, bound through Sonarr's own config system rather than config.xml — the *arr apps read

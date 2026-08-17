@@ -183,7 +183,6 @@ k8s_dry_run_unsupported:
   - pihole
   - prowlarr
   - registry
-  - sonarr
   - terraria-stats
   - traefik
   - valheim-stats

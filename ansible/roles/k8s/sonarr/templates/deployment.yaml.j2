@@ -57,10 +57,8 @@ spec:
               value: "{{ sonarr_k8s_log_level }}"
             - name: SONARR__LOG__ROTATE
               value: "{{ sonarr_k8s_log_rotate }}"
-{% if not sonarr_k8s_rehearsal %}
             - name: DOCKER_MODS
               value: "{{ sonarr_k8s_docker_mods }}"
-{% endif %}
           volumeMounts:
             - name: config
               mountPath: /config

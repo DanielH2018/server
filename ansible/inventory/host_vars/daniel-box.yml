@@ -152,8 +152,9 @@ containers_list:
   #
   # It holds the real indexers and download client, so what keeps it from acting on them matters:
   # every one of those targets is a DOCKER network name that does not resolve in the cluster. An
-  # egress NetworkPolicy was tried first and is NOT enforced here — see the role's
-  # isolation-probe-job.yaml.j2, which asserts the boundary that actually holds on every deploy.
+  # egress NetworkPolicy was tried first and is NOT enforced here — the boundary that actually
+  # holds is name resolution, not a policy. Measurement recorded in the role's tasks/main.yml
+  # header; the probe harness that tested it was retired 2026-08-17 as dead code.
   - name: sonarr
     platform: k8s
     hostname: "sonarr"
@@ -182,9 +183,11 @@ containers_list:
   # for the same reason as qbittorrent above: the entry is mandatory for
   # validate_k8s_manifests.py, and gitops would otherwise deploy them unattended.
   #
-  # They also cannot be deployed one at a time, and the reason is worth keeping: standing up
-  # prowlarr makes the bare name `prowlarr` resolve, which is exactly what the rehearsing
-  # sonarr's isolation probe fails on. D3's "one window" is enforced, not remembered.
+  # They were also not deployable one at a time during the slice-4 rehearsal, and the reason is
+  # worth keeping: standing up prowlarr makes the bare name `prowlarr` resolve, which is the
+  # moment a rehearsing sonarr could reach its real indexers. That window closed at B4c
+  # (2026-08-07) when this copy became authoritative, so the constraint is history — the ordering
+  # requirement above (manifest validation + unattended gitops) is the one still live.
   - name: radarr
     platform: k8s
     hostname: "radarr"

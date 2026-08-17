@@ -19,7 +19,7 @@
 #
 # sonarr and radarr reach prowlarr by bare name from their own application databases — the indexer
 # definitions live on their PVCs, not in this repo. Recorded in
-# roles/k8s/sonarr/templates/isolation-probe-job.yaml.j2.
+# roles/k8s/sonarr/tasks/main.yml's header.
 #
 # flaresolverr-netpol-probe is the CONTROL leg of this role's OWN isolation probe
 # (netpol-probe-job.yaml.j2): before it asserts flaresolverr is unreachable from outside
