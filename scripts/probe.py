@@ -1485,36 +1485,100 @@ def main(argv=None):
 # --- B2 / Longhorn backup objects -------------------------------------------
 
 LONGHORN_PREFIX = "longhorn"
-KOPIA_REPO_CONFIG = "/app/config/repository.config"
+B2_API_VERSION = "v3"
+B2_AUTHORIZE_URL = (
+    f"https://api.backblazeb2.com/b2api/{B2_API_VERSION}/b2_authorize_account"
+)
 
 
-def longhorn_lsf_argv(bucket, prefix=LONGHORN_PREFIX):
-    """`rclone lsf` inside the kopia container, listing the Longhorn backup prefix.
+# This used to run `rclone lsf` inside the kopia container. Both halves of that are gone:
+# the k3s migration removed Docker from daniel-box and daniel-server (2026-08-14), and kopia
+# itself was retired — its `kopia_b2_*` secrets are Longhorn's credentials now. The command
+# therefore died with `FileNotFoundError: 'docker'` on every real run, while the tests kept
+# passing because they only ever exercised the argv builder and the parser. B2's native API
+# needs no SigV4 signing, so plain curl replaces both dependencies.
+def b2_curl(config_body, timeout=DEFAULT_TIMEOUT):
+    """One B2 API call, with url and credentials fed through curl's stdin config.
 
-    The B2 key is deliberately NOT in argv: `docker exec -e VAR` with no `=value` makes
-    Docker inherit the value from this process's environment, so the secret never reaches
-    the host process table (where `ps` would show it) nor this tool's own --dry-run output.
+    Same guard as the HA and *arr helpers above: neither the application key nor the
+    session token may appear in argv, where `ps` would expose them to any local user.
     """
-    return [
-        "docker",
-        "exec",
-        "-e",
-        "RCLONE_CONFIG_B2_TYPE",
-        "-e",
-        "RCLONE_CONFIG_B2_ACCOUNT",
-        "-e",
-        "RCLONE_CONFIG_B2_KEY",
-        "kopia",
-        "rclone",
-        "lsf",
-        f"b2:{bucket}/{prefix}",
-        "--recursive",
-        "--files-only",
-        "--format",
-        "ps",
-        "--separator",
-        ";",
-    ]
+    out = subprocess.run(
+        ["curl", "-sS", "--max-time", str(timeout), "--config", "-"],
+        input=config_body,
+        capture_output=True,
+        text=True,
+    )
+    if out.returncode != 0:
+        raise SystemExit("B2 request failed: " + out.stderr.strip()[:400])
+    try:
+        return json.loads(out.stdout)
+    except json.JSONDecodeError:
+        # B2 reports a refused transaction cap as a JSON error, so a non-JSON body here
+        # is a different problem (proxy, DNS, truncation) and is worth showing verbatim.
+        raise SystemExit("B2 returned a non-JSON body: " + out.stdout.strip()[:200])
+
+
+def b2_authorize_config(key_id, app_key):
+    return f'url = "{B2_AUTHORIZE_URL}"\nuser = "{key_id}:{app_key}"\n'
+
+
+def b2_list_files_config(api_url, token, bucket_id, prefix, start=None):
+    query = {
+        "bucketId": bucket_id,
+        "prefix": prefix.rstrip("/") + "/",
+        "maxFileCount": "1000",
+    }
+    if start:
+        query["startFileName"] = start
+    url = f"{api_url}/b2api/{B2_API_VERSION}/b2_list_file_names?{urlencode(query)}"
+    return f'url = "{url}"\nheader = "Authorization: {token}"\n'
+
+
+def b2_list_buckets_config(api_url, token, account_id, bucket_name):
+    query = {"accountId": account_id, "bucketName": bucket_name}
+    url = f"{api_url}/b2api/{B2_API_VERSION}/b2_list_buckets?{urlencode(query)}"
+    return f'url = "{url}"\nheader = "Authorization: {token}"\n'
+
+
+def b2_longhorn_lines(key_id, app_key, bucket, prefix=LONGHORN_PREFIX, _call=b2_curl):
+    """List the Longhorn prefix, returning `path;size` lines.
+
+    The shape is rclone's `lsf --format ps --separator ;` verbatim, and the paths are made
+    relative to the prefix the same way rclone's did — so parse_longhorn_listing below is
+    unchanged and its tests still describe the real input. Leaving the paths absolute would
+    match none of its patterns and report a healthy bucket as "no Longhorn backup objects".
+    """
+    auth = _call(b2_authorize_config(key_id, app_key))
+    storage = auth.get("apiInfo", {}).get("storageApi", {})
+    api_url, token = storage.get("apiUrl"), auth.get("authorizationToken")
+    if not api_url or not token:
+        raise SystemExit("B2 authorize returned no apiUrl/authorizationToken")
+
+    # A bucket-scoped application key already names its bucket; an account-wide one does not
+    # and has to be looked up.
+    bucket_id = storage.get("bucketId")
+    if not bucket_id:
+        listed = _call(
+            b2_list_buckets_config(api_url, token, auth.get("accountId", ""), bucket)
+        )
+        buckets = listed.get("buckets", [])
+        if not buckets:
+            raise SystemExit(f"B2 has no bucket named {bucket}")
+        bucket_id = buckets[0]["bucketId"]
+
+    strip = prefix.rstrip("/") + "/"
+    lines, start = [], None
+    while True:
+        page = _call(b2_list_files_config(api_url, token, bucket_id, prefix, start))
+        for entry in page.get("files", []):
+            name = entry.get("fileName", "")
+            if name.startswith(strip):
+                name = name[len(strip) :]
+            lines.append(f"{name};{entry.get('contentLength', 0)}")
+        start = page.get("nextFileName")
+        if not start:
+            return lines
 
 
 def parse_longhorn_listing(lines):
@@ -1585,50 +1649,24 @@ def run_b2_longhorn(ns):
     Costs a handful of transactions (one listing, paged at 1000 objects) — negligible
     against the daily free allowance, but not free: don't put it in a loop.
     """
-    # Ahead of the config read: --dry-run exists to show the command WITHOUT touching
-    # anything, so it must not require a running kopia container (or any Docker at all —
-    # daniel-box has none).
+    # Ahead of the credential read: --dry-run exists to describe the call WITHOUT making it,
+    # so it must not decrypt anything either.
     if ns.dry_run:
+        bucket = ns.bucket or "<kopia_b2_bucket>"
         print(
-            " ".join(
-                longhorn_lsf_argv(ns.bucket or "<bucket-from-repo-config>", ns.prefix)
-            )
+            f"GET {B2_AUTHORIZE_URL} then b2_list_file_names "
+            f"bucket={bucket} prefix={ns.prefix.rstrip('/')}/"
         )
         return 0
 
-    conf = subprocess.run(
-        ["docker", "exec", "kopia", "cat", KOPIA_REPO_CONFIG],
-        capture_output=True,
-        text=True,
+    bucket = ns.bucket or sops_extract("kopia_b2_bucket")
+    lines = b2_longhorn_lines(
+        sops_extract("kopia_b2_key_id"),
+        sops_extract("kopia_b2_application_key"),
+        bucket,
+        ns.prefix,
     )
-    if conf.returncode != 0:
-        raise SystemExit(
-            "cannot read kopia's repository config: " + conf.stderr.strip()
-        )
-    try:
-        cfg = json.loads(conf.stdout)["storage"]["config"]
-    except (json.JSONDecodeError, KeyError) as e:
-        raise SystemExit(f"unexpected repository config shape: {e}")
-
-    bucket = ns.bucket or cfg.get("bucket")
-    if not bucket:
-        raise SystemExit(
-            "no bucket in the repository config and none passed with --bucket"
-        )
-
-    argv = longhorn_lsf_argv(bucket, ns.prefix)
-    env = dict(os.environ)
-    env["RCLONE_CONFIG_B2_TYPE"] = "b2"
-    env["RCLONE_CONFIG_B2_ACCOUNT"] = cfg.get("accessKeyID", "")
-    env["RCLONE_CONFIG_B2_KEY"] = cfg.get("secretAccessKey", "")
-    out = subprocess.run(argv, capture_output=True, text=True, env=env)
-    if out.returncode != 0:
-        # rclone echoes B2's own refusal here — including "Transaction cap exceeded".
-        raise SystemExit("rclone listing failed: " + out.stderr.strip()[:400])
-
-    text, code = format_longhorn_summary(
-        parse_longhorn_listing(out.stdout.splitlines())
-    )
+    text, code = format_longhorn_summary(parse_longhorn_listing(lines))
     print(text)
     return code
 

@@ -52,6 +52,32 @@ def _ansible_search(value, pattern, ignorecase=False, multiline=False) -> bool:
     return bool(re.search(pattern, str(value), flags))
 
 
+_BOOLEANS_TRUE = {"y", "yes", "on", "1", "true", "t"}
+_BOOLEANS_FALSE = {"n", "no", "off", "0", "false", "f", ""}
+
+
+def _ansible_bool(value) -> bool:
+    """Mirror Ansible's `bool` filter (module_utils.parsing.convert_bool.boolean, strict=False).
+
+    Vanilla Jinja2 has no `bool` filter, so a template guarding on `x | bool` renders here with
+    `TemplateRuntimeError: No filter named 'bool' found`. Faithfulness matters more than
+    convenience: the reason templates use `| bool` at all is that `-e var=false` arrives as the
+    STRING "false", which plain Jinja truthiness reads as True. A stub that just called Python's
+    bool() would agree with Ansible on real booleans and disagree on exactly the inputs the
+    filter exists for, so the test would pass while production took the other branch.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    normalised = str(value).strip().lower()
+    if normalised in _BOOLEANS_TRUE:
+        return True
+    if normalised in _BOOLEANS_FALSE:
+        return False
+    return False
+
+
 ROLES = ANSIBLE / "roles"
 
 # Shell-specific overrides: values a lint pass needs to be shell-plausible rather than the bare
@@ -81,6 +107,7 @@ def discover_templates() -> list[Path]:
 def build_env(template_dir: Path) -> Environment:
     env = make_env([template_dir, SHARED_TPL])
     env.tests["search"] = _ansible_search
+    env.filters["bool"] = _ansible_bool
     return env
 
 
