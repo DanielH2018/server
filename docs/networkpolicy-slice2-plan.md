@@ -39,9 +39,15 @@ This is why each policy below lists Traefik explicitly. It is deliberate redunda
 
 **This plan does not pre-allow the node IPs.** sonarr's own `verify.yml` runs on every deploy and fails the play loudly if the path is blocked, which makes the deploy itself the experiment. Task 5 records the answer either way. Adding both address forms up front would have made the deploy pass without revealing which entry did the work, and would have left an unexamined allowance in the policy permanently.
 
-### Rollback limitation for the four per-workload policies
+### Rollback for the four per-workload policies: the var flip is complete
 
-Flipping `netpol_baseline_enforced: false` no longer fully rolls back sonarr, radarr, prowlarr or qbittorrent. That flag only makes `baseline-ingress` permissive again — the four per-workload policies from Task 1 still select `app: <name>` directly and still admit only their own listed peers, independent of the baseline. A caller broken by one of these four policies stays broken with the flag off, so it no longer proves "it isn't the NetworkPolicy" for these workloads. The actual rollback for slice 2 is per-policy: drop the entry from the role's `manifests_files` **and** patch the live object out, since `kubectl apply` does not prune objects removed from the manifest set.
+`netpol_baseline_enforced: false` **does** roll sonarr, radarr, prowlarr and qbittorrent back, in full — the same one-line flip that rolls back slice 1.
+
+It works because the baseline's off-state is an *allow-all rule*, not an absent policy. With the flag off, `netpol-baseline/templates/networkpolicy.yaml.j2` renders `ingress:` as `- {}` — one empty rule, which admits everything — while its `podSelector` (`netpol-baseline: enforced`) is unchanged and still selects all four workloads. NetworkPolicies are **additive**: a pod admits the union of every policy that selects it, so a permissive baseline readmits everything to those four regardless of what their own policies list. Their allow lists do not narrow anything once the baseline is wide.
+
+**Do not hand-patch the four live NetworkPolicy objects instead.** `ingress: []` and `ingress: [{}]` are exact inverses, and the spec names that pair as the easiest thing in this design to get backwards — patching in the wrong one turns a partial outage into a total deny of the workload you were trying to unblock.
+
+**The one residual the flag does not cover:** a pod carrying `app: <name>` but *not* `netpol-baseline: enforced` — i.e. an old pod part-way through a rollout — is selected only by its per-workload policy, which the flag does not touch. That window closes at the first rollout after this branch, because every pod created from then on carries both labels.
 
 ---
 
@@ -476,7 +482,9 @@ Expected: both probes print their assertions green.
 - [ ] **Step 5: Verify the live state**
 
 Run: `kubectl -n homelab get pods -l netpol-baseline=enforced --no-headers | wc -l`
-Expected: `16` (slice 1's six plus slice 2's ten). configarr is a CronJob and will only appear while a job is running, so expect `15` between runs — confirm which by checking whether a configarr pod exists at that moment.
+Expected: **15** standing pods.
+
+The durable invariant is **16 roles** — slice 1's six plus slice 2's ten — pinned by `ansible/tests/test_netpol_baseline_labels.py`. The pod count is not that number and never settles on it: configarr is a CronJob with no standing pod, so it contributes zero between runs. A count above 15 means a Job pod is still around and has not yet aged out — a configarr CronJob run, or the `configarr-deploy-*` one-off from this deploy. Count roles (or run the test); do not treat a pod count as the check.
 
 Run: `kubectl -n homelab get networkpolicy`
 Expected: `baseline-ingress`, `flaresolverr`, `headlamp`, `n8n-broker`, `registry`, plus the four new ones.
@@ -513,7 +521,7 @@ Mark slice 2 done. Move jellyfin explicitly into slice 4's row with the VIP reas
 
 ## Done when
 
-- 16 pods carry `netpol-baseline: enforced` (15 between configarr runs).
+- All 16 roles stamp `netpol-baseline: enforced` onto their pod template — asserted by `ansible/tests/test_netpol_baseline_labels.py`, not by a live pod count (15 pods stand; configarr's CronJob has none between runs).
 - Four new NetworkPolicies are live.
 - Both probes green.
 - sonarr's indexers and download client both test green in its UI.
