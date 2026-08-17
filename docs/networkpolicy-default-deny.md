@@ -124,10 +124,24 @@ That check catches *unlabelled* pods. It does not catch two more consequences of
 `podSelector: {}` switch, found while building slice 3, where the target already carries some
 other label and so would pass that check while still breaking:
 
-- **The netpol-probe Jobs get fenced too.** They exist specifically to behave like an attacker pod
-  with no allow-list entry; under `podSelector: {}` they lose that property and prove nothing, and
-  every inverted assertion in them starts failing instead. Slice 5 must exempt the probe pods in
-  the policy, or rewrite the probes to expect the new state.
+- **`podSelector: {}` fences each probe's control target, not the probe pod itself.** Every probe
+  leg in this repo is **outbound** (`netpol-probe-job.yaml.j2:44,61,104`;
+  `netpol-probe-slice2-job.yaml.j2`; `netpol-probe-slice3-job.yaml.j2:72,93,102`;
+  `prowlarr/netpol-probe-job.yaml.j2:53,64`; `sonarr/isolation-probe-job.yaml.j2`) — nothing needs a
+  probe pod to be reachable *inbound*. An Ingress-only policy selecting a probe pod governs what
+  reaches it, not what it can reach, and return traffic rides conntrack, so being selected as a
+  target cannot break an outbound assertion. What actually breaks is the mirror image:
+  `podSelector: {}` also selects each probe's **control target**. `netpol-probe-slice3-job.yaml.j2:72`
+  dials `traefik:80` for its control; under a namespace-scope baseline, traefik's own ingress policy
+  would admit only `app: traefik`, observability's prometheus, and the two cni0 `/32`s — the probe
+  pod matches none of those, the control fails, and the Job exits 1 with `CONTROL FAILED`, not with
+  a failed inverted assertion. `netpol-probe-job.yaml.j2:51-55` already documents the same shape for
+  its own NEGATIVE CONTROL leg (dialing homepage): "by construction there is no unfenced pod left"
+  once slice 5 lands. Slice 5 must apply the same fix to every probe's control leg: admit the probe
+  pod as an explicit peer **on its control target's policy** — the shape
+  `prowlarr/networkpolicy-prowlarr.yaml.j2:24-27` already uses, where prowlarr's own policy admits
+  `flaresolverr-netpol-probe` as a caller because that probe's control leg dials `prowlarr` before
+  asserting flaresolverr is unreachable.
 - **The `flaresolverr` exemption's rationale expires.** It is exempt from the labelling guard today
   (Ruling 4, Task 1) because its own bespoke policy is *tighter* than the baseline. Under
   `podSelector: {}` the baseline selects it anyway regardless of the exemption, producing exactly
@@ -235,10 +249,12 @@ it first means debugging slices 2–4 with the monitoring possibly impaired.
   the slice-3 probe substitutes an **EndpointSlice readiness gate** — proving the four backends
   have ready endpoints — for the HTTP liveness assertion earlier slices use.
 - **`observability` gets its own node-CIDR list**, `netpol_baseline_obs_node_cidrs`, rather than
-  widening the shared `homelab` baseline's four addresses. That list is a separate policy object in
-  a different namespace — it was never going to cover `observability` pods regardless — and the
-  16 already-enforcing homelab roles read it today; editing it for observability's benefit would put
-  all 16 at risk of a regression nobody would trace back to this namespace.
+  widening the shared `homelab` baseline's two addresses. The policy that reads that shared list
+  (`networkpolicy.yaml.j2`) lives in `homelab`, and a NetworkPolicy only ever selects pods in its own
+  namespace — so widening the list would not have reached `observability` pods even if edited. It
+  stays separate anyway for a real, independent reason: the 16 already-enforcing homelab roles read
+  that list today, and editing it for observability's benefit would put all 16 at risk of a
+  regression nobody would trace back to this namespace.
 - **The intra-namespace mesh is a bare `podSelector: {}` peer.** The real justification is not "one
   role, six workloads" but that `observability` is **sole-tenant today** — `claude-otel` is the only
   role that renders into it. That is the invariant the design leans on, and it is exactly what a
@@ -246,8 +262,8 @@ it first means debugging slices 2–4 with the monitoring possibly impaired.
   every already-fenced pod there with no policy change of its own.
 - **`otelq` is a host process, not a cluster caller**, reading `loki:3100`, `prometheus:9090` and
   `tempo:3200` over loopback hostPorts, admitted by the node-CIDR `ipBlock` peer (which carries no
-  `ports` restriction — trimming it to "nameable" ports would break otelq silently). Both `cni0`
-  entries (`10.42.0.1/32`, `10.42.1.1/32`) are load-bearing, not just daniel-box's: a hostPort binds
+  `ports` restriction — trimming that CIDR list to "nameable" entries would break otelq silently).
+  Both `cni0` entries (`10.42.0.1/32`, `10.42.1.1/32`) are load-bearing, not just daniel-box's: a hostPort binds
   only on the node the pod actually runs on, and prometheus/loki/tempo are unpinned single-replica
   Deployments, so either node can be the one otelq's loopback path resolves to. Only
   `10.42.1.0/32` (daniel-server's `flannel.1`) has no caller nameable today; it stays as deliberate
