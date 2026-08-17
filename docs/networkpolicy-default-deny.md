@@ -52,10 +52,11 @@ of whether the source is a pod, so that single line would have readmitted **ever
 the cluster** — cancelling the default-deny while reading like a node allowance. The
 baseline uses `/32` host addresses only.
 
-Note also that `registry`'s policy allows `10.42.1.0/32`, which matches neither node's
-`cni0` (`.1` on both). It is probably vestigial — registry runs on daniel-box, so
-`10.42.0.1/32` is the entry doing the work. **Verify before copying it anywhere**; do not
-propagate it on the assumption it was derived from a real observation.
+Note also that `registry`'s policy allows `10.42.1.0/32`. That is **not** a `cni0` address —
+`cni0` is `.1` on both nodes — but it is not a stray either: it is daniel-server's
+**`flannel.1`** address, the VXLAN interface (daniel-box's is `10.42.0.0`). Traffic genuinely
+sources from it. **Verify what it is doing before copying it anywhere**, and equally before
+removing it; see "Answers from slice 1" below.
 
 ## Approach: trusted-infra baseline
 
@@ -253,16 +254,23 @@ bazarr → sonarr/radarr, freshrss → feed-cache, home-assistant → mosquitto.
 Both blocking items were settled by observation on 2026-08-17, after slice 1 was deployed and
 enforced. Slice 2 depends on the first; slice 4's mosquitto rule depends on the second.
 
-### 1. `registry`'s `10.42.1.0/32` is vestigial — but do not simply delete it
+### 1. `registry`'s `10.42.1.0/32` is daniel-server's `flannel.1` — a real address, do not remove it
 
 `kubectl -n homelab get pod -l app=registry -o jsonpath='{.items[0].spec.nodeName}'` → **daniel-box**,
 whose podCIDR is `10.42.0.0/24`. Registry serves containerd over a hostPort on the node it runs on,
-so `10.42.0.1/32` is the entry doing the work. `10.42.1.0/32` matches neither node's `cni0` (both
-are `.1`); it is the network address of daniel-server's CIDR, not an address anything sources from.
+so `10.42.0.1/32` is the entry doing the work for daniel-box's own pulls.
 
-The correct repair in slice 4 is to **replace** it with `10.42.1.1/32`, not to drop it. Registry is
-not pinned to a node, so if it is ever rescheduled onto daniel-server the working entry becomes the
-one that is currently wrong.
+`10.42.1.0/32` is not a `cni0` address (both nodes' `cni0` is `.1`), but it is **not** the inert
+network address of daniel-server's CIDR either — measured, `10.42.1.0` is daniel-server's
+**`flannel.1`**, the VXLAN interface, and `10.42.0.0` is daniel-box's. It is an interface address
+that traffic really does source from.
+
+**Slice 4 must therefore not delete it, and must not "replace" it with `10.42.1.1/32`.** An earlier
+version of this section gave exactly that instruction, on the belief that the entry matched nothing.
+That belief was wrong. Whether daniel-server's containerd actually pulls through `flannel.1` rather
+than `cni0` is unproven in either direction — the point is that the address is real, so removing the
+entry needs evidence, not an assumption. Registry is not pinned to a node, so a reschedule onto
+daniel-server is the case that entry may well be covering.
 
 ### 2. Pod → MetalLB VIP traffic is SNAT'd to the node bridge address, despite ETP=Local
 
@@ -287,20 +295,54 @@ workload fenced by the baseline remains reachable over a VIP hairpin today.
 
 Deployed 2026-08-17. Ten workloads labelled, four per-workload allow policies live.
 
-### 3. Host → ClusterIP arrives as the node's `cni0` address, not the node IP
+### 3. Host → ClusterIP is admitted by the baseline's `cni0` `/32`s — only on the caller's own node
 
-This was the last unmeasured address form in the design, and slice 2 was built as the experiment
-rather than pre-allowing both. `roles/k8s/sonarr/tasks/verify.yml` calls sonarr's ClusterIP from the
-Ansible controller on daniel-box on every deploy; with sonarr fenced and **no node-IP ipBlock in its
-policy**, that verify passed and returned real data (14 series, 20.8 GiB measured through the
-mount). So the baseline's existing `10.42.0.1/32` and `10.42.1.1/32` entries already cover the host
-path. No node-IP allowance is needed anywhere.
+Slice 2 was built as the experiment for this rather than pre-allowing both address forms.
+`roles/k8s/sonarr/tasks/verify.yml` calls sonarr's ClusterIP from the Ansible controller on
+daniel-box on every deploy; with sonarr fenced and **no node-IP ipBlock in its policy**, that verify
+passed and returned real data (14 series, 20.8 GiB measured through the mount). So a host caller
+does arrive as the node's `cni0` address, and the baseline's existing `10.42.0.1/32` and
+`10.42.1.1/32` entries cover it — **when the pod is on the same node as the caller, and only then.**
 
-**Scope of the proof, stated precisely:** sonarr and the Ansible controller are both on daniel-box,
-so this establishes the **same-node** case. The cross-node case — a host on one node reaching a pod
-on the other — is still unmeasured, and `registry`'s policy records `10.42.1.0/32` (flannel.1, not
-cni0) as the agent-side SNAT target, which suggests the cross-node form may differ. Slice 3 or 4
-should treat a host caller to a pod on the other node as unproven.
+Cross-node, host → fenced pod is **blocked today**. Not unproven: measured, 2026-08-17.
+
+| caller host | target | target's node | fenced | result |
+|---|---|---|---|---|
+| daniel-box | prowlarr `:9696` | daniel-server | yes (slice 2) | **000 — blocked** |
+| daniel-box | littlelink `:3000` | daniel-server | yes (slice 1) | **000 — blocked** |
+| daniel-box | healthchecks `:8000` | daniel-server | yes (slice 1) | **000 — blocked** |
+| daniel-box | ical-proxy `:5000` | daniel-server | yes (slice 1) | **000 — blocked** |
+| daniel-box | freshrss `:80` | daniel-server | **no** (control) | 200 |
+| daniel-box | sonarr `:8989` | daniel-box | yes (slice 2) | 200 |
+| daniel-server | sonarr `:8989` | daniel-box | yes (slice 2) | **000 — blocked** |
+| daniel-server | jellyfin `:8096` | daniel-box | **no** (control) | 302 |
+| daniel-server | littlelink `:3000` | daniel-server | yes (slice 1) | 200 |
+
+The two unfenced controls reach across nodes fine, so the blocks are the policy, not routing. What
+the cross-node source address actually *is* remains unmeasured — the result shows only that it is
+neither of the two `cni0` `/32`s. `registry`'s `10.42.1.0/32` (daniel-server's `flannel.1` — see
+"Answers from slice 1") is the first candidate worth checking.
+
+**Scope, stated honestly: this is a pre-existing hole from slice 1, not something slice 2
+introduced.** littlelink, healthchecks and ical-proxy are slice-1 workloads and were already in it
+the moment slice 1 was enforced. Slice 2 adds exactly one daniel-server workload to the set,
+prowlarr.
+
+**And no caller is broken today.** The repo has exactly two host → ClusterIP callers —
+`roles/k8s/sonarr/tasks/verify.yml` and `roles/setup/fake_remux/tasks/main.yml` — and both target
+sonarr from daniel-box. sonarr is pinned to daniel-box by the `media-data` PV's *required*
+`nodeAffinity` (`roles/k8s/media-volume/templates/pv.yaml.j2`), so neither can become the cross-node
+case while that pin holds.
+
+**Warning for slice 3, where that stops being true.**
+`roles/k8s/claude-otel/templates/telemetry-health.sh.j2` runs from a host cron on both nodes and
+resolves prometheus's ClusterIP at runtime (`kubectl get svc prometheus -o
+jsonpath='{.spec.clusterIP}'`, then curls it). prometheus has **no node pin** —
+`roles/k8s/claude-otel/templates/prometheus.yaml.j2` sets no `nodeSelector`, `nodeAffinity` or
+`nodeName`. Fencing prometheus therefore breaks that heartbeat from the non-co-located host the
+moment prometheus reschedules, silently and without a deploy to blame it on. Slice 3 must either
+measure the cross-node source address and admit it, or leave prometheus reachable from both hosts,
+before it labels the observability namespace.
 
 ### Three callers the census missed, and what they have in common
 
