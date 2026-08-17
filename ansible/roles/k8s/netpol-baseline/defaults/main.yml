@@ -29,11 +29,22 @@ netpol_baseline_probe_image: alpine:3.24
 netpol_baseline_obs_enforced: false
 
 # All four node addresses, where the homelab list carries only the two cni0 /32s.
-# prometheus has no node pin and telemetry-health.sh curls its ClusterIP from a cron on BOTH
-# nodes, so one of those two crons is cross-node whenever prometheus lands on daniel-box.
-# Slice 2 measured cross-node host -> fenced pod as blocked with cni0 alone.
+#
+# prometheus has no node pin, so it can land on daniel-server. When it does, the claude-otel
+# health cron — installed on daniel-box only (`containers_list` in host_vars/daniel-box.yml; no
+# entry, and no `delegate_to`, for daniel-server) — calling its ClusterIP is cross-node. By
+# slice 2's own evidence, a cross-node host->pod packet arrives as the SENDING node's flannel.1,
+# so that caller needs daniel-box's own flannel.1 (10.42.0.0/32), not daniel-server's.
+#
+# The two daniel-server entries (10.42.1.1/32 cni0, 10.42.1.0/32 flannel.1) are therefore not
+# required by any caller nameable today — kept anyway as deliberate over-inclusion, at the same
+# trust level the homelab baseline already grants its own node bridges, and to cover a future
+# caller running on daniel-server.
+#
+# Verified per node with `ip -4 -o addr show flannel.1` (daniel-box: 10.42.0.0, daniel-server:
+# 10.42.1.0) — matches these entries exactly, same as the cni0 addresses below.
 netpol_baseline_obs_node_cidrs:
   - 10.42.0.1/32    # daniel-box cni0
-  - 10.42.1.1/32    # daniel-server cni0
-  - 10.42.0.0/32    # daniel-box flannel.1
-  - 10.42.1.0/32    # daniel-server flannel.1
+  - 10.42.1.1/32    # daniel-server cni0 (no caller nameable today; deliberate over-inclusion)
+  - 10.42.0.0/32    # daniel-box flannel.1 (the claude-otel cron, when prometheus is cross-node)
+  - 10.42.1.0/32    # daniel-server flannel.1 (no caller nameable today; deliberate over-inclusion)
