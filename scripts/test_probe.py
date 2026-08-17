@@ -1044,16 +1044,110 @@ LSF = [
 ]
 
 
-def test_longhorn_argv_passes_credentials_by_name_only():
-    """`-e VAR` with no value makes Docker inherit it, keeping the key out of argv.
+def test_b2_credentials_travel_in_the_stdin_config_not_argv():
+    """argv is visible in `ps`, so the application key must only ever reach curl's stdin.
 
-    argv is visible in `ps` and is printed verbatim by --dry-run, so a value here would
-    publish the B2 key to anyone on the host and to this tool's own output.
+    The old Docker implementation kept the key out of argv by having `docker exec -e VAR`
+    inherit it; curl's `--config -` is the same guard by the route the rest of this file
+    already uses for HA and the *arr apps.
     """
-    argv = probe.longhorn_lsf_argv("some-bucket")
-    assert "-e" in argv and "RCLONE_CONFIG_B2_KEY" in argv
-    assert not [a for a in argv if "=" in a and a.startswith("RCLONE")]
-    assert "b2:some-bucket/longhorn" in argv
+    body = probe.b2_authorize_config("keyid123", "appkey456")
+    assert 'user = "keyid123:appkey456"' in body
+    assert probe.B2_AUTHORIZE_URL in body
+
+
+def test_b2_list_config_carries_the_token_as_a_header_and_scopes_the_prefix():
+    body = probe.b2_list_files_config("https://api.example", "tok", "bid", "longhorn")
+    assert 'header = "Authorization: tok"' in body
+    assert "prefix=longhorn%2F" in body and "bucketId=bid" in body
+
+
+def test_b2_longhorn_lines_strips_the_prefix_and_pages():
+    """Paths must come back RELATIVE to the prefix, as rclone's lsf produced them.
+
+    B2 returns absolute names (`longhorn/backupstore/...`). Leaving them absolute matches
+    none of parse_longhorn_listing's patterns, so a perfectly healthy bucket would report
+    "no Longhorn backup objects" — a false data-loss alarm.
+    """
+    pages = [
+        {
+            "apiInfo": {
+                "storageApi": {"apiUrl": "https://api.example", "bucketId": "b"}
+            },
+            "authorizationToken": "tok",
+            "accountId": "acct",
+        },
+        {
+            "files": [
+                {
+                    "fileName": "longhorn/backupstore/volumes/aa/bb/pvc-x/blocks/1/2/a.blk",
+                    "contentLength": 2097152,
+                }
+            ],
+            "nextFileName": "more",
+        },
+        {
+            "files": [
+                {
+                    "fileName": "longhorn/backupstore/volumes/aa/bb/pvc-x/volume.cfg",
+                    "contentLength": 120,
+                }
+            ]
+        },
+    ]
+    calls = iter(pages)
+    lines = probe.b2_longhorn_lines(
+        "k", "s", "bucket", "longhorn", _call=lambda _body: next(calls)
+    )
+    assert lines == [
+        "backupstore/volumes/aa/bb/pvc-x/blocks/1/2/a.blk;2097152",
+        "backupstore/volumes/aa/bb/pvc-x/volume.cfg;120",
+    ]
+    # The whole point: these lines survive the parser that the real command feeds them to.
+    vols = probe.parse_longhorn_listing(lines)
+    assert vols["pvc-x"]["blocks"] == 1 and vols["pvc-x"]["cfgs"] == 1
+
+
+def test_b2_longhorn_command_does_not_shell_out_to_docker_or_rclone():
+    """The regression this rewrite exists for.
+
+    `probe.py b2-longhorn` shelled out to `docker exec kopia rclone ...` and died with
+    FileNotFoundError on both k3s nodes from the day Docker was removed (2026-08-14) —
+    while the tests stayed green because they only covered the argv builder and the parser.
+    Neither binary exists on these hosts, so naming them here is a dead path by definition.
+    """
+    seen = {}
+
+    def fake_run(argv, **kwargs):
+        seen["argv"] = argv
+        seen["stdin"] = kwargs.get("input", "")
+
+        class Result:
+            returncode = 0
+            stdout = "{}"
+            stderr = ""
+
+        return Result()
+
+    real_run = probe.subprocess.run
+    probe.subprocess.run = fake_run
+    try:
+        probe.b2_curl('url = "https://api.example"\n')
+    finally:
+        probe.subprocess.run = real_run
+
+    assert seen["argv"][0] == "curl"
+    assert "docker" not in seen["argv"] and "rclone" not in seen["argv"]
+    # The url/credentials reach curl through stdin, so argv stays free of both.
+    assert seen["stdin"].startswith("url = ")
+
+    # And no `"docker"` argv literal survives anywhere in this section's executable code.
+    with open(_MOD) as fh:
+        section = fh.read().split("# --- B2 / Longhorn backup objects")[1]
+    code = "\n".join(
+        line for line in section.splitlines() if not line.strip().startswith("#")
+    )
+    assert '"docker"' not in code
 
 
 def test_parse_longhorn_listing_separates_data_from_metadata():
