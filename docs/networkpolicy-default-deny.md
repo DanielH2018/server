@@ -318,27 +318,53 @@ Cross-node, host → fenced pod is **blocked today**. Not unproven: measured, 20
 | daniel-server | jellyfin `:8096` | daniel-box | **no** (control) | 302 |
 | daniel-server | littlelink `:3000` | daniel-server | yes (slice 1) | 200 |
 
-The two unfenced controls reach across nodes fine, so the blocks are the policy, not routing. What
-the cross-node source address actually *is* remains unmeasured — the result shows only that it is
-neither of the two `cni0` `/32`s. `registry`'s `10.42.1.0/32` (daniel-server's `flannel.1` — see
-"Answers from slice 1") is the first candidate worth checking.
+The two unfenced controls reach across nodes fine, so the blocks are the policy, not routing. The
+result shows the cross-node source is neither of the two `cni0` `/32`s.
+
+**Strong evidence that it is `flannel.1`, short of a packet capture.** `registry` is a fenced pod
+running on daniel-box, and its policy admits exactly two host-shaped sources on `:5000` —
+`10.42.0.1/32` (daniel-box `cni0`) and `10.42.1.0/32` (daniel-server `flannel.1`). Every node's
+containerd is configured to pull through that ClusterIP (see the caller below), and `ical-proxy` —
+scheduled on daniel-server, `imagePullPolicy: Always` — started at 2026-08-16T23:36:13Z with a
+resolved digest, *after* registry's policy was live. The only entry that could have admitted that
+cross-node pull is `10.42.1.0/32`. Not proof (no capture, and no cold pull was forced), but it is
+the answer slice 3 needs, and it is why the slice-4 instruction to remove that entry was withdrawn.
 
 **Scope, stated honestly: this is a pre-existing hole from slice 1, not something slice 2
 introduced.** littlelink, healthchecks and ical-proxy are slice-1 workloads and were already in it
 the moment slice 1 was enforced. Slice 2 adds exactly one daniel-server workload to the set,
 prowlarr.
 
-**And no caller is broken today.** Exactly two host → ClusterIP callers in the repo target a
-**fenced** pod — `roles/k8s/sonarr/tasks/verify.yml` and `roles/setup/fake_remux/tasks/main.yml` —
-and both target sonarr from daniel-box. sonarr is pinned to daniel-box by the `media-data` PV's
-*required* `nodeAffinity` (`roles/k8s/media-volume/templates/pv.yaml.j2`), so neither can become the
-cross-node case while that pin holds.
+**And no caller is broken today**, but the census that establishes this took three passes to get
+right, so treat the list as the deliverable and the method as insufficient.
 
-There is a third host → ClusterIP caller, and it is the reason for the warning below: it targets
-prometheus in `observability`, which no policy selects until slice 3. Census method, for the next
-slice to repeat: `grep -rn clusterIP --include='*.j2' --include='*.yml' ansible/roles/` finds every
-one of them, because a host caller cannot use cluster DNS and must resolve the ClusterIP first.
-`registry`'s hit is a static Service field, not a caller.
+Host → ClusterIP callers targeting a **fenced** pod:
+
+1. `roles/k8s/sonarr/tasks/verify.yml` → sonarr, from daniel-box.
+2. `roles/setup/fake_remux/tasks/main.yml` → sonarr, from daniel-box.
+   Both are same-node and stay that way: sonarr is pinned to daniel-box by the `media-data` PV's
+   *required* `nodeAffinity` (`roles/k8s/media-volume/templates/pv.yaml.j2`).
+3. **containerd on daniel-server → `registry`, cross-node, and working.**
+   `roles/setup/k3s/templates/registries.yaml.j2` renders
+   `endpoint: http://{{ k8s_registry_cluster_ip }}:{{ k8s_registry_port }}` on every host that is
+   not the registry node, installed by `roles/setup/k3s/tasks/agent.yml`. registry is fenced and
+   runs on daniel-box. This is the cross-node host path succeeding in production, and it is the
+   evidence above.
+
+A fourth targets prometheus in `observability`, which no policy selects until slice 3 — the warning
+below.
+
+**The census method that missed one, and why.** Two passes used
+`grep -rn clusterIP --include='*.j2' --include='*.yml' ansible/roles/`, on the reasoning that a host
+caller cannot use cluster DNS and must resolve a ClusterIP first. That is true but insufficient: the
+registry caller references the **variable** `k8s_registry_cluster_ip`, whose name does not contain
+the string `clusterIP`, so the grep cannot see it. The earlier draft compounded this by dismissing
+registry's one hit as "a static Service field, not a caller" — which closed the door on following
+the variable to its host consumer.
+
+For slices 3–5, grep for the variables too (`_cluster_ip`, `_clusterip`), and check
+`roles/setup/**` as well as `roles/k8s/**` — a host caller is more likely to live in host setup than
+in a workload role.
 
 **Warning for slice 3, where that stops being true.**
 `roles/k8s/claude-otel/templates/telemetry-health.sh.j2` runs from a host cron on both nodes and
