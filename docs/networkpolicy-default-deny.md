@@ -328,11 +328,17 @@ introduced.** littlelink, healthchecks and ical-proxy are slice-1 workloads and 
 the moment slice 1 was enforced. Slice 2 adds exactly one daniel-server workload to the set,
 prowlarr.
 
-**And no caller is broken today.** The repo has exactly two host → ClusterIP callers —
-`roles/k8s/sonarr/tasks/verify.yml` and `roles/setup/fake_remux/tasks/main.yml` — and both target
-sonarr from daniel-box. sonarr is pinned to daniel-box by the `media-data` PV's *required*
-`nodeAffinity` (`roles/k8s/media-volume/templates/pv.yaml.j2`), so neither can become the cross-node
-case while that pin holds.
+**And no caller is broken today.** Exactly two host → ClusterIP callers in the repo target a
+**fenced** pod — `roles/k8s/sonarr/tasks/verify.yml` and `roles/setup/fake_remux/tasks/main.yml` —
+and both target sonarr from daniel-box. sonarr is pinned to daniel-box by the `media-data` PV's
+*required* `nodeAffinity` (`roles/k8s/media-volume/templates/pv.yaml.j2`), so neither can become the
+cross-node case while that pin holds.
+
+There is a third host → ClusterIP caller, and it is the reason for the warning below: it targets
+prometheus in `observability`, which no policy selects until slice 3. Census method, for the next
+slice to repeat: `grep -rn clusterIP --include='*.j2' --include='*.yml' ansible/roles/` finds every
+one of them, because a host caller cannot use cluster DNS and must resolve the ClusterIP first.
+`registry`'s hit is a static Service field, not a caller.
 
 **Warning for slice 3, where that stops being true.**
 `roles/k8s/claude-otel/templates/telemetry-health.sh.j2` runs from a host cron on both nodes and
