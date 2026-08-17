@@ -2,8 +2,10 @@
 
 Design doc. Written 2026-08-16. Status: **slices 1 and 2 deployed and enforcing** (slice 2 on
 2026-08-17). `netpol_baseline_enforced` is `true`; sixteen roles carry `netpol-baseline: enforced`
-and four per-workload allow policies are live alongside the baseline. Slices 3–5 are still design
-only. See "Answers from slice 1" and "Answers from slice 2" below for what each deploy settled.
+and four per-workload allow policies are live alongside the baseline. **Slice 3 is built and merged
+but not yet enforcing** — `netpol_baseline_obs_enforced` is still `false`. Slices 4–5 are still
+design only. See "Answers from slice 1" and "Answers from slice 2" below for what each deploy
+settled.
 
 ## The problem
 
@@ -118,6 +120,20 @@ pod nobody remembered to label gets fenced at once, including anything added bet
 then. It is gated on a check that enumerates pods in the namespace lacking the label and fails
 if the list is non-empty, which turns a silent catch-all into an explicit reconciliation.
 
+That check catches *unlabelled* pods. It does not catch two more consequences of the same
+`podSelector: {}` switch, found while building slice 3, where the target already carries some
+other label and so would pass that check while still breaking:
+
+- **The netpol-probe Jobs get fenced too.** They exist specifically to behave like an attacker pod
+  with no allow-list entry; under `podSelector: {}` they lose that property and prove nothing, and
+  every inverted assertion in them starts failing instead. Slice 5 must exempt the probe pods in
+  the policy, or rewrite the probes to expect the new state.
+- **The `flaresolverr` exemption's rationale expires.** It is exempt from the labelling guard today
+  (Ruling 4, Task 1) because its own bespoke policy is *tighter* than the baseline. Under
+  `podSelector: {}` the baseline selects it anyway regardless of the exemption, producing exactly
+  the widening — traefik, prometheus, and every node CIDR admitted to a pod that today accepts only
+  `prowlarr` — the exemption was written to avoid.
+
 ### Rollback is a variable, never a deletion
 
 `kubectl delete` is denied and `kubectl apply` does not prune, so **removing the template
@@ -192,6 +208,50 @@ exactly the paths that are hardest — `loki:3100`, `tempo:3200`, `prometheus:90
 Claude Code exports OTLP), plus inbound from monitor-bridge, homelab-mcp and Traefik. It is
 also the instrument you would use to notice that a later slice broke something, so fencing
 it first means debugging slices 2–4 with the monitoring possibly impaired.
+
+### Slice 3 specifics
+
+- **A second baseline object, not a wider selector.** A NetworkPolicy only ever selects pods in its
+  own `metadata.namespace`, so `observability` needed its own ingress baseline
+  (`netpol-baseline-observability`, plus two per-workload policies) rather than more labels on the
+  existing `homelab` one. It is one role's worth of templates (`netpol-baseline`) but fences six
+  workloads once it enforces — `claude-otel` renders prometheus, loki, tempo, the otel-collector,
+  grafana and kube-state-metrics as six separate pod-producing documents from one role. Counting
+  roles, the fenced total becomes 17 once this slice enforces (6 slice-1 + 10 slice-2 +
+  `claude-otel`); counting workloads it is considerably higher — the two numbers answer different
+  questions and this slice is the first place they diverge by more than one.
+- **There are two Lokis, and a name grep cannot tell them apart.** `homelab-mcp` (in `homelab`) is
+  the only in-cluster caller of *this* Loki, reaching it via `CLAUDE_LOKI_URL`. `terraria-stats`,
+  `valheim-stats` and `monitor-bridge` all target a different Service, `loki-homelab` in `homelab`,
+  via the plain `LOKI_URL`. Both are plausibly "the Loki" from a manifest name alone; telling them
+  apart needed the **env value the manifest actually sets**, not the Service name either role's
+  template happens to use.
+- **Neither web route is unauthenticated, so the probe has no HTTP liveness leg.** grafana is
+  `use_authelia: true`. The prometheus route is **ClientIP LAN-gated plus rate-limit, not
+  Authelia** (`claude-otel/templates/prometheus-ingressroute.yaml.j2`) — worth stating precisely
+  because an earlier draft of this section called it Authelia-gated, and the two middlewares fail
+  identically to an unauthenticated-route probe (a 401 or a 302, see "The liveness target must be
+  an unauthenticated route" above) for different reasons. With no unauthenticated target available,
+  the slice-3 probe substitutes an **EndpointSlice readiness gate** — proving the four backends
+  have ready endpoints — for the HTTP liveness assertion earlier slices use.
+- **`observability` gets its own node-CIDR list**, `netpol_baseline_obs_node_cidrs`, rather than
+  widening the shared `homelab` baseline's four addresses. That list is a separate policy object in
+  a different namespace — it was never going to cover `observability` pods regardless — and the
+  16 already-enforcing homelab roles read it today; editing it for observability's benefit would put
+  all 16 at risk of a regression nobody would trace back to this namespace.
+- **The intra-namespace mesh is a bare `podSelector: {}` peer.** The real justification is not "one
+  role, six workloads" but that `observability` is **sole-tenant today** — `claude-otel` is the only
+  role that renders into it. That is the invariant the design leans on, and it is exactly what a
+  second role landing in the namespace later would silently invalidate: it would get free ingress to
+  every already-fenced pod there with no policy change of its own.
+- **`otelq` is a host process, not a cluster caller**, reading `loki:3100`, `prometheus:9090` and
+  `tempo:3200` over loopback hostPorts, admitted by the node-CIDR `ipBlock` peer (which carries no
+  `ports` restriction — trimming it to "nameable" ports would break otelq silently). Both `cni0`
+  entries (`10.42.0.1/32`, `10.42.1.1/32`) are load-bearing, not just daniel-box's: a hostPort binds
+  only on the node the pod actually runs on, and prometheus/loki/tempo are unpinned single-replica
+  Deployments, so either node can be the one otelq's loopback path resolves to. Only
+  `10.42.1.0/32` (daniel-server's `flannel.1`) has no caller nameable today; it stays as deliberate
+  over-inclusion, at the same trust level the baseline already grants node bridges.
 
 ### Slice 4 specifics
 
@@ -373,15 +433,35 @@ For slices 3–5, grep for the variables too (`_cluster_ip`, `_clusterip`), and 
 `roles/setup/**` as well as `roles/k8s/**` — a host caller is more likely to live in host setup than
 in a workload role.
 
-**Warning for slice 3, where that stops being true.**
-`roles/k8s/claude-otel/templates/telemetry-health.sh.j2` runs from a host cron on both nodes and
-resolves prometheus's ClusterIP at runtime (`kubectl get svc prometheus -o
-jsonpath='{.spec.clusterIP}'`, then curls it). prometheus has **no node pin** —
+**Slice 3 found two more gaps in the same census, worth folding into the method for slices 4–5.**
+First: a role is not the unit of fencing. Nine roles render more than one pod-producing document, so
+a census scoped to `containers_list` entries undercounts every one of them — `claude-otel` (6, this
+slice), `karakeep` (4), `scrutiny` (3), `prowlarr` (2, already handled via the flaresolverr
+exemption, Ruling 4), `n8n` (2), `loki-homelab` (2), `freshrss` (2), `crowdsec` (2),
+`cloudflare-ddns` (2). None of the unhandled ones are in scope for slices 1–3. Whichever slice
+fences one of these roles next must check for a second workload AND for an existing bespoke policy
+covering it, the way Task 1 did for flaresolverr — the role-granular habit silently leaves the
+second workload unfenced. Second: two services can share a **name** across namespaces — see "Two
+Lokis" in "Slice 3 specifics" above. Resolve the env value the manifest actually sets, not the
+Service name a role's own template happens to use.
+
+**Warning for slice 3, where that stops being true — corrected below.**
+`roles/k8s/claude-otel/templates/telemetry-health.sh.j2` resolves prometheus's ClusterIP at runtime
+(`kubectl get svc prometheus -o jsonpath='{.spec.clusterIP}'`, then curls it). An earlier draft of
+this section claimed the cron installing it "runs from a host cron on both nodes." **That is false,
+verified:** `claude-otel` appears in `containers_list` only in `host_vars/daniel-box.yml`;
+`daniel-server.yml` has no entry, and the cron task in `roles/k8s/claude-otel/tasks/main.yml` has no
+`delegate_to`. The cron installs and fires from daniel-box alone.
+
+That does not remove the cross-node exposure, it relocates it. prometheus has **no node pin** —
 `roles/k8s/claude-otel/templates/prometheus.yaml.j2` sets no `nodeSelector`, `nodeAffinity` or
-`nodeName`. Fencing prometheus therefore breaks that heartbeat from the non-co-located host the
-moment prometheus reschedules, silently and without a deploy to blame it on. Slice 3 must either
-measure the cross-node source address and admit it, or leave prometheus reachable from both hosts,
-before it labels the observability namespace.
+`nodeName` — so the moment prometheus lands on daniel-server, the daniel-box cron's call becomes
+cross-node, silently and without a deploy to blame it on. By slice 2's own evidence ("Answers from
+slice 2" above, the `registry`/`flannel.1` finding), a cross-node host→pod packet arrives as the
+**sending** node's `flannel.1` address — so that caller needs daniel-box's own flannel.1
+(`10.42.0.0/32`), not daniel-server's. Slice 3 must either admit that address or leave prometheus
+reachable from both hosts before it labels the observability namespace. See "Slice 3 specifics"
+above for what it settled and verified per-node with `ip -4 -o addr show flannel.1`.
 
 ### Three callers the census missed, and what they have in common
 
