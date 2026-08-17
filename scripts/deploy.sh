@@ -26,6 +26,11 @@
 #     inventory/group_vars/all.yml, including the 19 roles it refuses to cover.
 #   --list-services prints every valid --tags value and exits.
 #   --skip-tag-check deploys a tag this wrapper does not recognise.
+#   --changed [<ref>] deploys every service touched vs <ref> (default origin/master) instead of
+#     a hand-picked --tags. Resolves to --tags under the hood (scripts/deploy_tags.py changed),
+#     so the derived list still goes through the same lock and tag validation below, and prints
+#     what it derived before doing anything else. Refuses (exit 3, nothing touched) on a broad
+#     change — shared templates/inventory/setup-plane paths that don't map to one service.
 
 set -u
 
@@ -37,6 +42,46 @@ LOCK_BUSY=75
 # has always deployed its own tree, and running the wrapper must not change that.
 repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root" || exit 1
+
+# --changed [<ref>] is resolved to --tags "<derived>" right here, before anything else looks at
+# "$@" — everything below (locking, --check/--dry-run detection, tag validation) then runs
+# exactly the --tags path it always has, unchanged. Pulled out as its own pass because the ref
+# is an OPTIONAL positional: the single-pass case-statement loop below (which handles --tags'
+# own required argument via next_is_tags) can't tell "no ref given" from "the next flag" without
+# look-ahead, so --changed gets one.
+raw_args=("$@")
+filtered_args=()
+i=0
+n=${#raw_args[@]}
+changed_requested=0
+changed_ref="origin/master"
+while [[ "$i" -lt "$n" ]]; do
+    a="${raw_args[$i]}"
+    if [[ "$a" == "--changed" ]]; then
+        changed_requested=1
+        i=$((i + 1))
+        if [[ "$i" -lt "$n" && "${raw_args[$i]}" != -* ]]; then
+            changed_ref="${raw_args[$i]}"
+            i=$((i + 1))
+        fi
+        continue
+    fi
+    filtered_args+=("$a")
+    i=$((i + 1))
+done
+set -- "${filtered_args[@]}"
+
+if [[ "$changed_requested" == 1 ]]; then
+    derived_tags=$(uv run python scripts/deploy_tags.py changed "$changed_ref")
+    status=$?
+    if [[ "$status" != 0 ]]; then
+        exit "$status"
+    fi
+    if [[ -z "$derived_tags" ]]; then
+        exit 0
+    fi
+    set -- "$@" --tags "$derived_tags"
+fi
 
 # Ansible exits 0 on a tag that matches nothing, so a typo'd service name deploys
 # nothing and reports success -- see scripts/deploy_tags.py for why the play behaves

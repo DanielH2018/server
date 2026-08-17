@@ -11,6 +11,7 @@ Run: uv run pytest scripts/test_prune_worktrees.py
 from __future__ import annotations
 
 import os
+import subprocess
 
 from prune_worktrees import (
     KEEP,
@@ -20,6 +21,7 @@ from prune_worktrees import (
     classify,
     find_orphan_dirs,
     parse_worktree_list,
+    remove,
     session_is_alive,
 )
 
@@ -192,3 +194,114 @@ def test_nothing_ahead_of_upstream_reads_as_merged():
 
 def test_blank_lines_do_not_change_the_verdict():
     assert cherry_says_merged("\n- aaaaaaa\n\n") is True
+
+
+# --- remove(): the removal loop never had a test, which is why the unlock-before-remove
+# bug survived CI — every test above exercises classify()/is_merged()/session_is_alive()/
+# parse_worktree_list, none of them the actual `git worktree remove` call.
+
+
+def test_remove_unlocks_before_removing_a_locked_tree(monkeypatch):
+    calls = []
+
+    def fake_run(argv, **kwargs):
+        calls.append(argv)
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr("prune_worktrees.subprocess.run", fake_run)
+    ok, err = remove("/repo", _tree(locked=True))
+    assert ok is True and err == ""
+    assert calls == [
+        ["git", "worktree", "unlock", "/w"],
+        ["git", "worktree", "remove", "/w"],
+    ]
+
+
+def test_remove_skips_unlock_for_a_never_locked_tree(monkeypatch):
+    calls = []
+
+    def fake_run(argv, **kwargs):
+        calls.append(argv)
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr("prune_worktrees.subprocess.run", fake_run)
+    remove("/repo", _tree(locked=False))
+    assert calls == [["git", "worktree", "remove", "/w"]]
+
+
+def test_remove_never_passes_force(monkeypatch):
+    calls = []
+
+    def fake_run(argv, **kwargs):
+        calls.append(argv)
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr("prune_worktrees.subprocess.run", fake_run)
+    remove("/repo", _tree(locked=True))
+    # --force (or -f -f) is the escape hatch git's own docs suggest for a locked tree; using
+    # it here would remove the safety net that makes auto-unlock acceptable — a REMOVABLE
+    # tree is only guaranteed merged AND clean, not that git agrees it's safe to delete.
+    assert not any("-f" in c or "--force" in c for c in calls)
+
+
+def _init_scratch_repo(path):
+    subprocess.run(
+        ["git", "init", "-q", "--initial-branch=master", str(path)], check=True
+    )
+    subprocess.run(
+        ["git", "-C", str(path), "config", "user.email", "t@t.com"], check=True
+    )
+    subprocess.run(["git", "-C", str(path), "config", "user.name", "t"], check=True)
+    (path / "a.txt").write_text("one\n")
+    subprocess.run(["git", "-C", str(path), "add", "a.txt"], check=True)
+    subprocess.run(["git", "-C", str(path), "commit", "-q", "-m", "init"], check=True)
+
+
+def test_remove_actually_deletes_a_locked_worktree_on_disk(tmp_path, monkeypatch):
+    # Real git calls rather than mocks: the mocked tests above only prove call order, not
+    # that git accepts the sequence. Without the unlock, `git worktree remove` on a locked
+    # tree fails outright ("cannot remove a locked working tree") and the caller would
+    # report success while removing nothing — this is the bug itself, reproduced.
+    #
+    # Scrub GIT_* first. git exports GIT_DIR and GIT_INDEX_FILE into hook processes, and
+    # `git -C <path>` does NOT override them, so under the prek pre-commit hook every git
+    # call below — including remove()'s own — targets the real repository rather than the
+    # scratch one. Observed: it tried to commit into the live worktree and only an existing
+    # index.lock stopped it.
+    for var in [name for name in os.environ if name.startswith("GIT_")]:
+        monkeypatch.delenv(var, raising=False)
+
+    repo = tmp_path / "repo"
+    _init_scratch_repo(repo)
+    wt = tmp_path / "wt"
+    subprocess.run(
+        ["git", "-C", str(repo), "worktree", "add", "-q", "-b", "feature", str(wt)],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "worktree", "lock", str(wt), "--reason", "test lock"],
+        check=True,
+    )
+
+    ok, err = remove(
+        str(repo), Worktree(path=str(wt), head="x", branch="feature", locked=True)
+    )
+
+    assert ok, err
+    assert not wt.exists()
+
+
+def test_removable_reason_names_the_dead_lock_owner_not_unlocked():
+    # "unlocked" would be misleading here: at classify() time the tree is still locked —
+    # only remove() unlocks it later. The reason string must say what's actually true.
+    tree = _tree(locked=True)
+    tree.lock_reason = "claude session gone (pid 1 start 999999999)"
+    verdict, reason = classify(tree, merged=True, dirty=False)
+    assert verdict == REMOVABLE
+    assert "lock owner is dead" in reason
+
+
+def test_removable_reason_for_a_never_locked_tree_says_unlocked():
+    verdict, reason = classify(_tree(locked=False), merged=True, dirty=False)
+    assert verdict == REMOVABLE
+    assert reason.endswith("unlocked")

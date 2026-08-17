@@ -11,11 +11,16 @@ Design contract (mirrors the other hooks here):
     any failure degrades to a quiet skip (or, for a wedged dockerd, a one-line
     warning — a dockerd that hangs IS the signal). Always exits 0.
   - A host with no docker binary is not a broken Docker host: daniel-box runs k3s
-    and sets has_docker: false. Both checks skip silently there.
+    and sets has_docker: false. The docker check skips silently there; the Prometheus
+    check does NOT depend on docker (it goes through probe.py's cluster route, not
+    `docker inspect`) and always runs regardless.
   - The docker check is local + sub-second and always runs. The Prometheus check
     goes through `uv run probe.py` (one subprocess, bounded) — SessionStart fires
     once per session, so the small cost is paid rarely; it's skipped on any error so
-    a down monitoring stack can never stall session start.
+    a down monitoring stack can never stall session start. A down target whose
+    Deployment is deliberately scaled to 0 replicas (an on-demand game server) is
+    filtered out rather than reported — otherwise this would trade a false all-clear
+    for the same two names on every session open forever.
 
 Wired via .claude/settings.json -> hooks.SessionStart. Stdout is injected as
 session context by Claude Code (same mechanism the remember plugin uses).
@@ -75,8 +80,7 @@ def docker_problems():
         # means this host is not a Docker host at all — daniel-box runs k3s and sets
         # has_docker: false — not that a Docker host is broken. Staying silent is the whole
         # point of the all-green contract; warning here would fire on every session open
-        # forever. docker_ok=False still skips the Prometheus probe, which needs `docker
-        # inspect` to resolve the container IP and so cannot work here either.
+        # forever.
         return [], False
     lines = []
     for label, res in (("unhealthy", unhealthy), ("restarting", restarting)):
@@ -88,20 +92,72 @@ def docker_problems():
     return lines, True
 
 
+def _k8s_namespace():
+    """k8s_namespace, read from the same plaintext inventory file scripts/probe.py reads it
+    from. Duplicated rather than imported — target_problems() shells out to probe.py rather
+    than importing it (see its own docstring), and this stays consistent with that."""
+    path = os.path.join(REPO, "ansible", "inventory", "group_vars", "all.yml")
+    try:
+        with open(path) as f:
+            for line in f:
+                if line.startswith("k8s_namespace:"):
+                    return line.split(":", 1)[1].strip()
+    except OSError:
+        return None
+    return None
+
+
+def _is_scaled_to_zero(job, namespace):
+    """True only if `job`'s backing Deployment is confirmed to have spec.replicas: 0 — an
+    on-demand game server (terraria-stats, valheim-stats) deliberately left idle, not a
+    failure. Any lookup failure (wrong kind, missing Deployment, kubectl error, timeout)
+    returns False: a down target we can't explain to be intentional stays reported rather
+    than silently swallowed."""
+    if not namespace:
+        return False
+    try:
+        res = _run(
+            [
+                "k3s",
+                "kubectl",
+                "-n",
+                namespace,
+                "get",
+                "deployment",
+                job,
+                "-o",
+                "jsonpath={.spec.replicas}",
+            ],
+            5,
+        )
+    except subprocess.TimeoutExpired, OSError:
+        return False
+    if res.returncode != 0:
+        return False
+    try:
+        return int(res.stdout.strip()) == 0
+    except ValueError:
+        return False
+
+
 def target_problems():
-    """Best-effort list of down Prometheus scrape targets. [] on any failure
-    (monitoring being unreachable must not block or spam session start)."""
+    """Best-effort list of down Prometheus scrape targets, minus any whose Deployment is
+    deliberately scaled to 0 replicas. [] on any failure (monitoring being unreachable must
+    not block or spam session start)."""
     try:
         res = _run(["uv", "run", "python", "scripts/probe.py", "targets"], 6)
         active = json.loads(res.stdout)["data"]["activeTargets"]
     except Exception:
         return []
+    namespace = _k8s_namespace()
     bad = []
     for t in active:
         if t.get("health") == "up":
             continue
         labels = t.get("labels", {})
         job = labels.get("job", "?")
+        if _is_scaled_to_zero(job, namespace):
+            continue
         inst = labels.get("instance", "?")
         err = (t.get("lastError") or "").strip()[:70]
         bad.append(
@@ -168,8 +224,8 @@ def main():
     if payload.get("source") == "compact":
         return 0
 
-    dock, docker_ok = docker_problems()
-    targets = target_problems() if docker_ok else []
+    dock, _docker_ok = docker_problems()
+    targets = target_problems()
     problems = dock + targets
 
     banner = format_banner(problems)

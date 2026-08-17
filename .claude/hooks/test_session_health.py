@@ -91,8 +91,9 @@ def test_missing_docker_binary_is_silent(monkeypatch):
     monkeypatch.setattr(_mod, "_run", boom)
     lines, ok = _mod.docker_problems()
     assert lines == []
-    # Still False: the Prometheus probe shells out to `docker inspect` for the container
-    # IP, so it cannot work on a host without docker either.
+    # Still False: this only gates the docker section of the banner now — the Prometheus
+    # check does not depend on docker and runs regardless (see test_main_runs_targets_
+    # even_when_docker_down).
     assert ok is False
 
 
@@ -123,6 +124,69 @@ def test_target_problems_all_up(monkeypatch):
 def test_target_problems_swallows_bad_json(monkeypatch):
     monkeypatch.setattr(_mod, "_run", lambda *a, **k: _result("not json"))
     assert _mod.target_problems() == []  # monitoring hiccup must never blow up the hook
+
+
+def test_is_scaled_to_zero_true_when_replicas_zero(monkeypatch):
+    monkeypatch.setattr(_mod, "_run", lambda *a, **k: _result("0"))
+    assert _mod._is_scaled_to_zero("terraria-stats", "homelab") is True
+
+
+def test_is_scaled_to_zero_false_when_replicas_nonzero(monkeypatch):
+    monkeypatch.setattr(_mod, "_run", lambda *a, **k: _result("1"))
+    assert _mod._is_scaled_to_zero("loki", "homelab") is False
+
+
+def test_is_scaled_to_zero_false_on_kubectl_failure(monkeypatch):
+    # An unreadable answer must not be treated as "confirmed intentional" — a real problem
+    # we can't explain has to stay visible, same fail-open-to-visible rule probe.py's
+    # format_k8s_health uses for an unreadable restart time.
+    monkeypatch.setattr(
+        _mod,
+        "_run",
+        lambda *a, **k: types.SimpleNamespace(stdout="", stderr="x", returncode=1),
+    )
+    assert _mod._is_scaled_to_zero("sonarr", "homelab") is False
+
+
+def test_is_scaled_to_zero_false_on_timeout(monkeypatch):
+    def boom(*a, **k):
+        raise subprocess.TimeoutExpired("kubectl", 5)
+
+    monkeypatch.setattr(_mod, "_run", boom)
+    assert _mod._is_scaled_to_zero("sonarr", "homelab") is False
+
+
+def test_is_scaled_to_zero_false_without_a_namespace():
+    assert _mod._is_scaled_to_zero("sonarr", None) is False
+
+
+_TARGETS_ONE_SCALED_TO_ZERO = (
+    '{"data":{"activeTargets":['
+    '{"health":"down","labels":{"job":"terraria-stats","instance":"terraria-stats:9420"},'
+    '"lastError":"connection refused"},'
+    '{"health":"down","labels":{"job":"loki","instance":"loki:3100"},'
+    '"lastError":"connection refused"}'
+    "]}}"
+)
+
+
+def test_target_problems_filters_scaled_to_zero_deployments(monkeypatch):
+    # terraria-stats/valheim-stats are on-demand game servers deliberately scaled to 0 —
+    # reporting them every session open forever is exactly the noise the all-green
+    # contract exists to avoid, so only the genuinely-unexplained loki target survives.
+    monkeypatch.setattr(_mod, "_k8s_namespace", lambda: "homelab")
+    monkeypatch.setattr(
+        _mod,
+        "_is_scaled_to_zero",
+        lambda job, ns: job == "terraria-stats",
+    )
+    monkeypatch.setattr(
+        _mod, "_run", lambda *a, **k: _result(_TARGETS_ONE_SCALED_TO_ZERO)
+    )
+    bad = _mod.target_problems()
+    assert len(bad) == 1
+    assert "loki" in bad[0]
+    assert not any("terraria-stats" in line for line in bad)
 
 
 # --- main orchestration ------------------------------------------------------
@@ -195,13 +259,16 @@ def test_main_prints_banner_on_problem(monkeypatch, capsys):
     assert "jellyfin" in capsys.readouterr().out
 
 
-def test_main_skips_targets_when_docker_down(monkeypatch, capsys):
-    # docker_ok=False must short-circuit the Prometheus probe entirely.
+def test_main_runs_targets_even_when_docker_down(monkeypatch, capsys):
+    # docker_ok=False must no longer short-circuit the Prometheus probe: target_problems()
+    # doesn't touch docker (it goes through probe.py's cluster route), so daniel-box (no
+    # docker binary at all) used to get a false all-clear on scrape targets — the whole
+    # Prometheus check never ran. See the module docstring.
     called = {"targets": False}
 
     def tp():
         called["targets"] = True
-        return []
+        return ["  ✗ target loki [loki:3100] down"]
 
     monkeypatch.setattr(_mod.sys, "stdin", io.StringIO('{"source":"startup"}'))
     monkeypatch.setattr(
@@ -209,5 +276,7 @@ def test_main_skips_targets_when_docker_down(monkeypatch, capsys):
     )
     monkeypatch.setattr(_mod, "target_problems", tp)
     assert _mod.main() == 0
-    assert called["targets"] is False
-    assert "docker unreachable" in capsys.readouterr().out
+    assert called["targets"] is True
+    out = capsys.readouterr().out
+    assert "docker unreachable" in out
+    assert "loki" in out

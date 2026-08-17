@@ -128,3 +128,105 @@ def test_list_prints_the_real_tags(capsys):
 
 def test_real_inventory_has_no_empty_service_names():
     assert all(tag for tag in deploy_tags.service_tags())
+
+
+# --------------------------------------------------------------------------------- describe
+
+
+def test_service_records_carry_host_and_platform(host_vars):
+    records = deploy_tags.service_records(host_vars)
+    assert ("host_a", "k8s", "jellyfin") in records
+    assert ("host_a", "k8s", "sonarr") in records
+    # daniel-pi-style entries carry no `platform:` key at all — docker is the default,
+    # not a third unlabelled state.
+    assert ("host_b", "docker", "dozzle") in records
+
+
+def test_describe_groups_by_host_and_flags_dry_run_unsupported(capsys):
+    assert deploy_tags.main(["describe"]) == 0
+    out = capsys.readouterr().out
+    assert "daniel-box (k8s):" in out
+    # crowdsec is dry-run-unsupported in the real group_vars/all.yml.
+    assert "crowdsec  [dry-run: unsupported]" in out
+    assert "block tags: config, cron, deploy" in out
+
+
+def test_describe_does_not_change_lists_own_shape(capsys):
+    # `list` stays flat/sorted (test_list_prints_the_real_tags above pins that). describe is
+    # a separate view, not a reformat of it.
+    deploy_tags.main(["list"])
+    list_out = capsys.readouterr().out
+    deploy_tags.main(["describe"])
+    describe_out = capsys.readouterr().out
+    assert list_out != describe_out
+
+
+# ----------------------------------------------------------------------------------- changed
+
+
+def test_changed_prints_tags_for_a_service_and_k8s_change(capsys, monkeypatch):
+    monkeypatch.setattr(
+        deploy_tags,
+        "_git_diff_paths",
+        lambda ref: [
+            "ansible/roles/containers/dozzle/templates/docker-compose.yml.j2",
+            "ansible/roles/k8s/jellyfin/templates/deployment.yaml.j2",
+        ],
+    )
+    assert deploy_tags.main(["changed"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "dozzle,jellyfin"
+    assert "dozzle, jellyfin" in captured.err
+
+
+def test_changed_refuses_a_broad_change(capsys, monkeypatch):
+    monkeypatch.setattr(
+        deploy_tags,
+        "_git_diff_paths",
+        lambda ref: ["ansible/inventory/host_vars/daniel-box.yml"],
+    )
+    assert deploy_tags.main(["changed"]) == 3
+    captured = capsys.readouterr()
+    # Nothing but the tag list belongs on stdout — a refusal must not leak a stray tag line
+    # a caller might mistake for one.
+    assert captured.out == ""
+    assert "refusing" in captured.err
+    assert "ansible-playbook ansible/deploy.yml" in captured.err
+
+
+def test_changed_reports_no_files_differ(capsys, monkeypatch):
+    monkeypatch.setattr(deploy_tags, "_git_diff_paths", lambda ref: [])
+    assert deploy_tags.main(["changed"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "no files differ" in captured.err
+
+
+def test_changed_warns_but_still_exits_zero_on_a_docs_only_change(capsys, monkeypatch):
+    # tasks/-only change: not auto-deployed, not a tag, but must not be silently dropped.
+    monkeypatch.setattr(
+        deploy_tags,
+        "_git_diff_paths",
+        lambda ref: ["ansible/roles/containers/dozzle/tasks/main.yml"],
+    )
+    assert deploy_tags.main(["changed"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "structural change" in captured.err
+    assert "dozzle" in captured.err
+
+
+def test_changed_default_ref_is_origin_master():
+    parser_ref = []
+
+    def fake_git_diff(ref):
+        parser_ref.append(ref)
+        return []
+
+    orig = deploy_tags._git_diff_paths
+    deploy_tags._git_diff_paths = fake_git_diff
+    try:
+        deploy_tags.main(["changed"])
+    finally:
+        deploy_tags._git_diff_paths = orig
+    assert parser_ref == ["origin/master"]

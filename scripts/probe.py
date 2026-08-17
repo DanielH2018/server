@@ -17,6 +17,9 @@ Everything it runs is read-only (HTTP GET / TLS handshake / docker inspect).
 Subcommands:
     metric '<promql>'        Prometheus instant query [--json] (prometheus :9090)
     targets                  Prometheus scrape-target health (prometheus :9090)
+    monitors                 Kuma down-monitors rollup (exit 0 = all up), read from the
+                             monitor_status metric Prometheus already scrapes — no Kuma
+                             API credential needed
     loki-labels              Loki label names                (cluster loki-homelab)
     loki-query '<logql>'     Loki range query [--limit N] [--json] (cluster loki-homelab)
     alerts                   monitor-bridge DOWN history as episodes [--days N --check X --raw --json]
@@ -123,6 +126,14 @@ GROUP_VARS_PATH = os.path.join(
     "all.yml",
 )
 
+# Inventory hosts file (plaintext) — source of daniel-pi's LAN IP.
+HOSTS_INI_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "ansible",
+    "inventory",
+    "hosts.ini",
+)
+
 # Git-managed automation source (repo-root relative to this file) — the "expected" set for
 # the verify-automations post-deploy gate. The deployed config is copied from here verbatim.
 # `k8s`, not `containers`: HA moved at the slice-5 B3 cutover and this constant did not follow,
@@ -202,6 +213,25 @@ def pi_url(subpath):
     return f"http://daniel-pi.lan:61208/api/4/{subpath}"
 
 
+def pi_ip():
+    """daniel-pi's LAN IP, read from inventory (plaintext, not a secret) — same reason as
+    metallb_vip(): this host's resolver has no answer for daniel-pi.lan (a Pi-hole-only LAN
+    name), so `getent hosts daniel-pi.lan` exits 2 here and curl needs a --resolve pin instead
+    of DNS."""
+    with open(HOSTS_INI_PATH) as f:
+        for line in f:
+            if line.startswith("daniel-pi ") or line.startswith("daniel-pi\t"):
+                m = re.search(r"ansible_host=(\S+)", line)
+                if m:
+                    return m.group(1)
+    raise SystemExit(f"daniel-pi ansible_host not found in {HOSTS_INI_PATH}")
+
+
+def pi_resolve():
+    """curl --resolve pin for pi_url()'s daniel-pi.lan:61208."""
+    return f"daniel-pi.lan:61208:{pi_ip()}"
+
+
 # --- Home Assistant (pure) --------------------------------------------------
 
 
@@ -236,6 +266,16 @@ def ha_curl_config(token):
 # --- *arr apps (sonarr/radarr/prowlarr) read-only API (pure) ----------------
 # Sonarr/Radarr speak /api/v3, Prowlarr /api/v1. The X-Api-Key comes from SOPS
 # and is fed to curl via stdin (arr_curl_config), never argv — same guard as ha.
+#
+# NB this deliberately does NOT go through k8s_endpoint (Traefik + Authelia), unlike
+# scrutiny/prometheus/loki. Confirmed live 2026-08-17: sonarr has no Authelia
+# access_control bypass rule for its /api/* paths (scrutiny does — config-secret.yaml.j2),
+# so a Traefik-routed GET 302s to the Authelia login page instead of reaching sonarr. The
+# apps' own configarr/janitorr configs (config.yml.j2, application.yml.j2) hit
+# `http://sonarr:8989` directly — the in-cluster Service DNS name — for the same reason.
+# arr_url() therefore keeps the pre-migration ip:port shape; only the IP source changed,
+# from `docker inspect` to the Service's ClusterIP (resolve_arr_ip, k8s's equivalent of a
+# stable container IP — a Service's ClusterIP does not change across pod restarts/redeploys).
 ARR_PORTS = {"sonarr": 8989, "radarr": 7878, "prowlarr": 9696}
 ARR_API_VERSION = {"sonarr": "v3", "radarr": "v3", "prowlarr": "v1"}
 
@@ -580,6 +620,22 @@ def inspect_argv(container):
     return ["docker", "inspect", container]
 
 
+def k8s_service_ip_argv(service, namespace):
+    """kubectl argv for a Service's ClusterIP — the k8s analog of inspect_ip_argv, for
+    apps (arr) that must be reached directly rather than through k8s_endpoint."""
+    return [
+        "k3s",
+        "kubectl",
+        "-n",
+        namespace,
+        "get",
+        "service",
+        service,
+        "-o",
+        "jsonpath={.spec.clusterIP}",
+    ]
+
+
 def format_health(data, container):
     """Summarize a container's state + healthcheck from `docker inspect` output.
 
@@ -809,6 +865,39 @@ def format_metric(data):
     return "\n".join(lines)
 
 
+# Kuma's own numeric status codes, from the exporter that feeds monitor_status.
+_MONITOR_STATUS_LABELS = {"0": "DOWN", "1": "UP", "2": "PENDING", "3": "MAINTENANCE"}
+
+
+def format_monitor_status(data):
+    """Format Kuma's monitor_status vector (Prometheus job=uptime-kuma) into a down-monitors
+    rollup. Pure: takes the parsed instant-query response, returns (text, exit_code).
+
+    Kuma keeps no history of its own — that's why `alerts` reconstructs the past from Loki
+    instead of asking Kuma for it — but it does hold live state, and Prometheus already
+    scrapes that state (postflight.py's check_kuma_monitors uses the same metric). No new
+    Kuma API credential needed for "what's down right now" when this was already covering it.
+
+    exit_code is 0 only when every monitor reports UP (1); PENDING and MAINTENANCE count as
+    not-up too, same as DOWN, since neither means "confirmed healthy".
+    """
+    result = data.get("data", {}).get("result", [])
+    if not result:
+        return "no monitor_status series returned (uptime-kuma scrape target down?)", 1
+    problems, up = [], 0
+    for series in result:
+        name = (series.get("metric") or {}).get("monitor_name", "?")
+        status = (series.get("value") or [None, None])[1]
+        if status == "1":
+            up += 1
+        else:
+            problems.append(f"  {name}: {_MONITOR_STATUS_LABELS.get(status, status)}")
+    summary = f"{up}/{len(result)} monitors up"
+    if problems:
+        return "\n".join([summary] + sorted(problems)), 1
+    return summary, 0
+
+
 def format_loki(data):
     """Human view of a Loki query_range result: just the log lines, sorted oldest
     -> newest across all streams (nanosecond-epoch timestamps), so the newest sits
@@ -935,6 +1024,7 @@ def _build_parser():
         help="print raw JSON instead of the formatted view",
     )
     sub.add_parser("targets", help="Prometheus scrape-target health")
+    sub.add_parser("monitors", help="Kuma down-monitors rollup (exit 0 = all up)")
     sub.add_parser("loki-labels", help="Loki label names")
     lq = sub.add_parser("loki-query", help="Loki range query")
     lq.add_argument("logql")
@@ -1037,12 +1127,13 @@ def _build_parser():
     return p
 
 
-def plan(args, resolve_ip, k8s_endpoint=k8s_endpoint):
+def plan(args, resolve_ip, k8s_endpoint=k8s_endpoint, pi_resolve=pi_resolve):
     """Return the command pipeline (list of argv stages) for the parsed args.
 
-    `resolve_ip(container) -> ip` and `k8s_endpoint(hostname) -> (base, pin)` are injected so
-    all routing/URL logic is testable without Docker, SOPS, or the network. Most
-    commands are a single stage; `cert` is a two-stage openssl pipeline.
+    `resolve_ip(container) -> ip`, `k8s_endpoint(hostname) -> (base, pin)`, and
+    `pi_resolve() -> pin` are injected so all routing/URL logic is testable without
+    Docker, SOPS, or the network. Most commands are a single stage; `cert` is a
+    two-stage openssl pipeline.
     """
     ns = _build_parser().parse_args(args)
     cmd = ns.cmd
@@ -1062,7 +1153,9 @@ def plan(args, resolve_ip, k8s_endpoint=k8s_endpoint):
         base, pin = k8s_endpoint("scrutiny")
         return [curl_argv(scrutiny_url(base), resolve=pin)]
     if cmd == "pi":
-        return [curl_argv(pi_url(ns.subpath))]
+        # daniel-pi.lan is a Pi-hole-only LAN name; this host's resolver bypasses it (same
+        # trap as every other cluster/LAN name here), so pin it like k8s_endpoint does.
+        return [curl_argv(pi_url(ns.subpath), resolve=pi_resolve())]
     if cmd == "cert":
         host, _, port = ns.target.partition(":")
         port = int(port) if port else 443
@@ -1080,6 +1173,32 @@ def resolve_ip(container):
     ip = parse_ip(out.stdout)
     if not ip:
         raise SystemExit(f"{container} has no container IP (is it running?)")
+    return ip
+
+
+def resolve_arr_ip(app):
+    """The *arr app's k8s Service ClusterIP — resolve_ip's k8s equivalent, used instead of
+    k8s_endpoint because sonarr/radarr/prowlarr have no Authelia bypass rule for /api/* (see
+    the comment above ARR_PORTS). A ClusterIP is stable across pod restarts and redeploys,
+    so this doesn't reintroduce the hand-copied-IP staleness `docker inspect` was resolving
+    around in the first place.
+
+    CAVEAT confirmed live 2026-08-17: this only reaches the app when its pod is scheduled on
+    THIS node (daniel-box). Each app's NetworkPolicy allows ingress only from specific pod
+    selectors, no ipBlock for the host — sonarr/radarr (on daniel-box) answered anyway, but
+    prowlarr (on daniel-server that day) refused the connection although ICMP to its pod IP
+    got through, so this is the NetworkPolicy's enforcement, not routing. Host-originated
+    traffic apparently doesn't pass through the destination node's own NetworkPolicy iptables
+    the same way same-node traffic does. This will flip on the next reschedule; a real fix
+    needs a NetworkPolicy ipBlock for the node (ansible/roles/k8s/*/templates/), out of scope
+    here."""
+    ns = k8s_namespace()
+    out = subprocess.run(k8s_service_ip_argv(app, ns), capture_output=True, text=True)
+    if out.returncode != 0:
+        raise SystemExit(f"kubectl get service {app} failed: {out.stderr.strip()}")
+    ip = out.stdout.strip()
+    if not ip:
+        raise SystemExit(f"{app} has no ClusterIP (does the Service exist?)")
     return ip
 
 
@@ -1131,6 +1250,24 @@ def run_query(ns):
         return 1
     print(formatter(data))
     return 0
+
+
+def run_monitors(ns):
+    """Print Kuma's live down-monitors rollup (exit 0 = all up)."""
+    base, pin = prom_endpoint()
+    url = prom_query_url(base, "monitor_status")
+    if ns.dry_run:
+        print(" ".join(curl_argv(url, resolve=pin)))
+        return 0
+    body = fetch(url, resolve=pin)
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError:
+        print(body.strip())
+        return 1
+    text, code = format_monitor_status(data)
+    print(text)
+    return code
 
 
 def _rows_from_loki(data: dict) -> list[tuple[int, str]]:
@@ -1282,15 +1419,23 @@ def config_get(url, config_body, resolve=None):
 
 
 def run_arr(ns):
-    """Read-only *arr API GET. Pulls <app>_api_key from SOPS and passes it via
-    stdin. Pretty-prints JSON by default; `--json` prints the raw response."""
+    """Read-only *arr API GET, resolved to the app's k8s Service ClusterIP.
+
+    sonarr/radarr/prowlarr have run as k8s Deployments since 2026-08-07 (B4c) and have
+    no Docker container left to `docker inspect` an IP from — this used to shell out to
+    `resolve_ip(ns.app)`, which died with `FileNotFoundError: 'docker'` on both cluster
+    nodes. resolve_arr_ip replaces it with the same idea (resolve the current address at
+    run time) via kubectl instead of docker — see the comment above ARR_PORTS for why
+    this talks to the Service directly instead of going through k8s_endpoint like every
+    other cluster subcommand. Pulls <app>_api_key from SOPS and passes it via stdin.
+    Pretty-prints JSON by default; `--json` prints the raw response."""
     if ns.dry_run:
         print(
-            " ".join(ha_curl_argv(arr_url("<arr-ip>", ns.app, ns.path)))
+            " ".join(ha_curl_argv(arr_url("<arr-clusterip>", ns.app, ns.path)))
             + "   # + X-Api-Key: <redacted> (via --config stdin)"
         )
         return 0
-    url = arr_url(resolve_ip(ns.app), ns.app, ns.path)
+    url = arr_url(resolve_arr_ip(ns.app), ns.app, ns.path)
     body = config_get(url, arr_curl_config(sops_extract(f"{ns.app}_api_key")))
     if ns.json:
         print(body, end="")
@@ -1470,6 +1615,8 @@ def main(argv=None):
         return run_b2_longhorn(ns)
     if ns.cmd == "ha-state":
         return run_ha_state(ns)
+    if ns.cmd == "monitors":
+        return run_monitors(ns)
     # metric / loki-query default to a formatted view; --json and --dry-run fall
     # through to the raw streaming path below.
     if ns.cmd in ("metric", "loki-query") and not ns.json and not ns.dry_run:
