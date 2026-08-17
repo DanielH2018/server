@@ -1,0 +1,35 @@
+---
+# Slice 2 of the ingress default-deny.
+#
+# sonarr and radarr reach this pod as the download client at `wireguard:8080` — a compat Service
+# (service-wireguard.yaml.j2) that selects `app: qbittorrent`, carrying the hostname their SQLite
+# databases were seeded with under Docker. The Service name differs; the pod is the same, so a
+# podSelector on `app: qbittorrent` covers it. The PORT is the WebUI port, not container_item.port.
+#
+# TRAEFIK IS LISTED HERE DELIBERATELY — see the rollout hazard in the slice-2 plan.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: qbittorrent
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: qbittorrent
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: traefik
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - sonarr
+                  - radarr
+      ports:
+        - protocol: TCP
+          port: {{ qbittorrent_k8s_webui_port }}

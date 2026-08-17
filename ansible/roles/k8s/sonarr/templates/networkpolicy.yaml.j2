@@ -1,0 +1,43 @@
+---
+# Slice 2 of the ingress default-deny. The baseline (roles/k8s/netpol-baseline) admits traefik,
+# prometheus and the node bridges to every pod carrying `netpol-baseline: enforced`. This file adds
+# sonarr's own callers, which are all direct pod → ClusterIP and therefore invisible to the
+# baseline.
+#
+# TRAEFIK IS LISTED HERE DELIBERATELY, even though the baseline also admits it. This policy selects
+# `app: sonarr`, which the OLD pod carries during a rollout — and that pod does not yet carry the
+# baseline label, so the baseline does not select it. Without this rule the sonarr UI 502s for the
+# length of every rollout. Do not remove it as redundant.
+#
+# bazarr addresses sonarr by BARE NAME from its own application database, not from any manifest
+# (roles/k8s/bazarr/defaults/main.yml). It is in this list because of that comment, not because a
+# grep found it — dropping it would break subtitle fetching silently.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sonarr
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: sonarr
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: traefik
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - janitorr        # templates/config/application.yml.j2 — deploy-time verify too
+                  - configarr       # CronJob; its pod template carries app: configarr
+                  - monitor-bridge  # env-secret.yaml.j2, cluster FQDN
+                  - autofix-bridge  # env-secret.yaml.j2, cluster FQDN
+                  - bazarr          # app DB, bare name — see header
+      ports:
+        - protocol: TCP
+          port: {{ container_item.port }}

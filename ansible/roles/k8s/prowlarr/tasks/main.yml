@@ -45,11 +45,13 @@
     manifests_extra_rollouts:
       - name: flaresolverr
     manifests_files:
-      # The policy is listed FIRST so it exists before flaresolverr can be scheduled. Within a
-      # single `kubectl apply -f <dir>` that ordering is not guaranteed, which is why the pod
-      # also cannot be reached in the gap: it takes seconds to pull and start, and the policy is
-      # applied in the same call.
+      # Both policies are listed FIRST so they exist before their pods can be scheduled. Within a
+      # single `kubectl apply -f <dir>` that ordering is not guaranteed, which is why the pods
+      # also cannot be reached in the gap: they take seconds to pull and start, and the policies
+      # are applied in the same call. networkpolicy.yaml fences flaresolverr;
+      # networkpolicy-prowlarr.yaml (slice 2) fences prowlarr itself.
       - networkpolicy.yaml
+      - networkpolicy-prowlarr.yaml
       - deployment-flaresolverr.yaml
       - service-flaresolverr.yaml
       - deployment.yaml

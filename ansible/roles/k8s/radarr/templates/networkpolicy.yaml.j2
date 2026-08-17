@@ -1,0 +1,39 @@
+---
+# Slice 2 of the ingress default-deny. The baseline admits traefik, prometheus and the node bridges
+# to every pod carrying `netpol-baseline: enforced`. This file adds radarr's own callers, which are
+# all direct pod → ClusterIP and therefore invisible to the baseline.
+#
+# TRAEFIK IS LISTED HERE DELIBERATELY, even though the baseline also admits it. This policy selects
+# `app: radarr`, which the OLD pod carries during a rollout — and that pod does not yet carry the
+# baseline label. Without this rule the radarr UI 502s for the length of every rollout.
+#
+# bazarr addresses radarr by BARE NAME from its own application database, not from any manifest.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: radarr
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: radarr
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: traefik
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - janitorr
+                  - configarr
+                  - monitor-bridge
+                  - autofix-bridge
+                  - bazarr
+      ports:
+        - protocol: TCP
+          port: {{ container_item.port }}
