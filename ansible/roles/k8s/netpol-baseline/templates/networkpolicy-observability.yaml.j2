@@ -39,11 +39,15 @@ spec:
             matchLabels:
               app: traefik
         # Intra-namespace: grafana -> prometheus/loki/tempo, prometheus -> kube-state-metrics /
-        # the otel collector. The mesh here is thick and entirely trusted — every pod in
-        # observability is part of one telemetry system rendered from one role. Enumerating each
-        # workload's pairwise edges would add review surface without adding a boundary; the
-        # boundary that matters is the namespace edge. A bare podSelector is correct here and
-        # means observability only.
+        # the otel collector. The mesh here is thick and entirely trusted — the real
+        # justification is not "one telemetry system, one role" but that this namespace is
+        # SOLE-TENANT today: claude-otel is the only role that renders into it. That is the
+        # invariant this bare selector leans on, and it is exactly what a second role landing in
+        # the namespace later would silently invalidate — it would get free ingress to every
+        # already-fenced pod here with no policy change of its own (guarded by
+        # ansible/tests/test_observability_sole_tenancy.py). Enumerating each workload's pairwise
+        # edges would add review surface without adding a boundary; the boundary that matters is
+        # the namespace edge. A bare podSelector is correct here and means observability only.
         - podSelector: {}
 {% for cidr in netpol_baseline_obs_node_cidrs %}
         - ipBlock:
