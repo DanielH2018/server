@@ -172,7 +172,7 @@
   become: true
 
 # The slice-2 probe's assertions are INVERTED (see netpol-probe-slice2-job.yaml.j2): a failed
-# `nc` is the PASS case. That means a crashlooping or scaled-to-zero sonarr/qbittorrent reads
+# `nc` is the PASS case. That means a crashlooping or scaled-to-zero target reads
 # identically to a correctly-fenced one — both produce "unreachable" — and the probe would print
 # "isolated: ... unreachable from an unlisted caller" and exit 0 for a reason that has nothing to
 # do with the policy. Slice 1's probe avoids this with its own liveness leg (assertion 3, through
@@ -189,7 +189,7 @@
 # (`get endpoints <missing>` exits non-zero with NotFound; an existing Service with no ready
 # backends exits 0). So this is a choice about reading readiness directly, not the only way to ask.
 # Same query shape as roles/k8s/pihole/tasks/main.yml's own endpoint-readiness check.
-- name: Read sonarr's and qbittorrent's endpoint readiness
+- name: Read the slice-2 probe targets' endpoint readiness
   tags: [deploy]
   when:
     - netpol_baseline_enforced | bool
@@ -201,14 +201,19 @@
   become: true
   changed_when: false
   register: netpol_baseline_probe_slice2_targets
+  # One entry per target the probe asserts against. Adding an assertion to
+  # netpol-probe-slice2-job.yaml.j2 without adding its target here reopens the silent-green hole
+  # this gate exists to close.
   loop:
     - sonarr
+    - radarr
+    - prowlarr
     - qbittorrent
 
 # Not best-effort: a silent pass here is exactly the failure mode this task exists to close, so
 # an empty result — whether from zero ready addresses or a query that could not be answered —
 # fails the play rather than letting the probe run and misreport.
-- name: Fail if sonarr or qbittorrent has no ready endpoint
+- name: Fail if any slice-2 probe target has no ready endpoint
   tags: [deploy]
   when:
     - netpol_baseline_enforced | bool

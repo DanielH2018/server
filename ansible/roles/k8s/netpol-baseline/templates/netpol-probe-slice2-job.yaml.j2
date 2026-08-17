@@ -84,6 +84,35 @@ spec:
               fi
               echo "isolated: sonarr unreachable from an unlisted caller"
 
+              # radarr's allowed callers are traefik, janitorr, configarr, monitor-bridge,
+              # autofix-bridge, bazarr and prowlarr (roles/k8s/radarr/templates/networkpolicy.yaml.j2).
+              # This pod is none of them. Port hardcoded from radarr's containers_list entry in
+              # ansible/inventory/host_vars/daniel-box.yml — see the silently-green warning above.
+              if nc -w 5 -z radarr 7878; then
+                echo "POLICY NOT ENFORCED: reached radarr directly from a pod that is not one of"
+                echo "its allowed callers (traefik, janitorr, configarr, monitor-bridge,"
+                echo "autofix-bridge, bazarr or prowlarr). Either netpol_baseline_enforced is"
+                echo "false, or the label is missing from radarr's POD TEMPLATE, or radarr's"
+                echo "policy admits too much."
+                exit 1
+              fi
+              echo "isolated: radarr unreachable from an unlisted caller"
+
+              # prowlarr's allowed callers are traefik, monitor-bridge, sonarr, radarr and the
+              # flaresolverr-netpol-probe control leg
+              # (roles/k8s/prowlarr/templates/networkpolicy-prowlarr.yaml.j2). This pod is none of
+              # them. Port hardcoded from prowlarr's containers_list entry in
+              # ansible/inventory/host_vars/daniel-box.yml — see the silently-green warning above.
+              if nc -w 5 -z prowlarr 9696; then
+                echo "POLICY NOT ENFORCED: reached prowlarr directly from a pod that is not one of"
+                echo "its allowed callers (traefik, monitor-bridge, sonarr, radarr or"
+                echo "flaresolverr-netpol-probe). Either netpol_baseline_enforced is false, or the"
+                echo "label is missing from prowlarr's POD TEMPLATE, or prowlarr's policy admits"
+                echo "too much."
+                exit 1
+              fi
+              echo "isolated: prowlarr unreachable from an unlisted caller"
+
               # qbittorrent's policy admits traefik, sonarr, radarr and its own reach-probe
               # (roles/k8s/qbittorrent/templates/networkpolicy.yaml.j2). This pod is none of those.
               # Port hardcoded rather than referencing qbittorrent_k8s_webui_port
