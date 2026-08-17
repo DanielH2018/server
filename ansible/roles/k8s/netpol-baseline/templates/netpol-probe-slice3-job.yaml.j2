@@ -1,0 +1,100 @@
+---
+# Slice 3 fences the observability namespace, and its question is again different from slices 1
+# and 2: prometheus and loki each admit exactly two named cross-namespace callers
+# (monitor-bridge, homelab-mcp — networkpolicy-prometheus.yaml.j2, networkpolicy-loki.yaml.j2),
+# both of which run in {{ k8s_namespace }}. This probe asserts that a THIRD pod in
+# {{ k8s_namespace }}, carrying neither of those two labels, is refused.
+#
+# THIS JOB RUNS IN {{ k8s_namespace }}, NOT {{ k8s_observability_namespace }} — the single
+# easiest thing to get wrong in this slice. The observability baseline
+# (networkpolicy-observability.yaml.j2) admits `podSelector: {}`, i.e. every pod in that
+# namespace, as an intra-namespace peer. A probe pod placed inside observability would therefore
+# NOT be blocked by anything, and it would report the fence broken while the policy is working
+# exactly as designed. The label below (netpol-probe-slice3) also deliberately matches neither
+# `monitor-bridge` nor `homelab-mcp`, so Task 4's per-workload policies do not admit it either.
+#
+# What this probe does NOT cover: the intra-namespace podSelector: {} peer itself (grafana ->
+# prometheus/loki/tempo and friends). The readiness gate below proves the four targets are up;
+# the intra-namespace path is exercised for real in Task 6 Step 5, by grafana rendering its
+# panels — a probe run from inside observability cannot stand in for that without also
+# invalidating itself, per the note above.
+#
+# NO HTTP LIVENESS LEG: grafana has use_authelia: true and the prometheus route carries its own
+# middleware chain, so Authelia's forwardauth would answer with a 302 before Traefik ever
+# proxied to the app — a probe would print success without ever contacting the target. That is
+# exactly the slice-1 littlelink trap this role's own header already documents. The readiness
+# gate in tasks/main.yml (EndpointSlice, not HTTP) replaces that leg for this slice, same
+# reasoning as the slice-2 probe's gate.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: netpol-baseline-probe-slice3
+  namespace: {{ k8s_namespace }}
+spec:
+  # Deliberately BELOW the `kubectl wait --timeout=180s` in tasks/main.yml, not equal to it. The
+  # two clocks start at different moments, so equal values make it a coin flip which one fires on
+  # a slow cold image pull — and the two failures read completely differently. Lower here means
+  # the Job is always the clock that expires first, so the pod is terminal (and its logs final)
+  # by the time the wait gives up and the log fetch runs. Costs no wall time either way: with
+  # backoffLimit: 0 a failed Job never satisfies --for=condition=complete, so the wait burns its
+  # full 180s regardless.
+  activeDeadlineSeconds: 120
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: netpol-probe-slice3
+    spec:
+      restartPolicy: Never
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      containers:
+        - name: probe
+          image: {{ netpol_baseline_probe_image }}
+          command:
+            - sh
+            - -c
+            - |
+              # 1. CONTROL — the network and DNS work at all, same control as slices 1-2.
+              #    A failure here means this probe proves nothing, rather than meaning either
+              #    observability policy failed.
+              if ! nc -w 5 -z traefik 80; then
+                echo "CONTROL FAILED: cannot reach traefik:80, so nothing below is attributable"
+                echo "to the policy. Check DNS and the traefik Service."
+                exit 1
+              fi
+              echo "control ok: traefik:80 reachable"
+
+              # 2. THE ASSERTIONS — cross-namespace, direct pod-to-service must FAIL. Inverted:
+              #    success here is the failure case. This pod carries neither the monitor-bridge
+              #    nor homelab-mcp label prometheus-callers/loki-callers admit
+              #    (networkpolicy-prometheus.yaml.j2, networkpolicy-loki.yaml.j2), so if either
+              #    connects, that policy admits more than its documented two callers.
+              if nc -w 5 -z prometheus.{{ k8s_observability_namespace }} 9090; then
+                echo "POLICY NOT ENFORCED: reached prometheus.{{ k8s_observability_namespace }}:9090"
+                echo "from a pod that is neither monitor-bridge nor homelab-mcp. Either"
+                echo "netpol_baseline_obs_enforced is false, or prometheus-callers"
+                echo "(networkpolicy-prometheus.yaml.j2) admits too much."
+                exit 1
+              fi
+              echo "isolated: prometheus.{{ k8s_observability_namespace }}:9090 unreachable from an unlisted caller"
+
+              if nc -w 5 -z loki.{{ k8s_observability_namespace }} 3100; then
+                echo "POLICY NOT ENFORCED: reached loki.{{ k8s_observability_namespace }}:3100 from"
+                echo "a pod that is not homelab-mcp. Either netpol_baseline_obs_enforced is false,"
+                echo "or loki-callers (networkpolicy-loki.yaml.j2) admits too much."
+                exit 1
+              fi
+              echo "isolated: loki.{{ k8s_observability_namespace }}:3100 unreachable from an unlisted caller"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
