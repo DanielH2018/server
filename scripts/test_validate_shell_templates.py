@@ -3,7 +3,99 @@ shell scripts (*.sh.j2) that the prek bash-syntax-check / shellcheck hooks can't
 tags a `.sh.j2` as {jinja, text}, never `shell`).
 """
 
+import shutil
+
+import pytest
 import validate_shell_templates as v
+from _render_guard import ALL_VARS, BASE_CONTEXT, load_yaml
+
+BACKUP_HEALTH = v.ROLES / "setup" / "k3s" / "templates" / "longhorn-backup-health.sh.j2"
+
+
+@pytest.mark.parametrize(
+    ("b2_armed", "r2_armed", "expect_armed", "expect_disarmed"),
+    [
+        (True, True, ["default", "r2"], []),
+        (True, False, ["default"], ["r2"]),
+        (False, True, ["r2"], ["default"]),
+        (False, False, [], ["default", "r2"]),
+    ],
+)
+def test_backup_health_renders_clean_for_every_arm_state(
+    tmp_path, b2_armed: bool, r2_armed: bool, expect_armed, expect_disarmed
+):
+    """Both branches of the armed gates must render to valid shell.
+
+    main() renders with group_vars only, so the ROLE default `k3s_longhorn_backup_armed: false`
+    is never applied there and its branch would go unexercised — the dead-path shape that let two
+    commands stay broken behind passing tests after the k3s cutover. The disarmed branch is the
+    one that matters most: it is what runs whenever B2 is off, and an empty BACKUP_TARGETS array
+    under `set -u` is exactly the kind of thing that only fails at 03:30.
+    """
+    shellcheck_bin = shutil.which("shellcheck")
+    assert shellcheck_bin, "shellcheck must be on PATH (dev dependency shellcheck-py)"
+
+    ctx = {
+        **BASE_CONTEXT,
+        **load_yaml(ALL_VARS),
+        **v.SHELL_STUB_OVERRIDES,
+        "k3s_longhorn_backup_armed": b2_armed,
+        "k3s_longhorn_r2_armed": r2_armed,
+    }
+    rendered = v.render_template(BACKUP_HEALTH, ctx)
+
+    out = tmp_path / "longhorn-backup-health.sh"
+    out.write_text(rendered)
+    assert v.bash_syntax_check(out) is None
+    assert v.shellcheck_check(out, shellcheck_bin) is None
+
+    def targets(prefix: str) -> list[str]:
+        line = next(ln for ln in rendered.splitlines() if ln.startswith(prefix))
+        return line[len(prefix) : -1].split()
+
+    assert targets("BACKUP_TARGETS=(") == expect_armed
+    assert targets("DISARMED_TARGETS=(") == expect_disarmed
+
+
+def test_backup_health_arm_gates_treat_the_string_false_as_disarmed():
+    # Ansible's `-e k3s_longhorn_backup_armed=false` passes the STRING "false", which is truthy in
+    # Jinja. Without `| bool` an extra-vars disarm would leave `default` in the armed set and
+    # silently restore the permanently-red monitor this gate exists to prevent.
+    ctx = {
+        **BASE_CONTEXT,
+        **load_yaml(ALL_VARS),
+        **v.SHELL_STUB_OVERRIDES,
+        "k3s_longhorn_backup_armed": "false",
+        "k3s_longhorn_r2_armed": "false",
+    }
+    rendered = v.render_template(BACKUP_HEALTH, ctx)
+    assert "BACKUP_TARGETS=()" in rendered
+    assert "DISARMED_TARGETS=(default r2)" in rendered
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (True, True),
+        (False, False),
+        ("true", True),
+        ("false", False),
+        ("yes", True),
+        ("no", False),
+        ("on", True),
+        ("off", False),
+        ("1", True),
+        ("0", False),
+        (1, True),
+        (0, False),
+        ("", False),
+        # Ansible's non-strict boolean() returns False for anything unrecognised rather than
+        # raising — the branch that matters, since plain Jinja would call it True.
+        ("maybe", False),
+    ],
+)
+def test_ansible_bool_filter_mirrors_ansible_semantics(value, expected: bool):
+    assert v._ansible_bool(value) is expected
 
 
 def test_all_real_shell_templates_render_and_lint_clean():

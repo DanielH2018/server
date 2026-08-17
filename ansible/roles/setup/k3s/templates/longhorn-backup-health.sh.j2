@@ -63,8 +63,13 @@ add() { PROBLEMS="${PROBLEMS:+$PROBLEMS; }$1"; }
 #    the target went unavailable and nothing noticed. So the disarmed set is not merely skipped, it
 #    is named in the green message (see the MSG below). Silence would trade one blind spot for
 #    another.
-BACKUP_TARGETS=({% if k3s_longhorn_backup_armed %}default{% endif %}{% if k3s_longhorn_r2_armed %} r2{% endif %})
-DISARMED_TARGETS=({% if not k3s_longhorn_backup_armed %}default{% endif %}{% if not k3s_longhorn_r2_armed %} r2{% endif %})
+#    `| bool` on every one of these, matching longhorn-backup.yml's `when:` rather than the older
+#    unfiltered r2 line: `-e k3s_longhorn_backup_armed=false` passes the STRING "false", which is
+#    truthy in Jinja. Unfiltered, an extra-vars disarm would put `default` back into the armed set
+#    and empty the disarmed one — reverting this fix silently, in exactly the ad-hoc-incident case
+#    it is most likely to be used.
+BACKUP_TARGETS=({% if k3s_longhorn_backup_armed | bool %}default{% endif %}{% if k3s_longhorn_r2_armed | bool %} r2{% endif %})
+DISARMED_TARGETS=({% if not k3s_longhorn_backup_armed | bool %}default{% endif %}{% if not k3s_longhorn_r2_armed | bool %} r2{% endif %})
 
 is_disarmed_target() {
   local want="$1" candidate
