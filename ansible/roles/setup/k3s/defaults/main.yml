@@ -234,8 +234,11 @@ k3s_longhorn_backup_prefix: longhorn
 # first — that ordering, not the clock, is what made the previous four re-arms fail.
 k3s_longhorn_backup_armed: true
 
-# Daily volume backup to that target. 03:30 keeps it clear of the Kopia run and of the daily
-# secret-rotation cron. 14 retained backups per volume is two weeks of daily recovery points
+# Daily volume backup to that target. 03:30 was chosen to clear the Kopia run and the daily
+# secret-rotation cron; Kopia was retired with the k3s migration and issues no B2 traffic at all
+# now, so only the rotation cron still constrains this. (The `kopia_b2_*` SOPS key names outlived
+# the tool — they are Longhorn's credentials. Do not read them as evidence Kopia still runs, and
+# do not attribute any B2 spend to it.) 14 retained backups per volume is two weeks of recovery
 # — Longhorn backups are incremental at the block level, so the marginal cost of depth here is
 # small compared to the first full. Since the 2026-08-16 sharding this group is, in steady
 # state, only the four R2-routed volumes plus any newly provisioned PVC awaiting reconcile —
