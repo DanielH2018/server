@@ -12,6 +12,7 @@ Run: uv run pytest scripts/test_probe.py
 
 import importlib.util
 import os
+import re
 from datetime import datetime, timezone
 
 
@@ -67,6 +68,19 @@ def test_pi_url():
     assert probe.pi_url("fs") == "http://daniel-pi.lan:61208/api/4/fs"
 
 
+def test_pi_ip_reads_real_inventory():
+    # hosts.ini is plaintext, not a secret — same class of dead-path bug as
+    # test_verify_automations_path_exists below: a wrong path or regex would only ever
+    # be caught by opening the real file.
+    ip = probe.pi_ip()
+    assert re.match(r"^\d+\.\d+\.\d+\.\d+$", ip), ip
+
+
+def test_pi_resolve_pins_the_lan_ip(monkeypatch):
+    monkeypatch.setattr(probe, "pi_ip", lambda: "10.0.0.139")
+    assert probe.pi_resolve() == "daniel-pi.lan:61208:10.0.0.139"
+
+
 # --- low-level argv / parsing helpers ---------------------------------------
 
 
@@ -93,6 +107,14 @@ def test_parse_ip_takes_first_nonempty_token():
 
 def test_parse_ip_returns_none_when_no_ip():
     assert probe.parse_ip("   \n") is None
+
+
+def test_k8s_service_ip_argv_targets_the_service():
+    argv = probe.k8s_service_ip_argv("sonarr", "homelab")
+    assert argv[:2] == ["k3s", "kubectl"]
+    assert argv[-1] == "jsonpath={.spec.clusterIP}"
+    assert "sonarr" in argv
+    assert "homelab" in argv
 
 
 # --- plan(): routing for each subcommand ------------------------------------
@@ -158,12 +180,30 @@ def test_plan_scrutiny_uses_cluster_endpoint_with_vip_pin():
 
 
 def test_plan_pi_does_not_resolve_docker():
-    # Pi glances is reached by hostname, so the resolver must NOT be consulted.
+    # Pi glances is reached by hostname, so the container resolver must NOT be consulted.
     def boom(_):
         raise AssertionError("pi must not resolve a container IP")
 
-    stages = probe.plan(["pi", "fs"], boom)
-    assert stages == [probe.curl_argv("http://daniel-pi.lan:61208/api/4/fs")]
+    stages = probe.plan(
+        ["pi", "fs"], boom, pi_resolve=lambda: "daniel-pi.lan:61208:10.0.0.139"
+    )
+    assert stages == [
+        probe.curl_argv(
+            "http://daniel-pi.lan:61208/api/4/fs",
+            resolve="daniel-pi.lan:61208:10.0.0.139",
+        )
+    ]
+
+
+def test_plan_pi_resolves_to_a_reachable_pin_not_dns():
+    # Regression guard: this host's resolver has no answer for daniel-pi.lan (a
+    # Pi-hole-only LAN name), so plan() must always carry a --resolve pin here — a bare
+    # curl_argv() with no pin is the pre-fix shape that died `Could not resolve host`.
+    stages = probe.plan(
+        ["pi", "fs"], None, pi_resolve=lambda: "daniel-pi.lan:61208:10.0.0.139"
+    )
+    assert "--resolve" in stages[0]
+    assert "daniel-pi.lan:61208:10.0.0.139" in stages[0]
 
 
 def test_plan_cert_defaults_port_and_sni_to_host():
@@ -854,6 +894,59 @@ def test_format_metric_empty_is_no_data():
     )
 
 
+def _monitor_series(name, status):
+    return {"metric": {"monitor_name": name}, "value": [1720000000, status]}
+
+
+def test_format_monitor_status_all_up():
+    data = {
+        "data": {
+            "result": [_monitor_series("sonarr", "1"), _monitor_series("radarr", "1")]
+        }
+    }
+    text, code = probe.format_monitor_status(data)
+    assert text == "2/2 monitors up"
+    assert code == 0
+
+
+def test_format_monitor_status_lists_down_monitors_and_fails():
+    data = {
+        "data": {
+            "result": [
+                _monitor_series("sonarr", "1"),
+                _monitor_series("terraria (game port)", "0"),
+            ]
+        }
+    }
+    text, code = probe.format_monitor_status(data)
+    assert text == "1/2 monitors up\n  terraria (game port): DOWN"
+    assert code == 1
+
+
+def test_format_monitor_status_labels_pending_and_maintenance_as_not_up():
+    data = {
+        "data": {
+            "result": [_monitor_series("a", "2"), _monitor_series("b", "3")],
+        }
+    }
+    text, code = probe.format_monitor_status(data)
+    assert "a: PENDING" in text
+    assert "b: MAINTENANCE" in text
+    assert code == 1
+
+
+def test_format_monitor_status_empty_result_fails():
+    text, code = probe.format_monitor_status({"data": {"result": []}})
+    assert code == 1
+    assert "no monitor_status series" in text
+
+
+def test_monitors_subcommand_parses():
+    p = probe._build_parser()
+    ns = p.parse_args(["monitors"])
+    assert ns.cmd == "monitors"
+
+
 def test_format_loki_prints_lines_oldest_first_across_streams():
     data = {
         "data": {
@@ -940,6 +1033,61 @@ def test_arr_request_never_puts_key_in_argv():
     argv = probe.ha_curl_argv(probe.arr_url("h", "sonarr", "health"))
     assert "--config" in argv
     assert not any("Api-Key" in a or "SECRET" in a for a in argv)
+
+
+def test_resolve_arr_ip_uses_kubectl_not_docker(monkeypatch):
+    # Regression guard for the dead command: sonarr/radarr/prowlarr have run as k8s
+    # Deployments since 2026-08-07 and have no Docker container to `docker inspect` an IP
+    # from — resolve_arr_ip must reach the app's ClusterIP via kubectl instead.
+    monkeypatch.setattr(probe, "k8s_namespace", lambda: "homelab")
+
+    class FakeResult:
+        returncode = 0
+        stdout = "10.43.114.186"
+        stderr = ""
+
+    calls = []
+
+    def fake_run(argv, **kwargs):
+        calls.append(argv)
+        return FakeResult()
+
+    monkeypatch.setattr(probe.subprocess, "run", fake_run)
+    assert probe.resolve_arr_ip("sonarr") == "10.43.114.186"
+    assert calls == [probe.k8s_service_ip_argv("sonarr", "homelab")]
+    assert "docker" not in calls[0]
+
+
+def test_resolve_arr_ip_raises_on_kubectl_failure(monkeypatch):
+    monkeypatch.setattr(probe, "k8s_namespace", lambda: "homelab")
+
+    class FakeResult:
+        returncode = 1
+        stdout = ""
+        stderr = 'services "sonarr" not found'
+
+    monkeypatch.setattr(probe.subprocess, "run", lambda argv, **kwargs: FakeResult())
+    try:
+        probe.resolve_arr_ip("sonarr")
+        assert False, "expected SystemExit"
+    except SystemExit as e:
+        assert "sonarr" in str(e)
+
+
+def test_resolve_arr_ip_raises_on_empty_cluster_ip(monkeypatch):
+    monkeypatch.setattr(probe, "k8s_namespace", lambda: "homelab")
+
+    class FakeResult:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    monkeypatch.setattr(probe.subprocess, "run", lambda argv, **kwargs: FakeResult())
+    try:
+        probe.resolve_arr_ip("sonarr")
+        assert False, "expected SystemExit"
+    except SystemExit as e:
+        assert "ClusterIP" in str(e)
 
 
 def test_arr_subcommand_parses_app_path_and_json_flag():

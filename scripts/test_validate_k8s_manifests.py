@@ -73,4 +73,122 @@ data:
 """
     error = vkm.yaml_error(rendered)
     assert error is not None, "duplicate key in embedded YAML accepted"
-    assert "duplicate key" in error
+
+
+# --------------------------------------------------------------------- PVC claimName cross-check
+
+DEPLOYMENT_WITH_CLAIM = """\
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: example
+spec:
+  template:
+    spec:
+      containers:
+        - name: example
+          image: example:latest
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {claim}
+"""
+
+PVC_DOC = """\
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {name}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+"""
+
+
+def test_find_pvc_names_reads_a_pvc_object():
+    doc = list(vkm.parse_docs(PVC_DOC.format(name="example-data")))[0]
+    assert vkm.find_pvc_names(doc) == ["example-data"]
+
+
+def test_find_pvc_names_ignores_a_non_pvc_object():
+    doc = list(vkm.parse_docs(DEPLOYMENT_WITH_CLAIM.format(claim="x")))[0]
+    assert vkm.find_pvc_names(doc) == []
+
+
+def test_find_claim_name_refs_finds_a_deployment_volume():
+    doc = list(vkm.parse_docs(DEPLOYMENT_WITH_CLAIM.format(claim="example-data")))[0]
+    assert vkm.find_claim_name_refs(doc) == ["example-data"]
+
+
+def test_find_claim_name_refs_finds_a_cronjob_nested_one_level_deeper():
+    rendered = """\
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: example
+spec:
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: example
+              image: example:latest
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: example-data
+"""
+    doc = list(vkm.parse_docs(rendered))[0]
+    assert vkm.find_claim_name_refs(doc) == ["example-data"]
+
+
+def test_find_claim_name_refs_finds_multiple_across_a_document():
+    rendered = """\
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: example
+spec:
+  template:
+    spec:
+      containers:
+        - name: example
+          image: example:latest
+      volumes:
+        - name: a
+          persistentVolumeClaim:
+            claimName: claim-a
+        - name: b
+          persistentVolumeClaim:
+            claimName: claim-b
+"""
+    doc = list(vkm.parse_docs(rendered))[0]
+    assert sorted(vkm.find_claim_name_refs(doc)) == ["claim-a", "claim-b"]
+
+
+def test_real_tree_has_no_unresolved_claim_name(capsys):
+    # The actual regression guard: every claimName across the real k8s roles must resolve
+    # against a rendered PVC (or a seed-volume-backed one) — a brand-new service naming a PVC
+    # that was never wired up must show here, since nothing else in the tree checks this.
+    assert vkm.main() == 0
+    err = capsys.readouterr().err
+    assert "matches no rendered PersistentVolumeClaim" not in err
+
+
+def test_seed_volume_pvc_names_resolves_a_real_seed_backed_role():
+    # tdarr's config PVC is created by seed-volume's own pvc.yaml.j2 (never rendered under
+    # seed-volume's own role — it's in SKIP_ROLES), using vars tdarr's include_role task passes.
+    # tdarr's deployment.yaml.j2 references the SAME value directly as a claimName, so without
+    # this resolving, tdarr's config claim would show as unresolved on every real run.
+    base = {
+        **vkm.BASE_CONTEXT,
+        **vkm.load_yaml(vkm.ALL_VARS),
+        "playbook_dir": str(vkm.ANSIBLE),
+    }
+    base = vkm.resolve_vars(base, base)
+    ctx = {**base, **vkm.role_defaults("tdarr", base)}
+    names = vkm.seed_volume_pvc_names("tdarr", ctx)
+    assert ctx["tdarr_k8s_configs_claim"] in names

@@ -198,7 +198,7 @@ def test_check_template_catches_a_broken_render(tmp_path):
     orig_ansible = v.ANSIBLE
     v.ANSIBLE = tmp_path
     try:
-        err = v.check_template(broken, {"sys_user": "ubuntu"}, out_dir, "bash")
+        err = v.check_template(broken, {"sys_user": "ubuntu"}, out_dir, "bash", {})
     finally:
         v.ANSIBLE = orig_ansible
 
@@ -220,7 +220,7 @@ def test_check_template_passes_a_clean_render(tmp_path):
     v.ANSIBLE = tmp_path
     try:
         err = v.check_template(
-            clean, {"sys_user": "ubuntu"}, out_dir, v.shutil.which("shellcheck")
+            clean, {"sys_user": "ubuntu"}, out_dir, v.shutil.which("shellcheck"), {}
         )
     finally:
         v.ANSIBLE = orig_ansible
@@ -234,3 +234,118 @@ def test_main_fails_closed_when_shellcheck_missing(monkeypatch):
     # design comment).
     monkeypatch.setattr(v.shutil, "which", lambda name: None)
     assert v.main() == 1
+
+
+# --------------------------------------------------------------------------- cron PATH rule
+
+
+def test_cron_job_scripts_resolves_a_dest_rename():
+    # claude-otel deploys templates/telemetry-health.sh.j2 to
+    # /usr/local/bin/claude-otel-health.sh — the cron `job:` only ever names the dest, so this
+    # must resolve through the template task's `src:`, not assume dest basename == template name.
+    mapping = v.cron_job_scripts()
+    telemetry = v.ROLES / "k8s/claude-otel/templates/telemetry-health.sh.j2"
+    assert telemetry in mapping
+    assert mapping[telemetry].name == "main.yml"
+
+
+def test_cron_job_scripts_excludes_archive():
+    mapping = v.cron_job_scripts()
+    assert not any("archive" in str(t) for t in mapping)
+
+
+def test_cron_job_scripts_excludes_the_deliberately_unscheduled_reaper():
+    # longhorn-reap-orphan-backups.sh.j2 uses the same bare `k3s kubectl` as the two real
+    # offenders but health-crons.yml deliberately never schedules it — it must not appear here.
+    mapping = v.cron_job_scripts()
+    assert not any(t.name == "longhorn-reap-orphan-backups.sh.j2" for t in mapping)
+
+
+def test_cron_path_error_flags_a_bare_invocation_with_no_path_fix(tmp_path):
+    template = tmp_path / "bad.sh.j2"
+    task_file = tmp_path / "main.yml"
+    task_file.write_text("- name: noop\n")
+    rendered = '#!/bin/bash\nKUBECTL="k3s kubectl -n foo"\n$KUBECTL get pods\n'
+    err = v.cron_path_error(template, rendered, {template: task_file})
+    assert err is not None
+    assert "cron job target" in err
+
+
+def test_cron_path_error_passes_a_path_export(tmp_path):
+    template = tmp_path / "good.sh.j2"
+    task_file = tmp_path / "main.yml"
+    task_file.write_text("- name: noop\n")
+    rendered = (
+        '#!/bin/bash\nexport PATH="/usr/local/bin:${PATH}"\n'
+        'KUBECTL="k3s kubectl -n foo"\n$KUBECTL get pods\n'
+    )
+    assert v.cron_path_error(template, rendered, {template: task_file}) is None
+
+
+def test_cron_path_error_passes_an_absolute_invocation(tmp_path):
+    template = tmp_path / "good.sh.j2"
+    task_file = tmp_path / "main.yml"
+    task_file.write_text("- name: noop\n")
+    rendered = (
+        '#!/bin/bash\nKUBECTL="/usr/local/bin/k3s kubectl -n foo"\n$KUBECTL get pods\n'
+    )
+    assert v.cron_path_error(template, rendered, {template: task_file}) is None
+
+
+def test_cron_path_error_does_not_flag_kubectl_echoed_in_a_message(tmp_path):
+    # registry-gc.sh.j2's real shape: a human-facing suggestion string containing "kubectl",
+    # with no bare `k3s` invocation anywhere — must not be flagged as an invocation.
+    template = tmp_path / "good.sh.j2"
+    task_file = tmp_path / "main.yml"
+    task_file.write_text("- name: noop\n")
+    rendered = (
+        '#!/bin/bash\nMSG="job stuck — see: kubectl -n ns logs job/x"\necho "$MSG"\n'
+    )
+    assert v.cron_path_error(template, rendered, {template: task_file}) is None
+
+
+def test_cron_path_error_ignores_a_bare_invocation_inside_a_comment(tmp_path):
+    template = tmp_path / "good.sh.j2"
+    task_file = tmp_path / "main.yml"
+    task_file.write_text("- name: noop\n")
+    rendered = "#!/bin/bash\n# see k3s kubectl for details\necho hi\n"
+    assert v.cron_path_error(template, rendered, {template: task_file}) is None
+
+
+def test_cron_path_error_is_a_noop_for_a_non_cron_template(tmp_path):
+    template = tmp_path / "whatever.sh.j2"
+    rendered = 'KUBECTL="k3s kubectl -n foo"\n$KUBECTL get pods\n'
+    assert v.cron_path_error(template, rendered, {}) is None
+
+
+def test_cron_path_error_passes_when_the_crontab_sets_path(tmp_path):
+    template = tmp_path / "good.sh.j2"
+    task_file = tmp_path / "main.yml"
+    task_file.write_text(
+        "- name: Schedule the PATH line\n"
+        "  ansible.builtin.cron:\n"
+        "    env: yes\n"
+        "    name: PATH\n"
+        "    value: /usr/local/bin:/usr/bin:/bin\n"
+    )
+    rendered = '#!/bin/bash\nKUBECTL="k3s kubectl -n foo"\n$KUBECTL get pods\n'
+    assert v.cron_path_error(template, rendered, {template: task_file}) is None
+
+
+def test_no_cron_job_template_in_the_tree_violates_the_path_rule():
+    # The rule shipped with two real offenders (telemetry-health, longhorn-backup-health);
+    # both were fixed in the same change, so there is no allowlist. Asserting zero against
+    # the real tree keeps that true without a list to go stale.
+    ctx = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **v.SHELL_STUB_OVERRIDES}
+    cron_map = v.cron_job_scripts()
+    assert cron_map, (
+        "cron_job_scripts() found no cron-installed templates — resolver broke"
+    )
+    offenders = {
+        str(template.relative_to(v.ROLES))
+        for template, task_file in cron_map.items()
+        if v.cron_path_error(
+            template, v.render_template(template, ctx), {template: task_file}
+        )
+    }
+    assert offenders == set()

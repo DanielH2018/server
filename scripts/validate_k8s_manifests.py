@@ -14,6 +14,13 @@ stub, so the port and hostname a manifest renders with are the ones a deploy wou
 Structural check only: secrets are stubbed (StubUndefined), so no SOPS access is needed. Run
 directly or via the ``validate-k8s-manifests`` prek hook. Exits non-zero on any render failure
 or invalid YAML.
+
+Also cross-checks every ``persistentVolumeClaim.claimName`` against the PVC names actually
+rendered across the whole tree (a Deployment mounting a PVC nothing declares passes admission —
+PVC binding is a scheduling concern, not a validating webhook — so this is otherwise only caught
+live). Reported as ``[WARN]``, not folded into the exit code: added 2026-08-17, unproven against
+the real tree yet. Promote to a hard failure (fold `unresolved` into `failures` in main()) once
+it has run clean — no false positive — for a while.
 """
 
 from __future__ import annotations
@@ -123,6 +130,83 @@ def resolve_vars(values: dict, context: dict, passes: int = 5) -> dict:
 
 def role_defaults(role: str, base: dict) -> dict:
     return resolve_vars(load_yaml(K8S_ROLES / role / "defaults" / "main.yml"), base)
+
+
+def parse_docs(rendered: str) -> list:
+    """Parse a rendered manifest into its YAML documents, the same way yaml_error does. Only
+    called after yaml_error has already confirmed the render is valid YAML — a raise here would
+    be a bug in this function, not in the manifest."""
+    return list(yaml.load_all(rendered, Loader=_StrictKeyLoader))  # noqa: S506
+
+
+def find_pvc_names(doc) -> list[str]:
+    """The name of the PVC this document declares, if it is one — a rendered manifest is one
+    object per document, so this is a direct check, not a recursive search."""
+    if isinstance(doc, dict) and doc.get("kind") == "PersistentVolumeClaim":
+        name = (doc.get("metadata") or {}).get("name")
+        if isinstance(name, str):
+            return [name]
+    return []
+
+
+def find_claim_name_refs(node) -> list[str]:
+    """Every `persistentVolumeClaim.claimName` in a parsed manifest, wherever it is nested.
+
+    A Deployment/DaemonSet has it at spec.template.spec.volumes[]; a CronJob one level deeper
+    through spec.jobTemplate; a bare Pod at spec.volumes[] directly. Walked generically instead
+    of hardcoded per-kind paths, so a shape this wasn't written for (a future StatefulSet, say)
+    is still covered rather than silently skipped.
+    """
+    refs: list[str] = []
+    if isinstance(node, dict):
+        pvc = node.get("persistentVolumeClaim")
+        if isinstance(pvc, dict) and isinstance(pvc.get("claimName"), str):
+            refs.append(pvc["claimName"])
+        for value in node.values():
+            refs.extend(find_claim_name_refs(value))
+    elif isinstance(node, list):
+        for item in node:
+            refs.extend(find_claim_name_refs(item))
+    return refs
+
+
+def seed_volume_pvc_names(role: str, ctx: dict) -> list[str]:
+    """PVC names seed-volume creates on this role's behalf.
+
+    seed-volume is in SKIP_ROLES and never rendered under its own role — its templates/pvc.yaml.j2
+    (metadata.name: `{{ seed_volume_claim }}`) only ever renders with vars a CALLING role passes
+    on the `include_role` task (e.g. tdarr's `seed_volume_claim: "{{ tdarr_k8s_configs_claim }}"`),
+    which is otherwise invisible to this validator — it reads role defaults/templates, not
+    task-level `vars:` overrides. Without this, every seed-volume-backed claimName (tdarr,
+    freshrss, ...) would show as unresolved. Best-effort: only handles a plain string `vars:`
+    value, which is the only form any current caller uses.
+    """
+    names: list[str] = []
+    tasks_dir = K8S_ROLES / role / "tasks"
+    if not tasks_dir.is_dir():
+        return names
+    env = make_env([SHARED_TPL])
+    for task_file in sorted(tasks_dir.glob("*.yml")):
+        try:
+            tasks = yaml.safe_load(task_file.read_text())
+        except yaml.YAMLError:
+            continue
+        if not isinstance(tasks, list):
+            continue
+        for task in tasks:
+            if not isinstance(task, dict):
+                continue
+            inc = task.get("ansible.builtin.include_role")
+            if not isinstance(inc, dict) or inc.get("name") != "k8s/seed-volume":
+                continue
+            claim = (task.get("vars") or {}).get("seed_volume_claim")
+            if not isinstance(claim, str):
+                continue
+            try:
+                names.append(env.from_string(claim).render(ctx))
+            except Exception:
+                continue
+    return names
 
 
 def yaml_error(rendered: str) -> str | None:
@@ -246,20 +330,24 @@ def make_lookup(ctx: dict):
     return lookup
 
 
-def check_template(role: str, tpl: Path, ctx: dict) -> str | None:
-    """Render one manifest template; return an error string or None on success."""
+def check_template(role: str, tpl: Path, ctx: dict) -> tuple[str | None, list]:
+    """Render one manifest template. Returns (error, docs) — docs is [] whenever error is set,
+    otherwise the manifest's parsed YAML documents (for the PVC claimName cross-reference check
+    in main(), which needs the actual objects rather than just a pass/fail)."""
     env = make_env([K8S_ROLES / role / "templates", SHARED_TPL])
     env.globals["lookup"] = make_lookup(ctx)
     register_ansible_filters(env)
     rendered, err = render_or_error(env, tpl.name, ctx)
     if err:
-        return err
+        return err, []
 
     err = yaml_error(rendered)
     if err:
         print(f"\n----- rendered {role}/{tpl.name} -----", file=sys.stderr)
         dump_numbered(rendered)
-    return err
+        return err, []
+
+    return None, parse_docs(rendered)
 
 
 def main() -> int:
@@ -276,6 +364,14 @@ def main() -> int:
         d.name for d in K8S_ROLES.iterdir() if d.is_dir() and d.name not in SKIP_ROLES
     )
     checked = failures = 0
+    # Built up alongside the existing per-template loop below (one render pass, not two): every
+    # declared PVC name (from a rendered PersistentVolumeClaim, or from a seed-volume include —
+    # see seed_volume_pvc_names), and every (rel, docs) this run successfully parsed. The
+    # claimName cross-reference check runs once, after the loop, once the PVC index is complete
+    # — a reference in role A can legitimately name a PVC role B declares (media_volume_claim,
+    # ~7 consumers), so it can't be checked role-by-role as the loop goes.
+    pvc_names: set[str] = set()
+    parsed_templates: list[tuple[str, list]] = []
     for role in roles:
         # Not every .j2 in a k8s role's templates/ is a manifest — a role may also ship a
         # helper script (claude-otel's telemetry-health.sh.j2) or a Dockerfile for
@@ -313,15 +409,43 @@ def main() -> int:
             continue
 
         ctx = {**base, **role_defaults(role, base), "container_item": entries[role]}
+        pvc_names.update(seed_volume_pvc_names(role, ctx))
         for tpl in templates:
             checked += 1
-            err = check_template(role, tpl, ctx)
+            err, docs = check_template(role, tpl, ctx)
             rel = f"{role}/{tpl.name}"
             if err:
                 failures += 1
                 print(f"  [FAIL] {rel}: {err}", file=sys.stderr)
             else:
+                for doc in docs:
+                    pvc_names.update(find_pvc_names(doc))
+                parsed_templates.append((rel, docs))
                 print(f"  [ok]   {rel}")
+
+    # WARNING ONLY, deliberately — not folded into `failures`. This is new and unproven against
+    # the real tree; a false positive here must not be able to block a deploy the way a `[FAIL]`
+    # does. Promote to a hard failure once it's run clean for a while (see the module docstring
+    # note below this function). PVC binding itself is still a scheduling concern this can't see
+    # — this only proves the referenced NAME exists somewhere in what got rendered.
+    unresolved = 0
+    for rel, docs in parsed_templates:
+        for doc in docs:
+            for claim in find_claim_name_refs(doc):
+                if claim not in pvc_names:
+                    unresolved += 1
+                    print(
+                        f"  [WARN] {rel}: claimName {claim!r} matches no rendered "
+                        "PersistentVolumeClaim",
+                        file=sys.stderr,
+                    )
+    if unresolved:
+        print(
+            f"\n{unresolved} claimName reference(s) match no rendered PVC — WARNING ONLY, does "
+            "not fail the build. A brand-new service naming a PVC that doesn't exist yet would "
+            "show up here.",
+            file=sys.stderr,
+        )
 
     print(f"\n{checked} k8s manifest template(s) checked, {failures} failure(s).")
     return 1 if failures else 0

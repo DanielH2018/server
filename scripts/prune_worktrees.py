@@ -126,6 +126,8 @@ def classify(tree: Worktree, merged: bool, dirty: bool) -> tuple[str, str]:
         return KEEP, "detached HEAD — no branch to check"
     if not merged:
         return KEEP, f"{tree.branch} not merged into origin/master"
+    if tree.locked:
+        return REMOVABLE, f"{tree.branch} merged, clean, lock owner is dead"
     return REMOVABLE, f"{tree.branch} merged, clean, unlocked"
 
 
@@ -187,6 +189,31 @@ def is_dirty(path: str) -> bool:
     return bool(_git(["status", "--porcelain"], cwd=path))
 
 
+def remove(repo: str, tree: Worktree) -> tuple[bool, str]:
+    """Unlock if needed, then remove. Never --force: git's own refusal on a tree with
+    uncommitted or untracked files is the backstop that makes auto-unlock safe here —
+    classify() only marks a locked tree REMOVABLE once session_is_alive() has confirmed the
+    owner is dead, so this never releases a lock a live session still holds. Without the
+    unlock, `git worktree remove` fails outright on a locked tree ("cannot remove a locked
+    working tree") and the whole prune silently no-ops while reporting the tree as removed.
+    """
+    if tree.locked:
+        subprocess.run(
+            ["git", "worktree", "unlock", tree.path],
+            cwd=repo,
+            capture_output=True,
+            check=False,
+        )
+    result = subprocess.run(
+        ["git", "worktree", "remove", tree.path],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0, result.stderr.strip()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -239,17 +266,11 @@ def main() -> int:
         return 0
 
     for tree in removable:
-        result = subprocess.run(
-            ["git", "worktree", "remove", tree.path],
-            cwd=repo,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if result.returncode == 0:
+        ok, error = remove(repo, tree)
+        if ok:
             print(f"removed {tree.path}")
         else:
-            print(f"could not remove {tree.path}: {result.stderr.strip()}")
+            print(f"could not remove {tree.path}: {error}")
     return 0
 
 

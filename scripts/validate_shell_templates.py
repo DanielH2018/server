@@ -26,6 +26,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+import yaml
 from jinja2 import Environment
 
 from _render_guard import (
@@ -104,6 +105,140 @@ def discover_templates() -> list[Path]:
     return sorted(ROLES.rglob("*.sh.j2"))
 
 
+# cron's PATH (/usr/bin:/bin) omits /usr/local/bin, where the k3s install script puts `k3s`
+# (and the `kubectl` it aliases). A script that calls either by bare name only works when RUN
+# INTERACTIVELY, where the shell's own PATH already has it — under cron it fails "command not
+# found", or worse: bare `kubectl` alone (without `k3s kubectl`) silently reports an EMPTY
+# cluster rather than erroring, which reads as "the cluster has nothing" instead of "PATH is
+# wrong". longhorn-trim-volumes.sh.j2 already carries the fix and the comment this trap is
+# copied from.
+#
+# Only a script that's an ACTUAL cron `job:` target is in scope — this must not flag
+# longhorn-reap-orphan-backups.sh.j2, which uses the same bare `k3s kubectl` and is deliberately
+# UNSCHEDULED (health-crons.yml says so explicitly): a template-content scan alone can't tell
+# "runs under cron's PATH" from "would, if anything ever scheduled it".
+# No leading `\b` before the literal path: PATH= is always followed directly by `/` or a quote,
+# neither a word character, so `\b` never matches there (a boundary needs one word side) — it
+# would silently reject every real `export PATH=/usr/local/bin...` and `export PATH="/usr/local/
+# bin...` line, which is exactly the two forms actually in use.
+_PATH_EXPORT_INCLUDES_LOCAL_BIN = re.compile(
+    r"^\s*export\s+PATH=[^\n]*/usr/local/bin\b", re.MULTILINE
+)
+# A real invocation, not a substring. Every script in this repo that touches the cluster does
+# so via the compound `k3s kubectl ...` — k3s's own bundled wrapper — never a standalone
+# `kubectl`; `k3s` is the actual binary PATH has to resolve, and the `kubectl` after it is just
+# k3s's own subcommand syntax, not a second lookup. So only a BARE `k3s` is checked:
+#  - `(?![\w/])`/`(?<![\w/])` rule out a preceding/following path separator (already-absolute,
+#    e.g. `/usr/local/bin/k3s kubectl`) and a word character (a `k3s_`-prefixed Ansible var name
+#    is not an invocation of anything).
+# A bare `kubectl` alone is deliberately NOT matched: registry-gc.sh.j2 echoes one in a
+# human-facing suggestion string ("see: kubectl -n ... logs ..."), which is not an invocation at
+# all — matching it there would flag prose, not code. This is what must also not fire on
+# longhorn-trim-volumes.sh.j2's own explanatory comment about this exact trap — comments are
+# stripped before this runs, so prose mentioning either name never reaches it regardless.
+_BARE_K8S_INVOCATION = re.compile(r"(?<![\w/])k3s(?![\w/])")
+# `env: yes/true` + `name: PATH` is the ansible.builtin.cron idiom for a crontab-level `PATH=...`
+# line (distinct from the module's `job:` — see the ansible.builtin.cron docs on `env`), which
+# would fix every job in that cron_file without an in-script export. No cron task in this repo
+# uses it today (checked 2026-08-17), so this branch is currently unexercised — kept as a real
+# alternative rather than assuming every fix must be an in-script export.
+_CRONTAB_PATH_ENV = re.compile(
+    r"env:\s*(?:yes|true)\b[\s\S]{0,200}?/usr/local/bin|/usr/local/bin[\s\S]{0,200}?env:\s*(?:yes|true)\b"
+)
+
+
+def cron_job_scripts(roles: Path = ROLES) -> dict[Path, Path]:
+    """Map template path -> the tasks/*.yml file that schedules it as a cron `job:`.
+
+    Two hops, not one: the deployed script's basename does not always match the template's own
+    filename — claude-otel deploys templates/telemetry-health.sh.j2 to
+    /usr/local/bin/claude-otel-health.sh (a `dest:` rename), and the cron `job:` only ever names
+    the dest. So this resolves `job:` -> dest basename -> the `ansible.builtin.template` task in
+    the SAME file whose `dest:` matches -> that task's `src:`, and only then has a template.
+
+    archive/ is excluded — nothing there is included by any play, so its cron tasks never
+    actually run.
+    """
+    mapping: dict[Path, Path] = {}
+    # Roles are nested two levels under ROLES (roles/{containers,k8s,setup}/<role>/tasks/...),
+    # so this needs rglob, not a fixed-depth glob.
+    for task_file in sorted(roles.rglob("tasks/*.yml")):
+        if "archive" in task_file.parts:
+            continue
+        try:
+            tasks = yaml.safe_load(task_file.read_text())
+        except yaml.YAMLError:
+            continue
+        if not isinstance(tasks, list):
+            continue
+
+        dest_to_src: dict[str, str] = {}
+        for task in tasks:
+            if not isinstance(task, dict):
+                continue
+            mod = task.get("ansible.builtin.template")
+            if not isinstance(mod, dict):
+                continue
+            src = str(mod.get("src", ""))
+            dest = str(mod.get("dest", ""))
+            if src.endswith(".sh.j2") and dest.startswith("/usr/local/bin/"):
+                dest_to_src[Path(dest).name] = src
+
+        for task in tasks:
+            if not isinstance(task, dict):
+                continue
+            mod = task.get("ansible.builtin.cron")
+            if not isinstance(mod, dict):
+                continue
+            job = str(mod.get("job", "")).strip()
+            m = re.match(r"^/usr/local/bin/([\w.-]+\.sh)$", job)
+            if not m:
+                continue
+            src = dest_to_src.get(m.group(1))
+            if not src:
+                continue
+            template_path = task_file.parent.parent / "templates" / src
+            mapping[template_path] = task_file
+    return mapping
+
+
+def _strip_comments(text: str) -> str:
+    return "\n".join(
+        line for line in text.splitlines() if not line.strip().startswith("#")
+    )
+
+
+def cron_path_error(
+    template: Path, rendered: str, cron_map: dict[Path, Path]
+) -> str | None:
+    """None if this template is fine; an error string if it's a cron job target that calls
+    kubectl/k3s bare and has no PATH fix anywhere (in-script export, or a crontab PATH line)."""
+    task_file = cron_map.get(template)
+    if task_file is None:
+        return None  # not a cron job target at all — out of scope for this rule
+
+    code = _strip_comments(rendered)
+    if _PATH_EXPORT_INCLUDES_LOCAL_BIN.search(code):
+        return None
+    if not _BARE_K8S_INVOCATION.search(code):
+        return None
+    if _CRONTAB_PATH_ENV.search(task_file.read_text()):
+        return None
+
+    try:
+        rel_task_file = task_file.relative_to(REPO)
+    except ValueError:
+        rel_task_file = (
+            task_file  # e.g. a unit test's tmp_path fixture, not a real repo path
+        )
+    return (
+        "calls kubectl/k3s bare but is a cron job target "
+        f"({rel_task_file}) — cron's PATH omits /usr/local/bin. Add "
+        '`export PATH="/usr/local/bin:${PATH}"` (see longhorn-trim-volumes.sh.j2), call k3s/'
+        "kubectl by absolute path, or set a crontab-level PATH via env: yes on the cron task."
+    )
+
+
 def build_env(template_dir: Path) -> Environment:
     env = make_env([template_dir, SHARED_TPL])
     env.tests["search"] = _ansible_search
@@ -141,7 +276,11 @@ def shellcheck_check(path: Path, shellcheck_bin: str) -> str | None:
 
 
 def check_template(
-    path: Path, ctx: dict, out_dir: Path, shellcheck_bin: str
+    path: Path,
+    ctx: dict,
+    out_dir: Path,
+    shellcheck_bin: str,
+    cron_map: dict[Path, Path],
 ) -> str | None:
     """Render one template, write it under out_dir preserving its relative path (minus the
     trailing .j2), then lint the rendered file. Return an error string, or None on success."""
@@ -167,6 +306,10 @@ def check_template(
         dump_numbered(rendered)
         return f"shellcheck: {err}"
 
+    err = cron_path_error(path, rendered, cron_map)
+    if err:
+        return err
+
     return None
 
 
@@ -189,13 +332,14 @@ def main() -> int:
 
     all_vars = load_yaml(ALL_VARS)
     ctx = {**BASE_CONTEXT, **all_vars, **SHELL_STUB_OVERRIDES}
+    cron_map = cron_job_scripts()
 
     failures = 0
     with tempfile.TemporaryDirectory(prefix="validate-shell-templates-") as tmp:
         out_dir = Path(tmp)
         for path in templates:
             rel = path.relative_to(REPO)
-            err = check_template(path, ctx, out_dir, shellcheck_bin)
+            err = check_template(path, ctx, out_dir, shellcheck_bin, cron_map)
             if err:
                 failures += 1
                 print(f"  [FAIL] {rel}: {err}", file=sys.stderr)
