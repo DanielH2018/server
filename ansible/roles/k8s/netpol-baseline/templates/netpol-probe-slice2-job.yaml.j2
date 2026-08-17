@@ -1,0 +1,98 @@
+---
+# Slice 1's probe (netpol-probe-job.yaml.j2) asks "is a workload with no in-cluster caller
+# unreachable" — that's the whole question for the six apps in that slice. Slice 2's workloads
+# (sonarr, radarr, prowlarr, qbittorrent) DO have allowed callers, so the question is different:
+# does each policy admit exactly its listed callers and nobody else. This probe asserts that
+# from a pod that is on nobody's allow list — it carries no `app` label any of the four slice-2
+# policies admit, cross-checked against their matchExpressions/matchLabels at write time.
+#
+# THE POSITIVE DIRECTION IS DELIBERATELY NOT PROBED HERE. It is already proven by two things that
+# run on every deploy anyway: roles/k8s/janitorr/tasks/verify.yml opens TCP to sonarr, radarr and
+# jellyfin from inside the janitorr pod, and roles/k8s/sonarr/tasks/verify.yml calls sonarr's API
+# from the host. Both fail their deploy if the fencing is wrong. Do not add a redundant positive
+# probe here — extend one of those two instead.
+#
+# This pod carries NO netpol-baseline label, so the baseline does not select it either. That is
+# also the point — it stands in for a compromised workload trying to move laterally.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: netpol-baseline-probe-slice2
+  namespace: {{ k8s_namespace }}
+spec:
+  # Deliberately BELOW the `kubectl wait --timeout=180s` in tasks/main.yml, not equal to it. The
+  # two clocks start at different moments, so equal values make it a coin flip which one fires on
+  # a slow cold image pull — and the two failures read completely differently. Lower here means
+  # the Job is always the clock that expires first, so the pod is terminal (and its logs final)
+  # by the time the wait gives up and the log fetch runs. Costs no wall time either way: with
+  # backoffLimit: 0 a failed Job never satisfies --for=condition=complete, so the wait burns its
+  # full 180s regardless.
+  activeDeadlineSeconds: 120
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: netpol-baseline-probe-slice2
+    spec:
+      restartPolicy: Never
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      containers:
+        - name: probe
+          image: {{ netpol_baseline_probe_image }}
+          command:
+            - sh
+            - -c
+            - |
+              if ! nc -w 5 -z traefik 80; then
+                echo "CONTROL FAILED: cannot reach traefik:80, so nothing below is attributable"
+                echo "to the policy. Check DNS and the traefik Service."
+                exit 1
+              fi
+              echo "control ok: traefik:80 reachable"
+
+              if ! nc -w 5 -z homepage 3000; then
+                echo "NEGATIVE CONTROL FAILED: cannot reach the unfenced homepage:3000 either."
+                echo "This pod cannot open connections at all, so the assertions below would pass"
+                echo "whether or not the policies work."
+                exit 1
+              fi
+              echo "negative control ok: unfenced homepage:3000 reachable"
+
+              # This pod carries no app label that sonarr's policy admits. Its allowed callers are
+              # traefik, janitorr, configarr, monitor-bridge, autofix-bridge, bazarr and prowlarr
+              # (roles/k8s/sonarr/templates/networkpolicy.yaml.j2). Port hardcoded from
+              # ansible/inventory/host_vars/daniel-box.yml's sonarr containers_list entry — a
+              # wrong value here fails loudly (this probe) rather than silently.
+              if nc -w 5 -z sonarr 8989; then
+                echo "POLICY NOT ENFORCED: reached sonarr directly from a pod that is not one of"
+                echo "its allowed callers. Either netpol_baseline_enforced is false, or the label"
+                echo "is missing from sonarr's POD TEMPLATE, or sonarr's policy admits too much."
+                exit 1
+              fi
+              echo "isolated: sonarr unreachable from an unlisted caller"
+
+              # qbittorrent's policy admits traefik, sonarr, radarr and its own reach-probe
+              # (roles/k8s/qbittorrent/templates/networkpolicy.yaml.j2). This pod is none of those.
+              # Port hardcoded rather than referencing qbittorrent_k8s_webui_port
+              # (roles/k8s/qbittorrent/defaults/main.yml): this role's tasks reach it via
+              # include_role (ansible/deploy.yml), which does not expose another role's
+              # defaults/main.yml unless that include sets `public: true` — none in this repo do.
+              if nc -w 5 -z qbittorrent 8080; then
+                echo "POLICY NOT ENFORCED: reached qbittorrent from a pod that is not sonarr or"
+                echo "radarr."
+                exit 1
+              fi
+              echo "isolated: qbittorrent unreachable from an unlisted caller"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi

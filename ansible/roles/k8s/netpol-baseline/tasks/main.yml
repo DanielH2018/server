@@ -147,3 +147,111 @@
       image-pull or admission failure, NOT an assertion failure; see the describe command above.'
       if not netpol_baseline_probe_log.stdout_lines else
       'See the logged assertion output above for which of the four checks failed.' }}
+
+# ── slice 2: prove the per-workload allow policies admit exactly their listed callers ──────────
+# Own directory, same reason as the slice-1 probe above: `kubectl apply -f <dir>` reads every
+# file in the directory it is given, and a Job's pod template is immutable.
+- name: Create the netpol-baseline-probe-slice2 manifest directory
+  tags: [config]
+  ansible.builtin.file:
+    path: /etc/rancher/k3s/manifests/netpol-baseline-probe-slice2
+    state: directory
+    mode: "0700"
+    owner: root
+    group: root
+  become: true
+
+- name: Render the netpol-baseline-probe-slice2 probe
+  tags: [config]
+  ansible.builtin.template:
+    src: netpol-probe-slice2-job.yaml.j2
+    dest: /etc/rancher/k3s/manifests/netpol-baseline-probe-slice2/netpol-probe-slice2-job.yaml
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+
+- name: Clear the previous netpol-baseline-probe-slice2 run
+  tags: [deploy]
+  when:
+    - netpol_baseline_enforced | bool
+    - not k8s_no_mutate
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} delete job netpol-baseline-probe-slice2
+      --ignore-not-found --wait=true
+  become: true
+  changed_when: true
+
+- name: Run the netpol-baseline-probe-slice2 probe
+  tags: [deploy]
+  when:
+    - netpol_baseline_enforced | bool
+    - not k8s_no_mutate
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl apply -f
+      /etc/rancher/k3s/manifests/netpol-baseline-probe-slice2/netpol-probe-slice2-job.yaml
+  become: true
+  changed_when: true
+
+- name: Wait for the netpol-baseline-probe-slice2 probe
+  tags: [deploy]
+  when:
+    - netpol_baseline_enforced | bool
+    - not k8s_no_mutate
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
+      job/netpol-baseline-probe-slice2 --timeout=180s
+  become: true
+  changed_when: false
+  register: netpol_baseline_probe_slice2
+  failed_when: false
+
+# Same reasoning as the slice-1 Report task above: unconditional on the wait's outcome, and
+# `failed_when: false`, so a failing probe still gets its logs fetched and shown before the play
+# aborts, instead of dying at the wait with nothing but "timed out waiting for the condition".
+- name: Report the netpol-baseline-probe-slice2 probe
+  tags: [deploy]
+  when:
+    - netpol_baseline_enforced | bool
+    - not k8s_no_mutate
+  ansible.builtin.command:
+    cmd: "k3s kubectl -n {{ k8s_namespace }} logs job/netpol-baseline-probe-slice2"
+  become: true
+  changed_when: false
+  register: netpol_baseline_probe_slice2_log
+  failed_when: false
+
+# stdout_lines is [] when the pod never ran, so print stderr (where "container not found" and the
+# other kubectl-side reasons land) and a next step, rather than an empty list.
+- name: Show the netpol-baseline-probe-slice2 result
+  tags: [deploy]
+  when:
+    - netpol_baseline_enforced | bool
+    - not k8s_no_mutate
+  ansible.builtin.debug:
+    msg: >-
+      {{ netpol_baseline_probe_slice2_log.stdout_lines
+         or ['no probe output. kubectl logs said: '
+             ~ (netpol_baseline_probe_slice2_log.stderr | default('') | trim | default('(nothing)', true)),
+             'Inspect with: sudo k3s kubectl -n ' ~ k8s_namespace
+             ~ ' describe job netpol-baseline-probe-slice2'] }}
+
+- name: Fail if the netpol-baseline-probe-slice2 probe did not complete
+  tags: [deploy]
+  # Ansible short-circuits a `when` list, so `not k8s_no_mutate` is what keeps
+  # netpol_baseline_probe_slice2.rc from being dereferenced on a dry run, where the wait that
+  # registers it never ran.
+  when:
+    - netpol_baseline_enforced | bool
+    - not k8s_no_mutate
+    - netpol_baseline_probe_slice2.rc != 0
+  ansible.builtin.fail:
+    msg: >-
+      netpol-baseline-probe-slice2 did not complete (rc={{ netpol_baseline_probe_slice2.rc }}).
+      {{ 'It printed no output at all, so the pod never ran its script — this is a scheduling,
+      image-pull or admission failure, NOT an assertion failure; see the describe command above.'
+      if not netpol_baseline_probe_slice2_log.stdout_lines else
+      'See the logged assertion output above for which check failed.' }}
