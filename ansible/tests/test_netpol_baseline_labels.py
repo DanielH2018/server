@@ -66,6 +66,15 @@ BESPOKE_POLICY_WORKLOADS = {
     ("prowlarr", "flaresolverr"),
 }
 
+# Pod-producing docs that are deliberately unlabelled and deliberately NOT fenced: a netpol probe
+# stands in for a compromised pod with no allow-list entry, so labelling one would make it prove
+# nothing. This is a different category from BESPOKE_POLICY_WORKLOADS, which is "fenced by its own
+# policy" — these are fenced by nothing, on purpose.
+UNFENCED_BY_DESIGN_WORKLOADS = {
+    ("prowlarr", "flaresolverr-netpol-probe"),
+    ("sonarr", "sonarr-isolation-probe"),
+}
+
 
 def _pod_template_labels(doc: dict) -> dict:
     """The labels a Deployment or CronJob actually stamps onto its pods.
@@ -103,7 +112,7 @@ def test_exactly_the_slice_1_and_slice_2_roles_carry_the_baseline_label() -> Non
     )
 
 
-POD_KINDS = {"Deployment", "DaemonSet", "StatefulSet", "CronJob"}
+POD_KINDS = {"Deployment", "DaemonSet", "StatefulSet", "CronJob", "Job"}
 
 
 def _labelled_workloads() -> set[tuple[str, str]]:
@@ -126,13 +135,13 @@ def test_every_pod_producing_doc_in_a_fenced_role_is_labelled() -> None:
         and doc.get("kind") in POD_KINDS
         and _pod_template_labels(doc).get(LABEL[0]) != LABEL[1]
     }
-    unexplained = sorted(
-        f"{role}/{name}" for role, name in unlabelled - BESPOKE_POLICY_WORKLOADS
-    )
+    exempt = BESPOKE_POLICY_WORKLOADS | UNFENCED_BY_DESIGN_WORKLOADS
+    unexplained = sorted(f"{role}/{name}" for role, name in unlabelled - exempt)
     assert not unexplained, (
         "pod-producing docs inside a fenced role are missing the baseline label:\n"
         f"  {unexplained}\n"
-        "Every workload in a fenced role must carry it — the role is not the unit. If this one is "
-        "genuinely unfenced, label it. If it is already fenced by its own NetworkPolicy, add "
-        "(role, name) to BESPOKE_POLICY_WORKLOADS above with a comment naming that policy file."
+        "Every workload in a fenced role must carry it — the role is not the unit. Pick one: "
+        "label it; if it is already fenced by its own NetworkPolicy, add (role, name) to "
+        "BESPOKE_POLICY_WORKLOADS above with a comment naming that policy file; if it is a probe "
+        "that must stay unfenced to test the fence, add it to UNFENCED_BY_DESIGN_WORKLOADS."
     )
