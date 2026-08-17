@@ -56,6 +56,19 @@ export KUBECONFIG=/home/{{ sys_user }}/.kube/config
 KUBECTL="k3s kubectl"
 MANIFEST_ROOT=/etc/rancher/k3s/manifests
 
+# A non-root `stat`/`-d` test on MANIFEST_ROOT itself still succeeds (only traverse permission
+# on the parent is needed), but `grep -r` into its mode-0700 per-service subdirs then fails
+# permission-denied on every one, and that failure is swallowed by check_kind's 2>/dev/null —
+# indistinguishable from "no template declares this name". Every live object would misclassify
+# as an orphan, and both push blocks below are unconditional, so a hand-run as a non-root user
+# corrupts the real Kuma monitor and fires the healthchecks.io dead-man's switch on entirely
+# false data. Must precede PUSH_TOKEN handling, the grep, the early -d push path, and both push
+# blocks, so a non-root run pushes nothing at all.
+if [[ $EUID -ne 0 ]]; then
+  echo "must run as root: the staged manifest dirs under $MANIFEST_ROOT are mode 0700 (try: sudo $0)" >&2
+  exit 64
+fi
+
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 # Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
 # edge's bridge route for this name was removed in the slice-7 bridge teardown.
