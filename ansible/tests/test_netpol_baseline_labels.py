@@ -54,6 +54,18 @@ BORN_FENCED_ROLES = {
 
 LABEL = ("netpol-baseline", "enforced")
 
+# Workloads inside a fenced role that are fenced by their OWN NetworkPolicy rather than by the
+# baseline label. Each entry must name the policy that covers it: an unexplained exemption is
+# indistinguishable from a workload someone forgot to label.
+#
+# flaresolverr: roles/k8s/prowlarr/templates/networkpolicy.yaml.j2 admits app=prowlarr only, on one
+# port. That is TIGHTER than the baseline, which would also admit traefik, prometheus and the node
+# CIDRs — so labelling it would widen the fence around a headless browser that renders
+# attacker-supplied pages.
+BESPOKE_POLICY_WORKLOADS = {
+    ("prowlarr", "flaresolverr"),
+}
+
 
 def _pod_template_labels(doc: dict) -> dict:
     """The labels a Deployment or CronJob actually stamps onto its pods.
@@ -88,4 +100,39 @@ def test_exactly_the_slice_1_and_slice_2_roles_carry_the_baseline_label() -> Non
         f"  unexpected (fenced without a probe proving its callers still work): {extra}\n"
         "Update SLICE_1_ROLES/SLICE_2_ROLES together with docs/networkpolicy-default-deny.md "
         "when the rollout moves to the next slice."
+    )
+
+
+POD_KINDS = {"Deployment", "DaemonSet", "StatefulSet", "CronJob"}
+
+
+def _labelled_workloads() -> set[tuple[str, str]]:
+    key, value = LABEL
+    return {
+        (role, doc.get("metadata", {}).get("name", "?"))
+        for role, _tpl, doc in rendered_docs()
+        if doc.get("kind") in POD_KINDS and _pod_template_labels(doc).get(key) == value
+    }
+
+
+def test_every_pod_producing_doc_in_a_fenced_role_is_labelled() -> None:
+    """A role is not a unit of fencing. claude-otel renders six workloads; five
+    could go unlabelled while the role still looked fenced."""
+    fenced_roles = SLICE_1_ROLES | SLICE_2_ROLES
+    unlabelled = {
+        (role, doc.get("metadata", {}).get("name", "?"))
+        for role, _tpl, doc in rendered_docs()
+        if role in fenced_roles
+        and doc.get("kind") in POD_KINDS
+        and _pod_template_labels(doc).get(LABEL[0]) != LABEL[1]
+    }
+    unexplained = sorted(
+        f"{role}/{name}" for role, name in unlabelled - BESPOKE_POLICY_WORKLOADS
+    )
+    assert not unexplained, (
+        "pod-producing docs inside a fenced role are missing the baseline label:\n"
+        f"  {unexplained}\n"
+        "Every workload in a fenced role must carry it — the role is not the unit. If this one is "
+        "genuinely unfenced, label it. If it is already fenced by its own NetworkPolicy, add "
+        "(role, name) to BESPOKE_POLICY_WORKLOADS above with a comment naming that policy file."
     )
