@@ -1,0 +1,57 @@
+---
+# The namespace ingress baseline. Kubernetes admits every pod-to-pod connection by default and a
+# NetworkPolicy constrains only the pods it SELECTS, so this is the object that makes every other
+# policy in the repo mean something.
+#
+# INGRESS ONLY. An Egress policy selects pods correctly on this cluster and blocks nothing
+# (measured 2026-08-07, recorded in sonarr/templates/isolation-probe-job.yaml.j2). Writing one
+# would read like a control in the repo and do nothing in the cluster.
+#
+# Kubelet probe traffic needs no rule here: flaresolverr admits :8191 only from prowlarr yet is
+# probed on that port and runs 1/1, and headlamp corroborates it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: baseline-ingress
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+{% if netpol_baseline_scope == 'namespace' %}
+    {}
+{% else %}
+    matchLabels:
+      netpol-baseline: enforced
+{% endif %}
+  policyTypes:
+    - Ingress
+  ingress:
+{# `| bool`, matching the `when:` in tasks/main.yml. Without it the two disagree for a STRING:
+   `-e netpol_baseline_enforced=false` is truthy to Jinja (this branch renders, fencing applied)
+   and False to Ansible's `when:` (every probe task skipped) — enforcement with no probe, from
+   the exact override an operator reaches for mid-incident. #}
+{% if netpol_baseline_enforced | bool %}
+    # Three callers legitimately reach almost every pod. Stating them once here is the whole
+    # design; the alternative is restating them in ~50 per-workload policies.
+    - from:
+        # Traefik is the front door for every web UI. Bare podSelector = this namespace only.
+        - podSelector:
+            matchLabels:
+              app: traefik
+        # Prometheus scrapes every workload. namespaceSelector and podSelector are SIBLING KEYS
+        # in ONE list item, so they AND together: the prometheus pod in observability. As two
+        # separate list items they would OR, admitting the entire observability namespace.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app: prometheus
+{% for cidr in netpol_baseline_node_cidrs %}
+        - ipBlock:
+            cidr: {{ cidr }}
+{% endfor %}
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}

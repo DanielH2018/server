@@ -39,6 +39,24 @@ from _render_guard import (
 sys.path.insert(0, str(ANSIBLE / "filter_plugins"))
 from toposort import filter_by_platform  # noqa: E402 — needs the path insert above
 
+from ansible.plugins.filter.core import to_bool  # noqa: E402
+
+
+def register_ansible_filters(env):
+    """Register the Ansible filters the manifest templates use on a bare Jinja env.
+
+    `bool` is ansible-core's own `to_bool`, not Python's `bool()`: `bool("false")` is True, so a
+    hand-rolled shim would render `{% if x | bool %}` the opposite way from a real deploy and
+    report clean on exactly the string/boolean divergence `| bool` is written to prevent.
+
+    pihole's ConfigMap includes the shared dnsmasq template, which derives its override records
+    from the inventory via the repo's filter plugin — register the real thing for that too.
+    """
+    env.filters["bool"] = to_bool
+    env.filters["filter_by_platform"] = filter_by_platform
+    return env
+
+
 K8S_ROLES = ANSIBLE / "roles" / "k8s"
 HOST_VARS = ANSIBLE / "inventory" / "host_vars" / "daniel-box.yml"
 # Helper roles, included by service roles rather than deployed on their own. They have no
@@ -232,9 +250,7 @@ def check_template(role: str, tpl: Path, ctx: dict) -> str | None:
     """Render one manifest template; return an error string or None on success."""
     env = make_env([K8S_ROLES / role / "templates", SHARED_TPL])
     env.globals["lookup"] = make_lookup(ctx)
-    # pihole's ConfigMap includes the shared dnsmasq template, which derives its override
-    # records from the inventory via the repo's filter plugin — register the real thing.
-    env.filters["filter_by_platform"] = filter_by_platform
+    register_ansible_filters(env)
     rendered, err = render_or_error(env, tpl.name, ctx)
     if err:
         return err

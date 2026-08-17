@@ -13,6 +13,7 @@ spec:
     metadata:
       labels:
         app: littlelink
+        netpol-baseline: enforced
     spec:
       # No legacy Docker-link env vars for every Service in the namespace. Harmless clutter
       # here, fatal for Authelia — see that role's deployment for the failure it causes.

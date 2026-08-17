@@ -1,0 +1,24 @@
+---
+# The activation lever, and the rollback lever: set false and redeploy. NOT a deletion —
+# `kubectl apply` does not prune, so removing this role's template would leave the live policy
+# enforcing with nothing in the repo describing it.
+#
+# Landed false so the role could be applied and its list position verified without fencing
+# anything; flipped true 2026-08-16 once the six slice-1 workloads were deployed carrying
+# `netpol-baseline: enforced` and confirmed as exactly six selected pods.
+netpol_baseline_enforced: true
+
+# `label`     — the policy selects only pods carrying `netpol-baseline: enforced` (slices 1-4)
+# `namespace` — the policy selects every pod via `podSelector: {}` (slice 5)
+netpol_baseline_scope: label
+
+# The node-side bridge addresses, for traffic that arrives with a node IP: containerd image
+# pulls, hostPort paths, and the three host crons that dial traefik. Verified per node with
+# `ip -4 -o addr show cni0`. These are /32 HOST addresses on purpose — see the plan's Global
+# Constraints for why a /16 here would silently cancel the whole policy.
+netpol_baseline_node_cidrs:
+  - 10.42.0.1/32
+  - 10.42.1.1/32
+
+# Matches headlamp_k8s_netpol_probe_image and registry_k8s_netpol_probe_image.
+netpol_baseline_probe_image: alpine:3.24

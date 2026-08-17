@@ -1,0 +1,122 @@
+---
+# Proves the baseline is ENFORCED, not merely applied. Four assertions, because the obvious
+# single one is not sufficient for this slice: these six apps have no in-cluster caller, so
+# "cannot reach littlelink" is true under enforcement, under a missing label, AND when
+# littlelink is down. Each assertion below eliminates one of those.
+#
+# This pod carries NO netpol-baseline label, so the policy does not select it. That is the point
+# — it stands in for a compromised workload trying to move laterally.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: netpol-baseline-probe
+  namespace: {{ k8s_namespace }}
+spec:
+  # Deliberately BELOW the `kubectl wait --timeout=180s` in tasks/main.yml, not equal to it. The
+  # two clocks start at different moments, so equal values make it a coin flip which one fires on
+  # a slow cold image pull — and the two failures read completely differently. Lower here means
+  # the Job is always the clock that expires first, so the pod is terminal (and its logs final)
+  # by the time the wait gives up and the log fetch runs. Costs no wall time either way: with
+  # backoffLimit: 0 a failed Job never satisfies --for=condition=complete, so the wait burns its
+  # full 180s regardless.
+  activeDeadlineSeconds: 120
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: netpol-baseline-probe
+    spec:
+      restartPolicy: Never
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      containers:
+        - name: probe
+          image: {{ netpol_baseline_probe_image }}
+          command:
+            - sh
+            - -c
+            - |
+              # 1. CONTROL — the network and DNS work at all. traefik:80 is open to every source
+              #    deliberately (see the spec: narrowing the front door buys nothing and would
+              #    break every other probe job's control). A failure here means this probe proves
+              #    nothing, rather than meaning the policy failed.
+              if ! nc -w 5 -z traefik 80; then
+                echo "CONTROL FAILED: cannot reach traefik:80, so nothing below is attributable"
+                echo "to the policy. Check DNS and the traefik Service."
+                exit 1
+              fi
+              echo "control ok: traefik:80 reachable"
+
+              # 2. NEGATIVE CONTROL — an UNFENCED pod is still reachable from here. homepage
+              #    carries no netpol-baseline label and is in no slice of the rollout table; it
+              #    is first fenced at slice 5, when the selector becomes podSelector: {} and
+              #    every pod in the namespace is covered. THIS ASSERTION NEEDS A DIFFERENT
+              #    CONTROL AT SLICE 5 — by construction there is no unfenced pod left in the
+              #    namespace then, so the replacement has to come from outside it. If this fails
+              #    the probe pod's own networking is broken and assertion 3 would pass for the wrong
+              #    reason. Port 3000 here is homepage's Service — unrelated to littlelink's own
+              #    port 3000 used in assertions 3-4 below; they are different Services reached by
+              #    different names.
+              if ! nc -w 5 -z homepage 3000; then
+                echo "NEGATIVE CONTROL FAILED: cannot reach the unfenced homepage:3000 either."
+                echo "This pod cannot open connections at all, so assertion 3 below would pass"
+                echo "whether or not the policy works. Investigate before trusting this job."
+                exit 1
+              fi
+              echo "negative control ok: unfenced homepage:3000 reachable"
+
+              # 3. LIVENESS — littlelink is actually UP and Traefik can reach it. Goes through the
+              #    Traefik VIP by hostname, which is the real allowed path, so this doubles as the
+              #    positive test of the policy's traefik rule. If this fails but 4 passes, the app
+              #    is down (or CrowdSec banned this source) and the fencing result is meaningless.
+              #
+              #    Deliberately littlelink, not bento-pdf: littlelink has use_authelia: false, so
+              #    this request reaches the app directly. An Authelia-gated app would have the
+              #    forwardauth middleware answer first (401, or a 302 to the login portal) before
+              #    Traefik ever proxies to the pod — the probe would then either be permanently
+              #    red for a reason unrelated to enforcement, or print "liveness ok" without ever
+              #    contacting the app, silently reintroducing the exact false-pass this job exists
+              #    to eliminate. If littlelink is ever swapped for an Authelia-gated app, pick
+              #    another unauthed one instead of adding a bypass rule for this probe.
+              if ! wget -q -T 10 --no-check-certificate -O /dev/null \
+                   "https://www.local.{{ domain }}/"; then
+                echo "LIVENESS FAILED: littlelink is not reachable through traefik. Three causes,"
+                echo "and the third is the one that looks like the other two:"
+                echo "  1. the app is down;"
+                echo "  2. the baseline's traefik rule is wrong;"
+                echo "  3. this wget never got as far as the policy — DNS or TLS. This is the"
+                echo "     only busybox-TLS call in the repo, so ssl_client in this image and"
+                echo "     busybox wget's option surface are both unexercised, and Pi-hole"
+                echo "     answers AAAA for .local names with ::, which getaddrinfo may try"
+                echo "     first. Check from inside this pod before touching the policy:"
+                echo "       nslookup www.local.{{ domain }}   # does it resolve, and to what"
+                echo "       nc -w 5 -z traefik 443            # is the TLS port even open"
+                echo "       wget -S -O /dev/null --no-check-certificate https://www.local.{{ domain }}/"
+                echo "Assertion 4 below cannot distinguish enforcement from an app that is"
+                echo "simply not listening."
+                exit 1
+              fi
+              echo "liveness ok: littlelink reachable through traefik"
+
+              # 4. THE ASSERTION — direct pod-to-pod must FAIL. Inverted: success here is the
+              #    failure case. littlelink:3000 is a different Service from homepage:3000 above.
+              if nc -w 5 -z littlelink 3000; then
+                echo "POLICY NOT ENFORCED: reached littlelink:3000 directly from a pod that"
+                echo "carries no netpol-baseline label. Either netpol_baseline_enforced is false,"
+                echo "or the label is missing from littlelink's POD TEMPLATE (check"
+                echo "spec.template.metadata.labels, not spec.selector.matchLabels)."
+                exit 1
+              fi
+              echo "isolated: littlelink:3000 unreachable except through traefik"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
