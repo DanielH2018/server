@@ -47,6 +47,7 @@ BACKEND=$($KUBECTL get pods -l app=longhorn-manager -o json 2>/dev/null \
       | .status.podIP' | head -1)
 if [[ -z "$BACKEND" ]]; then
   echo "ABORT: no ready longhorn-manager pod on ${NODE}; nothing local to send trims to." >&2
+  logger -t longhorn-trim "ABORT: no ready longhorn-manager pod on ${NODE}"
   exit 1
 fi
 
@@ -76,6 +77,11 @@ done < <($KUBECTL get volumes.longhorn.io \
   -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.status.state}{"|"}{.status.robustness}{"|"}{.status.kubernetesStatus.pvcName}{"\n"}{end}' 2>/dev/null)
 
 echo "trimmed ${TRIMMED}, skipped ${SKIPPED}, failed ${FAILED}."
+# Unconditional — fires on both a clean run and a partial failure (FAILED>0 below still exits
+# non-zero, but this line runs first either way), so Loki (via Promtail's syslog job) carries a
+# durable "did it reclaim anything" record next to the other nightly health verdicts. Without
+# this, a retained-snapshot no-op and a genuinely clean run were indistinguishable after the fact.
+logger -t longhorn-trim "trimmed ${TRIMMED} volume(s), ${SKIPPED} skipped, ${FAILED} failed"
 
 # WHY THIS NOTE EXISTS. Everything above can succeed against a volume whose blocks are entirely
 # pinned by a retained snapshot, reclaiming nothing and exiting 0 — so a nightly cron prints

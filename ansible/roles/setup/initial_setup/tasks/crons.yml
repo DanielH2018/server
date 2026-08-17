@@ -3,11 +3,16 @@
 # pruning, ansible.log truncation, and the infrastructure-map refresh.
 # Split out of main.yml on 2026-08-15; task content and tags are unchanged.
 
-- name: Deploy the daily secret-rotation audit wrapper (server only)
+- name: Deploy the daily secret-rotation audit wrapper (gitops host only)
   tags: [crons]
-  # Server-only: the authoritative repo + SOPS live here. Reads names from the encrypted
-  # secrets.yml (values stay encrypted) and the rotation registry; see scripts/secret_rotation.py.
-  when: inventory_hostname == 'daniel-server'
+  # Gated on has_gitops, not a hostname: this reads ansible/secret_rotation.yml and the key
+  # list of ansible/vars/secrets.yml straight off the working tree (no SOPS decrypt, no live
+  # source), so it's only trustworthy on a host whose tree self-refreshes — gitops-deploy.service
+  # pulls origin every 30 min. daniel-server carries neither has_gitops nor an auto-pulling
+  # tree; its checkout can silently sit weeks behind origin (verified 39 commits behind on
+  # 2026-08-17) while this cron keeps reading its stale copy and reporting a green monitor on
+  # a secret the registry never saw. Follow has_gitops if it moves to a different host later.
+  when: has_gitops
   ansible.builtin.template:
     src: secret-rotation-audit.sh.j2
     dest: /usr/local/bin/secret-rotation-audit.sh
@@ -17,11 +22,11 @@
   become: true
   no_log: true  # renders secret_rotation_push_token (gitops_deploy wrapper parity)
 
-- name: Schedule the daily secret-rotation audit (server only)
+- name: Schedule the daily secret-rotation audit (gitops host only)
   tags: [crons]
   # 08:00 — after the Sunday 07:30 reboot + 07:15 CrowdSec-hub jobs settle; clear of the
   # 06:xx redeploy window. Pushes the "Secret Rotation" Kuma monitor (uptime-kuma role).
-  when: inventory_hostname == 'daniel-server'
+  when: has_gitops
   ansible.builtin.cron:
     name: "Daily secret rotation audit"
     minute: "0"
@@ -30,13 +35,14 @@
     user: "{{ sys_user }}"
   become: true
 
-- name: Deploy the weekly secret-rotation wrapper (server only)
+- name: Deploy the weekly secret-rotation wrapper (gitops host only)
   tags: [crons]
   # Unattended rotation of coming-due auto-tier push tokens (rotate --commit --deploy +
   # git push; anything due within ROTATE_LEAD_DAYS rotates BEFORE it goes overdue).
   # Reverts on failure; cross-host tokens stay manual. See scripts/secret_rotation.py +
-  # docs/secret-rotation.md.
-  when: inventory_hostname == 'daniel-server'
+  # docs/secret-rotation.md. Same has_gitops gate as the daily audit above — the tree this
+  # script commits/pushes from must be the one origin (and CI) actually see.
+  when: has_gitops
   ansible.builtin.template:
     src: secret-rotate.sh.j2
     dest: /usr/local/bin/secret-rotate.sh
@@ -46,11 +52,11 @@
   become: true
   no_log: true  # renders secret_rotation_push_token (gitops_deploy wrapper parity)
 
-- name: Schedule the weekly secret rotation (server only)
+- name: Schedule the weekly secret rotation (gitops host only)
   tags: [crons]
   # Sunday 09:00 — after the 07:30 reboot, the 06:xx redeploys, and the 08:00 daily audit
   # have all settled; quiet window minimises any clash with a concurrent operator session.
-  when: inventory_hostname == 'daniel-server'
+  when: has_gitops
   ansible.builtin.cron:
     name: "Weekly secret rotation (auto tier)"
     minute: "0"
@@ -84,6 +90,11 @@
   # Pings the Healthchecks "Docker Image Prune" monitor ON SUCCESS (`&&`): a failed
   # prune leaves the check un-pinged so it alerts. Ping kept in the Ansible-managed job
   # so a [crons] redeploy can't silently strip it (the late-May regression). Dashed UUID.
+  # has_docker-gated: daniel-box and daniel-server have had no docker binary since the
+  # 2026-08-14 k3s migration completed; the ping lives inside this same job, so gating it
+  # here (rather than skipping only the `docker` call) also retires the monitor cleanly
+  # instead of leaving a dead-man that never pings on those two hosts.
+  when: has_docker
   ansible.builtin.cron:
     name: "Clean unused Docker images"
     minute: "30"
