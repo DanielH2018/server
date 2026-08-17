@@ -202,6 +202,83 @@ def loki_query_url(base, logql, limit, start=None, end=None, direction=None):
     return f"{base}/loki/api/v1/query_range?" + urlencode(params)
 
 
+_DURATION_UNITS = {"m": 60, "h": 3600, "d": 86400, "w": 604800}
+
+
+def parse_duration_seconds(text):
+    """`30m` / `6h` / `2d` / `1w` -> seconds. Raises SystemExit on anything else.
+
+    Loki's default query window is an hour, which silently hides anything older — a backup run
+    75 minutes ago simply returns nothing, and an empty result reads as "no backups" rather than
+    "you did not ask far enough back".
+    """
+    m = re.fullmatch(r"(\d+)([mhdw])", text.strip())
+    if not m:
+        raise SystemExit(f"bad duration {text!r} — use forms like 30m, 6h, 2d, 1w")
+    return int(m.group(1)) * _DURATION_UNITS[m.group(2)]
+
+
+# Longhorn logs one of these per backup, naming the delta it processed:
+#   "Created snapshot changed blocks: 46 mappings, 46 blocks and 45 new blocks"
+# `blocks` is the delta it walks, and it issues one HeadObject per block to decide whether the
+# block is already in the store — so that count IS the backup's Class B transaction cost. `new`
+# is what it then uploaded, which is Class A and unmetered. B2 publishes no usage endpoint (its
+# per-class counters are Partner-tier only), so this line is the closest thing to a meter the
+# backup plane has, and it costs nothing because the logs are already in Loki.
+BACKUP_BLOCKS_RE = re.compile(
+    r"Created snapshot changed blocks: \d+ mappings, (\d+) blocks and (\d+) new blocks"
+)
+# The replica that emitted the line, e.g. "[pvc-1c0e18da-...-r-9d333575] time=..."
+BACKUP_VOLUME_RE = re.compile(r"\[(pvc-[0-9a-f-]{36})-r-[0-9a-f]+\]")
+SPEND_LOGQL = '{namespace="longhorn-system"} |= "Created snapshot changed blocks"'
+
+
+def parse_backup_spend(rows):
+    """[(ns_timestamp, line)] -> per-volume {backups, blocks, new_blocks}.
+
+    Lines whose replica prefix was trimmed by the log pipeline still count toward the totals;
+    they are attributed to "unattributed" rather than dropped, because losing them would
+    understate spend and understating is the failure mode that matters here.
+    """
+    vols = {}
+    for _, line in rows:
+        m = BACKUP_BLOCKS_RE.search(line)
+        if not m:
+            continue
+        v = BACKUP_VOLUME_RE.search(line)
+        name = v.group(1) if v else "unattributed"
+        entry = vols.setdefault(name, {"backups": 0, "blocks": 0, "new_blocks": 0})
+        entry["backups"] += 1
+        entry["blocks"] += int(m.group(1))
+        entry["new_blocks"] += int(m.group(2))
+    return vols
+
+
+def format_backup_spend(vols, window, names=None):
+    """Render measured Class B spend. Never exits non-zero: this is a meter, not a gate."""
+    names = names or {}
+    if not vols:
+        return f"no backups logged in the last {window} — widen --since, or nothing ran"
+    rows = [
+        "%-24s %8s %8s %10s" % ("PVC", "BACKUPS", "BLOCKS", "UPLOADED"),
+    ]
+    for vol in sorted(vols, key=lambda k: -vols[k]["blocks"]):
+        v = vols[vol]
+        rows.append(
+            "%-24s %8d %8d %10d"
+            % (names.get(vol, vol)[:24], v["backups"], v["blocks"], v["new_blocks"])
+        )
+    total_blocks = sum(v["blocks"] for v in vols.values())
+    total_new = sum(v["new_blocks"] for v in vols.values())
+    rows.append("")
+    rows.append(
+        "measured Class B over %s: %d (one HeadObject per delta block, cap 2500/day)"
+        % (window, total_blocks)
+    )
+    rows.append("of which uploaded: %d blocks (Class A — unmetered)" % total_new)
+    return "\n".join(rows)
+
+
 def scrutiny_url(base):
     return f"{base}/api/summary"
 
@@ -1030,6 +1107,12 @@ def _build_parser():
     lq.add_argument("logql")
     lq.add_argument("--limit", type=int, default=100)
     lq.add_argument(
+        "--since",
+        help="how far back to look, e.g. 30m/6h/2d/1w. Loki defaults to ONE HOUR, and "
+        "anything older simply returns nothing — an empty result reads as 'no logs' rather "
+        "than 'you did not ask far enough back'.",
+    )
+    lq.add_argument(
         "--json", action="store_true", help="print raw JSON instead of the log lines"
     )
     al = sub.add_parser(
@@ -1081,6 +1164,13 @@ def _build_parser():
         default=2,
         help="k3s_longhorn_weekly_backup_retain, to spot backups no job will prune",
     )
+    b2s = sub.add_parser(
+        "b2-spend",
+        help="MEASURED Class B spend from Longhorn's own logs (b2-budget projects Class C; "
+        "this counts what backups actually cost). Reads Loki, spends nothing on B2.",
+    )
+    b2s.add_argument("--since", default="24h", help="window, e.g. 30m/6h/2d/1w")
+    b2s.add_argument("--limit", type=int, default=1000)
     pi = sub.add_parser("pi", help="Pi glances API")
     pi.add_argument("subpath", help="e.g. fs, quicklook, mem, cpu")
     ct = sub.add_parser(
@@ -1167,7 +1257,17 @@ def plan(args, resolve_ip, k8s_endpoint=k8s_endpoint, pi_resolve=pi_resolve):
         return [curl_argv(loki_labels_url(base), resolve=pin)]
     if cmd == "loki-query":
         base, pin = k8s_endpoint("loki-homelab")
-        return [curl_argv(loki_query_url(base, ns.logql, ns.limit), resolve=pin)]
+        start = end = None
+        if getattr(ns, "since", None):
+            end_s = datetime.now(_CHICAGO).timestamp()
+            start = int((end_s - parse_duration_seconds(ns.since)) * 1e9)
+            end = int(end_s * 1e9)
+        return [
+            curl_argv(
+                loki_query_url(base, ns.logql, ns.limit, start=start, end=end),
+                resolve=pin,
+            )
+        ]
     if cmd == "scrutiny":
         base, pin = k8s_endpoint("scrutiny")
         return [curl_argv(scrutiny_url(base), resolve=pin)]
@@ -1634,6 +1734,8 @@ def main(argv=None):
         return run_b2_longhorn(ns)
     if ns.cmd == "b2-budget":
         return run_b2_budget(ns)
+    if ns.cmd == "b2-spend":
+        return run_b2_spend(ns)
     if ns.cmd == "ha-state":
         return run_ha_state(ns)
     if ns.cmd == "monitors":
@@ -1969,6 +2071,32 @@ def pvc_names(_run=None):
         for pv in json.loads(out.stdout).get("items", [])
         if pv.get("spec", {}).get("claimRef")
     }
+
+
+def run_b2_spend(ns):
+    """Measured Class B spend from Longhorn's own logs, over --since.
+
+    Costs nothing against B2 — it reads Loki, not the backup store. This is the counterpart to
+    b2-budget: that one PROJECTS Class C from block counts, this one MEASURES Class B from what
+    the backups actually did.
+    """
+    seconds = parse_duration_seconds(ns.since)
+    end_s = datetime.now(_CHICAGO).timestamp()
+    base, pin = loki_endpoint()
+    url = loki_query_url(
+        base,
+        SPEND_LOGQL,
+        ns.limit,
+        start=int((end_s - seconds) * 1e9),
+        end=int(end_s * 1e9),
+        direction="forward",
+    )
+    if ns.dry_run:
+        print(" ".join(curl_argv(url, resolve=pin)))
+        return 0
+    rows = _rows_from_loki(json.loads(fetch(url, resolve=pin)))
+    print(format_backup_spend(parse_backup_spend(rows), ns.since, pvc_names()))
+    return 0
 
 
 def run_b2_budget(ns):
