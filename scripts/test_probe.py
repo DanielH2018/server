@@ -1371,15 +1371,16 @@ def test_format_backup_budget_flags_a_b2_volume_left_on_the_daily_tier():
     assert "ON THE DAILY TIER AND ON B2" in text and "pvc-new" in text
 
 
-def test_format_backup_budget_reports_a_backlog_of_pending_deletes():
-    """Backups beyond `retain` each cost a full block-tree walk when Longhorn catches up, so
-    a backlog is the difference between a cheap night and one that blows the cap."""
+def test_format_backup_budget_reports_stranded_backups_not_pending_deletes():
+    """Backups beyond `retain` are stranded, not queued. Longhorn enforces retain only when the
+    owning job runs against a volume still in its groups, counting only its own backups — so a
+    volume that moved tier keeps its old backups forever and only the reaper clears them."""
     vols = {"pvc-a": {"prune": 100, "blocks": 50, "backups": 11}}
     text, code = probe.format_backup_budget(
         vols, {"pvc-a": "weekly-backup-d5"}, retain=4
     )
     assert code == 0
-    assert "+7 backlogged deletes" in text
+    assert "7 stranded backup(s)" in text and "reaper" in text
 
 
 def test_no_cluster_route_carries_the_retired_k8s_suffix():

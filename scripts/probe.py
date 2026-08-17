@@ -1881,9 +1881,16 @@ def format_backup_budget(vols, shards, names=None, retain=4):
     for shard in sorted(byshard):
         members = sorted(byshard[shard], key=lambda kv: -kv[1]["prune"])
         total = sum(v["prune"] for _, v in members)
-        # A volume already at or over `retain` deletes one backup per run, so it prunes once.
-        # Below it, the backup count is still climbing and nothing is deleted yet.
-        pending = sum(max(0, v["backups"] - retain) for _, v in members)
+        # Backups beyond `retain` are STRANDED, not queued for deletion. Longhorn enforces
+        # retain only when the owning RecurringJob runs against a volume still in its `groups:`,
+        # and it counts only ITS OWN backups — so the daily-era backups on a volume that moved to
+        # a weekday shard are pruned by nothing, ever. Measured 2026-08-17: radarr-config sat at
+        # 4 daily-backup + 1 weekly-backup-d2 against retain 4 and deleted none, because the
+        # weekly job saw 1 of its own. `longhorn-reap-orphan-backups.sh` is what clears these.
+        #
+        # The consequence for this projection: a shard's prune cost does not begin until that
+        # job has more than `retain` of its own backups, and until then its blocks only grow.
+        stranded = sum(max(0, v["backups"] - retain) for _, v in members)
         flag = "OVER" if total > budget else "ok"
         if total > budget:
             over.append(shard)
@@ -1893,7 +1900,9 @@ def format_backup_budget(vols, shards, names=None, retain=4):
                 shard,
                 total,
                 flag,
-                "  (+%d backlogged deletes)" % pending if pending else "",
+                "  (%d stranded backup(s) — see the orphan-backup reaper)" % stranded
+                if stranded
+                else "",
             )
         )
         for vol, v in members:
