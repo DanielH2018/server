@@ -8,6 +8,15 @@
 # baseline label. Without this rule the radarr UI 502s for the length of every rollout.
 #
 # bazarr addresses radarr by BARE NAME from its own application database, not from any manifest.
+#
+# prowlarr is here for the REVERSE of the radarr→prowlarr direction documented elsewhere: its
+# Application Sync POSTs indexer definitions INTO radarr over the ClusterIP
+# (`[POST] http://radarr:7878/api/v3/indexer?forceSave=true`, seen live in prowlarr's logs).
+# Same class as bazarr above — configured in prowlarr's own application database on its PVC, not
+# in any manifest here — so it is invisible to grep and easy to mistake for an unused caller.
+# Fenced, radarr silently keeps stale indexer definitions and nothing alerts, because
+# monitor-bridge's "Prowlarr Indexers" check reads prowlarr's own /api/v1/indexerstatus, which
+# this breakage does not touch.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -34,6 +43,7 @@ spec:
                   - monitor-bridge
                   - autofix-bridge
                   - bazarr
+                  - prowlarr        # Application Sync writes indexers in — see header
       ports:
         - protocol: TCP
           port: {{ container_item.port }}

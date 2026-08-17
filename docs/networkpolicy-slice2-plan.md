@@ -39,6 +39,10 @@ This is why each policy below lists Traefik explicitly. It is deliberate redunda
 
 **This plan does not pre-allow the node IPs.** sonarr's own `verify.yml` runs on every deploy and fails the play loudly if the path is blocked, which makes the deploy itself the experiment. Task 5 records the answer either way. Adding both address forms up front would have made the deploy pass without revealing which entry did the work, and would have left an unexamined allowance in the policy permanently.
 
+### Rollback limitation for the four per-workload policies
+
+Flipping `netpol_baseline_enforced: false` no longer fully rolls back sonarr, radarr, prowlarr or qbittorrent. That flag only makes `baseline-ingress` permissive again — the four per-workload policies from Task 1 still select `app: <name>` directly and still admit only their own listed peers, independent of the baseline. A caller broken by one of these four policies stays broken with the flag off, so it no longer proves "it isn't the NetworkPolicy" for these workloads. The actual rollback for slice 2 is per-policy: drop the entry from the role's `manifests_files` **and** patch the live object out, since `kubectl apply` does not prune objects removed from the manifest set.
+
 ---
 
 ### Task 1: Per-workload policies for the four with pod callers

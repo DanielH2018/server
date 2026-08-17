@@ -12,6 +12,15 @@
 # bazarr addresses sonarr by BARE NAME from its own application database, not from any manifest
 # (roles/k8s/bazarr/defaults/main.yml). It is in this list because of that comment, not because a
 # grep found it — dropping it would break subtitle fetching silently.
+#
+# prowlarr is here for the REVERSE of the sonarr→prowlarr direction documented elsewhere: its
+# Application Sync POSTs indexer definitions INTO sonarr over the ClusterIP
+# (`[POST] http://sonarr:8989/api/v3/indexer?forceSave=true`, seen live in prowlarr's logs).
+# Same class as bazarr above — configured in prowlarr's own application database on its PVC, not
+# in any manifest here — so it is invisible to grep and easy to mistake for an unused caller.
+# Fenced, sonarr silently keeps stale indexer definitions and nothing alerts, because
+# monitor-bridge's "Prowlarr Indexers" check reads prowlarr's own /api/v1/indexerstatus, which
+# this breakage does not touch.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -38,6 +47,7 @@ spec:
                   - monitor-bridge  # env-secret.yaml.j2, cluster FQDN
                   - autofix-bridge  # env-secret.yaml.j2, cluster FQDN
                   - bazarr          # app DB, bare name — see header
+                  - prowlarr        # Application Sync writes indexers in — see header
       ports:
         - protocol: TCP
           port: {{ container_item.port }}
