@@ -1421,9 +1421,79 @@ def test_parse_backup_spend_keeps_lines_whose_replica_prefix_was_trimmed():
 
 def test_format_backup_spend_totals_and_says_when_the_window_was_empty():
     text = probe.format_backup_spend(probe.parse_backup_spend(SPEND_LOG), "6h")
-    assert "measured Class B over 6h: 181" in text
+    assert "backups over 6h: 181 Class B measured" in text
     empty = probe.format_backup_spend({}, "6h")
     assert "no backups logged" in empty and "widen --since" in empty
+
+
+def test_parse_b2_ledger_totals_per_tool_and_skips_malformed_lines():
+    tools = probe.parse_b2_ledger(
+        [
+            "2026-08-17T12:00:00Z\tdrain\t972\t59\t5\tretain 2",
+            "2026-08-17T13:00:00Z\tdrain\t179\t5\t4\tradarr",
+            "2026-08-17T14:00:00Z\tb2-budget\t0\t0\t5\t4 pages",
+            "not a ledger line",
+            "2026-08-17T15:00:00Z\tdrain\tnot\tnumbers\there\t",
+        ]
+    )
+    assert tools["drain"] == {"runs": 2, "class_a": 1151, "class_b": 64, "class_c": 9}
+    assert tools["b2-budget"]["class_c"] == 5
+    assert "not a ledger line" not in tools
+
+
+def test_record_b2_spend_never_raises_when_the_ledger_is_unwritable(monkeypatch):
+    """A ledger failure must not fail the real work — the accounting is secondary to the
+    operation it is accounting for."""
+    monkeypatch.setattr(probe, "B2_LEDGER_DIR", "/proc/cannot/create/this")
+    probe.record_b2_spend("drain", class_c=5)  # must not raise
+
+
+def test_record_then_read_round_trips(tmp_path, monkeypatch):
+    monkeypatch.setattr(probe, "B2_LEDGER_DIR", str(tmp_path))
+    probe.record_b2_spend("drain", class_a=100, class_b=59, class_c=5, note="retain 2")
+    probe.record_b2_spend("b2-budget", class_c=5)
+    tools = probe.read_b2_ledger()
+    assert tools["drain"]["class_b"] == 59
+    assert tools["b2-budget"]["class_c"] == 5
+
+
+def test_b2_longhorn_lines_reports_pages_plus_the_authorize_as_class_c():
+    """Each page is one b2_list_file_names and the authorize before them is billable too, so a
+    two-page listing costs three Class C — the number the ledger needs."""
+    pages = [
+        {
+            "files": [{"fileName": "longhorn/a", "contentLength": 1}],
+            "nextFileName": "b",
+        },
+        {"files": [{"fileName": "longhorn/b", "contentLength": 2}]},
+    ]
+    calls = []
+
+    def fake(_config):
+        if not calls:
+            calls.append(1)
+            return {
+                "apiInfo": {"storageApi": {"apiUrl": "https://api", "bucketId": "bid"}},
+                "authorizationToken": "t",
+            }
+        return pages.pop(0)
+
+    stats = {}
+    probe.b2_longhorn_lines("k", "s", "bucket", _call=fake, _stats=stats)
+    assert stats == {"class_c": 3, "pages": 2}
+
+
+def test_format_backup_spend_shows_maintenance_and_never_sums_the_two_windows():
+    """Backups span --since; the ledger covers the UTC day. A combined total would match
+    neither, so the report must keep them apart."""
+    text = probe.format_backup_spend(
+        probe.parse_backup_spend(SPEND_LOG),
+        "6h",
+        ledger={"drain": {"runs": 2, "class_a": 0, "class_b": 64, "class_c": 9}},
+    )
+    assert "backups over 6h: 181 Class B measured" in text
+    assert "drain" in text and "64 Class B" in text
+    assert "245" not in text  # 181 + 64 must not appear as a combined figure
 
 
 def test_format_backup_budget_flags_a_b2_volume_left_on_the_daily_tier():
