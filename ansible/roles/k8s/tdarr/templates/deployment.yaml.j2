@@ -17,6 +17,7 @@ spec:
     metadata:
       labels:
         app: tdarr
+        netpol-baseline: enforced
     spec:
       enableServiceLinks: false
       # The file-mode half of the GPU wiring (D2) — the device plugin below handles the cgroup

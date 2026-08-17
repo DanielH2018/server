@@ -1,0 +1,61 @@
+---
+# Slice 2 of the ingress default-deny.
+#
+# sonarr and radarr reach this pod as the download client at `wireguard:8080` — a compat Service
+# (service-wireguard.yaml.j2) that selects `app: qbittorrent`, carrying the hostname their SQLite
+# databases were seeded with under Docker. The Service name differs; the pod is the same, so a
+# podSelector on `app: qbittorrent` covers it. The PORT is the WebUI port, not container_item.port.
+#
+# This rule is PORT-SCOPED, and for the callers below that scoping is the whole grant: the baseline
+# admits neither sonarr, radarr nor qbittorrent-reach-probe, so they reach this pod only through
+# this rule and only on the WebUI port.
+#
+# TRAEFIK IS LISTED HERE DELIBERATELY — do not remove it as redundant — but be accurate about why.
+# The baseline admits traefik to every baseline-labelled pod on ANY port, and policies are
+# additive, so while qbittorrent carries that label the union is the same with or without this
+# entry. It was load-bearing for the deploy that INTRODUCED the label: the old pod carried
+# `app: qbittorrent` without `netpol-baseline: enforced`, so this policy was the only one selecting
+# it and the UI would have 502'd for the length of that rollout (the "rollout hazard" section of
+# the slice-2 plan). That window is closed — every pod created from here on carries both labels.
+# It stays because this policy then states its own complete caller set rather than depending on the
+# baseline continuing to admit traefik on all ports: if that baseline rule is ever port-scoped, or
+# this pod template loses the label, this line is what keeps the UI up.
+#
+# qbittorrent-reach-probe (tasks/verify.yml, "Reach the WebUI from a pod, as Traefik does") is
+# load-bearing here, not incidental: it exists to prove qbittorrent is reachable from the POD
+# CIDR specifically, despite the Mullvad kill-switch's iptables rules on the wireguard sidecar —
+# the one source address that can detect the kill-switch having eaten the cluster's return path
+# (D11 trap). Fence that probe out and the check would still pass-or-fail on this policy alone,
+# silently inverting what it asserts: a REACHED would mean nothing, and the one real regression
+# this test exists to catch (the kill-switch swallowing pod-CIDR traffic) would read as green.
+# Same shape as roles/k8s/registry/templates/networkpolicy.yaml.j2 admitting its own
+# registry-selftest-push/registry-selftest-pull Jobs. The probe pod carries this app label only
+# because tasks/verify.yml's `kubectl run` sets it with `--labels` — kubectl's default `run:`
+# label would not match a podSelector on `app`.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: qbittorrent
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: qbittorrent
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: traefik
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - sonarr
+                  - radarr
+                  - qbittorrent-reach-probe  # tasks/verify.yml pod-CIDR reachability check
+      ports:
+        - protocol: TCP
+          port: {{ qbittorrent_k8s_webui_port }}

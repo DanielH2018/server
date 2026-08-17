@@ -40,6 +40,10 @@
     # the whole deploy while the pod is still coming up healthy.
     manifests_rollout_timeout: 660s
     manifests_files:
+      # The policy is listed FIRST so it exists before the pod can be scheduled. `kubectl apply
+      # -f <dir>` does not guarantee that ordering, which is why the gap is also survivable: the
+      # pod takes seconds to pull and start, and the policy is applied in the same call.
+      - networkpolicy.yaml
       - deployment.yaml
       - service.yaml
       - ingressroute.yaml

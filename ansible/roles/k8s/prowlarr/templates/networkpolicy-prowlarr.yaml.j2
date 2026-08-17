@@ -1,0 +1,60 @@
+---
+# Slice 2 of the ingress default-deny. NOTE: this role's OTHER policy file, networkpolicy.yaml.j2,
+# fences flaresolverr and is unrelated to this one. Both are applied.
+#
+# This rule is PORT-SCOPED, and for the callers below that scoping is the whole grant: the baseline
+# admits none of monitor-bridge, sonarr, radarr or flaresolverr-netpol-probe, so they reach prowlarr
+# only through this rule and only on this one port.
+#
+# TRAEFIK IS LISTED HERE DELIBERATELY — do not remove it as redundant — but be accurate about why.
+# The baseline admits traefik to every baseline-labelled pod on ANY port, and policies are
+# additive, so while prowlarr carries that label the union is the same with or without this entry.
+# It was load-bearing for the deploy that INTRODUCED the label: the old pod carried `app: prowlarr`
+# without `netpol-baseline: enforced`, so this policy was the only one selecting it and the UI
+# would have 502'd for the length of that rollout (the "rollout hazard" section of the slice-2
+# plan). That window is closed — every pod created from here on carries both labels. It stays
+# because this policy then states its own complete caller set rather than depending on the baseline
+# continuing to admit traefik on all ports: if that baseline rule is ever port-scoped, or this pod
+# template loses the label, this line is what keeps the UI up.
+#
+# sonarr and radarr reach prowlarr by bare name from their own application databases — the indexer
+# definitions live on their PVCs, not in this repo. Recorded in
+# roles/k8s/sonarr/templates/isolation-probe-job.yaml.j2.
+#
+# flaresolverr-netpol-probe is the CONTROL leg of this role's OWN isolation probe
+# (netpol-probe-job.yaml.j2): before it asserts flaresolverr is unreachable from outside
+# prowlarr, it first proves its own pod networking works at all by retrying
+# `nc -z prowlarr {{ container_item.port }}` for up to 150s, riding out prowlarr's restart. Fence
+# that leg out and the control can never pass, so the Job fails and aborts every prowlarr deploy
+# — a negative test with no working control proves nothing. Same shape as
+# roles/k8s/registry/templates/networkpolicy.yaml.j2 admitting its own
+# registry-selftest-push/registry-selftest-pull Jobs: a deploy-time test pod that must reach the
+# workload it is fencing. Do not "clean this up" as an unused caller.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prowlarr
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: prowlarr
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: traefik
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - monitor-bridge
+                  - sonarr
+                  - radarr
+                  - flaresolverr-netpol-probe  # control leg of this role's own isolation probe
+      ports:
+        - protocol: TCP
+          port: {{ container_item.port }}

@@ -18,6 +18,7 @@ spec:
     metadata:
       labels:
         app: radarr
+        netpol-baseline: enforced
     spec:
       enableServiceLinks: false
       # No fsGroup: seed-volume restores ownership with `tar -p --numeric-owner`, the LSIO image

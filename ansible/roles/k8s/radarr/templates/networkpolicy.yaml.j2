@@ -1,0 +1,59 @@
+---
+# Slice 2 of the ingress default-deny. The baseline admits traefik, prometheus and the node bridges
+# to every pod carrying `netpol-baseline: enforced`. This file adds radarr's own callers, which are
+# all direct pod → ClusterIP and therefore invisible to the baseline.
+#
+# This rule is PORT-SCOPED, and for the callers below that scoping is the whole grant: the baseline
+# admits none of janitorr, configarr, monitor-bridge, autofix-bridge, bazarr or prowlarr, so they
+# reach radarr only through this rule and only on this one port.
+#
+# TRAEFIK IS LISTED HERE DELIBERATELY — do not remove it as redundant — but be accurate about why.
+# The baseline admits traefik to every baseline-labelled pod on ANY port, and policies are
+# additive, so while radarr carries that label the union is the same with or without this entry.
+# It was load-bearing for the deploy that INTRODUCED the label: the old pod carried `app: radarr`
+# without `netpol-baseline: enforced`, so this policy was the only one selecting it and the UI
+# would have 502'd for the length of that rollout. That window is closed — every pod created from
+# here on carries both labels. It stays because this policy then states its own complete caller set
+# rather than depending on the baseline continuing to admit traefik on all ports: if that baseline
+# rule is ever port-scoped, or this pod template loses the label, this line is what keeps the UI up.
+#
+# bazarr addresses radarr by BARE NAME from its own application database, not from any manifest.
+#
+# prowlarr is here for the REVERSE of the radarr→prowlarr direction documented elsewhere: its
+# Application Sync POSTs indexer definitions INTO radarr over the ClusterIP
+# (`[POST] http://radarr:7878/api/v3/indexer?forceSave=true`, seen live in prowlarr's logs).
+# Same class as bazarr above — configured in prowlarr's own application database on its PVC, not
+# in any manifest here — so it is invisible to grep and easy to mistake for an unused caller.
+# Fenced, radarr silently keeps stale indexer definitions and nothing alerts, because
+# monitor-bridge's "Prowlarr Indexers" check reads prowlarr's own /api/v1/indexerstatus, which
+# this breakage does not touch.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: radarr
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: radarr
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: traefik
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - janitorr
+                  - configarr
+                  - monitor-bridge
+                  - autofix-bridge
+                  - bazarr
+                  - prowlarr        # Application Sync writes indexers in — see header
+      ports:
+        - protocol: TCP
+          port: {{ container_item.port }}

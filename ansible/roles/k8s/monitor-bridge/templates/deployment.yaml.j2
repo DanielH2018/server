@@ -18,6 +18,7 @@ spec:
     metadata:
       labels:
         app: monitor-bridge
+        netpol-baseline: enforced
       annotations:
         # Recreate the pod when check.py's source changes — the script is not a manifest,
         # so the manifests role's own change detection never sees it.

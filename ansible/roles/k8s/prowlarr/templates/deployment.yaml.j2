@@ -17,6 +17,7 @@ spec:
     metadata:
       labels:
         app: prowlarr
+        netpol-baseline: enforced
     spec:
       enableServiceLinks: false
       # No fsGroup: seed-volume restores ownership with `tar -p --numeric-owner` and the LSIO
