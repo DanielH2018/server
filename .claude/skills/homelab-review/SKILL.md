@@ -138,28 +138,23 @@ Reviews here have a misfire history (an Authelia `trusted_proxies` proposal that
 crash-looped it; a PEP-758 `except X, Y:` misread as a syntax bug; and in the 2026-08-15 run both a
 proposed `N8N_PROXY_HOPS` change and a Pi `:latest`-pinning "fix" would have caused damage) — a
 wrong finding costs the operator more than a missed one. So: for each deduplicated High/Medium
-finding dispatch one skeptic — `general-purpose`, all in one parallel message — whose ONLY job is to try to **refute** it against: the role's CLAUDE.md
-(accepted trade-offs), the role's tasks/templates + shared macros, monitor-bridge `check.py` +
-role crons, the don't-re-flag memories, **git history (`git log`/`git blame` the cited lines — a
-finding already fixed in a later commit or intentionally reverted with a rationale is not live)**,
-and live state via `scripts/probe.py` where relevant. **`probe.py health <svc>` is k8s-native by
-default** — it gates on rollout completion (observed generation, updated/ready/available
-replicas) AND on no container restart in the last 180s, which `kubectl rollout status` alone
-can't see; use it as the primary liveness check for a cluster workload, falling back to
-`kubectl get`/`logs`/`describe` (the readonly SA covers get/list/watch, not Secrets or `exec`) to
-drill into a failure. Pass `--docker` for the Pi's Compose services — that mode shells `docker
-inspect` and only answers for those. Also `probe.py targets | metric | alerts | b2-longhorn`.
+finding dispatch one **`skeptic`** agent, all in one parallel message. That agent carries the whole
+refutation contract — where to look (role CLAUDE.md, tasks/templates, `check.py` + crons,
+don't-re-flag memories, `git log`/`git blame`, `gh pr list`, `probe.py`/`kubectl` for live state),
+the rule that a comment or a reassuring name is not evidence, and the three verdicts. Do not restate
+it in the brief; give the skeptic the finding, its `file:line`, and which reviewer raised it.
 
-**Size the skeptic to the finder.** A skeptic must be at least the tier of the agent that raised
-the finding: a High from an opus reviewer (security, backup/observability, CI/CD) gets an opus
-skeptic; everything else runs `model: sonnet`. A weaker refuter plus an explicit refute-bias is a
-path for real findings to die in the appendix, and the appendix is never re-read.
+**Size the skeptic to the finder.** `skeptic` deliberately pins no `model`, so you set it per
+dispatch. It must be at least the tier of the agent that raised the finding: a High from an opus
+reviewer (security, backup/observability, CI/CD) gets `model: opus`; everything else runs
+`model: sonnet`. A weaker refuter plus an explicit refute-bias is a path for real findings to die in
+the appendix, and the appendix is never re-read.
 
-**Merged history is not the whole history.** Several sessions work this repo at once, one branch each,
-so a fix can be real and not yet on master: also check `gh pr list` (and `gh pr diff <n>` when a title
-looks related) plus the other live worktrees' changed paths from the SessionStart banner. A finding
-already fixed on an open branch is REFUTED-as-live and reported as "fixed in PR #n, unmerged", not
-re-raised.
+**Merged history is not the whole history.** Several sessions work this repo at once, one branch
+each, so a fix can be real and not yet on master. The skeptic checks `gh pr list` itself; what it
+cannot see is the SessionStart banner, so pass it the other live worktrees' changed paths when they
+touch the finding. A finding already fixed on an open branch is REFUTED-as-live and reported as
+"fixed in PR #n, unmerged", not re-raised.
 
 Verdict per finding: **CONFIRMED** (refutation failed), **REFUTED** (cite the disproving
 evidence), or **UNCERTAIN**. Refuted findings drop to a one-line "refuted in verification"

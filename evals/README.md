@@ -15,7 +15,7 @@ Design: `docs/superpowers/specs/2026-07-10-homelab-agent-skill-evals-design.md`.
 export EVAL_CASE_DIRS=$HOME/server/evals/cases
 export EVAL_AGENT_DIRS=$HOME/server/.claude/agents:$HOME/server/.claude/skills
 for a in security-review homelab-network-diagnostician homelab-backup-observability-reviewer \
-         homelab-cicd-reviewer homelab-container-reviewer homelab-review ha-review; do
+         homelab-cicd-reviewer homelab-container-reviewer skeptic homelab-review ha-review; do
   node $HOME/.local/share/chezmoi/evals/run-evals.mjs --agent "$a"
 done
 
@@ -91,6 +91,12 @@ uv run python evals/trend.py report.json --no-write                 # report onl
 - **catch-defect** — a planted regression (drawn from this repo's documented gotchas) the agent must flag.
 - **no-overflag** — an accepted trade-off *with its justifying comment embedded in the snippet*; the
   agent must respect the in-context justification and not flag it.
+- **skeptic** — the verifier's own judgment, which nothing measured until 2026-08-17. Every
+  `homelab-review` case grades the *orchestrator*: it is handed pre-computed verdicts and checked on
+  what it does with them. The `skeptic` cases grade the verdict itself — refute on cited evidence,
+  refuse to accept a comment as proof, and (the one that matters) keep a finding alive when the
+  decisive check cannot be run. Refuting is cheap and always defensible, which is how real findings
+  die; see the `review-skeptics-drop-real-findings` memory.
 - **skill** — hermetic synthesis contract (dedup / anti-merge / drop-settled / verdict-manifest /
   fixed-on-an-unmerged-branch / HA-out-of-scope / recurrence-not-discovery / collection-manifest /
   skeptic-sizing / seam-surfaces / standing-list-foldback / prioritize / STOP) + one live smoke.

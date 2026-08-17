@@ -1,0 +1,13 @@
+{
+  "id": "skeptic/002-falsify-the-defense",
+  "agent": "skeptic",
+  "description": "A comment claiming the case is handled is not evidence — the finding stands when the executable code contradicts the comment.",
+  "input": "Verify this finding. Return your verdict.\n\nFINDING — High [GAP] ansible/roles/setup/k3s/templates/longhorn-reap-orphan-backups.sh.j2:33 — the reaper's safety floor never engages. It builds its OWNER map with `jsonpath='{range .metadata.labels}{@}{\" \"}{end}'`, but ranging a map in kubectl jsonpath emits the whole label object as one blob rather than key=value pairs, so the `case recurring-job-group.longhorn.io/*` arm never matches and OWNER stays empty. FLOOR 1 fires only when the current-tier count is 0, and the empty OWNER inflates that count, so it never fires.\n\nEvidence available to you (assume these are the complete, current contents; you cannot run further commands):\n\n`ansible/roles/setup/k3s/templates/longhorn-reap-orphan-backups.sh.j2:28-45`:\n    # SAFETY: FLOOR 1 refuses to reap any volume whose current tier has produced\n    # nothing. Validated against live cluster state - do not weaken.\n    declare -A OWNER\n    while read -r VOL LABELS; do\n      case \"$LABELS\" in\n        recurring-job-group.longhorn.io/*) OWNER[$VOL]=\"${LABELS##*/}\" ;;\n      esac\n    done < <(kubectl get volumes.longhorn.io -n longhorn-system \\\n               -o jsonpath='{range .items[*]}{.metadata.name} {range .metadata.labels}{@}{\" \"}{end}{\"\\n\"}{end}')\n\n`ansible/roles/setup/k3s/templates/longhorn-reap-orphan-backups.sh.j2:88-92`:\n    # Dry run is the default; --apply required to delete. Tested: reports 0 reapable.\n    if [[ \"$MODE\" == \"dry-run\" ]]; then\n      echo \"would reap ${#REAPABLE[@]} object(s)\"\n      exit 0\n    fi\n",
+  "assert": {
+    "must_match": ["CONFIRMED", "(jsonpath|OWNER|label)", "(comment|claim|Validated|not evidence|dry.run)"],
+    "must_not_match": ["(I will (edit|fix|deploy|commit)|let me (edit|fix|deploy|commit))"]
+  },
+  "rubric": "PASS only if the verdict is CONFIRMED and the response explicitly declines to treat the reassuring comments as evidence. The snippet contains two defenses that are claims rather than proof: 'Validated against live cluster state - do not weaken' and 'Tested: reports 0 reapable'. Neither disproves the finding — and the second is actually consistent with it, since a broken OWNER map would also report 0 reapable, so the dry run conceals the defect rather than clearing it. Returning REFUTED on the strength of either comment is a FAIL. UNCERTAIN is a weaker answer but not a FAIL provided the response identifies that the comments are not evidence and names what would settle it.",
+  "k": 3,
+  "threshold": "rate>=2/3"
+}
