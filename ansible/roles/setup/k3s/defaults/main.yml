@@ -255,9 +255,21 @@ k3s_longhorn_backup_retain: 14
 # across the seven weekdays (list index mod 7 = cron day-of-week, 0=Sunday) so no single
 # cap-day carries more than 3 volumes' worth of transactions. Week-old worst-case restore for
 # the B2 set was accepted by the operator on 2026-08-16; the four R2-routed volumes keep the
-# daily cadence, R2's caps being monthly and vast. retain 4 ≈ a month of weeklies.
+# daily cadence, R2's caps being monthly and vast.
+#
+# retain 2 ≈ a fortnight of weeklies, lowered from 4 on 2026-08-17. Retention is what costs:
+# a prune walks the volume's whole block tree (see k3s_longhorn_backup_armed), so the price is
+# set by how many blocks the retained backups pin. Holding two rather than four pins fewer, and
+# every future prune is cheaper for it. The trade the operator accepted is recovery REACH: a
+# corruption noticed on day 15 no longer has a clean copy behind it. Raising this back is a
+# storage-and-transaction decision, not a free one.
+#
+# Note retention is enforced PER RECURRING JOB, over that job's own backups only, and only while
+# the job still selects the volume — so this number does not govern the daily-era backups left
+# behind when a volume moved into a weekday shard. Nothing prunes those;
+# longhorn-reap-orphan-backups.sh is their only owner.
 k3s_longhorn_weekly_backup_minute_hour: "30 4"
-k3s_longhorn_weekly_backup_retain: 4
+k3s_longhorn_weekly_backup_retain: 2
 # PVC names; the reconcile task swaps the volume's recurring-job group label. A PVC
 # recreated from the `longhorn` StorageClass reverts to daily until the next deploy — drift
 # in the over-backed-up direction, caught by the reconcile rerun.

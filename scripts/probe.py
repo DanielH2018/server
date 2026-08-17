@@ -1078,8 +1078,8 @@ def _build_parser():
     b2b.add_argument(
         "--retain",
         type=int,
-        default=4,
-        help="k3s_longhorn_weekly_backup_retain, to spot a backlog of pending deletes",
+        default=2,
+        help="k3s_longhorn_weekly_backup_retain, to spot backups no job will prune",
     )
     pi = sub.add_parser("pi", help="Pi glances API")
     pi.add_argument("subpath", help="e.g. fs, quicklook, mem, cpu")
@@ -1856,7 +1856,7 @@ def parse_backup_budget(lines):
     return vols
 
 
-def format_backup_budget(vols, shards, names=None, retain=4):
+def format_backup_budget(vols, shards, names=None, retain=2):
     """Render the per-shard Class C projection; non-zero exit if a shard is over budget.
 
     `shards` maps volume name to its recurring-job group. A volume with no group never runs a
