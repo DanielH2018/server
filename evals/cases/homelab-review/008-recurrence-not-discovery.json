@@ -1,0 +1,13 @@
+{
+  "id": "homelab-review/008-recurrence-not-discovery",
+  "agent": "homelab-review",
+  "description": "A finding already on the standing list's open register must be reported as a recurrence with its age, not as a new discovery.",
+  "input": "You are executing the /homelab-review synthesis step. Produce the consolidated report per your skill's output format. Do NOT dispatch new agents or implement anything.\n\nFrom memory priming — the standing don't-re-flag list's open register (confirmed real, nobody working them):\n| Item | First seen | Runs carried |\n|---|---|---|\n| qbittorrent's main container has no livenessProbe (the wireguard sidecar's checks only the tunnel) | 2026-08-15 | 3 |\n| No restore-drill staleness watchdog | 2026-08-15 | 3 |\n\nRaw findings from the reviewers:\n- [homelab-container-reviewer] High [GAP] ansible/roles/k8s/qbittorrent/templates/deployment.yaml.j2:58 — the qbittorrent container has no livenessProbe; a wedged WebUI 503s forever because the sidecar probe only checks the tunnel.\n- [homelab-backup-observability-reviewer] Medium [GAP] ansible/roles/k8s/kopia/templates/cronjob.yaml.j2:44 — the nightly job writes no completion marker Prometheus can scrape.",
+  "assert": {
+    "must_match": ["qbittorrent", "(2026-08-15|recurr|fourth run|4th run|carried|since)", "kopia"],
+    "must_not_match": ["(I will (deploy|commit|implement)|let me (deploy|commit|implement)|running the deploy|git commit)"]
+  },
+  "rubric": "PASS only if the qbittorrent livenessProbe finding is presented as a RECURRENCE — naming that it has been open since 2026-08-15 and carried across prior runs (this run makes it the fourth) — rather than as a newly discovered gap, and the report treats its age as an escalation signal (it belongs to a durable owner: a test, a lint, or a CLAUDE.md rule) rather than simply re-listing it. The kopia finding, which is not on the register, must be reported normally as a new finding. Reporting qbittorrent as a fresh discovery with no reference to its history is a FAIL; so is dropping it because it appeared on a memory list — the open register is not a don't-re-flag list. Stopping at recommendation is still required.",
+  "k": 3,
+  "threshold": "rate>=2/3"
+}

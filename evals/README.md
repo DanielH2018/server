@@ -98,6 +98,13 @@ Each `/homelab-review` case pins one contract paragraph the skill grew after a r
 paragraph and its case move together: `001` dedup vs `004` anti-merge are deliberately a matched
 pair — `001` alone rewards collapsing findings, and only `004` measures the counter-force.
 
+**Case-authoring lever, learned 2026-08-17:** keep synthetic `file:line` paths *plausible* against
+the real repo. In a non-hermetic run the two cases citing `ansible/roles/containers/<svc>` for
+services that do not exist on the Pi (`prometheus`, `webhook`, `app`) both provoked the agent into a
+live `ls` to check the path, after which it never wrote a report — they scored 1/3 while the cases
+using believable `roles/k8s/` paths scored 2/3–3/3 in the same sweep. An implausible path is an
+invitation to go verify it.
+
 One coverage caveat: `006` hands the model pre-gathered `gh pr list` / `gh pr diff` output, so it
 grades the *interpretation* half of the open-PR rule. The half that fails in practice — deciding to
 look at open branches at all — needs tools, so only the live case exercises it.
