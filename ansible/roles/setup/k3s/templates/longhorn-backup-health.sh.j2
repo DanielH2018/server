@@ -50,8 +50,36 @@ add() { PROBLEMS="${PROBLEMS:+$PROBLEMS; }$1"; }
 #    unavailable had no fast signal at all: its four volumes are caught by check 4, but only once
 #    they age past MAX_AGE_S, and that message names no target — triage would start in the wrong
 #    place. Naming the target in the message is the point of the loop.
-BACKUP_TARGETS=(default{% if k3s_longhorn_r2_armed %} r2{% endif %})
-for TARGET in "${BACKUP_TARGETS[@]}"; do
+#
+#    A DISARMED target is not a fault, and this is the whole reason the split below exists. When
+#    k3s_longhorn_backup_armed is false the k3s role enforces a BLANK backupTargetURL, so Longhorn
+#    reports `available: false` with `backup target URL is empty` — forever, by declaration. Until
+#    2026-08-17 only `r2` was gated this way and `default` was checked unconditionally, so the
+#    2026-08-16 B2 disarm put this monitor into status=down on every 10-minute tick with no action
+#    available to clear it. That is precisely the failure check 3 already guards against in its own
+#    comment: a monitor red for a reason nobody can fix stops being read at all.
+#
+#    Disarming must stay VISIBLE rather than silent, though — the header records 2026-08-02, when
+#    the target went unavailable and nothing noticed. So the disarmed set is not merely skipped, it
+#    is named in the green message (see the MSG below). Silence would trade one blind spot for
+#    another.
+#    `| bool` on every one of these, matching longhorn-backup.yml's `when:` rather than the older
+#    unfiltered r2 line: `-e k3s_longhorn_backup_armed=false` passes the STRING "false", which is
+#    truthy in Jinja. Unfiltered, an extra-vars disarm would put `default` back into the armed set
+#    and empty the disarmed one — reverting this fix silently, in exactly the ad-hoc-incident case
+#    it is most likely to be used.
+BACKUP_TARGETS=({% if k3s_longhorn_backup_armed | bool %}default{% endif %}{% if k3s_longhorn_r2_armed | bool %} r2{% endif %})
+DISARMED_TARGETS=({% if not k3s_longhorn_backup_armed | bool %}default{% endif %}{% if not k3s_longhorn_r2_armed | bool %} r2{% endif %})
+
+is_disarmed_target() {
+  local want="$1" candidate
+  for candidate in ${DISARMED_TARGETS[@]+"${DISARMED_TARGETS[@]}"}; do
+    [[ "$want" == "$candidate" ]] && return 0
+  done
+  return 1
+}
+
+for TARGET in ${BACKUP_TARGETS[@]+"${BACKUP_TARGETS[@]}"}; do
   AVAILABLE=$($KUBECTL get backuptarget "$TARGET" -o jsonpath='{.status.available}' 2>&1)
   if [[ "$AVAILABLE" != "true" ]]; then
     REASON=$($KUBECTL get backuptarget "$TARGET" -o jsonpath='{.status.conditions[0].message}' 2>/dev/null | head -c 160)
@@ -162,6 +190,7 @@ first_run_after() {
 }
 UNCOVERED=""
 CHECKED=0
+SUPPRESSED=0
 
 # Run once per backup TIER. Until 2026-08-15 only the `default` group was walked, so the eleven
 # volumes moved to the weekly group (k3s_longhorn_weekly_volumes) had no per-volume staleness check
@@ -170,11 +199,29 @@ CHECKED=0
 # eleven every day. Each tier carries its own bound, and the message names which tier is late.
 check_tier() {
   local selector="$1" max_age_s="$2" tier="$3" job="$4" run_hhmm="$5" dow="$6"
-  local VOL CREATED CLAIM LATEST CREATED_S LATEST_S FIRST_RUN_S
+  local VOL CREATED CLAIM TARGET LATEST CREATED_S LATEST_S FIRST_RUN_S
 
-  while read -r VOL CREATED CLAIM; do
+  while read -r VOL CREATED CLAIM TARGET; do
     # A Pending PVC has no volumeName yet — nothing to back up, and not a fault.
     [[ -z "$VOL" ]] && continue
+
+    # An unset backupTargetName IS the `default` target in Longhorn, not "no target". Without
+    # this the field would read as armed and the volume would be reported stale while B2 is off.
+    [[ -z "$TARGET" ]] && TARGET=default
+
+    # A volume routed to a DISARMED target cannot be backed up, so reporting it as stale says
+    # nothing an operator can act on. Keyed on the volume's own spec.backupTargetName rather than
+    # on its tier: the tier→target mapping is inventory that can be re-pointed, and check 5
+    # already reads this same field for exactly that reason. On 2026-08-16 the split happened to
+    # be clean — the 4 daily volumes on r2, all 21 weekly-shard volumes on default — but gating
+    # whole tiers would silently do the wrong thing the first time one volume moves.
+    #
+    # Counted, not silently dropped: SUPPRESSED feeds the green message, so "21 volume(s) not
+    # checked" stays on screen the entire time B2 is off.
+    if is_disarmed_target "$TARGET"; then
+      SUPPRESSED=$(( SUPPRESSED + 1 ))
+      continue
+    fi
 
     # Freshness must come from THIS tier's own job. `__no_job__` is the sentinel for a tier no
     # RecurringJob selects (weekly-legacy): it matches nothing, deliberately, so a volume stuck
@@ -210,8 +257,11 @@ check_tier() {
     elif (( NOW_S - LATEST_S > max_age_s )); then
       UNCOVERED="${UNCOVERED:+$UNCOVERED, }${CLAIM} (${tier}, $(( (NOW_S - LATEST_S) / 3600 ))h)"
     fi
+  # backupTargetName is last on the line on purpose: it is the only field that can render EMPTY
+  # (a volume with no explicit target), and an empty field under `read`'s whitespace splitting
+  # would shift every field after it. The claim before it always renders at least `/`.
   done < <($KUBECTL get volumes.longhorn.io -l "$selector" \
-    -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.metadata.creationTimestamp}{" "}{.status.kubernetesStatus.namespace}/{.status.kubernetesStatus.pvcName}{"\n"}{end}' 2>/dev/null)
+    -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.metadata.creationTimestamp}{" "}{.status.kubernetesStatus.namespace}/{.status.kubernetesStatus.pvcName}{" "}{.spec.backupTargetName}{"\n"}{end}' 2>/dev/null)
 }
 
 check_tier "recurring-job-group.longhorn.io/default=enabled" "$MAX_AGE_S" daily \
@@ -292,7 +342,19 @@ if [[ -z "$PROBLEMS" ]]; then
   # The counts are in the green message on purpose: "newest backup 8h old" was true even while a
   # volume had no backup at all, and it was true throughout the 2026-08-08 transaction-cap outage.
   # The two numbers are what make this green mean something.
-  MSG="backup target(s) ${BACKUP_TARGETS[*]} available, newest backup $(( AGE_S / 3600 ))h old, ${CHECKED} backed-up volume(s) covered across daily+weekly, ${RECENT_N} B2 backup(s)/24h (budget {{ k3s_longhorn_daily_backup_budget }})"
+  #
+  # DISARMED is appended for the same reason, and it is the half of the 2026-08-17 gate that
+  # matters: skipping a disarmed target keeps the monitor actionable, but skipping it QUIETLY
+  # would mean a green tile while 21 volumes go unbacked — the 2026-08-02 blind spot with extra
+  # steps. Green now reads "everything still armed is healthy, and here is what is not armed".
+  DISARMED_NOTE=""
+  # Tested as a string rather than by array length: bash's length sigil puts a brace followed by
+  # a hash into the Jinja source, which opens a Jinja comment, and the template then fails to
+  # render with "Missing end of comment tag". Naming that pair literally here would do it again.
+  if [[ -n "${DISARMED_TARGETS[*]:-}" ]]; then
+    DISARMED_NOTE=" — DISARMED: ${DISARMED_TARGETS[*]} (${SUPPRESSED} volume(s) not checked)"
+  fi
+  MSG="backup target(s) ${BACKUP_TARGETS[*]:-none} available, newest backup $(( AGE_S / 3600 ))h old, ${CHECKED} backed-up volume(s) covered across daily+weekly, ${RECENT_N} B2 backup(s)/24h (budget {{ k3s_longhorn_daily_backup_budget }})${DISARMED_NOTE}"
 else
   STATUS=down
   MSG="$PROBLEMS"
