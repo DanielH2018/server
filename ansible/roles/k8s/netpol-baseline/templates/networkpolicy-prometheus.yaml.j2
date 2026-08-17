@@ -1,0 +1,52 @@
+---
+# prometheus is the one observability workload (besides loki) with a caller outside this
+# namespace: monitor-bridge and homelab-mcp both run in {{ k8s_namespace }} and reach it directly
+# (PROMETHEUS_URL / CLUSTER_PROMETHEUS_URL on monitor-bridge, PROMETHEUS_URL on homelab-mcp).
+# Every other observability workload's callers stay inside {{ k8s_observability_namespace }} and
+# are already covered by netpol-baseline's own `podSelector: {}` peer
+# (networkpolicy-observability.yaml.j2) — grafana (fronted by Traefik), tempo,
+# kube-state-metrics and otel-collector need no per-workload policy of their own.
+#
+# INGRESS ONLY, same as the rest of this role: an Egress policy selects pods correctly on this
+# cluster and blocks nothing (measured 2026-08-07). Writing one would read like a control in the
+# repo and do nothing in the cluster.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-callers
+  namespace: {{ k8s_observability_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: prometheus
+  policyTypes:
+    - Ingress
+  ingress:
+{# `| bool`, matching the `when:` in tasks/main.yml — same trap netpol_baseline_obs_enforced
+   already guards against for the namespace baseline: a STRING override like
+   `-e netpol_baseline_obs_enforced=false` is truthy to bare Jinja and False to Ansible's
+   `when:`, so without `| bool` the two sides disagree and this policy would fence prometheus
+   with no probe to catch it. #}
+{% if netpol_baseline_obs_enforced | bool %}
+    - from:
+        # namespaceSelector and podSelector are SIBLING KEYS in ONE list item, so they AND
+        # together: monitor-bridge or homelab-mcp, but only inside {{ k8s_namespace }}. As two
+        # separate list items they would OR, admitting the entire {{ k8s_namespace }} namespace
+        # (or any pod anywhere labelled monitor-bridge/homelab-mcp) rather than just these two
+        # callers.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ k8s_namespace }}
+          podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values: [monitor-bridge, homelab-mcp]
+      ports:
+        - protocol: TCP
+          port: 9090
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}
