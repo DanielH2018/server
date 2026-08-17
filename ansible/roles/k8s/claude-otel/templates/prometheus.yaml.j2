@@ -366,6 +366,7 @@ spec:
     metadata:
       labels:
         app: prometheus
+        netpol-baseline: enforced
     spec:
       # Without this the pod runs as the namespace `default` SA, whose token cannot list nodes —
       # kubernetes_sd_configs then discovers zero targets and the cadvisor job silently reports

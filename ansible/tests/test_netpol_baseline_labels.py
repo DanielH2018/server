@@ -54,6 +54,19 @@ BORN_FENCED_ROLES = {
 
 LABEL = ("netpol-baseline", "enforced")
 
+# Slice 3: the observability namespace. Named per WORKLOAD, not per role — all six render
+# from the single claude-otel role, which is why Task 1 made the guard workload-granular.
+SLICE_3_WORKLOADS = {
+    ("claude-otel", "grafana"),
+    ("claude-otel", "prometheus"),
+    ("claude-otel", "loki"),
+    ("claude-otel", "tempo"),
+    ("claude-otel", "kube-state-metrics"),
+    ("claude-otel", "otel-collector"),
+}
+
+SLICE_3_ROLES = {role for role, _name in SLICE_3_WORKLOADS}
+
 # Workloads inside a fenced role that are fenced by their OWN NetworkPolicy rather than by the
 # baseline label. Each entry must name the policy that covers it: an unexplained exemption is
 # indistinguishable from a workload someone forgot to label.
@@ -98,17 +111,17 @@ def _labelled_roles() -> set[str]:
     }
 
 
-def test_exactly_the_slice_1_and_slice_2_roles_carry_the_baseline_label() -> None:
-    expected = SLICE_1_ROLES | SLICE_2_ROLES | BORN_FENCED_ROLES
+def test_exactly_the_fenced_roles_carry_the_baseline_label() -> None:
+    expected = SLICE_1_ROLES | SLICE_2_ROLES | SLICE_3_ROLES | BORN_FENCED_ROLES
     labelled = _labelled_roles()
     missing = sorted(expected - labelled)
     extra = sorted(labelled - expected)
     assert not missing and not extra, (
-        "netpol-baseline: enforced no longer matches slice 1 + slice 2.\n"
+        "netpol-baseline: enforced no longer matches slice 1 + slice 2 + slice 3.\n"
         f"  missing (silently unfenced, and the probe would not notice): {missing}\n"
         f"  unexpected (fenced without a probe proving its callers still work): {extra}\n"
-        "Update SLICE_1_ROLES/SLICE_2_ROLES together with docs/networkpolicy-default-deny.md "
-        "when the rollout moves to the next slice."
+        "Update SLICE_1_ROLES/SLICE_2_ROLES/SLICE_3_WORKLOADS together with "
+        "docs/networkpolicy-default-deny.md when the rollout moves to the next slice."
     )
 
 
@@ -127,7 +140,7 @@ def _labelled_workloads() -> set[tuple[str, str]]:
 def test_every_pod_producing_doc_in_a_fenced_role_is_labelled() -> None:
     """A role is not a unit of fencing. claude-otel renders six workloads; five
     could go unlabelled while the role still looked fenced."""
-    fenced_roles = SLICE_1_ROLES | SLICE_2_ROLES
+    fenced_roles = SLICE_1_ROLES | SLICE_2_ROLES | SLICE_3_ROLES
     unlabelled = {
         (role, doc.get("metadata", {}).get("name", "?"))
         for role, _tpl, doc in rendered_docs()
@@ -144,4 +157,16 @@ def test_every_pod_producing_doc_in_a_fenced_role_is_labelled() -> None:
         "label it; if it is already fenced by its own NetworkPolicy, add (role, name) to "
         "BESPOKE_POLICY_WORKLOADS above with a comment naming that policy file; if it is a probe "
         "that must stay unfenced to test the fence, add it to UNFENCED_BY_DESIGN_WORKLOADS."
+    )
+
+
+def test_exactly_the_slice_3_workloads_carry_the_baseline_label() -> None:
+    labelled_claude_otel = {
+        name for (role, name) in _labelled_workloads() if role == "claude-otel"
+    }
+    expected = {name for _, name in SLICE_3_WORKLOADS}
+    assert labelled_claude_otel == expected, (
+        "claude-otel's labelled workloads no longer match SLICE_3_WORKLOADS.\n"
+        f"  labelled: {sorted(labelled_claude_otel)}\n"
+        f"  expected: {sorted(expected)}"
     )
