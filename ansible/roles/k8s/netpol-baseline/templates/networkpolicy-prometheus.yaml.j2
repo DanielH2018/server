@@ -1,11 +1,17 @@
 ---
-# prometheus is the one observability workload (besides loki) with a caller outside this
-# namespace: monitor-bridge and homelab-mcp both run in {{ k8s_namespace }} and reach it directly
-# (PROMETHEUS_URL / CLUSTER_PROMETHEUS_URL on monitor-bridge, PROMETHEUS_URL on homelab-mcp).
-# Every other observability workload's callers stay inside {{ k8s_observability_namespace }} and
-# are already covered by netpol-baseline's own `podSelector: {}` peer
-# (networkpolicy-observability.yaml.j2) — grafana (fronted by Traefik), tempo,
-# kube-state-metrics and otel-collector need no per-workload policy of their own.
+# prometheus is one of two observability workloads (with loki) that need a per-workload grant
+# for an in-cluster, cross-namespace caller: monitor-bridge and homelab-mcp both run in
+# {{ k8s_namespace }} and reach it over the network (PROMETHEUS_URL / CLUSTER_PROMETHEUS_URL on
+# monitor-bridge, PROMETHEUS_URL on homelab-mcp). grafana, tempo, kube-state-metrics and
+# otel-collector need no per-workload policy — NOT because their callers stay inside
+# {{ k8s_observability_namespace }} (prometheus itself, like loki and tempo, is also read on
+# host loopback by `otelq`, a workstation host process — see claude-otel/CLAUDE.md) but because
+# every non-namespace caller these four have arrives over a loopback hostPort, which is admitted
+# by the baseline's node-CIDR `ipBlock` peer (`netpol_baseline_obs_node_cidrs`,
+# networkpolicy-observability.yaml.j2), not by anything in this file. That ipBlock peer carries
+# no `ports` restriction, so trimming `netpol_baseline_obs_node_cidrs` to entries with a
+# same-service-nameable caller would silently break otelq's hostPort path on the next flip —
+# grep this comment before touching that list.
 #
 # INGRESS ONLY, same as the rest of this role: an Egress policy selects pods correctly on this
 # cluster and blocks nothing (measured 2026-08-07). Writing one would read like a control in the
@@ -42,6 +48,13 @@ spec:
               - key: app
                 operator: In
                 values: [monitor-bridge, homelab-mcp]
+      # Port-9090-wide is the finest an L3/L4 NetworkPolicy can express — it does not
+      # distinguish a read (query) from a write/admin call on the same port. That is only safe
+      # because Prometheus runs today without --web.enable-admin-api, --web.enable-lifecycle or
+      # --web.enable-remote-write-receiver (all three absent from claude-otel/prometheus.yaml.j2
+      # as of this writing). If any of those flags is ever added, this grant silently becomes a
+      # write/admin grant to monitor-bridge and homelab-mcp with no NetworkPolicy-side change to
+      # flag in review — check for that when reviewing a future flag addition.
       ports:
         - protocol: TCP
           port: 9090

@@ -1,12 +1,20 @@
 ---
-# loki's one cross-namespace caller is homelab-mcp, via CLAUDE_LOKI_URL — the observability loki
-# in {{ k8s_observability_namespace }}, not the plain LOKI_URL homelab-mcp also holds, which
-# points at the different loki-homelab service in {{ k8s_namespace }} and is out of scope here.
-# monitor-bridge does not call loki (it only reaches prometheus). Every other observability
-# workload's callers stay inside {{ k8s_observability_namespace }} and are already covered by
-# netpol-baseline's own `podSelector: {}` peer (networkpolicy-observability.yaml.j2) — grafana
-# (fronted by Traefik), tempo, kube-state-metrics and otel-collector need no per-workload policy
-# of their own.
+# THIS loki (the observability one) has one cross-namespace, in-cluster caller: homelab-mcp, via
+# CLAUDE_LOKI_URL — not the plain LOKI_URL homelab-mcp also holds, which points at the different
+# loki-homelab service in {{ k8s_namespace }} and is out of scope here. monitor-bridge does not
+# call THIS loki (its LOKI_URL / check_loki_ingestion / check_loki_reachable all target that
+# other loki-homelab instance) — worth naming explicitly so a future policy written for
+# loki-homelab isn't drafted on the assumption that monitor-bridge has no loki caller at all.
+#
+# grafana, tempo, kube-state-metrics and otel-collector need no per-workload policy — NOT
+# because their callers stay inside {{ k8s_observability_namespace }} (loki itself, like
+# prometheus and tempo, is also read on host loopback by `otelq`, a workstation host process —
+# see claude-otel/CLAUDE.md) but because every non-namespace caller these four have arrives over
+# a loopback hostPort, which is admitted by the baseline's node-CIDR `ipBlock` peer
+# (`netpol_baseline_obs_node_cidrs`, networkpolicy-observability.yaml.j2), not by anything in
+# this file. That ipBlock peer carries no `ports` restriction, so trimming
+# `netpol_baseline_obs_node_cidrs` to entries with a same-service-nameable caller would silently
+# break otelq's hostPort path on the next flip — grep this comment before touching that list.
 #
 # INGRESS ONLY, same as the rest of this role: an Egress policy selects pods correctly on this
 # cluster and blocks nothing (measured 2026-08-07). Writing one would read like a control in the
