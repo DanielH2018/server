@@ -1058,7 +1058,9 @@ def _build_parser():
         help="Longhorn backup objects in B2, per volume — proves DATA blocks landed, "
         "not just metadata (exit 1 if any volume has none)",
     )
-    b2l.add_argument("--bucket", help="override the bucket from kopia's repo config")
+    b2l.add_argument(
+        "--bucket", help="override the bucket read from the kopia_b2_bucket secret"
+    )
     b2l.add_argument(
         "--prefix", default=LONGHORN_PREFIX, help="B2 prefix Longhorn writes under"
     )
@@ -1067,7 +1069,9 @@ def _build_parser():
         help="per-shard Class C projection against B2's free-tier daily cap "
         "(exit 1 if a weekly shard is over budget)",
     )
-    b2b.add_argument("--bucket", help="override the bucket from kopia's repo config")
+    b2b.add_argument(
+        "--bucket", help="override the bucket read from the kopia_b2_bucket secret"
+    )
     b2b.add_argument(
         "--prefix", default=LONGHORN_PREFIX, help="B2 prefix Longhorn writes under"
     )
@@ -1913,7 +1917,7 @@ def format_backup_budget(vols, shards, names=None, retain=4):
             )
         )
     rows.append(
-        "budget per day: %d Class C (cap %d less %d reserved for kopia and the probes)"
+        "budget per day: %d Class C (cap %d less %d reserved for the B2 probes and prune overhead)"
         % (budget, B2_CLASS_C_DAILY_CAP, B2_BUDGET_RESERVE)
     )
     if over:
