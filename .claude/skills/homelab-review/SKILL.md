@@ -36,17 +36,37 @@ per-dispatch with a bigger `model` (e.g. the session model). The docs-freshness 
 report-only by nature — its findings are stale-doc edits for the operator, never infra changes.
 
 ## 2. Prime from memory FIRST (the signal-booster — do this before dispatching)
-This is a **mature** setup: a cold agent will re-flag dozens of settled decisions. Before dispatching,
-read **every** `review-*-state` memory, newest first (there is more than one, and same-day runs carry
-a letter suffix — e.g. `review-2026-08-15-state` *and* `review-2026-08-15b-state`; the later one is
-not a superset of the earlier), plus the accepted-decision ("don't re-flag") memories from the
-auto-memory index. For each area, extract its relevant don't-re-flag items **plus** the
-discipline: *verify a candidate finding against the role's CLAUDE.md, role crons, and monitor-bridge
-`check.py` BEFORE reporting it.* Pull this at runtime — never rely on a hardcoded list (it goes stale,
-the exact failure mode these reviews keep finding).
+This is a **mature** setup: a cold agent will re-flag dozens of settled decisions. Read, in this
+order:
 
-**Done when** every in-scope area has a don't-re-flag list — or an explicit "none recorded for this
-area". An area you skipped reading for is not an area with nothing to skip.
+1. **`homelab-review-standing-donot-reflag`** — the distilled deliberate trade-offs, durable
+   refutations, verified-clean list, and the recurring-open register. This is the bulk of the
+   priming and it is one file by design: the dated ledgers grow by one per run, and reading all of
+   them at the most expensive moment (immediately before a 4–6 way fan-out that each get a slice)
+   is what this file replaces.
+2. **The newest two dated `review-*-state` memories** — for recency only: what shipped since the
+   standing list was last distilled, and this week's refutations with their evidence. Same-day runs
+   carry a letter suffix (`review-2026-08-16-state` *and* `…16b-state`); the later is not a superset.
+3. Any other accepted-decision memory the auto-memory index surfaces for an in-scope area.
+
+For each area, extract its don't-re-flag items **plus** the discipline: *verify a candidate finding
+against the role's CLAUDE.md, role crons, and monitor-bridge `check.py` BEFORE reporting it.* Pull
+this at runtime — never rely on a hardcoded list (it goes stale, the exact failure mode these
+reviews keep finding). The standing list is a **prior, not a verdict**: re-flag any of it on new
+evidence at a cited `file:line`.
+
+**Also extract the still-OPEN confirmed findings**, not just the settled ones. A finding carried
+across runs must be reported as a **recurrence** — "open since 2026-08-15, third run" — never as a
+discovery. A third appearance is an escalation signal (it belongs in a durable owner: a test, a
+lint, a CLAUDE.md rule), and re-presenting it as new is how it stays unowned. Verify each is still
+live before reporting: the register is only as fresh as the last ledger.
+
+**When the standing list and a dated ledger disagree, the ledger wins** and the standing list is
+stale — say so in the report so the next distillation fixes it.
+
+**Done when** every in-scope area has a don't-re-flag list *and* its open-recurrence list — or an
+explicit "none recorded for this area". An area you skipped reading for is not an area with nothing
+to skip.
 
 ## 3. Dispatch all selected agents IN PARALLEL
 Issue every dispatch in a single message so they run concurrently (one agent per independent domain —
@@ -63,6 +83,16 @@ must include:
   the `file:line` of the defense when clearing one — a comment, a reassuring name (`*_valid`,
   `# intentional`), or "handled by Traefik/Authelia/upstream" is NOT evidence; verify it in code;
 - the **output format** below.
+
+**Three surfaces fall between the six areas — name them in the brief or nobody reviews them.**
+They are unowned because they sit on a seam, not because they are settled:
+- **Host OS and hardware** → give it to the backup/observability brief: the UPS/NUT shutdown
+  chain, SMART/scrutiny, disk and sensor health on both nodes and the Pi.
+- **Cluster control plane** → give it to the network brief: etcd health, node pressure/taints, and
+  MetalLB VIP announcement. The ETP-Local blackout spans network *and* workload placement, which is
+  exactly why neither reviewer picks it up unprompted.
+- **Cost and quota** → give it to the backup/observability brief: B2 caps and storage headroom.
+  Cap breaches are the most recurrent incident class in the memory index and no area owns them.
 
 `security-review` is the only reviewer without `Bash` (see Notes) — don't hand it a brief that
 depends on running `git log`, `kubectl`, or `probe.py`; its live/history checks belong to step 6.
@@ -83,8 +113,15 @@ the same way in every brief:
 
 Uncertain between two tiers? Take the higher one — the cost of a wrong tier is one extra skeptic.
 
-## 5. Deduplicate (before anything is verified)
-Merge findings that several agents surfaced — e.g. a healthcheck gap seen by both the security and
+## 5. Collect, then deduplicate (before anything is verified)
+**Manifest what came back first.** List every agent you dispatched in step 3 and, next to each,
+whether it returned findings, returned an explicit "clean", or returned nothing. An agent that
+died, errored, or came back empty leaves a **coverage hole** — report it as an unreviewed domain,
+never as a clean one. This is the step-6 manifest rule one level up: silence from a reviewer is a
+missing answer, not a passing grade. Re-dispatch a failed agent if the run is still cheap; if not,
+name the gap in the report.
+
+Then merge findings that several agents surfaced — e.g. a healthcheck gap seen by both the security and
 container reviewers is one finding, not two.
 
 **Anti-merge:** only merge findings that are the *same* defect (same `file:line` + same mechanism +
@@ -97,8 +134,7 @@ Reviews here have a misfire history (an Authelia `trusted_proxies` proposal that
 crash-looped it; a PEP-758 `except X, Y:` misread as a syntax bug; and in the 2026-08-15 run both a
 proposed `N8N_PROXY_HOPS` change and a Pi `:latest`-pinning "fix" would have caused damage) — a
 wrong finding costs the operator more than a missed one. So: for each deduplicated High/Medium
-finding dispatch one skeptic — `general-purpose`, **`model: sonnet`**, all in one
-parallel message — whose ONLY job is to try to **refute** it against: the role's CLAUDE.md
+finding dispatch one skeptic — `general-purpose`, all in one parallel message — whose ONLY job is to try to **refute** it against: the role's CLAUDE.md
 (accepted trade-offs), the role's tasks/templates + shared macros, monitor-bridge `check.py` +
 role crons, the don't-re-flag memories, **git history (`git log`/`git blame` the cited lines — a
 finding already fixed in a later commit or intentionally reverted with a rationale is not live)**,
@@ -109,6 +145,11 @@ can't see; use it as the primary liveness check for a cluster workload, falling 
 `kubectl get`/`logs`/`describe` (the readonly SA covers get/list/watch, not Secrets or `exec`) to
 drill into a failure. Pass `--docker` for the Pi's Compose services — that mode shells `docker
 inspect` and only answers for those. Also `probe.py targets | metric | alerts | b2-longhorn`.
+
+**Size the skeptic to the finder.** A skeptic must be at least the tier of the agent that raised
+the finding: a High from an opus reviewer (security, backup/observability, CI/CD) gets an opus
+skeptic; everything else runs `model: sonnet`. A weaker refuter plus an explicit refute-bias is a
+path for real findings to die in the appendix, and the appendix is never re-read.
 
 **Merged history is not the whole history.** Several sessions work this repo at once, one branch each,
 so a fix can be real and not yet on master: also check `gh pr list` (and `gh pr diff <n>` when a title
@@ -138,6 +179,12 @@ executable code.
   nothing), and the **deliberate trade-offs** not to re-flag. If a `review-<date>-state` memory
   already exists for today, write the next letter suffix (`…-state`, `…b-state`) rather than
   overwriting — the earlier run's ledger stays live.
+- **Then fold the durable half into `homelab-review-standing-donot-reflag`** — a new deliberate
+  trade-off, a refutation that will recur, a recurring-open item's incremented run count, or an
+  entry this run proved stale. Step 2 reads that file instead of every ledger, so a run that
+  writes only its dated ledger quietly re-grows the priming cost this skill was rebuilt to avoid.
+  Per the repo's corroborate-before-promote rule, promote an item only on a **second** independent
+  occurrence or against real evidence; a single run's say-so stays in the dated ledger.
 
 ## Notes
 - All six reviewer agents are read-only investigators. `security-review` is the one without `Bash`
