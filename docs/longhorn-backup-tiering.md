@@ -68,6 +68,38 @@ selecting the `r2` target, not `default`; see
 | autokuma-data | **no-backup** | — | regenerates from the static-monitors Secret |
 | pihole-etc, livesync-data, grafana-data, registry/prometheus/loki/tempo/speedtest/karakeep-meili/mosquitto/flaresolverr | no-backup (pre-existing) | — | consistent with kopia: FTL/gravity, couchdb-data, plugins, TSDBs were all excluded; the configs kopia *kept* are Ansible-rendered here |
 
+## The transaction budget (2026-08-17) — what this doc's framing was missing
+
+Everything above prices a volume by **churn**: divert the high-churn paths and a weekly cadence
+caps the rest. That is the right model for *upload* cost and it is not the model for the cost
+that actually kept firing the cap.
+
+Longhorn enforces `retain` by calling `DeleteDeltaBlockBackup` once per excess backup, and each
+call walks the volume's whole block tree with one delimited `ListObjects` per directory
+(backupstore `deltablock.go:1496-1510` via `s3.go:108`). LIST is a Backblaze Class C transaction
+against a free-tier 2,500/day. So:
+
+- **A prune costs `1 + lv1dirs + lv2dirs` LISTs, about 1.28 per stored block.** It is priced in
+  total accumulated blocks, not in what changed. A volume that never changes still costs full
+  price every time it prunes.
+- **It runs once per deleted backup.** A volume sitting at 11 backups against `retain: 4` costs
+  seven full walks the moment Longhorn catches up, not one.
+
+That second point is what produced the seventh cap event on 2026-08-16 and is why four re-arms in
+a row failed: 93 backups stood against retain 4, so arming queued ~71 walks — **~22,989 Class C,
+nine days of cap**, spent before any new data moved. The backlog was drained directly against the
+B2 API before the 2026-08-17 re-arm (deletes are Class A and unmetered, so the end state Longhorn
+was heading for cost nothing to reach), taking the store from 9,312 blocks to ~7,660.
+
+Post-drain the worst weekday shard projects at ~1,524 Class C against the 2,500 cap, and the
+existing `index mod 7` shard split happens to balance well enough that it needed no change. That
+is luck, not design — the split is by list position and the cost is by block count.
+
+**Run `uv run python scripts/probe.py b2-budget` after adding a volume or changing a shard.** It
+re-derives the projection from one listing of the live bucket (~10 Class C) and exits non-zero if
+a shard is over budget. Nothing else will announce the drift, because the cost grows quietly with
+stored blocks rather than with anything a deploy touches.
+
 ## Deliberate deviations from kopiaignore (all in the cheap direction)
 
 - ~~**code-server extensions (+VSIX caches)**: kopia excluded them as reinstallable; here

@@ -1332,6 +1332,47 @@ def test_format_longhorn_summary_treats_no_objects_as_failure():
     assert code == 1 and "no Longhorn backup objects" in text
 
 
+def test_parse_backup_budget_prices_a_prune_by_directories_not_blocks():
+    """A prune's cost is one ListObjects per block directory, so two blocks sharing a
+    second-level directory cost less than two that do not."""
+    vols = probe.parse_backup_budget(LSF)
+    # pvc-authelia: blocks/ + 1a/ + (1a,2b) + (1a,2c) = 4
+    assert vols["pvc-authelia"]["prune"] == 4
+    assert vols["pvc-authelia"]["blocks"] == 2
+    assert vols["pvc-authelia"]["backups"] == 1
+    # volume.cfg is not a backup, so it must not inflate the retention count.
+    assert vols["pvc-bento"]["backups"] == 0
+    assert vols["pvc-bento"]["prune"] == 3
+
+
+def test_format_backup_budget_flags_a_shard_over_the_daily_cap():
+    over = probe.B2_CLASS_C_DAILY_CAP - probe.B2_BUDGET_RESERVE + 1
+    vols = {"pvc-big": {"prune": over, "blocks": 9000, "backups": 4}}
+    text, code = probe.format_backup_budget(vols, {"pvc-big": "weekly-backup-d2"})
+    assert code == 1
+    assert "OVER BUDGET" in text and "weekly-backup-d2" in text
+
+
+def test_format_backup_budget_does_not_charge_a_day_for_an_unscheduled_volume():
+    """A volume with no recurring job never runs a backup and so never prunes — charging its
+    blocks to a shard would read as an over-budget day that cannot actually happen."""
+    vols = {"pvc-idle": {"prune": 99999, "blocks": 9000, "backups": 3}}
+    text, code = probe.format_backup_budget(vols, {"pvc-idle": "no-backup"})
+    assert code == 0
+    assert "never pruned" in text and "pvc-idle" in text
+
+
+def test_format_backup_budget_reports_a_backlog_of_pending_deletes():
+    """Backups beyond `retain` each cost a full block-tree walk when Longhorn catches up, so
+    a backlog is the difference between a cheap night and one that blows the cap."""
+    vols = {"pvc-a": {"prune": 100, "blocks": 50, "backups": 11}}
+    text, code = probe.format_backup_budget(
+        vols, {"pvc-a": "weekly-backup-d5"}, retain=4
+    )
+    assert code == 0
+    assert "+7 backlogged deletes" in text
+
+
 def test_no_cluster_route_carries_the_retired_k8s_suffix():
     """The `-k8s` suffix retired 2026-08-15 (870723e8), but probe.py kept building it for
     another five hours: every cluster subcommand 404'd against Traefik's no-Host-match while

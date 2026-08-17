@@ -204,13 +204,35 @@ k3s_longhorn_backup_prefix: longhorn
 # That is 40-110x the entire daily allowance, which is why it cannot recover on its own and why
 # the reset alone is not a fix.
 #
-# DO NOT RE-ARM ON A TIMER. Re-arming at 00:05 on fresh caps is exactly what produced this event,
-# and doing it again reproduces it a third time: steady-state spend genuinely exceeds 2,500/day
-# (a prune round alone measured ~2,738 LISTs). Re-arm only after the spend is below the cap, or
-# after the caps are raised. The R2 target stays armed independently (k3s_longhorn_r2_armed), so
-# traefik-acme, authelia-config, home-assistant-config and zigbee2mqtt-data keep backing up
-# while this is off.
-k3s_longhorn_backup_armed: false
+# RE-ARMED 2026-08-17 after measuring, rather than estimating, where the Class C went. Three
+# things were established from the backupstore source and from one direct listing of the bucket
+# (10 Class C — the measurement was never the expensive part):
+#
+#   1. THE PRUNE IS THE COST, and it is priced in DIRECTORIES, not bytes or changed blocks.
+#      DeleteDeltaBlockBackup -> getBlockNamesForVolume walks `blocks/<lv1>/<lv2>/` with one
+#      delimited ListObjects per directory (backupstore deltablock.go:1496-1510, s3.go:108), so a
+#      volume's prune costs 1 + lv1dirs + lv2dirs LISTs — about 1.28 per stored block. The
+#      remembered "~2,738 LISTs for a prune round" was real but was one VOLUME, not one round.
+#   2. IT RUNS ONCE PER DELETED BACKUP, not once per run. 93 backups stood against retain 4, so
+#      arming would have queued ~71 tree walks costing ~22,989 Class C — nine days of cap, and
+#      the true cause of the seventh event. Those 26 excess backups and the 1,650 blocks nothing
+#      referenced were deleted directly against the B2 API instead: deletes are Class A and
+#      unmetered, so the end state Longhorn wanted cost nothing to reach.
+#   3. RE-ARMING ITSELF IS CHEAP. The target sync pulls one BackupVolume CR per remote prefix
+#      (~25 Class C) and one Backup CR per remote backup (~93 Class B), once. At pollInterval 0
+#      nothing re-lists afterwards: btc.go's isBackupTargetSyncRequired gates on
+#      SyncRequestedAt > LastSyncedAt and no BackupStoreTimer exists to advance it.
+#
+# The storm is still real and still failure-driven — a failed sync returns before LastSyncedAt is
+# set, so the gate never closes and every watch event re-lists. But it only starts once the cap is
+# already gone. Keeping spend under the cap is therefore the whole defence, and post-drain the
+# worst weekday shard projects at ~1,524 Class C against 2,500. `probe.py b2-budget` recomputes
+# that projection from the live bucket; run it after adding a volume, because the cost grows with
+# stored blocks and nothing else will announce the drift.
+#
+# STILL DO NOT RE-ARM ON A TIMER, and do not re-arm without draining the over-retention backlog
+# first — that ordering, not the clock, is what made the previous four re-arms fail.
+k3s_longhorn_backup_armed: true
 
 # Daily volume backup to that target. 03:30 keeps it clear of the Kopia run and of the daily
 # secret-rotation cron. 14 retained backups per volume is two weeks of daily recovery points
