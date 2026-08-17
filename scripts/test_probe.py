@@ -15,6 +15,8 @@ import os
 import re
 from datetime import datetime, timezone
 
+import pytest
+
 
 _MOD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "probe.py")
 _spec = importlib.util.spec_from_file_location("probe", _MOD)
@@ -1360,6 +1362,68 @@ def test_format_backup_budget_does_not_charge_a_day_for_an_unscheduled_volume():
     text, code = probe.format_backup_budget(vols, {"pvc-idle": "no-backup"})
     assert code == 0
     assert "never pruned" in text and "pvc-idle" in text
+
+
+SPEND_LOG = [
+    (
+        1,
+        '[pvc-1c0e18da-dd0a-4059-af81-f5f346c7eabc-r-9d333575] time="..." '
+        'msg="Created snapshot changed blocks: 104 mappings, 104 blocks and 75 new blocks"',
+    ),
+    (
+        2,
+        '[pvc-00d8210a-e38d-49f9-ba22-3aff333f59ab-r-b0d3cf84] time="..." '
+        'msg="Created snapshot changed blocks: 77 mappings, 77 blocks and 67 new blocks"',
+    ),
+    (3, 'time="..." msg="Performing delta block backup"'),
+]
+
+
+def test_parse_duration_seconds_accepts_the_documented_forms():
+    assert probe.parse_duration_seconds("30m") == 1800
+    assert probe.parse_duration_seconds("6h") == 21600
+    assert probe.parse_duration_seconds("2d") == 172800
+    assert probe.parse_duration_seconds("1w") == 604800
+
+
+def test_parse_duration_seconds_rejects_junk_rather_than_defaulting():
+    """A silently-ignored duration would query Loki's one-hour default and report an empty
+    window as 'nothing ran', which is the failure this flag exists to prevent."""
+    for bad in ("6", "h", "6y", "-2d", "", "6 h"):
+        with pytest.raises(SystemExit):
+            probe.parse_duration_seconds(bad)
+
+
+def test_parse_backup_spend_counts_delta_blocks_per_volume():
+    """`blocks` is the delta Longhorn walks, and it HeadObjects each one — so that count is the
+    backup's Class B cost. `new blocks` is what it uploaded, which is Class A and free."""
+    vols = probe.parse_backup_spend(SPEND_LOG)
+    assert vols["pvc-1c0e18da-dd0a-4059-af81-f5f346c7eabc"]["blocks"] == 104
+    assert vols["pvc-1c0e18da-dd0a-4059-af81-f5f346c7eabc"]["new_blocks"] == 75
+    assert vols["pvc-00d8210a-e38d-49f9-ba22-3aff333f59ab"]["backups"] == 1
+    # The unrelated progress line must not be counted as a backup.
+    assert len(vols) == 2
+
+
+def test_parse_backup_spend_keeps_lines_whose_replica_prefix_was_trimmed():
+    """Dropping an unattributable line would understate spend, and understating is the failure
+    mode that matters — the cap does not care which volume it was."""
+    vols = probe.parse_backup_spend(
+        [
+            (
+                1,
+                'msg="Created snapshot changed blocks: 9 mappings, 9 blocks and 2 new blocks"',
+            )
+        ]
+    )
+    assert vols["unattributed"]["blocks"] == 9
+
+
+def test_format_backup_spend_totals_and_says_when_the_window_was_empty():
+    text = probe.format_backup_spend(probe.parse_backup_spend(SPEND_LOG), "6h")
+    assert "measured Class B over 6h: 181" in text
+    empty = probe.format_backup_spend({}, "6h")
+    assert "no backups logged" in empty and "widen --since" in empty
 
 
 def test_format_backup_budget_flags_a_b2_volume_left_on_the_daily_tier():
