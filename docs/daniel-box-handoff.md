@@ -54,10 +54,14 @@ that served `dockerd`. `net.ipv4.ip_forward=1` survives the removal: it is persi
 With `/usr/bin/docker` gone, the `roles/setup/k3s` fail-closed guard (`Refuse to run on a host
 that already runs Docker containers`) passes again and `ansible/k3s-bringup.yml` is unblocked.
 
-**This is now enforced, not remembered.** `docker_install` carries `when: has_docker`;
-`has_docker` defaults true fleet-wide in `group_vars/all.yml` and is set **false** in
-`host_vars/daniel-box.yml`. A bare `initial_setup.yml` on this host no longer reinstalls Docker,
-so runs here no longer need `--tags` to stay safe. Guarded by
+**This is now enforced, not remembered — and, as of PR #242 (2026-08-17), enforced differently.**
+`docker_install` no longer carries `when: has_docker` on the role include; it runs on every host
+unconditionally, and `tasks/main.yml` dispatches internally on `has_docker` (`install.yml` vs
+`teardown.yml`). `has_docker` defaults true fleet-wide in `group_vars/all.yml` and is set
+**false** in `host_vars/daniel-box.yml`, so a bare `initial_setup.yml` on this host still no
+longer reinstalls Docker — but it now also runs the teardown pass every time (reaping any stale
+Compose systemd units/crons; a no-op once nothing is left to reap), which the old gated version
+never did. Runs here still need no `--tags` to stay safe. Guarded by
 `ansible/tests/test_k3s_host_has_no_docker.py`.
 
 ### 1b. Claude Code is installed — RESOLVED 2026-08-01

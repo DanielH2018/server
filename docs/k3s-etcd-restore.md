@@ -95,5 +95,8 @@ If it will not rejoin, re-run the documented join:
 3. Longhorn UI — volumes attached and healthy. If a volume's data is also lost, restore it from
    the Longhorn backup *after* the PVC object exists, not before.
 4. Redeploy from Ansible (`./scripts/deploy.sh`) to reconcile anything the snapshot predates.
-5. Run `/usr/local/bin/manifest-prune-check.sh` — a restore can resurrect objects that were
-   deliberately retired between the snapshot and now, which is exactly what it detects.
+5. Run `sudo /usr/local/bin/manifest-prune-check.sh` — a restore can resurrect objects that were
+   deliberately retired between the snapshot and now, which is exactly what it detects. The
+   staged manifest dirs it diffs against are mode 0700, so a non-`sudo` run now fails fast
+   (`exit 64`, "must run as root") rather than doing anything useful — it needs root to see the
+   real manifest set at all.

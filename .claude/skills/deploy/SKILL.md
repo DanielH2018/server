@@ -36,21 +36,28 @@ Steps:
 5. **Verify it actually came up healthy** — Ansible reporting `ok`/`changed` only means the
    playbook ran, not that the workload is up (it can apply cleanly then crash-loop or fail
    its probes).
-   - **k3s:** `kubectl -n <namespace> rollout status deployment/<service> --timeout=120s`,
-     then `kubectl -n <namespace> get pods -l app=<service>` to confirm `Running` and
-     `READY 1/1`. On failure: `kubectl -n <namespace> describe pod <pod>` and
-     `kubectl -n <namespace> logs <pod> --tail=50`. These verbs are allow-listed and
-     read-only, so they run without a prompt.
+   - **k3s:** `uv run python scripts/probe.py health <service>` is the primary check —
+     allow-listed, k8s-native. Exit 0 only when the rollout is fully complete (observed
+     generation caught up, every replica updated/ready/available) **and** no container
+     restarted in the last 180s; an unreadable restart timestamp counts as recent (fails
+     closed). That restart window is exactly what `kubectl rollout status` can't see —
+     readiness flips a Deployment `Available` before a bad liveness probe starts killing it,
+     so a rollout-status check alone can report green on a crashlooping pod.
+     - On failure, drill down: `kubectl -n <namespace> rollout status
+       deployment/<service> --timeout=120s`, `kubectl -n <namespace> get pods -l
+       app=<service>`, `kubectl -n <namespace> describe pod <pod>`, and
+       `kubectl -n <namespace> logs <pod> --tail=50`. These verbs are allow-listed and
+       read-only, so they run without a prompt.
      - A pod that stays `Running` but never becomes ready is a **probe** failure, not a
        deploy failure — read `describe`'s Events.
      - If a ConfigMap/Secret change appears not to have taken effect, check whether the
        Deployment carries a `checksum/config` pod annotation; without it the pod isn't
        rolled. Also note `kubectl apply` leaves **stale Secret keys** behind — a key removed
        from the manifest persists live until patched out.
-   - **Docker (Pi only):** `uv run python scripts/probe.py health <service>` — exit 0 =
-     running + healthy; allow-listed. But it inspects the **local** Docker daemon, and the
-     Pi's is remote, so run it over ssh (`ssh daniel-pi ...`) or verify via the Pi's Uptime
-     Kuma monitor instead.
+   - **Docker (Pi only):** `uv run python scripts/probe.py health <service> --docker` —
+     exit 0 = running + healthy; allow-listed. `--docker` inspects the **local** Docker
+     daemon, and the Pi's is remote, so run it over ssh (`ssh daniel-pi ...`) or verify via
+     the Pi's Uptime Kuma monitor instead.
    - For a config-only run (`--skip-tags deploy`), the workload isn't recreated, so this is
      just a liveness check, not a deploy verification.
 6. Report the result, including the verification line. If the gate fails, surface the failing

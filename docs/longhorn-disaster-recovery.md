@@ -90,6 +90,13 @@ the per-volume map and each exclusion's rationale:
   > Those frozen dailies are load-bearing until the weekly tier produces something —
   > `/usr/local/bin/longhorn-reap-orphan-backups.sh` refuses to touch a volume whose current
   > tier has produced nothing, for exactly this reason. Do not delete them by hand.
+  >
+  > **Paused, not running, as of ~20:45 UTC the same day.** B2 was disarmed hours after this
+  > was written (seventh transaction-cap event) and stays that way on the terms in the
+  > current-state note at the top of
+  > [`longhorn-backup-tiering.md`](longhorn-backup-tiering.md). Depth-building here is stalled
+  > at zero until B2 re-arms; only the four R2-routed daily volumes above are currently
+  > accruing recovery points.
 - **No-backup** (16 volumes): rebuilt, not restored. The notable rebuild paths:
   uptime-kuma (recreate the first-run admin by hand; AutoKuma backfills monitors from the
   static-monitors Secret; history is gone), scrutiny (TSDB refills from collector runs),
