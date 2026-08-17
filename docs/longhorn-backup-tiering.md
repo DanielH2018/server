@@ -3,12 +3,13 @@
 > **Current arming state (checked here, not restated in prose below):**
 > `k3s_longhorn_backup_armed` / `k3s_longhorn_r2_armed` in
 > [`ansible/roles/setup/k3s/defaults/main.yml`](../ansible/roles/setup/k3s/defaults/main.yml)
-> are the live source of truth, updated at every arm/disarm. As of 2026-08-16 ~20:45 UTC (the
-> seventh transaction-cap event) B2 (`default` target) is **disarmed** and staying that way
-> until spend fits the cap or the cap is raised — see
-> [`b2-transaction-cap-monitoring-gaps.md`](b2-transaction-cap-monitoring-gaps.md). R2 stays
-> armed independently, so only its four volumes (below) are actively backing up; the weekly
-> B2 shard schedule this doc describes is the *design*, not current behavior.
+> are the live source of truth, updated at every arm/disarm. As of **2026-08-17 13:12 UTC both
+> targets are armed**: B2 (`default`) was re-armed once the over-retention backlog that caused
+> the seventh cap event was drained, and the weekly B2 shard schedule below is now current
+> behaviour rather than design. See *The transaction budget* section for what the backlog was
+> and why draining it was the precondition, and
+> [`b2-transaction-cap-monitoring-gaps.md`](b2-transaction-cap-monitoring-gaps.md) for the
+> monitoring history.
 
 2026-08-12, after the fifth B2 transaction-cap event. The operator declined to raise the
 caps, so usage had to fit them. Kopia's path-level ignore rules
@@ -89,11 +90,19 @@ That second point is what produced the seventh cap event on 2026-08-16 and is wh
 a row failed: 93 backups stood against retain 4, so arming queued ~71 walks — **~22,989 Class C,
 nine days of cap**, spent before any new data moved. The backlog was drained directly against the
 B2 API before the 2026-08-17 re-arm (deletes are Class A and unmetered, so the end state Longhorn
-was heading for cost nothing to reach), taking the store from 9,312 blocks to ~7,660.
+was heading for cost nothing to reach). With the three stale `no-backup` prefixes removed at the
+same time, the store went from 22 prefixes / 93 backups / 9,312 blocks / 6.15 GiB to **19 / 60 /
+4,031 / 2.86 GiB**, every volume at or under `retain`.
 
 Post-drain the worst weekday shard projects at ~1,524 Class C against the 2,500 cap, and the
 existing `index mod 7` shard split happens to balance well enough that it needed no change. That
 is luck, not design — the split is by list position and the cost is by block count.
+
+Draining takes `b2_list_file_versions`, **not** `b2_list_file_names`. Deleting one version of an
+object that has superseded versions merely promotes the older one, so the backup survives while
+its blocks are gone — the first drain pass reported 1,676/1,676 deleted and still left five
+volumes over retention, caught only by re-listing afterwards. The operation reporting success is
+not evidence of the end state.
 
 **Run `uv run python scripts/probe.py b2-budget` after adding a volume or changing a shard.** It
 re-derives the projection from one listing of the live bucket (~10 Class C) and exits non-zero if
