@@ -59,8 +59,14 @@
 # The library is the thing tdarr can damage, so prove it is both present and WRITABLE before
 # trusting the pod. A read-only or empty /media reads as "no work to do" in the UI rather than as
 # a fault — tdarr would simply report a library of zero files and look idle.
+#
+# Guarded on k8s_no_mutate: the touch/rm probe writes to the live media volume, which --dry-run
+# must not do. Under `--check`/`--dry-run` this whole task (and its report below) is skipped, so
+# a dry run proves the manifest but not library writability — the manifest apply itself is
+# `--dry-run=server` under those modes, so no new pod exists to prove it against anyway.
 - name: Prove the library is mounted and writable
   tags: [deploy]
+  when: not k8s_no_mutate
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} exec {{ tdarr_k8s_pod.stdout }} --
@@ -73,5 +79,6 @@
 
 - name: Report the library check
   tags: [deploy]
+  when: not k8s_no_mutate
   ansible.builtin.debug:
     msg: "{{ tdarr_k8s_media.stdout_lines }}"
