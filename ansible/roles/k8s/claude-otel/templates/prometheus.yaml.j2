@@ -212,13 +212,54 @@ data:
       # whether the scrape is unwired or fenced off. Reopened by
       # roles/setup/k3s/files/longhorn-metrics-networkpolicy.yaml.
       #
-      # KNOWN, not yet fixed: this is a static_configs target against the ClusterIP, so it
-      # round-robins the two longhorn-manager pods and gets roughly half of each one's series
-      # per scrape. The fix is kubernetes_sd_configs with role: endpoints on longhorn-backend.
+      # FIXED (2026-08-17): this used to be a static_configs target against the
+      # longhorn-backend ClusterIP. Prometheus held one keep-alive connection to whichever of
+      # the two longhorn-manager pods the Service happened to route it to for hours at a time,
+      # so `count by (node) (longhorn_disk_usage_bytes)` showed daniel-server only — verified
+      # live: 0 samples for daniel-box over a 1h window vs 60/60 for daniel-server, and 7-day
+      # totals of ~600 vs ~3102 (17% vs 31%). It only swapped endpoints on a manager pod
+      # restart, so daniel-box's Longhorn disk headroom was genuinely unobservable even though
+      # `nodes.longhorn.io daniel-box` shows a real, Ready, Schedulable disk carrying dozens of
+      # replicas — this was a scrape defect, not a disk actually missing from the cluster.
+      #
+      # Now uses kubernetes_sd_configs with role: endpoints, scoped to longhorn-system, so both
+      # longhorn-manager pods behind the Service are scraped independently every interval.
+      # Chose role: endpoints over role: endpointslice because the live Endpoints object
+      # already carries a clean, populated targetRef for both addresses (`kubectl get
+      # endpoints -n longhorn-system longhorn-backend -o yaml` showed targetRef.name
+      # longhorn-manager-ntbrt / longhorn-manager-ltwpr for the daniel-box/daniel-server
+      # addresses respectively — confirmed against the equivalent EndpointSlice, which carries
+      # the same targetRef), so __meta_kubernetes_endpoint_address_target_name resolves
+      # reliably here despite longhorn-manager being DaemonSet-managed. RBAC already grants
+      # `get, list, watch` on `endpoints` cluster-wide (ClusterRole below), so this collects
+      # without any RBAC change. No dashboard or check.py consumer pins the old ClusterIP
+      # `instance` label (grepped both), so changing `instance` to each pod's IP is safe.
+      #
+      # Expect longhorn_manager_* and longhorn_instance_manager_* series counts to roughly
+      # double: today's blended-from-two-pods series becomes two real per-pod series. That's
+      # the fix working, not a regression.
+      #
+      # Next step (not done here): a Longhorn storage dashboard + check-arm, once this fix has
+      # been deployed long enough to have real data. Two traps for whoever builds it:
+      # longhorn_volume_last_backup_at has 14 series that all read 0 (a freshness panel on it
+      # would falsely report "no backups ever"), and longhorn_volume_robustness is one-hot over
+      # a `state` label (healthy/degraded/faulted/unknown x 14 volumes = 56 series) rather than
+      # an attached/detached split, so any panel must select on `state` explicitly.
       - job_name: longhorn
         scrape_interval: 1m
-        static_configs:
-          - targets: ['longhorn-backend.longhorn-system.svc:9500']
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names: [longhorn-system]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            regex: longhorn-backend
+            action: keep
+          - source_labels: [__meta_kubernetes_endpoint_port_name]
+            regex: manager
+            action: keep
+          - source_labels: [__meta_kubernetes_endpoint_address_target_name]
+            target_label: pod
       # This stack's OWN Loki/Tempo internals, distinct from the loki-homelab job above
       # (that one is the general-purpose homelab log store). instance_role separates the
       # two so a dashboard/alert query doesn't accidentally blend claude-otel's internal

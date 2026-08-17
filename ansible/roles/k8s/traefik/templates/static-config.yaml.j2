@@ -84,7 +84,10 @@ data:
 
     # Slice-6 B1 (D2): a real file, not stdout — the crowdsec agent sidecar tails it from
     # the shared emptyDir. Same json format + dropped StartUTC as the Docker edge, so the
-    # crowdsecurity/traefik parser behaves identically across the cutover.
+    # crowdsecurity/traefik parser behaves identically across the cutover. A second sidecar
+    # (access-log-rotate, deployment.yaml.j2) tails the same file to stdout for Loki and
+    # copytruncates it to keep the shared emptyDir bounded — see that sidecar's comment for why
+    # copytruncate is safe for both readers.
     accessLog:
       filePath: /var/log/traefik/access.log
       format: json
