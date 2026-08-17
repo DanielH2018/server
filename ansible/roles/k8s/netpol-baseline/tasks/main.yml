@@ -171,6 +171,60 @@
     group: root
   become: true
 
+# The slice-2 probe's assertions are INVERTED (see netpol-probe-slice2-job.yaml.j2): a failed
+# `nc` is the PASS case. That means a crashlooping or scaled-to-zero sonarr/qbittorrent reads
+# identically to a correctly-fenced one — both produce "unreachable" — and the probe would print
+# "isolated: ... unreachable from an unlisted caller" and exit 0 for a reason that has nothing to
+# do with the policy. Slice 1's probe avoids this with its own liveness leg (assertion 3, through
+# traefik to littlelink); slice 2 cannot reuse that shape because sonarr is Authelia-gated — a
+# forwardauth 302 would look like a healthy backend without the request ever reaching the app,
+# the exact trap slice 1's probe header documents as the reason it picks an UNauthed app instead.
+# So the liveness check happens here, at the layer that already has cluster access, gating the
+# probe itself rather than living inside it.
+#
+# EndpointSlice, not `get endpoints`: EndpointSlice carries per-address readiness
+# (`.endpoints[].conditions.ready`), so a pod that exists but is failing its readiness probe is
+# correctly excluded. `get endpoints` only ever lists addresses already filtered to ready ones,
+# giving no way to distinguish "Service has zero ready backends" from "Service does not exist".
+# Same query shape as roles/k8s/pihole/tasks/main.yml's own endpoint-readiness check.
+- name: Read sonarr's and qbittorrent's endpoint readiness
+  tags: [deploy]
+  when:
+    - netpol_baseline_enforced | bool
+    - not k8s_no_mutate
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} get endpointslice -l kubernetes.io/service-name={{ item }}
+      -o jsonpath={.items[*].endpoints[?(@.conditions.ready==true)].targetRef.name}
+  become: true
+  changed_when: false
+  register: netpol_baseline_probe_slice2_targets
+  loop:
+    - sonarr
+    - qbittorrent
+
+# Not best-effort: a silent pass here is exactly the failure mode this task exists to close, so
+# an empty result — whether from zero ready addresses or a query that could not be answered —
+# fails the play rather than letting the probe run and misreport.
+- name: Fail if sonarr or qbittorrent has no ready endpoint
+  tags: [deploy]
+  when:
+    - netpol_baseline_enforced | bool
+    - not k8s_no_mutate
+  ansible.builtin.assert:
+    that: item.stdout | trim | length > 0
+    fail_msg: >-
+      {{ item.item }} has no ready endpoint, so the slice-2 probe was not run. Its assertions are
+      inverted — a failed connection is the PASS case — so it cannot tell "fenced by the policy"
+      apart from "nothing is listening"; running it against a down target would report green for
+      the wrong reason. Fix {{ item.item }}'s readiness first (check
+      `sudo k3s kubectl -n {{ k8s_namespace }} get pods -l app={{ item.item }}` and its rollout
+      status), then re-run this deploy so the probe's result is attributable to the policy again.
+    quiet: true
+  loop: "{{ netpol_baseline_probe_slice2_targets.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
 - name: Clear the previous netpol-baseline-probe-slice2 run
   tags: [deploy]
   when:
