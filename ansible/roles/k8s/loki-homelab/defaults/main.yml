@@ -1,7 +1,7 @@
 ---
 # Pinned like the claude-otel Loki (Renovate-tracked); the Docker copy ran :latest under
 # Watchtower, which retires with it.
-loki_homelab_image: grafana/loki:3.3.0
+loki_homelab_image: grafana/loki:3.7.6
 loki_homelab_promtail_image: grafana/promtail:3.3.0
 
 # 1.1 G live in the Docker named volume at planning. `longhorn-nobackup` on purpose — same
