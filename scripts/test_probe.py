@@ -1362,6 +1362,15 @@ def test_format_backup_budget_does_not_charge_a_day_for_an_unscheduled_volume():
     assert "never pruned" in text and "pvc-idle" in text
 
 
+def test_format_backup_budget_flags_a_b2_volume_left_on_the_daily_tier():
+    """A PVC provisioned from the longhorn StorageClass lands in `default` until a deploy
+    reconciles its label, which on B2 means a prune every night against a weekly budget."""
+    vols = {"pvc-new": {"prune": 300, "blocks": 200, "backups": 4}}
+    text, code = probe.format_backup_budget(vols, {"pvc-new": "default"})
+    assert code == 1
+    assert "ON THE DAILY TIER AND ON B2" in text and "pvc-new" in text
+
+
 def test_format_backup_budget_reports_a_backlog_of_pending_deletes():
     """Backups beyond `retain` each cost a full block-tree walk when Longhorn catches up, so
     a backlog is the difference between a cheap night and one that blows the cap."""
