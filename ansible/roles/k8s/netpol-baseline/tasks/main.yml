@@ -57,7 +57,9 @@
 
 - name: Clear the previous netpol-baseline probe run
   tags: [deploy]
-  when: netpol_baseline_enforced | bool
+  when:
+    - netpol_baseline_enforced | bool
+    - not k8s_no_mutate
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} delete job netpol-baseline-probe
@@ -67,7 +69,9 @@
 
 - name: Run the netpol-baseline probe
   tags: [deploy]
-  when: netpol_baseline_enforced | bool
+  when:
+    - netpol_baseline_enforced | bool
+    - not k8s_no_mutate
   ansible.builtin.command:
     cmd: >-
       k3s kubectl apply -f
@@ -77,7 +81,9 @@
 
 - name: Wait for the netpol-baseline probe
   tags: [deploy]
-  when: netpol_baseline_enforced | bool
+  when:
+    - netpol_baseline_enforced | bool
+    - not k8s_no_mutate
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
@@ -100,7 +106,9 @@
 # before the descriptive fail — which is precisely the outcome this ordering exists to avoid.
 - name: Report the netpol-baseline probe
   tags: [deploy]
-  when: netpol_baseline_enforced | bool
+  when:
+    - netpol_baseline_enforced | bool
+    - not k8s_no_mutate
   ansible.builtin.command:
     cmd: "k3s kubectl -n {{ k8s_namespace }} logs job/netpol-baseline-probe"
   become: true
@@ -112,7 +120,9 @@
 # other kubectl-side reasons land) and a next step, rather than an empty list.
 - name: Show the netpol-baseline probe result
   tags: [deploy]
-  when: netpol_baseline_enforced | bool
+  when:
+    - netpol_baseline_enforced | bool
+    - not k8s_no_mutate
   ansible.builtin.debug:
     msg: >-
       {{ netpol_baseline_probe_log.stdout_lines
@@ -123,7 +133,13 @@
 
 - name: Fail if the netpol-baseline probe did not complete
   tags: [deploy]
-  when: netpol_baseline_enforced | bool and netpol_baseline_probe.rc != 0
+  # Ansible short-circuits a `when` list, so `not k8s_no_mutate` is what keeps
+  # netpol_baseline_probe.rc from being dereferenced on a dry run, where the wait that registers
+  # it never ran.
+  when:
+    - netpol_baseline_enforced | bool
+    - not k8s_no_mutate
+    - netpol_baseline_probe.rc != 0
   ansible.builtin.fail:
     msg: >-
       netpol-baseline probe did not complete (rc={{ netpol_baseline_probe.rc }}).
