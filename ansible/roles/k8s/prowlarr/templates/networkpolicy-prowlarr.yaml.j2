@@ -8,6 +8,16 @@
 # sonarr and radarr reach prowlarr by bare name from their own application databases — the indexer
 # definitions live on their PVCs, not in this repo. Recorded in
 # roles/k8s/sonarr/templates/isolation-probe-job.yaml.j2.
+#
+# flaresolverr-netpol-probe is the CONTROL leg of this role's OWN isolation probe
+# (netpol-probe-job.yaml.j2): before it asserts flaresolverr is unreachable from outside
+# prowlarr, it first proves its own pod networking works at all by retrying
+# `nc -z prowlarr {{ container_item.port }}` for up to 150s, riding out prowlarr's restart. Fence
+# that leg out and the control can never pass, so the Job fails and aborts every prowlarr deploy
+# — a negative test with no working control proves nothing. Same shape as
+# roles/k8s/registry/templates/networkpolicy.yaml.j2 admitting its own
+# registry-selftest-push/registry-selftest-pull Jobs: a deploy-time test pod that must reach the
+# workload it is fencing. Do not "clean this up" as an unused caller.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -32,6 +42,7 @@ spec:
                   - monitor-bridge
                   - sonarr
                   - radarr
+                  - flaresolverr-netpol-probe  # control leg of this role's own isolation probe
       ports:
         - protocol: TCP
           port: {{ container_item.port }}
