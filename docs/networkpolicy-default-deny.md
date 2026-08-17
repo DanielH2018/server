@@ -248,10 +248,48 @@ bazarr → sonarr/radarr, freshrss → feed-cache, home-assistant → mosquitto.
   alongside the four that already exist.
 - Probe jobs: `ansible/roles/k8s/<name>/templates/netpol-probe-job.yaml.j2`, same pattern.
 
-## Open items to settle during slice 1
+## Answers from slice 1
 
-1. Whether `registry`'s `10.42.1.0/32` entry is load-bearing or vestigial.
-2. The observed source IP for pod → MetalLB VIP traffic under ETP=Local.
-3. Whether a lint should require every `containers_list` entry to have a policy — the
+Both blocking items were settled by observation on 2026-08-17, after slice 1 was deployed and
+enforced. Slice 2 depends on the first; slice 4's mosquitto rule depends on the second.
+
+### 1. `registry`'s `10.42.1.0/32` is vestigial — but do not simply delete it
+
+`kubectl -n homelab get pod -l app=registry -o jsonpath='{.items[0].spec.nodeName}'` → **daniel-box**,
+whose podCIDR is `10.42.0.0/24`. Registry serves containerd over a hostPort on the node it runs on,
+so `10.42.0.1/32` is the entry doing the work. `10.42.1.0/32` matches neither node's `cni0` (both
+are `.1`); it is the network address of daniel-server's CIDR, not an address anything sources from.
+
+The correct repair in slice 4 is to **replace** it with `10.42.1.1/32`, not to drop it. Registry is
+not pinned to a node, so if it is ever rescheduled onto daniel-server the working entry becomes the
+one that is currently wrong.
+
+### 2. Pod → MetalLB VIP traffic is SNAT'd to the node bridge address, despite ETP=Local
+
+Measured against the live mosquitto:
+
+- zigbee2mqtt's pod IP: `10.42.0.242` (on daniel-box)
+- every line in mosquitto's log: `New connection from 10.42.0.1:<port> on port 1883`
+
+`10.42.0.1` is daniel-box's `cni0`. **ETP=Local preserves the source IP for traffic arriving from
+outside the cluster, not for a pod dialling its own cluster's LoadBalancer VIP** — that path
+hairpins through the node and is masqueraded. No pod IP appears in the log at all.
+
+Consequence for slice 4: **a `podSelector` cannot express "mosquitto accepts zigbee2mqtt".** The
+rule must use the node `ipBlock`s, which also means it cannot distinguish zigbee2mqtt from any
+other pod on the same node — so fencing mosquitto by source is not achievable while the client
+dials the VIP. Either accept that, or move the client to the ClusterIP so pod identity survives.
+
+The baseline's existing `10.42.0.1/32` and `10.42.1.1/32` entries already admit this path, so any
+workload fenced by the baseline remains reachable over a VIP hairpin today.
+
+## Open items still outstanding
+
+1. Whether a lint should require every `containers_list` entry to have a policy — the
    baseline makes a missing policy safe rather than broken, so this is optional, but it is
-   the executable-check end of the repo's escalation ladder.
+   the executable-check end of the repo's escalation ladder. Slice 1 shipped a narrower
+   version of this: `ansible/tests/test_netpol_baseline_labels.py` pins the labelled set.
+2. The probe's `activeDeadlineSeconds` (120s) is shorter than the Ansible wait (180s), so a
+   deadline-exceeded run produces a misleading diagnosis in either branch of the fail message.
+   Slice 1's probe completed well inside both, so the real timings are now known and this can
+   be tuned rather than guessed.
