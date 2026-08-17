@@ -22,3 +22,18 @@ netpol_baseline_node_cidrs:
 
 # Matches headlamp_k8s_netpol_probe_image and registry_k8s_netpol_probe_image.
 netpol_baseline_probe_image: alpine:3.24
+
+# Slice 3 fences the observability namespace. It carries its OWN enforcement flag and its
+# OWN node-CIDR list, deliberately: the shared netpol_baseline_node_cidrs is read by the 16
+# workloads slices 1 and 2 already deployed, and widening it would re-scope all of them.
+netpol_baseline_obs_enforced: false
+
+# All four node addresses, where the homelab list carries only the two cni0 /32s.
+# prometheus has no node pin and telemetry-health.sh curls its ClusterIP from a cron on BOTH
+# nodes, so one of those two crons is cross-node whenever prometheus lands on daniel-box.
+# Slice 2 measured cross-node host -> fenced pod as blocked with cni0 alone.
+netpol_baseline_obs_node_cidrs:
+  - 10.42.0.1/32    # daniel-box cni0
+  - 10.42.1.1/32    # daniel-server cni0
+  - 10.42.0.0/32    # daniel-box flannel.1
+  - 10.42.1.0/32    # daniel-server flannel.1
