@@ -45,6 +45,26 @@ traefik_k8s_agent_cpu_limit: "0.5"
 traefik_k8s_agent_mem_limit: 256Mi
 traefik_k8s_agent_cpu_request: 50m
 traefik_k8s_agent_mem_request: 64Mi
-# The access log lives on an emptyDir shared between traefik and the sidecar. sizeLimit
-# bounds a runaway log; rotation proper is a B5-soak follow-up (traefik rotates on USR1).
+# The access log lives on an emptyDir shared between traefik, the crowdsec-agent sidecar, and
+# the access-log-rotate sidecar below. sizeLimit is now a BACKSTOP, not a countdown: the
+# access-log-rotate sidecar copytruncates the file well before this is reached (see its
+# resources/policy below), so hitting this would mean rotation itself has stopped working.
 traefik_k8s_access_log_size: 1Gi
+
+# (repo:tag, no digest) matching the pattern this role already uses for traefik/crowdsec above —
+# a real version tag, not a `latest` rolling one, so Renovate's k8s-defaults manager tracks it by
+# tag bump with no digest-pin plumbing needed. Alpine's busybox provides everything the
+# access-log-rotate sidecar's script needs: sh, tail, cp, mv, wc.
+traefik_k8s_logrotate_image: alpine:3.24
+traefik_k8s_logrotate_cpu_limit: "100m"
+traefik_k8s_logrotate_mem_limit: 64Mi
+traefik_k8s_logrotate_cpu_request: "10m"
+traefik_k8s_logrotate_mem_request: 16Mi
+
+# Rotation policy for the shared access log (copytruncate, see deployment.yaml.j2's
+# access-log-rotate sidecar). At the measured ~0.7 req/s edge rate (~23.5MB/day of JSON access
+# lines), a 100Mi threshold rotates roughly once every 4-5 days; keeping 2 rotated generations
+# plus the live file caps the volume at ~300Mi worst case — comfortably under the 1Gi emptyDir
+# cap above even through a traffic spike that fills the live file between checks.
+traefik_k8s_access_log_rotate_mb: 100
+traefik_k8s_access_log_keep: 2

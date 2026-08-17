@@ -254,6 +254,125 @@ spec:
             requests:
               cpu: "{{ traefik_k8s_agent_cpu_request }}"
               memory: {{ traefik_k8s_agent_mem_request }}
+        # Ships the access log to Loki (tails it to stdout, which promtail's k8s-pods job
+        # auto-discovers by container name — no scrape-config change needed) and keeps the
+        # traefik-logs emptyDir off the eviction path (copytruncate before traefik_k8s_access_log_size
+        # is ever reached).
+        #
+        # copytruncate, NOT a SIGUSR1 reopen signal: signalling traefik's PID 1 from a sibling
+        # container needs shareProcessNamespace: true on the pod (NOT set, deliberately — every
+        # sidecar here would then see and be able to signal every other container's process,
+        # a real security regression on this security-critical edge pod for a marginal gain).
+        # copytruncate needs no cross-container signal at all: it copies the log aside then
+        # truncates the SAME inode in place, so traefik's already-open fd keeps writing without
+        # being reopened. That works because traefik opens the access log O_APPEND, and an
+        # O_APPEND write always targets the current end-of-file rather than a cached offset — so
+        # the first write after a truncate lands at the new offset 0. The rotate() function below
+        # checks this held rather than trusting it silently (see "did rotation actually take"
+        # below). CrowdSec's acquis.yaml (crowdsec-secret.yaml.j2) names the exact file
+        # /var/log/traefik/access.log, not a glob, so the rotated .1/.2 generations are never
+        # re-ingested and old requests never get re-banned. This isn't a new mechanism for this
+        # file: the retired Docker-era edge (ansible/roles/containers/archive/traefik) ran
+        # copytruncate against this exact access.log, with crowdsec tailing it the same way, for
+        # months with no reported loss (see git history: b93d9a4c added
+        # roles/containers/traefik/files/traefik-logrotate with `copytruncate`, `rotate 7`).
+        #
+        # Deliberately NO readinessProbe — same trap as crowdsec-agent above: a sidecar's
+        # readiness gates the whole pod's Service endpoints, so a tail or rotation hiccup here
+        # must never pull the EDGE out of rotation. No livenessProbe either: the loop below is
+        # its own watchdog for the child `tail` (restarts it, logging when it does), and a
+        # container restart here would gain nothing a shell loop can't already do.
+        - name: access-log-rotate
+          image: {{ traefik_k8s_logrotate_image }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              LOG=/var/log/traefik/access.log
+              MAX_BYTES=$(( {{ traefik_k8s_access_log_rotate_mb }} * 1024 * 1024 ))
+              KEEP={{ traefik_k8s_access_log_keep }}
+              ROTATE_DISABLED=0
+
+              log() { echo "access-log-rotate: $*"; }
+
+              # BusyBox's tail is not asserted to reseek to 0 on a detected truncation the way
+              # GNU coreutils does — this image was never exec'd against to check. Rather than
+              # rely on that, the child is killed and restarted across every rotation, which is
+              # correct regardless of which tail implementation the image carries. `-n +1`
+              # follows from byte 0: right after a truncate/restart the file is ~empty, so
+              # nothing is lost by not seeking to the (now stale) end.
+              start_tail() {
+                tail -f -n +1 "$LOG" &
+                TAIL_PID=$!
+              }
+
+              # stat is O(1); wc -c re-reads the whole file, which matters at 100MB+ on a
+              # once-a-minute poll. Falls back if this image's stat lacks -c.
+              file_size() {
+                stat -c%s "$LOG" 2>/dev/null || wc -c < "$LOG"
+              }
+
+              rotate() {
+                i=$KEEP
+                while [ "$i" -gt 1 ]; do
+                  prev=$((i - 1))
+                  if [ -e "$LOG.$prev" ]; then
+                    mv "$LOG.$prev" "$LOG.$i"
+                  fi
+                  i=$prev
+                done
+                cp "$LOG" "$LOG.1"
+                : > "$LOG"
+                kill "$TAIL_PID" 2>/dev/null || true
+                wait "$TAIL_PID" 2>/dev/null || true
+                start_tail
+
+                # Did the truncate actually take? If traefik does not open the log O_APPEND
+                # after all, its cached write offset stays at the pre-rotate size, the file
+                # re-grows to it on the very next write, and copying that in full every cycle
+                # would spend the disk I/O this sidecar exists to bound. Fail loud and stop
+                # trying rather than fail silent and thrash.
+                size_after=$(file_size)
+                if [ "$size_after" -ge "$MAX_BYTES" ]; then
+                  log "truncate did not shrink $LOG (still ${size_after}B) — disabling further rotation"
+                  ROTATE_DISABLED=1
+                fi
+              }
+
+              start_tail
+
+              while true; do
+                sleep 60
+                if ! kill -0 "$TAIL_PID" 2>/dev/null; then
+                  log "tail exited, restarting"
+                  start_tail
+                fi
+                if [ "$ROTATE_DISABLED" -eq 1 ]; then
+                  continue
+                fi
+                if [ -f "$LOG" ]; then
+                  size=$(file_size)
+                  if [ "$size" -ge "$MAX_BYTES" ]; then
+                    rotate
+                  fi
+                fi
+              done
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: traefik-logs
+              mountPath: /var/log/traefik
+          resources:
+            limits:
+              cpu: "{{ traefik_k8s_logrotate_cpu_limit }}"
+              memory: {{ traefik_k8s_logrotate_mem_limit }}
+            requests:
+              cpu: "{{ traefik_k8s_logrotate_cpu_request }}"
+              memory: {{ traefik_k8s_logrotate_mem_request }}
       volumes:
         - name: config
           configMap:
@@ -297,8 +416,10 @@ spec:
           emptyDir: {}
         - name: tmp-agent
           emptyDir: {}
-        # sizeLimit so a runaway access log evicts nothing quietly forever — rotation
-        # proper is a B5-soak follow-up (traefik reopens the file on USR1).
+        # sizeLimit is a BACKSTOP against pod eviction, not the rotation mechanism — the
+        # access-log-rotate sidecar copytruncates the log well before this is reached (see
+        # traefik_k8s_access_log_rotate_mb / _keep in defaults/main.yml). Hitting this cap would
+        # mean rotation itself has stopped working, not that rotation was never implemented.
         - name: traefik-logs
           emptyDir:
             sizeLimit: {{ traefik_k8s_access_log_size }}

@@ -17,6 +17,9 @@
 # so resolving beats hardcoding.
 set -uo pipefail
 
+# Cron's PATH is /usr/bin:/bin, which omits /usr/local/bin where k3s lives. Without this the
+# cron run dies on "k3s: command not found" instead of reporting cluster state.
+export PATH="/usr/local/bin:${PATH}"
 export KUBECONFIG=/home/{{ sys_user }}/.kube/config
 KUBECTL="k3s kubectl -n {{ k8s_observability_namespace }}"
 
