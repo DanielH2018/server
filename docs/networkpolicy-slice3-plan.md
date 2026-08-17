@@ -70,8 +70,8 @@ Prometheus *scraping outward* needs no rule at all: that is egress from promethe
 |---|---|
 | `roles/k8s/netpol-baseline/templates/networkpolicy-observability.yaml.j2` | **Create.** The observability baseline. Own CIDR list, own enforcement flag, cross-namespace traefik peer. |
 | `roles/k8s/netpol-baseline/defaults/main.yml` | **Modify.** Add `netpol_baseline_obs_enforced`, `netpol_baseline_obs_node_cidrs`. |
-| `roles/k8s/claude-otel/templates/networkpolicy-prometheus.yaml.j2` | **Create.** monitor-bridge + homelab-mcp peers. |
-| `roles/k8s/claude-otel/templates/networkpolicy-loki.yaml.j2` | **Create.** homelab-mcp peer. |
+| `roles/k8s/netpol-baseline/templates/networkpolicy-prometheus.yaml.j2` | **Create.** monitor-bridge + homelab-mcp peers. Lives in netpol-baseline, not claude-otel — see Task 4. |
+| `roles/k8s/netpol-baseline/templates/networkpolicy-loki.yaml.j2` | **Create.** homelab-mcp peer. |
 | `roles/k8s/claude-otel/templates/*.yaml.j2` (6 workloads) | **Modify.** Add the `netpol-baseline: enforced` pod label. |
 | `roles/k8s/netpol-baseline/templates/netpol-probe-slice3-job.yaml.j2` | **Create.** Inverted probe + controls. |
 | `roles/k8s/netpol-baseline/tasks/main.yml` | **Modify.** Readiness gate + probe run for slice 3. |
@@ -246,7 +246,14 @@ SLICE_3_WORKLOADS = {
 }
 ```
 
-Assert `_labelled_workloads()` contains exactly the slice-1/2 workloads plus these six. Run it first and watch it fail with six missing.
+Then make two changes, and **not** a third (Ruling 1):
+
+1. Add `"claude-otel"` to the fenced-role set that Task 1's `test_every_pod_producing_doc_in_a_fenced_role_is_labelled` iterates. That is what makes the guard demand all six.
+2. Add one claude-otel-specific assertion: `{name for (role, name) in _labelled_workloads() if role == "claude-otel"} == {n for _, n in SLICE_3_WORKLOADS}`.
+
+**Do not enumerate workload tuples for slices 1 and 2.** Task 1's test already derives that invariant from the rendered docs; restating it as a hand-maintained list would need updating on every future slice and could drift from what is actually deployed.
+
+Run it first and watch the claude-otel assertion fail with six missing.
 
 - [ ] **Step 2: Add `netpol-baseline: enforced` to each pod template's `metadata.labels`**
 
@@ -266,9 +273,18 @@ Expected: PASS, 16 roles + 6 observability workloads.
 Only these two have cross-namespace callers. grafana is reached solely through Traefik, and tempo / kube-state-metrics / otel-collector solely from inside the namespace — all covered by Task 2's baseline.
 
 **Files:**
-- Create: `ansible/roles/k8s/claude-otel/templates/networkpolicy-prometheus.yaml.j2`
-- Create: `ansible/roles/k8s/claude-otel/templates/networkpolicy-loki.yaml.j2`
-- Modify: `ansible/roles/k8s/claude-otel/tasks/main.yml` (add both to `manifests_files`)
+- Create: `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-prometheus.yaml.j2`
+- Create: `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-loki.yaml.j2`
+- Modify: `ansible/roles/k8s/netpol-baseline/tasks/main.yml` (add both to `manifests_files`)
+
+> **Corrected during the preflight scan (Ruling 2).** An earlier draft of this task put these two
+> files in the `claude-otel` role and declared them unconditional, reasoning that "a policy which
+> only adds peers is inert until something else selects the pod." **That is false.** In Kubernetes a
+> NetworkPolicy selecting a pod is precisely what makes that pod default-deny. As drafted, Task 6's
+> stage A would have fenced prometheus and loki the moment it deployed — admitting only
+> monitor-bridge and homelab-mcp, and cutting off grafana, Traefik and the host heartbeat. That is
+> the exact inversion of the two-stage deploy's purpose. Hence: netpol-baseline role, and gated on
+> the same flag as the baseline.
 
 - [ ] **Step 1: prometheus**
 
@@ -285,6 +301,7 @@ spec:
   policyTypes:
     - Ingress
   ingress:
+{% if netpol_baseline_obs_enforced | bool %}
     - from:
         - namespaceSelector:
             matchLabels:
@@ -297,6 +314,9 @@ spec:
       ports:
         - protocol: TCP
           port: 9090
+{% else %}
+    - {}
+{% endif %}
 ```
 
 - [ ] **Step 2: loki** — same shape, `app: loki`, values `[homelab-mcp]`, port `3100`.
@@ -305,7 +325,10 @@ spec:
 
 Run: `uv run python scripts/validate_k8s_manifests.py && prek run --all-files`
 
-**These policies are unconditional — no `enforced` guard.** A NetworkPolicy that only *adds* peers is inert until something else selects the pod, and the baseline is what does that. Guarding them too would mean two flags to reason about for one behaviour.
+**Both carry the same `netpol_baseline_obs_enforced` guard as the baseline, with the same
+`ingress: [{}]` off-state.** One flag governs the whole slice, so flipping it back is a true
+rollback for these two policies as well — the property that was documented falsely in slice 2 and
+had to be corrected afterwards.
 
 ---
 
@@ -329,13 +352,18 @@ against `prometheus`, `loki`, `grafana`, `tempo` in `{{ k8s_observability_namesp
 
 - [ ] **Step 2: The probe pod**
 
-Runs in `{{ k8s_observability_namespace }}` with a label on nobody's allow list.
+**One Job, in `{{ k8s_namespace }}`** — the same namespace and shape as the slice-1 and slice-2 probes. An earlier draft asked for an in-namespace control *and* a cross-namespace inverted leg from one Job; a Job's pod lives in exactly one namespace, so that is not buildable (Ruling 3).
 
-1. **Control:** `nc -w 5 -z prometheus 9090` **must succeed** — the probe pod is in-namespace, and the baseline's `podSelector: {}` peer admits it. This control proves DNS and networking work.
-2. **Negative control:** an unfenced target reachable from here.
-3. **Inverted assertions:** from a pod in **`{{ k8s_namespace }}`** with a non-allow-listed label, `nc -w 5 -z prometheus.{{ k8s_observability_namespace }} 9090` and the same for `loki:3100` **must fail**.
+Label it `app: netpol-probe-slice3` — it must be neither `monitor-bridge` nor `homelab-mcp`, or Task 4's policies would admit it and every inverted assertion would fail.
 
-**The inverted leg must run from the `homelab` namespace, not from `observability`.** The baseline admits `podSelector: {}` — every in-namespace pod — so an in-namespace inverted probe would fail to be blocked and the probe would report the fence as broken when it is working exactly as designed. This is the single easiest way to get this slice's probe wrong.
+1. **Control:** `nc -w 5 -z traefik 80` **must succeed** — proves DNS and pod networking before anything is concluded from a failure. Exactly the slice-1/2 control.
+2. **Inverted assertions, both must fail to connect:**
+   - `nc -w 5 -z prometheus.{{ k8s_observability_namespace }} 9090`
+   - `nc -w 5 -z loki.{{ k8s_observability_namespace }} 3100`
+
+**Why the probe cannot run from inside `observability`.** The baseline admits `podSelector: {}` — every pod in that namespace — so an in-namespace probe would *not* be blocked, and it would report the fence as broken while it is working exactly as designed. This is the single easiest way to get this slice's probe wrong.
+
+**What this probe deliberately does not cover:** the intra-namespace `podSelector: {}` peer itself. The EndpointSlice gate proves the targets are up, and Task 6 Step 5 exercises the intra-namespace path through the real consumer — grafana rendering its panels.
 
 - [ ] **Step 3: Gate every run task**
 
