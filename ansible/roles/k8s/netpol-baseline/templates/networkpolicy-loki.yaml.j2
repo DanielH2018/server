@@ -6,15 +6,17 @@
 # other loki-homelab instance) — worth naming explicitly so a future policy written for
 # loki-homelab isn't drafted on the assumption that monitor-bridge has no loki caller at all.
 #
-# grafana, tempo, kube-state-metrics and otel-collector need no per-workload policy — NOT
-# because their callers stay inside {{ k8s_observability_namespace }} (loki itself, like
-# prometheus and tempo, is also read on host loopback by `otelq`, a workstation host process —
-# see claude-otel/CLAUDE.md) but because every non-namespace caller these four have arrives over
-# a loopback hostPort, which is admitted by the baseline's node-CIDR `ipBlock` peer
-# (`netpol_baseline_obs_node_cidrs`, networkpolicy-observability.yaml.j2), not by anything in
-# this file. That ipBlock peer carries no `ports` restriction, so trimming
-# `netpol_baseline_obs_node_cidrs` to entries with a same-service-nameable caller would silently
-# break otelq's hostPort path on the next flip — grep this comment before touching that list.
+# loki itself is ALSO read on host loopback by `otelq` (a workstation host process — see
+# claude-otel/CLAUDE.md), covered the same way as tempo/otel-collector below, not by this file.
+# The other four need no per-workload policy, each for a different reason — don't collapse them
+# into one mechanism:
+#   - tempo, otel-collector: loopback-hostPort callers only, admitted by the node-CIDR `ipBlock`
+#     peer (`netpol_baseline_obs_node_cidrs`, networkpolicy-observability.yaml.j2), which carries
+#     no `ports` restriction — trimming that list to "nameable" entries breaks otelq silently.
+#   - grafana: Traefik only, admitted by that same file's explicit traefik
+#     namespaceSelector+podSelector peer — unrelated to the ipBlock/CIDR list above.
+#   - kube-state-metrics: no external caller at all; prometheus scrapes it from inside the
+#     namespace, covered by the plain `podSelector: {}` peer.
 #
 # INGRESS ONLY, same as the rest of this role: an Egress policy selects pods correctly on this
 # cluster and blocks nothing (measured 2026-08-07). Writing one would read like a control in the
