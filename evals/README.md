@@ -98,6 +98,10 @@ Each `/homelab-review` case pins one contract paragraph the skill grew after a r
 paragraph and its case move together: `001` dedup vs `004` anti-merge are deliberately a matched
 pair — `001` alone rewards collapsing findings, and only `004` measures the counter-force.
 
+One coverage caveat: `006` hands the model pre-gathered `gh pr list` / `gh pr diff` output, so it
+grades the *interpretation* half of the open-PR rule. The half that fails in practice — deciding to
+look at open branches at all — needs tools, so only the live case exercises it.
+
 Fidelity boundary: hermetic cases run with `--tools ""`, so they grade judgment + output discipline,
 not file navigation or real Task-dispatch. security-review's severity standards live in an
 `@`-included `DETAILED_GUIDE.md` that the engine does not expand — the agent body is passed as a
