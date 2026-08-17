@@ -392,6 +392,11 @@ K8S_MIN_WORKLOADS = int(_env("K8S_MIN_WORKLOADS", "5"))
 # longhorn-csi-plugin, longhorn-manager, speaker. Bump this floor (and the comment) when a
 # DaemonSet is added or retired — same discipline as K8S_MIN_WORKLOADS.
 K8S_MIN_DAEMONSETS = int(_env("K8S_MIN_DAEMONSETS", "9"))
+# Hysteresis for check_longhorn_volumes. A node drain and the Sunday 07:30 reboot both degrade
+# every volume on the departing node BY DESIGN, so a single breaching cycle must not page — 3
+# cycles at the bridge cadence is longer than either takes to settle. Same shape as
+# CPU_CONSECUTIVE / UPS_CONSECUTIVE.
+LONGHORN_CONSECUTIVE = int(_env("LONGHORN_CONSECUTIVE", "3"))
 # Crash-loop arm of the workload check: pods whose restart counter climbed more than
 # K8S_RESTART_MAX inside K8S_RESTART_WINDOW page even while readiness flaps green
 # (CrashLoopBackOff passes probes briefly each backoff cycle — the 2026-08-13 homepage
@@ -2633,6 +2638,76 @@ def check_discord():
     return ok, msg
 
 
+_longhorn_degraded_streak = 0
+
+
+def check_longhorn_volumes():
+    """Longhorn volumes that have lost replica redundancy, named by PVC.
+
+    `k3s_longhorn_replica_count` is 2, so a volume reading `degraded` is down to a single copy —
+    still serving, one more failure from data loss — and `faulted` means no healthy replica is
+    left at all. Nothing else in CHECKS covers this: k8s_workloads watches the pod, not the
+    volume under it, and the backup-plane cron watches Backup objects rather than live replica
+    state. Until this arm landed (2026-08-17) replica loss was silent.
+
+    `longhorn_volume_robustness` is ONE-HOT over a `state` label (healthy/degraded/faulted/
+    unknown) with value 0 or 1 — four series per volume. So this selects on the label and never
+    compares the value to a state ordinal, which is the mistake an earlier proposal made.
+    `unknown` means detached and is deliberately not a fault: 6 of 43 volumes read it here,
+    including the intentionally scaled-to-zero game servers.
+
+    The two longhorn-manager pods report DISJOINT volume subsets (43 volumes total across both,
+    not 43 each), so offenders are deduped by name rather than counted — a raw count would
+    change meaning the moment a volume moved between managers.
+
+    An absent metric is treated as a breach, NOT as green. If the longhorn scrape job dies the
+    degraded selector returns empty for exactly the same reason a healthy cluster does, and a
+    check that cannot distinguish "nothing is wrong" from "I cannot see" is the failure mode
+    this estate keeps rediscovering (manifest-prune's unreadable staged dirs, the backup
+    reaper's unpopulated owner map). The volume count doubles as that input assertion: the
+    one-hot shape guarantees a `state="healthy"` series per volume even when its value is 0.
+    """
+    global _longhorn_degraded_streak
+    volumes = prom_scalar('count(longhorn_volume_robustness{state="healthy"})')
+    if not volumes:
+        _longhorn_degraded_streak, ok, msg = down_streak(
+            _longhorn_degraded_streak,
+            LONGHORN_CONSECUTIVE,
+            "no longhorn_volume_robustness series — replica redundancy is UNMONITORED "
+            "(job=longhorn scrape down?), which is not the same as healthy",
+            "scrape gap grace",
+        )
+        return ok, msg
+    worst = {}
+    for labels, _value in prom_vector(
+        'longhorn_volume_robustness{state=~"degraded|faulted"} == 1'
+    ):
+        name = labels.get("pvc") or labels.get("volume", "?")
+        state = labels.get("state", "?")
+        # faulted outranks degraded if both ever report for one volume
+        if worst.get(name) != "faulted":
+            worst[name] = state
+    if not worst:
+        _longhorn_degraded_streak = 0
+        return True, "%d volume(s) redundant, none degraded or faulted" % int(volumes)
+    faulted = sorted(n for n, s in worst.items() if s == "faulted")
+    degraded = sorted(n for n, s in worst.items() if s != "faulted")
+    parts = []
+    if faulted:
+        parts.append("%d faulted (%s)" % (len(faulted), ", ".join(faulted[:5])))
+    if degraded:
+        parts.append(
+            "%d degraded, single-copy (%s)" % (len(degraded), ", ".join(degraded[:5]))
+        )
+    _longhorn_degraded_streak, ok, msg = down_streak(
+        _longhorn_degraded_streak,
+        LONGHORN_CONSECUTIVE,
+        "of %d volume(s): %s" % (int(volumes), "; ".join(parts)),
+        "drain/reboot grace",
+    )
+    return ok, msg
+
+
 CHECKS = [
     ("disk", _env("KUMA_PUSH_DISK", ""), check_disk),
     ("cert", _env("KUMA_PUSH_CERT", ""), check_cert),
@@ -2676,6 +2751,11 @@ CHECKS = [
     ("b2_storage", _env("KUMA_PUSH_B2_STORAGE", ""), check_b2_storage),
     ("k8s_workloads", _env("KUMA_PUSH_K8S_WORKLOADS", ""), check_k8s_workloads),
     ("cluster_targets", _env("KUMA_PUSH_CLUSTER_TARGETS", ""), check_cluster_targets),
+    (
+        "longhorn_volumes",
+        _env("KUMA_PUSH_LONGHORN_VOLUMES", ""),
+        check_longhorn_volumes,
+    ),
 ]
 
 # Checks that query Prometheus. A single Prometheus outage would fail every one of them at once
@@ -2695,6 +2775,10 @@ PROM_DEPENDENT = frozenset(
         "traefik5xx",
         "ups",  # queries HA's Prometheus-scraped UPS battery sensors
         "promtail_dropped",  # increase(promtail_dropped_entries_total) instant query
+        # Reads longhorn_volume_robustness. Its own absent-metric branch pages when the
+        # longhorn scrape job dies, so it must be suppressed when PROMETHEUS itself is the
+        # cause — otherwise a Prometheus outage pages twice for one root cause.
+        "longhorn_volumes",
     }
 )
 
