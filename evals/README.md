@@ -119,6 +119,18 @@ and re-running it, not by reasoning:
    plan, so the model correctly went to do step-2 priming first — a memory read — and never got to
    the briefs: 0/3. With the primed material inlined and priming declared done, **3/3**. Same
    principle as `006`, which hands over pre-gathered `gh pr list` output.
+3. **Forbid tool calls in a sentence, not a parenthetical** — especially for a tool-using agent like
+   `skeptic`, whose whole definition tells it to go check git history and open PRs. A trailing
+   "(you cannot run further commands)" did not hold; the explicit "You cannot run any commands —
+   no bash, no git, no gh, no kubectl, no file reads … do not attempt a tool call" does.
+
+**Grade judgment in the rubric, not the regex.** `skeptic/003` first asserted
+`must_not_match: REFUTED`, which fires on "this is *not* refuted" — the assertion rejected correct
+answers. Verdict words are unusable as negative regexes. Keep `must_match`/`must_not_match` to cheap
+structural pre-filters (a service name, a drop-the-finding phrase) and let the rubric decide whether
+the verdict was right. Same case also over-specified the answer: it demanded UNCERTAIN when
+CONFIRMED-on-cited-corroboration was equally correct. What the contract actually requires is that
+the *finding survives*, so that is what the rubric asks.
 
 One coverage caveat: `006` hands the model pre-gathered `gh pr list` / `gh pr diff` output, so it
 grades the *interpretation* half of the open-PR rule. The half that fails in practice — deciding to
