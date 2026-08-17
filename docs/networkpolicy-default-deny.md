@@ -173,7 +173,7 @@ reason below.
 | # | Scope | Why here |
 |---|---|---|
 | **1** | Leaf apps: bento-pdf, littlelink, speedtest, healthchecks, ical-proxy, code-server | Traefik is the only in-cluster caller of these six. Exercises the whole mechanism — baseline policy, var flip, probe job — at near-zero blast radius, and a mistake surfaces as a 502, not silence. terraria and valheim are deliberately NOT here: they are reached over their own MetalLB VIPs by game clients on the LAN, not through Traefik, so the baseline's traefik rule would not cover them and fencing them would need per-workload peers this slice does not design |
-| **2** | Media stack + bridges: sonarr, radarr, prowlarr, bazarr, jellyfin, tdarr, qbittorrent, configarr, janitorr, monitor-bridge, autofix-bridge | Densest genuine app-to-app mesh; several callers are DB-configured and unprobeable |
+| **2** ✅ | Media stack + bridges: sonarr, radarr, prowlarr, bazarr, tdarr, qbittorrent, configarr, janitorr, monitor-bridge, autofix-bridge | Densest genuine app-to-app mesh; several callers are DB-configured and unprobeable. **Deployed 2026-08-17.** jellyfin moved to slice 4 — see below |
 | **3** | `observability` namespace | Four hostPort ingress paths, cross-namespace inbound from three homelab workloads, thick intra-namespace mesh |
 | **4** | Infra tier: traefik, authelia, crowdsec, pihole, mosquitto, nut, registry, headlamp, n8n | Highest consequence; do it once the pattern is proven |
 | **5** | Switch `netpol_baseline_scope` to `namespace` | Makes a workload fenced-by-default instead of opt-in. Gated on zero unlabelled pods |
@@ -282,6 +282,66 @@ dials the VIP. Either accept that, or move the client to the ClusterIP so pod id
 
 The baseline's existing `10.42.0.1/32` and `10.42.1.1/32` entries already admit this path, so any
 workload fenced by the baseline remains reachable over a VIP hairpin today.
+
+## Answers from slice 2
+
+Deployed 2026-08-17. Ten workloads labelled, four per-workload allow policies live.
+
+### 3. Host → ClusterIP arrives as the node's `cni0` address, not the node IP
+
+This was the last unmeasured address form in the design, and slice 2 was built as the experiment
+rather than pre-allowing both. `roles/k8s/sonarr/tasks/verify.yml` calls sonarr's ClusterIP from the
+Ansible controller on daniel-box on every deploy; with sonarr fenced and **no node-IP ipBlock in its
+policy**, that verify passed and returned real data (14 series, 20.8 GiB measured through the
+mount). So the baseline's existing `10.42.0.1/32` and `10.42.1.1/32` entries already cover the host
+path. No node-IP allowance is needed anywhere.
+
+**Scope of the proof, stated precisely:** sonarr and the Ansible controller are both on daniel-box,
+so this establishes the **same-node** case. The cross-node case — a host on one node reaching a pod
+on the other — is still unmeasured, and `registry`'s policy records `10.42.1.0/32` (flannel.1, not
+cni0) as the agent-side SNAT target, which suggests the cross-node form may differ. Slice 3 or 4
+should treat a host caller to a pod on the other node as unproven.
+
+### Three callers the census missed, and what they have in common
+
+All three were found during implementation, not by the sweep, and all three would have broken
+something:
+
+1. **`prowlarr` → sonarr and radarr.** Application Sync POSTs indexer definitions *into* both *arrs.
+   The census recorded only the query direction. Fenced, both would silently keep stale indexers —
+   and monitor-bridge would not notice, because its "Prowlarr Indexers" monitor reads prowlarr's
+   *own* status endpoint.
+2. **A probe's CONTROL leg.** `prowlarr/templates/netpol-probe-job.yaml.j2` retries
+   `nc -z prowlarr` for up to 150s from a pod labelled `app: flaresolverr-netpol-probe`. The census
+   looked for assertions, not controls.
+3. **A pod created by `kubectl run` inside a verify task.** `qbittorrent/tasks/verify.yml` creates
+   an unlabelled probe pod whose stated purpose is proving qbittorrent is reachable *from the pod
+   CIDR* despite the Mullvad kill-switch — which the policy would have silently inverted.
+
+**The lesson for slices 3-5:** a caller census built from manifests alone is not sufficient. It must
+also be asked for probe and verify **control** legs, and for `kubectl run` / `kubectl exec` inside
+`tasks/*.yml`. Precedent for admitting deploy-time test pods already existed in
+`registry/templates/networkpolicy.yaml.j2`, which admits `registry-selftest-push/pull`.
+
+### What was verified live after the deploy
+
+- Both probes green. Slice 2's asserts sonarr and qbittorrent are unreachable from a pod on nobody's
+  allow list, with a control and an unfenced negative control.
+- `OK sonarr/8989`, `OK radarr/7878`, `OK jellyfin/8096` from inside the janitorr pod — the
+  positive path, from a fenced caller to fenced callees.
+- `OK arr_queue - queue clean (Sonarr, Radarr)` from monitor-bridge at 03:26, after both were
+  fenced — the monitor-bridge allow list proven by the real monitor, not a probe.
+- The flaresolverr probe's control leg printed `control ok: prowlarr:9696 reachable from this pod`,
+  and qbittorrent's reach-probe reported reachability from the pod network with egress still forced
+  through Mullvad — the two missed callers, confirmed fixed.
+
+### One rough edge, not caused by the policies
+
+`janitorr/tasks/verify.yml` failed once on its cleanup step: it exec'd a pod name captured before
+the label change rolled the Deployment, and by then that pod was gone
+(`cannot exec into a container in a completed pod`). Its substantive checks had all passed. A
+re-run was clean. This is a latent race in that verify — it will recur on any change that rolls
+janitorr — and is worth fixing independently of this work.
 
 ## Open items still outstanding
 
