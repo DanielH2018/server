@@ -19,6 +19,22 @@
 # entire backup coverage for the volumes they belonged to. A cleanup that reads as hygiene can
 # be the deletion of the last copy, so the floor below is the point of the script, not a
 # refinement of it.
+#
+# THE OTHER FLOOR IS COST, AND THE DRY RUN DOES NOT SHOW IT. Every deletion here goes through
+# Longhorn, and each Longhorn backup deletion walks the volume's whole block tree — one delimited
+# ListObjects per block directory, about 1.28 LISTs per stored block (backupstore
+# deltablock.go:1496-1510). LIST is a Backblaze Class C transaction against a free-tier 2,500/day.
+# Measured 2026-08-17: SEVEN reapable strays across three volumes (871, 333 and 42 blocks) came to
+# ~3,640 Class C — 1.5x the entire daily cap. Reaping the debris left by a transaction-cap event
+# is itself capable of causing one, and the list below reads as cheap because it is short.
+#
+# Before --apply: multiply each volume's prune cost by the number of its backups being removed and
+# check that against the day's remaining headroom (`probe.py b2-budget` prints the per-volume
+# figure). If it does not fit, do NOT spread this over several days — delete the objects straight
+# against the B2 API instead, where deletes are Class A and unmetered, then force one target sync
+# (`backuptarget.spec.syncRequestedAt`) to drop the now-dangling Backup CRs. That sync is cheap and
+# walks no block trees: BackupVolumeController labels each vanished backup
+# delete-custom-resource-only before removing the CR (bvc.go:384).
 set -uo pipefail
 
 KUBECTL="k3s kubectl -n longhorn-system"
@@ -186,6 +202,12 @@ delete_bucket() {
 
 if (( APPLY == 0 && APPLY_DELETED_VOLUMES == 0 )); then
   echo "dry run — ${COUNT} stray(s) and ${ORPHAN_COUNT} orphan(s) would be deleted."
+  echo
+  echo "  COST: each deletion walks that volume's whole block tree — roughly 1.28 Class C"
+  echo "  transactions per stored block, against a 2,500/day free-tier cap. Seven strays"
+  echo "  measured ~3,640 Class C on 2026-08-17, 1.5x the daily cap. A short list is not a"
+  echo "  cheap one. Check 'probe.py b2-budget' for the per-volume figure before --apply."
+  echo
   echo "  --apply                  deletes the reapable strays"
   echo "  --apply-deleted-volumes  deletes backups whose volume no longer exists"
   exit 0
