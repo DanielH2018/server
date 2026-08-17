@@ -202,6 +202,72 @@ def loki_query_url(base, logql, limit, start=None, end=None, direction=None):
     return f"{base}/loki/api/v1/query_range?" + urlencode(params)
 
 
+# B2 charges per transaction class and reports the totals nowhere an API can reach: the Native
+# API has no usage operation, and the per-class Usage Reports are Partner-tier. Backup spend is
+# recoverable from Longhorn's logs (see BACKUP_BLOCKS_RE), but MAINTENANCE spend — the drains,
+# inventories and verification listings an operator runs by hand — leaves no trace at all once
+# the terminal scrolls. On 2026-08-17 that was most of a 2,000-transaction day and had to be
+# reconstructed from memory, badly. Anything here that talks to B2 records what it spent, so the
+# controllable half of the bill stops being guesswork.
+B2_LEDGER_DIR = os.path.expanduser("~/.local/state/homelab/b2-ledger")
+
+
+def b2_ledger_path(day=None):
+    """One TSV per UTC day — the day B2's own counters reset on, not the local day."""
+    day = day or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return os.path.join(B2_LEDGER_DIR, f"{day}.tsv")
+
+
+def record_b2_spend(tool, class_a=0, class_b=0, class_c=0, note="", _now=None):
+    """Append one line of spend. Never raises: a ledger failure must not fail the real work."""
+    try:
+        os.makedirs(B2_LEDGER_DIR, exist_ok=True)
+        stamp = (_now or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        line = "\t".join(
+            [
+                stamp,
+                tool,
+                str(class_a),
+                str(class_b),
+                str(class_c),
+                note.replace("\t", " "),
+            ]
+        )
+        with open(b2_ledger_path(), "a") as fh:
+            fh.write(line + "\n")
+    except OSError:
+        pass
+
+
+def parse_b2_ledger(lines):
+    """TSV lines -> per-tool {class_a, class_b, class_c, runs}. Malformed lines are skipped."""
+    tools = {}
+    for line in lines:
+        parts = line.rstrip("\n").split("\t")
+        if len(parts) < 5:
+            continue
+        try:
+            a, b, c = int(parts[2]), int(parts[3]), int(parts[4])
+        except ValueError:
+            continue
+        entry = tools.setdefault(
+            parts[1], {"runs": 0, "class_a": 0, "class_b": 0, "class_c": 0}
+        )
+        entry["runs"] += 1
+        entry["class_a"] += a
+        entry["class_b"] += b
+        entry["class_c"] += c
+    return tools
+
+
+def read_b2_ledger(day=None):
+    try:
+        with open(b2_ledger_path(day)) as fh:
+            return parse_b2_ledger(fh.readlines())
+    except OSError:
+        return {}
+
+
 _DURATION_UNITS = {"m": 60, "h": 3600, "d": 86400, "w": 604800}
 
 
@@ -254,28 +320,66 @@ def parse_backup_spend(rows):
     return vols
 
 
-def format_backup_spend(vols, window, names=None):
-    """Render measured Class B spend. Never exits non-zero: this is a meter, not a gate."""
+def format_backup_spend(vols, window, names=None, ledger=None):
+    """Render measured backup spend alongside recorded maintenance spend.
+
+    Never exits non-zero: this is a meter, not a gate. The two halves are printed separately and
+    deliberately NOT summed — the backup figure spans --since while the ledger covers the UTC day
+    B2's counters reset on, so a combined total would match neither window.
+    """
     names = names or {}
-    if not vols:
-        return f"no backups logged in the last {window} — widen --since, or nothing ran"
-    rows = [
-        "%-24s %8s %8s %10s" % ("PVC", "BACKUPS", "BLOCKS", "UPLOADED"),
-    ]
-    for vol in sorted(vols, key=lambda k: -vols[k]["blocks"]):
-        v = vols[vol]
+    rows = []
+    if vols:
+        rows.append("%-24s %8s %8s %10s" % ("PVC", "BACKUPS", "BLOCKS", "UPLOADED"))
+        for vol in sorted(vols, key=lambda k: -vols[k]["blocks"]):
+            v = vols[vol]
+            rows.append(
+                "%-24s %8d %8d %10d"
+                % (names.get(vol, vol)[:24], v["backups"], v["blocks"], v["new_blocks"])
+            )
+        rows.append("")
         rows.append(
-            "%-24s %8d %8d %10d"
-            % (names.get(vol, vol)[:24], v["backups"], v["blocks"], v["new_blocks"])
+            "backups over %s: %d Class B measured, %d blocks uploaded (Class A, unmetered)"
+            % (
+                window,
+                sum(v["blocks"] for v in vols.values()),
+                sum(v["new_blocks"] for v in vols.values()),
+            )
         )
-    total_blocks = sum(v["blocks"] for v in vols.values())
-    total_new = sum(v["new_blocks"] for v in vols.values())
+    else:
+        rows.append(
+            f"no backups logged in the last {window} — widen --since, or nothing ran"
+        )
+
+    ledger = ledger or {}
+    rows.append("")
+    if ledger:
+        rows.append("maintenance recorded today (UTC), from the ledger:")
+        for tool in sorted(ledger, key=lambda k: -ledger[k]["class_c"]):
+            t = ledger[tool]
+            rows.append(
+                "  %-22s %3d run(s) %6d Class B %6d Class C"
+                % (tool[:22], t["runs"], t["class_b"], t["class_c"])
+            )
+        rows.append(
+            "  %-22s %10d Class B %6d Class C"
+            % (
+                "TOTAL",
+                sum(t["class_b"] for t in ledger.values()),
+                sum(t["class_c"] for t in ledger.values()),
+            )
+        )
+    else:
+        rows.append(
+            "no maintenance recorded today — nothing has written the ledger yet"
+        )
+
     rows.append("")
     rows.append(
-        "measured Class B over %s: %d (one HeadObject per delta block, cap 2500/day)"
-        % (window, total_blocks)
+        "Still unrecorded: Longhorn's own metadata reads (Backup-CR pulls, target syncs) and "
+        "the monitor's B2 probes. B2 publishes no counter to reconcile against, so the console's "
+        "Caps & Alerts page remains the only ground truth."
     )
-    rows.append("of which uploaded: %d blocks (Class A — unmetered)" % total_new)
     return "\n".join(rows)
 
 
@@ -1171,6 +1275,18 @@ def _build_parser():
     )
     b2s.add_argument("--since", default="24h", help="window, e.g. 30m/6h/2d/1w")
     b2s.add_argument("--limit", type=int, default=1000)
+    b2r = sub.add_parser(
+        "b2-record",
+        help="record a tool's B2 transaction spend in today's ledger, so maintenance "
+        "spend stops being reconstructed from memory",
+    )
+    b2r.add_argument(
+        "--tool", required=True, help="what spent them, e.g. drain, inventory"
+    )
+    b2r.add_argument("--class-a", type=int, default=0, dest="class_a")
+    b2r.add_argument("--class-b", type=int, default=0, dest="class_b")
+    b2r.add_argument("--class-c", type=int, default=0, dest="class_c")
+    b2r.add_argument("--note", default="")
     pi = sub.add_parser("pi", help="Pi glances API")
     pi.add_argument("subpath", help="e.g. fs, quicklook, mem, cpu")
     ct = sub.add_parser(
@@ -1736,6 +1852,8 @@ def main(argv=None):
         return run_b2_budget(ns)
     if ns.cmd == "b2-spend":
         return run_b2_spend(ns)
+    if ns.cmd == "b2-record":
+        return run_b2_record(ns)
     if ns.cmd == "ha-state":
         return run_ha_state(ns)
     if ns.cmd == "monitors":
@@ -1811,7 +1929,9 @@ def b2_list_buckets_config(api_url, token, account_id, bucket_name):
     return f'url = "{url}"\nheader = "Authorization: {token}"\n'
 
 
-def b2_longhorn_lines(key_id, app_key, bucket, prefix=LONGHORN_PREFIX, _call=b2_curl):
+def b2_longhorn_lines(
+    key_id, app_key, bucket, prefix=LONGHORN_PREFIX, _call=b2_curl, _stats=None
+):
     """List the Longhorn prefix, returning `path;size` lines.
 
     The shape is rclone's `lsf --format ps --separator ;` verbatim, and the paths are made
@@ -1839,8 +1959,10 @@ def b2_longhorn_lines(key_id, app_key, bucket, prefix=LONGHORN_PREFIX, _call=b2_
 
     strip = prefix.rstrip("/") + "/"
     lines, start = [], None
+    pages = 0
     while True:
         page = _call(b2_list_files_config(api_url, token, bucket_id, prefix, start))
+        pages += 1
         for entry in page.get("files", []):
             name = entry.get("fileName", "")
             if name.startswith(strip):
@@ -1848,6 +1970,12 @@ def b2_longhorn_lines(key_id, app_key, bucket, prefix=LONGHORN_PREFIX, _call=b2_
             lines.append(f"{name};{entry.get('contentLength', 0)}")
         start = page.get("nextFileName")
         if not start:
+            # Each page is one b2_list_file_names, and the authorize that preceded them is
+            # itself billable — both Class C. Reported through an out-param so the existing
+            # callers and their tests keep the plain list return.
+            if _stats is not None:
+                _stats["class_c"] = pages + 1
+                _stats["pages"] = pages
             return lines
 
 
@@ -2095,7 +2223,27 @@ def run_b2_spend(ns):
         print(" ".join(curl_argv(url, resolve=pin)))
         return 0
     rows = _rows_from_loki(json.loads(fetch(url, resolve=pin)))
-    print(format_backup_spend(parse_backup_spend(rows), ns.since, pvc_names()))
+    # Reads Loki, not B2 — nothing to record for this command itself.
+    print(
+        format_backup_spend(
+            parse_backup_spend(rows), ns.since, pvc_names(), read_b2_ledger()
+        )
+    )
+    return 0
+
+
+def run_b2_record(ns):
+    """Record a tool's B2 spend in today's ledger.
+
+    Exists so scripts outside this repo — the one-shot drains and inventories an operator writes
+    during an incident — can contribute to the same tally instead of scrolling past in a terminal
+    and being reconstructed from memory afterwards.
+    """
+    record_b2_spend(ns.tool, ns.class_a, ns.class_b, ns.class_c, ns.note)
+    print(
+        "recorded %s: %d Class A, %d Class B, %d Class C -> %s"
+        % (ns.tool, ns.class_a, ns.class_b, ns.class_c, b2_ledger_path())
+    )
     return 0
 
 
@@ -2112,11 +2260,18 @@ def run_b2_budget(ns):
         )
         return 0
 
+    stats = {}
     lines = b2_longhorn_lines(
         sops_extract("kopia_b2_key_id"),
         sops_extract("kopia_b2_application_key"),
         ns.bucket or sops_extract("kopia_b2_bucket"),
         ns.prefix,
+        _stats=stats,
+    )
+    record_b2_spend(
+        "b2-budget",
+        class_c=stats.get("class_c", 0),
+        note=f"{stats.get('pages', 0)} pages",
     )
     text, code = format_backup_budget(
         parse_backup_budget(lines), volume_shard_labels(), pvc_names(), ns.retain
@@ -2145,11 +2300,18 @@ def run_b2_longhorn(ns):
         return 0
 
     bucket = ns.bucket or sops_extract("kopia_b2_bucket")
+    stats = {}
     lines = b2_longhorn_lines(
         sops_extract("kopia_b2_key_id"),
         sops_extract("kopia_b2_application_key"),
         bucket,
         ns.prefix,
+        _stats=stats,
+    )
+    record_b2_spend(
+        "b2-longhorn",
+        class_c=stats.get("class_c", 0),
+        note=f"{stats.get('pages', 0)} pages",
     )
     text, code = format_longhorn_summary(parse_longhorn_listing(lines))
     print(text)
