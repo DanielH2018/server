@@ -9,15 +9,21 @@
 #     so `Namespace`, `ns` or `all` all fall through to the slice-1 label selector. At slice 5
 #     that means the whole-namespace default-deny silently does not happen while every check
 #     passes.
+#   netpol_baseline_obs_enforced — the observability twin of netpol_baseline_enforced, same
+#     `| bool` trap on both the template's `if` and the probe tasks' `when:` (slice 3's own probe
+#     work, task 6). A typo here is silent in the same direction: allow-all renders, the probe
+#     skips, and the deploy reports green while observability is unfenced.
 - name: Check the netpol-baseline levers
   ansible.builtin.assert:
     that:
       - netpol_baseline_enforced | string | lower in ['true', 'false']
       - netpol_baseline_scope in ['label', 'namespace']
+      - netpol_baseline_obs_enforced | string | lower in ['true', 'false']
     fail_msg: >-
       netpol-baseline: netpol_baseline_enforced must be true or false (got
-      {{ netpol_baseline_enforced | to_json }}) and netpol_baseline_scope must be 'label' or
-      'namespace' (got {{ netpol_baseline_scope | to_json }}).
+      {{ netpol_baseline_enforced | to_json }}), netpol_baseline_scope must be 'label' or
+      'namespace' (got {{ netpol_baseline_scope | to_json }}), and netpol_baseline_obs_enforced
+      must be true or false (got {{ netpol_baseline_obs_enforced | to_json }}).
     quiet: true
 
 # No Deployment, so manifests_rollout is empty — there is nothing to wait on. The policy takes
