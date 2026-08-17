@@ -2,6 +2,7 @@
 name: security-review
 description: Performs a focused security audit on Ansible playbooks, Kubernetes manifest templates, Docker Compose templates, and configuration files in this homelab. Use this agent when reviewing changes before a deploy, auditing a specific service, or checking for exposed secrets and misconfigurations. Runs read-only — makes no changes to files.
 model: opus
+effort: medium
 tools: Read, Grep, Glob
 ---
 

@@ -21,18 +21,22 @@ agent:
 
 | Area | Agent | Size |
 |---|---|---|
-| Security & hardening | `security-review` | opus (frontmatter) |
+| Security & hardening | `security-review` | opus, effort medium |
 | Network & reverse proxy | `homelab-network-diagnostician` | sonnet (frontmatter) |
-| Backups & observability | `homelab-backup-observability-reviewer` | opus (frontmatter) |
-| CI/CD & GitOps | `homelab-cicd-reviewer` | opus (frontmatter) |
+| Backups & observability | `homelab-backup-observability-reviewer` | opus, effort medium |
+| CI/CD & GitOps | `homelab-cicd-reviewer` | opus, effort medium |
 | Media & container infra | `homelab-container-reviewer` | sonnet (frontmatter) |
 | Docs vs live-config drift | `homelab-docs-freshness-reviewer` | sonnet (frontmatter) |
 
 **Sizing:** reviewer tiers are pinned in each agent's frontmatter so a routine review never
 silently rides the session model. Judgment-heavy domains (security, backup/alert-chain, GitOps)
 run opus; pattern/consistency scans (container hygiene, docs-vs-config drift) and live-wiring triage
-(network) run sonnet. Only when the operator asks for a **deep audit** should you override
-per-dispatch with a bigger `model` (e.g. the session model). The docs-freshness reviewer is
+(network) run sonnet. **The three opus finders also pin `effort: medium`** — opus at a high effort
+inherited from the session turns a routine six-domain review into an expensive one, and these
+reviewers read templates and cite `file:line` rather than solving anything hard. The sonnet
+reviewers pin no effort and inherit the session's. Only when the operator asks for a **deep audit**
+should you override per-dispatch with a bigger `model` (e.g. the session model); raising effort
+needs an edit to the agent, since the Agent tool takes a `model` override but no effort override. The docs-freshness reviewer is
 report-only by nature — its findings are stale-doc edits for the operator, never infra changes.
 
 ## 2. Prime from memory FIRST (the signal-booster — do this before dispatching)

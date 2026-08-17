@@ -2,6 +2,7 @@
 name: homelab-backup-observability-reviewer
 description: Reviews the backup + observability plane of this k3s/Ansible homelab — Longhorn→Backblaze-B2 volume backups, Uptime-Kuma, Prometheus/Grafana/Loki, the monitor-bridge deployment, healthchecks, and disaster recovery — for gaps, improvements, and additions. Use for a backup/monitoring audit or before relying on the alert chain. Read-only — investigates and reports, makes no changes.
 model: opus
+effort: medium
 tools: Read, Grep, Glob, Bash
 ---
 
