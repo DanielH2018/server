@@ -2,8 +2,20 @@
 # Slice 2 of the ingress default-deny. NOTE: this role's OTHER policy file, networkpolicy.yaml.j2,
 # fences flaresolverr and is unrelated to this one. Both are applied.
 #
-# TRAEFIK IS LISTED HERE DELIBERATELY — see the rollout hazard in the slice-2 plan: this policy
-# selects `app: prowlarr`, which the pre-rollout pod carries without the baseline label.
+# This rule is PORT-SCOPED, and for the callers below that scoping is the whole grant: the baseline
+# admits none of monitor-bridge, sonarr, radarr or flaresolverr-netpol-probe, so they reach prowlarr
+# only through this rule and only on this one port.
+#
+# TRAEFIK IS LISTED HERE DELIBERATELY — do not remove it as redundant — but be accurate about why.
+# The baseline admits traefik to every baseline-labelled pod on ANY port, and policies are
+# additive, so while prowlarr carries that label the union is the same with or without this entry.
+# It was load-bearing for the deploy that INTRODUCED the label: the old pod carried `app: prowlarr`
+# without `netpol-baseline: enforced`, so this policy was the only one selecting it and the UI
+# would have 502'd for the length of that rollout (the "rollout hazard" section of the slice-2
+# plan). That window is closed — every pod created from here on carries both labels. It stays
+# because this policy then states its own complete caller set rather than depending on the baseline
+# continuing to admit traefik on all ports: if that baseline rule is ever port-scoped, or this pod
+# template loses the label, this line is what keeps the UI up.
 #
 # sonarr and radarr reach prowlarr by bare name from their own application databases — the indexer
 # definitions live on their PVCs, not in this repo. Recorded in

@@ -6,7 +6,20 @@
 # databases were seeded with under Docker. The Service name differs; the pod is the same, so a
 # podSelector on `app: qbittorrent` covers it. The PORT is the WebUI port, not container_item.port.
 #
-# TRAEFIK IS LISTED HERE DELIBERATELY — see the rollout hazard in the slice-2 plan.
+# This rule is PORT-SCOPED, and for the callers below that scoping is the whole grant: the baseline
+# admits neither sonarr, radarr nor qbittorrent-reach-probe, so they reach this pod only through
+# this rule and only on the WebUI port.
+#
+# TRAEFIK IS LISTED HERE DELIBERATELY — do not remove it as redundant — but be accurate about why.
+# The baseline admits traefik to every baseline-labelled pod on ANY port, and policies are
+# additive, so while qbittorrent carries that label the union is the same with or without this
+# entry. It was load-bearing for the deploy that INTRODUCED the label: the old pod carried
+# `app: qbittorrent` without `netpol-baseline: enforced`, so this policy was the only one selecting
+# it and the UI would have 502'd for the length of that rollout (the "rollout hazard" section of
+# the slice-2 plan). That window is closed — every pod created from here on carries both labels.
+# It stays because this policy then states its own complete caller set rather than depending on the
+# baseline continuing to admit traefik on all ports: if that baseline rule is ever port-scoped, or
+# this pod template loses the label, this line is what keeps the UI up.
 #
 # qbittorrent-reach-probe (tasks/verify.yml, "Reach the WebUI from a pod, as Traefik does") is
 # load-bearing here, not incidental: it exists to prove qbittorrent is reachable from the POD

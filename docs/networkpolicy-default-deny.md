@@ -1,9 +1,9 @@
 # Default-deny ingress NetworkPolicies
 
-Design doc. Written 2026-08-16. Status: **slice 1 implemented and inert; not yet activated.**
-The `netpol-baseline` role, the six labelled apps and the probe job are all in the tree, but
-`netpol_baseline_enforced` is still `false` — the policy renders an allow-all body, so nothing
-is fenced. Turning it on is a separate deploy, and slices 2–5 are still design only.
+Design doc. Written 2026-08-16. Status: **slices 1 and 2 deployed and enforcing** (slice 2 on
+2026-08-17). `netpol_baseline_enforced` is `true`; sixteen roles carry `netpol-baseline: enforced`
+and four per-workload allow policies are live alongside the baseline. Slices 3–5 are still design
+only. See "Answers from slice 1" and "Answers from slice 2" below for what each deploy settled.
 
 ## The problem
 

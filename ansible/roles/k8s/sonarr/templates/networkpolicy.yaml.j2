@@ -4,10 +4,19 @@
 # sonarr's own callers, which are all direct pod → ClusterIP and therefore invisible to the
 # baseline.
 #
-# TRAEFIK IS LISTED HERE DELIBERATELY, even though the baseline also admits it. This policy selects
-# `app: sonarr`, which the OLD pod carries during a rollout — and that pod does not yet carry the
-# baseline label, so the baseline does not select it. Without this rule the sonarr UI 502s for the
-# length of every rollout. Do not remove it as redundant.
+# This rule is PORT-SCOPED, and for the callers below that scoping is the whole grant: the baseline
+# admits none of janitorr, configarr, monitor-bridge, autofix-bridge, bazarr or prowlarr, so they
+# reach sonarr only through this rule and only on this one port.
+#
+# TRAEFIK IS LISTED HERE DELIBERATELY — do not remove it as redundant — but be accurate about why.
+# The baseline admits traefik to every baseline-labelled pod on ANY port, and policies are
+# additive, so while sonarr carries that label the union is the same with or without this entry.
+# It was load-bearing for the deploy that INTRODUCED the label: the old pod carried `app: sonarr`
+# without `netpol-baseline: enforced`, so this policy was the only one selecting it and the UI
+# would have 502'd for the length of that rollout. That window is closed — every pod created from
+# here on carries both labels. It stays because this policy then states its own complete caller set
+# rather than depending on the baseline continuing to admit traefik on all ports: if that baseline
+# rule is ever port-scoped, or this pod template loses the label, this line is what keeps the UI up.
 #
 # bazarr addresses sonarr by BARE NAME from its own application database, not from any manifest
 # (roles/k8s/bazarr/defaults/main.yml). It is in this list because of that comment, not because a

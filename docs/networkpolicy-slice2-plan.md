@@ -407,7 +407,7 @@ fi
 echo "isolated: qbittorrent unreachable from an unlisted caller"
 ```
 
-If that `containers_list` lookup for sonarr's port is awkward in this role's context, hardcoding `8989` with a comment naming `host_vars/daniel-box.yml` as the source is acceptable — the probe is a test, and a wrong port here fails loudly rather than silently.
+If that `containers_list` lookup for sonarr's port is awkward in this role's context, hardcoding `8989` with a comment naming `host_vars/daniel-box.yml` as the source is acceptable. Note what that costs, because it is the opposite of the reassuring version: these assertions are **inverted**, so a wrong port makes `nc` fail, which is the PASS branch — a bad hardcoded port fails **silently green**, not loudly. Say so in the comment next to the number.
 
 - [ ] **Step 2: Wire it into the role**
 

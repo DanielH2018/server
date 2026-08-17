@@ -182,10 +182,12 @@
 # So the liveness check happens here, at the layer that already has cluster access, gating the
 # probe itself rather than living inside it.
 #
-# EndpointSlice, not `get endpoints`: EndpointSlice carries per-address readiness
-# (`.endpoints[].conditions.ready`), so a pod that exists but is failing its readiness probe is
-# correctly excluded. `get endpoints` only ever lists addresses already filtered to ready ones,
-# giving no way to distinguish "Service has zero ready backends" from "Service does not exist".
+# EndpointSlice, not `get endpoints`: EndpointSlice states readiness per address, as a condition on
+# each entry (`.endpoints[].conditions.ready`), so one jsonpath filter selects exactly the ready
+# backends. Endpoints can express readiness too — `subsets[].addresses` against
+# `subsets[].notReadyAddresses` — and rc alone already separates the two failure cases there
+# (`get endpoints <missing>` exits non-zero with NotFound; an existing Service with no ready
+# backends exits 0). So this is a choice about reading readiness directly, not the only way to ask.
 # Same query shape as roles/k8s/pihole/tasks/main.yml's own endpoint-readiness check.
 - name: Read sonarr's and qbittorrent's endpoint readiness
   tags: [deploy]

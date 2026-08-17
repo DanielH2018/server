@@ -70,8 +70,12 @@ spec:
               # This pod carries no app label that sonarr's policy admits. Its allowed callers are
               # traefik, janitorr, configarr, monitor-bridge, autofix-bridge, bazarr and prowlarr
               # (roles/k8s/sonarr/templates/networkpolicy.yaml.j2). Port hardcoded from
-              # ansible/inventory/host_vars/daniel-box.yml's sonarr containers_list entry — a
-              # wrong value here fails loudly (this probe) rather than silently.
+              # ansible/inventory/host_vars/daniel-box.yml's sonarr containers_list entry. A WRONG
+              # PORT HERE FAILS SILENTLY GREEN, not loudly: these assertions are inverted, so a
+              # port nothing listens on makes `nc` fail, which is the PASS branch. Re-check every
+              # hardcoded port below against its source whenever this file is touched — the
+              # readiness gate in tasks/main.yml checks the Service has ready backends, not that
+              # this number is the port they serve.
               if nc -w 5 -z sonarr 8989; then
                 echo "POLICY NOT ENFORCED: reached sonarr directly from a pod that is not one of"
                 echo "its allowed callers. Either netpol_baseline_enforced is false, or the label"
