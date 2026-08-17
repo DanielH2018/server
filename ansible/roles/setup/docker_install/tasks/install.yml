@@ -1,0 +1,218 @@
+---
+- name: Add packages
+  tags: [docker-repo]
+  ansible.builtin.apt:
+    name: "{{ packages }}"
+    state: present
+  vars:
+    packages:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+      - python3-debian  # required by ansible.builtin.deb822_repository (below)
+  become: true
+
+- name: Ensure the APT keyring directory exists
+  tags: [docker-repo]
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Install the Docker GPG key
+  tags: [docker-repo]
+  # Fetched ASCII-armored straight to its final path. apt reads armored keys referenced by
+  # Signed-By, so there is nothing to dearmor — this is what Docker's own install docs do.
+  #
+  # Deliberately NOT `gpg --dearmor` via `command`: that creates the file under root's
+  # umask, which the initial_setup role tightens to 027 EARLIER IN THE SAME PLAY. On a fresh
+  # host the keyring therefore landed 0640; apt fetches as the unprivileged `_apt` user,
+  # could not read it, and reported the repo as unsigned — failing the play at the cache
+  # refresh below, before Docker was ever installed (daniel-box, 2026-08-01). Existing hosts
+  # never showed it because their keyring predates the umask change and a `creates:` guard
+  # stopped it being regenerated. get_url sets the mode declaratively, so no umask can reach
+  # it. Same idiom as optimize_pi's azlux key.
+  #
+  # force defaults to false, so an existing key is not re-fetched every run; the fingerprint
+  # check below still runs every play, and now validates the exact file apt consumes.
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+
+- name: Verify the Docker GPG key fingerprint
+  tags: [docker-repo]
+  # Fail the play closed if the fetched key is NOT Docker's published signing key
+  # (fingerprint 9DC85822 9FC7DD38 854AE2D8 8D81803C 0EBFCD88, per docs.docker.com). Without
+  # this, a swapped/MITM'd key fetched over the network would be silently trusted by apt.
+  # Runs every play (changed_when: false), so a tampered key is also caught on re-runs, not
+  # just first install. gpg --show-keys reads armored input, so this needs no dearmored copy.
+  ansible.builtin.command:
+    cmd: gpg --show-keys --with-colons /etc/apt/keyrings/docker.asc
+  register: docker_install_key_fpr
+  changed_when: false
+  failed_when: "'9DC858229FC7DD38854AE2D88D81803C0EBFCD88' not in docker_install_key_fpr.stdout"
+
+- name: Add Docker APT repository
+  tags: [docker-repo]
+  # deb822 format (.sources) — the one-line "deb [...] ..." apt_repository form is deprecated.
+  # No update_cache here (deb822_repository lacks it); the next task refreshes the cache.
+  ansible.builtin.deb822_repository:
+    name: docker
+    types: [deb]
+    uris: https://download.docker.com/linux/ubuntu
+    suites: "{{ ansible_facts.distribution_release }}"
+    components: [stable]
+    architectures: ["{{ repo_arch }}"]
+    signed_by: /etc/apt/keyrings/docker.asc
+    state: present
+  vars:
+    # Map ansible_facts.architecture (x86_64) to dpkg terms (amd64)
+    repo_arch: "{{ 'amd64' if ansible_facts.architecture == 'x86_64' else 'arm64' }}"
+  become: true
+
+- name: Remove the deprecated one-line Docker APT source
+  tags: [docker-repo]
+  # deb822_repository writes docker.sources; drop any docker.list left by the old
+  # apt_repository task so apt doesn't see the repo "configured multiple times".
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/docker.list
+    state: absent
+  become: true
+
+- name: Remove the superseded dearmored keyring and its download artefact
+  tags: [docker-repo]
+  # Runs AFTER deb822_repository has repointed Signed-By at the .asc, so apt is never left
+  # referencing a keyring that no longer exists. On a host provisioned before this change
+  # the old file is the 0640 one that broke the cache refresh; leaving it around invites a
+  # future Signed-By pointing back at an unreadable key.
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/share/keyrings/docker-archive-keyring.gpg
+    - /tmp/docker.gpg
+  become: true
+
+- name: Update apt-get repo and cache
+  tags: [docker-repo]
+  ansible.builtin.apt:
+    upgrade: true
+    update_cache: true
+    force_apt_get: true
+  become: true
+
+- name: Install Docker
+  tags: [docker-engine]
+  ansible.builtin.apt:
+    name: "{{ packages }}"
+    state: present
+  vars:
+    packages:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      # Compose v2 is the engine behind community.docker.docker_compose_v2 (our
+      # deploy module) and buildx backs its `build: always`. Declared explicitly
+      # so the dependency is reproducible and not left to docker-ce-cli Recommends
+      # (which apt marks auto-installed and could drop under a stricter apt config).
+      - docker-compose-plugin
+      - docker-buildx-plugin
+  become: true
+
+- name: Remove the deprecated linuxserver docker-compose v1 wrapper
+  tags: [docker-engine]
+  # Superseded by docker-compose-plugin (`docker compose`). The old run.sh wrapper
+  # shipped EOL Compose v1.29 and was fetched from an unpinned GitHub master.
+  ansible.builtin.file:
+    path: /usr/local/bin/docker-compose
+    state: absent
+  become: true
+
+- name: Resolve the deploy user (for docker group membership)
+  tags: [docker-group]
+  # ansible_facts.env.USER is "root" under the play's become:true, but the user who runs
+  # docker (the become:false connecting user) is who needs docker-group membership.
+  ansible.builtin.command: id -un
+  become: false
+  changed_when: false
+  register: docker_install_deploy_user
+
+- name: Add user to docker group
+  tags: [docker-group]
+  ansible.builtin.user:
+    name: "{{ docker_install_deploy_user.stdout }}"
+    groups: docker
+    append: true
+  become: true
+
+- name: Configure Docker daemon (log limits + live-restore)
+  tags: [docker-daemon]
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    # live-restore keeps containers running across a daemon restart (e.g. a
+    # docker-ce package upgrade), so a Docker restart doesn't bounce all ~42
+    # containers. Safe on this single-node, non-swarm host.
+    #
+    # default-address-pools: Docker's built-in default (172.17-172.31/16 + 192.168.0.0/16
+    # as /20s) is nearly exhausted — all fourteen 172.x /16 slots are used and new isolation
+    # nets have started landing in the 192.168.0.0/16 fallback, which also squats on a common
+    # home-LAN range AND on the RFC1918 blocks Authelia/Unbound/Mullvad treat as trusted. Pin
+    # new-network allocation to 10.200.0.0/16 in /24s (256 nets): clear of the LAN (10.0.0.0/24),
+    # wg-easy (10.8.0.0/24), the Mullvad tunnel (10.64.0.0/10), and Docker's own 172.16/12 +
+    # 192.168/16 defaults. Only NEW `docker network create` calls draw from this; the ~20
+    # existing networks keep their current subnets across the restart (live-restore).
+    content: |
+      {
+        "log-driver": "json-file",
+        "log-opts": {
+          "max-size": "10m",
+          "max-file": "3"
+        },
+        "live-restore": true,
+        "default-address-pools": [
+          { "base": "10.200.0.0/16", "size": 24 }
+        ]
+      }
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+  register: docker_install_daemon_config
+
+- name: Restart Docker to apply daemon config # noqa no-handler
+  tags: [docker-daemon]
+  ansible.builtin.systemd:
+    name: docker
+    state: restarted
+  become: true
+  when: docker_install_daemon_config.changed
+
+- name: Create Docker networks
+  tags: [docker-networks]
+  community.docker.docker_network:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - "{{ docker_network }}"
+    - monitoring
+    - media
+    - apps
+    # homepage_private removed 2026-08-14 — retired with homepage at E3; recreating it
+    # here only masked the dangling reference in docker-proxy's compose.
+    - lifecycle  # private net: Watchtower + Autoheal <-> docker-proxy-lifecycle only
+    - codeserver # isolation net: code-server <-> docker-proxy-codeserver only (keeps the shared docker-proxy off apps — Security M1)
+    - kopia      # isolation net: Kopia <-> Traefik only (unauthenticated repo not reachable by other apps)
+    - terraria   # isolation net: Terraria <-> Traefik only (raw-TCP game port bypasses the CrowdSec chain; keeps a game-protocol exploit off the shared apps net)
+    # `ups` and `mqtt` retired 2026-08-09 with slice-5 B3: their memberships (NUT<->HA,
+    # Mosquitto<->z2m<->HA) all crossed to the cluster or the DOCKER-USER-locked LAN publish.
+    - portainer-agent  # isolation net (daniel-pi): single-member — keeps the root-equivalent Docker-socket agent off the Pi's shared proxy bridge (reached only via its host-published :9001)
+  become: true

@@ -98,6 +98,12 @@ fi
 # DaemonSets carry no ownerReference — they come from the Longhorn install, not from a staged
 # manifest, so every one of them would report as an orphan. longhorn-ui's IngressRoute is ours
 # and stays checked; the workloads behind it are not.
+#
+# longhorn-system:networkpolicy joined on 2026-08-16 with the networkpolicy kind. The upstream
+# Longhorn chart ships seven of them (backing-image-data-source, backing-image-manager,
+# instance-manager, longhorn-manager, longhorn-manager-allow-metrics-scrape,
+# longhorn-recovery-backend, longhorn-webhook), none carrying an ownerReference, and this repo
+# renders none of them — every one would report as an orphan on the first tick.
 EXCLUDED_NS_KINDS=(
   "kube-system:*"
   "metallb-system:*"
@@ -105,6 +111,7 @@ EXCLUDED_NS_KINDS=(
   "longhorn-system:service"
   "longhorn-system:deployment"
   "longhorn-system:daemonset"
+  "longhorn-system:networkpolicy"
 )
 
 ORPHANS=""
@@ -158,7 +165,16 @@ check_kind() {
 #                outside the owning role's manifests_files) has not been audited. A false red on
 #                the storage plane is the most expensive kind here; add it after the audit, not
 #                before.
-for KIND in ingressroute middleware service tlsoption deployment daemonset cronjob; do
+#
+# networkpolicy joined on 2026-08-16 with the default-deny ingress baseline
+# (docs/networkpolicy-default-deny.md). That design's central safety argument is that the
+# baseline template must always be rendered, because deleting it leaves the live policy
+# ENFORCING with nothing in the repo describing it — an orphan class whose failure mode is
+# silent connection refusals rather than a missing route, and which nothing watched until now.
+# The homelab namespace's four live policies (flaresolverr, headlamp, n8n-broker, registry) are
+# all staged by their own roles, so this kind starts green; longhorn-system's seven are excluded
+# above.
+for KIND in ingressroute middleware service tlsoption deployment daemonset cronjob networkpolicy; do
   check_kind "$KIND"
 done
 
@@ -198,7 +214,7 @@ check_deployed /opt/gitops-deploy/host_lib.py \
 
 if [[ -z "$ORPHANS" && -z "$DRIFTED" ]]; then
   STATUS=up
-  MSG="no orphaned routing (IngressRoute/Middleware/Service/TLSOption) or workload (Deployment/DaemonSet/CronJob) objects found; deployed scripts match the repo"
+  MSG="no orphaned routing (IngressRoute/Middleware/Service/TLSOption), workload (Deployment/DaemonSet/CronJob) or policy (NetworkPolicy) objects found; deployed scripts match the repo"
 else
   STATUS=down
   MSG=""

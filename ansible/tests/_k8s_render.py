@@ -29,11 +29,11 @@ from validate_k8s_manifests import (  # noqa: E402 — needs the path insert abo
     load_yaml,
     make_env,
     make_lookup,
+    register_ansible_filters,
     render_or_error,
     resolve_vars,
     role_defaults,
 )
-from toposort import filter_by_platform  # noqa: E402
 
 
 def rendered_docs():
@@ -53,7 +53,7 @@ def rendered_docs():
         ctx = {**base, **role_defaults(role, base), "container_item": entries[role]}
         env = make_env([role_dir / "templates", SHARED_TPL])
         env.globals["lookup"] = make_lookup(ctx)
-        env.filters["filter_by_platform"] = filter_by_platform
+        register_ansible_filters(env)
 
         for tpl in sorted(role_dir.glob("templates/*.j2")):
             if tpl.name.endswith(".sh.j2") or tpl.name.startswith("Dockerfile"):
