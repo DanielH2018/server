@@ -92,18 +92,27 @@ uv run python evals/trend.py report.json --no-write                 # report onl
 - **no-overflag** — an accepted trade-off *with its justifying comment embedded in the snippet*; the
   agent must respect the in-context justification and not flag it.
 - **skill** — hermetic synthesis contract (dedup / anti-merge / drop-settled / verdict-manifest /
-  fixed-on-an-unmerged-branch / HA-out-of-scope / prioritize / STOP) + one live smoke.
+  fixed-on-an-unmerged-branch / HA-out-of-scope / recurrence-not-discovery / collection-manifest /
+  skeptic-sizing / seam-surfaces / standing-list-foldback / prioritize / STOP) + one live smoke.
 
 Each `/homelab-review` case pins one contract paragraph the skill grew after a real misfire, so a
 paragraph and its case move together: `001` dedup vs `004` anti-merge are deliberately a matched
 pair — `001` alone rewards collapsing findings, and only `004` measures the counter-force.
 
-**Case-authoring lever, learned 2026-08-17:** keep synthetic `file:line` paths *plausible* against
-the real repo. In a non-hermetic run the two cases citing `ansible/roles/containers/<svc>` for
-services that do not exist on the Pi (`prometheus`, `webhook`, `app`) both provoked the agent into a
-live `ls` to check the path, after which it never wrote a report — they scored 1/3 while the cases
-using believable `roles/k8s/` paths scored 2/3–3/3 in the same sweep. An implausible path is an
-invitation to go verify it.
+**Two case-authoring rules, both learned the hard way on 2026-08-17.** In a non-hermetic run the
+agent still has tools, so anything that invites it to go *check* something ends the run with a tool
+call and no report — every `must_match` then reads as missing, including trivial ones. That
+signature means "no output", not "wrong answer". Both rules were confirmed by fixing a failing case
+and re-running it, not by reasoning:
+
+1. **Cite paths that exist.** `003` cited `roles/containers/app` (no such role — the Pi has five)
+   and scored 1/3 twice; repointed at the real `roles/containers/wg-easy` it scores **3/3**. Cases
+   citing retired roles (`k8s/kopia`) or roles that never existed (`k8s/longhorn` — the real files
+   are under `roles/setup/k3s/templates/`) were corrected for the same reason.
+2. **Pre-supply anything an earlier step would have gathered.** `012` asked for the step-3 dispatch
+   plan, so the model correctly went to do step-2 priming first — a memory read — and never got to
+   the briefs: 0/3. With the primed material inlined and priming declared done, **3/3**. Same
+   principle as `006`, which hands over pre-gathered `gh pr list` output.
 
 One coverage caveat: `006` hands the model pre-gathered `gh pr list` / `gh pr diff` output, so it
 grades the *interpretation* half of the open-PR rule. The half that fails in practice — deciding to

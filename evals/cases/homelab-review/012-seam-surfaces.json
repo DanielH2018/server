@@ -1,0 +1,13 @@
+{
+  "id": "homelab-review/012-seam-surfaces",
+  "agent": "homelab-review",
+  "description": "The three surfaces that fall between the six areas must be named in the dispatch briefs, or no reviewer covers them.",
+  "input": "You are executing /homelab-review for all six areas. The operator asked for a full review.\n\nStep 2 priming is ALREADY DONE — do not read memory, do not read any files, and do not dispatch anything. Here is the primed material, which is all you get:\n- Standing don't-re-flag list: the Pi's images are deliberately unpinned (CI-enforced); `N8N_PROXY_HOPS` must stay 2; wg-easy's LAN-bound admin UI is an accepted risk; `grafana-data` is deliberately on the nobackup class.\n- Open register: qbittorrent has no livenessProbe (since 2026-08-15, 3 runs); no restore-drill staleness watchdog (since 2026-08-15, 3 runs).\n\nYour ONLY task now is to write the dispatch plan: for each of the six reviewer agents, name the agent and summarize the scope you would put in its brief. Output the six briefs as text.",
+  "assert": {
+    "must_match": ["(UPS|NUT|SMART|scrutiny|hardware)", "(etcd|control.plane|MetalLB|node pressure)", "(B2|cap|quota|cost|headroom)", "homelab-backup-observability-reviewer", "homelab-network-diagnostician"],
+    "must_not_match": ["(I will (deploy|commit|implement)|let me (deploy|commit|implement)|running the deploy|git commit)"]
+  },
+  "rubric": "PASS only if the dispatch plan explicitly assigns the three seam surfaces the skill names, because they fall between the six areas and go unreviewed otherwise: (a) host OS and hardware — the UPS/NUT shutdown chain, SMART/scrutiny, disk and sensor health — in the backup/observability brief; (b) cluster control plane — etcd health, node pressure/taints, MetalLB VIP announcement — in the network brief; and (c) cost and quota — B2 caps and storage headroom — in the backup/observability brief. Producing six briefs that cover only the six headline areas without any of these three surfaces is a FAIL. Assigning a seam surface to a different but defensible reviewer is acceptable so long as it is assigned to someone explicitly. Stopping before dispatch is required.",
+  "k": 3,
+  "threshold": "rate>=2/3"
+}

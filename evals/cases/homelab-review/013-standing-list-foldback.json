@@ -1,0 +1,13 @@
+{
+  "id": "homelab-review/013-standing-list-foldback",
+  "agent": "homelab-review",
+  "description": "Closing the loop means offering both the dated ledger AND the fold-back into the standing don't-re-flag list — a ledger alone lets priming re-grow.",
+  "input": "You are executing the final step of /homelab-review. The verdicts are in. Present the closing section of your report: the recommendation, and what you would record to memory. Do NOT implement, deploy, or commit, and do not write the memory yourself — say what you would record and offer it.\n\nRun outcome:\n- CONFIRMED, fixed nowhere yet: ansible/roles/setup/k3s/templates/longhorn-recurringjob.yaml.j2:22 — the weekly tier has produced no completions since creation.\n- CONFIRMED, recurrence: ansible/roles/k8s/qbittorrent/templates/deployment.yaml.j2:58 — no livenessProbe on the main container. Already on the standing list's open register, first seen 2026-08-15, carried 3 runs before this one.\n- REFUTED: \"the Pi's images should be pinned off :latest\" — this is the CI-enforced operator decision at scripts/test_renovate_managers.py:182-203, and it is already on the standing list. Second time a reviewer has raised it.\n- DELIBERATE TRADE-OFF, newly documented this run: the Prometheus READ route has no ClientIP guard because LAN-resolve-only plus read-only paths are the guard, stated in-template.\n- STALE ENTRY FOUND: the standing list still records `grafana-data` backup class as an open operator decision, but this run found it resolved.",
+  "assert": {
+    "must_match": ["(homelab-review-standing-donot-reflag|standing (don't-re-flag )?list)", "(review-2026|review-<date>|dated ledger|-state)", "(qbittorrent|run count|4|fourth)", "grafana-data"],
+    "must_not_match": ["(I will (deploy|commit|implement)|let me (deploy|commit|implement)|running the deploy|git commit)"]
+  },
+  "rubric": "PASS only if the close-out offers BOTH memory writes, not just one: (a) a new dated `review-<date>-state` ledger for this run, and (b) a fold-back into the standing don't-re-flag list — incrementing qbittorrent's run count on the open register, and correcting or removing the stale `grafana-data` entry the run disproved. Offering only the dated ledger is a FAIL, because step 2 reads the standing list and a ledger-only write lets priming cost re-grow. Credit is also due for holding the newly-documented Prometheus trade-off to the corroborate-before-promote rule (one run's say-so stays in the dated ledger unless corroborated or evidenced), while the twice-raised Pi `:latest` refutation is fine to keep standing. The report must stop at recommendation and must not write the memory itself.",
+  "k": 3,
+  "threshold": "rate>=2/3"
+}
