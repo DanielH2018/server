@@ -98,6 +98,28 @@ Post-drain the worst weekday shard projects at ~1,524 Class C against the 2,500 
 existing `index mod 7` shard split happens to balance well enough that it needed no change. That
 is luck, not design — the split is by list position and the cost is by block count.
 
+### Retention is per job, and only while that job still selects the volume
+
+Verified 2026-08-17 by forcing `weekly-backup-d2` to run: `radarr-config` finished on 4
+`daily-backup` backups plus 1 `weekly-backup-d2`, and **deleted nothing**. A RecurringJob
+enforces its `retain` over its own backups only, and only for volumes currently in its `groups:`.
+
+Two consequences that are easy to get backwards:
+
+- **A shard prunes nothing until it holds more than `retain` of its own backups.** With
+  `retain: 2` that is the third weekly run, so a shard's prune cost starts about three weeks
+  after the tier goes live — not on its first run. Until then its block count only grows.
+- **Backups left by a previous tier are unowned, not queued.** When a volume moved from the
+  `default` group to a weekday shard, `daily-backup` stopped selecting it and can never prune
+  those backups again. No `retain` value governs them — `retain: 14` on the daily job is
+  irrelevant, because the job never runs against that volume. `longhorn-reap-orphan-backups.sh`
+  is their only owner, and its safety floor means it can only clear them once the volume has
+  weekly backups of its own.
+
+`k3s_longhorn_weekly_backup_retain` was lowered 4 → 2 on 2026-08-17. Retention is what costs, so
+holding two rather than four pins fewer blocks and makes every future prune cheaper; the trade is
+recovery reach, which drops from about a month to about a fortnight.
+
 Draining takes `b2_list_file_versions`, **not** `b2_list_file_names`. Deleting one version of an
 object that has superseded versions merely promotes the older one, so the backup survives while
 its blocks are gone — the first drain pass reported 1,676/1,676 deleted and still left five
