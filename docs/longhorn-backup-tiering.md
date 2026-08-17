@@ -1,5 +1,15 @@
 # Longhorn backup tiering — the kopiaignore rules, translated
 
+> **Current arming state (checked here, not restated in prose below):**
+> `k3s_longhorn_backup_armed` / `k3s_longhorn_r2_armed` in
+> [`ansible/roles/setup/k3s/defaults/main.yml`](../ansible/roles/setup/k3s/defaults/main.yml)
+> are the live source of truth, updated at every arm/disarm. As of 2026-08-16 ~20:45 UTC (the
+> seventh transaction-cap event) B2 (`default` target) is **disarmed** and staying that way
+> until spend fits the cap or the cap is raised — see
+> [`b2-transaction-cap-monitoring-gaps.md`](b2-transaction-cap-monitoring-gaps.md). R2 stays
+> armed independently, so only its four volumes (below) are actively backing up; the weekly
+> B2 shard schedule this doc describes is the *design*, not current behavior.
+
 2026-08-12, after the fifth B2 transaction-cap event. The operator declined to raise the
 caps, so usage had to fit them. Kopia's path-level ignore rules
 (`ansible/roles/containers/archive/kopia/templates/kopiaignore.j2`) encode two years of

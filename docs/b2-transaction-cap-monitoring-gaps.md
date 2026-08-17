@@ -1,12 +1,32 @@
 # B2 transaction cap, 2026-08-02 — what the monitoring did and didn't say
 
-> **Incident record — the open questions below are now closed (2026-08-14).** The recurring
-> driver was the two backup systems sharing one B2 account: Kopia's nightly plus Longhorn's.
-> That contention is gone — **Kopia was retired 2026-08-13 and its repo deleted 2026-08-14**,
-> leaving Longhorn as the sole B2 consumer (first green Longhorn-only nightly: 2026-08-13,
-> 10 volumes, 4.5 min). Read this for the *monitoring* lessons, which still apply; the
-> remediation steps that say `docker stop kopia` / `deploy.yml --tags kopia` on daniel-server
-> can no longer be run — that host has no Docker and no kopia. Current backup docs:
+> **Incident record — updated 2026-08-17; the "closed" claim below did not hold.** Kopia was
+> retired 2026-08-13 and its repo deleted 2026-08-14, leaving Longhorn as the sole B2 consumer
+> (first green Longhorn-only nightly: 2026-08-13, 10 volumes, 4.5 min) — that ruled out
+> Kopia/Longhorn contention as *the* driver, but not the cap itself: it blew twice more with
+> Longhorn as the only consumer left (sixth event 2026-08-15, a Class-B cap hit mid restore
+> drill; seventh event 2026-08-16 ~20:45 UTC, retry storm measured at 64-192 req/min). B2 is
+> **disarmed as of that seventh event** (`k3s_longhorn_backup_armed: false`) and, per the
+> variable's own comment, staying that way until spend is under the cap or the cap is raised —
+> explicitly not on a re-arm-on-a-timer.
+>
+> The retry-storm question left open below (§"Open at 2026-08-08 19:26 UTC" — cap-driven vs.
+> poll-interval-driven) is answered, adversely: commit `89508575` found `pollInterval` was
+> already `0s` on both targets when the seventh event hit, so *"the poll interval was never the
+> thing driving it."* Every failed `BackupVolume` reconcile requeues and a successful one
+> doesn't, so the loop is purely failure-driven and self-sustains once the cap is exhausted —
+> setting the poll interval to 0 never had a chance of stopping it. (What spends the cap in the
+> first place is being re-measured as this is written — treat the per-request rate figures
+> below as measured-at-the-time, not as a settled mechanism.)
+>
+> This doc's own recurrence log stops at the fourth event (2026-08-11); events five through
+> seven are not written up here. The live incident record is now the comment above
+> `k3s_longhorn_backup_armed` in
+> [`ansible/roles/setup/k3s/defaults/main.yml`](../ansible/roles/setup/k3s/defaults/main.yml)
+> (around lines 189-213), updated at every arm/disarm. Read this doc for the *monitoring*
+> lessons, which still apply; the remediation steps that say `docker stop kopia` /
+> `deploy.yml --tags kopia` on daniel-server can no longer be run — that host has no Docker and
+> no kopia (the kopia role is archived). Current backup docs:
 > [`longhorn-backup-tiering.md`](longhorn-backup-tiering.md) and
 > [`longhorn-disaster-recovery.md`](longhorn-disaster-recovery.md).
 
@@ -361,6 +381,15 @@ docker-fleet check's restart-policy scope instead of paging red for 11 hours.
 Re-arm after 00:00 UTC: `deploy.yml --tags kopia` on daniel-server (recreates the
 container), then re-set `backupTargetURL` to `s3://daniel-server-kopia@us-east-005/longhorn`
 and confirm the target goes `available: true` without a 403 before walking away.
+
+> Historical — the kopia role is now archived, so this exact step no longer applies: the
+> `kopia` tag matches no service and `./scripts/deploy.sh --tags kopia` exits 2. Today's
+> re-arm is purely declarative: flip
+> `k3s_longhorn_backup_armed: true` in
+> [`ansible/roles/setup/k3s/defaults/main.yml`](../ansible/roles/setup/k3s/defaults/main.yml),
+> then `uv run ansible-playbook ansible/k3s-bringup.yml --tags longhorn_backup` on daniel-box —
+> that task patches `backuptargets.longhorn.io default` directly; nothing kopia- or
+> Docker-related is involved.
 
 Operator decision now genuinely due (third cap event in nine days): raise the B2 daily caps
 so Longhorn + kopia can coexist on the account, or thin/serialise the backup set. Enrolment

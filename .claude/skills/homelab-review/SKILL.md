@@ -102,10 +102,13 @@ parallel message — whose ONLY job is to try to **refute** it against: the role
 (accepted trade-offs), the role's tasks/templates + shared macros, monitor-bridge `check.py` +
 role crons, the don't-re-flag memories, **git history (`git log`/`git blame` the cited lines — a
 finding already fixed in a later commit or intentionally reverted with a rationale is not live)**,
-and live state via `scripts/probe.py` where relevant. **`probe.py health <svc>` shells `docker
-inspect`, so it only answers for the Pi's Compose services** — for a cluster workload use
-`kubectl get`/`logs`/`describe` (the readonly SA covers get/list/watch, not Secrets or `exec`), or
-`probe.py targets | metric | alerts | b2-longhorn`.
+and live state via `scripts/probe.py` where relevant. **`probe.py health <svc>` is k8s-native by
+default** — it gates on rollout completion (observed generation, updated/ready/available
+replicas) AND on no container restart in the last 180s, which `kubectl rollout status` alone
+can't see; use it as the primary liveness check for a cluster workload, falling back to
+`kubectl get`/`logs`/`describe` (the readonly SA covers get/list/watch, not Secrets or `exec`) to
+drill into a failure. Pass `--docker` for the Pi's Compose services — that mode shells `docker
+inspect` and only answers for those. Also `probe.py targets | metric | alerts | b2-longhorn`.
 
 **Merged history is not the whole history.** Several sessions work this repo at once, one branch each,
 so a fix can be real and not yet on master: also check `gh pr list` (and `gh pr diff <n>` when a title

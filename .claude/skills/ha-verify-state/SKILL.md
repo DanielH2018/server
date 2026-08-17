@@ -55,8 +55,10 @@ it advanced. A loaded-but-never-fired automation has an old/`None` `last_trigger
 
 `probe.py ha` needs a host age key to decrypt the token, so run it on daniel-server or
 daniel-box — it reaches HA at the stable bridge URL `https://home-assistant.local.<domain>`,
-which is the same endpoint before and after the cluster move. If HA is down, ask the cluster:
-`kubectl -n homelab get pods -l app=home-assistant` and
-`kubectl -n homelab logs deploy/home-assistant --tail=50`. (`probe.py health` inspects Docker
-containers, so it has nothing to say about HA any more.) The recorder-DB rules above are the
-fallback for historical questions, with the WAL/start-time caveats in mind.
+which is the same endpoint before and after the cluster move. If HA is down, check first with
+`uv run python scripts/probe.py health home-assistant` (k8s-native: gates on rollout completion
+AND no container restart in the last 180s — catches a crashlooping pod that a bare rollout
+check would miss). On failure, drill down with `kubectl -n homelab get pods -l
+app=home-assistant` and `kubectl -n homelab logs deploy/home-assistant --tail=50`. The
+recorder-DB rules above are the fallback for historical questions, with the WAL/start-time
+caveats in mind.

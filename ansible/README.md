@@ -213,10 +213,14 @@ uv run ansible-playbook ansible/k3s-bringup.yml     # cluster foundation (k3s, L
 uv run ansible-playbook ansible/deploy.yml          # deploy all workloads (Docker play dependency-ordered; k8s play in list order)
 ```
 
-> `initial_setup.yml` installs Docker only where `has_docker` is true. Both cluster nodes set
-> `has_docker: false` (daniel-server since the 2026-08-14 uninstall), so post-migration that
-> role applies to `daniel-pi` alone — the `has_docker: true` in `group_vars/all.yml` is now a
-> default that every real host except the Pi overrides.
+> `docker_install` runs on every host, unconditionally — `tasks/main.yml` is a dispatcher:
+> `has_docker: true` runs `install.yml`, `has_docker: false` runs `teardown.yml` (reaps stale
+> Compose systemd units and crons; a no-op on a host that never had Docker). Both cluster nodes
+> set `has_docker: false` (daniel-server since the 2026-08-14 uninstall), so `initial_setup.yml`
+> only *installs* Docker on `daniel-pi` — the `has_docker: true` in `group_vars/all.yml` is now a
+> default that every real host except the Pi overrides, and on daniel-box/daniel-server a run
+> instead exercises the teardown path. `ansible/tests/test_k3s_host_has_no_docker.py` guards
+> against reintroducing the old `when: has_docker` gate on the role include.
 
 or `./ansible/bring-up.sh --continue [--host <name>]`, which runs those three in order and
 stops at the first failure. Add `-e target=<host>` to each command when driving another host
