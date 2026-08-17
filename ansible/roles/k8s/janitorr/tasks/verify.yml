@@ -86,8 +86,14 @@
 # Constructed rather than waited for: `leaving-soon` currently holds no symlinks at all, only the
 # `empty-file.media` placeholders, so there is nothing live to check. Building the exact artefact
 # janitorr would build makes the test deterministic and independent of whether a cleanup has run.
+#
+# This whole round trip — write, read, report, remove — is guarded on k8s_no_mutate: it writes a
+# real symlink into the live media tree, which --dry-run must not do. Under `--check`/`--dry-run`
+# the manifest apply is itself `--dry-run=server`, so there is no newly-deployed pod to prove this
+# against anyway; a dry run of janitorr proves the manifest, not the leaving-soon path contract.
 - name: Write a probe symlink the way janitorr would
   tags: [deploy]
+  when: not k8s_no_mutate
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} exec {{ janitorr_k8s_pod.stdout }} --
@@ -103,6 +109,7 @@
 
 - name: Resolve and read that symlink from inside Jellyfin's namespace
   tags: [deploy]
+  when: not k8s_no_mutate
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} exec {{ janitorr_k8s_jellyfin_pod.stdout }} -c jellyfin --
@@ -123,6 +130,7 @@
 
 - name: Report the symlink round trip
   tags: [deploy]
+  when: not k8s_no_mutate
   ansible.builtin.debug:
     msg: "{{ janitorr_k8s_symlink.stdout_lines + janitorr_k8s_jellyfin_read.stdout_lines }}"
 
@@ -130,6 +138,7 @@
 # Jellyfin's "Leaving Soon" collection as a real entry.
 - name: Remove the probe symlink
   tags: [deploy]
+  when: not k8s_no_mutate
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} exec {{ janitorr_k8s_pod.stdout }} --

@@ -250,15 +250,59 @@ _MUTATES = re.compile(
     r"kubectl\b[^\n]*?\b(apply|create |delete |replace|scale |rollout restart|exec -i|patch )"
 )
 
+# A plain `kubectl exec <pod> -- <cmd>` (no `-i`) is only a mutation if <cmd> itself writes.
+# `exec` alone also covers read probes (tdarr's/jellyfin's device checks, VAAPI encodes to
+# /dev/null, `id`/`ls`/`cat`/curl GETs, janitorr's reachability check) that must not trip this.
+# Curated from what the repo's exec payloads actually do, not a bare filesystem-verb scan:
+# touch/mkdir/ln/mv/cp/tee/chmod/chown/dd write to a mounted volume (tdarr's write probe,
+# janitorr's leaving-soon symlink); a bare `rm` does too, but needs a word boundary so it can't
+# match inside `warm`/`germ`-shaped tokens; `cscli … create|delete|add|remove` and `pihole -g`
+# write to the tool's own state (crowdsec/pihole, both already dry-run-unsupported for other
+# reasons — this just gives their real exec writes a matching rule too).
+_EXEC_WRITE = re.compile(
+    r"\b(touch|mkdir|ln -s\w*|rm|mv|cp|tee|chmod|chown|dd)\b"
+    r"|cscli \S+ (create|delete|add|remove)\b"
+    r"|pihole -g\b"
+)
+
+# A plain `exec` (not `-i`) that isn't already caught by _MUTATES.
+_BARE_EXEC = re.compile(r"kubectl\b[^\n]*\bexec\s+(?!-i\b)\S")
+
+
+def _task_chunks(task_file: Path) -> list[str]:
+    """Join each task's (possibly multi-line, folded-scalar) body into one string.
+
+    A raw per-line scan can't see `kubectl … exec pod --` and the write verb it pipes to when
+    they land on different physical lines of a `cmd: >-` block — which is the normal shape here.
+    Splitting on `- name:` (a task boundary in every file in this tree, block-nested or not) and
+    joining what follows gives each task one flat string to search, without needing a full YAML
+    parse that would miss commands nested under `block:`/`loop:`.
+    """
+    chunks: list[str] = []
+    current: list[str] = []
+    for line in task_file.read_text().splitlines():
+        stripped = line.strip()
+        if re.match(r"^-\s*name:", stripped):
+            if current:
+                chunks.append(" ".join(current))
+            current = []
+        if stripped.startswith("#"):
+            continue
+        current.append(stripped)
+    if current:
+        chunks.append(" ".join(current))
+    return chunks
+
 
 def _mutates_outside_manifests(role: Path) -> bool:
     """Does this role write to the cluster from its OWN tasks?"""
     for task_file in sorted((role / "tasks").glob("*.yml")):
-        for line in task_file.read_text().splitlines():
-            stripped = line.strip()
-            if stripped.startswith("#") or "--dry-run=client" in stripped:
+        for chunk in _task_chunks(task_file):
+            if "--dry-run=client" in chunk:
                 continue
-            if _MUTATES.search(stripped):
+            if _MUTATES.search(chunk):
+                return True
+            if _BARE_EXEC.search(chunk) and _EXEC_WRITE.search(chunk):
                 return True
     return False
 
@@ -269,16 +313,26 @@ def _bypasses_manifests(role: Path) -> bool:
     return main.exists() and "manifests" not in main.read_text()
 
 
-def _guarded_at_entry(role: Path) -> bool:
-    """Does the role gate its own body on a no-mutation run?
+# Whole-identifier, not a bare substring: janitorr's unrelated `janitorr_dry_run: "{{
+# janitorr_k8s_dry_run }}"` contains the literal text "k8s_dry_run" inside a longer variable
+# name, which a substring check reads as a guard that isn't there. `\b` anchors this to the
+# real fact names, which are underscore-joined identifiers with no boundary in the middle of
+# `janitorr_k8s_dry_run` for `\b` to land on.
+_GUARD_FACT = re.compile(r"\bk8s_no_mutate\b|\bk8s_dry_run\b")
 
-    seed-volume and image-builder take this route rather than being listed as unsupported,
-    because both are reachable as DEPENDENCIES (25 and 7 callers) and the play-level refusal
-    only sees roles the operator names with --tags.
+
+def _guarded_at_entry(role: Path) -> bool:
+    """Does the role gate its mutating tasks on a no-mutation run?
+
+    seed-volume and image-builder gate their whole body at the top of main.yml, because both
+    are reachable as DEPENDENCIES (25 and 7 callers) and the play-level refusal only sees roles
+    the operator names with --tags. tdarr and janitorr instead guard the individual tasks that
+    write, inside verify.yml — checked across every task file in the role, not just main.yml,
+    so that placement is recognised too.
     """
-    main = role / "tasks/main.yml"
-    return main.exists() and (
-        "k8s_no_mutate" in main.read_text() or "k8s_dry_run" in main.read_text()
+    return any(
+        _GUARD_FACT.search(task_file.read_text())
+        for task_file in (role / "tasks").glob("*.yml")
     )
 
 
