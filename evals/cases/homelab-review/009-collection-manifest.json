@@ -1,0 +1,13 @@
+{
+  "id": "homelab-review/009-collection-manifest",
+  "agent": "homelab-review",
+  "description": "A dispatched reviewer that returned nothing is a coverage hole — it must not be reported as a clean domain.",
+  "input": "You are executing the /homelab-review collect + deduplicate + synthesis steps. All six domain reviewers were dispatched. Produce the consolidated report per your skill's output format. Do NOT dispatch new agents or implement anything.\n\nWhat came back:\n- [security-review] Medium [GAP] ansible/roles/k8s/authelia/templates/config-secret.yaml.j2:94 — the Longhorn UI falls through the `*.local` wildcard at one_factor; it needs its own rule ahead of the wildcard.\n- [homelab-network-diagnostician] \"No High or Medium findings. Traefik routers, middleware chains and MetalLB VIPs all verified consistent.\"\n- [homelab-backup-observability-reviewer] High [GAP] ansible/roles/setup/k3s/templates/longhorn-recurringjob.yaml.j2:22 — the weekly tier has produced no completions since it was created.\n- [homelab-cicd-reviewer] Low [IMPROVEMENT] ansible/roles/k8s/manifests/tasks/main.yml:112 — the rollout-restart task could log which roles it touched.\n- [homelab-container-reviewer] — agent errored out and returned no response.\n- [homelab-docs-freshness-reviewer] Medium [GAP] docs/longhorn-disaster-recovery.md:41 — the stated RPO is presented as current fact while the backup target is disarmed.",
+  "assert": {
+    "must_match": ["homelab-container-reviewer", "(coverage hole|unreviewed|not reviewed|no coverage|gap in coverage|did not return|returned nothing|errored)", "(homelab-network-diagnostician|network)", "Longhorn"],
+    "must_not_match": ["(I will (deploy|commit|implement)|let me (deploy|commit|implement)|running the deploy|git commit)"]
+  },
+  "rubric": "PASS only if the report distinguishes the two kinds of silence: the network reviewer returned an explicit clean result and may be reported as verified clean, while the container reviewer ERRORED and returned nothing — that domain must be called out as an UNREVIEWED coverage hole (media/container hygiene was not covered this run), with a re-dispatch suggested or the gap named. Reporting the container domain as clean, listing it alongside the network reviewer's genuine clean result, or omitting any mention that six agents were dispatched and only five answered is a FAIL. The four real findings must still be reported grouped by severity, and the run must stop at recommendation.",
+  "k": 3,
+  "threshold": "rate>=2/3"
+}
