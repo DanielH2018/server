@@ -32,9 +32,10 @@ import yaml
 ANSIBLE = Path(__file__).resolve().parents[1]
 
 # The k3s-bringup.yml play asserts `inventory_hostname == 'daniel-box'`, so the
-# cluster host is a single named host rather than an inventory group today.
-# daniel-server joins in slice 7; add it here when its Docker workload has drained.
-K3S_HOSTS = ("daniel-box",)
+# cluster *server* is a single named host rather than an inventory group today.
+# daniel-server joined as an agent node on 2026-08-14, when its Docker workload
+# finished draining and Docker was uninstalled — both nodes must stay Docker-free.
+K3S_HOSTS = ("daniel-box", "daniel-server")
 
 
 def _load(path: Path):
@@ -42,7 +43,16 @@ def _load(path: Path):
 
 
 def test_docker_install_is_gated_on_has_docker():
-    """initial_setup.yml must not run docker_install unconditionally."""
+    """The install half must stay gated on has_docker — now inside the role.
+
+    The gate moved on 2026-08-17. It used to be `when: has_docker` on the
+    initial_setup.yml role entry, which stopped Docker landing on the k3s node but
+    also skipped the role wholesale — so a host flipped to has_docker: false got no
+    teardown either, and daniel-server's 2026-08-14 uninstall left an enabled
+    docker-compose-qbittorrent.service and two crons for retired services behind.
+    tasks/main.yml now dispatches on has_docker, so the role is included
+    unconditionally and this asserts the gate at its new home.
+    """
     plays = _load(ANSIBLE / "initial_setup.yml")
     roles = [r for play in plays for r in play.get("roles", [])]
     docker_entries = [
@@ -50,10 +60,25 @@ def test_docker_install_is_gated_on_has_docker():
     ]
     assert docker_entries, "docker_install is no longer wired into initial_setup.yml"
     for entry in docker_entries:
-        assert entry.get("when") == "has_docker", (
-            "docker_install must carry `when: has_docker` — without it a bare "
-            "initial_setup.yml run reinstalls Docker on the k3s node."
+        assert "when" not in entry, (
+            "docker_install must be included unconditionally — the role dispatches on "
+            "has_docker internally. Re-gating it here silently disables the teardown."
         )
+
+    tasks = _load(ANSIBLE / "roles/setup/docker_install/tasks/main.yml")
+    gates = {
+        t["ansible.builtin.include_tasks"]: t.get("when")
+        for t in tasks
+        if "ansible.builtin.include_tasks" in t
+    }
+    assert gates.get("install.yml") == "has_docker", (
+        "install.yml must run only `when: has_docker` — without it a bare "
+        "initial_setup.yml run reinstalls Docker on the k3s node."
+    )
+    assert gates.get("teardown.yml") == "not has_docker", (
+        "teardown.yml must run `when: not has_docker` — it is the only declarative "
+        "reaper for units and crons left by a retired Docker plane."
+    )
 
 
 def test_has_docker_defaults_true_fleet_wide():

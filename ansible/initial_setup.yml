@@ -19,7 +19,10 @@
     - { role: config_files, tags: ["config_files"] }
     - { role: initial_setup, tags: ["initial_setup"] }
     - { role: sops_setup, tags: ["sops_setup"] }
-    - { role: docker_install, tags: ["docker_install"], when: has_docker }
+    # Unconditional: the role dispatches on has_docker internally (install.yml vs
+    # teardown.yml). Gating it here is what let daniel-server's retired Compose units and
+    # crons survive the 2026-08-14 uninstall — a skipped role reaps nothing.
+    - { role: docker_install, tags: ["docker_install"] }
     - { role: gitops_deploy, tags: ["gitops_deploy"], when: has_gitops }
     # Per-user, become: false throughout — they manage the connecting user's home, not
     # root's. Placed after docker_install so the OS is fully set up before the dotfiles

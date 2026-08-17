@@ -6,13 +6,31 @@ role under `ansible/roles/setup/`, run by `initial_setup.yml`, not `deploy.yml`.
 repo-root `CLAUDE.md` and `.claude/rules/docker.md` for conventions.
 
 ## Where it runs
-- In `ansible/initial_setup.yml`, after [[sops_setup]] — every host.
+- In `ansible/initial_setup.yml`, after [[sops_setup]] — every host, **unconditionally**.
+  `tasks/main.yml` is a dispatcher: `has_docker: true` runs `install.yml` (everything below),
+  `has_docker: false` runs `teardown.yml`.
 - `uv run ansible-playbook ansible/initial_setup.yml --tags "docker_install"`.
 - **Granular tags:** `docker-repo` (APT repo + GPG + the cache-refresh/upgrade task),
   `docker-engine` (install + v1-wrapper removal), `docker-group` (user resolution +
   membership), `docker-daemon` (daemon.json + conditional restart), `docker-networks`.
 
-## What it does (`tasks/main.yml`)
+## Teardown (`tasks/teardown.yml`, `has_docker: false`)
+Reaps what an imperative Docker uninstall leaves behind: any `docker-compose-*.service`
+unit (disable → remove → `daemon-reload`) and the crons in `docker_install_stale_crons`
+whose owning Compose roles are archived and so can no longer reap them. Everything is
+`state: absent`, so it is a no-op on a host that never had Docker.
+
+**Why it exists:** until 2026-08-17 this role was gated `when: has_docker` in
+`initial_setup.yml`, so flipping a host to `has_docker: false` skipped it entirely and
+nothing declarative ever cleaned up. daniel-server's 2026-08-14 uninstall was done
+imperatively and missed a still-enabled `docker-compose-qbittorrent.service`
+(`Requires=` a `docker.service` that no longer exists) plus two crons for retired
+services. Install without uninstall is a one-way door; this is the way back out.
+
+**Not covered, deliberately:** package purge, `/var/lib/docker`, and the rendered
+`containers/` tree. Those hold data, so removing them stays an operator decision.
+
+## What it does (`tasks/install.yml`)
 1. **APT repo (deb822):** installs prereqs (incl. `python3-debian`, required by
    `deb822_repository`), the Docker GPG key, and the Docker repo as a `.sources` file;
    removes any legacy one-line `docker.list` (the old `apt_repository` form is deprecated).

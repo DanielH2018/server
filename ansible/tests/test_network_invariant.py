@@ -28,7 +28,7 @@ def _created_networks() -> set[str]:
     all_vars = yaml.safe_load((_ANSIBLE / "inventory/group_vars/all.yml").read_text())
     docker_network = all_vars["docker_network"]
     tasks = yaml.safe_load(
-        (_ANSIBLE / "roles/setup/docker_install/tasks/main.yml").read_text()
+        (_ANSIBLE / "roles/setup/docker_install/tasks/install.yml").read_text()
     )
     loop = next(t["loop"] for t in tasks if t.get("name") == "Create Docker networks")
     # the loop's first item is the Jinja "{{ docker_network }}"; the rest are literals

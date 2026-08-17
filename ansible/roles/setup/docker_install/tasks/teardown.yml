@@ -1,0 +1,58 @@
+---
+# Reaps what an imperative Docker uninstall leaves behind. Runs on any host with
+# has_docker: false; everything here is state=absent, so it is a no-op on a host that
+# never had Docker. The packages and /var/lib/docker are deliberately NOT touched —
+# purging those is the operator's call, and on daniel-server it is already done.
+
+- name: Find leftover docker-compose systemd units
+  tags: [docker-teardown]
+  # The containers/common role installs one docker-compose-<svc>.service per boot-managed
+  # service. They are not removed when a service retires, and each Requires=docker.service —
+  # so on a Docker-less host they fail at every boot. Globbed rather than listed by name:
+  # the retired services are exactly the ones no inventory still names.
+  ansible.builtin.find:
+    paths: /etc/systemd/system
+    patterns: "docker-compose-*.service"
+    file_type: file
+  register: docker_install_leftover_units
+  become: true
+
+- name: Disable and remove the leftover docker-compose units
+  tags: [docker-teardown]
+  # Disabling first drops the multi-user.target wants symlink; file:absent alone would
+  # leave that dangling. state: stopped is safe — without a docker.service they are
+  # inactive already, and systemd no-ops a stop on an inactive unit.
+  ansible.builtin.systemd_service:
+    name: "{{ item.path | basename }}"
+    state: stopped
+    enabled: false
+  loop: "{{ docker_install_leftover_units.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  become: true
+
+- name: Remove the leftover docker-compose unit files
+  tags: [docker-teardown]
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ docker_install_leftover_units.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  notify: Reload systemd after docker teardown
+  become: true
+
+- name: Remove crons belonging to retired Compose services
+  tags: [docker-teardown]
+  # Ansible-managed crons are only reaped by the role that wrote them, and these roles are
+  # archived — so they outlive their services. Both were still scheduled on daniel-server
+  # two days after the uninstall: the ical-proxy redeploy invokes a Docker deploy for a
+  # service that is now a k8s workload, and the tdarr sweep points at a transcode_cache
+  # directory the migration emptied, making it a silent no-op rather than merely stale.
+  # Listed by name because ansible.builtin.cron matches on its exact comment marker.
+  ansible.builtin.cron:
+    name: "{{ item }}"
+    user: "{{ sys_user }}"
+    state: absent
+  loop: "{{ docker_install_stale_crons }}"
+  become: true
