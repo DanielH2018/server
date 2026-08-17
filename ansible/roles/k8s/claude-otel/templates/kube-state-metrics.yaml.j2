@@ -69,6 +69,7 @@ spec:
     metadata:
       labels:
         app: kube-state-metrics
+        netpol-baseline: enforced
     spec:
       serviceAccountName: kube-state-metrics
       enableServiceLinks: false
