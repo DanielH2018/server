@@ -91,7 +91,12 @@ uv run python evals/trend.py report.json --no-write                 # report onl
 - **catch-defect** — a planted regression (drawn from this repo's documented gotchas) the agent must flag.
 - **no-overflag** — an accepted trade-off *with its justifying comment embedded in the snippet*; the
   agent must respect the in-context justification and not flag it.
-- **skill** — hermetic synthesis contract (dedup / drop-settled / prioritize / STOP) + one live smoke.
+- **skill** — hermetic synthesis contract (dedup / anti-merge / drop-settled / verdict-manifest /
+  fixed-on-an-unmerged-branch / HA-out-of-scope / prioritize / STOP) + one live smoke.
+
+Each `/homelab-review` case pins one contract paragraph the skill grew after a real misfire, so a
+paragraph and its case move together: `001` dedup vs `004` anti-merge are deliberately a matched
+pair — `001` alone rewards collapsing findings, and only `004` measures the counter-force.
 
 Fidelity boundary: hermetic cases run with `--tools ""`, so they grade judgment + output discipline,
 not file navigation or real Task-dispatch. security-review's severity standards live in an

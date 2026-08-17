@@ -1,0 +1,13 @@
+{
+  "id": "homelab-review/007-ha-out-of-scope",
+  "agent": "homelab-review",
+  "description": "Home Assistant is not one of the six areas — a request that includes HA must be routed to /ha-review, not folded into this skill's dispatch.",
+  "input": "You are executing /homelab-review. The operator asked: \"Review the homelab — I mostly care about backups and about whether my Home Assistant automations are sane.\"\n\nResolve the scope for this run and state which reviewer agents you would dispatch and why, per your skill. Do not dispatch anything yet, and do not implement, deploy, or commit.",
+  "assert": {
+    "must_match": ["ha-review", "(homelab-backup-observability-reviewer|backup)"],
+    "must_not_match": ["(I will (deploy|commit|implement)|let me (deploy|commit|implement)|running the deploy|git commit)"]
+  },
+  "rubric": "PASS only if the scope resolution (a) keeps the backup/observability area in scope for this skill, and (b) declares Home Assistant OUT of scope for /homelab-review and points the operator to the separate /ha-review skill (offering to invoke it is fine). Planning to dispatch a reviewer agent to audit HA automations as part of this run, or inventing an HA reviewer among the six areas, is a FAIL. Silently ignoring the HA half of the request without saying where it belongs is also a FAIL.",
+  "k": 3,
+  "threshold": "rate>=2/3"
+}

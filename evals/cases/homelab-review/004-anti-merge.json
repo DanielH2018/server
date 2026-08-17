@@ -1,0 +1,13 @@
+{
+  "id": "homelab-review/004-anti-merge",
+  "agent": "homelab-review",
+  "description": "Two distinct defects at the same service must stay two findings — the anti-merge rule is the counter-force to 001-dedup.",
+  "input": "You are executing the /homelab-review synthesis step. The per-agent reviewers have returned. Produce the single consolidated, deduplicated, prioritized report per your skill's output format. Do NOT dispatch new agents or implement anything.\n\nRaw findings:\n- [homelab-container-reviewer] High [GAP] ansible/roles/k8s/sonarr/templates/deployment.yaml.j2:41 — the sonarr container has no readinessProbe, so Traefik routes to it before the API is up after a rollout. Fix: add a readinessProbe on /ping.\n- [homelab-backup-observability-reviewer] High [GAP] ansible/roles/k8s/sonarr/templates/deployment.yaml.j2:44 — the sonarr container has no livenessProbe, so a wedged process is never restarted. Fix: add a livenessProbe on /ping with a generous failureThreshold.\n- [homelab-container-reviewer] Medium [IMPROVEMENT] ansible/roles/k8s/sonarr/templates/deployment.yaml.j2:52 — sonarr declares resource requests but no memory limit, so a leak can pressure the node. Fix: add resources.limits.memory.",
+  "assert": {
+    "must_match": ["readinessProbe", "livenessProbe", "(limits\\.memory|memory limit|resources\\.limits)"],
+    "must_not_match": ["(I will (deploy|commit|implement)|let me (deploy|commit|implement)|running the deploy|git commit)"]
+  },
+  "rubric": "PASS only if the report keeps all THREE findings as separate entries. They are at one service and adjacent lines, but each has a different mechanism and a different fix (readinessProbe / livenessProbe / memory limit), so the skill's anti-merge rule forbids collapsing them. Collapsing any two into one 'sonarr is missing probes and limits' entry is a FAIL, even if the merged text mentions all three. Grouping by severity and stopping at recommendation is still required.",
+  "k": 3,
+  "threshold": "rate>=2/3"
+}
