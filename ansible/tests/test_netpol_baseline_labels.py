@@ -27,7 +27,36 @@ SLICE_1_ROLES = {
     "code-server",
 }
 
+# Slice 2: the media stack plus both push bridges. configarr is a CronJob, not a Deployment —
+# its pod template lives two levels deeper, at spec.jobTemplate.spec.template, and
+# _pod_template_labels() below has a CronJob-specific branch to reach it.
+SLICE_2_ROLES = {
+    "sonarr",
+    "radarr",
+    "prowlarr",
+    "qbittorrent",
+    "bazarr",
+    "tdarr",
+    "janitorr",
+    "monitor-bridge",
+    "autofix-bridge",
+    "configarr",
+}
+
 LABEL = ("netpol-baseline", "enforced")
+
+
+def _pod_template_labels(doc: dict) -> dict:
+    """The labels a Deployment or CronJob actually stamps onto its pods.
+
+    A Deployment's pod template is spec.template. A CronJob's is one level deeper, at
+    spec.jobTemplate.spec.template — its own spec.template does not exist, so reading that
+    path the Deployment way would silently return {} for every CronJob.
+    """
+    spec = doc.get("spec") or {}
+    if doc.get("kind") == "CronJob":
+        spec = ((spec.get("jobTemplate") or {}).get("spec")) or {}
+    return (spec.get("template") or {}).get("metadata", {}).get("labels", {})
 
 
 def _labelled_roles() -> set[str]:
@@ -35,23 +64,19 @@ def _labelled_roles() -> set[str]:
     return {
         role
         for role, _tpl, doc in rendered_docs()
-        if (doc.get("spec") or {})
-        .get("template", {})
-        .get("metadata", {})
-        .get("labels", {})
-        .get(key)
-        == value
+        if _pod_template_labels(doc).get(key) == value
     }
 
 
-def test_exactly_the_slice_1_roles_carry_the_baseline_label() -> None:
+def test_exactly_the_slice_1_and_slice_2_roles_carry_the_baseline_label() -> None:
+    expected = SLICE_1_ROLES | SLICE_2_ROLES
     labelled = _labelled_roles()
-    missing = sorted(SLICE_1_ROLES - labelled)
-    extra = sorted(labelled - SLICE_1_ROLES)
+    missing = sorted(expected - labelled)
+    extra = sorted(labelled - expected)
     assert not missing and not extra, (
-        "netpol-baseline: enforced no longer matches slice 1.\n"
+        "netpol-baseline: enforced no longer matches slice 1 + slice 2.\n"
         f"  missing (silently unfenced, and the probe would not notice): {missing}\n"
         f"  unexpected (fenced without a probe proving its callers still work): {extra}\n"
-        "Update SLICE_1_ROLES together with docs/networkpolicy-default-deny.md when the "
-        "rollout moves to the next slice."
+        "Update SLICE_1_ROLES/SLICE_2_ROLES together with docs/networkpolicy-default-deny.md "
+        "when the rollout moves to the next slice."
     )

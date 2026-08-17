@@ -17,6 +17,7 @@ spec:
     metadata:
       labels:
         app: autofix-bridge
+        netpol-baseline: enforced
       annotations:
         checksum/autofix-script: "{{ (autofix_bridge_script | default({})).checksum | default('unstaged') }}"
     spec:
