@@ -66,6 +66,34 @@
     user: "{{ sys_user }}"
   become: true
 
+# Reverse of the has_gitops gate above. A skipped cron task leaves an already-installed entry
+# running, so gating alone would have left daniel-server's two crons in place reading its stale
+# tree while daniel-box gained its own — two hosts pushing one Kuma monitor, which is worse than
+# the staleness this move fixes. These run everywhere the gate is false, so the crons follow
+# has_gitops in both directions.
+- name: Remove the secret-rotation crons from any non-gitops host
+  tags: [crons]
+  when: not has_gitops
+  ansible.builtin.cron:
+    name: "{{ item }}"
+    state: absent
+    user: "{{ sys_user }}"
+  loop:
+    - "Daily secret rotation audit"
+    - "Weekly secret rotation (auto tier)"
+  become: true
+
+- name: Remove the secret-rotation wrappers from any non-gitops host
+  tags: [crons]
+  when: not has_gitops
+  ansible.builtin.file:
+    path: "/usr/local/bin/{{ item }}"
+    state: absent
+  loop:
+    - secret-rotation-audit.sh
+    - secret-rotate.sh
+  become: true
+
 - name: Schedule sudo crontab for weekly restart
   tags: [crons]
   # Pings the Healthchecks "Reboot" monitor, then reboots. The ping lives INSIDE the
@@ -100,6 +128,20 @@
     minute: "30"
     hour: "6"
     job: '/usr/bin/docker system prune -a -f --filter "until=168h" && curl -fsS -m 10 --retry 3 https://healthchecks.{{ domain }}/ping/6c716f7f-219c-42e1-9f8b-d1d964b6cc35'
+    user: "{{ ansible_facts.user_id }}"
+  become: true
+  tags: [prune, crons]
+
+# Reverse of the has_docker gate above. The cron was installed unconditionally before this
+# change, so it already exists on both cluster nodes, where it has been failing since the
+# 2026-08-14 Docker removal and leaving the Healthchecks dead-man un-pinged. Skipping the task
+# would leave it there; this retires the entry so the monitor stops being fed by a host that
+# cannot run it.
+- name: Remove the Docker image cleanup cron from any host without Docker
+  when: not has_docker
+  ansible.builtin.cron:
+    name: "Clean unused Docker images"
+    state: absent
     user: "{{ ansible_facts.user_id }}"
   become: true
   tags: [prune, crons]
