@@ -1062,6 +1062,21 @@ def _build_parser():
     b2l.add_argument(
         "--prefix", default=LONGHORN_PREFIX, help="B2 prefix Longhorn writes under"
     )
+    b2b = sub.add_parser(
+        "b2-budget",
+        help="per-shard Class C projection against B2's free-tier daily cap "
+        "(exit 1 if a weekly shard is over budget)",
+    )
+    b2b.add_argument("--bucket", help="override the bucket from kopia's repo config")
+    b2b.add_argument(
+        "--prefix", default=LONGHORN_PREFIX, help="B2 prefix Longhorn writes under"
+    )
+    b2b.add_argument(
+        "--retain",
+        type=int,
+        default=4,
+        help="k3s_longhorn_weekly_backup_retain, to spot a backlog of pending deletes",
+    )
     pi = sub.add_parser("pi", help="Pi glances API")
     pi.add_argument("subpath", help="e.g. fs, quicklook, mem, cpu")
     ct = sub.add_parser(
@@ -1613,6 +1628,8 @@ def main(argv=None):
         return run_alerts(ns)
     if ns.cmd == "b2-longhorn":
         return run_b2_longhorn(ns)
+    if ns.cmd == "b2-budget":
+        return run_b2_budget(ns)
     if ns.cmd == "ha-state":
         return run_ha_state(ns)
     if ns.cmd == "monitors":
@@ -1785,6 +1802,167 @@ def format_longhorn_summary(vols):
             bad
         )
     return out, (1 if bad else 0)
+
+
+# B2's free tier allows 2,500 Class C transactions a day. Longhorn's retention delete is the
+# thing that spends them: DeleteDeltaBlockBackup walks the volume's whole block tree with one
+# delimited ListObjects per directory (backupstore deltablock.go getBlockNamesForVolume), and it
+# runs once per deleted backup. So a shard's daily Class C cost is set by how many BLOCKS its
+# volumes hold, not by how much data changed — which is why this is worth watching as volumes
+# grow, and why the seventh cap event was not preventable by looking at bytes.
+B2_CLASS_C_DAILY_CAP = 2500
+# Headroom for kopia and the monitor probes, which share the account-wide cap.
+B2_BUDGET_RESERVE = 400
+
+
+def parse_backup_budget(lines):
+    """Per-volume backup count, block count, and the Class C cost of one retention prune.
+
+    Takes the same `path;size` lines as parse_longhorn_listing. A prune costs one
+    ListObjects for `blocks/`, one per first-level hash directory, and one per second-level
+    directory — so the DIRECTORY counts, not the block count, are the price.
+    """
+    vols = {}
+    for line in lines:
+        path = line.strip().rpartition(";")[0]
+        if not path:
+            continue
+        parts = path.split("/")
+        if "volumes" not in parts:
+            continue
+        i = parts.index("volumes")
+        if len(parts) < i + 4:
+            continue
+        v = vols.setdefault(
+            parts[i + 3], {"backups": 0, "blocks": 0, "lv1": set(), "lv2": set()}
+        )
+        tail = parts[i + 4 :]
+        if tail[:1] == ["backups"] and path.endswith(".cfg"):
+            v["backups"] += 1
+        elif path.endswith(".blk") and tail[:1] == ["blocks"] and len(tail) >= 4:
+            v["blocks"] += 1
+            v["lv1"].add(tail[1])
+            v["lv2"].add((tail[1], tail[2]))
+    for v in vols.values():
+        v["prune"] = 1 + len(v["lv1"]) + len(v["lv2"])
+    return vols
+
+
+def format_backup_budget(vols, shards, names=None, retain=4):
+    """Render the per-shard Class C projection; non-zero exit if a shard is over budget.
+
+    `shards` maps volume name to its recurring-job group. A volume with no group never runs a
+    backup and never prunes, so it is reported separately rather than charged to a day.
+    """
+    names = names or {}
+    budget = B2_CLASS_C_DAILY_CAP - B2_BUDGET_RESERVE
+    byshard, idle = {}, []
+    for vol, v in vols.items():
+        shard = shards.get(vol)
+        if not shard or not shard.startswith("weekly-backup-"):
+            idle.append(vol)
+            continue
+        byshard.setdefault(shard, []).append((vol, v))
+
+    rows, over = [], []
+    for shard in sorted(byshard):
+        members = sorted(byshard[shard], key=lambda kv: -kv[1]["prune"])
+        total = sum(v["prune"] for _, v in members)
+        # A volume already at or over `retain` deletes one backup per run, so it prunes once.
+        # Below it, the backup count is still climbing and nothing is deleted yet.
+        pending = sum(max(0, v["backups"] - retain) for _, v in members)
+        flag = "OVER" if total > budget else "ok"
+        if total > budget:
+            over.append(shard)
+        rows.append(
+            "%-17s %5d C  %s%s"
+            % (
+                shard,
+                total,
+                flag,
+                "  (+%d backlogged deletes)" % pending if pending else "",
+            )
+        )
+        for vol, v in members:
+            rows.append(
+                "    %-22s %5d C  %5d blocks  %2d backups"
+                % (names.get(vol, vol)[:22], v["prune"], v["blocks"], v["backups"])
+            )
+    if idle:
+        rows.append(
+            "not in a weekly shard (never pruned): %s"
+            % ", ".join(sorted(names.get(v, v) for v in idle))
+        )
+    rows.append(
+        "budget per day: %d Class C (cap %d less %d reserved for kopia and the probes)"
+        % (budget, B2_CLASS_C_DAILY_CAP, B2_BUDGET_RESERVE)
+    )
+    if over:
+        rows.append("OVER BUDGET: %s — rebalance before the next run" % ", ".join(over))
+    return "\n".join(rows), (1 if over else 0)
+
+
+def volume_shard_labels(_run=None):
+    """{longhorn volume: recurring-job group} from the live cluster."""
+    run = _run or (lambda argv: subprocess.run(argv, capture_output=True, text=True))
+    out = run(
+        [
+            "kubectl",
+            "-n",
+            "longhorn-system",
+            "get",
+            "volumes.longhorn.io",
+            "-o",
+            "json",
+        ]
+    )
+    if out.returncode != 0:
+        raise SystemExit("kubectl failed: " + out.stderr.strip()[:300])
+    shards = {}
+    for item in json.loads(out.stdout).get("items", []):
+        for key in item.get("metadata", {}).get("labels", {}):
+            if key.startswith("recurring-job-group.longhorn.io/"):
+                shards[item["metadata"]["name"]] = key.split("/", 1)[1]
+    return shards
+
+
+def pvc_names(_run=None):
+    """{longhorn volume: PVC name}, so the report reads in service terms."""
+    run = _run or (lambda argv: subprocess.run(argv, capture_output=True, text=True))
+    out = run(["kubectl", "get", "pv", "-o", "json"])
+    if out.returncode != 0:
+        return {}
+    return {
+        pv["metadata"]["name"]: pv["spec"].get("claimRef", {}).get("name", "")
+        for pv in json.loads(out.stdout).get("items", [])
+        if pv.get("spec", {}).get("claimRef")
+    }
+
+
+def run_b2_budget(ns):
+    """Project each weekly shard's Class C spend against B2's free-tier daily cap.
+
+    One listing (~10 Class C), so it is cheap enough to run weekly and far too expensive to
+    put in the 10-minute monitor cron.
+    """
+    if ns.dry_run:
+        print(
+            f"GET {B2_AUTHORIZE_URL} then b2_list_file_names prefix={ns.prefix.rstrip('/')}/ "
+            "plus kubectl get volumes.longhorn.io,pv"
+        )
+        return 0
+
+    lines = b2_longhorn_lines(
+        sops_extract("kopia_b2_key_id"),
+        sops_extract("kopia_b2_application_key"),
+        ns.bucket or sops_extract("kopia_b2_bucket"),
+        ns.prefix,
+    )
+    text, code = format_backup_budget(
+        parse_backup_budget(lines), volume_shard_labels(), pvc_names(), ns.retain
+    )
+    print(text)
+    return code
 
 
 def run_b2_longhorn(ns):
