@@ -1856,13 +1856,18 @@ def format_backup_budget(vols, shards, names=None, retain=4):
     """
     names = names or {}
     budget = B2_CLASS_C_DAILY_CAP - B2_BUDGET_RESERVE
-    byshard, idle = {}, []
+    byshard, idle, daily = {}, [], []
     for vol, v in vols.items():
         shard = shards.get(vol)
-        if not shard or not shard.startswith("weekly-backup-"):
+        if shard and shard.startswith("weekly-backup-"):
+            byshard.setdefault(shard, []).append((vol, v))
+        elif shard in (None, "no-backup"):
             idle.append(vol)
-            continue
-        byshard.setdefault(shard, []).append((vol, v))
+        else:
+            # A PVC provisioned from the `longhorn` StorageClass lands in `default` — the DAILY
+            # group — until the next deploy reconciles its label. On B2 that is a prune every
+            # night against a budget sized for one a week, so it is the loudest thing here.
+            daily.append(vol)
 
     rows, over = [], []
     for shard in sorted(byshard):
@@ -1890,8 +1895,18 @@ def format_backup_budget(vols, shards, names=None, retain=4):
             )
     if idle:
         rows.append(
-            "not in a weekly shard (never pruned): %s"
+            "no-backup (never pruned): %s"
             % ", ".join(sorted(names.get(v, v) for v in idle))
+        )
+    if daily:
+        over.append("daily-on-B2")
+        rows.append(
+            "ON THE DAILY TIER AND ON B2: %s — %d C every night, not once a week. "
+            "Route to r2 or move to a weekly shard."
+            % (
+                ", ".join(sorted(names.get(v, v) for v in daily)),
+                sum(vols[v]["prune"] for v in daily),
+            )
         )
     rows.append(
         "budget per day: %d Class C (cap %d less %d reserved for kopia and the probes)"
