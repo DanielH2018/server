@@ -7,7 +7,7 @@
 pihole_k8s_image: pihole/pihole:2026.07.2
 # The Docker side runs klutchell/unbound:latest with watchtower disabled; k8s images are
 # pinned (Renovate k8s-defaults manager). v-prefixed tags track upstream unbound releases.
-pihole_k8s_unbound_image: klutchell/unbound:v1.25.2
+pihole_k8s_unbound_image: klutchell/unbound:1.26.0
 
 pihole_k8s_claim: pihole-etc
 # Second instance, for deploy-time DNS continuity. Its own claim because /etc/pihole is RWO
