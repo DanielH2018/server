@@ -1,0 +1,46 @@
+# Ansible-managed (setup/k3s, tasks/coredns.yml). Do not edit in the cluster — k3s no longer
+# reconciles this ConfigMap (manifests/coredns.yaml.skip), so a hand-edit here survives and
+# then drifts from the repo silently.
+#
+# k3s's bundled Corefile ends in `forward . /etc/resolv.conf`, which inherits whichever
+# resolvers the node CoreDNS happens to land on, under forward's DEFAULT `random` policy.
+# That made Pi-hole a coin flip rather than a primary: measured 2026-08-18, CoreDNS had
+# 16915 connection-cache hits against the Pi-hole VIP and 14610 against Cloudflare, and 2 of
+# 4 known-blocked domains resolved unblocked through the cluster resolver. The list below
+# replaces both halves of that — Pi-hole first for every query, and no dependence on which
+# node CoreDNS is scheduled to.
+#
+# Everything above the forward is k3s's bundled Corefile, reproduced verbatim. Keep it that
+# way: `NodeHosts` is written into this ConfigMap by k3s's own node controller, which keeps
+# running after the addon is skipped, and the two `import` lines are the documented
+# customization seam.
+.:53 {
+    errors
+    health
+    ready
+    kubernetes cluster.local in-addr.arpa ip6.arpa {
+      pods insecure
+      fallthrough in-addr.arpa ip6.arpa
+    }
+    hosts /etc/coredns/NodeHosts {
+      ttl 60
+      reload 15s
+      fallthrough
+    }
+    prometheus :9153
+    cache 30
+    loop
+    reload
+    loadbalance
+    import /etc/coredns/custom/*.override
+    # The Pi-hole entry is the DNS Service's CLUSTER IP, not the LAN VIP. A cluster workload
+    # reaching a cluster Service through kube-proxy is unaffected by the LoadBalancer's
+    # externalTrafficPolicy: Local, which blackholes VIP traffic the MetalLB announcer would
+    # otherwise have to forward to another node.
+    forward . {{ k3s_coredns_upstreams | join(' ') }} {
+      policy sequential
+      health_check {{ k3s_coredns_health_check }}
+      max_fails {{ k3s_coredns_max_fails }}
+    }
+}
+import /etc/coredns/custom/*.server

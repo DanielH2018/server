@@ -1,0 +1,86 @@
+---
+# Cluster DNS: make Pi-hole the primary resolver for every workload, with the pinned
+# upstreams as a real fallback.
+#
+# k3s ships CoreDNS as an Addon, so the `coredns` ConfigMap carries
+# `objectset.rio.cattle.io/owner-gvk: k3s.cattle.io/v1, Kind=Addon` and the deploy controller
+# reverts any live edit. Two mechanisms release it and only one is non-destructive:
+# `--disable coredns` takes the controller's delete path and removes the objects (cluster DNS
+# is down until something replaces them), while a `.skip` marker makes the controller
+# `continue` past the file and touch nothing — "Skipped files are just ignored",
+# pkg/deploy/controller.go. The marker is what this uses, so the Deployment, Service and RBAC
+# stay exactly as k3s left them and only the Corefile becomes ours.
+#
+# The cost, accepted deliberately: a k3s upgrade shipping a revised bundled Corefile is
+# ignored while the marker exists, and nothing reports that. Re-read k3s's coredns.yaml
+# whenever k3s_version moves.
+
+- name: Stop k3s reconciling its bundled CoreDNS addon
+  tags: [coredns]
+  ansible.builtin.file:
+    path: /var/lib/rancher/k3s/server/manifests/coredns.yaml.skip
+    state: touch
+    mode: "0644"
+    owner: root
+    group: root
+    # The marker's presence is the entire state, so don't let touch report changed forever.
+    access_time: preserve
+    modification_time: preserve
+  become: true
+
+# Ordering is load-bearing: the marker must exist before the patch, or the deploy controller
+# reverts the Corefile between these two tasks and the change reads as mysteriously inert.
+- name: Stage the CoreDNS Corefile patch
+  tags: [coredns]
+  ansible.builtin.copy:
+    # A merge patch touches only the keys it names. Applying a ConfigMap that held just the
+    # Corefile would instead strip `NodeHosts`, which k3s's node controller rewrites only on
+    # the next node event — a window in which no pod can resolve a node by name.
+    content: "{{ {'data': {'Corefile': lookup('template', 'coredns-corefile.j2')}} | to_nice_json }}"
+    dest: /etc/rancher/k3s/coredns-corefile-patch.json
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+
+- name: Point cluster DNS at Pi-hole first
+  tags: [coredns]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n kube-system patch configmap coredns --type merge
+      --patch-file /etc/rancher/k3s/coredns-corefile-patch.json
+  register: k3s_coredns_patch
+  become: true
+  changed_when: "'(no change)' not in k3s_coredns_patch.stdout"
+
+- name: Confirm NodeHosts survived the patch
+  tags: [coredns]
+  ansible.builtin.command:
+    cmd: k3s kubectl -n kube-system get configmap coredns -o jsonpath={.data.NodeHosts}
+  register: k3s_coredns_nodehosts
+  become: true
+  changed_when: false
+  failed_when: k3s_coredns_nodehosts.stdout | trim | length == 0
+
+- name: Check whether dig is available for the resolver probe
+  tags: [coredns]
+  ansible.builtin.stat:
+    path: /usr/bin/dig
+  register: k3s_coredns_dig
+
+# Proves the forward by BEHAVIOUR rather than by reading back the ConfigMap this play just
+# wrote. `pi.hole` is answered by FTL itself and is NXDOMAIN at every public resolver, so an
+# answer proves the query reached Pi-hole. It is a better probe than a blocked ad domain,
+# which would stop discriminating the day a blocklist drops it. The retries cover CoreDNS's
+# `reload` (up to ~30s) — no restart is issued, because bouncing the only DNS replica costs
+# more than waiting for it.
+- name: Verify cluster DNS resolves through Pi-hole
+  tags: [coredns]
+  ansible.builtin.command:
+    cmd: dig +short +time=2 +tries=1 @{{ k3s_cluster_dns_ip }} pi.hole
+  register: k3s_coredns_probe
+  changed_when: false
+  retries: "{{ k3s_coredns_probe_retries }}"
+  delay: 5
+  until: k3s_coredns_probe.stdout | trim | length > 0
+  when: k3s_coredns_dig.stat.exists

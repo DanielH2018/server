@@ -544,6 +544,39 @@ k3s_node_dns_upstreams:
 k3s_node_dns_dhcp_links:
   - eno1
 
+# ── Cluster DNS (tasks/coredns.yml) ─────────────────────────────────────────────────────
+# What CoreDNS forwards to, in order. This is deliberately NOT the node's resolv.conf that
+# k3s's bundled Corefile uses: that inherits whichever resolvers CoreDNS's node happens to
+# carry, and forward's default `random` policy then treats them as peers rather than as a
+# primary and a fallback — so Pi-hole answered roughly half of all cluster queries and the
+# other half silently lost ad-blocking and the local.daniel-hunter.com records.
+#
+# First entry is the pihole-dns Service's CLUSTER IP, not the LAN VIP. kube-proxy routes it
+# to either Pi-hole pod regardless of the LoadBalancer's externalTrafficPolicy: Local, which
+# is what blackholes VIP traffic the MetalLB announcer would have to forward to another node.
+#
+# This does NOT weaken the cold-boot invariant above. That one governs the NODE's resolvers,
+# which must work before the cluster exists; CoreDNS is a cluster workload that cannot run
+# before the cluster does, so its depending on an in-cluster Service costs nothing.
+k3s_coredns_upstreams:
+  - "{{ dns_k8s_cluster_ip }}"
+  - 1.1.1.1
+  - 1.0.0.1
+
+# `policy sequential` alone would make every query wait out a dead Pi-hole. health_check
+# probes the upstream on this interval and max_fails marks it down, so only the queries
+# inside one interval pay the penalty — the same intent as daniel-server's resolv.conf
+# `timeout:2 attempts:1`.
+k3s_coredns_health_check: 5s
+k3s_coredns_max_fails: 2
+
+# The cluster DNS Service address, from kube-system/cluster-dns. Used only by the post-patch
+# resolver probe, which queries CoreDNS directly rather than through the node's resolver.
+k3s_cluster_dns_ip: 10.43.0.10
+
+# CoreDNS's `reload` plugin re-reads the Corefile within ~30s; 8 tries at 5s covers it.
+k3s_coredns_probe_retries: 8
+
 # ── Phase F: agent join (slice-7 D1/§F) ─────────────────────────────────────────────────
 # daniel-server joins as an AGENT, not a second server (D1: a two-member etcd halves
 # availability rather than doubling it). Run via:
