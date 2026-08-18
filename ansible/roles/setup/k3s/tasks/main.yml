@@ -23,3 +23,5 @@
   ansible.builtin.import_tasks: kubeconfig.yml
 - name: Apply node-level host configuration
   ansible.builtin.import_tasks: node.yml
+- name: Point cluster DNS at Pi-hole
+  ansible.builtin.import_tasks: coredns.yml

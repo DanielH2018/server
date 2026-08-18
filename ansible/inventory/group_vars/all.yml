@@ -82,6 +82,13 @@ mqtt_k8s_vip: 10.0.0.242
 # wg-easy's WG_DEFAULT_DNS and its own resolv.conf primary (pihole_host_dns_primary) here.
 # Until the router's DHCP DNS option flips, nothing resolves through it.
 dns_k8s_vip: 10.0.0.243
+# The same Service's ClusterIP, pinned. Global because two roles need it and neither owns
+# the other: roles/k8s/pihole claims it on the Service, and roles/setup/k3s names it in the
+# CoreDNS Corefile so cluster DNS forwards to Pi-hole first. Cluster DNS uses this rather
+# than the VIP above because kube-proxy reaches either Pi-hole pod through a ClusterIP,
+# where the LoadBalancer's externalTrafficPolicy: Local blackholes traffic the MetalLB
+# announcer would have to forward to another node.
+dns_k8s_cluster_ip: 10.43.252.187
 # Jellyfin's dedicated LAN LoadBalancer VIP (slice 4, B5) — a second path distinct from the
 # Traefik ingress VIP. Global for the same cross-role reason: roles/k8s/jellyfin's
 # service-lan claims it, and roles/k8s/uptime-kuma's VIP port tile probes it.

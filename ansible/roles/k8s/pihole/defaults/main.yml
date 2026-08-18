@@ -30,6 +30,13 @@ pihole_k8s_unbound_port: 5335
 # daniel-server's wg-easy and resolv.conf repoint to it at B3's cutover half.
 pihole_k8s_lan_ip: "{{ dns_k8s_vip }}"
 
+# Pinned so CoreDNS can name it. Cluster DNS forwards to this address rather than to the LAN
+# VIP (see k3s_coredns_upstreams): kube-proxy reaches either Pi-hole pod through it, where
+# the VIP is subject to externalTrafficPolicy: Local. An unpinned clusterIP would be
+# reassigned if the Service were ever recreated, silently pointing cluster DNS at nothing.
+# Immutable once bound — changing it needs the Service deleted and recreated.
+pihole_k8s_dns_cluster_ip: "{{ dns_k8s_cluster_ip }}"
+
 # Resource caps mirrored from the compose templates (M1 blast-radius values). k8s-native
 # units on purpose: compose-style "1.0"/"0.50" normalize server-side ("1"/"500m") and make
 # every `kubectl apply` report the Deployment "configured" (flapped live 2026-08-09).
