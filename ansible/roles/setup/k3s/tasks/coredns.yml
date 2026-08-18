@@ -30,13 +30,29 @@
 
 # Ordering is load-bearing: the marker must exist before the patch, or the deploy controller
 # reverts the Corefile between these two tasks and the change reads as mysteriously inert.
+- name: Render the desired Corefile
+  tags: [coredns]
+  ansible.builtin.set_fact:
+    k3s_coredns_corefile: "{{ lookup('template', 'coredns-corefile.j2') }}"
+
+# Read before write, so the patch's changed status compares CONTENT rather than parsing
+# kubectl's output. `patched (no change)` is a message string that has moved between kubectl
+# releases, and a task keyed on it reports changed forever the day it moves again.
+- name: Read the live Corefile
+  tags: [coredns]
+  ansible.builtin.command:
+    cmd: k3s kubectl -n kube-system get configmap coredns -o jsonpath={.data.Corefile}
+  register: k3s_coredns_live
+  become: true
+  changed_when: false
+
 - name: Stage the CoreDNS Corefile patch
   tags: [coredns]
   ansible.builtin.copy:
     # A merge patch touches only the keys it names. Applying a ConfigMap that held just the
     # Corefile would instead strip `NodeHosts`, which k3s's node controller rewrites only on
     # the next node event — a window in which no pod can resolve a node by name.
-    content: "{{ {'data': {'Corefile': lookup('template', 'coredns-corefile.j2')}} | to_nice_json }}"
+    content: "{{ {'data': {'Corefile': k3s_coredns_corefile}} | to_nice_json }}"
     dest: /etc/rancher/k3s/coredns-corefile-patch.json
     mode: "0644"
     owner: root
@@ -49,9 +65,9 @@
     cmd: >-
       k3s kubectl -n kube-system patch configmap coredns --type merge
       --patch-file /etc/rancher/k3s/coredns-corefile-patch.json
-  register: k3s_coredns_patch
   become: true
-  changed_when: "'(no change)' not in k3s_coredns_patch.stdout"
+  changed_when: true
+  when: k3s_coredns_live.stdout | trim != k3s_coredns_corefile | trim
 
 - name: Confirm NodeHosts survived the patch
   tags: [coredns]
@@ -73,14 +89,19 @@
 # answer proves the query reached Pi-hole. It is a better probe than a blocked ad domain,
 # which would stop discriminating the day a blocklist drops it. The retries cover CoreDNS's
 # `reload` (up to ~30s) — no restart is issued, because bouncing the only DNS replica costs
-# more than waiting for it.
+# more than waiting for it. The query is host-sourced against the cluster DNS Service
+# address, so it exercises the same CoreDNS a pod reaches without needing a throwaway pod.
 - name: Verify cluster DNS resolves through Pi-hole
   tags: [coredns]
   ansible.builtin.command:
     cmd: dig +short +time=2 +tries=1 @{{ k3s_cluster_dns_ip }} pi.hole
   register: k3s_coredns_probe
   changed_when: false
-  retries: "{{ k3s_coredns_probe_retries }}"
+  # `until` owns the verdict. Without this, a dig that exits non-zero (no route, timeout)
+  # fails the task on its first attempt instead of being retried — and the task still fails
+  # if the condition is never satisfied, which is the outcome worth reporting.
+  failed_when: false
+  retries: "{{ k3s_coredns_probe_retries | int }}"
   delay: 5
   until: k3s_coredns_probe.stdout | trim | length > 0
   when: k3s_coredns_dig.stat.exists
