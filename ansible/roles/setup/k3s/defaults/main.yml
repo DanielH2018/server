@@ -536,6 +536,14 @@ k3s_node_dns_upstreams:
   - 1.1.1.1
   - 1.0.0.1
 
+# Links whose DHCP lease must not contribute resolvers. The drop-in above pins the node's
+# DNS, but it does not stop systemd-resolved from ALSO listing the lease's servers per link
+# — six nameservers total, against the 3 Kubernetes gives a pod. See templates/netplan-dns.yaml.j2.
+# eno1 is the only link carrying a lease with DNS; enx9cebe885f44e (USB NIC) is down and is
+# left alone so the override cannot outlive the interface it names.
+k3s_node_dns_dhcp_links:
+  - eno1
+
 # ── Phase F: agent join (slice-7 D1/§F) ─────────────────────────────────────────────────
 # daniel-server joins as an AGENT, not a second server (D1: a two-member etcd halves
 # availability rather than doubling it). Run via:

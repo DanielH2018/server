@@ -1,0 +1,23 @@
+# Ansible-managed (setup/k3s, tasks/node.yml). Do not edit by hand.
+#
+# Stop the DHCP lease from contributing resolvers to this node's DNS set.
+# 50-homelab-upstream.conf already routes every query to the pinned upstreams via
+# `Domains=~.`, so the ISP's servers are never queried — but systemd-resolved still writes
+# them into /run/systemd/resolve/resolv.conf, six entries deep. kubelet reads that file and
+# copies it into every pod with an effective dnsPolicy of Default, and Kubernetes caps a pod
+# at 3 nameservers, so kubelet emitted a DNSConfigForming warning on each sync for the
+# hostNetwork pods on this node (metallb speaker, node-exporter). Dropping the DHCP
+# resolvers collapses the file to the pinned upstreams and the warning stops.
+#
+# Merged over 50-cloud-init.yaml by filename order — netplan reads /etc/netplan/*.yaml
+# lexically and later files win, so cloud-init may regenerate its own file freely.
+network:
+  version: 2
+  ethernets:
+{% for link in k3s_node_dns_dhcp_links %}
+    {{ link }}:
+      dhcp4-overrides:
+        use-dns: false
+      dhcp6-overrides:
+        use-dns: false
+{% endfor %}
