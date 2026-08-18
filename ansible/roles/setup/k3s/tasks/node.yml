@@ -46,6 +46,41 @@
   become: true
   when: k3s_node_dns_dropin.changed
 
+# The drop-in above pins WHICH resolvers the node uses; the netplan override below controls
+# HOW MANY end up in /run/systemd/resolve/resolv.conf. kubelet copies that file into every
+# pod whose effective dnsPolicy is Default and Kubernetes keeps only the first 3, so the
+# lease's four ISP resolvers cost the node a DNSConfigForming warning per pod sync for
+# nothing — `Domains=~.` means they are never queried.
+- name: Drop the DHCP-supplied resolvers from the node's DNS set
+  tags: [node-dns]
+  ansible.builtin.template:
+    src: netplan-dns.yaml.j2
+    dest: /etc/netplan/99-homelab-dns.yaml
+    mode: "0600"
+    owner: root
+    group: root
+  become: true
+  register: k3s_node_dns_netplan
+
+# Split from the apply deliberately: `generate` parses and merges every /etc/netplan/*.yaml
+# and fails without touching the running configuration, so a bad merge stops here rather
+# than reconfiguring the control-plane node's only uplink.
+- name: Validate the merged netplan configuration # noqa no-handler
+  tags: [node-dns]
+  ansible.builtin.command:
+    cmd: netplan generate
+  become: true
+  changed_when: false
+  when: k3s_node_dns_netplan.changed
+
+- name: Apply the netplan DNS override # noqa no-handler
+  tags: [node-dns]
+  ansible.builtin.command:
+    cmd: netplan apply
+  become: true
+  changed_when: true
+  when: k3s_node_dns_netplan.changed
+
 - name: Raise the inotify instance limit for pod log tailing
   tags: [node-sysctl]
   # Kernel default is 128 instances PER UID — and every root-uid process on the node
