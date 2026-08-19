@@ -156,3 +156,19 @@ def test_the_backup_tier_label_loss_is_called_out() -> None:
         "the playbook must tell the operator how to restore the tier label"
     )
     assert "no backup tier" in text
+
+
+def test_the_quiesce_selector_is_proven_before_anything_is_scaled_down() -> None:
+    """A selector matching nothing makes the quiesce wait pass instantly.
+
+    The wait selects pods by `app=<mig_deploy>`. If a Deployment used a different label the wait
+    would succeed immediately while the writer kept running, and the copy would capture a live
+    filesystem. Nothing downstream would notice — the digests would agree, because both sides are
+    read after the same torn copy.
+    """
+    names = _names(_main_tasks())
+    check = names.index("Refuse to migrate when the selector matches no running pod")
+    quiesce = names.index("Quiesce the workload")
+    assert check < quiesce, (
+        "the selector must be proven to match a running pod before the workload is scaled down"
+    )

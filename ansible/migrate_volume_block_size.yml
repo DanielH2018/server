@@ -136,6 +136,26 @@
         group: root
       become: true
 
+    # The wait below selects pods by app={{ mig_deploy }}. If a Deployment used a different
+    # label the selector would match nothing, the wait would pass instantly, and the copy would
+    # run against a volume its writer still had open — silently, and only visible later as
+    # corrupt data. Prove the selector matches something BEFORE scaling anything down.
+    - name: Confirm the workload's pods are selectable before quiescing
+      ansible.builtin.command:
+        argv: [k3s, kubectl, -n, "{{ mig_namespace }}", get, pod,
+               -l, "app={{ mig_deploy }}", -o, "jsonpath={.items[*].metadata.name}"]
+      become: true
+      register: mig_pods_before
+      changed_when: false
+
+    - name: Refuse to migrate when the selector matches no running pod
+      ansible.builtin.assert:
+        that: mig_pods_before.stdout | trim | length > 0
+        fail_msg: >-
+          no pod matches app={{ mig_deploy }} in {{ mig_namespace }}. Either the Deployment uses
+          a different label — in which case the quiesce wait would pass without the writer ever
+          stopping — or the workload is already down. Nothing has been changed.
+
     - name: Quiesce the workload
       ansible.builtin.command:
         argv: [k3s, kubectl, -n, "{{ mig_namespace }}", scale,
