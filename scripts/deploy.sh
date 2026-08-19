@@ -26,6 +26,10 @@
 #     inventory/group_vars/all.yml, including the 19 roles it refuses to cover.
 #   --list-services prints every valid --tags value and exits.
 #   --skip-tag-check deploys a tag this wrapper does not recognise.
+#   --skip-staleness-check deploys from a tree behind origin/master. Refused by default
+#     (exit 4, nothing deployed): a stale tree renders stale templates and reverts live
+#     config, and every repo-side check reads green while it does. Being *ahead* of master
+#     is normal branch work and is never refused.
 #   --changed [<ref>] deploys every service touched vs <ref> (default origin/master) instead of
 #     a hand-picked --tags. Resolves to --tags under the hood (scripts/deploy_tags.py changed),
 #     so the derived list still goes through the same lock and tag validation below, and prints
@@ -92,6 +96,7 @@ args=()
 tags=()
 next_is_tags=0
 skip_tag_check=0
+skip_staleness_check=0
 dry_run=0
 
 for arg in "$@"; do
@@ -104,6 +109,9 @@ for arg in "$@"; do
     case "$arg" in
         --skip-tag-check)
             skip_tag_check=1
+            ;;
+        --skip-staleness-check)
+            skip_staleness_check=1
             ;;
         --dry-run)
             # Translated, not passed through: ansible-playbook has no --dry-run of its own
@@ -149,6 +157,16 @@ if [[ "$skip_tag_check" == 0 && ${#tags[@]} -gt 0 ]]; then
 fi
 
 set -- "${args[@]}"
+
+# A tree behind origin/master renders stale templates and reverts live config for the roles
+# it targets, while every repo-side check still reads green -- the stale tree is consistent
+# with itself. Measured 2026-08-19; see scripts/deploy_staleness.py. This runs before --check
+# and --dry-run too: a green dry run against a stale tree is the misleading signal itself.
+if [[ "$skip_staleness_check" == 0 ]]; then
+    if ! uv run python scripts/deploy_staleness.py; then
+        exit 4
+    fi
+fi
 
 for arg in "$@"; do
     if [[ "$arg" == "--check" ]]; then
