@@ -533,10 +533,30 @@ Deployed 2026-08-19 in two stages, as designed: `claude-otel` first to add the l
 - **Stage B rolled nothing, as predicted.** All seven pods kept the start times from the stage-A
   roll. A NetworkPolicy change restarts nothing, so arming the fence is observable only in the
   probe and the callers.
+- **Stage A deployed stale templates, and that is the session's most reusable finding.** The
+  worktree was 48 commits behind master, and `scripts/deploy.sh` renders from whatever tree it
+  runs in, so stage A reverted `claude-otel` to its state at the branch point. Live for roughly
+  nine minutes (22:14–22:23): the longhorn scrape lost the endpoint-based service discovery that
+  scrapes both `longhorn-manager` pods, falling back to a single Service target, and
+  `telemetry-health.sh` was reverted alongside it. Rebasing onto master and redeploying restored
+  both. Nothing about this is specific to NetworkPolicies — **any** worktree-isolated session that
+  is behind master silently reverts live config for the roles it deploys, and every repo-side
+  check reads green because the tree it renders from is internally consistent. It surfaced here
+  only because a scrape-target count moved and got chased rather than waved through. The durable
+  fix is a check in `deploy.sh` — refuse, or at least warn, when `HEAD` is behind
+  `origin/master` — not a paragraph in a design doc.
 - **The probe is the proof, not the witnesses.** `netpol-baseline-probe-slice3` reported its control
   target reachable (`traefik:80`) and both fenced services unreachable from an unlisted caller. The
   scrape-target count returning to 25 shows the admitted callers still work; only the inverted
   assertions show the fence denies anything.
+- **The intra-namespace `podSelector: {}` peer is proven, and it proves additivity too.**
+  Prometheus scrapes kube-state-metrics, `loki:3100` and `tempo:3200` — all three fenced, all
+  three reading `up == 1` after the fence. The loki case is the interesting one: `loki-callers`
+  admits only `homelab-mcp` on 3100, so prometheus reaches loki solely because the baseline's
+  `podSelector: {}` rule unions with it. Grafana's own outbound path to those three datasources
+  rides the same rule but was not separately exercised — no dashboard was loaded in the
+  verification window, and an absence of errors in grafana's log is not evidence that it queried
+  anything.
 - **A 302 from the grafana route proves nothing**, for the reason already recorded elsewhere in this
   doc: Authelia's redirect fires in the middleware, before Traefik proxies to the backend. The
   Traefik cross-namespace peer was proven instead through the `prometheus` route, which carries no
