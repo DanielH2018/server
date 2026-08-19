@@ -1,0 +1,37 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: traefik
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: traefik
+  policyTypes:
+    - Ingress
+  ingress:
+    # The front door. Open to every source on purpose: these ports already take LAN, WireGuard
+    # and Cloudflare traffic, and ETP=Local preserves the client IP, so an ipBlock list here
+    # would have to enumerate the internet. It also keeps uptime-kuma's ~20 monitors and all
+    # four netpol probe control legs working -- each dials traefik:80 to prove the probe itself
+    # has a network.
+    - ports:
+        - port: 80
+          protocol: TCP
+        - port: 443
+          protocol: TCP
+    # :8080 is the port worth fencing. prometheus moved to the observability namespace in
+    # slice 3, so this is cross-namespace: namespaceSelector and podSelector are siblings in
+    # ONE from item, which ANDs them. As separate items they would OR, admitting every pod in
+    # observability and every prometheus anywhere.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - port: 8080
+          protocol: TCP
