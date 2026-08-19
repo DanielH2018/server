@@ -5,7 +5,7 @@
 uptime_kuma_k8s_enabled: true
 
 # SAME tag as the Docker copy on purpose — the seeded SQLite crosses hosts, not versions.
-uptime_kuma_k8s_image: louislam/uptime-kuma:2.4.0
+uptime_kuma_k8s_image: louislam/uptime-kuma:2.5.0
 # Pinned (the Docker sidecar ran :latest): the k8s-defaults Renovate manager only tracks
 # versioned pins, and v2.0.0 is what the KD5 gate verified (docker.enabled, static-file
 # notification entities, on_delete semantics).
