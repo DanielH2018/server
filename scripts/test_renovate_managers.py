@@ -579,7 +579,7 @@ def test_no_built_image_floats_on_an_unpinned_base(tracked: list[str]) -> None:
 
 
 def test_n8n_base_pins_in_lockstep() -> None:
-    """n8n's app and task-runner base pins must carry the same version.
+    """n8n's app and task-runner base pins must name the same tag.
 
     The two images are version-coupled: the runners execute Code-node tasks on behalf of the
     n8n they serve, and the runners Dockerfile pins pnpm to the base's own store version. A
@@ -588,23 +588,30 @@ def test_n8n_base_pins_in_lockstep() -> None:
     file's header records. Renovate groups them into one PR (the "n8n (lockstep: app + task
     runners)" packageRule); this asserts the coupling actually held.
 
+    Compares the TAG and stops at the `@`. Both pins are `stable@sha256:...`, and their
+    digests necessarily DIFFER — they are two different images. What has to match is the
+    channel each one follows, because that is what decides they describe the same release.
+    The check reads the same way for a plain version pin, so it survives a move back to one.
+
     The same shape as test_shellcheck_py_pins_in_lockstep below, and for the same reason: a
     grouping rule expresses intent, only a test enforces it."""
     root = _REPO / "ansible/roles/k8s/n8n-images/templates"
     app = re.search(
-        r"^FROM\s+n8nio/n8n:(\S+)", (root / "Dockerfile.j2").read_text(), re.MULTILINE
+        r"^FROM\s+n8nio/n8n:([^@\s]+)",
+        (root / "Dockerfile.j2").read_text(),
+        re.MULTILINE,
     )
     runners = re.search(
-        r"^FROM\s+n8nio/runners:(\S+)",
+        r"^FROM\s+n8nio/runners:([^@\s]+)",
         (root / "Dockerfile-runners.j2").read_text(),
         re.MULTILINE,
     )
-    assert app, "no `FROM n8nio/n8n:<version>` in Dockerfile.j2"
-    assert runners, "no `FROM n8nio/runners:<version>` in Dockerfile-runners.j2"
+    assert app, "no `FROM n8nio/n8n:<tag>` in Dockerfile.j2"
+    assert runners, "no `FROM n8nio/runners:<tag>` in Dockerfile-runners.j2"
     assert app.group(1) == runners.group(1), (
-        f"n8n base pins have drifted apart: app is {app.group(1)}, runners is "
+        f"n8n base pins have drifted apart: app follows {app.group(1)}, runners follows "
         f"{runners.group(1)}. They are version-coupled — a skew surfaces as Code-node "
-        "workflows failing at runtime, not as a build error. Bump both together."
+        "workflows failing at runtime, not as a build error. Move both together."
     )
 
 
