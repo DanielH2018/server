@@ -9,13 +9,21 @@ Two findings carry the decision, and the second was not expected:
    28 volume prefixes, 4,080 live objects, 2.64 GiB — cost **5 Class C calls**. Deletes are
    Class A, which B2 does not meter. Deleting one volume's chain through Longhorn costs on the
    order of several hundred Class C.
-2. **Longhorn's own deletion leaves objects behind, permanently.** Five volumes whose chains
-   were deleted through Longhorn earlier today have **zero Backup CRs** and still hold **286
-   live objects (12.7 MiB)** in B2. Nothing in Longhorn references them, so nothing will ever
-   revisit them. We paid full Class C price for a deletion that only half happened.
+2. **Deleting a chain through Longhorn leaves objects behind.** Five volumes whose chains were
+   deleted through Longhorn earlier today have **zero Backup CRs** and still hold **286 live
+   objects (12.7 MiB)** in B2. We paid full Class C price for a deletion that only half
+   happened.
 
-Finding 2 matters independently of cost. Even at an unlimited transaction budget, the Longhorn
-path does not actually empty the store.
+**Finding 2 has an untested alternative explanation, and it is the likelier one.**
+`drop_migrated_backup_chain.yml` deletes `Backup` CRs only — it never deletes the
+`BackupVolume` CR, which is what owns the volume *directory* in Longhorn's object model. All
+seven stale `BackupVolume` CRs are still standing. So "Backups gone, directory still there" is
+at least as consistent with *we never deleted the directory's owner* as with *Longhorn strands
+objects*. Until that is tested, finding 2 reads as: these objects remain, and the path that
+would clean them up was never exercised.
+
+The cost argument alone carries the recommendation, and it is measured. Finding 2 changes only
+how much extra the route is worth.
 
 ## What was measured
 
@@ -44,7 +52,15 @@ The top two are the chains deliberately not yet deleted. The bottom five are the
 The hide-marker column is the tell. Volumes untouched today carry 1–6 hide markers; the five
 drained ones carry 17–67. Longhorn issued deletes, roughly half the objects went away, and the
 rest stayed. Their `BackupVolume` CRs last synced at 23:18–23:19Z and carry no
-`deletionTimestamp`, so this is a settled state, not a cleanup still in flight.
+`deletionTimestamp` — but they were also never asked to go away, which is the open question
+above.
+
+**The test that settles it** — one command, on the smallest prefix (`pvc-36a38101`: 31 live
+objects, 0.1 MiB, zero Backup CRs, replacement already backed up at 16 MiB). Delete its
+`BackupVolume` CR, then re-list the prefix. If it empties, finding 2 collapses and the fix is
+one extra task in `drop_migrated_backup_chain.yml`. A ready-to-run play with both refusal
+guards is at `/home/ubuntu/.claude/jobs/2763e390/tmp/oneshot-bv-delete-test.yml`; the auto-mode
+classifier blocks it as a backup-plane write, so it needs explicit approval.
 
 ### The bucket layout, and why prefix deletion is safe
 
@@ -84,7 +100,8 @@ Per volume, the two paths:
 | Objects actually removed | about half | all of them, verified |
 
 For the 14 volumes still at 2 MiB, deleting the old chains through Longhorn is on the order of
-**thousands of Class C**, against roughly **6 Class C** through the API.
+**thousands of Class C**. Through the API it is one enumeration (5), one verification re-list
+per volume (14), plus the target sync — call it **20–50 Class C** in total.
 
 **This does not make the remaining migration free, and I earlier said it would.** The measured
 ~180 Class C per volume of *migration* cost — volume deletion, target syncs, the first backup
@@ -132,8 +149,10 @@ The one change either way: `b2_list_versions` needs a `prefix` parameter.
   exercised this session. If it does not drop the dangling CRs, they need removing another way.
 - **The sync's own cost.** The header calls it cheap. A sync must walk every volume directory,
   so estimate tens of Class C per drain run — small, but not zero, and not measured.
-- **Why Longhorn leaves residue.** The measurement is solid; the cause is not established. It
-  does not change the recommendation, since the API route removes the objects either way.
+- **Whether the residue is residue at all.** The object counts are solid; the cause is not
+  established, and the leading explanation is that we never deleted the `BackupVolume` CR. See
+  the test above. It does not change the recommendation, since the API route removes the objects
+  either way.
 - **B2's Class C billing granularity for large pages.** B2 bills listing per 1,000 names
   returned, so the 5-call figure is 5 *billed* units either way; a smaller `maxFileCount` would
   not reduce it.
