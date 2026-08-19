@@ -1,4 +1,10 @@
-FROM lscr.io/linuxserver/code-server:latest
+# PINNED. `:latest` here had no updater: the weekly redeploy cron that used to force a rebuild of
+# every locally-built role (roles/containers/common/tasks/redeploy_cron.yml) lost its last caller
+# in the 2026-08-14 k3s migration, and Renovate cannot bump a tag with no version in it. An
+# explicit tag makes the built-in dockerfile manager track this; the linuxserver packageRule in
+# renovate.json already orders the -lsNN form. See Dockerfile.j2 in roles/k8s/n8n-images for the
+# full reasoning.
+FROM lscr.io/linuxserver/code-server:4.133.0-ls358
 
 # 1. Install system dependencies
 #    texlive-fonts-extra is deliberately NOT here: it is a 1.7 G leaf package, on its own

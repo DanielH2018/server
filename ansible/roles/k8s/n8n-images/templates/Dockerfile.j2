@@ -1,5 +1,21 @@
-# Use the official n8n image as the base
-FROM n8nio/n8n:latest
+# Use the official n8n image as the base.
+#
+# PINNED, and it must stay pinned. `:latest` was the documented rolling tier until 2026-08-19, on
+# the premise that a rebuild picks up the newest base — but the thing that forced those rebuilds
+# was roles/containers/common/tasks/redeploy_cron.yml, whose callers the k3s migration archived on
+# 2026-08-14. Nothing on the cluster side replaced it, so a `:latest` FROM has no updater at all:
+# Renovate has no version to bump, so there is no PR, no commit, and no gitops tick. n8n sat on
+# 2.34.6 while upstream shipped 2.35.4.
+#
+# An explicit tag is what Renovate's built-in dockerfile manager reads. It raises a PR (no
+# automerge — the automerge rules match custom.regex managers only), and the merged commit lands
+# under ansible/roles/k8s/**, which gitops_deploy classifies as a k8s-role change and Discord-alerts
+# for an operator to deploy. That is the posture n8n's autodeploy-denylist entry asks for.
+#
+# LOCKSTEP with Dockerfile-runners.j2: n8n and its task runners are version-coupled, both
+# repositories publish the same version tags, and renovate.json groups them into one PR
+# (test_renovate_managers.py asserts the two pins match).
+FROM n8nio/n8n:2.35.4
 
 # Switch to the root user to install packages
 USER root
