@@ -26,7 +26,7 @@ netpol_baseline_probe_image: alpine:3.24
 # Slice 3 fences the observability namespace. It carries its OWN enforcement flag and its
 # OWN node-CIDR list, deliberately: the shared netpol_baseline_node_cidrs is read by the 16
 # workloads slices 1 and 2 already deployed, and widening it would re-scope all of them.
-netpol_baseline_obs_enforced: false
+netpol_baseline_obs_enforced: true
 
 # All four node addresses, where the homelab list carries only the two cni0 /32s.
 #
