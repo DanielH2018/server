@@ -1355,6 +1355,39 @@ def test_format_backup_budget_flags_a_shard_over_the_daily_cap():
     assert "OVER BUDGET" in text and "weekly-backup-d2" in text
 
 
+def test_stranded_counts_backups_the_current_tier_does_not_own():
+    """Stranded means "no job will ever prune this", not "past retain".
+
+    Longhorn's retain counts only a job's OWN backups, so a daily-era backup on a volume that
+    has since moved to a weekday shard is pruned by nothing, ever. Until 2026-08-19 this was
+    computed as `max(0, backups - retain)`, which under-reported the live cluster by 4.7x — 7
+    against a true 33 — on the number an operator reads before deciding what to delete.
+    """
+    vols = {"pvc-moved": {"prune": 10, "blocks": 100, "backups": 5}}
+    owners = {"pvc-moved": {"daily-backup": 4, "weekly-backup-d2": 1}}
+    text, _ = probe.format_backup_budget(
+        vols, {"pvc-moved": "weekly-backup-d2"}, retain=2, owners=owners
+    )
+    assert "4 stranded backup(s)" in text, text
+
+
+def test_backups_the_current_tier_owns_are_not_stranded_even_past_retain():
+    """The owning job prunes them on its next run, so they are queued, not abandoned."""
+    vols = {"pvc-busy": {"prune": 10, "blocks": 100, "backups": 5}}
+    owners = {"pvc-busy": {"weekly-backup-d2": 5}}
+    text, _ = probe.format_backup_budget(
+        vols, {"pvc-busy": "weekly-backup-d2"}, retain=2, owners=owners
+    )
+    assert "stranded" not in text, text
+
+
+def test_stranded_falls_back_to_zero_without_ownership_data():
+    """No owners map means nothing is PROVEN stranded — never guess high and prompt a delete."""
+    vols = {"pvc-x": {"prune": 10, "blocks": 100, "backups": 5}}
+    text, _ = probe.format_backup_budget(vols, {"pvc-x": "weekly-backup-d2"}, retain=2)
+    assert "stranded" not in text, text
+
+
 def test_format_backup_budget_does_not_charge_a_day_for_an_unscheduled_volume():
     """A volume with no recurring job never runs a backup and so never prunes — charging its
     blocks to a shard would read as an over-budget day that cannot actually happen."""
@@ -1506,15 +1539,21 @@ def test_format_backup_budget_flags_a_b2_volume_left_on_the_daily_tier():
 
 
 def test_format_backup_budget_reports_stranded_backups_not_pending_deletes():
-    """Backups beyond `retain` are stranded, not queued. Longhorn enforces retain only when the
-    owning job runs against a volume still in its groups, counting only its own backups — so a
-    volume that moved tier keeps its old backups forever and only the reaper clears them."""
+    """Stranded backups are abandoned, not queued. Longhorn enforces retain only when the owning
+    job runs against a volume still in its groups, counting only its own backups — so a volume
+    that moved tier keeps its old backups forever and only the reaper clears them.
+
+    This asserted `backups - retain` until 2026-08-19, which is a different quantity and made
+    the check ratify the bug: 11 backups against retain 4 read as 7 stranded, when the answer
+    depends entirely on who owns them. Here the d5 job owns 2, so the other 9 are the strays.
+    """
     vols = {"pvc-a": {"prune": 100, "blocks": 50, "backups": 11}}
+    owners = {"pvc-a": {"daily-backup": 9, "weekly-backup-d5": 2}}
     text, code = probe.format_backup_budget(
-        vols, {"pvc-a": "weekly-backup-d5"}, retain=4
+        vols, {"pvc-a": "weekly-backup-d5"}, retain=4, owners=owners
     )
     assert code == 0
-    assert "7 stranded backup(s)" in text and "reaper" in text
+    assert "9 stranded backup(s)" in text and "reaper" in text
 
 
 def test_no_cluster_route_carries_the_retired_k8s_suffix():
