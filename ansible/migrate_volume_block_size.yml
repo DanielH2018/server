@@ -1,0 +1,372 @@
+---
+# Recreate one Longhorn volume so it picks up the current default-backup-block-size.
+#
+# WHY THIS EXISTS. `default-backup-block-size` moved from 2 MiB to 16 MiB on 2026-08-19, and
+# Longhorn applies it to NEW volumes only — the Volume CRD says so outright: "BackupBlockSize
+# indicate the block size to create backups. The block size is immutable." Every volume created
+# before that date keeps 2 MiB forever, through backups, restarts and Longhorn upgrades.
+#
+# The cost is a disaster-recovery one. A restore spends one Class B GET per block, and B2's free
+# tier allows 2,500 Class B per day. At 2 MiB the store held 3,472 blocks, so a full-cluster
+# restore needed ~139% of a daily cap and could not complete in one day. At 16 MiB the same data
+# is ~434 blocks.
+#
+# WHY NOT JUST REDEPLOY THE SERVICE. Every one of these volumes was created by k8s/seed-volume,
+# which copies from a Docker source path under /home/ubuntu/server/containers. Docker was removed
+# from both cluster nodes on 2026-08-14 and those paths are gone. A fresh PVC has no .seeded
+# marker, so the role decides it must copy, then fails on the missing source. It fails loudly and
+# before it empties anything — copy.yml checksums the source ahead of the destination wipe — so
+# this is an abort, not a data-loss path. But it does mean recreation cannot go through the role.
+# Hence the copy-out / copy-back here.
+#
+# WHAT PROTECTS THE DATA. The staging copy is verified by file count and content digest before
+# the original is deleted, and the copy back is verified against the same digest before the
+# staging volume is removed. Between those two points the staging volume is the only copy, which
+# is why the original's B2 backup chain must not be deleted until this has finished and the new
+# volume has a backup of its own.
+#
+# Usage (one volume at a time, deliberately):
+#   uv run ansible-playbook ansible/migrate_volume_block_size.yml \
+#     -i ansible/inventory/hosts.ini -e mig_claim=terraria-stats-data -e mig_deploy=terraria-stats
+#
+# Afterwards, restore the volume's backup-tier label — a recreated volume has none, which puts it
+# in no tier at all, and the backup-health check only notices once it ages past its bound:
+#   uv run ansible-playbook ansible/k3s-bringup.yml --tags longhorn
+- name: Recreate a Longhorn volume at the current backup block size
+  hosts: daniel-box
+  connection: local
+  gather_facts: false
+  vars:
+    mig_namespace: homelab
+    mig_image: busybox:stable
+    mig_temp_claim: "{{ mig_claim }}-blockmig"
+    mig_pod: "blockmig-{{ mig_claim }}"
+    mig_manifests: /etc/rancher/k3s/blockmig
+  pre_tasks:
+    - name: Load secrets for become
+      community.sops.load_vars:
+        file: "{{ playbook_dir }}/vars/secrets.yml"
+      delegate_to: localhost
+      no_log: true
+
+    - name: Set become password
+      ansible.builtin.set_fact:
+        ansible_become_password: "{{ become_password }}"
+      no_log: true
+
+    - name: Require a claim and its workload
+      ansible.builtin.assert:
+        that:
+          - mig_claim is defined
+          - mig_deploy is defined
+        fail_msg: >-
+          pass -e mig_claim=<pvc> and -e mig_deploy=<deployment>. The workload is not derived,
+          because scaling the wrong Deployment leaves the real writer running against a volume
+          being copied. For a volume with no Deployment — one written only by a CronJob, such as
+          pi-peer-backup-data — pass -e mig_deploy=none, and the play asserts the volume is
+          detached instead of quiescing anything.
+
+  tasks:
+    # Read from the cluster rather than from the role default. If the setting had not actually
+    # been applied, assuming it would delete and rebuild the volume for no gain, and the mistake
+    # would surface only after the original was gone.
+    - name: Read the block size new volumes are being created at
+      ansible.builtin.command:
+        argv: [k3s, kubectl, -n, longhorn-system, get, "settings.longhorn.io",
+               default-backup-block-size, -o, "jsonpath={.value}"]
+      become: true
+      register: mig_setting
+      changed_when: false
+
+    - name: Note the target block size
+      ansible.builtin.set_fact:
+        mig_target_block: "{{ mig_setting.stdout | int * 1048576 }}"
+
+    - name: Require the setting to be readable
+      ansible.builtin.assert:
+        that: mig_target_block | int > 0
+        fail_msg: >-
+          default-backup-block-size read back as '{{ mig_setting.stdout }}'. Nothing has been
+          changed. Deploy the longhorn setting before migrating any volume.
+
+    - name: Resolve the bound PersistentVolume
+      ansible.builtin.command:
+        argv: [k3s, kubectl, -n, "{{ mig_namespace }}", get, pvc, "{{ mig_claim }}",
+               -o, "jsonpath={.spec.volumeName}"]
+      become: true
+      register: mig_pv
+      changed_when: false
+
+    - name: Read the volume's current block size and requested size
+      ansible.builtin.command:
+        argv: [k3s, kubectl, -n, longhorn-system, get, volume, "{{ mig_pv.stdout }}", -o, json]
+      become: true
+      register: mig_volume
+      changed_when: false
+
+    - name: Note what is being migrated
+      ansible.builtin.set_fact:
+        mig_block: "{{ (mig_volume.stdout | from_json).spec.backupBlockSize }}"
+        mig_bytes: "{{ (mig_volume.stdout | from_json).spec.size }}"
+        mig_backup_target: "{{ (mig_volume.stdout | from_json).spec.backupTargetName }}"
+        mig_request: "{{ (mig_volume.stdout | from_json).spec.size | int / 1073741824 }}"
+
+    # Re-running against an already-migrated volume would delete and rebuild it for nothing,
+    # spending real downtime and stranding its backup chain a second time.
+    - name: Refuse to migrate a volume that is already at the target block size
+      ansible.builtin.assert:
+        that: mig_block | int != mig_target_block | int
+        fail_msg: >-
+          {{ mig_claim }} is already at {{ mig_block | int // 1048576 }}Mi blocks — nothing to do.
+
+    # Longhorn's admission webhook enforces this on create. Discovering it after the original is
+    # deleted would leave the data only on the staging volume.
+    - name: Refuse a size the webhook will reject
+      ansible.builtin.assert:
+        that: mig_bytes | int % (mig_target_block | int) == 0
+        fail_msg: >-
+          {{ mig_claim }} requests {{ mig_bytes }} bytes, which is not an integer multiple of the
+          {{ mig_target_block | int // 1048576 }}Mi block size. Longhorn will refuse to create the
+          replacement. Fix the size in the role's PVC template first.
+
+    - name: Create the manifest directory
+      ansible.builtin.file:
+        path: "{{ mig_manifests }}"
+        state: directory
+        mode: "0700"
+        owner: root
+        group: root
+      become: true
+
+    # The wait below selects pods by app={{ mig_deploy }}. If a Deployment used a different
+    # label the selector would match nothing, the wait would pass instantly, and the copy would
+    # run against a volume its writer still had open — silently, and only visible later as
+    # corrupt data. Prove the selector matches something BEFORE scaling anything down.
+    - name: Confirm the workload's pods are selectable before quiescing
+      when: mig_deploy != "none"
+      ansible.builtin.command:
+        argv: [k3s, kubectl, -n, "{{ mig_namespace }}", get, pod,
+               -l, "app={{ mig_deploy }}", -o, "jsonpath={.items[*].metadata.name}"]
+      become: true
+      register: mig_pods_before
+      changed_when: false
+
+    - name: Refuse to migrate when the selector matches no running pod
+      when: mig_deploy != "none"
+      ansible.builtin.assert:
+        that: mig_pods_before.stdout | trim | length > 0
+        fail_msg: >-
+          no pod matches app={{ mig_deploy }} in {{ mig_namespace }}. Either the Deployment uses
+          a different label — in which case the quiesce wait would pass without the writer ever
+          stopping — or the workload is already down. Nothing has been changed.
+
+    # A volume written only by a CronJob has nothing to scale, and for most of the day nothing
+    # holds it open. Detached is the same guarantee the quiesce buys — no writer — but read from
+    # Longhorn rather than inferred from a pod list, so it is the stronger check of the two.
+    # It is a point-in-time reading: a CronJob that fires mid-migration would still attach the
+    # volume, so run this well clear of its schedule.
+    #
+    # A finished CronJob pod still counts as a consumer. Kubernetes keeps Completed pods, and
+    # each one holds the kubernetes.io/pvc-protection finalizer on any claim it mounted, so the
+    # PVC delete below hangs in Terminating until they are removed. Observed on
+    # pi-peer-backup-data, blocked by a pod that had finished 18 hours earlier. Delete the
+    # claim's finished pods first: `kubectl -n <ns> delete pod <name>`.
+    - name: Require the volume to be detached when there is no workload to quiesce
+      when: mig_deploy == "none"
+      ansible.builtin.assert:
+        that: (mig_volume.stdout | from_json).status.state == "detached"
+        fail_msg: >-
+          {{ mig_claim }} is {{ (mig_volume.stdout | from_json).status.state }}, not detached.
+          Something has it open, and copying now would capture a torn filesystem. Nothing has
+          been changed.
+
+    - name: Quiesce the workload
+      when: mig_deploy != "none"
+      ansible.builtin.command:
+        argv: [k3s, kubectl, -n, "{{ mig_namespace }}", scale,
+               "deploy/{{ mig_deploy }}", --replicas=0]
+      become: true
+      changed_when: true
+
+    # The volume is ReadWriteOnce and attached to whichever node the workload ran on. Copying
+    # before the writer is gone would capture a torn SQLite WAL.
+    - name: Wait for the workload's pods to go
+      when: mig_deploy != "none"
+      ansible.builtin.command:
+        argv: [k3s, kubectl, -n, "{{ mig_namespace }}", get, pod,
+               -l, "app={{ mig_deploy }}", -o, "jsonpath={.items[*].metadata.name}"]
+      become: true
+      register: mig_pods
+      until: mig_pods.stdout | trim | length == 0
+      retries: 30
+      delay: 5
+      changed_when: false
+
+    - name: Stage the staging claim
+      ansible.builtin.copy:
+        dest: "{{ mig_manifests }}/staging.yaml"
+        mode: "0600"
+        content: |
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: {{ mig_temp_claim }}
+            namespace: {{ mig_namespace }}
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            storageClassName: longhorn-nobackup
+            resources:
+              requests:
+                storage: {{ mig_bytes }}
+      become: true
+
+    - name: Create the staging claim
+      ansible.builtin.command:
+        argv: [k3s, kubectl, apply, -f, "{{ mig_manifests }}/staging.yaml"]
+      become: true
+      changed_when: true
+
+    - name: Copy out, verify, rebuild and copy back
+      block:
+        - name: Copy the data onto the staging volume
+          ansible.builtin.include_tasks: tasks/blockmig_copy.yml
+          vars:
+            copy_src_claim: "{{ mig_claim }}"
+            copy_dst_claim: "{{ mig_temp_claim }}"
+
+        - name: Record what the staging volume now holds
+          ansible.builtin.set_fact:
+            mig_files: "{{ copy_dst_files }}"
+            mig_digest: "{{ copy_dst_digest }}"
+
+        - name: Refuse to delete the original when the staging copy is empty
+          ansible.builtin.assert:
+            that: mig_files | int > 0
+            fail_msg: >-
+              the staging copy of {{ mig_claim }} holds no files. The original is untouched;
+              nothing has been deleted.
+
+        - name: Delete the original claim
+          ansible.builtin.command:
+            argv: [k3s, kubectl, -n, "{{ mig_namespace }}", delete, pvc, "{{ mig_claim }}",
+                   --wait=true]
+          become: true
+          changed_when: true
+
+        # The replacement cannot be created while the old PersistentVolume still holds the name,
+        # and Longhorn removes the Volume CR only after the PV goes.
+        - name: Wait for the old PersistentVolume to go
+          ansible.builtin.command:
+            argv: [k3s, kubectl, get, pv, "{{ mig_pv.stdout }}"]
+          become: true
+          register: mig_pv_gone
+          until: mig_pv_gone.rc != 0
+          retries: 60
+          delay: 5
+          changed_when: false
+          failed_when: false
+
+        - name: Stage the replacement claim
+          ansible.builtin.copy:
+            dest: "{{ mig_manifests }}/replacement.yaml"
+            mode: "0600"
+            content: |
+              apiVersion: v1
+              kind: PersistentVolumeClaim
+              metadata:
+                name: {{ mig_claim }}
+                namespace: {{ mig_namespace }}
+              spec:
+                accessModes: ["ReadWriteOnce"]
+                storageClassName: longhorn
+                resources:
+                  requests:
+                    storage: {{ mig_bytes }}
+          become: true
+
+        - name: Create the replacement claim
+          ansible.builtin.command:
+            argv: [k3s, kubectl, apply, -f, "{{ mig_manifests }}/replacement.yaml"]
+          become: true
+          changed_when: true
+
+        - name: Wait for the replacement to bind
+          ansible.builtin.command:
+            argv: [k3s, kubectl, -n, "{{ mig_namespace }}", get, pvc, "{{ mig_claim }}",
+                   -o, "jsonpath={.spec.volumeName}"]
+          become: true
+          register: mig_new_pv
+          until: mig_new_pv.stdout | trim | length > 0
+          retries: 60
+          delay: 5
+          changed_when: false
+
+        - name: Copy the data back onto the replacement
+          ansible.builtin.include_tasks: tasks/blockmig_copy.yml
+          vars:
+            copy_src_claim: "{{ mig_temp_claim }}"
+            copy_dst_claim: "{{ mig_claim }}"
+
+        # This is the gate the whole play exists to reach. Until it passes, the staging volume
+        # is not removed, so a mismatch leaves a recoverable copy behind rather than a hole.
+        - name: Assert the replacement matches what was copied out
+          ansible.builtin.assert:
+            that:
+              - copy_dst_files | int == mig_files | int
+              - copy_dst_digest == mig_digest
+            fail_msg: >-
+              {{ mig_claim }} did not come back intact: {{ copy_dst_files }} files /
+              {{ copy_dst_digest }} against {{ mig_files }} / {{ mig_digest }}. The staging
+              volume {{ mig_temp_claim }} still holds the verified copy — do NOT delete it.
+            success_msg: >-
+              {{ mig_claim }} restored: {{ copy_dst_files }} files, identical digest.
+
+        - name: Read the replacement's block size
+          ansible.builtin.command:
+            argv: [k3s, kubectl, -n, longhorn-system, get, volume, "{{ mig_new_pv.stdout }}",
+                   -o, "jsonpath={.spec.backupBlockSize}"]
+          become: true
+          register: mig_new_block
+          changed_when: false
+
+        - name: Assert the replacement actually took the new block size
+          ansible.builtin.assert:
+            that: mig_new_block.stdout | int == mig_target_block | int
+            fail_msg: >-
+              {{ mig_claim }} was rebuilt at {{ mig_new_block.stdout | int // 1048576 }}Mi
+              blocks, not {{ mig_target_block | int // 1048576 }}Mi — the migration bought
+              nothing and the old backup chain is now stranded.
+            success_msg: >-
+              {{ mig_claim }} is now on {{ mig_new_block.stdout | int // 1048576 }}Mi blocks.
+
+        - name: Remove the staging claim
+          ansible.builtin.command:
+            argv: [k3s, kubectl, -n, "{{ mig_namespace }}", delete, pvc, "{{ mig_temp_claim }}",
+                   --ignore-not-found, --wait=false]
+          become: true
+          changed_when: true
+
+      always:
+        # In `always` because a failure anywhere above otherwise leaves the service down with no
+        # sign of why, and the copy pod holding both volumes attached.
+        - name: Remove the copy pod
+          ansible.builtin.command:
+            argv: [k3s, kubectl, -n, "{{ mig_namespace }}", delete, pod, "{{ mig_pod }}",
+                   --ignore-not-found, --wait=false]
+          become: true
+          changed_when: true
+
+        - name: Restore the workload
+          when: mig_deploy != "none"
+          ansible.builtin.command:
+            argv: [k3s, kubectl, -n, "{{ mig_namespace }}", scale,
+                   "deploy/{{ mig_deploy }}", --replicas=1]
+          become: true
+          changed_when: true
+
+    - name: Report what still has to happen
+      ansible.builtin.debug:
+        msg:
+          - "{{ mig_claim }} rebuilt at {{ mig_new_block.stdout | int // 1048576 }}Mi blocks."
+          - "Its backup-tier label is GONE — run: uv run ansible-playbook ansible/k3s-bringup.yml --tags longhorn"
+          - "Until then it is in no backup tier, and its old B2 chain belongs to a volume that no longer exists."

@@ -1,0 +1,135 @@
+---
+# Delete the backup chain left behind when a volume is rebuilt by migrate_volume_block_size.yml.
+#
+# WHY NOT THE REAPER. longhorn-reap-orphan-backups.sh already deletes stranded backups and has the
+# better safety floor, but it is all-or-nothing: it reaps every orphan it finds. Each Longhorn
+# backup deletion walks the volume's whole block tree — about 1.28 Class C LISTs per stored block
+# — and the full backlog from a 20-volume migration is roughly 13,900 Class C against a 2,100/day
+# budget. Reaping it in one pass would cause exactly the transaction-cap event the migration
+# exists to prevent. This playbook deletes one volume's chain, so the spend can be paced.
+#
+# For a backlog too large to pace, the reaper's own header gives the alternative: delete the
+# objects straight against the B2 API, where deletes are Class A and unmetered, then force one
+# backup-target sync to drop the dangling Backup CRs.
+#
+# THE SAFETY CONDITION. A migrated volume's old chain belongs to a Longhorn volume that no longer
+# exists, so no RecurringJob will ever prune it — retain is per job, over its own backups, and
+# only while the job still selects the volume. It is also, until the replacement has been backed
+# up, the only copy of that data. So this refuses to run unless the replacement has a Completed
+# backup of its own. That check is machine-made rather than operator-remembered on purpose.
+#
+# Usage:
+#   uv run ansible-playbook ansible/drop_migrated_backup_chain.yml \
+#     -i ansible/inventory/hosts.ini -e drop_claim=sonarr-config
+#
+# The old volume is resolved from the Backup objects themselves: any Completed backup naming a
+# volume that no longer exists, for a PVC of this name.
+- name: Drop a migrated volume's stranded backup chain
+  hosts: daniel-box
+  connection: local
+  gather_facts: false
+  vars:
+    drop_namespace: homelab
+  pre_tasks:
+    - name: Load secrets for become
+      community.sops.load_vars:
+        file: "{{ playbook_dir }}/vars/secrets.yml"
+      delegate_to: localhost
+      no_log: true
+
+    - name: Set become password
+      ansible.builtin.set_fact:
+        ansible_become_password: "{{ become_password }}"
+      no_log: true
+
+    - name: Require a claim
+      ansible.builtin.assert:
+        that: drop_claim is defined
+        fail_msg: "pass -e drop_claim=<pvc>"
+
+  tasks:
+    - name: Resolve the volume currently backing the claim
+      ansible.builtin.command:
+        argv: [k3s, kubectl, -n, "{{ drop_namespace }}", get, pvc, "{{ drop_claim }}",
+               -o, "jsonpath={.spec.volumeName}"]
+      become: true
+      register: drop_current_pv
+      changed_when: false
+
+    - name: List every backup and the volume it belongs to
+      ansible.builtin.command:
+        argv: [k3s, kubectl, -n, longhorn-system, get, backups.longhorn.io, -o, json]
+      become: true
+      register: drop_backups
+      changed_when: false
+
+    - name: List the volumes that still exist
+      ansible.builtin.command:
+        argv: [k3s, kubectl, -n, longhorn-system, get, volumes.longhorn.io,
+               -o, "custom-columns=NAME:.metadata.name", --no-headers]
+      become: true
+      register: drop_live_volumes
+      changed_when: false
+
+    # A backup whose volume still exists is somebody's live chain, not debris. Restricting to
+    # Completed matters too: Longhorn's retain never prunes an Error backup, so those are removed
+    # by the reaper's own path, not here.
+    # The orphan test is "the volume is not in this list", so an empty or malformed list makes
+    # every backup an orphan and deletes a live chain. The claim's own volume must be in it:
+    # that proves the list was read, parsed and trimmed correctly, in one check.
+    - name: Refuse to classify orphans against an unusable volume list
+      ansible.builtin.assert:
+        that: drop_current_pv.stdout in (drop_live_volumes.stdout_lines | map('trim') | list)
+        fail_msg: >-
+          the live-volume list does not contain {{ drop_claim }}'s own volume
+          ({{ drop_current_pv.stdout }}). Every backup would be treated as stranded. Nothing
+          has been deleted.
+
+    # custom-columns pads every name to the column width, and a padded name matches nothing —
+    # which would classify every backup as an orphan. Trim before comparing.
+    - name: Narrow to Completed backups whose volume no longer exists
+      ansible.builtin.set_fact:
+        drop_orphans: >-
+          {{ (drop_backups.stdout | from_json)["items"]
+             | selectattr('status.volumeName', 'defined')
+             | selectattr('status.state', 'equalto', 'Completed')
+             | rejectattr('status.volumeName', 'in',
+                          drop_live_volumes.stdout_lines | map('trim') | list)
+             | list }}
+
+    # Backup objects do not name their PVC directly; Longhorn stores it inside the
+    # KubernetesStatus label, which is a JSON string. Matching the quoted key/value pair rather
+    # than the bare name keeps `n8n-data` from also selecting `n8n-data-something`.
+    - name: Keep only the ones belonging to this claim
+      ansible.builtin.set_fact:
+        drop_stranded: >-
+          {{ drop_orphans
+             | selectattr('status.labels.KubernetesStatus', 'defined')
+             | selectattr('status.labels.KubernetesStatus', 'search',
+                          '"pvcName":"' ~ drop_claim ~ '"')
+             | map(attribute='metadata.name') | list }}
+        drop_current_backups: >-
+          {{ (drop_backups.stdout | from_json)["items"]
+             | selectattr('status.volumeName', 'defined')
+             | selectattr('status.volumeName', 'equalto', drop_current_pv.stdout)
+             | selectattr('status.state', 'equalto', 'Completed')
+             | map(attribute='metadata.name') | list }}
+
+    - name: Refuse to drop the old chain until the replacement has one of its own
+      ansible.builtin.assert:
+        that: drop_current_backups | length > 0
+        fail_msg: >-
+          {{ drop_claim }} (now {{ drop_current_pv.stdout }}) has no Completed backup. Deleting
+          the stranded chain would leave it with no recovery point at all. Trigger its weekday
+          shard first and wait for the backup to complete.
+        success_msg: >-
+          {{ drop_claim }} has {{ drop_current_backups | length }} Completed backup(s) on its
+          current volume; {{ drop_stranded | length }} stranded object(s) will be deleted.
+
+    - name: Delete the stranded backups
+      ansible.builtin.command:
+        argv: [k3s, kubectl, -n, longhorn-system, delete,
+               "backups.longhorn.io/{{ item }}", --ignore-not-found]
+      become: true
+      loop: "{{ drop_stranded }}"
+      changed_when: true
