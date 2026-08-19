@@ -43,6 +43,15 @@ SLICE_2_ROLES = {
     "configarr",
 }
 
+# Leaf apps born fenced. A service added AFTER a slice shipped belongs to no slice — it was
+# never part of that rollout — but it is the same shape slice 1 covers: Traefik is its only
+# caller and it dials nothing itself, so labelling it at creation costs nothing and skips the
+# unfenced window a later slice would have to close.
+BORN_FENCED_ROLES = {
+    # Serves each host's ~/.claude/artifacts read-only; makes no outbound connection at all.
+    "artifacts",
+}
+
 LABEL = ("netpol-baseline", "enforced")
 
 
@@ -69,7 +78,7 @@ def _labelled_roles() -> set[str]:
 
 
 def test_exactly_the_slice_1_and_slice_2_roles_carry_the_baseline_label() -> None:
-    expected = SLICE_1_ROLES | SLICE_2_ROLES
+    expected = SLICE_1_ROLES | SLICE_2_ROLES | BORN_FENCED_ROLES
     labelled = _labelled_roles()
     missing = sorted(expected - labelled)
     extra = sorted(labelled - expected)

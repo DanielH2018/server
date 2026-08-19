@@ -179,6 +179,13 @@ reason below.
 | **4** | Infra tier: traefik, authelia, crowdsec, pihole, mosquitto, nut, registry, headlamp, n8n | Highest consequence; do it once the pattern is proven |
 | **5** | Switch `netpol_baseline_scope` to `namespace` | Makes a workload fenced-by-default instead of opt-in. Gated on zero unlabelled pods |
 
+**Services born fenced.** A leaf app added after slice 1 shipped belongs to no slice, but has
+slice 1's shape: Traefik is its only caller and it dials nothing. Those carry the label from
+their first deploy rather than waiting for slice 5 to sweep them up, and
+`ansible/tests/test_netpol_baseline_labels.py` lists them in `BORN_FENCED_ROLES` so the set
+stays as explicit as the slices. So far: **artifacts** (2026-08-19), the read-only browser over
+each host's `~/.claude/artifacts`.
+
 **Why observability moved from first to third.** It is small in pod count but dense in
 exactly the paths that are hardest — `loki:3100`, `tempo:3200`, `prometheus:9090` and
 `otel-collector:4317` all take traffic over hostPorts (that last one is how both hosts'
