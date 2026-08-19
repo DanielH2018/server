@@ -67,6 +67,22 @@ SLICE_3_WORKLOADS = {
 
 SLICE_3_ROLES = {role for role, _name in SLICE_3_WORKLOADS}
 
+# Slice 4: core infra (docs/networkpolicy-default-deny.md). Named per WORKLOAD, not per role, for
+# the same reason as slice 3: pihole renders two workloads — pihole and pihole-2, an HA pair
+# sharing app=pihole and differing only on the instance label — from one role.
+SLICE_4_WORKLOADS = {
+    ("traefik", "traefik"),
+    ("authelia", "authelia"),
+    ("crowdsec", "crowdsec"),
+    ("pihole", "pihole"),
+    ("pihole", "pihole-2"),
+    ("mosquitto", "mosquitto"),
+    ("nut", "nut"),
+    ("jellyfin", "jellyfin"),
+}
+
+SLICE_4_ROLES = {role for role, _name in SLICE_4_WORKLOADS}
+
 # Workloads inside a fenced role that are fenced by their OWN NetworkPolicy rather than by the
 # baseline label. Each entry must name the policy that covers it: an unexplained exemption is
 # indistinguishable from a workload someone forgot to label.
