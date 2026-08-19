@@ -118,7 +118,14 @@
     - { key: "IgnoreRhosts", value: "yes" }
     - { key: "ChallengeResponseAuthentication", value: "no" }
     - { key: "MaxAuthTries", value: "3" }
-    - { key: "MaxSessions", value: "2" }
+    # 10 is OpenSSH's own default and still within the CIS ceiling. MaxSessions caps channels
+    # per CONNECTION, not per host, and every interactive session to these hosts is multiplexed
+    # down one ControlMaster connection (chezmoi home/private_dot_ssh/private_config.tmpl) —
+    # so 2 meant two concurrent shells per host. The third got `error: no more sessions` from
+    # sshd, which the client reports as `mux_client_request_session: session request failed:
+    # Session open refused by peer`. It then falls back to its own connection and cannot claim
+    # the control socket, so one refusal produced several error lines.
+    - { key: "MaxSessions", value: "10" }
     - { key: "ClientAliveCountMax", value: "2" }
     - { key: "LoginGraceTime", value: "30" }
     - { key: "LogLevel", value: "VERBOSE" }
