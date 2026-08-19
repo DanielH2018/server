@@ -360,6 +360,18 @@
       ],
       "groupName": "karakeep time-tagger pip deps (manual \u2014 track the pinned app)",
       "automerge": false
+    },
+    {
+      "description": "n8n and its task runners are pinned TWICE by design \u2014 roles/k8s/n8n-images/templates/Dockerfile.j2 (n8nio/n8n) and Dockerfile-runners.j2 (n8nio/runners) \u2014 and the two must move in lockstep: the runners are version-coupled to the n8n they serve, both repositories publish the same version tags, and a split surfaces as every Code-node workflow failing at RUNTIME rather than as a build error (the 2026-08-06 `@n8n/di` incident, recorded in Dockerfile-runners.j2). One group = one PR touching both files, so the lockstep test in scripts/test_renovate_managers.py never sees half an update. NO automerge: these are built images, so a bump is only realised by an operator-driven rebuild (`deploy.sh --tags n8n-images,n8n`), and a PR that merged itself would sit undeployed while reading as shipped. Both FROMs were `:latest` until 2026-08-19, which meant no PR at all \u2014 see the Dockerfile header.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "n8nio/n8n",
+        "n8nio/runners"
+      ],
+      "groupName": "n8n (lockstep: app + task runners)",
+      "automerge": false
     }
   ]
 }

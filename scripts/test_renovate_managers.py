@@ -480,10 +480,11 @@ def test_every_dockerfile_is_renovate_visible(tracked: list[str]) -> None:
 
     The compose-template guard above covers `image:` lines; this is its sibling for built
     images. Discovery is by CONTENT (any tracked ansible/ file with a FROM line), not by
-    name, so the check doesn't share the blind spot it guards against. Untagged / :latest
-    FROMs are the deliberate rolling tier (build-on-recreate semantics — metabase, n8n,
-    code-server) and need no version tracking; the version-bearing ones are exactly what
-    the dockerfile manager must keep seeing."""
+    name, so the check doesn't share the blind spot it guards against.
+
+    Whether the FROM carries a version is a separate question, and its own test below —
+    this one is purely about file NAMING, so a build file renamed out of the manager's
+    filePatterns still fails here even when its pin is explicit."""
     from_re = re.compile(r"^FROM\s+\S+", re.MULTILINE)
     build_files = [
         f
@@ -504,6 +505,99 @@ def test_every_dockerfile_is_renovate_visible(tracked: list[str]) -> None:
         "Build file(s) with a FROM line that Renovate's dockerfile manager will NOT scan "
         "(name doesn't match its filePatterns) — their base-image pins will age silently:\n"
         + "\n".join(escaped)
+    )
+
+
+# A FROM line's image reference, plus the stage name a multi-stage build gives it.
+_FROM_RE = re.compile(
+    r"^FROM\s+(?P<ref>\S+)(?:\s+[Aa][Ss]\s+(?P<stage>\S+))?", re.MULTILINE
+)
+
+
+def test_no_built_image_floats_on_an_unpinned_base(tracked: list[str]) -> None:
+    """No FROM may float: every base needs an explicit version tag or a digest.
+
+    This test used to be the exemption it now forbids. The sibling above blessed untagged
+    and `:latest` FROMs as "the deliberate rolling tier (build-on-recreate semantics)" —
+    which was true only under Docker Compose, where `build: always` plus the weekly
+    roles/containers/common/tasks/redeploy_cron.yml redeploy forced the rebuild that picked
+    up new base layers. The k3s migration archived that cron's last caller on 2026-08-14 and
+    put nothing in its place, so from then on a floating FROM had NO updater whatsoever:
+    Renovate has no version to bump, so no PR is raised, so no commit lands, so gitops never
+    ticks and no rebuild ever runs. Three images (n8n, n8n-runners, code-server) drifted that
+    way until 2026-08-19 — n8n stuck on 2.34.6 while upstream shipped 2.35.4.
+
+    So the rule inverts: an explicit tag is what makes the base a tracked dependency with a
+    PR, CI and a review, exactly like every pulled image in the fleet. A `:latest@sha256:...`
+    digest pin is accepted — that is a real, Renovate-bumpable pin, and it is the shape the
+    k8s roles already use for mutable-tag upstreams.
+
+    Multi-stage internal references (`FROM builder`) are skipped: a stage name declared
+    earlier in the same file is not an upstream image and has nothing to pin."""
+    build_files = [
+        f
+        for f in tracked
+        if f.startswith("ansible/")
+        and not f.endswith(".md")
+        and not f.startswith("ansible/roles/containers/archive/")
+        and _FROM_RE.search((_REPO / f).read_text(errors="ignore"))
+    ]
+    assert build_files, (
+        "no FROM-bearing build files found under ansible/ (discovery drifted?)"
+    )
+    floating = []
+    for f in build_files:
+        stages: set[str] = set()
+        for m in _FROM_RE.finditer((_REPO / f).read_text(errors="ignore")):
+            ref = m.group("ref")
+            if m.group("stage"):
+                stages.add(m.group("stage").lower())
+            # An earlier stage in the same file, not an upstream image.
+            if ref.lower() in stages:
+                continue
+            # A digest is a pin in its own right, whatever the tag says.
+            if "@sha256:" in ref:
+                continue
+            # Strip the registry host before looking for a tag, so the `:5000` in a
+            # `localhost:5000/foo` host:port is never mistaken for one.
+            tag = ref.rsplit("/", 1)[-1].partition(":")[2]
+            if not tag or tag == "latest":
+                floating.append(f"{f}: FROM {ref}")
+    assert not floating, (
+        "Build file(s) whose base image floats on an unpinned tag. Renovate cannot bump a "
+        "tag with no version in it, so these have NO update path at all — not a PR, not an "
+        "alert, not a rebuild. Pin an explicit version (or a @sha256 digest):\n"
+        + "\n".join(floating)
+    )
+
+
+def test_n8n_base_pins_in_lockstep() -> None:
+    """n8n's app and task-runner base pins must carry the same version.
+
+    The two images are version-coupled: the runners execute Code-node tasks on behalf of the
+    n8n they serve, and the runners Dockerfile pins pnpm to the base's own store version. A
+    skew does not fail the build — it surfaces at RUNTIME as every Code-node workflow timing
+    out while both pods stay Ready, which is precisely the 2026-08-06 `@n8n/di` failure that
+    file's header records. Renovate groups them into one PR (the "n8n (lockstep: app + task
+    runners)" packageRule); this asserts the coupling actually held.
+
+    The same shape as test_shellcheck_py_pins_in_lockstep below, and for the same reason: a
+    grouping rule expresses intent, only a test enforces it."""
+    root = _REPO / "ansible/roles/k8s/n8n-images/templates"
+    app = re.search(
+        r"^FROM\s+n8nio/n8n:(\S+)", (root / "Dockerfile.j2").read_text(), re.MULTILINE
+    )
+    runners = re.search(
+        r"^FROM\s+n8nio/runners:(\S+)",
+        (root / "Dockerfile-runners.j2").read_text(),
+        re.MULTILINE,
+    )
+    assert app, "no `FROM n8nio/n8n:<version>` in Dockerfile.j2"
+    assert runners, "no `FROM n8nio/runners:<version>` in Dockerfile-runners.j2"
+    assert app.group(1) == runners.group(1), (
+        f"n8n base pins have drifted apart: app is {app.group(1)}, runners is "
+        f"{runners.group(1)}. They are version-coupled — a skew surfaces as Code-node "
+        "workflows failing at runtime, not as a build error. Bump both together."
     )
 
 
