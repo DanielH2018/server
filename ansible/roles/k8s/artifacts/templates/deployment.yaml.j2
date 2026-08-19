@@ -39,6 +39,8 @@ spec:
               value: /srv/artifacts
             - name: ARTIFACTS_PORT
               value: "{{ container_item.port }}"
+            - name: ARTIFACTS_SERVICES_FILE
+              value: /app/known_services.json
             - name: PYTHONUNBUFFERED
               value: "1"
             - name: TZ

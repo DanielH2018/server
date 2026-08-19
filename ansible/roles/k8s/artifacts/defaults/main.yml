@@ -29,6 +29,47 @@ artifacts_peer_sources:
 # pull direction, on a timer. A session on daniel-box mounts its own tree and never waits.
 artifacts_sync_minute: "*/5"
 
+# Services no inventory lists any more, but that the older artifacts are about — a document
+# reviewing the kopia retirement is only findable by service if the name is still recognised.
+# Retiring a service should add its name here rather than dropping it from the index.
+# Platform components that carry no containers_list entry because they are installed by
+# roles/setup/k3s rather than deployed as workloads. Longhorn is the reason this list exists:
+# it is the most-discussed subject in the corpus and matched nothing without it.
+artifacts_platform_services:
+  - longhorn
+  - k3s
+  - metallb
+  - coredns
+  - unbound
+  - cert-manager
+
+# Derived once (2026-08-19) as the roles under containers/archive/ that no host's
+# containers_list still names — `ls roles/containers/archive` minus the two inventories.
+# prometheus, tempo and otel-collector are live in the observability namespace rather than
+# retired, but they are absent from containers_list for the same reason, so they belong here.
+artifacts_retired_services:
+  - beszel
+  - calibre
+  - calibre-web
+  - calmerge
+  - change-detection
+  - duplicati
+  - file-browser
+  - foundry
+  - guacamole
+  - happy
+  - jellyseerr
+  - kopia
+  - minecraft
+  - otel-collector
+  - portainer
+  - portainer-agent
+  - prometheus
+  - readarr
+  - tempo
+  - wallabag
+  - watchtower
+
 # The index is built per request from ~50 files; the pod is idle between page loads.
 artifacts_k8s_cpu_limit: "500m"
 artifacts_k8s_mem_limit: 128Mi

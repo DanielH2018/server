@@ -68,6 +68,127 @@ CONTENT_TYPES = {
     ".json": "application/json",
 }
 
+# The service names artifacts are matched against, rendered by Ansible from both hosts'
+# containers_list plus the retired names older documents still discuss. Absent in a unit test,
+# where the fixtures pass their own list.
+SERVICES_FILE = Path(
+    os.environ.get("ARTIFACTS_SERVICES_FILE", "/app/known_services.json")
+)
+
+# A service name is only tagged on a WORD match, never a substring: `nut` occurs inside
+# "minute" and "minutes", which appear in nearly every document here — measured 2026-08-19,
+# substring matching tagged 33 of 48 artifacts `nut` where word matching tags 16.
+#
+# Word boundaries are not enough on their own for a name that is also an ordinary noun. These
+# need two mentions before the document is about that service, so one passing "the container
+# registry" does not tag it.
+# `happy` and `tempo` are retired services whose names are ordinary English words, so they sit
+# here for the same reason `nut` does.
+AMBIGUOUS_SERVICES = {
+    "nut",
+    "registry",
+    "homepage",
+    "speedtest",
+    "peanut",
+    "happy",
+    "tempo",
+    "foundry",
+}
+
+# Keyword -> category, checked against title and body. First category to reach the highest
+# score wins; ties fall to the earlier entry here, so the more specific categories lead.
+CATEGORY_KEYWORDS = {
+    "security": (
+        "authelia",
+        "crowdsec",
+        "sso",
+        "vulnerab",
+        "cve",
+        "secret",
+        "sops",
+        "permission",
+        "rbac",
+        "networkpolicy",
+        "firewall",
+        "auth",
+        "credential",
+    ),
+    "backup": (
+        "backup",
+        "longhorn",
+        "restore",
+        "snapshot",
+        "b2 ",
+        "kopia",
+        "retention",
+        "disaster",
+    ),
+    "network": (
+        "dns",
+        "traefik",
+        "ingress",
+        "wireguard",
+        "pi-hole",
+        "pihole",
+        "routing",
+        "resolv",
+        "netplan",
+    ),
+    "monitoring": (
+        "prometheus",
+        "grafana",
+        "loki",
+        "alert",
+        "kuma",
+        "otel",
+        "telemetry",
+        "metric",
+        "probe",
+    ),
+    "cost": ("cost", "spend", "cap", "billing", "free tier", "transaction", "pricing"),
+    "home-automation": (
+        "home assistant",
+        "zigbee",
+        "automation",
+        "z2m",
+        "mqtt",
+        "lighting",
+    ),
+    "tooling": ("claude", "skill", "hook", "agent", "session", "artifact", "worktree"),
+    "ci": (
+        "ci ",
+        "github action",
+        "renovate",
+        "prek",
+        "pre-commit",
+        "pipeline",
+        "gitops",
+    ),
+    "infra": (
+        "k3s",
+        "kubernetes",
+        "ansible",
+        "deploy",
+        "cluster",
+        "pod",
+        "node",
+        "docker",
+        "role",
+    ),
+}
+
+# Chosen only when nothing more specific scores — see derive_category.
+FALLBACK_CATEGORY = "infra"
+
+# How many service chips a document shows, most-mentioned first. Uncapped, a broad review
+# tagged a dozen services and the row stopped carrying information (measured: 5.8 per tagged
+# document across the real corpus).
+MAX_SERVICES = int(os.environ.get("ARTIFACTS_MAX_SERVICES", "5"))
+
+_META_RE = re.compile(
+    r"""<meta[^>]+name=["']artifact:([a-z]+)["'][^>]+content=["']([^"']*)["']""", re.I
+)
+_FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n", re.S)
 _TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
 _H1_RE = re.compile(r"<h1[^>]*>(.*?)</h1>", re.I | re.S)
 _UPDATED_RE = re.compile(r"""data-updated=["']([^"']+)["']""", re.I)
@@ -135,6 +256,150 @@ def parse_html(body: str) -> dict:
     return meta
 
 
+def load_known_services(path: Path = None) -> list[str]:
+    """Service names to match documents against; empty when the file is absent."""
+    path = path or SERVICES_FILE
+    try:
+        names = json.loads(path.read_text(encoding="utf-8"))
+    except OSError, ValueError:
+        return []
+    return sorted({str(n).lower() for n in names if str(n).strip()})
+
+
+def split_list(value: str) -> list[str]:
+    """Parse a comma- or space-separated metadata value into a clean list."""
+    return [
+        part.strip().lower()
+        for part in re.split(r"[,\s]+", value or "")
+        if part.strip()
+    ]
+
+
+def declared_metadata(body: str, is_markdown: bool = False) -> dict:
+    """Metadata the artifact states about itself.
+
+    HTML declares it as `<meta name="artifact:category" content="infra">`; Markdown uses YAML
+    frontmatter with the same keys. Parsed with a line reader rather than a YAML library
+    because the server runs on the standard library alone, and the values are scalars and
+    comma lists — not nested YAML.
+    """
+    found: dict[str, str] = {}
+    if is_markdown:
+        m = _FRONTMATTER_RE.match(body)
+        if m:
+            for line in m.group(1).splitlines():
+                key, sep, value = line.partition(":")
+                if sep and key.strip().islower():
+                    found[key.strip()] = value.strip().strip("'\"")
+    else:
+        found = {k.lower(): v for k, v in _META_RE.findall(body)}
+
+    meta: dict = {}
+    if found.get("category"):
+        meta["category"] = found["category"].strip().lower()
+    if found.get("status"):
+        meta["status"] = found["status"].strip().lower()
+    for key in ("services", "tags"):
+        if found.get(key):
+            meta[key] = split_list(found[key])
+    return meta
+
+
+def derive_services(text: str, known: list[str]) -> list[str]:
+    """Service names the document is about.
+
+    Word match only, and a name that is also an ordinary English noun needs two mentions —
+    see AMBIGUOUS_SERVICES for why one "the container registry" must not tag the document.
+    """
+    haystack = text.lower()
+    hits = []
+    for name in known:
+        if len(name) < 3:
+            continue
+        count = len(re.findall(rf"\b{re.escape(name)}\b", haystack))
+        if count >= (2 if name in AMBIGUOUS_SERVICES else 1):
+            hits.append((count, name))
+    # Most-mentioned first, then capped: a review touching a dozen services is about the two
+    # or three it keeps returning to, and a row of twelve chips says less than a row of four.
+    # Nothing is lost to search — the names are still in the document text the index carries.
+    hits.sort(key=lambda pair: (-pair[0], pair[1]))
+    return [name for _, name in hits[:MAX_SERVICES]]
+
+
+def derive_category(title: str, text: str) -> str:
+    """Best-fitting category, by keyword weight.
+
+    Two rules keep this from labelling everything `infra`. The title counts five times a body
+    mention, because a document titled "B2 cost review" is about cost however often its body
+    says "pod". And `infra` only wins when nothing more specific scores at all: every document
+    here describes work on this cluster, so its words appear everywhere and it would otherwise
+    swamp the specific categories — measured, it beat `cost` 4-3 on exactly that title.
+    """
+    title_l = title.lower()
+    body = text.lower()
+    scores = {
+        category: sum(5 * title_l.count(w) + body.count(w) for w in words)
+        for category, words in CATEGORY_KEYWORDS.items()
+    }
+    specific = {c: s for c, s in scores.items() if c != FALLBACK_CATEGORY and s > 0}
+    if specific:
+        return max(specific, key=lambda c: (specific[c], -list(scores).index(c)))
+    return FALLBACK_CATEGORY if scores.get(FALLBACK_CATEGORY) else ""
+
+
+def derive_status(slices: dict | None) -> str:
+    """Document status from the slice chips it already carries.
+
+    Reuses the skill's own `planned|active|done` tokens rather than introducing a second
+    vocabulary for the same idea. A document with no slices has no derivable status.
+    """
+    if not slices:
+        return ""
+    if slices.get("active"):
+        return "active"
+    if slices.get("planned"):
+        return "planned"
+    return "done" if slices.get("done") else ""
+
+
+def apply_metadata(entry: dict, body: str, is_markdown: bool, known: list[str]) -> None:
+    """Merge declared and derived metadata onto an index entry.
+
+    Declared always wins, and every field records which it was. A guessed category that
+    renders identically to a stated one would make a heuristic look authoritative — the
+    reader has to be able to see which values to trust.
+    """
+    declared = declared_metadata(body, is_markdown)
+    source: dict[str, str] = {}
+
+    for field, derive in (
+        (
+            "category",
+            lambda: derive_category(entry.get("title", ""), entry.get("text", "")),
+        ),
+        ("status", lambda: derive_status(entry.get("slices"))),
+        (
+            "services",
+            lambda: derive_services(
+                f"{entry.get('title', '')} {entry.get('text', '')}", known
+            ),
+        ),
+    ):
+        if declared.get(field):
+            entry[field] = declared[field]
+            source[field] = "declared"
+        else:
+            value = derive()
+            if value:
+                entry[field] = value
+                source[field] = "derived"
+
+    if declared.get("tags"):
+        entry["tags"] = declared["tags"]
+        source["tags"] = "declared"
+    entry["source"] = source
+
+
 def parse_markdown(body: str) -> dict:
     """Title from the first ATX heading; summary from the first non-heading line."""
     meta: dict = {}
@@ -175,7 +440,8 @@ def scan(root: Path) -> list[tuple[str, Path, os.stat_result]]:
     return found
 
 
-def build_index(root: Path) -> dict:
+def build_index(root: Path, known_services: list[str] = None) -> dict:
+    known = load_known_services() if known_services is None else known_services
     entries = []
     for host, path, st in scan(root):
         rel = path.relative_to(root / host).as_posix()
@@ -197,6 +463,8 @@ def build_index(root: Path) -> dict:
             entry.update(parse_html(body) if suffix != ".md" else parse_markdown(body))
         entry.setdefault("title", slug_title(path.name))
         entry.setdefault("summary", "")
+        if suffix in PARSEABLE:
+            apply_metadata(entry, body, suffix == ".md", known)
         # An .md alongside an .html of the same stem is the same document — the skill writes
         # both. Flagged so the GUI can fold the Markdown copy away by default.
         entry["companion_html"] = (
@@ -208,6 +476,10 @@ def build_index(root: Path) -> dict:
         "generated": datetime.now(timezone.utc).isoformat(),
         "count": len(entries),
         "hosts": sorted({e["host"] for e in entries}),
+        # Facet values come from what the corpus actually holds, not a fixed vocabulary, so a
+        # category nothing uses never appears as a dead dropdown entry.
+        "categories": sorted({e["category"] for e in entries if e.get("category")}),
+        "statuses": sorted({e["status"] for e in entries if e.get("status")}),
         "artifacts": entries,
     }
 
@@ -360,6 +632,11 @@ border-radius:8px;padding:14px 16px;margin-bottom:10px;text-decoration:none;colo
 color:var(--crust)}
 .chip-host{background:var(--mauve)}.chip-done{background:var(--green)}
 .chip-active{background:var(--yellow)}.chip-planned{background:var(--overlay0)}
+.chip-cat{background:var(--blue)}.chip-svc{background:var(--surface1);color:var(--text)}
+.chip-tag{background:transparent;color:var(--subtext0);border:1px solid var(--surface1)}
+/* Derived, not declared: hollow rather than filled, so a guess never reads as a statement. */
+.chip-derived{background:transparent;border:1px dashed var(--overlay0);color:var(--subtext0)}
+.tagrow{margin-top:8px}
 mark{background:var(--yellow);color:var(--crust);border-radius:2px}
 .empty{color:var(--overlay0);padding:40px 0;text-align:center}
 footer{color:var(--overlay0);font-size:12px;padding:0 24px 30px;max-width:1100px;margin:0 auto}
@@ -370,6 +647,8 @@ footer{color:var(--overlay0);font-size:12px;padding:0 24px 30px;max-width:1100px
   <div class="controls">
     <input type="search" id="q" placeholder="Search titles, summaries and body text..." autofocus>
     <select id="host"><option value="">All hosts</option></select>
+    <select id="category"><option value="">All categories</option></select>
+    <select id="status"><option value="">Any status</option></select>
     <select id="sort">
       <option value="mtime">Newest first</option>
       <option value="title">Title A-Z</option>
@@ -397,9 +676,13 @@ function fmtSize(n) {
 }
 // Every whitespace-separated term must appear somewhere in the haystack (AND, not phrase),
 // so "drift box" finds the daniel-box drift audit without caring about word order.
+// Metadata joins the haystack rather than getting its own syntax: typing "longhorn backup"
+// finds the artifact whether those words are its tags, its category, or just its prose.
 function matches(a, terms) {
   if (!terms.length) return true;
-  const hay = [a.title, a.summary, a.name, a.host, a.text].join(" ").toLowerCase();
+  const hay = [a.title, a.summary, a.name, a.host, a.text, a.category, a.status,
+               (a.services || []).join(" "), (a.tags || []).join(" ")]
+    .join(" ").toLowerCase();
   return terms.every(t => hay.includes(t));
 }
 function highlight(text, terms) {
@@ -414,10 +697,14 @@ function highlight(text, terms) {
 function render() {
   const terms = $("q").value.toLowerCase().split(/\s+/).filter(Boolean);
   const host = $("host").value;
+  const category = $("category").value;
+  const status = $("status").value;
   const sort = $("sort").value;
   const dupes = $("dupes").checked;
   let items = DATA.artifacts.filter(a =>
-    (!host || a.host === host) && (dupes || !a.companion_html) && matches(a, terms));
+    (!host || a.host === host) && (!category || a.category === category) &&
+    (!status || a.status === status) &&
+    (dupes || !a.companion_html) && matches(a, terms));
   items.sort((x, y) => sort === "title" ? x.title.localeCompare(y.title)
            : sort === "host" ? (x.host + x.title).localeCompare(y.host + y.title)
            : y.mtime.localeCompare(x.mtime));
@@ -425,28 +712,48 @@ function render() {
   $("list").innerHTML = items.length ? items.map(a => {
     const slices = a.slices ? ["done", "active", "planned"].filter(k => a.slices[k])
       .map(k => `<span class="chip chip-${k}">${a.slices[k]} ${k}</span>`).join(" ") : "";
+    // A derived value is marked, never rendered as if the document had stated it — a guessed
+    // category that looks identical to a declared one makes the heuristic authoritative.
+    const der = (f) => (a.source || {})[f] === "derived" ? " chip-derived" : "";
+    const derTitle = (f) => (a.source || {})[f] === "derived"
+      ? ' title="inferred from the document, not declared by it"' : "";
+    const cat = a.category
+      ? `<span class="chip chip-cat${der("category")}"${derTitle("category")}>${esc(a.category)}</span>` : "";
+    const stat = a.status
+      ? `<span class="chip chip-${a.status}${der("status")}"${derTitle("status")}>${esc(a.status)}</span>` : "";
+    const svcs = (a.services || []).map(s =>
+      `<span class="chip chip-svc${der("services")}"${derTitle("services")}>${esc(s)}</span>`).join(" ");
+    const tags = (a.tags || []).map(t => `<span class="chip chip-tag">${esc(t)}</span>`).join(" ");
     return `<a class="card" href="${esc(a.url)}" target="_blank" rel="noopener">
       <h2>${highlight(a.title, terms)}</h2>
       ${a.summary ? `<p>${highlight(a.summary, terms)}</p>` : ""}
       <div class="meta">
         <span class="chip chip-host">${esc(a.host)}</span>
+        ${cat}${stat}
         <span>${esc(a.name)}</span>
         <span>${fmtDate(a.updated || a.mtime)}</span>
         <span>${fmtSize(a.size)}</span>
         ${slices}
-      </div></a>`;
+      </div>
+      ${svcs || tags ? `<div class="meta tagrow">${svcs} ${tags}</div>` : ""}</a>`;
   }).join("") : `<div class="empty">No artifact matches that search.</div>`;
 }
 async function load() {
   const res = await fetch("/api/index.json", {cache: "no-store"});
   DATA = await res.json();
-  $("host").innerHTML = '<option value="">All hosts</option>' +
-    DATA.hosts.map(h => `<option value="${esc(h)}">${esc(h)}</option>`).join("");
+  const fill = (id, label, values) => {
+    $(id).innerHTML = `<option value="">${label}</option>` +
+      (values || []).map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
+  };
+  fill("host", "All hosts", DATA.hosts);
+  fill("category", "All categories", DATA.categories);
+  fill("status", "Any status", DATA.statuses);
   $("foot").textContent = "Indexed " + fmtDate(DATA.generated) +
     " - artifacts are pruned 7 days after their last update.";
   render();
 }
-["q", "host", "sort", "dupes"].forEach(id => $(id).addEventListener("input", render));
+["q", "host", "category", "status", "sort", "dupes"].forEach(
+  id => $(id).addEventListener("input", render));
 load();
 </script>
 </body></html>
