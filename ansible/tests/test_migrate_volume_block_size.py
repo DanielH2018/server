@@ -172,3 +172,38 @@ def test_the_quiesce_selector_is_proven_before_anything_is_scaled_down() -> None
     assert check < quiesce, (
         "the selector must be proven to match a running pod before the workload is scaled down"
     )
+
+
+def test_a_volume_with_no_deployment_is_proven_detached_instead() -> None:
+    """pi-peer-backup-data is written by a CronJob, so there is nothing to scale.
+
+    Skipping the quiesce without replacing it would copy whatever state the volume happened to
+    be in. `detached` read from Longhorn is the same guarantee the quiesce buys — no writer —
+    and a stronger one, because it is read rather than inferred from a pod list.
+    """
+    names = _names(_main_tasks())
+    assert (
+        "Require the volume to be detached when there is no workload to quiesce"
+        in names
+    ), "mig_deploy=none must still prove nothing has the volume open"
+    text = _text()
+    assert 'status.state == "detached"' in text
+
+
+def test_every_workload_step_is_skipped_when_there_is_no_workload() -> None:
+    """A leftover scale against deploy/none fails the play, and in `always` it hides the real error."""
+    guarded = {
+        "Confirm the workload's pods are selectable before quiescing",
+        "Refuse to migrate when the selector matches no running pod",
+        "Quiesce the workload",
+        "Wait for the workload's pods to go",
+        "Restore the workload",
+    }
+    seen = set()
+    for task in _main_tasks() + _migration_block()["always"]:
+        if task.get("name") in guarded:
+            seen.add(task["name"])
+            assert task.get("when") == 'mig_deploy != "none"', (
+                f"{task['name']} must be skipped when there is no Deployment to act on"
+            )
+    assert seen == guarded, f"not all workload steps were found: {guarded - seen}"

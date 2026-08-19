@@ -62,7 +62,9 @@
         fail_msg: >-
           pass -e mig_claim=<pvc> and -e mig_deploy=<deployment>. The workload is not derived,
           because scaling the wrong Deployment leaves the real writer running against a volume
-          being copied.
+          being copied. For a volume with no Deployment — one written only by a CronJob, such as
+          pi-peer-backup-data — pass -e mig_deploy=none, and the play asserts the volume is
+          detached instead of quiescing anything.
 
   tasks:
     # Read from the cluster rather than from the role default. If the setting had not actually
@@ -141,6 +143,7 @@
     # run against a volume its writer still had open — silently, and only visible later as
     # corrupt data. Prove the selector matches something BEFORE scaling anything down.
     - name: Confirm the workload's pods are selectable before quiescing
+      when: mig_deploy != "none"
       ansible.builtin.command:
         argv: [k3s, kubectl, -n, "{{ mig_namespace }}", get, pod,
                -l, "app={{ mig_deploy }}", -o, "jsonpath={.items[*].metadata.name}"]
@@ -149,6 +152,7 @@
       changed_when: false
 
     - name: Refuse to migrate when the selector matches no running pod
+      when: mig_deploy != "none"
       ansible.builtin.assert:
         that: mig_pods_before.stdout | trim | length > 0
         fail_msg: >-
@@ -156,7 +160,28 @@
           a different label — in which case the quiesce wait would pass without the writer ever
           stopping — or the workload is already down. Nothing has been changed.
 
+    # A volume written only by a CronJob has nothing to scale, and for most of the day nothing
+    # holds it open. Detached is the same guarantee the quiesce buys — no writer — but read from
+    # Longhorn rather than inferred from a pod list, so it is the stronger check of the two.
+    # It is a point-in-time reading: a CronJob that fires mid-migration would still attach the
+    # volume, so run this well clear of its schedule.
+    #
+    # A finished CronJob pod still counts as a consumer. Kubernetes keeps Completed pods, and
+    # each one holds the kubernetes.io/pvc-protection finalizer on any claim it mounted, so the
+    # PVC delete below hangs in Terminating until they are removed. Observed on
+    # pi-peer-backup-data, blocked by a pod that had finished 18 hours earlier. Delete the
+    # claim's finished pods first: `kubectl -n <ns> delete pod <name>`.
+    - name: Require the volume to be detached when there is no workload to quiesce
+      when: mig_deploy == "none"
+      ansible.builtin.assert:
+        that: (mig_volume.stdout | from_json).status.state == "detached"
+        fail_msg: >-
+          {{ mig_claim }} is {{ (mig_volume.stdout | from_json).status.state }}, not detached.
+          Something has it open, and copying now would capture a torn filesystem. Nothing has
+          been changed.
+
     - name: Quiesce the workload
+      when: mig_deploy != "none"
       ansible.builtin.command:
         argv: [k3s, kubectl, -n, "{{ mig_namespace }}", scale,
                "deploy/{{ mig_deploy }}", --replicas=0]
@@ -166,6 +191,7 @@
     # The volume is ReadWriteOnce and attached to whichever node the workload ran on. Copying
     # before the writer is gone would capture a torn SQLite WAL.
     - name: Wait for the workload's pods to go
+      when: mig_deploy != "none"
       ansible.builtin.command:
         argv: [k3s, kubectl, -n, "{{ mig_namespace }}", get, pod,
                -l, "app={{ mig_deploy }}", -o, "jsonpath={.items[*].metadata.name}"]
@@ -331,6 +357,7 @@
           changed_when: true
 
         - name: Restore the workload
+          when: mig_deploy != "none"
           ansible.builtin.command:
             argv: [k3s, kubectl, -n, "{{ mig_namespace }}", scale,
                    "deploy/{{ mig_deploy }}", --replicas=1]
