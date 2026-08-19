@@ -140,6 +140,72 @@ def test_drill_never_prints_the_restored_file() -> None:
     assert "cat /drill" not in code, "the probe must never print a restored file"
 
 
+def test_drill_distinguishes_no_output_from_an_empty_volume() -> None:
+    """The first real run failed here, and the message could not say why.
+
+    `kubectl run --rm -i` returned an EMPTY string on 2026-08-19 — no pod output and no error —
+    so the drill reported "restored volume has no files:" with nothing after the colon. An empty
+    capture and an empty volume are the two things this check exists to tell apart, and the
+    attach form collapses them. The pod is now created, waited for, and read via logs.
+    """
+    code = _code(DRILL)
+    assert "--rm -i" not in code, (
+        "the attach form silently returns an empty capture; create the pod and read its logs"
+    )
+    assert "logs" in code and ".status.phase" in code, (
+        "the probe must reach a terminal phase and be read from logs, so a failure is legible"
+    )
+    assert "produced no output" in code, (
+        "an empty capture must fail with its own message, never as 'no files'"
+    )
+
+
+def test_drill_reports_a_failed_probe_pod_distinctly() -> None:
+    """A pod that crashed says nothing about the volume — do not blame the data for it."""
+    code = _code(DRILL)
+    assert 'fail "probe pod ${PHASE}' in code, (
+        "a non-Succeeded probe must report the phase"
+    )
+
+
+def test_stamp_is_readable_by_the_user_that_checks_it() -> None:
+    """Writer and reader are different users, and root's umask here does not accommodate that.
+
+    The drill runs as root; the heartbeat runs as sys_user under its own cron. Root's umask on
+    daniel-box is 027, so plain `mkdir -p` produced drwxr-x--- root:root and the stamp was
+    unreadable by the checker. Check 7 fails closed on an unreadable stamp, so the first GREEN
+    drill would have paged "no restore drill has ever succeeded" — permanently, and precisely
+    backwards. Observed 2026-08-19 on the first passing run.
+    """
+    code = _code(DRILL)
+    assert 'chmod 0755 "$STAMP_DIR"' in code, (
+        "the stamp directory mode must be explicit; root's umask makes it unreadable otherwise"
+    )
+    assert 'chmod 0644 "$STAMP"' in code, (
+        "the stamp file must be readable by the checker"
+    )
+
+
+def test_drill_and_heartbeat_deploy_under_a_shared_tag() -> None:
+    """Check 7 and the drill are one feature; shipping either alone pages for nothing.
+
+    Deploying `restore-drill` alone installs a drill nothing watches. Deploying `backup-health`
+    alone installs a check whose stamp no drill writes, which then pages forever. Both tasks
+    carry `backup-health` so the pair moves together.
+    """
+    names = {
+        "Deploy the Longhorn restore drill",
+        "Schedule the Longhorn restore drill",
+        "Deploy the Longhorn backup-plane heartbeat",
+    }
+    for task in _tasks():
+        if task.get("name") in names:
+            assert "backup-health" in task.get("tags", []), (
+                f"{task['name']} must carry the backup-health tag so the drill and the check "
+                "that reads its stamp are never deployed apart"
+            )
+
+
 def test_check_seven_fails_closed_when_the_drill_never_ran() -> None:
     """The never-run state is the one most in need of reporting. See the module docstring."""
     block = _check_seven()

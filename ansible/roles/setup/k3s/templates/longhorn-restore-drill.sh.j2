@@ -133,15 +133,33 @@ done
 # `acme.json` for a domain string, which tied it to traefik-acme forever — and a restored volume
 # that mounts but is EMPTY is the failure this must catch. Contents are never printed: these are
 # service config volumes and several hold credentials.
-PROBE=$($KUBECTL -n "$PVC_NS" run "${DRILL}-probe" --rm -i --restart=Never \
-  --image={{ k3s_longhorn_restore_drill_image }} --quiet \
+#
+# Create-then-read, NOT `kubectl run --rm -i`. The attach form returned an EMPTY string on
+# 2026-08-19 — no pod output, no error — and the drill reported "restored volume has no files"
+# with nothing after the colon. An empty capture is indistinguishable from an empty volume, which
+# is the one thing this check exists to tell apart. Creating the pod, waiting for it to reach a
+# terminal phase, and then reading its logs makes both the result and any failure legible.
+$KUBECTL -n "$PVC_NS" run "${DRILL}-probe" --restart=Never \
+  --image={{ k3s_longhorn_restore_drill_image }} \
   --overrides="$(cat <<JSON
-{"spec":{"containers":[{"name":"probe","image":"{{ k3s_longhorn_restore_drill_image }}",
+{"spec":{"containers":[{"name":"${DRILL}-probe","image":"{{ k3s_longhorn_restore_drill_image }}",
 "command":["sh","-c","echo files=\$(find /drill -type f | wc -l) bytes=\$(find /drill -type f -exec cat {} + | wc -c)"],
 "volumeMounts":[{"name":"d","mountPath":"/drill","readOnly":true}]}],
 "volumes":[{"name":"d","persistentVolumeClaim":{"claimName":"${DRILL}"}}],"restartPolicy":"Never"}}
 JSON
-)" 2>&1)
+)" >/dev/null 2>&1 || fail "could not create the probe pod"
+
+PROBE_DEADLINE=$(( $(date +%s) + 300 ))
+while :; do
+  PHASE=$($KUBECTL -n "$PVC_NS" get pod "${DRILL}-probe" -o jsonpath='{.status.phase}' 2>/dev/null)
+  [[ "$PHASE" == "Succeeded" || "$PHASE" == "Failed" ]] && break
+  (( $(date +%s) > PROBE_DEADLINE )) && fail "probe pod stuck in ${PHASE:-unknown} — could not read the restored volume"
+  sleep 5
+done
+
+PROBE=$($KUBECTL -n "$PVC_NS" logs "${DRILL}-probe" 2>&1)
+[[ "$PHASE" == "Succeeded" ]] || fail "probe pod ${PHASE}: ${PROBE:-<no logs>}"
+[[ -n "$PROBE" ]] || fail "probe pod produced no output — the volume state is unknown, not empty"
 
 FILES=$(sed -n 's/.*files=\([0-9]\{1,\}\).*/\1/p' <<<"$PROBE" | head -1)
 BYTES=$(sed -n 's/.*bytes=\([0-9]\{1,\}\).*/\1/p' <<<"$PROBE" | head -1)
@@ -153,6 +171,13 @@ MIN_BYTES="{{ k3s_longhorn_restore_drill_min_bytes }}"
 
 # The stamp is written ONLY here, after both assertions pass. Check 7 reads its contents, so
 # stamping earlier — or on any failure path — would report a broken drill as a healthy one.
+# Modes set EXPLICITLY, because the reader is a different user. This script runs as root, whose
+# umask here is 027 — so `mkdir -p` alone produced drwxr-x--- root:root, and the heartbeat (which
+# runs as {{ sys_user }} under its own cron) could not read the stamp. Check 7 fails closed on an
+# unreadable stamp, so a PASSING drill would have paged "no restore drill has ever succeeded"
+# forever. Observed 2026-08-19, on the first green run.
 mkdir -p "$STAMP_DIR"
+chmod 0755 "$STAMP_DIR"
 date +%s >"$STAMP"
+chmod 0644 "$STAMP"
 logger -t longhorn-restore-drill "PASS: ${PVC} restored from ${BACKUP} (files=${FILES}, bytes=${BYTES})"
