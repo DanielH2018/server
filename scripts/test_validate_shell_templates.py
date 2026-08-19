@@ -126,6 +126,7 @@ def test_discover_templates_finds_the_known_set():
         "autofix-disk-prune.sh.j2",
         "longhorn-backup-health.sh.j2",
         "longhorn-reap-orphan-backups.sh.j2",
+        "longhorn-restore-drill.sh.j2",
         "longhorn-reap-orphan-snapshots.sh.j2",
         "longhorn-trim-volumes.sh.j2",
         "disk-health.sh.j2",

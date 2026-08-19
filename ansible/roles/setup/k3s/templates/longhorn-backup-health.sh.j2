@@ -392,6 +392,38 @@ if [[ -n "$FAILED_JOBS" ]]; then
   add 2 "backup job(s) that failed in the last {{ k3s_longhorn_backup_error_max_age_hours }}h: ${FAILED_JOBS}"
 fi
 
+# 7. Do the backups actually RESTORE? Checks 1-6 all answer "did a backup happen", which is a
+#    different claim. The first restore drill, 2026-08-15, failed on a B2 Class-B cap and
+#    surfaced as `cannot find volume.cfg in backupstore` — indistinguishable from data loss.
+#    The retry passed the next day, and then nothing recurred: the drill was a one-off playbook
+#    in a home directory, unscheduled and unwatched. A drill that silently stops looks exactly
+#    like one that was never set up, which is the whole reason this check exists rather than
+#    trusting the cron to keep running.
+#
+#    FAILS CLOSED, and that is the property worth protecting. The obvious shape here is
+#    `[[ -f $STAMP ]] && check_age`, which reports green when the drill has NEVER run — the one
+#    state most in need of reporting. A missing stamp is treated as a failure, matching how
+#    probe.py health treats an unreadable restart time. So is an unparseable one.
+#
+#    The drill writes the stamp only after its data assertions pass, so freshness here means "a
+#    restore was proven recently", not "the drill process ran recently". That distinction is
+#    what makes this cover the cron dying AND the drill failing, without needing to watch both.
+DRILL_STAMP="{{ k3s_longhorn_restore_drill_stamp_dir }}/last-success"
+DRILL_MAX_AGE_S=$(( {{ k3s_longhorn_restore_drill_max_age_days }} * 86400 ))
+if [[ ! -r "$DRILL_STAMP" ]]; then
+  add 3 "no restore drill has ever succeeded (no ${DRILL_STAMP}) — backups are unproven"
+else
+  DRILL_AT=$(cat "$DRILL_STAMP" 2>/dev/null)
+  if [[ ! "$DRILL_AT" =~ ^[0-9]+$ ]]; then
+    add 3 "restore-drill stamp is unreadable — treating the restore path as unproven"
+  else
+    DRILL_AGE_S=$(( $(date +%s) - DRILL_AT ))
+    if (( DRILL_AGE_S > DRILL_MAX_AGE_S )); then
+      add 3 "last successful restore drill was $(( DRILL_AGE_S / 86400 ))d ago (limit {{ k3s_longhorn_restore_drill_max_age_days }}d)"
+    fi
+  fi
+fi
+
 if (( PROBLEM_COUNT == 0 )); then
   STATUS=up
   # The counts are in the green message on purpose: "newest backup 8h old" was true even while a

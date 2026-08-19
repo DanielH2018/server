@@ -163,6 +163,37 @@ k3s_longhorn_backup_detached_volumes: "true"
 # files/longhorn-storageclass.yaml and ansible/tests/test_longhorn_storageclass.py).
 k3s_longhorn_backup_block_size: 16
 
+# Restore drill — proves the backups come BACK, which nothing else here checks. The heartbeat
+# watches Longhorn's own objects, and none of them can tell you whether the bytes in B2 restore.
+#
+# Pinned to one small volume on purpose. The question this answers is "does the restore path
+# still work", not "does every volume restore" — the latter needs a per-volume assertion for
+# each and costs a Class B GET per block of everything in the store. traefik-acme is 4 blocks,
+# so a drill is about 4 Class B against a 2,500/day cap: it can run monthly and never be noticed.
+# Must be a volume on the B2 target. The daily tier (traefik-acme, authelia-config,
+# zigbee2mqtt-data, home-assistant-config) all route to R2, so drilling any of them would prove
+# Cloudflare's store and say nothing about B2 — the one under a transaction cap. healthchecks-config
+# is on B2, is one of the smallest there at ~30 blocks, and its weekday shard (d3) keeps it fresh.
+k3s_longhorn_restore_drill_pvc: healthchecks-config
+k3s_longhorn_restore_drill_namespace: homelab
+# A restored volume that mounts but is EMPTY is the failure mode this floor catches: an empty
+# filesystem passes every check that only asks whether the mount succeeded. Deliberately low —
+# this asserts "real data came back", not any particular size, so it does not need revisiting
+# when the service grows or shrinks.
+k3s_longhorn_restore_drill_min_bytes: 1024
+k3s_longhorn_restore_drill_image: busybox:stable
+# The 2026-08-16 drill restored in ~21s. This bound is generous against that because a slow
+# restore is not itself a failure, but a hung one must not leave a Volume CR attached forever.
+k3s_longhorn_restore_drill_timeout_s: 900
+k3s_longhorn_restore_drill_stamp_dir: /var/lib/longhorn-restore-drill
+# 04:10 on the 3rd of the month: after the daily tier's 03:30 run so the newest backup is the
+# one just written, and clear of every weekly shard's 04:30.
+k3s_longhorn_restore_drill_cron: "10 4 3 * *"
+# How stale the drill's last success may be before the heartbeat calls it out. The drill runs
+# monthly, so this allows one missed run plus slack — long enough not to page on a single
+# skipped month, short enough that a drill which has silently stopped is noticed.
+k3s_longhorn_restore_drill_max_age_days: 45
+
 # How many volume engines Longhorn upgrades per node once the manager moves to a new version.
 # Upstream ships 0, which means engines NEVER follow the manager — after a version bump every
 # volume keeps running the old engine image until someone walks the UI. Across the v1.7.2 ->
