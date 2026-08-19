@@ -50,9 +50,17 @@ def test_nothing_is_deleted_before_the_replacement_has_a_backup() -> None:
 def test_only_backups_of_vanished_volumes_are_considered() -> None:
     """A backup whose volume still exists is a live chain, not debris."""
     text = PLAY.read_text()
-    assert (
-        "rejectattr('status.volumeName', 'in', drop_live_volumes.stdout_lines)" in text
-    ), "the candidate set must exclude backups whose Longhorn volume still exists"
+    assert "rejectattr('status.volumeName', 'in'," in text, (
+        "the candidate set must exclude backups whose Longhorn volume still exists"
+    )
+    assert "map('trim')" in text, (
+        "kubectl custom-columns pads names to the column width, and a padded name matches "
+        "nothing — every backup would then classify as an orphan"
+    )
+    assert "Refuse to classify orphans against an unusable volume list" in text, (
+        "an empty or malformed volume list makes the orphan test vacuously true, so it must "
+        "be proven usable before anything is classified"
+    )
     assert "'equalto', 'Completed'" in text, (
         "only Completed backups belong here; Error backups are the reaper's path"
     )
