@@ -389,6 +389,16 @@ containers_list:
     hostname: "peanut"
     port: 8080
     use_authelia: true
+  # Browses every host's ~/.claude/artifacts (the plans, specs and review write-ups Claude
+  # Code renders) at one authenticated URL, with search over their indexed metadata. Serves
+  # hostPath trees, so the pod is pinned to daniel-box and daniel-server's copy is rsynced
+  # in by a cron there. LAN-only by choice — the route passes public=false, since these
+  # documents are audits of this homelab.
+  - name: artifacts
+    platform: k8s
+    hostname: "artifacts"
+    port: 8080
+    use_authelia: true
   # Phase E (2026-08-13): read-only MCP server, the Docker edge's last routed tenant.
   # No hostname/ingressroute — its bearer-token router lives in the edge gate Secret
   # (roles/k8s/traefik/templates/livesync-gate-secret.yaml.j2), matching only

@@ -1,0 +1,65 @@
+---
+# ── host side: the trees the pod mounts ────────────────────────────────────────────────
+# Both directories must exist before the Deployment starts: the hostPath volumes are
+# `type: Directory`, so a missing path leaves the pod stuck in ContainerCreating rather
+# than serving an empty index.
+- name: Ensure the local artifacts directory exists
+  tags: [config]
+  ansible.builtin.file:
+    path: "{{ artifacts_host_dir }}"
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0750"
+  when: not k8s_dry_run | bool
+
+- name: Ensure a peer directory exists for every synced host
+  tags: [config]
+  ansible.builtin.file:
+    path: "{{ artifacts_peer_dir }}/{{ item.name }}"
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0750"
+  loop: "{{ artifacts_peer_sources }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: not k8s_dry_run | bool
+
+- name: Install the peer artifact sync script
+  tags: [config]
+  ansible.builtin.template:
+    src: sync-artifacts.sh.j2
+    dest: /usr/local/bin/sync-artifacts.sh
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  when: not k8s_dry_run | bool
+
+# Pull, not push: `daniel-box` does not resolve from daniel-server, and a push would need an
+# ssh key inside the cluster. daniel-box already reaches daniel-server, so the sync runs from
+# the side that works. Cron rather than a sidecar for the same reason — the credential stays
+# on the host and never enters a pod.
+- name: Schedule the peer artifact sync
+  tags: [cron]
+  ansible.builtin.cron:
+    name: "Sync peer Claude artifacts"
+    minute: "{{ artifacts_sync_minute }}"
+    user: "{{ sys_user }}"
+    job: "/usr/local/bin/sync-artifacts.sh"
+    cron_file: sync-artifacts
+  become: true
+  when: not k8s_dry_run | bool
+
+# ── cluster side ───────────────────────────────────────────────────────────────────────
+- name: Deploy the artifacts browser to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: artifacts
+    manifests_files:
+      - configmap.yaml
+      - deployment.yaml
+      - service.yaml
+      - ingressroute.yaml

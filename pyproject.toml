@@ -35,6 +35,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "ansible/roles/k8s/valheim-stats/files",        # the Valheim sibling: adds deaths + a steamid<->name map
   "ansible/roles/k8s/ical-proxy/files",
   "ansible/roles/k8s/homelab-mcp/files",
+  "ansible/roles/k8s/artifacts/files",             # artifact index/search server + path confinement
   ".claude/hooks",
   ".claude/scripts",                 # audit-permissions report/suggester logic tests
   "scripts",                         # closes the smoke_extract CI gap

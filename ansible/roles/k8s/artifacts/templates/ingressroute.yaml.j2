@@ -1,0 +1,16 @@
+{% from 'ingressroute.yml.j2' import ingressroute with context %}
+{#
+  public=false: these artifacts are drift audits, permission reviews and security write-ups of
+  this homelab. Authelia gates the route either way, but a name that never matches on the
+  public host is one fewer thing depending on the SSO layer holding. LAN + WireGuard reach it;
+  the internet has no rule to match.
+#}
+---
+{{ ingressroute(
+    container_item.name,
+    container_item.hostname | default(container_item.name),
+    container_item.port,
+    container_item.use_authelia,
+    public=false,
+  )
+}}

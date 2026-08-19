@@ -1,0 +1,36 @@
+---
+# Same base image as the other stdlib-only Python workloads here (monitor-bridge,
+# autofix-bridge) — artifact_server.py imports nothing off PyPI, so there is no wheel to
+# build and no image to maintain.
+artifacts_k8s_image: python:3.14-alpine
+
+# hostPath pins the pod to ONE node. daniel-box is the control-plane node, where Ansible
+# runs and where most sessions work, so its tree is the local mount and every other host's
+# is synced in below.
+artifacts_k8s_node: daniel-box
+
+# The tree Claude Code's artifact-design skill writes to on each host.
+artifacts_host_dir: /home/ubuntu/.claude/artifacts
+# Where daniel-box holds the other hosts' copies: one subdirectory per host, which becomes
+# the /a/<host>/ path segment the index and the GUI filter on.
+artifacts_peer_dir: /home/ubuntu/.claude/artifacts-peer
+
+# Hosts whose artifacts are PULLED onto daniel-box, because push is not available: the
+# `daniel-box` name does not resolve from daniel-server (verified 2026-08-19), and pushing
+# would need an ssh key in the cluster either way. daniel-box already reaches daniel-server
+# over ssh, so the sync runs there, in the direction that works.
+artifacts_peer_sources:
+  - name: daniel-server
+    ssh_target: daniel-server
+    path: /home/ubuntu/.claude/artifacts
+
+# Every 5 minutes: an artifact written on daniel-server is browsable within one interval. It
+# cannot be instant — daniel-server holds no key to daniel-box, so the sync only runs in the
+# pull direction, on a timer. A session on daniel-box mounts its own tree and never waits.
+artifacts_sync_minute: "*/5"
+
+# The index is built per request from ~50 files; the pod is idle between page loads.
+artifacts_k8s_cpu_limit: "500m"
+artifacts_k8s_mem_limit: 128Mi
+artifacts_k8s_cpu_request: "10m"
+artifacts_k8s_mem_request: 32Mi

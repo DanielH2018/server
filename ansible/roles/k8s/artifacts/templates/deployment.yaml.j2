@@ -1,0 +1,103 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: artifacts
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: artifacts
+  template:
+    metadata:
+      labels:
+        app: artifacts
+        netpol-baseline: enforced
+    spec:
+      enableServiceLinks: false
+      # hostPath is node-local, so the pod MUST land where the artifacts are. Unpinned, it
+      # schedules onto the other node and every mount resolves to an empty directory — the
+      # index then reads as "no artifacts" rather than as a scheduling mistake.
+      nodeSelector:
+        kubernetes.io/hostname: {{ artifacts_k8s_node }}
+      securityContext:
+        # Artifacts are written 0660 ubuntu:ubuntu, with no other-read. Running as any other
+        # uid/gid returns an empty index instead of a permission error, which is the same
+        # failure shape as the DAC_OVERRIDE traps elsewhere in this cluster.
+        runAsUser: {{ puid }}
+        runAsGroup: {{ pgid }}
+        fsGroup: {{ pgid }}
+        runAsNonRoot: true
+      automountServiceAccountToken: false
+      containers:
+        - name: artifacts
+          image: {{ artifacts_k8s_image }}
+          command: ["python3", "/app/artifact_server.py"]
+          env:
+            - name: ARTIFACTS_ROOT
+              value: /srv/artifacts
+            - name: ARTIFACTS_PORT
+              value: "{{ container_item.port }}"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: TZ
+              value: {{ tz }}
+          securityContext:
+            # The server writes nothing: the index is in memory and every mount is read-only.
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - containerPort: {{ container_item.port }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ container_item.port }}
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ container_item.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          volumeMounts:
+            - name: script
+              mountPath: /app
+              readOnly: true
+            - name: artifacts-{{ artifacts_k8s_node }}
+              mountPath: /srv/artifacts/{{ artifacts_k8s_node }}
+              readOnly: true
+{% for peer in artifacts_peer_sources %}
+            - name: artifacts-{{ peer.name }}
+              mountPath: /srv/artifacts/{{ peer.name }}
+              readOnly: true
+{% endfor %}
+          resources:
+            requests:
+              cpu: {{ artifacts_k8s_cpu_request }}
+              memory: {{ artifacts_k8s_mem_request }}
+            limits:
+              cpu: {{ artifacts_k8s_cpu_limit }}
+              memory: {{ artifacts_k8s_mem_limit }}
+      volumes:
+        - name: script
+          configMap:
+            name: artifacts-server
+        # type: Directory, not DirectoryOrCreate — kubelet would create a missing directory
+        # as root, and the sync (which runs as ubuntu) could then never write into it. The
+        # role's own tasks create both paths with the right ownership first.
+        - name: artifacts-{{ artifacts_k8s_node }}
+          hostPath:
+            path: {{ artifacts_host_dir }}
+            type: Directory
+{% for peer in artifacts_peer_sources %}
+        - name: artifacts-{{ peer.name }}
+          hostPath:
+            path: {{ artifacts_peer_dir }}/{{ peer.name }}
+            type: Directory
+{% endfor %}

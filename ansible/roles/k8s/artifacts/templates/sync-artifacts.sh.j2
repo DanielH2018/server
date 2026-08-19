@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Managed by ansible (roles/k8s/artifacts) — edits here are overwritten on the next deploy.
+#
+# Copy every other host's ~/.claude/artifacts onto daniel-box, one directory per host, so the
+# artifacts Deployment can serve them all from a single hostPath tree. Pull rather than push:
+# `daniel-box` does not resolve from daniel-server, and pushing would put an ssh key somewhere
+# this one does not have to go.
+set -euo pipefail
+
+# Destination paths are written out per host below rather than through a shared variable:
+# the peer list can be empty, and an unused variable is a shellcheck failure in the rendered
+# script (validate_shell_templates.py renders with the loop unrolled to nothing).
+
+# One sync at a time. The cron interval is far longer than a run, but a slow or hung ssh must
+# not stack copies of rsync against the same destination.
+exec 9>"/tmp/sync-artifacts.lock"
+flock -n 9 || exit 0
+
+status=0
+{% for peer in artifacts_peer_sources %}
+# --delete, so an artifact pruned on {{ peer.name }} stops being served here too; the index
+# would otherwise keep offering links to documents that no longer exist anywhere.
+# ConnectTimeout keeps a rebooting peer from holding the lock for the whole interval, and
+# BatchMode makes a missing key fail rather than prompt.
+if ! rsync -a --delete --timeout=60 \
+    -e 'ssh -o BatchMode=yes -o ConnectTimeout=10' \
+    "{{ peer.ssh_target }}:{{ peer.path }}/" "{{ artifacts_peer_dir }}/{{ peer.name }}/"; then
+  echo "sync-artifacts: {{ peer.name }} failed" >&2
+  status=1
+fi
+{% endfor %}
+
+exit "$status"
