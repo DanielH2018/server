@@ -1,0 +1,158 @@
+#!/usr/bin/env python3
+"""Ordering guards on the block-size migration playbook.
+
+This playbook deletes a live PVC and rebuilds it. Everything protecting the data is an ORDER: a
+verification that happens before a deletion. Reordering two tasks turns a safe migration into an
+irreversible one, and nothing about the YAML makes that visible on review.
+
+Three orders carry the weight:
+
+  VERIFY BEFORE DELETE. The staging copy must be checked before the original PVC is deleted.
+  Between the delete and the copy back, staging is the only copy of the data.
+
+  VERIFY BEFORE DISCARD. The copy back must be checked before the staging PVC is removed. A
+  mismatch has to leave the verified copy on disk, not clean it up.
+
+  RESTORE IN `always`. The play scales the workload to zero. A failure anywhere in between must
+  still bring it back, or a failed migration is also a silent outage.
+
+Run: uv run pytest ansible/tests/test_migrate_volume_block_size.py
+"""
+
+from pathlib import Path
+
+import yaml
+
+ANSIBLE = Path(__file__).resolve().parents[1]
+PLAY = ANSIBLE / "migrate_volume_block_size.yml"
+COPY = ANSIBLE / "tasks" / "blockmig_copy.yml"
+
+
+def _text() -> str:
+    return PLAY.read_text()
+
+
+def _names(tasks) -> list[str]:
+    return [t["name"] for t in tasks if isinstance(t, dict) and "name" in t]
+
+
+def _play() -> dict:
+    return yaml.safe_load(_text())[0]
+
+
+def _main_tasks() -> list:
+    return _play()["tasks"]
+
+
+def _migration_block() -> dict:
+    block = next(
+        t
+        for t in _main_tasks()
+        if t.get("name") == "Copy out, verify, rebuild and copy back"
+    )
+    return block
+
+
+def test_the_staging_copy_is_verified_before_the_original_is_deleted() -> None:
+    """Between this delete and the copy back, staging holds the only copy of the data."""
+    names = _names(_migration_block()["block"])
+    verify = names.index("Refuse to delete the original when the staging copy is empty")
+    delete = names.index("Delete the original claim")
+    assert verify < delete, (
+        "the original PVC is deleted before the staging copy is checked — an empty or partial "
+        "copy would destroy the only remaining data"
+    )
+
+
+def test_the_copy_back_is_verified_before_staging_is_discarded() -> None:
+    """A mismatch must leave the verified copy on disk rather than tidying it away."""
+    names = _names(_migration_block()["block"])
+    verify = names.index("Assert the replacement matches what was copied out")
+    discard = names.index("Remove the staging claim")
+    assert verify < discard, (
+        "the staging volume is removed before the copy back is verified, so a failed migration "
+        "would delete the last good copy"
+    )
+
+
+def test_the_workload_is_restored_even_when_the_migration_fails() -> None:
+    """The play scales to zero; a failure that skips the scale back up is a silent outage."""
+    always = _names(_migration_block()["always"])
+    assert "Restore the workload" in always, (
+        "the scale back to 1 must be in `always`, or an aborted migration leaves the service down"
+    )
+    assert "Remove the copy pod" in always, (
+        "the copy pod holds both volumes attached and must be removed on every exit path"
+    )
+
+
+def test_the_target_block_size_is_read_from_the_cluster() -> None:
+    """Assuming it would rebuild the volume at the OLD size and only fail afterwards.
+
+    The role default and the live setting are different facts. If the setting had never been
+    applied, a hardcoded target would pass the "already migrated?" check, destroy the volume,
+    rebuild it at 2 MiB and only then notice.
+    """
+    names = _names(_main_tasks())
+    assert "Read the block size new volumes are being created at" in names, (
+        "the target block size must come from settings.longhorn.io, not from a role default"
+    )
+    read = names.index("Read the block size new volumes are being created at")
+    quiesce = names.index("Quiesce the workload")
+    assert read < quiesce, "read the setting before taking the service down"
+
+
+def test_the_size_is_checked_against_the_webhook_rule_before_anything_is_touched() -> (
+    None
+):
+    """Longhorn refuses to create a volume whose size is not a multiple of the block size.
+
+    Hitting that after the original is deleted would strand the data on the staging volume with
+    no way to rebuild the real one. See test_pvc_sizes_match_block_size.py for the same rule
+    enforced against the templates.
+    """
+    names = _names(_main_tasks())
+    check = names.index("Refuse a size the webhook will reject")
+    quiesce = names.index("Quiesce the workload")
+    assert check < quiesce, (
+        "the size must be validated before the workload is taken down, not after the original "
+        "PVC has been deleted"
+    )
+
+
+def test_an_already_migrated_volume_is_refused() -> None:
+    """Re-running would spend real downtime and strand the backup chain a second time."""
+    names = _names(_main_tasks())
+    assert (
+        "Refuse to migrate a volume that is already at the target block size" in names
+    )
+
+
+def test_the_workload_is_named_explicitly_rather_than_derived() -> None:
+    """Scaling the wrong Deployment leaves the real writer running against a volume being copied."""
+    asserts = _names(_play()["pre_tasks"])
+    assert "Require a claim and its workload" in asserts
+    assert "mig_deploy is defined" in _text()
+
+
+def test_the_copy_verifies_both_count_and_content() -> None:
+    """A file count alone passes on truncated files; a digest alone passes on a missing file."""
+    copy = COPY.read_text()
+    assert "copy_counts" in copy and "copy_digests" in copy
+    assert "Assert the copy landed intact" in copy, (
+        "the copy task must verify its own result, so a mismatch is reported against the copy "
+        "that produced it rather than several tasks later"
+    )
+
+
+def test_the_backup_tier_label_loss_is_called_out() -> None:
+    """A rebuilt volume carries no tier label, which puts it in no backup tier at all.
+
+    Nothing pages for this immediately — the backup-health check only notices once the volume
+    ages past its tier bound, by which time the operator has moved on.
+    """
+    text = _text()
+    assert "--tags longhorn" in text, (
+        "the playbook must tell the operator how to restore the tier label"
+    )
+    assert "no backup tier" in text
