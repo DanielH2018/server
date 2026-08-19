@@ -1,4 +1,14 @@
-FROM python:3.14-slim
+# DIGEST-PINNED. `python:3.14-slim` is a version tag but still a MOVING one: it re-points at every
+# 3.14.x patch and every base-OS refresh, so the tag alone left this image drifting under a name
+# that reads pinned. Renovate cannot offer an update for movement inside a tag — only for a tag
+# change (3.14 -> 3.15) — so nothing signalled a rebuild, the same failure the `:latest` bases had
+# until 2026-08-19, one notch weaker.
+#
+# The digest is what makes the movement visible: Renovate's dockerfile manager raises a digest PR
+# when the tag re-points, and the merged commit lands under ansible/roles/k8s/**, which
+# gitops_deploy Discord-alerts for an operator to rebuild. Keep the tag alongside the digest — it
+# is what carries the 3.14 line, and dropping it would let a digest bump silently cross a minor.
+FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4
 WORKDIR /app
 # Pin to the versions uv.lock resolves for the `dev` group, so the runtime image matches what
 # test_app.py validates against (a bare `pip install flask requests` re-resolves to newest PyPI on

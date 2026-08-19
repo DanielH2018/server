@@ -1,4 +1,8 @@
-FROM debian:bookworm-slim
+# DIGEST-PINNED — see roles/k8s/ical-proxy/templates/Dockerfile.j2 for why a version tag alone is
+# not a pin. `bookworm-slim` moves with every Debian point release and every security refresh, so
+# it drifted the same way. Keep the codename alongside the digest: it is what holds this on
+# bookworm, and a bare digest would let a bump cross into trixie unremarked.
+FROM debian:bookworm-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nut \
