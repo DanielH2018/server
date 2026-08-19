@@ -1,7 +1,9 @@
-# PINNED in lockstep with Dockerfile.j2 — see the reasoning there. The two must carry the SAME
-# version: the runners are version-coupled to the n8n they serve, and a split would surface as
-# task failures rather than a build error.
-FROM n8nio/runners:2.35.4
+# PINNED in lockstep with Dockerfile.j2 — see the reasoning there for why this is the channel tag
+# plus a digest rather than a version. The two must name the SAME channel: the runners are
+# version-coupled to the n8n they serve, and a split would surface as task failures rather than a
+# build error. The digests differ because these are different images; `runners:stable` and
+# `runners:2.35.4` were the same digest when this was written, so both sides sit on 2.35.4.
+FROM n8nio/runners:stable@sha256:1bbf3092a9ec5c54e25ef8f4e0ace2e464f7b5c829db7aad74a1e05665786388
 
 USER root
 

@@ -7,15 +7,28 @@
 # Renovate has no version to bump, so there is no PR, no commit, and no gitops tick. n8n sat on
 # 2.34.6 while upstream shipped 2.35.4.
 #
-# An explicit tag is what Renovate's built-in dockerfile manager reads. It raises a PR (no
+# An explicit ref is what Renovate's built-in dockerfile manager reads. It raises a PR (no
 # automerge — the automerge rules match custom.regex managers only), and the merged commit lands
 # under ansible/roles/k8s/**, which gitops_deploy classifies as a k8s-role change and Discord-alerts
 # for an operator to deploy. That is the posture n8n's autodeploy-denylist entry asks for.
 #
+# CHANNEL + DIGEST, not a version. `:2.35.4` was the first pin, and it had a side effect worth
+# naming: it changed which release train n8n follows. `:latest` is an alias for `:stable`, so every
+# rebuild had been quietly tracking the STABLE channel; pinning a bare version froze that and handed
+# the update stream to Renovate's docker datasource, which reads every published tag and so runs
+# AHEAD of stable — its next offer would have been 2.36.2, a release upstream has not promoted.
+#
+# Pinning the channel tag with a digest beside it restores the old behaviour and makes it explicit.
+# The tag names the channel; the digest is what Renovate bumps, so a PR arrives exactly when n8n
+# promotes a new stable, and an unpromoted release is never offered. Same shape as the four
+# line-tagged bases digest-pinned in PR #266 — the tag holds the line, the digest tracks movement
+# inside it.
+#
 # LOCKSTEP with Dockerfile-runners.j2: n8n and its task runners are version-coupled, both
-# repositories publish the same version tags, and renovate.json groups them into one PR
-# (test_renovate_managers.py asserts the two pins match).
-FROM n8nio/n8n:2.35.4
+# repositories publish a `stable` tag and both resolved to 2.35.4 when this was written, and
+# renovate.json groups them into one PR. test_renovate_managers.py asserts the two carry the same
+# TAG — their digests differ by design, since they are different images.
+FROM n8nio/n8n:stable@sha256:2f9c115b71c9c2f3e856ba8debecf26dfd6a8fca67a6790e32d63b3931b7c2d4
 
 # Switch to the root user to install packages
 USER root
