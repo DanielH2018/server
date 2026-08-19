@@ -1,0 +1,119 @@
+---
+# Copy one Longhorn volume's contents onto another and measure what landed.
+#
+# Included twice by migrate_volume_block_size.yml — once to stage the data off the 2 MiB volume,
+# once to put it back on the 16 MiB replacement. Both claims must be unattached when this runs;
+# the caller quiesces the workload first.
+#
+# Sets copy_dst_files and copy_dst_digest for the caller to compare across the two runs. The
+# digest is of file CONTENTS and paths, not of the tar stream, because a tar digest also covers
+# mtimes and device numbers and would differ across a copy that is in fact correct.
+#
+# The pod runs as root with default capabilities on purpose: the files are owned by uid 1000 and
+# a root process without DAC_OVERRIDE cannot write another uid's files, which has broken three
+# init containers in this cluster already.
+- name: Remove any copy pod left by an earlier attempt
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, "{{ mig_namespace }}", delete, pod, "{{ mig_pod }}",
+           --ignore-not-found, --wait=true]
+  become: true
+  changed_when: true
+
+- name: Stage the copy pod
+  ansible.builtin.copy:
+    dest: "{{ mig_manifests }}/copy-pod.yaml"
+    mode: "0600"
+    content: |
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: {{ mig_pod }}
+        namespace: {{ mig_namespace }}
+      spec:
+        restartPolicy: Never
+        containers:
+          - name: copy
+            image: {{ mig_image }}
+            command: ["sleep", "3600"]
+            volumeMounts:
+              - name: src
+                mountPath: /src
+              - name: dst
+                mountPath: /dst
+        volumes:
+          - name: src
+            persistentVolumeClaim:
+              claimName: {{ copy_src_claim }}
+          - name: dst
+            persistentVolumeClaim:
+              claimName: {{ copy_dst_claim }}
+  become: true
+
+- name: Start the copy pod
+  ansible.builtin.command:
+    argv: [k3s, kubectl, apply, -f, "{{ mig_manifests }}/copy-pod.yaml"]
+  become: true
+  changed_when: true
+
+- name: Wait for the copy pod to be ready
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, "{{ mig_namespace }}", wait, "pod/{{ mig_pod }}",
+           --for=condition=Ready, --timeout=300s]
+  become: true
+  changed_when: false
+
+# `cp -a` rather than a tar pipe: both claims are mounted in this one pod, so there is no stream
+# to build, and busybox tar's support for --numeric-owner is not worth relying on. -a preserves
+# ownership and modes, which matters because these files belong to uid 1000. The .seeded marker
+# the seed-volume role checks for is an ordinary file and travels with the rest.
+- name: Copy the tree
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, "{{ mig_namespace }}", exec, "{{ mig_pod }}", "--",
+           sh, -c, "cp -a /src/. /dst/"]
+  become: true
+  changed_when: true
+
+- name: Count the files on each side
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, "{{ mig_namespace }}", exec, "{{ mig_pod }}", "--",
+           sh, -c,
+           "cd /src && find . -type f ! -path './lost+found/*' | wc -l && cd /dst && find . -type f ! -path './lost+found/*' | wc -l"]
+  become: true
+  register: copy_counts
+  changed_when: false
+
+- name: Digest the contents on each side
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, "{{ mig_namespace }}", exec, "{{ mig_pod }}", "--",
+           sh, -c,
+           "cd /src && find . -type f ! -path './lost+found/*' -exec md5sum {} + | sort | md5sum && cd /dst && find . -type f ! -path './lost+found/*' -exec md5sum {} + | sort | md5sum"]
+  become: true
+  register: copy_digests
+  changed_when: false
+
+- name: Note what the destination holds
+  ansible.builtin.set_fact:
+    copy_dst_files: "{{ copy_counts.stdout_lines[1] | trim }}"
+    copy_dst_digest: "{{ copy_digests.stdout_lines[1].split()[0] | trim }}"
+
+# Checked here as well as by the caller: this is the point where source and destination are both
+# still mounted, so a mismatch can be reported against the copy that produced it.
+- name: Assert the copy landed intact
+  ansible.builtin.assert:
+    that:
+      - copy_counts.stdout_lines[0] | trim == copy_counts.stdout_lines[1] | trim
+      - copy_digests.stdout_lines[0].split()[0] == copy_digests.stdout_lines[1].split()[0]
+    fail_msg: >-
+      copying {{ copy_src_claim }} to {{ copy_dst_claim }} did not reproduce it:
+      {{ copy_counts.stdout_lines[0] | trim }} files / {{ copy_digests.stdout_lines[0].split()[0] }}
+      became {{ copy_counts.stdout_lines[1] | trim }} / {{ copy_digests.stdout_lines[1].split()[0] }}.
+    success_msg: >-
+      {{ copy_src_claim }} -> {{ copy_dst_claim }}: {{ copy_counts.stdout_lines[1] | trim }} files,
+      identical digest.
+
+- name: Remove the copy pod
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, "{{ mig_namespace }}", delete, pod, "{{ mig_pod }}",
+           --ignore-not-found, --wait=true]
+  become: true
+  changed_when: true
