@@ -13,4 +13,8 @@ spec:
   storageClassName: longhorn
   resources:
     requests:
-      storage: 100Mi
+      # 128Mi, not 100Mi: Longhorn's admission webhook rejects any volume whose size is not
+      # an integer multiple of default-backup-block-size, which is 16Mi since 2026-08-19.
+      # At 100Mi this PVC provisions today and would fail to be recreated — which is exactly
+      # the disaster-recovery path it exists to serve.
+      storage: 128Mi
