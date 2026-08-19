@@ -392,8 +392,9 @@ containers_list:
   # Browses every host's ~/.claude/artifacts (the plans, specs and review write-ups Claude
   # Code renders) at one authenticated URL, with search over their indexed metadata. Serves
   # hostPath trees, so the pod is pinned to daniel-box and daniel-server's copy is rsynced
-  # in by a cron there. LAN-only by choice — the route passes public=false, since these
-  # documents are audits of this homelab.
+  # in by a cron there. Answers on both the LAN and the public name, behind Authelia — a
+  # link is the only way anyone reaches an artifact, so one that resolves from inside the
+  # LAN alone fails wherever the reader is.
   - name: artifacts
     platform: k8s
     hostname: "artifacts"
