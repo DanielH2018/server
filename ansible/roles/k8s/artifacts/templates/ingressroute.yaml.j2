@@ -1,9 +1,22 @@
 {% from 'ingressroute.yml.j2' import ingressroute with context %}
 {#
-  public=false: these artifacts are drift audits, permission reviews and security write-ups of
-  this homelab. Authelia gates the route either way, but a name that never matches on the
-  public host is one fewer thing depending on the SSO layer holding. LAN + WireGuard reach it;
-  the internet has no rule to match.
+  Public as well as LAN, which is the default the macro already applies — so no `public=`
+  argument here.
+
+  This route was LAN-only for its first day: the artifacts are drift audits, permission
+  reviews and security write-ups of this homelab, and a name that never matches publicly is
+  one fewer thing depending on the SSO layer holding. Reverted 2026-08-19 by request, and the
+  LAN-only form cost more than it bought. The link a session emits is the ONE way anyone
+  reaches an artifact, and a link that resolves only from inside the LAN fails wherever the
+  reader actually is.
+
+  It also removes a failure this hit in practice. Authelia selects its portal by the request's
+  domain (see the `cookies:` list in roles/k8s/authelia — `auth.local.<domain>` for the LAN
+  name, `auth.<domain>` for the public one), so a LAN-only route can only ever send a login
+  through the LAN portal. Where that portal is unreachable the page hangs on the redirect and
+  the service looks broken while it is serving fine.
+
+  What still gates it: the `authelia` middleware, unchanged, on both names.
 #}
 ---
 {{ ingressroute(
@@ -11,6 +24,5 @@
     container_item.hostname | default(container_item.name),
     container_item.port,
     container_item.use_authelia,
-    public=false,
   )
 }}
