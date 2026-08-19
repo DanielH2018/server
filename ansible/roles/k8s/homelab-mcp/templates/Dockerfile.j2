@@ -1,4 +1,6 @@
-FROM python:3.14-slim
+# DIGEST-PINNED — see roles/k8s/ical-proxy/templates/Dockerfile.j2 for why a version tag alone is
+# not a pin. Same base, same digest: Renovate groups the two into one PR, so they stay in step.
+FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4
 WORKDIR /app
 # mcp pinned <2: 2.0.0 (picked up by the 2026-08-09 Sunday rebuild, Docker era) removed
 # mcp.server.fastmcp and crash-looped the container. Lift the pin only with an

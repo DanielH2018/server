@@ -561,13 +561,20 @@ def test_no_built_image_floats_on_an_unpinned_base(tracked: list[str]) -> None:
             # Strip the registry host before looking for a tag, so the `:5000` in a
             # `localhost:5000/foo` host:port is never mistaken for one.
             tag = ref.rsplit("/", 1)[-1].partition(":")[2]
-            if not tag or tag == "latest":
+            # A tag naming a LINE rather than a release still moves — `python:3.14-slim`
+            # re-points at every 3.14.x, `debian:bookworm-slim` at every point release. Renovate
+            # can only offer a TAG change for those (3.14 -> 3.15), never the movement inside
+            # one, so the tag reads pinned while the base drifts. A release tag is the case
+            # where the tag alone suffices, and two dots is what separates the two:
+            # `2.35.4` and `4.133.0-ls358` are releases, `3.14-slim` / `3.22` / `bookworm-slim`
+            # are lines. A line tag must therefore carry a digest as well.
+            if not tag or tag == "latest" or tag.count(".") < 2:
                 floating.append(f"{f}: FROM {ref}")
     assert not floating, (
-        "Build file(s) whose base image floats on an unpinned tag. Renovate cannot bump a "
-        "tag with no version in it, so these have NO update path at all — not a PR, not an "
-        "alert, not a rebuild. Pin an explicit version (or a @sha256 digest):\n"
-        + "\n".join(floating)
+        "Build file(s) whose base image can still move. Renovate cannot bump a tag with no "
+        "version in it, nor the movement inside a line tag, so these have no update path — "
+        "not a PR, not an alert, not a rebuild. Pin an exact release tag, or keep the line "
+        "tag and add the @sha256 digest beside it:\n" + "\n".join(floating)
     )
 
 
