@@ -350,6 +350,48 @@ if (( RECENT_N > {{ k3s_longhorn_daily_backup_budget }} )); then
 cut backup scope or raise the cap before it 403s"
 fi
 
+# 6. Did the JOB fail, rather than the backup? Every check above reads Longhorn's own objects,
+#    and a recurring job that dies before Longhorn records anything leaves none of them: no
+#    Error backup for check 3, and the other volumes keep the fleet-wide freshness of check 2
+#    green. `daily-backup-29775090` failed at 03:30 on 2026-08-12, exhausted its three retries
+#    by 11:28, and produced exactly one signal anywhere — a failed Job object nothing read. The
+#    B2 transaction cap it died against was found by hand, days later. Check 4 would have caught
+#    the consequence once those volumes aged past their tier bound, but hours after the fact and
+#    naming a stale volume rather than the run that failed.
+#
+#    BOUNDED BY THE SAME AGE as check 3, for the same reason and more sharply. Kubernetes keeps
+#    failed Jobs indefinitely — no TTL, and the history limits retain them by design — so this is
+#    a set that only grows. Unbounded, the 2026-08-12 failure alone would hold the tile red on
+#    every 10-minute tick forever, which is precisely the desensitising the check 3 comment
+#    describes. A failure pages for {{ k3s_longhorn_backup_error_max_age_hours }}h and then
+#    clears itself, whether or not anyone deletes the object.
+#
+#    Dated by the Failed CONDITION, not by creationTimestamp: a Job retries to its backoff limit
+#    before failing, and those are eight hours apart in the 2026-08-12 case. Created-yesterday /
+#    failed-this-morning is the shape that would silently fall outside the window.
+#
+#    Every failed Job in the namespace counts, with no name filter. The backup jobs are the only
+#    thing scheduled here, and a filter on `daily-backup-*`/`weekly-backup-d*` is a second copy of
+#    the naming scheme that would go quiet the day a tier is renamed.
+FAILED_JOBS=$($KUBECTL get jobs.batch -o json 2>/dev/null \
+  | jq -r --argjson cutoff "$ERROR_CUTOFF_S" '
+      .items[]
+      | select(any(.status.conditions[]?; .type == "Failed" and .status == "True"))
+      | {
+          name: .metadata.name,
+          at: ((([.status.conditions[]?
+                  | select(.type == "Failed" and .status == "True")
+                  | .lastTransitionTime] | first)
+                // .metadata.creationTimestamp // "")
+               | try fromdateiso8601 catch 0)
+        }
+      | select(.at > $cutoff)
+      | .name' \
+  | paste -sd', ')
+if [[ -n "$FAILED_JOBS" ]]; then
+  add 2 "backup job(s) that failed in the last {{ k3s_longhorn_backup_error_max_age_hours }}h: ${FAILED_JOBS}"
+fi
+
 if (( PROBLEM_COUNT == 0 )); then
   STATUS=up
   # The counts are in the green message on purpose: "newest backup 8h old" was true even while a
