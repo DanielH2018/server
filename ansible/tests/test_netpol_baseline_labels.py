@@ -67,13 +67,18 @@ SLICE_3_WORKLOADS = {
 
 SLICE_3_ROLES = {role for role, _name in SLICE_3_WORKLOADS}
 
-# Slice 4: core infra (docs/networkpolicy-default-deny.md). Named per WORKLOAD, not per role, for
-# the same reason as slice 3: pihole renders two workloads — pihole and pihole-2, an HA pair
-# sharing app=pihole and differing only on the instance label — from one role.
+# Slice 4: core infra (docs/networkpolicy-default-deny.md). Named per WORKLOAD, not per role: two
+# roles here each render a second pod-producing doc the role-granular habit would miss — pihole
+# (pihole-2, its HA pair, same app label, different instance) and crowdsec (crowdsec-node-agent,
+# the DaemonSet). crowdsec-node-agent is labelled, not exempted: its only inbound caller is
+# prometheus scraping it (verified live — count(up{job="crowdsec-node-agents"} == 1) == 2), and the
+# baseline already admits prometheus on every port, so the baseline alone suffices. Its own calls
+# out to the LAPI are outbound, which kube-router does not enforce and an ingress policy can't break.
 SLICE_4_WORKLOADS = {
     ("traefik", "traefik"),
     ("authelia", "authelia"),
     ("crowdsec", "crowdsec"),
+    ("crowdsec", "crowdsec-node-agent"),
     ("pihole", "pihole"),
     ("pihole", "pihole-2"),
     ("mosquitto", "mosquitto"),
