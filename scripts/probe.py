@@ -2086,7 +2086,7 @@ def parse_backup_budget(lines):
     return vols
 
 
-def format_backup_budget(vols, shards, names=None, retain=2):
+def format_backup_budget(vols, shards, names=None, retain=2, owners=None):
     """Render the per-shard Class C projection; non-zero exit if a shard is over budget.
 
     `shards` maps volume name to its recurring-job group. A volume with no group never runs a
@@ -2120,7 +2120,27 @@ def format_backup_budget(vols, shards, names=None, retain=2):
         #
         # The consequence for this projection: a shard's prune cost does not begin until that
         # job has more than `retain` of its own backups, and until then its blocks only grow.
-        stranded = sum(max(0, v["backups"] - retain) for _, v in members)
+        # STRANDED means "no job will ever prune this", which is NOT the same as "past retain"
+        # — and until 2026-08-19 this line computed the latter, `max(0, backups - retain)`,
+        # while the comment above described the former. It under-reported by 4.7x: 7 against a
+        # true 33, on the number an operator reads before deciding what to delete.
+        #
+        # A backup is stranded when the job that produced it is not the job that now selects the
+        # volume. Longhorn's retain counts only a job's OWN backups, so a daily-era backup on a
+        # volume since moved to a weekday shard is pruned by nothing, ever — regardless of how
+        # many backups the volume has in total. Anything the current tier owns is NOT stranded
+        # even when it sits past retain, because that job prunes it on its next run.
+        # No ownership data means nothing is PROVEN stranded, so claim nothing. Falling back to
+        # `backups - retain` is what produced the wrong number, and this figure is read
+        # immediately before someone deletes a backup.
+        stranded = (
+            0
+            if owners is None
+            else sum(
+                max(0, v["backups"] - owners.get(vol, {}).get(shard, 0))
+                for vol, v in members
+            )
+        )
         flag = "OVER" if total > budget else "ok"
         if total > budget:
             over.append(shard)
@@ -2186,6 +2206,28 @@ def volume_shard_labels(_run=None):
             if key.startswith("recurring-job-group.longhorn.io/"):
                 shards[item["metadata"]["name"]] = key.split("/", 1)[1]
     return shards
+
+
+def volume_owned_backup_counts(_run=None):
+    """{longhorn volume: how many of its backups its CURRENT recurring job owns}.
+
+    Longhorn stamps the producing job onto `.status.labels.RecurringJob`. That is a Longhorn
+    STATUS field, not a Kubernetes label, so `kubectl -l` cannot select on it.
+    """
+    run = _run or (lambda argv: subprocess.run(argv, capture_output=True, text=True))
+    out = run(
+        ["kubectl", "-n", "longhorn-system", "get", "backups.longhorn.io", "-o", "json"]
+    )
+    if out.returncode != 0:
+        raise SystemExit("kubectl failed: " + out.stderr.strip()[:300])
+    owners = {}
+    for item in json.loads(out.stdout).get("items", []):
+        status = item.get("status", {})
+        vol = status.get("volumeName")
+        job = (status.get("labels") or {}).get("RecurringJob")
+        if vol and job:
+            owners.setdefault(vol, {})[job] = owners.setdefault(vol, {}).get(job, 0) + 1
+    return owners
 
 
 def pvc_names(_run=None):
@@ -2274,7 +2316,11 @@ def run_b2_budget(ns):
         note=f"{stats.get('pages', 0)} pages",
     )
     text, code = format_backup_budget(
-        parse_backup_budget(lines), volume_shard_labels(), pvc_names(), ns.retain
+        parse_backup_budget(lines),
+        volume_shard_labels(),
+        pvc_names(),
+        ns.retain,
+        volume_owned_backup_counts(),
     )
     print(text)
     return code
