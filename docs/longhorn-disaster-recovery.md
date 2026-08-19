@@ -166,7 +166,27 @@ The drill playbook lives at `/home/ubuntu/migration-oneshots/restore-drill.yml`;
 restore Volume CR needs `spec.backupTargetName` since the v1.12 multi-target change, or
 it resolves against the volume's default target.
 
-Nothing yet watches whether the drill keeps running — a drill that silently stops looks
-identical to one that was never scheduled. Until that exists, treat a first restore as
-untested and lean on the 7-day hidden-version window
-(`daysFromHidingToDeleting: 7` on the bucket) if something looks wrong mid-restore.
+**Scheduled since 2026-08-19.** `/usr/local/bin/longhorn-restore-drill.sh` (k3s role,
+`longhorn-restore-drill.sh.j2`) runs monthly as root on the 3rd at 04:10, restoring the newest
+backup of `healthchecks-config` into a throwaway volume, checking the restored filesystem has
+files and clears a byte floor, then tearing everything down. It resolves the backup, volume and
+size from the cluster — the hand-run version pinned all three, and a pinned backup ID dies the
+day retention deletes it.
+
+It drills a **B2** volume deliberately. `traefik-acme`, which the 2026-08-16 drill used, carries
+`spec.backupTargetName: r2`, as do the other three daily-tier volumes; B2 holds only the weekly
+tier. Drilling `traefik-acme` proves Cloudflare's store and says nothing about the one under a
+transaction cap.
+
+**Check 7 of the backup heartbeat watches it**, because a drill that silently stops looks
+identical to one that was never scheduled. The drill writes
+`/var/lib/longhorn-restore-drill/last-success` only after its data assertions pass, and check 7
+pages when that stamp is missing, unparseable, or older than
+`k3s_longhorn_restore_drill_max_age_days` (45). It fails closed: a drill that has never run is
+reported, not skipped.
+
+What is still not covered: only one volume is drilled, so this proves the restore PATH works, not
+that every volume restores. A full-cluster restore is also still rationed — at 16 MiB blocks
+(set 2026-08-19) new volumes cost ~8x less to restore, but existing volumes remain at 2 MiB until
+recreated. Lean on the 7-day hidden-version window (`daysFromHidingToDeleting: 7` on the bucket)
+if something looks wrong mid-restore.
