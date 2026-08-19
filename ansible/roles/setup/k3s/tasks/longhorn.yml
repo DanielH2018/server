@@ -131,6 +131,24 @@
   become: true
   changed_when: "'no change' not in k3s_longhorn_detached_backup.stdout"
 
+- name: Set the backup block size for new volumes
+  tags: [longhorn, longhorn_backup]
+  # Cuts prune, backup AND restore cost by the same factor — every one of them is priced per
+  # block. See the variable's comment in defaults/main.yml for the numbers.
+  #
+  # Applies to volumes created AFTER this runs; the field is immutable per volume, so this
+  # patch never touches anything that already exists and cannot be a migration risk. It is
+  # also why leaving it alone is not free: each PVC created meanwhile is locked at the old size.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch settings.longhorn.io default-backup-block-size
+      --type=merge -p {{ block_size_patch | quote }}
+  vars:
+    block_size_patch: '{"value":"{{ k3s_longhorn_backup_block_size }}"}'
+  register: k3s_longhorn_block_size
+  become: true
+  changed_when: "'no change' not in k3s_longhorn_block_size.stdout"
+
 - name: Let volume engines follow the Longhorn manager version
   tags: [longhorn]
   # Upstream's 0 means engines never follow a manager upgrade, so a version bump leaves every

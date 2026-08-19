@@ -98,6 +98,44 @@ def test_storageclass_does_not_pin_a_replica_count():
     )
 
 
+def test_storageclass_does_not_pin_a_backup_block_size():
+    """Same trap as numberOfReplicas, one setting along.
+
+    `backupBlockSize` became a StorageClass parameter in Longhorn 1.10, and a parameter beats
+    the `default-backup-block-size` setting the role patches — so declaring it here would
+    silently ignore k3s_longhorn_backup_block_size. Worse than the replica case, because
+    StorageClass parameters are immutable AND a volume's block size is immutable: correcting a
+    wrong value would mean recreating the class and then every volume provisioned through it.
+    """
+    sc = yaml.safe_load(STORAGECLASS.read_text())
+    assert "backupBlockSize" not in sc.get("parameters", {}), (
+        "longhorn-storageclass.yaml must not set backupBlockSize. A StorageClass parameter "
+        "overrides the default-backup-block-size setting the role patches, so pinning it "
+        "here silently ignores k3s_longhorn_backup_block_size."
+    )
+
+
+def test_role_patches_the_backup_block_size_setting():
+    """With the parameter absent, the setting is the only lever that reaches new volumes."""
+    commands = _commands(_tasks())
+    assert any(
+        "settings.longhorn.io default-backup-block-size" in c for c in commands
+    ), (
+        "The role must patch default-backup-block-size. Every B2 cost Longhorn incurs is "
+        "priced per block — prune, backup and restore alike — so this is the one setting "
+        "that moves all three, and it reaches volumes only at creation time."
+    )
+
+
+def test_backup_block_size_is_a_value_longhorn_accepts():
+    """Longhorn takes 2 or 16 MiB and nothing between; a typo here is silently wrong."""
+    defaults = yaml.safe_load((K3S / "defaults" / "main.yml").read_text())
+    assert defaults["k3s_longhorn_backup_block_size"] in (2, 16), (
+        "k3s_longhorn_backup_block_size must be 2 or 16 (MiB). Longhorn rejects other "
+        "values, and the patch reports success regardless."
+    )
+
+
 def test_storageclass_stays_the_cluster_default():
     """Dropping this annotation breaks every PVC that omits storageClassName."""
     sc = yaml.safe_load(STORAGECLASS.read_text())

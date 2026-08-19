@@ -143,6 +143,26 @@ k3s_longhorn_backupstore_poll_interval: 0
 # default-group volume, so the global scope costs nothing.
 k3s_longhorn_backup_detached_volumes: "true"
 
+# Block size, in MiB, for volumes created from here on. Every B2 cost Longhorn incurs is priced
+# PER BLOCK: pruning a backup issues ~1.28 Class C LISTs per stored block (it walks the volume's
+# whole block tree), backing up issues one Class B HeadObject per changed block, and restoring
+# issues one Class B GET per block. Block size is the only lever that moves all three at once.
+#
+# Upstream's default is 2. At that size the store held 3,472 blocks on 2026-08-19, so a
+# full-cluster restore would need ~3,472 Class B against a 2,500/day free-tier cap — 139%, which
+# means a total-loss recovery CANNOT complete in a day. At 16 that is ~434 blocks, about a sixth
+# of one day's allowance, and disaster recovery stops being rationed by transactions.
+#
+# NEW VOLUMES ONLY, and this is the trap: the field is immutable per volume, so every PVC created
+# while this reads 2 is locked at 2 until it is destroyed and recreated. Flipping it costs nothing
+# and changes nothing that already exists — the saving accrues only as volumes are replaced.
+#
+# Longhorn accepts 2 or 16 and nothing between. Governed by the SETTING rather than the
+# StorageClass on purpose: a StorageClass parameter beats the setting and its parameters are
+# immutable, which is the trap `numberOfReplicas` sprang on 2026-08-01 (see
+# files/longhorn-storageclass.yaml and ansible/tests/test_longhorn_storageclass.py).
+k3s_longhorn_backup_block_size: 16
+
 # How many volume engines Longhorn upgrades per node once the manager moves to a new version.
 # Upstream ships 0, which means engines NEVER follow the manager — after a version bump every
 # volume keeps running the old engine image until someone walks the UI. Across the v1.7.2 ->
