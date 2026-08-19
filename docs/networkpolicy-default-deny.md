@@ -1,11 +1,11 @@
 # Default-deny ingress NetworkPolicies
 
-Design doc. Written 2026-08-16. Status: **slices 1 and 2 deployed and enforcing** (slice 2 on
-2026-08-17). `netpol_baseline_enforced` is `true`; sixteen roles carry `netpol-baseline: enforced`
-and four per-workload allow policies are live alongside the baseline. **Slice 3 is built and merged
-but not yet enforcing** — `netpol_baseline_obs_enforced` is still `false`. Slices 4–5 are still
-design only. See "Answers from slice 1" and "Answers from slice 2" below for what each deploy
-settled.
+Design doc. Written 2026-08-16. Status: **slices 1, 2 and 3 deployed and enforcing** (slice 2 on
+2026-08-17, slice 3 on 2026-08-19). `netpol_baseline_enforced` and `netpol_baseline_obs_enforced`
+are both `true`. Seventeen roles carry `netpol-baseline: enforced`, and six per-workload allow
+policies are live alongside the two baselines — four in `homelab`, two in `observability`.
+Slices 4–5 are still design only. See "Answers from slice 1", "Answers from slice 2" and
+"Answers from slice 3" below for what each deploy settled.
 
 ## The problem
 
@@ -205,7 +205,7 @@ reason below.
 |---|---|---|
 | **1** | Leaf apps: bento-pdf, littlelink, speedtest, healthchecks, ical-proxy, code-server | Traefik is the only in-cluster caller of these six. Exercises the whole mechanism — baseline policy, var flip, probe job — at near-zero blast radius, and a mistake surfaces as a 502, not silence. terraria and valheim are deliberately NOT here: they are reached over their own MetalLB VIPs by game clients on the LAN, not through Traefik, so the baseline's traefik rule would not cover them and fencing them would need per-workload peers this slice does not design |
 | **2** ✅ | Media stack + bridges: sonarr, radarr, prowlarr, bazarr, tdarr, qbittorrent, configarr, janitorr, monitor-bridge, autofix-bridge | Densest genuine app-to-app mesh; several callers are DB-configured and unprobeable. **Deployed 2026-08-17.** jellyfin moved to slice 4 — see below |
-| **3** | `observability` namespace | Four hostPort ingress paths, cross-namespace inbound from three homelab workloads, thick intra-namespace mesh |
+| **3** ✅ | `observability` namespace | Four hostPort ingress paths, cross-namespace inbound from three homelab workloads, thick intra-namespace mesh. **Deployed 2026-08-19.** |
 | **4** | Infra tier: traefik, authelia, crowdsec, pihole, mosquitto, nut, registry, headlamp, n8n | Highest consequence; do it once the pattern is proven |
 | **5** | Switch `netpol_baseline_scope` to `namespace` | Makes a workload fenced-by-default instead of opt-in. Gated on zero unlabelled pods |
 
@@ -519,6 +519,36 @@ the label change rolled the Deployment, and by then that pod was gone
 (`cannot exec into a container in a completed pod`). Its substantive checks had all passed. A
 re-run was clean. This is a latent race in that verify — it will recur on any change that rolls
 janitorr — and is worth fixing independently of this work.
+
+## Answers from slice 3
+
+Deployed 2026-08-19 in two stages, as designed: `claude-otel` first to add the labels while
+`netpol_baseline_obs_enforced` stayed `false`, then `netpol-baseline` to arm the fence.
+
+- **The two-stage split earned its keep, for a reason the plan did not anticipate.** Stage A rolled
+  all six workloads and the scrape-target count moved from 25 to 29. Every one of the extra four was
+  a dead pod's series still inside Prometheus's lookback window, not a new target — but that is only
+  legible because stage A changed the labels and nothing else. Had the fence gone live in the same
+  deploy, the same reading would have had two candidate causes and no way to separate them.
+- **Stage B rolled nothing, as predicted.** All seven pods kept the start times from the stage-A
+  roll. A NetworkPolicy change restarts nothing, so arming the fence is observable only in the
+  probe and the callers.
+- **The probe is the proof, not the witnesses.** `netpol-baseline-probe-slice3` reported its control
+  target reachable (`traefik:80`) and both fenced services unreachable from an unlisted caller. The
+  scrape-target count returning to 25 shows the admitted callers still work; only the inverted
+  assertions show the fence denies anything.
+- **A 302 from the grafana route proves nothing**, for the reason already recorded elsewhere in this
+  doc: Authelia's redirect fires in the middleware, before Traefik proxies to the backend. The
+  Traefik cross-namespace peer was proven instead through the `prometheus` route, which carries no
+  Authelia — it returned HTTP 200 with a real result body.
+- **Only one of the four node CIDRs was exercised.** Both loki and prometheus were scheduled on
+  daniel-box, and both host callers run there too: the `telemetry-health.sh` heartbeat (exit 0
+  through the fence) and the loopback hostPort path to loki (HTTP 200). Both are therefore
+  same-node, which the earlier slices measured as arriving from `cni0` — consistent with the
+  inference this slice made, and the same-node hostPort DNAT source is now exercised rather than
+  merely inferred. The other three entries — daniel-server's `cni0` and both `flannel.1`
+  addresses — are still unexercised. They cover the case where a pod moves nodes, which is
+  precisely why the list was not trimmed to what a single day's placement happens to need.
 
 ## Open items still outstanding
 
