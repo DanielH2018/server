@@ -118,6 +118,31 @@
     cron_file: longhorn-trim
   become: true
 
+- name: Deploy the Longhorn restore drill
+  tags: [backup-health, restore-drill]
+  ansible.builtin.template:
+    src: longhorn-restore-drill.sh.j2
+    dest: /usr/local/bin/longhorn-restore-drill.sh
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Schedule the Longhorn restore drill
+  tags: [backup-health, restore-drill]
+  # Runs as ROOT, unlike the heartbeat beside it. The drill creates and deletes Volume/PV/PVC
+  # objects and runs a pod; the read-only ServiceAccount the heartbeat uses is Forbidden on all
+  # of it. Root's k3s kubectl reads /etc/rancher/k3s/k3s.yaml and has the cluster-admin cert.
+  ansible.builtin.cron:
+    name: "Longhorn restore drill"
+    minute: "{{ k3s_longhorn_restore_drill_cron.split()[0] }}"
+    hour: "{{ k3s_longhorn_restore_drill_cron.split()[1] }}"
+    day: "{{ k3s_longhorn_restore_drill_cron.split()[2] }}"
+    user: root
+    job: "/usr/local/bin/longhorn-restore-drill.sh"
+    cron_file: longhorn-restore-drill
+  become: true
+
 - name: Deploy the root-disk headroom heartbeat
   tags: [disk-health]
   ansible.builtin.template:

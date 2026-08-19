@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+# Longhorn restore drill — managed by Ansible (k3s role); edits overwritten.
+#
+# Restores the newest backup of one small volume from B2 into a NEW volume, mounts it in a
+# throwaway pod, checks the data is real, then tears everything down. The live volume is never
+# touched.
+#
+# This exists because "the backup completed" and "the backup restores" are different claims and
+# only the first was ever checked. The backup-plane heartbeat watches Longhorn's own objects;
+# none of them can tell you whether the bytes in B2 come back. The first drill, run by hand on
+# 2026-08-15, FAILED — not on the data, but on a B2 Class-B cap at 100%, which surfaced as
+# `cannot find volume.cfg in backupstore` and reads exactly like data loss. The retry on
+# 2026-08-16 passed. Nothing recurred after that, and a drill that silently stops looks
+# identical to one that was never scheduled — which is what this script and check 7 of
+# longhorn-backup-health.sh fix between them.
+#
+# Runs as ROOT from cron, and has to: it creates and deletes Volume/PV/PVC objects and runs a
+# pod. The read-only ServiceAccount the heartbeat uses cannot do any of that, so do not try to
+# convert this to that credential.
+set -uo pipefail
+
+# Cron's PATH is /usr/bin:/bin, which omits /usr/local/bin where k3s lives.
+export PATH="/usr/local/bin:${PATH}"
+KUBECTL="k3s kubectl"
+
+PVC="{{ k3s_longhorn_restore_drill_pvc }}"
+PVC_NS="{{ k3s_longhorn_restore_drill_namespace }}"
+DRILL="restore-drill-${PVC}"
+STAMP_DIR="{{ k3s_longhorn_restore_drill_stamp_dir }}"
+STAMP="${STAMP_DIR}/last-success"
+MANIFEST=$(mktemp /tmp/restore-drill.XXXXXX.yaml)
+
+fail() { logger -t longhorn-restore-drill "FAIL: $*"; echo "restore drill FAILED: $*" >&2; exit 1; }
+
+# Teardown runs on EVERY exit path including the failures above, because a half-restored volume
+# left attached would block the next run and, being a Longhorn volume with a replica, occupies
+# real disk. `--ignore-not-found` throughout so cleanup is idempotent whatever stage we died at.
+cleanup() {
+  $KUBECTL -n "$PVC_NS" delete pod "${DRILL}-probe" --ignore-not-found --now >/dev/null 2>&1
+  $KUBECTL -n "$PVC_NS" delete pvc "$DRILL" --ignore-not-found >/dev/null 2>&1
+  $KUBECTL delete pv "$DRILL" --ignore-not-found >/dev/null 2>&1
+  $KUBECTL -n longhorn-system delete volume "$DRILL" --ignore-not-found >/dev/null 2>&1
+  rm -f "$MANIFEST"
+}
+trap cleanup EXIT
+
+# Resolved from the cluster, never hardcoded. The hand-run one-shot this replaces pinned the
+# backup ID, the volume name and the size as literals — all three of which were true only on
+# 2026-08-16. A pinned backup ID is the worst of them: retention deletes it, and the drill then
+# fails forever on a missing backup while reading as a restore failure.
+VOL=$($KUBECTL -n "$PVC_NS" get pvc "$PVC" -o jsonpath='{.spec.volumeName}' 2>/dev/null)
+[[ -n "$VOL" ]] || fail "no volume bound to ${PVC_NS}/${PVC}"
+
+SIZE=$($KUBECTL -n longhorn-system get volume "$VOL" -o jsonpath='{.spec.size}' 2>/dev/null)
+[[ -n "$SIZE" ]] || fail "cannot read size of volume ${VOL}"
+
+TARGET=$($KUBECTL -n longhorn-system get volume "$VOL" -o jsonpath='{.spec.backupTargetName}' 2>/dev/null)
+TARGET="${TARGET:-default}"
+
+# Newest Completed backup, by snapshot time. `sort_by` over a string is fine here: these are
+# RFC3339 stamps in a fixed zone, so lexical and chronological order agree.
+BACKUP=$($KUBECTL -n longhorn-system get backups.longhorn.io -o json 2>/dev/null \
+  | jq -r --arg vol "$VOL" '
+      [.items[]
+       | select(.status.volumeName == $vol and .status.state == "Completed")]
+      | sort_by(.status.snapshotCreatedAt)
+      | last
+      | .metadata.name // ""')
+[[ -n "$BACKUP" ]] || fail "no Completed backup for ${PVC} (volume ${VOL})"
+
+URL=$($KUBECTL -n longhorn-system get backuptarget "$TARGET" -o jsonpath='{.spec.backupTargetURL}' 2>/dev/null)
+[[ -n "$URL" ]] || fail "backup target ${TARGET} has no URL — is it disarmed?"
+
+# A restore Volume CR needs spec.backupTargetName since the v1.12 multi-target change, or it
+# resolves against the volume's default target and silently restores from the wrong store.
+cat >"$MANIFEST" <<YAML
+apiVersion: longhorn.io/v1beta2
+kind: Volume
+metadata:
+  name: ${DRILL}
+  namespace: longhorn-system
+spec:
+  frontend: blockdev
+  backupTargetName: ${TARGET}
+  fromBackup: "${URL}?backup=${BACKUP}&volume=${VOL}"
+  numberOfReplicas: 1
+  size: "${SIZE}"
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ${DRILL}
+spec:
+  capacity:
+    storage: ${SIZE}
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: longhorn-static
+  csi:
+    driver: driver.longhorn.io
+    volumeHandle: ${DRILL}
+    fsType: ext4
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ${DRILL}
+  namespace: ${PVC_NS}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: longhorn-static
+  volumeName: ${DRILL}
+  resources:
+    requests:
+      storage: ${SIZE}
+YAML
+
+$KUBECTL apply -f "$MANIFEST" >/dev/null 2>&1 || fail "could not create the drill volume"
+
+# Poll rather than `kubectl wait`: restoreRequired is a plain status field, not a Condition, so
+# there is nothing for --for=condition to watch.
+DEADLINE=$(( $(date +%s) + {{ k3s_longhorn_restore_drill_timeout_s }} ))
+while :; do
+  STATE=$($KUBECTL -n longhorn-system get volume "$DRILL" \
+    -o jsonpath='{.status.state} {.status.restoreRequired}' 2>/dev/null)
+  [[ "$STATE" == "detached false" ]] && break
+  (( $(date +%s) > DEADLINE )) && fail "restore did not finish in {{ k3s_longhorn_restore_drill_timeout_s }}s (last state: ${STATE:-unknown})"
+  sleep 10
+done
+
+# Generic on purpose: counts files and sums their bytes rather than looking for a known
+# filename. The drill has to be repointable at any volume — the original one-off checked
+# `acme.json` for a domain string, which tied it to traefik-acme forever — and a restored volume
+# that mounts but is EMPTY is the failure this must catch. Contents are never printed: these are
+# service config volumes and several hold credentials.
+PROBE=$($KUBECTL -n "$PVC_NS" run "${DRILL}-probe" --rm -i --restart=Never \
+  --image={{ k3s_longhorn_restore_drill_image }} --quiet \
+  --overrides="$(cat <<JSON
+{"spec":{"containers":[{"name":"probe","image":"{{ k3s_longhorn_restore_drill_image }}",
+"command":["sh","-c","echo files=\$(find /drill -type f | wc -l) bytes=\$(find /drill -type f -exec cat {} + | wc -c)"],
+"volumeMounts":[{"name":"d","mountPath":"/drill","readOnly":true}]}],
+"volumes":[{"name":"d","persistentVolumeClaim":{"claimName":"${DRILL}"}}],"restartPolicy":"Never"}}
+JSON
+)" 2>&1)
+
+FILES=$(sed -n 's/.*files=\([0-9]\{1,\}\).*/\1/p' <<<"$PROBE" | head -1)
+BYTES=$(sed -n 's/.*bytes=\([0-9]\{1,\}\).*/\1/p' <<<"$PROBE" | head -1)
+
+[[ -n "$FILES" && "$FILES" -gt 0 ]] || fail "restored volume has no files: ${PROBE}"
+MIN_BYTES="{{ k3s_longhorn_restore_drill_min_bytes }}"
+[[ -n "$BYTES" && "$BYTES" -ge "$MIN_BYTES" ]] \
+  || fail "restored volume holds ${BYTES:-0} bytes, under the ${MIN_BYTES} floor: ${PROBE}"
+
+# The stamp is written ONLY here, after both assertions pass. Check 7 reads its contents, so
+# stamping earlier — or on any failure path — would report a broken drill as a healthy one.
+mkdir -p "$STAMP_DIR"
+date +%s >"$STAMP"
+logger -t longhorn-restore-drill "PASS: ${PVC} restored from ${BACKUP} (files=${FILES}, bytes=${BYTES})"
