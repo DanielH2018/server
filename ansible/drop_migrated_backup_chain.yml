@@ -66,7 +66,7 @@
     - name: List the volumes that still exist
       ansible.builtin.command:
         argv: [k3s, kubectl, -n, longhorn-system, get, volumes.longhorn.io,
-               -o, "jsonpath={range .items[*]}{.metadata.name}{'\n'}{end}"]
+               -o, "custom-columns=NAME:.metadata.name", --no-headers]
       become: true
       register: drop_live_volumes
       changed_when: false
@@ -74,13 +74,27 @@
     # A backup whose volume still exists is somebody's live chain, not debris. Restricting to
     # Completed matters too: Longhorn's retain never prunes an Error backup, so those are removed
     # by the reaper's own path, not here.
+    # The orphan test is "the volume is not in this list", so an empty or malformed list makes
+    # every backup an orphan and deletes a live chain. The claim's own volume must be in it:
+    # that proves the list was read, parsed and trimmed correctly, in one check.
+    - name: Refuse to classify orphans against an unusable volume list
+      ansible.builtin.assert:
+        that: drop_current_pv.stdout in (drop_live_volumes.stdout_lines | map('trim') | list)
+        fail_msg: >-
+          the live-volume list does not contain {{ drop_claim }}'s own volume
+          ({{ drop_current_pv.stdout }}). Every backup would be treated as stranded. Nothing
+          has been deleted.
+
+    # custom-columns pads every name to the column width, and a padded name matches nothing —
+    # which would classify every backup as an orphan. Trim before comparing.
     - name: Narrow to Completed backups whose volume no longer exists
       ansible.builtin.set_fact:
         drop_orphans: >-
-          {{ (drop_backups.stdout | from_json).items
+          {{ (drop_backups.stdout | from_json)["items"]
              | selectattr('status.volumeName', 'defined')
              | selectattr('status.state', 'equalto', 'Completed')
-             | rejectattr('status.volumeName', 'in', drop_live_volumes.stdout_lines)
+             | rejectattr('status.volumeName', 'in',
+                          drop_live_volumes.stdout_lines | map('trim') | list)
              | list }}
 
     # Backup objects do not name their PVC directly; Longhorn stores it inside the
@@ -95,7 +109,7 @@
                           '"pvcName":"' ~ drop_claim ~ '"')
              | map(attribute='metadata.name') | list }}
         drop_current_backups: >-
-          {{ (drop_backups.stdout | from_json).items
+          {{ (drop_backups.stdout | from_json)["items"]
              | selectattr('status.volumeName', 'defined')
              | selectattr('status.volumeName', 'equalto', drop_current_pv.stdout)
              | selectattr('status.state', 'equalto', 'Completed')
