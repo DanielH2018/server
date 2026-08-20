@@ -709,6 +709,18 @@ landed BEFORE running netpol-baseline.**
 
 ## What slice 5 decided
 
+**Deployed and enforcing since 2026-08-20.** Both baselines select
+`matchExpressions: [{key: netpol-baseline-exempt, operator: DoesNotExist}]` live: 81 pods fenced in
+`homelab` and 4 exempt. All five netpol-baseline probes passed on the first run, and so did the
+prowlarr, headlamp and registry probes during stage A — **no probe needed changing**, which is the
+measured form of the correction above. 25 Prometheus targets up, monitor-bridge all-OK including
+`cluster_targets - all 24 targets up`. Spot checks across the fencing shapes: home-assistant 200,
+uptime-kuma / scrutiny / karakeep / n8n / headlamp 302, registry 200 over its node hostPort (it has
+no public route, so the edge 404s by design) with both self-test pull Jobs complete.
+
+The two-stage deploy ran clean and nothing 5xx'd. That is the part worth not over-reading: slice
+4.5's outage came from an abort mid-run, which stage discipline reduces but does not eliminate.
+
 The plan and its caller analysis are in `docs/networkpolicy-slice5-plan.md`. Four decisions are
 durable enough to record here rather than only there.
 

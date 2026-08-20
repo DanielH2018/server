@@ -5,6 +5,10 @@
 **Goal:** switch `netpol_baseline_scope` from `label` to `namespace`, so the baseline fences every
 pod in `homelab` — including pods nobody labelled and pods that do not exist yet.
 
+**Deployed 2026-08-20.** 81 pods fenced, 4 exempt, both namespaces on the expression selector. All
+eight probes passed, no probe needed changing, and no route 5xx'd. Findings are in
+`docs/networkpolicy-default-deny.md`.
+
 **Architecture:** the flip is one variable read by one Jinja conditional in one template, applied
 atomically by a single `kubectl apply`. The work is not the flip; it is the exemption the flip
 needs and the gate that proves the exemption is correct.
