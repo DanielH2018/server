@@ -1,4 +1,18 @@
 ---
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# NOT covered by the completeness/consistency guard: _roles() in
+# ansible/tests/test_k8s_autodeploy_guard.py excludes shared roles ("manifests", "seed-volume"),
+# so this declaration is inert even for the guard, not just for the deployer. seed-volume is
+# absent from gitops_deploy_k8s_autodeploy_denylist today, which makes it auto-deployable by the
+# CSV's own rule — declared false here because that is the honest answer, not the current one:
+# it renders a bare Pod (seed-pod.yaml.j2), never a Deployment, so there is nothing for
+# `rollout status` to gate, and it is the shared PVC-seeding path every migrating-state role
+# above (prowlarr, sonarr, home-assistant, ...) depends on — a stray auto-deploy here has an
+# outsized blast radius for a role that is otherwise invisible to this whole mechanism. Whoever
+# writes 1b needs to decide whether the filter plugin reads shared roles at all.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "renders a bare Pod, not a Deployment — nothing for rollout status to gate; shared PVC-seeding path for every migrating-state role, so a stray auto-deploy has outsized blast radius. Absent from the CSV denylist and NOT covered by the completeness/consistency guard (_roles() excludes shared roles) — a real gap, not a mirrored one"  # noqa var-naming[no-role-prefix]
+
 # Where the data comes from. daniel-server is the only source in slice 2 — every Docker
 # service being migrated lives there — but it is a variable because slice 5 moves services
 # off the Pi.

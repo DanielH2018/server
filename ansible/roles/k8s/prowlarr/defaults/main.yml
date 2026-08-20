@@ -8,6 +8,17 @@ prowlarr_k8s_enabled: true  # flipped 2026-08-07 by B4c — the Docker copy is s
 
 prowlarr_k8s_image: lscr.io/linuxserver/prowlarr:2.4.0.5397-ls150
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Migrating state — strategy is Recreate and the config volume (indexer definitions + API keys)
+# is seeded through k8s/seed-volume (hardcoded ReadWriteOnce). This role renders TWO
+# Deployments (prowlarr + flaresolverr) and gates both correctly via manifests_extra_rollouts —
+# briefly removed from the denylist under an "ungated sub-deployment" reason that turned out to
+# be stale, then restored (2026-08-20) once review found the real, unrelated reason below.
+# Gatedness was never the issue; the PVC/Recreate shape is. The linuxserver -lsNN scheme also
+# hides a breaking bump as a routine patch bump (currently 2.4.0.5397-ls150).
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC; -lsNN versioning hides a breaking bump. NOT about gatedness — both rendered Deployments (prowlarr + flaresolverr) gate correctly"  # noqa var-naming[no-role-prefix]
+
 # 84 M at B4a. Holds the indexer definitions and their API keys.
 prowlarr_k8s_claim: prowlarr-config
 # `longhorn` — backed up. Briefly `longhorn-nobackup` on 2026-08-08, after B2's TRANSACTION cap

@@ -16,6 +16,15 @@ tdarr_k8s_enabled: true
 # refuses. Same shape as the dri-device-plugin role's pin, for the same reason.
 tdarr_k8s_image: ghcr.io/haveagitgat/tdarr:latest@sha256:e5163f305367b47baacee761aa98f420fb4e46a8e5db22b197f23a550f96dd6b
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Migrating state — strategy is Recreate and both config claims are seeded through
+# k8s/seed-volume (hardcoded ReadWriteOnce). Sharper than most of this class: tdarr is
+# stateful AND rewrites library files in place, and the comment above already documents why
+# version bumps stay manual — an unvetted auto-deploy is exactly the risk that pin exists to
+# avoid, on top of the migrating-state PVC hazard.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC; also rewrites library files in place and is pinned by digest specifically to stay manual, not Renovate-auto-mergeable"  # noqa var-naming[no-role-prefix]
+
 # ── two config claims, not one ──────────────────────────────────────────────────────────────
 # /app/server is the 204 M database (library state, transcode history, node registrations) and
 # /app/configs is 20 K of flow/plugin definitions. They are separate mounts in the compose file

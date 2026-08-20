@@ -2,6 +2,13 @@
 # Tag KEPT alongside the digest (repo:tag@sha256) so Renovate's k8s-defaults manager still
 # tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal.
 headlamp_k8s_image: ghcr.io/headlamp-k8s/headlamp:v0.44.0@sha256:b491653c1a0d380b70b67a4024f1204591f9c84a68ee567778d53d28b1856168
+
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Stateless: RollingUpdate Deployment, no PVC, readinessProbe, digest-pinned image. The
+# netpol-probe Job below is a one-shot check, not a workload the rollout gate needs to cover.
+k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe, digest-pinned image"  # noqa var-naming[no-role-prefix]
+
 headlamp_k8s_cpu_limit: "500m"
 headlamp_k8s_mem_limit: 256Mi
 headlamp_k8s_cpu_request: "20m"

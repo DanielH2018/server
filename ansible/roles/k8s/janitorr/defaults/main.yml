@@ -7,6 +7,14 @@
 # take the new digest.
 janitorr_k8s_image: ghcr.io/schaka/janitorr:jvm-stable@sha256:6becfbed9098d27e6bf81a114976394a091d095ee5aba3ae8d86a4fd94af8e7a
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Probe-less: the Deployment renders no readinessProbe, so `rollout status` would return the
+# moment the pod reports Running and prove nothing. Sharper here than most of this class —
+# janitorr is the one role in the fleet that deletes real media, so a wedged deploy that isn't
+# caught could run the delete path against a broken app state with nothing watching.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "probe-less — no readinessProbe on the Deployment; also the only role that deletes real media, so a wedge is not merely inert"  # noqa var-naming[no-role-prefix]
+
 # Flipped to "false" 2026-08-08 (operator decision), after the port shipped dry and verify.yml
 # produced the evidence it exists for: the config the JVM loaded read dry-run: true, sonarr,
 # radarr and jellyfin all accepted connections, and a probe symlink written the way janitorr

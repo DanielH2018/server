@@ -9,6 +9,16 @@
 # interactive setup wizard and would silently reopen the admin API.
 wg_easy_k8s_image: ghcr.io/wg-easy/wg-easy:14@sha256:5f26407fd2ede54df76d63304ef184576a6c1bb73f934a58a11abdd852fab549
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Platform: the only remote-access path in (all router forwards, including 51820/udp, land on
+# this host). A failed deploy could cut the one path available to fix a broken cluster remotely.
+# It ALSO matches the migrating-state shape independently: Recreate + a real PVC seeded through
+# k8s/seed-volume (hardcoded ReadWriteOnce) holding the server keypair and every client config —
+# a bad image swap can migrate that volume before the gate observes a fault, same class as
+# sonarr/prowlarr. Either reason alone would justify the denylist entry.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "platform — sole remote-access path; a failed deploy can cut off remote recovery. ALSO Recreate + RWO seed-volume PVC (migrating-state shape, same class as sonarr/prowlarr) — two independent reasons"  # noqa var-naming[no-role-prefix]
+
 wg_easy_k8s_claim: wg-easy-config
 # `longhorn`, NOT nobackup: /etc/wireguard holds the server keypair and every client
 # config — losing it means re-importing every device. Tiny volume, real state.

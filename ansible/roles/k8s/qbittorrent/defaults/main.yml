@@ -19,6 +19,16 @@ qbittorrent_k8s_enabled: true  # flipped 2026-08-07 by B4c — the Docker copy i
 qbittorrent_k8s_image: lscr.io/linuxserver/qbittorrent:latest@sha256:6816d2b144b1eb97665f886e41e18a14d026ba78c9d0953fc68a1211ea819433
 qbittorrent_k8s_wireguard_image: lscr.io/linuxserver/wireguard:latest@sha256:3abfd4b82212106e357989750b9c0c9859aa511f5305a9a55c18c8de7198b655
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Migrating state — strategy is Recreate and the config volume is seeded through
+# k8s/seed-volume (hardcoded ReadWriteOnce), same class as sonarr/radarr. Sharper here than the
+# rest of the class: the WireGuard sidecar's kill-switch iptables live in the pod netns and
+# outlive a container restart, so a failed image swap does not merely crashloop — it can
+# deadlock the pod behind a fence nothing in the rollout gate can see (9h / 107 restarts,
+# 2026-08-16, killswitch-survives-container-restart.md).
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC; also the WireGuard sidecar kill-switch can deadlock the pod past a restart, sharper than the rest of this class"  # noqa var-naming[no-role-prefix]
+
 # ── one config volume, two containers ───────────────────────────────────────────────────────
 # Reproduces the Compose file exactly: wireguard and qbittorrent both mount `./config` at
 # /config. It looks like a mistake and is not — they write different subtrees of it, and

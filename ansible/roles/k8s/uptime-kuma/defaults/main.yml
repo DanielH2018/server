@@ -11,6 +11,16 @@ uptime_kuma_k8s_image: louislam/uptime-kuma:2.5.0
 # notification entities, on_delete semantics).
 autokuma_k8s_image: ghcr.io/bigboot/autokuma:2.0.0
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Observability: this IS the alerting spine every push/HTTP monitor and the Discord chain depend
+# on — a broken deploy cannot page about being broken. It ALSO independently matches the
+# migrating-state shape: Recreate + a real PVC seeded through k8s/seed-volume (hardcoded
+# ReadWriteOnce) holding the heartbeat history — a bad image swap can migrate that volume before
+# the gate observes a fault, same class as sonarr/prowlarr. Either reason alone would justify
+# the denylist entry.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "observability — the alerting spine; a broken deploy cannot page about being broken. ALSO Recreate + RWO seed-volume PVC (migrating-state shape) — two independent reasons"  # noqa var-naming[no-role-prefix]
+
 # 1.5 G live at planning (heartbeat history) — `longhorn`, BACKED UP, which the Docker copy
 # deliberately never was (kopiaignore). The migration upgrades the DB from "unrecoverable"
 # to "nightly Longhorn backup".

@@ -3,3 +3,11 @@
 # drain). The host plane (the disk-prune cron) stays on daniel-server with the Docker
 # daemon it prunes — see the containers role.
 autofix_bridge_k8s_image: python:3.14-alpine
+
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Observability: the auto-remediation twin of monitor-bridge — a broken deploy silently stops
+# fixing *arr queue issues with no page of its own (the docker-liveness Kuma monitor is a slower
+# backstop, not a rollout gate). ALSO renders no readinessProbe on its Deployment (probe-less),
+# which compounds independently of the observability classification.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "observability — auto-remediation loop; a broken deploy silently stops fixing arr issues. ALSO no readinessProbe (probe-less) — two independent reasons"  # noqa var-naming[no-role-prefix]

@@ -19,6 +19,15 @@ claude_otel_grafana_image: grafana/grafana:11.6.16
 # kube_deployment_status_* — the only readiness signal the seven routeless workloads have.
 claude_otel_kube_state_metrics_image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.14.0
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Observability: the Claude Code telemetry stack (collector/Loki/Prometheus/Grafana/Tempo/
+# kube-state-metrics) — a broken deploy blinds this whole diagnostic surface with nothing else
+# watching it. ALSO Recreate + a PVC on each stateful sub-service (loki-data, grafana-data,
+# prometheus-data, tempo-data) — several independently migrating-state-shaped Deployments behind
+# one role, which compounds the risk across more than one component at once.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "observability — Claude Code's own telemetry stack, six sub-images across several Deployments. ALSO each stateful component (loki/grafana/prometheus/tempo) is Recreate + its own PVC — compounding, not single-component"  # noqa var-naming[no-role-prefix]
+
 # longhorn-nobackup, NOT longhorn. Two reasons, either sufficient on its own:
 #   - Volume: Loki with content logging on grows fast, and Prometheus TSDB is high-churn.
 #     Both are the "bulky, regenerable state" the Docker side already keeps out of Kopia.

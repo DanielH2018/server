@@ -20,6 +20,17 @@ karakeep_k8s_meili_image: getmeili/meilisearch:v1.41.0
 # crashloop the boot-time `uv pip install`).
 karakeep_k8s_tagger_image: ghcr.io/astral-sh/uv:python3.14-bookworm-slim@sha256:7cf77f594be8042dab6daa9fe326f90962252268b4f120a7f5dccce4d947e6c1
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Three independent reasons, not one: (1) stateful/manual-upgrade — meilisearch DB-format
+# migrations are not always backward-compatible, so a bump needs a human watching; (2)
+# probe-less — the time-tagger sub-deployment renders no readinessProbe, so `rollout status`
+# would return on Running and prove nothing for it even if the primary Deployment were fine;
+# (3) migrating state — strategy is Recreate and the config PVC is seeded through
+# k8s/seed-volume (hardcoded ReadWriteOnce). Any one of the three would justify the denylist
+# entry; a reason naming only one would miss the other two.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "three reasons: (1) stateful — meilisearch DB-format migration; (2) probe-less time-tagger sub-deployment; (3) migrating state — Recreate + RWO seed-volume PVC"  # noqa var-naming[no-role-prefix]
+
 # Mirrors resources('2.0', '2048M', '0.10', '128M') in the compose template.
 karakeep_k8s_cpu_limit: "2"
 karakeep_k8s_mem_limit: 2048Mi

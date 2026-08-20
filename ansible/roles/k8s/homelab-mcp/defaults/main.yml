@@ -4,6 +4,13 @@
 # rebuild cron for base refreshes).
 homelab_mcp_k8s_image: "{{ k8s_registry_pull_host }}/homelab-mcp:latest"
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Stateless RollingUpdate Deployment, no PVC, readinessProbe. The image tag is a mutable
+# :latest built in-cluster (imagePullPolicy: Always), not an upstream tag Renovate can bump
+# blind — every rebuild is this repo's own image-builder run, not a vendor's release.
+k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe, in-cluster-built image under this repo's own control"  # noqa var-naming[no-role-prefix]
+
 # Carried over from the compose template's resources() caps.
 homelab_mcp_k8s_cpu_limit: 500m
 homelab_mcp_k8s_mem_limit: 256Mi

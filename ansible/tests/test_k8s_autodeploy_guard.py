@@ -12,7 +12,9 @@ gate:
     <dir>/` applies it but nothing waits on it, so a bump to its image is deployed and never
     verified. A typo'd or drifted `manifests_extra_rollouts` entry falls into this the same way
     an undeclared Deployment does — matching is by name, not by count. prowlarr and freshrss
-    were the original instances and now declare their extras correctly, so they are gated;
+    were the original instances and now declare their extras correctly, so they are gated —
+    but both stay on the denylist regardless, for migrating-state reasons (Recreate + an RWO
+    seed-volume PVC) that gatedness never touched. Don't read "gated" as "eligible";
   * a role passing `manifests_rollout: ''`, which skips the rollout wait AND the stability soak
     outright;
   * a role whose gated Deployment(s) declare no `readinessProbe`: `rollout status` then returns
@@ -262,10 +264,12 @@ def test_readiness_probe_check_covers_every_gated_deployment(tmp_path: Path) -> 
 def test_extra_rollouts_are_counted_as_gated() -> None:
     """prowlarr renders two Deployments and gates both, by name — it is not an offender.
 
-    `manifests_extra_rollouts` post-dates this guard's original model. Until the guard
-    resolves each Deployment's real name and matches it against the primary rollout plus the
-    declared extras, retiring prowlarr from the denylist breaks the suite for a reason that
-    stopped being true.
+    This pins the guard's matching model (identity, not count) against a role that actually
+    has an extra: a rendered Deployment is gated only if its own resolved name equals the
+    primary rollout name or appears in `manifests_extra_rollouts`. prowlarr stays on the
+    denylist regardless — the migrating-state PVC/Recreate shape covered in its
+    `k8s_autodeploy_reason`, unrelated to whether it gates cleanly — so this test is about the
+    guard's model, not about prowlarr's eligibility.
     """
     prowlarr = _K8S_ROLES / "prowlarr"
     assert len(_deployment_templates(prowlarr)) == 2
@@ -327,3 +331,60 @@ def test_auto_deployable_roles_do_not_skip_the_rollout_gate() -> None:
 # different one that happens to leave the same shape — prowlarr and freshrss are gated AND
 # still denylisted, for migrating-state reasons this file's shape-only helpers can't see. A
 # reason-aware version of this check lands with the per-role k8s_autodeploy_reason declaration.
+
+
+def _pins_an_image(role: Path) -> bool:
+    defaults = role / "defaults/main.yml"
+    return defaults.is_file() and bool(
+        re.search(r"^\s*\w*_image:\s*\S", defaults.read_text(), re.MULTILINE)
+    )
+
+
+def _declares_autodeploy(role: Path) -> bool:
+    defaults = role / "defaults/main.yml"
+    if not defaults.is_file():
+        return False
+    data = yaml.safe_load(defaults.read_text()) or {}
+    return "k8s_autodeploy" in data and bool(
+        str(data.get("k8s_autodeploy_reason", "")).strip()
+    )
+
+
+def test_every_image_pinning_role_declares_its_autodeploy_stance() -> None:
+    """Eligibility is declared where the justifying knowledge lives, not in a central list.
+
+    Omission must not read as consent: a new role that pins an image and says nothing about
+    auto-deploy fails here rather than inheriting a default.
+    """
+    missing = [
+        role.name
+        for role in _roles()
+        if _pins_an_image(role) and not _declares_autodeploy(role)
+    ]
+    assert not missing, (
+        "Role(s) pinning an image without a k8s_autodeploy declaration. Add both keys to "
+        "defaults/main.yml — k8s_autodeploy: true|false and a k8s_autodeploy_reason saying "
+        "why:\n" + "\n".join(sorted(missing))
+    )
+
+
+def test_declarations_match_the_denylist_they_will_replace() -> None:
+    """The declaration set and the CSV denylist must agree before the deployer switches.
+
+    Slice 1b re-points gitops_deploy at the declarations. If the two disagree at that moment,
+    the switch silently changes which services auto-deploy — so pin the equivalence here,
+    while the denylist is still the live input and a mismatch is harmless.
+    """
+    denylist = _denylist()
+    mismatched = []
+    for role in _roles():
+        if not _pins_an_image(role):
+            continue
+        data = yaml.safe_load((role / "defaults/main.yml").read_text()) or {}
+        declared = bool(data.get("k8s_autodeploy"))
+        if declared == (role.name in denylist):
+            mismatched.append(
+                f"{role.name}: declares k8s_autodeploy={declared} but "
+                f"{'is' if role.name in denylist else 'is not'} denylisted"
+            )
+    assert not mismatched, "\n".join(mismatched)

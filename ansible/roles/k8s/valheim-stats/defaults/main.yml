@@ -4,6 +4,15 @@
 # lifts (the loopback registry cannot serve cross-node pulls). Same call as terraria-stats.
 valheim_stats_k8s_image: python:3.14-alpine
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Games: companion stats exporter for the hand-operated valheim game server — grouped with it
+# operationally, not deployed unattended. It ALSO independently matches the migrating-state
+# shape: Recreate + its own ReadWriteOnce PVC holding the all-time playtime/deaths SQLite DB —
+# unlike terraria-stats there is no seed at all, so a lost volume starts the totals at zero
+# with nothing to reconstruct from, which makes this the sharper of the two.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "games — companion to the hand-operated valheim server. ALSO Recreate + its own RWO PVC holding un-seeded, irreplaceable stats — two independent reasons"  # noqa var-naming[no-role-prefix]
+
 # All-time playtime/deaths live in this SQLite DB and nothing else. Unlike terraria-stats
 # there is NO seed: Valheim was archived in January, long before this Loki existed, so
 # there is no history anywhere to import and the totals genuinely start at zero on first

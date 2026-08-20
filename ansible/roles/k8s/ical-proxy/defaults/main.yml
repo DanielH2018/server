@@ -4,6 +4,12 @@
 # having moved out of the retired Docker role.
 ical_proxy_k8s_image: "{{ k8s_registry_pull_host }}/ical-proxy:latest"
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Stateless RollingUpdate Deployment, no PVC, readinessProbe. Internal-only (no public route),
+# image is in-cluster-built via image-builder, not an upstream tag Renovate bumps blind.
+k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe, in-cluster-built image, internal-only route"  # noqa var-naming[no-role-prefix]
+
 # Resource caps mirrored from the compose template (M1 values, k8s-native units).
 ical_proxy_k8s_cpu_limit: 500m
 ical_proxy_k8s_mem_limit: 128Mi

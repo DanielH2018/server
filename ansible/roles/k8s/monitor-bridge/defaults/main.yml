@@ -2,3 +2,11 @@
 # THE monitor-bridge since the Docker uninstall (2026-08-14) — the Phase F twin that
 # outlived its remnant. check.py lives in this role's files/ and every check runs here.
 monitor_bridge_k8s_image: python:3.14-alpine
+
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Observability: this IS the alert pipeline — every threshold check in the fleet pushes through
+# it, so a broken deploy cannot page about being broken. ALSO renders no readinessProbe on its
+# Deployment (probe-less), which compounds even if this were ever removed from the "observability"
+# class: `rollout status` would return the moment the pod reports Running and prove nothing.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "observability — this IS the alert pipeline; a broken deploy cannot page about being broken. ALSO no readinessProbe (probe-less) — two independent reasons"  # noqa var-naming[no-role-prefix]

@@ -3,6 +3,14 @@
 # never the version.
 authelia_k8s_image: authelia/authelia:4.39.20
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Platform: the SSO/OIDC gate every Authelia-fronted route depends on. A failed deploy locks
+# out access to the rest of the fleet, including whatever tooling would be used to fix it.
+# Also Recreate + a PVC (its own SQLite session/config store) on its own state, which compounds
+# the risk but isn't the primary reason.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "platform — SSO/OIDC gate; a failed deploy locks out access to everything behind it, including the tools to fix it"  # noqa var-naming[no-role-prefix]
+
 # Session cookie name. MUST differ from the Docker instance's `authelia_session_local`.
 # Both portals serve the cookie domain local.<domain>, and a browser holds one cookie per
 # (domain, name) pair — with a shared name, logging in at one portal overwrites the other's
