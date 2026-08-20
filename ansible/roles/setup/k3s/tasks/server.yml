@@ -110,12 +110,25 @@
 # genuinely IS enabled. `reencrypt` is the half that rewrites them.
 - name: Read the secrets-encryption status
   tags: [k3s_server]
+  # RETRIES ARE LOAD-BEARING, and the arming run proved it (2026-08-20). `k3s secrets-encrypt`
+  # talks to the SUPERVISOR, which starts later than the apiserver — so the preceding
+  # `kubectl wait --for=condition=Ready` returns while this endpoint is still refusing, and the
+  # first attempt came back `secret-encrypt error ID 21789` about a second after the installer
+  # restarted k3s. The assert below then failed the play with the flag armed and every existing
+  # Secret still plaintext: exactly the half-applied state the assert exists to prevent, caused
+  # by reading the status too early rather than by anything being wrong.
+  #
+  # `failed_when: false` keeps the unreadable case flowing to the assert, which reports it far
+  # better than a bare non-zero exit; `until` is what stops a transient from getting there.
   ansible.builtin.command:
     cmd: k3s secrets-encrypt status
   register: k3s_secrets_encrypt_status
   become: true
   changed_when: false
   failed_when: false
+  until: "'Encryption Status:' in k3s_secrets_encrypt_status.stdout"
+  retries: 12
+  delay: 5
   when: k3s_secrets_encryption | bool
 
 - name: Fail if the secrets-encryption status could not be read

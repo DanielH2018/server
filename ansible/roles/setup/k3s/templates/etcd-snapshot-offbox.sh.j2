@@ -13,6 +13,13 @@
 # backups, in the same bucket under the `longhorn` prefix. A full recovery needs both, and the
 # order matters — restore etcd first so the PVC objects exist, then restore the volumes.
 # docs/k3s-etcd-restore.md has the procedure.
+#
+# IT ALSO NO LONGER CARRIES THE SECRETS IN A USABLE FORM. Since --secrets-encryption was armed
+# (2026-08-20) Secrets are encrypted in etcd, so restoring this snapshot onto a REBUILT host
+# needs /var/lib/rancher/k3s/server/cred/encryption-config.json from daniel-box put in place
+# first. That key is deliberately NOT uploaded beside the snapshot: storing it in this bucket
+# would hand anyone with the bucket both halves and undo the encryption entirely. Restoring
+# onto daniel-box with its disk intact is unaffected — the key is already there.
 set -uo pipefail
 
 # Cron's PATH (/usr/bin:/bin) omits /usr/local/bin, where the k3s install script puts the binary.
