@@ -136,6 +136,12 @@ Add `netpol-baseline-exempt: "true"` beside each pod template's existing `app:` 
 one-line comment naming the bespoke policy it protects. Extend the guard with two assertions: each
 of the four roles carries the exempt label, and no other role does.
 
+**The n8n trap.** `deployment-runners.yaml.j2` sits beside `deployment.yaml.j2` in the same role,
+and the exempt label must NOT land on it. The bespoke policy `n8n-broker` selects `app: n8n` only;
+`n8n-runners` has no bespoke policy and is fenced by the baseline alone, so exempting it would
+unfence it silently. The Task 3 gate catches a stray only because its allow-list is exactly four
+app names.
+
 ### Task 2 — Render the opt-out selector
 
 **Files:** `ansible/roles/k8s/netpol-baseline/{defaults/main.yml,templates/networkpolicy.yaml.j2,templates/networkpolicy-observability.yaml.j2}`.
@@ -170,6 +176,10 @@ continue until it reads exactly four:
 ```
 kubectl -n homelab get pods -L netpol-baseline-exempt
 ```
+
+Deploying `prowlarr` also re-runs its own netpol probe, whose control leg dials `prowlarr:9696`.
+Nothing has changed for that probe at stage A, so it must pass — and if it does not, the cause is
+not the exemption.
 
 **Stage B** — flip `netpol_baseline_scope: namespace` and `netpol_baseline_obs_scope: namespace`,
 deploy `netpol-baseline`. The gate from Task 3 runs first and fails the deploy if stage A drifted.
