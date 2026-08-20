@@ -119,20 +119,24 @@ stay).
     it unapplied while a plain ff-merge clears the divergence.
 
     The deployer detects this itself instead of relying on an operator to remember it. Each
-    tick, `k8s_declarations_at(f"origin/{BRANCH}")` reads every role's `defaults/main.yml` at the
-    ref the deployer just fetched, and `declared_denylist()` parses it with a stdlib regex — the
-    unit runs under `uv run --no-project` and cannot import `yaml` or the filter plugin. If that
-    result disagrees with `K8S_AUTODEPLOY_DENYLIST`, or can't be read at all, k8s auto-deploy is
-    disarmed for that tick and `alert_once` pages naming
-    `ansible/initial_setup.yml --tags gitops_deploy` — the playbook that actually re-renders the
-    config, not `deploy.yml`. The disarm itself is stateless: it is recomputed every tick, so it
-    self-clears the moment the config is re-rendered. Only the page is throttled, on
-    `STALE_DENYLIST_FILE`. The regex is deliberately biased toward denied — unanimity is required
-    across every match, an absent or unparseable declaration counts as denied, and a shared role
-    skips the check entirely — so the worst a parsing bug here can do is a spurious disarm, never
-    a permitted deploy. It is not the authoritative reader: the filter plugin, parsing real YAML,
-    still decides the denylist, and `ansible/tests/test_denylist_parsers_agree.py` pins the two
-    together against the live tree.
+    tick, `k8s_declarations_at(origin)` reads every role's `defaults/main.yml` at the SHA the
+    tick already pinned for the diff and the alert — not a re-resolved `origin/<branch>`, which
+    would open a TOCTOU against a concurrent fetch — and `declared_denylist()` parses it with a
+    stdlib regex, since the unit runs under `uv run --no-project` and cannot import `yaml` or the
+    filter plugin. If that result disagrees with `K8S_AUTODEPLOY_DENYLIST`, or can't be read at
+    all, k8s auto-deploy is disarmed for that tick. The page names the fix for whichever
+    direction the mismatch is in — re-render via `ansible/initial_setup.yml --tags gitops_deploy`
+    when the config is behind origin, `git push` when it's ahead — and includes the read
+    exception's type and message when the declarations couldn't be read at all. The disarm
+    itself is stateless: it is recomputed every tick, so it self-clears the moment the config is
+    re-rendered. Only the page is throttled, on `STALE_DENYLIST_FILE`. The regex is deliberately
+    biased toward denied — unanimity is required across every match, an absent or unparseable
+    declaration counts as denied, and a shared role skips the check entirely — so a parsing bug
+    here almost always produces a spurious disarm rather than a permitted deploy. The one gap is
+    a file that is invalid YAML overall, which the regex can still read a value out of but the
+    filter would raise on rather than deny; CI is what closes it, not the regex's own bias —
+    `ansible/tests/test_denylist_parsers_agree.py` runs the filter against the live tree and
+    fails on exactly that shape, and `REQUIRE_CI` refuses to promote a red tip.
   - **The gate is in the play, not here.** `roles/k8s/manifests` applies,
     `roles/k8s/rollout-drain` runs `rollout status --timeout`, and
     `ansible/post_tasks/k8s_stabilise_gate.yml` holds the post-Available soak that hard-fails
