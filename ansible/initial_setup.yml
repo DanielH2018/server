@@ -34,8 +34,16 @@
     - { role: claude_code, tags: ["claude_code"], when: has_claude_code }
     - { role: renovate_notify, tags: ["renovate_notify"], when: inventory_hostname == renovate_notify_host }
     # Host half of the UPS stack (udev rule + secondary upsmon that performs the real
-    # poweroff); the primary is the k8s/nut pod pinned to the same host.
-    - { role: nut_host, tags: ["nut_host"], when: inventory_hostname == ups_host }
+    # poweroff); the primary is the k8s/nut pod pinned to ups_host.
+    #
+    # ups_host runs it unconditionally — it owns the USB UPS. Any OTHER host runs only the
+    # client half, and only once nut_host_secondary_armed is set for it: daniel-box draws from
+    # the same UPS (measured 2026-08-20) and today takes a hard cut, but a secondary upsmon's
+    # job is to power the machine off, so arming one on the control-plane node without the
+    # console-attended `upsmon -c fsd` drill risks an unplanned cluster shutdown.
+    - role: nut_host
+      tags: ["nut_host"]
+      when: inventory_hostname == ups_host or nut_host_secondary_armed | bool
     - { role: optimize_pi, tags: ["optimize_pi"], when: inventory_hostname == 'daniel-pi' }
     # Slice 4, B7c: the fake-remux detector + reconciler follow the media stack onto daniel-box.
     # Host-conditional like optimize_pi/renovate_notify — the scripts still live in the

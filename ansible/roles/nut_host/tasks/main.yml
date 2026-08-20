@@ -6,22 +6,62 @@
 #
 # Runs from initial_setup.yml, gated to ups_host (group_vars/all.yml).
 
+# ── USB half: only the host the UPS is physically attached to ───────────────────
 - name: Install udev rule for APC UPS USB permissions
   ansible.builtin.copy:
     dest: /etc/udev/rules.d/99-nut-apc.rules
     content: 'SUBSYSTEM=="usb", ATTR{idVendor}=="051d", ATTR{idProduct}=="0002", MODE="0666"'
     mode: "0644"
   become: true
+  when: inventory_hostname == ups_host
 
 - name: Reload udev rules
   ansible.builtin.command: udevadm control --reload-rules
   become: true
   changed_when: false
+  when: inventory_hostname == ups_host
 
 - name: Trigger udev for USB subsystem
   ansible.builtin.command: udevadm trigger --subsystem-match=usb
   become: true
   changed_when: false
+  when: inventory_hostname == ups_host
+
+# ── Endpoint resolution, for a host the UPS is not attached to ──────────────────
+# The Service does not pin its clusterIP, so this is a snapshot taken at deploy time. The assert
+# below is what stops a stale snapshot from becoming a shutdown chain that is silently dead: a
+# wrong endpoint and a working one look identical while mains power is up, and the difference
+# only shows during the cut this exists for.
+- name: Resolve the nut ClusterIP for a cross-node secondary
+  tags: [deploy]
+  when:
+    - inventory_hostname != ups_host
+    - not k8s_no_mutate
+  ansible.builtin.command:
+    cmd: k3s kubectl -n {{ k8s_namespace }} get service nut -o jsonpath={.spec.clusterIP}
+  become: true
+  changed_when: false
+  register: nut_host_clusterip_lookup
+
+- name: Set the resolved upsd endpoint
+  when: inventory_hostname != ups_host
+  ansible.builtin.set_fact:
+    nut_host_upsd_clusterip: "{{ nut_host_clusterip_lookup.stdout | default('') | trim }}"
+
+- name: Fail if upsd is not reachable at the resolved endpoint
+  tags: [deploy]
+  when:
+    - inventory_hostname != ups_host
+    - not k8s_no_mutate
+  ansible.builtin.wait_for:
+    host: "{{ nut_host_upsd_host }}"
+    port: 3493
+    timeout: 10
+    msg: >-
+      nut_host: upsd is unreachable at {{ nut_host_upsd_host }}:3493 from {{ inventory_hostname }},
+      so a secondary upsmon here would install a shutdown chain that never fires. An empty host
+      means the nut Service was not found; a timeout means the ClusterIP is not routable from this
+      node's host netns, or the nut NetworkPolicy no longer admits this node's flannel.1 address.
 
 # ── Graceful shutdown (the part the pod CANNOT do) ──────────────────────────────
 # The pod's upsmon (primary) raises FSD but can't power off the host. This host-native

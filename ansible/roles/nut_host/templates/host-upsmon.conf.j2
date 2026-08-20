@@ -1,10 +1,14 @@
 # Host-side upsmon (SECONDARY) — managed by Ansible (nut_host role); edits overwritten.
 #
 # The NUT primary lives in the k8s `nut` pod (USB access); it raises FSD on battery
-# events but cannot power off the host. This secondary connects to the pod's upsd over
-# the loopback hostPort (127.0.0.1:3493) and is the one that actually shuts the host
-# down when FSD is set.
-MONITOR {{ nut_ups_name | default('apc-ups') }}@127.0.0.1 1 upsmon {{ nut_monitor_password }} secondary
+# events but cannot power off the host. This secondary is the one that actually shuts
+# the host down when FSD is set.
+#
+# The endpoint differs by host, which is why it is templated. The UPS host reaches upsd
+# over the pod's loopback hostPort (127.0.0.1:3493). Any other host has to cross nodes
+# and uses the ClusterIP, resolved at deploy time — the role's defaults explain why the
+# LAN publish is not an option and why no NetworkPolicy change is needed for this.
+MONITOR {{ nut_ups_name | default('apc-ups') }}@{{ nut_host_upsd_host }} 1 upsmon {{ nut_monitor_password }} secondary
 MINSUPPLIES 1
 SHUTDOWNCMD "/usr/bin/systemctl poweroff"
 POLLFREQ 5

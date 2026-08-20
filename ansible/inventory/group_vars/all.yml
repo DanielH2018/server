@@ -259,6 +259,23 @@ k8s_registry_push_host: "registry.{{ k8s_namespace }}.svc.cluster.local:{{ k8s_r
 # The UPS's USB host: gates the nut_host role (host-side secondary upsmon + udev rule) in
 # initial_setup.yml, paired with the k8s/nut pod's nodeSelector.
 ups_host: daniel-server
+# Whether a host that is NOT ups_host also runs the host-side secondary upsmon — the process
+# that actually powers a machine off when the pod's primary raises FSD. Read in a play-level
+# `when:` in initial_setup.yml, which is why it lives here rather than in the role's defaults
+# alongside the other `_armed` switches.
+#
+# daniel-box DOES draw from the same UPS, measured 2026-08-20: sampling `upsc apc-ups@127.0.0.1`
+# every 3s while modulating a 16-core burn on daniel-box (daniel-server idle) moved ups.load by
+# ~5 points ≈ 45 W, three transitions phase-locked to the burn across two cycles. The repo had
+# recorded nothing either way, and sensor.apc_ups_load at 35% was suggestive but not proof.
+# So today, on mains failure, daniel-server powers off cleanly while daniel-box — etcd,
+# Longhorn's primary replicas, Kuma, Prometheus, Traefik, LAN DNS — is hard-cut at battery end.
+#
+# DEFAULT FALSE ON PURPOSE. A secondary upsmon's entire job is to power the machine off, so a
+# mistake here is an unplanned shutdown of the control-plane node, and a wrong SHUTDOWNCMD or an
+# unreachable upsd is indistinguishable from a working one while mains power is up. Set this per
+# host only after the console-attended `upsmon -c fsd` drill has passed there.
+nut_host_secondary_armed: false
 # backup_controller_host removed 2026-08-14 (host flip 1): the daniel-server peer-pull
 # host cron became the k8s/pi-peer-backup CronJob (Longhorn PVC → the 03:30 B2 nightly),
 # so no host holds a backup-controller role anymore.
