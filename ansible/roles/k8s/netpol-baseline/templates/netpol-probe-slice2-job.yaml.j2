@@ -34,6 +34,9 @@ spec:
     metadata:
       labels:
         app: netpol-baseline-probe-slice2
+        # Admits this pod to the sentinel (speedtest:80) only — see
+        # networkpolicy-netpol-sentinel.yaml.j2.
+        netpol-probe: control
     spec:
       restartPolicy: Never
       enableServiceLinks: false
@@ -52,20 +55,23 @@ spec:
               fi
               echo "control ok: traefik:80 reachable"
 
-              # homepage is unfenced only until slice 5, same as slice 1's own negative control
-              # (netpol-probe-job.yaml.j2) — at slice 5 the selector becomes podSelector: {} and
-              # every pod in the namespace is covered, so THIS ASSERTION NEEDS A DIFFERENT CONTROL
-              # THEN TOO. By construction there is no unfenced pod left in the namespace at that
-              # point, so the replacement has to come from outside it. Both probes break together
-              # when that happens; this comment is here so whoever lands on this one first isn't
-              # the only one who knows why.
-              if ! nc -w 5 -z homepage 3000; then
-                echo "NEGATIVE CONTROL FAILED: cannot reach the unfenced homepage:3000 either."
-                echo "This pod cannot open connections at all, so the assertions below would pass"
+              # SENTINEL CONTROL — a FENCED pod that explicitly admits this probe is reachable.
+              # This pod carries `netpol-probe: control`, and networkpolicy-netpol-sentinel.yaml.j2
+              # admits exactly that label to speedtest:80. Slice 1's probe uses the same leg.
+              #
+              # It used to dial homepage:3000, reachable only because homepage was unfenced.
+              # Slice 4.5 fences homepage and slice 5 leaves no unfenced pod at all, so the
+              # control is a named peer now rather than an accident of the rollout order — and a
+              # stronger check besides: it proves admitted traffic still passes, not merely that
+              # this pod has a network.
+              if ! nc -w 5 -z speedtest 80; then
+                echo "SENTINEL CONTROL FAILED: cannot reach speedtest:80, which the sentinel"
+                echo "policy admits this pod to. Either this pod cannot open connections at all,"
+                echo "or admitted traffic is being denied, so the assertions below would pass"
                 echo "whether or not the policies work."
                 exit 1
               fi
-              echo "negative control ok: unfenced homepage:3000 reachable"
+              echo "sentinel control ok: speedtest:80 reachable, admitted by policy"
 
               # This pod carries no app label that sonarr's policy admits. Its allowed callers are
               # traefik, janitorr, configarr, monitor-bridge, autofix-bridge, bazarr and prowlarr

@@ -1,0 +1,52 @@
+---
+# The probes' POSITIVE CONTROL, and the reason it is a policy rather than an accident.
+#
+# Every probe job needs one leg that MUST succeed. Without it, an inverted leg ("this connection
+# must be refused") passes for the wrong reason whenever the probe pod has no network, DNS is
+# down, or the target is simply dead. Slices 1 and 2 got that leg from `homepage:3000`, which
+# worked only because homepage happened to be unfenced.
+#
+# Slice 4.5 labels homepage, and slice 5 sets `podSelector: {}` — after which NO pod in this
+# namespace is unfenced and the incidental control cannot be recreated. So the control target is
+# named here instead. This is also STRICTLY STRONGER than the leg it replaces: reaching an
+# unfenced pod proved only that the probe had a network, where reaching a FENCED pod that admits
+# us proves the admit path itself still works. That distinguishes "denied by policy" — what the
+# inverted legs assert — from "the policy engine is dropping everything".
+#
+# speedtest, deliberately, and NOT littlelink: littlelink is the slice-1 probe's DENIED target
+# (netpol-probe-job.yaml.j2 assertion 4), so admitting the probes there would make that probe
+# report POLICY NOT ENFORCED. speedtest is a static bandwidth page, is no probe's target, and has
+# no data and no dependents.
+#
+# Adding a probe? Give its pod `netpol-probe: control` and dial `speedtest:80`.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: netpol-sentinel
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: speedtest
+  policyTypes:
+    - Ingress
+  ingress:
+{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
+   lever. `| bool` for the string trap. Both explained in full in
+   networkpolicy-traefik.yaml.j2. #}
+{% if netpol_baseline_enforced | bool %}
+    # speedtest's real callers (traefik, prometheus) come from the baseline policy, which already
+    # selects it. This rule adds the probe pods and nothing else. Port 80 is the containerPort,
+    # which for speedtest equals the Service port — verified 2026-08-20.
+    - from:
+        - podSelector:
+            matchLabels:
+              netpol-probe: control
+      ports:
+        - port: 80
+          protocol: TCP
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}
