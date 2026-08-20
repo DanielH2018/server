@@ -16,6 +16,7 @@ spec:
     metadata:
       labels:
         app: uptime-kuma
+        netpol-baseline: enforced
     spec:
       enableServiceLinks: false
       # The pod is the first cluster workload probing `-k8s` LAN names. CoreDNS forwards to

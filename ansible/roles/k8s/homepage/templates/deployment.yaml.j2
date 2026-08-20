@@ -13,6 +13,7 @@ spec:
     metadata:
       labels:
         app: homepage
+        netpol-baseline: enforced
     spec:
       enableServiceLinks: false
       # The identity behind kubernetes.yaml's `mode: cluster` (rbac.yaml.j2). Without the

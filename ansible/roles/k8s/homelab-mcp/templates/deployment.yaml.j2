@@ -13,6 +13,7 @@ spec:
     metadata:
       labels:
         app: homelab-mcp
+        netpol-baseline: enforced
     spec:
       enableServiceLinks: false
       # Same posture as the compose template: uid 1000, read-only root, all caps dropped,
