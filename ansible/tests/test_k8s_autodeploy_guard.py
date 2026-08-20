@@ -144,21 +144,30 @@ def _deployment_templates(role: Path) -> list[str]:
 
 
 def _batch_templates(role: Path) -> list[tuple[str, str]]:
-    """Templates rendering a `kind: Job` or `kind: CronJob`, as (filename, metadata.name).
+    """Every `kind: Job` or `kind: CronJob` a template renders, as (filename, metadata.name).
 
     Batch workloads are gated role-locally (`wait --for=condition=complete`), not through
     `manifests_rollout`, so they need their own offender set. Matching only
     Deployment/DaemonSet made a Job-only role render zero workloads and pass every shape
     guard ungated — the same defect slice 2 found for DaemonSets.
+
+    A template can hold several `---`-separated YAML documents, and a batch-workload
+    template holding two is not hypothetical:
+    `registry/templates/selftest-pull-job.yaml.j2` renders both `registry-selftest-pull`
+    and `registry-selftest-pull-agent` in one file. Splitting on the document separator and
+    matching `kind`/`name` within each document (rather than a single `findall` for `name:`
+    over the whole file) keeps a Job's name paired with that Job, not with an unrelated
+    container, volume, or a non-batch document sharing the file.
     """
     out: list[tuple[str, str]] = []
     tdir = role / "templates"
     for t in sorted(tdir.glob("*.j2")) if tdir.is_dir() else []:
         text = t.read_text()
-        if not re.search(r"^kind:\s*(?:Job|CronJob)\s*$", text, re.MULTILINE):
-            continue
-        name = re.search(r"^\s{2}name:\s*(\S+)\s*$", text, re.MULTILINE)
-        out.append((t.name, name.group(1) if name else ""))
+        for doc in re.split(r"^---\s*$", text, flags=re.MULTILINE):
+            if not re.search(r"^kind:\s*(?:Job|CronJob)\s*$", doc, re.MULTILINE):
+                continue
+            name = re.search(r"^\s{2}name:\s*(\S+)\s*$", doc, re.MULTILINE)
+            out.append((t.name, name.group(1) if name else ""))
     return out
 
 
@@ -185,6 +194,24 @@ def _batch_gated_names(role: Path) -> set[str]:
         if re.search(rf"name:\s*k8s/{re.escape(shared)}\s*$", text, re.MULTILINE):
             names.add(f"<delegated:{shared}>")
     return names
+
+
+def test_batch_templates_sees_every_document_in_a_multi_job_template() -> None:
+    """A template with two `---`-separated Jobs must yield both, not just the first.
+
+    registry/templates/selftest-pull-job.yaml.j2 is the live instance: it renders
+    registry-selftest-pull and registry-selftest-pull-agent in one file. A `_batch_templates`
+    that stops at the first `name:` in the file would see only the former — an ungated
+    second Job that no offender list would ever name, the same fail-open shape this whole
+    task exists to close.
+    """
+    role = _K8S_ROLES / "registry"
+    found = {
+        name
+        for filename, name in _batch_templates(role)
+        if filename == "selftest-pull-job.yaml.j2"
+    }
+    assert found == {"registry-selftest-pull", "registry-selftest-pull-agent"}
 
 
 def test_auto_deployable_roles_gate_every_batch_workload_they_render() -> None:
