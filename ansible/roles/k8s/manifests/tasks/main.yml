@@ -29,6 +29,41 @@
 # directory on every restart and takes ownership of what it finds, which fights Ansible
 # for the same resources.
 
+- name: Check that manifests_rollout_kind is a kind every consumer understands
+  tags: [deploy]
+  # Three places key on the exact literal 'daemonset': the apply-output ternary below, the
+  # queued kind that roles/k8s/rollout-drain runs `rollout status` with, and the jsonpath
+  # branch in post_tasks/k8s_stabilise_gate.yml. kubectl accepts 'ds' and 'DaemonSet' as
+  # aliases, so a caller using one of those gets a green deploy with the stabilisation gate
+  # reading a Deployment's jsonpath off a DaemonSet — 0 == 0, passing vacuously. Fail loudly
+  # here instead.
+  ansible.builtin.assert:
+    that:
+      - manifests_rollout_kind | default('deploy') in ['deploy', 'daemonset']
+    fail_msg: >-
+      manifests_rollout_kind must be 'deploy' or 'daemonset', not
+      '{{ manifests_rollout_kind | default('deploy') }}'. kubectl aliases like 'ds' or
+      'DaemonSet' are rejected here on purpose: three consumers match the literal 'daemonset',
+      and an alias makes the stabilisation gate pass without checking anything.
+    quiet: true
+
+- name: Check that every manifests_extra_rollouts entry names an understood kind
+  tags: [deploy]
+  # Same alias trap as the assert above, reached through the loop instead of the role var: an
+  # extra rollout can set its own `kind` (see claude-otel, which loops deploy and daemonset in
+  # one role), so it needs the same constraint the primary rollout gets.
+  ansible.builtin.assert:
+    that:
+      - item.kind | default('deploy') in ['deploy', 'daemonset']
+    fail_msg: >-
+      manifests_extra_rollouts entry '{{ item.name }}' has kind '{{ item.kind | default('deploy') }}',
+      which must be 'deploy' or 'daemonset'. kubectl aliases like 'ds' or 'DaemonSet' are
+      rejected here on purpose — see the manifests_rollout_kind assert above.
+    quiet: true
+  loop: "{{ manifests_extra_rollouts | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+
 - name: Create a throwaway render directory for {{ manifests_service }}
   # `always`, because manifests_dest_dir is read by BOTH config-tagged tasks (the renders) and
   # the deploy-tagged apply, and neither tag alone survives every documented invocation. Tags
@@ -251,16 +286,19 @@
     - not k8s_dry_run | bool
     - manifests_rollout | default(manifests_service) | length > 0
 
-# Everything above handles ONE Deployment per role. A role that renders several (n8n: n8n and
-# n8n-runners; karakeep: four) names the others here as {name, image} pairs, where `image` is
-# the k8s/image-builder name whose rebuild should roll it. Optional and empty by default, so
-# every single-Deployment role behaves exactly as before.
+# Everything above handles ONE Deployment per role. A role that renders several (freshrss:
+# freshrss-feed-cache; prowlarr: flaresolverr; n8n: n8n-runners; karakeep: karakeep-meilisearch)
+# names the others here as {name, image} pairs, where `image` is the k8s/image-builder name
+# whose rebuild should roll it. Optional and empty by default, so every single-Deployment role
+# behaves exactly as before. Every current extra is kind: Deployment; an entry can set its own
+# `kind` (see claude-otel, which loops both deploy and daemonset in one role) and falls back to
+# manifests_rollout_kind, same as the primary rollout, when it omits one.
 - name: Roll the extra deployments after a config or image change for {{ manifests_service }}
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} rollout restart
-      {{ manifests_rollout_kind | default('deploy') }}/{{ item.name }}
+      {{ item.kind | default(manifests_rollout_kind | default('deploy')) }}/{{ item.name }}
   become: true
   changed_when: true
   loop: "{{ manifests_extra_rollouts | default([]) }}"
@@ -272,7 +310,7 @@
       or (item.image | default(item.name)) in (k8s_rebuilt_images | default([]))
     # Same apply-output-prefix derivation as the primary rollout above — see that comment.
     - not manifests_apply.stdout is search(
-        (manifests_rollout_kind | default('deploy') == 'daemonset') | ternary('daemonset.apps/', 'deployment.apps/')
+        (item.kind | default(manifests_rollout_kind | default('deploy')) == 'daemonset') | ternary('daemonset.apps/', 'deployment.apps/')
         ~ item.name ~ ' created')
 
 - name: Queue the batch drain for the extra rollouts of {{ manifests_service }}
@@ -287,7 +325,7 @@
       {{ (k8s_pending_rollouts | default([])) + [{
            'name': item.name,
            'namespace': k8s_namespace,
-           'kind': manifests_rollout_kind | default('deploy'),
+           'kind': item.kind | default(manifests_rollout_kind | default('deploy')),
            'timeout': manifests_rollout_timeout | default('300s'),
            'changed': (manifests_render is changed) or (manifests_secret_render is changed)
                       or ((item.image | default(item.name)) in (k8s_rebuilt_images | default([]))),

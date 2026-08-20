@@ -24,7 +24,7 @@
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n kube-system rollout status ds/dri-device-plugin --timeout=180s
+      k3s kubectl -n kube-system rollout status daemonset/dri-device-plugin --timeout=180s
   become: true
   changed_when: false
 
