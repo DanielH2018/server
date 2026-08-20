@@ -2,8 +2,8 @@
 code_server_k8s_image: "{{ k8s_registry_pull_host }}/code-server:latest"
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
-# Eligible today only by absence from gitops_deploy_k8s_autodeploy_denylist, not because the
-# shape is safe: strategy is Recreate, and the config claim (code_server_k8s_claim) is seeded
+# Denied (k8s_autodeploy: false below) because the shape is not safe: strategy is
+# Recreate, and the config claim (code_server_k8s_claim) is seeded
 # through k8s/seed-volume, which hardcodes ReadWriteOnce. The workspace claim below is NOT
 # seeded the same way — pvc-workspace.yaml.j2 is a plain claim, and an initContainer migrates
 # workspace/.ssh/.config/git-identity onto it from the config volume on first boot — but it

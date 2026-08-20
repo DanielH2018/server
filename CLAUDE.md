@@ -422,7 +422,8 @@ uv run pytest scripts         # just one suite
 - **Deps live once** in the `dev` dependency group; the prek `pytest` and
   `validate-compose-templates` hooks call `uv run`, so there's no duplicated dependency list.
   **uv must be on `PATH` for `prek run`** (CI installs it via `astral-sh/setup-uv`).
-- **Suites:** `ansible/tests/` (toposort deploy-ordering filters),
+- **Suites:** `ansible/tests/` (toposort deploy-ordering filters, the k8s auto-deploy guard,
+  and the auto-deploy denylist derivation),
   `ansible/roles/k8s/monitor-bridge/files/` + `ansible/roles/k8s/autofix-bridge/files/`
   (B2/Prometheus/Loki check logic),
   `.claude/hooks/` (read-only Bash classifier), `scripts/` (image-diff parser).

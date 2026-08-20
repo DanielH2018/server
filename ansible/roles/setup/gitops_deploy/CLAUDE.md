@@ -107,6 +107,16 @@ stay).
     declares nothing raises at template time rather than dropping out of the denylist, since
     absence from it means auto-deployable. To stop a role auto-deploying, set
     `k8s_autodeploy: false` in its defaults; there is no central list to edit.
+
+    That edit alone does not reach the host. It lands under `roles/k8s/<role>/`, so the
+    deployer routes it to `ChangeSet.k8s` and its defer-and-alert names `ansible/deploy.yml
+    --tags <svc>` — `deploy.yml` runs no setup role, so it never re-renders
+    `/etc/gitops-deploy/config.env`, and the denylist on the host stays the old one while the
+    role you just denied is still auto-deployable. Run
+    `uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy` to push the
+    change. This is the same silent-no-op class `broad_remediation()`'s docstring warns about
+    (`deploy_logic.py` around line 177) — naming `deploy.yml` for a setup-plane change leaves
+    it unapplied while a plain ff-merge clears the divergence.
   - **The gate is in the play, not here.** `roles/k8s/manifests` applies,
     `roles/k8s/rollout-drain` runs `rollout status --timeout`, and
     `ansible/post_tasks/k8s_stabilise_gate.yml` holds the post-Available soak that hard-fails
@@ -114,8 +124,9 @@ stay).
     `roles/k8s/manifests` until 5eea64e6 batched the rollouts and deferred the soak to
     end-of-play.) This deployer adds no health-poll phase for
     k8s: `containers_for()` returns `[]` for a k8s service, which is exactly the 2026-08-08
-    configarr false-rollback. The denylist covers the roles that gate can't protect — see
-    `defaults/main.yml`, where every entry carries its reason.
+    configarr false-rollback. The denylist covers the roles that gate can't protect — see each
+    role's own `roles/k8s/<name>/defaults/main.yml`, where its `k8s_autodeploy_reason` carries
+    the reason.
   - **A k8s rollback is local-only, and that is not sufficient on its own.** On failure the tick
     holds the bad SHA, `git reset --hard`es, redeploys the prior pin, and pages. But `skip_hold`
     matches only while `origin_head == hold_sha`, so **the bad pin is still on master** — the next

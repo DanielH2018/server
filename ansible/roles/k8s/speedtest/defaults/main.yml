@@ -6,8 +6,8 @@
 speedtest_k8s_image: lscr.io/linuxserver/speedtest-tracker:latest@sha256:e095f60b019819ea5a265e220bfb16d4e620c767f25005a065d73cab7c187c49
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
-# Eligible today only by absence from gitops_deploy_k8s_autodeploy_denylist, not because the
-# shape is safe: strategy is Recreate and speedtest_k8s_claim below is seeded through
+# Denied (k8s_autodeploy: false below) because the shape is not safe: strategy is
+# Recreate and speedtest_k8s_claim below is seeded through
 # k8s/seed-volume, which hardcodes ReadWriteOnce — the same migrating-state shape (Recreate +
 # RWO PVC) that keeps sonarr/radarr/prowlarr off the list. Data lost this way is regenerable
 # history (see the storage-class comment below), which is why speedtest was the original

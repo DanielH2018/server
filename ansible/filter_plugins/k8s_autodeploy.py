@@ -96,15 +96,15 @@ def k8s_autodeploy_denylist(playbook_dir):
 
     denied = []
     for role in sorted(os.listdir(roles_dir)):
+        if role.startswith(".") or role == "__pycache__":
+            continue
         entry_path = os.path.join(roles_dir, role)
         if not os.path.isdir(entry_path):
-            if role.startswith("."):
-                continue
             raise AnsibleFilterError(
-                f"k8s_autodeploy_denylist: '{entry_path}' is not a directory (possibly a "
-                f"dangling symlink). Every entry under roles/k8s/ must be a real role "
-                f"directory declaring `{DECLARATION}`; remove it or fix the symlink rather "
-                f"than let it silently drop out of the denylist."
+                f"k8s_autodeploy_denylist: '{entry_path}' is not a directory. Every entry "
+                f"under roles/k8s/ must be a real role directory declaring `{DECLARATION}`; "
+                f"a dangling symlink is one likely cause. Remove it or fix the symlink "
+                f"rather than let it silently drop out of the denylist."
             )
         if role in SHARED_ROLES:
             continue
