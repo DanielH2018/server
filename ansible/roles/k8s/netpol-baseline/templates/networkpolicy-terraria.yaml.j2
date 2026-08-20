@@ -1,0 +1,39 @@
+---
+# The Terraria server. Its LAN clients are the reason :7777 stays open to everyone.
+#
+# WHY OPEN RATHER THAN PEERED, so a later narrowing does not have to rediscover it: the Service
+# is a LoadBalancer with `externalTrafficPolicy: Local`, which PRESERVES the client's real source
+# address instead of SNAT-ing it to a node. That is the right setting for a game server, and it
+# means the source addresses arriving here are whichever LAN or VPN devices someone plays from —
+# not a set this file can enumerate. An ipBlock of the LAN prefix would be the shape to reach
+# for, and it would also admit every other device on the LAN, which is most of what an attacker
+# on the LAN would already have.
+#
+# Kuma's "k3s Terraria (game port)" monitor dials the node IP on 7777 rather than a Service name;
+# the open rule covers it, so no peer is needed for the tile.
+#
+# 7777 is the containerPort AND the Service port — verified 2026-08-20, they match.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: terraria
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: terraria
+  policyTypes:
+    - Ingress
+  ingress:
+{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
+   lever. `| bool` for the string trap. Both explained in full in
+   networkpolicy-traefik.yaml.j2. #}
+{% if netpol_baseline_enforced | bool %}
+    - ports:
+        - port: 7777
+          protocol: TCP
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}

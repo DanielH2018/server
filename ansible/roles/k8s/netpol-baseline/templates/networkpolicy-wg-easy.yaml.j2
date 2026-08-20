@@ -1,0 +1,44 @@
+---
+# The WireGuard endpoint. Two ports, and they are fenced differently.
+#
+# 51820/UDP — the VPN listener, OPEN. Clients dial it from the public internet (the router
+#   forwards 51820/udp to this node), so the source addresses are by definition not enumerable.
+#   Its Service (`wg-easy-udp`) is a LoadBalancer with `externalTrafficPolicy: Local`, which
+#   preserves the client address rather than SNAT-ing it — correct for WireGuard, which
+#   authenticates by key rather than by address, and the reason an ipBlock here would be
+#   meaningless. Fencing this port is what would break remote access.
+#
+# 51821/TCP — the admin UI, on a ClusterIP Service. No rule here: the baseline already admits
+#   traefik and prometheus, and nothing else has any business in it.
+#
+# Note for slice 5: traffic a VPN client sends ONWARD to a cluster service is routed through this
+# pod, so it arrives at that service as `app: wg-easy` rather than as the client. In practice VPN
+# clients reach services by hostname through Traefik, so no policy in the repo depends on this —
+# but a service someone later dials by ClusterIP over the VPN would need `app: wg-easy` as a peer.
+#
+# Both ports come from this service's `containers_list` entry (udp_port / port) — verified live
+# 2026-08-20 as 51820 and 51821, and equal to the containerPorts.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wg-easy
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: wg-easy
+  policyTypes:
+    - Ingress
+  ingress:
+{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
+   lever. `| bool` for the string trap. Both explained in full in
+   networkpolicy-traefik.yaml.j2. #}
+{% if netpol_baseline_enforced | bool %}
+    - ports:
+        - port: 51820
+          protocol: UDP
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}

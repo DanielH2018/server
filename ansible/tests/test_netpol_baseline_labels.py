@@ -129,6 +129,18 @@ SLICE_45B_WORKLOADS = {
 
 SLICE_45B_ROLES = {role for role, _name in SLICE_45B_WORKLOADS}
 
+# Slice 4.5 stage C: the LAN-facing workloads. Each is fenced by a policy that leaves its game or
+# VPN port OPEN, because its Service is a LoadBalancer with externalTrafficPolicy: Local and the
+# real client addresses are therefore neither SNAT-ed nor enumerable. They are labelled all the
+# same: the label is what puts them under the baseline, which fences every OTHER port on them.
+SLICE_45C_WORKLOADS = {
+    ("terraria", "terraria"),
+    ("valheim", "valheim"),
+    ("wg-easy", "wg-easy"),
+}
+
+SLICE_45C_ROLES = {role for role, _name in SLICE_45C_WORKLOADS}
+
 # Workloads inside a fenced role that are fenced by their OWN NetworkPolicy rather than by the
 # baseline label. Each entry must name the policy that covers it: an unexplained exemption is
 # indistinguishable from a workload someone forgot to label.
@@ -189,6 +201,7 @@ def test_exactly_the_fenced_roles_carry_the_baseline_label() -> None:
         | SLICE_4_ROLES
         | SLICE_45A_ROLES
         | SLICE_45B_ROLES
+        | SLICE_45C_ROLES
         | BORN_FENCED_ROLES
     )
     labelled = _labelled_roles()
@@ -225,6 +238,7 @@ def test_every_pod_producing_doc_in_a_fenced_role_is_labelled() -> None:
         | SLICE_4_ROLES
         | SLICE_45A_ROLES
         | SLICE_45B_ROLES
+        | SLICE_45C_ROLES
     )
     unlabelled = {
         (role, doc.get("metadata", {}).get("name", "?"))
@@ -271,6 +285,19 @@ def test_exactly_the_slice_45b_workloads_carry_the_baseline_label() -> None:
         "slice 4.5 stage B's labelled workloads no longer match SLICE_45B_WORKLOADS.\n"
         f"  labelled: {sorted(labelled)}\n"
         f"  expected: {sorted(SLICE_45B_WORKLOADS)}"
+    )
+
+
+def test_exactly_the_slice_45c_workloads_carry_the_baseline_label() -> None:
+    labelled = {
+        (role, name)
+        for (role, name) in _labelled_workloads()
+        if role in SLICE_45C_ROLES
+    }
+    assert labelled == SLICE_45C_WORKLOADS, (
+        "slice 4.5 stage C's labelled workloads no longer match SLICE_45C_WORKLOADS.\n"
+        f"  labelled: {sorted(labelled)}\n"
+        f"  expected: {sorted(SLICE_45C_WORKLOADS)}"
     )
 
 
