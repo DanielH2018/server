@@ -1,7 +1,8 @@
 # Default-deny ingress NetworkPolicies
 
-Design doc. Written 2026-08-16. Status: **slices 1, 2 and 3 deployed and enforcing** (slice 2 on
-2026-08-17, slice 3 on 2026-08-19). `netpol_baseline_enforced` and `netpol_baseline_obs_enforced`
+Design doc. Written 2026-08-16. Status: **slices 1-4 deployed and enforcing** (slice 2 on
+2026-08-17, slice 3 on 2026-08-19, slice 4 on 2026-08-20). Slice 5 is **blocked on a new slice 4.5**
+— 28 workloads belong to no slice, and slice 5's gate fails on any unlabelled pod. `netpol_baseline_enforced` and `netpol_baseline_obs_enforced`
 are both `true`. Seventeen roles carry `netpol-baseline: enforced`, and six per-workload allow
 policies are live alongside the two baselines — four in `homelab`, two in `observability`.
 Slices 4–5 are still design only. See "Answers from slice 1", "Answers from slice 2" and
@@ -206,7 +207,7 @@ reason below.
 | **1** | Leaf apps: bento-pdf, littlelink, speedtest, healthchecks, ical-proxy, code-server | Traefik is the only in-cluster caller of these six. Exercises the whole mechanism — baseline policy, var flip, probe job — at near-zero blast radius, and a mistake surfaces as a 502, not silence. terraria and valheim are deliberately NOT here: they are reached over their own MetalLB VIPs by game clients on the LAN, not through Traefik, so the baseline's traefik rule would not cover them and fencing them would need per-workload peers this slice does not design |
 | **2** ✅ | Media stack + bridges: sonarr, radarr, prowlarr, bazarr, tdarr, qbittorrent, configarr, janitorr, monitor-bridge, autofix-bridge | Densest genuine app-to-app mesh; several callers are DB-configured and unprobeable. **Deployed 2026-08-17.** jellyfin moved to slice 4 — see below |
 | **3** ✅ | `observability` namespace | Four hostPort ingress paths, cross-namespace inbound from three homelab workloads, thick intra-namespace mesh. **Deployed 2026-08-19.** |
-| **4** | Infra tier: traefik, authelia, crowdsec, pihole, mosquitto, nut, registry, headlamp, n8n | Highest consequence; do it once the pattern is proven |
+| **4** ✅ | Infra tier: traefik, authelia, crowdsec, pihole, mosquitto, nut, jellyfin | Highest consequence; do it once the pattern is proven. **Deployed 2026-08-20.** registry/headlamp/n8n were NOT labelled — each already carries a bespoke policy *tighter* than the baseline, so labelling would widen it |
 | **5** | Switch `netpol_baseline_scope` to `namespace` | Makes a workload fenced-by-default instead of opt-in. Gated on zero unlabelled pods |
 
 **Services born fenced.** A leaf app added after slice 1 shipped belongs to no slice, but has
@@ -569,6 +570,63 @@ Deployed 2026-08-19 in two stages, as designed: `claude-otel` first to add the l
   merely inferred. The other three entries — daniel-server's `cni0` and both `flannel.1`
   addresses — are still unexercised. They cover the case where a pod moves nodes, which is
   precisely why the list was not trimmed to what a single day's placement happens to need.
+
+## Answers from slice 4
+
+Deployed 2026-08-20. Policies applied first, then labels one role at a time, traefik last. All four
+slices' probes now pass together for the first time; 29 pods carry `netpol-baseline: enforced`.
+
+**Two defects survived every review and were found only by deploying.** Both are the same mistake
+in different clothing: the caller census asked *"which pods dial this Service, on which Service
+port"*. Both halves of that question are wrong.
+
+- **A NetworkPolicy matches the POD's port, not the Service's.** kube-proxy has already DNAT'd
+  Service port → targetPort by the time the policy is evaluated. traefik's Service maps 80→`http`
+  and 443→`https`, whose containerPorts are **8000 and 8443**, so a policy naming 80/443 admitted
+  two ports nothing listens on and denied every in-cluster caller of the real ones. The symptom was
+  diagnostic and misleading: the probes failed on `cannot reach traefik:80` while the same route
+  answered **200 from the LAN**, because external traffic arrives over the VIP path rather than the
+  ClusterIP. Every review verified the ports against the Service — the wrong reference — because
+  that is what they were asked to check. **Check `targetPort` for every service a policy fences.**
+  In this slice only traefik diverged; the other six map 1:1.
+- **A sidecar has no network identity of its own — it carries its POD's labels.** authelia runs a
+  `crowdsec-agent` sidecar shipping auth logs to the LAPI, so that traffic arrives as
+  `app: authelia`, which the crowdsec policy did not admit. kube-router REJECTs rather than drops,
+  so the sidecar crash-looped on "connection refused", which made the whole pod unready, which
+  pulled authelia out of its Service endpoints, which **broke SSO on every protected route for
+  ~17 minutes**, while the authelia container itself stayed healthy throughout. Find them with
+  `grep -rl crowdsec-agent ansible/roles/k8s --include='*.j2'` — here: traefik, authelia, and the
+  node-agent DaemonSet.
+
+**Two callers the review caught before deploy, both confirmed live afterwards.**
+- Home Assistant reaches nut cross-node over the ClusterIP; `sensor.ups_power` kept updating after
+  nut was fenced. Same-node *and* cross-node pod→ClusterIP→pod both **preserve the source pod IP** —
+  it is not masqueraded to cni0, which several earlier conclusions in this project assumed.
+- zigbee2mqtt logged `Connected to MQTT server` after mosquitto's roll. This is the live proof the
+  mosquitto podSelectors are load-bearing: an earlier reading of the connection log concluded they
+  had "never matched a real connection", because z2m and HA hold **persistent** MQTT sessions that
+  never reappear in a log window, and the connections that *were* visible were kubelet probes at
+  the readiness/liveness periods.
+
+**The rollback lever is wider than one slice.** `netpol_baseline_enforced` gates the baseline too,
+so disarming it to unstick a slice-4 workload also unfences the 16 slice-1/2 workloads. Reverting a
+single workload's label is the narrower undo.
+
+## Slice 4.5 — the 28 workloads no slice owns
+
+Slice 4 does **not** unblock slice 5. `homelab` holds 56 controllers; slices 1-4 and the
+`flaresolverr` exemption cover 27 of them, leaving **28 that belong to no slice** — and slice 5's
+gate fails on any unlabelled pod. They fall in four groups:
+
+| Group | Count | Members |
+|---|---|---|
+| Standalone apps | 13 | home-assistant, homelab-mcp, homepage, freshrss, karakeep, livesync, loki-homelab, peanut, uptime-kuma, wg-easy, zigbee2mqtt, cloudflare-ddns-direct, cloudflare-ddns-proxied |
+| Sub-workloads of a parent role | 7 | karakeep-chrome, karakeep-meilisearch, karakeep-time-tagger, scrutiny-influxdb, scrutiny-web, freshrss-feed-cache, n8n-runners |
+| DaemonSets — fence or exempt | 4 | node-exporter, promtail, scrutiny-collector, crowdsec-node-agent *(already fenced in slice 4)* |
+| Deferred since slice 1 | 4 | terraria, valheim, terraria-stats, valheim-stats — LAN game clients reach them over their own MetalLB VIPs, so they need per-workload peers no slice has designed |
+
+Slice 4.5 must apply slice 4's two lessons from the start: check `targetPort`, not the Service
+port, and enumerate sidecars, which carry their host pod's identity.
 
 ## Open items still outstanding
 

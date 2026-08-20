@@ -1,0 +1,52 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pihole
+  namespace: {{ k8s_namespace }}
+spec:
+  # `app: pihole` deliberately, NOT the Service's two-label selector. There are two instances --
+  # pihole (instance=pihole) and pihole-2 (instance=pihole-2) -- and the single label covers both.
+  # The `pihole` Service selects only instance=pihole; matching the Service here would fence one
+  # replica of an HA pair and leave the other wide open.
+  podSelector:
+    matchLabels:
+      app: pihole
+  policyTypes:
+    - Ingress
+  ingress:
+{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
+   lever. `| bool` for the string trap. Both explained in full in
+   networkpolicy-traefik.yaml.j2. BOTH rules below sit inside this conditional. #}
+{% if netpol_baseline_enforced | bool %}
+    # :53 stays open. It is daniel-server's resolv.conf nameserver and serves every LAN client,
+    # whose addresses are not enumerable here. The UI is the attack surface; :53 is what takes
+    # the house down.
+    #
+    # Cluster DNS also lands here: CoreDNS forwards to pihole-dns's ClusterIP, so these queries
+    # arrive from a kube-system pod, not from a node. Verified live 2026-08-20: the Corefile's
+    # `forward .` target (10.43.252.187) equals pihole-dns's ClusterIP. An open :53 covers that
+    # too -- it is recorded because the spec asserted the opposite (docs/networkpolicy-default-
+    # deny.md's Slice 4 section claims pihole's :53 callers are "hosts, not pods"), and a future
+    # narrowing must not repeat that error.
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # The admin UI, fenced to Traefik and the homepage widget.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: traefik
+        - podSelector:
+            matchLabels:
+              app: homepage
+      ports:
+        - port: 80
+          protocol: TCP
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}

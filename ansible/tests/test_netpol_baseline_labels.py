@@ -67,6 +67,27 @@ SLICE_3_WORKLOADS = {
 
 SLICE_3_ROLES = {role for role, _name in SLICE_3_WORKLOADS}
 
+# Slice 4: core infra (docs/networkpolicy-default-deny.md). Named per WORKLOAD, not per role: two
+# roles here each render a second pod-producing doc the role-granular habit would miss — pihole
+# (pihole-2, its HA pair, same app label, different instance) and crowdsec (crowdsec-node-agent,
+# the DaemonSet). crowdsec-node-agent is labelled, not exempted: its only inbound caller is
+# prometheus scraping it (verified live — count(up{job="crowdsec-node-agents"} == 1) == 2), and the
+# baseline already admits prometheus on every port, so the baseline alone suffices. Its own calls
+# out to the LAPI are outbound, which kube-router does not enforce and an ingress policy can't break.
+SLICE_4_WORKLOADS = {
+    ("traefik", "traefik"),
+    ("authelia", "authelia"),
+    ("crowdsec", "crowdsec"),
+    ("crowdsec", "crowdsec-node-agent"),
+    ("pihole", "pihole"),
+    ("pihole", "pihole-2"),
+    ("mosquitto", "mosquitto"),
+    ("nut", "nut"),
+    ("jellyfin", "jellyfin"),
+}
+
+SLICE_4_ROLES = {role for role, _name in SLICE_4_WORKLOADS}
+
 # Workloads inside a fenced role that are fenced by their OWN NetworkPolicy rather than by the
 # baseline label. Each entry must name the policy that covers it: an unexplained exemption is
 # indistinguishable from a workload someone forgot to label.
@@ -112,15 +133,21 @@ def _labelled_roles() -> set[str]:
 
 
 def test_exactly_the_fenced_roles_carry_the_baseline_label() -> None:
-    expected = SLICE_1_ROLES | SLICE_2_ROLES | SLICE_3_ROLES | BORN_FENCED_ROLES
+    expected = (
+        SLICE_1_ROLES
+        | SLICE_2_ROLES
+        | SLICE_3_ROLES
+        | SLICE_4_ROLES
+        | BORN_FENCED_ROLES
+    )
     labelled = _labelled_roles()
     missing = sorted(expected - labelled)
     extra = sorted(labelled - expected)
     assert not missing and not extra, (
-        "netpol-baseline: enforced no longer matches slice 1 + slice 2 + slice 3.\n"
+        "netpol-baseline: enforced no longer matches slice 1 + slice 2 + slice 3 + slice 4.\n"
         f"  missing (silently unfenced, and the probe would not notice): {missing}\n"
         f"  unexpected (fenced without a probe proving its callers still work): {extra}\n"
-        "Update SLICE_1_ROLES/SLICE_2_ROLES/SLICE_3_WORKLOADS together with "
+        "Update SLICE_1_ROLES/SLICE_2_ROLES/SLICE_3_WORKLOADS/SLICE_4_WORKLOADS together with "
         "docs/networkpolicy-default-deny.md when the rollout moves to the next slice."
     )
 
@@ -140,7 +167,7 @@ def _labelled_workloads() -> set[tuple[str, str]]:
 def test_every_pod_producing_doc_in_a_fenced_role_is_labelled() -> None:
     """A role is not a unit of fencing. claude-otel renders six workloads; five
     could go unlabelled while the role still looked fenced."""
-    fenced_roles = SLICE_1_ROLES | SLICE_2_ROLES | SLICE_3_ROLES
+    fenced_roles = SLICE_1_ROLES | SLICE_2_ROLES | SLICE_3_ROLES | SLICE_4_ROLES
     unlabelled = {
         (role, doc.get("metadata", {}).get("name", "?"))
         for role, _tpl, doc in rendered_docs()

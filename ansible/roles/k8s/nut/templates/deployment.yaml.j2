@@ -17,6 +17,7 @@ spec:
     metadata:
       labels:
         app: nut
+        netpol-baseline: enforced
     spec:
       # The UPS is USB-attached to daniel-server. This pin is physical, not a scheduling
       # preference — it does NOT unwind with the drain's L2/VIP pins.

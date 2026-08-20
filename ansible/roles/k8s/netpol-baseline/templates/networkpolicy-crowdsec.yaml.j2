@@ -1,0 +1,72 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: crowdsec
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: crowdsec
+  policyTypes:
+    - Ingress
+  ingress:
+{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
+   lever. `| bool` for the string trap. Both explained in full in
+   networkpolicy-traefik.yaml.j2. All THREE rules below sit inside this conditional -- leaving
+   any of them outside it would keep crowdsec fenced through a rollback. #}
+{% if netpol_baseline_enforced | bool %}
+    # LAPI (8080) and AppSec (7422): the Traefik bouncer plugin. The dashboard (3000) is
+    # reached through Traefik like any route.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: traefik
+      ports:
+        - port: 8080
+          protocol: TCP
+        - port: 7422
+          protocol: TCP
+        - port: 3000
+          protocol: TCP
+    # The node agents only ever dial the LAPI (node-agent-daemonset.yaml.j2:68,
+    # LOCAL_API_URL="http://crowdsec:8080") -- never AppSec or the dashboard. Kept as its own
+    # from item rather than folded into traefik's rule above: sibling `from` peers share the
+    # whole rule's ports list, so grouping them would hand the node agents AppSec and the
+    # dashboard for free.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: crowdsec-node-agent
+        # authelia runs a crowdsec-agent SIDECAR that ships its auth logs to this LAPI. A sidecar
+        # has no identity of its own on the network -- it inherits its POD's labels, so this
+        # traffic arrives as `app: authelia`, not as anything crowdsec-shaped. Omitting it took
+        # authelia down on 2026-08-20: the sidecar crash-looped on "connection refused" (kube-router
+        # REJECTs rather than drops), which made the whole POD unready, which pulled authelia out of
+        # its Service endpoints, which broke SSO on every protected route. The authelia container
+        # itself was healthy throughout.
+        # The three pods running this sidecar are traefik, authelia and the node-agent DaemonSet
+        # (`grep -rl crowdsec-agent ansible/roles/k8s --include='*.j2'`); all three are admitted here.
+        - podSelector:
+            matchLabels:
+              app: authelia
+      ports:
+        - port: 8080
+          protocol: TCP
+    # Metrics, cross-namespace to observability -- siblings in one from item, see the traefik
+    # policy's comment for why that distinction is load-bearing.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - port: 6060
+          protocol: TCP
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}

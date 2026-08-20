@@ -1,0 +1,81 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mosquitto
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: mosquitto
+  policyTypes:
+    - Ingress
+  ingress:
+{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
+   lever. `| bool` for the string trap. Both explained in full in
+   networkpolicy-traefik.yaml.j2. BOTH rules below sit inside this conditional. #}
+{% if netpol_baseline_enforced | bool %}
+    # zigbee2mqtt and home-assistant. DO NOT DELETE THESE TWO podSelectors -- they are the only
+    # thing admitting the MQTT clients, and a log observation will not show you that.
+    #
+    # What was observed live 2026-08-20 (`kubectl -n homelab logs deploy/mosquitto --since=2h`):
+    # only two sources appeared, 10.42.0.1 (2880 connections) and 10.42.1.182 (360). Neither
+    # zigbee2mqtt's pod IP (10.42.0.135) nor home-assistant's (10.42.0.17) appeared at all.
+    # That observation is accurate. The conclusion first drawn from it was not, twice over:
+    #
+    #   1. The 10.42.0.1 connections are KUBELET PROBES, not MQTT clients. Each logs a connect
+    #      followed by "connection closed by client", at exactly 10s and 30s spacing -- matching
+    #      `readinessProbe periodSeconds: 10` and `livenessProbe periodSeconds: 30` in
+    #      mosquitto/templates/deployment.yaml.j2:102,107. 2880 over 2h is precisely that pair.
+    #   2. zigbee2mqtt and home-assistant hold PERSISTENT MQTT sessions. A long-lived client
+    #      logs one "New connection" when it first connects and nothing afterwards, so it is
+    #      invisible in every window that does not contain its reconnect. Their absence from
+    #      the log is NOT evidence that they never connect.
+    #
+    # So the podSelectors are load-bearing, and no ipBlock substitutes for them: pod ->
+    # ClusterIP -> pod traffic PRESERVES the caller's pod IP, same-node and cross-node alike.
+    # It is NOT masqueraded to the cni0 bridge address (proven from slice 2's own probe log --
+    # netpol-baseline-probe-slice2-79xf7 ran on daniel-box and logged `isolated:` for
+    # sonarr/radarr/qbittorrent, all daniel-box pods). The next time either client reconnects
+    # it arrives as 10.42.0.135 or 10.42.0.17, and only these podSelectors admit it. Deleting
+    # them breaks MQTT at that reconnect -- delayed, and hard to trace back to this file.
+    #
+    # The two cni0 ipBlocks are what admits the kubelet probes. They duplicate
+    # netpol_baseline_node_cidrs ONLY ONCE mosquitto carries `netpol-baseline: enforced` and the
+    # always-on baseline selects it. During the deploy step that applies this policy the label
+    # is not on the pod yet, so in that window they are the only admission a host-side caller
+    # has. Do not delete them as "redundant with the baseline" without confirming the label has
+    # landed.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: zigbee2mqtt
+        - podSelector:
+            matchLabels:
+              app: home-assistant
+        - ipBlock:
+            cidr: 10.42.0.1/32
+        - ipBlock:
+            cidr: 10.42.1.1/32
+      ports:
+        - port: 1883
+          protocol: TCP
+    # uptime-kuma's "k3s Mosquitto (VIP)" port monitor (roles/k8s/uptime-kuma's
+    # static-monitors.yaml.j2), found live in the same observation: it connects to the
+    # mosquitto-lan VIP (10.0.0.242:1883) from daniel-server, cross-node from the mosquitto pod
+    # on daniel-box, and arrives as its own real pod IP (10.42.1.182, 360 connections/2h) --
+    # not SNAT'd, because ETP=Local on mosquitto-lan preserves the client address for a
+    # cross-node LoadBalancer hop. This caller is not in the task-5 brief's template; omitting
+    # it would have silently fenced a live Kuma monitor the moment this policy was applied.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: uptime-kuma
+      ports:
+        - port: 1883
+          protocol: TCP
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}

@@ -1,0 +1,134 @@
+---
+# Slice 4 fences the infra tier: traefik, authelia, crowdsec, pihole, mosquitto, nut and
+# jellyfin all carry `netpol-baseline: enforced` (Task 7), each behind its own per-workload
+# allow policy. This probe's question is narrower than "is anything reachable" — it asserts
+# that four of those workloads (authelia, crowdsec, nut, mosquitto) refuse a caller that is not
+# on their allow list, the same inverted shape as the slice-2/slice-3 probes.
+#
+# THIS JOB RUNS IN {{ k8s_namespace }}, same namespace as all four targets — unlike slice 3,
+# there is no cross-namespace trap here to get wrong.
+#
+# CONTROL, not inverted: traefik:80 must succeed. The probe pod carries no label any slice-4
+# policy admits, and traefik's ingress policy (networkpolicy-traefik.yaml.j2) is open to all
+# sources by design (it terminates LAN/WAN traffic before Authelia or any app sees it) — so a
+# reachable traefik:80 proves the probe pod has a network and DNS at all. Without this leg, a
+# probe pod that itself has no network would print "isolated" for every inverted target for the
+# wrong reason: not because the fence works, but because nothing works.
+#
+# INVERTED, same reasoning as slices 2 and 3: a failed `nc` is the PASS case. A crashlooping or
+# scaled-to-zero target would report "isolated" too, so this alone cannot tell "fenced by the
+# policy" apart from "nothing is listening" — the readiness gate in tasks/main.yml proves all
+# four targets are up before this Job runs, closing that gap the same way the slice-2/3 gates do.
+#
+# Ports hardcoded from each target's own NetworkPolicy `port:` (networkpolicy-authelia.yaml.j2:26,
+# networkpolicy-crowdsec.yaml.j2:26, networkpolicy-nut.yaml.j2:69,
+# networkpolicy-mosquitto.yaml.j2:61) — a wrong port here fails silently green, since these
+# assertions are inverted: a port nothing listens on makes `nc` fail, which is the PASS branch.
+# Re-check against the Service source whenever this file is touched; the readiness gate checks
+# the Service has ready backends, not that these numbers are the ports it serves.
+#
+# DNS leg: the name it resolves must be one ONLY pihole can answer, and picking that name is the
+# whole difficulty of this leg.
+#   A cluster.local name proves nothing. CoreDNS's Corefile has
+#   `kubernetes cluster.local in-addr.arpa ip6.arpa { fallthrough in-addr.arpa ip6.arpa }`, so a
+#   *.svc.cluster.local query is answered authoritatively and NEVER reaches the `forward .` line.
+#   A pihole policy that broke external resolution would leave such a leg green.
+#   A public name proves nothing either. The forward line is
+#   `forward . 10.43.252.187 1.1.1.1 1.0.0.1 { policy sequential; health_check 5s; max_fails 2 }`
+#   — pihole first, but Cloudflare is a live fallback, so a fenced-out pihole still resolves any
+#   public name.
+# `daniel-pi.lan` is the discriminator. Pi-hole serves it as a `host-record` (the shared
+# ansible/templates/pihole-dnsmasq.conf.j2), and `.lan` is a private TLD Cloudflare NXDOMAINs.
+# Verified live 2026-08-20: `dig @10.43.0.10 daniel-pi.lan` → 10.0.0.139, `dig @1.1.1.1
+# daniel-pi.lan` → NXDOMAIN. So a successful lookup proves the query reached pihole and pihole
+# answered. There is no coredns-custom ConfigMap on this cluster (checked the same day), so the
+# `import /etc/coredns/custom/*.override` above the forward stubs nothing locally.
+# Caveat on timing, not on correctness: the Corefile's `cache 30` can serve this answer from
+# CoreDNS's cache for up to 30s after pihole becomes unreachable.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: netpol-baseline-probe-slice4
+  namespace: {{ k8s_namespace }}
+spec:
+  # Deliberately BELOW the `kubectl wait --timeout=180s` in tasks/main.yml, same reasoning as the
+  # slice-3 probe: two independent clocks starting at different moments, so the Job's own
+  # deadline must be the one that always fires first — otherwise a slow cold image pull makes it
+  # a coin flip which timeout wins, and the two failures read completely differently. Costs no
+  # wall time either way: with backoffLimit: 0 a failed Job never satisfies
+  # --for=condition=complete, so the wait burns its full 180s regardless.
+  activeDeadlineSeconds: 120
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: netpol-probe-slice4
+    spec:
+      restartPolicy: Never
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      containers:
+        - name: probe
+          image: {{ netpol_baseline_probe_image }}
+          command:
+            - sh
+            - -c
+            - |
+              set -u
+              # CONTROL. This pod carries no label any slice-4 policy admits, so it must still
+              # reach traefik:80 -- those ports are open to all sources by design. A failure
+              # here means the probe itself has no network, and every assertion below would be
+              # a false pass.
+              if ! nc -w 5 -z traefik 80; then
+                echo "CONTROL FAILED: traefik:80 unreachable -- assertions below are meaningless"
+                exit 1
+              fi
+              echo "control ok: traefik:80 reachable"
+
+              # INVERTED. Each must FAIL. An unlisted caller reaching these means the fence is
+              # not doing its job.
+              for target in authelia:9091 crowdsec:8080 nut:3493 mosquitto:1883; do
+                host=${target%%:*}
+                port=${target##*:}
+                if nc -w 5 -z "$host" "$port"; then
+                  echo "LEAK: $target reachable from an unlisted caller"
+                  exit 1
+                fi
+                echo "isolated: $target unreachable from an unlisted caller"
+              done
+
+              # DNS. daniel-pi.lan is a pihole-only record: CoreDNS holds no authority for
+              # `.lan`, so the query traverses `forward .`, and Cloudflare (the fallback
+              # resolver on that same line) NXDOMAINs it. Resolving it therefore proves pihole
+              # itself answered -- a cluster.local name would be answered by CoreDNS without
+              # ever reaching pihole, and a public name would be answered by the Cloudflare
+              # fallback even with pihole fenced out.
+              #
+              # Two forms, either of which passing is a pass. The image is
+              # {{ netpol_baseline_probe_image }}, whose nslookup is BusyBox's applet, and this
+              # is the first probe in the role to resolve a name outside cluster.local -- so
+              # its search-list behaviour has no precedent here to lean on. `daniel-pi.lan` has
+              # one dot against the pod's `ndots:5`, so a resolver that honours the search list
+              # tries daniel-pi.lan.{{ k8s_namespace }}.svc.cluster.local and its siblings
+              # first, and some BusyBox builds stop at that first NXDOMAIN instead of going on
+              # to the absolute name. The trailing-dot form skips the search list outright. No
+              # false pass either way: nothing but pihole answers `daniel-pi.lan` in any form,
+              # and the search-list variants NXDOMAIN.
+              if ! nslookup daniel-pi.lan. >/dev/null 2>&1 &&
+                 ! nslookup daniel-pi.lan >/dev/null 2>&1; then
+                echo "DNS FAILED: pihole did not answer daniel-pi.lan -- check the pihole policy"
+                exit 1
+              fi
+              echo "dns ok: pihole answered daniel-pi.lan, so :53 is reachable through the fence"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi

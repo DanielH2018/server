@@ -1,0 +1,32 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: jellyfin
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: jellyfin
+  policyTypes:
+    - Ingress
+  ingress:
+{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
+   lever. `| bool` for the string trap. Both explained in full in
+   networkpolicy-traefik.yaml.j2. #}
+{% if netpol_baseline_enforced | bool %}
+    # :8096 stays open to all sources. LAN clients (TVs, phones) reach the jellyfin-lan VIP
+    # 10.0.0.241 directly rather than through Traefik, and with ETP=Local they arrive as their
+    # own 10.0.0.x address -- enumerable only as "the LAN", which buys nothing over leaving it
+    # open. traefik, homepage and janitorr all reach the same port and are covered by this.
+    # uptime-kuma's "k3s Jellyfin (VIP)" port monitor (roles/k8s/uptime-kuma's
+    # static-monitors.yaml.j2) also dials this VIP; it too is covered by leaving the port open,
+    # rather than by an explicit admit, for the same reason.
+    - ports:
+        - port: 8096
+          protocol: TCP
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}
