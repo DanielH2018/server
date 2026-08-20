@@ -3415,10 +3415,26 @@ def test_longhorn_selects_on_the_state_label_not_a_value_ordinal():
 # true sentence about a check that reads a different metric.
 
 
-def test_missing_extended_resource_is_a_fault():
+def test_the_query_uses_the_label_kube_state_metrics_actually_emits():
+    """KSM sanitizes the resource name into the label, so the configured name never matches.
+
+    Live on 2026-08-20: both nodes advertised `devic.es/dri: 4`, KSM emitted
+    `resource="devic_es_dri"`, and the query for the unsanitised name matched nothing - which this
+    check reads as the plugin having deregistered. The monitor went DOWN on a healthy cluster and
+    stayed there until the sanitiser landed. The operator-facing name stays the one
+    `kubectl describe node` prints; only the query is sanitised.
+    """
+    assert check.ksm_resource_label("devic.es/dri") == "devic_es_dri"
+    assert check.ksm_resource_label("nvidia.com/gpu") == "nvidia_com_gpu"
+    assert check.ksm_resource_label("cpu") == "cpu"
+
+
+def test_missing_extended_resource_names_both_the_resource_and_its_label():
+    """A false fault and a real one look identical unless the alert names the label it queried."""
     ok, msg = check.extended_resource_verdict(["devic.es/dri"], {"devic.es/dri": 0}, 12)
     assert ok is False
     assert "devic.es/dri" in msg
+    assert "devic_es_dri" in msg
 
 
 def test_resource_absent_from_the_map_is_a_fault():
