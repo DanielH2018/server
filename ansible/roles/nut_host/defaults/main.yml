@@ -1,0 +1,13 @@
+---
+# Where this host's upsmon finds upsd. The UPS host reaches it over the pod's loopback hostPort;
+# every other host has to cross nodes, and the LAN publish that would once have served that
+# (the Docker-era `server_ip:3493` + its DOCKER-USER firewall) was deliberately retired with the
+# port. The remaining path is the ClusterIP, which a node's own host netns can reach through
+# kube-proxy's rules, and which the nut NetworkPolicy already admits: it carries both flannel.1
+# /32s precisely because "a cross-node host->pod packet arrives as the SENDING node's flannel.1
+# address". No policy change is needed for this.
+#
+# Resolved at deploy time rather than hardcoded, because the Service does not pin its clusterIP.
+# That makes the rendered value a snapshot: see the reachability assert in tasks/main.yml, which
+# is what stops a stale snapshot from sitting silently broken until the next power cut.
+nut_host_upsd_host: "{{ '127.0.0.1' if inventory_hostname == ups_host else nut_host_upsd_clusterip | default('') }}"
