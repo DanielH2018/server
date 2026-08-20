@@ -474,12 +474,25 @@ k3s_longhorn_snapshot_reap_delete_timeout: 120s
 # which probes b2_authorize_account and reports B2's own `transaction_cap_exceeded`. That is the
 # instrument for the re-add; this one stays a growth tripwire and is set above the new normal.
 #
-# A tripwire on GROWTH, not a derived ceiling: Longhorn's per-backup transaction cost was never
-# measured, so no threshold here can come from first principles. What is evidenced is the trend
-# (4 -> 7 -> 15 in three days) and where it ended.
+# A tripwire on GROWTH, not a derived ceiling. It was written when Longhorn's per-backup
+# transaction cost had never been measured, so no threshold could come from first principles;
+# what was evidenced was the trend (4 -> 7 -> 15 in three days) and where it ended.
+#
+# 16, set 2026-08-20. The decision about the cap this note asks for is the block-size migration:
+# every backed-up volume moved to 16 MiB blocks, so block count per volume fell about 8.6x
+# (sonarr 200 -> 23, prowlarr 216 -> 25) and with it the prune cost each backup carries. The
+# per-backup cost is no longer unmeasured either — `probe.py b2-budget` prices a stored block at
+# ~2 Class C, matching the two shards it can price today (d4: 50 blocks / 101 C, d6: 35 / 70 C).
+# The worst projected shard is now ~220 Class C against the 2100 budget, where d2 alone was 1359.
+#
+# Deliberately 16 rather than the ~24 the arithmetic allows. All 21 volumes backing up on one day
+# would cost roughly 790 Class C, so cost has stopped being the binding constraint and the count
+# is — which is exactly when a growth tripwire has to stay tight. 16 sits just above what a
+# migration-sized night actually produced (12 on 2026-08-20) rather than at the ceiling. Revisit
+# at 24 only after watching a few ordinary weeks at 16.
 #
 # Raise it only together with a decision about the cap itself, never to silence the warning.
-k3s_longhorn_daily_backup_budget: 8
+k3s_longhorn_daily_backup_budget: 16
 
 # Root-disk headroom heartbeat (templates/disk-health.sh.j2). 75, not the fleet's 90: Longhorn's
 # storageMinimalAvailablePercentage=25 stops replica scheduling once the disk passes 75% used, so
