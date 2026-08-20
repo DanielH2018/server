@@ -89,6 +89,12 @@ _CORPUS: list[tuple[str, str]] = [
     ("yaml_off", 'k8s_autodeploy: off\nk8s_autodeploy_reason: "ok"\n'),
     # A quoted "true" is a YAML string, not a boolean — the filter rejects it outright.
     ("quoted_string_true", 'k8s_autodeploy: "true"\nk8s_autodeploy_reason: "ok"\n'),
+    # Bare non-boolean scalars. These are the entries that catch a widened _TRUE_VALUES: the
+    # regex would start permitting them while the filter still rejects a non-bool. The quoted
+    # case above does not catch it, because the quotes defeat the regex too.
+    ("bare_word", 'k8s_autodeploy: maybe\nk8s_autodeploy_reason: "ok"\n'),
+    ("bare_int", 'k8s_autodeploy: 1\nk8s_autodeploy_reason: "ok"\n'),
+    ("bare_null", 'k8s_autodeploy: ~\nk8s_autodeploy_reason: "ok"\n'),
 ]
 
 
