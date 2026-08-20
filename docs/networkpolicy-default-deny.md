@@ -143,6 +143,16 @@ other label and so would pass that check while still breaking:
   `prowlarr/networkpolicy-prowlarr.yaml.j2:24-27` already uses, where prowlarr's own policy admits
   `flaresolverr-netpol-probe` as a caller because that probe's control leg dials `prowlarr` before
   asserting flaresolverr is unreachable.
+
+  **Superseded — this half of the bullet no longer holds.** The premise is that traefik's policy
+  admits only `app: traefik`, prometheus and the two cni0 `/32`s. Slice 4 then gave traefik an
+  open-port rule, written after this paragraph. Read live 2026-08-20, its first ingress rule is
+  `{"ports":[{"port":8000},{"port":8443}]}` with **no `from:`** — open to every source. So every
+  control leg dialing `traefik:80` survives the flip untouched: slices 1-4 and headlamp's probe on
+  the open-port rule, slice 4.5 and the sentinel legs of slices 1-2 on the sentinel policy, and
+  prowlarr's on the explicit peer this bullet describes. Slice 5 changed no probe. What remains
+  true is the mechanism: an ingress policy on a probe's **control target** can break the probe,
+  where one on the probe pod itself cannot.
 - **The `flaresolverr` exemption's rationale expires.** It is exempt from the labelling guard today
   (Ruling 4, Task 1) because its own bespoke policy is *tighter* than the baseline. Under
   `podSelector: {}` the baseline selects it anyway regardless of the exemption, producing exactly
@@ -688,11 +698,42 @@ landed BEFORE running netpol-baseline.**
 - The born-fenced widening problem: `podSelector: {}` adds the baseline's allow-list on top of
   headlamp's, n8n's and registry's own policies. Slice 5 must decide whether to exempt them.
 - Transient Job pods — buildkit image builds, the probes themselves, `pi-peer-backup` — are
-  selected by a namespace-scoped selector. The probes in particular must stay unfenced to prove
-  anything.
+  selected by a namespace-scoped selector. Being selected costs them nothing: every one of them
+  is outbound-only, and an Ingress policy governs what reaches a pod, not what it reaches (return
+  traffic rides conntrack). The buildkit Jobs are the one worth checking rather than assuming, and
+  they are fine too: `buildctl-daemonless.sh` starts a buildkitd inside the pod, so the build's
+  only client is loopback.
 - Traffic a VPN client sends onward to a cluster service is routed through the wg-easy pod and
   arrives as `app: wg-easy`. Nothing depends on it today, because VPN clients reach services by
   hostname through Traefik, but a service dialled by ClusterIP over the VPN would need that peer.
+
+## What slice 5 decided
+
+The plan and its caller analysis are in `docs/networkpolicy-slice5-plan.md`. Four decisions are
+durable enough to record here rather than only there.
+
+**The selector is an opt-out, not `podSelector: {}`.** A bare `{}` would select the four workloads
+that own a policy *tighter* than the baseline — flaresolverr, headlamp, n8n, registry — and, because
+policies are additive, add traefik, prometheus and both node CIDRs on top of each. That is the exact
+widening the flaresolverr guard exemption was written to avoid, and the spec above predicts its
+rationale expiring here. Instead the selector is `matchExpressions: [{key: netpol-baseline-exempt,
+operator: DoesNotExist}]`, and those four workloads carry the label. `DoesNotExist` rather than
+`NotIn: ["true"]`: a pod with no such key satisfies `DoesNotExist` unambiguously.
+
+**The exemption goes on n8n and not on n8n-runners.** `n8n-broker` selects `app: n8n` only, so
+`n8n-runners` is fenced by the baseline alone. The two pod templates sit side by side in one role.
+
+**The gate reads the cluster, not the templates.** The spec's gate — enumerate pods lacking the
+label, fail if non-empty — inverts under an opt-out, where unlabelled is the *fenced* case. It is
+replaced by an exact set comparison, in both directions, against live pods: a name missing is a
+workload about to be widened, and a name present but unexpected is a pod fenced by nothing.
+Template-level is not enough, and slice 4.5 is why: `n8n-runners` rendered its label while the live
+Deployment did not carry it, for ~16 hours, with `test_netpol_baseline_labels.py` green throughout.
+
+**The deploy hazard inverts too.** Slice 4.5's partial run left policies applied with labels
+missing, and every fenced UI returned 5xx — loud. Here a partial run leaves the four exempt
+workloads *widened* instead, which nothing observes. So the exempt labels deploy first and are
+verified live before the scope flips.
 
 ## Open items still outstanding
 
