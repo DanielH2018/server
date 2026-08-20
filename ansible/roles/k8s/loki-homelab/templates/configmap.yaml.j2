@@ -119,3 +119,23 @@ data:
               job: authlog
               machine: ${HOSTNAME}
               __path__: /var/log/auth.log
+{% if k3s_audit_log_enabled | default(false) %}
+      # The apiserver audit log. Only daniel-box writes one — the file lives under the k3s
+      # SERVER data directory and the agent node has no apiserver — but the job is declared
+      # on both because this is a DaemonSet with one config. On daniel-server the glob
+      # matches nothing and promtail simply reports no targets for it.
+      #
+      # Tailed off the host rather than read from the pod's own filesystem: the log is
+      # written by the apiserver, which on k3s is a process inside the k3s server, not a pod.
+      #
+      # JSON, one object per line. Left unparsed here on purpose — a `json` pipeline stage
+      # would index every audit field as a label and blow past Loki's series limits. Query it
+      # with `| json` at read time instead, which costs nothing until someone asks.
+      - job_name: k8s-audit
+        static_configs:
+          - targets: [localhost]
+            labels:
+              job: k8s-audit
+              machine: ${HOSTNAME}
+              __path__: {{ k3s_audit_log_path | default('/var/lib/rancher/k3s/server/logs/audit.log') }}
+{% endif %}

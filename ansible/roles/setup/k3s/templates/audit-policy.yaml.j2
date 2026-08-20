@@ -1,0 +1,83 @@
+---
+# kube-apiserver audit policy — managed by Ansible (k3s role); edits overwritten.
+#
+# The apiserver reads this ONCE, at startup. A change here does not take effect until k3s
+# restarts, which is why the task that writes it notifies the restart handler.
+#
+# LEVELS, and why this one. `Metadata` records who did what to which object, without request
+# or response bodies. That answers the question this log exists for — "which session deleted
+# that" — at a fraction of the volume of `Request`/`RequestResponse`, which would write every
+# manifest this cluster applies into a file on the control-plane disk.
+#
+# Secrets are the deliberate exception in the other direction: they are logged at `Metadata`
+# too, NOT at `RequestResponse`. Logging Secret bodies would write every credential in the
+# cluster to a plaintext file on disk, which is the exact exposure --secrets-encryption is
+# armed to close. An audit log that leaks what encryption protects is worse than no audit log.
+apiVersion: audit.k8s.io/v1
+kind: Policy
+
+# Requests that never reach a rule are not logged at all, so the omissions below are real
+# filtering, not cosmetic ordering.
+omitStages:
+  # RequestReceived doubles the entry count and carries nothing the later stage lacks.
+  - RequestReceived
+
+rules:
+  # ── dropped first: high-volume, low-value ─────────────────────────────────────────────
+  # Ordering matters — the FIRST matching rule wins, so every `level: None` rule has to
+  # precede the catch-all at the bottom or the catch-all logs everything anyway.
+
+  # Reads. This cluster's controllers watch continuously, and a `get`/`list`/`watch` cannot
+  # change state, so logging them buys nothing and would dominate the file.
+  - level: None
+    verbs: ["get", "list", "watch"]
+
+  # The readonly ServiceAccount Claude sessions authenticate as. It holds `get list watch`
+  # and nothing else (k3s_readonly_sa_name), so every request it makes is already covered by
+  # the read rule above; this is belt-and-braces against the SA ever being widened by
+  # accident, which would otherwise flood the log rather than surface.
+  - level: None
+    users: ["system:serviceaccount:{{ k3s_readonly_sa_namespace }}:{{ k3s_readonly_sa_name }}"]
+    verbs: ["get", "list", "watch"]
+
+  # Kubelet and node-lease heartbeats: one write per node every few seconds, forever.
+  - level: None
+    users: ["system:kube-proxy", "system:apiserver"]
+  - level: None
+    userGroups: ["system:nodes"]
+    resources:
+      - group: "coordination.k8s.io"
+        resources: ["leases"]
+
+  # Leader-election churn from Longhorn, MetalLB and the k3s controllers. Same shape as the
+  # node leases: constant writes that say nothing about operator or agent activity.
+  - level: None
+    resources:
+      - group: "coordination.k8s.io"
+        resources: ["leases"]
+
+  # Health and discovery endpoints — unauthenticated probes, no state.
+  - level: None
+    nonResourceURLs:
+      - /healthz*
+      - /livez*
+      - /readyz*
+      - /version
+      - /metrics
+      - /openapi/*
+      - /api*
+
+  # ── kept: everything that changes state, plus pod access ──────────────────────────────
+
+  # Pod subresources are the reason this log exists. `exec`, `attach` and `portforward` are
+  # auto-approved for agent sessions here and several of those pods mount Longhorn PVCs, so
+  # an entry naming the user, the pod and the time is the only record that a session reached
+  # inside a container at all.
+  - level: Metadata
+    resources:
+      - group: ""
+        resources: ["pods/exec", "pods/attach", "pods/portforward"]
+
+  # Catch-all: every remaining request, which after the drops above means the writes —
+  # create, update, patch, delete, deletecollection — plus anything a future resource adds.
+  - level: Metadata
