@@ -39,10 +39,10 @@ import re
 from pathlib import Path
 
 import yaml
+from k8s_autodeploy import k8s_autodeploy_denylist
 
 _REPO = Path(__file__).resolve().parents[2]
 _K8S_ROLES = _REPO / "ansible/roles/k8s"
-_DEPLOYER_DEFAULTS = _REPO / "ansible/roles/setup/gitops_deploy/defaults/main.yml"
 # Not a workload role — the shared include every other role calls. The invariant: no role in
 # _SHARED may pin an `_image:` var, because that's what makes a role Renovate-visible and
 # therefore auto-deployable in the first place. Both here have no defaults/main.yml at all, so
@@ -53,8 +53,13 @@ _SHARED = {"manifests", "rollout-drain"}
 
 
 def _denylist() -> set[str]:
-    data = yaml.safe_load(_DEPLOYER_DEFAULTS.read_text())
-    return set(data["gitops_deploy_k8s_autodeploy_denylist"])
+    """The denylist as the deployer will render it — derived, not parsed.
+
+    Reading `gitops_deploy_k8s_autodeploy_denylist` out of the deployer's defaults would
+    now yield the Jinja expression as a *string*, and `set()` over a string iterates its
+    characters — a denylist of single letters that silently protects nothing.
+    """
+    return set(k8s_autodeploy_denylist(str(_REPO / "ansible")))
 
 
 def _roles() -> list[Path]:
@@ -402,29 +407,14 @@ def test_every_role_declares_its_autodeploy_stance() -> None:
     )
 
 
-def test_declarations_match_the_denylist_they_will_replace() -> None:
-    """The declaration set and the CSV denylist must agree before the deployer switches.
+def test_every_role_is_either_denied_or_declares_itself_deployable() -> None:
+    """The two sets must partition the workload roles exactly.
 
-    Slice 1b re-points gitops_deploy at the declarations. If the two disagree at that moment,
-    the switch silently changes which services auto-deploy — so pin the equivalence here,
-    while the denylist is still the live input and a mismatch is harmless.
-
-    Scoped by _declares_autodeploy(), not _pins_an_image(): a role with no defaults/main.yml
-    at all (longhorn-ui, n8n-images before round 1) has no `_image:` var either, so filtering
-    on _pins_an_image() skipped the exact roles that need checking most. The completeness test
-    above already fails on a role with no declaration, so this one only needs to check the
-    declarations that exist.
+    The filter raises on an undeclared role, so this asserts the partition holds across
+    the live tree rather than trusting that it does.
     """
-    denylist = _denylist()
-    mismatched = []
-    for role in _roles():
-        if not _declares_autodeploy(role):
-            continue
-        data = yaml.safe_load((role / "defaults/main.yml").read_text()) or {}
-        declared = bool(data.get("k8s_autodeploy"))
-        if declared == (role.name in denylist):
-            mismatched.append(
-                f"{role.name}: declares k8s_autodeploy={declared} but "
-                f"{'is' if role.name in denylist else 'is not'} denylisted"
-            )
-    assert not mismatched, "\n".join(mismatched)
+    denied = _denylist()
+    all_roles = {p.name for p in _roles()}
+    deployable = {p.name for p in _roles() if _auto_deployable(p)}
+    assert denied | deployable == all_roles
+    assert denied & deployable == set()

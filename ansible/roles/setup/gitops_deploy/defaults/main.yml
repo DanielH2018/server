@@ -43,112 +43,19 @@ gitops_deploy_k8s_autodeploy_pilot: []
 # safety gain, since three services fit the timeout with room to spare.
 gitops_deploy_k8s_autodeploy_max_per_tick: 3
 
-# Services that must NEVER auto-deploy, even on a clean image-only diff. This list is the safety
-# boundary: eligibility is (image-only diff) AND (not denylisted) AND (pilot scope, if set).
-# An EMPTY list disables the feature outright rather than allowing everything — see the
-# fail-closed guard in gitops_deploy.py.
-gitops_deploy_k8s_autodeploy_denylist:
-  # platform — a failed deploy here removes the ability to observe OR fix the failure, and
-  # etp-local-vips-blackout-on-node-join shows host probes stay green straight through it
-  - traefik
-  - authelia
-  - pihole
-  - crowdsec
-  - wg-easy
-  # observability — a broken monitor cannot page about being broken
-  - monitor-bridge
-  - autofix-bridge
-  - uptime-kuma
-  - claude-otel
-  - loki-homelab
-  - healthchecks
-  # migrating state — Recreate + RWO Longhorn migrates the volume BEFORE failure is detected, so
-  # the rollback redeploy can fail too and leave the pod crashlooping on data it can no longer
-  # read. home-assistant is the sharpest: the linuxserver -lsNN regex versioning makes
-  # 2026.6.3 -> 2026.7.0 a MINOR, so HA's breaking-change channel would auto-merge.
-  - home-assistant
-  - sonarr
-  - radarr
-  - jellyfin
-  - zigbee2mqtt
-  # Same class, added 2026-08-16 when the pilot list was cleared: all three are Recreate + RWO
-  # Longhorn, identical in shape to their denylisted siblings above, and were eligible only
-  # because the slice-1 pilot happened to name neither. qbittorrent is the sharpest of the three
-  # — its WireGuard sidecar's kill-switch lives in the pod netns and outlives the container that
-  # owns it, so a failed image swap does not merely crashloop, it deadlocks the pod behind a
-  # fence nothing in the rollout gate can see (9h / 107 restarts, 2026-08-16).
-  - qbittorrent
-  - bazarr
-  - tdarr
-  # Same class, re-added 2026-08-20: both were briefly removed under an "ungated
-  # sub-deployment" reason that manifests_extra_rollouts fixed — they gate every Deployment
-  # they render correctly, and always have. But gatedness was never the binding reason either
-  # belongs here. Both seed their config PVC through k8s/seed-volume, which hardcodes
-  # ReadWriteOnce, and both declare `strategy: type: Recreate`, so a bad image swap can still
-  # migrate the on-disk format before the gate observes a fault, then fail the rollback
-  # redeploy against data it can no longer read — the same failure mode as sonarr/radarr
-  # above. prowlarr is a Servarr app on the same linuxserver -lsNN scheme that hides a
-  # breaking bump as a minor (currently 2.4.0.5397-ls150); freshrss instead tracks `:latest`
-  # by digest, so it rides whatever image lands after Renovate's digest soak.
-  - prowlarr
-  - freshrss
-  # Recreate + RWO PVC: the replacement pod migrates the volume before the gate sees a fault,
-  # so the rollback feeds the prior image data it can no longer read. Both were eligible only
-  # because nothing had checked them; their own reasons said "NOT independently safe".
-  - code-server
-  - speedtest
-  # dependency edges — this deployer models no intra-tick ordering. registry is the image-supply
-  # path for n8n, n8n-runners, homelab-mcp, ical-proxy, nut, pi-peer-backup and code-server
-  # (homelab-mcp pulls with imagePullPolicy: Always); mosquitto is the broker for zigbee2mqtt
-  # and home-assistant.
-  - registry
-  - mosquitto
-  # stateful / manual-upgrade — pinned influxdb; meilisearch DB-format migration; probe-less
-  # sub-deployments (karakeep time-tagger, n8n runners)
-  - scrutiny
-  - karakeep
-  - n8n
-  # livesync is a CouchDB instance (Recreate + RWO) — a database, in the same class as the
-  # pinned influxdb above. Added 2026-08-16 with the pilot clearing.
-  - livesync
-  # nothing for `rollout status` to gate — CronJob / Job / volume / DaemonSet
-  - configarr
-  - pi-peer-backup
-  - media-volume
-  - n8n-images
-  # neither is a containers_list entry, so unlike the block above these pin an image and render
-  # NO Deployment AND match no play at all: a promoted bump runs `ansible-playbook deploy.yml
-  # --tags <role>`, which matches nothing, exits 0, clears the hold, and alerts nobody — a
-  # silent success where nothing deployed. seed-volume is the sharper of the two: it is the
-  # shared PVC-seeding path every migrating-state role above depends on, so the bumped image
-  # lands later under whichever role next includes it. image-builder renders a Job that builds
-  # the images other roles consume — same "nothing to gate" shape as configarr's class, but
-  # with no containers_list entry to at least apply the bump.
-  - seed-volume
-  - image-builder
-  # route-only role: renders an IngressRoute + Middlewares into longhorn-system and owns no
-  # Deployment at all (Longhorn itself comes from roles/setup/k3s), so there is nothing for
-  # `rollout status` to gate. It also pins no image, so it can never qualify anyway.
-  - longhorn-ui
-  - node-exporter
-  - dri-device-plugin
-  # NetworkPolicy-only role: renders no Deployment, so there is nothing for `rollout status` to
-  # gate. NOT redundant — it DOES pin an image (netpol_baseline_probe_image: alpine:3.24, the
-  # probe Job), and renovate.json's k8s-images manager matches `_image:` across
-  # roles/k8s/*/defaults/main.yml, so Renovate tracks it and will open a bump PR that this entry
-  # is the only thing holding back from auto-deploying ungated.
-  - netpol-baseline
-  # probe-less Deployments — `rollout status` returns on Running and proves nothing
-  - cloudflare-ddns
-  - janitorr
-  - nut
-  - terraria
-  # valheim renders no readinessProbe at all — the same shape as terraria directly above, and
-  # missed for the same reason the two below were (added 2026-08-16 with the pilot clearing).
-  - valheim
-  # games
-  - terraria-stats
-  - valheim-stats
+# Roles that must never be auto-deployed, derived from each role's own declaration:
+# roles/k8s/<name>/defaults/main.yml sets `k8s_autodeploy` plus a `k8s_autodeploy_reason`
+# giving the mechanism. The reasons that used to be comments here now live beside the role
+# they describe, where every property that justifies them is visible at once.
+#
+# The filter fails closed: a role that declares nothing, declares a non-boolean, or cannot
+# be parsed raises rather than dropping out of this list. Absence from the denylist means
+# auto-deployable, which is how seed-volume and image-builder went months as eligible.
+#
+# An empty denylist still disarms the feature in gitops_deploy.py rather than allowing
+# everything — but the filter refuses to render an empty one, so that guard is now a
+# backstop rather than a live path.
+gitops_deploy_k8s_autodeploy_denylist: "{{ playbook_dir | k8s_autodeploy_denylist }}"
 
 # Wall-clock cap for one `ansible-playbook` invocation on the k8s path, in seconds. Sized as
 # (max rollout wait + stabilise soak) x 2 so a forward rollout AND its rollback redeploy both fit
