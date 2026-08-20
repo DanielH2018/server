@@ -417,3 +417,31 @@ def test_every_role_is_either_denied_or_declares_itself_deployable() -> None:
     deployable = {p.name for p in _roles() if _auto_deployable(p)}
     assert denied | deployable == all_roles
     assert denied & deployable == set()
+
+
+def test_manifests_rollout_kind_defaults_to_deploy() -> None:
+    """Every existing caller omits manifests_rollout_kind, so the shared role's default is
+    what keeps ~50 roles behaving exactly as before."""
+    text = (_K8S_ROLES / "manifests/tasks/main.yml").read_text()
+    assert re.search(
+        r"manifests_rollout_kind\s*\|\s*default\(\s*['\"]deploy['\"]\s*\)", text
+    ), "roles/k8s/manifests must default manifests_rollout_kind to 'deploy'"
+
+
+def test_manifests_rollout_no_longer_hardcodes_the_deploy_kind() -> None:
+    """The three hardcoded `deploy`/`deployment.apps` sites must all read the variable.
+
+    The apply-output check is the one that matters most: it needs `daemonset.apps/` for a
+    DaemonSet, a different string from the `daemonset` kubectl kind, and getting it wrong
+    restarts a freshly created workload mid-creation.
+    """
+    text = (_K8S_ROLES / "manifests/tasks/main.yml").read_text()
+    assert "rollout restart\n      deploy/" not in text, (
+        "rollout restart still hardcodes deploy/"
+    )
+    assert "'kind': 'deploy'," not in text, (
+        "the batch-drain set_fact still hardcodes 'kind': 'deploy'"
+    )
+    assert "search('deployment.apps/'" not in text, (
+        "the apply-output check still hardcodes deployment.apps/"
+    )

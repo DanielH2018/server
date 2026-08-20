@@ -5,7 +5,9 @@
 #   manifests_service       service name (also the manifest subdirectory)
 #   manifests_files         list of template basenames rendered world-readable
 #   manifests_secret_files  list rendered 0600 with no_log (anything carrying a secret)
-#   manifests_rollout       Deployment to wait on; set '' to skip the wait entirely
+#   manifests_rollout       workload to wait on; set '' to skip the wait entirely
+#   manifests_rollout_kind  kubectl kind of that workload (and of every entry in
+#                           manifests_extra_rollouts): 'deploy' (default) or 'daemonset'
 #
 # Derived here, not passed in:
 #   manifests_image_changed  true when k8s/image-builder rebuilt this service's image to a new
@@ -205,14 +207,20 @@
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} rollout restart
-      deploy/{{ manifests_rollout | default(manifests_service) }}
+      {{ manifests_rollout_kind | default('deploy') }}/{{ manifests_rollout | default(manifests_service) }}
   become: true
   changed_when: true
   when:
     - not k8s_dry_run | bool
     - manifests_rollout | default(manifests_service) | length > 0
     - manifests_render is changed or manifests_secret_render is changed or manifests_image_changed
-    - not manifests_apply.stdout is search('deployment.apps/' ~ (manifests_rollout | default(manifests_service)) ~ ' created')
+    # The apply-output prefix is NOT the kubectl kind: `kubectl apply` prints
+    # `deployment.apps/x created` and `daemonset.apps/x created`. Deriving it from the kind
+    # keeps the two in step — a mismatch here never matches, so a freshly created workload
+    # would be restarted mid-creation, which is the race this condition exists to prevent.
+    - not manifests_apply.stdout is search(
+        (manifests_rollout_kind | default('deploy') == 'daemonset') | ternary('daemonset.apps/', 'deployment.apps/')
+        ~ (manifests_rollout | default(manifests_service)) ~ ' created')
 
 - name: Queue the batch drain for the rollout of {{ manifests_service }}
   tags: [deploy]
@@ -232,7 +240,7 @@
       {{ (k8s_pending_rollouts | default([])) + [{
            'name': manifests_rollout | default(manifests_service),
            'namespace': k8s_namespace,
-           'kind': 'deploy',
+           'kind': manifests_rollout_kind | default('deploy'),
            'timeout': manifests_rollout_timeout | default('300s'),
            'changed': (manifests_render is changed) or (manifests_secret_render is changed)
                       or manifests_image_changed,
@@ -251,7 +259,8 @@
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} rollout restart deploy/{{ item.name }}
+      k3s kubectl -n {{ k8s_namespace }} rollout restart
+      {{ manifests_rollout_kind | default('deploy') }}/{{ item.name }}
   become: true
   changed_when: true
   loop: "{{ manifests_extra_rollouts | default([]) }}"
@@ -261,7 +270,10 @@
     - not k8s_dry_run | bool
     - manifests_render is changed or manifests_secret_render is changed
       or (item.image | default(item.name)) in (k8s_rebuilt_images | default([]))
-    - not manifests_apply.stdout is search('deployment.apps/' ~ item.name ~ ' created')
+    # Same apply-output-prefix derivation as the primary rollout above — see that comment.
+    - not manifests_apply.stdout is search(
+        (manifests_rollout_kind | default('deploy') == 'daemonset') | ternary('daemonset.apps/', 'deployment.apps/')
+        ~ item.name ~ ' created')
 
 - name: Queue the batch drain for the extra rollouts of {{ manifests_service }}
   tags: [deploy]
@@ -275,7 +287,7 @@
       {{ (k8s_pending_rollouts | default([])) + [{
            'name': item.name,
            'namespace': k8s_namespace,
-           'kind': 'deploy',
+           'kind': manifests_rollout_kind | default('deploy'),
            'timeout': manifests_rollout_timeout | default('300s'),
            'changed': (manifests_render is changed) or (manifests_secret_render is changed)
                       or ((item.image | default(item.name)) in (k8s_rebuilt_images | default([]))),
