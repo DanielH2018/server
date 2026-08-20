@@ -14,7 +14,7 @@ netpol_baseline_enforced: true
 #
 # This is also the rollback lever for slice 5 — set back to `label` and redeploy. Every workload
 # still carries its opt-in label, so nothing else has to move.
-netpol_baseline_scope: label
+netpol_baseline_scope: namespace
 
 # The workloads that opt OUT under namespace scope, by `app` label. Each owns a NetworkPolicy
 # TIGHTER than this baseline, and policies are additive: selecting one here would ADD traefik,
@@ -50,7 +50,7 @@ netpol_baseline_obs_enforced: true
 # Observability's own scope lever, separate from netpol_baseline_scope for the same reason its
 # enforcement flag and node-CIDR list are separate: the two namespaces are rolled out and rolled
 # back independently. Same two values, same meaning.
-netpol_baseline_obs_scope: label
+netpol_baseline_obs_scope: namespace
 
 # All four node addresses, where the homelab list carries only the two cni0 /32s.
 #
