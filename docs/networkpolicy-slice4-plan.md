@@ -819,6 +819,19 @@ uv run python scripts/probe.py metric 'count(up == 1)'
 - uptime-kuma's monitors still green — the ~20 `*.local.` checks are the broadest live evidence
   that Traefik's front door stayed open.
 
+> **The undo lever is wider than this slice.** `netpol_baseline_enforced` gates
+> `networkpolicy.yaml.j2:32` as well, so `-e netpol_baseline_enforced=false` does not just disarm
+> slice 4 — it renders `baseline-ingress` allow-all too, unfencing the **16 slice-1 and slice-2
+> workloads** that rely on it. Slice 3 is unaffected; it has its own flag. If you need to unstick
+> one slice-4 workload mid-deploy, prefer reverting that workload's label to disarming the whole
+> baseline.
+>
+> **`--tags pihole` rolls both DNS pods.** The role deploys pihole and pihole-2, each
+> `strategy: Recreate` with one replica, so each rollout empties that pod's slot in the
+> `pihole-dns` VIP backend. Cluster pods have the Cloudflare fallback on CoreDNS's forward line;
+> **LAN clients pointed at 10.0.0.243 do not.** Expect a possible DNS gap for the LAN at that step
+> and verify resolution after it.
+
 - [ ] **Step 5: Record what the deploy settled, and define slice 4.5**
 
 Add an *Answers from slice 4* section to the spec covering: whether mosquitto's source was the pod
