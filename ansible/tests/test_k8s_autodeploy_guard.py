@@ -51,6 +51,12 @@ _K8S_ROLES = _REPO / "ansible/roles/k8s"
 # guard below like any other role.
 _SHARED = {"manifests", "rollout-drain"}
 
+# Shared roles that carry their own Job-completion gate. A role delegating to one of these
+# is gated by it; `test_gating_shared_roles_actually_wait` proves each really does wait.
+# Task 2 adds "cronjob-gate" here, in the same commit that creates that role — naming it
+# before the role exists would commit a red test.
+_GATING_SHARED_ROLES = {"image-builder"}
+
 
 def _denylist() -> set[str]:
     """The denylist as the deployer will render it — derived, not parsed.
@@ -135,6 +141,92 @@ def _deployment_templates(role: Path) -> list[str]:
         ):
             out.append(t.name)
     return out
+
+
+def _batch_templates(role: Path) -> list[tuple[str, str]]:
+    """Templates rendering a `kind: Job` or `kind: CronJob`, as (filename, metadata.name).
+
+    Batch workloads are gated role-locally (`wait --for=condition=complete`), not through
+    `manifests_rollout`, so they need their own offender set. Matching only
+    Deployment/DaemonSet made a Job-only role render zero workloads and pass every shape
+    guard ungated — the same defect slice 2 found for DaemonSets.
+    """
+    out: list[tuple[str, str]] = []
+    tdir = role / "templates"
+    for t in sorted(tdir.glob("*.j2")) if tdir.is_dir() else []:
+        text = t.read_text()
+        if not re.search(r"^kind:\s*(?:Job|CronJob)\s*$", text, re.MULTILINE):
+            continue
+        name = re.search(r"^\s{2}name:\s*(\S+)\s*$", text, re.MULTILINE)
+        out.append((t.name, name.group(1) if name else ""))
+    return out
+
+
+def _batch_gated_names(role: Path) -> set[str]:
+    """Batch workload names this role waits on to completion, by any accepted mechanism.
+
+    Two forms count. A role-local `wait --for=condition=complete job/<name>` is the repo's
+    established pattern (headlamp, media-volume, netpol-baseline, n8n, prowlarr, registry).
+    Delegating to a shared role that carries its own completion gate also counts; those
+    shared roles are asserted to hold a real wait by
+    `test_gating_shared_roles_actually_wait`, so this is a delegation, not an exemption.
+    """
+    tasks = role / "tasks/main.yml"
+    if not tasks.is_file():
+        return set()
+    text = tasks.read_text()
+    names = set(
+        re.findall(
+            r"wait\s+--for=condition=complete\s+(?:job|job\.batch)/(\S+)",
+            text,
+        )
+    )
+    for shared in sorted(_GATING_SHARED_ROLES):
+        if re.search(rf"name:\s*k8s/{re.escape(shared)}\s*$", text, re.MULTILINE):
+            names.add(f"<delegated:{shared}>")
+    return names
+
+
+def test_auto_deployable_roles_gate_every_batch_workload_they_render() -> None:
+    """An auto-deployable role must wait on every Job/CronJob it renders.
+
+    Without this, a batch-only role auto-deploys with no gate at all: `rollout status` has
+    no Deployment to watch, `manifests_rollout: ''` skips the stability soak too, and a bad
+    image is reported as a successful deploy.
+    """
+    offenders = []
+    for role in _roles():
+        if not _auto_deployable(role):
+            continue
+        gated = _batch_gated_names(role)
+        if any(n.startswith("<delegated:") for n in gated):
+            continue
+        for template, name in _batch_templates(role):
+            if not name or name not in gated:
+                offenders.append(
+                    f"{role.name}: {template} renders {name or '<unnamed>'}"
+                )
+    assert not offenders, (
+        "Auto-deployable role(s) rendering an ungated batch workload — add a "
+        "`wait --for=condition=complete job/<name>` after the apply, or set "
+        "k8s_autodeploy: false with a k8s_autodeploy_reason:\n  "
+        + "\n  ".join(offenders)
+    )
+
+
+def test_gating_shared_roles_actually_wait() -> None:
+    """Every shared role `_batch_gated_names` trusts must hold a real completion wait.
+
+    This is what makes the delegation branch above a delegation rather than a hole.
+    """
+    for shared in sorted(_GATING_SHARED_ROLES):
+        tasks = _REPO / "ansible/roles/k8s" / shared / "tasks/main.yml"
+        assert tasks.is_file(), (
+            f"{shared}: trusted as a gating shared role but has no tasks"
+        )
+        assert "wait --for=condition=complete" in tasks.read_text(), (
+            f"{shared}: trusted as a gating shared role but never waits for completion"
+        )
 
 
 def _sets_empty_rollout(role: Path) -> bool:
