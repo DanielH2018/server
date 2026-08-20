@@ -41,6 +41,10 @@ spec:
     metadata:
       labels:
         app: flaresolverr
+        # Opted OUT of the namespace baseline (slice 5). `networkpolicy.yaml.j2` admits only
+        # prowlarr on :8191; the baseline is additive, so selecting this pod would ADD traefik,
+        # prometheus and both node CIDRs on top — the widening the guard exemption avoids today.
+        netpol-baseline-exempt: "true"
     spec:
       enableServiceLinks: false
       automountServiceAccountToken: false

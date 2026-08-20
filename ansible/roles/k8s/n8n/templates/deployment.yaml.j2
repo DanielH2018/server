@@ -20,6 +20,13 @@ spec:
     metadata:
       labels:
         app: n8n
+        # Opted OUT of the namespace baseline (slice 5). `networkpolicy.yaml.j2` (live name
+        # `n8n-broker`) is tighter than the baseline, and the baseline is additive.
+        #
+        # This label belongs HERE and not in `deployment-runners.yaml.j2`: n8n-broker selects
+        # `app: n8n` only, so n8n-runners has no bespoke policy and the baseline is the only
+        # thing fencing it. Exempting the runners would unfence them with nothing to notice.
+        netpol-baseline-exempt: "true"
     spec:
       enableServiceLinks: false
       automountServiceAccountToken: false

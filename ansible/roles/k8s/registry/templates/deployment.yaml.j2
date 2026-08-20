@@ -18,6 +18,9 @@ spec:
     metadata:
       labels:
         app: registry
+        # Opted OUT of the namespace baseline (slice 5). `networkpolicy.yaml.j2` is tighter than
+        # the baseline, and the baseline is additive — selecting this pod would widen it.
+        netpol-baseline-exempt: "true"
     spec:
       # Pinned to the registry node by design (2026-08-14 re-plumb): its loopback
       # hostPort and its RWO PVC both live here, and every node's registries.yaml mirror
