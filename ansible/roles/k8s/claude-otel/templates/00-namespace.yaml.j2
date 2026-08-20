@@ -15,3 +15,27 @@ metadata:
     {{ key }}: {{ value }}
 {% endfor %}
 {% endif %}
+{% if k8s_default_limitrange %}
+---
+# Default requests and limits for any container in this namespace that omits them. It lives in
+# the namespace file, not one of its own, because it is a property OF the namespace and must be
+# applied after it — and this file is the one guaranteed to sort first. Every container this
+# role renders already sets both, so nothing here changes; see k8s_default_limitrange in
+# group_vars/all.yml for what it is actually for, and why it sets no min/max.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: default-container-limits
+  namespace: {{ k8s_observability_namespace }}
+spec:
+  limits:
+    - type: Container
+      defaultRequest:
+{% for key, value in k8s_default_limitrange.defaultRequest.items() %}
+        {{ key }}: {{ value }}
+{% endfor %}
+      default:
+{% for key, value in k8s_default_limitrange.default.items() %}
+        {{ key }}: {{ value }}
+{% endfor %}
+{% endif %}

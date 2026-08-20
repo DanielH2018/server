@@ -146,6 +146,53 @@ k8s_psa_labels:
   pod-security.kubernetes.io/warn: baseline
   pod-security.kubernetes.io/audit: baseline
 
+# ── Default container resources, applied to homelab and observability ───────────────────
+# A LimitRange, and deliberately NOT a ResourceQuota. Every one of the 105 containers this
+# repo renders already carries requests and limits, so this changes nothing on the Ansible
+# path. It exists for the objects that never took that path: the `ctx-probe` pod in homelab
+# is the standing example, hand-created on 2026-08-14 with no resources at all. A Helm chart,
+# a `kubectl run`, or a future operator lands the same way.
+#
+# DEFAULTS ONLY — no `min`, no `max`. The difference is what happens to a container that
+# breaks the rule: a `min`/`max` REJECTS every pod outside the band, including ones this repo
+# already renders at 2Gi and 4Gi, while a default only fills in what was left out. Same
+# reason there is no ResourceQuota: a namespace CPU/memory quota makes requests and limits
+# MANDATORY on every pod in it, turning a missing value from "gets a default" into "the
+# deploy fails admission".
+#
+# DEFAULTS STILL HAVE ONE REJECTION PATH, and it is why the ceiling below is not tighter. A
+# container that sets a REQUEST and no limit is given `default` as its limit — and if that
+# limit lands below the request it stated, the API server refuses the pod, because requests
+# must be ≤ limits. Requests-only is exactly how a lot of Helm charts ship, so the ceiling
+# has to sit above anything one plausibly asks for.
+#
+# Hence 2Gi rather than the 512Mi midpoint of the estate: 2Gi is already the joint-most-common
+# memory limit here (16 of 105 containers) and it is 1/14th of a node, so it still bounds a
+# runaway while leaving the rejection path essentially unreachable. A pod that requests more
+# than 2Gi and declares no limit gets refused, and that pod is worth looking at. The requests
+# are the estate's own floor — 50m is the modal CPU request across homelab, at 34 of 105.
+#
+# LimitRange evaluates at pod CREATE only, so adding this evicts nothing and restarts
+# nothing. Existing pods keep the resources they were admitted with.
+#
+# NOT WATCHED BY manifest-prune-check. `limitrange` is absent from its kind list, and adding
+# it would make the check red on day one: homelab's copy is applied inline from deploy.yml
+# beside the namespace, so it appears in no staged manifest dir and reads as an orphan.
+# Observability's copy IS staged (claude-otel), so the two would not behave alike.
+#
+# ROLLBACK: set to {} and redeploy. That stops it being APPLIED; it does not remove the live
+# object, because ceasing to render a whole object never prunes it (the same trap as
+# kubectl-apply-leaves-orphaned-objects). To remove it live:
+#   kubectl delete limitrange default-container-limits -n homelab
+#   kubectl delete limitrange default-container-limits -n observability
+k8s_default_limitrange:
+  defaultRequest:
+    cpu: 50m
+    memory: 64Mi
+  default:
+    cpu: "2"
+    memory: 2Gi
+
 # ── apiserver audit log ─────────────────────────────────────────────────────────────────
 # Here rather than in roles/setup/k3s/defaults because TWO roles read them: setup/k3s arms
 # the flags and writes the policy, and loki-homelab's promtail tails the file so the log is
