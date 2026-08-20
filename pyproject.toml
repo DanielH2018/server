@@ -55,10 +55,12 @@ addopts = "-q -n auto"
 # shared module (deployed INTO each setup script's /opt dir as a sibling) — on pythonpath so the
 # import-tested renovate_notify.py + test_host_lib.py resolve it in CI. scripts: the k8s manifest
 # tests import the render guards from there — _k8s_render.py did it with a sys.path insert, which
-# only worked for modules importing _k8s_render first.
+# only worked for modules importing _k8s_render first. gitops_deploy/files: lets
+# ansible/tests/test_denylist_parsers_agree.py import deploy_logic alongside the filter plugin.
 pythonpath = [
   "ansible/filter_plugins",
   "ansible/roles/setup/common/files",
+  "ansible/roles/setup/gitops_deploy/files",
   "scripts",
 ]
 
