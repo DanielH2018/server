@@ -33,6 +33,7 @@ from deploy_logic import (  # noqa: E402
     broad_remediation,
     ci_verdict,
     containers_to_gate,
+    declared_denylist,
     declared_k8s_services,
     declared_services,
     deferred_service_alerts,
@@ -101,6 +102,10 @@ META_ALERT_FILE = "/var/lib/gitops-deploy/meta_alerted_sha"
 # operator redeploys it by hand. Unlike tasks/meta this deployer has no mechanism that ever
 # applies a k8s role change, so there's no "rode a redeploy" case to dedupe against `deployed`.
 K8S_ALERT_FILE = "/var/lib/gitops-deploy/k8s_alerted_sha"
+# Per-SHA throttle for the stale-denylist alert. The DISARM itself is stateless — recomputed
+# every tick, so it clears the moment an operator re-renders the config. Only the page is
+# throttled.
+STALE_DENYLIST_FILE = "/var/lib/gitops-deploy/stale_denylist_alerted_sha"
 # Same throttle for a master tip that FAILED CI: alert once per SHA so the operator fixes or
 # reverts, instead of re-paging every 30-min tick for as long as master stays red. There is no
 # marker for the `ci_pending` path — an unfinished run is the normal state for the first tick or
@@ -529,6 +534,34 @@ def service_healthy(service: str, deadline: float | None = None) -> bool:
     return all(health_ok(c, deadline=deadline) for c in containers_for(service))
 
 
+def k8s_declarations_at(ref: str) -> dict[str, str | None]:
+    """Every k8s role's defaults/main.yml as it exists at `ref`.
+
+    Reads the ref directly rather than the working tree: the promotion decision runs BEFORE the
+    ff-merge, so the working tree still holds the pre-merge declarations — exactly as stale as
+    the config we are checking it against.
+
+    A role directory present at the ref with no defaults/main.yml maps to None, which
+    declared_denylist() reads as denied.
+    """
+    listing = run(["git", "ls-tree", "-r", "--name-only", ref, "ansible/roles/k8s/"])
+    roles: dict[str, str | None] = {}
+    for path in listing.splitlines():
+        # "ansible/roles/k8s/<role>/<rest...>" — a real role always has a file at least one
+        # directory deep, so anything shallower (a stray file directly under roles/k8s/) is
+        # not a role and must not be recorded as one.
+        parts = path.split("/")
+        if len(parts) < 5:
+            continue
+        role = parts[3]
+        if parts[4] == "defaults" and path.endswith("defaults/main.yml"):
+            roles[role] = run(["git", "show", f"{ref}:{path}"])
+        else:
+            # Still record the role so one with no defaults/ at all is visible as None.
+            roles.setdefault(role, None)
+    return roles
+
+
 def k8s_image_diff(local: str, origin: str, svc: str) -> str:
     """Unified diff of one k8s role's defaults/main.yml across the incoming range.
 
@@ -711,6 +744,39 @@ def main() -> int:
     except OSError:
         k8s_services = set()
     cs = reroute_k8s_services(cs, k8s_services)
+    # The denylist in config.env is baked at Ansible template time. A later declaration flip
+    # lands under roles/k8s/, which routes to ChangeSet.k8s and alerts naming deploy.yml — a
+    # playbook that runs no setup role and never re-renders this config. Without this check the
+    # host would keep acting on the old list, leaving a role that was just denied still
+    # auto-deployable. Disarm loudly rather than acting on a stale boundary.
+    autodeploy_enabled = K8S_AUTODEPLOY_ENABLED
+    if autodeploy_enabled:
+        try:
+            declared = declared_denylist(k8s_declarations_at(f"origin/{BRANCH}"))
+        except Exception as exc:  # noqa: BLE001 - any failure here must disarm, not crash
+            declared = None
+            log(f"could not read k8s declarations at origin: {exc}")
+        if declared is None or declared != K8S_AUTODEPLOY_DENYLIST:
+            autodeploy_enabled = False
+            if declared is not None:
+                added = sorted(declared - K8S_AUTODEPLOY_DENYLIST)
+                removed = sorted(K8S_AUTODEPLOY_DENYLIST - declared)
+                detail = (
+                    f"denied at origin but not in config: {added or 'none'}; "
+                    f"in config but not at origin: {removed or 'none'}"
+                )
+            else:
+                detail = "the declarations at origin could not be read"
+            log(f"k8s auto-deploy disarmed — stale denylist ({detail})")
+            alert_once(
+                STALE_DENYLIST_FILE,
+                "stale_denylist",
+                origin,
+                f"⚠️ gitops-deploy: `/etc/gitops-deploy/config.env` denylist is stale against "
+                f"`{origin[:8]}` — {detail}. k8s auto-deploy is DISARMED until it is re-rendered. "
+                f"Run `uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy` "
+                f"on the host. (`deploy.yml` does not re-render it.)",
+            )
     # Promote image-bump-only k8s changes to the auto-deploy channel. Everything not promoted
     # stays in cs.k8s and defer-and-alerts exactly as before, so this is inert until a service
     # passes BOTH the diff-shape test and the denylist.
@@ -719,7 +785,7 @@ def main() -> int:
         paths,
         denylist=K8S_AUTODEPLOY_DENYLIST,
         pilot=K8S_AUTODEPLOY_PILOT,
-        enabled=K8S_AUTODEPLOY_ENABLED,
+        enabled=autodeploy_enabled,
         image_only=lambda svc: is_image_only_diff(k8s_image_diff(local, origin, svc)),
         max_per_tick=K8S_AUTODEPLOY_MAX_PER_TICK,
     )
