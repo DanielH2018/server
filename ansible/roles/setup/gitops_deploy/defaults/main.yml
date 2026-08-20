@@ -80,6 +80,18 @@ gitops_deploy_k8s_autodeploy_denylist:
   - qbittorrent
   - bazarr
   - tdarr
+  # Same class, re-added 2026-08-20: both were briefly removed under an "ungated
+  # sub-deployment" reason that manifests_extra_rollouts fixed — they gate every Deployment
+  # they render correctly, and always have. But gatedness was never the binding reason either
+  # belongs here. Both seed their config PVC through k8s/seed-volume, which hardcodes
+  # ReadWriteOnce, and both declare `strategy: type: Recreate`, so a bad image swap can still
+  # migrate the on-disk format before the gate observes a fault, then fail the rollback
+  # redeploy against data it can no longer read — the same failure mode as sonarr/radarr
+  # above. prowlarr is a Servarr app on the same linuxserver -lsNN scheme that hides a
+  # breaking bump as a minor (currently 2.4.0.5397-ls150); freshrss instead tracks `:latest`
+  # by digest, so it rides whatever image lands after Renovate's digest soak.
+  - prowlarr
+  - freshrss
   # dependency edges — this deployer models no intra-tick ordering. registry is the image-supply
   # path for n8n, n8n-runners, homelab-mcp, ical-proxy, nut, pi-peer-backup and code-server
   # (homelab-mcp pulls with imagePullPolicy: Always); mosquitto is the broker for zigbee2mqtt
