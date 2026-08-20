@@ -86,11 +86,6 @@ gitops_deploy_k8s_autodeploy_denylist:
   # and home-assistant.
   - registry
   - mosquitto
-  # ungated sub-deployments — these roles render a SECOND Deployment that k8s/manifests never
-  # waits on (it gates deploy/{{ manifests_rollout | default(service) }}, exactly one). Remove
-  # once a role stops rendering two; the guard test in scripts/ enforces the invariant.
-  - prowlarr
-  - freshrss
   # stateful / manual-upgrade — pinned influxdb; meilisearch DB-format migration; probe-less
   # sub-deployments (karakeep time-tagger, n8n runners)
   - scrutiny
