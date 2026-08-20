@@ -124,10 +124,12 @@ stay).
     would open a TOCTOU against a concurrent fetch — and `declared_denylist()` parses it with a
     stdlib regex, since the unit runs under `uv run --no-project` and cannot import `yaml` or the
     filter plugin. If that result disagrees with `K8S_AUTODEPLOY_DENYLIST`, or can't be read at
-    all, k8s auto-deploy is disarmed for that tick. The page names the fix for whichever
-    direction the mismatch is in — re-render via `ansible/initial_setup.yml --tags gitops_deploy`
-    when the config is behind origin, `git push` when it's ahead — and includes the read
-    exception's type and message when the declarations couldn't be read at all. The disarm
+    all, k8s auto-deploy is disarmed for that tick. Both mismatch directions usually mean the
+    same thing — config is behind origin — since a role can be denied there OR promoted there;
+    either way the page leads with the re-render (`ansible/initial_setup.yml --tags
+    gitops_deploy`), and only when a role was removed from the denylist does it also name the
+    secondary cause, an operator who rendered locally before pushing (`git push` it). It includes
+    the read exception's type and message when the declarations couldn't be read at all. The disarm
     itself is stateless: it is recomputed every tick, so it self-clears the moment the config is
     re-rendered. Only the page is throttled, on `STALE_DENYLIST_FILE`. The regex is deliberately
     biased toward denied — unanimity is required across every match, an absent or unparseable

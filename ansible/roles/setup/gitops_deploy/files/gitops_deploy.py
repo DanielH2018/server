@@ -762,23 +762,22 @@ def main() -> int:
                     f"denied at origin but not in config: {added or 'none'}; "
                     f"in config but not at origin: {removed or 'none'}"
                 )
-                # The two directions need different fixes. `added`: config is BEHIND origin — a
-                # declaration flip landed and this host never re-rendered. `removed`: config is
-                # AHEAD of origin — an operator rendered locally before pushing, so re-rendering
-                # again changes nothing; the fix is `git push`.
-                fixes = []
-                if added:
-                    fixes.append(
-                        "config is behind origin: run `uv run ansible-playbook "
-                        "ansible/initial_setup.yml --tags gitops_deploy` on the host "
-                        "(`deploy.yml` does not re-render it)"
+                # Both directions are usually "config is behind origin" and want the same fix:
+                # a re-render. `added` means a role was newly denied at origin; `removed` means a
+                # role was PROMOTED there — the denylist shrank — which this host has not picked
+                # up yet. `removed` has one other cause, an operator who rendered locally before
+                # pushing, so it names that as a secondary check. Naming `git push` FIRST on
+                # `removed` was wrong: it is the less common cause and the fix does nothing for
+                # the other one, which is what a promotion looks like.
+                fix = (
+                    "run `uv run ansible-playbook ansible/initial_setup.yml --tags "
+                    "gitops_deploy` on the host (`deploy.yml` does not re-render config.env)"
+                )
+                if removed and not added:
+                    fix += (
+                        ". If that changes nothing, the config was rendered from an unpushed "
+                        "tree instead — `git push` it and re-render"
                     )
-                if removed:
-                    fixes.append(
-                        "config is ahead of origin: the rendered change was never pushed — "
-                        "`git push` it"
-                    )
-                fix = "; ".join(fixes)
             else:
                 detail = f"the declarations at origin could not be read ({read_error})"
                 fix = "check the ref/path on the host — this clears on its own once it reads again"
