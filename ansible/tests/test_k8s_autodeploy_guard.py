@@ -68,6 +68,55 @@ def _roles() -> list[Path]:
     )
 
 
+# The DaemonSet-alias sweep below deliberately does NOT reuse _roles() or _SHARED: those exist
+# to enumerate *deployable* roles for the auto-deploy guards above, and excluding manifests +
+# rollout-drain is correct for that job. The sweep's job is different — it must see the shared
+# roles too, since manifests/tasks/main.yml and rollout-drain/tasks/main.yml are two of the
+# three consumers that key on the literal 'daemonset'. Kept as an independent file list so the
+# two concerns can't drift into each other.
+_KUBECTL_CONSUMER_ROOTS = (
+    _K8S_ROLES,  # includes manifests/ and rollout-drain/, unlike _roles()
+    _REPO / "ansible/post_tasks",
+    _REPO / "ansible/tasks",
+)
+
+# kubectl accepts 'ds', 'daemonsets' and any casing of 'DaemonSet' as the same resource; this
+# repo's convention is the exact lowercase singular 'daemonset'. Anchored on the kubectl verbs
+# that take a resource-type argument, plus the `<kind>/<name>` shorthand `rollout status` and
+# `rollout restart` use — neither of which ever appears in a manifest's `kind:` field, so
+# `kind: DaemonSet` in a rendered manifest template is correctly never matched.
+_KUBECTL_RESOURCE_ARG_RE = re.compile(
+    r"\b(?:get|describe|delete|rollout\s+status|rollout\s+restart)\s+([A-Za-z]+)(?=/|\s|$)"
+)
+_DAEMONSET_ALIASES = {"ds", "daemonset", "daemonsets"}
+
+
+def _daemonset_alias_matches(text: str) -> list[str]:
+    """kubectl resource-type arguments naming DaemonSet by any spelling but exact 'daemonset'."""
+    return [
+        m.group(1)
+        for m in _KUBECTL_RESOURCE_ARG_RE.finditer(text)
+        if m.group(1).lower() in _DAEMONSET_ALIASES and m.group(1) != "daemonset"
+    ]
+
+
+def _kubectl_consumer_paths() -> list[Path]:
+    """Every file under the roots that actually issue kubectl commands against a kind.
+
+    Not repo-wide in the literal sense (READMEs, CI workflows, etc. are out of scope — they
+    don't run kubectl), but wide enough to cover manifests/, rollout-drain/, and the post_tasks/
+    and tasks/ playbooks that read a queued `kind` — the three consumers the F1 assert names.
+    """
+    paths = []
+    for root in _KUBECTL_CONSUMER_ROOTS:
+        if not root.is_dir():
+            continue
+        for p in sorted(root.rglob("*")):
+            if p.is_file() and "__pycache__" not in p.parts:
+                paths.append(p)
+    return paths
+
+
 def _deployment_templates(role: Path) -> list[str]:
     """Templates rendering a `kind: Deployment`, by name."""
     out = []
@@ -484,25 +533,62 @@ def test_manifests_rollout_kind_is_constrained_to_known_values() -> None:
     )
 
 
-def test_no_role_spells_the_daemonset_kind_as_ds() -> None:
-    """One spelling of the kind, repo-wide.
+def test_daemonset_alias_matcher_flags_kubectl_args_but_not_manifest_kind_fields() -> (
+    None
+):
+    """Pins the boundary the sweep below depends on, so the next reader sees it rather than
+    having to re-derive it from the regex.
 
-    `manifests_rollout_kind` and two other consumers match the literal 'daemonset', so a role
-    using kubectl's `ds` alias is a working command that reads as a sanctioned spelling — and
-    copying it into a parameterized role gives a green deploy with the stabilisation gate
-    reading a Deployment's jsonpath off a DaemonSet.
+    `kind: DaemonSet` in a manifest is correct and required by the Kubernetes API — a naive
+    case-insensitive sweep would flag every daemonset.yaml.j2 in the repo. The distinction is
+    kubectl argument vs. manifest field: a manifest's `kind:` line never follows a kubectl verb
+    or takes the `<kind>/<name>` shorthand, so it is never matched here regardless of casing.
+    """
+    must_flag = [
+        "kubectl get DaemonSet foo",
+        "rollout status DaemonSet/foo",
+        "kubectl get ds foo",
+        "kubectl get daemonsets foo",
+    ]
+    for line in must_flag:
+        assert _daemonset_alias_matches(line), f"should have flagged: {line!r}"
+
+    must_not_flag = [
+        "kind: DaemonSet",
+        "  kind: DaemonSet\n",
+        "kubectl get daemonset foo",
+        "rollout status daemonset/foo",
+    ]
+    for line in must_not_flag:
+        assert not _daemonset_alias_matches(line), f"should not have flagged: {line!r}"
+
+
+def test_no_kubectl_invocation_spells_the_daemonset_kind_by_alias() -> None:
+    """One spelling of the kind, across every file that actually issues a kubectl command
+    against it — manifests/ and rollout-drain/ (both excluded from _roles()/_SHARED on
+    purpose, see _kubectl_consumer_paths), every other role under roles/k8s/, and the
+    post_tasks/ and tasks/ playbooks that consume a queued `kind`.
+
+    `manifests_rollout_kind` and two other consumers match the literal 'daemonset', so a
+    kubectl invocation using 'ds', 'daemonsets', or any casing of 'DaemonSet' is a working
+    command that reads as a sanctioned spelling — and copying it into a parameterized role
+    gives a green deploy with the stabilisation gate reading a Deployment's jsonpath off a
+    DaemonSet.
     """
     offenders = []
-    for role in _roles():
-        for path in sorted(role.rglob("*")):
-            if not path.is_file():
-                continue
-            for n, line in enumerate(path.read_text(errors="ignore").splitlines(), 1):
-                if re.search(r"\bds/|\bget ds\b|kind:\s*ds\b", line):
-                    offenders.append(
-                        f"{path.relative_to(_K8S_ROLES)}:{n}: {line.strip()}"
-                    )
+    for path in _kubectl_consumer_paths():
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        except OSError:
+            continue
+        for n, line in enumerate(text.splitlines(), 1):
+            for token in _daemonset_alias_matches(line):
+                offenders.append(
+                    f"{path.relative_to(_REPO)}:{n}: {token!r} in {line.strip()}"
+                )
     assert not offenders, (
-        "spell the DaemonSet kind 'daemonset', not kubectl's 'ds' alias — three consumers "
-        "match the literal:\n" + "\n".join(offenders)
+        "spell the DaemonSet kind 'daemonset', not a kubectl alias like 'ds', 'daemonsets', "
+        "or 'DaemonSet' — found:\n" + "\n".join(offenders)
     )
