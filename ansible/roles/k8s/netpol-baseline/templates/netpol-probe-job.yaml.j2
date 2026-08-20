@@ -62,13 +62,24 @@ spec:
               #    This leg used to dial homepage:3000, which was reachable only because homepage
               #    was unfenced. Slice 4.5 fences it and slice 5 leaves no unfenced pod at all, so
               #    the control is now a named peer rather than an accident of the rollout order.
-              if ! nc -w 5 -z speedtest 80; then
-                echo "SENTINEL CONTROL FAILED: cannot reach speedtest:80, which the sentinel"
-                echo "policy admits this pod to. Either this pod cannot open connections at all,"
-                echo "or admitted traffic is being denied. Assertion 4 below would pass whether"
-                echo "or not the policy works. Investigate before trusting this job."
-                exit 1
-              fi
+              #    RETRIED. This is the only leg here whose result depends on kube-router knowing
+              #    THIS pod's OWN labels — assertion 1 dials an open port and assertion 4 asserts
+              #    a denial, and neither needs the source pod resolved. A Job pod is seconds old
+              #    when it dials, and kube-router must observe it and add its IP to the ipset
+              #    behind `netpol-probe: control` first. Measured 2026-08-20: one immediate
+              #    attempt fails with the policy, the labels and the target all correct.
+              i=0
+              until nc -w 5 -z speedtest 80; do
+                i=$((i + 1))
+                if [ "$i" -ge 12 ]; then
+                  echo "SENTINEL CONTROL FAILED: cannot reach speedtest:80 after 60s, which the"
+                  echo "sentinel policy admits this pod to. Either this pod cannot open"
+                  echo "connections at all, or admitted traffic is being denied. Assertion 4"
+                  echo "below would pass whether or not the policy works."
+                  exit 1
+                fi
+                sleep 5
+              done
               echo "sentinel control ok: speedtest:80 reachable, admitted by policy"
 
               # 3. LIVENESS — littlelink is actually UP and Traefik can reach it. Goes through the
