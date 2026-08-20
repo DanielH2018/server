@@ -15,6 +15,7 @@ spec:
     metadata:
       labels:
         app: scrutiny-collector
+        netpol-baseline: enforced
     spec:
       # Phase F drain (2026-08-13): unpinned — the DaemonSet covers both nodes and the
       # Docker spoke on daniel-server retired with it. Both hosts' SMART source is the

@@ -1,0 +1,45 @@
+---
+# Scrutiny's web UI and API. Two callers beyond the baseline's traefik and prometheus:
+#
+#   scrutiny-collector — the DaemonSet posts SMART data to COLLECTOR_API_ENDPOINT
+#                        (roles/k8s/scrutiny/templates/collector-daemonset.yaml.j2). It runs on
+#                        both nodes; a pod-to-pod peer covers both, because same-node and
+#                        cross-node pod -> ClusterIP -> pod both preserve the source pod IP here.
+#   monitor-bridge     — SCRUTINY_URL=http://scrutiny…:8080 (monitor-bridge/templates/
+#                        env-secret.yaml.j2) drives the Kuma disk-health tile.
+#
+# NOTE THE NAMES DIVERGE: the Service is `scrutiny`, the pod label is `app: scrutiny-web`. A
+# policy written against the Service name would select nothing and fence nothing.
+#
+# 8080 is the containerPort AND the Service port — verified 2026-08-20, they match.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: scrutiny-web
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: scrutiny-web
+  policyTypes:
+    - Ingress
+  ingress:
+{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
+   lever. `| bool` for the string trap. Both explained in full in
+   networkpolicy-traefik.yaml.j2. #}
+{% if netpol_baseline_enforced | bool %}
+    - from:
+        - podSelector:
+            matchLabels:
+              app: scrutiny-collector
+        - podSelector:
+            matchLabels:
+              app: monitor-bridge
+      ports:
+        - port: 8080
+          protocol: TCP
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}

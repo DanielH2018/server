@@ -42,6 +42,7 @@ spec:
     metadata:
       labels:
         app: promtail
+        netpol-baseline: enforced
     spec:
       # Unpinned at the drain step (2026-08-14): the Docker promtail retired with it, so
       # this DaemonSet is the only shipper and covers both nodes' host + pod logs.

@@ -88,6 +88,31 @@ SLICE_4_WORKLOADS = {
 
 SLICE_4_ROLES = {role for role, _name in SLICE_4_WORKLOADS}
 
+# Slice 4.5 stage A: the roles that render more than one workload. A role is not the unit of
+# fencing (test_every_pod_producing_doc_in_a_fenced_role_is_labelled below enforces that), so
+# these roles are labelled WHOLE — labelling scrutiny-collector alone would fail that test on
+# scrutiny-web and scrutiny-influxdb. Sub-workloads whose role name differs from the workload
+# name are exactly where the slice-4 review caught an omission, so they are all named here.
+SLICE_45A_WORKLOADS = {
+    ("karakeep", "karakeep"),
+    ("karakeep", "karakeep-chrome"),
+    ("karakeep", "karakeep-meilisearch"),
+    ("karakeep", "karakeep-time-tagger"),
+    ("scrutiny", "scrutiny-web"),
+    ("scrutiny", "scrutiny-influxdb"),
+    ("scrutiny", "scrutiny-collector"),
+    ("freshrss", "freshrss"),
+    ("freshrss", "freshrss-feed-cache"),
+    ("loki-homelab", "loki-homelab"),
+    ("loki-homelab", "promtail"),
+    ("cloudflare-ddns", "cloudflare-ddns-direct"),
+    ("cloudflare-ddns", "cloudflare-ddns-proxied"),
+    ("node-exporter", "node-exporter"),
+    ("n8n", "n8n-runners"),
+}
+
+SLICE_45A_ROLES = {role for role, _name in SLICE_45A_WORKLOADS}
+
 # Workloads inside a fenced role that are fenced by their OWN NetworkPolicy rather than by the
 # baseline label. Each entry must name the policy that covers it: an unexplained exemption is
 # indistinguishable from a workload someone forgot to label.
@@ -96,8 +121,15 @@ SLICE_4_ROLES = {role for role, _name in SLICE_4_WORKLOADS}
 # port. That is TIGHTER than the baseline, which would also admit traefik, prometheus and the node
 # CIDRs — so labelling it would widen the fence around a headless browser that renders
 # attacker-supplied pages.
+#
+# n8n: roles/k8s/n8n/templates/networkpolicy.yaml.j2 (live name `n8n-broker`) fences it already.
+# Slice 4.5 labels n8n-runners, which drags the whole n8n role into the fenced set — but labelling
+# n8n itself would ADD the baseline's traefik + prometheus + node-CIDR allow-list on top of a
+# tighter bespoke policy, widening it. Same reasoning as flaresolverr, and the same reasoning that
+# keeps headlamp and registry out of slice 4.5 entirely.
 BESPOKE_POLICY_WORKLOADS = {
     ("prowlarr", "flaresolverr"),
+    ("n8n", "n8n"),
 }
 
 # Pod-producing docs that are deliberately unlabelled and deliberately NOT fenced: a netpol probe
@@ -107,6 +139,7 @@ BESPOKE_POLICY_WORKLOADS = {
 UNFENCED_BY_DESIGN_WORKLOADS = {
     ("prowlarr", "flaresolverr-netpol-probe"),
     ("sonarr", "sonarr-isolation-probe"),
+    ("n8n", "n8n-netpol-probe"),
 }
 
 
@@ -138,6 +171,7 @@ def test_exactly_the_fenced_roles_carry_the_baseline_label() -> None:
         | SLICE_2_ROLES
         | SLICE_3_ROLES
         | SLICE_4_ROLES
+        | SLICE_45A_ROLES
         | BORN_FENCED_ROLES
     )
     labelled = _labelled_roles()
@@ -167,7 +201,9 @@ def _labelled_workloads() -> set[tuple[str, str]]:
 def test_every_pod_producing_doc_in_a_fenced_role_is_labelled() -> None:
     """A role is not a unit of fencing. claude-otel renders six workloads; five
     could go unlabelled while the role still looked fenced."""
-    fenced_roles = SLICE_1_ROLES | SLICE_2_ROLES | SLICE_3_ROLES | SLICE_4_ROLES
+    fenced_roles = (
+        SLICE_1_ROLES | SLICE_2_ROLES | SLICE_3_ROLES | SLICE_4_ROLES | SLICE_45A_ROLES
+    )
     unlabelled = {
         (role, doc.get("metadata", {}).get("name", "?"))
         for role, _tpl, doc in rendered_docs()
@@ -184,6 +220,22 @@ def test_every_pod_producing_doc_in_a_fenced_role_is_labelled() -> None:
         "label it; if it is already fenced by its own NetworkPolicy, add (role, name) to "
         "BESPOKE_POLICY_WORKLOADS above with a comment naming that policy file; if it is a probe "
         "that must stay unfenced to test the fence, add it to UNFENCED_BY_DESIGN_WORKLOADS."
+    )
+
+
+def test_exactly_the_slice_45a_workloads_carry_the_baseline_label() -> None:
+    """Without this, SLICE_45A_WORKLOADS would be decorative — only the roles it derives are
+    otherwise read, so a workload could be renamed or dropped and every other assertion here
+    would still pass."""
+    labelled = {
+        (role, name)
+        for (role, name) in _labelled_workloads()
+        if role in SLICE_45A_ROLES
+    }
+    assert labelled == SLICE_45A_WORKLOADS, (
+        "slice 4.5 stage A's labelled workloads no longer match SLICE_45A_WORKLOADS.\n"
+        f"  labelled: {sorted(labelled)}\n"
+        f"  expected: {sorted(SLICE_45A_WORKLOADS)}"
     )
 
 
