@@ -1,22 +1,28 @@
 """Guards on which k8s roles gitops_deploy may auto-deploy.
 
-`roles/k8s/manifests` waits on exactly ONE deployment —
-`deploy/{{ manifests_rollout | default(manifests_service) }}` — and runs `assert_stable.yml`
-against that same single name. Two role shapes therefore auto-deploy without a working gate:
+`roles/k8s/manifests` waits on the primary rollout —
+`deploy/{{ manifests_rollout | default(manifests_service) }}` — plus every
+`manifests_extra_rollouts` entry, and runs `assert_stable.yml` against each. A rendered
+Deployment is gated only if its own `metadata.name` matches the primary rollout name or one of
+the declared extras; a name that can't be resolved statically (a Jinja expression) counts as
+ungated, the fail-closed direction. Three role shapes therefore auto-deploy without a working
+gate:
 
-  * a role rendering a `kind: Deployment` it does not gate: `kubectl apply -f <dir>/` applies it
-    but nothing waits on it, so a bump to its image is deployed and never verified. A role gates
-    its primary rollout plus every `manifests_extra_rollouts` entry; anything beyond that is
-    ungated. prowlarr and freshrss were the original instances and now declare their extras, so
-    they are gated — the guard counts ungated Deployments, not rendered ones;
+  * a role rendering a `kind: Deployment` whose name isn't in that gated set: `kubectl apply -f
+    <dir>/` applies it but nothing waits on it, so a bump to its image is deployed and never
+    verified. A typo'd or drifted `manifests_extra_rollouts` entry falls into this the same way
+    an undeclared Deployment does — matching is by name, not by count. prowlarr and freshrss
+    were the original instances and now declare their extras correctly, so they are gated;
   * a role passing `manifests_rollout: ''`, which skips the rollout wait AND the stability soak
     outright;
-  * a role whose Deployment declares no `readinessProbe`: `rollout status` then returns the
-    moment the pod reports Running, which proves only that the image exists.
+  * a role whose gated Deployment(s) declare no `readinessProbe`: `rollout status` then returns
+    the moment the pod reports Running, which proves only that the image exists. Checked per
+    Deployment, not once per role — a probe on the primary doesn't excuse a probe-less extra.
 
 All three are fine for a hand-deployed role — an operator is watching. None is fine for an
-auto-deployed one, so the denylist must cover them. Asserting it here means a role that later
-grows a second Deployment fails the suite instead of silently auto-deploying ungated.
+auto-deployed one, so the denylist must cover them. Asserting it here means a role whose gated
+set drifts from what it actually renders fails the suite instead of silently auto-deploying
+ungated.
 
 These guards were belt-and-braces while `gitops_deploy_k8s_autodeploy_pilot` named a single
 service; clearing the pilot on 2026-08-16 made them the only thing standing between a role shape
@@ -139,20 +145,29 @@ def _deployment_name(template: Path) -> str | None:
     return name if _LITERAL_NAME.match(name) else None
 
 
-def _ungated_deployment_count(role: Path) -> int:
-    """Rendered Deployments whose name is neither the primary rollout nor a declared extra.
+def _gated_names(role: Path) -> set[str]:
+    """Deployment names this role's rollout gate actually waits on."""
+    return {_primary_rollout_name(role)} | _extra_rollouts(role)
+
+
+def _ungated_deployments(role: Path) -> list[str]:
+    """Rendered Deployment templates whose resolved name is not in the gated set.
 
     Matches by identity, not count: a rendered Deployment is gated only if its own resolved
     name equals the primary rollout name or appears in manifests_extra_rollouts. A typo'd or
     drifted extra name, or a Deployment whose name can't be resolved statically, both count as
     ungated — count alone let a mismatched name through as long as the totals lined up.
     """
-    gated = {_primary_rollout_name(role)} | _extra_rollouts(role)
-    return sum(
-        1
+    gated = _gated_names(role)
+    return [
+        template
         for template in _deployment_templates(role)
         if _deployment_name(role / "templates" / template) not in gated
-    )
+    ]
+
+
+def _ungated_deployment_count(role: Path) -> int:
+    return len(_ungated_deployments(role))
 
 
 def test_auto_deployable_roles_gate_every_deployment_they_render() -> None:
@@ -161,12 +176,11 @@ def test_auto_deployable_roles_gate_every_deployment_they_render() -> None:
     for role in _roles():
         if role.name in denylist:
             continue
-        ungated = _ungated_deployment_count(role)
+        ungated = _ungated_deployments(role)
         if ungated:
-            rendered = ", ".join(_deployment_templates(role))
             offenders.append(
-                f"{role.name}: renders {len(_deployment_templates(role))} Deployments "
-                f"({rendered}) and gates {len(_extra_rollouts(role)) + 1} — {ungated} ungated"
+                f"{role.name}: {', '.join(ungated)} not in the gated set "
+                f"{sorted(_gated_names(role))}"
             )
     assert not offenders, (
         "Auto-deployable role(s) with an ungated Deployment — declare the extras in "
@@ -206,6 +220,43 @@ def test_auto_deployable_roles_declare_a_readiness_probe() -> None:
         "gitops_deploy_k8s_autodeploy_denylist with a reason, or give the Deployment(s) a "
         "readinessProbe:\n" + "\n".join(offenders)
     )
+
+
+def test_readiness_probe_check_covers_every_gated_deployment(tmp_path: Path) -> None:
+    """A probe on the primary Deployment doesn't excuse a probe-less gated extra.
+
+    The old `any()` check would read this role as compliant — the primary has a probe, and
+    `any()` stops looking once one template has one. Checking each template individually is
+    what catches the extra.
+    """
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "templates").mkdir()
+    (role / "tasks" / "main.yml").write_text(
+        "- ansible.builtin.include_role:\n"
+        "    name: k8s/manifests\n"
+        "  vars:\n"
+        "    manifests_service: widget\n"
+        "    manifests_extra_rollouts:\n"
+        "      - name: widget-cache\n"
+    )
+    (role / "templates" / "deployment.yaml.j2").write_text(
+        "apiVersion: apps/v1\n"
+        "kind: Deployment\n"
+        "metadata:\n"
+        "  name: widget\n"
+        "spec:\n"
+        "  template:\n"
+        "    spec:\n"
+        "      containers:\n"
+        "        - readinessProbe:\n"
+        "            httpGet:\n"
+        "              path: /\n"
+    )
+    (role / "templates" / "deployment-cache.yaml.j2").write_text(
+        "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: widget-cache\n"
+    )
+    assert _deployments_missing_readiness_probe(role) == ["deployment-cache.yaml.j2"]
 
 
 def test_extra_rollouts_are_counted_as_gated() -> None:
@@ -254,6 +305,7 @@ def test_extra_rollout_naming_the_wrong_deployment_reads_as_ungated(
         "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: widget-cache\n"
     )
     assert _extra_rollouts(role) == {"widget-typo"}
+    assert _ungated_deployments(role) == ["deployment-cache.yaml.j2"]
     assert _ungated_deployment_count(role) == 1
 
 
