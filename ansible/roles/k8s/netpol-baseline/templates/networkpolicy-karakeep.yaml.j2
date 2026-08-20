@@ -1,0 +1,47 @@
+---
+# karakeep itself. Browsers arrive through traefik and prometheus scrapes it, both of which the
+# baseline already admits — but one caller lives INSIDE karakeep's own role and the first census
+# of this slice missed it:
+#
+#   karakeep-time-tagger — its `wait-for-karakeep` init container opens a TCP connection to
+#     `karakeep:3000` and retries every 5s until it succeeds
+#     (roles/k8s/karakeep/templates/deployment-time-tagger.yaml.j2). Denying it does not crash the
+#     pod; it wedges the new pod in Init forever while the OLD one keeps running, so the workload
+#     reads healthy and the rollout simply never completes.
+#
+# HOW IT WAS MISSED, because the same mistake is easy to repeat: the caller census searched each
+# workload's name across the tree while excluding its own role directory, to filter out the
+# thousands of self-references. That exclusion also filtered out every caller that lives in the
+# same role as its callee. When fencing a role that renders several workloads, read the role's own
+# templates for init containers and wait loops — `grep -rn 'create_connection\|nc -z\|nc -w'` over
+# the role — rather than trusting a cross-role census.
+#
+# 3000 is the containerPort AND the Service port — verified 2026-08-20, they match.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: karakeep
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: karakeep
+  policyTypes:
+    - Ingress
+  ingress:
+{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
+   lever. `| bool` for the string trap. Both explained in full in
+   networkpolicy-traefik.yaml.j2. #}
+{% if netpol_baseline_enforced | bool %}
+    - from:
+        - podSelector:
+            matchLabels:
+              app: karakeep-time-tagger
+      ports:
+        - port: 3000
+          protocol: TCP
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}
