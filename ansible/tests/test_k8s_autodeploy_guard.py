@@ -13,8 +13,9 @@ gate:
     verified. A typo'd or drifted `manifests_extra_rollouts` entry falls into this the same way
     an undeclared Deployment does — matching is by name, not by count. prowlarr and freshrss
     were the original instances and now declare their extras correctly, so they are gated —
-    but both stay on the denylist regardless, for migrating-state reasons (Recreate + an RWO
-    seed-volume PVC) that gatedness never touched. Don't read "gated" as "eligible";
+    but both still declare k8s_autodeploy: false regardless, for migrating-state reasons
+    (Recreate + an RWO seed-volume PVC) that gatedness never touched. Don't read "gated" as
+    "eligible";
   * a role passing `manifests_rollout: ''`, which skips the rollout wait AND the stability soak
     outright;
   * a role whose gated Deployment(s) declare no `readinessProbe`: `rollout status` then returns
@@ -22,9 +23,9 @@ gate:
     Deployment, not once per role — a probe on the primary doesn't excuse a probe-less extra.
 
 All three are fine for a hand-deployed role — an operator is watching. None is fine for an
-auto-deployed one, so the denylist must cover them. Asserting it here means a role whose gated
-set drifts from what it actually renders fails the suite instead of silently auto-deploying
-ungated.
+auto-deployed one, so a role's own k8s_autodeploy declaration must cover them. Asserting it
+here means a role whose gated set drifts from what it actually renders fails the suite instead
+of silently auto-deploying ungated.
 
 These guards were belt-and-braces while `gitops_deploy_k8s_autodeploy_pilot` named a single
 service; clearing the pilot on 2026-08-16 made them the only thing standing between a role shape
@@ -172,11 +173,37 @@ def _ungated_deployment_count(role: Path) -> int:
     return len(_ungated_deployments(role))
 
 
+def _auto_deployable(role: Path) -> bool:
+    """Whether gitops_deploy may auto-deploy this role, per the role's own declaration.
+
+    Fail-closed: a role that declares nothing is not auto-deployable. The completeness guard
+    makes that unreachable for a role that declares, and it is still the right default for a
+    role that doesn't.
+    """
+    defaults = role / "defaults/main.yml"
+    if not defaults.is_file():
+        return False
+    data = yaml.safe_load(defaults.read_text()) or {}
+    return bool(data.get("k8s_autodeploy"))
+
+
+def test_auto_deployable_reads_the_declaration_not_the_denylist() -> None:
+    """The guards' input is the role's own declaration.
+
+    Asserted directly so that when slice 1b deletes the denylist, this file needs no edit —
+    and so a future reader cannot mistake the denylist for the source of truth.
+    """
+    for role in _roles():
+        if not _declares_autodeploy(role):
+            continue
+        data = yaml.safe_load((role / "defaults/main.yml").read_text()) or {}
+        assert _auto_deployable(role) is bool(data.get("k8s_autodeploy"))
+
+
 def test_auto_deployable_roles_gate_every_deployment_they_render() -> None:
-    denylist = _denylist()
     offenders = []
     for role in _roles():
-        if role.name in denylist:
+        if not _auto_deployable(role):
             continue
         ungated = _ungated_deployments(role)
         if ungated:
@@ -186,8 +213,9 @@ def test_auto_deployable_roles_gate_every_deployment_they_render() -> None:
             )
     assert not offenders, (
         "Auto-deployable role(s) with an ungated Deployment — declare the extras in "
-        "manifests_extra_rollouts, or add the role to gitops_deploy_k8s_autodeploy_denylist "
-        "with a reason:\n" + "\n".join(offenders)
+        "manifests_extra_rollouts, or set k8s_autodeploy: false with a k8s_autodeploy_reason "
+        "in the role's defaults/main.yml (and keep gitops_deploy_k8s_autodeploy_denylist in "
+        "sync while it is still the deployer's input):\n" + "\n".join(offenders)
     )
 
 
@@ -206,10 +234,9 @@ def _deployments_missing_readiness_probe(role: Path) -> list[str]:
 
 
 def test_auto_deployable_roles_declare_a_readiness_probe() -> None:
-    denylist = _denylist()
     offenders = []
     for role in _roles():
-        if role.name in denylist:
+        if not _auto_deployable(role):
             continue
         missing = _deployments_missing_readiness_probe(role)
         if missing:
@@ -218,9 +245,10 @@ def test_auto_deployable_roles_declare_a_readiness_probe() -> None:
                 f"`rollout status` returns on Running"
             )
     assert not offenders, (
-        "Auto-deployable role(s) whose rollout gate proves nothing — add to "
-        "gitops_deploy_k8s_autodeploy_denylist with a reason, or give the Deployment(s) a "
-        "readinessProbe:\n" + "\n".join(offenders)
+        "Auto-deployable role(s) whose rollout gate proves nothing — give the Deployment(s) a "
+        "readinessProbe, or set k8s_autodeploy: false with a k8s_autodeploy_reason in the "
+        "role's defaults/main.yml (and keep gitops_deploy_k8s_autodeploy_denylist in sync "
+        "while it is still the deployer's input):\n" + "\n".join(offenders)
     )
 
 
@@ -314,15 +342,16 @@ def test_extra_rollout_naming_the_wrong_deployment_reads_as_ungated(
 
 
 def test_auto_deployable_roles_do_not_skip_the_rollout_gate() -> None:
-    denylist = _denylist()
     offenders = [
         f"{role.name}: passes manifests_rollout: '' — rollout wait and stability soak both skipped"
         for role in _roles()
-        if role.name not in denylist and _sets_empty_rollout(role)
+        if _auto_deployable(role) and _sets_empty_rollout(role)
     ]
     assert not offenders, (
-        "Auto-deployable role(s) with no rollout gate at all — add to "
-        "gitops_deploy_k8s_autodeploy_denylist with a reason:\n" + "\n".join(offenders)
+        "Auto-deployable role(s) with no rollout gate at all — set k8s_autodeploy: false "
+        "with a k8s_autodeploy_reason in the role's defaults/main.yml (and keep "
+        "gitops_deploy_k8s_autodeploy_denylist in sync while it is still the deployer's "
+        "input):\n" + "\n".join(offenders)
     )
 
 
