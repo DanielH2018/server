@@ -1,7 +1,7 @@
 """Guards on which k8s roles gitops_deploy may auto-deploy.
 
 `roles/k8s/manifests` waits on the primary rollout —
-`deploy/{{ manifests_rollout | default(manifests_service) }}` — plus every
+`{{ manifests_rollout_kind | default('deploy') }}/{{ manifests_rollout | default(manifests_service) }}` — plus every
 `manifests_extra_rollouts` entry, and runs `assert_stable.yml` against each. A rendered
 Deployment is gated only if its own `metadata.name` matches the primary rollout name or one of
 the declared extras; a name that can't be resolved statically (a Jinja expression) counts as
@@ -118,14 +118,21 @@ def _kubectl_consumer_paths() -> list[Path]:
 
 
 def _deployment_templates(role: Path) -> list[str]:
-    """Templates rendering a `kind: Deployment`, by name."""
+    """Templates rendering a `kind: Deployment` or `kind: DaemonSet`, by name.
+
+    Both are gated the same way: `roles/k8s/manifests` waits on `<kind>/<name>` and the guards
+    below check that every rendered workload is named in that wait. Matching only Deployment
+    made a DaemonSet role render zero workloads and pass every shape guard ungated.
+    """
     out = []
     for t in (
         sorted((role / "templates").glob("*.j2"))
         if (role / "templates").is_dir()
         else []
     ):
-        if re.search(r"^kind:\s*Deployment\s*$", t.read_text(), re.MULTILINE):
+        if re.search(
+            r"^kind:\s*(?:Deployment|DaemonSet)\s*$", t.read_text(), re.MULTILINE
+        ):
             out.append(t.name)
     return out
 
@@ -186,7 +193,8 @@ def _primary_rollout_name(role: Path) -> str:
 
 
 _DEPLOYMENT_NAME = re.compile(
-    r"^kind:\s*Deployment\s*$\n\s*metadata:\s*$\n\s*name:\s*(.+?)\s*$", re.MULTILINE
+    r"^kind:\s*(?:Deployment|DaemonSet)\s*$\n\s*metadata:\s*$\n\s*name:\s*(.+?)\s*$",
+    re.MULTILINE,
 )
 _LITERAL_NAME = re.compile(r"^[\w.-]+$")
 
@@ -277,7 +285,7 @@ def test_auto_deployable_roles_gate_every_deployment_they_render() -> None:
                 f"{sorted(_gated_names(role))}"
             )
     assert not offenders, (
-        "Auto-deployable role(s) with an ungated Deployment — declare the extras in "
+        "Auto-deployable role(s) with an ungated workload — declare the extras in "
         "manifests_extra_rollouts, or set k8s_autodeploy: false with a k8s_autodeploy_reason "
         "in the role's own defaults/main.yml (the denylist is derived from that "
         "declaration):\n" + "\n".join(offenders)
@@ -310,7 +318,7 @@ def test_auto_deployable_roles_declare_a_readiness_probe() -> None:
                 f"`rollout status` returns on Running"
             )
     assert not offenders, (
-        "Auto-deployable role(s) whose rollout gate proves nothing — give the Deployment(s) a "
+        "Auto-deployable role(s) whose rollout gate proves nothing — give the workload(s) a "
         "readinessProbe, or set k8s_autodeploy: false with a k8s_autodeploy_reason in the "
         "role's own defaults/main.yml (the denylist is derived from that declaration):\n"
         + "\n".join(offenders)
@@ -352,6 +360,22 @@ def test_readiness_probe_check_covers_every_gated_deployment(tmp_path: Path) -> 
         "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: widget-cache\n"
     )
     assert _deployments_missing_readiness_probe(role) == ["deployment-cache.yaml.j2"]
+
+
+def test_the_workload_matcher_sees_daemonsets(tmp_path: Path) -> None:
+    """A DaemonSet-rendering role must be visible to the shape guards.
+
+    Before this, `_deployment_templates` matched only `kind: Deployment`, so a DaemonSet role
+    rendered zero workloads and passed every shape guard while being ungated — the failure
+    mode the guards exist to catch, hidden by the matcher rather than absent.
+    """
+    role = tmp_path / "widget"
+    (role / "templates").mkdir(parents=True)
+    (role / "templates/daemonset.yaml.j2").write_text(
+        "apiVersion: apps/v1\nkind: DaemonSet\nmetadata:\n  name: widget\n"
+    )
+    assert _deployment_templates(role) == ["daemonset.yaml.j2"]
+    assert _deployment_name(role / "templates/daemonset.yaml.j2") == "widget"
 
 
 def test_extra_rollouts_are_counted_as_gated() -> None:
