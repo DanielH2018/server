@@ -372,15 +372,29 @@ def test_check_eight_derives_its_window_from_the_fleet() -> None:
     )
 
 
-def test_check_eight_waits_a_full_cycle_before_reporting() -> None:
-    """Before one cycle elapses, an undrilled volume is one whose turn has not come."""
+def test_check_eight_graces_each_candidate_from_when_it_joined() -> None:
+    """A rotation-wide start date judges a volume added yesterday against a cycle it never had.
+
+    Once the rotation itself is older than a cycle, every volume that later joins the backup set
+    would be flagged immediately and page for a full cycle. The attempt stamp cannot stand in
+    either: it is refreshed each time the volume comes up, so for anything in steady rotation it
+    is never older than one cycle and the grace would never expire. Only a write-once join marker
+    answers "has this volume had a fair chance".
+    """
     block = _check_seven()
-    assert "ROTATION_START" in block, (
-        "coverage must not report until a full rotation has had time to run, or every deploy "
-        "pages for a fortnight"
+    assert "DRILL_SEEN" in block, (
+        "coverage must grace each candidate from its own join marker"
     )
-    assert "NOW_S - ROTATION_START > COVERAGE_MAX_S" in block, (
-        "the grace period must be derived from the rotation's first attempt"
+    assert "NOW_S - SEEN_AT > COVERAGE_MAX_S" in block, (
+        "the grace period must be measured per candidate, from when it joined the rotation"
+    )
+    assert "ROTATION_START" not in block, (
+        "a rotation-wide start date pages for a full cycle on every newly added volume"
+    )
+    code = _code(DRILL)
+    assert '! -e "${SEEN_DIR}/${cand}"' in code, (
+        "the join marker must be written once and never refreshed, or it decays into a second "
+        "attempt stamp and the grace never expires"
     )
 
 
