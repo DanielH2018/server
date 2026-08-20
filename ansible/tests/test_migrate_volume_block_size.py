@@ -207,3 +207,34 @@ def test_every_workload_step_is_skipped_when_there_is_no_workload() -> None:
                 f"{task['name']} must be skipped when there is no Deployment to act on"
             )
     assert seen == guarded, f"not all workload steps were found: {guarded - seen}"
+
+
+def test_an_aborted_migration_discards_its_staging_claim() -> None:
+    """A staging PVC left behind by an abort holds a Longhorn volume nobody will reclaim."""
+    always = _names(_migration_block()["always"])
+    assert (
+        "Discard the staging claim after an abort that never touched the original"
+        in always
+    ), (
+        "an abort before the original is deleted must clean up the staging claim, or every "
+        "failed run leaks a PVC — n8n-files leaked one on 2026-08-20"
+    )
+
+
+def test_the_staging_discard_is_skipped_once_the_original_is_gone() -> None:
+    """After the delete, staging is the only copy — an abort must leave it standing."""
+    always = _migration_block()["always"]
+    discard = next(
+        t
+        for t in always
+        if t.get("name")
+        == "Discard the staging claim after an abort that never touched the original"
+    )
+    assert "mig_original_deleted" in str(discard.get("when", "")), (
+        "the discard must be conditional on the original still existing; unconditionally "
+        "deleting the staging claim in `always` destroys the only copy of the data"
+    )
+    names = _names(_migration_block()["block"])
+    assert names.index("Delete the original claim") < names.index(
+        "Record that the original is gone"
+    ), "the flag has to be set after the delete it describes"

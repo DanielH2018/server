@@ -253,6 +253,12 @@
           become: true
           changed_when: true
 
+        # From here until the copy back is verified, the staging volume is the only copy. The
+        # cleanup in `always` reads this to decide whether discarding it is safe.
+        - name: Record that the original is gone
+          ansible.builtin.set_fact:
+            mig_original_deleted: true
+
         # The replacement cannot be created while the old PersistentVolume still holds the name,
         # and Longhorn removes the Volume CR only after the PV goes.
         - name: Wait for the old PersistentVolume to go
@@ -361,6 +367,16 @@
           ansible.builtin.command:
             argv: [k3s, kubectl, -n, "{{ mig_namespace }}", scale,
                    "deploy/{{ mig_deploy }}", --replicas=1]
+          become: true
+          changed_when: true
+
+        # Only safe while the original still exists. Once it is deleted the staging volume is
+        # the only copy, and an abort there must leave it standing for a manual recovery.
+        - name: Discard the staging claim after an abort that never touched the original
+          when: not (mig_original_deleted | default(false))
+          ansible.builtin.command:
+            argv: [k3s, kubectl, -n, "{{ mig_namespace }}", delete, pvc, "{{ mig_temp_claim }}",
+                   --ignore-not-found, --wait=false]
           become: true
           changed_when: true
 
