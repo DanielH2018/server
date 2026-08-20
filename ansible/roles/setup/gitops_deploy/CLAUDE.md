@@ -100,6 +100,13 @@ stay).
   scope (if set) names it, the only path the push touched under its role is
   `defaults/main.yml`, and every changed line in that file assigns an `*_image:` var. Everything
   else stays in `ChangeSet.k8s` and behaves exactly as described below.
+
+    That denylist is no longer hand-maintained: `filter_plugins/k8s_autodeploy.py` derives it
+    from each role's own `k8s_autodeploy` declaration in `roles/k8s/<name>/defaults/main.yml`,
+    where the reason sits beside the role it describes. The filter fails closed — a role that
+    declares nothing raises at template time rather than dropping out of the denylist, since
+    absence from it means auto-deployable. To stop a role auto-deploying, set
+    `k8s_autodeploy: false` in its defaults; there is no central list to edit.
   - **The gate is in the play, not here.** `roles/k8s/manifests` applies,
     `roles/k8s/rollout-drain` runs `rollout status --timeout`, and
     `ansible/post_tasks/k8s_stabilise_gate.yml` holds the post-Available soak that hard-fails
