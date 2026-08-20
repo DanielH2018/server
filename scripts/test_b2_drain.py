@@ -15,6 +15,7 @@ from b2_drain import (
     DrainError,
     classify,
     current_versions,
+    parse_volume_list,
     live_object_count,
     volume_of,
     volume_prefix,
@@ -88,3 +89,14 @@ def test_a_stranded_volume_is_drainable():
     drainable, refused = classify([VOL], present={VOL}, live={"pvc-other"})
     assert drainable == [VOL]
     assert refused == {}
+
+
+def test_a_volume_list_parses_from_either_separator():
+    """The file form exists because 20 names is 820 characters and shells wrap it."""
+    assert parse_volume_list("a,b") == ["a", "b"]
+    assert parse_volume_list("a\nb\n") == ["a", "b"]
+    assert parse_volume_list(" a , b \n") == ["a", "b"]
+
+
+def test_a_duplicated_name_is_only_drained_once():
+    assert parse_volume_list("a,b,a") == ["a", "b"]

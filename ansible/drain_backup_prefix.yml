@@ -36,8 +36,11 @@
 
     - name: Require the volumes to drain
       ansible.builtin.assert:
-        that: drain_volumes is defined and drain_volumes | length > 0
-        fail_msg: "pass -e drain_volumes=<longhorn-volume-name>[,<name>...]"
+        that: (drain_volumes | default('')) | length > 0 or (drain_volumes_file | default('')) | length > 0
+        fail_msg: >-
+          pass -e drain_volumes=<name>[,<name>...] or -e drain_volumes_file=<path>. Twenty
+          names is 820 characters, which no shell pastes reliably on one line, so the file
+          form is the one to use for a full sweep.
 
   tasks:
     - name: Read the live Longhorn volumes
@@ -66,8 +69,10 @@
     - name: Drain the prefixes
       ansible.builtin.command:
         argv: "{{ ['uv', 'run', 'python', 'scripts/b2_drain.py',
-                   '--live-volumes-file', drain_live_file,
-                   '--volumes', drain_volumes]
+                   '--live-volumes-file', drain_live_file]
+                  + (['--volumes-file', drain_volumes_file]
+                     if (drain_volumes_file | default('')) | length > 0
+                     else ['--volumes', drain_volumes])
                   + (['--apply'] if drain_apply | bool else []) }}"
         chdir: "{{ drain_repo }}"
       environment:

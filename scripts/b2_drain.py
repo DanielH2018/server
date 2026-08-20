@@ -67,6 +67,21 @@ def volume_of(key: str, prefix: str = BACKUPSTORE_PREFIX) -> str | None:
     return parts[2]
 
 
+def parse_volume_list(raw: str) -> list[str]:
+    """Volume names from either a comma-separated argument or a file, order preserved.
+
+    Both separators are accepted so the same parser handles `--volumes a,b` and a file written
+    one-per-line; duplicates are dropped so a name listed twice is not deleted twice.
+    """
+    seen, out = set(), []
+    for chunk in raw.replace(",", "\n").splitlines():
+        name = chunk.strip()
+        if name and name not in seen:
+            seen.add(name)
+            out.append(name)
+    return out
+
+
 def volume_prefix(key: str, prefix: str = BACKUPSTORE_PREFIX) -> str:
     """The `<prefix><xx>/<yy>/<volume>/` a key sits under.
 
@@ -204,10 +219,17 @@ def read_live_volumes(path: str) -> set[str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--live-volumes-file", required=True)
-    parser.add_argument(
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument(
         "--volumes",
-        required=True,
         help="comma-separated Longhorn volume names whose prefixes to drain",
+    )
+    # Twenty volume names is 820 characters, which no shell pastes reliably on one line. The
+    # allow-list is still explicit — the operator names and can read the file — only the way it
+    # arrives changes.
+    source.add_argument(
+        "--volumes-file",
+        help="file of volume names, one per line or comma-separated",
     )
     parser.add_argument(
         "--apply",
@@ -222,9 +244,18 @@ def main(argv: list[str] | None = None) -> int:
         print(f"missing credential in the environment: {exc}", file=sys.stderr)
         return 2
 
-    requested = [v.strip() for v in args.volumes.split(",") if v.strip()]
+    if args.volumes_file:
+        try:
+            with open(args.volumes_file, encoding="utf-8") as handle:
+                raw = handle.read()
+        except OSError as exc:
+            print(f"cannot read {args.volumes_file}: {exc}", file=sys.stderr)
+            return 2
+    else:
+        raw = args.volumes
+    requested = parse_volume_list(raw)
     if not requested:
-        print("--volumes named nothing", file=sys.stderr)
+        print("no volumes were named", file=sys.stderr)
         return 2
 
     try:
