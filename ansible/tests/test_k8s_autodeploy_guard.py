@@ -43,8 +43,13 @@ import yaml
 _REPO = Path(__file__).resolve().parents[2]
 _K8S_ROLES = _REPO / "ansible/roles/k8s"
 _DEPLOYER_DEFAULTS = _REPO / "ansible/roles/setup/gitops_deploy/defaults/main.yml"
-# Not a workload role — the shared include every other role calls.
-_SHARED = {"manifests", "seed-volume", "rollout-drain"}
+# Not a workload role — the shared include every other role calls. The invariant: no role in
+# _SHARED may pin an `_image:` var, because that's what makes a role Renovate-visible and
+# therefore auto-deployable in the first place. Both here have no defaults/main.yml at all, so
+# neither pins one — that's the supporting fact, not the rule. seed-volume pins
+# seed_volume_image and does NOT belong here; it's denylisted instead and evaluated by every
+# guard below like any other role.
+_SHARED = {"manifests", "rollout-drain"}
 
 
 def _denylist() -> set[str]:
@@ -179,6 +184,12 @@ def _auto_deployable(role: Path) -> bool:
     Fail-closed: a role that declares nothing is not auto-deployable. The completeness guard
     makes that unreachable for a role that declares, and it is still the right default for a
     role that doesn't.
+
+    Reads defaults/main.yml as a plain FILE via yaml.safe_load, not as a live Ansible variable.
+    Whoever re-points gitops_deploy at these declarations (slice 1b) must do the same: k8s_autodeploy
+    and k8s_autodeploy_reason are unprefixed keys, shared by name across every role in one play, so
+    Ansible variable lookup would resolve whichever role's defaults last set them in load order —
+    not the role being asked about.
     """
     defaults = role / "defaults/main.yml"
     if not defaults.is_file():
