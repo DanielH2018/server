@@ -80,12 +80,25 @@ A policy written on `podSelector: {app: pihole}` therefore covers **both** insta
 is wanted. Writing it on the two-label selector would fence only one and leave the other silently
 open. Use the single label deliberately, and say so in the template.
 
-### 4. uptime-kuma reaches ~20 services *through* Traefik
+### 4. What actually depends on Traefik's `:80` — corrected after review
 
-`uptime-kuma/templates/static-monitors.yaml.j2` monitors ~20 `*.local.` hostnames, all of which
-resolve to the Traefik VIP. Those monitors survive only because the spec keeps Traefik's `:80`/
-`:443` open to all sources. If anyone later narrows the front door, the monitoring plane goes red
-in one move — record it, do not fence it.
+An earlier draft of this census claimed uptime-kuma's monitors justify leaving `:80` open. That is
+false, and the correction matters because this paragraph is the rationale a future auditor reads
+before narrowing the front door. Measured against
+`uptime-kuma/templates/static-monitors.yaml.j2`: **22 monitors use `https://`**, so they traverse
+`:443`, and 3 more dial `daniel-pi` directly and bypass Traefik entirely. **Zero dial
+`traefik:80`.**
+
+Two things genuinely depend on `:80`:
+
+- **The HTTP→HTTPS redirect entrypoint** (`traefik/templates/static-config.yaml.j2:36-42`,
+  `redirections: entryPoint: to: ":443"`). Every client arriving on plain HTTP hits this before
+  being redirected. This is the primary reason and was unstated until review.
+- **The four netpol probe control legs** — exactly four files grep `nc -w 5 -z traefik 80`, each
+  dialling it to prove the probe pod has a network at all before asserting anything.
+
+uptime-kuma still matters to `:443`, and narrowing *that* would take the monitoring plane red in
+one move. It is simply not evidence about `:80`.
 
 ### Caller matrix
 
