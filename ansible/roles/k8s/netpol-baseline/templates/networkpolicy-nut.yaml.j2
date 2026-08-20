@@ -1,0 +1,33 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nut
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: nut
+  policyTypes:
+    - Ingress
+  ingress:
+    # peanut is the web UI in-cluster. The node entries are daniel-server's shutdown chain:
+    # upsmon runs as a host process there, so it arrives as a node address, not a pod. Both
+    # nodes' cni0 and flannel.1 are admitted because nut has no node pin -- if the pod moves to
+    # daniel-server the same caller becomes same-node instead of cross-node, and the address
+    # changes with it.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: peanut
+        - ipBlock:
+            cidr: 10.42.0.1/32
+        - ipBlock:
+            cidr: 10.42.1.1/32
+        - ipBlock:
+            cidr: 10.42.0.0/32
+        - ipBlock:
+            cidr: 10.42.1.0/32
+      ports:
+        - port: 3493
+          protocol: TCP

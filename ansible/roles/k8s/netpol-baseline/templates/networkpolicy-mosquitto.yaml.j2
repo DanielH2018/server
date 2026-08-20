@@ -1,0 +1,52 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mosquitto
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: mosquitto
+  policyTypes:
+    - Ingress
+  ingress:
+    # zigbee2mqtt and home-assistant, admitted as pods AND as node addresses. Observed live
+    # 2026-08-20 (`kubectl -n homelab logs deploy/mosquitto --since=2h`, 2880 connections over
+    # the window): every connection from these two callers arrived as 10.42.0.1, the daniel-box
+    # cni0 bridge address, NOT as either pod's own IP (zigbee2mqtt=10.42.0.135,
+    # home-assistant=10.42.0.17) -- same-node traffic through the `mosquitto` ClusterIP Service
+    # hairpins through the bridge and is masqueraded to it. The podSelectors below are admitted
+    # for completeness / future-proofing (a cross-node placement or a client that bypasses the
+    # Service would arrive as a real pod IP) but neither has yet matched a real connection; the
+    # ipBlock is what is actually admitting today's traffic. Narrowing to only the observed form
+    # needs a caller census first -- two of three previous ClientIP narrowings in this homelab
+    # broke callers hiding in the CIDR they were narrowing against.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: zigbee2mqtt
+        - podSelector:
+            matchLabels:
+              app: home-assistant
+        - ipBlock:
+            cidr: 10.42.0.1/32
+        - ipBlock:
+            cidr: 10.42.1.1/32
+      ports:
+        - port: 1883
+          protocol: TCP
+    # uptime-kuma's "k3s Mosquitto (VIP)" port monitor (roles/k8s/uptime-kuma's
+    # static-monitors.yaml.j2), found live in the same observation: it connects to the
+    # mosquitto-lan VIP (10.0.0.242:1883) from daniel-server, cross-node from the mosquitto pod
+    # on daniel-box, and arrives as its own real pod IP (10.42.1.182, 360 connections/2h) --
+    # not SNAT'd, because ETP=Local on mosquitto-lan preserves the client address for a
+    # cross-node LoadBalancer hop. This caller is not in the task-5 brief's template; omitting
+    # it would have silently fenced a live Kuma monitor the moment this policy was applied.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: uptime-kuma
+      ports:
+        - port: 1883
+          protocol: TCP
