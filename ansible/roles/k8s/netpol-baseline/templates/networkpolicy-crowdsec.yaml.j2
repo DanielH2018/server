@@ -38,6 +38,18 @@ spec:
         - podSelector:
             matchLabels:
               app: crowdsec-node-agent
+        # authelia runs a crowdsec-agent SIDECAR that ships its auth logs to this LAPI. A sidecar
+        # has no identity of its own on the network -- it inherits its POD's labels, so this
+        # traffic arrives as `app: authelia`, not as anything crowdsec-shaped. Omitting it took
+        # authelia down on 2026-08-20: the sidecar crash-looped on "connection refused" (kube-router
+        # REJECTs rather than drops), which made the whole POD unready, which pulled authelia out of
+        # its Service endpoints, which broke SSO on every protected route. The authelia container
+        # itself was healthy throughout.
+        # The three pods running this sidecar are traefik, authelia and the node-agent DaemonSet
+        # (`grep -rl crowdsec-agent ansible/roles/k8s --include='*.j2'`); all three are admitted here.
+        - podSelector:
+            matchLabels:
+              app: authelia
       ports:
         - port: 8080
           protocol: TCP
