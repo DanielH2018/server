@@ -100,11 +100,16 @@ rewrites it with a `git pull` mid-run), so a `-e target=daniel-pi` deploy takes 
 `--check` runs unlocked. Exit **2** means a `--tags` value matched no service and *nothing
 was deployed* — Ansible itself exits 0 on an unmatched tag, so the wrapper checks the tags
 against `containers_list` first (`scripts/deploy_tags.py`); `--list-services` prints every
-valid value and `--skip-tag-check` bypasses. `--dry-run` validates the k8s manifests against
+valid value and `--skip-tag-check` bypasses. Exit **4** means the tree is behind
+`origin/master` and *nothing was deployed* — a stale tree renders stale templates and reverts
+live config while every repo-side check still reads green (`scripts/deploy_staleness.py`);
+`--skip-staleness-check` bypasses it. That check runs ahead of `--check` and `--dry-run` too,
+because a green dry run against a stale tree is itself the misleading signal; being *ahead* of
+master is normal branch work and is never refused. `--dry-run` validates the k8s manifests against
 the live API server without applying them, and runs unlocked because it mutates nothing —
 see *Checking a k8s change without deploying it* below. The bare `ansible-playbook` forms
-below still work and are what the wrapper runs, but they have neither the lock nor the tag
-check; use them only when you deliberately want that.
+below still work and are what the wrapper runs, but they have neither the lock, the tag
+check, nor the staleness check; use them only when you deliberately want that.
 
 ```bash
 # Deploy a specific container
