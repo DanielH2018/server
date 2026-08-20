@@ -437,24 +437,30 @@ fi
 #    definition of "eligible" free to drift from the one that actually selects.
 #
 #    The window is DERIVED: one full cycle is one day per candidate, so a fleet that grows cannot
-#    silently outrun a hardcoded number. Nothing is reported until a full cycle has elapsed since
-#    the rotation's first attempt — before that, an undrilled volume is simply one whose turn has
-#    not come, and flagging it would page for a fortnight after every deploy.
+#    silently outrun a hardcoded number.
+#
+#    The grace is PER CANDIDATE, measured from when that volume joined the rotation — the drill's
+#    `seen/<pvc>` marker, written once and never refreshed. A single rotation-wide start date is
+#    the obvious shape and is wrong: once the rotation is older than a cycle, a volume that joined
+#    yesterday is instantly judged against a window it has not had, so every volume added to the
+#    backup set would page for a full cycle. The attempt stamp cannot stand in either — it is
+#    refreshed each time the volume comes up, so for anything in steady rotation it is never older
+#    than one cycle and the grace would never expire.
 DRILL_CANDIDATES="{{ k3s_longhorn_restore_drill_stamp_dir }}/candidates"
-DRILL_ATTEMPTS="{{ k3s_longhorn_restore_drill_stamp_dir }}/attempts"
+DRILL_SEEN="{{ k3s_longhorn_restore_drill_stamp_dir }}/seen"
 DRILL_SUCCESS="{{ k3s_longhorn_restore_drill_stamp_dir }}/success"
 if [[ -r "$DRILL_CANDIDATES" ]]; then
   CAND_N=$(grep -c . "$DRILL_CANDIDATES" 2>/dev/null || echo 0)
-  # Oldest attempt stamp = when the rotation started. `find -printf` avoids a stat-per-file loop.
-  ROTATION_START=$(find "$DRILL_ATTEMPTS" -maxdepth 1 -type f -printf '%T@\n' 2>/dev/null \
-    | cut -d. -f1 | sort -n | head -1)
   COVERAGE_MAX_S=$(( (CAND_N + {{ k3s_longhorn_restore_drill_coverage_slack_days }}) * 86400 ))
   NOW_S=$(date +%s)
-  if (( CAND_N > 0 )) && [[ "$ROTATION_START" =~ ^[0-9]+$ ]] \
-     && (( NOW_S - ROTATION_START > COVERAGE_MAX_S )); then
+  if (( CAND_N > 0 )); then
     UNPROVEN=""
     while IFS= read -r cand; do
       [[ -n "$cand" ]] || continue
+      # No marker means the drill has not published one yet: judge nothing on missing evidence.
+      SEEN_AT=$(stat -c %Y "${DRILL_SEEN}/${cand}" 2>/dev/null)
+      [[ "$SEEN_AT" =~ ^[0-9]+$ ]] || continue
+      (( NOW_S - SEEN_AT > COVERAGE_MAX_S )) || continue
       CAND_AT=$(cat "${DRILL_SUCCESS}/${cand}" 2>/dev/null)
       if [[ ! "$CAND_AT" =~ ^[0-9]+$ ]] || (( NOW_S - CAND_AT > COVERAGE_MAX_S )); then
         UNPROVEN="${UNPROVEN:+${UNPROVEN}, }${cand}"

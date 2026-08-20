@@ -35,6 +35,7 @@ STAMP="${STAMP_DIR}/last-success"
 # least-recently-succeeded forever and be picked every single day.
 ATTEMPT_DIR="${STAMP_DIR}/attempts"
 SUCCESS_DIR="${STAMP_DIR}/success"
+SEEN_DIR="${STAMP_DIR}/seen"
 # The eligible set, refreshed every run for the heartbeat's coverage check to read. Check 8 has
 # no cluster credential worth the name, so the drill — which already computes this — publishes it.
 CANDIDATES="${STAMP_DIR}/candidates"
@@ -106,10 +107,21 @@ ELIGIBLE=$($KUBECTL -n longhorn-system get volume -o json 2>/dev/null \
       | [.pvc, .ns, .vol, .size, .bs, .target] | @tsv')
 [[ -n "$ELIGIBLE" ]] || fail "no eligible volume has a Completed backup${PIN:+ (pin: ${PIN})}"
 
-mkdir -p "$STAMP_DIR" "$ATTEMPT_DIR" "$SUCCESS_DIR"
-chmod 0755 "$STAMP_DIR" "$ATTEMPT_DIR" "$SUCCESS_DIR"
+mkdir -p "$STAMP_DIR" "$ATTEMPT_DIR" "$SUCCESS_DIR" "$SEEN_DIR"
+chmod 0755 "$STAMP_DIR" "$ATTEMPT_DIR" "$SUCCESS_DIR" "$SEEN_DIR"
 printf '%s\n' "$ELIGIBLE" | cut -f1 >"$CANDIDATES"
 chmod 0644 "$CANDIDATES"
+
+# When each candidate JOINED the rotation, written once and never refreshed. Check 8 needs it to
+# tell "this volume has had a full cycle of chances and never restored" from "this volume joined
+# on Tuesday and its turn has not come". Neither other stamp can answer that: the attempt stamp
+# is refreshed every time the volume comes up, so it is never older than one cycle for a volume
+# in steady rotation, and a whole-rotation start date flags a newly joined volume immediately.
+while IFS= read -r cand; do
+  [[ -n "$cand" && ! -e "${SEEN_DIR}/${cand}" ]] || continue
+  touch "${SEEN_DIR}/${cand}"
+  chmod 0644 "${SEEN_DIR}/${cand}"
+done <"$CANDIDATES"
 
 # Least-recently-ATTEMPTED wins, so the rotation self-corrects: a volume that joins the backup
 # set has no attempt stamp, sorts first, and is drilled the next night rather than waiting out a

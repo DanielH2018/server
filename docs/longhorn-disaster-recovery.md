@@ -203,9 +203,11 @@ Check 8 is coverage, and rotation is what made it necessary — a green check 7 
 volumes restored. It reads the candidate list the drill publishes to
 `/var/lib/longhorn-restore-drill/candidates` and pages, by name, for any candidate whose
 `success/<pvc>` stamp is missing or older than one full cycle plus
-`k3s_longhorn_restore_drill_coverage_slack_days`. Nothing is reported until a cycle has elapsed
-since the rotation's first attempt, so a fresh deploy does not page for volumes whose turn has not
-come.
+`k3s_longhorn_restore_drill_coverage_slack_days`. The grace is measured **per volume**, from the
+`seen/<pvc>` marker the drill writes the first time that volume appears as a candidate — so a
+fresh deploy does not page for volumes whose turn has not come, and neither does a volume that
+joins the backup set later. A rotation-wide start date would flag every such volume the day it
+joined.
 
 What is still not covered: each night proves one volume, so at any moment the fleet-wide claim is
 "every volume restored within the last cycle", not "every volume restores right now". A full-cluster restore is also still rationed — at 16 MiB blocks
