@@ -164,6 +164,14 @@ def test_a_non_directory_dotfile_is_skipped(tmp_path: Path) -> None:
     assert k8s_autodeploy_denylist(str(tmp_path)) == ["denied"]
 
 
+def test_a_stray_pycache_directory_is_skipped(tmp_path: Path) -> None:
+    """A stray __pycache__ (or dotdir) under roles/k8s/ is not a role and must not raise."""
+    _seed_shared_roles(tmp_path)
+    _role(tmp_path, "denied", _OK)
+    (tmp_path / "roles" / "k8s" / "__pycache__").mkdir()
+    assert k8s_autodeploy_denylist(str(tmp_path)) == ["denied"]
+
+
 def test_an_empty_result_raises(tmp_path: Path) -> None:
     _seed_shared_roles(tmp_path)
     _role(tmp_path, "allowed", _OK_TRUE)
@@ -222,6 +230,28 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
             (_ANSIBLE / "roles/k8s" / role / "defaults/main.yml").read_text()
         )
         assert data["k8s_autodeploy"] is False
+    # The named-role assertions above move WITH a bulk flip — flip sonarr/etc to true and
+    # they simply stop being asserted, not caught. This count is what actually catches that:
+    # it is derived independently, by walking roles/k8s/ in this test rather than trusting
+    # the filter's own count, so a bulk flip of several roles to true shrinks it and fails
+    # here even though every assertion above still passes. Do not remove or loosen this floor
+    # to "simplify" the test — it is the one assertion that can't move with the thing it checks.
+    k8s_roles_dir = _ANSIBLE / "roles/k8s"
+    actually_false = [
+        role_dir.name
+        for role_dir in sorted(k8s_roles_dir.iterdir())
+        if role_dir.is_dir()
+        and not role_dir.name.startswith(".")
+        and role_dir.name != "__pycache__"
+        and role_dir.name not in SHARED_ROLES
+        and (role_dir / "defaults" / "main.yml").is_file()
+        and (
+            yaml.safe_load((role_dir / "defaults" / "main.yml").read_text()) or {}
+        ).get("k8s_autodeploy")
+        is False
+    ]
+    assert len(denied) == len(actually_false)
+    assert len(denied) >= 40
 
 
 def test_the_template_still_consumes_the_derived_variable() -> None:
