@@ -10,6 +10,34 @@
       - deployment.yaml
       - service.yaml
 
+# THE SECOND ROLE THAT MUST WAIT INLINE (crowdsec is the other; see its header). k8s/manifests
+# deliberately does NOT wait — it queues the rollout for k8s/rollout-drain at the end of the
+# batch. Most roles tolerate that because nothing else in them touches the workload they just
+# rolled. This one does: every self-test below dials registry over its Service, and the batch
+# drain runs long after them.
+#
+# Bit a 2026-08-20 13:49 deploy. registry-selftest-push's first pod got `connection refused` to
+# the registry ClusterIP while the Deployment was still rolling; the Job's ONE retry then
+# succeeded, so the deploy stayed green on its last attempt. That is the whole failure mode —
+# not a broken deploy, a deploy whose proof-of-loop spends its entire `backoffLimit: 1` budget
+# racing the pod it just restarted. A rollout slower than one retry backoff exhausts it and the
+# deploy dies on a registry that is merely slow to start.
+#
+# `rollout status`, not `wait --for=condition=Available`: this Deployment is single-replica, so
+# the OLD pod satisfies Available and the wait returns instantly. Returns immediately when
+# nothing rolled, so a no-change deploy pays nothing.
+#
+# It also returns success immediately for a Deployment scaled to ZERO, which registry-gc.sh
+# does while it collects. This gate does not cover that case, and does not need to: GC is
+# scheduled precisely so it never shares a window with a deploy (see the GC section below).
+- name: Wait for the registry rollout before proving anything against it
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} rollout status deploy/registry --timeout=300s
+  become: true
+  changed_when: false
+
 # ── proof of loop ───────────────────────────────────────────────────────────
 # The registry ran for a day with an empty catalog: healthy by every signal, and unproven. Its
 # readiness probe only says the process answers, which is true of a registry that no builder can

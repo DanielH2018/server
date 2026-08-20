@@ -17,11 +17,12 @@
 
 - name: Wait for the crowdsec rollout before talking to the LAPI
   tags: [deploy]
-  # THE ONE ROLE THAT MUST WAIT INLINE. k8s/manifests deliberately does NOT wait — it queues
-  # the rollout for k8s/rollout-drain at the end of the batch (see that role's header for the
-  # 1386s-to-max() rationale). Every other role tolerates that, because nothing else in them
-  # touches the workload they just rolled. This role does: the tasks below `exec` into
-  # deploy/crowdsec to reach the LAPI, and the batch drain runs long after them.
+  # ONE OF TWO ROLES THAT MUST WAIT INLINE (k8s/registry is the other). k8s/manifests
+  # deliberately does NOT wait — it queues the rollout for k8s/rollout-drain at the end of the
+  # batch (see that role's header for the 1386s-to-max() rationale). Most roles tolerate that,
+  # because nothing else in them touches the workload they just rolled. This role does: the
+  # tasks below `exec` into deploy/crowdsec to reach the LAPI, and the batch drain runs long
+  # after them. ansible/tests/test_inline_rollout_gates.py pins both.
   #
   # Without this gate a manifest change makes the role fail against the pod it just restarted
   # — and `no_log` on the task below censors the body, so it surfaces as a bare "Module
