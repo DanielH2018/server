@@ -1,0 +1,43 @@
+---
+# Home Assistant. Two callers beyond the baseline; prometheus scrapes :8123 too, but the
+# baseline already carries it, and browsers arrive through traefik, which it also carries.
+#
+#   homelab-mcp    — HA_URL (homelab-mcp/templates/deployment.yaml.j2), the read tools Claude uses
+#   monitor-bridge — HA_URL (monitor-bridge/templates/env-secret.yaml.j2), the scheduler-stuck
+#                    check that the container healthcheck cannot see
+#
+# scripts/probe.py's `ha` subcommands run on a NODE, not in a pod, so they arrive with a node
+# address and are covered by the baseline's cni0 /32s rather than by anything here.
+#
+# 8123 is the containerPort AND the Service port — verified 2026-08-20, they match.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: home-assistant
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: home-assistant
+  policyTypes:
+    - Ingress
+  ingress:
+{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
+   lever. `| bool` for the string trap. Both explained in full in
+   networkpolicy-traefik.yaml.j2. #}
+{% if netpol_baseline_enforced | bool %}
+    - from:
+        - podSelector:
+            matchLabels:
+              app: homelab-mcp
+        - podSelector:
+            matchLabels:
+              app: monitor-bridge
+      ports:
+        - port: 8123
+          protocol: TCP
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}

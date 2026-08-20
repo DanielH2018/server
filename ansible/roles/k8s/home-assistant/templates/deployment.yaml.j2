@@ -17,6 +17,7 @@ spec:
     metadata:
       labels:
         app: home-assistant
+        netpol-baseline: enforced
     spec:
       enableServiceLinks: false
       # No pod-level runAsUser/fsGroup: the LSIO image starts as root and s6 drops to

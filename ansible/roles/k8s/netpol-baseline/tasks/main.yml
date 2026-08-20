@@ -53,6 +53,8 @@
       - networkpolicy-scrutiny-influxdb.yaml
       - networkpolicy-scrutiny-web.yaml
       - networkpolicy-loki-homelab.yaml
+      - networkpolicy-home-assistant.yaml
+      - networkpolicy-uptime-kuma.yaml
 
 # ── prove the policy is enforced, rather than merely applied ────────────────────────────────
 # Its own directory: `kubectl apply -f <dir>` reads every file in the directory it is given, and

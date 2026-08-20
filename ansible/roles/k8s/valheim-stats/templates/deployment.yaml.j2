@@ -16,6 +16,7 @@ spec:
     metadata:
       labels:
         app: valheim-stats
+        netpol-baseline: enforced
       annotations:
         # Recreate the pod when the script ConfigMap's source changes — the manifests
         # role only restarts on manifest changes, and the script is not a manifest.

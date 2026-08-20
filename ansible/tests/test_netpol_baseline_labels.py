@@ -113,6 +113,22 @@ SLICE_45A_WORKLOADS = {
 
 SLICE_45A_ROLES = {role for role, _name in SLICE_45A_WORKLOADS}
 
+# Slice 4.5 stage B: the standalone apps. Each renders exactly one workload, so role-granular and
+# workload-granular agree here — they are still named per workload for the same reason stage A is.
+SLICE_45B_WORKLOADS = {
+    ("homepage", "homepage"),
+    ("homelab-mcp", "homelab-mcp"),
+    ("livesync", "livesync"),
+    ("peanut", "peanut"),
+    ("zigbee2mqtt", "zigbee2mqtt"),
+    ("terraria-stats", "terraria-stats"),
+    ("valheim-stats", "valheim-stats"),
+    ("home-assistant", "home-assistant"),
+    ("uptime-kuma", "uptime-kuma"),
+}
+
+SLICE_45B_ROLES = {role for role, _name in SLICE_45B_WORKLOADS}
+
 # Workloads inside a fenced role that are fenced by their OWN NetworkPolicy rather than by the
 # baseline label. Each entry must name the policy that covers it: an unexplained exemption is
 # indistinguishable from a workload someone forgot to label.
@@ -172,6 +188,7 @@ def test_exactly_the_fenced_roles_carry_the_baseline_label() -> None:
         | SLICE_3_ROLES
         | SLICE_4_ROLES
         | SLICE_45A_ROLES
+        | SLICE_45B_ROLES
         | BORN_FENCED_ROLES
     )
     labelled = _labelled_roles()
@@ -202,7 +219,12 @@ def test_every_pod_producing_doc_in_a_fenced_role_is_labelled() -> None:
     """A role is not a unit of fencing. claude-otel renders six workloads; five
     could go unlabelled while the role still looked fenced."""
     fenced_roles = (
-        SLICE_1_ROLES | SLICE_2_ROLES | SLICE_3_ROLES | SLICE_4_ROLES | SLICE_45A_ROLES
+        SLICE_1_ROLES
+        | SLICE_2_ROLES
+        | SLICE_3_ROLES
+        | SLICE_4_ROLES
+        | SLICE_45A_ROLES
+        | SLICE_45B_ROLES
     )
     unlabelled = {
         (role, doc.get("metadata", {}).get("name", "?"))
@@ -236,6 +258,19 @@ def test_exactly_the_slice_45a_workloads_carry_the_baseline_label() -> None:
         "slice 4.5 stage A's labelled workloads no longer match SLICE_45A_WORKLOADS.\n"
         f"  labelled: {sorted(labelled)}\n"
         f"  expected: {sorted(SLICE_45A_WORKLOADS)}"
+    )
+
+
+def test_exactly_the_slice_45b_workloads_carry_the_baseline_label() -> None:
+    labelled = {
+        (role, name)
+        for (role, name) in _labelled_workloads()
+        if role in SLICE_45B_ROLES
+    }
+    assert labelled == SLICE_45B_WORKLOADS, (
+        "slice 4.5 stage B's labelled workloads no longer match SLICE_45B_WORKLOADS.\n"
+        f"  labelled: {sorted(labelled)}\n"
+        f"  expected: {sorted(SLICE_45B_WORKLOADS)}"
     )
 
 

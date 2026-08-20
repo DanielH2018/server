@@ -1,0 +1,54 @@
+---
+# Uptime Kuma. Everything that pushes a heartbeat dials :3001 directly rather than going through
+# traefik, so this is the widest peer list in the slice:
+#
+#   monitor-bridge          — KUMA_URL (monitor-bridge/templates/env-secret.yaml.j2)
+#   autofix-bridge          — KUMA_URL (autofix-bridge/files/autofix.py)
+#   cloudflare-ddns-direct  — KUMA push URL (cloudflare-ddns/templates/deployment-direct.yaml.j2)
+#   cloudflare-ddns-proxied — the same, deployment-proxied.yaml.j2
+#
+# The host crons that push heartbeats arrive with a node address and are covered by the
+# baseline's cni0 /32s. Browsers arrive through traefik, also from the baseline.
+#
+# The `autokuma` sidecar in this pod needs NO rule: it reaches Kuma over pod-local loopback,
+# which no NetworkPolicy evaluates. A sidecar's OUTBOUND traffic would carry this pod's labels —
+# that is what broke authelia in slice 4 — but autokuma's Kuma traffic never leaves the pod.
+#
+# 3001 is the containerPort AND the Service port — verified 2026-08-20, they match.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: uptime-kuma
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: uptime-kuma
+  policyTypes:
+    - Ingress
+  ingress:
+{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
+   lever. `| bool` for the string trap. Both explained in full in
+   networkpolicy-traefik.yaml.j2. #}
+{% if netpol_baseline_enforced | bool %}
+    - from:
+        - podSelector:
+            matchLabels:
+              app: monitor-bridge
+        - podSelector:
+            matchLabels:
+              app: autofix-bridge
+        - podSelector:
+            matchLabels:
+              app: cloudflare-ddns-direct
+        - podSelector:
+            matchLabels:
+              app: cloudflare-ddns-proxied
+      ports:
+        - port: 3001
+          protocol: TCP
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}
