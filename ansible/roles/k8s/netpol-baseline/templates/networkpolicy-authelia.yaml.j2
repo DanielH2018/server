@@ -11,6 +11,10 @@ spec:
   policyTypes:
     - Ingress
   ingress:
+{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
+   lever. `| bool` for the string trap. Both explained in full in
+   networkpolicy-traefik.yaml.j2. #}
+{% if netpol_baseline_enforced | bool %}
     # Traefik is the only in-cluster caller: forwardauth-middleware.yaml.j2 dials
     # authelia.<ns>.svc:9091 from the Traefik pod. Apps behind the middleware never dial
     # authelia themselves -- an Authelia 302 is issued by Traefik before it proxies.
@@ -21,3 +25,8 @@ spec:
       ports:
         - port: 9091
           protocol: TCP
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}

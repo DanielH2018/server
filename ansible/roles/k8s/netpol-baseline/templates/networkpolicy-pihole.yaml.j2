@@ -15,6 +15,10 @@ spec:
   policyTypes:
     - Ingress
   ingress:
+{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
+   lever. `| bool` for the string trap. Both explained in full in
+   networkpolicy-traefik.yaml.j2. BOTH rules below sit inside this conditional. #}
+{% if netpol_baseline_enforced | bool %}
     # :53 stays open. It is daniel-server's resolv.conf nameserver and serves every LAN client,
     # whose addresses are not enumerable here. The UI is the attack surface; :53 is what takes
     # the house down.
@@ -41,3 +45,8 @@ spec:
       ports:
         - port: 80
           protocol: TCP
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}
