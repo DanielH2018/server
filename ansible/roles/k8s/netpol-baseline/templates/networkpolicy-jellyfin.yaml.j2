@@ -11,6 +11,10 @@ spec:
   policyTypes:
     - Ingress
   ingress:
+{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
+   lever. `| bool` for the string trap. Both explained in full in
+   networkpolicy-traefik.yaml.j2. #}
+{% if netpol_baseline_enforced | bool %}
     # :8096 stays open to all sources. LAN clients (TVs, phones) reach the jellyfin-lan VIP
     # 10.0.0.241 directly rather than through Traefik, and with ETP=Local they arrive as their
     # own 10.0.0.x address -- enumerable only as "the LAN", which buys nothing over leaving it
@@ -21,3 +25,8 @@ spec:
     - ports:
         - port: 8096
           protocol: TCP
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}

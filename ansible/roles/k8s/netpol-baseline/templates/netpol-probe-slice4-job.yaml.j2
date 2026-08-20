@@ -20,15 +20,31 @@
 # policy" apart from "nothing is listening" — the readiness gate in tasks/main.yml proves all
 # four targets are up before this Job runs, closing that gap the same way the slice-2/3 gates do.
 #
-# Ports hardcoded from each target's own NetworkPolicy `port:` (networkpolicy-authelia.yaml.j2:22,
-# networkpolicy-crowdsec.yaml.j2:21, networkpolicy-nut.yaml.j2:32,
-# networkpolicy-mosquitto.yaml.j2:37) — a wrong port here fails silently green, since these
+# Ports hardcoded from each target's own NetworkPolicy `port:` (networkpolicy-authelia.yaml.j2:26,
+# networkpolicy-crowdsec.yaml.j2:26, networkpolicy-nut.yaml.j2:69,
+# networkpolicy-mosquitto.yaml.j2:61) — a wrong port here fails silently green, since these
 # assertions are inverted: a port nothing listens on makes `nc` fail, which is the PASS branch.
 # Re-check against the Service source whenever this file is touched; the readiness gate checks
 # the Service has ready backends, not that these numbers are the ports it serves.
 #
-# DNS leg: resolving traefik's own cluster.local name exercises the CoreDNS -> pihole forward
-# path the slice-4 census found, without depending on any of the four fenced targets.
+# DNS leg: the name it resolves must be one ONLY pihole can answer, and picking that name is the
+# whole difficulty of this leg.
+#   A cluster.local name proves nothing. CoreDNS's Corefile has
+#   `kubernetes cluster.local in-addr.arpa ip6.arpa { fallthrough in-addr.arpa ip6.arpa }`, so a
+#   *.svc.cluster.local query is answered authoritatively and NEVER reaches the `forward .` line.
+#   A pihole policy that broke external resolution would leave such a leg green.
+#   A public name proves nothing either. The forward line is
+#   `forward . 10.43.252.187 1.1.1.1 1.0.0.1 { policy sequential; health_check 5s; max_fails 2 }`
+#   — pihole first, but Cloudflare is a live fallback, so a fenced-out pihole still resolves any
+#   public name.
+# `daniel-pi.lan` is the discriminator. Pi-hole serves it as a `host-record` (the shared
+# ansible/templates/pihole-dnsmasq.conf.j2), and `.lan` is a private TLD Cloudflare NXDOMAINs.
+# Verified live 2026-08-20: `dig @10.43.0.10 daniel-pi.lan` → 10.0.0.139, `dig @1.1.1.1
+# daniel-pi.lan` → NXDOMAIN. So a successful lookup proves the query reached pihole and pihole
+# answered. There is no coredns-custom ConfigMap on this cluster (checked the same day), so the
+# `import /etc/coredns/custom/*.override` above the forward stubs nothing locally.
+# Caveat on timing, not on correctness: the Corefile's `cache 30` can serve this answer from
+# CoreDNS's cache for up to 30s after pihole becomes unreachable.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -82,13 +98,17 @@ spec:
                 echo "isolated: $target unreachable from an unlisted caller"
               done
 
-              # DNS must still work -- this is the CoreDNS -> pihole path the census found.
-              # Resolving anything at all proves it, since cluster DNS forwards through pihole.
-              if ! nslookup traefik.{{ k8s_namespace }}.svc.cluster.local >/dev/null 2>&1; then
-                echo "DNS FAILED: cluster resolution broke -- check the pihole policy"
+              # DNS. daniel-pi.lan is a pihole-only record: CoreDNS holds no authority for
+              # `.lan`, so the query traverses `forward .`, and Cloudflare (the fallback
+              # resolver on that same line) NXDOMAINs it. Resolving it therefore proves pihole
+              # itself answered -- a cluster.local name would be answered by CoreDNS without
+              # ever reaching pihole, and a public name would be answered by the Cloudflare
+              # fallback even with pihole fenced out.
+              if ! nslookup daniel-pi.lan >/dev/null 2>&1; then
+                echo "DNS FAILED: pihole did not answer daniel-pi.lan -- check the pihole policy"
                 exit 1
               fi
-              echo "dns ok: cluster resolution works through the pihole fence"
+              echo "dns ok: pihole answered daniel-pi.lan, so :53 is reachable through the fence"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

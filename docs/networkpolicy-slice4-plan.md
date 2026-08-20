@@ -741,10 +741,19 @@ git commit -m "netpol slice 4: the infra-tier fence probe"
 **Files:**
 - Modify: `docs/networkpolicy-default-deny.md`
 
-**Deploy order matters and is not the slice-3 order.** There is no enforcement flag to stage
-behind: policies apply first, then labels arm them. Deploy `netpol-baseline` **before** the
-workload roles, so every policy exists before any pod carries the label that makes it default-deny.
-The reverse order fences pods against policies that do not exist yet.
+**Deploy order matters and is not the slice-3 order.** Deploy `netpol-baseline` **before** the
+workload roles, so every policy exists before any pod carries the baseline label. The reverse
+order fences pods against policies that do not exist yet.
+
+**Never run a tagless `./scripts/deploy.sh` until slice 4 is fully deployed.** `containers_list`
+in `ansible/inventory/host_vars/daniel-box.yml` has no toposort and runs in list order. `traefik`
+is entry **2** of 52 k8s entries (line 78); `netpol-baseline` is entry **52**, the last one
+(line 653). A tagless run therefore puts the `netpol-baseline: enforced` label on the Traefik pod
+50 entries *before* the policies apply. In that window the already-live baseline policy selects
+Traefik and admits only the Traefik pod, Prometheus and the node CIDRs — while LAN clients arrive
+as their own `10.0.0.x` addresses under ETP=Local. The edge dies, and it takes with it the routes
+you would use to diagnose it. This is an operator footgun only: `gitops-deploy` defers k8s role
+changes, so the automated pipeline cannot reach it on its own.
 
 - [ ] **Step 1: Capture witnesses before anything deploys**
 
@@ -754,12 +763,29 @@ uv run python scripts/probe.py health monitor-bridge
 ```
 Record the scrape-target count as the baseline. Kuma is the out-of-band witness.
 
-- [ ] **Step 2: Apply the policies first**
+- [ ] **Step 2: Apply the policies — THIS IS THE STEP THAT ARMS ALL SEVEN FENCES**
 
 ```bash
 ./scripts/deploy.sh --tags netpol-baseline
 ```
-Nothing is fenced yet — no pod carries a slice-4 label.
+
+**This step is the dangerous one, not Step 3.** A NetworkPolicy makes a pod default-deny by
+SELECTING it, and each of the seven bespoke policies selects on the workload's own `app:` label —
+`app: traefik`, `app: nut`, and so on. Those labels are already on the pods. So the moment this
+command applies, every one of the seven workloads is default-deny and admits only what its own
+policy names. Nothing waits for the `netpol-baseline: enforced` label; that label adds the
+baseline's admissions on top, in Step 3.
+
+Watch `nut` hardest here. Its policy is the narrowest and it has two live callers that only a
+podSelector admits — Home Assistant's NUT integration (`sensor.ups_power`, the Energy dashboard
+and the battery automations) and uptime-kuma's `k3s nut (upsd)` monitor. `traefik`, by contrast,
+is the *safe* one at this step: its own policy opens `:80`/`:443` to every source, so applying it
+changes nothing an LAN or WAN client can see.
+
+If this step breaks something, `./scripts/deploy.sh --tags netpol-baseline -e
+netpol_baseline_enforced=false` is the undo: every slice-4 policy re-renders as allow-all
+(`ingress: [{}]`) and re-applies over the fenced version. Deleting the policies is not available —
+`kubectl delete networkpolicy` is deny-listed for agents and refused by the readonly SA.
 
 - [ ] **Step 3: Label the workloads, one role at a time, traefik LAST**
 
@@ -773,8 +799,10 @@ Nothing is fenced yet — no pod carries a slice-4 label.
 ./scripts/deploy.sh --tags traefik
 ```
 
-One at a time so a break is attributable to one workload. **traefik last**: if its policy is wrong,
-every route in the cluster dies at once, including the routes you would use to diagnose the others.
+One at a time so a break is attributable to one workload. This step adds the baseline's
+admissions (Traefik, Prometheus, the node CIDRs) to each pod; it does not create the fence, which
+Step 2 already did. **traefik last** all the same: a mistake in the baseline's own peer set takes
+out every route in the cluster at once, including the routes you would use to diagnose the others.
 After `pihole`, before continuing, confirm DNS still resolves — that is the cluster-wide one:
 
 ```bash

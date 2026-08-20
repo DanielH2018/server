@@ -11,6 +11,23 @@ spec:
   policyTypes:
     - Ingress
   ingress:
+{# THE ROLLBACK LEVER. All seven slice-4 policies carry this same conditional, and this file
+   carries the reasoning the other six point back to.
+
+   `netpol_baseline_enforced` is the documented undo for slice 4, and it only works if each
+   bespoke policy renders allow-all when the flag is false. `kubectl apply` never prunes, so a
+   `when:` on the include in tasks/main.yml would undo nothing: the policies already applied
+   stay live and keep fencing, minus the traefik/prometheus grants the flag also switches off --
+   strictly worse than not rolling back at all. Real deletion is not available either;
+   `kubectl delete networkpolicy` is deny-listed for agents and refused by the readonly SA.
+   Slice 3 established this render-allow-all pattern for the observability policies
+   (networkpolicy-observability.yaml.j2); slice 4 follows it.
+
+   `| bool` matches the `when:` in tasks/main.yml. Without it the two disagree for a STRING:
+   `-e netpol_baseline_enforced=false` is truthy to Jinja (this branch renders, fencing
+   applied) and False to Ansible's `when:` (every probe task skipped) -- enforcement with no
+   probe, from the exact override an operator reaches for mid-incident. #}
+{% if netpol_baseline_enforced | bool %}
     # The front door. Open to every source on purpose: these ports already take LAN, WireGuard
     # and Cloudflare traffic, and ETP=Local preserves the client IP, so an ipBlock list here
     # would have to enumerate the internet. :80 in particular must stay open for the
@@ -38,3 +55,8 @@ spec:
       ports:
         - port: 8080
           protocol: TCP
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}
