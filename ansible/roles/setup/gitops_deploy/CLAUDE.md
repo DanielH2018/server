@@ -117,6 +117,22 @@ stay).
     change. This is the same silent-no-op class `broad_remediation()`'s docstring warns about
     (`deploy_logic.py` around line 177) — naming `deploy.yml` for a setup-plane change leaves
     it unapplied while a plain ff-merge clears the divergence.
+
+    The deployer now detects this itself instead of relying on an operator to remember it. Each
+    tick, `k8s_declarations_at(f"origin/{BRANCH}")` reads every role's `defaults/main.yml` at the
+    ref the deployer just fetched, and `declared_denylist()` parses it with a stdlib regex — the
+    unit runs under `uv run --no-project` and cannot import `yaml` or the filter plugin. If that
+    result disagrees with `K8S_AUTODEPLOY_DENYLIST`, or can't be read at all, k8s auto-deploy is
+    disarmed for that tick and `alert_once` pages naming
+    `ansible/initial_setup.yml --tags gitops_deploy` — the playbook that actually re-renders the
+    config, not `deploy.yml`. The disarm itself is stateless: it is recomputed every tick, so it
+    self-clears the moment the config is re-rendered. Only the page is throttled, on
+    `STALE_DENYLIST_FILE`. The regex is deliberately biased toward denied — unanimity is required
+    across every match, an absent or unparseable declaration counts as denied, and a shared role
+    skips the check entirely — so the worst a parsing bug here can do is a spurious disarm, never
+    a permitted deploy. It is not the authoritative reader: the filter plugin, parsing real YAML,
+    still decides the denylist, and `ansible/tests/test_denylist_parsers_agree.py` pins the two
+    together against the live tree.
   - **The gate is in the play, not here.** `roles/k8s/manifests` applies,
     `roles/k8s/rollout-drain` runs `rollout status --timeout`, and
     `ansible/post_tasks/k8s_stabilise_gate.yml` holds the post-Available soak that hard-fails
