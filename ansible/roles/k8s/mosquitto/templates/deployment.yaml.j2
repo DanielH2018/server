@@ -16,6 +16,7 @@ spec:
     metadata:
       labels:
         app: mosquitto
+        netpol-baseline: enforced
     spec:
       # Pinned to the VIP-announcing node while the MetalLB L2Advertisement is pinned
       # to daniel-box: with externalTrafficPolicy Local, a VIP-backed pod on the other

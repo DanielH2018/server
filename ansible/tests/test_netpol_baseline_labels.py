@@ -133,7 +133,13 @@ def _labelled_roles() -> set[str]:
 
 
 def test_exactly_the_fenced_roles_carry_the_baseline_label() -> None:
-    expected = SLICE_1_ROLES | SLICE_2_ROLES | SLICE_3_ROLES | BORN_FENCED_ROLES
+    expected = (
+        SLICE_1_ROLES
+        | SLICE_2_ROLES
+        | SLICE_3_ROLES
+        | SLICE_4_ROLES
+        | BORN_FENCED_ROLES
+    )
     labelled = _labelled_roles()
     missing = sorted(expected - labelled)
     extra = sorted(labelled - expected)
