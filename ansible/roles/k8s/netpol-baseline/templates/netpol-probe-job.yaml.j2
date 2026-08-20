@@ -26,6 +26,10 @@ spec:
     metadata:
       labels:
         app: netpol-baseline-probe
+        # Admits this pod to the sentinel (speedtest:80) and nothing else — see
+        # networkpolicy-netpol-sentinel.yaml.j2. It does NOT affect the inverted assertions:
+        # no policy in the repo names this label except the sentinel's.
+        netpol-probe: control
     spec:
       restartPolicy: Never
       enableServiceLinks: false
@@ -48,23 +52,24 @@ spec:
               fi
               echo "control ok: traefik:80 reachable"
 
-              # 2. NEGATIVE CONTROL — an UNFENCED pod is still reachable from here. homepage
-              #    carries no netpol-baseline label and is in no slice of the rollout table; it
-              #    is first fenced at slice 5, when the selector becomes podSelector: {} and
-              #    every pod in the namespace is covered. THIS ASSERTION NEEDS A DIFFERENT
-              #    CONTROL AT SLICE 5 — by construction there is no unfenced pod left in the
-              #    namespace then, so the replacement has to come from outside it. If this fails
-              #    the probe pod's own networking is broken and assertion 3 would pass for the wrong
-              #    reason. Port 3000 here is homepage's Service — unrelated to littlelink's own
-              #    port 3000 used in assertions 3-4 below; they are different Services reached by
-              #    different names.
-              if ! nc -w 5 -z homepage 3000; then
-                echo "NEGATIVE CONTROL FAILED: cannot reach the unfenced homepage:3000 either."
-                echo "This pod cannot open connections at all, so assertion 3 below would pass"
-                echo "whether or not the policy works. Investigate before trusting this job."
+              # 2. SENTINEL CONTROL — a FENCED pod that explicitly admits this probe is still
+              #    reachable. This pod carries `netpol-probe: control`, and
+              #    networkpolicy-netpol-sentinel.yaml.j2 admits exactly that label to
+              #    speedtest:80. If this fails, either the probe pod cannot open connections at
+              #    all or the policy engine is denying admitted traffic — and assertion 4 below
+              #    would pass whether or not the policy works.
+              #
+              #    This leg used to dial homepage:3000, which was reachable only because homepage
+              #    was unfenced. Slice 4.5 fences it and slice 5 leaves no unfenced pod at all, so
+              #    the control is now a named peer rather than an accident of the rollout order.
+              if ! nc -w 5 -z speedtest 80; then
+                echo "SENTINEL CONTROL FAILED: cannot reach speedtest:80, which the sentinel"
+                echo "policy admits this pod to. Either this pod cannot open connections at all,"
+                echo "or admitted traffic is being denied. Assertion 4 below would pass whether"
+                echo "or not the policy works. Investigate before trusting this job."
                 exit 1
               fi
-              echo "negative control ok: unfenced homepage:3000 reachable"
+              echo "sentinel control ok: speedtest:80 reachable, admitted by policy"
 
               # 3. LIVENESS — littlelink is actually UP and Traefik can reach it. Goes through the
               #    Traefik VIP by hostname, which is the real allowed path, so this doubles as the
@@ -100,7 +105,8 @@ spec:
               echo "liveness ok: littlelink reachable through traefik"
 
               # 4. THE ASSERTION — direct pod-to-pod must FAIL. Inverted: success here is the
-              #    failure case. littlelink:3000 is a different Service from homepage:3000 above.
+              #    failure case. littlelink is deliberately NOT the sentinel from assertion 2 —
+              #    a target cannot be both admitted and denied.
               if nc -w 5 -z littlelink 3000; then
                 echo "POLICY NOT ENFORCED: reached littlelink:3000 directly from a pod that"
                 echo "carries no netpol-baseline label. Either netpol_baseline_enforced is false,"

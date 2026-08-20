@@ -55,6 +55,9 @@ spec:
     metadata:
       labels:
         app: netpol-probe-slice3
+        # Admits this pod to the sentinel (speedtest:80) only — see
+        # networkpolicy-netpol-sentinel.yaml.j2.
+        netpol-probe: control
     spec:
       restartPolicy: Never
       enableServiceLinks: false
