@@ -92,6 +92,11 @@ gitops_deploy_k8s_autodeploy_denylist:
   # by digest, so it rides whatever image lands after Renovate's digest soak.
   - prowlarr
   - freshrss
+  # Recreate + RWO PVC: the replacement pod migrates the volume before the gate sees a fault,
+  # so the rollback feeds the prior image data it can no longer read. Both were eligible only
+  # because nothing had checked them; their own reasons said "NOT independently safe".
+  - code-server
+  - speedtest
   # dependency edges — this deployer models no intra-tick ordering. registry is the image-supply
   # path for n8n, n8n-runners, homelab-mcp, ical-proxy, nut, pi-peer-backup and code-server
   # (homelab-mcp pulls with imagePullPolicy: Always); mosquitto is the broker for zigbee2mqtt
