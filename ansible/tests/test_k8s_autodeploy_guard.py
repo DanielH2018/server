@@ -333,13 +333,6 @@ def test_auto_deployable_roles_do_not_skip_the_rollout_gate() -> None:
 # reason-aware version of this check lands with the per-role k8s_autodeploy_reason declaration.
 
 
-def _pins_an_image(role: Path) -> bool:
-    defaults = role / "defaults/main.yml"
-    return defaults.is_file() and bool(
-        re.search(r"^\s*\w*_image:\s*\S", defaults.read_text(), re.MULTILINE)
-    )
-
-
 def _declares_autodeploy(role: Path) -> bool:
     defaults = role / "defaults/main.yml"
     if not defaults.is_file():
@@ -353,13 +346,13 @@ def _declares_autodeploy(role: Path) -> bool:
 def test_every_role_declares_its_autodeploy_stance() -> None:
     """Eligibility is declared where the justifying knowledge lives, not in a central list.
 
-    Omission must not read as consent. Scoping this to image-pinning roles left a mirror gap:
-    a role with no defaults/main.yml at all — longhorn-ui and n8n-images, both live
-    containers_list entries, both on the CSV denylist today — has _pins_an_image() return
-    False and skips the check entirely. If 1b treats an undeclared role as eligible, the way
-    the CSV era treated denylist-absence as eligible, both flip from protected to
-    auto-deployable with nobody reviewing it. Every role _roles() yields must declare,
-    whether or not it pins an image.
+    Omission must not read as consent. This used to be scoped to roles pinning an `_image:`
+    var, which left a mirror gap: a role with no defaults/main.yml at all — longhorn-ui and
+    n8n-images, both live containers_list entries, both on the CSV denylist today — has no
+    `_image:` var either, so it skipped the check entirely. If 1b treats an undeclared role as
+    eligible, the way the CSV era treated denylist-absence as eligible, both flip from
+    protected to auto-deployable with nobody reviewing it. Every role _roles() yields must
+    declare, whether or not it pins an image.
     """
     missing = [role.name for role in _roles() if not _declares_autodeploy(role)]
     assert not missing, (
@@ -375,11 +368,17 @@ def test_declarations_match_the_denylist_they_will_replace() -> None:
     Slice 1b re-points gitops_deploy at the declarations. If the two disagree at that moment,
     the switch silently changes which services auto-deploy — so pin the equivalence here,
     while the denylist is still the live input and a mismatch is harmless.
+
+    Scoped by _declares_autodeploy(), not _pins_an_image(): a role with no defaults/main.yml
+    at all (longhorn-ui, n8n-images before round 1) has no `_image:` var either, so filtering
+    on _pins_an_image() skipped the exact roles that need checking most. The completeness test
+    above already fails on a role with no declaration, so this one only needs to check the
+    declarations that exist.
     """
     denylist = _denylist()
     mismatched = []
     for role in _roles():
-        if not _pins_an_image(role):
+        if not _declares_autodeploy(role):
             continue
         data = yaml.safe_load((role / "defaults/main.yml").read_text()) or {}
         declared = bool(data.get("k8s_autodeploy"))
