@@ -23,6 +23,15 @@ netpol_baseline_node_cidrs:
 # Matches headlamp_k8s_netpol_probe_image and registry_k8s_netpol_probe_image.
 netpol_baseline_probe_image: alpine:3.24
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renders a NetworkPolicy + a one-shot probe Job, no Deployment at all — nothing for
+# `rollout status` to gate. NOT a redundant declaration: this role DOES pin an image
+# (the probe Job above), and renovate.json's k8s-images manager matches `_image:` across
+# every role/defaults/main.yml, so Renovate tracks it and opens bump PRs regardless of whether
+# there is a Deployment to gate.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "renders a NetworkPolicy + probe Job, no Deployment — nothing for rollout status to gate, but Renovate tracks the pinned probe image anyway"  # noqa var-naming[no-role-prefix]
+
 # Slice 3 fences the observability namespace. It carries its OWN enforcement flag and its
 # OWN node-CIDR list, deliberately: the shared netpol_baseline_node_cidrs is read by the 16
 # workloads slices 1 and 2 already deployed, and widening it would re-scope all of them.

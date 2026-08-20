@@ -11,6 +11,16 @@ jellyfin_k8s_enabled: true
 # image. NOT the opencl-intel DOCKER_MODS variant — see D8/D12.
 jellyfin_k8s_image: lscr.io/linuxserver/jellyfin:10.11.10ubu2404-ls35
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Migrating state — strategy is Recreate and the config volume is seeded through
+# k8s/seed-volume (hardcoded ReadWriteOnce), so a bad image swap can migrate the library
+# database, artwork and trickplay data before the gate observes a fault, then fail the rollback
+# redeploy against data it can no longer read. Also the fleet's only workload requesting the
+# `devic.es/dri` GPU resource — a wrong image can wedge transcoding in a way a plain
+# readinessProbe never sees.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC; also the only GPU (devic.es/dri) workload in the fleet"  # noqa var-naming[no-role-prefix]
+
 # 206 M at B5, of which ~180 M is data/ (the library database, artwork, trickplay). longhorn, not
 # longhorn-nobackup: re-scanning a library rebuilds the metadata but loses watch state, user
 # accounts and API keys.

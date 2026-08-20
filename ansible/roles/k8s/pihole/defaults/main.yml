@@ -9,6 +9,15 @@ pihole_k8s_image: pihole/pihole:2026.07.2
 # pinned (Renovate k8s-defaults manager). v-prefixed tags track upstream unbound releases.
 pihole_k8s_unbound_image: klutchell/unbound:1.26.0
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Platform: the LAN's DNS resolver. A failed deploy breaks name resolution fleet-wide, and
+# etp-local-vips-blackout-on-node-join shows host probes stay green straight through that kind
+# of outage — DNS-dependent tooling (including the ability to reach a fix) goes dark first.
+# Also Recreate + PVC (the gravity/FTL databases) on its own state, which compounds the risk
+# but isn't the primary reason.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "platform — LAN DNS resolver; a failed deploy breaks name resolution fleet-wide, and host probes stay green through that kind of outage"  # noqa var-naming[no-role-prefix]
+
 pihole_k8s_claim: pihole-etc
 # Second instance, for deploy-time DNS continuity. Its own claim because /etc/pihole is RWO
 # and single-writer; the contents are fully derivable (see the note on pihole_k8s_claim), so

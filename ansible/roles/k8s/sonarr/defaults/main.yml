@@ -3,6 +3,15 @@
 # between the two is never attributable to the image.
 sonarr_k8s_image: lscr.io/linuxserver/sonarr:4.0.17.2952-ls312
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Migrating state — strategy is Recreate and the config volume is seeded through
+# k8s/seed-volume (hardcoded ReadWriteOnce), so a bad image swap can migrate the library
+# database + root-folder paths before the gate observes a fault, then fail the rollback
+# redeploy against data it can no longer read. The linuxserver -lsNN scheme hides a breaking
+# bump as a routine patch bump.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC; -lsNN versioning hides a breaking bump"  # noqa var-naming[no-role-prefix]
+
 # ── the config database ─────────────────────────────────────────────────────────────────────
 # 85 M / 221 files at B3. `longhorn`, not longhorn-nobackup: sonarr.db holds the library and the
 # absolute root-folder paths that this whole slice is careful about — it is exactly the state

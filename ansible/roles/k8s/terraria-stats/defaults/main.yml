@@ -4,6 +4,14 @@
 # cordon lifts (the loopback registry cannot serve cross-node pulls).
 terraria_stats_k8s_image: python:3.14-alpine
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Games: companion stats exporter for the hand-operated terraria game server — grouped with it
+# operationally, not deployed unattended. It ALSO independently matches the migrating-state
+# shape: Recreate + a real PVC seeded through k8s/seed-volume (hardcoded ReadWriteOnce) holding
+# the all-time playtime SQLite DB, which Loki's 31-day backfill window cannot fully reconstruct.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "games — companion to the hand-operated terraria server. ALSO Recreate + RWO seed-volume PVC holding irreplaceable stats — two independent reasons"  # noqa var-naming[no-role-prefix]
+
 # All-time playtime lives in the SQLite DB and Loki's backfill window only reaches
 # ~28d, so the volume is seeded from the Docker copy and rides the DAILY backup tier
 # (tiny file, irreplaceable totals).

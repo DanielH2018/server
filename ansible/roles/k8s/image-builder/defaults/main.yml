@@ -9,6 +9,15 @@
 # see the securityContext comment in build-job.yaml.j2, which is the honest version of that.
 image_builder_image: moby/buildkit:v0.32.2-rootless
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Eligible today only by absence from gitops_deploy_k8s_autodeploy_denylist, not because the
+# shape is safe: this role renders a Job and a ConfigMap, no Deployment at all — the same
+# "nothing for rollout status to gate" class as configarr/media-volume/node-exporter, which ARE
+# denylisted for exactly this shape. A bump to image_builder_image (the buildkit tool itself,
+# not a workload it builds) would apply and report success with nothing watching it land.
+k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "NOT independently safe — eligible only by denylist absence; renders a Job, no Deployment, nothing for rollout status to gate, same class as configarr/media-volume"  # noqa var-naming[no-role-prefix]
+
 # Caller-supplied; listed here so the contract is readable in one place rather than inferred
 # from the templates.
 #

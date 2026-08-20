@@ -4,6 +4,14 @@
 # build and no image to maintain.
 artifacts_k8s_image: python:3.14-alpine
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Stateless Deployment, RollingUpdate, no PVC, HTTP readinessProbe, and the base image tag
+# above is a real version, not a mutable :latest or an -lsNN scheme that hides a breaking bump.
+# Deliberately unprefixed: one constant key name every role uses, so the completeness guard
+# can check for it without knowing the role's own prefix.
+k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe gates the rollout, pinned image tag"  # noqa var-naming[no-role-prefix]
+
 # hostPath pins the pod to ONE node. daniel-box is the control-plane node, where Ansible
 # runs and where most sessions work, so its tree is the local mount and every other host's
 # is synced in below.

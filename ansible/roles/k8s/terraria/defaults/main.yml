@@ -6,6 +6,15 @@
 # of silently on next recreate (2026-08-13 pin).
 terraria_k8s_image: beardedio/terraria:vanilla-latest@sha256:901bc1178a9db0b331bf483724e6bac3d065c1dfd45a604818dfcbd4f755f4b0
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Two independent reasons: (1) probe-less — the Deployment renders no readinessProbe, so
+# `rollout status` would return the moment the pod reports Running; (2) migrating state —
+# strategy is Recreate and the worlds/config PVC is seeded through k8s/seed-volume (hardcoded
+# ReadWriteOnce), holding the one irreplaceable dataset the backup consolidation exists to
+# protect. Either alone would justify the denylist entry.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "two reasons: (1) probe-less — no readinessProbe; (2) migrating state — Recreate + RWO seed-volume PVC holding irreplaceable worlds"  # noqa var-naming[no-role-prefix]
+
 # 36 M of worlds + config at the port — `longhorn`, BACKED UP: this is the one
 # irreplaceable dataset the backup consolidation (backup-consolidation-longhorn.md, BL1)
 # moved the whole service for.

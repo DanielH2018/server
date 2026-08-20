@@ -1,6 +1,16 @@
 ---
 code_server_k8s_image: "{{ k8s_registry_pull_host }}/code-server:latest"
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Eligible today only by absence from gitops_deploy_k8s_autodeploy_denylist, not because the
+# shape is safe: strategy is Recreate and both claims below are seeded through k8s/seed-volume,
+# which hardcodes ReadWriteOnce — the same migrating-state shape (Recreate + RWO PVC) that keeps
+# sonarr/radarr/prowlarr off the list. A failed image swap can migrate the workspace/config
+# volumes before the gate observes a fault, then fail the rollback redeploy against data it can
+# no longer read.
+k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "NOT independently safe — eligible only by denylist absence; Recreate + RWO seed-volume PVC is the migrating-state shape, same class as sonarr/prowlarr"  # noqa var-naming[no-role-prefix]
+
 # 6.2 G at the port — mostly extensions and npm/pip caches; the workspace itself is ~2 M.
 code_server_k8s_claim: code-server-config
 # Still class `longhorn`, because storageClassName is immutable on a bound claim — the volume

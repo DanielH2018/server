@@ -4,6 +4,14 @@
 loki_homelab_image: grafana/loki:3.7.6
 loki_homelab_promtail_image: grafana/promtail:3.3.0
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Observability: the log store the Alert History reconstruction and every LogQL-backed
+# monitor-bridge check (Loki Log Ingestion, Promtail Dropped Entries) read from — a broken
+# deploy blinds those without paging about it. ALSO Recreate + a PVC (loki-homelab-data) on its
+# own state, which compounds the risk but isn't the primary reason.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "observability — log store other monitors read from; a broken deploy blinds them without paging. ALSO Recreate + PVC on its own log data"  # noqa var-naming[no-role-prefix]
+
 # 1.1 G live in the Docker named volume at planning. `longhorn-nobackup` on purpose — same
 # posture as the Docker volume's deliberate kopia exclusion: logs are bulky, rotating, and
 # reconstructible in spirit; the 31-day retention is the real bound.

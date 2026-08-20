@@ -3,6 +3,14 @@
 # difference in behaviour between them is never the image.
 zigbee2mqtt_k8s_image: ghcr.io/koenkk/zigbee2mqtt:2.12.0
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Migrating state — strategy is Recreate and the data volume (pairing state, coordinator
+# backup, device/group config, the pinned network key material) is seeded through
+# k8s/seed-volume (hardcoded ReadWriteOnce), so a bad image swap can migrate that volume before
+# the gate observes a fault. Losing it means re-pairing every Zigbee device by hand.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC holding pairing/coordinator state; losing it means re-pairing every device"  # noqa var-naming[no-role-prefix]
+
 # The config-install initContainer needs alpine (`install`). Same init image peanut and
 # home-assistant use.
 zigbee2mqtt_k8s_init_image: alpine:3.24

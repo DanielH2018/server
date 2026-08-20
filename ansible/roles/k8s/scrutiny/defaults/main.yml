@@ -9,6 +9,15 @@ scrutiny_k8s_web_image: ghcr.io/analogj/scrutiny:master-web@sha256:192656ce791dc
 scrutiny_k8s_collector_image: ghcr.io/analogj/scrutiny:master-collector@sha256:e0d55d2742017c7025e491e05eb516bc71758c575f7e0bfefe34f9ce13aced89
 scrutiny_k8s_influxdb_image: influxdb:2.9
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Stateful / manual-upgrade: pins a rolling upstream branch tag on a stateful monitoring
+# service by policy — moving to a different tag/branch is deliberately a manual, supervised
+# redeploy, never unsupervised auto-merge. ALSO Recreate + a real config PVC seeded through
+# k8s/seed-volume (hardcoded ReadWriteOnce) — the migrating-state shape compounds the
+# manual-upgrade policy, on top of the pinned influxdb engine holding the SMART trend history.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "stateful / manual-upgrade — rolling branch tag on a stateful monitor, deliberately manual. ALSO Recreate + RWO seed-volume PVC (migrating-state shape) — two independent reasons"  # noqa var-naming[no-role-prefix]
+
 # SC2: SMART history is trend data and the whole point of the tool — backed-up class.
 # 3.1 MB at planning; 2Gi leaves influxdb compaction headroom.
 scrutiny_k8s_influxdb_claim: scrutiny-influxdb-data

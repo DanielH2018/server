@@ -3,6 +3,14 @@
 # script. Pullable on either node since the 2026-08-14 registry re-plumb.
 pi_peer_backup_k8s_image: "{{ k8s_registry_pull_host }}/pi-peer-backup:latest"
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Nothing for `rollout status` to gate: this role renders a CronJob, not a Deployment. It does
+# own a real PVC (the un-rebuildable WireGuard peer keys), but since there is no rollout, a bad
+# image swap does not migrate that volume the way it would for a Recreate Deployment — the
+# risk here is purely "nothing watches the next scheduled run."
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "renders a CronJob, not a Deployment — nothing for rollout status to gate"  # noqa var-naming[no-role-prefix]
+
 pi_peer_backup_k8s_claim: pi-peer-backup-data
 # 23:30 local, same slot the daniel-server host cron held (clear of the 03:30 Longhorn
 # nightly, which snapshots the PVC this fills).

@@ -9,6 +9,15 @@
 # bouncer middleware consume them too, and role defaults are invisible across roles.
 crowdsec_k8s_metrics_port: 6060
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Platform: the in-cluster LAPI + AppSec + decision engine every bouncer (including traefik's
+# middleware) queries. A failed deploy could open or close traffic unpredictably fleet-wide.
+# Also Recreate + PVC (the decision DB) on its own state, which compounds the risk but isn't
+# the primary reason. crowdsec_k8s_image itself lives in group_vars/all.yml (shared with the
+# traefik sidecar and bouncer middleware), not here — this declaration covers the role.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "platform — LAPI/AppSec/decision engine every bouncer queries; a failed deploy can open or close traffic unpredictably fleet-wide"  # noqa var-naming[no-role-prefix]
+
 # Decision DB + hub state. Small: decisions are rows, the hub is megabytes.
 crowdsec_k8s_claim: crowdsec-db
 crowdsec_k8s_storage_class: longhorn

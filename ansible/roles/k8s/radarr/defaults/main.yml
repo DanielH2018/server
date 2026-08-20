@@ -10,6 +10,15 @@ radarr_k8s_enabled: true  # flipped 2026-08-07 by B4c — the Docker copy is sto
 
 radarr_k8s_image: lscr.io/linuxserver/radarr:6.1.1.10360-ls304
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Migrating state — strategy is Recreate and the config volume is seeded through
+# k8s/seed-volume (hardcoded ReadWriteOnce), so a bad image swap can migrate the library
+# database + root-folder paths before the gate observes a fault, then fail the rollback
+# redeploy against data it can no longer read. The linuxserver -lsNN scheme hides a breaking
+# bump as a routine patch bump.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC; -lsNN versioning hides a breaking bump"  # noqa var-naming[no-role-prefix]
+
 # 30 M at B4a. longhorn, not longhorn-nobackup: radarr.db holds the library and the absolute
 # root-folder paths this slice is careful about.
 radarr_k8s_claim: radarr-config

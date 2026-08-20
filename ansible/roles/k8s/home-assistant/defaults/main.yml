@@ -10,6 +10,15 @@ home_assistant_k8s_enabled: true
 # whether the mod layer applies under containerd is a B3 gate, checked at first boot.
 home_assistant_k8s_image: lscr.io/linuxserver/homeassistant:2026.6.3-ls221
 
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Migrating state — the sharpest case in the fleet: strategy is Recreate and the config volume
+# is seeded through k8s/seed-volume (hardcoded ReadWriteOnce), so a bad image swap can migrate
+# the volume before the gate observes a fault and then fail the rollback redeploy against data
+# it can no longer read. The linuxserver -lsNN scheme makes a breaking bump read as a MINOR
+# (2026.6.3 -> 2026.7.0), so semver-based auto-merge policy would not even flag it as risky.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC; -lsNN versioning hides a breaking bump as a MINOR"  # noqa var-naming[no-role-prefix]
+
 # The LSIO image has no `install`; the config-install initContainer needs alpine instead.
 # Same init image peanut and zigbee2mqtt use.
 home_assistant_k8s_init_image: alpine:3.24
