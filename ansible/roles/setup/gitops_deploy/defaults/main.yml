@@ -111,6 +111,16 @@ gitops_deploy_k8s_autodeploy_denylist:
   - pi-peer-backup
   - media-volume
   - n8n-images
+  # neither is a containers_list entry, so unlike the block above these pin an image and render
+  # NO Deployment AND match no play at all: a promoted bump runs `ansible-playbook deploy.yml
+  # --tags <role>`, which matches nothing, exits 0, clears the hold, and alerts nobody — a
+  # silent success where nothing deployed. seed-volume is the sharper of the two: it is the
+  # shared PVC-seeding path every migrating-state role above depends on, so the bumped image
+  # lands later under whichever role next includes it. image-builder renders a Job that builds
+  # the images other roles consume — same "nothing to gate" shape as configarr's class, but
+  # with no containers_list entry to at least apply the bump.
+  - seed-volume
+  - image-builder
   # route-only role: renders an IngressRoute + Middlewares into longhorn-system and owns no
   # Deployment at all (Longhorn itself comes from roles/setup/k3s), so there is nothing for
   # `rollout status` to gate. It also pins no image, so it can never qualify anyway.

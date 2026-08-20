@@ -133,7 +133,10 @@ stay).
     (qbittorrent/bazarr/tdarr, livesync, valheim, valheim-stats): each matched a published exclusion
     class already, and was outside the list only because the pilot made the list non-binding.
     `ansible/tests/test_k8s_autodeploy_guard.py` now enforces the three role shapes that must never
-    be eligible — more than one Deployment, `manifests_rollout: ''`, and no `readinessProbe`.
+    be eligible — a rendered Deployment whose name isn't in the gated set (a role gating a second
+    Deployment by name via `manifests_extra_rollouts` is fine; a name that can't be resolved
+    statically counts as ungated), `manifests_rollout: ''`, and a gated Deployment with no
+    `readinessProbe`.
   - **The deploy is time-bounded by `K8S_DEPLOY_TIMEOUT_S`, not `RUN_BUDGET_S`.** The latter feeds
     `gate_services()` — the Docker gate — and is inert here, so without an explicit timeout the
     only bound is systemd's `TimeoutStartSec` SIGTERM, which can land mid-rollback.

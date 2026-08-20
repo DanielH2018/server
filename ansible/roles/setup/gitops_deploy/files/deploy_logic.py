@@ -627,8 +627,8 @@ def split_k8s_auto_deploy(
     A service qualifies only when ALL of:
       * the feature is enabled;
       * it is not denylisted (platform / observability / migrating-state / dependency-edge /
-        ungated-sub-deployment / stateful / nothing-to-gate / probe-less / games — each entry's
-        reason is in the role defaults and the design doc's denylist table);
+        stateful / nothing-to-gate / probe-less / games — each entry's reason is in the role
+        defaults and the design doc's denylist table);
       * `pilot` is empty, or the service is named there (the slice-1 pilot scope);
       * every path this push changed under that role dir is exactly its defaults/main.yml;
       * `image_only(svc)` — that file's diff touches only `*_image:` lines.
