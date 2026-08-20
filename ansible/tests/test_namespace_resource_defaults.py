@@ -146,6 +146,42 @@ def test_every_rendered_container_sets_requests_and_limits() -> None:
     )
 
 
+def test_the_roles_outside_the_render_walk_are_accounted_for() -> None:
+    """rendered_docs() cannot see every pod that lands in these namespaces. Name the gap.
+
+    The walk covers roles that are `containers_list` members. Four are not, and two of those
+    ship pod templates — so the guard above says "every rendered container" while meaning
+    "every container in a containers_list role". Their pods land in `homelab` all the same,
+    which is exactly the population the LimitRange exists for.
+
+    The dangerous shape is a container that states a request and no limit: it takes `default`
+    as its limit and is refused if the request is higher. A build job asking for 4Gi would
+    stop working, and it would surface hours later as a failed image build rather than here.
+    """
+    excluded = {}
+    for role in ("image-builder", "seed-volume"):
+        for tpl in sorted(
+            (_REPO / "ansible/roles/k8s" / role / "templates").glob("*.j2")
+        ):
+            text = tpl.read_text()
+            if "containers:" not in text:
+                continue
+            excluded[f"{role}/{tpl.name}"] = (
+                "requests:" in text,
+                "limits:" in text,
+            )
+
+    assert excluded, "neither role ships a pod template any more; drop this guard"
+    for where, (has_requests, has_limits) in excluded.items():
+        # Either both or neither. Both means the LimitRange never touches it; neither means it
+        # takes the defaults, which is the control doing its job. Requests-only is the one
+        # combination that can be refused at admission.
+        assert has_requests == has_limits, (
+            f"{where} sets a request without a limit. It will take the namespace default as "
+            "its limit and be REFUSED if the request is higher. Set both, or neither."
+        )
+
+
 def test_both_workload_namespaces_get_a_limitrange() -> None:
     all_vars = _all_vars()
     expected = {all_vars["k8s_namespace"], all_vars["k8s_observability_namespace"]}
