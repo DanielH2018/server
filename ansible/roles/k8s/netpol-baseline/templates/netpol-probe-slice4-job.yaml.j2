@@ -104,7 +104,19 @@ spec:
               # itself answered -- a cluster.local name would be answered by CoreDNS without
               # ever reaching pihole, and a public name would be answered by the Cloudflare
               # fallback even with pihole fenced out.
-              if ! nslookup daniel-pi.lan >/dev/null 2>&1; then
+              #
+              # Two forms, either of which passing is a pass. The image is
+              # {{ netpol_baseline_probe_image }}, whose nslookup is BusyBox's applet, and this
+              # is the first probe in the role to resolve a name outside cluster.local -- so
+              # its search-list behaviour has no precedent here to lean on. `daniel-pi.lan` has
+              # one dot against the pod's `ndots:5`, so a resolver that honours the search list
+              # tries daniel-pi.lan.{{ k8s_namespace }}.svc.cluster.local and its siblings
+              # first, and some BusyBox builds stop at that first NXDOMAIN instead of going on
+              # to the absolute name. The trailing-dot form skips the search list outright. No
+              # false pass either way: nothing but pihole answers `daniel-pi.lan` in any form,
+              # and the search-list variants NXDOMAIN.
+              if ! nslookup daniel-pi.lan. >/dev/null 2>&1 &&
+                 ! nslookup daniel-pi.lan >/dev/null 2>&1; then
                 echo "DNS FAILED: pihole did not answer daniel-pi.lan -- check the pihole policy"
                 exit 1
               fi
