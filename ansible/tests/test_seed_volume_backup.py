@@ -108,3 +108,21 @@ def test_every_refusal_runs_before_anything_is_created():
         assert idx < first_write, (
             "'%s' must be asserted before the snapshot is created" % fragment
         )
+
+
+MIGRATE = (ANSIBLE / "migrate_volume_block_size.yml").read_text()
+
+
+def test_the_migrate_playbook_points_at_the_seed_step():
+    """Restoring the tier label is not the same as being covered.
+
+    `k3s-bringup.yml --tags longhorn` puts a rebuilt volume back in a weekly shard, and a weekly
+    shard runs on one weekday. The backup-health check's first-run grace then excuses the volume
+    until that day arrives, so it can hold no recovery point in either store for up to 6 days while
+    every monitor reads green. The migrate playbook has to name the seed step, or the operator
+    following its instructions stops one step short of coverage.
+    """
+    assert "seed_volume_backup.yml" in MIGRATE, (
+        "migrate_volume_block_size.yml must tell the operator to seed a first backup after "
+        "restoring the tier label - relabelling alone leaves a multi-day uncovered window"
+    )

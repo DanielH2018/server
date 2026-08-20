@@ -32,6 +32,13 @@
 # Afterwards, restore the volume's backup-tier label — a recreated volume has none, which puts it
 # in no tier at all, and the backup-health check only notices once it ages past its bound:
 #   uv run ansible-playbook ansible/k3s-bringup.yml --tags longhorn
+#
+# Then seed its first backup. Restoring the label is NOT the same as being covered: it puts the
+# volume back in a weekly shard, a weekly shard runs on one weekday, and the backup-health check's
+# first-run grace excuses the volume until that day comes. So a relabelled volume can sit up to 6
+# days with no recovery point in either store, showing green throughout. Fourteen were in exactly
+# that state on 2026-08-20, which is why this step exists:
+#   uv run ansible-playbook ansible/seed_volume_backup.yml -e seed_claim=<pvc>
 - name: Recreate a Longhorn volume at the current backup block size
   hosts: daniel-box
   connection: local
@@ -392,3 +399,7 @@
           - "{{ mig_claim }} rebuilt at {{ mig_new_block.stdout | int // 1048576 }}Mi blocks."
           - "Its backup-tier label is GONE — run: uv run ansible-playbook ansible/k3s-bringup.yml --tags longhorn"
           - "Until then it is in no backup tier, and its old B2 chain belongs to a volume that no longer exists."
+          - "THEN seed its first backup — a weekly shard runs on ONE weekday, so restoring the label
+             alone can leave it up to 6 days with no recovery point anywhere, and the backup-health
+             check's first-run grace excuses exactly that window:
+             uv run ansible-playbook ansible/seed_volume_backup.yml -e seed_claim={{ mig_claim }}"
