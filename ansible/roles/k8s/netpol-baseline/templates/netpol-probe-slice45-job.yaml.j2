@@ -1,0 +1,113 @@
+---
+# Slice 4.5 fences the 27 workloads no earlier slice owned — every remaining app, the
+# sub-workloads inside a parent role, the three DaemonSets, and the LAN-facing game and VPN
+# servers. This probe asserts three different things about that, because slice 4.5 introduced
+# three different fencing shapes:
+#
+#   1. SENTINEL CONTROL — speedtest:80 must SUCCEED. This pod carries `netpol-probe: control`,
+#      which networkpolicy-netpol-sentinel.yaml.j2 admits to speedtest and nothing else. This is
+#      a stronger control than the traefik:80 leg the earlier probes use: traefik is reachable
+#      because its policy is open to all sources, so it proves only that this pod has a network.
+#      Reaching a pod that is fenced AND admits us proves the admit path itself works — which is
+#      what separates "denied by policy" from "the policy engine is denying everything".
+#
+#   2. INVERTED — five fenced targets must REFUSE this pod. kube-router REJECTs rather than
+#      drops, so the failure arrives as "connection refused" rather than a timeout; `nc` returns
+#      non-zero either way, which is the PASS branch here.
+#
+#   3. OPEN-PORT — terraria:7777 must SUCCEED. The LAN-facing policies deliberately leave their
+#      game and VPN ports open (see networkpolicy-terraria.yaml.j2 for why), and nothing else in
+#      the repo proves that those rules are actually open rather than merely written. Without
+#      this leg, a terraria policy that fenced 7777 by mistake would look identical to a working
+#      one from inside the cluster, and would surface only as players unable to connect.
+#
+# THIS JOB RUNS IN {{ k8s_namespace }}, the same namespace as every target — no cross-namespace
+# trap to get wrong, unlike slice 3.
+#
+# Ports hardcoded from each target's own NetworkPolicy `port:`. These are POD ports, not Service
+# ports; every target in this slice maps 1:1 (verified 2026-08-20), which traefik notably does
+# not — see networkpolicy-traefik.yaml.j2. A wrong port fails silently green in the inverted
+# legs, because a port nothing listens on makes `nc` fail, which is the PASS branch. The
+# readiness gate in tasks/main.yml proves the targets are up before this Job runs; it does not
+# prove these numbers are the ports they serve. Re-check against the Service whenever this file
+# is touched.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: netpol-baseline-probe-slice45
+  namespace: {{ k8s_namespace }}
+spec:
+  # Shorter than the 180s wait in tasks/main.yml, deliberately: two independent clocks starting
+  # at different moments, so the Job's own deadline must be the one that always fires first.
+  activeDeadlineSeconds: 120
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: netpol-probe-slice45
+        # Admits this pod to the sentinel (speedtest:80) only — see
+        # networkpolicy-netpol-sentinel.yaml.j2. No other policy in the repo names this label,
+        # so it cannot make an inverted leg below pass for the wrong reason.
+        netpol-probe: control
+    spec:
+      restartPolicy: Never
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      containers:
+        - name: probe
+          image: {{ netpol_baseline_probe_image }}
+          command:
+            - sh
+            - -c
+            - |
+              set -u
+              # 1. SENTINEL CONTROL. Must succeed: the sentinel policy admits this pod's
+              #    `netpol-probe: control` label to speedtest:80. A failure means either this pod
+              #    has no network at all or admitted traffic is being denied, and every inverted
+              #    assertion below would be a false pass.
+              if ! nc -w 5 -z speedtest 80; then
+                echo "SENTINEL CONTROL FAILED: speedtest:80 unreachable despite the sentinel"
+                echo "policy admitting this pod. Either this pod has no network, or admitted"
+                echo "traffic is being denied. Assertions below are meaningless."
+                exit 1
+              fi
+              echo "sentinel control ok: speedtest:80 reachable, admitted by policy"
+
+              # 2. INVERTED. Each must FAIL. One target per fencing shape slice 4.5 introduced:
+              #    a fan-in app (home-assistant, uptime-kuma), a cross-namespace one
+              #    (loki-homelab), a sub-workload behind a parent (karakeep-meilisearch), and one
+              #    whose Service name differs from its pod label (scrutiny -> app: scrutiny-web),
+              #    which is the mistake most likely to select nothing and fence nothing.
+              for target in home-assistant:8123 uptime-kuma:3001 loki-homelab:3100 scrutiny:8080 karakeep-meilisearch:7700; do
+                host=${target%%:*}
+                port=${target##*:}
+                if nc -w 5 -z "$host" "$port"; then
+                  echo "LEAK: $target reachable from an unlisted caller"
+                  exit 1
+                fi
+                echo "isolated: $target unreachable from an unlisted caller"
+              done
+
+              # 3. OPEN-PORT. Must succeed. terraria's policy leaves 7777 open to every source
+              #    because its LoadBalancer preserves each player's real address and those are
+              #    not enumerable. This leg is the only thing in the repo that proves the rule is
+              #    open rather than merely written -- a mistake here would surface as players
+              #    unable to connect and nothing else.
+              if ! nc -w 5 -z terraria 7777; then
+                echo "OPEN PORT FAILED: terraria:7777 refused a connection it should accept from"
+                echo "any source. Check networkpolicy-terraria.yaml.j2 -- LAN players are broken."
+                exit 1
+              fi
+              echo "open port ok: terraria:7777 reachable from an unlisted caller, as designed"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
