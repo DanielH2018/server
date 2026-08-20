@@ -1,0 +1,240 @@
+---
+# Give one Longhorn volume its first backup, now, instead of waiting for its recurring job.
+#
+# WHY THIS EXISTS. A volume recreated by `migrate_volume_block_size.yml` comes back with no backup
+# history and no tier label. `k3s-bringup.yml --tags longhorn` restores the label, which puts the
+# volume back in a weekly shard — and a weekly shard runs on ONE weekday, so the replacement waits
+# up to 6 days for its first recovery point. On 2026-08-20 fourteen volumes sat in exactly that
+# state at once: no backup in either store, and the longest wait was 5.4 days.
+#
+# The backup-health check does not page for this, correctly: its first-run grace excuses a volume
+# until its first scheduled run, because a service deployed this afternoon must not redden the
+# backup plane. Grace is right and the exposure is still real. This playbook is what closes it.
+#
+# WHY NOT THE LONGHORN API. `POST /v1/volumes/<vol>?action=snapshotBackup` is what the UI calls,
+# but longhorn-system ships a NetworkPolicy on `app=longhorn-manager`, so the backend ClusterIP is
+# unreachable from a node's host netns (measured: connect fails, not 403). The CRs are the reachable
+# path, and they are what that API creates anyway.
+#
+# WHAT IT COSTS. One full backup of the volume's used blocks. Volumes rebuilt at 16 MiB cost roughly
+# an eighth of the 2 MiB-era figures in the estate's notes. It still counts against
+# `k3s_longhorn_daily_backup_budget` — Longhorn's share of B2's transaction cap — so seeding a batch
+# larger than the day's remaining headroom turns the backup-health monitor red for 24 hours. Check
+# the budget line in `journalctl -t longhorn-backup-health` before seeding more than a few.
+#
+# Usage (one volume at a time, deliberately — same reasoning as the migrate playbook):
+#   uv run ansible-playbook ansible/seed_volume_backup.yml \
+#     -i ansible/inventory/hosts.ini -e seed_claim=healthchecks-config
+#
+# It refuses a volume that already has a backup, one in no backup tier, and one routed to a
+# disarmed target. None of those is a fault worth spending a transaction on.
+- name: Give a Longhorn volume its first backup now
+  hosts: daniel-box
+  connection: local
+  gather_facts: false
+  vars:
+    seed_namespace: homelab
+    seed_timeout_s: 900
+  pre_tasks:
+    - name: Load secrets for become
+      community.sops.load_vars:
+        file: "{{ playbook_dir }}/vars/secrets.yml"
+      delegate_to: localhost
+      no_log: true
+
+    - name: Set become password
+      ansible.builtin.set_fact:
+        ansible_become_password: "{{ become_password }}"
+      no_log: true
+
+    - name: Require a claim
+      ansible.builtin.assert:
+        that: seed_claim is defined
+        fail_msg: "pass -e seed_claim=<pvc>"
+
+  tasks:
+    - name: Resolve the volume backing the claim
+      ansible.builtin.command:
+        argv: [k3s, kubectl, -n, "{{ seed_namespace }}", get, pvc, "{{ seed_claim }}",
+               -o, "jsonpath={.spec.volumeName}"]
+      become: true
+      register: seed_pv
+      changed_when: false
+
+    - name: Refuse a claim that is not bound
+      ansible.builtin.assert:
+        that: seed_pv.stdout | length > 0
+        fail_msg: >-
+          {{ seed_claim }} in {{ seed_namespace }} is not bound to a PersistentVolume, so there is
+          nothing to snapshot. Nothing has been changed.
+        quiet: true
+
+    - name: Read the volume's tier label, target and robustness
+      ansible.builtin.command:
+        argv: [k3s, kubectl, -n, longhorn-system, get, volumes.longhorn.io, "{{ seed_pv.stdout }}",
+               -o, json]
+      become: true
+      register: seed_volume
+      changed_when: false
+
+    - name: Note what is being seeded
+      ansible.builtin.set_fact:
+        seed_target: "{{ (seed_volume.stdout | from_json).spec.backupTargetName | default('default', true) }}"
+        seed_robustness: "{{ (seed_volume.stdout | from_json).status.robustness | default('unknown') }}"
+        seed_group: >-
+          {{ ((seed_volume.stdout | from_json).metadata.labels | default({}))
+             | dict2items
+             | selectattr('key', 'search', '^recurring-job-group.longhorn.io/')
+             | map(attribute='key') | map('regex_replace', '^.*/', '') | list | first | default('') }}
+
+    # A volume in no tier is not "missing a backup", it is opted out. Seeding one writes a recovery
+    # point that no retain policy will ever prune - Longhorn's retain is per job, and no job selects
+    # this volume - so it would sit in the store forever. That is the shape that produced the
+    # orphan-reaper work, and it is not worth a transaction to recreate it here.
+    - name: Refuse a volume that is in no backup tier
+      ansible.builtin.assert:
+        that:
+          - seed_group | length > 0
+          - seed_group != 'no-backup'
+        fail_msg: >-
+          {{ seed_claim }} is in recurring-job group '{{ seed_group | default('(none)', true) }}',
+          so nothing would ever prune the backup this creates - Longhorn's retain is per job, and
+          no job selects this volume. Label it into a tier first
+          (`uv run ansible-playbook ansible/k3s-bringup.yml --tags longhorn`), or leave it opted
+          out. Nothing has been changed.
+        quiet: true
+
+    - name: Read the backup target's availability
+      ansible.builtin.command:
+        argv: [k3s, kubectl, -n, longhorn-system, get, backuptargets.longhorn.io,
+               "{{ seed_target }}", -o, "jsonpath={.spec.backupTargetURL}|{.status.available}"]
+      become: true
+      register: seed_target_state
+      changed_when: false
+
+    # A blank URL is how this estate disarms a target. Snapshotting against one produces a Backup
+    # that can never complete, and the volume still has no recovery point - with a stuck Backup CR
+    # left behind to clean up.
+    - name: Refuse a disarmed or unavailable target
+      ansible.builtin.assert:
+        that:
+          - seed_target_state.stdout.split('|')[0] | length > 0
+          - seed_target_state.stdout.split('|')[1] == 'true'
+        fail_msg: >-
+          backup target '{{ seed_target }}' is disarmed or unavailable
+          ({{ seed_target_state.stdout }}), so this backup could not complete. Nothing has been
+          changed.
+        quiet: true
+
+    - name: Count the backups this volume already has
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail;
+          k3s kubectl -n longhorn-system get backups.longhorn.io
+          -o jsonpath='{range .items[*]}{.status.volumeName}{"\n"}{end}'
+          | grep -c '^{{ seed_pv.stdout }}$' || true
+        executable: /bin/bash
+      become: true
+      register: seed_existing
+      changed_when: false
+
+    # The point of this playbook is a FIRST recovery point. A volume that has one is on its
+    # recurring job's cadence and needs no help; seeding it again spends a transaction to shorten a
+    # gap the schedule already bounds.
+    - name: Refuse a volume that already has a backup
+      ansible.builtin.assert:
+        that: seed_existing.stdout | int == 0
+        fail_msg: >-
+          {{ seed_claim }} already has {{ seed_existing.stdout }} backup(s); its recurring job
+          covers it. Nothing has been changed.
+        quiet: true
+
+    - name: Report what is about to be seeded
+      ansible.builtin.debug:
+        msg: >-
+          seeding {{ seed_claim }} ({{ seed_pv.stdout }}), tier {{ seed_group }},
+          target {{ seed_target }}, robustness {{ seed_robustness }}
+
+    - name: Create the snapshot to back up
+      ansible.builtin.command:
+        argv: [k3s, kubectl, apply, -f, "-"]
+        stdin: |
+          apiVersion: longhorn.io/v1beta2
+          kind: Snapshot
+          metadata:
+            name: seed-{{ seed_pv.stdout | regex_replace('^pvc-', '') }}
+            namespace: longhorn-system
+          spec:
+            volume: {{ seed_pv.stdout }}
+            createSnapshot: true
+            labels:
+              seeded-by: seed_volume_backup.yml
+      become: true
+      register: seed_snapshot_applied
+      changed_when: true
+
+    - name: Wait for the snapshot to be ready
+      ansible.builtin.command:
+        argv: [k3s, kubectl, -n, longhorn-system, get, snapshots.longhorn.io,
+               "seed-{{ seed_pv.stdout | regex_replace('^pvc-', '') }}",
+               -o, "jsonpath={.status.readyToUse}"]
+      become: true
+      register: seed_snapshot_ready
+      until: seed_snapshot_ready.stdout == 'true'
+      retries: 30
+      delay: 10
+      changed_when: false
+
+    # The Backup CR is what the Longhorn UI's snapshotBackup action creates. The two labels are
+    # load-bearing: the backup controller routes on `backup-target`, and `backup-volume` is how the
+    # BackupVolume it creates finds its members. Omitting either leaves a Backup that reconciles
+    # against the default target regardless of where the volume is routed.
+    - name: Request the backup
+      ansible.builtin.command:
+        argv: [k3s, kubectl, apply, -f, "-"]
+        stdin: |
+          apiVersion: longhorn.io/v1beta2
+          kind: Backup
+          metadata:
+            name: seed-{{ seed_pv.stdout | regex_replace('^pvc-', '') }}
+            namespace: longhorn-system
+            labels:
+              backup-target: {{ seed_target }}
+              backup-volume: {{ seed_pv.stdout }}
+          spec:
+            snapshotName: seed-{{ seed_pv.stdout | regex_replace('^pvc-', '') }}
+            labels:
+              seeded-by: seed_volume_backup.yml
+      become: true
+      changed_when: true
+
+    - name: Wait for the backup to complete
+      ansible.builtin.command:
+        argv: [k3s, kubectl, -n, longhorn-system, get, backups.longhorn.io,
+               "seed-{{ seed_pv.stdout | regex_replace('^pvc-', '') }}",
+               -o, "jsonpath={.status.state}|{.status.error}"]
+      become: true
+      register: seed_backup_state
+      until: seed_backup_state.stdout.split('|')[0] in ['Completed', 'Error']
+      retries: "{{ (seed_timeout_s | int / 15) | int }}"
+      delay: 15
+      changed_when: false
+
+    # An Error state leaves a Backup CR behind that the orphan reaper would later have to classify,
+    # so name it here rather than letting the play end green on a backup that does not exist.
+    - name: Fail on a backup that errored
+      ansible.builtin.assert:
+        that: seed_backup_state.stdout.split('|')[0] == 'Completed'
+        fail_msg: >-
+          the seed backup for {{ seed_claim }} ended in state
+          '{{ seed_backup_state.stdout.split('|')[0] }}': {{ seed_backup_state.stdout.split('|')[1] }}.
+          The Backup CR seed-{{ seed_pv.stdout | regex_replace('^pvc-', '') }} is still present -
+          delete it before retrying, or the apply will adopt the failed one.
+        quiet: true
+
+    - name: Report the result
+      ansible.builtin.debug:
+        msg: >-
+          {{ seed_claim }} now has a recovery point on target {{ seed_target }}. Its
+          {{ seed_group }} recurring job takes over from here, and its retain policy will prune
+          this backup in the normal way.
