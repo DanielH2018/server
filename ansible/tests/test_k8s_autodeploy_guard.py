@@ -320,3 +320,68 @@ def test_auto_deployable_roles_do_not_skip_the_rollout_gate() -> None:
         "Auto-deployable role(s) with no rollout gate at all — add to "
         "gitops_deploy_k8s_autodeploy_denylist with a reason:\n" + "\n".join(offenders)
     )
+
+
+def test_roles_that_gate_their_extras_are_not_denylisted_for_being_ungated() -> None:
+    """A role gating every Deployment it renders has no ungated-sub-deployment reason left.
+
+    This is the check that catches the drift class the design names: a denylist entry whose
+    justifying condition was fixed in code without the entry being revisited.
+
+    Also requires every Deployment to carry a readiness probe: n8n gates both n8n and
+    n8n-runners by name (ungated_deployment_count is 0) but n8n-runners has no probe, so n8n's
+    entry is still justified by the OTHER guard in this file. Without this clause the test
+    would call n8n stale and demand its entry be retired, which would drop a still-needed
+    denylisting rather than a resolved one.
+    """
+    denylist = _denylist()
+    stale = [
+        role.name
+        for role in _roles()
+        if role.name in denylist
+        and len(_deployment_templates(role)) > 1
+        and _ungated_deployment_count(role) == 0
+        and not _deployments_missing_readiness_probe(role)
+    ]
+    assert not stale, (
+        "Denylisted for rendering an ungated Deployment, but every Deployment is now gated "
+        "via manifests_extra_rollouts — retire the entry or record a different reason: "
+        + ", ".join(stale)
+    )
+
+
+def test_gated_extra_with_no_probe_still_has_a_live_reason(tmp_path: Path) -> None:
+    """A gated extra with no readinessProbe is not "no reason left" — n8n's actual shape.
+
+    Both Deployments are named in the gated set (ungated_deployment_count is 0), so the
+    stale-denylist check needs the probe clause to avoid calling this role fully clean.
+    """
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "templates").mkdir()
+    (role / "tasks" / "main.yml").write_text(
+        "- ansible.builtin.include_role:\n"
+        "    name: k8s/manifests\n"
+        "  vars:\n"
+        "    manifests_service: widget\n"
+        "    manifests_extra_rollouts:\n"
+        "      - name: widget-cache\n"
+    )
+    (role / "templates" / "deployment.yaml.j2").write_text(
+        "apiVersion: apps/v1\n"
+        "kind: Deployment\n"
+        "metadata:\n"
+        "  name: widget\n"
+        "spec:\n"
+        "  template:\n"
+        "    spec:\n"
+        "      containers:\n"
+        "        - readinessProbe:\n"
+        "            httpGet:\n"
+        "              path: /\n"
+    )
+    (role / "templates" / "deployment-cache.yaml.j2").write_text(
+        "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: widget-cache\n"
+    )
+    assert _ungated_deployment_count(role) == 0
+    assert _deployments_missing_readiness_probe(role) == ["deployment-cache.yaml.j2"]
