@@ -39,6 +39,11 @@ class PR:
     created_at: str = (
         ""  # GitHub's PR `created_at` (ISO-8601), already in the pulls-list payload
     )
+    # The PR's changed files, and whether any of them still exists on the base branch. Populated
+    # only for conflicting PRs (see build_pr) — it costs one extra API call each, and the question
+    # is meaningless for a PR that merges cleanly. `None` = not looked up, which is NOT the same as
+    # "looked up and found nothing".
+    dead_paths: tuple[str, ...] | None = None
 
 
 def _find_dashboard_issue(issues: list[dict]) -> dict | None:
@@ -164,7 +169,34 @@ def ci_rollup(check_runs: list[dict], statuses: list[dict]) -> str:
     return "success"
 
 
+def is_dead_path(pr: PR) -> bool:
+    """True when a conflicting PR edits ONLY files that no longer exist on the base branch.
+
+    This is the difference between a PR that needs a rebase and one that can never be rebased.
+    Renovate holds one branch per branchName, so a branch stuck against a deleted path blocks the
+    dependency it tracks from ever getting a mergeable PR — while the dashboard still detects the
+    update at the LIVE path and reports the PR merely as "conflicting", which reads as ordinary
+    rebase noise.
+
+    Two instances by 2026-08-20: #67/#42/#69 against compose templates the k3s migration archived,
+    then #41 against roles/containers/karakeep after the same cutover. Both needed closing and
+    recreating, not rebasing, and in both cases the plain "conflicting" label is what let them sit
+    for weeks.
+
+    Requires ALL changed files to be gone: a PR touching one live and one deleted path is an
+    ordinary conflict a rebase can resolve.
+    """
+    if not pr.conflicting or not pr.dead_paths:
+        return False
+    return True
+
+
 def classify_pr(pr: PR) -> str:
+    if is_dead_path(pr):
+        # Ahead of the automerge check on purpose: a dead-path PR needs a human whether or not
+        # automerge was ever enabled on it, and "manual" would file it with PRs that are merely
+        # waiting to be reviewed.
+        return "dead-path"
     if not pr.automerge:
         return "manual"
     if pr.ci == "failure" or pr.conflicting:
@@ -177,7 +209,7 @@ def actionable(prs: list[PR]) -> list[tuple[PR, str]]:
     out = []
     for pr in prs:
         bucket = classify_pr(pr)
-        if bucket in ("stuck", "manual"):
+        if bucket in ("stuck", "manual", "dead-path"):
             out.append((pr, bucket))
     return out
 
@@ -241,6 +273,13 @@ def should_notify(prev_fp: str, cur_fp: str) -> tuple[bool, str]:
 
 
 def _pr_note(pr: PR) -> str:
+    if is_dead_path(pr):
+        # Names the remedy, because the whole failure mode is that "conflicting" implies a rebase
+        # will fix it and here nothing will: the files are gone from the base branch.
+        return (
+            "🪦 conflicting against deleted path(s) — close it, Renovate recreates: %s"
+            % (", ".join(pr.dead_paths or ()),)
+        )
     if pr.conflicting:
         return "⚠️ conflicting"
     if pr.ci == "failure":
