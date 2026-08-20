@@ -1,12 +1,21 @@
 # Default-deny ingress NetworkPolicies
 
-Design doc. Written 2026-08-16. Status: **slices 1-4 deployed and enforcing** (slice 2 on
-2026-08-17, slice 3 on 2026-08-19, slice 4 on 2026-08-20). Slice 5 is **blocked on a new slice 4.5**
-— 28 workloads belong to no slice, and slice 5's gate fails on any unlabelled pod. `netpol_baseline_enforced` and `netpol_baseline_obs_enforced`
-are both `true`. Seventeen roles carry `netpol-baseline: enforced`, and six per-workload allow
-policies are live alongside the two baselines — four in `homelab`, two in `observability`.
-Slices 4–5 are still design only. See "Answers from slice 1", "Answers from slice 2" and
-"Answers from slice 3" below for what each deploy settled.
+Design doc. Written 2026-08-16. Status: **all five slices deployed and enforcing** (slice 2 on
+2026-08-17, slice 3 on 2026-08-19, slices 4, 4.5 and 5 on 2026-08-20). `netpol_baseline_enforced`
+and `netpol_baseline_obs_enforced` are both `true`, and `netpol_baseline_scope` is `namespace` —
+so every pod in `homelab` and `observability` is fenced by default, and the only way out is the
+`netpol-baseline-exempt` label. Four workloads carry it: flaresolverr, headlamp, n8n and registry.
+
+Counts are deliberately not recorded here; they went stale within a day when they were. For live
+ones:
+
+```bash
+kubectl -n homelab get pods -l netpol-baseline=enforced --no-headers | wc -l   # fenced pods
+kubectl -n homelab get pods -l netpol-baseline-exempt --no-headers             # the exempt set
+ls ansible/roles/k8s/netpol-baseline/templates/networkpolicy-*.yaml.j2 | wc -l # policies
+```
+
+See "Answers from slice 1" through "What slice 5 decided" below for what each deploy settled.
 
 ## The problem
 
