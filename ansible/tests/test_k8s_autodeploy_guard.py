@@ -93,13 +93,66 @@ def _extra_rollouts(role: Path) -> set[str]:
     return set(re.findall(r"-\s*name:\s*(\S+)", block.group(1)))
 
 
-def _ungated_deployment_count(role: Path) -> int:
-    """Rendered Deployments this role does NOT wait on.
+def _primary_rollout_name(role: Path) -> str:
+    """The Deployment name `roles/k8s/manifests` waits on as this role's primary rollout.
 
-    manifests waits on the primary rollout plus every manifests_extra_rollouts entry, so one
-    primary plus N declared extras covers 1 + N Deployments.
+    Mirrors `manifests_rollout | default(manifests_service)` from
+    `roles/k8s/manifests/tasks/main.yml`. Every role that calls the shared role sets
+    `manifests_service` to a literal string, and every `manifests_rollout` override is
+    likewise a literal (checked repo-wide), so a regex match is safe here. A role that never
+    calls k8s/manifests resolves to '', which matches no real Deployment name.
     """
-    return max(0, len(_deployment_templates(role)) - 1 - len(_extra_rollouts(role)))
+    tasks = role / "tasks/main.yml"
+    if not tasks.is_file():
+        return ""
+    text = tasks.read_text()
+    rollout = re.search(
+        r"""^\s*manifests_rollout:\s*(?:"([^"]*)"|'([^']*)'|(\S+))\s*$""",
+        text,
+        re.MULTILINE,
+    )
+    if rollout:
+        return next(g for g in rollout.groups() if g is not None)
+    service = re.search(r"^\s*manifests_service:\s*(\S+)\s*$", text, re.MULTILINE)
+    return service.group(1) if service else ""
+
+
+_DEPLOYMENT_NAME = re.compile(
+    r"^kind:\s*Deployment\s*$\n\s*metadata:\s*$\n\s*name:\s*(.+?)\s*$", re.MULTILINE
+)
+_LITERAL_NAME = re.compile(r"^[\w.-]+$")
+
+
+def _deployment_name(template: Path) -> str | None:
+    """The rendered Deployment's `metadata.name`, or None if it isn't a static literal.
+
+    Every Deployment template puts `name:` two lines under `kind: Deployment` (`metadata:` in
+    between) — checked against all 56 Deployment templates in the repo. A non-literal value (a
+    Jinja expression, e.g. pihole's `{{ inst.name }}`) can't be resolved without rendering, so
+    this returns None rather than a guess; the caller treats None as ungated, the fail-closed
+    direction.
+    """
+    match = _DEPLOYMENT_NAME.search(template.read_text())
+    if not match:
+        return None
+    name = match.group(1)
+    return name if _LITERAL_NAME.match(name) else None
+
+
+def _ungated_deployment_count(role: Path) -> int:
+    """Rendered Deployments whose name is neither the primary rollout nor a declared extra.
+
+    Matches by identity, not count: a rendered Deployment is gated only if its own resolved
+    name equals the primary rollout name or appears in manifests_extra_rollouts. A typo'd or
+    drifted extra name, or a Deployment whose name can't be resolved statically, both count as
+    ungated — count alone let a mismatched name through as long as the totals lined up.
+    """
+    gated = {_primary_rollout_name(role)} | _extra_rollouts(role)
+    return sum(
+        1
+        for template in _deployment_templates(role)
+        if _deployment_name(role / "templates" / template) not in gated
+    )
 
 
 def test_auto_deployable_roles_gate_every_deployment_they_render() -> None:
@@ -122,40 +175,86 @@ def test_auto_deployable_roles_gate_every_deployment_they_render() -> None:
     )
 
 
-def _has_readiness_probe(role: Path) -> bool:
-    return any(
-        "readinessProbe" in (role / "templates" / name).read_text()
+def _deployments_missing_readiness_probe(role: Path) -> list[str]:
+    """Rendered Deployment template names with no readinessProbe.
+
+    Was `any()` across the role's templates, so a probe on the primary Deployment satisfied
+    the whole role and a probe-less *extra* passed unchecked — exactly the gap
+    `manifests_extra_rollouts` opened. Checks every rendered Deployment individually instead.
+    """
+    return [
+        name
         for name in _deployment_templates(role)
-    )
+        if "readinessProbe" not in (role / "templates" / name).read_text()
+    ]
 
 
 def test_auto_deployable_roles_declare_a_readiness_probe() -> None:
     denylist = _denylist()
-    offenders = [
-        f"{role.name}: Deployment has no readinessProbe — `rollout status` returns on Running"
-        for role in _roles()
-        if role.name not in denylist
-        and _deployment_templates(role)
-        and not _has_readiness_probe(role)
-    ]
+    offenders = []
+    for role in _roles():
+        if role.name in denylist:
+            continue
+        missing = _deployments_missing_readiness_probe(role)
+        if missing:
+            offenders.append(
+                f"{role.name}: {', '.join(missing)} has no readinessProbe — "
+                f"`rollout status` returns on Running"
+            )
     assert not offenders, (
         "Auto-deployable role(s) whose rollout gate proves nothing — add to "
-        "gitops_deploy_k8s_autodeploy_denylist with a reason, or give the Deployment a "
+        "gitops_deploy_k8s_autodeploy_denylist with a reason, or give the Deployment(s) a "
         "readinessProbe:\n" + "\n".join(offenders)
     )
 
 
 def test_extra_rollouts_are_counted_as_gated() -> None:
-    """prowlarr renders two Deployments and gates both — it is not an offender.
+    """prowlarr renders two Deployments and gates both, by name — it is not an offender.
 
     `manifests_extra_rollouts` post-dates this guard's original model. Until the guard
-    understands it, retiring prowlarr from the denylist breaks the suite for a reason that
+    resolves each Deployment's real name and matches it against the primary rollout plus the
+    declared extras, retiring prowlarr from the denylist breaks the suite for a reason that
     stopped being true.
     """
     prowlarr = _K8S_ROLES / "prowlarr"
     assert len(_deployment_templates(prowlarr)) == 2
+    assert _primary_rollout_name(prowlarr) == "prowlarr"
     assert _extra_rollouts(prowlarr) == {"flaresolverr"}
+    assert (
+        _deployment_name(prowlarr / "templates" / "deployment-flaresolverr.yaml.j2")
+        == "flaresolverr"
+    )
     assert _ungated_deployment_count(prowlarr) == 0
+
+
+def test_extra_rollout_naming_the_wrong_deployment_reads_as_ungated(
+    tmp_path: Path,
+) -> None:
+    """A typo'd or drifted `manifests_extra_rollouts` name doesn't gate anything real.
+
+    Matching by count alone (rendered - 1 - len(extras) == 0) read this as fully gated even
+    though the declared extra's name matches neither rendered Deployment. Matching by identity
+    catches it: the second Deployment's real name isn't in {primary, declared extra}.
+    """
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "templates").mkdir()
+    (role / "tasks" / "main.yml").write_text(
+        "- ansible.builtin.include_role:\n"
+        "    name: k8s/manifests\n"
+        "  vars:\n"
+        "    manifests_service: widget\n"
+        "    manifests_extra_rollouts:\n"
+        "      - name: widget-typo\n"
+    )
+    (role / "templates" / "deployment.yaml.j2").write_text(
+        "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: widget\n"
+    )
+    (role / "templates" / "deployment-cache.yaml.j2").write_text(
+        "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: widget-cache\n"
+    )
+    assert _extra_rollouts(role) == {"widget-typo"}
+    assert _ungated_deployment_count(role) == 1
 
 
 def test_auto_deployable_roles_do_not_skip_the_rollout_gate() -> None:
