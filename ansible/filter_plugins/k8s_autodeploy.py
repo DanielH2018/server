@@ -35,6 +35,51 @@ REASON = "k8s_autodeploy_reason"
 SHARED_ROLES = frozenset({"manifests", "rollout-drain"})
 
 
+def _check_shared_roles(roles_dir):
+    """Enforce the SHARED_ROLES invariant instead of just documenting it.
+
+    A typo'd or stale member would otherwise exclude nothing (silently — sorted() over
+    os.listdir() never notices a name that isn't there) and no test would catch it, which
+    is exactly the class of gap that left seed-volume and image-builder auto-deployable
+    for months under the CSV this replaces. This checks defaults/main.yml only, because
+    that is where this repo's Renovate manager reads image pins from.
+    """
+    for member in sorted(SHARED_ROLES):
+        member_dir = os.path.join(roles_dir, member)
+        if not os.path.isdir(member_dir):
+            raise AnsibleFilterError(
+                f"k8s_autodeploy_denylist: SHARED_ROLES member '{member}' is not a "
+                f"directory under {roles_dir}. A stale or typo'd entry here excludes "
+                f"nothing, which would silently make it a candidate for the denylist "
+                f"instead. Fix the name in SHARED_ROLES or remove the entry."
+            )
+
+        defaults_path = os.path.join(member_dir, "defaults", "main.yml")
+        if not os.path.isfile(defaults_path):
+            continue
+
+        try:
+            with open(defaults_path, encoding="utf-8") as handle:
+                data = yaml.safe_load(handle)
+        except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
+            raise AnsibleFilterError(
+                f"k8s_autodeploy_denylist: cannot read SHARED_ROLES member '{member}' "
+                f"defaults ({defaults_path}): {exc}"
+            ) from exc
+
+        if isinstance(data, dict):
+            image_keys = [key for key in data if str(key).endswith("_image")]
+            if image_keys:
+                raise AnsibleFilterError(
+                    f"k8s_autodeploy_denylist: SHARED_ROLES member '{member}' pins "
+                    f"{image_keys} in {defaults_path}. Pinning an `_image:` var is what "
+                    f"makes a role Renovate-visible and therefore auto-deployable, so a "
+                    f"shared role that pins one must not be silently skipped — remove it "
+                    f"from SHARED_ROLES and let it declare k8s_autodeploy like any other "
+                    f"role."
+                )
+
+
 def k8s_autodeploy_denylist(playbook_dir):
     """Role names that must never be auto-deployed, sorted.
 
@@ -47,10 +92,20 @@ def k8s_autodeploy_denylist(playbook_dir):
             f"k8s_autodeploy_denylist: no such directory: {roles_dir}"
         )
 
+    _check_shared_roles(roles_dir)
+
     denied = []
     for role in sorted(os.listdir(roles_dir)):
-        if not os.path.isdir(os.path.join(roles_dir, role)):
-            continue
+        entry_path = os.path.join(roles_dir, role)
+        if not os.path.isdir(entry_path):
+            if role.startswith("."):
+                continue
+            raise AnsibleFilterError(
+                f"k8s_autodeploy_denylist: '{entry_path}' is not a directory (possibly a "
+                f"dangling symlink). Every entry under roles/k8s/ must be a real role "
+                f"directory declaring `{DECLARATION}`; remove it or fix the symlink rather "
+                f"than let it silently drop out of the denylist."
+            )
         if role in SHARED_ROLES:
             continue
 
@@ -66,7 +121,7 @@ def k8s_autodeploy_denylist(playbook_dir):
         try:
             with open(path, encoding="utf-8") as handle:
                 data = yaml.safe_load(handle)
-        except (OSError, yaml.YAMLError) as exc:
+        except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
             raise AnsibleFilterError(
                 f"k8s_autodeploy_denylist: cannot read '{role}' defaults ({path}): {exc}"
             ) from exc
@@ -86,7 +141,8 @@ def k8s_autodeploy_denylist(playbook_dir):
                 f"every role truthy."
             )
 
-        if not data.get(REASON):
+        reason = data.get(REASON)
+        if not isinstance(reason, str) or not reason.strip():
             raise AnsibleFilterError(
                 f"k8s_autodeploy_denylist: role '{role}' sets `{DECLARATION}` but no "
                 f"`{REASON}`. The reason is what makes the stance reviewable; a bare "
