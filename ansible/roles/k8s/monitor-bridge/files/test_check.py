@@ -3446,6 +3446,18 @@ def test_no_series_at_all_is_inert_not_green_and_not_red():
     assert "devic.es/dri" in msg
 
 
+def test_the_inert_arm_takes_prom_scalars_real_empty_value():
+    """prom_scalar returns None on an empty query, never 0 - so None is what production feeds here.
+
+    Testing only 0 would leave the real call path unexercised: both are falsy today, but the
+    fixture would stop matching the producer the moment that branch grew anything sharper than a
+    truthiness test.
+    """
+    ok, msg = check.extended_resource_verdict(["devic.es/dri"], {}, None)
+    assert ok is True
+    assert "INERT" in msg
+
+
 def test_several_resources_are_all_checked():
     ok, msg = check.extended_resource_verdict(
         ["devic.es/dri", "example.com/fpga"],
