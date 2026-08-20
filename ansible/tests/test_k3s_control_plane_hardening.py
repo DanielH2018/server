@@ -135,10 +135,16 @@ def test_secrets_encryption_has_a_rollback_lever():
 def test_existing_secrets_are_reencrypted():
     """Arming the flag encrypts WRITES only; without this the old plaintext stays."""
     text = (K3S / "tasks" / "server.yml").read_text()
-    assert "secrets-encrypt reencrypt" in text, (
-        "The role must run `k3s secrets-encrypt reencrypt` after arming the flag. Encryption "
-        "applies to writes, so Secrets already in etcd stay plaintext — and every check "
-        "reads green, because encryption really is enabled."
+    assert "secrets-encrypt rotate-keys" in text, (
+        "The role must run `k3s secrets-encrypt rotate-keys` after arming the flag. "
+        "Encryption applies to writes, so Secrets already in etcd stay plaintext — and every "
+        "check reads green, because encryption really is enabled."
+    )
+    assert "secrets-encrypt reencrypt" not in text, (
+        "Use `rotate-keys`, not bare `reencrypt`. On k3s v1.30+ rotate-keys is the whole "
+        "procedure; `reencrypt` belongs to the legacy prepare -> rotate -> reencrypt sequence "
+        "and is invalid from the `start` stage a freshly armed cluster is in. It fails AFTER "
+        "the control-plane restart, leaving encryption enabled over untouched plaintext."
     )
     assert "reencrypt_finished" in text, (
         "The re-encryption must be guarded on the rotation stage reaching reencrypt_finished, "

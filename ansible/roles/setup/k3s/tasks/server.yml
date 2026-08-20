@@ -133,26 +133,50 @@
       reports enabled.
   when: k3s_secrets_encryption | bool
 
-- name: Re-encrypt Secrets already stored in etcd
+- name: Fail if the encryption flag did not take
   tags: [k3s_server]
+  # Separated from the re-encryption below so a flag that never reached the apiserver reports
+  # itself, rather than surfacing as a confusing error from rotate-keys several tasks later.
+  ansible.builtin.assert:
+    that: "'Encryption Status: Enabled' in k3s_secrets_encrypt_status.stdout"
+    fail_msg: >-
+      --secrets-encryption is in k3s_server_args but the apiserver reports
+      {{ k3s_secrets_encrypt_status.stdout_lines[0] | default('no status') }}. The installer
+      may not have rewritten the unit — check ExecStart in /etc/systemd/system/k3s.service.
+  when: k3s_secrets_encryption | bool
+
+- name: Rotate the encryption key and re-encrypt Secrets already stored in etcd
+  tags: [k3s_server]
+  # `rotate-keys`, NOT `reencrypt`. On k3s v1.30+ rotate-keys is the whole procedure — it
+  # rotates the key and re-encrypts every Secret with it. Bare `reencrypt` belongs to the
+  # legacy v1.29 prepare -> rotate -> reencrypt sequence and is INVALID from the initial
+  # `start` stage, which is the stage a freshly armed cluster is in. Getting this wrong fails
+  # after the control plane has already restarted, leaving encryption enabled and every
+  # existing Secret still plaintext — armed, green, and not actually protecting anything.
+  #
   # Runs only when the cluster has never completed a re-encryption. The stage advances to
   # reencrypt_finished and stays there, so this fires once on the arming run and skips on
-  # every play after it. Rewriting every Secret on each play would be slow (~5 Secrets/s) and
-  # would churn etcd for nothing.
+  # every play after it; rewriting every Secret each play would churn etcd at ~5 Secrets/s
+  # for nothing.
   ansible.builtin.command:
-    cmd: k3s secrets-encrypt reencrypt
+    cmd: k3s secrets-encrypt rotate-keys
   become: true
   changed_when: true
   when:
     - k3s_secrets_encryption | bool
-    - "'Encryption Status: Enabled' in k3s_secrets_encrypt_status.stdout"
     - "'reencrypt_finished' not in k3s_secrets_encrypt_status.stdout"
+  notify:
+    # k3s documents a server restart after the rotation completes. The handler runs at the end
+    # of the play, which is after the wait below — so the restart lands on a finished rotation,
+    # not a half-done one.
+    - Restart k3s
+    - Wait for the node to report Ready again
 
 - name: Wait for the re-encryption to finish
   tags: [k3s_server]
-  # reencrypt returns as soon as the request is accepted and processes in the background, so
-  # without this the play moves on while Secrets are still being rewritten — and a later task
-  # restarting k3s mid-rotation is how a rotation gets stranded part-done.
+  # rotate-keys returns as soon as the request is accepted and re-encrypts in the background,
+  # so without this the play moves on while Secrets are still being rewritten — and restarting
+  # k3s mid-rotation is how a rotation gets stranded part-done.
   ansible.builtin.command:
     cmd: k3s secrets-encrypt status
   register: k3s_reencrypt_wait
@@ -163,7 +187,6 @@
   delay: 10
   when:
     - k3s_secrets_encryption | bool
-    - "'Encryption Status: Enabled' in k3s_secrets_encrypt_status.stdout"
     - "'reencrypt_finished' not in k3s_secrets_encrypt_status.stdout"
 
 # containerd reads this only at startup, so a change needs k3s restarted — see the restart
