@@ -429,19 +429,80 @@ def test_manifests_rollout_kind_defaults_to_deploy() -> None:
 
 
 def test_manifests_rollout_no_longer_hardcodes_the_deploy_kind() -> None:
-    """The three hardcoded `deploy`/`deployment.apps` sites must all read the variable.
+    """The six hardcoded `deploy`/`deployment.apps` sites must all read the variable.
 
-    The apply-output check is the one that matters most: it needs `daemonset.apps/` for a
+    Three in the primary rollout (restart command, batch-drain kind, apply-output check) and
+    three more in the manifests_extra_rollouts loop, which duplicates the same pattern. The
+    apply-output check is the one that matters most: it needs `daemonset.apps/` for a
     DaemonSet, a different string from the `daemonset` kubectl kind, and getting it wrong
     restarts a freshly created workload mid-creation.
     """
     text = (_K8S_ROLES / "manifests/tasks/main.yml").read_text()
-    assert "rollout restart\n      deploy/" not in text, (
-        "rollout restart still hardcodes deploy/"
+    assert not re.search(r"rollout restart\s+deploy/", text), (
+        "a rollout restart still hardcodes deploy/ — this matches regardless of line wrapping, "
+        "and covers the manifests_extra_rollouts site as well as the primary one"
     )
     assert "'kind': 'deploy'," not in text, (
         "the batch-drain set_fact still hardcodes 'kind': 'deploy'"
     )
     assert "search('deployment.apps/'" not in text, (
         "the apply-output check still hardcodes deployment.apps/"
+    )
+
+
+def test_the_apply_output_ternary_maps_daemonset_to_the_daemonset_prefix() -> None:
+    """The absence assertions cannot see a swapped ternary.
+
+    `ternary('deployment.apps/', 'daemonset.apps/')` passes every other test in this file while
+    making `kubectl apply`'s output never match — the `when:` then passes and a freshly created
+    workload is `rollout restart`ed mid-creation, which is the race the condition prevents.
+    """
+    text = (_K8S_ROLES / "manifests/tasks/main.yml").read_text()
+    swapped = "ternary('deployment.apps/', 'daemonset.apps/')"
+    correct = "ternary('daemonset.apps/', 'deployment.apps/')"
+    assert swapped not in text, (
+        "the apply-output ternary is swapped: a daemonset would search for deployment.apps/"
+    )
+    assert text.count(correct) == 2, (
+        f"expected the correct ternary at both the primary and extras sites, found "
+        f"{text.count(correct)}"
+    )
+
+
+def test_manifests_rollout_kind_is_constrained_to_known_values() -> None:
+    """kubectl accepts 'ds' and 'DaemonSet'; three consumers here match only 'daemonset'.
+
+    Without this assert an alias gives a green deploy whose stabilisation gate read a
+    Deployment's jsonpath off a DaemonSet and compared 0 == 0 — passing vacuously.
+    """
+    text = (_K8S_ROLES / "manifests/tasks/main.yml").read_text()
+    assert (
+        "manifests_rollout_kind | default('deploy') in ['deploy', 'daemonset']" in text
+    ), (
+        "roles/k8s/manifests must assert manifests_rollout_kind against the two values its "
+        "consumers understand"
+    )
+
+
+def test_no_role_spells_the_daemonset_kind_as_ds() -> None:
+    """One spelling of the kind, repo-wide.
+
+    `manifests_rollout_kind` and two other consumers match the literal 'daemonset', so a role
+    using kubectl's `ds` alias is a working command that reads as a sanctioned spelling — and
+    copying it into a parameterized role gives a green deploy with the stabilisation gate
+    reading a Deployment's jsonpath off a DaemonSet.
+    """
+    offenders = []
+    for role in _roles():
+        for path in sorted(role.rglob("*")):
+            if not path.is_file():
+                continue
+            for n, line in enumerate(path.read_text(errors="ignore").splitlines(), 1):
+                if re.search(r"\bds/|\bget ds\b|kind:\s*ds\b", line):
+                    offenders.append(
+                        f"{path.relative_to(_K8S_ROLES)}:{n}: {line.strip()}"
+                    )
+    assert not offenders, (
+        "spell the DaemonSet kind 'daemonset', not kubectl's 'ds' alias — three consumers "
+        "match the literal:\n" + "\n".join(offenders)
     )

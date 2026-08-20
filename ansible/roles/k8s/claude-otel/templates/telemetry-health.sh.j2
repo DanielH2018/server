@@ -47,8 +47,8 @@ done
 
 # otel-collector runs as a DaemonSet (one pod per node), not a Deployment, so its readiness
 # is numberReady vs desiredNumberScheduled rather than readyReplicas vs spec.replicas.
-READY=$($KUBECTL get ds otel-collector -o jsonpath='{.status.numberReady}' 2>/dev/null)
-WANT=$($KUBECTL get ds otel-collector -o jsonpath='{.status.desiredNumberScheduled}' 2>/dev/null)
+READY=$($KUBECTL get daemonset otel-collector -o jsonpath='{.status.numberReady}' 2>/dev/null)
+WANT=$($KUBECTL get daemonset otel-collector -o jsonpath='{.status.desiredNumberScheduled}' 2>/dev/null)
 if [[ -z "$WANT" ]]; then
   add "otel-collector missing"
 elif (( ${READY:-0} < WANT )); then
