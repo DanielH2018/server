@@ -56,7 +56,9 @@ def _migration_block() -> dict:
 def test_the_staging_copy_is_verified_before_the_original_is_deleted() -> None:
     """Between this delete and the copy back, staging holds the only copy of the data."""
     names = _names(_migration_block()["block"])
-    verify = names.index("Refuse to delete the original when the staging copy is empty")
+    verify = names.index(
+        "Refuse to delete the original when the copy lost its contents"
+    )
     delete = names.index("Delete the original claim")
     assert verify < delete, (
         "the original PVC is deleted before the staging copy is checked — an empty or partial "
@@ -207,3 +209,66 @@ def test_every_workload_step_is_skipped_when_there_is_no_workload() -> None:
                 f"{task['name']} must be skipped when there is no Deployment to act on"
             )
     assert seen == guarded, f"not all workload steps were found: {guarded - seen}"
+
+
+def test_an_aborted_migration_discards_its_staging_claim() -> None:
+    """A staging PVC left behind by an abort holds a Longhorn volume nobody will reclaim."""
+    always = _names(_migration_block()["always"])
+    assert (
+        "Discard the staging claim after an abort that never touched the original"
+        in always
+    ), (
+        "an abort before the original is deleted must clean up the staging claim, or every "
+        "failed run leaks a PVC — n8n-files leaked one on 2026-08-20"
+    )
+
+
+def test_the_staging_discard_is_skipped_once_the_original_is_gone() -> None:
+    """After the delete, staging is the only copy — an abort must leave it standing."""
+    always = _migration_block()["always"]
+    discard = next(
+        t
+        for t in always
+        if t.get("name")
+        == "Discard the staging claim after an abort that never touched the original"
+    )
+    assert "mig_original_deleted" in str(discard.get("when", "")), (
+        "the discard must be conditional on the original still existing; unconditionally "
+        "deleting the staging claim in `always` destroys the only copy of the data"
+    )
+    names = _names(_migration_block()["block"])
+    assert names.index("Delete the original claim") < names.index(
+        "Record that the original is gone"
+    ), "the flag has to be set after the delete it describes"
+
+
+def test_an_empty_source_is_not_mistaken_for_a_lost_copy() -> None:
+    """A copy that lost data and a volume that was always empty both leave staging at 0 files.
+
+    Only the SOURCE count separates them, so the guard has to read it. Testing the destination
+    alone blocked n8n-files -- an empty PVC -- from ever migrating.
+    """
+    names = _names(_migration_block()["block"])
+    guard = next(
+        t
+        for t in _migration_block()["block"]
+        if t.get("name")
+        == "Refuse to delete the original when the copy lost its contents"
+    )
+    condition = str(guard["ansible.builtin.assert"]["that"])
+    assert "mig_src_files" in condition, (
+        "the guard must compare against the source count, or an empty volume is refused "
+        "for the same reason a failed copy is"
+    )
+    assert names.index("Record what the staging volume now holds") < names.index(
+        "Refuse to delete the original when the copy lost its contents"
+    ), "the counts have to be recorded before the guard reads them"
+
+
+def test_the_copy_task_publishes_the_source_count() -> None:
+    """The guard above cannot work unless the shared copy task exposes the source side."""
+    text = (ANSIBLE / "tasks" / "blockmig_copy.yml").read_text()
+    assert "copy_src_files:" in text, (
+        "blockmig_copy.yml must publish copy_src_files; without it the caller cannot tell an "
+        "empty source from a copy that lost everything"
+    )

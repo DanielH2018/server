@@ -91,8 +91,12 @@
   register: copy_digests
   changed_when: false
 
-- name: Note what the destination holds
+# The source count is published as well as the destination's so the caller can tell a copy that
+# LOST data from a volume that was legitimately empty. Both read 0 files, and only the source
+# count separates them.
+- name: Note what each side holds
   ansible.builtin.set_fact:
+    copy_src_files: "{{ copy_counts.stdout_lines[0] | trim }}"
     copy_dst_files: "{{ copy_counts.stdout_lines[1] | trim }}"
     copy_dst_digest: "{{ copy_digests.stdout_lines[1].split()[0] | trim }}"
 

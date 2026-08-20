@@ -1,0 +1,98 @@
+---
+# Delete stranded Longhorn backup prefixes straight out of B2.
+#
+# WHY. Deleting a chain through Longhorn walks the whole block tree once per deleted backup —
+# hundreds of Class C against a 2,500/day free-tier cap. Through the API it is one listing for
+# the entire store plus unmetered Class A deletes. Scoping and measurements:
+# docs/b2-api-drain-scoping.md.
+#
+# WHAT THIS PLAY ADDS over running the script by hand: the SOPS credentials, and the live
+# Longhorn volume list the script refuses to act without. The safety logic lives in the script
+# (scripts/b2_drain.py) where it is unit-tested.
+#
+# Usage — dry run first, always:
+#   uv run ansible-playbook ansible/drain_backup_prefix.yml -i ansible/inventory/hosts.ini \
+#     -e drain_volumes=pvc-aaa,pvc-bbb
+#   ... then add -e drain_apply=true
+- name: Drain stranded backup prefixes from B2
+  hosts: daniel-box
+  connection: local
+  gather_facts: false
+  vars:
+    drain_apply: false
+    drain_repo: /home/ubuntu/server/.claude/worktrees/longhorn-b2-weekly-rearm
+    drain_live_file: /tmp/longhorn-live-volumes.txt
+  pre_tasks:
+    - name: Load secrets
+      community.sops.load_vars:
+        file: "{{ playbook_dir }}/vars/secrets.yml"
+      delegate_to: localhost
+      no_log: true
+
+    - name: Set become password
+      ansible.builtin.set_fact:
+        ansible_become_password: "{{ become_password }}"
+      no_log: true
+
+    - name: Require the volumes to drain
+      ansible.builtin.assert:
+        that: (drain_volumes | default('')) | length > 0 or (drain_volumes_file | default('')) | length > 0
+        fail_msg: >-
+          pass -e drain_volumes=<name>[,<name>...] or -e drain_volumes_file=<path>. Twenty
+          names is 820 characters, which no shell pastes reliably on one line, so the file
+          form is the one to use for a full sweep.
+
+  tasks:
+    - name: Read the live Longhorn volumes
+      ansible.builtin.command:
+        argv: [k3s, kubectl, -n, longhorn-system, get, volumes.longhorn.io,
+               -o, 'custom-columns=V:.metadata.name', --no-headers]
+      become: true
+      register: drain_live
+      changed_when: false
+
+    # The script fails closed on an empty list, but catching it here names the cause rather
+    # than leaving the script to report that nothing could be proven stranded.
+    - name: Refuse to drain against an unusable volume list
+      ansible.builtin.assert:
+        that: drain_live.stdout_lines | length > 0
+        fail_msg: >-
+          the cluster returned no Longhorn volumes. Nothing can be proven stranded against an
+          empty list, so no prefix is safe to delete right now.
+
+    - name: Stage the live-volume list for the script
+      ansible.builtin.copy:
+        content: "{{ drain_live.stdout_lines | map('trim') | join('\n') }}\n"
+        dest: "{{ drain_live_file }}"
+        mode: "0600"
+
+    - name: Drain the prefixes
+      ansible.builtin.command:
+        argv: "{{ ['uv', 'run', 'python', 'scripts/b2_drain.py',
+                   '--live-volumes-file', drain_live_file]
+                  + (['--volumes-file', drain_volumes_file]
+                     if (drain_volumes_file | default('')) | length > 0
+                     else ['--volumes', drain_volumes])
+                  + (['--apply'] if drain_apply | bool else []) }}"
+        chdir: "{{ drain_repo }}"
+      environment:
+        B2_KEY_ID: "{{ kopia_b2_key_id }}"
+        B2_APP_KEY: "{{ kopia_b2_application_key }}"
+      register: drain_run
+      changed_when: drain_apply | bool
+      failed_when: drain_run.rc == 2
+
+    - name: Report
+      ansible.builtin.debug:
+        var: drain_run.stdout_lines
+
+    # Longhorn keeps Backup and BackupVolume CRs for objects that are now gone. A target sync
+    # reconciles them; it walks volume directories only, not block trees.
+    - name: Ask Longhorn to re-read the backup target
+      when: drain_apply | bool
+      ansible.builtin.command:
+        argv: [k3s, kubectl, -n, longhorn-system, patch, backuptarget, default,
+               --type, merge, -p,
+               '{"spec":{"syncRequestedAt":"{{ lookup("pipe", "date -u +%Y-%m-%dT%H:%M:%SZ") }}"}}']
+      become: true
+      changed_when: true
