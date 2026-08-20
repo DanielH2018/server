@@ -43,7 +43,7 @@ _REPO = Path(__file__).resolve().parents[2]
 _K8S_ROLES = _REPO / "ansible/roles/k8s"
 _DEPLOYER_DEFAULTS = _REPO / "ansible/roles/setup/gitops_deploy/defaults/main.yml"
 # Not a workload role — the shared include every other role calls.
-_SHARED = {"manifests", "seed-volume"}
+_SHARED = {"manifests", "seed-volume", "rollout-drain"}
 
 
 def _denylist() -> set[str]:
@@ -350,21 +350,22 @@ def _declares_autodeploy(role: Path) -> bool:
     )
 
 
-def test_every_image_pinning_role_declares_its_autodeploy_stance() -> None:
+def test_every_role_declares_its_autodeploy_stance() -> None:
     """Eligibility is declared where the justifying knowledge lives, not in a central list.
 
-    Omission must not read as consent: a new role that pins an image and says nothing about
-    auto-deploy fails here rather than inheriting a default.
+    Omission must not read as consent. Scoping this to image-pinning roles left a mirror gap:
+    a role with no defaults/main.yml at all — longhorn-ui and n8n-images, both live
+    containers_list entries, both on the CSV denylist today — has _pins_an_image() return
+    False and skips the check entirely. If 1b treats an undeclared role as eligible, the way
+    the CSV era treated denylist-absence as eligible, both flip from protected to
+    auto-deployable with nobody reviewing it. Every role _roles() yields must declare,
+    whether or not it pins an image.
     """
-    missing = [
-        role.name
-        for role in _roles()
-        if _pins_an_image(role) and not _declares_autodeploy(role)
-    ]
+    missing = [role.name for role in _roles() if not _declares_autodeploy(role)]
     assert not missing, (
-        "Role(s) pinning an image without a k8s_autodeploy declaration. Add both keys to "
-        "defaults/main.yml — k8s_autodeploy: true|false and a k8s_autodeploy_reason saying "
-        "why:\n" + "\n".join(sorted(missing))
+        "Role(s) with no k8s_autodeploy declaration. Add both keys to defaults/main.yml — "
+        "k8s_autodeploy: true|false and a k8s_autodeploy_reason saying why:\n"
+        + "\n".join(sorted(missing))
     )
 
 

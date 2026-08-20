@@ -1,0 +1,9 @@
+---
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# This role only builds two images via k8s/image-builder (see tasks/main.yml) — it renders a
+# Job each, never a Deployment, so there is nothing for `rollout status` to gate. A broken
+# build would just fail the Job outright rather than roll out silently; the risk is n8n itself
+# (a separate role) picking up a bad image on its own next deploy with nothing here to catch
+# it first.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "renders two Jobs via k8s/image-builder, never a Deployment — nothing for rollout status to gate"  # noqa var-naming[no-role-prefix]
