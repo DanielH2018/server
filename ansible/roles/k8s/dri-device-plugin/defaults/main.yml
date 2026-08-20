@@ -15,12 +15,13 @@
 dri_device_plugin_image: ghcr.io/squat/generic-device-plugin:latest@sha256:dc192e164c69b03f156765793a1be62ca437709ae477b27ca7d8f3dcf5021576
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
-# Nothing for `rollout status` to gate: this role renders a DaemonSet, not a Deployment. It is
-# also the workload that advertises the /dev/dri render node as a schedulable resource —
-# jellyfin's GPU transcoding depends on it, so a wedge here has a downstream victim with no
-# rollout gate of its own watching for it either.
+# `rollout status` can gate a DaemonSet now, but readiness on /health only proves the HTTP
+# listener, not gRPC registration with the kubelet. This is also the workload that advertises
+# the /dev/dri render node as a schedulable resource — jellyfin's GPU transcoding depends on
+# it, so a wedge here has a downstream victim with no rollout gate of its own watching for it
+# either.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "renders a DaemonSet, not a Deployment — nothing for rollout status to gate; jellyfin's GPU transcoding depends on it"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "readiness on /health proves the HTTP listener, not that the plugin registered its gRPC socket with the kubelet — rollout status would go green on an unregistered plugin, and that makes jellyfin and tdarr unschedulable"  # noqa var-naming[no-role-prefix]
 
 # How many pods may hold the render node at once. It is one physical device; this is a scheduling
 # allowance, not a hardware fact — jellyfin and tdarr both want it, and the GPU multiplexes fine.

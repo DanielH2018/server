@@ -9,17 +9,7 @@
     name: k8s/manifests
   vars:
     manifests_service: node-exporter
-    # '' skips the shared role's deploy/-shaped rollout wait (this is a DaemonSet); the
-    # explicit wait below replaces it.
-    manifests_rollout: ''
+    manifests_rollout: node-exporter
+    manifests_rollout_kind: daemonset
     manifests_files:
       - daemonset.yaml
-
-- name: Wait for the node-exporter DaemonSet rollout
-  tags: [deploy]
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} rollout status daemonset/node-exporter
-      --timeout=300s
-  become: true
-  changed_when: false

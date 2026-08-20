@@ -4,7 +4,5 @@
 node_exporter_k8s_image: prom/node-exporter:v1.10.2
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
-# Nothing for `rollout status` to gate: this role renders a DaemonSet, not a Deployment — the
-# rollout gate this deployer wires (roles/k8s/manifests + rollout-drain) is Deployment-shaped.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "renders a DaemonSet, not a Deployment — nothing for rollout status to gate"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "stateless DaemonSet, read-only hostPath mounts and no PVC, readinessProbe gates the rollout, version-pinned image"  # noqa var-naming[no-role-prefix]
