@@ -147,8 +147,9 @@ The one change either way: `b2_list_versions` needs a `prefix` parameter.
 
 ## What is not verified
 
-- **The `syncRequestedAt` reconcile.** Documented in this repo's own reaper header; not
-  exercised. If it does not drop the dangling CRs, they need removing another way.
+- ~~The `syncRequestedAt` reconcile.~~ **Verified 2026-08-20**: after draining 20 prefixes the
+  patch dropped the stale `BackupVolume` CRs from 32 to 12 and left zero `Backup` CRs pointing
+  at a volume that no longer exists.
 - **The sync's own cost.** A sync must walk every volume directory, so estimate tens of Class C
   per drain run — small, but not zero, and not measured.
 - **What deletes `volume.cfg`.** Each drained prefix keeps one. The likely answer is deleting
@@ -156,6 +157,16 @@ The one change either way: `b2_list_versions` needs a `prefix` parameter.
   are still standing. One object per volume, so this is tidiness, not cost.
 - **B2's Class C billing granularity for large pages.** B2 bills listing per 1,000 names
   returned, so the 5-call figure is 5 billed units either way.
+
+## Result
+
+Run 2026-08-20 against all 20 stranded prefixes: **4,373 versions deleted, every prefix
+independently verified empty, 25 Class C total** (5 to enumerate the store, one verification
+re-list per volume). The backupstore went from 28 volume prefixes / 4,080 live objects /
+2.64 GiB to 8 / 110 / 0.07 GiB, and listing the whole store now costs 1 Class C rather than 5.
+
+The same deletions through Longhorn would have cost thousands of Class C and taken days against
+the daily cap.
 
 ## Risks
 
