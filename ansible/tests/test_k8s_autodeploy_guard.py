@@ -192,6 +192,26 @@ def _primary_rollout_name(role: Path) -> str:
     return service.group(1) if service else ""
 
 
+def _primary_rollout_kind(role: Path) -> str:
+    """The kubectl kind `roles/k8s/manifests` will use for this role's primary rollout.
+
+    Mirrors `manifests_rollout_kind | default('deploy')`. Same regex-is-safe reasoning as
+    `_primary_rollout_name`: every caller sets this to a literal, and the shared role asserts
+    the value is one of 'deploy'/'daemonset' before anything reads it.
+    """
+    tasks = role / "tasks/main.yml"
+    if not tasks.is_file():
+        return "deploy"
+    match = re.search(
+        r"""^\s*manifests_rollout_kind:\s*(?:"([^"]*)"|'([^']*)'|(\S+))\s*$""",
+        tasks.read_text(),
+        re.MULTILINE,
+    )
+    if not match:
+        return "deploy"
+    return next(g for g in match.groups() if g is not None)
+
+
 _DEPLOYMENT_NAME = re.compile(
     r"^kind:\s*(?:Deployment|DaemonSet)\s*$\n\s*metadata:\s*$\n\s*name:\s*(.+?)\s*$",
     re.MULTILINE,
@@ -289,6 +309,48 @@ def test_auto_deployable_roles_gate_every_deployment_they_render() -> None:
         "manifests_extra_rollouts, or set k8s_autodeploy: false with a k8s_autodeploy_reason "
         "in the role's own defaults/main.yml (the denylist is derived from that "
         "declaration):\n" + "\n".join(offenders)
+    )
+
+
+_MANIFEST_KIND_TO_ROLLOUT_KIND = {"Deployment": "deploy", "DaemonSet": "daemonset"}
+
+
+def test_auto_deployable_roles_gate_the_right_kind() -> None:
+    """Name-only gating passes a role whose rollout kind is wrong.
+
+    `_gated_names` compares names and nothing else, so a role setting
+    `manifests_rollout: node-exporter` without `manifests_rollout_kind: daemonset` reports zero
+    offenders while the shared role runs `rollout status deploy/node-exporter` against a
+    Deployment that does not exist. kubectl fails loudly at deploy time; CI stays green, which
+    is the failure this file exists to prevent.
+    """
+    offenders = []
+    for role in _roles():
+        if not _auto_deployable(role):
+            continue
+        primary = _primary_rollout_name(role)
+        if not primary:
+            continue
+        declared = _primary_rollout_kind(role)
+        for name in _deployment_templates(role):
+            template = role / "templates" / name
+            if _deployment_name(template) != primary:
+                continue
+            rendered = re.search(
+                r"^kind:\s*(Deployment|DaemonSet)\s*$",
+                template.read_text(),
+                re.MULTILINE,
+            )
+            expected = _MANIFEST_KIND_TO_ROLLOUT_KIND[rendered.group(1)]
+            if expected != declared:
+                offenders.append(
+                    f"{role.name}: {name} renders a {rendered.group(1)}, so the rollout gate "
+                    f"needs manifests_rollout_kind: {expected}, but the role declares "
+                    f"{declared!r}"
+                )
+    assert not offenders, (
+        "Auto-deployable role(s) whose rollout gate names the wrong kind — `rollout status` "
+        "would target a workload that does not exist:\n" + "\n".join(offenders)
     )
 
 

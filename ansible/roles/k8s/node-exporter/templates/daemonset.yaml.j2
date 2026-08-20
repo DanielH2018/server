@@ -51,6 +51,16 @@ spec:
               port: 9100
             initialDelaySeconds: 15
             periodSeconds: 30
+          # `rollout status daemonset/node-exporter` gates on numberReady, which without a
+          # readiness probe means "Running" — it would return green on a container that never
+          # served a scrape. Shorter delay than the liveness probe: this one decides when the
+          # rollout is allowed to proceed, not when to kill the container.
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 9100
+            initialDelaySeconds: 5
+            periodSeconds: 10
           volumeMounts:
             - name: proc
               mountPath: /host/proc

@@ -60,10 +60,6 @@ _NO_READINESS = {
         "n8n-runners",
     ): "no Service; task runners are dialled by the broker, not routed",
     ("crowdsec", "crowdsec-agent"): "DaemonSet agent, no Service; liveness covers it",
-    (
-        "node-exporter",
-        "node-exporter",
-    ): "scraped by Prometheus, so absence is a down target",
     # ── periodic workers with no server to probe. A stale Kuma push heartbeat catches
     #    'running but not doing its job', which readiness cannot see.
     ("cloudflare-ddns", "cloudflare-ddns"): "Kuma push heartbeat; no server to probe",
