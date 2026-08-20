@@ -2348,6 +2348,18 @@ def check_r2_usage():
     return r2_usage()
 
 
+def ksm_resource_label(resource):
+    """Turn a Kubernetes resource name into the `resource` label kube-state-metrics emits.
+
+    KSM replaces every character outside [a-zA-Z0-9_] with `_`, so `devic_es_dri` is the only form
+    that matches a series — while `devic.es/dri` is what `kubectl describe node` prints and what an
+    operator would configure. Querying the unsanitised name matches nothing, and this check reads
+    "matches nothing" as the device plugin having deregistered. That is a DOWN on a healthy
+    cluster, which is what it did live from 18:05 to 18:35 UTC on 2026-08-20.
+    """
+    return "".join(c if c.isalnum() or c == "_" else "_" for c in resource)
+
+
 def extended_resource_verdict(expected, advertised, allocatable_series):
     """Pure: (ok, msg) for extended resources that must stay advertised by some node.
 
@@ -2378,7 +2390,10 @@ def extended_resource_verdict(expected, advertised, allocatable_series):
         return False, (
             "extended resource(s) advertised by no node: %s — the device plugin is Running but "
             "its resource is deregistered; pods requesting it cannot schedule"
-            % ", ".join(missing)
+            % ", ".join(
+                "%s (kube-state-metrics label %s)" % (r, ksm_resource_label(r))
+                for r in missing
+            )
         )
     return True, "extended resource(s) advertised: %s" % ", ".join(
         "%s on %d node(s)" % (r, advertised.get(r, 0)) for r in expected
@@ -2515,7 +2530,8 @@ def check_k8s_workloads():
     for resource in K8S_EXTENDED_RESOURCES:
         advertised[resource] = len(
             prom_vector(
-                'kube_node_status_allocatable{resource="%s"} > 0' % resource,
+                'kube_node_status_allocatable{resource="%s"} > 0'
+                % ksm_resource_label(resource),
                 base=CLUSTER_PROM_URL,
                 source="cluster prometheus",
             )
