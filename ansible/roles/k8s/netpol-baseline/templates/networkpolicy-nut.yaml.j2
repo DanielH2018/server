@@ -12,10 +12,17 @@ spec:
     - Ingress
   ingress:
     # peanut is the web UI in-cluster. The node entries are daniel-server's shutdown chain:
-    # upsmon runs as a host process there, so it arrives as a node address, not a pod. Both
-    # nodes' cni0 and flannel.1 are admitted because nut has no node pin -- if the pod moves to
-    # daniel-server the same caller becomes same-node instead of cross-node, and the address
-    # changes with it.
+    # upsmon runs as a host process there, so it arrives as a node address, not a pod. nut is
+    # permanently pinned to daniel-server (nodeSelector in nut/templates/deployment.yaml.j2 --
+    # the UPS is USB-attached there and this never unwinds), so this is not about the pod
+    # moving. It's the always-on baseline that changes what's load-bearing here: nut now
+    # carries `netpol-baseline: enforced` (Task 7), so the baseline already admits both nodes'
+    # cni0 addresses (10.42.0.1/32, 10.42.1.1/32 -- netpol_baseline_node_cidrs) on every port,
+    # making the two cni0 entries below redundant. The two flannel.1 entries (10.42.0.0/32,
+    # 10.42.1.0/32) are NOT in netpol_baseline_node_cidrs and are genuinely load-bearing: a
+    # cross-node host->pod packet arrives as the SENDING node's flannel.1 address, so daniel-box
+    # host processes (e.g. the shutdown chain's peer, or a monitor) reaching the pinned pod on
+    # daniel-server show up as daniel-box's flannel.1, not its cni0.
     - from:
         - podSelector:
             matchLabels:
