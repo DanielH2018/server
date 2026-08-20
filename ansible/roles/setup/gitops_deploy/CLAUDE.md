@@ -118,7 +118,7 @@ stay).
     (`deploy_logic.py` around line 177) — naming `deploy.yml` for a setup-plane change leaves
     it unapplied while a plain ff-merge clears the divergence.
 
-    The deployer now detects this itself instead of relying on an operator to remember it. Each
+    The deployer detects this itself instead of relying on an operator to remember it. Each
     tick, `k8s_declarations_at(f"origin/{BRANCH}")` reads every role's `defaults/main.yml` at the
     ref the deployer just fetched, and `declared_denylist()` parses it with a stdlib regex — the
     unit runs under `uv run --no-project` and cannot import `yaml` or the filter plugin. If that
