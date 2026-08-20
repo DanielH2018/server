@@ -177,13 +177,36 @@
       # earlier form: that produced a bare Namespace with no way to carry labels, and the Pod
       # Security Admission labels have to live on the object that owns the namespace or the
       # next apply removes them again.
+      #
+      # A `kind: List` rather than one object, so the namespace and the LimitRange that bounds
+      # it are applied by the same task in the same order. The LimitRange is namespace-scoped
+      # and would fail to apply before its namespace exists; a List guarantees the sequence
+      # without a second task and a second `become`.
       ansible.builtin.set_fact:
         deploy_k8s_ns_manifest:
+          apiVersion: v1
+          kind: List
+          items: >-
+            {{ [_deploy_k8s_ns_doc]
+               + ([_deploy_k8s_limitrange_doc] if k8s_default_limitrange | default({}) else []) }}
+      vars:
+        _deploy_k8s_ns_doc:
           apiVersion: v1
           kind: Namespace
           metadata:
             name: "{{ k8s_namespace }}"
             labels: "{{ k8s_psa_labels | default({}) }}"
+        # Defaults only — see k8s_default_limitrange in group_vars/all.yml for why there is no
+        # min/max here and no ResourceQuota anywhere.
+        _deploy_k8s_limitrange_doc:
+          apiVersion: v1
+          kind: LimitRange
+          metadata:
+            name: default-container-limits
+            namespace: "{{ k8s_namespace }}"
+          spec:
+            limits:
+              - "{{ k8s_default_limitrange | combine({'type': 'Container'}) }}"
       when: containers_list | length > 0
       tags: always
 
@@ -193,10 +216,15 @@
         stdin: "{{ deploy_k8s_ns_manifest | to_nice_yaml }}"
       register: deploy_k8s_ns_apply
       become: true
-      # `created` alone was the old test, which reported ok for a namespace that already
-      # existed — correct while the manifest was label-free and could never differ, wrong now
-      # that a label change comes back as `configured`.
-      changed_when: "'unchanged' not in deploy_k8s_ns_apply.stdout"
+      # Per LINE, not per stdout. `created` alone was the first test, which reported ok for a
+      # namespace that already existed; `'unchanged' not in stdout` replaced it and was right
+      # for exactly as long as this applied one object. With the LimitRange alongside it,
+      # stdout carries two verdicts, and a steady-state `namespace/homelab unchanged` on the
+      # first line masks a `limitrange/... created` on the second — the substring is present,
+      # so the task reports ok on the one run that changed something.
+      changed_when: >-
+        {{ deploy_k8s_ns_apply.stdout_lines
+           | reject('search', ' unchanged$') | list | length > 0 }}
       # Skipped under dry-run for the same reason as everything else: it is a write. The
       # namespace already exists on any cluster a dry run is worth running against, so the
       # manifests below have somewhere to be validated into regardless.
