@@ -13,9 +13,12 @@ spec:
   ingress:
     # The front door. Open to every source on purpose: these ports already take LAN, WireGuard
     # and Cloudflare traffic, and ETP=Local preserves the client IP, so an ipBlock list here
-    # would have to enumerate the internet. It also keeps uptime-kuma's ~20 monitors and all
-    # four netpol probe control legs working -- each dials traefik:80 to prove the probe itself
-    # has a network.
+    # would have to enumerate the internet. :80 in particular must stay open for the
+    # http->https redirect entrypoint (static-config.yaml.j2, entryPoint.to: ":443") -- every
+    # client that arrives on plain HTTP hits that redirect before reaching :443. It also keeps
+    # all four netpol probe control legs working -- each dials traefik:80 to prove the probe
+    # itself has a network. (uptime-kuma's monitors do NOT depend on :80: they're https:// and
+    # so traverse :443, or for the Pi services dial daniel-pi directly, bypassing traefik.)
     - ports:
         - port: 80
           protocol: TCP
