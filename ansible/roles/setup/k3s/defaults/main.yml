@@ -488,8 +488,22 @@ k3s_longhorn_snapshot_reap_delete_timeout: 120s
 # Deliberately 16 rather than the ~24 the arithmetic allows. All 21 volumes backing up on one day
 # would cost roughly 790 Class C, so cost has stopped being the binding constraint and the count
 # is — which is exactly when a growth tripwire has to stay tight. 16 sits just above what a
-# migration-sized night actually produced (12 on 2026-08-20) rather than at the ceiling. Revisit
-# at 24 only after watching a few ordinary weeks at 16.
+# migration-sized night actually produced (12 on 2026-08-20) rather than at the ceiling.
+#
+# PROMOTING TO 24. Elapsed time is not the gate; these three are, and the first cannot be checked
+# before 2026-08-27:
+#
+#   1. Every shard has been priced. `probe.py b2-budget` can only cost a shard whose volumes
+#      already hold backups, and on 2026-08-20 that was 3 of 7 — the other 18 volumes were
+#      rebuilt hours earlier and had none yet. Once each weekday has run once, the ~220
+#      worst-shard figure above stops being a projection. Promote on the measured number.
+#   2. That measured worst shard is not materially above ~220 Class C. If it is, the ~2 C/block
+#      model is wrong and the arithmetic behind 24 goes with it.
+#   3. The arm has not fired at 16 on a day with no deliberate burst. A tripwire already firing
+#      on ordinary traffic is one to investigate, not one to loosen.
+#
+# b2-budget models cost, it does not measure it — B2 publishes no usage API, so the console's
+# Caps & Alerts page stays the only ground truth for what was actually spent.
 #
 # Raise it only together with a decision about the cap itself, never to silence the warning.
 k3s_longhorn_daily_backup_budget: 16
