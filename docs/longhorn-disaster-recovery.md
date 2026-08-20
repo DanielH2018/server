@@ -150,9 +150,11 @@ the per-volume map and each exclusion's rationale:
 
 ## Assurance gap (known, narrowing)
 
-kopia's three-tier assurance (snapshot → weekly verify → monthly restore drill) is not
-yet rebuilt for Longhorn: backups are verified to *complete* (the backup-plane heartbeat)
-and the restore path has now been proven once, but nothing recurs.
+kopia's three-tier assurance (snapshot → weekly verify → monthly restore drill) is rebuilt for
+Longhorn and, since 2026-08-20, exceeds it on cadence: backups are verified to *complete* (the
+backup-plane heartbeat) and to *restore*, one volume per night, rotating over the whole backup
+set. What the tiers do not give you is simultaneity — see the nightly drill below for what the
+fleet-wide claim actually is.
 
 **The first restore drill ran on 2026-08-15, against `traefik-acme`, and it failed** — not
 on the data, but on a B2 Class-B cap already at 100%, which surfaced as
@@ -166,27 +168,47 @@ The drill playbook lives at `/home/ubuntu/migration-oneshots/restore-drill.yml`;
 restore Volume CR needs `spec.backupTargetName` since the v1.12 multi-target change, or
 it resolves against the volume's default target.
 
-**Scheduled since 2026-08-19.** `/usr/local/bin/longhorn-restore-drill.sh` (k3s role,
-`longhorn-restore-drill.sh.j2`) runs monthly as root on the 3rd at 04:10, restoring the newest
-backup of `healthchecks-config` into a throwaway volume, checking the restored filesystem has
-files and clears a byte floor, then tearing everything down. It resolves the backup, volume and
-size from the cluster — the hand-run version pinned all three, and a pinned backup ID dies the
-day retention deletes it.
+**Scheduled since 2026-08-19; nightly and rotating since 2026-08-20.**
+`/usr/local/bin/longhorn-restore-drill.sh` (k3s role, `longhorn-restore-drill.sh.j2`) runs as root
+at 04:10 every night. Each run restores the newest backup of ONE volume into a throwaway volume,
+checks the restored filesystem has files and clears a byte floor, then tears everything down. It
+resolves the backup, volume and size from the cluster — the hand-run version pinned all three, and
+a pinned backup ID dies the day retention deletes it.
 
-It drills a **B2** volume deliberately. `traefik-acme`, which the 2026-08-16 drill used, carries
-`spec.backupTargetName: r2`, as do the other three daily-tier volumes; B2 holds only the weekly
-tier. Drilling `traefik-acme` proves Cloudflare's store and says nothing about the one under a
-transaction cap.
+**Which volume rotates.** Candidates are every volume carrying a
+`recurring-job-group.longhorn.io/*` label other than `no-backup` — the same selector check 4 uses,
+and the only one that cannot drift from what the RecurringJobs really select. Each night the
+least-recently-*attempted* candidate is drilled, so a full cycle takes one night per candidate (25
+on 2026-08-20). Ordering by attempt rather than by success is deliberate: a volume that fails
+every drill would otherwise stay the least-recently-succeeded forever, be picked every night, and
+starve the other 24.
 
-**Check 7 of the backup heartbeat watches it**, because a drill that silently stops looks
-identical to one that was never scheduled. The drill writes
-`/var/lib/longhorn-restore-drill/last-success` only after its data assertions pass, and check 7
-pages when that stamp is missing, unparseable, or older than
-`k3s_longhorn_restore_drill_max_age_days` (45). It fails closed: a drill that has never run is
-reported, not skipped.
+A candidate with no Completed backup is skipped rather than failed — check 4 already pages
+per-volume for that, and failing here would burn a rotation slot re-reporting it.
 
-What is still not covered: only one volume is drilled, so this proves the restore PATH works, not
-that every volume restores. A full-cluster restore is also still rationed — at 16 MiB blocks
+The rotation covers **both targets**. The drill was pinned to a B2 volume until 2026-08-20,
+because B2 is the store under a transaction cap and drilling an R2 volume proves Cloudflare
+instead. That still holds per-night, and stops mattering once every volume comes up in turn: each
+target is proven on the nights its own volumes are drilled. R2 restores are free (10M Class B per
+month, zero egress), and the 16 MiB block change of 2026-08-19 cut B2's per-restore cost eightfold
+— a whole 25-night cycle now costs less than one day's measured baseline Class B spend.
+
+**Checks 7 and 8 of the backup heartbeat watch it**, and they answer different questions. Check 7
+is liveness: the drill writes `/var/lib/longhorn-restore-drill/last-success` only after its data
+assertions pass, and check 7 pages when that stamp is missing, unparseable, or older than
+`k3s_longhorn_restore_drill_max_age_days` (3 — two tolerated bad nights). It fails closed: a drill
+that has never run is reported, not skipped.
+
+Check 8 is coverage, and rotation is what made it necessary — a green check 7 now means one of 25
+volumes restored. It reads the candidate list the drill publishes to
+`/var/lib/longhorn-restore-drill/candidates` and pages, by name, for any candidate whose
+`success/<pvc>` stamp is missing or older than one full cycle plus
+`k3s_longhorn_restore_drill_coverage_slack_days`. Nothing is reported until a cycle has elapsed
+since the rotation's first attempt, so a fresh deploy does not page for volumes whose turn has not
+come.
+
+What is still not covered: each night proves one volume, so at any moment the fleet-wide claim is
+"every volume restored within the last cycle", not "every volume restores right now". A full-cluster restore is also still rationed — at 16 MiB blocks
 (set 2026-08-19) new volumes cost ~8x less to restore, but existing volumes remain at 2 MiB until
 recreated. Lean on the 7-day hidden-version window (`daysFromHidingToDeleting: 7` on the bucket)
 if something looks wrong mid-restore.

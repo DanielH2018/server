@@ -23,12 +23,23 @@ set -uo pipefail
 export PATH="/usr/local/bin:${PATH}"
 KUBECTL="k3s kubectl"
 
-PVC="{{ k3s_longhorn_restore_drill_pvc }}"
-PVC_NS="{{ k3s_longhorn_restore_drill_namespace }}"
-DRILL="restore-drill-${PVC}"
+PIN="{{ k3s_longhorn_restore_drill_pvc }}"
+FALLBACK_NS="{{ k3s_longhorn_restore_drill_namespace }}"
+MAX_BYTES="{{ k3s_longhorn_restore_drill_max_actual_bytes }}"
 STAMP_DIR="{{ k3s_longhorn_restore_drill_stamp_dir }}"
 STAMP="${STAMP_DIR}/last-success"
+# Per-volume bookkeeping, and the two directories do different jobs. ATTEMPT_DIR drives the
+# rotation and is stamped on every run whatever the outcome; SUCCESS_DIR records proof and is
+# written only after the assertions pass. Selecting on attempts rather than successes is what
+# stops one permanently broken volume from starving the other 24 — it would otherwise stay the
+# least-recently-succeeded forever and be picked every single day.
+ATTEMPT_DIR="${STAMP_DIR}/attempts"
+SUCCESS_DIR="${STAMP_DIR}/success"
+# The eligible set, refreshed every run for the heartbeat's coverage check to read. Check 8 has
+# no cluster credential worth the name, so the drill — which already computes this — publishes it.
+CANDIDATES="${STAMP_DIR}/candidates"
 MANIFEST=$(mktemp /tmp/restore-drill.XXXXXX.yaml)
+DRILL=""
 
 fail() { logger -t longhorn-restore-drill "FAIL: $*"; echo "restore drill FAILED: $*" >&2; exit 1; }
 
@@ -36,6 +47,9 @@ fail() { logger -t longhorn-restore-drill "FAIL: $*"; echo "restore drill FAILED
 # left attached would block the next run and, being a Longhorn volume with a replica, occupies
 # real disk. `--ignore-not-found` throughout so cleanup is idempotent whatever stage we died at.
 cleanup() {
+  # Guarded: the candidate query runs before a volume is chosen, so an early failure reaches this
+  # trap with DRILL empty — and `delete pod restore-drill--probe` is a confusing no-op at best.
+  [[ -n "$DRILL" ]] || { rm -f "$MANIFEST"; return; }
   $KUBECTL -n "$PVC_NS" delete pod "${DRILL}-probe" --ignore-not-found --now >/dev/null 2>&1
   $KUBECTL -n "$PVC_NS" delete pvc "$DRILL" --ignore-not-found >/dev/null 2>&1
   $KUBECTL delete pv "$DRILL" --ignore-not-found >/dev/null 2>&1
@@ -44,18 +58,79 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Resolved from the cluster, never hardcoded. The hand-run one-shot this replaces pinned the
-# backup ID, the volume name and the size as literals — all three of which were true only on
-# 2026-08-16. A pinned backup ID is the worst of them: retention deletes it, and the drill then
-# fails forever on a missing backup while reading as a restore failure.
-VOL=$($KUBECTL -n "$PVC_NS" get pvc "$PVC" -o jsonpath='{.spec.volumeName}' 2>/dev/null)
-[[ -n "$VOL" ]] || fail "no volume bound to ${PVC_NS}/${PVC}"
+# Everything below is resolved from the cluster, never hardcoded. The hand-run one-shot this
+# replaces pinned the backup ID, the volume name and the size as literals — all three of which
+# were true only on 2026-08-16. A pinned backup ID is the worst of them: retention deletes it,
+# and the drill then fails forever on a missing backup while reading as a restore failure.
+#
+# ELIGIBILITY is by the `recurring-job-group.longhorn.io/*` LABEL, the same selector check 4 of
+# the heartbeat uses, and for the same reason: the label is what a RecurringJob actually selects
+# on, so it cannot drift from what is really being backed up the way storageClassName does (a
+# PVC's class is immutable and still reads `longhorn` on volumes dropped from the backup set on
+# 2026-08-08). The `no-backup` group is an explicit opt-OUT and is excluded by name.
+#
+# A volume with no Completed Backup CR is SKIPPED, not failed. That looks like the drill hiding a
+# problem, and it would be if nothing else watched — but check 4 already pages per-volume when a
+# declared volume has no fresh backup, and it owns that alarm. Failing here as well would burn a
+# rotation slot re-reporting it, and after the 16 MiB migration recreated volumes faster than
+# their weekday shards refilled, it would have failed most slots for a week.
+BACKED=$($KUBECTL -n longhorn-system get backups.longhorn.io -o json 2>/dev/null \
+  | jq -c '[.items[] | select(.status.state == "Completed") | .status.volumeName] | unique')
+[[ -n "$BACKED" ]] || fail "cannot list backups — is the backup target reachable?"
 
-SIZE=$($KUBECTL -n longhorn-system get volume "$VOL" -o jsonpath='{.spec.size}' 2>/dev/null)
-[[ -n "$SIZE" ]] || fail "cannot read size of volume ${VOL}"
+# actualSize, not spec.size: spec is the declared ceiling and says nothing about what a restore
+# has to pull down. The cap bounds one run's egress and wall-clock, and excludes nothing today
+# (the largest candidate is valheim-config at ~1.3 GB) — it is a guard against a volume growing
+# into a restore that cannot finish inside the timeout, which would read as a restore failure.
+ELIGIBLE=$($KUBECTL -n longhorn-system get volume -o json 2>/dev/null \
+  | jq -r --argjson backed "$BACKED" --argjson max "$MAX_BYTES" --arg pin "$PIN" '
+      [.items[]
+       | select([.metadata.labels // {} | keys[]
+                 | select(startswith("recurring-job-group.longhorn.io/"))
+                 | sub("recurring-job-group.longhorn.io/"; "")
+                 | select(. != "no-backup")] | length > 0)
+       # .metadata.name, NOT .status.volumeName: a Volume CR has no status.volumeName — that
+       # field belongs to Backup CRs, and comparing the null it yields here matched nothing at
+       # all, leaving the drill with an empty candidate set every night.
+       | select(.metadata.name as $v | $backed | index($v))
+       | select(((.status.actualSize // 0) | tonumber) <= $max)
+       | {pvc: (.status.kubernetesStatus.pvcName // ""),
+          ns: (.status.kubernetesStatus.namespace // ""),
+          vol: .metadata.name,
+          size: (.spec.size | tostring),
+          bs: ((.spec.backupBlockSize // 16777216) | tostring),
+          target: (.spec.backupTargetName // "default")}
+       | select(.pvc != "")
+       | select($pin == "" or .pvc == $pin)]
+      | sort_by(.pvc)[]
+      | [.pvc, .ns, .vol, .size, .bs, .target] | @tsv')
+[[ -n "$ELIGIBLE" ]] || fail "no eligible volume has a Completed backup${PIN:+ (pin: ${PIN})}"
 
-TARGET=$($KUBECTL -n longhorn-system get volume "$VOL" -o jsonpath='{.spec.backupTargetName}' 2>/dev/null)
-TARGET="${TARGET:-default}"
+mkdir -p "$STAMP_DIR" "$ATTEMPT_DIR" "$SUCCESS_DIR"
+chmod 0755 "$STAMP_DIR" "$ATTEMPT_DIR" "$SUCCESS_DIR"
+printf '%s\n' "$ELIGIBLE" | cut -f1 >"$CANDIDATES"
+chmod 0644 "$CANDIDATES"
+
+# Least-recently-ATTEMPTED wins, so the rotation self-corrects: a volume that joins the backup
+# set has no attempt stamp, sorts first, and is drilled the next night rather than waiting out a
+# cycle. A missing stamp is epoch 0 for exactly that reason.
+CHOICE=$(while IFS=$'\t' read -r pvc rest; do
+  [[ -n "$pvc" ]] || continue
+  at=0
+  [[ -f "${ATTEMPT_DIR}/${pvc}" ]] && at=$(stat -c %Y "${ATTEMPT_DIR}/${pvc}" 2>/dev/null || echo 0)
+  printf '%s\t%s\t%s\n' "$at" "$pvc" "$rest"
+done <<<"$ELIGIBLE" | sort -n -k1,1 | head -1 | cut -f2-)
+
+IFS=$'\t' read -r PVC PVC_NS VOL SIZE BLOCKSIZE TARGET <<<"$CHOICE"
+[[ -n "$PVC" && -n "$VOL" && -n "$SIZE" ]] || fail "could not select a volume to drill"
+PVC_NS="${PVC_NS:-$FALLBACK_NS}"
+DRILL="restore-drill-${PVC}"
+
+# Stamped BEFORE the restore, and that ordering is the whole anti-starvation property. Stamping
+# on success only would make a volume that always fails permanently the oldest, so it would be
+# picked every night and the other 24 would never be drilled again.
+touch "${ATTEMPT_DIR}/${PVC}"
+chmod 0644 "${ATTEMPT_DIR}/${PVC}"
 
 # Newest Completed backup, by snapshot time. `sort_by` over a string is fine here: these are
 # RFC3339 stamps in a fixed zone, so lexical and chronological order agree.
@@ -73,6 +148,13 @@ URL=$($KUBECTL -n longhorn-system get backuptarget "$TARGET" -o jsonpath='{.spec
 
 # A restore Volume CR needs spec.backupTargetName since the v1.12 multi-target change, or it
 # resolves against the volume's default target and silently restores from the wrong store.
+#
+# backupBlockSize is carried from the SOURCE volume rather than left to default. Omitted, the new
+# volume takes the global `backup-block-size` setting, which is 16 MiB since 2026-08-19 — while
+# the four R2 volumes are still 2 MiB and only convert on recreation. Longhorn refuses a size that
+# is not a multiple of the block size, so a mismatch strands the restore on exactly the volumes
+# the rotation added. Every candidate size is a 16 MiB multiple today, so nothing is stranded
+# right now; pinning it means that stays true when a volume of an awkward size joins.
 cat >"$MANIFEST" <<YAML
 apiVersion: longhorn.io/v1beta2
 kind: Volume
@@ -82,6 +164,7 @@ metadata:
 spec:
   frontend: blockdev
   backupTargetName: ${TARGET}
+  backupBlockSize: "${BLOCKSIZE}"
   fromBackup: "${URL}?backup=${BACKUP}&volume=${VOL}"
   numberOfReplicas: 1
   size: "${SIZE}"
@@ -171,13 +254,17 @@ MIN_BYTES="{{ k3s_longhorn_restore_drill_min_bytes }}"
 
 # The stamp is written ONLY here, after both assertions pass. Check 7 reads its contents, so
 # stamping earlier — or on any failure path — would report a broken drill as a healthy one.
-# Modes set EXPLICITLY, because the reader is a different user. This script runs as root, whose
-# umask here is 027 — so `mkdir -p` alone produced drwxr-x--- root:root, and the heartbeat (which
+# Modes are set EXPLICITLY on every file and directory the drill writes — here and at the
+# candidate query above — because the reader is a different user. This script runs as root, whose
+# umask here is 027, so `mkdir -p` alone produced drwxr-x--- root:root and the heartbeat (which
 # runs as {{ sys_user }} under its own cron) could not read the stamp. Check 7 fails closed on an
 # unreadable stamp, so a PASSING drill would have paged "no restore drill has ever succeeded"
 # forever. Observed 2026-08-19, on the first green run.
-mkdir -p "$STAMP_DIR"
-chmod 0755 "$STAMP_DIR"
 date +%s >"$STAMP"
 chmod 0644 "$STAMP"
+# The per-volume record check 8 reads for coverage. The global stamp above answers "is the drill
+# alive"; this one answers "has THIS volume been proven", which rotation makes a different
+# question — a green global stamp now means one of 25 volumes restored, not all of them.
+cp "$STAMP" "${SUCCESS_DIR}/${PVC}"
+chmod 0644 "${SUCCESS_DIR}/${PVC}"
 logger -t longhorn-restore-drill "PASS: ${PVC} restored from ${BACKUP} (files=${FILES}, bytes=${BYTES})"
