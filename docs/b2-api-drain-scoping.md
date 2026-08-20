@@ -1,66 +1,71 @@
 # Deleting Longhorn backups through the B2 API — scoping
 
-**Recommendation: build it.** The evidence below was measured on 2026-08-19 against the live
-bucket, read-only, for a total of 10 Class C transactions.
+**Recommendation: build it**, on the transaction-cost argument alone. Measured 2026-08-19/20
+against the live bucket, read-only apart from one chain deletion that ran on its own schedule.
 
-Two findings carry the decision, and the second was not expected:
+Two findings carry the decision:
 
 1. **Deletion through the B2 API is effectively free.** Enumerating the *entire* backupstore —
-   28 volume prefixes, 4,080 live objects, 2.64 GiB — cost **5 Class C calls**. Deletes are
+   28 volume prefixes, ~3,400 live objects, 2.64 GiB — costs **5 Class C calls**. Deletes are
    Class A, which B2 does not meter. Deleting one volume's chain through Longhorn costs on the
-   order of several hundred Class C.
-2. **Deleting a chain through Longhorn leaves objects behind.** Five volumes whose chains were
-   deleted through Longhorn earlier today have **zero Backup CRs** and still hold **286 live
-   objects (12.7 MiB)** in B2. We paid full Class C price for a deletion that only half
-   happened.
+   order of several hundred Class C, because a prune walks the whole block tree once per
+   deleted backup.
+2. **Blocks live under each volume's own prefix**, so deleting a prefix is safe. Details below.
 
-**Finding 2 has an untested alternative explanation, and it is the likelier one.**
-`drop_migrated_backup_chain.yml` deletes `Backup` CRs only — it never deletes the
-`BackupVolume` CR, which is what owns the volume *directory* in Longhorn's object model. All
-seven stale `BackupVolume` CRs are still standing. So "Backups gone, directory still there" is
-at least as consistent with *we never deleted the directory's owner* as with *Longhorn strands
-objects*. Until that is tested, finding 2 reads as: these objects remain, and the path that
-would clean them up was never exercised.
+## Retracted: Longhorn does not leave residue
 
-The cost argument alone carries the recommendation, and it is measured. Finding 2 changes only
-how much extra the route is worth.
+An earlier draft of this document claimed that deleting a chain through Longhorn strands about
+half the objects in B2, and argued the API route was worth building for that reason alone.
+**That was wrong, and the error was in how I counted.**
+
+`b2_list_file_versions` returns every version of every object. On a versioned bucket, deleting a
+file writes a hide marker and keeps the upload version underneath — so a correctly deleted
+object still comes back with `action == "upload"`. I counted those as live. Five volumes whose
+chains Longhorn had already deleted appeared to hold 286 live objects; counting each file's
+*current* state instead, they hold **one object each — `volume.cfg` — and zero blocks.**
+
+Two things confirm the deletion path is working correctly:
+
+- **Watching one run live.** `sonarr-config`'s chain was deleted at 00:06 UTC. Its block count
+  went 200 → 110 over the following five minutes, with hide markers climbing in step. Longhorn
+  deletes blocks; it just does so gradually.
+- **The retained versions clear themselves.** The `daniel-server-kopia` bucket carries a
+  lifecycle rule `daysFromHidingToDeleting: 7` across the whole bucket, so hidden versions are
+  removed automatically after a week at no transaction cost.
+
+So a prefix that still lists objects, and still bills for storage, right after a successful
+delete is expected. It is not evidence of a leak.
+
+What this changes: the route is worth building for its Class C cost and nothing else. That
+argument is measured and still large.
 
 ## What was measured
 
 Survey method: one `b2_authorize_account`, then `b2_list_file_versions` paginated over the
-prefix `longhorn/backupstore/volumes/`, counting live objects (`action == "upload"`) separately
-from hide markers.
+prefix `longhorn/backupstore/volumes/`. Versions come back newest-first per file name, so the
+first version seen for a name is its current state.
 
 ### The seven stale prefixes
 
 A prefix is stale when its `BackupVolume` CR exists but the Longhorn `Volume` does not — the
-seven volumes rebuilt at 16 MiB blocks today. There are 32 `BackupVolume` CRs against 43 live
-volumes.
+seven volumes rebuilt at 16 MiB blocks. There are 32 `BackupVolume` CRs against 43 live volumes.
 
-| Prefix | Service | Live objects | Blocks | Hide markers | Size | Backup CRs |
+Snapshot at 00:11 UTC, with `sonarr-config` mid-deletion:
+
+| Prefix | Service | Live | Blocks | Deleted | Retained versions | Stored |
 |---|---|---|---|---|---|---|
-| `pvc-9432817d` | prowlarr-config | 225 | 216 | 2 | 50.4 MiB | 2 |
-| `pvc-cc4ab76b` | sonarr-config | 206 | 200 | 1 | 64.1 MiB | 2 |
-| `pvc-8e41a06c` | — | 90 | 57 | 67 | 1.1 MiB | **0** |
-| `pvc-de7f9d60` | — | 68 | 52 | 58 | 10.8 MiB | **0** |
-| `pvc-d06c0d9d` | — | 57 | 21 | 31 | 0.2 MiB | **0** |
-| `pvc-c926b73e` | — | 40 | 29 | 33 | 0.5 MiB | **0** |
-| `pvc-36a38101` | — | 31 | 11 | 17 | 0.1 MiB | **0** |
+| `pvc-9432817d` | prowlarr-config | 219 | 216 | 2 | 6 | 50.4 MiB |
+| `pvc-cc4ab76b` | sonarr-config | 112 | 110 | 94 | 100 | 64.1 MiB |
+| `pvc-8e41a06c` | — | 1 | 0 | 67 | 89 | 1.1 MiB |
+| `pvc-de7f9d60` | — | 1 | 0 | 58 | 67 | 10.8 MiB |
+| `pvc-c926b73e` | — | 1 | 0 | 33 | 39 | 0.5 MiB |
+| `pvc-d06c0d9d` | — | 1 | 0 | 31 | 56 | 0.2 MiB |
+| `pvc-36a38101` | — | 1 | 0 | 17 | 30 | 0.1 MiB |
 
-The top two are the chains deliberately not yet deleted. The bottom five are the residue.
+The five one-object rows are drained volumes. Their single remaining object is `volume.cfg`;
+their storage is retained versions awaiting the 7-day lifecycle sweep.
 
-The hide-marker column is the tell. Volumes untouched today carry 1–6 hide markers; the five
-drained ones carry 17–67. Longhorn issued deletes, roughly half the objects went away, and the
-rest stayed. Their `BackupVolume` CRs last synced at 23:18–23:19Z and carry no
-`deletionTimestamp` — but they were also never asked to go away, which is the open question
-above.
-
-**The test that settles it** — one command, on the smallest prefix (`pvc-36a38101`: 31 live
-objects, 0.1 MiB, zero Backup CRs, replacement already backed up at 16 MiB). Delete its
-`BackupVolume` CR, then re-list the prefix. If it empties, finding 2 collapses and the fix is
-one extra task in `drop_migrated_backup_chain.yml`. A ready-to-run play with both refusal
-guards is at `/home/ubuntu/.claude/jobs/2763e390/tmp/oneshot-bv-delete-test.yml`; the auto-mode
-classifier blocks it as a backup-plane write, so it needs explicit approval.
+`prowlarr-config` is the only chain still intact.
 
 ### The bucket layout, and why prefix deletion is safe
 
@@ -72,41 +77,37 @@ longhorn/backupstore/volumes/<xx>/<yy>/<volume-name>/
 ```
 
 **Blocks live under each volume's own prefix.** The same content hash appears as separate
-objects under different volumes — `7e208b53…blk` exists under both `pvc-a36be217` and
+objects under different volumes — `7e208b53….blk` exists under both `pvc-a36be217` and
 `pvc-2e468900`. Deduplication is within a volume, never across volumes.
 
-This is the property the whole design rests on: deleting everything under one volume's prefix
-cannot remove a block another volume's backup depends on. Without it, prefix deletion would be
-unsafe at any price.
+This is the property the design rests on: deleting everything under one volume's prefix cannot
+remove a block another volume's backup depends on.
 
 ### Credentials
 
 The existing SOPS key `kopia_b2_key_id` / `kopia_b2_application_key` already carries
 `deleteFiles`. No new credential, no `secret_rotation.py sync`.
 
-Worth noting separately: that key also carries `writeBuckets`, `deleteFiles`,
-`writeBucketLifecycleRules` and `writeBucketReplications`. It is far broader than either
-Longhorn or a drain tool needs. Narrowing it is out of scope here but belongs on the list.
+It also carries `writeBuckets`, `writeBucketLifecycleRules` and `writeBucketReplications` — far
+broader than either Longhorn or a drain tool needs. Narrowing it is out of scope here but
+belongs on the list.
 
 ## Cost
-
-Per volume, the two paths:
 
 | | Longhorn | B2 API |
 |---|---|---|
 | Enumerate | — | shared: 5 Class C for the whole store |
 | Delete | ~1.28 Class C per stored block, per deleted backup | Class A, unmetered |
 | Reconcile | — | one backup-target sync |
-| Objects actually removed | about half | all of them, verified |
 
 For the 14 volumes still at 2 MiB, deleting the old chains through Longhorn is on the order of
 **thousands of Class C**. Through the API it is one enumeration (5), one verification re-list
 per volume (14), plus the target sync — call it **20–50 Class C** in total.
 
-**This does not make the remaining migration free, and I earlier said it would.** The measured
-~180 Class C per volume of *migration* cost — volume deletion, target syncs, the first backup
-at 16 MiB — is Longhorn-side and unaffected. Fourteen volumes is still roughly 2,500 Class C,
-so about **two days**, not one session. What the API route removes is the deletion half.
+This does **not** make the remaining migration free, and an earlier claim of mine said it would.
+The measured ~180 Class C per volume of *migration* cost — volume deletion, target syncs, the
+first backup at 16 MiB — is Longhorn-side and unaffected. Fourteen volumes is still roughly
+2,500 Class C, so about **two days**, not one session. The API route removes the deletion half.
 
 ## Design
 
@@ -119,11 +120,11 @@ A host-side script plus a thin Ansible play to supply the SOPS credentials.
    everything rather than classify everything as an orphan.
 3. **Require an explicit allow-list** of volume names on the command line. Discovery proposes;
    the operator disposes. Dry run is the default.
-4. **Delete every version**, including hide markers, via `b2_delete_file_version`.
-5. **Re-list the prefix and assert it is empty.** This is not optional. The 2026-08-19 drain
-   reported "1,676/1,676 deleted" and left five volumes over retention, because it listed
-   current names and B2 retains superseded versions. A tool that reports success without
-   re-reading is the failure mode we already hit once.
+4. **Delete every version**, including hide markers. A drain cannot wait out the 7-day lifecycle
+   rule, so it removes the retained versions itself.
+5. **Re-list the prefix and assert it is empty**, counting current state rather than versions —
+   the mistake this document already made once. The 2026-08-19 drain reported "1,676/1,676
+   deleted" and left five volumes over retention for the same family of reason.
 6. **Force one backup-target sync** (`backuptarget.spec.syncRequestedAt`) so Longhorn drops the
    now-dangling `Backup` and `BackupVolume` CRs.
 
@@ -137,25 +138,23 @@ A host-side script plus a thin Ansible play to supply the SOPS credentials.
 Import it, or copy it? **Copy the roughly 60 lines.** `check.py` is 3,109 lines and evaluates
 ~60 environment-derived constants at import time; pulling a monitor's entire configuration
 surface into a CLI tool to reuse four functions is the worse trade. The alternative — extract
-the client into a sibling module and put it on `pythonpath`, following the
-`roles/setup/common/files` precedent — is cleaner but means editing a deployed monitor for the
-benefit of a cleanup tool. Take that path if a third consumer ever appears.
+the client into a sibling module on `pythonpath`, following the `roles/setup/common/files`
+precedent — is cleaner but means editing a deployed monitor for the benefit of a cleanup tool.
+Take that path if a third consumer ever appears.
 
 The one change either way: `b2_list_versions` needs a `prefix` parameter.
 
 ## What is not verified
 
 - **The `syncRequestedAt` reconcile.** Documented in this repo's own reaper header; not
-  exercised this session. If it does not drop the dangling CRs, they need removing another way.
-- **The sync's own cost.** The header calls it cheap. A sync must walk every volume directory,
-  so estimate tens of Class C per drain run — small, but not zero, and not measured.
-- **Whether the residue is residue at all.** The object counts are solid; the cause is not
-  established, and the leading explanation is that we never deleted the `BackupVolume` CR. See
-  the test above. It does not change the recommendation, since the API route removes the objects
-  either way.
+  exercised. If it does not drop the dangling CRs, they need removing another way.
+- **The sync's own cost.** A sync must walk every volume directory, so estimate tens of Class C
+  per drain run — small, but not zero, and not measured.
+- **What deletes `volume.cfg`.** Each drained prefix keeps one. The likely answer is deleting
+  the `BackupVolume` CR, which `drop_migrated_backup_chain.yml` never does — all seven stale CRs
+  are still standing. One object per volume, so this is tidiness, not cost.
 - **B2's Class C billing granularity for large pages.** B2 bills listing per 1,000 names
-  returned, so the 5-call figure is 5 *billed* units either way; a smaller `maxFileCount` would
-  not reduce it.
+  returned, so the 5-call figure is 5 billed units either way.
 
 ## Risks
 
@@ -168,10 +167,9 @@ The one change either way: `b2_list_versions` needs a `prefix` parameter.
 
 ## Suggested first target
 
-`prowlarr-config` and `sonarr-config` — the two chains still pending deletion. They are already
-scheduled to be deleted through Longhorn at a cost of roughly a thousand Class C between them,
-they still have live `Backup` CRs (so they exercise the sync-reconcile step, which the residue
-volumes would not), and their replacements are backed up and verified at 16 MiB.
+`prowlarr-config` — the only chain still intact, and the only remaining case where the API route
+can be compared directly against the Longhorn path. Its replacement is backed up and verified at
+16 MiB, and it still has live `Backup` CRs, so it exercises the sync-reconcile step.
 
-Draining the five residue prefixes is the zero-risk warm-up: no Longhorn object references them,
-so there is nothing to reconcile and nothing to lose.
+The five drained prefixes are not worth targeting: one `volume.cfg` each, with their retained
+versions already scheduled for lifecycle deletion.
