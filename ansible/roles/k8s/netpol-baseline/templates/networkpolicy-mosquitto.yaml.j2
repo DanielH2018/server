@@ -16,12 +16,16 @@ spec:
     # the window): every connection from these two callers arrived as 10.42.0.1, the daniel-box
     # cni0 bridge address, NOT as either pod's own IP (zigbee2mqtt=10.42.0.135,
     # home-assistant=10.42.0.17) -- same-node traffic through the `mosquitto` ClusterIP Service
-    # hairpins through the bridge and is masqueraded to it. The podSelectors below are admitted
-    # for completeness / future-proofing (a cross-node placement or a client that bypasses the
-    # Service would arrive as a real pod IP) but neither has yet matched a real connection; the
-    # ipBlock is what is actually admitting today's traffic. Narrowing to only the observed form
-    # needs a caller census first -- two of three previous ClientIP narrowings in this homelab
-    # broke callers hiding in the CIDR they were narrowing against.
+    # hairpins through the bridge and is masqueraded to it. Now that mosquitto carries
+    # `netpol-baseline: enforced` (Task 7), the always-on baseline policy already admits
+    # netpol_baseline_node_cidrs (10.42.0.1/32, 10.42.1.1/32) on every port -- so this policy's
+    # own cni0 ipBlock entries below duplicate the baseline and are NOT what's load-bearing for
+    # today's observed traffic. The podSelectors are: they're the only admission the baseline
+    # doesn't already provide, and they're what would matter the moment a connection arrives as
+    # a real pod IP instead of the masqueraded bridge address (a cross-node placement, or a
+    # client that bypasses the Service). Narrowing to only the observed form needs a caller
+    # census first -- two of three previous ClientIP narrowings in this homelab broke callers
+    # hiding in the CIDR they were narrowing against.
     - from:
         - podSelector:
             matchLabels:
