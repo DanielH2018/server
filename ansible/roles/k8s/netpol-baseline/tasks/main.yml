@@ -504,3 +504,168 @@
       image-pull or admission failure, NOT an assertion failure; see the describe command above.'
       if not netpol_baseline_probe_slice3_log.stdout_lines else
       'See the logged assertion output above for which of the two assertions failed.' }}
+
+# ── slice 4: prove the infra-tier's per-workload allow policies admit exactly their listed ─────
+# ── callers ──────────────────────────────────────────────────────────────────────────────────
+# Own directory, same reason as the slice-1/2/3 probes above: `kubectl apply -f <dir>` reads
+# every file in the directory it is given, and a Job's pod template is immutable.
+#
+# Gated on netpol_baseline_enforced, NOT netpol_baseline_obs_enforced — unlike slice 3, all four
+# slice-4 targets (authelia, crowdsec, nut, mosquitto) live in {{ k8s_namespace }}, under the
+# same homelab-namespace lever slices 1-2 already run under.
+- name: Create the netpol-baseline-probe-slice4 manifest directory
+  tags: [config]
+  ansible.builtin.file:
+    path: /etc/rancher/k3s/manifests/netpol-baseline-probe-slice4
+    state: directory
+    mode: "0700"
+    owner: root
+    group: root
+  become: true
+
+- name: Render the netpol-baseline-probe-slice4 probe
+  tags: [config]
+  ansible.builtin.template:
+    src: netpol-probe-slice4-job.yaml.j2
+    dest: /etc/rancher/k3s/manifests/netpol-baseline-probe-slice4/netpol-probe-slice4-job.yaml
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+
+# The slice-4 probe's assertions are INVERTED, same as slices 2-3: a failed `nc` is the PASS
+# case. That means a crashlooping or scaled-to-zero target reads identically to a correctly-
+# fenced one, so this gate proves authelia, crowdsec, nut and mosquitto are actually up before
+# the probe runs — otherwise "unreachable" could mean either "fenced" or "down", and the probe
+# would report green for the wrong reason.
+#
+# EndpointSlice, not `get endpoints` — same reasoning and same jsonpath as the slice-2/3 gates
+# above. Namespace is {{ k8s_namespace }}, same as the targets themselves.
+- name: Read the slice-4 probe targets' endpoint readiness
+  tags: [deploy]
+  when:
+    - netpol_baseline_enforced | bool
+    - not k8s_no_mutate
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} get endpointslice -l kubernetes.io/service-name={{ item }}
+      -o jsonpath={.items[*].endpoints[?(@.conditions.ready==true)].targetRef.name}
+  become: true
+  changed_when: false
+  register: netpol_baseline_probe_slice4_targets
+  # One entry per target the probe asserts against. Adding an assertion to
+  # netpol-probe-slice4-job.yaml.j2 without adding its target here reopens the silent-green hole
+  # this gate exists to close.
+  loop:
+    - authelia
+    - crowdsec
+    - nut
+    - mosquitto
+
+# Not best-effort: a silent pass here is exactly the failure mode this task exists to close, so
+# an empty result — whether from zero ready addresses or a query that could not be answered —
+# fails the play rather than letting the probe run and misreport. Fails closed: an unreadable
+# result is a failure, not a pass.
+- name: Fail if any slice-4 probe target has no ready endpoint
+  tags: [deploy]
+  when:
+    - netpol_baseline_enforced | bool
+    - not k8s_no_mutate
+  ansible.builtin.assert:
+    that: item.stdout | trim | length > 0
+    fail_msg: >-
+      {{ item.item }} has no ready endpoint, so the slice-4 probe was not run. Its assertions are
+      inverted — a failed connection is the PASS case — so it cannot tell "fenced by the policy"
+      apart from "nothing is listening"; running it against a down target would report green for
+      the wrong reason. Fix {{ item.item }}'s readiness first (check
+      `sudo k3s kubectl -n {{ k8s_namespace }} get pods -l app={{ item.item }}` and its rollout
+      status), then re-run this deploy so the probe's result is attributable to the policy again.
+    quiet: true
+  loop: "{{ netpol_baseline_probe_slice4_targets.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Clear the previous netpol-baseline-probe-slice4 run
+  tags: [deploy]
+  when:
+    - netpol_baseline_enforced | bool
+    - not k8s_no_mutate
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} delete job netpol-baseline-probe-slice4
+      --ignore-not-found --wait=true
+  become: true
+  changed_when: true
+
+- name: Run the netpol-baseline-probe-slice4 probe
+  tags: [deploy]
+  when:
+    - netpol_baseline_enforced | bool
+    - not k8s_no_mutate
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl apply -f
+      /etc/rancher/k3s/manifests/netpol-baseline-probe-slice4/netpol-probe-slice4-job.yaml
+  become: true
+  changed_when: true
+
+- name: Wait for the netpol-baseline-probe-slice4 probe
+  tags: [deploy]
+  when:
+    - netpol_baseline_enforced | bool
+    - not k8s_no_mutate
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
+      job/netpol-baseline-probe-slice4 --timeout=180s
+  become: true
+  changed_when: false
+  register: netpol_baseline_probe_slice4
+  failed_when: false
+
+# Same reasoning as the slice-1/2/3 Report tasks above: unconditional on the wait's outcome, and
+# `failed_when: false`, so a failing probe still gets its logs fetched and shown before the play
+# aborts, instead of dying at the wait with nothing but "timed out waiting for the condition".
+- name: Report the netpol-baseline-probe-slice4 probe
+  tags: [deploy]
+  when:
+    - netpol_baseline_enforced | bool
+    - not k8s_no_mutate
+  ansible.builtin.command:
+    cmd: "k3s kubectl -n {{ k8s_namespace }} logs job/netpol-baseline-probe-slice4"
+  become: true
+  changed_when: false
+  register: netpol_baseline_probe_slice4_log
+  failed_when: false
+
+# stdout_lines is [] when the pod never ran, so print stderr (where "container not found" and the
+# other kubectl-side reasons land) and a next step, rather than an empty list.
+- name: Show the netpol-baseline-probe-slice4 result
+  tags: [deploy]
+  when:
+    - netpol_baseline_enforced | bool
+    - not k8s_no_mutate
+  ansible.builtin.debug:
+    msg: >-
+      {{ netpol_baseline_probe_slice4_log.stdout_lines
+         or ['no probe output. kubectl logs said: '
+             ~ (netpol_baseline_probe_slice4_log.stderr | default('') | trim | default('(nothing)', true)),
+             'Inspect with: sudo k3s kubectl -n ' ~ k8s_namespace
+             ~ ' describe job netpol-baseline-probe-slice4'] }}
+
+- name: Fail if the netpol-baseline-probe-slice4 probe did not complete
+  tags: [deploy]
+  # Ansible short-circuits a `when` list, so `not k8s_no_mutate` is what keeps
+  # netpol_baseline_probe_slice4.rc from being dereferenced on a dry run, where the wait that
+  # registers it never ran.
+  when:
+    - netpol_baseline_enforced | bool
+    - not k8s_no_mutate
+    - netpol_baseline_probe_slice4.rc != 0
+  ansible.builtin.fail:
+    msg: >-
+      netpol-baseline-probe-slice4 did not complete (rc={{ netpol_baseline_probe_slice4.rc }}).
+      {{ 'It printed no output at all, so the pod never ran its script — this is a scheduling,
+      image-pull or admission failure, NOT an assertion failure; see the describe command above.'
+      if not netpol_baseline_probe_slice4_log.stdout_lines else
+      'See the logged assertion output above for which of the five checks failed.' }}
