@@ -27,6 +27,7 @@ from deploy_logic import (
     ci_verdict,
     declared_denylist,
     SHARED_K8S_ROLES,
+    k8s_role_paths,
 )
 
 
@@ -1438,3 +1439,84 @@ def test_an_indented_key_is_not_a_declaration():
     assert declared_denylist(sources) == frozenset(
         {"r"}
     )  # denied: no top-level declaration
+
+
+def test_a_duplicate_key_with_the_denial_first_reads_as_denied():
+    sources = {"r": "k8s_autodeploy: false\nk8s_autodeploy: true\n"}
+    assert declared_denylist(sources) == frozenset({"r"})
+
+
+def test_a_duplicate_key_with_the_denial_last_reads_as_denied():
+    # YAML itself is last-key-wins, so a real parser would call this permitted. This reader
+    # requires unanimity instead, which is strictly more conservative — see declared_denylist's
+    # docstring for why that's the safe direction to diverge in.
+    sources = {"r": "k8s_autodeploy: true\nk8s_autodeploy: false\n"}
+    assert declared_denylist(sources) == frozenset({"r"})
+
+
+def test_no_space_after_the_colon_is_not_a_declaration():
+    sources = {"r": "k8s_autodeploy:true\n"}
+    assert declared_denylist(sources) == frozenset({"r"})
+
+
+def test_a_decoy_declaration_inside_a_quoted_scalar_reads_as_denied():
+    # A multi-line quoted YAML scalar can contain a line that starts at column 0 and looks
+    # exactly like a top-level `k8s_autodeploy: true` declaration, even though it's just text
+    # inside some other key's value. The regex can't tell the difference — it isn't a YAML
+    # parser — so it must not let that decoy line outvote the real, later `false`.
+    sources = {
+        "r": (
+            'k8s_autodeploy_reason: "line one\n'
+            "k8s_autodeploy: true\n"
+            'still inside the quote"\n'
+            "k8s_autodeploy: false\n"
+        )
+    }
+    assert declared_denylist(sources) == frozenset({"r"})
+
+
+def test_crlf_line_endings_are_not_recognized_and_so_deny():
+    sources = {"r": "k8s_autodeploy: true\r\n"}
+    assert declared_denylist(sources) == frozenset({"r"})
+
+
+def test_k8s_role_paths_finds_a_normal_role():
+    listing = "ansible/roles/k8s/sonarr/defaults/main.yml\nansible/roles/k8s/sonarr/tasks/main.yml\n"
+    assert k8s_role_paths(listing) == {
+        "sonarr": "ansible/roles/k8s/sonarr/defaults/main.yml"
+    }
+
+
+def test_k8s_role_paths_a_role_with_no_defaults_maps_to_none():
+    listing = "ansible/roles/k8s/homepage/tasks/main.yml\n"
+    assert k8s_role_paths(listing) == {"homepage": None}
+
+
+def test_k8s_role_paths_a_defaults_dir_holding_something_other_than_main_yml():
+    listing = "ansible/roles/k8s/sonarr/defaults/other.yml\n"
+    assert k8s_role_paths(listing) == {"sonarr": None}
+
+
+def test_k8s_role_paths_ignores_a_stray_file_directly_under_roles_k8s():
+    listing = "ansible/roles/k8s/README.md\n"
+    assert k8s_role_paths(listing) == {}
+
+
+def test_k8s_role_paths_empty_listing():
+    assert k8s_role_paths("") == {}
+
+
+def test_k8s_role_paths_order_does_not_matter():
+    before_after = (
+        "ansible/roles/k8s/sonarr/tasks/main.yml\n"
+        "ansible/roles/k8s/sonarr/defaults/main.yml\n"
+        "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2\n"
+    )
+    after_before = (
+        "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2\n"
+        "ansible/roles/k8s/sonarr/defaults/main.yml\n"
+        "ansible/roles/k8s/sonarr/tasks/main.yml\n"
+    )
+    expected = {"sonarr": "ansible/roles/k8s/sonarr/defaults/main.yml"}
+    assert k8s_role_paths(before_after) == expected
+    assert k8s_role_paths(after_before) == expected

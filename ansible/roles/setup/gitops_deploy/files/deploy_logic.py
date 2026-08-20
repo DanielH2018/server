@@ -620,9 +620,11 @@ SHARED_K8S_ROLES = frozenset({"manifests", "rollout-drain"})
 
 # A top-level `k8s_autodeploy:` assignment, with an optional trailing comment. Anchored at column
 # zero deliberately: an indented key of the same name belongs to some other mapping and does not
-# declare the role's stance.
+# declare the role's stance. `[ \t]+` (not `*`) requires a space after the colon, so
+# `k8s_autodeploy:true` — which is not a dict key YAML would resolve this way either — doesn't
+# match and falls through to "no declaration found", i.e. denied.
 _DECLARATION_RE = re.compile(
-    r"^k8s_autodeploy:[ \t]*(?P<value>\S+)[ \t]*(?:#.*)?$", re.MULTILINE
+    r"^k8s_autodeploy:[ \t]+(?P<value>\S+)[ \t]*(?:#.*)?$", re.MULTILINE
 )
 # The spellings PyYAML resolves to boolean true. Everything else — including an unparseable or
 # absent value — counts as denied, so this parser can never widen what may auto-deploy.
@@ -635,8 +637,18 @@ def declared_denylist(sources: dict[str, str | None]) -> frozenset[str]:
     """Roles denied auto-deploy, read from each role's own `k8s_autodeploy` declaration.
 
     `sources` maps a role name to the text of its defaults/main.yml, or None when the role has
-    no such file. Shared roles are skipped; every other role is denied unless it declares a
-    value PyYAML would read as boolean true.
+    no such file. Shared roles are skipped; every other role is denied unless EVERY line that
+    looks like a top-level `k8s_autodeploy:` assignment reads as true, and at least one such
+    line was found.
+
+    That's unanimity, not "last match wins" — a role is permitted only if every candidate
+    assignment agrees. YAML itself is last-key-wins for a genuine duplicate key, so unanimity is
+    not what a real YAML parser would do; it's deliberately more conservative. This is a regex,
+    not a YAML parser: it can't tell a real top-level `k8s_autodeploy:` key apart from the same
+    text sitting inside a multi-line quoted scalar, so on adversarial or malformed input (a
+    decoy `true` before the real `false`, a duplicate key) unanimity can only ever add denials
+    it would otherwise have missed — never turn a role the last-wins reading would deny into one
+    this reader calls permitted. On well-formed, single-declaration input the two rules agree.
 
     This exists ONLY to detect that /etc/gitops-deploy/config.env has gone stale against
     origin — it never decides eligibility. So it is deliberately biased: anything unclear reads
@@ -651,10 +663,39 @@ def declared_denylist(sources: dict[str, str | None]) -> frozenset[str]:
         if not text:
             denied.add(role)
             continue
-        match = _DECLARATION_RE.search(text)
-        if match is None or match.group("value") not in _TRUE_VALUES:
+        values = [m.group("value") for m in _DECLARATION_RE.finditer(text)]
+        if not values or any(v not in _TRUE_VALUES for v in values):
             denied.add(role)
     return frozenset(denied)
+
+
+def k8s_role_paths(listing: str) -> dict[str, str | None]:
+    """Map each k8s role to its defaults/main.yml path in a `git ls-tree -r --name-only` listing.
+
+    A role with no defaults/main.yml at that ref maps to None, which declared_denylist() reads
+    as denied. Paths look like `ansible/roles/k8s/<role>/<rest...>`, so the role name is the
+    FOURTH segment — this indexing shipped an off-by-one once already.
+
+    Pure string parsing, callable on its own so it's unit-testable without git; the I/O caller
+    is gitops_deploy.k8s_declarations_at.
+    """
+    roles: dict[str, str | None] = {}
+    for path in listing.splitlines():
+        # "ansible/roles/k8s/<role>/<rest...>" — a real role always has a file at least one
+        # directory deep, so anything shallower (a stray file directly under roles/k8s/) is
+        # not a role and must not be recorded as one.
+        parts = path.split("/")
+        if len(parts) < 5:
+            continue
+        role = parts[3]
+        if parts[4] == "defaults" and path.endswith("defaults/main.yml"):
+            roles[role] = path
+        else:
+            # Still record the role so one with no defaults/ at all is visible as None. A
+            # setdefault here never clobbers an already-found defaults/main.yml path, and
+            # doesn't need to run before it either — the listing's order doesn't matter.
+            roles.setdefault(role, None)
+    return roles
 
 
 def split_k8s_auto_deploy(

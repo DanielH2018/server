@@ -42,6 +42,7 @@ from deploy_logic import (  # noqa: E402
     health_decision,
     is_diverged,
     is_image_only_diff,
+    k8s_role_paths,
     next_action,
     reroute_k8s_services,
     services_from_changed_paths,
@@ -542,24 +543,15 @@ def k8s_declarations_at(ref: str) -> dict[str, str | None]:
     the config we are checking it against.
 
     A role directory present at the ref with no defaults/main.yml maps to None, which
-    declared_denylist() reads as denied.
+    declared_denylist() reads as denied. The path parsing itself is k8s_role_paths(), a pure
+    function unit-tested without git; this function does only the git I/O around it.
     """
     listing = run(["git", "ls-tree", "-r", "--name-only", ref, "ansible/roles/k8s/"])
-    roles: dict[str, str | None] = {}
-    for path in listing.splitlines():
-        # "ansible/roles/k8s/<role>/<rest...>" — a real role always has a file at least one
-        # directory deep, so anything shallower (a stray file directly under roles/k8s/) is
-        # not a role and must not be recorded as one.
-        parts = path.split("/")
-        if len(parts) < 5:
-            continue
-        role = parts[3]
-        if parts[4] == "defaults" and path.endswith("defaults/main.yml"):
-            roles[role] = run(["git", "show", f"{ref}:{path}"])
-        else:
-            # Still record the role so one with no defaults/ at all is visible as None.
-            roles.setdefault(role, None)
-    return roles
+    paths = k8s_role_paths(listing)
+    return {
+        role: run(["git", "show", f"{ref}:{path}"]) if path is not None else None
+        for role, path in paths.items()
+    }
 
 
 def k8s_image_diff(local: str, origin: str, svc: str) -> str:
