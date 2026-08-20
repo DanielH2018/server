@@ -311,3 +311,71 @@ def test_exactly_the_slice_3_workloads_carry_the_baseline_label() -> None:
         f"  labelled: {sorted(labelled_claude_otel)}\n"
         f"  expected: {sorted(expected)}"
     )
+
+
+# Slice 5 flips the baseline to namespace scope, where the selector inverts: it fences every pod
+# that does NOT carry `netpol-baseline-exempt`. These four workloads own a bespoke policy TIGHTER
+# than the baseline, and a NetworkPolicy is additive — selecting one would ADD traefik, prometheus
+# and both node CIDRs on top of it. The exemption keeps the tighter policy the only thing fencing
+# them. Each entry names the policy it protects.
+#
+# The pairing with BESPOKE_POLICY_WORKLOADS above is deliberate but not identical: that set is the
+# same idea under LABEL scope (do not add the opt-in label), and it lists only the two bespoke
+# workloads that live inside a role some slice already fenced. headlamp and registry are in no
+# slice at all, so they never needed an entry there and do need one here.
+EXEMPT_LABEL = ("netpol-baseline-exempt", "true")
+
+EXEMPT_WORKLOADS = {
+    # roles/k8s/prowlarr/templates/networkpolicy.yaml.j2 — admits app=prowlarr only, on :8191.
+    ("prowlarr", "flaresolverr"),
+    # roles/k8s/headlamp/templates/networkpolicy.yaml.j2
+    ("headlamp", "headlamp"),
+    # roles/k8s/n8n/templates/networkpolicy.yaml.j2 (live name `n8n-broker`), which selects
+    # app=n8n ONLY. n8n-runners is covered by nothing else, so it must NOT appear here.
+    ("n8n", "n8n"),
+    # roles/k8s/registry/templates/networkpolicy.yaml.j2
+    ("registry", "registry"),
+}
+
+
+def _exempt_workloads() -> set[tuple[str, str]]:
+    key, value = EXEMPT_LABEL
+    return {
+        (role, doc.get("metadata", {}).get("name", "?"))
+        for role, _tpl, doc in rendered_docs()
+        if doc.get("kind") in POD_KINDS
+        and str(_pod_template_labels(doc).get(key, "")).lower() == value
+    }
+
+
+def test_exactly_the_bespoke_workloads_are_exempt_from_the_baseline() -> None:
+    """Under namespace scope this label is the ONLY way out of the fence.
+
+    A missing entry is a workload about to be widened. An extra entry is a workload fenced by
+    nothing at all — the more dangerous direction, and the one a grep for the label cannot tell
+    apart from the safe one.
+    """
+    exempt = _exempt_workloads()
+    assert exempt == EXEMPT_WORKLOADS, (
+        "the set of workloads opted out of the baseline no longer matches EXEMPT_WORKLOADS.\n"
+        f"  exempt:   {sorted(exempt)}\n"
+        f"  expected: {sorted(EXEMPT_WORKLOADS)}\n"
+        "An extra entry is unfenced by everything; a missing one gets the baseline's allow-list "
+        "added on top of its own tighter policy."
+    )
+
+
+def test_no_workload_is_both_labelled_and_exempt() -> None:
+    """The two labels are opposites, and nothing enforces that from the manifests alone.
+
+    `netpol-baseline: enforced` selects a pod under label scope; `netpol-baseline-exempt`
+    de-selects it under namespace scope. A pod carrying both is fenced today and unfenced the
+    moment slice 5 lands, which is the hardest version of this to notice.
+    """
+    both = sorted(
+        f"{role}/{name}" for role, name in _labelled_workloads() & _exempt_workloads()
+    )
+    assert not both, (
+        f"workloads carry BOTH the baseline label and the exemption: {both}\n"
+        "Pick one: the baseline fences it, or its own policy does."
+    )
