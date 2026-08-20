@@ -1,0 +1,23 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: authelia
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: authelia
+  policyTypes:
+    - Ingress
+  ingress:
+    # Traefik is the only in-cluster caller: forwardauth-middleware.yaml.j2 dials
+    # authelia.<ns>.svc:9091 from the Traefik pod. Apps behind the middleware never dial
+    # authelia themselves -- an Authelia 302 is issued by Traefik before it proxies.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: traefik
+      ports:
+        - port: 9091
+          protocol: TCP
