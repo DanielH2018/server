@@ -9,6 +9,10 @@
     name: k8s/manifests
   vars:
     manifests_service: node-exporter
+    # The stabilisation gate compares ready against desired for this DaemonSet (2 nodes). If
+    # daniel-server goes NotReady mid-window, desired stays 2 while ready drops to 1 and the
+    # gate rolls back — for a cause unrelated to this change. Accepted: it fails safe, and a
+    # node going NotReady during a deploy is worth a rollback on its own.
     manifests_rollout: node-exporter
     manifests_rollout_kind: daemonset
     manifests_files:

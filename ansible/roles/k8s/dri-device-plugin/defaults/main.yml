@@ -15,13 +15,15 @@
 dri_device_plugin_image: ghcr.io/squat/generic-device-plugin:latest@sha256:dc192e164c69b03f156765793a1be62ca437709ae477b27ca7d8f3dcf5021576
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
-# `rollout status` can gate a DaemonSet now, but readiness on /health only proves the HTTP
-# listener, not gRPC registration with the kubelet. This is also the workload that advertises
-# the /dev/dri render node as a schedulable resource — jellyfin's GPU transcoding depends on
-# it, so a wedge here has a downstream victim with no rollout gate of its own watching for it
-# either.
+# tasks/main.yml sets manifests_rollout: '', so the shared rollout gate is skipped and the wait
+# is hand-rolled instead. Even a probe would not close this: a readiness probe on /health would
+# prove only the HTTP listener, not that the plugin registered its gRPC socket with the kubelet
+# — rollout status would go green on an unregistered plugin. This is also the workload that
+# advertises the /dev/dri render node as a schedulable resource — jellyfin's GPU transcoding
+# depends on it, so a wedge here has a downstream victim with no rollout gate of its own
+# watching for it either.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "readiness on /health proves the HTTP listener, not that the plugin registered its gRPC socket with the kubelet — rollout status would go green on an unregistered plugin, and that makes jellyfin and tdarr unschedulable"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "manifests_rollout: '' skips the shared rollout gate; even a /health readinessProbe would only prove the HTTP listener, not that the plugin registered its gRPC socket with the kubelet, and an unregistered plugin makes jellyfin and tdarr unschedulable"  # noqa var-naming[no-role-prefix]
 
 # How many pods may hold the render node at once. It is one physical device; this is a scheduling
 # allowance, not a hardware fact — jellyfin and tdarr both want it, and the GPU multiplexes fine.

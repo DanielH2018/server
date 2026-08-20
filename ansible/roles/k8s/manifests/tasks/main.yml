@@ -50,8 +50,9 @@
 - name: Check that every manifests_extra_rollouts entry names an understood kind
   tags: [deploy]
   # Same alias trap as the assert above, reached through the loop instead of the role var: an
-  # extra rollout can set its own `kind` (see claude-otel, which loops deploy and daemonset in
-  # one role), so it needs the same constraint the primary rollout gets.
+  # extra rollout can set its own `kind` (mixing deploy and daemonset in one role is legitimate
+  # — claude-otel does exactly that, though via its own private loop rather than
+  # manifests_extra_rollouts), so it needs the same constraint the primary rollout gets.
   ansible.builtin.assert:
     that:
       - item.kind | default('deploy') in ['deploy', 'daemonset']
@@ -291,8 +292,9 @@
 # names the others here as {name, image} pairs, where `image` is the k8s/image-builder name
 # whose rebuild should roll it. Optional and empty by default, so every single-Deployment role
 # behaves exactly as before. Every current extra is kind: Deployment; an entry can set its own
-# `kind` (see claude-otel, which loops both deploy and daemonset in one role) and falls back to
-# manifests_rollout_kind, same as the primary rollout, when it omits one.
+# `kind` and falls back to manifests_rollout_kind, same as the primary rollout, when it omits
+# one. claude-otel is the precedent for one role legitimately rolling both kinds together, though
+# it does so via its own private loop rather than manifests_extra_rollouts.
 - name: Roll the extra deployments after a config or image change for {{ manifests_service }}
   tags: [deploy]
   ansible.builtin.command:
