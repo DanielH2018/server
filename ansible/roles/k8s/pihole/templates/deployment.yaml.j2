@@ -18,6 +18,7 @@ spec:
     metadata:
       labels:
         app: pihole
+        netpol-baseline: enforced
         # Pod-only label — do NOT add to spec.selector.matchLabels above, which is
         # `apps/v1` immutable. It's how tasks/main.yml and roll_one.yml address a specific
         # instance's pod: `kubectl exec deploy/<name>` resolves through the Deployment's

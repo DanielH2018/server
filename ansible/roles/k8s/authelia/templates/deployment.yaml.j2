@@ -17,6 +17,7 @@ spec:
     metadata:
       labels:
         app: authelia
+        netpol-baseline: enforced
     spec:
       # Edge/auth/DNS eviction ordering — see setup/k3s templates/priorityclass.yaml.j2.
       priorityClassName: homelab-critical
