@@ -33,7 +33,6 @@
 # wrong endpoint and a working one look identical while mains power is up, and the difference
 # only shows during the cut this exists for.
 - name: Resolve the nut ClusterIP for a cross-node secondary
-  tags: [deploy]
   when:
     - inventory_hostname != ups_host
     - not k8s_no_mutate
@@ -49,7 +48,6 @@
     nut_host_upsd_clusterip: "{{ nut_host_clusterip_lookup.stdout | default('') | trim }}"
 
 - name: Fail if upsd is not reachable at the resolved endpoint
-  tags: [deploy]
   when:
     - inventory_hostname != ups_host
     - not k8s_no_mutate

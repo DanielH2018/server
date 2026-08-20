@@ -91,3 +91,20 @@ def test_the_reachability_failure_names_both_causes():
             "the failure message must distinguish 'no Service' from 'not routable / not "
             "admitted by the NetworkPolicy' — they have different remedies"
         )
+
+
+def test_no_task_is_tagged_so_the_lookup_cannot_be_split_from_its_consumer():
+    """A tag here can only separate the endpoint resolution from the template that reads it.
+
+    `nut_host` runs from initial_setup.yml alone, which has no config/deploy tag split. Tagging
+    the ClusterIP lookup while the set_fact and the template stay untagged means a --skip-tags run
+    renders `MONITOR <ups>@` from the `| default('')`, and skips the reachability assert that
+    would have caught it — a dead shutdown chain written with no error.
+    """
+    docs = list(yaml.safe_load_all(TASKS))
+    tasks = [t for doc in docs if isinstance(doc, list) for t in doc]
+    tagged = [t.get("name") for t in tasks if t.get("tags")]
+    assert not tagged, (
+        "tasks %r carry tags; the endpoint lookup, the set_fact that stores it and the "
+        "upsmon.conf template must be selected or skipped as one unit" % tagged
+    )
