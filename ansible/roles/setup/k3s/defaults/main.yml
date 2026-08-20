@@ -166,33 +166,59 @@ k3s_longhorn_backup_block_size: 16
 # Restore drill — proves the backups come BACK, which nothing else here checks. The heartbeat
 # watches Longhorn's own objects, and none of them can tell you whether the bytes in B2 restore.
 #
-# Pinned to one small volume on purpose. The question this answers is "does the restore path
-# still work", not "does every volume restore" — the latter needs a per-volume assertion for
-# each and costs a Class B GET per block of everything in the store. traefik-acme is 4 blocks,
-# so a drill is about 4 Class B against a 2,500/day cap: it can run monthly and never be noticed.
-# Must be a volume on the B2 target. The daily tier (traefik-acme, authelia-config,
-# zigbee2mqtt-data, home-assistant-config) all route to R2, so drilling any of them would prove
-# Cloudflare's store and say nothing about B2 — the one under a transaction cap. healthchecks-config
-# is on B2, is one of the smallest there at ~30 blocks, and its weekday shard (d3) keeps it fresh.
-k3s_longhorn_restore_drill_pvc: healthchecks-config
+# ROTATES over every volume declared for backup — one per night, least-recently-attempted first,
+# which is a full cycle in as many days as there are candidates (25 on 2026-08-20). Empty means
+# rotate; setting this to a PVC name pins the drill to that one volume, which is a debugging
+# lever and not the normal mode.
+#
+# It was pinned to one volume until 2026-08-20, on a cost model that no longer holds. That model
+# read "a Class B GET per block, so drilling everything is unaffordable" — true at 2 MiB blocks,
+# where the store was ~1,700 blocks. The 16 MiB block change (k3s_longhorn_backup_block_size,
+# 2026-08-19) cut that eightfold: the whole B2 candidate set is now ~250 blocks, so one night's
+# drill costs 4-85 Class B against the 2,500/day cap, and a 25-day cycle costs less than a single
+# day's measured baseline of 253-363. Rotation is affordable because block size made it so.
+#
+# R2 volumes are IN the rotation, which the old pin deliberately excluded. The reasoning then was
+# that drilling an R2 volume proves Cloudflare and says nothing about B2, the store under a
+# transaction cap — still true, and irrelevant once the rotation covers both: each target is
+# proven on the nights its own volumes come up. R2 restores are free (10M Class B/month, zero
+# egress), so adding those four costs nothing on the axis that was ever scarce.
+k3s_longhorn_restore_drill_pvc: ""
+# Fallback only, for a volume whose kubernetesStatus carries no namespace. The rotation reads the
+# namespace off each volume, because candidates are no longer all in one place.
 k3s_longhorn_restore_drill_namespace: homelab
+# Skip a candidate whose actualSize exceeds this. Bounds one night's egress and wall-clock so a
+# slow restore cannot read as a failed one. Excludes NOTHING today — the largest candidate is
+# valheim-config at ~1.3 GB — it is a guard against a volume growing past what the timeout below
+# can cover. A volume excluded here is silently undrilled, so raise both together.
+k3s_longhorn_restore_drill_max_actual_bytes: 2147483648
 # A restored volume that mounts but is EMPTY is the failure mode this floor catches: an empty
 # filesystem passes every check that only asks whether the mount succeeded. Deliberately low —
 # this asserts "real data came back", not any particular size, so it does not need revisiting
 # when the service grows or shrinks.
 k3s_longhorn_restore_drill_min_bytes: 1024
 k3s_longhorn_restore_drill_image: busybox:stable
-# The 2026-08-16 drill restored in ~21s. This bound is generous against that because a slow
-# restore is not itself a failure, but a hung one must not leave a Volume CR attached forever.
-k3s_longhorn_restore_drill_timeout_s: 900
+# The 2026-08-16 drill restored 51 MB in ~21s. Doubled from 900s when the rotation admitted
+# volumes 25x that size: a slow restore is not itself a failure, but a hung one must not leave a
+# Volume CR attached forever, and a timeout fires as a restore failure that nothing distinguishes
+# from a real one. Keep this above what k3s_longhorn_restore_drill_max_actual_bytes can take.
+k3s_longhorn_restore_drill_timeout_s: 1800
 k3s_longhorn_restore_drill_stamp_dir: /var/lib/longhorn-restore-drill
-# 04:10 on the 3rd of the month: after the daily tier's 03:30 run so the newest backup is the
-# one just written, and clear of every weekly shard's 04:30.
-k3s_longhorn_restore_drill_cron: "10 4 3 * *"
-# How stale the drill's last success may be before the heartbeat calls it out. The drill runs
-# monthly, so this allows one missed run plus slack — long enough not to page on a single
-# skipped month, short enough that a drill which has silently stopped is noticed.
-k3s_longhorn_restore_drill_max_age_days: 45
+# 04:10 nightly: after the daily tier's 03:30 run and clear of every weekly shard's 04:30, so the
+# drill never contends with a backup in flight. Also clear of the 05:15 manifest-prune window,
+# which would otherwise see the drill's transient restore-drill-* objects.
+k3s_longhorn_restore_drill_cron: "10 4 * * *"
+# How stale the drill's last success may be before the heartbeat calls it out. Nightly cadence, so
+# this allows two consecutive failed or skipped nights — short enough that a drill which has
+# silently stopped is noticed within the week, long enough not to page on a single bad night.
+# Cadence and this number move TOGETHER: check 7's stamp age is the drill's only alert path
+# (`logger` and stderr reach nobody), so raising the cadence without lowering this buys nothing.
+k3s_longhorn_restore_drill_max_age_days: 3
+# Coverage slack, on top of one full rotation cycle. Check 8 derives the window as
+# (candidate count + this) days, so it tracks the fleet automatically instead of going stale each
+# time a volume joins the backup set. A volume that fails every time it comes up stays invisible
+# to check 7 — the global stamp goes green on the other 24 — and this is what catches it.
+k3s_longhorn_restore_drill_coverage_slack_days: 5
 
 # How many volume engines Longhorn upgrades per node once the manager moves to a new version.
 # Upstream ships 0, which means engines NEVER follow the manager — after a version bump every

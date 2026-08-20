@@ -7,8 +7,14 @@ data, but on a B2 Class-B cap at 100%, which surfaced as `cannot find volume.cfg
 and reads exactly like data loss. The retry passed the next day. Then nothing recurred: the drill
 was a one-off playbook in a home directory, untracked, unscheduled and unwatched.
 
-Three properties carry the weight, and each is a way the drill can look healthy while being
+Four properties carry the weight, and each is a way the drill can look healthy while being
 useless:
+
+COVERAGE. The drill rotates over every volume declared for backup (one per night since
+2026-08-20), so a green check 7 means one of ~25 volumes restored — not all of them. A volume
+that fails every time its slot comes up hides behind the ones that pass, which is what check 8
+and the per-volume stamps exist to catch. Rotation must also order by ATTEMPT, not by success, or
+one broken volume is picked every night and coverage collapses to that volume alone.
 
 PINNED LITERALS. The one-off pinned the backup ID, the volume name and the size, all true only on
 the night it ran. A pinned backup ID is the worst: retention deletes it, and every later run then
@@ -64,26 +70,83 @@ def test_drill_resolves_the_backup_instead_of_pinning_one() -> None:
 def test_drill_resolves_volume_and_size_from_the_cluster() -> None:
     """The one-off hardcoded both. A resized volume would silently restore into the wrong size."""
     code = _code(DRILL)
-    assert "jsonpath='{.spec.volumeName}'" in code, "resolve the volume from the PVC"
-    assert "jsonpath='{.spec.size}'" in code, "resolve the size from the live Volume"
+    assert "vol: .metadata.name" in code, "resolve the volume from the live Volume list"
+    assert "size: (.spec.size | tostring)" in code, (
+        "resolve the size from the live Volume"
+    )
     assert not re.search(r"\bpvc-[0-9a-f]{8}-", code), (
         "a literal Longhorn volume name is pinned"
     )
     assert "134217728" not in code, "a literal size is pinned"
 
 
-def test_drill_targets_a_b2_volume() -> None:
-    """The daily tier routes to R2, so drilling it would prove the wrong store.
+def test_drill_rotates_over_the_declared_backup_set() -> None:
+    """Coverage is the point of rotating: one volume proves one volume, not the fleet.
 
-    traefik-acme, authelia-config, zigbee2mqtt-data and home-assistant-config all carry
-    `spec.backupTargetName: r2`. B2 is the target under a transaction cap and the one this whole
-    effort is about; a drill against an R2 volume restores from Cloudflare and says nothing about
-    it. The original one-off drilled traefik-acme, which is R2.
+    Eligibility must come from the `recurring-job-group.longhorn.io/*` LABEL — the same selector
+    check 4 uses, and the only one that cannot drift from what the RecurringJobs really select. A
+    PVC's storageClassName is immutable and still reads `longhorn` on volumes dropped from the
+    backup set on 2026-08-08, so filtering by class would drill volumes nothing backs up.
     """
     defaults = yaml.safe_load((K3S / "defaults" / "main.yml").read_text())
-    r2 = set(defaults.get("k3s_longhorn_r2_volumes", []))
-    assert defaults["k3s_longhorn_restore_drill_pvc"] not in r2, (
-        "the drill volume is routed to R2 — it would prove Cloudflare's store, not B2's"
+    assert defaults["k3s_longhorn_restore_drill_pvc"] == "", (
+        "the drill is pinned to one volume — rotation is disabled and 24 volumes go unproven"
+    )
+    code = _code(DRILL)
+    assert "recurring-job-group.longhorn.io/" in code, (
+        "eligibility must be selected by the recurring-job-group label"
+    )
+    assert 'select(. != "no-backup")' in code, (
+        "the no-backup group is an explicit opt-out and must be excluded"
+    )
+    assert "storageClassName" not in code.split("cat >")[0], (
+        "eligibility is filtered by storage class, which is immutable and drifts"
+    )
+
+
+def test_rotation_selects_by_attempt_not_by_success() -> None:
+    """Selecting on last SUCCESS lets one broken volume starve the other 24.
+
+    A volume that fails every drill would stay the least-recently-succeeded forever, be chosen
+    every night, and the rotation would never advance — turning a one-volume fault into total
+    loss of coverage. Stamping the attempt before the restore is what bounds a failing volume to
+    one slot per cycle.
+    """
+    code = _code(DRILL)
+    assert 'at=$(stat -c %Y "${ATTEMPT_DIR}/${pvc}"' in code, (
+        "rotation must order candidates by their attempt stamp"
+    )
+    attempt_at = code.index('touch "${ATTEMPT_DIR}/${PVC}"')
+    assert attempt_at < code.index("$KUBECTL apply -f"), (
+        "the attempt stamp must be written BEFORE the restore, or a failing volume starves "
+        "the rotation"
+    )
+    assert code.index('cp "$STAMP"') > code.index('"$BYTES" -ge "$MIN_BYTES"'), (
+        "the per-volume success stamp must be written only after the assertions pass"
+    )
+
+
+def test_drill_carries_the_source_block_size() -> None:
+    """Omitted, the restore volume takes the GLOBAL block size, which is 16 MiB since 2026-08-19.
+
+    The four R2 volumes are still 2 MiB and only convert on recreation. Longhorn refuses a volume
+    size that is not a multiple of its block size, so a mismatch strands the restore on exactly
+    the volumes rotation added.
+    """
+    code = _code(DRILL)
+    assert 'backupBlockSize: "${BLOCKSIZE}"' in code, (
+        "the restore volume must carry the source volume's block size"
+    )
+
+
+def test_drill_publishes_its_candidate_list() -> None:
+    """Check 8 has no cluster credential worth the name, and a second definition would drift."""
+    code = _code(DRILL)
+    assert 'cut -f1 >"$CANDIDATES"' in code, (
+        "the drill must publish the eligible set for the heartbeat's coverage check"
+    )
+    assert 'chmod 0644 "$CANDIDATES"' in code, (
+        "the heartbeat runs as a different user and must be able to read it"
     )
 
 
@@ -266,4 +329,69 @@ def test_drill_is_deployed_wherever_the_heartbeat_is() -> None:
     assert "backup-health" in deploy.get("tags", []), (
         "deploying backup-health alone would add check 7 while leaving the drill absent, "
         "so the monitor would page for a drill that was never installed"
+    )
+
+
+def test_drill_runs_daily() -> None:
+    """A monthly drill leaves a broken restore path undetected for weeks."""
+    defaults = yaml.safe_load((K3S / "defaults" / "main.yml").read_text())
+    minute, hour, dom, month, dow = defaults["k3s_longhorn_restore_drill_cron"].split()
+    assert (dom, month, dow) == ("*", "*", "*"), (
+        "the drill must run every night for the rotation to cover the fleet"
+    )
+    assert (int(hour), int(minute)) == (4, 10), (
+        "04:10 sits after the 03:30 daily tier, clear of the 04:30 weekly shards and of the "
+        "05:15 manifest-prune window that would see the drill's transient objects"
+    )
+
+
+def test_cadence_and_staleness_window_move_together() -> None:
+    """Check 7's stamp age is the drill's ONLY alert path — logger and stderr reach nobody.
+
+    Raising the cadence without lowering the window buys zero detection latency, which is the
+    trap this pairing exists to prevent.
+    """
+    defaults = yaml.safe_load((K3S / "defaults" / "main.yml").read_text())
+    max_age = defaults["k3s_longhorn_restore_drill_max_age_days"]
+    assert 2 <= max_age <= 7, (
+        f"max_age_days is {max_age}: a nightly drill should tolerate a couple of bad nights, "
+        "not a month of silence"
+    )
+
+
+def test_check_eight_derives_its_window_from_the_fleet() -> None:
+    """A hardcoded coverage window goes stale the moment a volume joins the backup set."""
+    block = _check_seven()
+    assert "CAND_N +" in block and "* 86400" in block, (
+        "the coverage window must be derived from the candidate count, so it tracks a fleet "
+        "that grows"
+    )
+    assert "$DRILL_CANDIDATES" in block, (
+        "coverage must read the candidate list the drill publishes, not a second definition "
+        "of eligibility free to drift from the one that selects"
+    )
+
+
+def test_check_eight_waits_a_full_cycle_before_reporting() -> None:
+    """Before one cycle elapses, an undrilled volume is one whose turn has not come."""
+    block = _check_seven()
+    assert "ROTATION_START" in block, (
+        "coverage must not report until a full rotation has had time to run, or every deploy "
+        "pages for a fortnight"
+    )
+    assert "NOW_S - ROTATION_START > COVERAGE_MAX_S" in block, (
+        "the grace period must be derived from the rotation's first attempt"
+    )
+
+
+def test_check_eight_names_the_unproven_volumes() -> None:
+    """A red that names no volume is unactionable and stops being read.
+
+    That is the failure recorded on 2026-08-15, when a blank backup target made the backup
+    plane's only monitor red for 9h with nothing an operator could act on.
+    """
+    block = _check_seven()
+    assert "${UNPROVEN}" in block, "the coverage failure must name the volumes"
+    assert "add 3" in block.split("UNPROVEN=")[-1], (
+        "coverage pages below backup-failure severity, like check 7"
     )
