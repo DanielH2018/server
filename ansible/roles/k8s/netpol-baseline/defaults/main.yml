@@ -30,6 +30,9 @@ netpol_baseline_exempt_workloads:
   - headlamp        # roles/k8s/headlamp/templates/networkpolicy.yaml.j2
   - n8n             # roles/k8s/n8n/templates/networkpolicy.yaml.j2 (live name `n8n-broker`)
   - registry        # roles/k8s/registry/templates/networkpolicy.yaml.j2
+  # netpol-baseline/templates/networkpolicy-karakeep-chrome.yaml.j2 (app=karakeep, :9222).
+  # Exempt because the baseline admits every port and this one is unauthenticated DevTools.
+  - karakeep-chrome
 
 # The node-side bridge addresses, for traffic that arrives with a node IP: containerd image
 # pulls, hostPort paths, and the three host crons that dial traefik. Verified per node with
@@ -51,6 +54,14 @@ netpol_baseline_obs_enforced: true
 # enforcement flag and node-CIDR list are separate: the two namespaces are rolled out and rolled
 # back independently. Same two values, same meaning.
 netpol_baseline_obs_scope: namespace
+
+# Observability's expected exempt set, reconciled against the cluster by the same gate the
+# homelab baseline gets. Empty, and empty deliberately: nothing in this namespace has a bespoke
+# policy to be fenced by, so a pod carrying `netpol-baseline-exempt` here is fenced by NOTHING.
+# Declared as a variable rather than hardcoding `== []` in the assert so that adding an
+# observability exemption is one edit in the same place as the homelab one, and so the failure
+# message can name what was expected.
+netpol_baseline_obs_exempt_workloads: []
 
 # All four node addresses, where the homelab list carries only the two cni0 /32s.
 #

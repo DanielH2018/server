@@ -13,7 +13,14 @@ spec:
     metadata:
       labels:
         app: karakeep-chrome
-        netpol-baseline: enforced
+        # EXEMPT, not enforced. The baseline's ingress rule carries no `ports:` key, so labelling
+        # this pod admits traefik, prometheus and both node bridges on EVERY port — including
+        # 9222, where Chrome serves unauthenticated DevTools (remote browser control) and must
+        # bind 0.0.0.0 because karakeep dials it cross-pod. That is strictly wider than the
+        # bespoke policy in netpol-baseline/templates/networkpolicy-karakeep-chrome.yaml.j2,
+        # which admits app=karakeep alone. Same reasoning as flaresolverr and n8n: a headless
+        # browser rendering attacker-supplied pages is exactly the workload not to widen.
+        netpol-baseline-exempt: "true"
     spec:
       enableServiceLinks: false
       automountServiceAccountToken: false

@@ -75,6 +75,48 @@
       to netpol_baseline_exempt_workloads with the policy that covers it.
     quiet: true
 
+# The observability twin of the gate above. Slice 5 flipped BOTH baselines to namespace scope,
+# but only homelab got a cluster-side reconcile — the gate is scoped `-n {{ k8s_namespace }}` and
+# gated on `netpol_baseline_scope`, so observability ran opt-out with nothing checking who had
+# opted out. The repo path is covered (test_netpol_baseline_labels.py pins the exempt set across
+# ALL rendered docs, not just homelab's), which is exactly the coverage that was green throughout
+# the ~16h slice-4.5 drift: a test reads the templates, and the drift is in the cluster.
+#
+# The expected set is empty, so this reads as "assert nothing here is exempt". That is the whole
+# point — in a namespace with no bespoke policies, an exemption is not a narrower fence, it is no
+# fence.
+- name: Read the workloads live-exempt from the observability baseline
+  tags: [deploy]
+  when:
+    - netpol_baseline_obs_scope == 'namespace'
+    - not k8s_no_mutate
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_observability_namespace }} get pods -l netpol-baseline-exempt
+      -o jsonpath={.items[*].metadata.labels.app}
+  become: true
+  changed_when: false
+  register: netpol_baseline_obs_live_exempt
+
+- name: Fail if observability's live exempt set is not exactly netpol_baseline_obs_exempt_workloads
+  tags: [deploy]
+  when:
+    - netpol_baseline_obs_scope == 'namespace'
+    - not k8s_no_mutate
+  ansible.builtin.assert:
+    that:
+      - netpol_baseline_obs_live_exempt.stdout.split() | unique | sort
+        == netpol_baseline_obs_exempt_workloads | sort
+    fail_msg: >-
+      netpol-baseline: the workloads exempt in {{ k8s_observability_namespace }} are not the ones
+      this role expects, so the observability baseline must not be applied yet.
+      live: {{ netpol_baseline_obs_live_exempt.stdout.split() | unique | sort | to_json }},
+      expected: {{ netpol_baseline_obs_exempt_workloads | sort | to_json }}.
+      Nothing in this namespace carries a bespoke policy, so a name in `live` is a pod fenced by
+      nothing at all — remove its `netpol-baseline-exempt` label, or add it here together with
+      the policy that covers it.
+    quiet: true
+
 # No Deployment, so manifests_rollout is empty — there is nothing to wait on. The policy takes
 # effect on apply.
 - name: Deploy the namespace ingress baseline

@@ -14,6 +14,8 @@ Run: uv run pytest ansible/tests/test_netpol_baseline_labels.py
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from _k8s_render import rendered_docs
 
 # Slice 1 of the rollout: the six traefik-only leaf apps (docs/networkpolicy-default-deny.md).
@@ -95,7 +97,6 @@ SLICE_4_ROLES = {role for role, _name in SLICE_4_WORKLOADS}
 # name are exactly where the slice-4 review caught an omission, so they are all named here.
 SLICE_45A_WORKLOADS = {
     ("karakeep", "karakeep"),
-    ("karakeep", "karakeep-chrome"),
     ("karakeep", "karakeep-meilisearch"),
     ("karakeep", "karakeep-time-tagger"),
     ("scrutiny", "scrutiny-web"),
@@ -158,6 +159,9 @@ SLICE_45C_ROLES = {role for role, _name in SLICE_45C_WORKLOADS}
 BESPOKE_POLICY_WORKLOADS = {
     ("prowlarr", "flaresolverr"),
     ("n8n", "n8n"),
+    # The baseline's rule has no `ports:`, so labelling a headless browser would admit traefik
+    # and prometheus to its unauthenticated DevTools port. Fenced by its own policy instead.
+    ("karakeep", "karakeep-chrome"),
 }
 
 # Pod-producing docs that are deliberately unlabelled and deliberately NOT fenced: a netpol probe
@@ -335,6 +339,9 @@ EXEMPT_WORKLOADS = {
     ("n8n", "n8n"),
     # roles/k8s/registry/templates/networkpolicy.yaml.j2
     ("registry", "registry"),
+    # netpol-baseline/templates/networkpolicy-karakeep-chrome.yaml.j2 — admits app=karakeep only,
+    # on :9222. The other three karakeep workloads stay labelled; only chrome is exempt.
+    ("karakeep", "karakeep-chrome"),
 }
 
 
@@ -378,4 +385,44 @@ def test_no_workload_is_both_labelled_and_exempt() -> None:
     assert not both, (
         f"workloads carry BOTH the baseline label and the exemption: {both}\n"
         "Pick one: the baseline fences it, or its own policy does."
+    )
+
+
+# --- Both namespaces must have a CLUSTER-side exempt gate, not just a template-side one -------
+#
+# Slice 5 flipped both baselines to namespace scope, i.e. from opt-in to opt-out. Under opt-out the
+# exempt set IS the boundary, so who carries the label stops being bookkeeping and becomes the
+# fence itself. Only `homelab` got a cluster-side reconcile; the observability baseline ran opt-out
+# with nothing checking who had opted out.
+#
+# Everything in this file is a TEMPLATE-side guard, and template-side guards are precisely what
+# stayed green through the ~16h slice-4.5 drift, because the drift was in the cluster. So this
+# asserts the existence of the runtime gate rather than duplicating its logic.
+
+_ROLE = Path(__file__).resolve().parents[1] / "roles" / "k8s" / "netpol-baseline"
+TASKS = (_ROLE / "tasks" / "main.yml").read_text()
+
+
+def test_each_namespace_scope_lever_has_a_live_exempt_gate():
+    """A namespace-scoped baseline without a live gate is an unenforced invariant."""
+    for scope_var, ns_var in (
+        ("netpol_baseline_scope", "k8s_namespace"),
+        ("netpol_baseline_obs_scope", "k8s_observability_namespace"),
+    ):
+        assert f"{scope_var} == 'namespace'" in TASKS, (
+            f"{scope_var} has no live exempt-set gate — under namespace scope the exempt "
+            "label is the only way out of the fence, so nothing reconciles it against the cluster"
+        )
+        assert f"-n {{{{ {ns_var} }}}} get pods -l netpol-baseline-exempt" in TASKS, (
+            f"the gate for {scope_var} must read {ns_var}, not another namespace — "
+            "homelab's gate was scoped to k8s_namespace and silently covered nothing else"
+        )
+
+
+def test_observability_expects_an_empty_exempt_set():
+    """Nothing in observability has a bespoke policy, so an exemption there fences nothing."""
+    defaults = (_ROLE / "defaults" / "main.yml").read_text()
+    assert "netpol_baseline_obs_exempt_workloads: []" in defaults, (
+        "observability's expected exempt set must be empty and explicit — an exemption in a "
+        "namespace with no bespoke policies is a pod fenced by nothing at all"
     )
