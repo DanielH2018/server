@@ -744,10 +744,15 @@ def main() -> int:
     autodeploy_enabled = K8S_AUTODEPLOY_ENABLED
     if autodeploy_enabled:
         try:
-            declared = declared_denylist(k8s_declarations_at(f"origin/{BRANCH}"))
+            # `origin` (the SHA pinned above, not f"origin/{BRANCH}") — the diff and the alert
+            # already evaluate against that exact commit; re-resolving the ref here would open a
+            # TOCTOU where a concurrent fetch lands between the two reads.
+            declared = declared_denylist(k8s_declarations_at(origin))
+            read_error = None
         except Exception as exc:  # noqa: BLE001 - any failure here must disarm, not crash
             declared = None
-            log(f"could not read k8s declarations at origin: {exc}")
+            read_error = f"{type(exc).__name__}: {exc}"
+            log(f"could not read k8s declarations at origin: {read_error}")
         if declared is None or declared != K8S_AUTODEPLOY_DENYLIST:
             autodeploy_enabled = False
             if declared is not None:
@@ -757,17 +762,34 @@ def main() -> int:
                     f"denied at origin but not in config: {added or 'none'}; "
                     f"in config but not at origin: {removed or 'none'}"
                 )
+                # The two directions need different fixes. `added`: config is BEHIND origin — a
+                # declaration flip landed and this host never re-rendered. `removed`: config is
+                # AHEAD of origin — an operator rendered locally before pushing, so re-rendering
+                # again changes nothing; the fix is `git push`.
+                fixes = []
+                if added:
+                    fixes.append(
+                        "config is behind origin: run `uv run ansible-playbook "
+                        "ansible/initial_setup.yml --tags gitops_deploy` on the host "
+                        "(`deploy.yml` does not re-render it)"
+                    )
+                if removed:
+                    fixes.append(
+                        "config is ahead of origin: the rendered change was never pushed — "
+                        "`git push` it"
+                    )
+                fix = "; ".join(fixes)
             else:
-                detail = "the declarations at origin could not be read"
+                detail = f"the declarations at origin could not be read ({read_error})"
+                fix = "check the ref/path on the host — this clears on its own once it reads again"
             log(f"k8s auto-deploy disarmed — stale denylist ({detail})")
             alert_once(
                 STALE_DENYLIST_FILE,
                 "stale_denylist",
                 origin,
                 f"⚠️ gitops-deploy: `/etc/gitops-deploy/config.env` denylist is stale against "
-                f"`{origin[:8]}` — {detail}. k8s auto-deploy is DISARMED until it is re-rendered. "
-                f"Run `uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy` "
-                f"on the host. (`deploy.yml` does not re-render it.)",
+                f"`{origin[:8]}` — {detail}. k8s auto-deploy is DISARMED until this is fixed: "
+                f"{fix}.",
             )
     # Promote image-bump-only k8s changes to the auto-deploy channel. Everything not promoted
     # stays in cs.k8s and defer-and-alerts exactly as before, so this is inert until a service
