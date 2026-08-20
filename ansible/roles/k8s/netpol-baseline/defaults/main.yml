@@ -9,8 +9,27 @@
 netpol_baseline_enforced: true
 
 # `label`     — the policy selects only pods carrying `netpol-baseline: enforced` (slices 1-4)
-# `namespace` — the policy selects every pod via `podSelector: {}` (slice 5)
+# `namespace` — the policy selects every pod EXCEPT those carrying `netpol-baseline-exempt`
+#               (slice 5). Not a bare `podSelector: {}`: see the template for why.
+#
+# This is also the rollback lever for slice 5 — set back to `label` and redeploy. Every workload
+# still carries its opt-in label, so nothing else has to move.
 netpol_baseline_scope: label
+
+# The workloads that opt OUT under namespace scope, by `app` label. Each owns a NetworkPolicy
+# TIGHTER than this baseline, and policies are additive: selecting one here would ADD traefik,
+# prometheus and both node CIDRs on top of its own allow-list.
+#
+# Read as an exact set, in both directions, by the live gate in tasks/main.yml — a name missing
+# from the cluster is a widening about to happen, and a name in the cluster but not here is a pod
+# fenced by nothing at all. `ansible/tests/test_netpol_baseline_labels.py` pins the same set
+# against the rendered templates; the gate exists because the templates and the cluster can
+# disagree, and did for ~16 hours during slice 4.5.
+netpol_baseline_exempt_workloads:
+  - flaresolverr    # roles/k8s/prowlarr/templates/networkpolicy.yaml.j2 (app=prowlarr, :8191)
+  - headlamp        # roles/k8s/headlamp/templates/networkpolicy.yaml.j2
+  - n8n             # roles/k8s/n8n/templates/networkpolicy.yaml.j2 (live name `n8n-broker`)
+  - registry        # roles/k8s/registry/templates/networkpolicy.yaml.j2
 
 # The node-side bridge addresses, for traffic that arrives with a node IP: containerd image
 # pulls, hostPort paths, and the three host crons that dial traefik. Verified per node with
@@ -27,6 +46,11 @@ netpol_baseline_probe_image: alpine:3.24
 # OWN node-CIDR list, deliberately: the shared netpol_baseline_node_cidrs is read by the 16
 # workloads slices 1 and 2 already deployed, and widening it would re-scope all of them.
 netpol_baseline_obs_enforced: true
+
+# Observability's own scope lever, separate from netpol_baseline_scope for the same reason its
+# enforcement flag and node-CIDR list are separate: the two namespaces are rolled out and rolled
+# back independently. Same two values, same meaning.
+netpol_baseline_obs_scope: label
 
 # All four node addresses, where the homelab list carries only the two cni0 /32s.
 #

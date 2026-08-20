@@ -17,7 +17,17 @@ metadata:
 spec:
   podSelector:
 {% if netpol_baseline_scope == 'namespace' %}
-    {}
+    # Every pod EXCEPT the ones that opt out. A bare `{}` here would select the four workloads
+    # carrying a policy tighter than this one (flaresolverr, headlamp, n8n, registry) and, because
+    # policies are additive, ADD this allow-list on top of theirs — widening exactly the fences
+    # those policies exist to draw. `netpol_baseline_exempt_workloads` names them, and a live gate
+    # in tasks/main.yml refuses to apply this if the cluster's exempt set differs.
+    #
+    # DoesNotExist, not `NotIn: ["true"]`: a pod with no such key satisfies DoesNotExist with no
+    # ambiguity, where NotIn against an absent key is the kind of semantics that reads two ways.
+    matchExpressions:
+      - key: netpol-baseline-exempt
+        operator: DoesNotExist
 {% else %}
     matchLabels:
       netpol-baseline: enforced
