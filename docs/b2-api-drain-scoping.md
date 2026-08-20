@@ -26,9 +26,10 @@ chains Longhorn had already deleted appeared to hold 286 live objects; counting 
 
 Two things confirm the deletion path is working correctly:
 
-- **Watching one run live.** `sonarr-config`'s chain was deleted at 00:06 UTC. Its block count
-  went 200 → 110 over the following five minutes, with hide markers climbing in step. Longhorn
-  deletes blocks; it just does so gradually.
+- **Watching one run to completion.** `sonarr-config`'s chain was deleted at 00:06 UTC. Its
+  block count went 200 → 110 at 00:11 and reached **0 by 00:17**, leaving one object —
+  `volume.cfg` — plus 213 retained versions. Longhorn deletes every block; it just takes about
+  ten minutes, so a prefix sampled mid-run looks half-finished.
 - **The retained versions clear themselves.** The `daniel-server-kopia` bucket carries a
   lifecycle rule `daysFromHidingToDeleting: 7` across the whole bucket, so hidden versions are
   removed automatically after a week at no transaction cost.
@@ -50,19 +51,19 @@ first version seen for a name is its current state.
 A prefix is stale when its `BackupVolume` CR exists but the Longhorn `Volume` does not — the
 seven volumes rebuilt at 16 MiB blocks. There are 32 `BackupVolume` CRs against 43 live volumes.
 
-Snapshot at 00:11 UTC, with `sonarr-config` mid-deletion:
+State at 00:17 UTC, after `sonarr-config`'s deletion completed:
 
 | Prefix | Service | Live | Blocks | Deleted | Retained versions | Stored |
 |---|---|---|---|---|---|---|
 | `pvc-9432817d` | prowlarr-config | 219 | 216 | 2 | 6 | 50.4 MiB |
-| `pvc-cc4ab76b` | sonarr-config | 112 | 110 | 94 | 100 | 64.1 MiB |
+| `pvc-cc4ab76b` | sonarr-config | 1 | 0 | 205 | 213 | 64.1 MiB |
 | `pvc-8e41a06c` | — | 1 | 0 | 67 | 89 | 1.1 MiB |
 | `pvc-de7f9d60` | — | 1 | 0 | 58 | 67 | 10.8 MiB |
 | `pvc-c926b73e` | — | 1 | 0 | 33 | 39 | 0.5 MiB |
 | `pvc-d06c0d9d` | — | 1 | 0 | 31 | 56 | 0.2 MiB |
 | `pvc-36a38101` | — | 1 | 0 | 17 | 30 | 0.1 MiB |
 
-The five one-object rows are drained volumes. Their single remaining object is `volume.cfg`;
+The six one-object rows are drained volumes. Their single remaining object is `volume.cfg`;
 their storage is retained versions awaiting the 7-day lifecycle sweep.
 
 `prowlarr-config` is the only chain still intact.
