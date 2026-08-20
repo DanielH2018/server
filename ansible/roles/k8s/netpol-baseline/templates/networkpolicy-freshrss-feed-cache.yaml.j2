@@ -1,0 +1,40 @@
+---
+# An nginx caching proxy in front of one external feed (files/nginx-feed-cache.conf proxy_passes
+# to https://rachelbythebay.com), so freshrss polls a local cache instead of the origin.
+#
+# The caller is freshrss, and the evidence is weaker than for the other policies here: the
+# subscription URL lives in FreshRSS's own database, not in this repo, so no template names
+# `feed-cache` as a target. Nothing else in the cluster has any reason to dial it, and the
+# baseline still admits traefik and prometheus. Confirm functionally after deploy — the feed must
+# still refresh — rather than trusting a grep that by construction cannot see the caller.
+#
+# Its Service is named `feed-cache`; the pod label is `app: freshrss-feed-cache`. Port 80 is the
+# containerPort and the Service port both — verified 2026-08-20.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: freshrss-feed-cache
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: freshrss-feed-cache
+  policyTypes:
+    - Ingress
+  ingress:
+{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
+   lever. `| bool` for the string trap. Both explained in full in
+   networkpolicy-traefik.yaml.j2. #}
+{% if netpol_baseline_enforced | bool %}
+    - from:
+        - podSelector:
+            matchLabels:
+              app: freshrss
+      ports:
+        - port: 80
+          protocol: TCP
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}

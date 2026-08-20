@@ -17,6 +17,7 @@ spec:
     metadata:
       labels:
         app: freshrss
+        netpol-baseline: enforced
     spec:
       enableServiceLinks: false
       # No fsGroup: seed-volume restores the source's ownership with `tar -p --numeric-owner`,

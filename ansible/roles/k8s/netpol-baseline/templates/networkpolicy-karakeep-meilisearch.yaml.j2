@@ -1,0 +1,33 @@
+---
+# karakeep's search index. karakeep dials it at MEILI_ADDR=http://karakeep-meilisearch:7700
+# (roles/k8s/karakeep/templates/deployment.yaml.j2), and nothing else does.
+#
+# 7700 is the containerPort AND the Service port — verified 2026-08-20, they match.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: karakeep-meilisearch
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: karakeep-meilisearch
+  policyTypes:
+    - Ingress
+  ingress:
+{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
+   lever. `| bool` for the string trap. Both explained in full in
+   networkpolicy-traefik.yaml.j2. #}
+{% if netpol_baseline_enforced | bool %}
+    - from:
+        - podSelector:
+            matchLabels:
+              app: karakeep
+      ports:
+        - port: 7700
+          protocol: TCP
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}

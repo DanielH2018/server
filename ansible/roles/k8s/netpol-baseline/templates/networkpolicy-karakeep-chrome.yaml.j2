@@ -1,0 +1,37 @@
+---
+# karakeep's headless Chrome. karakeep dials it at BROWSER_WEB_URL=http://karakeep-chrome:9222
+# (roles/k8s/karakeep/templates/deployment.yaml.j2) to render pages it is archiving.
+#
+# It renders attacker-supplied pages, so it is worth fencing tightly: karakeep is the only caller
+# that has any business here. The baseline already admits traefik and prometheus on every port;
+# this rule adds the one real caller.
+#
+# 9222 is the containerPort AND the Service port — verified 2026-08-20, they match.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: karakeep-chrome
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: karakeep-chrome
+  policyTypes:
+    - Ingress
+  ingress:
+{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
+   lever. `| bool` for the string trap. Both explained in full in
+   networkpolicy-traefik.yaml.j2. #}
+{% if netpol_baseline_enforced | bool %}
+    - from:
+        - podSelector:
+            matchLabels:
+              app: karakeep
+      ports:
+        - port: 9222
+          protocol: TCP
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}
