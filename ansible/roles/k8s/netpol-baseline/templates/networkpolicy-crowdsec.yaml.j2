@@ -1,0 +1,41 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: crowdsec
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: crowdsec
+  policyTypes:
+    - Ingress
+  ingress:
+    # LAPI (8080) and AppSec (7422): the Traefik bouncer plugin, plus the node agents that ship
+    # parsed logs to the LAPI. The dashboard (3000) is reached through Traefik like any route.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: traefik
+        - podSelector:
+            matchLabels:
+              app: crowdsec-node-agent
+      ports:
+        - port: 8080
+          protocol: TCP
+        - port: 7422
+          protocol: TCP
+        - port: 3000
+          protocol: TCP
+    # Metrics, cross-namespace to observability -- siblings in one from item, see the traefik
+    # policy's comment for why that distinction is load-bearing.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - port: 6060
+          protocol: TCP
