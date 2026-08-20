@@ -25,6 +25,8 @@ from deploy_logic import (
     is_image_only_diff,
     split_k8s_auto_deploy,
     ci_verdict,
+    declared_denylist,
+    SHARED_K8S_ROLES,
 )
 
 
@@ -1387,3 +1389,52 @@ def test_ci_never_overrides_the_earlier_short_circuits():
     assert next_action("aaa", "aaa", None, ci="fail") == "noop"
     assert next_action("aaa", "bad", "bad", ci="fail") == "skip_hold"
     assert next_action("aaa", "bbb", None, origin_ahead=False, ci="fail") == "noop"
+
+
+def test_declared_denylist_collects_roles_declaring_false():
+    sources = {
+        "sonarr": 'k8s_autodeploy: false\nk8s_autodeploy_reason: "x"\n',
+        "homepage": 'k8s_autodeploy: true\nk8s_autodeploy_reason: "y"\n',
+    }
+    assert declared_denylist(sources) == frozenset({"sonarr"})
+
+
+def test_declared_denylist_ignores_the_shared_roles():
+    sources = {name: None for name in SHARED_K8S_ROLES}
+    sources["sonarr"] = "k8s_autodeploy: false\n"
+    assert declared_denylist(sources) == frozenset({"sonarr"})
+
+
+def test_an_unparseable_declaration_counts_as_denied():
+    """Fail closed: a role we cannot read must not silently match the config's view."""
+    sources = {"weird": "k8s_autodeploy: maybe\n", "ok": "k8s_autodeploy: true\n"}
+    assert declared_denylist(sources) == frozenset({"weird"})
+
+
+def test_a_missing_declaration_counts_as_denied():
+    sources = {"silent": "some_other_var: 1\n", "ok": "k8s_autodeploy: true\n"}
+    assert declared_denylist(sources) == frozenset({"silent"})
+
+
+def test_a_missing_defaults_file_counts_as_denied():
+    sources = {"gone": None, "ok": "k8s_autodeploy: true\n"}
+    assert declared_denylist(sources) == frozenset({"gone"})
+
+
+def test_a_trailing_comment_does_not_break_parsing():
+    sources = {"r": "k8s_autodeploy: false  # noqa var-naming[no-role-prefix]\n"}
+    assert declared_denylist(sources) == frozenset({"r"})
+
+
+def test_yaml_no_and_off_read_as_false():
+    """PyYAML resolves these to False, so the filter denies them; match that."""
+    assert declared_denylist({"a": "k8s_autodeploy: no\n"}) == frozenset({"a"})
+    assert declared_denylist({"b": "k8s_autodeploy: off\n"}) == frozenset({"b"})
+
+
+def test_an_indented_key_is_not_a_declaration():
+    """Only a top-level key declares. An indented one belongs to some other block."""
+    sources = {"r": "something:\n  k8s_autodeploy: true\n"}
+    assert declared_denylist(sources) == frozenset(
+        {"r"}
+    )  # denied: no top-level declaration

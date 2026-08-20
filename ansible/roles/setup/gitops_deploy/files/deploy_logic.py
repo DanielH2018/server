@@ -612,6 +612,51 @@ def is_image_only_diff(diff_text: str) -> bool:
     return seen_change
 
 
+# Roles under roles/k8s/ that deploy no service of their own — they are included by other roles
+# and carry no defaults/main.yml, so they declare nothing. Mirrors SHARED_ROLES in
+# ansible/filter_plugins/k8s_autodeploy.py; ansible/tests/test_denylist_parsers_agree.py asserts
+# the two stay in step.
+SHARED_K8S_ROLES = frozenset({"manifests", "rollout-drain"})
+
+# A top-level `k8s_autodeploy:` assignment, with an optional trailing comment. Anchored at column
+# zero deliberately: an indented key of the same name belongs to some other mapping and does not
+# declare the role's stance.
+_DECLARATION_RE = re.compile(
+    r"^k8s_autodeploy:[ \t]*(?P<value>\S+)[ \t]*(?:#.*)?$", re.MULTILINE
+)
+# The spellings PyYAML resolves to boolean true. Everything else — including an unparseable or
+# absent value — counts as denied, so this parser can never widen what may auto-deploy.
+_TRUE_VALUES = frozenset(
+    {"true", "True", "TRUE", "yes", "Yes", "YES", "on", "On", "ON"}
+)
+
+
+def declared_denylist(sources: dict[str, str | None]) -> frozenset[str]:
+    """Roles denied auto-deploy, read from each role's own `k8s_autodeploy` declaration.
+
+    `sources` maps a role name to the text of its defaults/main.yml, or None when the role has
+    no such file. Shared roles are skipped; every other role is denied unless it declares a
+    value PyYAML would read as boolean true.
+
+    This exists ONLY to detect that /etc/gitops-deploy/config.env has gone stale against
+    origin — it never decides eligibility. So it is deliberately biased: anything unclear reads
+    as denied, which can make the comparison mismatch and disarm auto-deploy, but can never make
+    a denied role look permitted. The authoritative derivation is the Ansible filter, which
+    parses real YAML; ansible/tests/test_denylist_parsers_agree.py pins the two together.
+    """
+    denied = set()
+    for role, text in sources.items():
+        if role in SHARED_K8S_ROLES:
+            continue
+        if not text:
+            denied.add(role)
+            continue
+        match = _DECLARATION_RE.search(text)
+        if match is None or match.group("value") not in _TRUE_VALUES:
+            denied.add(role)
+    return frozenset(denied)
+
+
 def split_k8s_auto_deploy(
     cs: ChangeSet,
     paths: list[str],
