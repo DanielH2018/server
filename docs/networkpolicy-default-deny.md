@@ -612,7 +612,11 @@ port"*. Both halves of that question are wrong.
 so disarming it to unstick a slice-4 workload also unfences the 16 slice-1/2 workloads. Reverting a
 single workload's label is the narrower undo.
 
-## Slice 4.5 — the 28 workloads no slice owns
+## Slice 4.5 — the workloads no slice owns
+
+> **Superseded in two details by "Answers from slice 4.5" below**, which is the record of what
+> shipped: the real count was 27, and headlamp / n8n / registry are out of scope because they are
+> already born fenced.
 
 Slice 4 does **not** unblock slice 5. `homelab` holds 56 controllers; slices 1-4 and the
 `flaresolverr` exemption cover 27 of them, leaving **28 that belong to no slice** — and slice 5's
@@ -627,6 +631,68 @@ gate fails on any unlabelled pod. They fall in four groups:
 
 Slice 4.5 must apply slice 4's two lessons from the start: check `targetPort`, not the Service
 port, and enumerate sidecars, which carry their host pod's identity.
+
+## Answers from slice 4.5
+
+Deployed and enforcing 2026-08-20. Two corrections to the section above, and four things the
+rollout settled that the plan did not predict.
+
+**The count was 27, not 28, and three named workloads are out of scope.** The cluster held 31
+unlabelled controllers, of which `headlamp`, `n8n`, `registry` and `flaresolverr` already carry
+their own policies. Labelling them would ADD the baseline's traefik + prometheus + node-CIDR
+allow-list on top of a tighter bespoke one, widening them. `n8n` is now recorded in the guard's
+`BESPOKE_POLICY_WORKLOADS` for that reason — slice 4.5 labels `n8n-runners`, which drags the role
+into the fenced set and would otherwise demand a label on `n8n` itself.
+
+**The probes' unfenced control had to be replaced before anything else.** Slices 1 and 2 proved
+their probe pod had a network by dialing `homepage:3000`, which worked only because homepage
+happened to be unfenced. Slice 4.5 fences homepage and slice 5 leaves no unfenced pod at all.
+`networkpolicy-netpol-sentinel.yaml.j2` now admits pods labelled `netpol-probe: control` to
+`speedtest:80`, and that is strictly stronger than the leg it replaced: reaching an unfenced pod
+proved only that the probe had a network, where reaching a FENCED pod that admits us proves the
+admit path itself works. Not `littlelink` — that is slice 1's DENIED target, and a target cannot
+be both admitted and denied.
+
+**A caller census that excludes a workload's own role misses intra-role callers.** The census
+searched each name across the tree while excluding its own role directory, to filter out
+self-references — which also filtered out every caller living in the same role as its callee.
+`karakeep-time-tagger`'s `wait-for-karakeep` init container dials `karakeep:3000`, and denying it
+crashes nothing: the new pod wedges in `Init` forever while the OLD pod keeps serving, so the
+Deployment reads 1/1 and the workload looks healthy while the rollout silently never completes.
+When fencing a role that renders several workloads, grep the role's own templates for
+`create_connection\|nc -z\|nc -w` rather than trusting a cross-role census. The other two
+intra-role dialers are fine: `n8n-runners → n8n:5679` is admitted by the pre-existing n8n-broker
+policy, and karakeep's calls to chrome and meilisearch are covered by this slice.
+
+**A probe leg that depends on the probe pod's OWN labels needs a retry.** The sentinel leg failed
+live with the policy, the pod's labels and the target all verified correct, and kept failing 15
+minutes after the policy was applied — so not policy reconciliation lag. Every other leg in every
+probe either dials a rule with no `from:` or asserts a denial, and neither needs kube-router to
+resolve the SOURCE pod. The sentinel is the only leg whose match depends on this pod's own labels
+being known, and a Job pod is seconds old when it dials. It now retries for up to 60s, which made
+it pass with nothing else changed.
+
+**Deploy order: workload roles first, netpol-baseline last — but a partial run is the hazard.**
+A per-workload policy alone does not admit traefik, so applying policies before labels fences every
+UI off from the front door. The natural `containers_list` order already puts netpol-baseline last,
+which is correct. What is NOT safe is treating one combined run as atomic: this deploy aborted at a
+300s rollout wait, 11 roles never received their labels, and netpol-baseline then applied ALL their
+policies — producing exactly the policies-first state the ordering exists to avoid. The Home
+Assistant, Uptime Kuma, Scrutiny and Loki routes returned 5xx for roughly 17 minutes until the
+remaining labels landed. Game and VPN ports were unaffected, because those policies leave their
+port open regardless of the label. **Deploy the workload roles to completion and verify every label
+landed BEFORE running netpol-baseline.**
+
+## What slice 5 inherits
+
+- The born-fenced widening problem: `podSelector: {}` adds the baseline's allow-list on top of
+  headlamp's, n8n's and registry's own policies. Slice 5 must decide whether to exempt them.
+- Transient Job pods — buildkit image builds, the probes themselves, `pi-peer-backup` — are
+  selected by a namespace-scoped selector. The probes in particular must stay unfenced to prove
+  anything.
+- Traffic a VPN client sends onward to a cluster service is routed through the wg-easy pod and
+  arrives as `app: wg-easy`. Nothing depends on it today, because VPN clients reach services by
+  hostname through Traefik, but a service dialled by ClusterIP over the VPN would need that peer.
 
 ## Open items still outstanding
 
