@@ -19,11 +19,60 @@
       - netpol_baseline_enforced | string | lower in ['true', 'false']
       - netpol_baseline_scope in ['label', 'namespace']
       - netpol_baseline_obs_enforced | string | lower in ['true', 'false']
+      - netpol_baseline_obs_scope in ['label', 'namespace']
     fail_msg: >-
       netpol-baseline: netpol_baseline_enforced must be true or false (got
-      {{ netpol_baseline_enforced | to_json }}), netpol_baseline_scope must be 'label' or
-      'namespace' (got {{ netpol_baseline_scope | to_json }}), and netpol_baseline_obs_enforced
-      must be true or false (got {{ netpol_baseline_obs_enforced | to_json }}).
+      {{ netpol_baseline_enforced | to_json }}), netpol_baseline_scope and
+      netpol_baseline_obs_scope must each be 'label' or 'namespace' (got
+      {{ netpol_baseline_scope | to_json }} and {{ netpol_baseline_obs_scope | to_json }}), and
+      netpol_baseline_obs_enforced must be true or false (got
+      {{ netpol_baseline_obs_enforced | to_json }}).
+    quiet: true
+
+# Slice 5's gate, and it reads the CLUSTER rather than the rendered templates on purpose.
+# `ansible/tests/test_netpol_baseline_labels.py` already pins the exempt set against the
+# templates — but during slice 4.5 the templates and the cluster disagreed for ~16 hours
+# (n8n-runners rendered its label and the live Deployment did not carry it) with that guard
+# green throughout. Under namespace scope the same drift is worse in both directions: a pod
+# missing its exemption gets this baseline's allow-list added on top of a tighter policy, and a
+# pod carrying an exemption nothing else covers is fenced by nothing at all.
+#
+# Runs only under namespace scope: under label scope the exemption selects nothing, so there is
+# nothing to be wrong about.
+- name: Read the workloads live-exempt from the baseline
+  tags: [deploy]
+  when:
+    - netpol_baseline_scope == 'namespace'
+    - not k8s_no_mutate
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} get pods -l netpol-baseline-exempt
+      -o jsonpath={.items[*].metadata.labels.app}
+  become: true
+  changed_when: false
+  register: netpol_baseline_live_exempt
+
+# Deliberately an exact set comparison, not a subset check in either direction. `| unique` because
+# a rollout briefly runs two pods of the same app, and `| sort` because jsonpath returns them in
+# whatever order the API server lists.
+- name: Fail if the live exempt set is not exactly netpol_baseline_exempt_workloads
+  tags: [deploy]
+  when:
+    - netpol_baseline_scope == 'namespace'
+    - not k8s_no_mutate
+  ansible.builtin.assert:
+    that:
+      - netpol_baseline_live_exempt.stdout.split() | unique | sort
+        == netpol_baseline_exempt_workloads | sort
+    fail_msg: >-
+      netpol-baseline: the workloads exempt in the cluster are not the ones this role expects,
+      so the namespace baseline must not be applied yet.
+      live: {{ netpol_baseline_live_exempt.stdout.split() | unique | sort | to_json }},
+      expected: {{ netpol_baseline_exempt_workloads | sort | to_json }}.
+      A name missing from `live` is a workload about to have this baseline's allow-list ADDED on
+      top of its own tighter policy — deploy that workload's role first. A name in `live` that is
+      not expected is a pod fenced by nothing; remove its `netpol-baseline-exempt` label or add it
+      to netpol_baseline_exempt_workloads with the policy that covers it.
     quiet: true
 
 # No Deployment, so manifests_rollout is empty — there is nothing to wait on. The policy takes
