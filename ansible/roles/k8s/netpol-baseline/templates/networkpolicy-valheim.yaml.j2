@@ -1,0 +1,36 @@
+---
+# The Valheim server. Same shape as networkpolicy-terraria.yaml.j2 and for the same reason: a
+# LoadBalancer with `externalTrafficPolicy: Local` preserves each player's real source address,
+# so the callers are not a set this file can enumerate. Read that file's comment for the full
+# argument before narrowing either.
+#
+# Valheim is UDP, and it needs BOTH ports: 2456 is the game port and 2457 is the query port the
+# server browser uses. Opening only 2456 leaves the server running and unlistable.
+#
+# 2456 and 2457 are the containerPorts AND the Service ports — verified 2026-08-20, they match.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: valheim
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: valheim
+  policyTypes:
+    - Ingress
+  ingress:
+{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
+   lever. `| bool` for the string trap. Both explained in full in
+   networkpolicy-traefik.yaml.j2. #}
+{% if netpol_baseline_enforced | bool %}
+    - ports:
+        - port: 2456
+          protocol: UDP
+        - port: 2457
+          protocol: UDP
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}
