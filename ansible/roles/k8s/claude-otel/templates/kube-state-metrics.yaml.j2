@@ -41,6 +41,14 @@ rules:
   - apiGroups: [apps]
     resources: [deployments, statefulsets, daemonsets]
     verbs: [list, watch]
+  # Nodes, for kube_node_status_allocatable — the only continuous signal that an extended
+  # resource is still advertised. dri-device-plugin can wedge while its pod stays Running and
+  # Ready (it has no probe, and a container without a readinessProbe is Ready the moment it
+  # starts), which the DaemonSet-unavailability arm cannot see. Node objects carry no secret
+  # material; this is spec+status on a cluster-scoped resource the readonly SA already lists.
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [list, watch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -83,7 +91,7 @@ spec:
           args:
             # Must match the ClusterRole above. Restricting the set also drops the metric
             # cardinality this stack has no use for.
-            - --resources=pods,deployments,statefulsets,daemonsets
+            - --resources=pods,deployments,statefulsets,daemonsets,nodes
             - --metric-labels-allowlist=pods=[app],deployments=[app]
           ports:
             - name: metrics

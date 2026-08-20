@@ -392,6 +392,20 @@ K8S_MIN_WORKLOADS = int(_env("K8S_MIN_WORKLOADS", "5"))
 # longhorn-csi-plugin, longhorn-manager, speaker. Bump this floor (and the comment) when a
 # DaemonSet is added or retired — same discipline as K8S_MIN_WORKLOADS.
 K8S_MIN_DAEMONSETS = int(_env("K8S_MIN_DAEMONSETS", "9"))
+# Extended resources that must stay ADVERTISED by at least one node. The DaemonSet arm above
+# watches whether the plugin's POD is running; this watches whether the thing the pod exists to
+# provide is still there. dri-device-plugin has no probe — and a container with no readinessProbe
+# is Ready the instant it starts — so a plugin that wedges internally (gRPC registration hangs, a
+# stuck goroutine) keeps a Running, Ready, fully-available DaemonSet while kubelet quietly
+# deregisters the resource. Nothing restarts it, and the only other evidence is jellyfin and tdarr
+# turning unschedulable, which does not surface until they next reschedule.
+#
+# Comma-separated, so a second device plugin needs no code change.
+K8S_EXTENDED_RESOURCES = [
+    r.strip()
+    for r in _env("K8S_EXTENDED_RESOURCES", "devic.es/dri").split(",")
+    if r.strip()
+]
 # Hysteresis for check_longhorn_volumes. A node drain and the Sunday 07:30 reboot both degrade
 # every volume on the departing node BY DESIGN, so a single breaching cycle must not page — 3
 # cycles at the bridge cadence is longer than either takes to settle. Same shape as
@@ -2334,6 +2348,43 @@ def check_r2_usage():
     return r2_usage()
 
 
+def extended_resource_verdict(expected, advertised, allocatable_series):
+    """Pure: (ok, msg) for extended resources that must stay advertised by some node.
+
+    `advertised` maps resource name -> number of nodes advertising a NON-ZERO quantity.
+    `allocatable_series` is the total count of kube_node_status_allocatable series, and it is what
+    separates the two ways this can come back empty:
+
+      - no series at all  -> kube-state-metrics is not collecting `nodes`, so the question was
+        never asked. Reported as INERT rather than as a fault, and named in the message: a check
+        that cannot read its input must not answer as though it did, in either direction. Silently
+        passing would be the failure this arm exists to fix; silently failing would page for a
+        collector change nobody made.
+      - series exist, resource absent -> the resource is genuinely gone. That is the fault.
+
+    A resource advertised by zero nodes is identical to one that never appears, and both are a
+    fault once the collector is confirmed running: the pods that need it cannot schedule either way.
+    """
+    if not expected:
+        return True, "no extended resources watched"
+    if not allocatable_series:
+        return True, (
+            "extended-resource check INERT: no kube_node_status_allocatable series "
+            "(kube-state-metrics is not collecting `nodes`); %s unwatched"
+            % ", ".join(expected)
+        )
+    missing = [r for r in expected if not advertised.get(r)]
+    if missing:
+        return False, (
+            "extended resource(s) advertised by no node: %s — the device plugin is Running but "
+            "its resource is deregistered; pods requesting it cannot schedule"
+            % ", ".join(missing)
+        )
+    return True, "extended resource(s) advertised: %s" % ", ".join(
+        "%s on %d node(s)" % (r, advertised.get(r, 0)) for r in expected
+    )
+
+
 def k8s_workloads_verdict(
     total,
     offenders,
@@ -2448,7 +2499,7 @@ def check_k8s_workloads():
         base=CLUSTER_PROM_URL,
         source="cluster prometheus",
     )
-    return k8s_workloads_verdict(
+    ok, msg = k8s_workloads_verdict(
         total,
         offenders,
         K8S_MIN_WORKLOADS,
@@ -2457,6 +2508,33 @@ def check_k8s_workloads():
         ds_offenders,
         K8S_MIN_DAEMONSETS,
     )
+    # Folded into this monitor rather than given its own: a new Kuma monitor needs a new push
+    # token in SOPS, and this arm answers the same question the DaemonSet arm does — is the
+    # cluster still able to run the workloads that depend on it.
+    advertised = {}
+    for resource in K8S_EXTENDED_RESOURCES:
+        advertised[resource] = len(
+            prom_vector(
+                'kube_node_status_allocatable{resource="%s"} > 0' % resource,
+                base=CLUSTER_PROM_URL,
+                source="cluster prometheus",
+            )
+        )
+    res_ok, res_msg = extended_resource_verdict(
+        K8S_EXTENDED_RESOURCES,
+        advertised,
+        prom_scalar(
+            "count(kube_node_status_allocatable)",
+            base=CLUSTER_PROM_URL,
+            source="cluster prometheus",
+        ),
+    )
+    if not res_ok:
+        # The resource fault wins the message: an unschedulable-by-design cluster is more urgent
+        # than whatever the workload arm has to say, and the workload arm's own text is preserved
+        # after it rather than dropped.
+        return False, "%s | %s" % (res_msg, msg)
+    return ok, "%s, %s" % (msg, res_msg)
 
 
 def check_cluster_targets():

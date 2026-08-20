@@ -3403,3 +3403,59 @@ def test_longhorn_selects_on_the_state_label_not_a_value_ordinal():
     assert len(queries) == 1
     assert 'state=~"degraded|faulted"' in queries[0]
     assert "== 2" not in queries[0]
+
+
+# --- extended_resource_verdict ------------------------------------------------------------------
+#
+# dri-device-plugin has no probe, and a container without a readinessProbe is Ready the instant it
+# starts. So a plugin that wedges internally keeps a Running, Ready, fully-available DaemonSet
+# while kubelet deregisters the extended resource - the DaemonSet arm is structurally blind to it,
+# and the only other evidence (jellyfin and tdarr unschedulable) does not appear until they next
+# reschedule. The repo recorded this omission as "covered by monitor-bridge's check", which was a
+# true sentence about a check that reads a different metric.
+
+
+def test_missing_extended_resource_is_a_fault():
+    ok, msg = check.extended_resource_verdict(["devic.es/dri"], {"devic.es/dri": 0}, 12)
+    assert ok is False
+    assert "devic.es/dri" in msg
+
+
+def test_resource_absent_from_the_map_is_a_fault():
+    """An absent key and a zero count mean the same thing: nothing advertises it."""
+    ok, _ = check.extended_resource_verdict(["devic.es/dri"], {}, 12)
+    assert ok is False
+
+
+def test_advertised_resource_passes_and_reports_node_count():
+    ok, msg = check.extended_resource_verdict(["devic.es/dri"], {"devic.es/dri": 1}, 12)
+    assert ok is True
+    assert "1 node(s)" in msg
+
+
+def test_no_series_at_all_is_inert_not_green_and_not_red():
+    """The collector not running must not read as health or as fault - it must say so.
+
+    Passing silently would be exactly the "check that cannot read its input answers anyway"
+    failure this arm exists to fix. Failing would page for a kube-state-metrics config change
+    nobody made. Naming it is the only honest option.
+    """
+    ok, msg = check.extended_resource_verdict(["devic.es/dri"], {}, 0)
+    assert ok is True
+    assert "INERT" in msg
+    assert "devic.es/dri" in msg
+
+
+def test_several_resources_are_all_checked():
+    ok, msg = check.extended_resource_verdict(
+        ["devic.es/dri", "example.com/fpga"],
+        {"devic.es/dri": 2, "example.com/fpga": 0},
+        12,
+    )
+    assert ok is False
+    assert "example.com/fpga" in msg
+
+
+def test_nothing_expected_is_trivially_ok():
+    ok, _ = check.extended_resource_verdict([], {}, 12)
+    assert ok is True
