@@ -237,14 +237,20 @@
         - name: Record what the staging volume now holds
           ansible.builtin.set_fact:
             mig_files: "{{ copy_dst_files }}"
+            mig_src_files: "{{ copy_src_files }}"
             mig_digest: "{{ copy_dst_digest }}"
 
-        - name: Refuse to delete the original when the staging copy is empty
+        # The fault this guards against is a copy that LOST data, which shows up as an empty
+        # staging volume beside a source that had files. An empty staging volume beside an empty
+        # source is not that — it is a volume with nothing in it, and there is nothing to lose by
+        # rebuilding it. Testing the destination alone conflated the two and blocked n8n-files,
+        # an empty PVC, from migrating at all (2026-08-20).
+        - name: Refuse to delete the original when the copy lost its contents
           ansible.builtin.assert:
-            that: mig_files | int > 0
+            that: mig_files | int > 0 or mig_src_files | int == 0
             fail_msg: >-
-              the staging copy of {{ mig_claim }} holds no files. The original is untouched;
-              nothing has been deleted.
+              {{ mig_claim }} holds {{ mig_src_files }} files but the staging copy holds none.
+              The original is untouched; nothing has been deleted.
 
         - name: Delete the original claim
           ansible.builtin.command:
