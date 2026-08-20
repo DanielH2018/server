@@ -50,6 +50,72 @@ k3s_server_args: >-
   --write-kubeconfig-mode 0640
   --node-ip {{ server_ip }} --advertise-address {{ server_ip }}
   --kubelet-arg=allowed-unsafe-sysctls=net.ipv4.conf.all.src_valid_mark,net.ipv4.ip_forward
+  {% if k3s_secrets_encryption %}--secrets-encryption{% endif %}
+  {% if k3s_audit_log_enabled %}
+  --kube-apiserver-arg=audit-policy-file={{ k3s_audit_policy_path }}
+  --kube-apiserver-arg=audit-log-path={{ k3s_audit_log_path }}
+  --kube-apiserver-arg=audit-log-maxage={{ k3s_audit_log_maxage }}
+  --kube-apiserver-arg=audit-log-maxbackup={{ k3s_audit_log_maxbackup }}
+  --kube-apiserver-arg=audit-log-maxsize={{ k3s_audit_log_maxsize }}
+  {% endif %}
+
+# ── why none of the arguments above is quoted ───────────────────────────────────────────
+# The install task's `when:` compares `k3s_server_args.split()` against the installed unit
+# with single quotes STRIPPED, because the installer single-quotes every argument it writes.
+# A quoted value here — `--kube-apiserver-arg='audit-log-path=…'` — therefore never matches
+# its own installed form, so the comparison reports a missing argument on every play and
+# reinstalls k3s each time, restarting the control plane. None of these values contains a
+# space, so none of them needs quoting. Keep it that way.
+# `ansible/tests/test_k3s_control_plane_hardening.py` fails if a quote reappears.
+
+# ── secrets encryption at rest (G1) ─────────────────────────────────────────────────────
+# Off is k3s's default, which leaves every Secret stored in etcd as plaintext — and
+# `etcd-snapshot-offbox.sh` then ships a daily copy of that plaintext to R2, so the
+# credentials SOPS protects on the git side sit unprotected in an object store. This flag
+# makes the apiserver encrypt Secrets on WRITE with a generated AES-CBC key.
+#
+# ARMING THIS IS ONLY HALF THE JOB. Existing Secrets stay plaintext in etcd until they are
+# rewritten; the role runs `k3s secrets-encrypt reencrypt` for that (see server.yml), which
+# needs root on the control-plane host.
+#
+# The key lives on the same disk as etcd, so this defends against a stolen snapshot or a
+# stolen disk, not against root on daniel-box. The snapshot is the copy that leaves the
+# house, which is the exposure that matters here.
+#
+# ROLLBACK: set false, then re-run the installer BY HAND. The install task detects an
+# argument that was added, never one that was removed — the same caveat the allow-listed
+# sysctls carry above.
+k3s_secrets_encryption: true
+
+# ── apiserver audit logging (G2/G3) ─────────────────────────────────────────────────────
+# k3s writes no audit log by default, so there is no record of API writes at all. This
+# cluster auto-approves `kubectl exec`, `cp` and `port-forward` for agent sessions, and
+# several of those containers mount Longhorn PVCs — the controls that make that acceptable
+# are all preventive, with nothing underneath them to answer "which session did this".
+#
+# ORDER IS LOAD-BEARING. The apiserver reads the policy file at STARTUP and refuses to come
+# up if it is missing, so the log directory and the policy must both exist before the
+# installer rewrites the unit and restarts k3s. server.yml creates them immediately before
+# the install task for exactly that reason; moving them after it wedges the control plane on
+# the one node that also serves LAN DNS.
+#
+# ROLLBACK: same as secrets encryption — set false and re-run the installer by hand.
+#
+# k3s_audit_log_enabled, k3s_audit_log_dir and k3s_audit_log_path live in
+# inventory/group_vars/all.yml, NOT here: loki-homelab's promtail config reads them to tail
+# the file, and a role default is invisible to another role's templates. Same reason
+# k3s_metallb_ingress_vip sits there.
+
+# The policy the apiserver reads at startup. Role-local because only this role writes it.
+k3s_audit_policy_path: /var/lib/rancher/k3s/server/audit.yaml
+
+# Rotation, and it is not optional. An unrotated audit log grows without bound on the disk
+# `disk-health.sh` watches at k3s_disk_max_pct — a Metadata-level policy on a cluster this
+# chatty produces a steady stream of entries, so the apiserver's own rotation is what keeps
+# the control-plane disk from filling. 5 x 100 MiB bounds the log at ~500 MiB.
+k3s_audit_log_maxage: 30       # days a rotated file is kept
+k3s_audit_log_maxbackup: 5     # rotated files kept
+k3s_audit_log_maxsize: 100     # MiB before rotating
 
 # ── why two unsafe sysctls are allow-listed ─────────────────────────────────────────────
 # net.ipv4.ip_forward (slice-6 B5, wg-easy pulled forward): the wg-easy SERVER routes

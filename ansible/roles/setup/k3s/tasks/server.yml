@@ -28,6 +28,41 @@
     mode: "0755"
   become: true
 
+# ── audit logging: these two MUST precede the installer ─────────────────────────────────
+# The apiserver reads the audit policy at startup and refuses to start without it, and the
+# install task below rewrites the unit and restarts k3s itself. Writing the policy after it
+# would arm the flag against a file that does not exist yet, wedging the control plane on
+# the node that also serves LAN DNS. Both tasks are unconditional writes so an already-armed
+# host converges the same way a fresh one does.
+- name: Create the apiserver audit log directory
+  tags: [k3s_server]
+  ansible.builtin.file:
+    path: "{{ k3s_audit_log_dir }}"
+    state: directory
+    mode: "0700"
+    owner: root
+    group: root
+  become: true
+  when: k3s_audit_log_enabled | bool
+
+- name: Write the apiserver audit policy
+  tags: [k3s_server]
+  # Notifies the restart because the apiserver reads this once, at startup — an edited policy
+  # is otherwise inert until something else happens to restart k3s. On the arming run the
+  # installer restarts k3s too, so that run pays for two restarts; every later run pays for
+  # none, because the file does not change. Same pattern as registries.yaml below.
+  ansible.builtin.template:
+    src: audit-policy.yaml.j2
+    dest: "{{ k3s_audit_policy_path }}"
+    mode: "0600"
+    owner: root
+    group: root
+  become: true
+  when: k3s_audit_log_enabled | bool
+  notify:
+    - Restart k3s
+    - Wait for the node to report Ready again
+
 - name: Read the installed k3s systemd unit
   tags: [k3s_server]
   ansible.builtin.slurp:
@@ -67,6 +102,69 @@
     cmd: k3s kubectl wait --for=condition=Ready node --all --timeout=300s
   become: true
   changed_when: false
+
+# ── secrets encryption: arming the flag is only half of it ──────────────────────────────
+# --secrets-encryption makes the apiserver encrypt Secrets on WRITE. Everything already in
+# etcd stays plaintext until it is rewritten, so a run that stops at the flag leaves exactly
+# the exposure the flag was added to close — and every check reads green, because encryption
+# genuinely IS enabled. `reencrypt` is the half that rewrites them.
+- name: Read the secrets-encryption status
+  tags: [k3s_server]
+  ansible.builtin.command:
+    cmd: k3s secrets-encrypt status
+  register: k3s_secrets_encrypt_status
+  become: true
+  changed_when: false
+  failed_when: false
+  when: k3s_secrets_encryption | bool
+
+- name: Fail if the secrets-encryption status could not be read
+  tags: [k3s_server]
+  # Guards the guard. Every task below keys off this output, so an unparseable result must
+  # stop the play rather than silently skip the re-encryption and leave the plaintext in
+  # place — an unreadable input and "nothing to do" are otherwise indistinguishable.
+  ansible.builtin.assert:
+    that: "'Encryption Status:' in k3s_secrets_encrypt_status.stdout"
+    fail_msg: >-
+      `k3s secrets-encrypt status` returned no recognisable status on {{ inventory_hostname }}
+      (rc={{ k3s_secrets_encrypt_status.rc }}): {{ k3s_secrets_encrypt_status.stdout | default('') }}
+      {{ k3s_secrets_encrypt_status.stderr | default('') }}. Re-encryption is skipped when this
+      cannot be read, which would leave existing Secrets in etcd as plaintext while the flag
+      reports enabled.
+  when: k3s_secrets_encryption | bool
+
+- name: Re-encrypt Secrets already stored in etcd
+  tags: [k3s_server]
+  # Runs only when the cluster has never completed a re-encryption. The stage advances to
+  # reencrypt_finished and stays there, so this fires once on the arming run and skips on
+  # every play after it. Rewriting every Secret on each play would be slow (~5 Secrets/s) and
+  # would churn etcd for nothing.
+  ansible.builtin.command:
+    cmd: k3s secrets-encrypt reencrypt
+  become: true
+  changed_when: true
+  when:
+    - k3s_secrets_encryption | bool
+    - "'Encryption Status: Enabled' in k3s_secrets_encrypt_status.stdout"
+    - "'reencrypt_finished' not in k3s_secrets_encrypt_status.stdout"
+
+- name: Wait for the re-encryption to finish
+  tags: [k3s_server]
+  # reencrypt returns as soon as the request is accepted and processes in the background, so
+  # without this the play moves on while Secrets are still being rewritten — and a later task
+  # restarting k3s mid-rotation is how a rotation gets stranded part-done.
+  ansible.builtin.command:
+    cmd: k3s secrets-encrypt status
+  register: k3s_reencrypt_wait
+  become: true
+  changed_when: false
+  until: "'reencrypt_finished' in k3s_reencrypt_wait.stdout"
+  retries: 30
+  delay: 10
+  when:
+    - k3s_secrets_encryption | bool
+    - "'Encryption Status: Enabled' in k3s_secrets_encrypt_status.stdout"
+    - "'reencrypt_finished' not in k3s_secrets_encrypt_status.stdout"
 
 # containerd reads this only at startup, so a change needs k3s restarted — see the restart
 # task below. Written here rather than in the registry role because it is node configuration,

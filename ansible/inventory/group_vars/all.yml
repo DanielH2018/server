@@ -122,6 +122,45 @@ zigbee_ext_pan_id: [221, 187, 17, 34, 51, 68, 85, 102]
 # Traefik Middleware references are namespace-scoped, and cross-namespace references cost a
 # qualified name on all ~33 routes that follow for no isolation this homelab needs.
 k8s_namespace: homelab
+
+# ── Pod Security Admission labels, applied to homelab and observability ─────────────────
+# WARN AND AUDIT ONLY — deliberately no `enforce`. PSA is a namespace-level control and this
+# cluster puts 241 manifests in one namespace, so a single level has to cover `nut` and the
+# `scrutiny` collector (privileged), `node-exporter` (hostNetwork), four hostPath mounts and
+# `registry`'s hostPort alongside every ordinary web app. Enforcing `baseline` today would
+# refuse seven workloads in homelab and four more in observability, where loki, tempo,
+# prometheus and the collector each publish a loopback hostPort.
+#
+# So this is the measuring instrument, not the fence. `warn` returns the violation to whoever
+# applies the manifest; `audit` records it as an annotation in the apiserver audit log, which
+# k3s_audit_log_enabled now writes. Together they produce the exact rejection list, from the
+# admission controller rather than from a grep — which is what a decision about splitting
+# namespaces needs and nobody has today.
+#
+# PSA evaluates at pod CREATE and UPDATE only, so adding these evicts nothing and restarts
+# nothing. Read the warnings for a week before considering `enforce` on either namespace.
+#
+# ROLLBACK: set to {} and redeploy. Unlike the k3s server flags, this one is a real rollback —
+# `kubectl apply` owns these labels, so removing them from the manifest removes them live.
+k8s_psa_labels:
+  pod-security.kubernetes.io/warn: baseline
+  pod-security.kubernetes.io/audit: baseline
+
+# ── apiserver audit log ─────────────────────────────────────────────────────────────────
+# Here rather than in roles/setup/k3s/defaults because TWO roles read them: setup/k3s arms
+# the flags and writes the policy, and loki-homelab's promtail tails the file so the log is
+# readable in Grafana instead of only by root on daniel-box. A role default is invisible to
+# another role's templates — the same reason k3s_metallb_ingress_vip lives in this file.
+#
+# Only daniel-box writes a log: the path is under the k3s SERVER data directory and the agent
+# node runs no apiserver. Promtail declares the job on both nodes anyway, because a DaemonSet
+# carries one config; on daniel-server the path matches nothing.
+#
+# The rest of the audit settings — the policy path and the three rotation limits — stay in
+# the k3s role, because nothing outside it reads them.
+k3s_audit_log_enabled: true
+k3s_audit_log_dir: /var/lib/rancher/k3s/server/logs
+k3s_audit_log_path: "{{ k3s_audit_log_dir }}/audit.log"
 # How long a k8s role holds after `rollout status` returns before declaring the deploy healthy
 # (post_tasks/k8s_stabilise_gate.yml; also claude-otel's own assert_stable.yml, which rolls
 # itself). `rollout status` returns on Available, which

@@ -104,6 +104,14 @@ spec:
             # volume's whole reason to exist).
             - name: positions
               mountPath: /positions
+{% if k3s_audit_log_enabled | default(false) %}
+            # The apiserver audit log, mounted at its real host path so the promtail config's
+            # __path__ needs no translation. Read-only: nothing here should ever write to the
+            # control plane's data directory.
+            - name: k8s-audit
+              mountPath: {{ k3s_audit_log_dir }}
+              readOnly: true
+{% endif %}
           resources:
             limits:
               cpu: "250m"
@@ -125,3 +133,14 @@ spec:
           hostPath:
             path: /var/lib/promtail-positions
             type: DirectoryOrCreate
+{% if k3s_audit_log_enabled | default(false) %}
+        - name: k8s-audit
+          hostPath:
+            path: {{ k3s_audit_log_dir }}
+            # DirectoryOrCreate, not Directory: this DaemonSet also lands on daniel-server,
+            # which has no apiserver and therefore no such directory. `Directory` would leave
+            # that pod stuck in ContainerCreating, taking the node's syslog and pod tailing
+            # down with it — a mount for a file one node does not have must not be able to
+            # stop the other logs that pod is responsible for.
+            type: DirectoryOrCreate
+{% endif %}
