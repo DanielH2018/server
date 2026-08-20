@@ -64,13 +64,21 @@ spec:
               # control is a named peer now rather than an accident of the rollout order — and a
               # stronger check besides: it proves admitted traffic still passes, not merely that
               # this pod has a network.
-              if ! nc -w 5 -z speedtest 80; then
-                echo "SENTINEL CONTROL FAILED: cannot reach speedtest:80, which the sentinel"
-                echo "policy admits this pod to. Either this pod cannot open connections at all,"
-                echo "or admitted traffic is being denied, so the assertions below would pass"
-                echo "whether or not the policies work."
-                exit 1
-              fi
+              # RETRIED, for the reason spelled out in netpol-probe-job.yaml.j2: this is the only
+              # leg whose result depends on kube-router knowing THIS pod's OWN labels, and a Job
+              # pod is seconds old when it dials.
+              i=0
+              until nc -w 5 -z speedtest 80; do
+                i=$((i + 1))
+                if [ "$i" -ge 12 ]; then
+                  echo "SENTINEL CONTROL FAILED: cannot reach speedtest:80 after 60s, which the"
+                  echo "sentinel policy admits this pod to. Either this pod cannot open"
+                  echo "connections at all, or admitted traffic is being denied, so the"
+                  echo "assertions below would pass whether or not the policies work."
+                  exit 1
+                fi
+                sleep 5
+              done
               echo "sentinel control ok: speedtest:80 reachable, admitted by policy"
 
               # This pod carries no app label that sonarr's policy admits. Its allowed callers are

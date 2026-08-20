@@ -66,12 +66,25 @@ spec:
               #    `netpol-probe: control` label to speedtest:80. A failure means either this pod
               #    has no network at all or admitted traffic is being denied, and every inverted
               #    assertion below would be a false pass.
-              if ! nc -w 5 -z speedtest 80; then
-                echo "SENTINEL CONTROL FAILED: speedtest:80 unreachable despite the sentinel"
-                echo "policy admitting this pod. Either this pod has no network, or admitted"
-                echo "traffic is being denied. Assertions below are meaningless."
-                exit 1
-              fi
+              #    RETRIED, and the retry is the point rather than defensive padding: this is the
+              #    only leg in any probe whose result depends on kube-router knowing THIS pod's
+              #    OWN labels. The open-port legs carry no `from:` and the inverted legs assert a
+              #    denial, which is the default — neither needs the source pod resolved. A Job
+              #    pod is seconds old when it dials, and kube-router has to observe the new pod
+              #    and add its IP to the ipset backing `netpol-probe: control` before the rule
+              #    matches. Measured 2026-08-20: a single immediate attempt fails while the
+              #    policy, the pod's labels and the target are all correct.
+              i=0
+              until nc -w 5 -z speedtest 80; do
+                i=$((i + 1))
+                if [ "$i" -ge 12 ]; then
+                  echo "SENTINEL CONTROL FAILED: speedtest:80 unreachable after 60s despite the"
+                  echo "sentinel policy admitting this pod. Either this pod has no network, or"
+                  echo "admitted traffic is being denied. Assertions below are meaningless."
+                  exit 1
+                fi
+                sleep 5
+              done
               echo "sentinel control ok: speedtest:80 reachable, admitted by policy"
 
               # 2. INVERTED. Each must FAIL. One target per fencing shape slice 4.5 introduced:
