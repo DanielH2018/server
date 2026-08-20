@@ -36,10 +36,20 @@ spec:
     # all four netpol probe control legs working -- each dials traefik:80 to prove the probe
     # itself has a network. (uptime-kuma's monitors do NOT depend on :80: they're https:// and
     # so traverse :443, or for the Pi services dial daniel-pi directly, bypassing traefik.)
+    #
+    # THE PORT NUMBERS HERE ARE POD PORTS, NOT SERVICE PORTS. A NetworkPolicy matches the
+    # destination port on the POD, after kube-proxy has already DNAT'd the Service port to the
+    # targetPort. traefik's Service maps 80 -> targetPort `http` and 443 -> `https`, and those
+    # container ports are 8000 and 8443. Writing 80/443 here therefore admits traffic to two
+    # ports nothing listens on, and denies every in-cluster caller of the real ones.
+    # Measured 2026-08-20: that is exactly what happened -- the slice-1 probe's control leg
+    # failed with "cannot reach traefik:80" while the same route answered 200 from the LAN,
+    # because external traffic arrives over the VIP path rather than the ClusterIP.
+    # Every other service in this slice maps its ports 1:1, which is why only this file was hit.
     - ports:
-        - port: 80
+        - port: 8000
           protocol: TCP
-        - port: 443
+        - port: 8443
           protocol: TCP
     # :8080 is the port worth fencing. prometheus moved to the observability namespace in
     # slice 3, so this is cross-namespace: namespaceSelector and podSelector are siblings in
