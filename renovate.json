@@ -46,6 +46,10 @@
       "before 6am"
     ]
   },
+  "ansible-galaxy": {
+    "description": "Disabled: it matches ansible/requirements.yml, which the custom regex manager below already owns. With both enabled, community.general 13.3.0 opened twice (#204 built-in, #257 grouped) and the built-in copy sat outside the manual-lockstep group's `automerge: false`, which is keyed on matchManagers: custom.regex. Disabled as a MANAGER OBJECT rather than via enabledManagers: that key is an allowlist, and this repo depends on the built-in dockerfile, github-actions, pep621 and pyenv managers.",
+    "enabled": false
+  },
   "customManagers": [
     {
       "customType": "regex",
@@ -60,7 +64,7 @@
     },
     {
       "customType": "regex",
-      "description": "Ansible Galaxy collection pins in ansible/requirements.yml. The built-in ansible-galaxy manager isn't reliably matching this path here, so pin them explicitly \u2014 otherwise the collections age silently (silence != up-to-date, the same failure mode as the lockFileMaintenance note). Each name/version pair maps to the galaxy-collection datasource.",
+      "description": "Ansible Galaxy collection pins in ansible/requirements.yml. The built-in ansible-galaxy manager IS disabled at the top level (see the `ansible-galaxy` key): it matches this same file, so leaving both on produced two PRs for every bump \u2014 and the built-in one landed outside the manual-lockstep group below, escaping its deliberate `automerge: false`. This custom manager is the single owner. Collections must not age silently (silence != up-to-date, the same failure mode as the lockFileMaintenance note). Each name/version pair maps to the galaxy-collection datasource.",
       "managerFilePatterns": [
         "/(^|/)ansible/requirements\\.yml$/"
       ],

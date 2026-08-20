@@ -89,7 +89,43 @@ def build_pr(repo: str, pr: dict) -> PR:
         ci=ci_rollup(runs, statuses),
         conflicting=conflicting,
         created_at=pr.get("created_at", ""),
+        dead_paths=dead_paths(repo, n, pr) if conflicting else None,
     )
+
+
+def dead_paths(repo: str, n: int, pr: dict) -> tuple[str, ...]:
+    """The PR's changed files that no longer exist on the base branch, if ALL of them are gone.
+
+    Only called for conflicting PRs — it is one extra API call each, and the question is
+    meaningless for a PR that merges cleanly. Returns () when any changed file still exists,
+    because then a rebase can genuinely resolve the conflict and the ordinary note is right.
+
+    Fails to (), never raises: a lookup error must degrade to the existing "conflicting" note
+    rather than lose the PR from the digest entirely. An unreadable answer and "nothing is
+    deleted" would otherwise be indistinguishable, which is the failure shape this whole check
+    exists to fix.
+    """
+    base = ((pr.get("base") or {}).get("ref")) or "master"
+    try:
+        files = get("%s/repos/%s/pulls/%d/files?per_page=100" % (API, repo, n))
+    except Exception as exc:  # noqa: BLE001 - degrade to the ordinary conflicting note
+        log("dead_paths: could not list files for #%d: %s" % (n, exc))
+        return ()
+    if not files:
+        return ()
+    gone = []
+    for f in files:
+        path = f.get("filename", "")
+        if not path:
+            continue
+        try:
+            get("%s/repos/%s/contents/%s?ref=%s" % (API, repo, path, base))
+        except Exception:  # noqa: BLE001 - a 404 is the answer we are looking for
+            gone.append(path)
+            continue
+        # The file still exists on base: an ordinary conflict, resolvable by rebase.
+        return ()
+    return tuple(gone)
 
 
 def discord(webhook: str, content: str) -> bool:

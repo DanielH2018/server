@@ -11,6 +11,7 @@ def _pr(
     ci="success",
     conflicting=False,
     created_at="",
+    dead_paths=None,
 ):
     return nl.PR(
         number=number,
@@ -20,6 +21,7 @@ def _pr(
         ci=ci,
         conflicting=conflicting,
         created_at=created_at,
+        dead_paths=dead_paths,
     )
 
 
@@ -414,3 +416,65 @@ def test_render_problems_lists_each_problem():
     msg = nl.render_problems({"WARN: lookup failed for karakeep"})
     assert "Repository Problems" in msg
     assert "WARN: lookup failed for karakeep" in msg
+
+
+# --- Dead-path PRs: conflicting against files that no longer exist ------------------------------
+#
+# Renovate holds one branch per branchName, so a branch conflicting against a DELETED path blocks
+# the dependency it tracks from ever producing a mergeable PR — while the dashboard keeps detecting
+# the update at the live path and the PR reports only as "conflicting", which reads as ordinary
+# rebase noise. Two occurrences: #67/#42/#69 (compose templates archived by the k3s migration) and
+# #41 (roles/containers/karakeep, same cutover), the second found on 2026-08-20 with the live pin
+# 24 days behind.
+
+_GONE = ("ansible/roles/containers/karakeep/templates/docker-compose.yml.j2",)
+
+
+def test_dead_path_pr_is_its_own_bucket():
+    """Not "stuck" and not "manual" — the remedy differs: close it, do not rebase it."""
+    assert (
+        nl.classify_pr(_pr(automerge=False, conflicting=True, dead_paths=_GONE))
+        == "dead-path"
+    )
+
+
+def test_dead_path_beats_automerge_state():
+    """A dead-path PR needs a human whether or not automerge was ever enabled."""
+    for automerge in (True, False):
+        pr = _pr(automerge=automerge, conflicting=True, dead_paths=_GONE)
+        assert nl.classify_pr(pr) == "dead-path"
+
+
+def test_a_conflicting_pr_with_live_files_is_still_just_stuck():
+    """An ordinary conflict a rebase resolves must not be mislabelled as unrecoverable."""
+    pr = _pr(automerge=True, conflicting=True, dead_paths=())
+    assert nl.classify_pr(pr) == "stuck"
+    assert "deleted path" not in nl._pr_note(pr)
+
+
+def test_unlooked_up_is_not_treated_as_dead():
+    """None means "not checked" and must never be read as "nothing exists"."""
+    pr = _pr(automerge=True, conflicting=True, dead_paths=None)
+    assert nl.classify_pr(pr) == "stuck"
+
+
+def test_a_clean_pr_is_never_dead_path():
+    """The dead-path question only arises for a conflicting PR."""
+    assert (
+        nl.classify_pr(_pr(automerge=True, conflicting=False, dead_paths=()))
+        == "on-track"
+    )
+
+
+def test_dead_path_note_names_the_files_and_the_remedy():
+    """ "Conflicting" implies a rebase will fix it; here nothing will, so say so."""
+    note = nl._pr_note(_pr(conflicting=True, dead_paths=_GONE))
+    assert "deleted path" in note
+    assert "close it" in note.lower()
+    assert "docker-compose.yml.j2" in note
+
+
+def test_dead_path_prs_reach_the_digest():
+    """A bucket nothing surfaces is the same silence the check was written to end."""
+    pr = _pr(automerge=False, conflicting=True, dead_paths=_GONE)
+    assert (pr, "dead-path") in nl.actionable([pr])
