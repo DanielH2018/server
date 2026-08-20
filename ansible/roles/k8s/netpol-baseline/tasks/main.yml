@@ -47,6 +47,7 @@
       - networkpolicy-nut.yaml
       - networkpolicy-jellyfin.yaml
       - networkpolicy-netpol-sentinel.yaml
+      - networkpolicy-karakeep.yaml
       - networkpolicy-karakeep-chrome.yaml
       - networkpolicy-karakeep-meilisearch.yaml
       - networkpolicy-freshrss-feed-cache.yaml
