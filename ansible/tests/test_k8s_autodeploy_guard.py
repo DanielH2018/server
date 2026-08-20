@@ -230,8 +230,8 @@ def test_auto_deployable_roles_gate_every_deployment_they_render() -> None:
     assert not offenders, (
         "Auto-deployable role(s) with an ungated Deployment — declare the extras in "
         "manifests_extra_rollouts, or set k8s_autodeploy: false with a k8s_autodeploy_reason "
-        "in the role's defaults/main.yml (and keep gitops_deploy_k8s_autodeploy_denylist in "
-        "sync while it is still the deployer's input):\n" + "\n".join(offenders)
+        "in the role's own defaults/main.yml (the denylist is derived from that "
+        "declaration):\n" + "\n".join(offenders)
     )
 
 
@@ -263,8 +263,8 @@ def test_auto_deployable_roles_declare_a_readiness_probe() -> None:
     assert not offenders, (
         "Auto-deployable role(s) whose rollout gate proves nothing — give the Deployment(s) a "
         "readinessProbe, or set k8s_autodeploy: false with a k8s_autodeploy_reason in the "
-        "role's defaults/main.yml (and keep gitops_deploy_k8s_autodeploy_denylist in sync "
-        "while it is still the deployer's input):\n" + "\n".join(offenders)
+        "role's own defaults/main.yml (the denylist is derived from that declaration):\n"
+        + "\n".join(offenders)
     )
 
 
@@ -365,9 +365,8 @@ def test_auto_deployable_roles_do_not_skip_the_rollout_gate() -> None:
     ]
     assert not offenders, (
         "Auto-deployable role(s) with no rollout gate at all — set k8s_autodeploy: false "
-        "with a k8s_autodeploy_reason in the role's defaults/main.yml (and keep "
-        "gitops_deploy_k8s_autodeploy_denylist in sync while it is still the deployer's "
-        "input):\n" + "\n".join(offenders)
+        "with a k8s_autodeploy_reason in the role's own defaults/main.yml (the denylist is "
+        "derived from that declaration):\n" + "\n".join(offenders)
     )
 
 
