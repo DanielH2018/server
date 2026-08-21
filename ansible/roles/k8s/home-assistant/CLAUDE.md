@@ -193,3 +193,33 @@ every task in this directory whether or not it is needed.
   `roles/k8s/home-assistant`)
 - Deploy (from daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "home-assistant"`
   — or the `/ha-deploy` skill, which adds the health + loaded-config gates
+
+## Traps
+
+### The entity snapshot is blind to disappearances
+`scripts/validate_ha_config.py` resolves every entity reference against config refs ∪
+`state/external_entities.yml`. That file is a snapshot, rewritten only by an explicit
+`ha_state_model.py refresh` against live HA. So the guard catches a **typo** — a name that
+never existed — and is structurally blind to a **disappearance** — a name that stopped
+existing. Both read as "reference resolves".
+
+Found 2026-08-16: `sensor.pixel_9_pro_do_not_disturb_sensor` and
+`sensor.pixel_9_pro_sleep_duration` no longer existed on any device, yet stayed listed in the
+snapshot. Validation passed clean while three features were inert. `bedroom_notify`'s `quiet`
+collapsed, so routine alerts pushed at `default` instead of `low`; the short-night wake knee
+became unreachable; the "you slept N h" note never sent.
+
+The failure is silent by construction. `states()` on a missing entity renders `unknown`,
+which sat inside `bedroom_notify`'s own `not in ['off','unknown','unavailable']` exclusion
+list, and `| float(0)` latched a zero the curve treats as a normal night.
+
+Run `uv run python scripts/probe.py ha verify-entities` (added in PR #218) — it diffs the
+snapshot against live HA and exits non-zero on anything that vanished. Treat it as a
+post-deploy gate alongside `ha verify-automations`. When a reference does turn out dead, fix
+the config first and refresh second: `refresh` alone drops the ids from the snapshot and
+makes the validator start failing on the still-present config refs. That failure is the
+desired signal, not a regression, but it is not a fix.
+
+A defensive `| float(0)` or an `unknown` in an exclusion list converts a dead entity from a
+crash into a permanent wrong answer. When reviewing HA Jinja, treat both idioms as places a
+disappearance can hide.
