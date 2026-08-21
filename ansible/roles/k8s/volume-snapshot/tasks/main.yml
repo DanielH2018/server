@@ -1,0 +1,82 @@
+---
+# Take a Longhorn snapshot of a service's RWO volumes immediately BEFORE its manifests are
+# applied, so that a bad image bump is reversible.
+#
+# WHY. Thirteen roles here run `strategy: Recreate` against an RWO Longhorn volume. The
+# replacement pod attaches that volume and may migrate the on-disk format before anything
+# observes a fault — after which redeploying the previous image is not a rollback, because the
+# old binary can no longer read its own data. Neither `rollout status` nor the stabilisation
+# soak sees this: a schema migration is exactly what a healthy start looks like.
+#
+# WHAT THIS ROLE DOES NOT DO. It never reverts. It creates a recovery point and nothing in the
+# repo consumes it yet — reverting is slice 7b and is a manual sequence today. CLAUDE.md says so
+# plainly, and that limit is the first thing to read before relying on this.
+#
+# The caller sets:
+#   volume_snapshot_service  service name; goes in the snapshot name
+#   volume_snapshot_claims   PVC names in k8s_namespace whose volumes to snapshot
+#   volume_snapshot_retain   optional, see defaults/main.yml
+#   volume_snapshot_timeout  optional, see defaults/main.yml
+
+- name: Check that volume-snapshot was given a service and at least one claim
+  tags: [deploy]
+  # Fails here rather than letting an empty claims list read as success. A role that included
+  # this and got a silent no-op would deploy with no recovery point while the play reported the
+  # snapshot step as run — the same shape of lie k8s_no_mutate guarding exists to prevent.
+  ansible.builtin.assert:
+    that:
+      - volume_snapshot_service | default('') | length > 0
+      - volume_snapshot_claims | default([]) | length > 0
+    fail_msg: >-
+      k8s/volume-snapshot needs volume_snapshot_service and a non-empty volume_snapshot_claims.
+      Got service '{{ volume_snapshot_service | default('') }}' and
+      {{ volume_snapshot_claims | default([]) | length }} claim(s).
+    quiet: true
+
+# The deploy tag. `chdir`, NOT `git -C`: `git -C` does not override GIT_DIR, and a stray GIT_DIR
+# in the environment has already made a check in this repo operate on the wrong repository.
+#
+# No `become`. The repo checkout belongs to the deploying user, and git refuses a repository it
+# considers to have dubious ownership when read as root.
+#
+# `check_mode: false` because this is a read whose value every task below depends on. A command
+# task is SKIPPED under --check by default, and a skipped read does not fail — it fails the
+# downstream consumer several tasks later with an undefined attribute. That class cost nine
+# roles a fix already.
+- name: Resolve the deploy tag for {{ volume_snapshot_service }}
+  tags: [deploy]
+  ansible.builtin.command:
+    argv:
+      - git
+      - rev-parse
+      - --short=8
+      - HEAD
+    chdir: "{{ playbook_dir }}/.."
+  changed_when: false
+  check_mode: false
+  register: volume_snapshot_sha
+
+- name: Check that the deploy tag resolved for {{ volume_snapshot_service }}
+  tags: [deploy]
+  # The read above has no `failed_when: false`, so a git failure already aborts. What this
+  # covers is a rc-0 empty answer, which would name every snapshot `autodeploy-<svc>-` and make
+  # 7b's reconstruction ambiguous across deploys — a silently useless recovery point.
+  ansible.builtin.assert:
+    that:
+      - volume_snapshot_sha.stdout | default('') | trim | length > 0
+    fail_msg: >-
+      `git rev-parse --short=8 HEAD` in {{ playbook_dir }}/.. returned nothing, so the snapshot
+      name for {{ volume_snapshot_service }} cannot be made deterministic. Refusing to take a
+      snapshot slice 7b would not be able to find.
+    quiet: true
+
+# One include per claim rather than a loop per task: each claim resolves to its own volume, its
+# own snapshot name and its own prune set, and a per-task loop would leave every register as a
+# `.results` list that the asserts and the Jinja below would have to index in parallel. That
+# zipping is where a per-item read failure hides.
+- name: Snapshot every volume before the apply for {{ volume_snapshot_service }}
+  tags: [deploy]
+  ansible.builtin.include_tasks: claim.yml
+  loop: "{{ volume_snapshot_claims }}"
+  loop_control:
+    loop_var: volume_snapshot_claim

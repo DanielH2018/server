@@ -1,0 +1,245 @@
+---
+# One claim's worth of work: resolve its Longhorn volume, snapshot it, wait for the snapshot to
+# be usable, then prune this service's older snapshots of that same volume.
+#
+# Included per claim from main.yml, which resolves the deploy tag once for all of them.
+
+# `check_mode: false` for the same reason as the deploy tag in main.yml: a command task is
+# skipped under --check, and a skipped read fails its consumer rather than itself. This one is
+# also the only thing that proves the claim exists and is bound, which is worth having a dry run
+# actually check.
+- name: Resolve the Longhorn volume backing {{ volume_snapshot_claim }}
+  tags: [deploy]
+  # argv, not a folded `cmd:` string. `ansible.builtin.command` shlex-splits a `cmd`, so a
+  # jsonpath is only safe there while it happens to contain no spaces — and a later edit that
+  # adds a `{range ...}` turns the whole call into a silently wrong one. Slice 4 shipped exactly
+  # that and made a branch dead code for a round. argv invokes no shell and has no quoting layer
+  # to get wrong.
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - "{{ k8s_namespace }}"
+      - get
+      - pvc
+      - "{{ volume_snapshot_claim }}"
+      - -o
+      - 'jsonpath={.spec.volumeName}'
+  become: true
+  changed_when: false
+  check_mode: false
+  register: volume_snapshot_pvc
+
+- name: Check the Longhorn volume binding for {{ volume_snapshot_claim }}
+  tags: [deploy]
+  # A `get` against a Pending PVC returns rc 0 and an empty `volumeName`, so nothing above
+  # fails. Left unchecked, the Snapshot CR below would be created with `volume: ""` — which
+  # Longhorn rejects, but several tasks later and with an error naming the CR rather than the
+  # claim. Fail here, where the message can say which claim.
+  ansible.builtin.assert:
+    that:
+      - volume_snapshot_pvc.stdout | default('') | trim | length > 0
+    fail_msg: >-
+      PVC {{ k8s_namespace }}/{{ volume_snapshot_claim }} has no spec.volumeName — it does not
+      exist, or it is still Pending. {{ volume_snapshot_service }} cannot be given a recovery
+      point, so the deploy is stopping before it changes anything.
+    quiet: true
+
+- name: Name the pre-deploy snapshot for {{ volume_snapshot_claim }}
+  tags: [deploy]
+  # The name is deterministic from service + deploy tag + claim, because slice 7b's revert has
+  # to reconstruct it without being told what it was.
+  #
+  # The claim suffix is a deliberate extension of the design's `autodeploy-<svc>-<sha8>`: a
+  # service with two RWO claims (pihole has exactly that) would otherwise produce two Snapshot
+  # CRs with one name, and the second `apply` would fight the first over `spec.volume` instead
+  # of taking a second snapshot. The design's string survives verbatim as a PREFIX, so 7b's
+  # reconstruction is a prefix match rather than an equality test.
+  #
+  # `volume_snapshot_prefix` deliberately omits the tag: it is what the prune below selects on,
+  # and it must match this service's snapshots from EVERY deploy, not just this one.
+  ansible.builtin.set_fact:
+    volume_snapshot_volume: "{{ volume_snapshot_pvc.stdout | trim }}"
+    volume_snapshot_prefix: "autodeploy-{{ volume_snapshot_service }}-"
+    volume_snapshot_name: >-
+      autodeploy-{{ volume_snapshot_service }}-{{ volume_snapshot_sha.stdout | trim }}-{{ volume_snapshot_claim }}
+
+# `apply`, not `create`: re-running a deploy at the same tree is normal (a retry, a hand-run
+# after a transient failure), and `create` would fail it with AlreadyExists. Apply reports
+# "unchanged" and the existing snapshot stands as the recovery point for that tag.
+#
+# The consequence is worth knowing: the snapshot belongs to the FIRST deploy of this tag, not
+# the current one. CLAUDE.md records the case where that matters — a dirty tree, where one tag
+# names two different sets of contents.
+- name: Take a pre-deploy Longhorn snapshot of {{ volume_snapshot_claim }}
+  tags: [deploy]
+  when: not (k8s_no_mutate | bool)
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - apply
+      - -f
+      - "-"
+    stdin: |
+      apiVersion: longhorn.io/v1beta2
+      kind: Snapshot
+      metadata:
+        name: {{ volume_snapshot_name }}
+        namespace: longhorn-system
+      spec:
+        volume: {{ volume_snapshot_volume }}
+        createSnapshot: true
+  become: true
+  register: volume_snapshot_apply
+  changed_when: "'created' in volume_snapshot_apply.stdout"
+
+# Skipped rather than run under a no-mutation guard, for cronjob-gate's reason: the snapshot
+# this waits on is created by the task above, which the same guard skips. Reading a PREVIOUS
+# deploy's snapshot and calling it this run's recovery point would be a lie, and an unguarded
+# poll would burn the whole timeout on every dry run and then fail.
+#
+# `readyToUse` and `markRemoved` are read together so the failure below can tell the two apart.
+- name: Wait for the pre-deploy snapshot to become usable for {{ volume_snapshot_claim }}
+  tags: [deploy]
+  when: not (k8s_no_mutate | bool)
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - longhorn-system
+      - get
+      - snapshots.longhorn.io
+      - "{{ volume_snapshot_name }}"
+      - -o
+      - 'jsonpath={.status.readyToUse}{"|"}{.status.markRemoved}'
+  become: true
+  changed_when: false
+  register: volume_snapshot_ready
+  until: volume_snapshot_ready.stdout | default('') | split('|') | first == 'true'
+  retries: "{{ (volume_snapshot_timeout | int / 5) | round | int }}"
+  delay: 5
+  # Suppressed so the task below can explain WHY, rather than Ansible aborting on the last
+  # attempt's rc with nothing but "ran out of retries". It is not a silent swallow: the very
+  # next task fails the deploy on the same condition, and it is the only consumer of this read.
+  failed_when: false
+
+- name: Fail on a snapshot that never became usable for {{ volume_snapshot_claim }}
+  tags: [deploy]
+  when:
+    - not (k8s_no_mutate | bool)
+    - volume_snapshot_ready.stdout | default('') | split('|') | first != 'true'
+  ansible.builtin.fail:
+    msg: >-
+      The pre-deploy snapshot {{ volume_snapshot_name }} of Longhorn volume
+      {{ volume_snapshot_volume }} did not report readyToUse within
+      {{ volume_snapshot_timeout }}s (last read: '{{ volume_snapshot_ready.stdout | default('') }}',
+      as readyToUse|markRemoved).
+      {{ 'It is markRemoved, which means a snapshot for this service and deploy tag already
+      existed and is being deleted — the recovery point for this tag is gone, and reverting to
+      a markRemoved snapshot fails. Deploy from a fresh commit rather than re-running this one.'
+      if (volume_snapshot_ready.stdout | default('') | split('|') | last) == 'true'
+      else 'The volume engine did not complete the snapshot. Check
+      `kubectl -n longhorn-system get volumes.longhorn.io ' ~ volume_snapshot_volume ~ '`.' }}
+      Stopping before the apply: {{ volume_snapshot_service }} would be deployed with no way
+      back.
+
+# ------------------------------------------------------------------------------------ pruning
+#
+# Guarded as a whole, not just at the delete. Under a no-mutation run the snapshot above was
+# never taken, so a prune computed from the live list would be counting a retention window that
+# does not include this run's snapshot — and would delete a real one during a dry run.
+#
+# Filtered by volume in the jsonpath rather than by name alone. Two services can share a name
+# prefix (`valheim` and `valheim-stats`), and while they never share a volume, keying the
+# retention window on the volume makes that impossible instead of merely unlikely.
+#
+# The volume filter is one comparison because kubectl's jsonpath has no `&&` — verified
+# 2026-08-21, `unrecognized character in action: U+0026`. markRemoved and the name prefix are
+# therefore filtered in Jinja below.
+- name: List this service's live snapshots of {{ volume_snapshot_claim }}
+  tags: [deploy]
+  when: not (k8s_no_mutate | bool)
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - longhorn-system
+      - get
+      - snapshots.longhorn.io
+      - -o
+      - 'jsonpath={range .items[?(@.spec.volume=="{{ volume_snapshot_volume }}")]}{.metadata.creationTimestamp}{"|"}{.status.markRemoved}{"|"}{.metadata.name}{"\n"}{end}'
+  become: true
+  changed_when: false
+  register: volume_snapshot_existing
+
+- name: Choose which older snapshots to prune for {{ volume_snapshot_claim }}
+  tags: [deploy]
+  when: not (k8s_no_mutate | bool)
+  # markRemoved snapshots are dropped from the window rather than counted in it. A CR that
+  # survives its own delete is normal here (see CLAUDE.md), and counting three of those as the
+  # retained three would make the next pass delete live snapshots to make room.
+  #
+  # Sorted on the creationTimestamp field, newest first, so the slice below keeps the newest N
+  # and hands back the rest. `volume_snapshot_retain` is clamped to a floor of 1: the newest
+  # snapshot is never a candidate whatever the caller passes, because 7b reverts to it and a
+  # retention pass that races a rollback destroys the recovery point it exists to protect.
+  ansible.builtin.set_fact:
+    volume_snapshot_live: >-
+      {{ volume_snapshot_existing.stdout_lines | default([])
+         | map('split', '|')
+         | selectattr('1', 'equalto', 'false')
+         | selectattr('2', 'match', volume_snapshot_prefix)
+         | sort(attribute='0', reverse=true)
+         | map(attribute='2') | list }}
+    volume_snapshot_keep: "{{ [volume_snapshot_retain | int, 1] | max }}"
+
+- name: Check that the snapshot listing found this run's snapshot for {{ volume_snapshot_claim }}
+  tags: [deploy]
+  when: not (k8s_no_mutate | bool)
+  # The listing above is the input to a DELETE, so a listing that silently returns nothing —
+  # a jsonpath the shlex split tore in half, a field Longhorn renamed — must fail rather than
+  # read as "nothing to prune". The snapshot taken a few tasks up is a known member of the set,
+  # so its absence proves the read is broken and not that the volume is empty.
+  ansible.builtin.assert:
+    that:
+      - volume_snapshot_name in volume_snapshot_live
+    fail_msg: >-
+      The snapshot listing for volume {{ volume_snapshot_volume }} does not contain
+      {{ volume_snapshot_name }}, which this play just created and waited for. The listing is
+      broken, so the prune below would be deleting from a set it cannot see. Read
+      {{ volume_snapshot_live | length }} live snapshot(s) with prefix
+      '{{ volume_snapshot_prefix }}'.
+    quiet: true
+
+# `--wait=false` is not optional. A Snapshot CR carries a `longhorn.io` finalizer: the delete
+# sets `markRemoved: true` and waits for the volume to coalesce the data, and a default
+# `kubectl delete` blocks on that — measured hanging a drill for twelve minutes on 2026-08-21.
+#
+# So the CR persisting after a successful delete is the expected outcome, not a failure. A
+# snapshot whose only child is `volume-head` cannot be folded away while the volume is attached
+# at all; it clears at the next detach. Nothing here treats "the CR is gone" as success.
+#
+# `--ignore-not-found` because a concurrent prune (a second deploy of the same service, the
+# orphan reaper) may have removed it already, and re-reporting that as a deploy failure would
+# be noise.
+- name: Prune snapshots beyond the retention window for {{ volume_snapshot_claim }}
+  tags: [deploy]
+  when: not (k8s_no_mutate | bool)
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - longhorn-system
+      - delete
+      - snapshots.longhorn.io
+      - "{{ item }}"
+      - --wait=false
+      - --ignore-not-found
+  become: true
+  loop: "{{ volume_snapshot_live[volume_snapshot_keep | int :] }}"
+  changed_when: true

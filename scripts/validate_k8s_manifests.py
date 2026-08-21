@@ -87,12 +87,17 @@ HOST_VARS = ANSIBLE / "inventory" / "host_vars" / "daniel-box.yml"
 # cronjob-gate is the fifth, and renders nothing for the same reason: it creates a one-off Job
 # from the CALLER's CronJob with `kubectl create job --from=cronjob/<name>`, so the pod spec it
 # runs is the caller's rendered manifest, never a template of its own.
+# volume-snapshot is the sixth. It applies one Longhorn Snapshot CR per claim, built inline from
+# the caller's service name and PVC and piped to `kubectl apply -f -`; there is no template to
+# render standalone, and the object is per-deploy state rather than part of a service's manifest
+# set. `ansible/tests/test_volume_snapshot.py` is what checks its shape instead.
 SKIP_ROLES = {
     "manifests",
     "seed-volume",
     "image-builder",
     "rollout-drain",
     "cronjob-gate",
+    "volume-snapshot",
 }
 
 
