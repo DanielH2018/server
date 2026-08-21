@@ -133,6 +133,32 @@ def test_push_monitors_never_retry():
 RESEND_HELD: set[str] = set()
 
 
+def test_autokuma_pin_still_drops_resend_interval_on_push_monitors():
+    """The guard below asserts a field the deployed AutoKuma throws away.
+
+    In AutoKuma v2.0.0, `resendInterval` is declared on exactly three monitor variants —
+    MonitorHttp, MonitorJsonQuery and MonitorKeyword. MonitorPush has no such field, so serde
+    drops it as unknown and the value never reaches Kuma. The fleet-wide 360 introduced on
+    2026-08-16 therefore applies to the 25 http tiles and to none of the 50 push tiles: those
+    still notify once on the down transition and then stay silent, which is the exact failure
+    that change was made to fix.
+
+    Observed 2026-08-21: editing `k3s Longhorn Backup`'s resendInterval from 0 to 360 produced
+    no `Updating push:` line, while a notification-list edit on `R2 Free Tier Headroom` in the
+    same deploy did. Upstream fixed this in 2.1.0-rc.1 ("Fix resend_interval missing for most
+    monitor types, see #152") — a prerelease, so taking it is a decision about the alerting
+    spine's sidecar, not a routine bump.
+
+    This test fails when the pin moves, so whoever moves it re-reads the paragraph above and
+    checks whether the push tiles started re-notifying.
+    """
+    pinned = ROLE_DEFAULTS["autokuma_k8s_image"]
+    assert pinned.endswith(":2.0.0"), (
+        f"AutoKuma pin moved to {pinned!r} — re-verify whether resendInterval now reaches push "
+        "monitors, and update this test and the comment above it with what you found"
+    )
+
+
 def test_push_monitors_re_notify_while_still_down():
     # Kuma's `resendInterval` default is 0, meaning "notify once on the down transition, then
     # never again". Every push monitor here ran that way until 2026-08-16: the Longhorn backup
