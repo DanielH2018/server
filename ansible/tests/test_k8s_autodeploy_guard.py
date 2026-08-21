@@ -2553,9 +2553,11 @@ def _migrating_state(role: Path) -> bool:
     Measured 2026-08-21: this predicate is true for 31 roles, not the thirteen slice 7a task 3
     declared `k8s_autodeploy_snapshot_pvcs` for. `_migrating_state` is broad on purpose — it
     reads `strategy: Recreate` plus a rendered RWO claim off every role, whether or not that
-    role is auto-deployable — and `test_auto_deployable_migrating_state_roles_declare_snapshot_pvcs`
-    below stays vacuous today for a narrower reason: the 31 roles this predicate flags and the 14
-    `_auto_deployable` roles do not intersect at all, not because the two counts happen to match.
+    role is auto-deployable. Before slice 7b task 7 promoted twelve of those thirteen, the 31
+    roles this predicate flagged and the 14 `_auto_deployable` roles did not intersect at all,
+    which is what made `test_auto_deployable_migrating_state_roles_declare_snapshot_pvcs` below
+    vacuous. Task 7 makes the two sets overlap on exactly those twelve, so the guard now
+    actually exercises its assertion instead of matching an empty loop.
 
     Almost every PVC `_rendered_pvc_claims` can find in this repo hardcodes
     `accessModes: [ReadWriteOnce]` (both direct templates and k8s/seed-volume's shared one), so a
@@ -2575,23 +2577,37 @@ def test_auto_deployable_migrating_state_roles_declare_snapshot_pvcs() -> None:
     """An auto-deployable role with the Recreate + RWO-PVC shape must declare a non-empty
     `k8s_autodeploy_snapshot_pvcs`, so the pre-apply Longhorn snapshot actually runs for it.
 
-    DELIBERATELY VACUOUS TODAY, and that is stated here rather than left for a future reader to
-    discover: `_auto_deployable` is true for 14 roles (none `strategy: Recreate`, checked
-    against every one's own Deployment/DaemonSet template), `_migrating_state` is true for the
-    thirteen this task declared for, and the two sets do not intersect. No migrating-state role
-    is auto-deployable — that is precisely what slice 7b changes, and this guard exists so that
-    change can't silently reintroduce the Task 3 gap it depends on.
-    `test_snapshot_pvc_declarations_match_rendered_claims` above is the guard that actually
-    bites today; this project has repeatedly shipped guards that matched nothing by accident,
-    and the difference here is that the vacuity is deliberate and documented rather than
-    discovered.
+    WAS DELIBERATELY VACUOUS through slice 7a, and 7a's ledger carried that forward rather
+    than leaving a future reader to discover it: `_auto_deployable` was true for 14 roles (none
+    `strategy: Recreate`), `_migrating_state` was true for the thirteen slice 7a task 3 declared
+    `k8s_autodeploy_snapshot_pvcs` for, and the two sets did not intersect. Slice 7b task 7
+    promotes twelve of those thirteen (`code-server` stays denylisted, for an unrelated reason —
+    its image is an immutable `registry/…:latest` ref with no version signal to auto-deploy on),
+    so this guard now runs against a non-empty offender set for the first time and asserts it
+    stays empty: every promoted role already declares its snapshot claims, so the assertion
+    passes on real coverage rather than on nothing to check.
+    `test_snapshot_pvc_declarations_match_rendered_claims` above is the guard that actually bit
+    before this; this project has repeatedly shipped guards that matched nothing by accident,
+    and the difference here was that the vacuity used to be deliberate and documented rather
+    than discovered.
     """
-    offenders = [
+    candidates = [
         role.name
         for role in _roles()
-        if _auto_deployable(role)
-        and _migrating_state(role)
-        and not (_role_defaults(role).get("k8s_autodeploy_snapshot_pvcs") or [])
+        if _auto_deployable(role) and _migrating_state(role)
+    ]
+    assert candidates, (
+        "no auto-deployable role has the Recreate + RWO-PVC shape — this guard has gone back "
+        "to vacuous. If slice 7b's twelve promotions were reverted, that's expected and this "
+        "assertion should be relaxed back to documenting vacuity; if they weren't, "
+        "_auto_deployable or _migrating_state has drifted from what the roles actually declare."
+    )
+    offenders = [
+        role
+        for role in candidates
+        if not (
+            _role_defaults(_K8S_ROLES / role).get("k8s_autodeploy_snapshot_pvcs") or []
+        )
     ]
     assert not offenders, (
         "auto-deployable role(s) with the Recreate + RWO-PVC shape declare no "
