@@ -1,8 +1,9 @@
 # k8s/volume-snapshot — a pre-apply Longhorn snapshot for a `Recreate` + RWO role
 
-This role deploys nothing. A caller includes it immediately **before** `roles/k8s/manifests`, and
-it takes a Longhorn snapshot of each of the caller's RWO volumes, waits until the snapshot is
-usable, then prunes that service's older snapshots of the same volume.
+This role deploys nothing. `roles/k8s/manifests` includes it immediately **before**
+`Apply manifests for {{ manifests_service }}`, and it takes a Longhorn snapshot of each of the
+caller's RWO volumes, waits until the snapshot is usable, then prunes that service's older
+snapshots of the same volume.
 
 **Read this first: the role gives you a recovery point and nothing that consumes it.** There is
 no revert here, and no revert anywhere else in the repo. Reverting is slice 7b, and until that
@@ -11,17 +12,30 @@ section of `docs/superpowers/specs/2026-08-20-k8s-autodeploy-coverage-design.md`
 role detects a bad deploy, alerts on one, or rolls anything back. It makes the damage reversible
 by hand; it does not reverse it.
 
+## How a role opts in
+
+A `Recreate` + RWO role does **not** include this role itself. It declares
+`k8s_autodeploy_snapshot_pvcs` in its own `defaults/main.yml`, and the shared include in
+`roles/k8s/manifests/tasks/main.yml` picks it up — role defaults are in scope for an included
+role, so nothing needs plumbing through the call site:
+
 ```yaml
-- name: Snapshot the widget volume before applying
-  tags: [deploy]
-  ansible.builtin.include_role:
-    name: k8s/volume-snapshot
-  vars:
-    volume_snapshot_service: widget           # goes in the snapshot name
-    volume_snapshot_claims: [widget-config]   # PVC names in k8s_namespace
-    # volume_snapshot_retain: 3               # defaults in defaults/main.yml
-    # volume_snapshot_timeout: 120            # seconds; defaults in defaults/main.yml
+# roles/k8s/widget/defaults/main.yml
+k8s_autodeploy_snapshot_pvcs:
+  - widget-config   # PVC name(s) in k8s_namespace
 ```
+
+A role that never declares `k8s_autodeploy_snapshot_pvcs` — every role until slice 7a task 3 opts
+one in — gets `| default([]) | length == 0`, and the include in `roles/k8s/manifests` never runs:
+no extra kubectl call, no extra fact, nothing.
+
+`roles/k8s/manifests` passes through only `volume_snapshot_claims` and `volume_snapshot_service`;
+`volume_snapshot_retain` and `volume_snapshot_timeout` are not wired to a caller override at that
+call site. Whether a caller could still change them by declaring same-named defaults of its own
+is unverified — two roles' `defaults/main.yml` setting the same variable name is not a pattern
+tested here — so don't rely on it. They stay at this role's own defaults
+(`volume_snapshot_retain: 3`, `volume_snapshot_timeout: 120`) until a caller genuinely needs
+something else, at which point the call site is where that gets added.
 
 ## Why a `Recreate` + RWO role needs this
 
@@ -96,7 +110,8 @@ changed the workload.
 |---|---|
 | a claim is missing or still `Pending` | **fails** — named by claim, before anything is applied |
 | `git rev-parse` returns nothing | **fails** — an undated name is one 7b cannot find |
-| the snapshot never reports `readyToUse` | **fails** — this is the recovery point the deploy is about to need |
+| the volume is detached (not `attached`) when the snapshot never reports `readyToUse` | **skips this claim and warns loudly** — see below |
+| the snapshot never reports `readyToUse` for any other reason (`markRemoved`, or attached and stuck) | **fails** — this is the recovery point the deploy is about to need |
 | the snapshot listing does not contain this run's own snapshot | **fails** — the read is broken, so the prune would be deleting from a set it cannot see |
 | a delete in the prune returns non-zero | **fails** — see below |
 
@@ -107,18 +122,26 @@ block beneath it against `filesystem trim` — the mechanism
 the prune runs before the apply, failing costs a deploy that has not started rather than a
 half-deployed service.
 
-## A detached volume cannot be snapshotted at all
+## A detached volume cannot be snapshotted at all, and that is not fatal
 
 A Longhorn snapshot needs a running engine, and a workload scaled to zero has none. Two records
 of the same constraint: `longhorn-reap-orphan-snapshots.sh.j2` refuses to reap on a detached
 volume ("no engine to purge it", observed on `terraria-config` on 2026-08-16), and the slice 7
 drill got a `500` reverting a plainly detached volume for the same reason.
 
-So including this role in a service that may be scaled to zero fails that service's deploy after
-`volume_snapshot_timeout` seconds. The failure message names the detached case explicitly rather
-than leaving it as "the engine did not complete the snapshot". **Whoever wires a caller must
-check this**, because scaled-to-zero is a normal state to come back from and the deploy that
-brings a service back up is exactly the one that would hit it.
+**Ruling from slice 7a task 2: this skips the claim and warns, rather than failing the deploy.**
+The realistic way a `Recreate` + RWO volume is detached at snapshot time is that an operator
+deliberately scaled the service to zero — failing that deploy would block a legitimate action for
+a service that is already down. After the wait times out, `claim.yml` reads the volume's own
+`status.state` and skips only when it is not `attached`; any other unready cause (a `markRemoved`
+name collision, or a stuck engine on a volume that *is* attached) still fails the deploy.
+
+The gap this leaves is real and stays visible on purpose: the apply that follows may scale the
+workload back up, the new pod can migrate the on-disk format, and there is then no recovery point
+behind it. The skip task's `ansible.builtin.debug` warning names the service, the claim, and that
+the deploy is proceeding unprotected — a silent skip would defeat the point of the slice. Slice 7b
+closes the gap for real: it builds maintenance-mode attach for the revert anyway, and the same
+machinery can attach a detached volume long enough to snapshot it first.
 
 ## The guard is `k8s_no_mutate`, and it covers the prune too
 

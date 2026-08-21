@@ -47,6 +47,7 @@ _ROLE = Path(__file__).resolve().parents[2] / "ansible/roles/k8s/volume-snapshot
 _CLAIM = _ROLE / "tasks/claim.yml"
 _MAIN = _ROLE / "tasks/main.yml"
 _DEFAULTS = _ROLE / "defaults/main.yml"
+_MANIFESTS = _ROLE.parent / "manifests/tasks/main.yml"
 
 _GUARD = "not (k8s_no_mutate | bool)"
 
@@ -271,6 +272,108 @@ def test_two_claims_of_one_service_get_two_names() -> None:
     assert len(names) == 2
 
 
+# ------------------------------------------------------------------------- the detached-volume skip
+
+
+def _detached_expression() -> str:
+    return _named(
+        _CLAIM, "Decide whether this claim's unready snapshot is a detached-volume case"
+    )["ansible.builtin.set_fact"]["volume_snapshot_detached"]
+
+
+def _detached(ready_stdout: str, state_stdout: str) -> bool:
+    return bool(
+        _render(
+            _detached_expression(),
+            volume_snapshot_ready={"stdout": ready_stdout},
+            volume_snapshot_volume_state={"stdout": state_stdout},
+        )
+    )
+
+
+def test_a_ready_snapshot_is_never_the_detached_case() -> None:
+    assert _detached("true|false", "detached") is False
+
+
+def test_a_markremoved_snapshot_is_not_the_detached_case() -> None:
+    """markRemoved means a name collision with a prior deploy's snapshot, not a missing
+    engine — it must still fail the deploy rather than being waved through as a skip."""
+    assert _detached("false|true", "detached") is False
+
+
+def test_an_unready_snapshot_on_an_attached_volume_is_not_the_detached_case() -> None:
+    """A stuck engine on an attached volume is a genuine failure, not the scaled-to-zero case
+    the skip exists for."""
+    assert _detached("false|false", "attached") is False
+
+
+def test_an_unready_snapshot_on_a_detached_volume_is_the_detached_case() -> None:
+    assert _detached("false|false", "detached") is True
+
+
+def test_an_unread_volume_state_is_treated_as_not_attached() -> None:
+    """The volume-state read only runs once the wait has already failed. An empty read (rc!=0,
+    or a jsonpath that returned nothing) must not be read as 'attached' and fall through to
+    failing the deploy instead of the named skip."""
+    assert _detached("false|false", "") is True
+
+
+def test_the_warn_task_fires_only_for_the_detached_case() -> None:
+    when = str(
+        _named(_CLAIM, "Warn and skip the snapshot for a detached volume").get(
+            "when", ""
+        )
+    )
+    assert _GUARD in when
+    assert "volume_snapshot_detached | bool" in when
+
+
+def test_the_warning_names_the_service_the_claim_and_that_the_deploy_is_unprotected() -> (
+    None
+):
+    """A silent skip would defeat the point of the slice — the recovery point's absence has to
+    be as visible as its presence."""
+    msg = _named(_CLAIM, "Warn and skip the snapshot for a detached volume")[
+        "ansible.builtin.debug"
+    ]["msg"]
+    assert "{{ volume_snapshot_service }}" in msg
+    assert "{{ volume_snapshot_claim }}" in msg
+    assert "UNPROTECTED" in msg
+
+
+def test_the_fail_task_does_not_fire_for_the_detached_case() -> None:
+    when = str(
+        _named(_CLAIM, "Fail on a snapshot that never became usable").get("when", "")
+    )
+    assert "not (volume_snapshot_detached | bool)" in when
+
+
+def test_the_prune_block_skips_a_detached_claim_too() -> None:
+    """The snapshot for a detached claim was never taken, so the retention listing has nothing
+    of this run's to find. Running the prune block anyway would fail the 'found this run's
+    snapshot' assert for a claim that was correctly, deliberately skipped."""
+    for fragment in (
+        "List this service's live snapshots",
+        "Choose which older snapshots to prune",
+        "Check that the snapshot listing found this run's snapshot",
+        "Prune snapshots beyond the retention window",
+    ):
+        when = str(_named(_CLAIM, fragment).get("when", ""))
+        assert _GUARD in when, fragment
+        assert "not (volume_snapshot_detached | bool)" in when, fragment
+
+
+def test_the_prune_loop_slices_cleanly_at_the_defaulted_floor_values() -> None:
+    """Pins the slice syntax against the values `default([])`/`default(1)` produce for a claim
+    skipped as detached, where `volume_snapshot_live`/`volume_snapshot_keep` are never set (the
+    'Choose which older snapshots' task that sets them shares this task's guard). Ansible's own
+    `default` filter — which only coalesces its own Undefined marker, not a bare Jinja one — is
+    not exercised through this harness's plain NativeEnvironment, so this pins the syntax it
+    defaults into rather than the coalescing itself."""
+    loop_expr = _named(_CLAIM, "Prune snapshots beyond the retention window")["loop"]
+    assert _render(loop_expr, volume_snapshot_live=[], volume_snapshot_keep=1) == []
+
+
 # ------------------------------------------------------------------------------- the plumbing
 
 
@@ -350,6 +453,51 @@ def test_the_role_declares_an_autodeploy_stance() -> None:
     defaults = yaml.safe_load(_DEFAULTS.read_text())
     assert defaults["k8s_autodeploy"] is False
     assert defaults["k8s_autodeploy_reason"].strip()
+
+
+# ------------------------------------------------------------------------ the manifests wiring
+#
+# This role's whole value is a snapshot taken BEFORE the apply that can destroy what it protects.
+# A snapshot moved after the apply would still create a CR, still pass readiness, still prune,
+# and every test above would keep passing — "wrong without anyone noticing" is exactly the shape
+# Task 1's `test_the_snapshot_name_starts_with_the_prefix_the_prune_selects_on` was written to
+# catch for the name/prefix coupling, and this is the same trap for the include's position.
+
+
+def _manifests_tasks() -> list[dict]:
+    return yaml.safe_load(_MANIFESTS.read_text()) or []
+
+
+def _manifests_index(fragment: str) -> int:
+    for i, task in enumerate(_manifests_tasks()):
+        if fragment in str(task.get("name", "")):
+            return i
+    raise AssertionError(f"no task in manifests/tasks/main.yml named {fragment!r}")
+
+
+def test_the_snapshot_include_runs_before_the_apply() -> None:
+    assert _manifests_index("Snapshot the stateful volumes") < _manifests_index(
+        "Apply manifests"
+    )
+
+
+def test_the_snapshot_include_is_inert_for_a_role_that_never_opts_in() -> None:
+    """`k8s_autodeploy_snapshot_pvcs` is what makes the include a no-op for the ~50 services
+    that do not declare it — this is the actual guarantee, not the `grep` that finds zero
+    declarations today. Task 3 adding declarations must not be able to remove this gate."""
+    task = _manifests_tasks()[_manifests_index("Snapshot the stateful volumes")]
+    when = str(task.get("when", ""))
+    assert _GUARD in when
+    assert "k8s_autodeploy_snapshot_pvcs | default([])" in when
+
+
+def test_the_snapshot_include_calls_the_right_role_with_the_right_vars() -> None:
+    task = _manifests_tasks()[_manifests_index("Snapshot the stateful volumes")]
+    include = task["ansible.builtin.include_role"]
+    assert include["name"] == "k8s/volume-snapshot"
+    call_vars = task["vars"]
+    assert call_vars["volume_snapshot_claims"] == "{{ k8s_autodeploy_snapshot_pvcs }}"
+    assert "manifests_service" in call_vars["volume_snapshot_service"]
 
 
 # --------------------------------------------------------------------------------- transport

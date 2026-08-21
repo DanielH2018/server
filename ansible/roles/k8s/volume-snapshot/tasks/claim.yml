@@ -121,32 +121,107 @@
   until: volume_snapshot_ready.stdout | default('') | split('|') | first == 'true'
   retries: "{{ (volume_snapshot_timeout | int / 5) | round | int }}"
   delay: 5
-  # Suppressed so the task below can explain WHY, rather than Ansible aborting on the last
-  # attempt's rc with nothing but "ran out of retries". It is not a silent swallow: the very
-  # next task fails the deploy on the same condition, and it is the only consumer of this read.
+  # Suppressed so the tasks below can explain WHY, rather than Ansible aborting on the last
+  # attempt's rc with nothing but "ran out of retries". It is not a silent swallow: one of the
+  # next two tasks always resolves the same condition, either into a fail or a named skip.
   failed_when: false
+
+# Only read when the wait above did not succeed — this is what turns "engine did not complete
+# the snapshot" from a guess into a fact the decision below can act on.
+#
+# `check_mode: false` and `failed_when: false` for the same reason as every other read here: a
+# skipped or errored read must not silently starve the decision task's condition, which is
+# evaluated whether this task ran or not (`| default('')`) and needs the real answer when it did.
+- name: Read the Longhorn volume state for {{ volume_snapshot_claim }}
+  tags: [deploy]
+  when:
+    - not (k8s_no_mutate | bool)
+    - volume_snapshot_ready.stdout | default('') | split('|') | first != 'true'
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - longhorn-system
+      - get
+      - volumes.longhorn.io
+      - "{{ volume_snapshot_volume }}"
+      - -o
+      - 'jsonpath={.status.state}'
+  become: true
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  register: volume_snapshot_volume_state
+
+# Computed unconditionally (whenever mutation is allowed at all), not only when the wait
+# failed, and always from THIS claim's own `volume_snapshot_ready` — never `default(false)`
+# fallback to a stale value. `include_tasks: claim.yml` runs this file once per claim in one
+# loop, and `set_fact` values are host facts that persist across loop iterations; if this task
+# were skipped whenever the wait already succeeded, a later claim that also succeeds would
+# inherit an EARLIER claim's `volume_snapshot_detached` verdict instead of getting its own. The
+# leading `first == 'true'` clause below makes a stale `volume_snapshot_volume_state` from a
+# previous claim harmless too: when this claim's own snapshot is ready, the expression is false
+# on that clause alone regardless of what an earlier claim's volume-state read left behind.
+- name: Decide whether this claim's unready snapshot is a detached-volume case for {{ volume_snapshot_claim }}
+  tags: [deploy]
+  when: not (k8s_no_mutate | bool)
+  ansible.builtin.set_fact:
+    volume_snapshot_detached: >-
+      {{ (volume_snapshot_ready.stdout | default('') | split('|') | first) != 'true'
+         and (volume_snapshot_ready.stdout | default('') | split('|') | last) != 'true'
+         and (volume_snapshot_volume_state.stdout | default('') | trim) != 'attached' }}
+
+# Ruling from slice 7a task 2: a detached volume SKIPS its snapshot and warns, rather than
+# failing the deploy. The realistic way a `Recreate` + RWO volume is detached at snapshot time
+# is that an operator deliberately scaled the service to zero — failing that deploy would block
+# a legitimate action for a service that is already down.
+#
+# The gap this leaves is real and must stay visible rather than glossed: the apply below may
+# set replicas back above zero, the pod starts, and it can migrate the on-disk format with no
+# recovery point behind it. A silent skip would defeat the point of the slice, so this warns by
+# name — service, claim, and the fact that the deploy proceeds unprotected — rather than only
+# in a debug log nobody reads. Slice 7b closes the gap for real: it builds maintenance-mode
+# attach for the revert anyway, and the same machinery can attach a detached volume long enough
+# to snapshot it. Pulling that forward here is the whole reason the slice was split.
+- name: Warn and skip the snapshot for a detached volume backing {{ volume_snapshot_claim }}
+  tags: [deploy]
+  when:
+    - not (k8s_no_mutate | bool)
+    - volume_snapshot_detached | bool
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: {{ volume_snapshot_service }}'s claim {{ volume_snapshot_claim }} (Longhorn
+      volume {{ volume_snapshot_volume }}) is not attached
+      (status.state='{{ volume_snapshot_volume_state.stdout | default('') | trim or 'unknown' }}'),
+      so Longhorn has no running engine to snapshot it. Skipping the pre-deploy snapshot for
+      this claim and continuing the deploy — THIS DEPLOY IS UNPROTECTED for
+      {{ volume_snapshot_claim }}: if the apply scales {{ volume_snapshot_service }} back up and
+      the new pod migrates its on-disk format, there is no recovery point to revert to. Expected
+      when the workload was deliberately scaled to zero; if it was not, investigate before
+      trusting a revert of {{ volume_snapshot_claim }}.
 
 - name: Fail on a snapshot that never became usable for {{ volume_snapshot_claim }}
   tags: [deploy]
   when:
     - not (k8s_no_mutate | bool)
     - volume_snapshot_ready.stdout | default('') | split('|') | first != 'true'
+    - not (volume_snapshot_detached | bool)
   ansible.builtin.fail:
     msg: >-
       The pre-deploy snapshot {{ volume_snapshot_name }} of Longhorn volume
       {{ volume_snapshot_volume }} did not report readyToUse within
       {{ volume_snapshot_timeout }}s (last read: '{{ volume_snapshot_ready.stdout | default('') }}',
-      as readyToUse|markRemoved).
+      as readyToUse|markRemoved; volume state:
+      '{{ volume_snapshot_volume_state.stdout | default('') | trim or 'unknown' }}').
       {{ 'It is markRemoved, which means a snapshot for this service and deploy tag already
       existed and is being deleted — the recovery point for this tag is gone, and reverting to
       a markRemoved snapshot fails. Deploy from a fresh commit rather than re-running this one.'
       if (volume_snapshot_ready.stdout | default('') | split('|') | last) == 'true'
-      else 'The volume engine did not complete the snapshot. The likeliest cause is a DETACHED
-      volume: a workload scaled to zero has no running engine, and a snapshot of it cannot be
-      taken at all — the same constraint that stops longhorn-reap-orphan-snapshots.sh reaping
-      on a detached volume. Check `kubectl -n longhorn-system get volumes.longhorn.io '
-      ~ volume_snapshot_volume ~ ' -o jsonpath={.status.state}`; anything other than `attached`
-      is that case, and scaling the workload up is what fixes it.' }}
+      else 'The volume is attached and the engine did not complete the snapshot in time — this
+      is not the detached-volume case (that one skips and warns instead of failing here), so it
+      is a genuine stuck engine or an overloaded cluster. Retrying the deploy is reasonable;
+      raising volume_snapshot_timeout is the fix if it keeps happening.' }}
       Stopping before the apply: {{ volume_snapshot_service }} would be deployed with no way
       back.
 
@@ -163,9 +238,15 @@
 # The volume filter is one comparison because kubectl's jsonpath has no `&&` — verified
 # 2026-08-21, `unrecognized character in action: U+0026`. markRemoved and the name prefix are
 # therefore filtered in Jinja below.
+#
+# Also skipped for a detached-volume claim: this claim's snapshot was never taken, so there is
+# nothing of this run's to find in the listing, and the "found this run's snapshot" assert a
+# few tasks down would fail for a claim that was deliberately, correctly skipped.
 - name: List this service's live snapshots of {{ volume_snapshot_claim }}
   tags: [deploy]
-  when: not (k8s_no_mutate | bool)
+  when:
+    - not (k8s_no_mutate | bool)
+    - not (volume_snapshot_detached | bool)
   ansible.builtin.command:
     argv:
       - k3s
@@ -182,7 +263,9 @@
 
 - name: Choose which older snapshots to prune for {{ volume_snapshot_claim }}
   tags: [deploy]
-  when: not (k8s_no_mutate | bool)
+  when:
+    - not (k8s_no_mutate | bool)
+    - not (volume_snapshot_detached | bool)
   # markRemoved snapshots are dropped from the window rather than counted in it. A CR that
   # survives its own delete is normal here (see CLAUDE.md), and counting three of those as the
   # retained three would make the next pass delete live snapshots to make room.
@@ -203,7 +286,9 @@
 
 - name: Check that the snapshot listing found this run's snapshot for {{ volume_snapshot_claim }}
   tags: [deploy]
-  when: not (k8s_no_mutate | bool)
+  when:
+    - not (k8s_no_mutate | bool)
+    - not (volume_snapshot_detached | bool)
   # The listing above is the input to a DELETE, so a listing that silently returns nothing —
   # a jsonpath the shlex split tore in half, a field Longhorn renamed — must fail rather than
   # read as "nothing to prune". The snapshot taken a few tasks up is a known member of the set,
@@ -232,7 +317,9 @@
 # be noise.
 - name: Prune snapshots beyond the retention window for {{ volume_snapshot_claim }}
   tags: [deploy]
-  when: not (k8s_no_mutate | bool)
+  when:
+    - not (k8s_no_mutate | bool)
+    - not (volume_snapshot_detached | bool)
   ansible.builtin.command:
     argv:
       - k3s
@@ -245,5 +332,14 @@
       - --wait=false
       - --ignore-not-found
   become: true
-  loop: "{{ volume_snapshot_live[volume_snapshot_keep | int :] }}"
+  # Defensive `default()` on both sides of the slice, for a detached-volume claim where
+  # `volume_snapshot_live`/`volume_snapshot_keep` are never set (the "Choose which older
+  # snapshots" task above shares this task's `volume_snapshot_detached` guard, so it is skipped
+  # too). Verified 2026-08-21: when a task's `when:` does not reference `item` and evaluates
+  # false, Ansible skips it without templating `loop:` at all, so this is not observed to be
+  # reachable today — but relying on that rather than stating it costs nothing here, and it is
+  # exactly the "registered var from a skipped task" trap this repo has hit before. `default([])`
+  # on an empty list slices to `[]` at any start index, which is why `default(1)` on the keep
+  # side is only for symmetry, not because a bad value would otherwise matter.
+  loop: "{{ (volume_snapshot_live | default([]))[(volume_snapshot_keep | default(1) | int) :] }}"
   changed_when: true

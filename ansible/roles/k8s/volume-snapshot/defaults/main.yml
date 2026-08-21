@@ -13,7 +13,10 @@ volume_snapshot_retain: 3
 # good deploy.
 #
 # The wait is deliberately NOT best-effort: a snapshot that never becomes ready fails the
-# deploy, because it is the recovery point the deploy is about to need.
+# deploy, because it is the recovery point the deploy is about to need — with one exception.
+# A detached volume (an operator's own workload scaled to zero) cannot be snapshotted at all,
+# and that case skips with a loud warning instead of failing. See claim.yml and this role's
+# CLAUDE.md ("A detached volume cannot be snapshotted at all, and that is not fatal").
 volume_snapshot_timeout: 120
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
