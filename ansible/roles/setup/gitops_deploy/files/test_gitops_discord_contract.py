@@ -21,6 +21,8 @@ import ast
 import pathlib
 import re
 
+import yaml
+
 _SRC = pathlib.Path(__file__).with_name("gitops_deploy.py")
 
 
@@ -403,4 +405,31 @@ def test_deploy_timeout_budget_survives_max_flock_contention():
         f"= {budget}s must fit inside TimeoutStartSec {timeout_start}s, or a slow health-gate under "
         f"max flock contention gets SIGTERMed mid-rollback and the bad commit is stranded live "
         f"(see 1ba4fbb2)."
+    )
+
+
+# --- k8s deploy-timeout budget arithmetic (task 6b) ---------------------------
+# A second, independent invariant from the Docker one above: on the k8s path, a failed forward
+# deploy and its rollback redeploy run SEQUENTIALLY inside one systemd unit activation, each
+# bounded by its own K8S_DEPLOY_TIMEOUT_S / K8S_ROLLBACK_TIMEOUT_S rather than by RUN_BUDGET_S.
+# Both values are Jinja references in config.env.j2, not literals, so this reads their source —
+# defaults/main.yml — instead of the rendered template.
+
+_DEFAULTS = pathlib.Path(__file__).parents[1] / "defaults" / "main.yml"
+
+
+def test_k8s_deploy_timeout_budget_survives_max_flock_contention():
+    unit = (_TEMPLATES / "gitops-deploy.service.j2").read_text()
+    defaults = yaml.safe_load(_DEFAULTS.read_text())
+    flock_wait = int(_search1(r"^ExecStart=.*?flock\s+-w\s+(\d+)", unit))
+    forward_timeout = int(defaults["gitops_deploy_k8s_timeout_s"])
+    rollback_timeout = int(defaults["gitops_deploy_k8s_rollback_timeout_s"])
+    timeout_start = _systemd_seconds(_search1(r"^TimeoutStartSec=(\S+)", unit))
+    budget = flock_wait + forward_timeout + rollback_timeout
+    assert budget <= timeout_start, (
+        f"flock -w {flock_wait} + K8S_DEPLOY_TIMEOUT_S {forward_timeout} + "
+        f"K8S_ROLLBACK_TIMEOUT_S {rollback_timeout} = {budget}s must fit inside TimeoutStartSec "
+        f"{timeout_start}s, or a stalled forward deploy followed by a stalled rollback gets "
+        f"SIGTERMed mid-rollback, stranding the bad commit live with the volume revert possibly "
+        f"half-done (task 6b)."
     )

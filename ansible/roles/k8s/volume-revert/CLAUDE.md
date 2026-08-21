@@ -183,25 +183,41 @@ on an immutable image tag. The media-adjacent volumes — `jellyfin-config`, the
 grace-period finding is what makes 4Gi a reasonable extrapolation rather than a guess, but it
 is still an extrapolation.
 
-### What the numbers say about the defaults
+### What the numbers say about the defaults — sized, task 6b
 
 Worst case per claim is `3 x volume_revert_state_timeout + 3 x volume_revert_api_timeout`,
-because the role makes three state waits and three API calls. At the shipped 180/60 that is
-**720s per claim, 1440s for a two-claim service** — and `tdarr` has two claims and is inside
-slice 7's promotion set, so this is not hypothetical. `K8S_DEPLOY_TIMEOUT_S` is 900s.
+because the role makes three state waits and three API calls. At the original 180/60 that was
+**720s per claim, 1440s for a two-claim service** — and `tdarr`/`code-server` each hold two
+claims and are inside slice 7's promotion set, so this was not hypothetical.
 
-Against the measurements: the worst state wait observed was 36.27s and the worst API call
-0.41s. Recommended, with the headroom each keeps:
+Task 4's manifests-level rehearsal (Phase 4 of the task-6 drill) is the number this sizing uses,
+because it is the path production actually takes: a rollback redeploy pays the snapshot wait
+AND the full revert cycle, not the revert alone. That run measured the revert's detach wait at
+**40.80s** (worst observed state wait) and every API call under **0.41s**. Set, with the
+headroom each keeps:
 
-- `volume_revert_state_timeout: 180 -> 90` — 2.5x the worst observed wait, and still 3x the
+- `volume_revert_state_timeout: 180 -> 90` — ~2.2x the worst observed wait, and still ~3x the
   fixed 30s grace period that dominates it.
 - `volume_revert_api_timeout: 60 -> 30` — ~70x the worst observed call. These three calls
   update CRs and return; they do not wait for the state change.
 
-That puts one claim at 360s and `tdarr` at 720s, inside the 900s budget — but only just, and
-the rollback redeploy still has to snapshot, apply and roll out inside what is left. Sizing the
-rollback's own budget is task 4's call, not this file's; these two numbers are the input it was
-waiting for.
+That puts one claim's worst case at 360s and `tdarr`/`code-server`'s at 720s. The **realistic**
+case is much smaller: the drill's own two-claim-shaped numbers (one claim's ~47s manifests-level
+cycle) put a real two-claim revert closer to **~150s**, not 720s — the 720s figure is a ceiling
+sized for a stalled Longhorn API, not the expected run.
+
+`gitops_deploy_k8s_rollback_timeout_s` (`K8S_ROLLBACK_TIMEOUT_S`) stays at **900s**, its own
+budget rather than sharing the forward deploy's. That covers the 720s worst-case revert with
+180s left for the rest of the SAME playbook run — the pre-revert snapshot wait and the
+post-apply rollout — at their REALISTIC cost (the drill measured ~38s combined for one claim),
+not at their own worst case. **It is not proven to survive every one of those steps also
+hitting its own ceiling in the same run** — a two-claim service's snapshot phase alone can reach
+240s (`volume_snapshot_timeout` x 2 claims), which alone exceeds the 180s left after a worst-case
+revert. That compound case (snapshot AND revert AND rollout all independently stalling at once)
+is an accepted residual risk, not a proven-safe one — see
+`ansible/roles/setup/gitops_deploy/CLAUDE.md`'s rollback-timeout section. The unit's
+`TimeoutStartSec` was raised from 25min to 35min to fit `K8S_DEPLOY_TIMEOUT_S` (900s, the
+forward attempt) plus `K8S_ROLLBACK_TIMEOUT_S` (900s) plus the flock wait.
 
 ## Things measured rather than assumed
 

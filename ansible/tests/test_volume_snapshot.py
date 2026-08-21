@@ -641,8 +641,8 @@ def test_the_detach_after_maintenance_runs_whenever_the_attach_succeeded_regardl
 ):
     """A snapshot that never became ready after a successful attach must not leave the volume
     attached — a stale attachment ticket costs the NEXT deploy's own maintenance-mode attach a
-    full 180s state wait before it fails, naming the wrong cause. So the detach's `when:` must
-    depend on the attach outcome alone, never on `volume_snapshot_ready`."""
+    full `volume_snapshot_state_timeout` wait before it fails, naming the wrong cause. So the
+    detach's `when:` must depend on the attach outcome alone, never on `volume_snapshot_ready`."""
     when = _named_when("Detach")
     assert _GUARD in when
     assert "volume_snapshot_maintenance_attached | bool" in when

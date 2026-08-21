@@ -342,8 +342,53 @@ against the working tree AFTER `git reset --hard local`, matching exactly what
 The rollback redeploy also reverts each claimed volume to its pre-deploy snapshot
 (`k8s/volume-revert`), which is strictly more work than the forward deploy — per claim, worst
 case is 3 state waits + 3 API calls against Longhorn, and `tdarr`/`code-server` each hold two
-claims. It gets its own timeout rather than sharing `K8S_DEPLOY_TIMEOUT_S`/900s, defaulted to
-that same 900s so this changes no behaviour today. **The default is UNSIZED** — nothing has
-measured a real revert cycle against it. Raise it only against Task 6's drill measurement, and
-check the raised value still fits inside the unit's `TimeoutStartSec=25min` alongside the
-forward attempt it shares the ceiling with.
+claims. It gets its own timeout rather than sharing `K8S_DEPLOY_TIMEOUT_S`, and stays at 900s
+(**sized, task 6b**, against Task 6's drill measurement — see
+`ansible/roles/k8s/volume-revert/CLAUDE.md`). A two-claim service's worst-case REVERT is 720s,
+leaving 180s; the realistic case is far smaller — a two-claim revert measured close to ~150s.
+
+**What the 900s figure does and does not cover.** The same `ansible-playbook` run this timeout
+bounds also pays a per-claim pre-revert snapshot wait (`volume_snapshot_timeout`, 120s) and a
+post-apply rollout wait, neither of which is `k8s/volume-revert`'s own cost. The 180s left after
+a worst-case revert covers those at their REALISTIC cost (the drill measured ~38s combined for
+one claim) — it does **not** cover a two-claim service's snapshot phase also hitting its own
+ceiling (2 x 120s = 240s alone exceeds the 180s left). A run where the snapshot wait, the revert,
+AND the rollout wait all independently stall to their own worst case in the same tick is not
+proven to fit inside 900s. This is an accepted residual risk, not a proven-safe one: closing it
+would mean raising `gitops_deploy_k8s_rollback_timeout_s` well past 900s and `TimeoutStartSec`
+past 35min, which task 6b did not do because a THREE-independent-mechanism simultaneous stall
+(snapshot readiness, Longhorn revert, and rollout, all in the same run) is a materially rarer tail
+than the single-mechanism worst case the 900s figure is actually sized against — the same
+realistic-over-worst-case-stacking judgment already made for `gitops_deploy_k8s_timeout_s` (see
+its own comment: ~2.5min/service, not each service's independent worst case).
+
+**The forward attempt and the rollback run sequentially, not concurrently, inside one systemd
+unit activation.** A failed forward deploy can spend its full `K8S_DEPLOY_TIMEOUT_S` (900s)
+before `gitops_deploy.py` gives up on it; the rollback that follows can then spend its full
+`K8S_ROLLBACK_TIMEOUT_S` (900s). `gitops-deploy.service.j2`'s `TimeoutStartSec` was raised from
+25min to 35min (task 6b) so 180s max flock wait + 900 + 900 = 1980s fits with margin — see that
+template's own arithmetic comment for both the Docker-path and k8s-path budgets it now covers.
+
+**Consequence for the operator: a pathological double-timeout run can overrun the 30-minute
+timer tick — verified live against the real unit, not inferred from the man page alone.**
+`systemctl show gitops-deploy.service -p ActiveEnterTimestamp` on daniel-box returns EMPTY: a
+`Type=oneshot` service with `RemainAfterExit=no` never enters the "active" state at all — it
+goes inactive → activating → inactive directly. `systemctl show gitops-deploy.timer -p
+LastTriggerUSec` matches this unit's own `ExecMainStartTimestamp` from the same run — so the
+30-min `OnUnitActiveSec` interval is measured from when the timer last STARTED the unit, not
+from when it finished. (An earlier draft of this note claimed the opposite — that the interval
+resets from completion — which this measurement disproves.)
+
+What that means for an overrunning run: the next scheduled elapse (also start-time-based, so it
+recurs every ~30min through the overrun) finds the unit already `activating` and, per `man
+systemd.timer`, "it is not restarted, but simply left running. There is no concept of spawning
+new service instances in this case" — the mechanism is systemd coalescing the new start job into
+the one already in flight, the same behavior whether the man page's literal wording is `active`
+or `activating`. **Proven: an overrun never produces a second, overlapping, or concurrent run.**
+Not verified here: whether each absorbed tick still advances `LastTriggerUSec` (so the next
+elapse keeps recomputing every ~30min throughout the overrun) or whether the schedule is left
+alone until the run finishes — either way, no second execution happens, so the distinction
+doesn't change the safety property, only how quickly the first tick after a long overrun lands.
+Belt and suspenders regardless: `ExecStart` sits behind `flock -w 180`, so even a hypothetical
+second invocation would block up to 180s on the lock and then fail cleanly (exit 1, alerting via
+`OnFailure`) rather than interleave with the git tree the first run is still using.
