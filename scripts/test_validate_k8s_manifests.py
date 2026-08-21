@@ -12,6 +12,7 @@ Run: uv run pytest scripts/test_validate_k8s_manifests.py
 
 import importlib.util
 import os
+import re
 
 _MOD = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "validate_k8s_manifests.py"
@@ -192,3 +193,114 @@ def test_seed_volume_pvc_names_resolves_a_real_seed_backed_role():
     ctx = {**base, **vkm.role_defaults("tdarr", base)}
     names = vkm.seed_volume_pvc_names("tdarr", ctx)
     assert ctx["tdarr_k8s_configs_claim"] in names
+
+
+# ── schema validation ────────────────────────────────────────────────────────────────────
+# Every object the guard renders is checked against the upstream Kubernetes OpenAPI schema,
+# which is what `kubectl apply --dry-run=server` does — offline, and covering the ~17 roles
+# k8s_dry_run_unsupported refuses. These tests pin the two ways that check goes wrong: a false
+# positive from PyYAML's octal parsing, and a schema version that drifts from the cluster.
+
+VALID_DEPLOYMENT = {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {"name": "example"},
+    "spec": {
+        "replicas": 1,
+        "selector": {"matchLabels": {"app": "example"}},
+        "template": {
+            "metadata": {"labels": {"app": "example"}},
+            "spec": {"containers": [{"name": "example", "image": "example:1"}]},
+        },
+    },
+}
+
+
+def _with_spec(**overrides) -> dict:
+    doc = {**VALID_DEPLOYMENT, "spec": {**VALID_DEPLOYMENT["spec"], **overrides}}
+    return doc
+
+
+def test_a_valid_deployment_passes():
+    assert vkm.schema_error(VALID_DEPLOYMENT) is None
+
+
+def test_a_misspelled_field_is_rejected():
+    # The half that strict=True buys. The API server ignores an undefined field, so a
+    # `readinessProb` typo applies clean and the probe simply never runs.
+    err = vkm.schema_error(_with_spec(progressDeadlineSecond=600))
+    assert err is not vkm.NO_SCHEMA
+    assert "progressDeadlineSecond" in err
+
+
+def test_a_wrong_type_is_rejected():
+    err = vkm.schema_error(_with_spec(replicas="three"))
+    assert err is not vkm.NO_SCHEMA
+    assert "spec.replicas" in err
+
+
+def test_a_crd_reports_no_schema_rather_than_failing():
+    # Traefik's IngressRoute and friends define their shape in the cluster, not in the upstream
+    # spec. Reported as skipped and counted, never as a pass — 57 objects in this tree are
+    # unvalidated for this reason and the run says so.
+    crd = {
+        "apiVersion": "traefik.io/v1alpha1",
+        "kind": "IngressRoute",
+        "metadata": {"name": "example"},
+        "spec": {"routes": []},
+    }
+    assert vkm.schema_error(crd) is vkm.NO_SCHEMA
+
+
+def test_octal_literals_are_read_as_kubectl_reads_them():
+    # PyYAML is YAML 1.1, where `0o444` is a STRING; the parser behind kubectl reads 292.
+    # Without this, four correct `defaultMode: 0o444` volumes fail as type errors. Verified
+    # against live objects: scrutiny-web/scrutiny-influxdb/uptime-kuma all carry
+    # secret.defaultMode: 292.
+    assert vkm.normalise_octal("0o444") == 292
+    assert vkm.normalise_octal({"defaultMode": "0o440"}) == {"defaultMode": 288}
+    assert vkm.normalise_octal([{"m": "0o755"}]) == [{"m": 493}]
+
+
+def test_octal_normalisation_leaves_other_strings_alone():
+    # It must not touch an image tag, a name, or a decimal already spelled as a string.
+    for value in ("0o", "0o8", "nginx:1.29", "0444", "444", ""):
+        assert vkm.normalise_octal(value) == value
+
+
+def test_a_defaultmode_octal_volume_passes_the_schema():
+    # The end-to-end version of the two tests above, at the shape that actually bit.
+    doc = _with_spec(
+        template={
+            "metadata": {"labels": {"app": "example"}},
+            "spec": {
+                "containers": [{"name": "example", "image": "example:1"}],
+                "volumes": [
+                    {"name": "c", "secret": {"secretName": "s", "defaultMode": "0o444"}}
+                ],
+            },
+        }
+    )
+    assert vkm.schema_error(doc) is None
+
+
+def test_schema_version_matches_the_cluster():
+    # A cluster upgrade that leaves K8S_SCHEMA_VERSION behind validates every manifest against
+    # the wrong API surface: a field added in the new minor reads as invalid, and one removed
+    # in it reads as fine. Silent in both directions, hence this test.
+    k3s_defaults = (
+        vkm.ANSIBLE / "roles" / "setup" / "k3s" / "defaults" / "main.yml"
+    ).read_text()
+    match = re.search(r"^k3s_version:\s*v(\d+\.\d+)\.", k3s_defaults, re.MULTILINE)
+    assert match, "k3s_version not found in roles/setup/k3s/defaults/main.yml"
+    assert vkm.K8S_SCHEMA_VERSION == match.group(1), (
+        f"K8S_SCHEMA_VERSION is {vkm.K8S_SCHEMA_VERSION} but the cluster runs "
+        f"{match.group(1)} — bump the pin and the kubernetes-validate dependency together."
+    )
+
+
+def test_real_tree_passes_the_schema(capsys):
+    # The regression guard: no rendered object in the tree fails its schema. Paired with
+    # main()'s own exit code so a new failure cannot hide behind a passing older check.
+    assert vkm.main() == 0
+    assert "fails the v" not in capsys.readouterr().err

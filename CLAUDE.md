@@ -150,9 +150,9 @@ manifest bug reaches production.
 
 | Mode | What sees the manifests | Catches |
 |---|---|---|
-| `prek run --all-files` | nothing (renders + parses YAML locally) | Jinja indent bugs, invalid YAML, duplicate keys |
+| `prek run --all-files` | nothing (renders locally, then parses and schema-checks) | Jinja indent bugs, invalid YAML, duplicate keys, **undefined fields and wrong types** — everything but CRDs, which have no upstream schema |
 | `--check` | nothing — the apply is **skipped**, so no API server is involved | task-level wiring; not the manifests themselves |
-| `--dry-run` | the **live API server**, via `kubectl apply --dry-run=server` | bad apiVersions and field names, schema drift, CRD-ordering mistakes, admission rejections |
+| `--dry-run` | the **live API server**, via `kubectl apply --dry-run=server` | what prek catches, plus **CRD** schemas, CRD-ordering mistakes and admission rejections |
 
 `--dry-run` renders to a temp dir, applies with `--dry-run=server`, and discards the temp dir.
 Nothing is staged, applied, patched or rolled. It does **not** catch scheduling, PVC binding,
