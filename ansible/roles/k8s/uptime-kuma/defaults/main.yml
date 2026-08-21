@@ -7,9 +7,18 @@ uptime_kuma_k8s_enabled: true
 # SAME tag as the Docker copy on purpose — the seeded SQLite crosses hosts, not versions.
 uptime_kuma_k8s_image: louislam/uptime-kuma:2.5.0
 # Pinned (the Docker sidecar ran :latest): the k8s-defaults Renovate manager only tracks
-# versioned pins, and v2.0.0 is what the KD5 gate verified (docker.enabled, static-file
-# notification entities, on_delete semantics).
-autokuma_k8s_image: ghcr.io/bigboot/autokuma:2.0.0
+# versioned pins. v2.0.0 is what the KD5 gate verified (docker.enabled, static-file
+# notification entities, on_delete semantics); 2.1.0-rc.2 is a deliberate prerelease, taken on
+# 2026-08-21 because it is the only release where `resendInterval` reaches a push monitor — see
+# the caveat under kuma_push_resend_interval_minutes.
+#
+# Two rc-2 mechanisms this deployment now depends on, read from the tagged source rather than
+# the changelog: `@/path` in an env value reads the file and strips one trailing newline
+# (kuma-client/src/config.rs, resolve_file_ref), and a health/metrics HTTP server listens on
+# 8090 unless AUTOKUMA__HEALTHCHECK_PORT is emptied (autokuma/src/config.rs). The published
+# image builds the DEFAULT feature set, which is Kuma v2 — `uptime-kuma-v1` is opt-in and the
+# Dockerfile's ARG FEATURES is empty.
+autokuma_k8s_image: ghcr.io/bigboot/autokuma:2.1.0-rc.2
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Observability: this IS the alerting spine every push/HTTP monitor and the Discord chain depend
@@ -45,6 +54,11 @@ uptime_kuma_k8s_mem_request: 64Mi
 # within this many seconds; postflight's `count(monitor_status)` check does not race it.
 autokuma_k8s_sync_interval: 60
 
+# What AutoKuma does with a live entity that has no declaration file. `delete` is the committed
+# stance (the deployment template carries the reasoning). Override to `keep` on the command line
+# for one deploy when the sidecar image itself is changing, then redeploy at the default.
+autokuma_k8s_on_delete: delete
+
 autokuma_k8s_cpu_limit: "250m"
 autokuma_k8s_mem_limit: 128Mi
 autokuma_k8s_cpu_request: "20m"
@@ -62,11 +76,12 @@ autokuma_k8s_mem_request: 32Mi
 # every push monitor).
 kuma_push_resend_interval_minutes: 360
 
-# CAVEAT, measured 2026-08-21: on the pinned AutoKuma v2.0.0 this value reaches the 25 http
-# monitors and NONE of the 50 push monitors. v2.0.0 declares `resendInterval` on MonitorHttp,
-# MonitorJsonQuery and MonitorKeyword only; MonitorPush has no such field, so serde drops it and
-# every push tile still notifies once per outage. Upstream fixed it in 2.1.0-rc.1 (#152), which
-# is a prerelease — see test_autokuma_pin_still_drops_resend_interval_on_push_monitors.
+# HISTORY, measured 2026-08-21: on AutoKuma v2.0.0 this value reached the 25 http monitors and
+# NONE of the 50 push monitors. v2.0.0 declared `resendInterval` on MonitorHttp, MonitorJsonQuery
+# and MonitorKeyword only; MonitorPush had no such field, so serde dropped it and every push tile
+# notified once per outage — the exact failure the fleet-wide 360 was introduced to fix. Upstream
+# moved the field into `with_monitor_common_fields_impl!` in 2.1.0-rc.1 (#152), where every
+# variant carries it, and taking that prerelease on 2026-08-21 is what closed the gap.
 
 # No monitor is held at 0. `k3s Longhorn Backup` was, from 2026-08-16 to 2026-08-21, while the
 # weekly tier had never completed a backup and every sharded volume reported uncovered — a
