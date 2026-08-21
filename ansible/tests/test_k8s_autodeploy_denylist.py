@@ -213,16 +213,34 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
     denied = k8s_autodeploy_denylist(str(_ANSIBLE))
     assert denied == sorted(set(denied)), "duplicated or unsorted"
     # Roles whose exclusion is load-bearing: losing the ingress or auth plane removes the
-    # ability to see or fix a failed deploy.
+    # ability to see or fix a failed deploy. sonarr and speedtest sat here until slice 7b task 7
+    # promoted them (and ten siblings) behind the pre-apply Longhorn snapshot and revert — they
+    # are asserted OUT of this list below, not just dropped, so a re-denial of either fails loud
+    # rather than reading as this test simply not having been updated.
     for role in (
         "traefik",
         "authelia",
-        "sonarr",
         "seed-volume",
         "code-server",
-        "speedtest",
     ):
         assert role in denied
+    # The twelve slice 7b promoted, checked by name so a regression reads as a specific
+    # assertion failure rather than a shrunk floor further down.
+    for role in (
+        "bazarr",
+        "freshrss",
+        "home-assistant",
+        "jellyfin",
+        "livesync",
+        "prowlarr",
+        "qbittorrent",
+        "radarr",
+        "sonarr",
+        "speedtest",
+        "tdarr",
+        "zigbee2mqtt",
+    ):
+        assert role not in denied
     # Every derived name must be a real role that really says false — catches a filter that
     # invents, mangles or mis-cases names.
     for role in denied:
@@ -251,7 +269,11 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
         is False
     ]
     assert len(denied) == len(actually_false)
-    assert len(denied) >= 40
+    # Measured 32 on 2026-08-21 after slice 7b task 7's twelve promotions dropped this from 44
+    # (uv run python scripts/k8s_autodeploy_counts.py). The floor sits two below the measured
+    # count — enough to catch an accidental bulk flip without needing an edit for every
+    # single-role promotion.
+    assert len(denied) >= 30
 
 
 def test_the_template_still_consumes_the_derived_variable() -> None:

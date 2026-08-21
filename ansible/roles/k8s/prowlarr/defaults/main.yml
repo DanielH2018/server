@@ -16,12 +16,16 @@ prowlarr_k8s_image: lscr.io/linuxserver/prowlarr:2.4.0.5397-ls150
 # be stale, then restored (2026-08-20) once review found the real, unrelated reason below.
 # Gatedness was never the issue; the PVC/Recreate shape is. The linuxserver -lsNN scheme also
 # hides a breaking bump as a routine patch bump (currently 2.4.0.5397-ls150).
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC; -lsNN versioning hides a breaking bump. NOT about gatedness — both rendered Deployments (prowlarr + flaresolverr) gate correctly"  # noqa var-naming[no-role-prefix]
+# Promoted in slice 7b (2026-08-21): k8s/manifests now takes a pre-apply Longhorn snapshot of
+# the claim below and reverts it if the deploy fails, so a bad swap reverts to the snapshot
+# instead of leaving the indexer definitions and API keys unreadable by the old image.
+k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC, now protected by the pre-apply Longhorn snapshot and revert; -lsNN versioning still hides a breaking bump. NOT about gatedness: both rendered Deployments (prowlarr + flaresolverr) gate correctly"  # noqa var-naming[no-role-prefix]
 # Slice 7a task 3 — the pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
 # Only the seeded config claim, not prowlarr_k8s_flaresolverr_claim — flaresolverr's PVC holds
 # nothing but a disposable browser profile, not migrating state. Declared regardless of
-# k8s_autodeploy — protects a manual deploy too, and this slice promotes nothing.
+# k8s_autodeploy — protects a manual deploy too, and slice 7b's revert is what this role's
+# auto-deploy now depends on.
 k8s_autodeploy_snapshot_pvcs: [prowlarr-config]  # noqa var-naming[no-role-prefix]
 
 # 84 M at B4a. Holds the indexer definitions and their API keys.

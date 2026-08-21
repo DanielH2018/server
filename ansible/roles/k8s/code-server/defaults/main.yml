@@ -2,17 +2,15 @@
 code_server_k8s_image: "{{ k8s_registry_pull_host }}/code-server:latest"
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
-# Denied (k8s_autodeploy: false below) because the shape is not safe: strategy is
-# Recreate, and the config claim (code_server_k8s_claim) is seeded
-# through k8s/seed-volume, which hardcodes ReadWriteOnce. The workspace claim below is NOT
-# seeded the same way — pvc-workspace.yaml.j2 is a plain claim, and an initContainer migrates
-# workspace/.ssh/.config/git-identity onto it from the config volume on first boot — but it
-# declares ReadWriteOnce in its own template, so the migrating-state shape (Recreate + RWO PVC)
-# holds regardless of which mechanism populated which claim. A failed image swap can still
-# migrate either volume before the gate observes a fault, then fail the rollback redeploy
-# against data it can no longer read.
+# code-server is the one migrating-state role slice 7b does NOT promote. `code_server_k8s_image`
+# above is `{{ k8s_registry_pull_host }}/code-server:latest` — an immutable in-cluster registry
+# tag with no version scheme, so Renovate's k8s-defaults manager has nothing to bump: there is
+# no image update event that could ever trigger an auto-deploy of this role in the first place.
+# The migrating-state shape below (Recreate + two RWO PVCs) is real and is still why a manual
+# redeploy stays worth the same pre-apply snapshot every other role gets — but it is not what
+# blocks auto-deploy here, so it is no longer the reason cited.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "migrating state — Recreate + two RWO PVCs (config seeded via k8s/seed-volume, workspace via its own initContainer migration). The replacement pod migrates the volumes before the rollout gate can observe a fault, so the rollback redeploys the prior image against data it can no longer read. Same class as sonarr/prowlarr; revisit in slice 7 behind the Longhorn pre-deploy snapshot"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "immutable registry/…:latest image with no version scheme — Renovate can never generate an update PR for it, so there is no bump event to auto-deploy regardless of the migrating-state PVC shape below"  # noqa var-naming[no-role-prefix]
 # Slice 7a task 3 — the pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
 # Both claims — code-server can never auto-deploy (its image is an immutable registry/…:latest
 # ref), but this slice protects a manual deploy too, which carries the same migration risk.
