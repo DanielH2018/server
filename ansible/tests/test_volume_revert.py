@@ -32,6 +32,7 @@ injected downstream of a broken command left a whole branch dead while every tes
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 import shutil
@@ -296,8 +297,22 @@ def test_the_role_declares_its_autodeploy_stance() -> None:
 
 def test_the_validator_skips_a_role_with_no_manifests() -> None:
     """`validate_k8s_manifests.py` renders every role's templates. This role has none, so it
-    must be in SKIP_ROLES or the validator fails on an absent templates directory."""
-    assert '"volume-revert"' in _VALIDATOR.read_text()
+    must be in SKIP_ROLES or the validator fails on an absent templates directory.
+
+    Read as a parsed set literal rather than searched for as a substring: a commented-out entry
+    satisfies a substring search while the validator no longer skips anything, which is the
+    mutation that found this test asserting nothing on 2026-08-21. The set is parsed instead of
+    imported because importing the validator pulls in `kubernetes_validate` and its sys.path
+    setup for a one-line fact.
+    """
+    tree = ast.parse(_VALIDATOR.read_text())
+    skip_roles = next(
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == "SKIP_ROLES" for t in node.targets)
+    )
+    assert "volume-revert" in ast.literal_eval(skip_roles)
 
 
 def test_the_role_is_absent_from_the_dry_run_refusal_list() -> None:
@@ -350,6 +365,11 @@ def test_the_selection_takes_the_newest_by_creation_timestamp() -> None:
     not chronologically sortable as strings, so the choice is made on `creationTimestamp`."""
     assert _selection([_OLDER, _NEWEST])[0].endswith("20260821180000")
     assert _selection([_NEWEST, _OLDER])[0].endswith("20260821180000")
+    # The name and the timestamp deliberately disagree here: the newer CR carries the smaller
+    # token. Sorting on the name would pick the other one, which is the whole reason the sort
+    # names `creationTimestamp` — a listing where the two agree cannot tell the two sorts apart.
+    misnamed = "2026-08-21T19:00:00Z|false|autodeploy-speedtest-abc12345-speedtest-config-00000000000001"
+    assert _selection([_NEWEST, misnamed])[0].endswith("00000000000001")
 
 
 def test_the_selection_rejects_a_markremoved_snapshot() -> None:
@@ -453,6 +473,7 @@ def test_the_sha_shape_is_checked_against_the_hex_it_must_be() -> None:
     compiled = re.compile(pattern.group(1))
     assert compiled.match("abc12345")
     assert compiled.match("abc123456")
+    assert not compiled.match("abc1234")  # seven characters is not a `--short=8` tag
     assert not compiled.match("master")
     assert not compiled.match("")
     assert not compiled.match("ABC12345")
