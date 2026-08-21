@@ -69,11 +69,15 @@ gitops_deploy_k8s_timeout_s: 900
 # recommended volume_revert_state_timeout/volume_revert_api_timeout (90/30), a two-claim
 # service's worst-case revert is 720s, leaving 180s in this 900s for the rest of the SAME run
 # (a pre-revert snapshot wait per claim, then apply and rollout) at their REALISTIC cost, not
-# their own worst case — a two-claim snapshot phase alone can reach 240s, which the 180s left
-# does not cover. That compound case is an accepted residual risk; see
-# ansible/roles/setup/gitops_deploy/CLAUDE.md's rollback-timeout section. The realistic revert
-# case is far smaller — the drill's own two-claim-shaped cycle was closer to ~150s. This value
-# has its OWN budget rather than sharing gitops_deploy_k8s_timeout_s
+# their own ceiling. 720s is reached by every wait/call succeeding at its own ceiling, or by the
+# last one failing after the rest succeeded slowly — a failure aborts the whole play immediately
+# (k8s/volume-revert's waits carry no ignore_errors/failed_when), so it can never compound with
+# an independent failure in another phase. The real residual: a SLOW BUT SUCCESSFUL snapshot
+# phase (up to 240s for two claims) is additive to a slow-but-successful revert on one
+# continuous timeline where nothing fails, and that combined total is not proven to fit the 180s
+# left; see ansible/roles/setup/gitops_deploy/CLAUDE.md's rollback-timeout section. The realistic
+# revert case is far smaller — the drill's own two-claim-shaped cycle was closer to ~150s. This
+# value has its OWN budget rather than sharing gitops_deploy_k8s_timeout_s
 # (900) at runtime because the two runs are sequential within one systemd unit activation —
 # see gitops-deploy.service.j2's TimeoutStartSec (raised to 35min for exactly this) and that
 # template's own arithmetic comment.
