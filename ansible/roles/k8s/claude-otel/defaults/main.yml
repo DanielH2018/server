@@ -10,7 +10,7 @@
 # without them; adding either changes nothing about whether collection works.
 
 # Pinned, Renovate-tracked. Same collector build the Docker side runs so config stays portable.
-claude_otel_collector_image: otel/opentelemetry-collector-contrib:0.157.0
+claude_otel_collector_image: otel/opentelemetry-collector-contrib:0.158.0
 claude_otel_loki_image: grafana/loki:3.7.6
 claude_otel_prometheus_image: prom/prometheus:v3.0.1
 claude_otel_grafana_image: grafana/grafana:11.6.16
