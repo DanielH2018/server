@@ -131,13 +131,12 @@ spec:
             #
             # The cadence was not the whole problem. AutoKuma updates an entity whenever
             # `current != merge(current, declared)` (sync.rs), and for BOTH notification objects
-            # that comparison never settles: the sidecar rewrote discord and email every pass,
+            # that comparison never settled: the sidecar rewrote discord and email every pass,
             # 716 times per 30 minutes, ~34k SQLite writes a day onto a Longhorn volume whose
-            # changed blocks the nightly backup then ships. The monitors converge fine; only the
-            # two notifications loop. This cuts the loop's cost 12x, it does not end it
-            # — the suspect is Kuma returning `config` in a shape the declared object never
-            # equals, and confirming that means AutoKuma's debug diff, which prints the Discord
-            # webhook and the SMTP password into Loki. Not worth it for a write rate this size.
+            # changed blocks the nightly backup then ships. Cutting the interval to 60 reduced
+            # that 12x without ending it. The cause was a missing `applyExisting` key in the
+            # declared notification configs — see the comment above them in
+            # static-monitors.yaml.j2 — and fixing that is what made the loop converge.
             - name: AUTOKUMA__SYNC_INTERVAL
               value: "{{ autokuma_k8s_sync_interval }}"
             # Flipped keep → delete 2026-08-10 after the transcription ledger closed:

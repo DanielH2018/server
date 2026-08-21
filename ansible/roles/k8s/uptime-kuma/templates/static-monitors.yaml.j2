@@ -29,12 +29,24 @@ metadata:
 type: Opaque
 stringData:
   # ── notifications (label-provisioned before; file-provisioned now — KD5 gate) ──────────
+  #
+  # `applyExisting: false` looks inert and is load-bearing. Kuma's save() forces the key into
+  # the stored config on EVERY write (server/notification.js: `notification.applyExisting =
+  # false` before `JSON.stringify`), and AutoKuma's config_eq compares the NUMBER of config keys
+  # after dropping six ignored ones — a set that does not include applyExisting. So a config
+  # declared without it is permanently one key short of what Kuma stores, never compares equal,
+  # and gets rewritten on every sync pass: 2 writes per pass, ~34k SQLite writes a day onto a
+  # Longhorn volume whose changed blocks the nightly backup then ships. The monitors converge
+  # fine; only these two objects looped, from the k3s cutover until 2026-08-21.
+  #
+  # The value must be false. Kuma reads the flag before forcing it (`applyExisting ||
+  # false`) and a true would attach the notification to every existing monitor.
   discord.json: |
     {
       "type": "notification",
       "name": "Homelab Alerts",
       "active": true,
-      "config": {"type": "discord", "discordWebhookUrl": "{{ monitor_discord_webhook_url }}", "discordUsername": "Uptime Kuma"}
+      "config": {"type": "discord", "applyExisting": false, "discordWebhookUrl": "{{ monitor_discord_webhook_url }}", "discordUsername": "Uptime Kuma"}
     }
   # Fans out to BOTH channels: the Discord dead-man's-switch below, plus the critical tier
   # (both backup targets, disks, SMART, SD, cert expiry, UPS) — a *degraded* Discord loses
@@ -47,7 +59,7 @@ stringData:
       "type": "notification",
       "name": "Homelab Alerts (Email)",
       "active": true,
-      "config": {"type": "smtp", "smtpHost": "smtp.gmail.com", "smtpPort": 465, "smtpSecure": true, "smtpUsername": "{{ email }}", "smtpPassword": "{{ smtp_notify_app_password }}", "smtpFrom": "{{ email }}", "smtpTo": "{{ email }}", "customSubject": "[Homelab] Uptime Kuma alert"}
+      "config": {"type": "smtp", "applyExisting": false, "smtpHost": "smtp.gmail.com", "smtpPort": 465, "smtpSecure": true, "smtpUsername": "{{ email }}", "smtpPassword": "{{ smtp_notify_app_password }}", "smtpFrom": "{{ email }}", "smtpTo": "{{ email }}", "customSubject": "[Homelab] Uptime Kuma alert"}
     }
   # ── daniel-pi LAN probes ───────────────────────────────────────────────────────────────
   daniel-pi-host.json: |
