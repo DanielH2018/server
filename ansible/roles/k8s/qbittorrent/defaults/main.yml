@@ -28,6 +28,10 @@ qbittorrent_k8s_wireguard_image: lscr.io/linuxserver/wireguard:latest@sha256:3ab
 # 2026-08-16, killswitch-survives-container-restart.md).
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC; also the WireGuard sidecar kill-switch can deadlock the pod past a restart, sharper than the rest of this class"  # noqa var-naming[no-role-prefix]
+# Slice 7a task 3 — the pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
+# Declared regardless of k8s_autodeploy — protects a manual deploy too, and this slice promotes
+# nothing.
+k8s_autodeploy_snapshot_pvcs: [qbittorrent-config]  # noqa var-naming[no-role-prefix]
 
 # ── one config volume, two containers ───────────────────────────────────────────────────────
 # Reproduces the Compose file exactly: wireguard and qbittorrent both mount `./config` at
