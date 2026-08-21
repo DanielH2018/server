@@ -206,6 +206,14 @@ CHECKED=0
 SUPPRESSED=0
 GRACED=0
 GRACED_VOLS=""
+# Split by whether the volume has ANY backup, not just one from its tier's job. A seed carries no
+# RecurringJob label, so it never satisfies the freshness match above and both cases land here —
+# but "no recovery point exists" and "a recovery point exists, the rotation has not reached it"
+# are different exposures and the operator acts on them differently.
+GRACED_NEW=0
+GRACED_NEW_VOLS=""
+GRACED_SEEDED=0
+GRACED_SEEDED_VOLS=""
 
 # Run once per backup TIER. Until 2026-08-15 only the `default` group was walked, so the eleven
 # volumes moved to the weekly group (k3s_longhorn_weekly_volumes) had no per-volume staleness check
@@ -263,6 +271,17 @@ check_tier() {
         # tile, because the weekly shard cadence puts a volume's first run up to six days out.
         GRACED=$(( GRACED + 1 ))
         GRACED_VOLS="${GRACED_VOLS:+${GRACED_VOLS}, }${CLAIM}"
+        # Same row set, without the `$3 == j` tier filter: any backup at all, however it was made.
+        ANY=$(printf '%s\n' "$COVERAGE" \
+          | awk -F'|' -v v="$VOL" '$1 == v && $2 != "" { print $2 }' \
+          | sort -r | head -1)
+        if [[ -n "$ANY" ]]; then
+          GRACED_SEEDED=$(( GRACED_SEEDED + 1 ))
+          GRACED_SEEDED_VOLS="${GRACED_SEEDED_VOLS:+${GRACED_SEEDED_VOLS}, }${CLAIM}"
+        else
+          GRACED_NEW=$(( GRACED_NEW + 1 ))
+          GRACED_NEW_VOLS="${GRACED_NEW_VOLS:+${GRACED_NEW_VOLS}, }${CLAIM}"
+        fi
         continue
       fi
       if [[ "$job" == "__no_job__" ]]; then
@@ -501,12 +520,22 @@ if (( PROBLEM_COUNT == 0 )); then
   if [[ -n "${DISARMED_TARGETS[*]:-}" ]]; then
     DISARMED_NOTE=" — DISARMED: ${DISARMED_TARGETS[*]} (${SUPPRESSED} volume(s) not checked)"
   fi
-  # Named, not just counted: a volume awaiting its first backup has no offsite copy at all, so
-  # "3 volume(s) awaiting" that nobody can act on would read as routine. The list is what makes it
-  # actionable, and it is short by construction — a volume leaves this state on its first backup.
+  # Named, not just counted: "3 volume(s) awaiting" that nobody can act on would read as routine.
+  # The list is what makes it actionable, and it is short by construction — a volume leaves this
+  # state on its first scheduled backup.
+  #
+  # Two notes, because the two states carry different risk. A volume with no backup anywhere has no
+  # recovery point and seeding it is the remedy; a seeded one already has an offsite copy and only
+  # waits for its shard day, which needs no action at all. Reporting both as "no offsite copy yet"
+  # over-stated the exposure of eleven seeded volumes on 2026-08-21. Emptiness is tested on the
+  # string, never with an array-length sigil: brace-then-hash opens a Jinja comment and the template
+  # then fails to render — the same trap named in the DISARMED block above.
   GRACED_NOTE=""
-  if (( GRACED > 0 )); then
-    GRACED_NOTE=" — ${GRACED} volume(s) awaiting their first scheduled backup, no offsite copy yet: ${GRACED_VOLS}"
+  if (( GRACED_NEW > 0 )); then
+    GRACED_NOTE=" — ${GRACED_NEW} volume(s) awaiting their first scheduled backup, no offsite copy at all: ${GRACED_NEW_VOLS}"
+  fi
+  if (( GRACED_SEEDED > 0 )); then
+    GRACED_NOTE="${GRACED_NOTE} — ${GRACED_SEEDED} volume(s) seeded but not yet in rotation, first scheduled run pending: ${GRACED_SEEDED_VOLS}"
   fi
   MSG="backup target(s) ${BACKUP_TARGETS[*]:-none} available, newest backup $(( AGE_S / 3600 ))h old, ${CHECKED} backed-up volume(s) covered across daily+weekly, ${RECENT_N} B2 backup(s)/24h (budget {{ k3s_longhorn_daily_backup_budget }})${DISARMED_NOTE}${GRACED_NOTE}"
   PUSH_MSG="$MSG"
