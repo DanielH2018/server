@@ -63,8 +63,12 @@
 # `kubectl create job --from=cronjob` sets a controller ownerReference that Forbid actually
 # keys on (task-3-rulings.md PARK; check post-deploy with `kubectl -n homelab get job
 # pi-peer-backup-deploy-gate -o jsonpath='{.metadata.ownerReferences}'`). If it doesn't, the
-# worst case is two concurrent rsyncs into this idempotent, --delete-free mirror — small either
-# way. See ansible/roles/k8s/cronjob-gate/CLAUDE.md.
+# PVC is ReadWriteOnce and this pod carries no node constraint, so the two pods CAN land on
+# different nodes: the second wedges on a Multi-Attach error until activeDeadlineSeconds (600s)
+# kills it, the controller deletes the pod, cronjob-gate reads no container state, and the
+# deploy fails with "No container state was readable" — the class in memory as
+# seed-pod-multiattach-blocks-deploys, not a small/idempotent-either-way outcome. See
+# ansible/roles/k8s/cronjob-gate/CLAUDE.md.
 - name: Gate the pi-peer-backup deploy on a one-off run
   tags: [deploy]
   ansible.builtin.include_role:

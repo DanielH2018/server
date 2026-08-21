@@ -25,7 +25,10 @@ replaced the retired Kopia scope for the Pi.
   deploy of this role to prove a bumped image still starts; `files/pull-pi-peers.sh`
   recognizes that Job by its pod's hostname prefix and skips both pushes for it, so a routine
   Renovate-driven deploy can't mask a missed scheduled firing or page from a deploy-time probe
-  instead of the backup itself.
+  instead of the backup itself. `configarr` — the other `k8s/cronjob-gate` caller — takes the
+  OPPOSITE position: its health reader counts a gate run like any other finished Job, because a
+  configarr gate run genuinely performs the reconcile, where this role's gate run is a dead-man
+  push about a specific 23:30 firing. See `ansible/roles/k8s/configarr/CLAUDE.md`.
 - **Manual run/proof:** `kubectl -n homelab create job ppb-manual --from=cronjob/pi-peer-backup`
   (this bypasses the gate-run hostname check, so a manual proof run DOES push — same as a
   scheduled run).

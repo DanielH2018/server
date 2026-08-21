@@ -540,3 +540,33 @@ def test_no_operator_message_carries_an_embedded_newline() -> None:
         "`msg:` block is indented deeper than the block's base, so YAML stopped folding it:\n  "
         + "\n  ".join(offenders)
     )
+
+
+def test_pi_peer_backup_pins_the_gate_job_name_it_hardcodes() -> None:
+    """pull-pi-peers.sh's hardcoded gate-run hostname prefix must match cronjob_gate_name.
+
+    task-3-rulings-2.md S3. The Job cronjob-gate creates is named
+    `<cronjob_gate_name>-deploy-gate` (see its CLAUDE.md), and pi-peer-backup's
+    `files/pull-pi-peers.sh` independently hardcodes `pi-peer-backup-deploy-gate` to recognise
+    that Job's pod by hostname prefix and skip pushing its Kuma/Healthchecks signals for it. The
+    reviewer grepped every `.py`, `.yml` and `.sh` under `ansible/` and `scripts/` and found the
+    only link between the two strings was prose in three CLAUDE.md files — renaming the Job
+    suffix, changing `cronjob_gate_name`, or adding a timestamp to either would silently stop
+    the script from recognising a gate run, and every deploy would resume pushing Kuma and
+    pinging the dead-man with no test failure and no log line. This is the machine-enforced
+    link, escalated per this repo's rule that a recurring prose-only defect becomes a check.
+    """
+    role = _ROLE.parent / "pi-peer-backup"
+    include = _gate_include(role)
+    assert include is not None, "pi-peer-backup no longer includes k8s/cronjob-gate"
+    cronjob_gate_name = (include.get("vars") or {}).get("cronjob_gate_name")
+    assert cronjob_gate_name, (
+        "pi-peer-backup's k8s/cronjob-gate include sets no cronjob_gate_name"
+    )
+    script = (role / "files/pull-pi-peers.sh").read_text()
+    expected = f'"${{HOSTNAME:-}}" == {cronjob_gate_name}-deploy-gate-*'
+    assert expected in script, (
+        f"pull-pi-peers.sh's gate-run hostname check does not match the Job cronjob-gate "
+        f"actually creates from cronjob_gate_name={cronjob_gate_name!r} — it must read "
+        f"exactly {expected!r}"
+    )

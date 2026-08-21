@@ -26,7 +26,11 @@ can catch a title that lies — the only pre-grab lever is **release-group reput
   transient *arr outage is what the retired wrapper avoided. No healthcheck / AutoKuma — a batch
   job, not a service; its health signal is a daniel-box host cron (`/opt/configarr-health`)
   that reads the last Job's outcome via `configarr_status.py` (still owned + tested here) and
-  pushes the "Configarr Sync" Kuma monitor.
+  pushes the "Configarr Sync" Kuma monitor. The health reader counts the gate's own Job like any
+  other finished run: unlike `pi-peer-backup` (whose gate run explicitly does NOT count toward
+  its dead-man monitor), a `configarr-deploy-gate` run genuinely performs the reconcile, so
+  counting it is correct rather than a shared-role inconsistency — see
+  `ansible/roles/k8s/pi-peer-backup/CLAUDE.md` for the other side of this choice.
 - **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
 
 ## Scope — what configarr manages
