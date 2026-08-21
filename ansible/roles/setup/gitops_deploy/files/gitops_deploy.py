@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
 import subprocess
 import sys
 import time
@@ -36,6 +37,7 @@ from deploy_logic import (  # noqa: E402
     declared_denylist,
     declared_k8s_services,
     declared_services,
+    declares_snapshot_claims,
     deferred_service_alerts,
     dirty_alert_slot,
     gate_services,
@@ -45,6 +47,7 @@ from deploy_logic import (  # noqa: E402
     k8s_role_paths,
     next_action,
     reroute_k8s_services,
+    rollback_volume_revert_note,
     services_from_changed_paths,
     should_alert_dirty,
     split_k8s_auto_deploy,
@@ -617,6 +620,26 @@ def deploy_k8s(
     run(argv, timeout=timeout)
 
 
+def read_local_k8s_default(role: str) -> str | None:
+    """A k8s role's defaults/main.yml, read from the CURRENT working tree rather than via `git
+    show`. Only called from the rollback path, after `git reset --hard local` — so a plain read
+    matches exactly what roles/k8s/manifests itself reads for the claim list (see the comment
+    above the revert task in that role's tasks/main.yml)."""
+    path = (
+        pathlib.Path(REPO)
+        / "ansible"
+        / "roles"
+        / "k8s"
+        / role
+        / "defaults"
+        / "main.yml"
+    )
+    try:
+        return path.read_text()
+    except FileNotFoundError:
+        return None
+
+
 def deploy(services: set[str]) -> None:
     tags = ",".join(sorted(services))
     # Run via `uv run` so the deploy uses the repo's pinned env (ansible-core plus
@@ -843,6 +866,7 @@ def main() -> int:
             log(f"k8s deploy failed for {sorted(cs.k8s_deploy)}: {exc}; rolling back")
             write_hold(origin)
             run(["git", "reset", "--hard", local])
+            rollback_failed: Exception | None = None
             try:
                 # `origin`, not `local`: the tree is already reset to the last-good commit, so
                 # the snapshot worth reverting to is the one taken before the FAILED deploy —
@@ -854,15 +878,27 @@ def main() -> int:
                     cs.k8s_deploy, K8S_ROLLBACK_TIMEOUT_S, restore_sha=origin[:8]
                 )
             except Exception as exc2:  # noqa: BLE001 — best-effort restore; we still hold + alert
+                rollback_failed = exc2
                 log(f"k8s rollback redeploy of the prior version also failed: {exc2}")
+            # Read from the tree AFTER the reset above, matching what roles/k8s/manifests itself
+            # reads for the claim list — the failed commit may have added or renamed a claim, and
+            # that version is exactly what must NOT decide this note.
+            reverting = frozenset(
+                svc
+                for svc in cs.k8s_deploy
+                if declares_snapshot_claims(read_local_k8s_default(svc))
+            )
+            revert_note = rollback_volume_revert_note(
+                cs.k8s_deploy,
+                reverting,
+                str(rollback_failed) if rollback_failed else None,
+            )
             posted = discord(
                 f"🚨 gitops-deploy: **k8s deploy failed** on {HOSTNAME}.\n"
                 f"`{', '.join(sorted(cs.k8s_deploy))}` from `{origin[:8]}` failed its rollout "
                 f"gate:\n`{exc}`\n"
                 f"Rolled back locally to `{local[:8]}`.\n"
-                f"Volume revert to the pre-deploy snapshot was attempted for "
-                f"`{', '.join(sorted(cs.k8s_deploy))}` (a no-op for any of them that declares no "
-                f"`k8s_autodeploy_snapshot_pvcs`).\n"
+                f"{revert_note}"
                 f"**The bad pin is still live on master.** The hold only skips THIS commit — "
                 f"`skip_hold` matches while `origin_head == hold_sha`, so the next push past it "
                 f"redeploys the same pin.\n"

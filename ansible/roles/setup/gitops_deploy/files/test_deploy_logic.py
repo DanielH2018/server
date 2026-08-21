@@ -29,6 +29,8 @@ from deploy_logic import (
     split_k8s_auto_deploy,
     ci_verdict,
     declared_denylist,
+    declares_snapshot_claims,
+    rollback_volume_revert_note,
     SHARED_K8S_ROLES,
     k8s_role_paths,
 )
@@ -1483,6 +1485,69 @@ def test_crlf_line_endings_are_not_recognized_and_so_deny():
     assert declared_denylist(sources) == frozenset({"r"})
 
 
+def test_declares_snapshot_claims_true_for_a_single_claim():
+    assert declares_snapshot_claims(
+        "k8s_autodeploy_snapshot_pvcs: [bazarr-config]  # noqa\n"
+    )
+
+
+def test_declares_snapshot_claims_true_for_a_two_claim_role():
+    assert declares_snapshot_claims(
+        "k8s_autodeploy_snapshot_pvcs: [tdarr-configs, tdarr-server]  # noqa\n"
+    )
+
+
+def test_declares_snapshot_claims_false_for_an_empty_list():
+    assert not declares_snapshot_claims("k8s_autodeploy_snapshot_pvcs: []\n")
+
+
+def test_declares_snapshot_claims_false_for_an_absent_key():
+    assert not declares_snapshot_claims("some_other_var: 1\n")
+
+
+def test_declares_snapshot_claims_false_for_none():
+    assert not declares_snapshot_claims(None)
+
+
+def test_declares_snapshot_claims_false_for_empty_string():
+    assert not declares_snapshot_claims("")
+
+
+def test_declares_snapshot_claims_ignores_an_indented_key():
+    assert not declares_snapshot_claims(
+        "something:\n  k8s_autodeploy_snapshot_pvcs: [x]\n"
+    )
+
+
+def test_rollback_volume_revert_note_reports_the_redeploy_failure_when_it_failed():
+    """The redeploy raising means the revert task inside roles/k8s/manifests may never have
+    run — the note must say so, not claim a revert was attempted."""
+    note = rollback_volume_revert_note({"sonarr"}, frozenset(), "boom")
+    assert "rollback redeploy itself failed" in note
+    assert "boom" in note
+    assert "Volume revert" not in note
+
+
+def test_rollback_volume_revert_note_says_no_claims_when_none_declare():
+    note = rollback_volume_revert_note({"speedtest"}, frozenset(), None)
+    assert "No service" in note
+    assert "no volume revert applies" in note
+
+
+def test_rollback_volume_revert_note_names_only_the_services_that_revert():
+    note = rollback_volume_revert_note(
+        {"sonarr", "speedtest"}, frozenset({"sonarr"}), None
+    )
+    assert "`sonarr`" in note
+    assert "speedtest" in note  # named as unaffected, not silently dropped
+    assert "declares no `k8s_autodeploy_snapshot_pvcs` and is unaffected" in note
+
+
+def test_rollback_volume_revert_note_omits_the_unaffected_aside_when_all_revert():
+    note = rollback_volume_revert_note({"sonarr"}, frozenset({"sonarr"}), None)
+    assert "unaffected" not in note
+
+
 def test_k8s_role_paths_finds_a_normal_role():
     listing = "ansible/roles/k8s/sonarr/defaults/main.yml\nansible/roles/k8s/sonarr/tasks/main.yml\n"
     assert k8s_role_paths(listing) == {
@@ -1571,18 +1636,30 @@ def _capture_run(monkeypatch):
     return calls
 
 
+_FORWARD_ARGV = [
+    "uv",
+    "run",
+    "--frozen",
+    "ansible-playbook",
+    "ansible/deploy.yml",
+    "--tags",
+    "sonarr",
+]
+
+
 def test_deploy_k8s_passes_no_extra_vars_by_default(monkeypatch) -> None:
     """The ordinary deploy must be byte-identical to what it was before this slice. ~50
-    services go through this call on every tick."""
+    services go through this call on every tick. Pins the full argv, not just -e's absence —
+    a stray extra arg anywhere else in the list would pass a presence-only check."""
     calls = _capture_run(monkeypatch)
     gitops_deploy.deploy_k8s({"sonarr"}, 900.0)
-    assert "-e" not in calls[0].argv
+    assert calls[0].argv == _FORWARD_ARGV
 
 
 def test_deploy_k8s_passes_the_restore_sha_when_given(monkeypatch) -> None:
     calls = _capture_run(monkeypatch)
     gitops_deploy.deploy_k8s({"sonarr"}, 900.0, restore_sha="deadbeef")
-    assert calls[0].argv[-2:] == ["-e", "k8s_restore_snapshot_sha=deadbeef"]
+    assert calls[0].argv == _FORWARD_ARGV + ["-e", "k8s_restore_snapshot_sha=deadbeef"]
 
 
 def test_deploy_k8s_treats_a_whitespace_only_restore_sha_as_absent(monkeypatch) -> None:
@@ -1590,7 +1667,7 @@ def test_deploy_k8s_treats_a_whitespace_only_restore_sha_as_absent(monkeypatch) 
     `| trim | length > 0` guard — a blank-but-truthy string must not add a broken `-e` arg."""
     calls = _capture_run(monkeypatch)
     gitops_deploy.deploy_k8s({"sonarr"}, 900.0, restore_sha="   ")
-    assert "-e" not in calls[0].argv
+    assert calls[0].argv == _FORWARD_ARGV
 
 
 # ── the rollback call site in main() ─────────────────────────────────────────────────────────
@@ -1636,14 +1713,14 @@ def test_the_rollback_redeploy_passes_the_FAILED_sha_not_the_good_one():
     assert "restore_sha" in rollback_kwargs, (
         "the rollback redeploy must pass restore_sha"
     )
+    # Pin the exact expression, not a prefix: `startswith("origin")` alone is satisfied by the
+    # full 40-char `origin` (volume-snapshot names with `git rev-parse --short=8`, so a 40-char
+    # SHA matches no snapshot and the revert silently never runs) and by an unrelated
+    # `origin_decoy` variable — neither is what this call site must send.
     sha_expr = ast.unparse(rollback_kwargs["restore_sha"])
-    assert sha_expr.startswith("origin"), (
-        f"rollback restore_sha must be derived from `origin` (the FAILED commit) — got "
-        f"`{sha_expr}`"
-    )
-    assert not sha_expr.startswith("local"), (
-        f"rollback restore_sha must not be `local` (the tree is already reset to it by this "
-        f"point) — got `{sha_expr}`"
+    assert sha_expr == "origin[:8]", (
+        f"rollback restore_sha must be exactly `origin[:8]` — the FAILED commit's short SHA, "
+        f"matching how volume-snapshot names its snapshots — got `{sha_expr}`"
     )
 
 

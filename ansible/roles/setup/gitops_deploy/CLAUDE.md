@@ -324,8 +324,19 @@ The same file also covers `deploy_k8s()` and the two `deploy_k8s()` call sites i
 `host_lib.parse_env_file` with canned values before the one import, so it works the same in CI
 and on a host where the real config.env exists, and never reads the real file. The rollback call
 site itself (inside `main()`, not unit-testable without mocking git/CI/Discord/state-file I/O) is
-covered by an AST source-check pinning that it passes `restore_sha=origin[:8]` — never `local`
-— and its own `K8S_ROLLBACK_TIMEOUT_S` budget, not the forward deploy's `K8S_DEPLOY_TIMEOUT_S`.
+covered by an AST source-check pinning that it passes `restore_sha=origin[:8]` EXACTLY (not a
+prefix check — the full 40-char `origin` also starts with `"origin"` and would match no snapshot,
+since volume-snapshot names with `git rev-parse --short=8`) and never `local`, and its own
+`K8S_ROLLBACK_TIMEOUT_S` budget, not the forward deploy's `K8S_DEPLOY_TIMEOUT_S`.
+
+`deploy_logic.declares_snapshot_claims()` and `rollback_volume_revert_note()` are pure and fully
+unit-tested: they decide the rollback alert's one revert-status line — whether the rollback
+redeploy itself failed (in which case the note says the revert task may never have run, not that
+it was attempted), and, when it succeeded, which of the batch's services actually declare
+`k8s_autodeploy_snapshot_pvcs` (only those revert; the alert must not imply the rest did too).
+`gitops_deploy.read_local_k8s_default()` is the one line of I/O feeding it — a plain file read
+against the working tree AFTER `git reset --hard local`, matching exactly what
+`roles/k8s/manifests` itself reads for the claim list.
 
 ## Rollback timeout (`K8S_ROLLBACK_TIMEOUT_S` / `gitops_deploy_k8s_rollback_timeout_s`)
 The rollback redeploy also reverts each claimed volume to its pre-deploy snapshot
