@@ -107,6 +107,19 @@ block beneath it against `filesystem trim` — the mechanism
 the prune runs before the apply, failing costs a deploy that has not started rather than a
 half-deployed service.
 
+## A detached volume cannot be snapshotted at all
+
+A Longhorn snapshot needs a running engine, and a workload scaled to zero has none. Two records
+of the same constraint: `longhorn-reap-orphan-snapshots.sh.j2` refuses to reap on a detached
+volume ("no engine to purge it", observed on `terraria-config` on 2026-08-16), and the slice 7
+drill got a `500` reverting a plainly detached volume for the same reason.
+
+So including this role in a service that may be scaled to zero fails that service's deploy after
+`volume_snapshot_timeout` seconds. The failure message names the detached case explicitly rather
+than leaving it as "the engine did not complete the snapshot". **Whoever wires a caller must
+check this**, because scaled-to-zero is a normal state to come back from and the deploy that
+brings a service back up is exactly the one that would hit it.
+
 ## The guard is `k8s_no_mutate`, and it covers the prune too
 
 Every mutating task carries `when: not (k8s_no_mutate | bool)`.

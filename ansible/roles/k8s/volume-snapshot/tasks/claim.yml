@@ -141,8 +141,12 @@
       existed and is being deleted — the recovery point for this tag is gone, and reverting to
       a markRemoved snapshot fails. Deploy from a fresh commit rather than re-running this one.'
       if (volume_snapshot_ready.stdout | default('') | split('|') | last) == 'true'
-      else 'The volume engine did not complete the snapshot. Check
-      `kubectl -n longhorn-system get volumes.longhorn.io ' ~ volume_snapshot_volume ~ '`.' }}
+      else 'The volume engine did not complete the snapshot. The likeliest cause is a DETACHED
+      volume: a workload scaled to zero has no running engine, and a snapshot of it cannot be
+      taken at all — the same constraint that stops longhorn-reap-orphan-snapshots.sh reaping
+      on a detached volume. Check `kubectl -n longhorn-system get volumes.longhorn.io '
+      ~ volume_snapshot_volume ~ ' -o jsonpath={.status.state}`; anything other than `attached`
+      is that case, and scaling the workload up is what fixes it.' }}
       Stopping before the apply: {{ volume_snapshot_service }} would be deployed with no way
       back.
 
