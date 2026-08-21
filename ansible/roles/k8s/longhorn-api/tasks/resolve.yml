@@ -49,11 +49,17 @@
       the NetworkPolicy refuses for host-originated traffic.
   when: (longhorn_api_pod.stdout | trim) | length == 0
 
-# `.split(' ')[0]`, not the raw trimmed stdout: the wildcard above can return more than one IP
-# space-separated on one line — a DaemonSet rolling update can briefly run an old (terminating)
-# and a new pod on the same node, and both satisfy the field selector. Concatenating them
-# untouched would silently produce a garbage URL; taking the first picks one reachable manager
-# rather than failing a resolve that a moment later would have returned exactly one IP.
+# `.split(' ')[0]`, not the raw trimmed stdout: the wildcard above returns space-separated IPs
+# for every matching pod, and this DaemonSet's own rollout is NOT what would put two pods on one
+# node at once — measured 2026-08-21, its updateStrategy is `{"rollingUpdate":{"maxSurge":0,
+# "maxUnavailable":"100%"},"type":"RollingUpdate"}`, and `maxSurge: 0` is delete-then-create
+# specifically to rule out a surge replacement coexisting with the pod it replaces. What this
+# still guards against is narrower: a terminating pod's object can outlive its container for the
+# grace period, still carrying its last-known podIP in `.status`, so a `get` mid-eviction can
+# transiently list it alongside its replacement. Concatenating both untouched would silently
+# produce a garbage URL; taking the first picks one reachable manager instead.
+# `_ground_truth_manager_ips()` in test_longhorn_api.py must resolve a duplicate node the same
+# way — see the comment there.
 - name: Record the API base
   tags: [deploy]
   ansible.builtin.set_fact:
