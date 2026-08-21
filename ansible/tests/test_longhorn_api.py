@@ -21,9 +21,11 @@ test merely disagrees with that ground truth, which is a real failure, not a rea
 
 from __future__ import annotations
 
+import os
 import shutil
 import socket
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -31,6 +33,7 @@ import yaml
 
 _ROLE = Path(__file__).resolve().parents[2] / "ansible/roles/k8s/longhorn-api"
 _RESOLVE = _ROLE / "tasks/resolve.yml"
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _tasks(path: Path) -> list[dict]:
@@ -75,11 +78,36 @@ def test_the_resolve_selects_this_nodes_own_manager_pod() -> None:
 
 def test_the_failure_guard_covers_an_empty_result() -> None:
     """A node with no local manager pod (unscheduled, mid-eviction) must fail loudly rather
-    than hand back an empty `longhorn_api` a caller would happily template into a broken URL."""
+    than hand back an empty `longhorn_api` a caller would happily template into a broken URL —
+    unless the caller opted into soft mode, which the next test covers."""
     guard = _named(_RESOLVE, "Fail when this node runs no longhorn-manager")
     when = guard["when"]
-    assert "longhorn_api_pod.stdout" in when
-    assert "length == 0" in when
+    assert isinstance(when, list)
+    assert any(
+        "longhorn_api_pod.stdout" in str(c) and "length == 0" in str(c) for c in when
+    )
+    assert "longhorn_api_required | bool" in when
+
+
+def test_soft_mode_records_the_miss_instead_of_failing() -> None:
+    """`longhorn_api_required: false` is the ONLY supported way to make an absent manager pod
+    non-fatal for a caller — `ignore_errors` on the include does not work, see
+    `test_longhorn_api_soft_mode_survives_no_manager` below, which proves the mechanism rather
+    than the YAML shape."""
+    task = _named(_RESOLVE, "Record that no longhorn-manager pod exists on this node")
+    when = task["when"]
+    assert "not (longhorn_api_required | bool)" in when
+    assert any("length == 0" in str(c) for c in when)
+    assert task["ansible.builtin.set_fact"]["longhorn_api_resolved"] is False
+
+
+def test_the_success_path_also_records_resolved_true() -> None:
+    """A caller in soft mode needs one fact to branch on regardless of outcome — a success that
+    only sets `longhorn_api`/`longhorn_api_node` would leave `longhorn_api_resolved` undefined
+    on the path that actually worked."""
+    task = _named(_RESOLVE, "Record the API base")
+    assert task["when"] == "(longhorn_api_pod.stdout | trim) | length > 0"
+    assert task["ansible.builtin.set_fact"]["longhorn_api_resolved"] is True
 
 
 def test_the_recorded_facts_are_the_documented_interface() -> None:
@@ -182,3 +210,112 @@ def test_the_resolve_returns_a_pod_ip_on_this_node() -> None:
         f"{this_node}'s manager pod is at {expected_ip!r} — the field selector or label "
         f"resolved the wrong pod, or none"
     )
+
+
+# ------------------------------------------------------- the soft-mode MECHANISM, not the YAML
+#
+# `ignore_errors: true` on a dynamic `include_role` does not catch a failure of a task the
+# include pulls in — only a failure of the include statement itself. That is documented Ansible
+# behaviour, and k8s/volume-snapshot's first cut of the detached-volume attach shipped exactly
+# that mistake: `ignore_errors` on the `include_role: {name: k8s/longhorn-api, ...}` task, which
+# a reviewer proved does nothing by running the REAL, unmodified role through a scratch play
+# with `k3s` stubbed to report no manager pod — the play still aborted at "Fail when this node
+# runs no longhorn-manager", the include's `ignore_errors` notwithstanding.
+#
+# These two tests run that same proof against the actual fix: `longhorn_api_required: false`,
+# read INSIDE resolve.yml, so the role itself chooses not to raise rather than asking a caller's
+# `ignore_errors` to catch something it structurally cannot. `become: true` on the pod-IP read
+# is satisfied by a passthrough `sudo` replacement rather than real privilege escalation — there
+# is nothing here that needs root, and the test sandbox has no passwordless sudo to use.
+
+
+def _run_longhorn_api_scratch_play(
+    *, required: bool
+) -> subprocess.CompletedProcess[str]:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+
+        k3s_stub = bin_dir / "k3s"
+        k3s_stub.write_text("#!/bin/sh\nexit 0\n")
+        k3s_stub.chmod(0o755)
+
+        # A `sudo`/`become_exe` passthrough: finds the trailing `-c '<command>'` the sudo become
+        # plugin always builds and execs it directly, as the current (unprivileged) user. Nothing
+        # the resolved task runs needs real root — it only needs `become: true` to not block on a
+        # password prompt this sandbox cannot answer.
+        fake_become = bin_dir / "fake_become"
+        fake_become.write_text(
+            "#!/bin/sh\n"
+            'last=""\n'
+            'prev=""\n'
+            'for a in "$@"; do prev="$last"; last="$a"; done\n'
+            'if [ "$prev" = "-c" ]; then exec /bin/sh -c "$last"; fi\n'
+            'exec "$@"\n'
+        )
+        fake_become.chmod(0o755)
+
+        required_var = "" if required else "\n          longhorn_api_required: false"
+        playbook = tmp_path / "play.yml"
+        playbook.write_text(
+            "- hosts: localhost\n"
+            "  connection: local\n"
+            "  gather_facts: false\n"
+            "  vars:\n"
+            "    ansible_hostname: testnode\n"
+            f'    ansible_become_exe: "{fake_become}"\n'
+            "  tasks:\n"
+            "    - name: Resolve longhorn API\n"
+            "      ansible.builtin.include_role:\n"
+            "        name: k8s/longhorn-api\n"
+            "        tasks_from: resolve.yml\n"
+            f"      vars:{required_var}\n"
+            "    - name: Prove we are still alive\n"
+            "      ansible.builtin.debug:\n"
+            "        msg: \"SURVIVED longhorn_api_resolved={{ longhorn_api_resolved | default('undef') }}\"\n"
+        )
+
+        env = dict(os.environ)
+        env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
+        env["ANSIBLE_LOG_PATH"] = str(tmp_path / "ansible.log")
+        env["ANSIBLE_NOCOLOR"] = "1"
+
+        return subprocess.run(
+            ["ansible-playbook", str(playbook), "-i", "localhost,"],
+            cwd=_REPO_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=90,
+            check=False,
+        )
+
+
+@pytest.mark.skipif(
+    shutil.which("ansible-playbook") is None, reason="ansible-playbook not on PATH"
+)
+def test_longhorn_api_soft_mode_survives_no_manager() -> None:
+    """The fix: `longhorn_api_required: false` makes an absent manager pod non-fatal because
+    resolve.yml itself skips its own `fail()`, not because a caller's `ignore_errors` catches
+    it. If this regresses back to relying on `ignore_errors` at the call site, this test goes
+    red — it runs the real role, not a rendered expression."""
+    result = _run_longhorn_api_scratch_play(required=False)
+    assert result.returncode == 0, (
+        f"soft mode must not abort the play when no longhorn-manager pod exists.\n"
+        f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+    )
+    assert "SURVIVED longhorn_api_resolved=False" in result.stdout
+
+
+@pytest.mark.skipif(
+    shutil.which("ansible-playbook") is None, reason="ansible-playbook not on PATH"
+)
+def test_longhorn_api_hard_mode_still_fails_by_default() -> None:
+    """The control for the test above: k8s/volume-revert never sets `longhorn_api_required`,
+    so it must keep getting today's hard failure. Without this, a bug that made soft mode the
+    DEFAULT would pass the test above and silently defang volume-revert's fail-fast guarantee."""
+    result = _run_longhorn_api_scratch_play(required=True)
+    assert result.returncode != 0
+    assert "No longhorn-manager pod" in result.stdout
+    assert "SURVIVED" not in result.stdout

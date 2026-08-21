@@ -40,6 +40,17 @@
   check_mode: false
   register: longhorn_api_pod
 
+# `longhorn_api_required` (default true, see defaults/main.yml) decides whether an empty result
+# is fatal. A caller that needs the API — k8s/volume-revert, which has no fallback for a failed
+# rollback — leaves it at the default and gets this hard failure, unchanged from before this
+# variable existed.
+#
+# THIS IS THE ONLY WAY TO MAKE THIS NON-FATAL FOR A CALLER. `ignore_errors: true` on the
+# `include_role` that pulls this file in does NOT work: it suppresses a failure of the include
+# STATEMENT, not a fatal `fail()` raised by a task the include pulls in — this is documented
+# Ansible behaviour, not a version quirk, and slice 7b shipped that exact mistake once already
+# (see k8s/volume-snapshot's CLAUDE.md and `test_longhorn_api_soft_mode_survives_no_manager` in
+# test_longhorn_api.py, which runs this file for real through a scratch play to prove it).
 - name: Fail when this node runs no longhorn-manager
   tags: [deploy]
   ansible.builtin.fail:
@@ -47,7 +58,20 @@
       No longhorn-manager pod on {{ ansible_hostname }}, so the Longhorn API is unreachable from
       here. The ClusterIP is not a fallback — it load-balances to the cross-node manager, which
       the NetworkPolicy refuses for host-originated traffic.
-  when: (longhorn_api_pod.stdout | trim) | length == 0
+  when:
+    - longhorn_api_required | bool
+    - (longhorn_api_pod.stdout | trim) | length == 0
+
+# The soft-mode half of the same decision: a caller that set `longhorn_api_required: false`
+# reads `longhorn_api_resolved` instead of the play aborting. `longhorn_api`/`longhorn_api_node`
+# stay undefined in this branch — there is no pod to build a URL from.
+- name: Record that no longhorn-manager pod exists on this node
+  tags: [deploy]
+  when:
+    - not (longhorn_api_required | bool)
+    - (longhorn_api_pod.stdout | trim) | length == 0
+  ansible.builtin.set_fact:
+    longhorn_api_resolved: false
 
 # `.split(' ')[0]`, not the raw trimmed stdout: the wildcard above returns space-separated IPs
 # for every matching pod, and this DaemonSet's own rollout is NOT what would put two pods on one
@@ -60,8 +84,14 @@
 # produce a garbage URL; taking the first picks one reachable manager instead.
 # `_ground_truth_manager_ips()` in test_longhorn_api.py must resolve a duplicate node the same
 # way — see the comment there.
+#
+# Guarded on a non-empty result: with `longhorn_api_required: false` and no manager pod, this
+# must not run at all — there is no IP to build a URL from, and `longhorn_api_resolved` above is
+# the only fact that branch gets.
 - name: Record the API base
   tags: [deploy]
+  when: (longhorn_api_pod.stdout | trim) | length > 0
   ansible.builtin.set_fact:
     longhorn_api: "http://{{ (longhorn_api_pod.stdout | trim).split(' ')[0] }}:9500"
     longhorn_api_node: "{{ ansible_hostname }}"
+    longhorn_api_resolved: true
