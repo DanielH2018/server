@@ -6,6 +6,12 @@
 #   autofix-bridge          — KUMA_URL (autofix-bridge/files/autofix.py)
 #   cloudflare-ddns-direct  — KUMA push URL (cloudflare-ddns/templates/deployment-direct.yaml.j2)
 #   cloudflare-ddns-proxied — the same, deployment-proxied.yaml.j2
+#   pi-peer-backup          — push_url (pi-peer-backup/templates/secret.yaml.j2), a CronJob
+#
+# pi-peer-backup was missed when this policy first landed: the census read Deployments, and it is
+# the namespace's only CronJob. Its 2026-08-21 03:30 UTC run pulled its two peer files and exited
+# Complete, then lost the heartbeat to `Failed to connect to uptime-kuma...:3001` — a backup that
+# succeeded while its monitor went silent.
 #
 # The host crons that push heartbeats arrive with a node address and are covered by the
 # baseline's cni0 /32s. Browsers arrive through traefik, also from the baseline.
@@ -44,6 +50,9 @@ spec:
         - podSelector:
             matchLabels:
               app: cloudflare-ddns-proxied
+        - podSelector:
+            matchLabels:
+              app: pi-peer-backup
       ports:
         - port: 3001
           protocol: TCP
