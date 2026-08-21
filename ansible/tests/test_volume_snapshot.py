@@ -638,7 +638,13 @@ def test_the_listing_jsonpath_parses() -> None:
     result = subprocess.run(
         rendered[1:], capture_output=True, text=True, timeout=30, check=False
     )
-    if "connection refused" in result.stderr or "was refused" in result.stderr:
+    unreachable_tokens = (
+        "connection refused",
+        "was refused",
+        "i/o timeout",
+        "no configuration has been provided",
+    )
+    if any(token in result.stderr for token in unreachable_tokens):
         pytest.skip("no reachable cluster")
     assert result.returncode == 0, (
         f"kubectl rejected the listing jsonpath: {result.stderr.strip()}"

@@ -38,8 +38,12 @@ match this repo's real call structure, the innermost role's own default won a sa
 collision against an ancestor's, every time, confirmed 2026-08-21 with a throwaway play. This is
 why `k8s_autodeploy_snapshot_pvcs` reaches the include cleanly — `k8s/volume-snapshot` never
 declares that name itself, so there is no collision to lose — while `volume_snapshot_retain`
-would silently stay at this role's own default even if a caller set it. The two knobs stay at
-`volume_snapshot_retain: 3`, `volume_snapshot_timeout: 120` until a caller genuinely needs
+would silently stay at this role's own default even if a caller set it as its own role default.
+`group_vars`, `host_vars` and `-e` all outrank a role default in Ansible's precedence order, so
+each of those DOES override `volume_snapshot_retain`/`volume_snapshot_timeout` — the thing a
+caller role's own `defaults/main.yml` cannot do is set them. The floor clamp described below holds
+regardless of which of those set the value, including `-e volume_snapshot_retain=0`. The two knobs
+stay at `volume_snapshot_retain: 3`, `volume_snapshot_timeout: 120` until a caller genuinely needs
 something else, at which point the fix is adding them to the `vars:` block at
 `roles/k8s/manifests/tasks/main.yml:186`, not a role default.
 
@@ -63,9 +67,11 @@ failed downgrade, at which point there is nothing to go back to.
 **Scope for this slice: 13 of 31.** Measured 2026-08-21, 31 roles in this repo carry the
 `Recreate` + rendered-RWO-claim shape this role exists for; task 3 declared
 `k8s_autodeploy_snapshot_pvcs` for 13 of them — the ones drawn from the auto-deploy promotion
-criteria, not from a data-migration survey. The other 18 (authelia, pihole, n8n, traefik-acme and
-the rest) carry the same manual-deploy migration risk today, unprotected by this role, exactly as
-they were before this branch. Widening to all 31 was considered and deferred: the create path
+criteria, not from a data-migration survey. The other 18 (authelia, claude-otel, crowdsec,
+healthchecks, karakeep, loki-homelab, mosquitto, n8n, pihole, registry, scrutiny, terraria,
+terraria-stats, traefik, uptime-kuma, valheim, valheim-stats, wg-easy) carry the same
+manual-deploy migration risk today, unprotected by this role, exactly as they were before this
+branch. Widening to all 31 was considered and deferred: the create path
 here is entirely unexercised live (no Snapshot CR has been applied by this code), and widening an
 unexercised new failure mode from 13 deploy paths to 31 before the first real deploy proves it
 out was judged the worse risk. Follow-up, not done here.
@@ -127,6 +133,20 @@ three dead CRs as the retained three would make the next pass delete live snapsh
 clamped to a floor of 1 at the point of use. 7b reverts to the most recent snapshot, and a
 retention pass that races a rollback would destroy the recovery point it exists to protect.
 
+**The retention window holds the 3 most recent deploy runs, not the 3 most recent distinct
+commits.** The per-run token (see "The snapshot name is deterministic" above) gives every run its
+own snapshot, so redeploying the same commit three times fills the window with three snapshots of
+that one commit and prunes out whatever came before it — including a pre-migration snapshot that
+was the actual recovery point this role exists to hold. An operator who redeploys the same
+commit after a migration, to pick up an unrelated config change, loses that recovery point on the
+third redeploy without touching a different commit at all.
+
+The trade was made deliberately, not overlooked: without the token, redeploying the same commit
+named the exact same CR its own earlier deploy already created, and `apply` against a CR that
+could be `markRemoved`-but-not-gone either silently reused a stale recovery point or failed the
+deploy outright. The token fixes the collision, but a window counted in runs rather than commits
+is the cost of fixing it this way.
+
 **Known cost, not fixed here: renaming a service strands its old snapshots permanently.** The
 prune selects on `autodeploy-<service>-`, and `longhorn-reap-orphan-snapshots.sh.j2` — the
 cluster-wide orphan reaper — skips any snapshot carrying no `RecurringJob` label, which every
@@ -169,8 +189,11 @@ the prune runs before the apply, failing costs a deploy that has not started rat
 half-deployed service.
 
 **Also accepted: this role runs on a no-op deploy too.** gitops-deploy only deploys services that
-actually changed, so a wasted snapshot before an unchanged apply is rare — and when it happens,
-it costs a few seconds on a manual deploy of an already-up-to-date service. Not worth gating on.
+actually changed, so this cost is rare in the automated pipeline. A manual deploy is a different
+story: each run gets its own token (see "The snapshot name is deterministic" above), so a no-op
+manual deploy of an already-up-to-date service still creates a real Snapshot CR and runs a real
+prune against it, not a skipped no-op. Running a full manual deploy twice in one day churns the
+snapshot chain of all 13 protected volumes. Not worth gating on.
 
 ## A detached volume cannot be snapshotted at all, and that is not fatal
 
