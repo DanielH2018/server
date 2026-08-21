@@ -1,0 +1,8 @@
+---
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# This role deploys no workload of its own: it resolves a fact for other roles to consume,
+# renders no manifest for `rollout status` to gate, and pins no `_image:` var for Renovate to
+# bump. Declared rather than added to the filter plugin's SHARED_ROLES, because it carries a
+# defaults/main.yml — the same choice cronjob-gate and volume-snapshot make for the same reason.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "deploys no workload of its own — resolves a fact other roles consume; it renders no manifest and pins no image for Renovate to bump"  # noqa var-naming[no-role-prefix]

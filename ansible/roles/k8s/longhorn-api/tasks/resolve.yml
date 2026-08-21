@@ -1,0 +1,41 @@
+---
+# The Longhorn HTTP API is reachable from a node's host netns ONLY via that node's own
+# longhorn-manager pod. The longhorn-manager NetworkPolicy's `from:` is entirely podSelectors,
+# so host-originated traffic matches no rule and the cross-node pod refuses the connection.
+# The `longhorn-backend` ClusterIP has one endpoint per node, which makes it a coin flip:
+# measured 2026-08-21, 2 of 8 GETs succeeded. `ansible/seed_volume_backup.yml:14-17` records
+# the same finding from the other direction and chose CRs instead.
+- name: Resolve this node's own longhorn-manager pod IP
+  tags: [deploy]
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - longhorn-system
+      - get
+      - pod
+      - -l
+      - app=longhorn-manager
+      - --field-selector
+      - spec.nodeName={{ ansible_hostname }}
+      - -o
+      - jsonpath={.items[0].status.podIP}
+  become: true
+  changed_when: false
+  register: longhorn_api_pod
+
+- name: Fail when this node runs no longhorn-manager
+  tags: [deploy]
+  ansible.builtin.fail:
+    msg: >-
+      No longhorn-manager pod on {{ ansible_hostname }}, so the Longhorn API is unreachable from
+      here. The ClusterIP is not a fallback — it load-balances to the cross-node manager, which
+      the NetworkPolicy refuses for host-originated traffic.
+  when: (longhorn_api_pod.stdout | trim) | length == 0
+
+- name: Record the API base
+  tags: [deploy]
+  ansible.builtin.set_fact:
+    longhorn_api: "http://{{ longhorn_api_pod.stdout | trim }}:9500"
+    longhorn_api_node: "{{ ansible_hostname }}"
