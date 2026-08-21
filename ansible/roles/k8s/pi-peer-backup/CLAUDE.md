@@ -20,8 +20,19 @@ replaced the retired Kopia scope for the Pi.
   (`HC_PING_URL`, slug `pi-peer-backup`) when one is configured: Kuma resolves to a
   Service in this cluster, so a cluster outage silences both the push and the monitor
   waiting for it. See `docs/healthchecks-io-deadman.md`.
+  **What the monitor means:** "the nightly 23:30 run happened," not "some run happened
+  recently." `k8s/cronjob-gate` runs a one-off Job (`pi-peer-backup-deploy-gate`) on every
+  deploy of this role to prove a bumped image still starts; `files/pull-pi-peers.sh`
+  recognizes that Job by its pod's hostname prefix and skips both pushes for it, so a routine
+  Renovate-driven deploy can't mask a missed scheduled firing or page from a deploy-time probe
+  instead of the backup itself.
 - **Manual run/proof:** `kubectl -n homelab create job ppb-manual --from=cronjob/pi-peer-backup`
+  (this bypasses the gate-run hostname check, so a manual proof run DOES push — same as a
+  scheduled run).
 
 ## Editing
 - Script: `files/pull-pi-peers.sh` (baked into the image — redeploy rebuilds)
 - Deploy (on daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "pi-peer-backup"`
+- Deploy-time gate: `k8s/cronjob-gate`, included after the manifests deploy task. Its default
+  timeout (660s) exceeds this CronJob's `activeDeadlineSeconds` (600s); see
+  `ansible/roles/k8s/cronjob-gate/CLAUDE.md` for what it proves and does not prove.
