@@ -56,3 +56,14 @@
       - cronjob.yaml
     manifests_secret_files:
       - secret.yaml
+
+# A CronJob has no rollout to wait on, so an image bump would otherwise deploy unobserved.
+# pi-peer-backup is a retention-free rsync mirror and sets concurrencyPolicy: Forbid, so the
+# gate's one-off run is idempotent and cannot collide with a scheduled run.
+# See ansible/roles/k8s/cronjob-gate/CLAUDE.md.
+- name: Gate the pi-peer-backup deploy on a one-off run
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: k8s/cronjob-gate
+  vars:
+    cronjob_gate_name: pi-peer-backup
