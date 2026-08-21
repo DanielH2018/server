@@ -1,0 +1,21 @@
+---
+# Detach and attach are engine operations; the drill measured the whole cycle at well under two
+# minutes on a 1Gi volume holding ~300 MB. Cost scales with the data to coalesce, not with
+# volume size, so the media-adjacent roles are slower and this ceiling is deliberately generous.
+volume_revert_state_timeout: 180
+volume_revert_poll_interval: 2
+
+# Seconds to wait for one Longhorn API action to answer. The three calls this role makes update
+# CRs and return; they do not wait for the state change, which the polls above cover. The
+# ceiling matters anyway: a client timeout is NOT proof the server did nothing, so a generous
+# value keeps the ambiguous outcome rare. CLAUDE.md says what to do when it happens.
+volume_revert_api_timeout: 60
+
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# This role deploys no workload of its own: it reverts another role's volume during a failed
+# deploy's rollback, renders no manifest for `rollout status` to gate, and pins no `_image:` var
+# for Renovate to bump. Declared rather than added to the filter plugin's SHARED_ROLES, because
+# it carries a defaults/main.yml — the same choice cronjob-gate, longhorn-api and
+# volume-snapshot make for the same reason.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "deploys no workload of its own — reverts a volume to a pre-deploy snapshot during a rollback; it renders no manifest and pins no image for Renovate to bump"  # noqa var-naming[no-role-prefix]
