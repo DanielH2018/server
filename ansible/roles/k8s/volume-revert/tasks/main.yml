@@ -26,17 +26,23 @@
   # eight characters when eight are ambiguous, and volume-snapshot names the snapshot from that
   # raw stdout; truncating to eight here would fail to match a nine-character name at the
   # `-<claim>-` boundary. So: eight or more lowercase hex digits, and no transformation.
+  #
+  # `is sequence` and `is not string` because a bare string passes a length check: Ansible would
+  # then loop its CHARACTERS, and the first claim would be a PVC named `t`. The failure is safe —
+  # it lands on the unbound-claim assert, before anything moves — but it names the wrong problem.
   ansible.builtin.assert:
     that:
       - volume_revert_service | default('') | length > 0
+      - volume_revert_claims | default([]) is sequence
+      - volume_revert_claims | default([]) is not string
       - volume_revert_claims | default([]) | length > 0
       - volume_revert_sha | default('') | regex_search('^[0-9a-f]{8,}$')
     fail_msg: >-
-      k8s/volume-revert needs volume_revert_service, a non-empty volume_revert_claims and a
-      volume_revert_sha of eight or more lowercase hex digits — the deploy tag
-      k8s/volume-snapshot named the snapshot with. Got service
-      '{{ volume_revert_service | default('') }}',
-      {{ volume_revert_claims | default([]) | length }} claim(s) and sha
+      k8s/volume-revert needs volume_revert_service, a volume_revert_claims LIST holding at
+      least one PVC name, and a volume_revert_sha of eight or more lowercase hex digits — the
+      deploy tag k8s/volume-snapshot named the snapshot with. Got service
+      '{{ volume_revert_service | default('') }}', claims
+      '{{ volume_revert_claims | default([]) }}' and sha
       '{{ volume_revert_sha | default('') }}'.
     quiet: true
 

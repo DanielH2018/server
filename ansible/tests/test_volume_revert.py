@@ -41,6 +41,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from _k8s_render import rendered_docs
 from ansible.plugins.filter.core import FilterModule
 from ansible.plugins.test.core import TestModule as _AnsibleTests
 from jinja2.nativetypes import NativeEnvironment
@@ -96,6 +97,56 @@ def _index(names: list[str], fragment: str) -> int:
     return hits[0]
 
 
+# kubectl's ways of saying "there is no cluster here to ask". Measured 2026-08-21: kubectl does
+# NOT print the bare string "connection refused" — it prints "The connection to the server
+# localhost:8080 was refused", and a cluster without Longhorn's CRDs answers "the server doesn't
+# have a resource type". A guard that misses either turns "no cluster" into a red test on any
+# machine that ships kubectl, GitHub's ubuntu runners included. The first four match
+# `test_volume_snapshot.py`'s list.
+_NO_CLUSTER = (
+    "connection refused",
+    "was refused",
+    "i/o timeout",
+    "no configuration has been provided",
+    "doesn't have a resource type",
+)
+
+
+def _no_cluster_to_ask(stderr: str) -> bool:
+    """Whether kubectl failed for want of a cluster rather than for want of a valid jsonpath.
+
+    A rejected jsonpath never counts as unreachable, whatever else the stderr says: that is the
+    one failure the seam test exists to catch, and it reads `error: error parsing jsonpath …`.
+    """
+    return "jsonpath" not in stderr and any(token in stderr for token in _NO_CLUSTER)
+
+
+def test_the_seam_test_skips_a_missing_cluster_and_fails_a_bad_jsonpath() -> None:
+    """The seam test's own guard, against stderr recorded from kubectl on 2026-08-21.
+
+    Without this, the guard is only exercised on a machine that happens to be in the state it
+    describes — which is never this one, and never CI.
+    """
+    unreachable = (
+        "The connection to the server localhost:8080 was refused - did you specify the right "
+        "host or port?",
+        "error: no configuration has been provided, try setting KUBERNETES_MASTER environment "
+        "variable",
+        'error: the server doesn\'t have a resource type "snapshots"',
+        "Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout",
+    )
+    for stderr in unreachable:
+        assert _no_cluster_to_ask(stderr), stderr
+    rejected = (
+        'error: error parsing jsonpath {range .items[?(@.spec.volume!=""&&@.spec.volume=="x")]}'
+        ", unrecognized character in action: U+0026 '&'"
+    )
+    assert not _no_cluster_to_ask(rejected)
+    # The combination that matters most: an unreachable-looking message must not excuse a
+    # jsonpath kubectl rejected.
+    assert not _no_cluster_to_ask(rejected + " connection refused")
+
+
 def _env() -> NativeEnvironment:
     env = NativeEnvironment()
     env.filters.update(FilterModule().filters())
@@ -107,25 +158,114 @@ def _render(expression: str, **context):
     return _env().from_string(expression).render(**context)
 
 
-def _mutating_tasks(path: Path) -> list[dict]:
-    """Tasks that change the cluster or wait on a change this role made.
+# kubectl verbs that change the cluster. `get`, `describe` and friends are deliberately absent:
+# a read is what `check_mode: false` exists to let run under `--check`.
+_WRITE_VERBS = {
+    "scale",
+    "patch",
+    "apply",
+    "create",
+    "delete",
+    "replace",
+    "edit",
+    "annotate",
+    "label",
+    "cordon",
+    "uncordon",
+    "drain",
+    "taint",
+    "exec",
+    "cp",
+    "rollout",
+}
+
+
+def _role_tasks() -> list[tuple[Path, dict]]:
+    """Every task in the role, both files.
+
+    Both files, because `main.yml` is where someone writes "and bring it back up" — and a census
+    that reads only `claim.yml` cannot see it. Measured 2026-08-21: an unguarded
+    `--replicas=1` appended to `main.yml` left all 27 tests green.
+    """
+    return [(path, task) for path in (_CLAIM, _MAIN) for task in _tasks(path)]
+
+
+def _mutating_tasks() -> list[tuple[Path, dict]]:
+    """Tasks that change the cluster, or that wait on a change this role made.
 
     The waits are included deliberately: under `k8s_no_mutate` the scale-down and the attach
     never happen, so an unguarded wait polls for a transition nobody requested and burns its
     whole timeout before failing a dry run that changed nothing.
+
+    Recognises a write by its kubectl verb rather than by the one verb this role happens to use
+    today, and recognises `kubernetes.core.*` as mutating whatever the module. The previous
+    version saw only `uri`, `scale` and `until`; an appended `kubectl patch pvc/...` was
+    invisible to it.
     """
     out = []
-    for task in _tasks(path):
-        if "ansible.builtin.uri" in task:
-            out.append(task)
+    for path, task in _role_tasks():
+        modules = [
+            key
+            for key in task
+            if "." in key and not key.startswith("ansible.builtin.set")
+        ]
+        if any(module.startswith("kubernetes.core.") for module in modules):
+            out.append((path, task))
             continue
-        command = task.get("ansible.builtin.command")
+        if "ansible.builtin.uri" in task:
+            out.append((path, task))
+            continue
+        command = task.get("ansible.builtin.command") or task.get(
+            "ansible.builtin.shell"
+        )
         if not isinstance(command, dict):
             continue
         argv = [str(token) for token in command.get("argv", [])]
-        if "scale" in argv or "until" in task:
-            out.append(task)
+        if _WRITE_VERBS.intersection(argv) or "until" in task:
+            out.append((path, task))
     return out
+
+
+def _guard_of(task: dict) -> list[str]:
+    when = task.get("when")
+    conditions = when if isinstance(when, list) else [when]
+    return [str(condition).strip() for condition in conditions]
+
+
+def _is_guarded(task: dict) -> bool:
+    return _GUARD in _guard_of(task)
+
+
+_PROSE_KEYS = {"name", "msg", "fail_msg", "success_msg"}
+
+
+def _strip_prose(node):
+    """Drop the human-readable fields, at any depth.
+
+    Everything left is something Ansible acts on. The prose is dropped because it legitimately
+    mentions the very strings the checks below hunt for — the frontend assert's failure message
+    says the workload "is at zero replicas", and an operator reading it mid-incident needs that
+    sentence more than a scanner needs a simpler rule.
+    """
+    if isinstance(node, dict):
+        return {k: _strip_prose(v) for k, v in node.items() if k not in _PROSE_KEYS}
+    if isinstance(node, list):
+        return [_strip_prose(item) for item in node]
+    return node
+
+
+def _body(task: dict) -> str:
+    """The task as YAML, minus the prose fields."""
+    return yaml.safe_dump(_strip_prose(task))
+
+
+def _body_with_prose(task: dict) -> str:
+    """The task as YAML, minus its name only.
+
+    The register check below needs the messages: a `debug` whose `msg` templates a skipped
+    task's register fails the dry run exactly like a `when` that reads one.
+    """
+    return yaml.safe_dump({key: value for key, value in task.items() if key != "name"})
 
 
 # --------------------------------------------------------------------------------- ordering
@@ -147,16 +287,51 @@ def test_a_missing_snapshot_fails_rather_than_skipping() -> None:
     task = _named(_CLAIM, "Fail when no snapshot matches this deploy")
     assert "ansible.builtin.fail" in task
     assert "failed_when: false" not in yaml.safe_dump(task)
+    assert "volume_revert_candidates | length == 0" in _guard_of(task)
+
+
+def test_a_dry_run_reports_a_missing_snapshot_instead_of_aborting() -> None:
+    """The failure above is guarded, and something must cover the other half.
+
+    `--check` and `--dry-run` run the two reads for real, so a service that has never deployed
+    legitimately has no snapshot — and an unguarded `fail` would abort the dry run rather than
+    answer its question. The pair is: fail when mutating, report when not.
+    """
+    fail = _guard_of(_named(_CLAIM, "Fail when no snapshot matches this deploy"))
+    report = _guard_of(_named(_CLAIM, "Report a dry run with nothing to revert"))
+    assert _GUARD in fail
+    assert "k8s_no_mutate | bool" in report
+    assert _GUARD not in report
+    assert "volume_revert_candidates | length == 0" in report
 
 
 def test_the_role_never_scales_back_up() -> None:
     """Every one of the thirteen manifests carries an explicit `replicas: 1`, so the apply that
     follows this role restores the Deployment. Scaling back here would roll the workload twice
-    and race the apply."""
-    for task in _iter_task_dicts(_CLAIM):
-        argv = task.get("ansible.builtin.command", {}).get("argv", [])
-        joined = " ".join(str(t) for t in argv)
-        assert "--replicas=1" not in joined
+    and race the apply.
+
+    Both files, and the class rather than the literal. Measured 2026-08-21: appending an
+    unguarded `kubectl scale ... --replicas=1` to `main.yml` left all 27 tests green, because
+    the check read `claim.yml` alone; and a scale-back can equally be written
+    `--replicas={{ n }}`, `kubernetes.core.k8s_scale`, or `kubectl patch -p '{"spec":
+    {"replicas":1}}'`. So: the only replica count this role may name anywhere is zero.
+    """
+    for _path, task in _role_tasks():
+        body = _body(task)
+        assert "k8s_scale" not in body, task["name"]
+        for match in re.finditer(r"replicas", body):
+            tail = body[match.end() : match.end() + 2]
+            assert tail == "=0", (
+                f"{task['name']!r} names a replica count that is not `--replicas=0`: "
+                f"...{body[match.start() - 20 : match.end() + 20]}... The apply that follows a "
+                f"revert restores the Deployment; this role only ever scales to zero."
+            )
+        argv = [
+            str(token)
+            for token in (task.get("ansible.builtin.command") or {}).get("argv", [])
+        ]
+        if "scale" in argv:
+            assert "to zero replicas" in task["name"], task["name"]
 
 
 def test_the_snapshot_lookup_precedes_the_scale_down() -> None:
@@ -168,6 +343,50 @@ def test_the_snapshot_lookup_precedes_the_scale_down() -> None:
     assert _index(tasks, "Fail when no snapshot matches this deploy") < _index(
         tasks, "to zero replicas"
     )
+
+
+def test_the_whole_sequence_is_in_the_drill_proven_order() -> None:
+    """Every step of claim.yml, pinned as one sequence.
+
+    Pairwise asserts leave the pairs nobody thought of unpinned, and two of those transpositions
+    are outages. Measured 2026-08-21: moving the scale-down AFTER the maintenance-mode attach
+    left every other test green, and at runtime the pod still holds the volume, so the attach
+    cannot give the engine a disabled frontend — service down, unreverted. Moving the detach
+    BEFORE the revert is the same shape: the revert then hits a plainly detached volume and gets
+    the drill-measured HTTP 500, again with the workload already at zero.
+
+    The sequence must also be exhaustive: a task in the file and not in this list fails here,
+    which is what makes someone adding a step decide where it belongs.
+    """
+    expected = [
+        "Resolve the Longhorn volume backing",
+        "Check the Longhorn volume binding",
+        "Name the snapshot prefix",
+        "taken by this deploy",
+        "Choose the newest matching snapshot",
+        "Fail when no snapshot matches this deploy",
+        "Report a dry run with nothing to revert",
+        "Record the snapshot to revert to",
+        "to zero replicas",
+        "the detach that precedes the attach",
+        "in maintenance mode",
+        "maintenance-mode attach of",
+        "disableFrontend",
+        "Revert the volume",
+        "Detach the volume",
+        "the detach after the revert",
+    ]
+    names = _task_names(_CLAIM)
+    assert len(names) == len(expected), (
+        f"claim.yml has {len(names)} tasks and this sequence names {len(expected)}. A step that "
+        f"is not in the list is a step whose position nothing checks — add it where it belongs."
+    )
+    positions = [_index(names, fragment) for fragment in expected]
+    assert positions == sorted(positions), (
+        "claim.yml's tasks are not in the drill-proven order. Read the table in the role's "
+        f"CLAUDE.md before reordering. Positions found: {dict(zip(expected, positions))}"
+    )
+    assert positions == list(range(len(expected)))
 
 
 def test_the_api_resolve_precedes_the_first_claim() -> None:
@@ -255,20 +474,45 @@ def test_the_post_revert_detach_is_verified_by_state() -> None:
 def test_every_mutation_is_guarded_on_k8s_no_mutate() -> None:
     """`k8s_no_mutate` is `ansible_check_mode or (k8s_dry_run | bool)`. Guarding on either half
     alone leaves the other half mutating a live cluster during a run that promised not to."""
-    mutating = _mutating_tasks(_CLAIM)
-    # An exact count, not a floor. The census is a heuristic — every `uri`, plus a command that
-    # scales or polls — and it is blind to a future `kubectl patch`, `apply` or `delete` that
-    # neither scales nor waits. A floor would let such a task arrive unguarded with this test
-    # still green; pinning the number makes whoever adds one read this comment.
+    mutating = _mutating_tasks()
+    # An exact count, not a floor. The census recognises a write by its kubectl verb, every
+    # `kubernetes.core.*` module and every polling wait — but a task shaped like none of those
+    # would still be invisible, and a floor would let it arrive unguarded with this test green.
+    # Pinning the number makes whoever adds a task read this comment.
     assert len(mutating) == 7, (
         f"the mutating-task census found {len(mutating)} tasks, not 7. If you added a mutation, "
         f"guard it and update this count; if the census stopped recognising one, fix "
         f"_mutating_tasks — a task it cannot see is a task this test does not check."
     )
-    for task in mutating:
-        when = task.get("when")
-        conditions = when if isinstance(when, list) else [when]
-        assert _GUARD in [str(c).strip() for c in conditions], task["name"]
+    for _path, task in mutating:
+        assert _is_guarded(task), task["name"]
+
+
+def test_nothing_unguarded_reads_a_guarded_tasks_register() -> None:
+    """A task that consumes a guarded task's `register` must carry the same guard.
+
+    Under `--check` the guarded task is skipped, its register is undefined, and the consumer
+    fails the dry run — a run that promised to change nothing instead changes nothing and dies.
+    Measured 2026-08-21: deleting the guard from the frontend assert, whose `that` reads
+    `volume_revert_attached`, left all 27 tests green, because an `assert` is not a mutation.
+    """
+    guarded_registers = {
+        task["register"]
+        for _path, task in _role_tasks()
+        if "register" in task and _is_guarded(task)
+    }
+    assert guarded_registers, (
+        "no guarded task registers anything; this test reads nothing"
+    )
+    for _path, task in _role_tasks():
+        if _is_guarded(task):
+            continue
+        body = _body_with_prose(task)
+        for register in guarded_registers:
+            assert register not in body, (
+                f"{task['name']!r} reads {register!r}, which a `{_GUARD}`-guarded task "
+                f"registers, but carries no such guard of its own."
+            )
 
 
 def test_every_read_a_later_task_depends_on_runs_under_check() -> None:
@@ -460,6 +704,43 @@ def test_the_inputs_are_checked_before_anything_moves() -> None:
     assert "volume_revert_sha" in joined
 
 
+def _input_check(**context) -> list[bool]:
+    """Render the input assert's clauses against a caller's vars, as Ansible would."""
+    that = _named(_MAIN, "Check that volume-revert was given")[
+        "ansible.builtin.assert"
+    ]["that"]
+    return [bool(_render("{{ " + clause + " }}", **context)) for clause in that]
+
+
+_GOOD_INPUT = {
+    "volume_revert_service": "tdarr",
+    "volume_revert_claims": ["tdarr-configs", "tdarr-server"],
+    "volume_revert_sha": "abc12345",
+}
+
+
+def test_the_input_check_accepts_a_real_call() -> None:
+    """The rejections below prove nothing if the clauses reject everything."""
+    assert all(_input_check(**_GOOD_INPUT))
+
+
+def test_a_bare_string_is_not_a_claims_list() -> None:
+    """`"tdarr-configs" | length` is 13, so a length check alone passes and Ansible's `loop:`
+    then iterates the CHARACTERS — the first claim becomes a PVC named `t`. It fails safely,
+    before anything moves, but on the unbound-claim assert, naming a PVC nobody wrote."""
+    assert not all(
+        _input_check(**{**_GOOD_INPUT, "volume_revert_claims": "tdarr-configs"})
+    )
+
+
+def test_the_input_check_rejects_an_empty_or_malformed_call() -> None:
+    """Each of these renders a snapshot prefix that matches nothing, which the role would
+    otherwise discover one task after the scale-down."""
+    assert not all(_input_check(**{**_GOOD_INPUT, "volume_revert_claims": []}))
+    assert not all(_input_check(**{**_GOOD_INPUT, "volume_revert_service": ""}))
+    assert not all(_input_check(**{**_GOOD_INPUT, "volume_revert_sha": "master"}))
+
+
 def test_the_sha_shape_is_checked_against_the_hex_it_must_be() -> None:
     """The regex is the assert's whole content, so it is worth pinning: it must accept the
     eight-or-more lowercase hex `--short=8` produces and reject a branch name, an empty string
@@ -509,23 +790,7 @@ def test_the_listing_jsonpath_parses() -> None:
     result = subprocess.run(
         rendered[1:], capture_output=True, text=True, timeout=60, check=False
     )
-    # Skip on an unreachable cluster, fail on anything else. kubectl does NOT print the bare
-    # string "connection refused" — it prints "The connection to the server localhost:8080 was
-    # refused", so a naive substring guard turns "no cluster" into a red test on any machine
-    # that ships kubectl, GitHub's ubuntu runners included. The token list matches
-    # `test_volume_snapshot.py`'s.
-    #
-    # A jsonpath kubectl rejects never skips, whatever else the stderr says: that is the one
-    # failure this test exists to catch, and it reads `error: error parsing jsonpath …`.
-    unreachable_tokens = (
-        "connection refused",
-        "was refused",
-        "i/o timeout",
-        "no configuration has been provided",
-    )
-    if "jsonpath" not in result.stderr and any(
-        token in result.stderr for token in unreachable_tokens
-    ):
+    if _no_cluster_to_ask(result.stderr):
         pytest.skip("no reachable cluster")
     assert result.returncode == 0, (
         f"kubectl rejected the listing jsonpath: {result.stderr.strip()}"
@@ -545,3 +810,60 @@ def test_the_revert_body_matches_the_servers_own_schema() -> None:
     assert task["body"]["name"] == "{{ volume_revert_snapshot }}"
     assert task["body_format"] == "json"
     assert json.dumps(task["body"])  # the body must be JSON-serialisable as written
+
+
+# ------------------------------------------------- the invariant that makes the design safe
+
+
+def _snapshot_roles() -> dict[str, list[str]]:
+    """Every role that opts into a pre-deploy snapshot, and the claims it declares."""
+    roles = {}
+    for defaults in sorted((_REPO / "ansible/roles/k8s").glob("*/defaults/main.yml")):
+        declared = (yaml.safe_load(defaults.read_text()) or {}).get(
+            "k8s_autodeploy_snapshot_pvcs"
+        )
+        if declared:
+            roles[defaults.parents[1].name] = declared
+    return roles
+
+
+def test_every_snapshot_role_restores_its_own_replicas() -> None:
+    """`volume-revert` scales to zero and never scales back. That is only correct because the
+    apply which follows restores the workload, and it restores it only if the role renders a
+    Deployment **named for the service** with an **explicit replica count**.
+
+    Nothing else in the repo enforces that. A role that opts into a snapshot but runs a
+    StatefulSet, names its workload something other than the service, or omits `replicas:` and
+    inherits the API server's default would leave its service at zero replicas after a
+    rollback — the outage the rollback was meant to end. This is the executable version of a
+    sentence that otherwise lives only in a comment.
+    """
+    roles = _snapshot_roles()
+    # A floor, and only as a sanity check on the reader itself: the guard below is the loop,
+    # which covers however many roles opt in. Thirteen opted in as of 2026-08-21.
+    assert len(roles) >= 13, (
+        f"only found {len(roles)} snapshot roles; the reader is broken"
+    )
+
+    deployments: dict[str, list[dict]] = {}
+    for role, _tpl, doc in rendered_docs():
+        if role in roles and doc.get("kind") == "Deployment":
+            deployments.setdefault(role, []).append(doc)
+
+    for role in sorted(roles):
+        named = [
+            doc
+            for doc in deployments.get(role, [])
+            if doc.get("metadata", {}).get("name") == role
+        ]
+        assert named, (
+            f"{role} declares k8s_autodeploy_snapshot_pvcs but renders no Deployment named "
+            f"{role!r}. k8s/volume-revert scales `deployment/{role}` to zero and does not scale "
+            f"it back, so this service would stay down after a rollback."
+        )
+        for doc in named:
+            replicas = doc.get("spec", {}).get("replicas")
+            assert isinstance(replicas, int) and replicas >= 1, (
+                f"{role}'s Deployment has replicas={replicas!r}. It must be an explicit count "
+                f"of at least one: the apply after a revert is what brings the workload back."
+            )
