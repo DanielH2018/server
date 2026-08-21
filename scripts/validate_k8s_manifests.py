@@ -98,6 +98,7 @@ SKIP_ROLES = {
     "rollout-drain",
     "cronjob-gate",
     "volume-snapshot",
+    "longhorn-api",  # no manifest templates — resolves a fact only, same as cronjob-gate/volume-snapshot
 }
 
 
