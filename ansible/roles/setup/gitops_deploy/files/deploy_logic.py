@@ -669,6 +669,64 @@ def declared_denylist(sources: dict[str, str | None]) -> frozenset[str]:
     return frozenset(denied)
 
 
+# A top-level, single-line `k8s_autodeploy_snapshot_pvcs: [...]` list literal — every role that
+# declares one today writes it this way (e.g. `[bazarr-config]`, `[tdarr-configs, tdarr-server]`).
+# Anchored at column zero for the same reason as _DECLARATION_RE: an indented key belongs to some
+# other mapping.
+_SNAPSHOT_CLAIM_RE = re.compile(
+    r"^k8s_autodeploy_snapshot_pvcs:[ \t]*\[(?P<items>[^\]]*)\]", re.MULTILINE
+)
+
+
+def declares_snapshot_claims(text: str | None) -> bool:
+    """Whether a role's defaults/main.yml declares at least one PVC for k8s/volume-revert to
+    consider — used only to word gitops-deploy's rollback alert accurately (which services in
+    the batch a volume revert can affect), NOT to gate anything: the real decision is made by
+    roles/k8s/manifests reading actual YAML. Absent, empty (`[]`), multi-line, or unparseable all
+    read as False, which is the safe direction for a line that must never overclaim.
+    """
+    if not text:
+        return False
+    m = _SNAPSHOT_CLAIM_RE.search(text)
+    return bool(m and m.group("items").strip())
+
+
+def rollback_volume_revert_note(
+    services: set[str], reverting: set[str], rollback_failed: str | None
+) -> str:
+    """One line for gitops-deploy's rollback-failure Discord alert, stating plainly whether the
+    volume revert to the pre-deploy snapshot actually ran and for which services — "was my data
+    rolled back too" is the first question during an incident.
+
+    `rollback_failed`, when given, is the rollback redeploy's own exception message: the
+    redeploy raised before Ansible could reach the revert task (or during it), so the revert may
+    never have completed, and the note must say that plainly rather than claim it ran.
+
+    `reverting` is the subset of `services` whose role defaults declare
+    `k8s_autodeploy_snapshot_pvcs` — volume-revert is a no-op for the rest even when the redeploy
+    itself succeeds, so naming only `services` would overclaim which ones actually changed.
+    """
+    if rollback_failed is not None:
+        return (
+            f"**The rollback redeploy itself failed** (`{rollback_failed}`) — the volume revert "
+            f"task may never have completed. Check whether `{', '.join(sorted(services))}` is "
+            f"sitting at zero replicas with a volume attached in Longhorn maintenance mode.\n"
+        )
+    if not reverting:
+        return (
+            f"No service in `{', '.join(sorted(services))}` declares "
+            f"`k8s_autodeploy_snapshot_pvcs` — no volume revert applies.\n"
+        )
+    no_claim = sorted(services - reverting)
+    line = f"Volume revert to the pre-deploy snapshot targets `{', '.join(sorted(reverting))}`"
+    if no_claim:
+        line += (
+            f" (`{', '.join(no_claim)}` declares no `k8s_autodeploy_snapshot_pvcs` and is "
+            f"unaffected)"
+        )
+    return line + ".\n"
+
+
 def k8s_role_paths(listing: str) -> dict[str, str | None]:
     """Map each k8s role to its defaults/main.yml path in a `git ls-tree -r --name-only` listing.
 
