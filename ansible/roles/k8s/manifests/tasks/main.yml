@@ -193,14 +193,27 @@
 # back to the snapshot taken before the FAILED deploy, so the apply below lands old manifests on
 # old data instead of old manifests on migrated data.
 #
+# That ordering has a cost, not just an upside: if the snapshot above fails (Longhorn is down,
+# the API times out) the play aborts here and the revert below never runs, leaving the rollback
+# redeploy applying old manifests against data the failed deploy already migrated — the exact
+# state this design exists to prevent. Snapshotting first is still correct — the alternative
+# risks the recovery point itself — but a Longhorn outage during THIS snapshot is this design's
+# one remaining failure mode.
+#
 # `k8s_restore_snapshot_sha` is set only by gitops-deploy's rollback redeploy, as an extra-var,
 # and it carries the FAILED commit's SHA — not this tree's. At this point the tree has already
 # been reset to the last good commit, so the role's own `git rev-parse` cannot derive it.
+#
+# The claim list, by contrast, comes from the CURRENT (rolled-back-to) tree's role defaults —
+# `k8s_autodeploy_snapshot_pvcs` is read fresh from this checkout, not from the failed commit. If
+# the failed commit renamed or added a claim, the snapshot-name prefix (built from the failed
+# SHA) matches nothing for it, and k8s/volume-revert's own "no snapshot matches this deploy"
+# assert fires — loud, and before the scale-down, so the failure is bounded rather than silent.
 - name: Revert the stateful volumes to the pre-deploy snapshot for {{ manifests_service }}
   tags: [deploy]
   when:
     - not (k8s_no_mutate | bool)
-    - (k8s_restore_snapshot_sha | default('')) | length > 0
+    - (k8s_restore_snapshot_sha | default('')) | trim | length > 0
     - (k8s_autodeploy_snapshot_pvcs | default([]) | length) > 0
   ansible.builtin.include_role:
     name: k8s/volume-revert
