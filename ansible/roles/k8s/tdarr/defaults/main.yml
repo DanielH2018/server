@@ -24,6 +24,11 @@ tdarr_k8s_image: ghcr.io/haveagitgat/tdarr:latest@sha256:e5163f305367b47baacee76
 # avoid, on top of the migrating-state PVC hazard.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC; also rewrites library files in place and is pinned by digest specifically to stay manual, not Renovate-auto-mergeable"  # noqa var-naming[no-role-prefix]
+# Slice 7a task 3 — the pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
+# Two claims, two seeds — same pairing as tdarr_k8s_server_claim/tdarr_k8s_configs_claim below.
+# Declared regardless of k8s_autodeploy — protects a manual deploy too, and this slice promotes
+# nothing.
+k8s_autodeploy_snapshot_pvcs: [tdarr-configs, tdarr-server]  # noqa var-naming[no-role-prefix]
 
 # ── two config claims, not one ──────────────────────────────────────────────────────────────
 # /app/server is the 204 M database (library state, transcode history, node registrations) and

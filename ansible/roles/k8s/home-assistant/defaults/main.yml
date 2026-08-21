@@ -18,6 +18,10 @@ home_assistant_k8s_image: lscr.io/linuxserver/homeassistant:2026.6.3-ls221
 # (2026.6.3 -> 2026.7.0), so semver-based auto-merge policy would not even flag it as risky.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC; -lsNN versioning hides a breaking bump as a MINOR"  # noqa var-naming[no-role-prefix]
+# Slice 7a task 3 — the pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
+# Declared regardless of k8s_autodeploy: protects a manual deploy the same way it would an
+# auto-deploy, and this slice promotes nothing.
+k8s_autodeploy_snapshot_pvcs: [home-assistant-config]  # noqa var-naming[no-role-prefix]
 
 # The LSIO image has no `install`; the config-install initContainer needs alpine instead.
 # Same init image peanut and zigbee2mqtt use.

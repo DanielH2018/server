@@ -2242,3 +2242,282 @@ def test_no_kubectl_invocation_spells_the_daemonset_kind_by_alias() -> None:
         "spell the DaemonSet kind 'daemonset', not a kubectl alias like 'ds', 'daemonsets', "
         "or 'DaemonSet' — found:\n" + "\n".join(offenders)
     )
+
+
+# ── slice 7a task 3: k8s_autodeploy_snapshot_pvcs ────────────────────────────────────────────
+#
+# k8s/manifests takes a pre-apply Longhorn snapshot of a role's `k8s_autodeploy_snapshot_pvcs`
+# claims (roles/k8s/manifests/tasks/main.yml, guarded on `not k8s_no_mutate`). That guard means
+# --dry-run never exercises volume-snapshot at all — a typo'd claim name is invisible to a dry
+# run and surfaces only on a real deploy, as the "PVC has no spec.volumeName" assert failing
+# before the apply (task-2-report.md). Test 1 below is therefore the only pre-deploy catch.
+#
+# THE BRIEF'S RECIPE FOR TEST 1 DOESN'T MATCH THIS CODEBASE'S SHAPE, AND HAD TO BE ADAPTED.
+# The brief says: parse the role's own `templates/*.j2` for `kind: PersistentVolumeClaim` and
+# assert every declared claim's name appears. Checked against the live tree
+# (`grep -rl PersistentVolumeClaim ansible/roles/k8s/{home-assistant,sonarr,radarr,jellyfin,
+# qbittorrent,bazarr,prowlarr,freshrss,livesync,speedtest,tdarr,code-server}`): only
+# code-server/templates/pvc-workspace.yaml.j2 matches. Eleven of the thirteen roles delegate PVC
+# creation entirely to the shared `k8s/seed-volume` role (`include_role: k8s/seed-volume`,
+# `vars: seed_volume_claim: "{{ <role>_k8s_claim }}"`) and render no PersistentVolumeClaim
+# document of their own at all. The literal recipe would find an empty rendered set for those
+# eleven and fail every one of their correct declarations — not vacuous, wrong. And the two
+# roles that DO render their own PVC (zigbee2mqtt, code-server's workspace claim) still write
+# `metadata.name: {{ <role>_k8s_claim }}`, a Jinja reference, not a literal — so even those two
+# need the same resolution step. `_rendered_pvc_claims` below is the adapted version: it reads
+# both sources (a role's own PVC template AND a `seed_volume_claim` var on a live
+# `k8s/seed-volume` include) and resolves the single-var-reference shape both use through the
+# role's own defaults/main.yml. This is a finding about the brief, not about any role's claim
+# name — every claim in the table was independently verified against `kubectl -n homelab get
+# pvc` on 2026-08-21 and all fourteen are live.
+
+_PVC_NAME = re.compile(
+    r"^kind:\s*[\"']?PersistentVolumeClaim[\"']?\s*(?:#.*)?$\n\s*metadata:\s*$\n\s*name:\s*(.+?)\s*$",
+    re.MULTILINE,
+)
+
+# The only PVC-name shape this repo writes: a whole-field reference to exactly one role-local
+# var — never a literal string, never a compound expression (`{{ a }}-{{ b }}`), never a
+# filter. `_resolve_claim_token` refuses anything else rather than guessing at it.
+_SINGLE_VAR_REF = re.compile(r"^\{\{\s*(\w+)\s*\}\}$")
+
+
+def _role_defaults(role: Path) -> dict:
+    """`role`'s defaults/main.yml as a plain dict, or `{}` if it has none."""
+    defaults = role / "defaults/main.yml"
+    if not defaults.is_file():
+        return {}
+    return yaml.safe_load(defaults.read_text()) or {}
+
+
+def _resolve_claim_token(token: str, defaults: dict) -> str | None:
+    """A PVC-name token, resolved to the literal claim name it renders — or None if it can't be.
+
+    `token` is either already a literal (`_LITERAL_NAME`, this file's existing standard for "no
+    Jinja left to resolve") or the single-var shape `_SINGLE_VAR_REF` matches, looked up in the
+    role's OWN defaults. A var absent from defaults, a non-string value, or a value that isn't
+    itself a literal (chained Jinja) all return None — the caller's job, not this function's, is
+    to decide whether None means "report as unresolvable" or "count as not rendered".
+    """
+    token = token.strip()
+    if _LITERAL_NAME.match(token):
+        return token
+    match = _SINGLE_VAR_REF.match(token)
+    if match:
+        value = defaults.get(match.group(1))
+        if isinstance(value, str) and _LITERAL_NAME.match(value):
+            return value
+    return None
+
+
+def _rendered_pvc_claims(role: Path) -> tuple[set[str], list[str]]:
+    """PVC claim names `role` actually causes to exist, as `(resolved, unresolved_tokens)`.
+
+    Two sources, because this repo builds a PVC two different ways:
+
+    1. A `kind: PersistentVolumeClaim` document in the role's own `templates/*.j2` —
+       zigbee2mqtt's data claim and code-server's workspace claim are the only two.
+    2. A `vars: seed_volume_claim: ...` on a task that includes `k8s/seed-volume` — how the
+       other twelve claims are actually created. Read through `_live_tasks`, the same walker
+       `_batch_gated_names` uses, so a commented-out or `when: false`-gated include credits
+       nothing, the same "argument-against read as the thing itself" trap this file's other
+       matchers are written against.
+
+    Every token found by either path is resolved through `_resolve_claim_token`. A token that
+    doesn't resolve is returned UNCHANGED in the second element rather than dropped — dropping
+    it would silently pass a role whose claim var was renamed or removed out from under a live
+    declaration, which is the same shape as crediting a comment, this time by omission.
+    """
+    defaults = _role_defaults(role)
+    raw: list[str] = []
+
+    tdir = role / "templates"
+    for t in sorted(tdir.glob("*.j2")) if tdir.is_dir() else []:
+        raw.extend(_PVC_NAME.findall(t.read_text()))
+
+    for task in _live_tasks(role):
+        include = task.get("ansible.builtin.include_role")
+        if isinstance(include, dict) and include.get("name") == "k8s/seed-volume":
+            claim = (task.get("vars") or {}).get("seed_volume_claim")
+            if isinstance(claim, str):
+                raw.append(claim)
+
+    resolved: set[str] = set()
+    unresolved: list[str] = []
+    for token in raw:
+        name = _resolve_claim_token(token, defaults)
+        if name is not None:
+            resolved.add(name)
+        else:
+            unresolved.append(token)
+    return resolved, unresolved
+
+
+def test_a_commented_out_seed_volume_include_does_not_credit_a_claim(
+    tmp_path: Path,
+) -> None:
+    """A `k8s/seed-volume` include disabled by a `#` must not credit its claim.
+
+    The same trap this file's other matchers are written against, in a new shape: a text
+    matcher would see `seed_volume_claim: "{{ widget_k8s_claim }}"` inside the comment block
+    and credit it. Parsing through `_live_tasks` closes it — a commented-out task never parses
+    as a task at all.
+    """
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "defaults").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(
+        "# - name: Seed the widget volume\n"
+        "#   ansible.builtin.include_role:\n"
+        "#     name: k8s/seed-volume\n"
+        "#   vars:\n"
+        '#     seed_volume_claim: "{{ widget_k8s_claim }}"\n'
+    )
+    (role / "defaults" / "main.yml").write_text("widget_k8s_claim: widget-config\n")
+    resolved, unresolved = _rendered_pvc_claims(role)
+    assert resolved == set()
+    assert unresolved == []
+
+
+def test_an_unresolvable_claim_var_is_reported_not_dropped(tmp_path: Path) -> None:
+    """A `{{ var }}` absent from the role's own defaults must be named, not silently dropped.
+
+    Dropping it would let a role whose claim var was renamed or removed pass this guard on an
+    empty rendered set matching an empty declared set — quietly correct only because both sides
+    went blind the same way.
+    """
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "defaults").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(
+        "- name: Seed the widget volume\n"
+        "  ansible.builtin.include_role:\n"
+        "    name: k8s/seed-volume\n"
+        "  vars:\n"
+        '    seed_volume_claim: "{{ widget_missing_claim }}"\n'
+    )
+    (role / "defaults" / "main.yml").write_text("widget_k8s_claim: widget-config\n")
+    resolved, unresolved = _rendered_pvc_claims(role)
+    assert resolved == set()
+    assert unresolved == ["{{ widget_missing_claim }}"]
+
+
+def test_pvc_template_claim_is_resolved_through_defaults(tmp_path: Path) -> None:
+    """A role's own `kind: PersistentVolumeClaim` template, live-shaped: `metadata.name` is a
+    single-var Jinja reference (zigbee2mqtt's and code-server's actual shape), resolved through
+    the role's own defaults rather than left as the literal `{{ ... }}` string."""
+    role = tmp_path / "widget"
+    (role / "templates").mkdir(parents=True)
+    (role / "defaults").mkdir(parents=True)
+    (role / "templates" / "pvc.yaml.j2").write_text(
+        "---\n"
+        "apiVersion: v1\n"
+        "kind: PersistentVolumeClaim\n"
+        "metadata:\n"
+        "  name: {{ widget_k8s_claim }}\n"
+        "  namespace: homelab\n"
+    )
+    (role / "defaults" / "main.yml").write_text("widget_k8s_claim: widget-config\n")
+    resolved, unresolved = _rendered_pvc_claims(role)
+    assert resolved == {"widget-config"}
+    assert unresolved == []
+
+
+def test_snapshot_pvc_declarations_match_rendered_claims() -> None:
+    """A declared `k8s_autodeploy_snapshot_pvcs` entry must be a claim the role actually
+    renders. A typo'd claim name snapshots nothing and fails silently at deploy time — the
+    volume simply isn't protected, and nothing says so; this is the only pre-deploy catch for
+    that, since --dry-run never reaches volume-snapshot (see the section comment above).
+
+    Exercised by all thirteen live declarations — see `_rendered_pvc_claims` for why this had
+    to read two sources rather than the brief's single one.
+    """
+    offenders = []
+    for role in _roles():
+        declared = _role_defaults(role).get("k8s_autodeploy_snapshot_pvcs") or []
+        if not declared:
+            continue
+        rendered, unresolved = _rendered_pvc_claims(role)
+        if unresolved:
+            offenders.append(
+                f"{role.name}: could not resolve claim token(s) {unresolved!r} against its "
+                f"own defaults/main.yml"
+            )
+        missing = [c for c in declared if c not in rendered]
+        if missing:
+            offenders.append(
+                f"{role.name}: k8s_autodeploy_snapshot_pvcs declares {missing} but the role "
+                f"only renders {sorted(rendered)!r}"
+            )
+    assert not offenders, (
+        "a declared k8s_autodeploy_snapshot_pvcs entry must be a claim the role actually "
+        "renders:\n" + "\n".join(offenders)
+    )
+
+
+_STRATEGY_RECREATE = re.compile(
+    r"^\s*strategy:\s*$\n\s*type:\s*Recreate\s*$", re.MULTILINE
+)
+
+
+def _deployment_strategy_is_recreate(role: Path) -> bool:
+    """Whether any template `role` renders declares `strategy: / type: Recreate`.
+
+    Comments stripped first so a `# type: Recreate` mentioned in passing (a rationale comment
+    on a RollingUpdate role explaining why it ISN'T Recreate, say) can't be credited — the same
+    discipline `_strip_comments` exists to enforce everywhere else in this file.
+    """
+    tdir = role / "templates"
+    if not tdir.is_dir():
+        return False
+    return any(
+        _STRATEGY_RECREATE.search(_strip_comments(t.read_text()))
+        for t in sorted(tdir.glob("*.j2"))
+    )
+
+
+def _migrating_state(role: Path) -> bool:
+    """Whether `role` has the shape volume-snapshot exists for: `strategy: Recreate` against at
+    least one rendered RWO PVC claim.
+
+    This is the mechanical definition, read off what the role actually renders — NOT off
+    `k8s_autodeploy_reason` text. This file's own top docstring already documents why: roughly
+    27 roles carry "migrating state" as a SECOND reason without the Recreate+RWO shape applying
+    to their primary rollout, so a reason-text scope would false-offend on day one against
+    roles this slice never touched. Every PVC `_rendered_pvc_claims` can find in this repo
+    hardcodes `accessModes: [ReadWriteOnce]` (both direct templates and k8s/seed-volume's
+    shared one) — checked, not assumed — so a rendered claim existing at all is sufficient
+    without a separate accessModes read.
+    """
+    return _deployment_strategy_is_recreate(role) and bool(
+        _rendered_pvc_claims(role)[0]
+    )
+
+
+def test_auto_deployable_migrating_state_roles_declare_snapshot_pvcs() -> None:
+    """An auto-deployable role with the Recreate + RWO-PVC shape must declare a non-empty
+    `k8s_autodeploy_snapshot_pvcs`, so the pre-apply Longhorn snapshot actually runs for it.
+
+    DELIBERATELY VACUOUS TODAY, and that is stated here rather than left for a future reader to
+    discover: `_auto_deployable` is true for 14 roles (none `strategy: Recreate`, checked
+    against every one's own Deployment/DaemonSet template), `_migrating_state` is true for the
+    thirteen this task declared for, and the two sets do not intersect. No migrating-state role
+    is auto-deployable — that is precisely what slice 7b changes, and this guard exists so that
+    change can't silently reintroduce the Task 3 gap it depends on.
+    `test_snapshot_pvc_declarations_match_rendered_claims` above is the guard that actually
+    bites today; this project has repeatedly shipped guards that matched nothing by accident,
+    and the difference here is that the vacuity is deliberate and documented rather than
+    discovered.
+    """
+    offenders = [
+        role.name
+        for role in _roles()
+        if _auto_deployable(role)
+        and _migrating_state(role)
+        and not (_role_defaults(role).get("k8s_autodeploy_snapshot_pvcs") or [])
+    ]
+    assert not offenders, (
+        "auto-deployable role(s) with the Recreate + RWO-PVC shape declare no "
+        "k8s_autodeploy_snapshot_pvcs, so a bad image swap can migrate the volume with no "
+        "pre-apply recovery point:\n" + "\n".join(offenders)
+    )

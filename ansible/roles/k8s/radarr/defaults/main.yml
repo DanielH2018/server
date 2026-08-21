@@ -18,6 +18,10 @@ radarr_k8s_image: lscr.io/linuxserver/radarr:6.1.1.10360-ls304
 # bump as a routine patch bump.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC; -lsNN versioning hides a breaking bump"  # noqa var-naming[no-role-prefix]
+# Slice 7a task 3 — the pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
+# Declared regardless of k8s_autodeploy — protects a manual deploy too, and this slice promotes
+# nothing.
+k8s_autodeploy_snapshot_pvcs: [radarr-config]  # noqa var-naming[no-role-prefix]
 
 # 30 M at B4a. longhorn, not longhorn-nobackup: radarr.db holds the library and the absolute
 # root-folder paths this slice is careful about.

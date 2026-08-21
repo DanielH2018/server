@@ -14,6 +14,10 @@ speedtest_k8s_image: lscr.io/linuxserver/speedtest-tracker:latest@sha256:e095f60
 # slice-1 pilot — but the shape itself is not different from the denylisted roles.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "migrating state — Recreate + an RWO seed-volume PVC, so the replacement pod migrates the volume before the rollout gate can observe a fault. The data lost is regenerable speed-test history, which is why this was the original auto-deploy pilot, but the shape is the same as sonarr/prowlarr; revisit in slice 7 behind the Longhorn pre-deploy snapshot"  # noqa var-naming[no-role-prefix]
+# Slice 7a task 3 — the pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
+# Declared regardless of k8s_autodeploy — protects a manual deploy too, and this slice promotes
+# nothing.
+k8s_autodeploy_snapshot_pvcs: [speedtest-config]  # noqa var-naming[no-role-prefix]
 
 # Mirrors resources('1.0', '512M', '0.10', '64M') in the compose template.
 speedtest_k8s_cpu_limit: "1"
