@@ -5,7 +5,7 @@
 `manifests_extra_rollouts` entry, and runs `assert_stable.yml` against each. A rendered
 Deployment is gated only if its own `metadata.name` matches the primary rollout name or one of
 the declared extras; a name that can't be resolved statically (a Jinja expression) counts as
-ungated, the fail-closed direction. Three role shapes therefore auto-deploy without a working
+ungated, the fail-closed direction. Four role shapes therefore auto-deploy without a working
 gate:
 
   * a role rendering a `kind: Deployment` whose name isn't in that gated set: `kubectl apply -f
@@ -20,9 +20,16 @@ gate:
     outright;
   * a role whose gated Deployment(s) declare no `readinessProbe`: `rollout status` then returns
     the moment the pod reports Running, which proves only that the image exists. Checked per
-    Deployment, not once per role — a probe on the primary doesn't excuse a probe-less extra.
+    Deployment, not once per role — a probe on the primary doesn't excuse a probe-less extra;
+  * a role rendering a `kind: Job` or `kind: CronJob` with no role-local
+    `wait --for=condition=complete job/<name>` after the apply: batch workloads are never
+    gated through `manifests_rollout` at all, so nothing above even attempts to wait on them.
+    A role that delegates its only batch workload to a shared role (e.g. image-builder) still
+    passes this guard vacuously — the Job lives in the shared role's own templates, not the
+    caller's, so the caller renders zero batch templates and the guard's empty loop reports it
+    as fine. That is a known limit, not a hole a delegation marker was ever able to close.
 
-All three are fine for a hand-deployed role — an operator is watching. None is fine for an
+All four are fine for a hand-deployed role — an operator is watching. None is fine for an
 auto-deployed one, so a role's own k8s_autodeploy declaration must cover them. Asserting it
 here means a role whose gated set drifts from what it actually renders fails the suite instead
 of silently auto-deploying ungated.
@@ -51,10 +58,12 @@ _K8S_ROLES = _REPO / "ansible/roles/k8s"
 # guard below like any other role.
 _SHARED = {"manifests", "rollout-drain"}
 
-# Shared roles that carry their own Job-completion gate. A role delegating to one of these
-# is gated by it; `test_gating_shared_roles_actually_wait` proves each really does wait.
-# Task 2 adds "cronjob-gate" here, in the same commit that creates that role — naming it
-# before the role exists would commit a red test.
+# Shared roles trusted to gate their own batch workload. Membership does NOT exempt a
+# delegating role from the batch guard below — the Job lives in the shared role's own
+# templates, not the caller's, so a role that only delegates renders zero batch templates
+# and passes the guard's empty loop on its own merits. This set exists solely so
+# `test_gating_shared_roles_actually_wait` has something to check: it proves each role named
+# here really does hold a completion wait, backed by a failure escalation.
 _GATING_SHARED_ROLES = {"image-builder"}
 
 
@@ -158,41 +167,65 @@ def _batch_templates(role: Path) -> list[tuple[str, str]]:
     matching `kind`/`name` within each document (rather than a single `findall` for `name:`
     over the whole file) keeps a Job's name paired with that Job, not with an unrelated
     container, volume, or a non-batch document sharing the file.
+
+    The `kind` match tolerates an optional quoting (`kind: "Job"`) and an optional trailing
+    comment (`kind: Job  # one-shot`) — both valid YAML that kubectl applies identically to
+    the bare form. No template does either today, so this is prophylactic rather than fixing
+    a live miss.
     """
     out: list[tuple[str, str]] = []
     tdir = role / "templates"
     for t in sorted(tdir.glob("*.j2")) if tdir.is_dir() else []:
         text = t.read_text()
         for doc in re.split(r"^---\s*$", text, flags=re.MULTILINE):
-            if not re.search(r"^kind:\s*(?:Job|CronJob)\s*$", doc, re.MULTILINE):
+            if not re.search(
+                r"^kind:\s*[\"']?(?:Job|CronJob)[\"']?\s*(?:#.*)?$", doc, re.MULTILINE
+            ):
                 continue
             name = re.search(r"^\s{2}name:\s*(\S+)\s*$", doc, re.MULTILINE)
             out.append((t.name, name.group(1) if name else ""))
     return out
 
 
-def _batch_gated_names(role: Path) -> set[str]:
-    """Batch workload names this role waits on to completion, by any accepted mechanism.
+def _uncommented(text: str) -> str:
+    """The file's lines with whole-line YAML comments removed.
 
-    Two forms count. A role-local `wait --for=condition=complete job/<name>` is the repo's
-    established pattern (headlamp, media-volume, netpol-baseline, n8n, prowlarr, registry).
-    Delegating to a shared role that carries its own completion gate also counts; those
-    shared roles are asserted to hold a real wait by
-    `test_gating_shared_roles_actually_wait`, so this is a delegation, not an exemption.
+    Every matcher below reads raw task text with regexes, so a commented-out task would
+    otherwise read as a live one — and that direction is fail-open. Watched: commenting out
+    headlamp's wait task left the batch guard green, where deleting it turned it red.
+    """
+    return "\n".join(
+        line for line in text.splitlines() if not line.lstrip().startswith("#")
+    )
+
+
+def _batch_gated_names(role: Path) -> set[str]:
+    """Batch workload names this role waits on to completion, via a role-local wait.
+
+    A role-local `wait --for=condition=complete job/<name>` is the repo's established
+    pattern (headlamp, media-volume, netpol-baseline, n8n, prowlarr, registry). A single
+    wait can name several Jobs at once — registry's `wait --for=condition=complete
+    job/registry-selftest-pull job/registry-selftest-pull-agent --timeout=180s` — so every
+    `job/<name>` token following the flag is credited, not just the one adjacent to it; the
+    same mirror of the multi-document defect `_batch_templates` fixes.
+
+    Delegating to a shared role that gates its own batch workload (image-builder) is NOT
+    credited here. The Job lives in the shared role's own templates, not this role's, so a
+    role that only delegates renders zero batch templates of its own — the caller,
+    `test_auto_deployable_roles_gate_every_batch_workload_they_render`, passes it on that
+    basis instead of through this function. `_GATING_SHARED_ROLES` records which roles are
+    trusted to gate what they own.
     """
     tasks = role / "tasks/main.yml"
     if not tasks.is_file():
         return set()
-    text = tasks.read_text()
-    names = set(
-        re.findall(
-            r"wait\s+--for=condition=complete\s+(?:job|job\.batch)/(\S+)",
-            text,
-        )
-    )
-    for shared in sorted(_GATING_SHARED_ROLES):
-        if re.search(rf"name:\s*k8s/{re.escape(shared)}\s*$", text, re.MULTILINE):
-            names.add(f"<delegated:{shared}>")
+    text = _uncommented(tasks.read_text())
+    names: set[str] = set()
+    for run in re.finditer(
+        r"wait\s+--for=condition=complete\s+((?:(?:job|job\.batch)/\S+\s*)+)",
+        text,
+    ):
+        names.update(re.findall(r"(?:job|job\.batch)/(\S+)", run.group(1)))
     return names
 
 
@@ -219,15 +252,16 @@ def test_auto_deployable_roles_gate_every_batch_workload_they_render() -> None:
 
     Without this, a batch-only role auto-deploys with no gate at all: `rollout status` has
     no Deployment to watch, `manifests_rollout: ''` skips the stability soak too, and a bad
-    image is reported as a successful deploy.
+    image is reported as a successful deploy. A role delegating its batch workload to a
+    shared role (image-builder) renders no Job/CronJob template of its own, so the inner
+    loop below never runs for it — that is what makes the delegation safe, with no
+    exemption branch needed here.
     """
     offenders = []
     for role in _roles():
         if not _auto_deployable(role):
             continue
         gated = _batch_gated_names(role)
-        if any(n.startswith("<delegated:") for n in gated):
-            continue
         for template, name in _batch_templates(role):
             if not name or name not in gated:
                 offenders.append(
@@ -242,17 +276,33 @@ def test_auto_deployable_roles_gate_every_batch_workload_they_render() -> None:
 
 
 def test_gating_shared_roles_actually_wait() -> None:
-    """Every shared role `_batch_gated_names` trusts must hold a real completion wait.
+    """Every role `_GATING_SHARED_ROLES` names must hold a real, live completion gate.
 
-    This is what makes the delegation branch above a delegation rather than a hole.
+    Necessary, not sufficient. A `wait --for=condition=complete` proves the play blocks
+    until the Job finishes; it does not by itself prove a failed Job fails the deploy.
+    image-builder's own wait is `... || wait --for=condition=failed` with no `failed_when`
+    on that task, so it exits 0 on a failed build by design — what actually fails the play
+    is a separate `ansible.builtin.fail` task a few steps later. So this checks for a wait
+    AND a failure escalation (`ansible.builtin.fail` or `failed_when`) somewhere in the
+    role's tasks, not that the two are wired together end to end.
+
+    Reads the file with whole-line comments stripped: `configarr/tasks/main.yml` (not a
+    member of this set, but the risk is general) explains in a comment why it deliberately
+    does NOT use `kubectl wait --for=condition=complete` — a bare substring check would have
+    read that explanation as the gate it is arguing against.
     """
     for shared in sorted(_GATING_SHARED_ROLES):
-        tasks = _REPO / "ansible/roles/k8s" / shared / "tasks/main.yml"
+        tasks = _K8S_ROLES / shared / "tasks/main.yml"
         assert tasks.is_file(), (
             f"{shared}: trusted as a gating shared role but has no tasks"
         )
-        assert "wait --for=condition=complete" in tasks.read_text(), (
+        text = _uncommented(tasks.read_text())
+        assert "wait --for=condition=complete" in text, (
             f"{shared}: trusted as a gating shared role but never waits for completion"
+        )
+        assert "ansible.builtin.fail" in text or "failed_when" in text, (
+            f"{shared}: waits for completion but has no failure escalation "
+            "(ansible.builtin.fail / failed_when) to actually fail the deploy"
         )
 
 
