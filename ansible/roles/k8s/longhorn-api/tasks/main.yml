@@ -8,8 +8,12 @@
 # downstream templated a broken URL from them. Fail loudly here instead, naming the fix,
 # matching `cronjob-gate` and `volume-snapshot`, which both carry a `tasks/main.yml` of their
 # own.
+#
+# `always`, not `deploy`: a `deploy`-tagged task is skippable with `--skip-tags deploy`, a
+# documented workflow in this repo's CLAUDE.md, and that would restore exactly the silent
+# no-op this guard exists to prevent.
 - name: Refuse a bare include of k8s/longhorn-api
-  tags: [deploy]
+  tags: [always]
   ansible.builtin.fail:
     msg: >-
       k8s/longhorn-api has no default entry point. Include it with

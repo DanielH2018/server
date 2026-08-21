@@ -63,6 +63,14 @@ def test_the_resolve_selects_this_nodes_own_manager_pod() -> None:
     # pod IP. Node-locality is the entire reason this role exists, so it gets a pinned assert.
     assert "spec.nodeName={{ ansible_hostname }}" in argv
     assert not any("longhorn-backend" in str(t) for t in argv)
+    # `[*]`, not `[0]`. Reverting to `{.items[0].status.podIP}` makes kubectl error out (rc=1,
+    # "array index out of bounds") on a zero-match query instead of returning rc=0 with empty
+    # stdout — which aborts the play before "Fail when this node runs no longhorn-manager" ever
+    # runs. The live test below CANNOT catch this regression: it skips whenever this node has
+    # no manager pod, which is the only state where `[0]` and `[*]` behave differently, so the
+    # skip fires before the command under test would ever expose the difference. This static
+    # assert is the only thing pinning it.
+    assert "jsonpath={.items[*].status.podIP}" in argv
 
 
 def test_the_failure_guard_covers_an_empty_result() -> None:
@@ -122,10 +130,14 @@ def _ground_truth_manager_ips() -> dict[str, str] | None:
     )
     if result.returncode != 0 or any(t in result.stderr for t in _UNREACHABLE_TOKENS):
         return None
+    # First match wins on a duplicate node, matching resolve.yml's `.split(' ')[0]` exactly —
+    # if a node ever runs two manager pods, the role and this ground truth must agree on which
+    # one is "the" answer, or a real multi-pod state fails this test on a disagreement that is
+    # not a bug.
     ips: dict[str, str] = {}
     for line in result.stdout.strip().splitlines():
         node, _, ip = line.partition("=")
-        if node and ip:
+        if node and ip and node not in ips:
             ips[node] = ip
     return ips
 
