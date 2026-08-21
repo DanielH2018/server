@@ -1,0 +1,83 @@
+---
+# Seconds to wait for the one-off gate run before giving up. Divided by the 10 s poll delay to
+# produce `retries`.
+#
+# This is a ceiling, not a wait: the poll returns as soon as the Job reaches either terminal
+# condition, and both callers' workloads finish well inside a minute — pi-peer-backup rsyncs the
+# Pi's wg-easy config, configarr reconciles the *arr stack. So a larger number costs nothing on
+# a healthy deploy and buys the one thing that matters on a wedged one.
+#
+# 660 is not arbitrary and is not free to change: it must EXCEED every caller's
+# `activeDeadlineSeconds`, and pi-peer-backup's is 600. Set below a caller's deadline, the
+# poll's retries run out first and Ansible aborts with a bare "ran out of retries" — no
+# role-authored message, no container states, no log. Set above it, the Job hits its own
+# deadline, goes Failed, and the poll returns to the role's own failure text.
+#
+# `ansible/tests/test_cronjob_gate_decision.py` enforces that ordering against every caller's
+# rendered CronJob, because the prose version of this rule was violated by the shipped default
+# on the day it was written.
+#
+# It is deliberately NOT configarr's old `configarr_k8s_timeout: 300`. That value was
+# timeout-preserving and equal to configarr's own deadline, which is the racing case the rule
+# above rules out.
+cronjob_gate_timeout: 660  # noqa var-naming[no-role-prefix]
+
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# This role deploys no workload of its own: it is a gate other roles include, and the Job it
+# creates is built imperatively from the CALLER's CronJob. It pins no `_image:` var, so
+# Renovate never bumps it, and it renders no manifest for `rollout status` to gate.
+# Declared rather than added to the filter plugin's SHARED_ROLES, because it carries a
+# defaults/main.yml — the same choice image-builder makes for the same reason.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "deploys no workload of its own — a gate other roles include; the Job it creates is built from the caller's CronJob, and it pins no image for Renovate to bump"  # noqa var-naming[no-role-prefix]
+
+# --------------------------------------------------------------------- failure classification
+#
+# The gate proves the new IMAGE RUNS. It does not prove the workload succeeded — see CLAUDE.md,
+# which states that limit plainly. The split below is what makes that contract true, and it
+# rests on when auto-deploy actually fires: only on an `_image:`-only diff, so the one thing
+# that changed is the image.
+#
+# ALLOWLIST, deliberately. A container state named here means the container reached its
+# entrypoint and ran; anything else — including a reason Kubernetes adds after this was
+# written — means it did not, and is fatal. Written this way round so a new reason string
+# cannot silently become non-fatal, which is the direction that costs something.
+#
+#   Completed  the container ran and exited 0. An init container that SUCCEEDED reports this
+#              even when a later container failed, so omitting it would make every
+#              multi-container failure read as fatal. The opposite direction — an init
+#              container that FAILED — is not handled here at all: it leaves the main
+#              container at `waiting.reason: PodInitializing`, which tasks/main.yml drops
+#              before this list is consulted. See the comment there; adding PodInitializing
+#              to either list would be the wrong fix.
+#   Error      the container ran and exited non-zero. On an `_image:`-only diff this is the
+#              application failing, not the image: a transient *arr outage for configarr, a
+#              briefly unreachable Pi for pi-peer-backup. configarr/tasks/main.yml records the
+#              incident behind that call — "failing the deploy over a transient *arr outage is
+#              exactly what the retired wrapper avoided by always exiting 0" — and the health
+#              cron already pages for it within configarr_k8s_max_age_hours.
+cronjob_gate_ran_reasons:  # noqa var-naming[no-role-prefix]
+  - Completed
+  - Error
+
+# Every entry here is fatal, but so is any readable reason absent from cronjob_gate_ran_reasons
+# above — this list does NOT decide the outcome, it only lets the failure message say "the new
+# image could not start" instead of "unrecognised state". So a missing entry costs a vaguer
+# message, never a missed failure. That is the only shape a list like this is safe in: a rule
+# that looked like it narrowed the fatal set would read as a guarantee it cannot give.
+#
+# StartError and ImagePullBackOff are both live in this repo, not hypothetical: peanut's image
+# has no `cp` (StartError, "executable file not found" at first deploy) and n8n's build sat in
+# ImagePullBackOff until the registry's TLS was fixed.
+cronjob_gate_start_failure_reasons:  # noqa var-naming[no-role-prefix]
+  - ImagePullBackOff
+  - ErrImagePull
+  - ErrImageNeverPull
+  - ImageInspectError
+  - InvalidImageName
+  - RegistryUnavailable
+  - CreateContainerError
+  - CreateContainerConfigError
+  - RunContainerError
+  - StartError
+  - ContainerCannotRun

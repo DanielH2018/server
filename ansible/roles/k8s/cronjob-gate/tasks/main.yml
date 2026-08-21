@@ -1,0 +1,217 @@
+---
+# Deploy-time gate for a role whose only workload is a CronJob. See CLAUDE.md for what a
+# caller's CronJob must guarantee before including this — `concurrencyPolicy: Forbid` and
+# idempotence under one extra out-of-band run.
+#
+# Extracted in shape from configarr, which had carried this inline since it ported to k3s. The
+# poll was not invented for the shared role; what changed is the guard (widened from
+# ansible_check_mode to k8s_no_mutate) and the failure handling (a run whose container never
+# STARTED now fails the deploy — see the block below the poll for what that does and does not
+# cover).
+
+# Fixed name, deleted first, so repeated deploys do not accumulate Jobs. `--wait=true` matters:
+# `create job` against a name whose Job is still terminating fails with AlreadyExists.
+- name: Remove the previous deploy-gate Job for {{ cronjob_gate_name }}
+  tags: [deploy]
+  when: not (k8s_no_mutate | bool)
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} delete job {{ cronjob_gate_name }}-deploy-gate
+      --ignore-not-found --wait=true
+  become: true
+  changed_when: false
+
+- name: Run a one-off gate Job for {{ cronjob_gate_name }}
+  tags: [deploy]
+  when: not (k8s_no_mutate | bool)
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} create job {{ cronjob_gate_name }}-deploy-gate
+      --from=cronjob/{{ cronjob_gate_name }}
+  become: true
+  changed_when: true
+
+- name: Wait for the gate run to finish for {{ cronjob_gate_name }}
+  tags: [deploy]
+  # Polls for EITHER terminal condition rather than `kubectl wait --for=condition=complete`,
+  # which can only name one: with backoffLimit 0 a failed run settles in seconds but `wait`
+  # would sit there for the whole timeout before reporting it. k8s/image-builder solves the
+  # same problem with `wait --for=condition=complete || wait --for=condition=failed`, which
+  # costs an extra 10 s on every failure and reads as two gates rather than one.
+  # A `cmd:` string is safe HERE and only here: this jsonpath contains no spaces, so command's
+  # shlex split leaves it whole. Add a `{range ...}` to it and it must move to argv like the
+  # container-state read below, which shipped broken for exactly that reason.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} get job {{ cronjob_gate_name }}-deploy-gate
+      -o jsonpath={.status.conditions[*].type}
+  become: true
+  changed_when: false
+  # Skipped rather than forced to run under a no-mutation run: the Job this waits on is created
+  # two tasks above, which k8s_no_mutate skips, so there is nothing to wait for. Reading the
+  # PREVIOUS deploy's Job and calling it "this run finished" would be a lie. Left unguarded,
+  # every dry run burned the whole cronjob_gate_timeout budget and then FAILED — `failed_when`
+  # below does not suppress a retry-exhaustion failure, only a non-zero rc on an attempt that
+  # actually ran. Every task below therefore leads with the same clause, because Ansible
+  # short-circuits a `when` list and that is what keeps them off this task's absent stdout.
+  when: not (k8s_no_mutate | bool)
+  register: cronjob_gate_result
+  until: >-
+    'Complete' in cronjob_gate_result.stdout or 'Failed' in cronjob_gate_result.stdout
+  retries: "{{ (cronjob_gate_timeout | int / 10) | round | int }}"
+  delay: 10
+  # Defensive, carried across from configarr, and narrower than it looks. On the `Failed` path
+  # `kubectl get` returns rc 0 — it found the Job and printed its conditions — so nothing would
+  # abort here even without this. What it covers is a non-zero rc on the attempt that satisfied
+  # `until`, which would otherwise fail the task before the log dump below could run. It does
+  # NOT make a hang pass: a run reaching neither condition exhausts the retries, and Ansible
+  # fails the task on that regardless of this setting.
+  failed_when: false
+
+# ---------------------------------------------------------------------------------------------
+# From here down the run did NOT complete, and the role decides whether that fails the deploy.
+#
+# It does not always, and the split rests on when auto-deploy fires: only on an `_image:`-only
+# diff, so the single thing that changed is the image.
+#
+#   * The container never reached its entrypoint — a pull failure, a bad exec format, a config
+#     the kubelet could not turn into a container. On an image-only diff that is the new image's
+#     fault and nothing else's, and the caller's health monitor would take hours to notice. This
+#     is the entire reason the gate exists, so it FAILS the deploy.
+#   * The container ran and exited non-zero — the binary works and the application failed. On an
+#     image-only diff that is almost never the image; it is a transient dependency, which the
+#     caller's own monitor already pages for on a bounded delay. Reported, not enforced.
+#     configarr/tasks/main.yml carries the incident behind that: a wrapper was retired for
+#     failing deploys over exactly this.
+#
+# So the contract is narrow and worth stating out loud: this role proves the new image RUNS. It
+# does not prove the workload succeeded. Do not "simplify" it back to a blanket fail — that
+# reverses a decision taken after a real outage, and CLAUDE.md records why.
+
+# argv, NOT a folded `cmd:` string. ansible.builtin.command shlex-splits a cmd, and the space
+# inside `{range .items[*]}` tears the jsonpath into two arguments while the quotes around the
+# newlines are stripped — kubectl then answers "name cannot be provided when a selector is
+# specified", rc=1, which `failed_when: false` below swallows into an empty stdout. That reads
+# as "no state readable", which is fatal, so the ENTIRE non-fatal branch below becomes dead
+# code and every application failure fails the deploy. It shipped that way once. argv invokes
+# no shell and has no quoting layer to get wrong; roles/setup/k3s/tasks/longhorn.yml:272 is the
+# other instance of the same fix, and its comment says the same thing.
+#
+# jsonpath rather than `-o json` piped through from_json: it flattens both container lists into
+# one newline-separated stream of reasons, which the classification below reads with stock
+# filters.
+#
+# batch.kubernetes.io/job-name, not the legacy bare `job-name`. Both labels are on this
+# cluster's Job pods today, but the legacy one is deprecated — and if it is ever dropped the
+# selector silently matches nothing, every failure becomes "no state readable", and the role
+# regresses to exactly the blanket fail described above without any error to notice.
+- name: Read the container states of the failed gate run for {{ cronjob_gate_name }}
+  tags: [deploy]
+  when:
+    - not (k8s_no_mutate | bool)
+    - "'Complete' not in cronjob_gate_result.stdout"
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - "{{ k8s_namespace }}"
+      - get
+      - pods
+      - --selector=batch.kubernetes.io/job-name={{ cronjob_gate_name }}-deploy-gate
+      - -o
+      - 'jsonpath={range .items[*]}{range .status.initContainerStatuses[*]}{.state.waiting.reason}{"\n"}{.state.terminated.reason}{"\n"}{end}{range .status.containerStatuses[*]}{.state.waiting.reason}{"\n"}{.state.terminated.reason}{"\n"}{end}{end}'
+  become: true
+  register: cronjob_gate_states
+  changed_when: false
+  # Falls through to the classification rather than aborting: an unreadable state is fatal
+  # anyway, and reaching the failure below gets the operator a message instead of a traceback.
+  failed_when: false
+
+# PodInitializing is dropped rather than classified, and it is not in either list on purpose.
+# It is the absence of an outcome, not an outcome: the main container reports it whenever an
+# init container is still running OR has failed. Left in, a FAILED init container would make
+# the main container's PodInitializing an unrecognised reason and fail the deploy — the
+# application-failure case this role deliberately does not fail on. Dropped, the decision rests
+# on the init container's own reason, which the read above already collects.
+#
+# `| default([])` because a module that fails to EXECUTE — as opposed to returning rc != 0 —
+# registers a result with no stdout_lines at all, and a bare dereference would raise an
+# undefined-attribute traceback instead of reaching the fail-closed message below.
+- name: Collect the container states read for {{ cronjob_gate_name }}
+  tags: [deploy]
+  when:
+    - not (k8s_no_mutate | bool)
+    - "'Complete' not in cronjob_gate_result.stdout"
+  ansible.builtin.set_fact:
+    cronjob_gate_reasons: >-
+      {{ cronjob_gate_states.stdout_lines | default([]) | select | list
+         | reject('equalto', 'PodInitializing') | list }}
+
+# `cronjob_gate_fatal` is an ALLOWLIST test — fatal unless every reason read is one of
+# cronjob_gate_ran_reasons — so a state this role has never heard of is fatal, and so is no
+# state at all. Same fail-closed choice `probe.py health` makes for an unreadable restart time,
+# and it is what stops a future Kubernetes reason string from quietly joining the non-fatal side.
+- name: Classify the gate failure for {{ cronjob_gate_name }}
+  tags: [deploy]
+  when:
+    - not (k8s_no_mutate | bool)
+    - "'Complete' not in cronjob_gate_result.stdout"
+  ansible.builtin.set_fact:
+    cronjob_gate_start_failures: >-
+      {{ cronjob_gate_reasons | select('in', cronjob_gate_start_failure_reasons) | list }}
+    cronjob_gate_fatal: >-
+      {{ (cronjob_gate_reasons | length) == 0
+         or (cronjob_gate_reasons | reject('in', cronjob_gate_ran_reasons) | list | length) > 0 }}
+
+# The pod log is the only place a bad image or a broken run is explained, and the pod is
+# garbage-collected with the Job on the next deploy — so it is pulled out here rather than left
+# for an operator to find after it is gone. Pulled for BOTH outcomes: on the non-fatal one,
+# nothing else will ever show it to whoever ran the deploy.
+- name: Show the failed gate log for {{ cronjob_gate_name }}
+  tags: [deploy]
+  when:
+    - not (k8s_no_mutate | bool)
+    - "'Complete' not in cronjob_gate_result.stdout"
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} logs job/{{ cronjob_gate_name }}-deploy-gate --tail=50
+  become: true
+  register: cronjob_gate_log
+  changed_when: false
+  failed_when: false
+
+- name: Report a non-fatal gate failure for {{ cronjob_gate_name }}
+  tags: [deploy]
+  when:
+    - not (k8s_no_mutate | bool)
+    - "'Complete' not in cronjob_gate_result.stdout"
+    - not (cronjob_gate_fatal | bool)
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: the {{ cronjob_gate_name }} deploy-gate run FAILED and the deploy is continuing
+      anyway. The container started and exited non-zero, so the new image runs and the failure
+      is the application's — most often a dependency that was briefly unavailable. This is NOT
+      a clean deploy: the workload did not do its job, and {{ cronjob_gate_name }}'s health
+      monitor is what pages if it stays broken. Container states:
+      {{ cronjob_gate_reasons | join(', ') }}. Last lines of the pod log:
+      {{ cronjob_gate_log.stdout | default('(no log)') }}
+
+- name: Fail on a gate run whose container never started for {{ cronjob_gate_name }}
+  tags: [deploy]
+  when:
+    - not (k8s_no_mutate | bool)
+    - "'Complete' not in cronjob_gate_result.stdout"
+    - cronjob_gate_fatal | bool
+  ansible.builtin.fail:
+    msg: >-
+      The {{ cronjob_gate_name }} deploy-gate run did not complete
+      (job conditions: {{ cronjob_gate_result.stdout | default('') | trim or '(none)' }};
+      container states: {{ cronjob_gate_reasons | join(', ') or '(none readable)' }}).
+      {{ 'The new image could not start.' if cronjob_gate_start_failures | length > 0
+      else 'No container state was readable, or one was read that this role does not
+      recognise as having run — failing closed. A run killed by its own activeDeadlineSeconds
+      lands here: the Job controller deletes its pods, so neither the state nor the log
+      survives.' }}
+      Last lines of the pod log:
+      {{ cronjob_gate_log.stdout | default('(no log — the pod never started; check the Job events)') }}
