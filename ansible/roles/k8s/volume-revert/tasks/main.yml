@@ -36,7 +36,13 @@
       - volume_revert_claims | default([]) is sequence
       - volume_revert_claims | default([]) is not string
       - volume_revert_claims | default([]) | length > 0
-      - volume_revert_sha | default('') | regex_search('^[0-9a-f]{8,}$')
+      # `is not none`, not the bare filter. `regex_search` returns the MATCHED STRING or None,
+      # and ansible-core 2.21 refuses a conditional whose result is not a boolean: "Conditional
+      # result (True) was derived from value of type 'str' ... Conditionals must have a boolean
+      # result". The bare form therefore aborted this assert on EVERY invocation — the task-6
+      # drill hit it on the first real call, before the role had done anything. A source-text
+      # test cannot see this; `test_volume_revert_input_guard_accepts_a_real_sha` runs the guard.
+      - volume_revert_sha | default('') | regex_search('^[0-9a-f]{8,}$') is not none
     fail_msg: >-
       k8s/volume-revert needs volume_revert_service, a volume_revert_claims LIST holding at
       least one PVC name, and a volume_revert_sha of eight or more lowercase hex digits — the
