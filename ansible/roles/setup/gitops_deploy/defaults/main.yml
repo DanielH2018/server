@@ -57,8 +57,16 @@ gitops_deploy_k8s_autodeploy_max_per_tick: 3
 # backstop rather than a live path.
 gitops_deploy_k8s_autodeploy_denylist: "{{ playbook_dir | k8s_autodeploy_denylist }}"
 
-# Wall-clock cap for one `ansible-playbook` invocation on the k8s path, in seconds. Sized as
-# (max rollout wait + stabilise soak) x 2 so a forward rollout AND its rollback redeploy both fit
-# inside the unit's TimeoutStartSec=25min. RUN_BUDGET_S does NOT cover this path — it bounds only
-# the Docker health gate (gate_services), which is inert on an all-k8s host.
+# Wall-clock cap for one `ansible-playbook` invocation on the k8s path, in seconds — the FORWARD
+# deploy only; the rollback redeploy has its own budget below. RUN_BUDGET_S does NOT cover this
+# path — it bounds only the Docker health gate (gate_services), which is inert on an all-k8s host.
 gitops_deploy_k8s_timeout_s: 900
+
+# Wall-clock cap for the ROLLBACK redeploy specifically — the run that also reverts each claimed
+# volume to its pre-deploy snapshot (k8s/volume-revert), which does strictly more work than a
+# forward deploy: per claim, worst case is 3 state waits + 3 API calls against Longhorn, and
+# tdarr/code-server each hold two claims. Defaults to gitops_deploy_k8s_timeout_s's own value so
+# this knob changes no behaviour today. UNSIZED: nothing has measured a real revert cycle against
+# it yet — Task 6's drill supplies that measurement; raise it only against that evidence, and
+# check it still fits inside the unit's TimeoutStartSec=25min alongside the forward attempt.
+gitops_deploy_k8s_rollback_timeout_s: 900

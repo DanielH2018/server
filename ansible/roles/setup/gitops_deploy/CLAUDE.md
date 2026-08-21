@@ -317,3 +317,22 @@ direction is a guess. On a pull-based host origin is the source of truth, so the
 the right lead in both directions and the push case belongs as a secondary check. Fixed in
 `7f5f629b`. The alert-direction logic lives in `gitops_deploy.py`'s `main()`, which no test
 imports — `test_deploy_logic.py` covers only `deploy_logic.py`.
+
+The same file also covers `deploy_k8s()` and the two `deploy_k8s()` call sites inside `main()`.
+`gitops_deploy.py` can't be imported the normal way in CI (`C = cfg()` reads
+`/etc/gitops-deploy/config.env` at module level, which doesn't exist there) — it stubs
+`host_lib.parse_env_file` with canned values before the one import, so it works the same in CI
+and on a host where the real config.env exists, and never reads the real file. The rollback call
+site itself (inside `main()`, not unit-testable without mocking git/CI/Discord/state-file I/O) is
+covered by an AST source-check pinning that it passes `restore_sha=origin[:8]` — never `local`
+— and its own `K8S_ROLLBACK_TIMEOUT_S` budget, not the forward deploy's `K8S_DEPLOY_TIMEOUT_S`.
+
+## Rollback timeout (`K8S_ROLLBACK_TIMEOUT_S` / `gitops_deploy_k8s_rollback_timeout_s`)
+The rollback redeploy also reverts each claimed volume to its pre-deploy snapshot
+(`k8s/volume-revert`), which is strictly more work than the forward deploy — per claim, worst
+case is 3 state waits + 3 API calls against Longhorn, and `tdarr`/`code-server` each hold two
+claims. It gets its own timeout rather than sharing `K8S_DEPLOY_TIMEOUT_S`/900s, defaulted to
+that same 900s so this changes no behaviour today. **The default is UNSIZED** — nothing has
+measured a real revert cycle against it. Raise it only against Task 6's drill measurement, and
+check the raised value still fits inside the unit's `TimeoutStartSec=25min` alongside the
+forward attempt it shares the ceiling with.
