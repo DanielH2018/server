@@ -347,20 +347,37 @@ claims. It gets its own timeout rather than sharing `K8S_DEPLOY_TIMEOUT_S`, and 
 `ansible/roles/k8s/volume-revert/CLAUDE.md`). A two-claim service's worst-case REVERT is 720s,
 leaving 180s; the realistic case is far smaller — a two-claim revert measured close to ~150s.
 
-**What the 900s figure does and does not cover.** The same `ansible-playbook` run this timeout
-bounds also pays a per-claim pre-revert snapshot wait (`volume_snapshot_timeout`, 120s) and a
-post-apply rollout wait, neither of which is `k8s/volume-revert`'s own cost. The 180s left after
-a worst-case revert covers those at their REALISTIC cost (the drill measured ~38s combined for
-one claim) — it does **not** cover a two-claim service's snapshot phase also hitting its own
-ceiling (2 x 120s = 240s alone exceeds the 180s left). A run where the snapshot wait, the revert,
-AND the rollout wait all independently stall to their own worst case in the same tick is not
-proven to fit inside 900s. This is an accepted residual risk, not a proven-safe one: closing it
-would mean raising `gitops_deploy_k8s_rollback_timeout_s` well past 900s and `TimeoutStartSec`
-past 35min, which task 6b did not do because a THREE-independent-mechanism simultaneous stall
-(snapshot readiness, Longhorn revert, and rollout, all in the same run) is a materially rarer tail
-than the single-mechanism worst case the 900s figure is actually sized against — the same
-realistic-over-worst-case-stacking judgment already made for `gitops_deploy_k8s_timeout_s` (see
-its own comment: ~2.5min/service, not each service's independent worst case).
+**Corrected (task 6b, second pass): a failure aborts the play, so failure-driven worst
+cases from different phases cannot stack.** `k8s/volume-revert`'s three waits are `until:` with
+no `ignore_errors` and no `failed_when`, and `k8s/manifests` runs
+snapshot → revert → apply → rollout as one play with no `rescue`. An exhausted wait fails its
+task and the WHOLE PLAY stops there — a snapshot-phase failure means `k8s/volume-revert` never
+runs at all, and a claim-1 failure means claim 2 never runs. So a "snapshot phase fails at its
+240s ceiling AND THEN the revert phase also fails at its 720s ceiling" scenario cannot happen:
+the first failure ends the run. An earlier draft of this note added those two independent
+FAILURE-driven worst cases together and concluded 900s wasn't provably safe — that was wrong,
+for the reason above.
+
+**What 900s does need to cover, and does only partially: a SLOW BUT FULLY SUCCESSFUL run.**
+`worst_case_revert` (720s for two claims) is reached either by every step succeeding right at
+its own ceiling, or by the very last wait failing after everything before it also succeeded
+slowly — both consume the same wall time, so 720s is a real ceiling on "how long before this
+role's fate (success or failure) is decided," not an unreachable one. On a genuinely slow but
+ultimately successful run, the pre-revert snapshot wait (`volume_snapshot_timeout`, up to 120s
+per claim) and the post-apply rollout wait are ADDITIVE to the revert on one continuous
+timeline — nothing fails, so nothing stops the play early. That combined slow-success total for
+a two-claim service (up to 240s snapshot + 720s revert + apply + rollout) can exceed 900s, and
+`K8S_ROLLBACK_TIMEOUT_S` would SIGTERM a run that was genuinely still succeeding, just slowly.
+The 180s left after the 720s revert covers that additive cost only at its REALISTIC size (~38s
+measured for one claim), not at every phase's own ceiling. This is the real, smaller residual:
+not a compounding-failure risk, but a slow-full-success risk, and it is still open.
+
+**The reachable failure mode is bounded by the first exhausted wait, and the timeout was never
+what stood between it and partial state.** When a wait does exhaust, the play stops right there
+— workload at zero, that claim's revert incomplete — which is exactly the manual-recovery case
+`k8s/volume-revert/CLAUDE.md` already documents. Raising or shrinking
+`gitops_deploy_k8s_rollback_timeout_s` does not change whether that failure happens; it only
+changes whether a SLOW SUCCESS gets cut short.
 
 **The forward attempt and the rollback run sequentially, not concurrently, inside one systemd
 unit activation.** A failed forward deploy can spend its full `K8S_DEPLOY_TIMEOUT_S` (900s)

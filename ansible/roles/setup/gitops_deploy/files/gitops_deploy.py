@@ -208,12 +208,16 @@ K8S_DEPLOY_TIMEOUT_S = int(C.get("K8S_DEPLOY_TIMEOUT_S", "900"))
 # each hold two claims. Sized (task 6b) against Task 6's drill: 900s covers a two-claim service's
 # 720s worst-case revert (at the drill-sized volume_revert_state_timeout/volume_revert_api_timeout,
 # 90/30) with 180s left for the rest of the SAME run's REALISTIC cost (~38s measured, one claim);
-# the realistic revert itself measures closer to ~150s. NOT proven: that 180s also covers this
-# run's OWN snapshot/rollout steps hitting their own worst case (a two-claim snapshot phase alone
-# can reach 240s) — see gitops_deploy/CLAUDE.md's rollback-timeout section for that accepted
-# residual. This run is SEQUENTIAL with K8S_DEPLOY_TIMEOUT_S inside one systemd unit activation
-# (a failed forward deploy, then this rollback) — see gitops-deploy.service.j2's TimeoutStartSec,
-# raised to 35min to fit both.
+# the realistic revert itself measures closer to ~150s. 720s is reached by every wait/call
+# succeeding right at its own ceiling (or by the last one failing after the rest succeeded
+# slowly) — a failure aborts the play immediately (no ignore_errors/failed_when in
+# k8s/volume-revert), so it can never compound with an independent failure in another phase.
+# The real residual: a SLOW BUT SUCCESSFUL snapshot phase (up to 240s for two claims) is
+# additive to a slow-but-successful revert on one continuous timeline where nothing fails, and
+# that combined total is not proven to fit in the 180s left — see gitops_deploy/CLAUDE.md's
+# rollback-timeout section. This run is SEQUENTIAL with K8S_DEPLOY_TIMEOUT_S inside one systemd
+# unit activation (a failed forward deploy, then this rollback) — see gitops-deploy.service.j2's
+# TimeoutStartSec, raised to 35min to fit both.
 K8S_ROLLBACK_TIMEOUT_S = int(C.get("K8S_ROLLBACK_TIMEOUT_S", "900"))
 
 # ── CI gate ───────────────────────────────────────────────────────────────────────────────────

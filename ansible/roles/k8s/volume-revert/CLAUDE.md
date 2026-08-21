@@ -210,14 +210,19 @@ sized for a stalled Longhorn API, not the expected run.
 budget rather than sharing the forward deploy's. That covers the 720s worst-case revert with
 180s left for the rest of the SAME playbook run — the pre-revert snapshot wait and the
 post-apply rollout — at their REALISTIC cost (the drill measured ~38s combined for one claim),
-not at their own worst case. **It is not proven to survive every one of those steps also
-hitting its own ceiling in the same run** — a two-claim service's snapshot phase alone can reach
-240s (`volume_snapshot_timeout` x 2 claims), which alone exceeds the 180s left after a worst-case
-revert. That compound case (snapshot AND revert AND rollout all independently stalling at once)
-is an accepted residual risk, not a proven-safe one — see
-`ansible/roles/setup/gitops_deploy/CLAUDE.md`'s rollback-timeout section. The unit's
-`TimeoutStartSec` was raised from 25min to 35min to fit `K8S_DEPLOY_TIMEOUT_S` (900s, the
-forward attempt) plus `K8S_ROLLBACK_TIMEOUT_S` (900s) plus the flock wait.
+not at their own ceiling. **720s is reached by every wait/call succeeding right at its own
+ceiling, or by the very last one failing after everything before it also succeeded slowly — a
+failure anywhere stops the play immediately (no `ignore_errors`, no `failed_when`), so a
+snapshot-phase failure and a revert-phase failure can never both consume their own worst case in
+one run.** The real residual is narrower than a compounding-failure scenario: a two-claim
+service's snapshot phase, succeeding but slowly, can still cost up to 240s
+(`volume_snapshot_timeout` x 2 claims) ADDITIVE to a slow-but-successful 720s revert on one
+continuous timeline where nothing fails — and that combined slow-success total is not proven to
+fit in the 180s left. That is an accepted residual risk (a slow full success getting cut short),
+not a proven-safe one — see `ansible/roles/setup/gitops_deploy/CLAUDE.md`'s rollback-timeout
+section. The unit's `TimeoutStartSec` was raised from 25min to 35min to fit
+`K8S_DEPLOY_TIMEOUT_S` (900s, the forward attempt) plus `K8S_ROLLBACK_TIMEOUT_S` (900s) plus the
+flock wait.
 
 ## Things measured rather than assumed
 

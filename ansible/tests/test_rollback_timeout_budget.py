@@ -2,29 +2,40 @@
 redeploy's own budget (task 6b).
 
 WHY THIS EXISTS. The rollback redeploy's `K8S_ROLLBACK_TIMEOUT_S`
-(`gitops_deploy_k8s_rollback_timeout_s`) has to cover the worst case a real service's REVERT can
-hit: `volume_revert_state_timeout` and `volume_revert_api_timeout` bound one claim's three state
+(`gitops_deploy_k8s_rollback_timeout_s`) has to cover `worst_case_revert` below: the longest a
+two-claim service's revert can run before its own fate (success or failure) is decided.
+`volume_revert_state_timeout` and `volume_revert_api_timeout` bound one claim's three state
 waits and three API calls, and a service can declare more than one claim (`tdarr`,
 `code-server` each declare two, via `k8s_autodeploy_snapshot_pvcs`). Nothing enforced that
 relationship until this test — a later change to either side (a bumped per-claim timeout, a
 service declaring a third claim, a cut to the rollback budget) could silently reopen the gap
 Task 6's drill was measuring against, and every other test would stay green.
 
+WHAT `worst_case_revert` MEANS, precisely, because it is easy to misread. Every wait in
+`k8s/volume-revert/tasks/claim.yml` is `until:` with no `ignore_errors` and no `failed_when`, so
+an exhausted wait fails the task and the WHOLE PLAY stops there — a failure in claim 1 means
+claim 2 never runs. That means `max_claims * 3 * (state + api)` is NOT "every wait across every
+claim times out and processing continues anyway" — that scenario is impossible. It IS reached
+two other ways that consume the same wall time: every wait/call across every claim succeeds
+right at its own ceiling, or every one succeeds except the very last, which fails after
+consuming the same ceiling. Both are real, and neither compounds a failure from one claim (or
+phase) with an independent failure from another.
+
 WHAT THIS DOES NOT COVER, on purpose. The same `ansible-playbook` run this timeout bounds also
 pays a per-claim snapshot wait (`volume_snapshot_timeout`, 120s) BEFORE the revert, then an
-apply and a rollout wait AFTER it. This test's margin floor is sized against the drill's
-REALISTIC overhead for those (Phase 4: ~5.5s snapshot wait + ~32s rollout-drain wait for one
-claim), not against every one of those steps ALSO hitting its own worst-case ceiling at once.
-That fully compound case — snapshot AND revert AND rollout all independently stalling to their
-ceilings in the same run — is not proven to fit inside 900s and is an accepted residual risk
-(see `ansible/roles/setup/gitops_deploy/CLAUDE.md`'s rollback-timeout section), consistent with
-how `gitops_deploy_k8s_timeout_s` itself is sized against realistic per-service time rather than
-worst-case ceiling-stacking across independent mechanisms.
+apply and a rollout wait AFTER it. On a genuinely slow-but-successful run — nothing fails, so
+nothing stops the play early — those are ADDITIVE to `worst_case_revert` on one continuous
+timeline. This test's margin floor is sized against the drill's REALISTIC overhead for those
+(Phase 4: ~5.5s snapshot wait + ~32s rollout-drain wait for one claim), not against a slow
+success in every one of those steps too. That combined slow-success total is not proven to fit
+inside 900s and is an accepted residual risk (see `ansible/roles/setup/gitops_deploy/CLAUDE.md`'s
+rollback-timeout section) — a narrower and smaller risk than a compounding-failure scenario,
+which the abort-on-first-failure semantics above rule out entirely.
 
 Sized against `ansible/roles/k8s/volume-revert/CLAUDE.md`'s task-6 numbers: at
 `volume_revert_state_timeout`/`volume_revert_api_timeout` = 90/30, a two-claim service's
-worst-case revert is 720s, inside the 900s `gitops_deploy_k8s_rollback_timeout_s` with 180s left
-for the realistic (not worst-case) cost of the rest of that run.
+`worst_case_revert` is 720s, inside the 900s `gitops_deploy_k8s_rollback_timeout_s` with 180s
+left for the realistic (not worst-case) cost of the rest of that run.
 """
 
 from __future__ import annotations
@@ -75,7 +86,10 @@ def test_rollback_timeout_covers_the_worst_case_revert_with_realistic_overhead_m
 
     # Three state waits and three API calls per claim (scale-down's own detach wait, the
     # maintenance-attach wait, the post-revert detach wait; the maintenance-attach POST, the
-    # revert POST, the detach POST) — see k8s/volume-revert/CLAUDE.md's sequence table.
+    # revert POST, the detach POST) — see k8s/volume-revert/CLAUDE.md's sequence table. Reached
+    # by slow success (or failing on the LAST wait after the rest succeeded slowly) — never by
+    # failures compounding across claims, since a failure aborts the play immediately. See the
+    # module docstring.
     worst_case_revert = max_claims * 3 * (state_timeout + api_timeout)
 
     assert worst_case_revert <= rollback_timeout, (
