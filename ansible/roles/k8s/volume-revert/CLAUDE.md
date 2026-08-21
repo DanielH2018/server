@@ -11,7 +11,10 @@ them. A caller that reverts without applying afterwards leaves the service down.
 
 **This code path runs only during an incident.** Nothing exercises it on a good day. That is
 why every step that can fail on its own account is checked before the scale-down, and why
-`ansible/tests/test_volume_revert.py` is mostly ordering tests.
+`ansible/tests/test_volume_revert.py` pins claim.yml's whole sequence rather than a few pairs.
+Two transpositions that look harmless are outages: scaling down AFTER the maintenance-mode
+attach leaves the pod holding the volume, and detaching BEFORE the revert gives the revert a
+volume with no engine. Read the table below before reordering anything.
 
 ## What the caller passes
 
@@ -24,6 +27,10 @@ why every step that can fail on its own account is checked before the scale-down
     volume_revert_claims: [widget-config]  # PVC names in k8s_namespace
     volume_revert_sha: 1a2b3c4d            # the deploy tag the snapshot was named with
 ```
+
+`volume_revert_claims` must be a **list**, not a bare string: `"tdarr-configs" | length` is
+13, so a string passes a length check and Ansible then loops its characters, looking up a PVC
+named `t`. The input assert rejects it by type.
 
 `volume_revert_sha` must be the **same string** `k8s/volume-snapshot` resolved for the deploy
 being rolled back — the output of `git rev-parse --short=8 HEAD` at that commit, used verbatim.
@@ -48,7 +55,8 @@ Per claim, in this order:
 2. **Find the newest snapshot matching `autodeploy-<svc>-<sha>-<claim>-`, and fail when none
    does.** Newest by `creationTimestamp`, never by name — CR names are not chronologically
    sortable as strings. `markRemoved` snapshots are rejected: a snapshot already marked removed
-   cannot be reverted to.
+   cannot be reverted to, and longhorn-manager refuses one itself
+   (`not revert to snapshot ... since it's marked as Removed`).
 3. **Scale the Deployment to zero.** The volume cannot be attached in maintenance mode while a
    pod holds it.
 4. **Wait for `state: detached`.**
@@ -62,6 +70,12 @@ Per claim, in this order:
 Steps 1 and 2 are reads. They run under `--check` too (`check_mode: false`), so a dry run
 answers the question that matters most about a rollback — is there a snapshot to revert to? —
 without changing anything.
+
+A dry run **reports** a missing snapshot; only a real run fails on one. `Fail when no snapshot
+matches this deploy` carries the same `k8s_no_mutate` guard as every mutation, and
+`Report a dry run with nothing to revert` is its other half. A service that has never deployed
+has no snapshot, so an unguarded failure would abort `--check` and `--dry-run` for exactly the
+services those modes are most useful on.
 
 ## The attach and the detach pair on an empty ticket key
 
