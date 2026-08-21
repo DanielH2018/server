@@ -1,15 +1,20 @@
 ---
-# Detach and attach are engine operations; the drill measured the whole cycle at well under two
-# minutes on a 1Gi volume holding ~300 MB. Cost scales with the data to coalesce, not with
-# volume size, so the media-adjacent roles are slower and this ceiling is deliberately generous.
-volume_revert_state_timeout: 180
+# Detach and attach are engine operations. Task 6's drill measured the whole cycle at 42.6s
+# direct and ~47s through a real deploy (speedtest-config, 1Gi/~382MB), and the worst single
+# state wait it saw was 40.80s — dominated by the fixed terminationGracePeriodSeconds: 30 that
+# speedtest, home-assistant and tdarr all set, not by data. 90 is ~2.2x that worst wait and 3x
+# the fixed grace period, with headroom left for a larger volume's coalesce time. Cost scales
+# with the data to coalesce, not with volume size, so the media-adjacent roles are slower and
+# this ceiling stays deliberately generous rather than tight to the 1Gi measurement.
+volume_revert_state_timeout: 90
 volume_revert_poll_interval: 2
 
 # Seconds to wait for one Longhorn API action to answer. The three calls this role makes update
-# CRs and return; they do not wait for the state change, which the polls above cover. The
-# ceiling matters anyway: a client timeout is NOT proof the server did nothing, so a generous
-# value keeps the ambiguous outcome rare. CLAUDE.md says what to do when it happens.
-volume_revert_api_timeout: 60
+# CRs and return; they do not wait for the state change, which the polls above cover. Task 6's
+# drill saw a worst single call of 0.41s; 30 is ~70x that, keeping the ceiling generous while a
+# client timeout still isn't proof the server did nothing. CLAUDE.md says what to do when it
+# happens.
+volume_revert_api_timeout: 30
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # This role deploys no workload of its own: it reverts another role's volume during a failed

@@ -205,9 +205,15 @@ K8S_DEPLOY_TIMEOUT_S = int(C.get("K8S_DEPLOY_TIMEOUT_S", "900"))
 # Bounds the ROLLBACK redeploy specifically — the run that also reverts each claimed volume to
 # its pre-deploy snapshot (k8s/volume-revert), which is strictly more work than a forward deploy:
 # per claim, worst case is 3 state waits + 3 API calls against Longhorn, and tdarr/code-server
-# each hold two claims. Defaults to K8S_DEPLOY_TIMEOUT_S's own default so this slice changes no
-# behaviour today. UNSIZED: nothing has measured a real revert cycle against this value yet.
-# Task 6's drill supplies that measurement; raise it only against that evidence, not a guess.
+# each hold two claims. Sized (task 6b) against Task 6's drill: 900s covers a two-claim service's
+# 720s worst-case revert (at the drill-sized volume_revert_state_timeout/volume_revert_api_timeout,
+# 90/30) with 180s left for the rest of the SAME run's REALISTIC cost (~38s measured, one claim);
+# the realistic revert itself measures closer to ~150s. NOT proven: that 180s also covers this
+# run's OWN snapshot/rollout steps hitting their own worst case (a two-claim snapshot phase alone
+# can reach 240s) — see gitops_deploy/CLAUDE.md's rollback-timeout section for that accepted
+# residual. This run is SEQUENTIAL with K8S_DEPLOY_TIMEOUT_S inside one systemd unit activation
+# (a failed forward deploy, then this rollback) — see gitops-deploy.service.j2's TimeoutStartSec,
+# raised to 35min to fit both.
 K8S_ROLLBACK_TIMEOUT_S = int(C.get("K8S_ROLLBACK_TIMEOUT_S", "900"))
 
 # ── CI gate ───────────────────────────────────────────────────────────────────────────────────

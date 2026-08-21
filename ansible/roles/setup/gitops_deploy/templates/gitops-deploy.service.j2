@@ -8,11 +8,32 @@ OnFailure=gitops-deploy-alert.service
 Type=oneshot
 # Kill a wedged run (hung ansible/docker) so it can't hold the unit "active" forever and starve
 # the 30-min timer (OnUnitActiveSec) — without this a hang stalls the whole pipeline until manual
-# intervention. 25min keeps it under the 30-min interval so the next tick still fires. The deployer
-# also self-budgets its health-gate phase (RUN_BUDGET_S=1020s, sized so 180s max flock wait + gate +
-# 300s rollback fits this 25min; see config.env.j2) to leave time here for the rollback redeploy —
-# so a slow multi-service gate can't get SIGTERMed before the rollback + hold run.
-TimeoutStartSec=25min
+# intervention.
+#
+# Two independent worst cases must fit inside this ceiling, and task 6b's k8s one is why it is
+# 35min rather than 25min:
+#   - Docker path: 180s max flock wait + RUN_BUDGET_S (1020s, the health-gate phase) +
+#     HEALTH_TIMEOUT_S (300s, the rollback redeploy) = 1500s = 25min exactly, still true and
+#     now with slack under the larger ceiling. See config.env.j2.
+#   - k8s path: a failed forward deploy can spend its whole K8S_DEPLOY_TIMEOUT_S (900s) before
+#     gitops_deploy.py catches the timeout, THEN the rollback redeploy can spend its whole
+#     K8S_ROLLBACK_TIMEOUT_S (900s) — the two run SEQUENTIALLY in one unit activation, not
+#     concurrently, and neither shares the Docker path's RUN_BUDGET_S. 180 (max flock wait) +
+#     900 + 900 = 1980s, which needs more than 25min (1500s) and is why this moved to 35min
+#     (2100s) — see ansible/roles/k8s/volume-revert/CLAUDE.md for the drill that sized the two
+#     revert-role timeouts feeding K8S_ROLLBACK_TIMEOUT_S.
+#
+# This deliberately GIVES UP the old invariant ("stay under the 30-min interval so the next tick
+# always fires on schedule") in exchange for the k8s rollback getting a budget that can actually
+# finish. That is a considered trade, not a bug to tighten back: a normal run finishes in well
+# under a minute, so the 30-min tick is only at risk in the pathological case both k8s timeouts
+# get spent in full — and per `ansible/roles/setup/gitops_deploy/CLAUDE.md`'s rollback-timeout
+# section (verified live against this unit on daniel-box, not inferred from the man page alone),
+# an overrun never produces a second or concurrent run: systemd finds the unit already
+# `activating` and coalesces the timer's start request into the run already in flight, rather
+# than spawning another one. The practical effect is a delayed/absorbed tick, not a stacked
+# deploy — see that CLAUDE.md section for what is and is not verified about the cadence.
+TimeoutStartSec=35min
 User={{ sys_user }}
 WorkingDirectory=/home/{{ sys_user }}/server
 # Need ~/.local/bin on PATH for `uv` (the deployer runs `uv run ansible-playbook`,
@@ -28,7 +49,7 @@ SyslogLevel=notice
 # this same git working tree, and this deployer's `git reset --hard` on a failed health gate
 # could silently discard a half-rotated secret. RUN_START (and so RUN_BUDGET_S, see
 # gitops_deploy.py) is measured from process start, AFTER flock acquires — so time spent
-# waiting here is pure overhead against this unit's 25min TimeoutStartSec, uncounted by that
+# waiting here is pure overhead against this unit's 35min TimeoutStartSec, uncounted by that
 # budget. -w 180 outlasts any normal deploy-step contention (secret-rotate is short — 0-2
 # tokens) but fails fast enough to leave the health-gate/rollback budget intact; on timeout
 # flock exits 1, failing the unit cleanly (OnFailure alerts) and the next 30-min timer tick

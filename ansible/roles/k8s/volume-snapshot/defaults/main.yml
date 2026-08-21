@@ -19,10 +19,13 @@ volume_snapshot_retain: 3
 # CLAUDE.md ("A detached volume cannot be snapshotted at all, and that is not fatal").
 volume_snapshot_timeout: 120
 
-# The maintenance-mode attach 7b uses to snapshot a detached volume. Same values as
-# k8s/volume-revert's volume_revert_state_timeout/poll_interval/api_timeout — the drill that
-# measured them (a full detach+attach cycle under two minutes on a 1Gi volume) applies equally
-# here, because it is the same Longhorn operation against the same class of volume.
+# The maintenance-mode attach 7b uses to snapshot a detached volume — proven unreachable by the
+# task-6 drill (seed-volume attaches first, and Longhorn snapshots a detached volume anyway; see
+# "The maintenance-mode attach is not reachable through a deploy" in this role's CLAUDE.md), so
+# unlike k8s/volume-revert's matching pair this isn't under the same budget pressure to tighten.
+# Left at the pre-drill values rather than following volume_revert_state_timeout/api_timeout
+# down to 90/30 (task 6b) — same drill, same Longhorn operation, but this path runs on the
+# FORWARD deploy for all 13 opted-in services, not inside the rollback's own timeout.
 volume_snapshot_state_timeout: 180
 volume_snapshot_poll_interval: 2
 volume_snapshot_api_timeout: 60
