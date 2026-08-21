@@ -207,6 +207,27 @@ def test_markremoved_snapshots_are_excluded_from_the_window_not_counted_in_it() 
     assert not [name for name in _prune(lines, 3) if "6666" in name or "7777" in name]
 
 
+def test_an_unpopulated_markremoved_is_treated_as_not_removed() -> None:
+    """R14: a snapshot read moments after creation can have `status.markRemoved` still
+    unpopulated, rendering `<ts>||<name>` rather than `<ts>|false|<name>`.
+
+    An `equalto 'false'` filter drops that line out of the listing entirely — including THIS
+    run's own snapshot, which fails the "found this run's snapshot" assert and the whole deploy
+    before the apply, over a field that just hasn't been written yet. It must be counted as
+    live, the same as an explicit 'false'.
+    """
+    empty_removed_line = (
+        "2026-08-21T10:05:00Z||autodeploy-widget-99999999-widget-config"
+    )
+    lines = _FIVE + [empty_removed_line]
+    live = _render(
+        _live_expression(),
+        volume_snapshot_existing={"stdout_lines": lines},
+        volume_snapshot_prefix="autodeploy-widget-",
+    )
+    assert "autodeploy-widget-99999999-widget-config" in live
+
+
 def test_snapshots_this_role_did_not_take_are_never_candidates() -> None:
     """Longhorn's own RecurringJob snapshots share the volume and must be left alone.
 
@@ -646,7 +667,9 @@ def test_the_listing_fields_exist_on_a_real_snapshot() -> None:
         created, removed, name = line.split("|")
         assert created.endswith("Z")
         assert removed in ("true", "false"), (
-            f"markRemoved read as {removed!r}; the retention filter compares it to the literal "
-            f"'false', so an absent or renamed field would drop every snapshot from the window"
+            f"markRemoved read as {removed!r}; the retention filter treats anything other than "
+            f"the literal 'true' as not-removed, so this is unexpected regardless — a renamed "
+            f"field reads as empty (not-removed, harmless) but any OTHER unexpected value here "
+            f"would silently retain a snapshot that should have dropped out of the window"
         )
         assert name

@@ -280,6 +280,13 @@
   # survives its own delete is normal here (see CLAUDE.md), and counting three of those as the
   # retained three would make the next pass delete live snapshots to make room.
   #
+  # `ne 'true'` rather than `equalto 'false'`: a snapshot read moments after creation can have
+  # `status.markRemoved` still unpopulated, rendering `<ts>||<name>` here. An `equalto 'false'`
+  # filter drops that line — including THIS run's own snapshot — out of the listing entirely,
+  # and the "found this run's snapshot" assert a few tasks down fails the deploy before the
+  # apply over a field that just hasn't been written yet. Not-removed is the correct read of an
+  # empty value; only an explicit `true` means removed.
+  #
   # Sorted on the creationTimestamp field, newest first, so the slice below keeps the newest N
   # and hands back the rest. `volume_snapshot_retain` is clamped to a floor of 1: the newest
   # snapshot is never a candidate whatever the caller passes, because 7b reverts to it and a
@@ -288,7 +295,7 @@
     volume_snapshot_live: >-
       {{ volume_snapshot_existing.stdout_lines | default([])
          | map('split', '|')
-         | selectattr('1', 'equalto', 'false')
+         | rejectattr('1', 'equalto', 'true')
          | selectattr('2', 'match', volume_snapshot_prefix)
          | sort(attribute='0', reverse=true)
          | map(attribute='2') | list }}
