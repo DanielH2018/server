@@ -50,7 +50,5 @@ media_volume_rsync_flags: "-rlptDH --delete"
 media_volume_probe_image: alpine:3.24
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
-# Nothing for `rollout status` to gate: this role provisions a static PV/PVC/StorageClass and
-# runs a one-shot Job to probe hardlink support — it renders no Deployment at all.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "renders a Job + PV/PVC/StorageClass, no Deployment — nothing for rollout status to gate"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "renders a Job it already gates to completion (delete --wait, apply, wait --for=condition=complete), plus a StorageClass and PV an _image:-only diff never touches — they re-apply unchanged; version-pinned hardlink-probe image"  # noqa var-naming[no-role-prefix]
