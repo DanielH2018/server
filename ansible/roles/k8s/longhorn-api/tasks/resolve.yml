@@ -5,6 +5,20 @@
 # The `longhorn-backend` ClusterIP has one endpoint per node, which makes it a coin flip:
 # measured 2026-08-21, 2 of 8 GETs succeeded. `ansible/seed_volume_backup.yml:14-17` records
 # the same finding from the other direction and chose CRs instead.
+#
+# `[*]`, NOT `[0]`. Measured 2026-08-21: `{.items[0].status.podIP}` against a zero-match query
+# returns rc=1 with "array index out of bounds: index 0, length 0" — a kubectl internals error,
+# not the empty stdout the guard task below expects, so Ansible aborts here and the guard never
+# runs. `{.items[*].status.podIP}` returns rc=0 with genuinely empty stdout on the same
+# zero-match query, which is what makes the guard reachable.
+#
+# `check_mode: false` because this is a read whose value the two tasks below depend on. A
+# command task is SKIPPED under --check by default, and a skipped read does not fail — it fails
+# a downstream consumer with an undefined attribute instead. That class has cost this repo nine
+# roles' worth of fixes already (see `volume-snapshot`'s "Resolve the deploy tag" task for the
+# same reasoning). The command is a plain read, so running it for real under `--check` is
+# harmless — this makes the role safe for any future caller rather than resting on every caller
+# remembering to gate its own include.
 - name: Resolve this node's own longhorn-manager pod IP
   tags: [deploy]
   ansible.builtin.command:
@@ -20,9 +34,10 @@
       - --field-selector
       - spec.nodeName={{ ansible_hostname }}
       - -o
-      - jsonpath={.items[0].status.podIP}
+      - jsonpath={.items[*].status.podIP}
   become: true
   changed_when: false
+  check_mode: false
   register: longhorn_api_pod
 
 - name: Fail when this node runs no longhorn-manager
@@ -34,8 +49,13 @@
       the NetworkPolicy refuses for host-originated traffic.
   when: (longhorn_api_pod.stdout | trim) | length == 0
 
+# `.split(' ')[0]`, not the raw trimmed stdout: the wildcard above can return more than one IP
+# space-separated on one line — a DaemonSet rolling update can briefly run an old (terminating)
+# and a new pod on the same node, and both satisfy the field selector. Concatenating them
+# untouched would silently produce a garbage URL; taking the first picks one reachable manager
+# rather than failing a resolve that a moment later would have returned exactly one IP.
 - name: Record the API base
   tags: [deploy]
   ansible.builtin.set_fact:
-    longhorn_api: "http://{{ longhorn_api_pod.stdout | trim }}:9500"
+    longhorn_api: "http://{{ (longhorn_api_pod.stdout | trim).split(' ')[0] }}:9500"
     longhorn_api_node: "{{ ansible_hostname }}"
