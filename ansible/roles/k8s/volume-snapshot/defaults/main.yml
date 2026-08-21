@@ -1,0 +1,25 @@
+---
+# How many autodeploy- snapshots to keep per volume. Three, not one: slice 7b reverts to the
+# most recent, and keeping a spare means a rollback is still possible if the newest snapshot is
+# the one that is corrupt or still coalescing.
+#
+# Clamped to a floor of 1 where it is used, so a caller passing `0` prunes down to the newest
+# rather than deleting the recovery point this role exists to produce.
+volume_snapshot_retain: 3
+
+# Seconds to wait for a snapshot to report `readyToUse`. A Longhorn snapshot is a marker in the
+# volume's chain rather than a data copy, so a healthy one settles in seconds — this is a
+# ceiling for a wedged engine, not an expected wait, and a larger number costs nothing on a
+# good deploy.
+#
+# The wait is deliberately NOT best-effort: a snapshot that never becomes ready fails the
+# deploy, because it is the recovery point the deploy is about to need.
+volume_snapshot_timeout: 120
+
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# This role deploys no workload of its own: it is a pre-apply step other roles include, it
+# renders no manifest for `rollout status` to gate, and it pins no `_image:` var for Renovate
+# to bump. Declared rather than added to the filter plugin's SHARED_ROLES, because it carries a
+# defaults/main.yml — the same choice cronjob-gate and image-builder make for the same reason.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "deploys no workload of its own — a pre-apply snapshot step other roles include; it renders no manifest and pins no image for Renovate to bump"  # noqa var-naming[no-role-prefix]
