@@ -256,8 +256,14 @@ def test_every_mutation_is_guarded_on_k8s_no_mutate() -> None:
     """`k8s_no_mutate` is `ansible_check_mode or (k8s_dry_run | bool)`. Guarding on either half
     alone leaves the other half mutating a live cluster during a run that promised not to."""
     mutating = _mutating_tasks(_CLAIM)
-    assert len(mutating) >= 6, (
-        "the mutating-task census found too few tasks to be reading the role"
+    # An exact count, not a floor. The census is a heuristic — every `uri`, plus a command that
+    # scales or polls — and it is blind to a future `kubectl patch`, `apply` or `delete` that
+    # neither scales nor waits. A floor would let such a task arrive unguarded with this test
+    # still green; pinning the number makes whoever adds one read this comment.
+    assert len(mutating) == 7, (
+        f"the mutating-task census found {len(mutating)} tasks, not 7. If you added a mutation, "
+        f"guard it and update this count; if the census stopped recognising one, fix "
+        f"_mutating_tasks — a task it cannot see is a task this test does not check."
     )
     for task in mutating:
         when = task.get("when")
@@ -503,9 +509,27 @@ def test_the_listing_jsonpath_parses() -> None:
     result = subprocess.run(
         rendered[1:], capture_output=True, text=True, timeout=60, check=False
     )
-    if result.returncode != 0 and "connection refused" in result.stderr.lower():
-        pytest.skip("cluster unreachable")
-    assert result.returncode == 0, result.stderr
+    # Skip on an unreachable cluster, fail on anything else. kubectl does NOT print the bare
+    # string "connection refused" — it prints "The connection to the server localhost:8080 was
+    # refused", so a naive substring guard turns "no cluster" into a red test on any machine
+    # that ships kubectl, GitHub's ubuntu runners included. The token list matches
+    # `test_volume_snapshot.py`'s.
+    #
+    # A jsonpath kubectl rejects never skips, whatever else the stderr says: that is the one
+    # failure this test exists to catch, and it reads `error: error parsing jsonpath …`.
+    unreachable_tokens = (
+        "connection refused",
+        "was refused",
+        "i/o timeout",
+        "no configuration has been provided",
+    )
+    if "jsonpath" not in result.stderr and any(
+        token in result.stderr for token in unreachable_tokens
+    ):
+        pytest.skip("no reachable cluster")
+    assert result.returncode == 0, (
+        f"kubectl rejected the listing jsonpath: {result.stderr.strip()}"
+    )
     # A volume that does not exist matches nothing, so an empty answer is the correct one —
     # what is under test is that kubectl ACCEPTED the jsonpath rather than rejecting it.
     assert result.stdout.strip() == ""
