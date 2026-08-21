@@ -199,6 +199,25 @@
   become: true
   changed_when: true
 
+# 130s, not 180s, and the same on all five probe waits below. Sized against two numbers rather
+# than picked:
+#
+#   * the FLOOR is each probe Job's own `activeDeadlineSeconds: 120`. A wait shorter than that
+#     would report a timeout on a probe the cluster still considers legitimately running — the
+#     `until nc -w 5 -z speedtest 80` retry loop in the probe scripts is bounded at 12
+#     iterations and can legitimately run into the deadline on a DROP path. So the Job's own
+#     deadline stays the thing that decides, and this only has to outlast it.
+#   * the CEILING is `K8S_DEPLOY_TIMEOUT_S` (900s), which gitops_deploy gives the whole
+#     unattended deploy. Measured live 2026-08-20, all five probes on daniel-box with the image
+#     cached: 8s, 10s, 4s, 5s, 8s — 35s of waiting in total. The 180s form put the arithmetic
+#     worst case at 5 x 180 = the entire budget.
+#
+# The five-timeouts-in-a-row worst case is not actually reachable: each wait is followed by its
+# own `Fail if … did not complete`, so the play aborts at the FIRST probe that does not
+# complete. The real worst case is the successful probes plus one timeout. Lowering the timeout
+# is still worth it — it cuts 50s of dead wall time off every failing deploy, and it makes the
+# arithmetic bound (5 x 130 = 650s) fit the budget for a reader who does not trace the fail
+# tasks.
 - name: Wait for the netpol-baseline probe
   tags: [deploy]
   when:
@@ -207,7 +226,7 @@
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
-      job/netpol-baseline-probe --timeout=180s
+      job/netpol-baseline-probe --timeout=130s
   become: true
   changed_when: false
   register: netpol_baseline_probe
@@ -384,7 +403,7 @@
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
-      job/netpol-baseline-probe-slice2 --timeout=180s
+      job/netpol-baseline-probe-slice2 --timeout=130s
   become: true
   changed_when: false
   register: netpol_baseline_probe_slice2
@@ -556,7 +575,7 @@
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
-      job/netpol-baseline-probe-slice3 --timeout=180s
+      job/netpol-baseline-probe-slice3 --timeout=130s
   become: true
   changed_when: false
   register: netpol_baseline_probe_slice3
@@ -721,7 +740,7 @@
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
-      job/netpol-baseline-probe-slice4 --timeout=180s
+      job/netpol-baseline-probe-slice4 --timeout=130s
   become: true
   changed_when: false
   register: netpol_baseline_probe_slice4
@@ -884,7 +903,7 @@
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
-      job/netpol-baseline-probe-slice45 --timeout=180s
+      job/netpol-baseline-probe-slice45 --timeout=130s
   become: true
   changed_when: false
   register: netpol_baseline_probe_slice45

@@ -269,7 +269,7 @@ _EXEC_WRITE = re.compile(
 _BARE_EXEC = re.compile(r"kubectl\b[^\n]*\bexec\s+(?!-i\b)\S")
 
 
-def _task_chunks(task_file: Path) -> list[str]:
+def _task_chunks(task_file: Path, strip_trailing_comments: bool = False) -> list[str]:
     """Join each task's (possibly multi-line, folded-scalar) body into one string.
 
     A raw per-line scan can't see `kubectl … exec pod --` and the write verb it pipes to when
@@ -277,6 +277,12 @@ def _task_chunks(task_file: Path) -> list[str]:
     Splitting on `- name:` (a task boundary in every file in this tree, block-nested or not) and
     joining what follows gives each task one flat string to search, without needing a full YAML
     parse that would miss commands nested under `block:`/`loop:`.
+
+    Whole-line comments are always dropped. `strip_trailing_comments` additionally drops a
+    trailing `#…` from every line BEFORE they are joined — per line, because joining first and
+    stripping after would delete the rest of the task. That direction is only safe for a check
+    that must not credit a comment (the guard search below); it is deliberately off for the
+    mutation search, where dropping text could only hide a write.
     """
     chunks: list[str] = []
     current: list[str] = []
@@ -288,23 +294,29 @@ def _task_chunks(task_file: Path) -> list[str]:
             current = []
         if stripped.startswith("#"):
             continue
+        if strip_trailing_comments:
+            stripped = re.sub(r"\s#.*$", "", stripped)
         current.append(stripped)
     if current:
         chunks.append(" ".join(current))
     return chunks
 
 
+def _chunk_mutates(chunk: str) -> bool:
+    if "--dry-run=client" in chunk:
+        return False
+    if _MUTATES.search(chunk):
+        return True
+    return bool(_BARE_EXEC.search(chunk) and _EXEC_WRITE.search(chunk))
+
+
 def _mutates_outside_manifests(role: Path) -> bool:
     """Does this role write to the cluster from its OWN tasks?"""
-    for task_file in sorted((role / "tasks").glob("*.yml")):
-        for chunk in _task_chunks(task_file):
-            if "--dry-run=client" in chunk:
-                continue
-            if _MUTATES.search(chunk):
-                return True
-            if _BARE_EXEC.search(chunk) and _EXEC_WRITE.search(chunk):
-                return True
-    return False
+    return any(
+        _chunk_mutates(chunk)
+        for task_file in sorted((role / "tasks").glob("*.yml"))
+        for chunk in _task_chunks(task_file)
+    )
 
 
 def _bypasses_manifests(role: Path) -> bool:
@@ -321,19 +333,95 @@ def _bypasses_manifests(role: Path) -> bool:
 _GUARD_FACT = re.compile(r"\bk8s_no_mutate\b|\bk8s_dry_run\b")
 
 
+_INCLUDED_FILE = re.compile(r"(?:import_tasks|include_tasks):\s*[\"']?([\w.-]+\.ya?ml)")
+
+
+def _guard_covered_files(role: Path) -> set[str]:
+    """Task files every one of whose tasks inherits a no-mutation guard from its caller.
+
+    seed-volume is the shape this exists for: main.yml is a single
+    `import_tasks: seed.yml` under `when: not k8s_no_mutate`, and the import propagates that
+    `when` to every task in seed.yml — and on to copy.yml, which seed.yml includes. Nothing in
+    either file names the guard, so a per-task rule alone would call the role unguarded and
+    demand it be added to k8s_dry_run_unsupported, where it would do nothing (the refusal reads
+    --tags, and seed-volume is reached as a dependency of 25 roles).
+
+    Only main.yml is scanned for the guarded include; from there the closure is transitive and
+    unconditional, because a file whose caller is guarded is guarded whatever it does next.
+    """
+    tasks_dir = role / "tasks"
+    main = tasks_dir / "main.yml"
+    if not main.is_file():
+        return set()
+    pending = [
+        m.group(1)
+        for chunk in _task_chunks(main, strip_trailing_comments=True)
+        if _GUARD_FACT.search(chunk)
+        for m in [_INCLUDED_FILE.search(chunk)]
+        if m
+    ]
+    covered: set[str] = set()
+    while pending:
+        name = pending.pop()
+        if name in covered:
+            continue
+        covered.add(name)
+        included = tasks_dir / name
+        if not included.is_file():
+            continue
+        for chunk in _task_chunks(included):
+            m = _INCLUDED_FILE.search(chunk)
+            if m:
+                pending.append(m.group(1))
+    return covered
+
+
+def _unguarded_mutations(role: Path) -> list[str]:
+    """Every task in the role that writes to the cluster with no k8s_no_mutate guard on it.
+
+    The guard has to sit ON the mutating task (or on the guarded include that pulled its whole
+    file in), not merely somewhere in the role. `_GUARD_FACT.search(task_file.read_text())` is
+    what this replaces, and it matched cronjob-gate's COMMENTS alone: deleting
+    `when: not (k8s_no_mutate | bool)` from its `kubectl create job` left this file green while
+    `./scripts/deploy.sh --tags configarr --dry-run` fired a real gate run and reconciled the
+    live *arr stack. configarr was dropped from k8s_dry_run_unsupported on the strength of that
+    guard, so this is the check the removal rests on.
+
+    Fail-closed in two directions. A trailing comment is stripped from the guard search, so a
+    `# k8s_no_mutate` in prose credits nothing. And the rule is per-task: a role that guarded a
+    `block:` rather than the tasks inside it would be reported here, even though Ansible would
+    propagate that `when`. No role in this tree does that today; if one is written, either move
+    the guard onto the tasks or make this walker read block ancestry the way
+    `test_k8s_autodeploy_guard.py::_iter_task_dicts` does.
+    """
+    covered = _guard_covered_files(role)
+    offenders = []
+    for task_file in sorted((role / "tasks").glob("*.yml")):
+        if task_file.name in covered:
+            continue
+        guarded = _task_chunks(task_file, strip_trailing_comments=True)
+        for chunk, guard_text in zip(_task_chunks(task_file), guarded):
+            if not _chunk_mutates(chunk):
+                continue
+            if _GUARD_FACT.search(guard_text):
+                continue
+            # The chunk is the whole task on one line, so the name runs to the next YAML key.
+            name = re.match(r"-\s*name:\s*(.*?)(?=\s+[\w.]+:|$)", chunk)
+            offenders.append(
+                f"{task_file.name}: {name.group(1) if name else chunk[:60]}"
+            )
+    return offenders
+
+
 def _guarded_at_entry(role: Path) -> bool:
     """Does the role gate its mutating tasks on a no-mutation run?
 
-    seed-volume and image-builder gate their whole body at the top of main.yml, because both
-    are reachable as DEPENDENCIES (25 and 7 callers) and the play-level refusal only sees roles
-    the operator names with --tags. tdarr and janitorr instead guard the individual tasks that
-    write, inside verify.yml — checked across every task file in the role, not just main.yml,
-    so that placement is recognised too.
+    Requires at least one mutating task, and a guard on every one of them. The "at least one"
+    half is what keeps a role that applies its objects some other way — `_bypasses_manifests`,
+    with nothing this file recognises as a kubectl write — from reading as guarded on an empty
+    loop. n8n-images is that role, and it belongs in k8s_dry_run_unsupported.
     """
-    return any(
-        _GUARD_FACT.search(task_file.read_text())
-        for task_file in (role / "tasks").glob("*.yml")
-    )
+    return bool(_mutates_outside_manifests(role)) and not _unguarded_mutations(role)
 
 
 def test_unsupported_list_matches_the_roles_that_actually_mutate() -> None:
@@ -396,6 +484,87 @@ def test_no_role_hides_a_dependency_the_tag_refusal_cannot_see() -> None:
         "unrelated service reaches them. Listing them in k8s_dry_run_unsupported does NOT help "
         "— that check only sees --tags. Guard tasks/main.yml on k8s_no_mutate instead."
     )
+
+
+def _role_with_tasks(tmp_path: Path, **files: str) -> Path:
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    for name, body in files.items():
+        (role / "tasks" / f"{name}.yml").write_text(body)
+    return role
+
+
+_CREATE_JOB = (
+    "- name: Run a one-off gate Job\n"
+    "  tags: [deploy]\n"
+    "  ansible.builtin.command:\n"
+    "    cmd: k3s kubectl -n ns create job widget-deploy-gate --from=cronjob/widget\n"
+)
+
+
+def test_a_guard_named_only_in_a_comment_does_not_excuse_a_mutating_task(
+    tmp_path: Path,
+) -> None:
+    """The W3 defect, pinned: `_guarded_at_entry` was a raw-text search over the whole file.
+
+    cronjob-gate's comments alone satisfied it, so deleting the `when:` from its
+    `kubectl create job` left both derivation tests green while a real dry run created the Job.
+    Watched failing with that `when:` deleted from the live role: both
+    `test_unsupported_list_matches_the_roles_that_actually_mutate` and
+    `test_no_role_hides_a_dependency_the_tag_refusal_cannot_see` name cronjob-gate.
+    """
+    commented = _role_with_tasks(
+        tmp_path / "a",
+        main="# guarded on k8s_no_mutate elsewhere in this role\n" + _CREATE_JOB,
+    )
+    assert _unguarded_mutations(commented) == ["main.yml: Run a one-off gate Job"]
+    assert not _guarded_at_entry(commented)
+
+    trailing = _role_with_tasks(
+        tmp_path / "b",
+        main=_CREATE_JOB.replace(
+            "  tags: [deploy]\n", "  tags: [deploy]  # not k8s_no_mutate guarded\n"
+        ),
+    )
+    assert not _guarded_at_entry(trailing)
+
+    guarded = _role_with_tasks(
+        tmp_path / "c",
+        main=_CREATE_JOB.replace(
+            "  tags: [deploy]\n",
+            "  tags: [deploy]\n  when: not (k8s_no_mutate | bool)\n",
+        ),
+    )
+    assert _unguarded_mutations(guarded) == []
+    assert _guarded_at_entry(guarded)
+
+
+def test_a_guarded_import_covers_the_file_it_pulls_in(tmp_path: Path) -> None:
+    """seed-volume's shape: the guard is on the import, not on the tasks that write.
+
+    Transitive, because seed.yml includes copy.yml and copy.yml writes too. An unguarded import
+    covers nothing — that is the direction that would silently excuse a real mutation.
+    """
+    guarded = _role_with_tasks(
+        tmp_path / "a",
+        main=(
+            "- name: Seed the volume\n"
+            "  ansible.builtin.import_tasks: seed.yml\n"
+            "  when: not k8s_no_mutate\n"
+        ),
+        seed="- name: Recurse\n  ansible.builtin.include_tasks: copy.yml\n",
+        copy=_CREATE_JOB,
+    )
+    assert _unguarded_mutations(guarded) == []
+    assert _guarded_at_entry(guarded)
+
+    unguarded = _role_with_tasks(
+        tmp_path / "b",
+        main="- name: Seed the volume\n  ansible.builtin.import_tasks: seed.yml\n",
+        seed=_CREATE_JOB,
+    )
+    assert _unguarded_mutations(unguarded) == ["seed.yml: Run a one-off gate Job"]
+    assert not _guarded_at_entry(unguarded)
 
 
 def test_no_mutate_covers_check_mode_and_dry_run() -> None:
