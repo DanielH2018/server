@@ -20,7 +20,10 @@
   gather_facts: false
   vars:
     drain_apply: false
-    drain_repo: /home/ubuntu/server/.claude/worktrees/longhorn-b2-weekly-rearm
+    # The repo this playbook is part of, not a fixed path. It used to name the worktree the
+    # drain was written in; that worktree was removed after the 2026-08-20 run, so the play
+    # failed as shipped from then on — the one path nobody re-runs after a successful drain.
+    drain_repo: "{{ playbook_dir | dirname }}"
     drain_live_file: /tmp/longhorn-live-volumes.txt
   pre_tasks:
     - name: Load secrets
