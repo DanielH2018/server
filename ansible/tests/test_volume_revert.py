@@ -947,21 +947,69 @@ def test_the_revert_runs_after_the_snapshot_and_before_the_apply() -> None:
     )
 
 
+def _revert_when() -> list[str]:
+    return _named(_MANIFESTS, "Revert the stateful volumes")["when"]
+
+
+def _revert_fires(**context) -> bool:
+    """Whether the revert include's `when:` clauses ALL evaluate true for this context — the
+    condition under which `ansible.builtin.include_role` actually runs.
+
+    Renders each clause exactly as `_input_check` renders the role's own input-check clauses
+    above, and for the same reason: a substring or regex match on the clause TEXT pins spelling,
+    not behaviour, and a spelling pin fails a strictly more correct rewrite of the same clause —
+    `| trim | length > 0` is a stricter, CORRECT version of the sha check and a text-anchored
+    assert rejects it. Rendering the clause is the only check that stays green under a harmless
+    rewrite and red under a behavioural regression.
+
+    This still renders one clause set against one synthetic context — it is not a playbook run.
+    The property that matters at runtime is that ~50 services share ONE `k8s_restore_snapshot_sha`
+    extra-var across a batch loop and each service's own `k8s_autodeploy_snapshot_pvcs` decides
+    whether IT reverts, with no leakage between iterations. That was verified by executing a toy
+    play — every service in the loop, three task orderings, on the pinned ansible-core — not by
+    this function or the tests that call it. Treat the tests below as a regression guard on the
+    condition, not as proof of the batch-loop behaviour by itself.
+    """
+    return all(
+        bool(_render("{{ " + clause + " }}", **context)) for clause in _revert_when()
+    )
+
+
+# k8s_no_mutate=False and both other vars populated: the context under which every clause
+# should independently need to hold for the include to fire. Each test below starts here and
+# breaks exactly one input.
+_FIRES_CONTEXT = {
+    "k8s_no_mutate": False,
+    "k8s_restore_snapshot_sha": "abc12345",
+    "k8s_autodeploy_snapshot_pvcs": ["speedtest-config"],
+}
+
+
+def test_the_revert_fires_on_a_real_rollback_call() -> None:
+    """The rejections below prove nothing if the clauses reject a real call too."""
+    assert _revert_fires(**_FIRES_CONTEXT)
+
+
 def test_the_revert_is_inert_without_the_restore_var() -> None:
     """~50 roles call k8s/manifests. On every ordinary deploy — which is all of them but a
     failed auto-deploy's second attempt — this include must not run.
 
-    Anchored on the full comparison, not on the variable's name appearing somewhere in the
-    clause: `test_the_role_never_scales_back_up` found `--replicas=01` passing a two-character
-    substring check elsewhere in this file, and `| length >= 0` is the same shape of hole here
-    — it contains the variable name, reads as a guard, and is true for every deploy.
+    Checked by rendering the clause, not by matching its text: a text-anchored assert pins
+    spelling, and a prior version of this test rejected `| trim | length > 0` — a strictly more
+    correct rewrite of the same clause (see the whitespace case below) — for failing to match
+    the exact punctuation it was written against. `k8s_no_mutate` is held False and the claims
+    list populated throughout, so only the sha input varies.
     """
-    when = _named(_MANIFESTS, "Revert the stateful volumes")["when"]
-    assert any(
-        re.search(r"k8s_restore_snapshot_sha.*\)\s*\|\s*length\s*>\s*0", c)
-        for c in when
-    ), when
-    assert _GUARD in when
+    # never set — the ordinary-deploy case; gitops-deploy sets this extra-var only on a
+    # rollback redeploy
+    without_sha = {
+        k: v for k, v in _FIRES_CONTEXT.items() if k != "k8s_restore_snapshot_sha"
+    }
+    assert not _revert_fires(**without_sha)
+    assert not _revert_fires(**{**_FIRES_CONTEXT, "k8s_restore_snapshot_sha": ""})
+    # whitespace-only: `default('')` passes it through unchanged, and a bare length check counts
+    # whitespace as content the role would then try to use as a snapshot-prefix SHA.
+    assert not _revert_fires(**{**_FIRES_CONTEXT, "k8s_restore_snapshot_sha": "   "})
 
 
 def test_a_role_with_no_declared_claims_never_reverts() -> None:
@@ -969,14 +1017,23 @@ def test_a_role_with_no_declared_claims_never_reverts() -> None:
     failing batch — including stateless ones with no snapshots at all. Those must skip, not
     fail looking for a snapshot that was never taken.
 
-    Anchored on the full comparison for the same reason as the sha clause above: the variable's
-    name appearing in the clause is not evidence the clause excludes an empty list.
+    Checked by rendering the clause, for the same reason as the sha test above: a text-anchored
+    assert rejected the redundant outer parens being dropped from this clause, a behaviourally
+    identical edit. `k8s_no_mutate` is held False and the sha valid throughout, so only the
+    claims input varies.
     """
-    when = _named(_MANIFESTS, "Revert the stateful volumes")["when"]
-    assert any(
-        re.search(r"k8s_autodeploy_snapshot_pvcs.*\)\s*\|\s*length\s*\)\s*>\s*0", c)
-        for c in when
-    ), when
+    without_claims = {
+        k: v for k, v in _FIRES_CONTEXT.items() if k != "k8s_autodeploy_snapshot_pvcs"
+    }
+    assert not _revert_fires(**without_claims)
+    assert not _revert_fires(**{**_FIRES_CONTEXT, "k8s_autodeploy_snapshot_pvcs": []})
+
+
+def test_the_revert_is_inert_under_k8s_no_mutate() -> None:
+    """A dry run or `--check` run must not enter the role, whatever the other two inputs say —
+    belt and braces alongside the role's own internal guard. Sha and claims are held valid
+    throughout, so only `k8s_no_mutate` varies."""
+    assert not _revert_fires(**{**_FIRES_CONTEXT, "k8s_no_mutate": True})
 
 
 def test_the_revert_include_passes_the_roles_own_interface() -> None:
