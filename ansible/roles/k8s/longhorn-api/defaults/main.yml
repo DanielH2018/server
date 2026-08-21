@@ -1,4 +1,17 @@
 ---
+# Whether the absence of a longhorn-manager pod on this node is fatal. Defaults true: a caller
+# that never sets this gets the original hard failure, matching k8s/volume-revert — a rollback
+# with no working Longhorn API has nothing safe to fall back to, so it must stop the play.
+#
+# A caller that genuinely has a fallback (k8s/volume-snapshot's detached-volume attempt is
+# best-effort on top of a ruling that a detached volume must not itself fail the deploy) sets
+# this false and reads `longhorn_api_resolved` instead of letting the play abort. See
+# resolve.yml: this is NOT `ignore_errors` on the include — that suppresses a failure of the
+# include statement, not a fatal `fail()` raised by a task the include pulls in, which is
+# exactly the failure this role raises. The only way to make that non-fatal for a caller is to
+# make the role itself choose not to raise it.
+longhorn_api_required: true
+
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # This role deploys no workload of its own: it resolves a fact for other roles to consume,
 # renders no manifest for `rollout status` to gate, and pins no `_image:` var for Renovate to
