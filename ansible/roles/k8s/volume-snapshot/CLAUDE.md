@@ -268,9 +268,26 @@ chain.
 So the premise this section's code rests on — "a Longhorn snapshot needs a running engine, and a
 workload scaled to zero has none" — does not hold for a volume that is detached but still has
 healthy replicas. It may well hold for a volume that has NEVER been attached, which is a
-genuinely different state and one the drill did not test; the `terraria-config` reap observation
-and slice 7a's `500` on a revert are both about operations other than snapshot creation, so
-neither is evidence about this one.
+genuinely different state and one the drill did not test.
+
+### The premise was never true on this Longhorn version
+
+Settled from git history 2026-08-21, because it decides whether the block above is dead code to
+retire or a version-compat guard worth keeping. **It is dead code**, and it was never a guard:
+
+- The premise entered the tree in `410751a`, 2026-08-21. Its commit message derives it from two
+  observations: `longhorn-reap-orphan-snapshots.sh` refusing to reap on a detached volume, and
+  slice 7's drill getting a `500` reverting a plainly detached one. **Neither is snapshot
+  creation** — one is a purge, the other a revert. The premise was generalised from adjacent
+  operations, and snapshot creation on a detached volume was never actually tried.
+- Longhorn has been pinned at **v1.12.1 since `ceb8723`, 2026-08-15** — six days before that
+  commit, and unchanged since. So the premise was written against v1.12.1 and is false on
+  v1.12.1. There is no older version here for it to have been true on.
+
+Retiring the block is therefore a cleanup, not a compatibility decision — but it is still a
+behaviour change resting on one volume's evidence, so it belongs in its own change with its own
+justification, not folded into a drill. The one case that would keep it honest is a volume that
+has never been attached; test that before deleting anything.
 
 **What this means for the code.** The maintenance-attach block, its `longhorn-api` include, its
 detach and both of their state waits are dead on this Longhorn version and this deploy path. The
