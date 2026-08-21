@@ -126,6 +126,11 @@
   # Two ways to reach this legitimately, and both mean the rollback cannot help: the service's
   # first deploy took no snapshot (k8s/seed-volume leaves the volume detached, and a detached
   # volume cannot be snapshotted), or a retention pass deleted the recovery point.
+  #
+  # Guarded on `k8s_no_mutate` like every other decision that stops the play. A dry run reads
+  # the same two facts for real and REPORTS the absence in the next task instead of aborting:
+  # a service that has never deployed legitimately has no snapshot, and failing `--check` for
+  # it would make the dry run useless exactly where it is most informative.
   ansible.builtin.fail:
     msg: >-
       No snapshot named '{{ volume_revert_prefix | trim }}*' exists for Longhorn volume
@@ -136,12 +141,32 @@
       whenever the volume was detached at snapshot time — or it has been deleted since.
       Stopping with {{ volume_revert_service }} still running: reverting to the wrong snapshot
       is worse than not reverting, and this play will not guess.
-  when: volume_revert_candidates | length == 0
+  when:
+    - not (k8s_no_mutate | bool)
+    - volume_revert_candidates | length == 0
+
+- name: Report a dry run with nothing to revert for {{ volume_revert_claim }}
+  tags: [deploy]
+  # The dry-run half of the task above. `--check` and `--dry-run` run the two reads for real, so
+  # this is the one thing a dry run of this role can genuinely answer, and it must be visible
+  # rather than a silent skip.
+  when:
+    - k8s_no_mutate | bool
+    - volume_revert_candidates | length == 0
+  ansible.builtin.debug:
+    msg: >-
+      DRY RUN: no snapshot named '{{ volume_revert_prefix | trim }}*' exists for Longhorn volume
+      {{ volume_revert_volume }} ({{ k8s_namespace }}/{{ volume_revert_claim }}). A real
+      rollback of {{ volume_revert_service }} at this commit would STOP here rather than revert.
+      Expected before the service's first successful deploy; investigate otherwise.
 
 - name: Record the snapshot to revert to for {{ volume_revert_claim }}
   tags: [deploy]
+  # `default('', true)` for the dry-run path alone: the fail above is guarded, so a real run
+  # never reaches this with an empty list. Under `--check` it does, and `[] | first` renders
+  # undefined — which would abort the dry run the task above exists to keep informative.
   ansible.builtin.set_fact:
-    volume_revert_snapshot: "{{ volume_revert_candidates | first }}"
+    volume_revert_snapshot: "{{ volume_revert_candidates | first | default('', true) }}"
 
 # --------------------------------------------------------------- from here the service stops
 #
