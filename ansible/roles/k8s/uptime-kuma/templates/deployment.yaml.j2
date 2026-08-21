@@ -93,17 +93,19 @@ spec:
         # `depends_on: {restart: true}` — a pod recreate cycles both.
         - name: autokuma
           image: {{ autokuma_k8s_image }}
-          # The Kuma ADMIN password is exported from a file mount instead of an inline env
-          # (same H1 discipline as the compose entrypoint wrapper): env vars are visible to
-          # anything that can read the pod spec or /proc, and this credential can silence
-          # the whole fleet's alerting. `exec` keeps autokuma PID 1 for the liveness grep.
-          command:
-            - /usr/bin/sh
-            - -c
-            - 'export AUTOKUMA__KUMA__PASSWORD="$(cat /etc/autokuma/kuma_password)"; exec autokuma'
           env:
             - name: AUTOKUMA__KUMA__URL
               value: http://localhost:3001
+            # The Kuma ADMIN password is read from a file mount rather than given inline (same
+            # H1 discipline as the compose entrypoint wrapper): an env VALUE is visible to
+            # anything that can read the pod spec or /proc, and this credential can silence the
+            # whole fleet's alerting. `@/path` is AutoKuma's own file reference — it reads the
+            # file and strips exactly one trailing newline (resolve_file_ref, kuma-client), so
+            # the value never appears in the spec. Until 2026-08-21 the same effect needed a
+            # `/usr/bin/sh -c 'export …; exec autokuma'` wrapper, which the rc-2 image cannot
+            # run: its base is distroless, where the only shell is /busybox/sh.
+            - name: AUTOKUMA__KUMA__PASSWORD
+              value: "@/etc/autokuma/kuma_password"
             - name: AUTOKUMA__KUMA__USERNAME
               valueFrom:
                 secretKeyRef:
@@ -145,8 +147,13 @@ spec:
             # .json file DELETES the live monitor and its history — that is the intended
             # semantic; the interim `keep` existed only while declarations still sat as
             # inert labels on Docker composes this instance can't read.
+            #
+            # A variable rather than a literal so that a risky sidecar upgrade can be deployed
+            # once with `-e autokuma_k8s_on_delete=keep`, checked, and then redeployed at the
+            # committed default. Only `keep` is safe to pass that way — it is the value that
+            # cannot destroy history.
             - name: AUTOKUMA__ON_DELETE
-              value: delete
+              value: {{ autokuma_k8s_on_delete }}
           securityContext:
             runAsUser: 1000
             runAsGroup: 1000
@@ -166,11 +173,28 @@ spec:
             - name: credentials
               mountPath: /etc/autokuma
               readOnly: true
+          # /health answers 200 only while the last reconcile finished within sync_interval * 3
+          # (autokuma/src/server.rs), so this is a liveness signal about the reconcile loop, not
+          # about the process — the `grep autokuma /proc/1/comm` check it replaced on 2026-08-21
+          # stayed green through a sidecar that had stopped syncing entirely.
+          #
+          # The startupProbe is load-bearing, not decoration. is_healthy() returns false while
+          # last_sync_timestamp is still unset, so /health serves 503 from container start until
+          # the FIRST full pass over all 82 entities lands. A bare liveness probe would kill the
+          # pod mid-reconcile; startup gates liveness until the first pass reports, and 30 x 10s
+          # is the allowance for it.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8090
+            periodSeconds: 10
+            failureThreshold: 30
           livenessProbe:
-            exec:
-              command: ["sh", "-c", "grep -q autokuma /proc/1/comm"]
-            initialDelaySeconds: 20
+            httpGet:
+              path: /health
+              port: 8090
             periodSeconds: 30
+            failureThreshold: 3
           resources:
             limits:
               cpu: "{{ autokuma_k8s_cpu_limit }}"

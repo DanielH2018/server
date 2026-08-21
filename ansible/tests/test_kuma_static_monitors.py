@@ -133,29 +133,36 @@ def test_push_monitors_never_retry():
 RESEND_HELD: set[str] = set()
 
 
-def test_autokuma_pin_still_drops_resend_interval_on_push_monitors():
-    """The guard below asserts a field the deployed AutoKuma throws away.
+def test_autokuma_pin_carries_resend_interval_on_push_monitors():
+    """The guard below asserts a field only some AutoKuma versions keep.
 
-    In AutoKuma v2.0.0, `resendInterval` is declared on exactly three monitor variants —
-    MonitorHttp, MonitorJsonQuery and MonitorKeyword. MonitorPush has no such field, so serde
-    drops it as unknown and the value never reaches Kuma. The fleet-wide 360 introduced on
-    2026-08-16 therefore applies to the 25 http tiles and to none of the 50 push tiles: those
-    still notify once on the down transition and then stay silent, which is the exact failure
-    that change was made to fix.
+    In AutoKuma v2.0.0, `resendInterval` was declared on exactly three monitor variants —
+    MonitorHttp, MonitorJsonQuery and MonitorKeyword. MonitorPush had no such field, so serde
+    dropped it as unknown and the value never reached Kuma. The fleet-wide 360 introduced on
+    2026-08-16 therefore applied to the 25 http tiles and to none of the 50 push tiles: those
+    notified once on the down transition and then stayed silent, which is the exact failure that
+    change was made to fix.
 
     Observed 2026-08-21: editing `k3s Longhorn Backup`'s resendInterval from 0 to 360 produced
     no `Updating push:` line, while a notification-list edit on `R2 Free Tier Headroom` in the
-    same deploy did. Upstream fixed this in 2.1.0-rc.1 ("Fix resend_interval missing for most
-    monitor types, see #152") — a prerelease, so taking it is a decision about the alerting
-    spine's sidecar, not a routine bump.
+    same deploy did. Upstream moved the field into `with_monitor_common_fields_impl!` in
+    2.1.0-rc.1 ("Fix resend_interval missing for most monitor types, see #152"), where every
+    variant carries it, and the pin moved to 2.1.0-rc.2 the same day to pick it up.
 
-    This test fails when the pin moves, so whoever moves it re-reads the paragraph above and
-    checks whether the push tiles started re-notifying.
+    Below that version the assertions in test_push_monitors_re_notify_while_still_down are
+    statements about this repo rather than about what deploys. This test fails when the pin
+    moves off a version known to carry the field, so whoever moves it re-reads the paragraph
+    above and checks whether the push tiles are still re-notifying.
     """
+    # Versions verified BY READING kuma-client/src/models/monitor.rs at the tag, not by trusting
+    # a release note. Add a version here only after doing the same.
+    CARRIES_RESEND_ON_PUSH = {"2.1.0-rc.2"}
     pinned = ROLE_DEFAULTS["autokuma_k8s_image"]
-    assert pinned.endswith(":2.0.0"), (
-        f"AutoKuma pin moved to {pinned!r} — re-verify whether resendInterval now reaches push "
-        "monitors, and update this test and the comment above it with what you found"
+    tag = pinned.rsplit(":", 1)[-1]
+    assert tag in CARRIES_RESEND_ON_PUSH, (
+        f"AutoKuma pin moved to {pinned!r} — re-verify in that tag's monitor.rs that "
+        "`resend_interval` is still in the shared field set and not per-variant, then add the "
+        "tag above. On a version that lost it, every push monitor pages exactly once per outage."
     )
 
 
