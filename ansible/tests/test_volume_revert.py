@@ -320,9 +320,13 @@ def test_the_role_never_scales_back_up() -> None:
         body = _body(task)
         assert "k8s_scale" not in body, task["name"]
         for match in re.finditer(r"replicas", body):
-            tail = body[match.end() : match.end() + 2]
-            assert tail == "=0", (
-                f"{task['name']!r} names a replica count that is not `--replicas=0`: "
+            # `=0` and then a non-digit, not merely the two characters `=0`. Measured
+            # 2026-08-21: a decoy `--replicas=01` — a scale to ONE, spelled to look like zero —
+            # satisfied the two-character check and passed. Nothing else caught it either,
+            # except the pinned census count, and that stops helping the moment someone
+            # legitimately adds an eighth mutating task and bumps the number.
+            assert re.match(r"=0(?![0-9])", body[match.end() :]), (
+                f"{task['name']!r} names a replica count that is not zero: "
                 f"...{body[match.start() - 20 : match.end() + 20]}... The apply that follows a "
                 f"revert restores the Deployment; this role only ever scales to zero."
             )
@@ -473,7 +477,21 @@ def test_the_post_revert_detach_is_verified_by_state() -> None:
 
 def test_every_mutation_is_guarded_on_k8s_no_mutate() -> None:
     """`k8s_no_mutate` is `ansible_check_mode or (k8s_dry_run | bool)`. Guarding on either half
-    alone leaves the other half mutating a live cluster during a run that promised not to."""
+    alone leaves the other half mutating a live cluster during a run that promised not to.
+
+    WHICH TEST COVERS WHICH GUARD. Nine tasks in `claim.yml` carry the guard, and three
+    mechanisms divide them — jointly exhaustive as of 2026-08-21, and nothing makes them stay
+    that way:
+
+      * seven by this census — the scale-down, the three waits, and the three API calls;
+      * one by `test_nothing_unguarded_reads_a_guarded_tasks_output` — the frontend assert,
+        caught through its read of `volume_revert_attached` rather than as a mutation;
+      * one by two dedicated tests — `Fail when no snapshot matches this deploy`, which is a
+        `fail` with no register and no kubectl verb, so BOTH generic rules are blind to it.
+
+    A tenth guarded task is therefore not automatically covered. Work out which of the three
+    would notice it, and if the answer is none, write the test that does.
+    """
     mutating = _mutating_tasks()
     # An exact count, not a floor. The census recognises a write by its kubectl verb, every
     # `kubernetes.core.*` module and every polling wait — but a task shaped like none of those
@@ -488,30 +506,73 @@ def test_every_mutation_is_guarded_on_k8s_no_mutate() -> None:
         assert _is_guarded(task), task["name"]
 
 
-def test_nothing_unguarded_reads_a_guarded_tasks_register() -> None:
-    """A task that consumes a guarded task's `register` must carry the same guard.
+def test_the_three_guard_rules_cover_every_guarded_task() -> None:
+    """The arithmetic in the census docstring, made executable.
 
-    Under `--check` the guarded task is skipped, its register is undefined, and the consumer
+    Each guarded task must be caught by at least one of the three mechanisms. A tenth guarded
+    task shaped like none of them — another `fail`, a `debug`, a `wait_for` — would otherwise
+    sit there with its guard checked by nothing, which is precisely how a guard gets dropped in
+    a later edit and noticed by no test.
+    """
+    guarded_outputs = _guarded_outputs()
+    # By name, not identity: every helper re-parses the YAML, so the same task is a different
+    # dict object each call.
+    census = {task["name"] for _path, task in _mutating_tasks()}
+    uncovered = []
+    for path, task in _role_tasks():
+        if path != _CLAIM or not _is_guarded(task):
+            continue
+        by_census = task["name"] in census
+        own = set(task.get("ansible.builtin.set_fact") or {}) | {task.get("register")}
+        body = _body_with_prose(task)
+        by_output = any(name in body for name in guarded_outputs - own)
+        by_dedicated = "Fail when no snapshot matches this deploy" in task["name"]
+        if not (by_census or by_output or by_dedicated):
+            uncovered.append(task["name"])
+    assert not uncovered, (
+        f"these guarded tasks are covered by no rule: {uncovered}. The census sees writes and "
+        f"waits, the output rule sees consumers of a guarded task's register or set_fact, and "
+        f"the missing-snapshot failure has two tests of its own. Yours matches none — write "
+        f"the test that would notice its guard disappearing."
+    )
+
+
+def _guarded_outputs() -> set[str]:
+    """Names a `k8s_no_mutate`-guarded task produces: its `register`, and its `set_fact` keys."""
+    outputs = set()
+    for _path, task in _role_tasks():
+        if not _is_guarded(task):
+            continue
+        if "register" in task:
+            outputs.add(task["register"])
+        outputs.update(task.get("ansible.builtin.set_fact") or {})
+    return outputs
+
+
+def test_nothing_unguarded_reads_a_guarded_tasks_output() -> None:
+    """A task that consumes a guarded task's output must carry the same guard.
+
+    Under `--check` the guarded task is skipped, its output is undefined, and the consumer
     fails the dry run — a run that promised to change nothing instead changes nothing and dies.
     Measured 2026-08-21: deleting the guard from the frontend assert, whose `that` reads
     `volume_revert_attached`, left all 27 tests green, because an `assert` is not a mutation.
+
+    Output means `register` AND `set_fact`. A guarded `set_fact` is skipped exactly like a
+    guarded command, and its keys are undefined for the same reason — `volume_revert_snapshot`
+    is that shape today, produced by a `set_fact` and read by the guarded revert. No guarded
+    `set_fact` exists as of 2026-08-21, so this half of the rule currently names nothing; it is
+    here so the next one is covered by the rule rather than by whoever writes it being careful.
     """
-    guarded_registers = {
-        task["register"]
-        for _path, task in _role_tasks()
-        if "register" in task and _is_guarded(task)
-    }
-    assert guarded_registers, (
-        "no guarded task registers anything; this test reads nothing"
-    )
+    guarded_outputs = _guarded_outputs()
+    assert guarded_outputs, "no guarded task produces anything; this test reads nothing"
     for _path, task in _role_tasks():
         if _is_guarded(task):
             continue
         body = _body_with_prose(task)
-        for register in guarded_registers:
-            assert register not in body, (
-                f"{task['name']!r} reads {register!r}, which a `{_GUARD}`-guarded task "
-                f"registers, but carries no such guard of its own."
+        for name in guarded_outputs:
+            assert name not in body, (
+                f"{task['name']!r} reads {name!r}, which a `{_GUARD}`-guarded task produces, "
+                f"but carries no such guard of its own."
             )
 
 
