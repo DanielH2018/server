@@ -635,6 +635,31 @@ def _sets_empty_rollout(role: Path) -> bool:
     )
 
 
+def _rollout_gate_offender(role: Path) -> bool:
+    """Whether a role with `manifests_rollout: ''` has no gate at all.
+
+    `manifests_rollout: ''` skips both the rollout wait and the stability soak, and for a role
+    rendering a Deployment that is a real defect. For a batch-only role it is correct and
+    unavoidable — there is no Deployment to roll, and completion is the terminal state — so such
+    a role is exempt HERE ONLY IF it proves an alternative gate: it renders at least one batch
+    workload, and `_batch_gated_names` credits every one of them. That is positive proof of a
+    working gate, not a blanket skip for anything gate-shaped — see task-1-rulings.md R1, which
+    deleted a delegation branch that exempted a role's whole batch check on the strength of a
+    marker rather than a rendered, credited name.
+
+    A role rendering NO workloads at all is still an offender even though the loop below would
+    be empty either way: rendering nothing is not evidence of a gate, only an absence of
+    anything to check, so it stays fail-closed and must declare k8s_autodeploy: false instead.
+    """
+    if not _sets_empty_rollout(role):
+        return False
+    batch = _batch_templates(role)
+    if not batch:
+        return True
+    gated = _batch_gated_names(role)
+    return any(not name or name not in gated for _, name in batch)
+
+
 def _extra_rollouts(role: Path) -> set[str]:
     """Deployment names the role gates via `manifests_extra_rollouts`.
 
@@ -979,16 +1004,93 @@ def test_extra_rollout_naming_the_wrong_deployment_reads_as_ungated(
     assert _ungated_deployment_count(role) == 1
 
 
+def test_rollout_gate_credits_a_fully_gated_batch_role(tmp_path: Path) -> None:
+    """A batch-only role that gates every rendered workload is not an offender.
+
+    `manifests_rollout: ''` is correct and unavoidable here — there is no Deployment to roll —
+    and the role-local `wait --for=condition=complete job/widget` is the alternative gate. This
+    is the positive-proof case `_rollout_gate_offender` exists to recognise.
+    """
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "templates").mkdir()
+    (role / "tasks" / "main.yml").write_text(
+        "- ansible.builtin.include_role:\n"
+        "    name: k8s/manifests\n"
+        "  vars:\n"
+        "    manifests_service: widget\n"
+        "    manifests_rollout: ''\n"
+        "- ansible.builtin.command:\n"
+        "    cmd: kubectl wait --for=condition=complete job/widget --timeout=180s\n"
+    )
+    (role / "templates" / "job.yaml.j2").write_text(
+        "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: widget\n"
+    )
+    assert _rollout_gate_offender(role) is False
+
+
+def test_rollout_gate_flags_a_batch_role_that_does_not_gate_its_workload(
+    tmp_path: Path,
+) -> None:
+    """A batch-only role rendering an ungated Job is still an offender.
+
+    Rendering a batch workload is not itself proof of a gate — the gate must actually credit
+    that workload's own name, or nothing here has proven anything.
+    """
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "templates").mkdir()
+    (role / "tasks" / "main.yml").write_text(
+        "- ansible.builtin.include_role:\n"
+        "    name: k8s/manifests\n"
+        "  vars:\n"
+        "    manifests_service: widget\n"
+        "    manifests_rollout: ''\n"
+    )
+    (role / "templates" / "job.yaml.j2").write_text(
+        "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: widget\n"
+    )
+    assert _rollout_gate_offender(role) is True
+
+
+def test_rollout_gate_flags_a_role_rendering_no_workloads(tmp_path: Path) -> None:
+    """A role setting `manifests_rollout: ''` and rendering nothing at all stays an offender.
+
+    Rendering no workloads means the batch loop is vacuous, which could otherwise look
+    identical to "everything it renders is gated." The three-way split is deliberate: a role
+    with nothing to gate has also offered no evidence the deploy did anything, so it stays
+    fail-closed rather than earning the same pass a fully-gated role gets.
+    """
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "templates").mkdir()
+    (role / "tasks" / "main.yml").write_text(
+        "- ansible.builtin.include_role:\n"
+        "    name: k8s/manifests\n"
+        "  vars:\n"
+        "    manifests_service: widget\n"
+        "    manifests_rollout: ''\n"
+    )
+    assert _rollout_gate_offender(role) is True
+
+
 def test_auto_deployable_roles_do_not_skip_the_rollout_gate() -> None:
     offenders = [
-        f"{role.name}: passes manifests_rollout: '' — rollout wait and stability soak both skipped"
+        f"{role.name}: passes manifests_rollout: '' with no gate proven — rollout wait and "
+        "stability soak are both skipped, and either it renders no batch workload or it "
+        "renders one this role does not gate"
         for role in _roles()
-        if _auto_deployable(role) and _sets_empty_rollout(role)
+        if _auto_deployable(role) and _rollout_gate_offender(role)
     ]
     assert not offenders, (
-        "Auto-deployable role(s) with no rollout gate at all — set k8s_autodeploy: false "
-        "with a k8s_autodeploy_reason in the role's own defaults/main.yml (the denylist is "
-        "derived from that declaration):\n" + "\n".join(offenders)
+        "Auto-deployable role(s) with no rollout gate at all. For a role rendering a "
+        "Deployment, that means restoring the rollout wait. For a batch-only role, gate every "
+        "rendered Job with a role-local `wait --for=condition=complete job/<name>`, or every "
+        "rendered CronJob with `include_role: k8s/cronjob-gate` "
+        "(`cronjob_gate_name: <the CronJob's metadata.name>`) — see "
+        "roles/k8s/cronjob-gate/CLAUDE.md. Or set k8s_autodeploy: false with a "
+        "k8s_autodeploy_reason in the role's own defaults/main.yml (the denylist is derived "
+        "from that declaration):\n" + "\n".join(offenders)
     )
 
 
