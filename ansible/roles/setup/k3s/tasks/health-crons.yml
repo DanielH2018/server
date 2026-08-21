@@ -208,9 +208,11 @@
 
 - name: Deploy the live-drift check Kuma credentials
   tags: [live-drift]
-  # 0640 root:{{ sys_user }} rather than inlined into the cron entry: /etc/cron.d files are
-  # world-readable, so a token written there is readable by every local account. Same split as
-  # ping.env for the Healthchecks key.
+  # 0640 root:{{ sys_user }} rather than inlined into the cron entry. /etc/cron.d is 0700
+  # root:root on this host, so a token in the cron file would not leak today — but that mode
+  # comes from the cron package, not from anything this role asserts, and a credential's
+  # protection should not rest on a default nothing here owns. Same split as ping.env for the
+  # Healthchecks key.
   ansible.builtin.template:
     src: live-drift-check.env.j2
     dest: /etc/rancher/k3s/live-drift-check.env
