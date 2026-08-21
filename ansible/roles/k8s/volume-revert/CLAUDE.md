@@ -80,6 +80,12 @@ whatever `attachmentID` the caller sends, and `manager.Detach` does
 The wait on `state: detached` after the detach is the only check that a 200 detach actually
 detached. It must never be suppressed with `failed_when: false`.
 
+**Why the revert needs no equivalent state check.** `api.SnapshotRevert` calls
+`manager.RevertSnapshot`, which talks to the running engine through the proxy and returns the
+engine's error — so a 200 there means the engine performed the revert, where the detach's 200
+only means a map delete was accepted. The same handler is where the frontend-enabled 500 comes
+from, and where the server refuses a snapshot it sees as `Removed`.
+
 ## Maintenance mode does not leak
 
 The drill measured `spec.disableFrontend: false` on the volume after the normal scale-up that
