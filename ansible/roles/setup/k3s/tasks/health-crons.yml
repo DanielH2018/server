@@ -191,6 +191,54 @@
     cron_file: manifest-prune-check
   become: true
 
+- name: Deploy the live-object drift check
+  tags: [live-drift]
+  # Root-owned but NOT root-run, unlike manifest-prune-check.sh beside it. That one needs root
+  # to read /etc/rancher/k3s/manifests/*/ at mode 0700; this one reads no files at all — it
+  # compares each live object against its own last-applied annotation, which is a plain
+  # `kubectl get`. So it runs as {{ sys_user }} with the read-only ServiceAccount kubeconfig
+  # and needs no privilege of any kind.
+  ansible.builtin.copy:
+    src: live_drift_check.py
+    dest: /usr/local/bin/live-drift-check.py
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Deploy the live-drift check Kuma credentials
+  tags: [live-drift]
+  # 0640 root:{{ sys_user }} rather than inlined into the cron entry: /etc/cron.d files are
+  # world-readable, so a token written there is readable by every local account. Same split as
+  # ping.env for the Healthchecks key.
+  ansible.builtin.template:
+    src: live-drift-check.env.j2
+    dest: /etc/rancher/k3s/live-drift-check.env
+    mode: "0640"
+    owner: root
+    group: "{{ sys_user }}"
+  become: true
+  no_log: true  # renders the Kuma push token
+
+- name: Schedule the live-object drift check
+  tags: [live-drift]
+  # KUBECONFIG is set explicitly because cron inherits neither it nor a useful PATH — without
+  # it kubectl talks to no cluster and every kind returns an error, which the check reports as
+  # exit 2 rather than as a clean run. `set -a` around the env file exports its assignments;
+  # sourcing alone would leave PUSH_TOKEN unset in the script's environment.
+  ansible.builtin.cron:
+    name: "Live object drift check"
+    minute: "{{ k3s_live_drift_cron_minute }}"
+    hour: "{{ k3s_live_drift_cron_hour }}"
+    user: "{{ sys_user }}"
+    job: >-
+      set -a; . /etc/rancher/k3s/live-drift-check.env; set +a;
+      KUBECONFIG=/home/{{ sys_user }}/.kube/config
+      /usr/local/bin/uv run --no-project --no-python-downloads
+      --python {{ host_python_version }} /usr/local/bin/live-drift-check.py
+    cron_file: live-drift-check
+  become: true
+
 - name: Deploy the off-box etcd snapshot credentials
   tags: [etcd-snapshot]
   # 0600 root:root, not 0640 root:{{ sys_user }} like the Healthchecks key above: these are the
