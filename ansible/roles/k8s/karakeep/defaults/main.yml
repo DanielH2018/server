@@ -11,7 +11,7 @@ karakeep_k8s_chrome_image: zenika/alpine-chrome:124  # moved off gcr.io/zenika-h
 # (2026-08-13): permanent Renovate lookup failure there ("Repository Problems" on the dashboard) —
 # switched to the Docker Hub mirror, verified to carry the same :124 tag before the swap. No digest
 # pin: a registry mirror doesn't guarantee an identical index digest to the gcr.io original.
-karakeep_k8s_meili_image: getmeili/meilisearch:v1.41.0
+karakeep_k8s_meili_image: getmeili/meilisearch:v1.53.1
 # 3.12 -> 3.14 (2026-08-16): the last interpreter in the repo still off the 3.14 the workflows,
 # .python-version and every other python image pin. The digest moves WITH the tag — a runtime
 # resolves repo:tag@sha256 by digest, so bumping only the tag would read 3.14 here and still run
