@@ -44,9 +44,22 @@ that workload, and is therefore allowed to declare `k8s_autodeploy: true`.
 Both of these must be **re-checked for every new caller**, because this role makes the CronJob's
 real workload run on every deploy — not a probe, not a dry run, the actual job.
 
-1. **`concurrencyPolicy: Forbid`.** The gate run can land while a scheduled run is still going.
-   `Forbid` is what makes the cluster refuse the overlap instead of running the workload twice
-   against the same state.
+1. **`concurrencyPolicy: Forbid`.** It protects one direction of the overlap and not the other,
+   so read which one you are getting. `concurrencyPolicy` governs whether the CronJob
+   **controller** creates a *scheduled* Job; `kubectl create job --from=cronjob` writes a Job
+   directly and no admission path consults it.
+
+   * **Protected:** a gate run in flight suppresses the next scheduled firing. Verified live
+     2026-08-21 — `longhorn-system/postmig-d6b`, a `cronjob.kubernetes.io/instantiate: manual`
+     Job, carries `ownerReferences[0].kind: CronJob` with `controller: true`, which is what puts
+     it in the CronJob's `.status.active` for `Forbid` to key on.
+   * **Unprotected:** a gate run created *into* a scheduled run that is already going. Nothing
+     refuses that, so property 2 below is what makes it safe, not `Forbid`.
+
+   The unprotected window is the scheduled run's own duration, and it is small — live
+   `lastScheduleTime` → `lastSuccessfulTime` is 21s for pi-peer-backup and 26s for configarr
+   (both measured 2026-08-21). Small, not zero: a deploy landing inside it runs the workload
+   twice against the same state.
 2. **Idempotence under one extra out-of-band run.** The schedule is the CronJob's contract; this
    role breaks it by adding a run at an arbitrary time. A convergent reconciler (configarr) or a
    retention-free mirror (pi-peer-backup) does not care. A job that rotates a credential,

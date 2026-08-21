@@ -58,17 +58,20 @@
       - secret.yaml
 
 # A CronJob has no rollout to wait on, so an image bump would otherwise deploy unobserved.
-# pi-peer-backup is a retention-free rsync mirror and sets concurrencyPolicy: Forbid, which
-# should keep the gate's one-off run from overlapping a scheduled one — unconfirmed whether
-# `kubectl create job --from=cronjob` sets a controller ownerReference that Forbid actually
-# keys on (task-3-rulings.md PARK; check post-deploy with `kubectl -n homelab get job
-# pi-peer-backup-deploy-gate -o jsonpath='{.metadata.ownerReferences}'`). If it doesn't, the
-# PVC is ReadWriteOnce and this pod carries no node constraint, so the two pods CAN land on
-# different nodes: the second wedges on a Multi-Attach error until activeDeadlineSeconds (600s)
-# kills it, the controller deletes the pod, cronjob-gate reads no container state, and the
-# deploy fails with "No container state was readable" — the class in memory as
-# seed-pod-multiattach-blocks-deploys, not a small/idempotent-either-way outcome. See
-# ansible/roles/k8s/cronjob-gate/CLAUDE.md.
+# pi-peer-backup is a retention-free rsync mirror and sets concurrencyPolicy: Forbid. Resolved
+# 2026-08-21, favourably: `kubectl create job --from=cronjob` DOES set a controller
+# ownerReference — verified on a live manual Job — so the gate run lands in the CronJob's
+# `.status.active` and Forbid suppresses the next scheduled firing while it is in flight. The
+# reverse direction is not protected: a gate run created into an already-running scheduled run
+# still overlaps. That window is this CronJob's own run duration, live 21s (04:30:00 →
+# 04:30:21), and the mirror is idempotent across it. Idempotence is not the whole story inside
+# that window, though: the PVC is ReadWriteOnce and neither pod carries a node constraint, so
+# two coexisting pods on different nodes give the second a Multi-Attach wedge until
+# activeDeadlineSeconds (600s) kills it — the controller then deletes the pod, cronjob-gate
+# reads no container state, and the deploy fails closed with "No container state was readable"
+# (the class in memory as seed-pod-multiattach-blocks-deploys). A 21s exposure per deploy, and
+# a loud failure rather than a silent one. See ansible/roles/k8s/cronjob-gate/CLAUDE.md for
+# both directions.
 - name: Gate the pi-peer-backup deploy on a one-off run
   tags: [deploy]
   ansible.builtin.include_role:

@@ -38,8 +38,12 @@
 # that only took effect at the next 04:30 would leave a deploy reporting success while the
 # *arrs still run yesterday's policy.
 #
-# configarr is a convergent reconciler and its CronJob sets concurrencyPolicy: Forbid, which is
-# what makes the extra out-of-band run safe. See ansible/roles/k8s/cronjob-gate/CLAUDE.md.
+# What makes the extra out-of-band run safe is that configarr is a convergent reconciler —
+# running the same sync twice changes nothing. Not concurrencyPolicy: Forbid, which is set but
+# only covers one direction: the gate run suppresses the next SCHEDULED firing (verified
+# 2026-08-21 — a `--from=cronjob` Job does carry a controller ownerReference), while a gate run
+# created into an already-running scheduled one still overlaps. That window is 26s live
+# (09:30:00 → 09:30:26). See ansible/roles/k8s/cronjob-gate/CLAUDE.md.
 - name: Gate the configarr deploy on a one-off run
   tags: [deploy]
   ansible.builtin.include_role:

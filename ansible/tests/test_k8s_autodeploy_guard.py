@@ -217,16 +217,24 @@ def _batch_templates(role: Path) -> list[tuple[str, str]]:
     return out
 
 
-def _uncommented(text: str) -> str:
-    """The file's lines with whole-line YAML comments removed.
+def _strip_comments(text: str) -> str:
+    """`text` with YAML/shell comments removed — whole-line AND trailing, on every line.
 
-    Every matcher below reads raw task text with regexes, so a commented-out task would
-    otherwise read as a live one — and that direction is fail-open. Watched: commenting out
-    headlamp's wait task left the batch guard green, where deleting it turned it red.
+    A comment is the argument against a thing, and this file's whole history is text matchers
+    crediting that argument as the thing itself: a commented-out wait counted as a gate, and a
+    comment explaining why a role does NOT use `kubectl wait` satisfied a check for
+    `kubectl wait`. Stripping only whole-line comments closed the first shape and left the
+    second one open in its trailing form — measured, `_has_completion_gate` credited
+    `- name: x  # we deliberately do not use wait --for=condition=complete`.
+
+    Applied to command text as well as to file text, so it also covers a `#` comment inside a
+    `shell: |` block scalar, where YAML itself does no stripping and the `#` is a real shell
+    comment. `re.MULTILINE` is what makes the trailing form strip on every line of such a block
+    rather than only after the last newline. An expression that legitimately contained ` #`
+    would be truncated, which can only make a check stricter.
     """
-    return "\n".join(
-        line for line in text.splitlines() if not line.lstrip().startswith("#")
-    )
+    kept = [line for line in text.splitlines() if not line.lstrip().startswith("#")]
+    return re.sub(r"\s#.*$", "", "\n".join(kept), flags=re.MULTILINE)
 
 
 _FALSY_WHEN_LITERALS = {
@@ -341,6 +349,28 @@ def _task_runs_on_a_normal_deploy(
     return "deploy" in effective_tags
 
 
+def _live_tasks(role: Path) -> list[dict]:
+    """Every task in the role's tasks/main.yml that a normal, untagged deploy actually runs.
+
+    The single entry point for "what does this role do", shared by `_batch_gated_names`,
+    `_has_completion_gate` and `_has_failure_escalation` so the three cannot drift apart. They
+    did drift: `_batch_gated_names` parsed YAML and applied the tags/`when:` rules, while the
+    other two were raw substring tests over the same file — so a `debug` describing a wait, or
+    a `fail` under `when: false`, credited in one and not in the other. Anything a matcher here
+    wants to read about a role goes through this walker first, and the module discipline is
+    then whichever module key the matcher reads off the returned dict.
+    """
+    tasks_file = role / "tasks/main.yml"
+    if not tasks_file.is_file():
+        return []
+    parsed = yaml.safe_load(tasks_file.read_text())
+    return [
+        task
+        for task, tags, when_falsy in _iter_task_dicts(parsed)
+        if _task_runs_on_a_normal_deploy(tags, when_falsy)
+    ]
+
+
 def _task_command_text(task: dict) -> str | None:
     """The shell/command string this task runs, or None if it isn't a command/shell task.
 
@@ -442,11 +472,8 @@ def _batch_gated_names(role: Path) -> set[str]:
     tasks_file = role / "tasks/main.yml"
     if not tasks_file.is_file():
         return set()
-    parsed = yaml.safe_load(tasks_file.read_text())
     names: set[str] = set()
-    for task, tags, when_falsy in _iter_task_dicts(parsed):
-        if not _task_runs_on_a_normal_deploy(tags, when_falsy):
-            continue
+    for task in _live_tasks(role):
         cmd = _task_command_text(task)
         if cmd:
             m = _WAIT_JOB_NAMES.search(cmd)
@@ -462,47 +489,56 @@ def _batch_gated_names(role: Path) -> set[str]:
     return names
 
 
-def _until_expressions(text: str) -> list[str]:
-    """Every `until:` value in a task file, each as one string including folded continuations.
+def _has_completion_gate(role: Path) -> bool:
+    """Whether the role runs a live gate that blocks until a batch workload is terminal.
 
-    Read as a block — the key's own line plus every following line indented deeper than it —
-    rather than by searching the whole file. A file-wide search for both terminal condition
-    names would be satisfied by two unrelated mentions, or by a single comment naming both,
-    which is the fail-open direction this file exists to avoid. `_uncommented` strips only
-    whole-line comments, so a trailing `#` inside the block is dropped here too; an expression
-    that legitimately contained ` #` would be truncated, which can only make the check
-    stricter.
+    Reads the role's tasks through `_live_tasks` — the same walker `_batch_gated_names` uses —
+    so the four dead-gate constructions it already rejects are rejected here too: a falsey
+    `when:`, `tags: [never]`, `tags: [config]`, and either of those sitting on an enclosing
+    `block:`. Both accepted forms then apply the same module discipline, and that is what
+    closes the shape this file keeps being caught by:
+
+    - `kubectl wait --for=condition=complete`, read from a real `command`/`shell` task via
+      `_task_command_text` and with comments stripped. A whole-file substring test credited
+      both an `ansible.builtin.debug` whose `msg:` described a wait in prose and a trailing
+      `# we deliberately do not use wait --for=condition=complete` — the comment configarr
+      actually carried, arguing against the very thing it was read as proving.
+    - an `until:` poll naming BOTH terminal conditions, which is what a role must use when the
+      workload can fail fast: `wait` names one condition, so with `backoffLimit: 0` a failed
+      run settles in seconds while `wait` sits for the whole timeout before reporting it. Read
+      off the task dict, so it is per-task rather than file-wide (two unrelated mentions cannot
+      combine) and YAML has already dropped any comment. The task must also be a command/shell
+      task: `until:` is loop control available to any module, and a poll over something that
+      observes nothing gates nothing. A poll naming only `Complete` is not accepted — that is
+      the same one-sided wait wearing a different shape, and it is the mutation this function
+      has to reject.
     """
-    out: list[str] = []
-    lines = text.splitlines()
-    for i, line in enumerate(lines):
-        head = re.match(r"^(\s*)until:(.*)$", line)
-        if not head:
+    for task in _live_tasks(role):
+        cmd = _task_command_text(task)
+        if cmd is None:
             continue
-        indent = len(head.group(1))
-        block = [head.group(2)]
-        for nxt in lines[i + 1 :]:
-            if nxt.strip() and len(nxt) - len(nxt.lstrip()) <= indent:
-                break
-            block.append(nxt)
-        out.append("\n".join(re.sub(r"\s#.*$", "", b) for b in block))
-    return out
+        if "wait --for=condition=complete" in _strip_comments(cmd):
+            return True
+        until = task.get("until")
+        if isinstance(until, str) and "Complete" in until and "Failed" in until:
+            return True
+    return False
 
 
-def _has_completion_gate(text: str) -> bool:
-    """Whether the text holds a live gate that blocks until a batch workload is terminal.
+def _has_failure_escalation(role: Path) -> bool:
+    """Whether the role runs a task that can fail the deploy outright.
 
-    `kubectl wait --for=condition=complete` is one form. The other is an `until:` poll naming
-    BOTH terminal conditions, which is what a role must use when the workload can fail fast:
-    `wait` can only name one condition, so with `backoffLimit: 0` a failed run settles in
-    seconds while `wait` sits for the whole timeout before reporting it. A poll naming only
-    `Complete` is not accepted — that is the same one-sided wait wearing a different shape, and
-    it is the mutation this function has to reject.
+    Routed through `_live_tasks` for the same reason `_has_completion_gate` is: the substring
+    test this replaces (`"ansible.builtin.fail" in text`) was satisfied by
+    `ansible.builtin.debug:  # never ansible.builtin.fail here`, and by a real `fail` under
+    `when: false` or `tags: [never]`. It is the only thing standing behind `_batch_gated_names`
+    crediting every `k8s/cronjob-gate` caller, so it carries more weight than its size suggests.
+
+    `ansible.builtin.fail` and the short `fail` Ansible also accepts, read as a module KEY on
+    the task dict rather than as text anywhere in the file.
     """
-    if "wait --for=condition=complete" in text:
-        return True
     return any(
-        "Complete" in expr and "Failed" in expr for expr in _until_expressions(text)
+        "ansible.builtin.fail" in task or "fail" in task for task in _live_tasks(role)
     )
 
 
@@ -1039,7 +1075,33 @@ def test_when_referencing_a_variable_is_left_alone(tmp_path: Path) -> None:
     assert _batch_gated_names(role) == {"widget-job"}
 
 
-def test_a_poll_naming_only_complete_is_not_a_completion_gate() -> None:
+def _gate_role(tmp_path: Path, body: str) -> Path:
+    """A synthetic role whose tasks/main.yml is `body`, for the gate matchers to read.
+
+    Written to disk and addressed by PATH, not handed to the matchers pre-parsed. The whole
+    defect these fixtures pin is that a matcher read raw text where its sibling parsed YAML and
+    applied the liveness rules — injecting a task list past `_live_tasks` would test the half
+    that was never broken and leave the transport unexercised, which is how this branch once
+    ran 13 green tests downstream of a broken one.
+    """
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(body)
+    return role
+
+
+_POLL_BOTH_CONDITIONS = (
+    "- name: Wait for the gate run\n"
+    "  ansible.builtin.command:\n"
+    "    cmd: k3s kubectl -n ns get job widget-deploy-gate -o jsonpath={.status.conditions}\n"
+    "  register: r\n"
+    "  until: >-\n"
+    "    'Complete' in r.stdout or 'Failed' in r.stdout\n"
+    "  retries: 30\n"
+)
+
+
+def test_a_poll_naming_only_complete_is_not_a_completion_gate(tmp_path: Path) -> None:
     """`_has_completion_gate` must reject the one-sided poll it exists to replace.
 
     A poll that waits only for `Complete` is `kubectl wait --for=condition=complete` wearing
@@ -1048,22 +1110,158 @@ def test_a_poll_naming_only_complete_is_not_a_completion_gate() -> None:
     cronjob-gate's poll be halved while `_GATING_SHARED_ROLES` stayed green — and
     `_batch_gated_names` credits every caller of that role.
     """
-    both = (
+    assert _has_completion_gate(_gate_role(tmp_path / "a", _POLL_BOTH_CONDITIONS))
+    assert not _has_completion_gate(
+        _gate_role(
+            tmp_path / "b",
+            _POLL_BOTH_CONDITIONS.replace(" or 'Failed' in r.stdout", ""),
+        )
+    )
+    # A comment naming both conditions is not a gate: the poll is read off the parsed task's
+    # own `until:`, so a `#` line cannot reach it and neither can a second task's mention.
+    assert not _has_completion_gate(
+        _gate_role(
+            tmp_path / "c",
+            "# 'Complete' and 'Failed' are the terminal conditions\n"
+            + _POLL_BOTH_CONDITIONS.replace(" or 'Failed' in r.stdout", ""),
+        )
+    )
+
+
+def test_a_poll_on_a_module_that_observes_nothing_is_not_a_gate(tmp_path: Path) -> None:
+    """`until:` is loop control on any module, so the poll half needs the same module rule.
+
+    A `debug` retried until a string appears re-renders its own message and never reads the
+    cluster. Crediting it would be the `debug`-describing-a-wait shape wearing loop control.
+    """
+    role = _gate_role(
+        tmp_path,
+        "- name: Pretend to poll\n"
+        "  ansible.builtin.debug:\n"
+        "    msg: waiting\n"
         "  until: >-\n"
         "    'Complete' in r.stdout or 'Failed' in r.stdout\n"
-        "  retries: 30\n"
+        "  retries: 30\n",
     )
-    complete_only = "  until: \"'Complete' in r.stdout\"\n  retries: 30\n"
-    assert _has_completion_gate(both)
-    assert not _has_completion_gate(complete_only)
-    # A comment naming both conditions is not a gate. `_uncommented` strips whole-line
-    # comments; reading the `until:` BLOCK rather than the file is what covers the rest.
+    assert not _has_completion_gate(role)
+
+
+def test_a_trailing_comment_arguing_against_a_wait_is_not_a_gate(
+    tmp_path: Path,
+) -> None:
+    """The fifth instance of this slice's running defect, pinned.
+
+    Measured before the fix: a task carrying a TRAILING
+    `# we deliberately do not use wait --for=condition=complete` satisfied
+    `_has_completion_gate`, because the first branch was a whole-file substring test while the
+    stripping only removed whole-line comments. configarr carried a comment of exactly that
+    kind. Two shapes, closed by two different mechanisms: on a plain scalar YAML itself drops
+    the comment, so reading the parsed task instead of the file text is what closes that one;
+    inside a `shell: |` block scalar the `#` is literal content and YAML keeps it, so
+    `_strip_comments` is what closes that one.
+    """
+    yaml_comment = _gate_role(
+        tmp_path / "a",
+        "- name: Reconcile  # we deliberately do not use wait --for=condition=complete\n"
+        "  ansible.builtin.command:\n"
+        "    cmd: k3s kubectl -n ns apply -f /tmp/x.yaml\n",
+    )
+    assert not _has_completion_gate(yaml_comment)
+
+    shell_comment = _gate_role(
+        tmp_path / "b",
+        "- name: Reconcile\n"
+        "  ansible.builtin.shell: |\n"
+        "    k3s kubectl -n ns apply -f /tmp/x.yaml"
+        "  # not wait --for=condition=complete: the Job can fail fast\n",
+    )
+    assert not _has_completion_gate(shell_comment)
+
+
+def test_a_debug_describing_a_wait_is_not_a_completion_gate(tmp_path: Path) -> None:
+    """Measured before the fix: an `ansible.builtin.debug` whose `msg:` names the wait
+    satisfied `_has_completion_gate`, because `_task_command_text`'s module discipline was
+    applied in `_batch_gated_names` and not here."""
+    role = _gate_role(
+        tmp_path,
+        "- name: Tell the operator what to do\n"
+        "  ansible.builtin.debug:\n"
+        "    msg: run wait --for=condition=complete job/widget-probe yourself\n",
+    )
+    assert not _has_completion_gate(role)
+
+
+def test_a_dead_wait_is_not_a_completion_gate(tmp_path: Path) -> None:
+    """A real wait that a normal deploy never runs gates nothing.
+
+    `_live_tasks` applies the same liveness rules `_batch_gated_names` does, so all four dead
+    constructions are rejected here too — including when they sit on an enclosing `block:`.
+    """
+    wait = (
+        "- name: Wait\n"
+        "  ansible.builtin.command:\n"
+        "    cmd: k3s kubectl -n ns wait --for=condition=complete job/widget --timeout=180s\n"
+    )
+    assert _has_completion_gate(_gate_role(tmp_path / "live", wait))
     assert not _has_completion_gate(
-        "  until: \"'Complete' in r.stdout\"  # not 'Failed', deliberately\n"
+        _gate_role(tmp_path / "when", wait + "  when: false\n")
     )
     assert not _has_completion_gate(
-        "# 'Complete' and 'Failed' are the terminal conditions\n"
+        _gate_role(tmp_path / "never", wait + "  tags: [never]\n")
     )
+    assert not _has_completion_gate(
+        _gate_role(tmp_path / "config", wait + "  tags: [config]\n")
+    )
+    assert not _has_completion_gate(
+        _gate_role(
+            tmp_path / "block",
+            "- name: Gate block\n"
+            "  when: false\n"
+            "  block:\n"
+            "    - name: Wait\n"
+            "      ansible.builtin.command:\n"
+            "        cmd: k3s kubectl -n ns wait --for=condition=complete job/widget\n",
+        )
+    )
+
+
+def test_failure_escalation_needs_a_fail_task_that_runs(tmp_path: Path) -> None:
+    """W2's half: `"ansible.builtin.fail" in text` credited a comment and a dead task.
+
+    This is the only thing standing behind `_batch_gated_names` crediting every
+    `k8s/cronjob-gate` caller, so a fail-open here reaches five promoted roles.
+    """
+    live = _gate_role(
+        tmp_path / "live",
+        "- name: Fail on a bad image\n  ansible.builtin.fail:\n    msg: bad image\n",
+    )
+    assert _has_failure_escalation(live)
+
+    commented = _gate_role(
+        tmp_path / "comment",
+        "- name: Report\n"
+        "  ansible.builtin.debug:  # never ansible.builtin.fail here\n"
+        "    msg: the deploy continues\n",
+    )
+    assert not _has_failure_escalation(commented)
+
+    when_false = _gate_role(
+        tmp_path / "when",
+        "- name: Fail on a bad image\n"
+        "  when: false\n"
+        "  ansible.builtin.fail:\n"
+        "    msg: bad image\n",
+    )
+    assert not _has_failure_escalation(when_false)
+
+    tagged_never = _gate_role(
+        tmp_path / "never",
+        "- name: Fail on a bad image\n"
+        "  tags: [never]\n"
+        "  ansible.builtin.fail:\n"
+        "    msg: bad image\n",
+    )
+    assert not _has_failure_escalation(tagged_never)
 
 
 def test_auto_deployable_roles_gate_every_batch_workload_they_render() -> None:
@@ -1117,26 +1315,28 @@ def test_gating_shared_roles_actually_wait() -> None:
     `failed_when: false` on the very task that observes the outcome, so accepting it would
     have made this half of the check pass on its own inverse.
 
-    Reads the file with whole-line comments stripped: `configarr/tasks/main.yml` (not a
-    member of this set, but the risk is general) used to explain in a comment why it
-    deliberately did NOT use `kubectl wait --for=condition=complete` — a bare substring check
-    would have read that explanation as the gate it was arguing against. `_has_completion_gate`
-    carries the same discipline for the poll form: it reads the `until:` block, not the file,
-    so a comment naming both conditions cannot satisfy it.
+    BOTH halves walk the role's tasks through `_live_tasks` rather than searching its text.
+    Neither used to. `configarr/tasks/main.yml` (not a member of this set, but the risk is
+    general) explained in a comment why it deliberately did NOT use
+    `kubectl wait --for=condition=complete`, and a substring check read that explanation as the
+    gate it was arguing against; the same trailing-comment and prose-in-a-`debug` shapes
+    satisfied the `ansible.builtin.fail` half, as did a real `fail` under `when: false` or
+    `tags: [never]`. `_has_completion_gate` and `_has_failure_escalation` carry the module and
+    liveness discipline now, so a comment, a `debug`, and a dead task all fail to credit.
     """
     for shared in sorted(_GATING_SHARED_ROLES):
-        tasks = _K8S_ROLES / shared / "tasks/main.yml"
-        assert tasks.is_file(), (
+        role = _K8S_ROLES / shared
+        assert (role / "tasks/main.yml").is_file(), (
             f"{shared}: trusted as a gating shared role but has no tasks"
         )
-        text = _uncommented(tasks.read_text())
-        assert _has_completion_gate(text), (
+        assert _has_completion_gate(role), (
             f"{shared}: trusted as a gating shared role but holds no completion gate — "
             "neither a `wait --for=condition=complete` nor an `until:` poll naming both "
-            "the Complete and Failed conditions"
+            "the Complete and Failed conditions, on a command/shell task that a normal "
+            "deploy actually runs"
         )
-        assert "ansible.builtin.fail" in text, (
-            f"{shared}: waits for completion but has no ansible.builtin.fail to actually "
+        assert _has_failure_escalation(role), (
+            f"{shared}: waits for completion but runs no ansible.builtin.fail to actually "
             "fail the deploy on a bad image"
         )
 
