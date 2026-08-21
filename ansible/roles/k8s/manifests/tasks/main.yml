@@ -187,6 +187,28 @@
     volume_snapshot_claims: "{{ k8s_autodeploy_snapshot_pvcs }}"
     volume_snapshot_service: "{{ manifests_service }}"
 
+# Revert AFTER the snapshot and BEFORE the apply. The snapshot above captures the state this
+# deploy is about to replace, which on a rollback redeploy is the already-migrated data — worth
+# keeping, because a wrong revert is then still recoverable. The revert then rolls the volume
+# back to the snapshot taken before the FAILED deploy, so the apply below lands old manifests on
+# old data instead of old manifests on migrated data.
+#
+# `k8s_restore_snapshot_sha` is set only by gitops-deploy's rollback redeploy, as an extra-var,
+# and it carries the FAILED commit's SHA — not this tree's. At this point the tree has already
+# been reset to the last good commit, so the role's own `git rev-parse` cannot derive it.
+- name: Revert the stateful volumes to the pre-deploy snapshot for {{ manifests_service }}
+  tags: [deploy]
+  when:
+    - not (k8s_no_mutate | bool)
+    - (k8s_restore_snapshot_sha | default('')) | length > 0
+    - (k8s_autodeploy_snapshot_pvcs | default([]) | length) > 0
+  ansible.builtin.include_role:
+    name: k8s/volume-revert
+  vars:
+    volume_revert_claims: "{{ k8s_autodeploy_snapshot_pvcs }}"
+    volume_revert_service: "{{ manifests_service }}"
+    volume_revert_sha: "{{ k8s_restore_snapshot_sha }}"
+
 - name: Apply manifests for {{ manifests_service }}
   tags: [deploy]
   # TRAP: `apply` only prunes map keys (Secret/ConfigMap data entries) on objects it has a
