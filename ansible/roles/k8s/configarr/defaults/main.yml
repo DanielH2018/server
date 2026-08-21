@@ -8,7 +8,7 @@ configarr_k8s_image: ghcr.io/raydak-labs/configarr:1.30.0
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "CronJob gated at deploy time by k8s/cronjob-gate, which proves the new image RUNS (a container that never starts fails the deploy) but deliberately does not enforce a successful sync; concurrencyPolicy Forbid and a convergent reconciler, so the gate's one-off run is idempotent and cannot collide with a scheduled run"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "CronJob gated at deploy time by k8s/cronjob-gate, which proves the new image RUNS (a container that never starts fails the deploy) but deliberately does not enforce a successful sync; concurrencyPolicy Forbid is set, and the reconciler is convergent, so even if the gate's one-off run does overlap a scheduled one, running the same sync twice is harmless"  # noqa var-naming[no-role-prefix]
 
 # Unchanged from the Docker cron. The health cron below reads whatever the last run produced,
 # so the two schedules are independent — this one can move without touching monitoring.
