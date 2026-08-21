@@ -229,94 +229,182 @@ def _uncommented(text: str) -> str:
     )
 
 
-def _iter_task_dicts(tasks) -> "list[dict]":
-    """Every task dict in a parsed tasks/main.yml, descending into `block`/`rescue`/`always`.
+_FALSY_WHEN_LITERALS = {
+    False,
+    0,
+    "false",
+    "False",
+    "FALSE",
+    "no",
+    "No",
+    "NO",
+    "off",
+    "Off",
+    "OFF",
+    "0",
+}
 
-    A raw top-level walk would miss a gate wrapped in a block. No live role in this repo wraps
-    its wait or its cronjob-gate include in one today, but a guard whose coverage depends on
-    that staying true is exactly the shape this file exists to avoid.
+
+def _when_is_falsy_literal(when) -> bool:
+    """Whether a `when:` value is a statically-decidable falsey literal, not just `when: false`.
+
+    Ansible templates a `when:` string through Jinja and evaluates the result the same way it
+    evaluates the bare boolean, so `when: "false"`, `'no'`, `'False'` and `when: 0` all skip the
+    task exactly as `when: false` does — measured directly against real Ansible, not assumed.
+    These are plain YAML scalars, decidable without rendering; a `when:` that references a
+    variable or filter is genuine Jinja and is left alone rather than guessed at, the same
+    fail-closed choice the rest of this file makes for anything it cannot resolve statically.
+
+    A `when:` list ANDs every entry, so if it is a list, any one entry testing falsy is enough
+    on its own to skip the task regardless of the others.
     """
-    out: list[dict] = []
+    if isinstance(when, list):
+        return any(_when_is_falsy_literal(w) for w in when)
+    if isinstance(when, (bool, int, str)):
+        return when in _FALSY_WHEN_LITERALS
+    return False
+
+
+def _normalize_tags(tags) -> tuple:
+    if tags is None:
+        return ()
+    if isinstance(tags, str):
+        return (tags,)
+    return tuple(tags)
+
+
+def _iter_task_dicts(
+    tasks, _inherited_tags: tuple = (), _inherited_when_falsy: bool = False
+) -> "list[tuple[dict, tuple, bool]]":
+    """Every task in a parsed tasks/main.yml, as `(task, effective_tags, effective_when_falsy)`.
+
+    Descends into `block`/`rescue`/`always`, and — this is the part a first pass got only half
+    right — PROPAGATES the enclosing block's own `when:`/`tags:` down to every task it contains,
+    the way Ansible itself does: a block's `tags:` UNION into each child's effective tags, and a
+    block's `when:` ANDs with each child's own `when:`, so a falsey block `when:` (or a
+    `tags: [never]`/`tags: [config]` on the block) excludes every task inside it regardless of
+    what that task states on its own. A walk that finds the nested task but doesn't carry this
+    down discovers the gate without discovering whether it runs — all four dead-gate
+    constructions this file guards against (`when: false`, `tags: [never]`, `tags: [config]`,
+    a `debug` posing as a wait) credit again the moment the construction sits on the `block:`
+    instead of on the task itself, which defeats the whole point of walking into the block.
+    """
+    out: list[tuple[dict, tuple, bool]] = []
     for task in tasks or []:
         if not isinstance(task, dict):
             continue
-        out.append(task)
+        effective_tags = _inherited_tags + _normalize_tags(task.get("tags"))
+        effective_when_falsy = _inherited_when_falsy or _when_is_falsy_literal(
+            task.get("when")
+        )
+        out.append((task, effective_tags, effective_when_falsy))
         for key in ("block", "rescue", "always"):
             nested = task.get(key)
             if isinstance(nested, list):
-                out.extend(_iter_task_dicts(nested))
+                out.extend(
+                    _iter_task_dicts(nested, effective_tags, effective_when_falsy)
+                )
     return out
 
 
-def _task_runs_on_a_normal_deploy(task: dict) -> bool:
-    """Whether a full, untagged deploy of this role would actually run this task.
+def _task_runs_on_a_normal_deploy(
+    effective_tags: tuple, effective_when_falsy: bool
+) -> bool:
+    """Whether a full, untagged deploy of this role would actually run a task with these
+    effective `tags:`/`when:` — already merged down from any enclosing `block:` by
+    `_iter_task_dicts`, so this function only has to apply the exclusion rules, not discover
+    ancestry.
 
     Fail-closed: anything this can't positively confirm reads as "does not run", because a
     false exemption here is invisible while a false offender is cheap to fix.
 
-    - `when: false` (the literal boolean, alone or inside a `when:` list) never runs. A `when:`
-      this can't evaluate statically — a Jinja condition — is left alone rather than guessed at.
-    - `tags: never` is Ansible's own reserved exclusion tag: it runs only when a play names it
-      explicitly, which a normal auto-deploy never does.
+    - a statically falsey `when:` (`_when_is_falsy_literal`) never runs, whether it sits on the
+      task or on an ancestor block.
+    - `tags: never`, likewise at either level, is Ansible's own reserved exclusion tag: it runs
+      only when a play names it explicitly, which a normal auto-deploy never does.
     - every real gate task in this repo (headlamp, media-volume, n8n, netpol-baseline, prowlarr,
-      registry, and every `k8s/cronjob-gate` include) carries `tags: [deploy]`. A task that
-      carries tags but not `deploy` is read as excluded here, even though a plain `--tags <role>`
-      run would still select it via `include_role: apply: tags:` mechanics — this repo also
-      runs config-only deploys (`--skip-tags deploy`), and crediting a `[config]`-tagged wait as
-      a real gate is how a task that stops running under THAT mode still reads as gated under
-      this one. A task with NO tags key at all is not excluded by this rule: omitting tags is
-      this repo's unremarkable default shape, not a signal of anything.
+      registry, and every `k8s/cronjob-gate` include) carries `tags: [deploy]`. A task whose
+      EFFECTIVE tags are non-empty but exclude `deploy` is read as excluded here, even though a
+      plain `--tags <role>` run would still select it via `include_role: apply: tags:`
+      mechanics — this repo also runs config-only deploys (`--skip-tags deploy`), and crediting
+      a `[config]`-tagged wait as a real gate is how a task that stops running under THAT mode
+      still reads as gated under this one. A task (and every enclosing block) with NO tags at
+      all is not excluded by this rule: omitting tags is this repo's unremarkable default
+      shape, not a signal of anything.
     """
-    when = task.get("when")
-    if when is False or (isinstance(when, list) and False in when):
+    if effective_when_falsy:
         return False
-    tags = task.get("tags")
-    if tags is None:
+    if "never" in effective_tags:
+        return False
+    if not effective_tags:
         return True
-    if isinstance(tags, str):
-        tags = [tags]
-    if "never" in tags:
-        return False
-    return "deploy" in tags
+    return "deploy" in effective_tags
 
 
 def _task_command_text(task: dict) -> str | None:
     """The shell/command string this task runs, or None if it isn't a command/shell task.
 
-    Only `ansible.builtin.command` and `ansible.builtin.shell` credit a wait. An
-    `ansible.builtin.debug` whose `msg:` merely describes a wait in prose — "run kubectl wait
-    --for=condition=complete job/widget-job yourself" — never runs anything, and reading its
-    text as a gate would be the same "argument-against read as the thing itself" shape
-    `_uncommented` exists to close for a comment, wearing a module instead of a `#`.
+    Only `ansible.builtin.command`/`ansible.builtin.shell` (FQCN or the short `command`/`shell`
+    module names Ansible also accepts) credit a wait. An `ansible.builtin.debug` whose `msg:`
+    merely describes a wait in prose — "run kubectl wait --for=condition=complete
+    job/widget-job yourself" — never runs anything, and reading its text as a gate would be the
+    same "argument-against read as the thing itself" shape `_uncommented` exists to close for a
+    comment, wearing a module instead of a `#`.
+
+    Reads both spellings a command/shell task can take: `cmd:` (a single string, however it was
+    folded/literal-blocked in YAML — `yaml.safe_load` already normalized that) and `argv:` (a
+    list of raw arguments, joined with spaces here so the same regexes downstream can read
+    either form). `argv:` is not hypothetical in this codebase — `k8s/cronjob-gate` itself uses
+    it for its own container-state read, specifically BECAUSE the `cmd:` form once shipped
+    broken (see its tasks/main.yml). A guard that could not read the spelling this repo already
+    established as the correct one would false-offend the next role that follows the precedent.
     """
-    for module in ("ansible.builtin.command", "ansible.builtin.shell"):
+    for module in (
+        "ansible.builtin.command",
+        "ansible.builtin.shell",
+        "command",
+        "shell",
+    ):
         args = task.get(module)
         if isinstance(args, dict):
             cmd = args.get("cmd")
             if isinstance(cmd, str):
                 return cmd
+            argv = args.get("argv")
+            if isinstance(argv, list) and all(isinstance(a, str) for a in argv):
+                return " ".join(argv)
         elif isinstance(args, str):
             return args
     return None
 
 
-# `[\w.-]+`, not `\S+`: a job/name token that isn't a plain name — a leftover Jinja fragment
-# from a caller that built its wait dynamically — must not be credited as a literal. Shares the
-# reasoning `_LITERAL_NAME` below states for the cronjob_gate_name path.
-_JOB_NAME_TOKEN = re.compile(r"(?:job|job\.batch)/([\w.-]+)")
+# Anchored to the run of `job/<name>` (or `job.batch/<name>`) tokens immediately following the
+# wait flag (S6/task-3-rulings-2.md), not a scan of the whole command: without the anchor, an
+# unrelated `job/<name>`-shaped token elsewhere in the same shell command — e.g. a `--from=
+# cronjob/X` on a `kubectl create job` earlier in the same one-liner — is credited as if the
+# wait named it too. `\S+` per token, not `[\w.-]+`, because a token must be validated as a
+# WHOLE against `_LITERAL_NAME` before being credited (see `_batch_gated_names` below): a Jinja
+# fragment like `job/build-{{ image_builder_name }}` must be refused outright, not silently
+# truncated into the shorter, still-plausible-looking literal `build-`.
+_WAIT_JOB_NAMES = re.compile(
+    r"wait\s+--for=condition=complete\s+((?:(?:job|job\.batch)/\S+\s*)+)"
+)
+_JOB_NAME_TOKEN = re.compile(r"(?:job|job\.batch)/(\S+)")
 
 
 def _batch_gated_names(role: Path) -> set[str]:
     """Batch workload names this role blocks on until they reach a terminal state.
 
     Parses tasks/main.yml as YAML rather than matching its raw text, and credits a task only
-    after `_task_runs_on_a_normal_deploy` confirms it actually executes. A text-matching
+    after `_task_runs_on_a_normal_deploy` confirms — using tags/when merged down from any
+    enclosing `block:` by `_iter_task_dicts` — that it actually executes. A text-matching
     version of this check was fooled by four constructions that all read as a gate without
-    running one: `when: false`, `tags: [never]`, `tags: [config]` (excluded from a
+    running one: a falsey `when:` (in any of its several spellings — see
+    `_when_is_falsy_literal`), `tags: [never]`, `tags: [config]` (excluded from a
     `--skip-tags deploy` run while every real gate task here is `[deploy]`), and — the one that
     needs no sabotage, only a plausible comment — an `ansible.builtin.debug` whose message reads
-    like a wait. `_task_command_text` only ever reads a real `command`/`shell` module, which
-    closes that last one outright.
+    like a wait. `_task_command_text` only ever reads a real `command`/`shell` task, which
+    closes that last one outright, and does so for the `argv:` spelling as well as `cmd:`.
 
     Two accepted forms, because a Job and a CronJob cannot be gated the same way:
 
@@ -324,23 +412,26 @@ def _batch_gated_names(role: Path) -> set[str]:
        pattern for a Job the role applies itself (headlamp, media-volume, netpol-baseline,
        n8n, prowlarr, registry). A single wait can name several Jobs at once — registry's
        `wait --for=condition=complete job/registry-selftest-pull
-       job/registry-selftest-pull-agent --timeout=180s` — so every `job/<name>` token in the
-       command is credited, not just the one adjacent to the flag.
+       job/registry-selftest-pull-agent --timeout=180s` — so every `job/<name>` token
+       immediately following the flag is credited, not just the one adjacent to it (`_WAIT_JOB_NAMES`
+       anchors the scan to that run of tokens specifically, so an unrelated `job/<name>`-shaped
+       string elsewhere in the same command is never picked up). Each token is credited only if
+       it is a full, literal name — `_LITERAL_NAME.match`, not a partial match — so a Jinja
+       fragment like image-builder's `job/build-{{ image_builder_name }}` is refused outright
+       rather than truncated into the shorter, wrong-but-plausible literal `build-`.
 
     2. An `include_role: k8s/cronjob-gate` with `cronjob_gate_name: <cronjob>`. A CronJob
        fires on its schedule and nothing runs at deploy time, so no `job/<name>` wait can be
        written for it. The credited name is `cronjob_gate_name` VERBATIM — the CronJob's own
        `metadata.name`, and therefore what `_batch_templates` yields for the caller's template.
-       A non-literal value (a Jinja expression) is not credited, the fail-closed choice
-       `_deployment_name` also makes for a non-literal Deployment name — see `_LITERAL_NAME`
-       below, reused here rather than redefined. The Job the shared role creates is
+       A non-literal value (a Jinja expression) is not credited, the same fail-closed choice
+       `_deployment_name` makes for a non-literal Deployment name — see `_LITERAL_NAME` below,
+       reused here rather than redefined. The Job the shared role creates is
        `<name>-deploy-gate`; crediting that instead would be a string no rendered manifest can
        ever equal — a marker that gates nothing, with no symptom.
 
     Reading the file as YAML also removes the ordering assumption a text scan needed: a caller
-    writing `vars:` above `ansible.builtin.include_role:` is the same task dict either way,
-    where the old text-chunk approach had to scope its search to the whole task to get this for
-    free.
+    writing `vars:` above `ansible.builtin.include_role:` is the same task dict either way.
 
     Delegating to `k8s/image-builder` is NOT credited. The Job lives in image-builder's own
     templates, not this role's, so a role that only delegates renders zero batch templates of
@@ -353,12 +444,16 @@ def _batch_gated_names(role: Path) -> set[str]:
         return set()
     parsed = yaml.safe_load(tasks_file.read_text())
     names: set[str] = set()
-    for task in _iter_task_dicts(parsed):
-        if not _task_runs_on_a_normal_deploy(task):
+    for task, tags, when_falsy in _iter_task_dicts(parsed):
+        if not _task_runs_on_a_normal_deploy(tags, when_falsy):
             continue
         cmd = _task_command_text(task)
-        if cmd and "wait --for=condition=complete" in cmd:
-            names.update(_JOB_NAME_TOKEN.findall(cmd))
+        if cmd:
+            m = _WAIT_JOB_NAMES.search(cmd)
+            if m:
+                for token in _JOB_NAME_TOKEN.findall(m.group(1)):
+                    if _LITERAL_NAME.match(token):
+                        names.add(token)
         include = task.get("ansible.builtin.include_role")
         if isinstance(include, dict) and include.get("name") == "k8s/cronjob-gate":
             gate_name = (task.get("vars") or {}).get("cronjob_gate_name")
@@ -466,6 +561,100 @@ def test_single_wait_naming_two_jobs_credits_both(tmp_path: Path) -> None:
         "      job/widget-a job/widget-b --timeout=120s\n"
     )
     assert _batch_gated_names(role) == {"widget-a", "widget-b"}
+
+
+def test_a_from_cronjob_token_in_the_same_command_is_not_credited(
+    tmp_path: Path,
+) -> None:
+    """An unrelated `job/<name>`-shaped token in the same command must not be credited.
+
+    task-3-rulings-2.md S6: before `_WAIT_JOB_NAMES` anchored the scan to the run of tokens
+    immediately after the wait flag, a `--from=cronjob/otherthing` earlier in the same
+    one-liner was picked up as if the wait had named it too.
+    """
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(
+        "- name: Create and wait for widget-job\n"
+        "  tags: [deploy]\n"
+        "  ansible.builtin.shell:\n"
+        "    cmd: >-\n"
+        "      k3s kubectl create job widget-job --from=cronjob/otherthing ;\n"
+        "      k3s kubectl wait --for=condition=complete job/widget-job --timeout=60s\n"
+    )
+    assert _batch_gated_names(role) == {"widget-job"}
+
+
+def test_a_jinja_job_name_in_a_wait_is_refused_outright(tmp_path: Path) -> None:
+    """A `job/<name>` token that isn't a full literal must be refused, not truncated.
+
+    task-3-rulings-2.md S7, the live instance: image-builder's wait names
+    `job/build-{{ image_builder_name }}`. Truncating at the first non-`[\\w.-]` character used
+    to credit the shorter, wrong-but-plausible literal `build-`; refusing the whole token
+    credits nothing instead — still fail-closed, but honest about why.
+    """
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(
+        "- name: Wait for the build\n"
+        "  tags: [deploy]\n"
+        "  ansible.builtin.command:\n"
+        "    cmd: >-\n"
+        "      k3s kubectl wait --for=condition=complete\n"
+        "      job/build-{{ widget_name }} --timeout=120s\n"
+    )
+    assert _batch_gated_names(role) == set()
+
+
+def test_argv_form_wait_is_credited(tmp_path: Path) -> None:
+    """An `argv:` list form of the wait command must be credited, same as `cmd:`.
+
+    task-3-rulings-2.md S8: `k8s/cronjob-gate` itself uses `argv:` for its own container-state
+    read, with a comment recording that the `cmd:` form shipped broken once — so `argv:` is an
+    established spelling in this codebase, and a guard that cannot read it would false-offend
+    the next role that follows the precedent.
+    """
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(
+        "- name: Wait for widget-job\n"
+        "  tags: [deploy]\n"
+        "  ansible.builtin.command:\n"
+        "    argv:\n"
+        "      - k3s\n"
+        "      - kubectl\n"
+        "      - wait\n"
+        "      - --for=condition=complete\n"
+        "      - job/widget-job\n"
+        "      - --timeout=120s\n"
+    )
+    assert _batch_gated_names(role) == {"widget-job"}
+
+
+def test_short_command_module_name_is_credited(tmp_path: Path) -> None:
+    """The short `command:`/`shell:` module spellings (not just the FQCN) must be credited."""
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(
+        "- name: Wait for widget-job\n"
+        "  tags: [deploy]\n"
+        "  command:\n"
+        "    cmd: k3s kubectl wait --for=condition=complete job/widget-job --timeout=120s\n"
+    )
+    assert _batch_gated_names(role) == {"widget-job"}
+
+
+def test_a_double_spaced_wait_command_is_still_credited(tmp_path: Path) -> None:
+    """Extra whitespace inside the command string must not defeat the match."""
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(
+        "- name: Wait for widget-job\n"
+        "  tags: [deploy]\n"
+        "  ansible.builtin.command:\n"
+        "    cmd: 'k3s kubectl wait  --for=condition=complete  job/widget-job --timeout=120s'\n"
+    )
+    assert _batch_gated_names(role) == {"widget-job"}
 
 
 def test_batch_templates_sees_quoted_and_commented_kind(tmp_path: Path) -> None:
@@ -684,6 +873,172 @@ def test_a_debug_message_describing_a_wait_does_not_count(tmp_path: Path) -> Non
     assert _batch_gated_names(role) == set()
 
 
+def test_a_wait_inside_a_when_false_block_does_not_count(tmp_path: Path) -> None:
+    """A wait task must not credit its Job when the FALSEY `when:` sits on the enclosing block.
+
+    task-3-rulings-2.md S1: a raw top-level walk finds the nested task but does not carry the
+    block's own `when:`/`tags:` down to it, so all four R1 constructions credit again the
+    moment they sit on the `block:` instead of the task. This pins the `when: false` case.
+    """
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(
+        "- name: Gate group\n"
+        "  when: false\n"
+        "  block:\n"
+        "    - name: Wait for widget-job\n"
+        "      tags: [deploy]\n"
+        "      ansible.builtin.command:\n"
+        "        cmd: k3s kubectl wait --for=condition=complete job/widget-job --timeout=120s\n"
+    )
+    assert _batch_gated_names(role) == set()
+
+
+def test_a_wait_inside_a_never_tagged_block_does_not_count(tmp_path: Path) -> None:
+    """S1: the `tags: [never]` case, with the tag on the enclosing block."""
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(
+        "- name: Gate group\n"
+        "  tags: [never]\n"
+        "  block:\n"
+        "    - name: Wait for widget-job\n"
+        "      ansible.builtin.command:\n"
+        "        cmd: k3s kubectl wait --for=condition=complete job/widget-job --timeout=120s\n"
+    )
+    assert _batch_gated_names(role) == set()
+
+
+def test_a_wait_inside_a_config_tagged_block_does_not_count(tmp_path: Path) -> None:
+    """S1: the `tags: [config]` case, with the tag on the enclosing block rather than the task.
+
+    The inner task carries no tags of its own at all — its effective tags come entirely from
+    the block, which is exactly the shape a bare per-task tag check misses.
+    """
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(
+        "- name: Gate group\n"
+        "  tags: [config]\n"
+        "  block:\n"
+        "    - name: Wait for widget-job\n"
+        "      ansible.builtin.command:\n"
+        "        cmd: k3s kubectl wait --for=condition=complete job/widget-job --timeout=120s\n"
+    )
+    assert _batch_gated_names(role) == set()
+
+
+def test_a_nested_block_when_false_propagates_two_levels_down(tmp_path: Path) -> None:
+    """S1: a block inside a block must still propagate a falsey `when:` to the innermost task.
+
+    `_iter_task_dicts` accumulates as it descends rather than reading only the immediate
+    parent, so this is the case that would catch a merge that stopped one level too soon.
+    """
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(
+        "- name: Outer group\n"
+        "  when: false\n"
+        "  block:\n"
+        "    - name: Inner group\n"
+        "      block:\n"
+        "        - name: Wait for widget-job\n"
+        "          tags: [deploy]\n"
+        "          ansible.builtin.command:\n"
+        "            cmd: k3s kubectl wait --for=condition=complete job/widget-job --timeout=120s\n"
+    )
+    assert _batch_gated_names(role) == set()
+
+
+def test_when_string_false_does_not_count(tmp_path: Path) -> None:
+    """task-3-rulings-2.md S2: `when: "false"` (a string) skips the task exactly like the
+    literal boolean, and must not credit its Job."""
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(
+        "- name: Wait for widget-job\n"
+        "  tags: [deploy]\n"
+        '  when: "false"\n'
+        "  ansible.builtin.command:\n"
+        "    cmd: k3s kubectl wait --for=condition=complete job/widget-job --timeout=120s\n"
+    )
+    assert _batch_gated_names(role) == set()
+
+
+def test_when_no_does_not_count(tmp_path: Path) -> None:
+    """S2: `when: 'no'` — a YAML-boolean-looking string Ansible also treats as falsey."""
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(
+        "- name: Wait for widget-job\n"
+        "  tags: [deploy]\n"
+        "  when: 'no'\n"
+        "  ansible.builtin.command:\n"
+        "    cmd: k3s kubectl wait --for=condition=complete job/widget-job --timeout=120s\n"
+    )
+    assert _batch_gated_names(role) == set()
+
+
+def test_when_capital_false_does_not_count(tmp_path: Path) -> None:
+    """S2: `when: 'False'` (capitalized string)."""
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(
+        "- name: Wait for widget-job\n"
+        "  tags: [deploy]\n"
+        "  when: 'False'\n"
+        "  ansible.builtin.command:\n"
+        "    cmd: k3s kubectl wait --for=condition=complete job/widget-job --timeout=120s\n"
+    )
+    assert _batch_gated_names(role) == set()
+
+
+def test_when_integer_zero_does_not_count(tmp_path: Path) -> None:
+    """S2: `when: 0` (an integer, not a boolean or string)."""
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(
+        "- name: Wait for widget-job\n"
+        "  tags: [deploy]\n"
+        "  when: 0\n"
+        "  ansible.builtin.command:\n"
+        "    cmd: k3s kubectl wait --for=condition=complete job/widget-job --timeout=120s\n"
+    )
+    assert _batch_gated_names(role) == set()
+
+
+def test_when_list_containing_a_falsy_string_does_not_count(tmp_path: Path) -> None:
+    """S2: `when: ["false"]` — the falsy spelling inside a `when:` list, which ANDs its
+    entries, so one falsy entry is enough to skip the task regardless of the others."""
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(
+        "- name: Wait for widget-job\n"
+        "  tags: [deploy]\n"
+        "  when:\n"
+        '    - "false"\n'
+        "  ansible.builtin.command:\n"
+        "    cmd: k3s kubectl wait --for=condition=complete job/widget-job --timeout=120s\n"
+    )
+    assert _batch_gated_names(role) == set()
+
+
+def test_when_referencing_a_variable_is_left_alone(tmp_path: Path) -> None:
+    """A genuine Jinja `when:` (references a variable) is NOT treated as falsy — this file
+    cannot evaluate it statically, so it is left alone rather than guessed at, and the task's
+    wait is credited normally."""
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(
+        "- name: Wait for widget-job\n"
+        "  tags: [deploy]\n"
+        "  when: some_condition | bool\n"
+        "  ansible.builtin.command:\n"
+        "    cmd: k3s kubectl wait --for=condition=complete job/widget-job --timeout=120s\n"
+    )
+    assert _batch_gated_names(role) == {"widget-job"}
+
+
 def test_a_poll_naming_only_complete_is_not_a_completion_gate() -> None:
     """`_has_completion_gate` must reject the one-sided poll it exists to replace.
 
@@ -811,32 +1166,39 @@ def _sets_empty_rollout(role: Path) -> bool:
 def _rollout_gate_offender(role: Path) -> bool:
     """Whether a role with `manifests_rollout: ''` has no gate at all.
 
-    `manifests_rollout: ''` skips both the rollout wait and the stability soak, and for a role
-    rendering a Deployment that is a real defect. For a batch-only role it is correct and
-    unavoidable — there is no Deployment to roll, and completion is the terminal state — so such
-    a role is exempt HERE ONLY IF it proves an alternative gate: it renders NO Deployment and NO
-    DaemonSet — the "batch-only" this exemption's docstring, assert message and brief all
-    claim — AND it renders at least one batch workload, AND `_batch_gated_names` credits every
-    one of them. That is positive proof of a working gate, not a blanket skip for anything
-    gate-shaped — see task-1-rulings.md R1, which deleted a delegation branch that exempted a
-    role's whole batch check on the strength of a marker rather than a rendered, credited name.
+    `manifests_rollout: ''` skips the PRIMARY rollout's wait and stability soak. The general
+    rule (task-3-rulings-2.md S5, generalising R2 rather than special-casing it): such a role
+    is an offender UNLESS every workload it renders — Deployment, DaemonSet and batch alike —
+    is gated by some mechanism this file can see, and it renders at least one workload total.
 
-    The Deployment/DaemonSet check matters on its own: without it, a role rendering a gated Job
-    *plus* a Deployment `_deployment_templates` can't see (a quoted or trailing-comment `kind:`
-    line, or a second Deployment in a `---`-split template) would read as exempt here even
-    though its Deployment has no rollout wait at all — the pre-batch-exemption guard was the
-    only thing ever catching that shape, and this exemption must not reopen it.
+    That single rule covers three shapes that used to need three different checks:
 
-    A role rendering NO workloads at all is still an offender even though the batch loop below
-    would be empty either way: rendering nothing is not evidence of a gate, only an absence of
-    anything to check, so it stays fail-closed and must declare k8s_autodeploy: false instead.
+    - A batch-only role (no Deployment/DaemonSet at all) whose rendered Jobs/CronJobs are all
+      credited by `_batch_gated_names` — this is R2's original case.
+    - A role that skips the PRIMARY rollout but gates its Deployment through
+      `manifests_extra_rollouts` instead. Extras roll and soak independently of the primary —
+      `roles/k8s/manifests/tasks/main.yml`'s extra-rollout queue task carries no
+      `manifests_rollout | length > 0` condition — so `_ungated_deployments(role) == []` is
+      already proof this Deployment IS gated, and an unconditional "renders a Deployment ⇒
+      offender" (R2's own rule, before this generalisation) falsely accused this shape: the
+      reviewer measured `_rollout_gate_offender: True` while `_ungated_deployments: []`.
+    - A role rendering an ungated Deployment `_deployment_templates` can't see by itself (a
+      quoted or trailing-comment `kind:` line, or a second Deployment in a `---`-split
+      template) — `_ungated_deployments` already resolves each rendered Deployment's name
+      against the gated set, so this shape is caught the same way an ordinary ungated
+      Deployment is, without a separate "renders any Deployment at all" check.
+
+    A role rendering NO workload of any kind is still an offender: rendering nothing is not
+    evidence of a gate, only an absence of anything to check, so it stays fail-closed and must
+    declare k8s_autodeploy: false instead.
     """
     if not _sets_empty_rollout(role):
         return False
-    if _deployment_templates(role):
+    if _ungated_deployments(role):
         return True
     batch = _batch_templates(role)
-    if not batch:
+    total_workloads = len(_deployment_templates(role)) + len(batch)
+    if not total_workloads:
         return True
     gated = _batch_gated_names(role)
     return any(not name or name not in gated for _, name in batch)
@@ -870,13 +1232,19 @@ def _primary_rollout_name(role: Path) -> str:
     `manifests_service` to a literal string, and every `manifests_rollout` override is
     likewise a literal (checked repo-wide), so a regex match is safe here. A role that never
     calls k8s/manifests resolves to '', which matches no real Deployment name.
+
+    Tolerates a trailing comment after the value, the same widening R3/`_sets_empty_rollout`
+    made — without it, `manifests_rollout: ''  # nothing to roll` disagreed between the two
+    matchers reading the same variable: `_sets_empty_rollout` said "empty" while this one, still
+    anchored at end-of-line right after the closing quote, fell through to `manifests_service`
+    and returned the real service name instead (task-3-rulings-2.md S4).
     """
     tasks = role / "tasks/main.yml"
     if not tasks.is_file():
         return ""
     text = tasks.read_text()
     rollout = re.search(
-        r"""^\s*manifests_rollout:\s*(?:"([^"]*)"|'([^']*)'|(\S+))\s*$""",
+        r"""^\s*manifests_rollout:\s*(?:"([^"]*)"|'([^']*)'|(\S+))\s*(?:#.*)?$""",
         text,
         re.MULTILINE,
     )
@@ -1280,6 +1648,30 @@ def test_rollout_gate_tolerates_a_trailing_comment_on_the_empty_rollout(
     assert _rollout_gate_offender(role) is True
 
 
+def test_primary_rollout_name_agrees_with_sets_empty_rollout_on_a_comment(
+    tmp_path: Path,
+) -> None:
+    """`_primary_rollout_name` must also read the trailing comment as empty, not the service.
+
+    task-3-rulings-2.md S4: R3 widened `_sets_empty_rollout` for
+    `manifests_rollout: ''  # nothing to roll` and left this matcher anchored at end-of-line
+    right after the closing quote, so the two disagreed about the same variable — one read
+    "empty", the other fell through to `manifests_service` and returned the real service name.
+    Latent while `_rollout_gate_offender`'s Deployment check happened to catch every affected
+    role anyway, but two matchers disagreeing about one variable is a defect on its own.
+    """
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(
+        "- ansible.builtin.include_role:\n"
+        "    name: k8s/manifests\n"
+        "  vars:\n"
+        "    manifests_service: widget\n"
+        "    manifests_rollout: ''  # nothing to roll\n"
+    )
+    assert _primary_rollout_name(role) == ""
+
+
 def _widget_with_a_deployment(
     tmp_path: Path, deployment_doc: str, deployment_filename: str = "deployment.yaml.j2"
 ) -> Path:
@@ -1384,6 +1776,39 @@ def test_rollout_gate_flags_one_gated_and_one_ungated_batch_workload(
         "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: widget-b\n"
     )
     assert _rollout_gate_offender(role) is True
+
+
+def test_rollout_gate_does_not_falsely_accuse_a_role_gated_via_extras(
+    tmp_path: Path,
+) -> None:
+    """A role skipping the primary rollout but gating its Deployment via extras is not an
+    offender.
+
+    task-3-rulings-2.md S5: R2's unconditional "renders a Deployment ⇒ offender" flagged this
+    shape even though the Deployment IS gated — `manifests_extra_rollouts` rolls and soaks
+    independently of the primary, so `manifests_rollout: ''` on the primary alone proves
+    nothing here. The reviewer measured `_rollout_gate_offender: True` while
+    `_ungated_deployments: []` for exactly this construction. The generalised rule checks
+    `_ungated_deployments` (which already resolves gating by name, primary-or-extra) instead of
+    "renders any Deployment at all", so this is no longer a false offender.
+    """
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "templates").mkdir()
+    (role / "tasks" / "main.yml").write_text(
+        "- ansible.builtin.include_role:\n"
+        "    name: k8s/manifests\n"
+        "  vars:\n"
+        "    manifests_service: widget\n"
+        "    manifests_rollout: ''\n"
+        "    manifests_extra_rollouts:\n"
+        "      - name: widget-extra\n"
+    )
+    (role / "templates" / "deployment-extra.yaml.j2").write_text(
+        "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: widget-extra\n"
+    )
+    assert _ungated_deployments(role) == []
+    assert _rollout_gate_offender(role) is False
 
 
 def test_auto_deployable_roles_do_not_skip_the_rollout_gate() -> None:
