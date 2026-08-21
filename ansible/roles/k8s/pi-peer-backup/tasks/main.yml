@@ -58,9 +58,13 @@
       - secret.yaml
 
 # A CronJob has no rollout to wait on, so an image bump would otherwise deploy unobserved.
-# pi-peer-backup is a retention-free rsync mirror and sets concurrencyPolicy: Forbid, so the
-# gate's one-off run is idempotent and cannot collide with a scheduled run.
-# See ansible/roles/k8s/cronjob-gate/CLAUDE.md.
+# pi-peer-backup is a retention-free rsync mirror and sets concurrencyPolicy: Forbid, which
+# should keep the gate's one-off run from overlapping a scheduled one — unconfirmed whether
+# `kubectl create job --from=cronjob` sets a controller ownerReference that Forbid actually
+# keys on (task-3-rulings.md PARK; check post-deploy with `kubectl -n homelab get job
+# pi-peer-backup-deploy-gate -o jsonpath='{.metadata.ownerReferences}'`). If it doesn't, the
+# worst case is two concurrent rsyncs into this idempotent, --delete-free mirror — small either
+# way. See ansible/roles/k8s/cronjob-gate/CLAUDE.md.
 - name: Gate the pi-peer-backup deploy on a one-off run
   tags: [deploy]
   ansible.builtin.include_role:

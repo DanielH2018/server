@@ -29,7 +29,23 @@ DEST=/data/peers
 install -m 0700 -d "$HOME/.ssh"
 install -m 0400 /ssh/id "$HOME/.ssh/id"
 
+# k8s/cronjob-gate (ansible/roles/k8s/cronjob-gate) runs a one-off gate Job named
+# pi-peer-backup-deploy-gate on every deploy of this role, to prove a bumped image still runs.
+# That run is not the scheduled backup, and it must not report as one: pushing here would make
+# the Kuma monitor mean "something ran" instead of "the nightly backup ran", masking a missed
+# 23:30 firing for the rest of its 2.5-day window, and a failing gate run would page the
+# operator from a deploy-time probe rather than from the backup itself. The pod's hostname is
+# `<job-name>-<random>` (kubectl create job --from=cronjob copies the pod spec verbatim, so
+# there is no other way for the script to tell the two runs apart).
+GATE_RUN=0
+[[ "${HOSTNAME:-}" == pi-peer-backup-deploy-gate-* ]] && GATE_RUN=1
+
 push() { # status msg
+  if [[ "$GATE_RUN" -eq 1 ]]; then
+    echo "deploy-gate run — not pushing Kuma/Healthchecks ($1: $2)"
+    return
+  fi
+
   curl -fsS -m 10 --get "$KUMA_PUSH_URL" \
     --data-urlencode "status=$1" --data-urlencode "msg=$2" >/dev/null \
     || echo "kuma push failed ($1: $2)" >&2
@@ -48,7 +64,12 @@ push() { # status msg
   fi
 }
 
-OUT=$(rsync -a --chmod=D700 \
+# --timeout bounds a connected-but-stalled transfer, which --connect-timeout does not cover: a
+# Pi that accepts the connection and then hangs would otherwise sit until the CronJob's own
+# activeDeadlineSeconds (600s) kills the pod, at which point the controller deletes it, the
+# deploy-time gate reads no container state, and the deploy fails on a misleading message
+# instead of this script's own. 120s is comfortably below that deadline for two small files.
+OUT=$(rsync -a --chmod=D700 --timeout=120 \
   --rsync-path='sudo rsync' \
   -e "ssh -i $HOME/.ssh/id -o UserKnownHostsFile=/ssh/known_hosts -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=15" \
   "$PI_SRC" "$DEST/" 2>&1)
