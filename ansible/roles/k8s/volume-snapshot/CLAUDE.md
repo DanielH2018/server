@@ -5,11 +5,14 @@ This role deploys nothing. `roles/k8s/manifests` includes it immediately **befor
 caller's RWO volumes, waits until the snapshot is usable, then prunes that service's older
 snapshots of the same volume.
 
-**Read this first: the role gives you a recovery point and nothing that consumes it.** There is
-no revert here, and no revert anywhere else in the repo. Reverting is slice 7b, and until that
-lands it is a manual operation — the proven sequence is inlined in "Reverting by hand until 7b
-lands" below. Nothing in this role detects a bad deploy, alerts on one, or rolls anything back.
-It makes the damage reversible by hand; it does not reverse it.
+**Read this first: the role gives you a recovery point, and `k8s/volume-revert` consumes it.**
+`roles/k8s/manifests` includes `k8s/volume-revert` between this role and the apply, gated on
+`k8s_restore_snapshot_sha` — an extra-var gitops-deploy sets only on a rollback redeploy of a
+failed auto-deploy's prior commit. Nothing in THIS role decides to revert or detects a bad
+deploy; it only makes the damage reversible. The drill-proven sequence, the manual recovery
+steps for a partial multi-claim revert, and what is and is not covered by tests all live in
+`k8s/volume-revert`'s own CLAUDE.md — see "Reverting: automated via k8s/volume-revert" below for
+the trigger and the pointer.
 
 ## How a role opts in
 
@@ -260,35 +263,26 @@ This role is **not** in `k8s_dry_run_unsupported`, and should not be added. That
 reached as a dependency is invisible to it. `seed-volume`, `image-builder` and `cronjob-gate` are
 all in the same position and are guarded internally instead.
 
-## Reverting by hand until 7b lands
+## Reverting: automated via k8s/volume-revert
 
-No revert exists in this repo yet. The sequence below is the proven manual one, inlined here
-rather than pointed at a spec — an operator mid-incident needs it in the role that made the
-snapshot, not in a design doc that may not even be checked out.
+A rollback is not a manual operation. `roles/k8s/manifests` includes `k8s/volume-revert`
+between this role's snapshot and the apply, gated on `k8s_restore_snapshot_sha`
+(`roles/k8s/manifests/tasks/main.yml:212`) — gitops-deploy sets that extra-var only when it
+redeploys a failed auto-deploy's prior good commit, and it carries the FAILED commit's SHA, not
+the tree's current one (the tree is already reset to the last good commit at that point). The
+claim list comes from the current, rolled-back-to tree's `k8s_autodeploy_snapshot_pvcs`, not
+from the failed commit — if the failed commit renamed or added a claim, `k8s/volume-revert`'s
+own "no snapshot matches this deploy" assert fires loud and before anything moves, rather than
+silently skipping.
 
-    scale the Deployment to 0
-    wait for the Longhorn volume to reach `detached`
-    resolve THIS NODE'S OWN longhorn-manager pod IP (the ClusterIP is a coin flip: the
-      longhorn-manager NetworkPolicy's `from:` is all podSelectors, so host-originated
-      traffic only reaches the local pod)
-    POST {api}/v1/volumes/<vol>?action=attach  {hostId: <node>, disableFrontend: true}
-    wait for `attached`
-    POST {api}/v1/volumes/<vol>?action=snapshotRevert  {name: <snapshot>}
-    POST {api}/v1/volumes/<vol>?action=detach  {}
-    wait for `detached`
-    scale the Deployment back to 1
-
-Two facts that cost a drill to learn and belong beside it:
-
-- A revert with the frontend ENABLED returns 500 "failed to revert snapshot for volume ... with
-  frontend enabled"; a revert on a plainly detached volume also fails, because there is no engine
-  to do the work. The maintenance-mode attach is what makes it work.
-- A multi-claim service is NOT atomic: each claim reverts separately, at slightly different
-  instants. A partial failure leaves a service's volumes mutually inconsistent — a different, and
-  possibly worse, state than the bad deploy it was recovering from.
+`k8s/volume-revert`'s own CLAUDE.md is the source of truth for the sequence, the two drilled
+facts that make it work (frontend must be disabled, a plainly detached volume also fails), the
+recovery steps for a partial multi-claim revert, and what is and is not exercised by tests. Read
+it there rather than a second copy here — this role only takes the snapshot the revert consumes.
 
 If more than one snapshot matches the reconstructed `autodeploy-<service>-<sha8>-<claim>` prefix
-(see "The snapshot name is deterministic" above), revert to the **newest** one.
+(see "The snapshot name is deterministic" above), `k8s/volume-revert` reverts to the **newest**
+one, never by assuming the match is unique.
 
 ## Things measured rather than assumed
 

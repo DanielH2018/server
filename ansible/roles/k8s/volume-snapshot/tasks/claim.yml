@@ -197,10 +197,17 @@
 # `attached` with `disableFrontend: true`, the retaken snapshot never becoming usable — falls
 # through to the warn-and-skip task below rather than failing the deploy: a detached volume is
 # not itself an error (see the two legitimate cases in CLAUDE.md), and this attempt is
-# best-effort on top of that ruling. `ignore_errors` and `failed_when: false` are what make a
-# failure inside this block non-fatal; the "Fold" task at the end reads what happened and
-# decides whether the claim is still the detached case.
-- name: Resolve the node-local Longhorn API to attach {{ volume_snapshot_claim }} # noqa ignore-errors
+# best-effort on top of that ruling. `failed_when: false` on the API calls and waits, plus
+# `longhorn_api_required: false` on the resolve below, are what make a failure inside this block
+# non-fatal — NOT `ignore_errors` on the resolve's `include_role`. `ignore_errors` on a dynamic
+# include only catches a failure of the include statement itself, never a fatal `fail()` raised
+# by a task the include pulls in — documented Ansible behaviour, proven here by
+# `test_longhorn_api_soft_mode_survives_no_manager` in test_longhorn_api.py, which runs the real
+# (unmodified) k8s/longhorn-api role through a scratch play and shows `ignore_errors` alone does
+# NOT stop the play from aborting. `longhorn_api_required: false` makes k8s/longhorn-api itself
+# choose not to raise, which is the only thing that works. The "Fold" task at the end reads what
+# happened and decides whether the claim is still the detached case.
+- name: Resolve the node-local Longhorn API to attach {{ volume_snapshot_claim }}
   tags: [deploy]
   when:
     - not (k8s_no_mutate | bool)
@@ -208,14 +215,15 @@
   ansible.builtin.include_role:
     name: k8s/longhorn-api
     tasks_from: resolve.yml
-  ignore_errors: true
+  vars:
+    longhorn_api_required: false
 
 - name: Attach the volume in maintenance mode for {{ volume_snapshot_claim }}
   tags: [deploy]
   when:
     - not (k8s_no_mutate | bool)
     - volume_snapshot_detached | bool
-    - longhorn_api is defined
+    - longhorn_api_resolved | default(false) | bool
   # `disableFrontend: true` IS maintenance mode — the only attach a snapshot on a volume with
   # no other engine can use. No `attachmentID`: the detach below omits it too, and both then key
   # the ticket "" — see k8s/volume-revert's CLAUDE.md for the manager.Attach/Detach behaviour
@@ -232,12 +240,17 @@
   register: volume_snapshot_maint_attach
   failed_when: false
 
+# Single condition, matching k8s/volume-revert's own attach wait: only `state == 'attached'`.
+# Folding `disableFrontend` into the same `until` (7b's first cut) means a volume that reaches
+# `attached` with the frontend still enabled burns the WHOLE timeout before giving up, since the
+# compound condition never becomes true and `until` has no way to fail fast on the half that
+# already settled. The separate assert below is what checks the frontend flag, immediately.
 - name: Wait for the maintenance-mode attach for {{ volume_snapshot_claim }}
   tags: [deploy]
   when:
     - not (k8s_no_mutate | bool)
     - volume_snapshot_detached | bool
-    - longhorn_api is defined
+    - longhorn_api_resolved | default(false) | bool
     - (volume_snapshot_maint_attach.status | default(0) | int) == 200
   ansible.builtin.command:
     argv:
@@ -253,18 +266,43 @@
   become: true
   changed_when: false
   register: volume_snapshot_maint_wait
-  until:
-    - volume_snapshot_maint_wait.stdout | default('') | split('|') | first == 'attached'
-    - volume_snapshot_maint_wait.stdout | default('') | split('|') | last == 'true'
+  until: volume_snapshot_maint_wait.stdout | default('') | split('|') | first == 'attached'
   retries: "{{ (volume_snapshot_state_timeout | int / volume_snapshot_poll_interval | int) | round | int }}"
   delay: "{{ volume_snapshot_poll_interval }}"
   failed_when: false
 
+# The frontend half of the wait above, split out so a volume that reached `attached` with the
+# frontend still enabled fails immediately rather than after burning the whole timeout — see the
+# comment on the wait task. `ignore_errors: true` on a plain leaf task like this one DOES
+# suppress a failure and let the play continue (verified against a throwaway play 2026-08-21) —
+# unlike `ignore_errors` on the dynamic `include_role` above, which does not. The two look
+# similar and behave completely differently; that is the whole reason the include above no
+# longer uses it.
+- name: Assert the maintenance-mode attach really set disableFrontend for {{ volume_snapshot_claim }}
+  tags: [deploy]
+  when:
+    - not (k8s_no_mutate | bool)
+    - volume_snapshot_detached | bool
+    - longhorn_api_resolved | default(false) | bool
+    - (volume_snapshot_maint_attach.status | default(0) | int) == 200
+  ansible.builtin.assert:
+    that:
+      - volume_snapshot_maint_wait.stdout | default('') | split('|') | last == 'true'
+    fail_msg: >-
+      Longhorn volume {{ volume_snapshot_volume }} came back as
+      '{{ volume_snapshot_maint_wait.stdout | default('') }}' (state|disableFrontend) after the
+      maintenance-mode attach, so its frontend is live — a snapshot taken now would be no more
+      reliable than one taken on a normal attach, and this attempt counts as failed.
+    quiet: true
+  ignore_errors: true
+  register: volume_snapshot_maint_frontend
+
 # Computed unconditionally whenever this claim started detached — never a stale value from an
 # earlier claim's attempt, the same invariant the original "Decide whether ... detached-volume
-# case" task above documents. Read with `default({})` on both registers: either can be entirely
-# unset if the API never resolved or the attach never returned 200, and that must read as
-# failure rather than raise on the missing var.
+# case" task above documents. Read with `default({})`/`default(false)` throughout: any of the
+# three inputs can be entirely unset if an earlier step in this sequence never ran (no manager
+# on this node, the attach never returning 200), and that must read as failure rather than raise
+# on the missing var.
 - name: Decide whether the maintenance-mode attach succeeded for {{ volume_snapshot_claim }}
   tags: [deploy]
   when:
@@ -274,7 +312,7 @@
     volume_snapshot_maintenance_attached: >-
       {{ ((volume_snapshot_maint_attach | default({})).status | default(0) | int) == 200
          and ((volume_snapshot_maint_wait | default({})).stdout | default('') | split('|') | first) == 'attached'
-         and ((volume_snapshot_maint_wait | default({})).stdout | default('') | split('|') | last) == 'true' }}
+         and not ((volume_snapshot_maint_frontend | default({})).failed | default(true)) }}
 
 # Same name, same CR as the first attempt above (`volume_snapshot_name`) — the prune's "found
 # this run's own snapshot" assert and the wait below both key on it, and a different name would
@@ -339,8 +377,9 @@
 
 # Guarded on the attach outcome ALONE, never on whether the retaken snapshot became ready. A
 # snapshot that stays stuck after a successful attach must not leave the volume attached in
-# maintenance mode — k8s/volume-revert's CLAUDE.md records that a stale attachment ticket costs
-# the NEXT deploy a 180s wait and then a failure naming the wrong cause.
+# maintenance mode — a stale attachment ticket costs the NEXT deploy's own maintenance-mode
+# attach (this one, or k8s/volume-revert's) a full 180s state wait before it fails, naming the
+# wrong cause. Recorded in this slice's design notes, not in either role's own CLAUDE.md.
 - name: Detach the volume after the maintenance-mode snapshot attempt for {{ volume_snapshot_claim }}
   tags: [deploy]
   when:

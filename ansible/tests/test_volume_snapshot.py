@@ -445,12 +445,22 @@ def test_the_maintenance_attach_resolves_longhorn_api_with_the_named_entry_point
     assert "volume_snapshot_detached | bool" in when
 
 
-def test_the_maintenance_attach_resolve_does_not_abort_the_deploy_on_failure() -> None:
-    """No longhorn-manager on this node must fall through to the warn-and-skip path, not fail
-    the whole deploy — a detached volume is not itself an error (CLAUDE.md's two legitimate
-    cases), and 7b's attach is best-effort on top of that ruling."""
+def test_the_maintenance_attach_resolve_uses_soft_mode_not_ignore_errors() -> None:
+    """`ignore_errors` on a dynamic `include_role` does NOT catch a failure of a task the
+    include pulls in — only a failure of the include statement itself. Round 1 of this task
+    shipped exactly that mistake, and a reviewer proved it does nothing by running the real
+    (unmodified) k8s/longhorn-api role through a scratch play with `k3s` stubbed to report no
+    manager pod: the play still aborted, `ignore_errors` on the include notwithstanding.
+
+    This test only pins the STATIC shape of the fix — `longhorn_api_required: false` passed,
+    `ignore_errors` gone. The MECHANISM is proven by
+    `test_longhorn_api_soft_mode_survives_no_manager` in test_longhorn_api.py, which runs the
+    real role through a scratch play exactly as the reviewer did. A test that only checks a
+    keyword here would have been green for the original, broken `ignore_errors` version too —
+    that is the failure mode this docstring exists to name."""
     task = _named(_CLAIM, "Resolve the node-local Longhorn API")
-    assert task.get("ignore_errors") is True
+    assert "ignore_errors" not in task
+    assert task["vars"]["longhorn_api_required"] is False
 
 
 def test_the_maintenance_attach_requests_disablefrontend_on_this_node() -> None:
@@ -483,50 +493,58 @@ def _maintenance_attached_expression() -> str:
     ]["volume_snapshot_maintenance_attached"]
 
 
-def _maintenance_attached(attach_status, wait_stdout) -> bool:
-    # `None` is simulated by the value its own `default(...)` fallback would produce (status 0,
-    # empty stdout), not by omitting the register or the field. `ansible_default` — the filter
-    # `FilterModule` actually wires to the name `default` — only coalesces `UndefinedMarker`,
-    # Ansible's own type; this harness's plain `NativeEnvironment` produces jinja2's native
-    # `Undefined` for both a variable never passed to render() and a missing dict key accessed
-    # via `.attr`, and neither is caught. Same caveat
-    # `test_the_prune_loop_slices_cleanly_at_the_defaulted_floor_values` documents above. So this
-    # pins the DOWNSTREAM decision against the coalesced value, not the coalescing itself.
+def _maintenance_attached(attach_status, wait_state, frontend_failed) -> bool:
+    # Every `None` is simulated by the value its own `default(...)` fallback would produce
+    # (status 0, empty stdout, failed=True — fail closed), not by omitting the register or the
+    # field. `ansible_default` — the filter `FilterModule` actually wires to the name `default`
+    # — only coalesces `UndefinedMarker`, Ansible's own type; this harness's plain
+    # `NativeEnvironment` produces jinja2's native `Undefined` for both a variable never passed
+    # to render() and a missing dict key accessed via `.attr`, and neither is caught. Same
+    # caveat `test_the_prune_loop_slices_cleanly_at_the_defaulted_floor_values` documents above.
+    # So this pins the DOWNSTREAM decision against the coalesced value, not the coalescing
+    # itself.
     attach = {"status": 0 if attach_status is None else attach_status}
-    wait = {"stdout": "" if wait_stdout is None else wait_stdout}
+    wait = {"stdout": "" if wait_state is None else wait_state}
+    frontend = {"failed": True if frontend_failed is None else frontend_failed}
     return bool(
         _render(
             _maintenance_attached_expression(),
             volume_snapshot_maint_attach=attach,
             volume_snapshot_maint_wait=wait,
+            volume_snapshot_maint_frontend=frontend,
         )
     )
 
 
-def test_the_attach_is_only_successful_with_a_200_and_attached_and_disabled_frontend() -> (
+def test_the_attach_is_only_successful_with_a_200_attached_state_and_a_passed_frontend_assert() -> (
     None
 ):
-    assert _maintenance_attached(200, "attached|true") is True
+    assert _maintenance_attached(200, "attached", frontend_failed=False) is True
 
 
 def test_a_non_200_attach_response_is_not_success() -> None:
-    assert _maintenance_attached(500, "attached|true") is False
+    assert _maintenance_attached(500, "attached", frontend_failed=False) is False
 
 
 def test_an_attach_that_never_reaches_attached_state_is_not_success() -> None:
-    assert _maintenance_attached(200, "attaching|") is False
+    assert _maintenance_attached(200, "attaching", frontend_failed=False) is False
 
 
 def test_an_attach_that_reaches_attached_with_the_frontend_still_enabled_is_not_success() -> (
     None
 ):
-    assert _maintenance_attached(200, "attached|false") is False
+    """The frontend check is now the separate assert task's `.failed`, not a second field
+    parsed inline here — `frontend_failed=True` is what that assert records when
+    `disableFrontend` came back `false`."""
+    assert _maintenance_attached(200, "attached", frontend_failed=True) is False
 
 
 def test_a_skipped_attach_attempt_is_not_success() -> None:
-    """If `longhorn_api` never resolved, the attach and wait tasks are skipped and neither
-    register carries a `status`/`stdout` field. The decision must read that as failure."""
-    assert _maintenance_attached(None, None) is False
+    """If `longhorn_api` never resolved, the attach, wait and frontend-assert tasks are all
+    skipped and none of the three registers carry a real value. The decision must read that as
+    failure — `frontend_failed=None` renders as the assert task's own `default(true)` fallback,
+    the same fail-closed default `claim.yml` uses."""
+    assert _maintenance_attached(None, None, None) is False
 
 
 def _detached_refold_expression() -> str:
@@ -564,12 +582,21 @@ def test_the_refold_expression_defaults_a_missing_attach_outcome_to_still_detach
     `volume_snapshot_maintenance_attached` should always have just been set — but a stale or
     missing value must fail closed (still warn), not silently clear a flag it never earned.
 
-    ONE-TIME OBSERVATION, not a persisting behavioural test: `ansible_default` (the filter
-    `FilterModule` wires to the name `default`) only coalesces Ansible's own `UndefinedMarker`,
-    and this harness's plain `NativeEnvironment` produces jinja2's native `Undefined` for a
-    variable never passed to render() at all — which `ansible_default` does not catch, so
-    rendering this expression with the variable omitted raises here even though real Ansible's
-    `AnsibleUndefined` would coalesce correctly. Pinning the source text is what's left."""
+    ONE-TIME OBSERVATION, not a persisting behavioural test — by choice, not because it is
+    impossible. `ansible_default` (the filter `FilterModule` wires to the name `default`) only
+    coalesces `UndefinedMarker`; this harness's plain `NativeEnvironment` produces jinja2's
+    native `Undefined` for a variable never passed to render() at all, which `ansible_default`
+    does not catch, so rendering this expression with the variable omitted raises here even
+    though real Ansible's `AnsibleUndefined` would coalesce correctly.
+
+    It CAN be made to render: constructing
+    `ansible._internal._templating._jinja_common.UndefinedMarker(name=..., _no_template_source=True)`
+    and passing that object as the variable's value produces exactly the type `ansible_default`
+    checks for, and the expression coalesces the way it would under real Ansible. Not done here
+    — that is a private underscore module with an undocumented constructor kwarg, in a part of
+    ansible-core that was recently rewritten, and coupling a test to it trades a harness gap for
+    a dependency on ansible-core internals that owe this test nothing and can change without
+    notice. Pinning the source text is the trade actually made, not the only option available."""
     assert "default(false)" in _detached_refold_expression().replace(" ", "")
 
 
@@ -596,9 +623,9 @@ def test_the_detach_after_maintenance_runs_whenever_the_attach_succeeded_regardl
     None
 ):
     """A snapshot that never became ready after a successful attach must not leave the volume
-    attached — CLAUDE.md's `k8s/volume-revert` records that a stale attachment ticket costs a
-    180s wait on the NEXT deploy and then a failure naming the wrong cause. So the detach's
-    `when:` must depend on the attach outcome alone, never on `volume_snapshot_ready`."""
+    attached — a stale attachment ticket costs the NEXT deploy's own maintenance-mode attach a
+    full 180s state wait before it fails, naming the wrong cause. So the detach's `when:` must
+    depend on the attach outcome alone, never on `volume_snapshot_ready`."""
     when = _named_when("Detach")
     assert _GUARD in when
     assert "volume_snapshot_maintenance_attached | bool" in when
@@ -617,40 +644,52 @@ def test_the_maintenance_detach_wait_is_never_suppressed() -> None:
     assert task["until"].strip().endswith("== 'detached'")
 
 
+# The full drill-proven order, by unique name fragment. Positional, not per-task — a per-task
+# `when:` guard has no way to see where in the sequence it runs, so transposing two adjacent
+# tasks (e.g. retaking the snapshot BEFORE the attach — snapshotting a volume never actually put
+# into maintenance mode, the precise bug this task exists to prevent) leaves every guard test
+# above green. Only a positional check catches it.
+_MAINTENANCE_SEQUENCE = (
+    "Resolve the node-local Longhorn API",
+    "Attach the volume in maintenance mode",
+    "Wait for the maintenance-mode attach",
+    "Assert the maintenance-mode attach really set disableFrontend",
+    "Decide whether the maintenance-mode attach succeeded",
+    "Retake the pre-deploy snapshot",
+    "Wait for the retaken snapshot to become usable",
+    "Detach the volume after the maintenance-mode snapshot attempt",
+    "Wait for the detach after the maintenance-mode snapshot attempt",
+    "Fold the maintenance-mode attempt back into the detached-volume decision",
+    "Warn and skip the snapshot for a detached volume",
+)
+
+
+def _task_index(fragment: str) -> int:
+    for i, task in enumerate(_tasks(_CLAIM)):
+        if fragment in str(task.get("name", "")):
+            return i
+    raise AssertionError(fragment)
+
+
 def test_every_maintenance_attach_task_is_guarded_on_detached_and_no_mutate() -> None:
-    for fragment in (
-        "Resolve the node-local Longhorn API",
-        "Attach",
-        "Wait for the maintenance-mode attach",
-        "Decide whether the maintenance-mode attach succeeded",
-        "Retake the pre-deploy snapshot",
-        "Wait for the retaken snapshot to become usable",
-        "Detach",
-        "Wait for the detach after the maintenance-mode snapshot attempt",
-        "Fold the maintenance-mode attempt back into the detached-volume decision",
-    ):
+    for fragment in _MAINTENANCE_SEQUENCE[
+        :-1
+    ]:  # the warn task's own guard is checked below
         when = _named_when(fragment)
         assert _GUARD in when, fragment
         assert "volume_snapshot_detached | bool" in when, fragment
 
 
-def test_the_maintenance_branch_precedes_the_warn_task() -> None:
-    """The warn-and-skip task must see the REFOLDED `volume_snapshot_detached`, which means
-    every maintenance-attach task must run before it in claim.yml's task order."""
-    names = [str(task.get("name", "")) for task in _tasks(_CLAIM)]
-
-    def index(fragment: str) -> int:
-        for i, name in enumerate(names):
-            if fragment in name:
-                return i
-        raise AssertionError(fragment)
-
-    warn_index = index("Warn and skip the snapshot for a detached volume")
-    for fragment in (
-        "Resolve the node-local Longhorn API",
-        "Fold the maintenance-mode attempt back into the detached-volume decision",
-    ):
-        assert index(fragment) < warn_index, fragment
+def test_the_maintenance_sequence_runs_in_the_drill_proven_order() -> None:
+    """Mutated 2026-08-21: swapping 'Retake' and 'Attach' (retaking before attaching) and,
+    separately, swapping 'Detach' and 'Wait for the retaken snapshot' both went red under this
+    test — see the fix-round report for the transcript. Every per-task guard test in this file
+    stayed green under both mutations, which is why a positional test exists at all."""
+    positions = [_task_index(fragment) for fragment in _MAINTENANCE_SEQUENCE]
+    assert positions == sorted(positions), (
+        f"the maintenance-mode sequence ran out of order: "
+        f"{list(zip(_MAINTENANCE_SEQUENCE, positions, strict=True))}"
+    )
 
 
 def test_the_role_declares_maintenance_attach_timeouts() -> None:
