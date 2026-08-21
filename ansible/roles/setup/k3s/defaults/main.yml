@@ -612,6 +612,11 @@ k3s_disk_health_cron_minute: "*/10"
 # find between two deploys in the same day. 05:15 — after the 03:30 nightly Longhorn backup
 # (k3s_longhorn_backup_cron) and its 04:30 Sunday sibling have both finished, ahead of the
 # day's first deploy.
+# Live-object drift check: 05:45, half an hour after the manifest-prune check at 05:15, so a
+# morning with both firing does not put two full kubectl sweeps on the API server at once.
+k3s_live_drift_cron_hour: "5"
+k3s_live_drift_cron_minute: "45"
+
 k3s_manifest_prune_cron_hour: "5"
 k3s_manifest_prune_cron_minute: "15"
 

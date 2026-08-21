@@ -40,6 +40,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   ".claude/hooks",
   ".claude/scripts",                 # audit-permissions report/suggester logic tests
   "scripts",                         # closes the smoke_extract CI gap
+  "ansible/roles/setup/k3s/files",             # live-object drift check comparison logic
   "ansible/roles/setup/gitops_deploy/files",   # deploy_logic decision tests
   "ansible/roles/setup/renovate_notify/files", # notifier decision tests
   "ansible/roles/setup/common/files",          # shared host_lib helper tests
