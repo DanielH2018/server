@@ -48,30 +48,40 @@
 
 - name: Name the pre-deploy snapshot for {{ volume_snapshot_claim }}
   tags: [deploy]
-  # The name is deterministic from service + deploy tag + claim, because slice 7b's revert has
-  # to reconstruct it without being told what it was.
+  # The name is deterministic from service + deploy tag + claim + this run's token. 7b
+  # reconstructs `autodeploy-<svc>-<sha8>-<claim>` without being told what the CR was called, and
+  # that string survives verbatim as a PREFIX of the real name — never as the whole name, because
+  # the run token below makes it non-unique by design.
   #
   # The claim suffix is a deliberate extension of the design's `autodeploy-<svc>-<sha8>`: a
   # service with two RWO claims (pihole has exactly that) would otherwise produce two Snapshot
   # CRs with one name, and the second `apply` would fight the first over `spec.volume` instead
-  # of taking a second snapshot. The design's string survives verbatim as a PREFIX, so 7b's
-  # reconstruction is a prefix match rather than an equality test.
+  # of taking a second snapshot.
   #
-  # `volume_snapshot_prefix` deliberately omits the tag: it is what the prune below selects on,
-  # and it must match this service's snapshots from EVERY deploy, not just this one.
+  # The run-token suffix (main.yml, once per role run) exists so redeploying an older commit —
+  # the manual rollback this slice exists to enable — never collides with that commit's earlier
+  # deploy. Without it, `autodeploy-<svc>-<sha8>-<claim>` alone would already name a Snapshot CR
+  # from that earlier deploy, markRemoved but not yet gone, and `apply` would report "unchanged"
+  # or fail against the markRemoved CR instead of taking a fresh snapshot. The consequence: one
+  # SHA can now own SEVERAL snapshots sharing the `autodeploy-<svc>-<sha8>-<claim>` prefix (a
+  # dirty tree deployed twice from the same commit is the other way to get here). 7b's prefix
+  # match is therefore not a unique lookup — it must pick the NEWEST of however many it finds.
+  #
+  # `volume_snapshot_prefix` deliberately omits the tag AND the token: it is what the prune below
+  # selects on, and it must match this service's snapshots from EVERY deploy, not just this one.
   ansible.builtin.set_fact:
     volume_snapshot_volume: "{{ volume_snapshot_pvc.stdout | trim }}"
     volume_snapshot_prefix: "autodeploy-{{ volume_snapshot_service }}-"
     volume_snapshot_name: >-
-      autodeploy-{{ volume_snapshot_service }}-{{ volume_snapshot_sha.stdout | trim }}-{{ volume_snapshot_claim }}
+      autodeploy-{{ volume_snapshot_service }}-{{ volume_snapshot_sha.stdout | trim }}-{{ volume_snapshot_claim }}-{{ volume_snapshot_run_token }}
 
-# `apply`, not `create`: re-running a deploy at the same tree is normal (a retry, a hand-run
-# after a transient failure), and `create` would fail it with AlreadyExists. Apply reports
-# "unchanged" and the existing snapshot stands as the recovery point for that tag.
-#
-# The consequence is worth knowing: the snapshot belongs to the FIRST deploy of this tag, not
-# the current one. CLAUDE.md records the case where that matters — a dirty tree, where one tag
-# names two different sets of contents.
+# `apply`, not `create`: `create` would fail with AlreadyExists on the one case the run token
+# doesn't rule out — two runs of this role landing in the same wall-clock second, so
+# `now(utc=true, fmt='%Y%m%d%H%M%S')` gives them the identical name. Apply reports "unchanged"
+# there and the earlier of the two snapshots stands as the recovery point for both. Every other
+# run — a retry a moment later, a redeploy of an older commit, a dirty tree deployed twice — gets
+# its own token and its own snapshot; CLAUDE.md's "the tag's determinism" section records what
+# that means for 7b's prefix match.
 - name: Take a pre-deploy Longhorn snapshot of {{ volume_snapshot_claim }}
   tags: [deploy]
   when: not (k8s_no_mutate | bool)
