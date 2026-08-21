@@ -7,10 +7,9 @@ snapshots of the same volume.
 
 **Read this first: the role gives you a recovery point and nothing that consumes it.** There is
 no revert here, and no revert anywhere else in the repo. Reverting is slice 7b, and until that
-lands it is a manual operation — the proven sequence is in the "Slice 7 drill, 2026-08-21"
-section of `docs/superpowers/specs/2026-08-20-k8s-autodeploy-coverage-design.md`. Nothing in this
-role detects a bad deploy, alerts on one, or rolls anything back. It makes the damage reversible
-by hand; it does not reverse it.
+lands it is a manual operation — the proven sequence is inlined in "Reverting by hand until 7b
+lands" below. Nothing in this role detects a bad deploy, alerts on one, or rolls anything back.
+It makes the damage reversible by hand; it does not reverse it.
 
 ## How a role opts in
 
@@ -25,62 +24,89 @@ k8s_autodeploy_snapshot_pvcs:
   - widget-config   # PVC name(s) in k8s_namespace
 ```
 
-A role that never declares `k8s_autodeploy_snapshot_pvcs` — every role until slice 7a task 3 opts
-one in — gets `| default([]) | length == 0`, and the include in `roles/k8s/manifests` never runs:
-no extra kubectl call, no extra fact, nothing.
+A role that never declares `k8s_autodeploy_snapshot_pvcs` — everything except the thirteen roles
+task 3 opted in — gets `| default([]) | length == 0`, and the include in `roles/k8s/manifests`
+never runs: no extra kubectl call, no extra fact, nothing.
 
-`roles/k8s/manifests` passes through only `volume_snapshot_claims` and `volume_snapshot_service`;
-`volume_snapshot_retain` and `volume_snapshot_timeout` are not wired to a caller override at that
-call site. Whether a caller could still change them by declaring same-named defaults of its own
-is unverified — two roles' `defaults/main.yml` setting the same variable name is not a pattern
-tested here — so don't rely on it. They stay at this role's own defaults
-(`volume_snapshot_retain: 3`, `volume_snapshot_timeout: 120`) until a caller genuinely needs
-something else, at which point the call site is where that gets added.
+`roles/k8s/manifests` passes through only `volume_snapshot_claims` and `volume_snapshot_service`
+as call-site `vars:` (`roles/k8s/manifests/tasks/main.yml:186`); `volume_snapshot_retain` and
+`volume_snapshot_timeout` are not wired there. **Measured, not assumed: a caller CANNOT change
+them by declaring same-named defaults of its own.** `k8s/volume-snapshot`'s own
+`defaults/main.yml` sets both, and it is the role actually executing when they're read — in a
+three-level `include_role` chain (caller → `k8s/manifests` → `k8s/volume-snapshot`) built to
+match this repo's real call structure, the innermost role's own default won a same-named
+collision against an ancestor's, every time, confirmed 2026-08-21 with a throwaway play. This is
+why `k8s_autodeploy_snapshot_pvcs` reaches the include cleanly — `k8s/volume-snapshot` never
+declares that name itself, so there is no collision to lose — while `volume_snapshot_retain`
+would silently stay at this role's own default even if a caller set it. The two knobs stay at
+`volume_snapshot_retain: 3`, `volume_snapshot_timeout: 120` until a caller genuinely needs
+something else, at which point the fix is adding them to the `vars:` block at
+`roles/k8s/manifests/tasks/main.yml:186`, not a role default.
+
+The one guarantee that holds regardless of what a caller passes: `volume_snapshot_retain` is
+clamped to a floor of 1 at `claim.yml`'s prune (`[volume_snapshot_retain | int, 1] | max`). A
+caller cannot delete the only recovery point by passing `retain: 0`, even once retain becomes
+callable.
 
 ## Why a `Recreate` + RWO role needs this
 
-Thirteen roles here run `strategy: Recreate` against an RWO Longhorn volume. On an image bump the
-old pod is deleted, the new one attaches the same volume, and the application may migrate its
-on-disk format before anything observes a fault. After that, redeploying the previous image is
-not a rollback: the old binary can no longer read its own data.
+A `Recreate` + RWO role attaches its Longhorn volume to a freshly-created pod on an image bump —
+the old pod is deleted first, the new one attaches the same volume — and the application may
+migrate its on-disk format before anything observes a fault. After that, redeploying the
+previous image is not a rollback: the old binary can no longer read its own data.
 
 Neither existing gate sees it. `rollout status` and the stabilisation soak in
 `roles/k8s/manifests` both watch for a pod that starts and stays up — and a schema migration is
 exactly what a healthy start looks like. The failure surfaces later, as corrupt data or as a
 failed downgrade, at which point there is nothing to go back to.
 
+**Scope for this slice: 13 of 31.** Measured 2026-08-21, 31 roles in this repo carry the
+`Recreate` + rendered-RWO-claim shape this role exists for; task 3 declared
+`k8s_autodeploy_snapshot_pvcs` for 13 of them — the ones drawn from the auto-deploy promotion
+criteria, not from a data-migration survey. The other 18 (authelia, pihole, n8n, traefik-acme and
+the rest) carry the same manual-deploy migration risk today, unprotected by this role, exactly as
+they were before this branch. Widening to all 31 was considered and deferred: the create path
+here is entirely unexercised live (no Snapshot CR has been applied by this code), and widening an
+unexercised new failure mode from 13 deploy paths to 31 before the first real deploy proves it
+out was judged the worse risk. Follow-up, not done here.
+
 ## The snapshot name is deterministic, and 7b depends on that
 
 ```
-autodeploy-<service>-<sha8>-<claim>
+autodeploy-<service>-<sha8>-<claim>-<token>
 ```
 
-`<sha8>` is `git rev-parse --short=8 HEAD` in the repo the deploy renders from. Slice 7b has to
-find this snapshot without being told what it was called, so the name is derived rather than
-recorded anywhere.
+`<sha8>` is `git rev-parse --short=8 HEAD` in the repo the deploy renders from, resolved once in
+`tasks/main.yml`. `<token>` is `now(utc=true, fmt='%Y%m%d%H%M%S')`, also resolved once in
+`tasks/main.yml` — before the per-claim loop, so every claim in one role run shares it, and the
+wait a few tasks later in `claim.yml` polls for the exact name the apply task in the same pass
+created.
 
-**The claim suffix is an extension of the design's `autodeploy-<svc>-<sha8>`, added because that
-name collides.** `volume_snapshot_claims` is a list, and a service with two RWO claims — pihole
-has exactly that — would produce two Snapshot CRs with one name. The design's string survives
-verbatim as a **prefix**, so 7b reconstructs `autodeploy-<svc>-<sha8>` and matches on prefix
-rather than equality.
+Slice 7b has to find this snapshot without being told what it was called, so
+`autodeploy-<service>-<sha8>-<claim>` — the design's original name, with the claim suffix added
+because a service with two RWO claims (pihole has exactly that) would otherwise produce two
+Snapshot CRs fighting over one name — survives verbatim as a **prefix**. 7b reconstructs that
+string and matches on prefix, not equality.
 
-**A multi-claim revert is not atomic.** This role snapshots each volume in turn, at slightly
-different instants, and 7b will have to revert them one at a time with a scale-down between. A
-partial failure leaves a service's volumes mutually inconsistent — which is a *different* and
-possibly worse state than the bad deploy it was recovering from. Do not read N-claim support here
-as N-claim support end to end.
+**The token exists so a rollback deploy can't be refused by its own protection step.**
+Redeploying an older commit is the manual rollback this slice exists to enable, and before the
+token existed, its snapshot name was fully deterministic from service + tag + claim alone — so
+redeploying a SHA a second time named the exact same CR the first deploy of that SHA already
+created. That CR can be `markRemoved` but not yet gone (the finalizer only clears at the next
+detach), and `apply` against it either silently reused the earlier deploy's stale recovery point
+or failed against the `markRemoved` CR. The token fixes the collision by making every run's name
+distinct.
 
-**Two things weaken the tag's determinism, and both are worth knowing before trusting it:**
+**The consequence: `autodeploy-<service>-<sha8>-<claim>` is no longer a unique lookup.** One SHA
+can now own several snapshots sharing that prefix — a genuine rollback redeploy is one way to get
+there, a dirty tree deployed twice from the same commit is another (the SHA names the last
+commit, not the working tree, so both deploys claim the same tag while the tree differs). **7b
+must pick the newest of however many matches it finds, not assume the match is unique.**
 
-- **A dirty tree.** The SHA names the last commit, not the working tree. Deploy uncommitted
-  changes twice from the same commit and both deploys claim the same tag while deploying
-  different contents. The second `apply` finds the existing Snapshot CR, reports `unchanged`, and
-  the second deploy's recovery point is the state before the *first* one.
-- **Re-deploying an old tag after three newer deploys.** Retention keeps three, so the snapshot
-  for that tag may already be `markRemoved` — and reverting to a `markRemoved` snapshot fails.
-  The wait catches this and fails the deploy with a message naming it, rather than proceeding
-  with a recovery point that cannot be used.
+The one case the token doesn't separate: two runs of this role landing in the same wall-clock
+second get the identical token and therefore the identical name. `apply` there reports
+"unchanged" and the earlier of the two stands as the recovery point for both — a retry a moment
+later gets a fresh token and a fresh snapshot.
 
 ## Pruning is asynchronous, and a lingering CR is normal
 
@@ -101,6 +127,14 @@ three dead CRs as the retained three would make the next pass delete live snapsh
 clamped to a floor of 1 at the point of use. 7b reverts to the most recent snapshot, and a
 retention pass that races a rollback would destroy the recovery point it exists to protect.
 
+**Known cost, not fixed here: renaming a service strands its old snapshots permanently.** The
+prune selects on `autodeploy-<service>-`, and `longhorn-reap-orphan-snapshots.sh.j2` — the
+cluster-wide orphan reaper — skips any snapshot carrying no `RecurringJob` label, which every
+`autodeploy-*` snapshot does by construction. Rename a service and its snapshots under the old
+name become invisible to both this role's own prefix filter and the reaper: nothing prunes them,
+nothing reaps them, and they pin their blocks against `filesystem trim` forever. Not touched in
+this slice.
+
 ## What fails the deploy, and what does not
 
 The whole role runs **before** the apply, so every failure below stops the deploy without having
@@ -111,16 +145,32 @@ changed the workload.
 | a claim is missing or still `Pending` | **fails** — named by claim, before anything is applied |
 | `git rev-parse` returns nothing | **fails** — an undated name is one 7b cannot find |
 | the volume is detached (not `attached`) when the snapshot never reports `readyToUse` | **skips this claim and warns loudly** — see below |
-| the snapshot never reports `readyToUse` for any other reason (`markRemoved`, or attached and stuck) | **fails** — this is the recovery point the deploy is about to need |
+| the snapshot never reports `readyToUse` for any other reason (attached and stuck) | **fails** — this is the recovery point the deploy is about to need |
 | the snapshot listing does not contain this run's own snapshot | **fails** — the read is broken, so the prune would be deleting from a set it cannot see |
 | a delete in the prune returns non-zero | **fails** — see below |
 
-The last row is a deliberate choice rather than an oversight. A prune failure is not itself
+The `markRemoved` case that used to sit in this table (a name collision with an earlier deploy's
+CR) can't happen from a fresh commit any more — the per-run token makes each run's name distinct
+— and is now only reachable if two runs land in the same wall-clock second; see "The snapshot
+name is deterministic" above.
+
+**`git rev-parse` is a hard prerequisite, and it is not reachable from the automated pipeline.**
+It runs without `become` (a repo checkout read as root is "dubious ownership" and git refuses
+it), which means it depends on the deploying user owning the checkout. `gitops-deploy.service`
+runs `User=ubuntu` with `WorkingDirectory=/home/ubuntu/server`, so the refusal is not reachable
+there — but a hand-run deploy as a different user, or from a checkout owned by someone else,
+would fail every one of these 13 roles at this task before it fails anywhere more specific.
+
+The last table row is a deliberate choice rather than an oversight. A prune failure is not itself
 dangerous, but swallowing it means unbounded snapshot growth, and a retained snapshot pins every
 block beneath it against `filesystem trim` — the mechanism
 `roles/setup/k3s/templates/longhorn-reap-orphan-snapshots.sh.j2` exists to clean up after. Since
 the prune runs before the apply, failing costs a deploy that has not started rather than a
 half-deployed service.
+
+**Also accepted: this role runs on a no-op deploy too.** gitops-deploy only deploys services that
+actually changed, so a wasted snapshot before an unchanged apply is rare — and when it happens,
+it costs a few seconds on a manual deploy of an already-up-to-date service. Not worth gating on.
 
 ## A detached volume cannot be snapshotted at all, and that is not fatal
 
@@ -130,11 +180,20 @@ volume ("no engine to purge it", observed on `terraria-config` on 2026-08-16), a
 drill got a `500` reverting a plainly detached volume for the same reason.
 
 **Ruling from slice 7a task 2: this skips the claim and warns, rather than failing the deploy.**
-The realistic way a `Recreate` + RWO volume is detached at snapshot time is that an operator
-deliberately scaled the service to zero — failing that deploy would block a legitimate action for
-a service that is already down. After the wait times out, `claim.yml` reads the volume's own
-`status.state` and skips only when it is not `attached`; any other unready cause (a `markRemoved`
-name collision, or a stuck engine on a volume that *is* attached) still fails the deploy.
+Two realistic ways a `Recreate` + RWO volume is detached at snapshot time, and failing the deploy
+would block a legitimate action in both:
+
+- **An operator deliberately scaled the service to zero.** Failing the deploy would block a
+  legitimate action for a service that is already down.
+- **This is the service's first-ever deploy.** All 13 roles run `k8s/seed-volume` first, which
+  deletes its seed pod with `--wait=false`, and no Deployment has ever attached the volume yet —
+  so a brand-new empty volume is legitimately detached, and the loud unprotected warning fires on
+  the deploy where an operator is least likely to expect it. This is not a false alarm to be
+  dismissed; it is the expected shape of a first deploy.
+
+After the wait times out, `claim.yml` reads the volume's own `status.state` and skips only when
+it is not `attached`; any other unready cause (a same-second name collision on a `markRemoved`
+CR, or a stuck engine on a volume that *is* attached) still fails the deploy.
 
 The gap this leaves is real and stays visible on purpose: the apply that follows may scale the
 workload back up, the new pod can migrate the on-disk format, and there is then no recovery point
@@ -143,39 +202,70 @@ the deploy is proceeding unprotected — a silent skip would defeat the point of
 closes the gap for real: it builds maintenance-mode attach for the revert anyway, and the same
 machinery can attach a detached volume long enough to snapshot it first.
 
-## The guard is `k8s_no_mutate`, and it covers the prune too
+## The guard is `k8s_no_mutate`, and neither `--check` nor `--dry-run` exercises this role at all
 
 Every mutating task carries `when: not (k8s_no_mutate | bool)`.
 `inventory/group_vars/all.yml` defines that as `ansible_check_mode or (k8s_dry_run | bool)`, and
 the reason it is one fact rather than two is that a role guarding either alone is guarded against
 neither.
 
-The **whole prune** is guarded, not just the delete. Under a no-mutation run the snapshot above
-it was never taken, so a retention window computed from the live list would be counting three
-snapshots that do not include this run's — and would delete a real one during a dry run.
+**The call site skips the whole role, not just its mutations.** The include in
+`roles/k8s/manifests/tasks/main.yml` is itself gated `when: not (k8s_no_mutate | bool)` — so under
+`--check` or `--dry-run`, `k8s/volume-snapshot` never starts. Nothing here — not the deploy-tag
+read, not the PVC lookup, not the assert that catches a typo'd claim name — runs under either
+mode. A wrong claim name in `k8s_autodeploy_snapshot_pvcs` surfaces only on a real deploy, as the
+"PVC has no spec.volumeName" assert failing before the apply.
 
-The wait is **skipped** rather than run, for `k8s/cronjob-gate`'s reason: it waits on something
-the same guard skipped creating, and reading the previous deploy's snapshot would be a lie.
-
-The two reads that *do* run under `--check` — the deploy tag and the PVC's `volumeName` — carry
-`check_mode: false` deliberately. A `command` task is skipped under `--check` by default, and a
-skipped read does not fail; it fails its consumer several tasks later with an undefined
-attribute. Running them gives a dry run something real to check (does the claim exist, is it
-bound) at no cost, since both are reads.
+The internal `k8s_no_mutate` guards on every task inside this role (the apply, the wait, the
+prune, and the two reads' own `check_mode: false`) are defence in depth for a future call site
+that includes this role unconditionally — they are not exercised by anything in this repo today,
+because the one call site that exists already keeps this role from starting under `--check` or
+`--dry-run`.
 
 This role is **not** in `k8s_dry_run_unsupported`, and should not be added. That refusal keys on
 `ansible_run_tags`, so it only reaches roles an operator names on the command line — a role
 reached as a dependency is invisible to it. `seed-volume`, `image-builder` and `cronjob-gate` are
 all in the same position and are guarded internally instead.
 
+## Reverting by hand until 7b lands
+
+No revert exists in this repo yet. The sequence below is the proven manual one, inlined here
+rather than pointed at a spec — an operator mid-incident needs it in the role that made the
+snapshot, not in a design doc that may not even be checked out.
+
+    scale the Deployment to 0
+    wait for the Longhorn volume to reach `detached`
+    resolve THIS NODE'S OWN longhorn-manager pod IP (the ClusterIP is a coin flip: the
+      longhorn-manager NetworkPolicy's `from:` is all podSelectors, so host-originated
+      traffic only reaches the local pod)
+    POST {api}/v1/volumes/<vol>?action=attach  {hostId: <node>, disableFrontend: true}
+    wait for `attached`
+    POST {api}/v1/volumes/<vol>?action=snapshotRevert  {name: <snapshot>}
+    POST {api}/v1/volumes/<vol>?action=detach  {}
+    wait for `detached`
+    scale the Deployment back to 1
+
+Two facts that cost a drill to learn and belong beside it:
+
+- A revert with the frontend ENABLED returns 500 "failed to revert snapshot for volume ... with
+  frontend enabled"; a revert on a plainly detached volume also fails, because there is no engine
+  to do the work. The maintenance-mode attach is what makes it work.
+- A multi-claim service is NOT atomic: each claim reverts separately, at slightly different
+  instants. A partial failure leaves a service's volumes mutually inconsistent — a different, and
+  possibly worse, state than the bad deploy it was recovering from.
+
+If more than one snapshot matches the reconstructed `autodeploy-<service>-<sha8>-<claim>` prefix
+(see "The snapshot name is deterministic" above), revert to the **newest** one.
+
 ## Things measured rather than assumed
 
 - `kubectl`'s jsonpath has **no `&&`** — `unrecognized character in action: U+0026`, verified
   2026-08-21. The snapshot listing therefore filters on `spec.volume` alone and does the rest in
   Jinja. Do not "simplify" it into a compound filter expression.
-- Every live Snapshot CR carries `status.markRemoved` explicitly (28 `false` / 17 `true` on
-  2026-08-21), so filtering on it in Jinja does not have to treat an absent field as a third
-  state.
+- The retention filter treats anything other than the literal `true` for `status.markRemoved` as
+  not-removed — an absent or unpopulated field (a snapshot read moments after creation) counts as
+  live, not as removed. Every live Snapshot CR measured on 2026-08-21 carried the field explicitly
+  (28 `false` / 17 `true`), but the filter no longer depends on that being universal.
 - `argv:`, not a folded `cmd:` string, on every `kubectl` call here. `ansible.builtin.command`
   shlex-splits a `cmd`, so a jsonpath is only safe there while it happens to contain no spaces,
   and the listing's `{range .items[?(...)]}` does not. Slice 4 shipped that bug and made a whole
@@ -184,6 +274,10 @@ all in the same position and are guarded internally instead.
   stray `GIT_DIR` has already made a check in this repo operate on the wrong repository. It also
   runs without `become`, because git refuses a repository it considers to have dubious ownership
   when a different user reads it.
+- Ansible role-defaults precedence for a same-named variable across an `include_role` chain: the
+  innermost (most recently loaded) role's own default wins over an ancestor's, confirmed
+  2026-08-21 with a throwaway three-level play matching this repo's real call structure. See "How
+  a role opts in" above for what that means for `volume_snapshot_retain`/`volume_snapshot_timeout`.
 
 ## What is unverified
 
@@ -193,5 +287,8 @@ checked live on 2026-08-21 is the shape it depends on: `longhorn.io/v1beta2` `Sn
 served resource; live CRs carry `spec.volume`, `spec.createSnapshot`, `status.readyToUse`,
 `status.markRemoved` and a `longhorn.io` finalizer; and Longhorn's own snapshots use custom names
 (`daily-ba-<uuid>`) rather than requiring a generated one. Whether a hand-applied Snapshot CR with
-`createSnapshot: true` produces a snapshot was not observed here — the drill recorded in the spec
-is the nearest evidence, and the first real deploy through this role is what confirms it.
+`createSnapshot: true` produces a snapshot was not observed here — the drill recorded in this
+CLAUDE.md's revert sequence is the nearest evidence, and the first real deploy through this role
+is what confirms it. The prune's live behaviour (`--wait=false` + `--ignore-not-found` against a
+real finalizer) is likewise unexercised, and `readyToUse` timing against the 120s ceiling is
+unmeasured.

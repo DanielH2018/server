@@ -2,11 +2,13 @@
 # Take a Longhorn snapshot of a service's RWO volumes immediately BEFORE its manifests are
 # applied, so that a bad image bump is reversible.
 #
-# WHY. Thirteen roles here run `strategy: Recreate` against an RWO Longhorn volume. The
-# replacement pod attaches that volume and may migrate the on-disk format before anything
-# observes a fault — after which redeploying the previous image is not a rollback, because the
-# old binary can no longer read its own data. Neither `rollout status` nor the stabilisation
-# soak sees this: a schema migration is exactly what a healthy start looks like.
+# WHY. A `Recreate` + RWO role attaches its Longhorn volume to a freshly-created pod on an image
+# bump, and the replacement may migrate the on-disk format before anything observes a fault —
+# after which redeploying the previous image is not a rollback, because the old binary can no
+# longer read its own data. Neither `rollout status` nor the stabilisation soak sees this: a
+# schema migration is exactly what a healthy start looks like. Measured 2026-08-21, 31 roles here
+# carry this shape; task 3 declared k8s_autodeploy_snapshot_pvcs for 13 of them (CLAUDE.md names
+# the other 18 as a follow-up, not a gap in this count).
 #
 # WHAT THIS ROLE DOES NOT DO. It never reverts. It creates a recovery point and nothing in the
 # repo consumes it yet — reverting is slice 7b and is a manual sequence today. CLAUDE.md says so

@@ -586,7 +586,14 @@ def test_the_snapshot_include_runs_before_the_apply() -> None:
 def test_the_snapshot_include_is_inert_for_a_role_that_never_opts_in() -> None:
     """`k8s_autodeploy_snapshot_pvcs` is what makes the include a no-op for the ~50 services
     that do not declare it — this is the actual guarantee, not the `grep` that finds zero
-    declarations today. Task 3 adding declarations must not be able to remove this gate."""
+    declarations today. Task 3 adding declarations must not be able to remove this gate.
+
+    This is a TEXT MATCH against the `when:` condition, not an execution — it proves the guard
+    expression is present, not that Ansible actually skips the include at runtime. The runtime
+    guarantee (a faithful toy play: roleA with the var set fires, roleB without it is skipped)
+    was verified by executing that play, not by this assertion. Treat this as a regression guard
+    against the condition being edited away, not as proof of the behaviour by itself.
+    """
     task = _manifests_tasks()[_manifests_index("Snapshot the stateful volumes")]
     when = str(task.get("when", ""))
     assert _GUARD in when
