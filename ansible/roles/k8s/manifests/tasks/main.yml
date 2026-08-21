@@ -167,6 +167,26 @@
   become: true
   when: not k8s_dry_run | bool
 
+# Snapshot before the apply, not after: the apply below is what changes the Deployment spec,
+# terminates the old pod and starts the new one — and the replacement pod is what migrates the
+# on-disk format. A snapshot taken afterwards captures the damage instead of protecting against
+# it.
+#
+# Roles opt in by declaring `k8s_autodeploy_snapshot_pvcs` in their own defaults/main.yml; role
+# defaults are in scope for an included role, so nothing needs plumbing through this call site.
+# A role that never declares it — the default for roughly fifty services — gets `| default([])`,
+# `length` is 0, and this include never runs: no extra kubectl call, no extra fact, nothing.
+- name: Snapshot the stateful volumes before applying manifests for {{ manifests_service }}
+  tags: [deploy]
+  when:
+    - not (k8s_no_mutate | bool)
+    - (k8s_autodeploy_snapshot_pvcs | default([]) | length) > 0
+  ansible.builtin.include_role:
+    name: k8s/volume-snapshot
+  vars:
+    volume_snapshot_claims: "{{ k8s_autodeploy_snapshot_pvcs }}"
+    volume_snapshot_service: "{{ manifests_service }}"
+
 - name: Apply manifests for {{ manifests_service }}
   tags: [deploy]
   # TRAP: `apply` only prunes map keys (Secret/ConfigMap data entries) on objects it has a
