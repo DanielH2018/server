@@ -40,6 +40,11 @@ uptime_kuma_k8s_cpu_limit: "500m"
 uptime_kuma_k8s_mem_limit: 512Mi
 uptime_kuma_k8s_cpu_request: "50m"
 uptime_kuma_k8s_mem_request: 64Mi
+# Seconds between AutoKuma reconcile passes — see the env comment in deployment.yaml.j2 for why
+# the upstream default of 5 was costing ~34k SQLite writes a day. A deploy's new monitors appear
+# within this many seconds; postflight's `count(monitor_status)` check does not race it.
+autokuma_k8s_sync_interval: 60
+
 autokuma_k8s_cpu_limit: "250m"
 autokuma_k8s_mem_limit: 128Mi
 autokuma_k8s_cpu_request: "20m"
@@ -57,16 +62,13 @@ autokuma_k8s_mem_request: 32Mi
 # every push monitor).
 kuma_push_resend_interval_minutes: 360
 
-# One monitor is held at 0, deliberately and temporarily.
+# No monitor is held at 0. `k3s Longhorn Backup` was, from 2026-08-16 to 2026-08-21, while the
+# weekly tier had never completed a backup and every sharded volume reported uncovered — a
+# condition no operator could clear, so a 6-hourly resend would only have trained the channel to
+# be muted. The hold lifted on 2026-08-21: the weekly tier completed its shard run at 04:30 and
+# the tile went green, so the fleet-wide 360 above now covers this monitor like every other.
 #
-# `k3s Longhorn Backup` has been DOWN since 04:30 on 2026-08-16 and cannot come back on its own:
-# the weekly tier has never completed a backup, so all 22 sharded volumes report as uncovered,
-# and the earliest any shard can clear is its next weekly run. It also notifies email, not just
-# Discord. Turning on a 6-hourly resend against a condition with no available action is how the
-# channel gets muted, which costs the NEXT alert — the same reasoning that set 360 everywhere
-# else, pointed the other way.
-#
-# LIFT THIS when the first weekly-backup-dN run completes and the tile goes green: delete the
-# override, delete the entry in test_kuma_static_monitors.py's held set, redeploy uptime-kuma.
-# It is a hold, not a revert — the fleet-wide 360 above is unchanged.
-kuma_longhorn_backup_resend_interval_minutes: 0
+# Kept as a comment because the shape recurs: a tile that is down, cannot recover without an
+# event nobody controls, and notifies email as well as Discord is the case a hold is for. Add
+# the override back plus an entry in test_kuma_static_monitors.py's RESEND_HELD, and write the
+# condition that lifts it.
