@@ -52,6 +52,7 @@ _CLAIM = _ROLE / "tasks/claim.yml"
 _MAIN = _ROLE / "tasks/main.yml"
 _DEFAULTS = _ROLE / "defaults/main.yml"
 _VALIDATOR = _REPO / "scripts/validate_k8s_manifests.py"
+_MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
 
 _GUARD = "not (k8s_no_mutate | bool)"
 
@@ -928,3 +929,73 @@ def test_every_snapshot_role_restores_its_own_replicas() -> None:
                 f"{role}'s Deployment has replicas={replicas!r}. It must be an explicit count "
                 f"of at least one: the apply after a revert is what brings the workload back."
             )
+
+
+# ------------------------------------------------------------------- the manifests call site
+
+
+def test_the_revert_runs_after_the_snapshot_and_before_the_apply() -> None:
+    """Order is the whole contract. A revert AFTER the apply restores the old data and then the
+    new pod migrates it again. A revert BEFORE the snapshot discards the recovery point for the
+    state being replaced. The three-way chain pins both adjacent pairs the insertion touches, so
+    moving the revert either direction fails one of the two comparisons."""
+    names = _task_names(_MANIFESTS)
+    assert (
+        _index(names, "Snapshot the stateful volumes")
+        < _index(names, "Revert the stateful volumes")
+        < _index(names, "Apply manifests")
+    )
+
+
+def test_the_revert_is_inert_without_the_restore_var() -> None:
+    """~50 roles call k8s/manifests. On every ordinary deploy — which is all of them but a
+    failed auto-deploy's second attempt — this include must not run.
+
+    Anchored on the full comparison, not on the variable's name appearing somewhere in the
+    clause: `test_the_role_never_scales_back_up` found `--replicas=01` passing a two-character
+    substring check elsewhere in this file, and `| length >= 0` is the same shape of hole here
+    — it contains the variable name, reads as a guard, and is true for every deploy.
+    """
+    when = _named(_MANIFESTS, "Revert the stateful volumes")["when"]
+    assert any(
+        re.search(r"k8s_restore_snapshot_sha.*\)\s*\|\s*length\s*>\s*0", c)
+        for c in when
+    ), when
+    assert _GUARD in when
+
+
+def test_a_role_with_no_declared_claims_never_reverts() -> None:
+    """The extra-var is global to the playbook run, so it is set for every service in the
+    failing batch — including stateless ones with no snapshots at all. Those must skip, not
+    fail looking for a snapshot that was never taken.
+
+    Anchored on the full comparison for the same reason as the sha clause above: the variable's
+    name appearing in the clause is not evidence the clause excludes an empty list.
+    """
+    when = _named(_MANIFESTS, "Revert the stateful volumes")["when"]
+    assert any(
+        re.search(r"k8s_autodeploy_snapshot_pvcs.*\)\s*\|\s*length\s*\)\s*>\s*0", c)
+        for c in when
+    ), when
+
+
+def test_the_revert_include_passes_the_roles_own_interface() -> None:
+    """The three vars k8s/volume-revert's own assert task requires, named exactly as that role
+    reads them — a typo here reads as a missing var at runtime, after the workload is already
+    scaled to zero on a real incident."""
+    task = _named(_MANIFESTS, "Revert the stateful volumes")
+    include = task["ansible.builtin.include_role"]
+    assert include["name"] == "k8s/volume-revert"
+    call_vars = task["vars"]
+    assert call_vars["volume_revert_claims"] == "{{ k8s_autodeploy_snapshot_pvcs }}"
+    assert call_vars["volume_revert_service"] == "{{ manifests_service }}"
+    assert call_vars["volume_revert_sha"] == "{{ k8s_restore_snapshot_sha }}"
+
+
+def test_the_revert_does_not_swallow_a_failed_claim() -> None:
+    """The call site must not blunt the role's own fail-fast behaviour. `k8s/volume-revert`
+    already stops the play on a failed claim; adding `ignore_errors` or `failed_when: false`
+    here would turn that into a partial revert nothing then flags."""
+    task = _named(_MANIFESTS, "Revert the stateful volumes")
+    assert "ignore_errors" not in task
+    assert "failed_when" not in task
