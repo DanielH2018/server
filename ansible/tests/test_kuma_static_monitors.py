@@ -194,6 +194,28 @@ def test_both_managed_notifications_are_defined():
     assert notifications == {"discord.json", "email.json"}
 
 
+def test_notification_configs_declare_apply_existing():
+    """A notification config without `applyExisting` can never compare equal to what Kuma stores.
+
+    Kuma's save() forces the key in on every write (`notification.applyExisting = false` before
+    `JSON.stringify`, server/notification.js), and AutoKuma's `config_eq` compares the NUMBER of
+    config keys after dropping six ignored ones — a set that does not include applyExisting. So
+    a declaration that omits it is permanently one key short, never matches, and is rewritten on
+    every sync pass. That ran from the k3s cutover to 2026-08-21 at ~34k SQLite writes a day.
+
+    The value must be false: Kuma reads the flag before forcing it (`applyExisting || false`),
+    and true would attach the notification to every existing monitor.
+    """
+    for name, entity in _entities().items():
+        if entity["type"] != "notification":
+            continue
+        config = entity.get("config", {})
+        assert config.get("applyExisting") is False, (
+            f"{name}: notification config must declare `applyExisting: false` or AutoKuma "
+            f"rewrites it on every sync pass forever, got {config.get('applyExisting')!r}"
+        )
+
+
 # Monitors whose failure is invisible on Discord alone and cannot wait for someone to notice a
 # muted channel — the tier that also mails. Enumerated rather than pattern-matched: "has 'B2' in
 # the name" is exactly the rule that put B2's headroom tile on this tier and left R2's off it
