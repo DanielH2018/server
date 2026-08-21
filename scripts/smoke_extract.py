@@ -61,6 +61,14 @@ _SKIP_BARE_BOOT = frozenset(
         # tag. Nothing is lost by skipping: the three karakeep manifests that use it all
         # override `command:`, so the bare entrypoint is not what runs in the cluster.
         "ghcr.io/astral-sh/uv",
+        # Exits with `Invalid config: missing configuration field "kuma.url"` (observed run
+        # 32489115934) — a reconciler whose entire job is talking to a Kuma it is pointed at,
+        # so there is no bare boot to test. Same class as authelia/couchdb. Unlike the uv entry
+        # above, the manifest does NOT override `command:` (2.1.0-rc.2 is distroless, so the
+        # shell wrapper that used to be there cannot run) — what covers the real boot is the
+        # deploy's own rollout-status gate plus the /health startupProbe, both of which
+        # exercise it with its config.
+        "ghcr.io/bigboot/autokuma",
     }
 )
 
