@@ -319,13 +319,19 @@ def test_an_unread_volume_state_is_treated_as_not_attached() -> None:
 
 
 def test_the_warn_task_fires_only_for_the_detached_case() -> None:
-    when = str(
-        _named(_CLAIM, "Warn and skip the snapshot for a detached volume").get(
-            "when", ""
-        )
+    """Checked against the raw `when:` list, not its stringified form.
+
+    `str(["not (volume_snapshot_detached | bool)"])` still contains the substring
+    `"volume_snapshot_detached | bool"`, so a substring check here would pass on both polarities
+    — inverting the task would make it warn "UNPROTECTED" on every healthy deploy and stay
+    silent on the one case that matters, with this test still green.
+    """
+    when = _named(_CLAIM, "Warn and skip the snapshot for a detached volume").get(
+        "when", []
     )
     assert _GUARD in when
     assert "volume_snapshot_detached | bool" in when
+    assert "not (volume_snapshot_detached | bool)" not in when
 
 
 def test_the_warning_names_the_service_the_claim_and_that_the_deploy_is_unprotected() -> (

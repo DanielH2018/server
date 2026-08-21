@@ -2271,10 +2271,51 @@ def test_no_kubectl_invocation_spells_the_daemonset_kind_by_alias() -> None:
 # name — every claim in the table was independently verified against `kubectl -n homelab get
 # pvc` on 2026-08-21 and all fourteen are live.
 
-_PVC_NAME = re.compile(
-    r"^kind:\s*[\"']?PersistentVolumeClaim[\"']?\s*(?:#.*)?$\n\s*metadata:\s*$\n\s*name:\s*(.+?)\s*$",
+_PVC_KIND = re.compile(
+    r"^kind:\s*[\"']?PersistentVolumeClaim[\"']?\s*(?:#.*)?$\n\s*metadata:\s*$\n",
     re.MULTILINE,
 )
+
+
+def _pvc_names(text: str) -> list[str]:
+    """`metadata.name` for every `kind: PersistentVolumeClaim` document in `text`.
+
+    Reads the metadata block by indentation rather than assuming `name:` is the line
+    immediately after `metadata:` — the earlier regex required exactly that, so a PVC whose
+    metadata carried `labels:` before `name:` yielded no claim and no complaint (R6). A key at
+    the same indentation as the block's first key is a sibling of `name:`; a shallower
+    indentation means the metadata block ended.
+
+    Two limits this still does not close, both real and left as read-the-tree-by-eye cases
+    rather than chased into a renderer:
+
+    - A PVC document nested inside `{% if ... %}` is credited whether or not that condition is
+      ever true.
+    - A `.j2` file left in the tree after being dropped from `manifests_files` (the list
+      `roles/k8s/manifests` actually applies) is credited too — this glob has no notion of
+      "still deployed".
+
+    So this predicate is not fail-closed: it is fail-open in both of those shapes, and
+    fail-closed only against the metadata-ordering gap R6 fixed.
+    """
+    names = []
+    for kind_match in _PVC_KIND.finditer(text):
+        indent = None
+        for line in text[kind_match.end() :].splitlines():
+            if not line.strip():
+                continue
+            this_indent = len(line) - len(line.lstrip(" \t"))
+            if indent is None:
+                indent = this_indent
+            elif this_indent < indent:
+                break
+            if this_indent == indent:
+                name = re.match(r"name:\s*(.+?)\s*$", line.strip())
+                if name:
+                    names.append(name.group(1))
+                    break
+    return names
+
 
 # The only PVC-name shape this repo writes: a whole-field reference to exactly one role-local
 # var — never a literal string, never a compound expression (`{{ a }}-{{ b }}`), never a
@@ -2333,7 +2374,7 @@ def _rendered_pvc_claims(role: Path) -> tuple[set[str], list[str]]:
 
     tdir = role / "templates"
     for t in sorted(tdir.glob("*.j2")) if tdir.is_dir() else []:
-        raw.extend(_PVC_NAME.findall(t.read_text()))
+        raw.extend(_pvc_names(t.read_text()))
 
     for task in _live_tasks(role):
         include = task.get("ansible.builtin.include_role")
@@ -2423,6 +2464,32 @@ def test_pvc_template_claim_is_resolved_through_defaults(tmp_path: Path) -> None
     assert unresolved == []
 
 
+def test_pvc_template_claim_is_found_when_name_is_not_the_first_metadata_key(
+    tmp_path: Path,
+) -> None:
+    """R6: `_PVC_NAME` used to require `name:` on the line immediately after `metadata:`, so a
+    PVC whose metadata carried `labels:` first yielded no claim and no complaint — silently, a
+    declared `k8s_autodeploy_snapshot_pvcs` entry would fail `test_snapshot_pvc_declarations_
+    match_rendered_claims` for a role that was correct."""
+    role = tmp_path / "widget"
+    (role / "templates").mkdir(parents=True)
+    (role / "defaults").mkdir(parents=True)
+    (role / "templates" / "pvc.yaml.j2").write_text(
+        "---\n"
+        "apiVersion: v1\n"
+        "kind: PersistentVolumeClaim\n"
+        "metadata:\n"
+        "  labels:\n"
+        "    app.kubernetes.io/name: widget\n"
+        "  name: {{ widget_k8s_claim }}\n"
+        "  namespace: homelab\n"
+    )
+    (role / "defaults" / "main.yml").write_text("widget_k8s_claim: widget-config\n")
+    resolved, unresolved = _rendered_pvc_claims(role)
+    assert resolved == {"widget-config"}
+    assert unresolved == []
+
+
 def test_snapshot_pvc_declarations_match_rendered_claims() -> None:
     """A declared `k8s_autodeploy_snapshot_pvcs` entry must be a claim the role actually
     renders. A typo'd claim name snapshots nothing and fails silently at deploy time — the
@@ -2481,13 +2548,23 @@ def _migrating_state(role: Path) -> bool:
     least one rendered RWO PVC claim.
 
     This is the mechanical definition, read off what the role actually renders — NOT off
-    `k8s_autodeploy_reason` text. This file's own top docstring already documents why: roughly
-    27 roles carry "migrating state" as a SECOND reason without the Recreate+RWO shape applying
-    to their primary rollout, so a reason-text scope would false-offend on day one against
-    roles this slice never touched. Every PVC `_rendered_pvc_claims` can find in this repo
-    hardcodes `accessModes: [ReadWriteOnce]` (both direct templates and k8s/seed-volume's
-    shared one) — checked, not assumed — so a rendered claim existing at all is sufficient
-    without a separate accessModes read.
+    `k8s_autodeploy_reason` text.
+
+    Measured 2026-08-21: this predicate is true for 31 roles, not the thirteen slice 7a task 3
+    declared `k8s_autodeploy_snapshot_pvcs` for. `_migrating_state` is broad on purpose — it
+    reads `strategy: Recreate` plus a rendered RWO claim off every role, whether or not that
+    role is auto-deployable — and `test_auto_deployable_migrating_state_roles_declare_snapshot_pvcs`
+    below stays vacuous today for a narrower reason: the 31 roles this predicate flags and the 14
+    `_auto_deployable` roles do not intersect at all, not because the two counts happen to match.
+
+    Almost every PVC `_rendered_pvc_claims` can find in this repo hardcodes
+    `accessModes: [ReadWriteOnce]` (both direct templates and k8s/seed-volume's shared one), so a
+    rendered claim existing at all is normally sufficient without a separate accessModes read.
+    The one exception: `k8s/media-volume`'s own `pvc.yaml.j2` is `ReadWriteMany`. It does not
+    corrupt this predicate today — `media-volume` itself renders no Recreate Deployment, so
+    `_migrating_state` never reaches that claim — but a future Recreate role sharing that RWX
+    volume would be flagged here as if it needed snapshot protection for a migration risk RWX
+    doesn't actually carry the same way RWO does.
     """
     return _deployment_strategy_is_recreate(role) and bool(
         _rendered_pvc_claims(role)[0]
