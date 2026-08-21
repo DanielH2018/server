@@ -1411,9 +1411,23 @@ def _rollout_gate_offender(role: Path) -> bool:
       against the gated set, so this shape is caught the same way an ordinary ungated
       Deployment is, without a separate "renders any Deployment at all" check.
 
-    A role rendering NO workload of any kind is still an offender: rendering nothing is not
-    evidence of a gate, only an absence of anything to check, so it stays fail-closed and must
-    declare k8s_autodeploy: false instead.
+    The condition on ALL of that is `manifests_rollout: ''`, written literally in the role's
+    tasks. A role that does not write it returns False at the top and is never judged here —
+    including a role that renders no workload at all, which is the part this docstring used to
+    overstate. It claimed a role rendering nothing is "still an offender"; that holds only when
+    the role ALSO sets `manifests_rollout: ''`. `n8n-images` is the counterexample: it renders
+    no Deployment and no batch template, and it is not an offender, because it never includes
+    `k8s/manifests` and so never passes a `manifests_rollout` for `_sets_empty_rollout` to find.
+
+    So the true statement is narrower, in two parts:
+
+    - A role that never calls `k8s/manifests` is outside this guard entirely. Its workloads, if
+      any, reach the cluster some other way, and whatever gates them is not
+      `manifests_rollout`. `test_auto_deployable_roles_gate_every_batch_workload_they_render`
+      and `_GATING_SHARED_ROLES` are what cover that shape.
+    - A role that DOES write `manifests_rollout: ''` and renders no workload is an offender.
+      Rendering nothing is not evidence of a gate, only an absence of anything to check, so it
+      stays fail-closed and must declare `k8s_autodeploy: false` instead.
     """
     if not _sets_empty_rollout(role):
         return False
