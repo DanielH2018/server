@@ -476,7 +476,7 @@ def _batch_gated_names(role: Path) -> set[str]:
     for task in _live_tasks(role):
         cmd = _task_command_text(task)
         if cmd:
-            m = _WAIT_JOB_NAMES.search(cmd)
+            m = _WAIT_JOB_NAMES.search(_strip_comments(cmd))
             if m:
                 for token in _JOB_NAME_TOKEN.findall(m.group(1)):
                     if _LITERAL_NAME.match(token):
@@ -577,6 +577,29 @@ def test_commented_out_wait_does_not_count_as_gated(tmp_path: Path) -> None:
     (role / "tasks" / "main.yml").write_text(
         "# disabled: k3s kubectl -n ns wait --for=condition=complete "
         "job/widget-probe --timeout=120s\n"
+    )
+    assert _batch_gated_names(role) == set()
+
+
+def test_a_wait_in_a_trailing_shell_comment_does_not_count_as_gated(
+    tmp_path: Path,
+) -> None:
+    """The W1 shape on the higher-stakes path: `_batch_gated_names`, not the shared-role check.
+
+    A `#` inside a `shell: |` block scalar is literal content to YAML, so the command text a
+    live task hands over can still carry a comment — and a `# TODO: wait
+    --for=condition=complete job/<name>` in it would put that name in the gated set, clearing
+    the very Job it says is not yet gated. The whole-line case above cannot reach here (a
+    commented-out task never parses as a task at all), so this is the shape that needed
+    `_strip_comments` on this path too.
+    """
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(
+        "- name: Apply the probe\n"
+        "  ansible.builtin.shell: |\n"
+        "    k3s kubectl -n ns apply -f /tmp/probe.yaml"
+        "  # TODO: wait --for=condition=complete job/widget-probe --timeout=120s\n"
     )
     assert _batch_gated_names(role) == set()
 
