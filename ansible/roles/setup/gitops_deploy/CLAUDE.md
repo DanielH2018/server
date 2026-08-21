@@ -248,3 +248,72 @@ to drive the GitOps-Alive Uptime-Kuma monitor — no Kuma pushing from the deplo
 service's rendered compose — a role often runs several containers and the bumped image's
 container is usually not the role-named one). Run via the repo pytest hook
 (`uv run pytest ansible/roles/setup/gitops_deploy/files`).
+
+## Traps
+
+### Deploying this role under the shared tree lock self-deadlocks
+Do not wrap `initial_setup.yml --tags gitops_deploy` in
+`flock /var/lock/server-git-tree.lock`. "Run gitops-deploy once" is a handler
+(`handlers/main.yml:11`), notified by five tasks in `tasks/main.yml`, and it invokes the
+deployer, whose systemd ExecStart is `flock -w 180 /var/lock/server-git-tree.lock …`.
+Holding the lock from outside makes the smoke run wait its full 180s, then fail the play.
+
+Observed 2026-08-20 clearing a broad-change park: `PLAY RECAP … changed=2 failed=1`, with
+`gitops_deploy : Run gitops-deploy once` timing at **180.30s** — the flock wait, not a slow
+task. The config had already rendered, so only the smoke run failed. Re-running with no
+outer flock succeeded (`ok=10 changed=0 failed=0`).
+
+Run it unlocked. The deployer takes the lock itself, which is what serializes it against the
+30-minute timer; the outer flock adds nothing and converts serialization into deadlock. This
+is a counter-example to the repo-root `CLAUDE.md` guidance that a deploy should take the tree
+lock, and it applies to any role whose tasks re-enter a lock-taking command.
+
+Because the smoke run is a handler, it fires only when something changed. A no-op run
+(`changed=0`) never invokes the deployer and cannot deadlock however it is wrapped —
+verified 2026-08-20 19:22, `ok=10 changed=0 failed=0` with no smoke-run task in the recap.
+So a missing smoke-run step is evidence that nothing needed re-rendering, not evidence of a
+broken or incomplete run.
+
+Separately, the deployer's broad-change alert says to run the remediation playbook and *then*
+`git merge --ff-only`. That order renders from the pre-merge tree and deploys nothing.
+Fast-forward first, then run the playbook.
+
+### Moving a config source changes which remediation the alert prescribes
+`/etc/gitops-deploy/config.env` is rendered only by
+`initial_setup.yml --tags gitops_deploy`. `deploy.yml` runs no setup role, so a change that
+must reach that file is unapplied by a `deploy.yml` run — while a plain ff-merge clears the
+divergence and every repo-side check reads green. `broad_remediation()`'s docstring names
+this: *"naming deploy.yml there is a silent no-op that leaves the change unapplied"*
+(2026-07-16 review M1).
+
+The remediation the deployer prescribes is decided by the path you edited, not by what the
+edit affects. Slice 1b (PR #290) derived the k8s auto-deploy denylist from each role's
+`k8s_autodeploy` declaration instead of a CSV in this role's defaults — same value, same
+rendered `config.env` line, different edit site:
+
+| edit site | routes to | alert names | re-renders config.env? |
+|---|---|---|---|
+| `roles/setup/gitops_deploy/defaults/main.yml` (old CSV) | `_BROAD_SETUP_PREFIXES` | `initial_setup.yml --tags <role>` | yes |
+| `roles/k8s/<role>/defaults/main.yml` (declaration) | `ChangeSet.k8s` | `deploy.yml --tags <svc>` | **no** |
+
+So denying a role from auto-deploy leaves it auto-deployable on the host, and the alert names
+the command that cannot fix it. It fails on a safety-tightening edit, which is the worst
+direction. Before moving any value that lands in a host config file, check which `_ACTIVE_*`
+regex its new path matches and what `broad_remediation()` says for that plane.
+
+A second instance appeared during slice 2 (PR #292), a different mechanism with the same
+failure. The stale-denylist alert added in slice 1c split on the direction of the set
+difference: `added` (denied at origin, absent from config) → "config is behind, re-render";
+`removed` (in config, not denied at origin) → "config is ahead — `git push` it". That second
+branch assumed one cause and has two. An operator rendering locally before pushing is one.
+The other is a promotion: a role leaving the denylist at origin shrinks the set, producing
+the identical signature while meaning the opposite. Promoting `node-exporter` was the first
+change to trigger it, so the host would disarm auto-deploy fleet-wide and page with
+`git push`, which does nothing; the alert is throttled per origin SHA, so it re-fires on
+every later push while the host stays stale.
+
+A set difference tells you what diverged, never why, so a remediation inferred from its
+direction is a guess. On a pull-based host origin is the source of truth, so the re-render is
+the right lead in both directions and the push case belongs as a secondary check. Fixed in
+`7f5f629b`. The alert-direction logic lives in `gitops_deploy.py`'s `main()`, which no test
+imports — `test_deploy_logic.py` covers only `deploy_logic.py`.

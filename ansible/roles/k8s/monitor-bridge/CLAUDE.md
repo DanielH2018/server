@@ -556,3 +556,39 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   `sudo k3s kubectl -n homelab exec deploy/monitor-bridge -- python /app/check.py --once`
   (the readonly SA plain `kubectl` uses holds no exec verb)
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "monitor-bridge"`
+
+## Traps
+
+### kube-state-metrics sanitizes resource names into labels
+`kubectl describe node` prints `devic.es/dri`. kube-state-metrics emits
+`kube_node_status_allocatable{resource="devic_es_dri"}` — every character outside
+`[a-zA-Z0-9_]` becomes `_`. A query written with the Kubernetes name matches no series, on a
+cluster where both nodes advertise the resource at capacity 4.
+
+A check designed to fail closed on an absent series cannot tell "the resource is
+deregistered" from "I asked the wrong question". Both return an empty vector. The 2026-08-20
+extended-resource arm went DOWN every 5 minutes from 18:05 to 18:29 UTC with
+`extended resource(s) advertised by no node: devic.es/dri — the device plugin is Running but
+its resource is deregistered`, while `kubectl get nodes` showed `"devic.es/dri":"4"` on both
+nodes. Fail-closed is right and is not the bug: it buys a blind check that pages instead of
+going green, and it costs a typo that pages identically to a real fault.
+
+Sanitize the configured name at query time and keep the operator-facing name the one
+`kubectl` prints, so config matches the world and the query matches KSM. Name both forms in
+the fault message — that is what makes the next mismatch diagnosable from the alert alone.
+Before trusting a new metric-backed check, run its exact query against live Prometheus and
+confirm it returns rows; the unit tests mock the payload, so they prove the verdict logic and
+nothing about the selector. Guarded by `ksm_resource_label` in `files/check.py` and its test;
+landed in PR #286 the same day PR #281 introduced it.
+
+### The bracketed log timestamps are Central time, not UTC
+Log lines like `[2026-08-16T07:26:57] DOWN b2_reachable ...` carry the container's local
+America/Chicago wall clock from the `TZ` env, while `kubectl logs --timestamps` prepends the
+true UTC ingestion time. Verified 2026-08-16: bracketed `07:26:57` paired with kubectl's
+`12:26:57Z`. Reading the brackets as UTC shifted a B2 cap-breach 5h early and pointed the
+investigation at the wrong window — a "03:09 breach" that was really 08:09 UTC, minutes after
+the 07:30 weekly reboot.
+
+When building a timeline from monitor-bridge, or from any homelab container that sets
+`TZ=America/Chicago`, pass `--timestamps` to `kubectl logs` and trust the prefix over the
+app's own stamp. Cross-check one line against `date -u` before anchoring an incident timeline.

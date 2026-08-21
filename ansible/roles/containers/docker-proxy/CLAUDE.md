@@ -27,3 +27,35 @@ raw socket. See repo-root `CLAUDE.md` for shared conventions.
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "docker-proxy"`
+
+## Traps
+
+### A dockerd restart permanently breaks docker-proxy
+Restarting `dockerd` replaces `/var/run/docker.sock` with a new inode. A container that
+bind-mounts the socket keeps the old inode, which has no listener, so the proxy fails
+permanently. A plain restart re-mounts nothing, so `autoheal` — which only restarts
+unhealthy containers — is structurally blind to this and the outage persists silently.
+
+Observed 2026-08-07 on daniel-server: all four proxies (`docker-proxy`,
+`docker-proxy-portainer`, `docker-proxy-codeserver`, `docker-proxy-lifecycle`) sat
+`Up 5 days (unhealthy)` for ~1.5 h. haproxy logs flip from `200` to `SH--` (502, server
+hangup) then steadily to `SC--` (503, server connection error) at exactly the socket's new
+mtime.
+
+The decisive one-line test compares the inode on the host and inside the container:
+`stat -c %i /var/run/docker.sock` returned `2834440` vs `1565`.
+
+The blast radius is wide because so much reads the daemon through these proxies. AutoKuma
+stops syncing, so monitors are silently never created — a `push failed … Monitor not found
+or not active` in `check.py --once` is the tell. Kuma's ~40 `docker`-type monitors go blind,
+and promtail's docker_sd stream stops.
+
+If AutoKuma logs `Docker responded with status code 503`, or a newly-added Kuma monitor
+never appears, check the inode pair before reading the proxy's config. Fix each proxy with
+`docker compose -f <dir>/docker-compose.yml up -d --force-recreate` —
+`docker-proxy-portainer` lives in `containers/portainer/`, the other three in
+`containers/docker-proxy/`.
+
+That four-proxy observation predates the 2026-08-14 Docker retirement on daniel-server. On
+daniel-pi, the only remaining Docker host, this role renders `docker-proxy` and
+`docker-proxy-lifecycle` — the mechanism is unchanged, the recreate list is shorter.

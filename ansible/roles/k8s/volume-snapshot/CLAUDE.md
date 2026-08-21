@@ -121,10 +121,11 @@ for the volume to coalesce the data. Two consequences the prune is written aroun
 
 - **`kubectl delete` blocks by default** — measured hanging a drill run for twelve minutes on
   2026-08-21. The delete here always passes `--wait=false`.
-- **The CR persists after a successful delete.** A snapshot whose only child is `volume-head`
-  cannot be folded away while the volume is attached at all; it clears at the next detach.
-  So "the CR is gone" is never the success condition, and a `markRemoved` CR sitting there is
-  the expected state, not a failed prune.
+- **The CR persists after a successful delete, so the name stays taken.** A snapshot whose
+  only child is `volume-head` cannot be folded away while the volume is attached at all; it
+  clears at the next detach. `kubectl delete snapshots.longhorn.io <name>` therefore does not
+  free the name. So "the CR is gone" is never the success condition, and a `markRemoved` CR
+  sitting there is the expected state, not a failed prune.
 
 `markRemoved` snapshots are dropped from the retention window rather than counted in it. Counting
 three dead CRs as the retained three would make the next pass delete live snapshots to make room.
