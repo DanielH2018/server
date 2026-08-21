@@ -18,10 +18,34 @@ it is a second destination for the handful of jobs whose silence actually matter
 | `manifest-prune-check` | `roles/setup/k3s/templates/manifest-prune-check.sh.j2` | 05:15 daily | live routing or workload objects absent from the staged manifests |
 | `pi-peer-backup` | `roles/k8s/pi-peer-backup/files/pull-pi-peers.sh` | 23:30 daily | rsync failed, or fewer than 2 peer files landed |
 | `registry-gc` | `roles/k8s/registry/templates/registry-gc.sh.j2` | 04:20 Sundays (UTC) | GC job exceeded its deadline, the registry pod would not terminate, the job manifest failed to apply, or the registry did not come back afterwards |
+| `uptime-kuma-alive` | `roles/setup/k3s/templates/longhorn-backup-health.sh.j2` | every 10 min | that script's Kuma push returned non-zero — see *Watching the spine itself* below |
 
 Cadences are the host's clock, and daniel-box runs **UTC** — not the `America/Chicago` the
 containers use. A check created in Chicago time drifts 5-6 hours from the cron that feeds it
 and fires false alarms.
+
+## Watching the spine itself
+
+The five job checks above all answer "did this job run and succeed". `uptime-kuma-alive`
+answers a different question: is the thing every alert terminates in still working.
+
+The gap it closes: `longhorn-backup-health` and `daniel-box-disk-health` ping hc-ping.com
+whether or not their Kuma push succeeded, which is right for a backup check and leaves Kuma
+itself uncovered. A dead Kuma pod, a wedged SQLite, or a NetworkPolicy that fences off :3001
+silences every one of the ~82 tiles — there is no Alertmanager, so nothing else pages — while
+all six checks above keep reporting green. A *cluster* outage is caught, because these scripts
+go silent with it. A Kuma-only outage was caught by nothing.
+
+`longhorn-backup-health` carries its Kuma push's exit status to this second slug: success
+pings, failure pings `/fail`. It was chosen over a dedicated cron because it already runs every
+10 minutes and already talks to Kuma — no new unit, no new credential.
+
+Set the check's **period to 10 minutes and its grace to 20**, matching the cron. It is not a
+job check, so `/start` is never sent and the duration column stays empty; that is expected.
+
+What it does not cover: Kuma accepting pushes while failing to *deliver* notifications. The
+`Discord Delivery` tile watches the Discord leg from inside Kuma, and the email tier is the
+second channel. A Kuma that accepts a push and then drops the alert still reads green here.
 
 ## What leaves the house
 
@@ -37,6 +61,7 @@ name internal infrastructure, and one sends no body at all:
 | `manifest-prune-check` | generic | Its message names live IngressRoute/Middleware objects — internal service and hostname fragments. |
 | `pi-peer-backup` | generic | An rsync failure echoes `PI_SRC`, which carries the Pi's LAN IP and ssh user. |
 | `registry-gc` | full message | A blob/link count, or a failure naming the cluster namespace and the `registry` Deployment. Low value to an outsider and it is what makes the failure actionable. |
+| `uptime-kuma-alive` | none | Status only, and status is the whole signal — it reports on Kuma, not on what Kuma found. |
 
 The withheld detail is still in Kuma, on the LAN. The off-site copy only has to carry *that*
 something is wrong; the diagnosis is available as soon as you can reach the house.

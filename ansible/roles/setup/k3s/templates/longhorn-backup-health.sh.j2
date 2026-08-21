@@ -575,12 +575,13 @@ fi
 # how long it lasted. promtail's node-syslog job carries this line into Loki.
 logger -t longhorn-backup-health "status=${STATUS} ${MSG}"
 
+KUMA_PUSH_OK=1
 curl -fsS --max-time 10 -G \
   --resolve "${KUMA_HOST}:443:${KUMA_RESOLVE_IP}" \
   --data-urlencode "status=${STATUS}" \
   --data-urlencode "msg=${PUSH_MSG}" \
   "$PUSH_URL" >/dev/null \
-  || logger -t longhorn-backup-health "push failed (status=${STATUS}: ${PUSH_MSG})"
+  || { KUMA_PUSH_OK=0; logger -t longhorn-backup-health "push failed (status=${STATUS}: ${PUSH_MSG})"; }
 
 # Off-premises dead-man's switch. The push above targets Kuma, which runs ON the cluster this
 # script watches — a cluster or WAN outage kills the push AND the monitor waiting for it, so
@@ -599,4 +600,22 @@ if [[ -n "$HC_PING_KEY" ]]; then
   [[ "$STATUS" == "up" ]] || HC_URL="${HC_URL}/fail"
   curl -fsS --max-time 10 --retry 3 --data-raw "$PUSH_MSG" "$HC_URL" >/dev/null \
     || logger -t longhorn-backup-health "healthchecks ping failed (status=${STATUS})"
+
+  # A SECOND slug, reporting on Kuma itself rather than on backups. The ping above goes out
+  # whether or not the Kuma push above it succeeded, which is correct for a backup check and
+  # leaves one case uncovered: Kuma alone being broken. Every alert in this homelab terminates
+  # in Kuma — there is no Alertmanager — so a dead pod, a wedged SQLite or a fenced-off port
+  # silences all ~82 tiles while every other off-site check keeps reporting green. The cluster
+  # being down is already caught by this script's own silence; Kuma being down was not caught
+  # by anything.
+  #
+  # This carries the Kuma push's exit status off-site, so a Kuma-only outage becomes silence
+  # on hc-ping within one grace period. Chosen here because this script runs every 10 minutes
+  # and already talks to Kuma — no new cron, no new credential, one of the 14 free slots.
+  #
+  # No body: the status IS the signal, and PUSH_MSG belongs to the other check.
+  HC_ALIVE_URL="https://hc-ping.com/${HC_PING_KEY}/uptime-kuma-alive"
+  (( KUMA_PUSH_OK )) || HC_ALIVE_URL="${HC_ALIVE_URL}/fail"
+  curl -fsS --max-time 10 --retry 3 "$HC_ALIVE_URL" >/dev/null \
+    || logger -t longhorn-backup-health "healthchecks kuma-alive ping failed (push_ok=${KUMA_PUSH_OK})"
 fi
