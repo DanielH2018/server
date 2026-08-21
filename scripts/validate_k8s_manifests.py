@@ -11,6 +11,12 @@ already applied and some not.
 Each role's ``container_item`` comes from daniel-box's real ``containers_list`` rather than a
 stub, so the port and hostname a manifest renders with are the ones a deploy would use.
 
+Every parsed object is then validated against the Kubernetes OpenAPI schema for
+``K8S_SCHEMA_VERSION`` (``strict=True``, so an undefined field is an error). That is the check
+``--dry-run`` makes against the live API server, made offline instead: no cluster, on a PR, and
+covering the ~17 roles ``k8s_dry_run_unsupported`` refuses. CRDs have no upstream schema and are
+reported as skipped rather than passed.
+
 Structural check only: secrets are stubbed (StubUndefined), so no SOPS access is needed. Run
 directly or via the ``validate-k8s-manifests`` prek hook. Exits non-zero on any render failure
 or invalid YAML.
@@ -27,9 +33,11 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import sys
 from pathlib import Path
 
+import kubernetes_validate
 import yaml
 
 from _render_guard import (
@@ -339,6 +347,76 @@ def make_lookup(ctx: dict):
     return lookup
 
 
+# Schema version the rendered manifests are validated against. Must track the cluster: a
+# manifest is judged by the API server it will actually be applied to, and validating a 1.37
+# field against 1.36 schemas reports a perfectly good manifest as invalid (and vice versa —
+# a removed field passes). test_schema_version_matches_k3s in
+# scripts/test_validate_k8s_manifests.py ties this to k3s_version in
+# roles/setup/k3s/defaults/main.yml so a cluster upgrade cannot leave it behind silently.
+K8S_SCHEMA_VERSION = "1.36"
+
+_OCTAL_LITERAL = re.compile(r"^0o[0-7]+$")
+
+# Returned by schema_error for a kind the upstream OpenAPI spec does not describe — a CRD.
+NO_SCHEMA = object()
+
+
+def normalise_octal(node):
+    """Convert YAML-1.2 octal literals (``0o444``) to the ints kubectl reads them as.
+
+    PyYAML implements YAML **1.1**, where ``0o444`` is not a number and parses as the STRING
+    "0o444"; the parser behind ``kubectl`` reads it as 292. So a manifest that is correct live
+    arrives here with a string in an integer field, and the schema check would report four
+    perfectly good ``defaultMode: 0o444`` volumes as type errors.
+
+    This is not a guess about which parser wins. The live objects were read while writing this:
+    ``scrutiny-web``, ``scrutiny-influxdb`` and ``uptime-kuma`` all carry
+    ``secret.defaultMode: 292`` — 0444 — from exactly those templates.
+
+    (The comment above mosquitto's ``defaultMode: 288`` claims the opposite, that kubectl reads
+    ``0o440`` as a string. The live values disagree with it. Decimal is still the unambiguous
+    spelling and mosquitto is fine as it stands, so nothing is changed there — but do not take
+    that comment as the reason to avoid octal literals.)
+    """
+    if isinstance(node, dict):
+        return {k: normalise_octal(v) for k, v in node.items()}
+    if isinstance(node, list):
+        return [normalise_octal(v) for v in node]
+    if isinstance(node, str) and _OCTAL_LITERAL.match(node):
+        return int(node, 8)
+    return node
+
+
+def schema_error(doc: dict) -> str | None | object:
+    """Validate one rendered object against the Kubernetes schema for K8S_SCHEMA_VERSION.
+
+    Returns None when the object validates, NO_SCHEMA when no schema exists for its
+    apiVersion/kind (every CRD in this fleet — Traefik's IngressRoute/Middleware/TLSOption —
+    since a CRD's schema lives in the cluster, not in the upstream OpenAPI spec), and an error
+    string otherwise.
+
+    ``strict=True`` rejects fields the schema does not define, which is the half that catches
+    typos: a misspelled ``readinessProb`` is silently ignored by the API server, so the
+    Deployment applies clean and the probe simply never runs.
+
+    This is the check ``--dry-run`` performs against the live API server, done offline and
+    without a cluster — so it also covers the ~17 roles k8s_dry_run_unsupported refuses.
+    """
+    try:
+        kubernetes_validate.validate(
+            normalise_octal(doc), K8S_SCHEMA_VERSION, strict=True
+        )
+    except kubernetes_validate.SchemaNotFoundError:
+        return NO_SCHEMA
+    except kubernetes_validate.ValidationError as exc:
+        path = ".".join(str(p) for p in getattr(exc, "path", []) or [])
+        detail = str(exc).split("\n")[0]
+        return f"{path or '<root>'}: {detail}" if path else detail
+    except kubernetes_validate.InvalidSchemaError as exc:
+        return f"schema error: {exc}"
+    return None
+
+
 def check_template(role: str, tpl: Path, ctx: dict) -> tuple[str | None, list]:
     """Render one manifest template. Returns (error, docs) — docs is [] whenever error is set,
     otherwise the manifest's parsed YAML documents (for the PVC claimName cross-reference check
@@ -365,7 +443,18 @@ def main() -> int:
     # group_vars values are resolved against each other first — several reference siblings
     # (k8s_registry_pull_host is "localhost:{{ k8s_registry_port }}"), and a role default that
     # reaches one of those needs it already expanded.
-    base = {**BASE_CONTEXT, **load_yaml(ALL_VARS), "playbook_dir": str(ANSIBLE)}
+    # daniel-box's host_vars are layered over group_vars, which is Ansible's own precedence.
+    # containers_list was already read from this file (k8s_entries) so that ports and hostnames
+    # render as a deploy would; the rest of the file has to come with it for the same reason.
+    # Without it a var defined only there renders as STUB — `render_gid: 993` reached
+    # jellyfin's and tdarr's securityContext.supplementalGroups as the string "STUB", which
+    # parses as valid YAML and is caught only by the schema check below.
+    base = {
+        **BASE_CONTEXT,
+        **load_yaml(ALL_VARS),
+        **load_yaml(HOST_VARS),
+        "playbook_dir": str(ANSIBLE),
+    }
     base = resolve_vars(base, base)
     entries = k8s_entries()
 
@@ -454,6 +543,40 @@ def main() -> int:
             "not fail the build. A brand-new service naming a PVC that doesn't exist yet would "
             "show up here.",
             file=sys.stderr,
+        )
+
+    # Schema validation, over the objects the loop already parsed. A hard failure, not a
+    # warning: an error here is exactly what `kubectl apply --dry-run=server` would reject, so
+    # letting it through would put a manifest on the cluster that the API server refuses
+    # partway through an apply — some objects applied, some not.
+    schema_failures = 0
+    skipped_kinds: dict[str, int] = {}
+    for rel, docs in parsed_templates:
+        for doc in docs:
+            if not isinstance(doc, dict) or "kind" not in doc:
+                continue
+            err = schema_error(doc)
+            if err is NO_SCHEMA:
+                kind = f"{doc.get('apiVersion')}/{doc.get('kind')}"
+                skipped_kinds[kind] = skipped_kinds.get(kind, 0) + 1
+            elif err:
+                schema_failures += 1
+                print(
+                    f"  [FAIL] {rel}: {doc.get('kind')} fails the "
+                    f"v{K8S_SCHEMA_VERSION} schema — {err}",
+                    file=sys.stderr,
+                )
+    failures += schema_failures
+
+    # Printed rather than silent: an unschema'd kind is unvalidated, and the only honest way to
+    # report coverage is to name what was not covered. A CRD count that jumps means a new
+    # custom resource arrived with nothing checking its shape.
+    if skipped_kinds:
+        total = sum(skipped_kinds.values())
+        detail = ", ".join(f"{k} x{v}" for k, v in sorted(skipped_kinds.items()))
+        print(
+            f"\n{total} object(s) had no v{K8S_SCHEMA_VERSION} schema and were NOT "
+            f"schema-checked: {detail}"
         )
 
     print(f"\n{checked} k8s manifest template(s) checked, {failures} failure(s).")
