@@ -165,7 +165,8 @@ changed the workload.
 |---|---|
 | a claim is missing or still `Pending` | **fails** — named by claim, before anything is applied |
 | `git rev-parse` returns nothing | **fails** — an undated name is one 7b cannot find |
-| the volume is detached (not `attached`) when the snapshot never reports `readyToUse` | **skips this claim and warns loudly** — see below |
+| the volume is detached and the maintenance-mode attach also fails | **skips this claim and warns loudly** — see below |
+| the volume is detached, the maintenance-mode attach succeeds, but the retaken snapshot never reports `readyToUse` | **fails** — this is now an attached, stuck engine, the same as the row below |
 | the snapshot never reports `readyToUse` for any other reason (attached and stuck) | **fails** — this is the recovery point the deploy is about to need |
 | the snapshot listing does not contain this run's own snapshot | **fails** — the read is broken, so the prune would be deleting from a set it cannot see |
 | a delete in the prune returns non-zero | **fails** — see below |
@@ -196,35 +197,43 @@ manual deploy of an already-up-to-date service still creates a real Snapshot CR 
 prune against it, not a skipped no-op. Running a full manual deploy twice in one day churns the
 snapshot chain of all 13 protected volumes. Not worth gating on.
 
-## A detached volume cannot be snapshotted at all, and that is not fatal
+## A detached volume gets a maintenance-mode attach before it gets skipped
 
 A Longhorn snapshot needs a running engine, and a workload scaled to zero has none. Two records
 of the same constraint: `longhorn-reap-orphan-snapshots.sh.j2` refuses to reap on a detached
 volume ("no engine to purge it", observed on `terraria-config` on 2026-08-16), and the slice 7
 drill got a `500` reverting a plainly detached volume for the same reason.
 
-**Ruling from slice 7a task 2: this skips the claim and warns, rather than failing the deploy.**
-Two realistic ways a `Recreate` + RWO volume is detached at snapshot time, and failing the deploy
-would block a legitimate action in both:
+**Ruling from slice 7a task 2: a detached claim does not fail the deploy.** Two realistic ways a
+`Recreate` + RWO volume is detached at snapshot time, and failing the deploy would block a
+legitimate action in both: an operator deliberately scaled the service to zero, or this is the
+service's first-ever deploy (all 13 roles run `k8s/seed-volume` first, which deletes its seed pod
+with `--wait=false`, and no Deployment has ever attached the volume yet — so a brand-new empty
+volume is legitimately detached).
 
-- **An operator deliberately scaled the service to zero.** Failing the deploy would block a
-  legitimate action for a service that is already down.
-- **This is the service's first-ever deploy.** All 13 roles run `k8s/seed-volume` first, which
-  deletes its seed pod with `--wait=false`, and no Deployment has ever attached the volume yet —
-  so a brand-new empty volume is legitimately detached, and the loud unprotected warning fires on
-  the deploy where an operator is least likely to expect it. This is not a false alarm to be
-  dismissed; it is the expected shape of a first deploy.
+**Slice 7b closes the gap 7a left open.** After the first wait times out, `claim.yml` reads the
+volume's own `status.state`; when it is not `attached`, the claim reuses `k8s/longhorn-api` and
+the maintenance-mode attach `k8s/volume-revert` proved (`POST ?action=attach
+{hostId, disableFrontend: true}`, wait for `attached` with the frontend disabled) to attach the
+volume long enough to retake the same-named snapshot, then detaches it again regardless of
+whether the retake succeeded. **Both of 7a's cases — the deliberate scale-to-zero and the
+service's first deploy — now get a real snapshot through this attach**, not the warning. Any
+other unready cause on the FIRST attempt (a same-second name collision on a `markRemoved` CR, or
+a stuck engine on a volume that *is* attached) still fails the deploy, unchanged from 7a.
 
-After the wait times out, `claim.yml` reads the volume's own `status.state` and skips only when
-it is not `attached`; any other unready cause (a same-second name collision on a `markRemoved`
-CR, or a stuck engine on a volume that *is* attached) still fails the deploy.
+**The warning survives, narrowed to one case: the maintenance-mode attach itself fails.** No
+longhorn-manager reachable on this node, or the attach/wait sequence timing out, both fall
+through to `ansible_debug` rather than failing the deploy — a detached volume is still not itself
+an error, and this attempt is best-effort on top of 7a's ruling. If the attach succeeds but the
+retaken snapshot still never becomes ready, that is no longer read as the detached case at all:
+it folds into the ordinary "attached and stuck" row above and fails the deploy, because by then
+the volume genuinely is attached.
 
-The gap this leaves is real and stays visible on purpose: the apply that follows may scale the
-workload back up, the new pod can migrate the on-disk format, and there is then no recovery point
-behind it. The skip task's `ansible.builtin.debug` warning names the service, the claim, and that
-the deploy is proceeding unprotected — a silent skip would defeat the point of the slice. Slice 7b
-closes the gap for real: it builds maintenance-mode attach for the revert anyway, and the same
-machinery can attach a detached volume long enough to snapshot it first.
+The gap that remains is narrower than 7a's, but still real and still visible on purpose: if the
+attach itself fails, the apply that follows may scale the workload back up, the new pod can
+migrate the on-disk format, and there is then no recovery point behind it. The warning names the
+service, the claim, and that the deploy is proceeding unprotected — a silent skip would defeat
+the point of the slice.
 
 ## The guard is `k8s_no_mutate`, and neither `--check` nor `--dry-run` exercises this role at all
 

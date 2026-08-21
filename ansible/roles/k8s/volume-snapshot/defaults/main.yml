@@ -19,6 +19,14 @@ volume_snapshot_retain: 3
 # CLAUDE.md ("A detached volume cannot be snapshotted at all, and that is not fatal").
 volume_snapshot_timeout: 120
 
+# The maintenance-mode attach 7b uses to snapshot a detached volume. Same values as
+# k8s/volume-revert's volume_revert_state_timeout/poll_interval/api_timeout — the drill that
+# measured them (a full detach+attach cycle under two minutes on a 1Gi volume) applies equally
+# here, because it is the same Longhorn operation against the same class of volume.
+volume_snapshot_state_timeout: 180
+volume_snapshot_poll_interval: 2
+volume_snapshot_api_timeout: 60
+
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # This role deploys no workload of its own: it is a pre-apply step other roles include, it
 # renders no manifest for `rollout status` to gate, and it pins no `_image:` var for Renovate

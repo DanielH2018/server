@@ -182,21 +182,232 @@
          and (volume_snapshot_ready.stdout | default('') | split('|') | last) != 'true'
          and (volume_snapshot_volume_state.stdout | default('') | trim) != 'attached' }}
 
-# Ruling from slice 7a task 2: a detached volume SKIPS its snapshot and warns, rather than
-# failing the deploy. Two realistic ways a `Recreate` + RWO volume is detached at snapshot time,
-# and failing the deploy would block a legitimate action in both: an operator deliberately
-# scaled the service to zero, or this is the service's FIRST deploy — all 13 roles run
-# k8s/seed-volume first, which leaves the volume detached (no Deployment has ever attached it
-# yet). A brand-new empty volume prints this same loud warning, and that is expected, not a
-# false alarm to be dismissed.
+# --------------------------------------------------- the maintenance-mode attach (slice 7b)
+#
+# 7a stopped here and warned: a detached volume has no running engine, so the snapshot above
+# could not complete. 7b reuses k8s/longhorn-api and the maintenance-mode attach k8s/volume-revert
+# proved (attach with disableFrontend, wait, act, detach) to attach the volume long enough to take
+# the snapshot, then leaves it exactly as it found it.
+#
+# Every task below runs only for THIS claim's detached case, and every one carries BOTH guards:
+# k8s_no_mutate (nothing here may run under --check/--dry-run) and volume_snapshot_detached
+# (nothing here may run for a claim whose snapshot already succeeded above).
+#
+# ANY failure in this sequence — no longhorn-manager on this node, the attach never reaching
+# `attached` with `disableFrontend: true`, the retaken snapshot never becoming usable — falls
+# through to the warn-and-skip task below rather than failing the deploy: a detached volume is
+# not itself an error (see the two legitimate cases in CLAUDE.md), and this attempt is
+# best-effort on top of that ruling. `ignore_errors` and `failed_when: false` are what make a
+# failure inside this block non-fatal; the "Fold" task at the end reads what happened and
+# decides whether the claim is still the detached case.
+- name: Resolve the node-local Longhorn API to attach {{ volume_snapshot_claim }} # noqa ignore-errors
+  tags: [deploy]
+  when:
+    - not (k8s_no_mutate | bool)
+    - volume_snapshot_detached | bool
+  ansible.builtin.include_role:
+    name: k8s/longhorn-api
+    tasks_from: resolve.yml
+  ignore_errors: true
+
+- name: Attach the volume in maintenance mode for {{ volume_snapshot_claim }}
+  tags: [deploy]
+  when:
+    - not (k8s_no_mutate | bool)
+    - volume_snapshot_detached | bool
+    - longhorn_api is defined
+  # `disableFrontend: true` IS maintenance mode — the only attach a snapshot on a volume with
+  # no other engine can use. No `attachmentID`: the detach below omits it too, and both then key
+  # the ticket "" — see k8s/volume-revert's CLAUDE.md for the manager.Attach/Detach behaviour
+  # this depends on.
+  ansible.builtin.uri:
+    url: "{{ longhorn_api }}/v1/volumes/{{ volume_snapshot_volume }}?action=attach"
+    method: POST
+    body_format: json
+    body:
+      hostId: "{{ longhorn_api_node }}"
+      disableFrontend: true
+    status_code: 200
+    timeout: "{{ volume_snapshot_api_timeout }}"
+  register: volume_snapshot_maint_attach
+  failed_when: false
+
+- name: Wait for the maintenance-mode attach for {{ volume_snapshot_claim }}
+  tags: [deploy]
+  when:
+    - not (k8s_no_mutate | bool)
+    - volume_snapshot_detached | bool
+    - longhorn_api is defined
+    - (volume_snapshot_maint_attach.status | default(0) | int) == 200
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - longhorn-system
+      - get
+      - volumes.longhorn.io
+      - "{{ volume_snapshot_volume }}"
+      - -o
+      - 'jsonpath={.status.state}{"|"}{.spec.disableFrontend}'
+  become: true
+  changed_when: false
+  register: volume_snapshot_maint_wait
+  until:
+    - volume_snapshot_maint_wait.stdout | default('') | split('|') | first == 'attached'
+    - volume_snapshot_maint_wait.stdout | default('') | split('|') | last == 'true'
+  retries: "{{ (volume_snapshot_state_timeout | int / volume_snapshot_poll_interval | int) | round | int }}"
+  delay: "{{ volume_snapshot_poll_interval }}"
+  failed_when: false
+
+# Computed unconditionally whenever this claim started detached — never a stale value from an
+# earlier claim's attempt, the same invariant the original "Decide whether ... detached-volume
+# case" task above documents. Read with `default({})` on both registers: either can be entirely
+# unset if the API never resolved or the attach never returned 200, and that must read as
+# failure rather than raise on the missing var.
+- name: Decide whether the maintenance-mode attach succeeded for {{ volume_snapshot_claim }}
+  tags: [deploy]
+  when:
+    - not (k8s_no_mutate | bool)
+    - volume_snapshot_detached | bool
+  ansible.builtin.set_fact:
+    volume_snapshot_maintenance_attached: >-
+      {{ ((volume_snapshot_maint_attach | default({})).status | default(0) | int) == 200
+         and ((volume_snapshot_maint_wait | default({})).stdout | default('') | split('|') | first) == 'attached'
+         and ((volume_snapshot_maint_wait | default({})).stdout | default('') | split('|') | last) == 'true' }}
+
+# Same name, same CR as the first attempt above (`volume_snapshot_name`) — the prune's "found
+# this run's own snapshot" assert and the wait below both key on it, and a different name would
+# make the prune fail and strand this run's snapshot outside its own retention window.
+- name: Retake the pre-deploy snapshot now the volume is attached for {{ volume_snapshot_claim }}
+  tags: [deploy]
+  when:
+    - not (k8s_no_mutate | bool)
+    - volume_snapshot_detached | bool
+    - volume_snapshot_maintenance_attached | bool
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - apply
+      - -f
+      - "-"
+    stdin: |
+      apiVersion: longhorn.io/v1beta2
+      kind: Snapshot
+      metadata:
+        name: {{ volume_snapshot_name }}
+        namespace: longhorn-system
+      spec:
+        volume: {{ volume_snapshot_volume }}
+        createSnapshot: true
+  become: true
+  register: volume_snapshot_apply
+  changed_when: "'created' in volume_snapshot_apply.stdout or 'configured' in volume_snapshot_apply.stdout"
+
+# Reuses `volume_snapshot_ready` — the same register the first attempt's wait used — so the
+# existing "Fail on a snapshot that never became usable" task and the prune block below, both
+# written before 7b, keep working unmodified against whichever attempt actually produced a
+# result. `failed_when: false`: an engine that attached but still can't snapshot in time must
+# fall through to the existing fail task below (which now fires, because the Fold task clears
+# `volume_snapshot_detached` whenever the attach itself succeeded), not abort here with no
+# detach performed.
+- name: Wait for the retaken snapshot to become usable for {{ volume_snapshot_claim }}
+  tags: [deploy]
+  when:
+    - not (k8s_no_mutate | bool)
+    - volume_snapshot_detached | bool
+    - volume_snapshot_maintenance_attached | bool
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - longhorn-system
+      - get
+      - snapshots.longhorn.io
+      - "{{ volume_snapshot_name }}"
+      - -o
+      - 'jsonpath={.status.readyToUse}{"|"}{.status.markRemoved}'
+  become: true
+  changed_when: false
+  register: volume_snapshot_ready
+  until: volume_snapshot_ready.stdout | default('') | split('|') | first == 'true'
+  retries: "{{ (volume_snapshot_timeout | int / 5) | round | int }}"
+  delay: 5
+  failed_when: false
+
+# Guarded on the attach outcome ALONE, never on whether the retaken snapshot became ready. A
+# snapshot that stays stuck after a successful attach must not leave the volume attached in
+# maintenance mode — k8s/volume-revert's CLAUDE.md records that a stale attachment ticket costs
+# the NEXT deploy a 180s wait and then a failure naming the wrong cause.
+- name: Detach the volume after the maintenance-mode snapshot attempt for {{ volume_snapshot_claim }}
+  tags: [deploy]
+  when:
+    - not (k8s_no_mutate | bool)
+    - volume_snapshot_detached | bool
+    - volume_snapshot_maintenance_attached | bool
+  ansible.builtin.uri:
+    url: "{{ longhorn_api }}/v1/volumes/{{ volume_snapshot_volume }}?action=detach"
+    method: POST
+    body_format: json
+    body: {}
+    status_code: 200
+    timeout: "{{ volume_snapshot_api_timeout }}"
+
+# The only proof that a 200 detach actually detached — never suppressed, matching
+# k8s/volume-revert's own final wait.
+- name: Wait for the detach after the maintenance-mode snapshot attempt for {{ volume_snapshot_claim }}
+  tags: [deploy]
+  when:
+    - not (k8s_no_mutate | bool)
+    - volume_snapshot_detached | bool
+    - volume_snapshot_maintenance_attached | bool
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - longhorn-system
+      - get
+      - volumes.longhorn.io
+      - "{{ volume_snapshot_volume }}"
+      - -o
+      - 'jsonpath={.status.state}'
+  become: true
+  changed_when: false
+  register: volume_snapshot_maint_detach_wait
+  until: volume_snapshot_maint_detach_wait.stdout | default('') | trim == 'detached'
+  retries: "{{ (volume_snapshot_state_timeout | int / volume_snapshot_poll_interval | int) | round | int }}"
+  delay: "{{ volume_snapshot_poll_interval }}"
+
+# The one place `volume_snapshot_detached` changes meaning: from here down it means "still
+# unprotected", not "was plainly detached". A successful maintenance attach clears it — whether
+# or not the retake above actually became ready — so the existing fail task below can catch a
+# genuinely stuck engine post-attach, and the existing prune block can run once there is a real
+# snapshot. `default(false)` fails closed: a claim that somehow reaches here with no recorded
+# outcome stays counted as unprotected rather than silently clearing the flag it never earned.
+- name: Fold the maintenance-mode attempt back into the detached-volume decision for {{ volume_snapshot_claim }}
+  tags: [deploy]
+  when:
+    - not (k8s_no_mutate | bool)
+    - volume_snapshot_detached | bool
+  ansible.builtin.set_fact:
+    volume_snapshot_detached: "{{ not (volume_snapshot_maintenance_attached | default(false) | bool) }}"
+
+# Ruling from slice 7a task 2, narrowed by 7b: a detached volume no longer skips outright — the
+# maintenance-mode attach above is tried first, and only when THAT fails does this fire. Two
+# realistic ways the attach itself fails, and failing the deploy over either would block a
+# legitimate action: no longhorn-manager pod on this node, or the attach/wait/retake sequence
+# timing out. An operator's own workload scaled to zero, and a brand-new service's first deploy
+# (k8s/seed-volume leaves the volume detached, no Deployment has ever attached it), both now GET
+# a real snapshot through the attach above rather than reaching this warning — see CLAUDE.md.
 #
 # The gap this leaves is real and must stay visible rather than glossed: the apply below may
 # set replicas back above zero, the pod starts, and it can migrate the on-disk format with no
 # recovery point behind it. A silent skip would defeat the point of the slice, so this warns by
 # name — service, claim, and the fact that the deploy proceeds unprotected — rather than only
-# in a debug log nobody reads. Slice 7b closes the gap for real: it builds maintenance-mode
-# attach for the revert anyway, and the same machinery can attach a detached volume long enough
-# to snapshot it. Pulling that forward here is the whole reason the slice was split.
+# in a debug log nobody reads.
 - name: Warn and skip the snapshot for a detached volume backing {{ volume_snapshot_claim }}
   tags: [deploy]
   when:
@@ -207,13 +418,14 @@
       WARNING: {{ volume_snapshot_service }}'s claim {{ volume_snapshot_claim }} (Longhorn
       volume {{ volume_snapshot_volume }}) is not attached
       (status.state='{{ volume_snapshot_volume_state.stdout | default('') | trim or 'unknown' }}'),
-      so Longhorn has no running engine to snapshot it. Skipping the pre-deploy snapshot for
-      this claim and continuing the deploy — THIS DEPLOY IS UNPROTECTED for
-      {{ volume_snapshot_claim }}: if the apply scales {{ volume_snapshot_service }} back up and
-      the new pod migrates its on-disk format, there is no recovery point to revert to. Expected
-      on this service's FIRST deploy, before any Deployment exists (k8s/seed-volume leaves the
-      volume detached), and equally expected when an operator deliberately scaled the workload
-      to zero; if neither is the case, investigate before trusting a revert of
+      and the maintenance-mode attach that would have let Longhorn snapshot it anyway also
+      failed. Skipping the pre-deploy snapshot for this claim and continuing the deploy — THIS
+      DEPLOY IS UNPROTECTED for {{ volume_snapshot_claim }}: if the apply scales
+      {{ volume_snapshot_service }} back up and the new pod migrates its on-disk format, there is
+      no recovery point to revert to. A first deploy and a deliberate scale-to-zero both take a
+      real snapshot through the maintenance-mode attach now — reaching this warning means that
+      attach itself failed (no longhorn-manager reachable on this node, or it never reached
+      attached state in time); investigate before trusting a revert of
       {{ volume_snapshot_claim }}.
 
 - name: Fail on a snapshot that never became usable for {{ volume_snapshot_claim }}
