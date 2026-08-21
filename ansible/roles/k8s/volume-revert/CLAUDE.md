@@ -149,6 +149,60 @@ internally instead. This role does the same: every mutating task and every wait 
 Guarding on either half alone is the bug that guard exists to prevent. `ansible/tests/test_volume_revert.py`
 pins the whole census of mutating tasks against it.
 
+## Measured cycle time (task-6 drill, 2026-08-21)
+
+The drill ran this role against `speedtest` / `speedtest-config` — 1Gi RWO on
+`longhorn-nobackup`, ~382 MB in the snapshot chain — on daniel-box, Longhorn v1.12.1. Marker
+files proved the data moved: a marker written before the snapshot survived, a marker written
+after it was gone. Per-phase numbers come from the `profile_tasks` callback.
+
+| Phase | Task | Measured |
+|---|---|---|
+| scale-down | Scale the Deployment to zero replicas | 0.29s |
+| wait-for-detach | Wait for the detach that precedes the attach | **36.27s** |
+| maintenance attach | Attach the volume in maintenance mode (POST) | 0.41s |
+| wait-for-attach | Wait for the maintenance-mode attach | 2.53s |
+| the revert itself | Revert the volume to the pre-deploy snapshot (POST) | 0.24s |
+| detach | Detach the volume (POST) | 0.34s |
+| wait-for-detach | Wait for the detach after the revert | 2.53s |
+| | **whole role, one claim** | **42.6s** |
+
+The rollout back up — which this role never performs, see above — took **32.46s** separately.
+
+**The dominant term is the pod's termination grace period, not the data.** `speedtest`,
+`home-assistant` and `tdarr` all set `terminationGracePeriodSeconds: 30`, which accounts for
+roughly 30 of that 36.27s; the Longhorn detach itself is the remaining ~6s. A second,
+independent measurement of the same transition (scaling to zero outside this role) gave
+**34.04s**, consistent. So the cycle cost is close to fixed per claim, and what varies with the
+volume is only the few seconds Longhorn spends coalescing the delta written since the snapshot.
+
+**This measurement is on a 1Gi volume and is not the worst case.** The largest volume slice 7's
+promotion actually covers is `home-assistant-config` at 4Gi; `code-server`'s 10Gi stays blocked
+on an immutable image tag. The media-adjacent volumes — `jellyfin-config`, the *-arr configs,
+`tdarr-server` — are **unmeasured**, and nothing here should be read as covering them. The
+grace-period finding is what makes 4Gi a reasonable extrapolation rather than a guess, but it
+is still an extrapolation.
+
+### What the numbers say about the defaults
+
+Worst case per claim is `3 x volume_revert_state_timeout + 3 x volume_revert_api_timeout`,
+because the role makes three state waits and three API calls. At the shipped 180/60 that is
+**720s per claim, 1440s for a two-claim service** — and `tdarr` has two claims and is inside
+slice 7's promotion set, so this is not hypothetical. `K8S_DEPLOY_TIMEOUT_S` is 900s.
+
+Against the measurements: the worst state wait observed was 36.27s and the worst API call
+0.41s. Recommended, with the headroom each keeps:
+
+- `volume_revert_state_timeout: 180 -> 90` — 2.5x the worst observed wait, and still 3x the
+  fixed 30s grace period that dominates it.
+- `volume_revert_api_timeout: 60 -> 30` — ~70x the worst observed call. These three calls
+  update CRs and return; they do not wait for the state change.
+
+That puts one claim at 360s and `tdarr` at 720s, inside the 900s budget — but only just, and
+the rollback redeploy still has to snapshot, apply and roll out inside what is left. Sizing the
+rollback's own budget is task 4's call, not this file's; these two numbers are the input it was
+waiting for.
+
 ## Things measured rather than assumed
 
 - The Longhorn API answers only from the **node-local** manager pod: the longhorn-manager
@@ -170,7 +224,14 @@ pins the whole census of mutating tasks against it.
 ## What is not covered by tests
 
 `kubectl` in a Claude session authenticates as a read-only ServiceAccount and `sudo` is denied,
-so **nothing in this repo's test suite has ever run this sequence**. The tests pin the order,
-the guards, the request bodies and the snapshot selection. Whether the Longhorn API performs the
-revert is proven only by the 2026-08-21 drill and by task 6 of this slice, which exercises the
-role against a real volume through Ansible.
+so **no test in this repo drives this sequence against a real Longhorn volume**. The tests pin
+the order, the guards, the request bodies and the snapshot selection. That the Longhorn API
+performs the revert is proven by the task-6 drill of 2026-08-21, which ran this role through
+Ansible against `speedtest-config` and verified the outcome with marker files.
+
+That drill also found what source-text tests structurally cannot. The role's input guard wrote
+its SHA check as a bare `regex_search`, which returns the matched STRING; ansible-core 2.21
+refuses a non-boolean conditional, so **the assert aborted on every invocation, with a valid
+SHA, before the role did anything** — the rollback path could never have run. Every test of that
+guard read its source text and passed throughout. `ansible/tests/test_volume_revert_input_guard.py`
+now runs the guard instead, and is the test that would have caught it.

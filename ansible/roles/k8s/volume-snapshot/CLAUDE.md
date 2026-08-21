@@ -202,6 +202,11 @@ snapshot chain of all 13 protected volumes. Not worth gating on.
 
 ## A detached volume gets a maintenance-mode attach before it gets skipped
 
+> **The task-6 drill of 2026-08-21 did not reach this path, and could not.** Read the section
+> "The maintenance-mode attach is not reachable through a deploy" below before relying on
+> anything in this one. The reasoning below is preserved because it is what the code implements;
+> it is not a description of observed behaviour.
+
 A Longhorn snapshot needs a running engine, and a workload scaled to zero has none. Two records
 of the same constraint: `longhorn-reap-orphan-snapshots.sh.j2` refuses to reap on a detached
 volume ("no engine to purge it", observed on `terraria-config` on 2026-08-16), and the slice 7
@@ -237,6 +242,44 @@ attach itself fails, the apply that follows may scale the workload back up, the 
 migrate the on-disk format, and there is then no recovery point behind it. The warning names the
 service, the claim, and that the deploy is proceeding unprotected — a silent skip would defeat
 the point of the slice.
+
+## The maintenance-mode attach is not reachable through a deploy
+
+Measured by the task-6 drill, 2026-08-21, on `speedtest` / `speedtest-config` (1Gi,
+`longhorn-nobackup`, Longhorn v1.12.1). Two independent reasons, either of which alone is
+enough:
+
+**1. `k8s/seed-volume` attaches the volume first.** All 13 roles that declare
+`k8s_autodeploy_snapshot_pvcs` also include `k8s/seed-volume`, which runs before `k8s/manifests`
+and therefore before this role. It starts a seed pod that MOUNTS the claim, and mounting attaches
+the Longhorn volume. The drill scaled `speedtest` to zero, confirmed the volume reached
+`detached`, then ran a real deploy — and this role still took the ordinary attached path,
+because the seed pod had attached the volume 11s earlier. So on the deploy path this role
+actually runs on, the volume is never detached when it looks.
+
+**2. Longhorn snapshotted the detached volume anyway.** Invoked directly against a genuinely
+detached volume — the same include `k8s/manifests` makes, only without seed-volume ahead of it —
+the ordinary `apply` + wait path SUCCEEDED in 10.8s. `volume_snapshot_detached` came out
+`false`, so the maintenance-mode attach never fired. The resulting Snapshot CR is a real
+recovery point, not an empty marker: `size=10436608`, `children={"volume-head":true}`, no error,
+and it survived the volume's later re-attach still `readyToUse` and correctly positioned in the
+chain.
+
+So the premise this section's code rests on — "a Longhorn snapshot needs a running engine, and a
+workload scaled to zero has none" — does not hold for a volume that is detached but still has
+healthy replicas. It may well hold for a volume that has NEVER been attached, which is a
+genuinely different state and one the drill did not test; the `terraria-config` reap observation
+and slice 7a's `500` on a revert are both about operations other than snapshot creation, so
+neither is evidence about this one.
+
+**What this means for the code.** The maintenance-attach block, its `longhorn-api` include, its
+detach and both of their state waits are dead on this Longhorn version and this deploy path. The
+"THIS DEPLOY IS UNPROTECTED" warning below it is correspondingly unreachable. That is a
+correctness question for a later task, not something the drill changed: removing the block would
+be a behaviour change made on one volume's evidence, and it is cheap insurance if a
+never-attached volume does still fail. What must not happen is anyone reading this role and
+believing the path is exercised — it is not, and until the drill ran, none of it had ever
+executed.
 
 ## The guard is `k8s_no_mutate`, and neither `--check` nor `--dry-run` exercises this role at all
 
@@ -286,6 +329,16 @@ one, never by assuming the match is unique.
 
 ## Things measured rather than assumed
 
+- **A skipped task still sets the variable it registers to** — to a result carrying
+  `skipped: true` and no `stdout` at all. Two tasks here may not share a register name unless
+  both always run. The retake wait shared `volume_snapshot_ready` with the first wait, and on
+  the ordinary attached path — where the retake is skipped — it erased the first wait's real
+  reading, so the deploy failed on a snapshot that was healthy and `readyToUse`. Measured
+  2026-08-21 on `speedtest-config`; the tasks below the retake now read the
+  `volume_snapshot_ready_out` fact, which folds the two waits by the path actually taken.
+  `test_skipped_retake_wait_keeps_first_read` runs the role and pins it. Note that only a
+  behavioural test can: this bug lives in when Ansible assigns a register, not in any
+  expression's text, and a source-text test asserted the broken design and passed.
 - `kubectl`'s jsonpath has **no `&&`** — `unrecognized character in action: U+0026`, verified
   2026-08-21. The snapshot listing therefore filters on `spec.volume` alone and does the rest in
   Jinja. Do not "simplify" it into a compound filter expression.
