@@ -1,0 +1,16 @@
+---
+# A bare `include_role: { name: k8s/longhorn-api }` runs THIS file, and this role's only real
+# task file is `tasks/resolve.yml` — every caller must include it explicitly with
+# `tasks_from: resolve.yml`. This role applies nothing through roles/k8s/manifests; it only
+# reads a pod IP and sets two facts. So a caller that forgets `tasks_from` has no manifest apply
+# to fall back to either — without this file, that mistake ran nothing at all, and
+# `longhorn_api` / `longhorn_api_node` came back undefined with no error until something
+# downstream templated a broken URL from them. Fail loudly here instead, naming the fix,
+# matching `cronjob-gate` and `volume-snapshot`, which both carry a `tasks/main.yml` of their
+# own.
+- name: Refuse a bare include of k8s/longhorn-api
+  tags: [deploy]
+  ansible.builtin.fail:
+    msg: >-
+      k8s/longhorn-api has no default entry point. Include it with
+      `tasks_from: resolve.yml` to get the `longhorn_api` / `longhorn_api_node` facts.
