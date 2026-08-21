@@ -152,14 +152,27 @@ jobs:
             if [ -z "$entry" ]; then
               echo "note: $img declares neither Entrypoint nor Cmd — nothing to assert"
             else
-              # An absolute path is asserted directly. A bare name is what the runtime would
-              # resolve through PATH, so expand it against the image's own PATH and accept the
-              # first hit. That branch is not an edge case: of 9 real images sampled on
-              # 2026-08-21, three declared a bare name — couchdb's `tini`, python's `python3`,
-              # wg-easy's `docker-entrypoint.sh` — so treating that shape as unassertable would
-              # have left a third of the fleet unchecked.
+              # Three shapes, and they resolve against three different things. Getting this
+              # wrong produces a false failure on a perfectly good image, so each was checked
+              # against real images on 2026-08-21 rather than assumed:
+              #
+              #   /app/entrypoint.sh   absolute — assert as given (authelia, tempo, dozzle)
+              #   tini                 no slash — resolved through PATH at runtime (couchdb,
+              #                        python's `python3`, wg-easy's `docker-entrypoint.sh`)
+              #   ./run.sh             has a slash but is relative — resolved against
+              #                        WorkingDir, NOT PATH (beardedio/terraria)
+              #
+              # Neither of the latter two is an edge case: of the 12 pins swept, three took the
+              # PATH branch and one the WorkingDir branch.
               case "$entry" in
-                /*) candidates="$entry" ;;
+                /*)
+                  candidates="$entry"
+                  ;;
+                */*)
+                  workdir="$(docker inspect -f '{{.Config.WorkingDir}}' "$cid")"
+                  [ -z "$workdir" ] && workdir="/"
+                  candidates="${workdir%/}/${entry#./}"
+                  ;;
                 *)
                   path="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$cid" \
                           | sed -n 's/^PATH=//p' | head -n1)"
