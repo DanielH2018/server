@@ -32,54 +32,20 @@
   ansible.builtin.include_role:
     name: k8s/rollout-drain
 
-# Carried over from the Docker role, which reconciled on every deploy: a config.yml edit that only
-# took effect at the next 04:30 would leave a deploy reporting success while the *arrs still run
-# yesterday's policy. Fixed name, deleted first, so deploys do not accumulate Jobs.
-- name: Remove the previous deploy-time reconcile Job
+# A CronJob has no rollout to wait on, so an image bump would otherwise deploy unobserved: the
+# apply reports success and the first thing to actually run the new image is the 04:30 firing,
+# hours later. Carried over from the Docker role for a second reason too — a config.yml edit
+# that only took effect at the next 04:30 would leave a deploy reporting success while the
+# *arrs still run yesterday's policy.
+#
+# configarr is a convergent reconciler and its CronJob sets concurrencyPolicy: Forbid, which is
+# what makes the extra out-of-band run safe. See ansible/roles/k8s/cronjob-gate/CLAUDE.md.
+- name: Gate the configarr deploy on a one-off run
   tags: [deploy]
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} delete job configarr-deploy
-      --ignore-not-found --wait=true
-  become: true
-  changed_when: false
-
-- name: Reconcile now via a one-off Job
-  tags: [deploy]
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} create job configarr-deploy
-      --from=cronjob/configarr
-  become: true
-  changed_when: true
-
-- name: Wait for the reconcile to finish
-  tags: [deploy]
-  # Polls for EITHER terminal condition rather than `kubectl wait --for=condition=complete`, which
-  # can only name one: with backoffLimit 0 a failed sync settles in seconds but `wait` would sit
-  # there for the full timeout before reporting it.
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} get job configarr-deploy
-      -o jsonpath={.status.conditions[*].type}
-  become: true
-  changed_when: false
-  # NOT under --check, and skipped rather than forced to run: the Job this waits on is created
-  # two tasks above, which check mode skips, so there is nothing to wait for. Reading the
-  # PREVIOUS deploy's Job and calling it "the reconcile finished" would be a lie. Left
-  # unguarded, every dry run burned the whole configarr_k8s_timeout budget (30 attempts, ~5
-  # min) and then FAILED — `failed_when: false` below does not suppress a retry-exhaustion
-  # failure, only a non-zero rc on an attempt that actually ran.
-  when: not ansible_check_mode
-  register: configarr_k8s_job
-  until: >-
-    'Complete' in configarr_k8s_job.stdout or 'Failed' in configarr_k8s_job.stdout
-  retries: "{{ (configarr_k8s_timeout | int / 10) | round | int }}"
-  delay: 10
-  # A sync that hangs to its activeDeadlineSeconds would otherwise exhaust the retries and fail the
-  # play, while one that fails FAST would report DOWN and leave the play green — the same outcome
-  # reached two opposite ways. Paging is the monitor's job in both cases.
-  failed_when: false
+  ansible.builtin.include_role:
+    name: k8s/cronjob-gate
+  vars:
+    cronjob_gate_name: configarr
 
 - name: Install the configarr health reader
   tags: [config]

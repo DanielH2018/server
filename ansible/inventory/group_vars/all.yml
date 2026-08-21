@@ -260,12 +260,15 @@ k8s_no_mutate: "{{ ansible_check_mode or (k8s_dry_run | bool) }}"
 # The refusal keys on `ansible_run_tags`, so it only reaches roles the operator NAMES. That is
 # sound for every role below because none of them is reachable as a dependency — verified by
 # test_k8s_dry_run.py, since the k8s roles carry no meta/main.yml and include one another only
-# by literal name. `seed-volume` and `image-builder` ARE reachable that way (25 and 7 callers),
+# by literal name. `seed-volume`, `image-builder` and `cronjob-gate` ARE reachable that way,
 # which is why they are guarded internally on k8s_no_mutate instead of listed here.
+#
+# `configarr` was listed here until its inline `kubectl create job` moved into k8s/cronjob-gate.
+# It now mutates the cluster only through roles that guard themselves, so dry-run covers it and
+# listing it would refuse a run that is safe.
 k8s_dry_run_unsupported:
   - autofix-bridge
   - claude-otel
-  - configarr
   - crowdsec
   - headlamp
   - loki-homelab

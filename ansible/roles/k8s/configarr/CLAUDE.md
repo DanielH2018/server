@@ -19,8 +19,11 @@ can catch a title that lies — the only pre-grab lever is **release-group reput
   `templates/config/config.yml.j2` and copies `files/configarr_status.py`. Edit configarr
   config HERE; deploy with `--tags configarr` from daniel-box.
 - **No web UI**, no Authelia · targets the cluster sonarr/radarr
-- **One-shot (ephemeral):** a nightly k8s CronJob, plus a `configarr-deploy` Job the deploy
-  creates from it so a config change syncs immediately. No healthcheck / AutoKuma — a batch
+- **One-shot (ephemeral):** a nightly k8s CronJob, plus a `configarr-deploy-gate` Job the
+  deploy creates from it (via `k8s/cronjob-gate`) so a config change syncs immediately. That
+  gate proves the new image RUNS — a container that never starts fails the deploy; a sync that
+  runs and fails is reported and the deploy continues, deliberately, because failing over a
+  transient *arr outage is what the retired wrapper avoided. No healthcheck / AutoKuma — a batch
   job, not a service; its health signal is a daniel-box host cron (`/opt/configarr-health`)
   that reads the last Job's outcome via `configarr_status.py` (still owned + tested here) and
   pushes the "Configarr Sync" Kuma monitor.
@@ -102,7 +105,7 @@ uv run python scripts/probe.py arr sonarr "/api/v3/qualityprofile" --json \
   (Its Docker-era compose wrapper `files/configarr_sync.py` was deleted 2026-08-14, with the
   host residue it wrote to — `/opt/configarr` and `/var/lib/configarr` — removed 2026-08-09.)
 - Deploy (from daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "configarr"` —
-  the k8s role also runs a one-off `configarr-deploy` Job so the edit syncs immediately.
-- Verify a sync: `kubectl -n homelab logs job/configarr-deploy` (or the latest
+  the k8s role also runs a one-off `configarr-deploy-gate` Job so the edit syncs immediately.
+- Verify a sync: `kubectl -n homelab logs job/configarr-deploy-gate` (or the latest
   `configarr-…` CronJob pod) — a healthy run lists the managed CFs and reports no errors.
 - Unit tests: `uv run pytest ansible/roles/k8s/configarr/files`.

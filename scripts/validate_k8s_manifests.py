@@ -76,7 +76,16 @@ HOST_VARS = ANSIBLE / "inventory" / "host_vars" / "daniel-box.yml"
 # rollout-drain is the fourth and renders nothing at all — it is pure tasks, waiting on the
 # rollouts a batch of roles queued into k8s_pending_rollouts. It lives under roles/k8s/ only so
 # that both deploy.yml and configarr can include it by name.
-SKIP_ROLES = {"manifests", "seed-volume", "image-builder", "rollout-drain"}
+# cronjob-gate is the fifth, and renders nothing for the same reason: it creates a one-off Job
+# from the CALLER's CronJob with `kubectl create job --from=cronjob/<name>`, so the pod spec it
+# runs is the caller's rendered manifest, never a template of its own.
+SKIP_ROLES = {
+    "manifests",
+    "seed-volume",
+    "image-builder",
+    "rollout-drain",
+    "cronjob-gate",
+}
 
 
 def k8s_entries() -> dict[str, dict]:

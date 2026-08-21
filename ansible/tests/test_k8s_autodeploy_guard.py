@@ -21,13 +21,24 @@ gate:
   * a role whose gated Deployment(s) declare no `readinessProbe`: `rollout status` then returns
     the moment the pod reports Running, which proves only that the image exists. Checked per
     Deployment, not once per role — a probe on the primary doesn't excuse a probe-less extra;
-  * a role rendering a `kind: Job` or `kind: CronJob` with no role-local
-    `wait --for=condition=complete job/<name>` after the apply: batch workloads are never
-    gated through `manifests_rollout` at all, so nothing above even attempts to wait on them.
-    A role that delegates its only batch workload to a shared role (e.g. image-builder) still
-    passes this guard vacuously — the Job lives in the shared role's own templates, not the
-    caller's, so the caller renders zero batch templates and the guard's empty loop reports it
-    as fine. That is a known limit, not a hole a delegation marker was ever able to close.
+  * a role rendering a `kind: Job` or `kind: CronJob` with no role-local completion gate after
+    the apply: batch workloads are never gated through `manifests_rollout` at all, so nothing
+    above even attempts to wait on them. Two gate forms count, and they cover different shapes:
+
+      - a role-local `wait --for=condition=complete job/<name>`, for a Job the role applies
+        itself. Every name the wait lists is credited;
+      - an `include_role: k8s/cronjob-gate` with `cronjob_gate_name: <cronjob>`, for a CronJob.
+        A CronJob runs on its schedule, so nothing executes at deploy time and no `job/<name>`
+        wait can be written for it at all; the shared role creates a one-off Job from the
+        CronJob and blocks on it. The CronJob named there is credited, because that is the
+        `metadata.name` the caller's own template renders.
+
+    Delegation to `k8s/image-builder` is the third shape and is NOT credited: the Job lives in
+    image-builder's templates, not the caller's, so a role that only delegates renders zero
+    batch templates and passes this guard vacuously on an empty loop. That is a known limit,
+    not a hole a delegation marker was ever able to close. `k8s/cronjob-gate` differs precisely
+    because the caller does render the workload — the CronJob is the caller's, only the gating
+    Job is the shared role's.
 
 All four are fine for a hand-deployed role — an operator is watching. None is fine for an
 auto-deployed one, so a role's own k8s_autodeploy declaration must cover them. Asserting it
@@ -58,13 +69,18 @@ _K8S_ROLES = _REPO / "ansible/roles/k8s"
 # guard below like any other role.
 _SHARED = {"manifests", "rollout-drain"}
 
-# Shared roles trusted to gate their own batch workload. Membership does NOT exempt a
-# delegating role from the batch guard below — the Job lives in the shared role's own
-# templates, not the caller's, so a role that only delegates renders zero batch templates
-# and passes the guard's empty loop on its own merits. This set exists solely so
-# `test_gating_shared_roles_actually_wait` has something to check: it proves each role named
-# here really does hold a completion wait, backed by a failure escalation.
-_GATING_SHARED_ROLES = {"image-builder"}
+# Shared roles other roles rely on to block until a batch workload is terminal. Membership
+# exempts nobody from the batch guard below; the set exists so
+# `test_gating_shared_roles_actually_wait` has something to check, and it proves each role
+# named here really does hold a completion gate backed by a failure escalation.
+#
+# What belongs here: any role under roles/k8s/ whose job is to make a caller's batch workload
+# observable at deploy time. image-builder applies and waits on a build Job of its own;
+# cronjob-gate creates a one-off Job from the CALLER's CronJob and polls it. cronjob-gate's
+# membership is load-bearing rather than documentary — `_batch_gated_names` credits a
+# delegation to it, so without this assertion the poll could be gutted and every guard in this
+# file would stay green while crediting a gate that no longer gates.
+_GATING_SHARED_ROLES = {"image-builder", "cronjob-gate"}
 
 
 def _denylist() -> set[str]:
@@ -199,22 +215,57 @@ def _uncommented(text: str) -> str:
     )
 
 
+# One TASK's text, from its `- name:` line to the next one (or end of file). Scoping the
+# cronjob_gate_name lookup to the whole task — rather than to the span after
+# `name: k8s/cronjob-gate` — is what stops an unrelated `cronjob_gate_name` (a set_fact, a
+# defaults entry, a var passed to some other role) from reading as a gate, while staying
+# order-independent: a caller writing the `vars:` block ABOVE `ansible.builtin.include_role:` is
+# valid YAML that Ansible runs identically, and reading forward from the include's name would
+# have called it ungated and told the maintainer to add an include it already has. It still
+# fails closed on a partially commented-out include, because `_uncommented` removes the
+# `name: k8s/cronjob-gate` line and no task then claims the include at all.
+_TASK_CHUNK = re.compile(r"^-\s*name:.*?(?=^-\s*name:|\Z)", re.MULTILINE | re.DOTALL)
+# Deliberately `[\w.-]+` rather than `\S+`: a Jinja expression (`{{ svc.name }}`) can't be
+# resolved without rendering, so it must not be credited as a literal name. It then matches no
+# rendered `metadata.name` and the role reads as ungated — the fail-closed direction, same as
+# `_deployment_name` takes for a non-literal Deployment name.
+_CRONJOB_GATE_NAME = re.compile(
+    r"""^\s*cronjob_gate_name:\s*["']?([\w.-]+)["']?\s*$""", re.MULTILINE
+)
+
+
 def _batch_gated_names(role: Path) -> set[str]:
-    """Batch workload names this role waits on to completion, via a role-local wait.
+    """Batch workload names this role blocks on until they reach a terminal state.
 
-    A role-local `wait --for=condition=complete job/<name>` is the repo's established
-    pattern (headlamp, media-volume, netpol-baseline, n8n, prowlarr, registry). A single
-    wait can name several Jobs at once — registry's `wait --for=condition=complete
-    job/registry-selftest-pull job/registry-selftest-pull-agent --timeout=180s` — so every
-    `job/<name>` token following the flag is credited, not just the one adjacent to it; the
-    same mirror of the multi-document defect `_batch_templates` fixes.
+    Two accepted forms, because a Job and a CronJob cannot be gated the same way:
 
-    Delegating to a shared role that gates its own batch workload (image-builder) is NOT
-    credited here. The Job lives in the shared role's own templates, not this role's, so a
-    role that only delegates renders zero batch templates of its own — the caller,
-    `test_auto_deployable_roles_gate_every_batch_workload_they_render`, passes it on that
-    basis instead of through this function. `_GATING_SHARED_ROLES` records which roles are
-    trusted to gate what they own.
+    1. A role-local `wait --for=condition=complete job/<name>`, the repo's established
+       pattern for a Job the role applies itself (headlamp, media-volume, netpol-baseline,
+       n8n, prowlarr, registry). A single wait can name several Jobs at once — registry's
+       `wait --for=condition=complete job/registry-selftest-pull
+       job/registry-selftest-pull-agent --timeout=180s` — so every `job/<name>` token
+       following the flag is credited, not just the one adjacent to it; the same mirror of
+       the multi-document defect `_batch_templates` fixes.
+
+    2. An `include_role: k8s/cronjob-gate` with `cronjob_gate_name: <cronjob>`. A CronJob
+       fires on its schedule and nothing runs at deploy time, so no `job/<name>` wait can be
+       written for it — before this form existed, a CronJob-rendering role could not be marked
+       gated by any mechanism this function accepted, and the assert below told the maintainer
+       to add a wait that is impossible to write. The credited name is `cronjob_gate_name`
+       VERBATIM, which is the CronJob's own `metadata.name` and therefore what
+       `_batch_templates` yields for the caller's template. The Job the shared role creates is
+       `<name>-deploy-gate`; crediting that instead would be a string no rendered manifest can
+       ever equal — a marker that gates nothing, with no symptom.
+
+    The cronjob-gate lookup is scoped to the whole TASK holding the include, not to the text
+    after its `name:` line, so a caller writing `vars:` above `ansible.builtin.include_role:`
+    resolves identically — mapping keys are unordered and Ansible runs both spellings the same.
+
+    Delegating to `k8s/image-builder` is NOT credited. The Job lives in image-builder's own
+    templates, not this role's, so a role that only delegates renders zero batch templates of
+    its own and `test_auto_deployable_roles_gate_every_batch_workload_they_render` passes it on
+    an empty loop rather than through this function. `_GATING_SHARED_ROLES` asserts that both
+    shared roles really do gate what they claim to.
     """
     tasks = role / "tasks/main.yml"
     if not tasks.is_file():
@@ -226,7 +277,54 @@ def _batch_gated_names(role: Path) -> set[str]:
         text,
     ):
         names.update(re.findall(r"(?:job|job\.batch)/(\S+)", run.group(1)))
+    for chunk in _TASK_CHUNK.findall(text):
+        if re.search(r"name:\s*k8s/cronjob-gate\b", chunk):
+            names.update(_CRONJOB_GATE_NAME.findall(chunk))
     return names
+
+
+def _until_expressions(text: str) -> list[str]:
+    """Every `until:` value in a task file, each as one string including folded continuations.
+
+    Read as a block — the key's own line plus every following line indented deeper than it —
+    rather than by searching the whole file. A file-wide search for both terminal condition
+    names would be satisfied by two unrelated mentions, or by a single comment naming both,
+    which is the fail-open direction this file exists to avoid. `_uncommented` strips only
+    whole-line comments, so a trailing `#` inside the block is dropped here too; an expression
+    that legitimately contained ` #` would be truncated, which can only make the check
+    stricter.
+    """
+    out: list[str] = []
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        head = re.match(r"^(\s*)until:(.*)$", line)
+        if not head:
+            continue
+        indent = len(head.group(1))
+        block = [head.group(2)]
+        for nxt in lines[i + 1 :]:
+            if nxt.strip() and len(nxt) - len(nxt.lstrip()) <= indent:
+                break
+            block.append(nxt)
+        out.append("\n".join(re.sub(r"\s#.*$", "", b) for b in block))
+    return out
+
+
+def _has_completion_gate(text: str) -> bool:
+    """Whether the text holds a live gate that blocks until a batch workload is terminal.
+
+    `kubectl wait --for=condition=complete` is one form. The other is an `until:` poll naming
+    BOTH terminal conditions, which is what a role must use when the workload can fail fast:
+    `wait` can only name one condition, so with `backoffLimit: 0` a failed run settles in
+    seconds while `wait` sits for the whole timeout before reporting it. A poll naming only
+    `Complete` is not accepted — that is the same one-sided wait wearing a different shape, and
+    it is the mutation this function has to reject.
+    """
+    if "wait --for=condition=complete" in text:
+        return True
+    return any(
+        "Complete" in expr and "Failed" in expr for expr in _until_expressions(text)
+    )
 
 
 def test_batch_templates_sees_every_document_in_a_multi_job_template() -> None:
@@ -308,6 +406,149 @@ def test_batch_templates_sees_quoted_and_commented_kind(tmp_path: Path) -> None:
     }
 
 
+def test_cronjob_gate_delegation_credits_the_named_cronjob(tmp_path: Path) -> None:
+    """An `include_role: k8s/cronjob-gate` credits `cronjob_gate_name`, verbatim.
+
+    Verbatim is the whole point. The Job the shared role creates is `<name>-deploy-gate`, but
+    what `_batch_templates` yields for the caller is the CronJob's own `metadata.name` — so
+    crediting the Job's name would produce a string no rendered manifest can equal, gating
+    nothing while reporting the role as gated. That is the shape a delegation marker took in
+    this same slice before it was deleted; this test is what stops it coming back.
+    """
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(
+        "- name: Gate the widget deploy on a one-off run\n"
+        "  tags: [deploy]\n"
+        "  ansible.builtin.include_role:\n"
+        "    name: k8s/cronjob-gate\n"
+        "  vars:\n"
+        "    cronjob_gate_name: widget\n"
+    )
+    assert _batch_gated_names(role) == {"widget"}
+
+
+def test_cronjob_gate_vars_above_the_include_are_credited(tmp_path: Path) -> None:
+    """`vars:` written above `ansible.builtin.include_role:` is the same task and must count.
+
+    Valid YAML, and Ansible runs it identically — mapping keys are unordered. Reading forward
+    from the include's own `name:` line saw nothing after it and called the role ungated, which
+    would tell a maintainer to add an include the role already has. Scoping to the whole task
+    removes the ordering assumption rather than documenting it.
+    """
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(
+        "- name: Gate the widget deploy on a one-off run\n"
+        "  tags: [deploy]\n"
+        "  vars:\n"
+        "    cronjob_gate_name: widget\n"
+        "  ansible.builtin.include_role:\n"
+        "    name: k8s/cronjob-gate\n"
+    )
+    assert _batch_gated_names(role) == {"widget"}
+
+
+def test_cronjob_gate_name_outside_the_include_is_not_credited(tmp_path: Path) -> None:
+    """`cronjob_gate_name` set anywhere but inside a k8s/cronjob-gate include gates nothing.
+
+    A set_fact, a defaults entry, or the same var handed to some other role all mention the
+    name without any gate running. Anchoring the lookup to the include's own body is what
+    keeps a mention from reading as a mechanism.
+    """
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(
+        "- name: Remember what we would gate\n"
+        "  ansible.builtin.set_fact:\n"
+        "    cronjob_gate_name: widget\n"
+    )
+    assert _batch_gated_names(role) == set()
+
+
+def test_commented_out_cronjob_gate_include_does_not_credit(tmp_path: Path) -> None:
+    """A gate commented out to skip a slow run must go red, not stay credited.
+
+    The same fail-open direction `test_commented_out_wait_does_not_count_as_gated` pins for
+    the wait form. Commenting a task out is the likelier edit than deleting it, so it is the
+    mutation worth pinning.
+
+    Two shapes, and they are rejected by different things. A wholly commented block is
+    rejected twice over — `_uncommented` deletes the lines, and `_CRONJOB_GATE_NAME`'s
+    leading `^\\s*` would refuse the `#`-prefixed value line even if it did not. The PARTIAL
+    comment below is the one `_uncommented` uniquely catches: disable only the include's
+    `name:` line and the `vars:` block underneath is still live text that an unstripped read
+    would credit, with no gate running at all.
+    """
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    tasks = role / "tasks" / "main.yml"
+    tasks.write_text(
+        "# - name: Gate the widget deploy on a one-off run\n"
+        "#   ansible.builtin.include_role:\n"
+        "#     name: k8s/cronjob-gate\n"
+        "#   vars:\n"
+        "#     cronjob_gate_name: widget\n"
+    )
+    assert _batch_gated_names(role) == set()
+
+    tasks.write_text(
+        "- name: Gate the widget deploy on a one-off run\n"
+        "  ansible.builtin.include_role:\n"
+        "#     name: k8s/cronjob-gate\n"
+        "  vars:\n"
+        "    cronjob_gate_name: widget\n"
+    )
+    assert _batch_gated_names(role) == set()
+
+
+def test_a_jinja_cronjob_gate_name_is_not_credited(tmp_path: Path) -> None:
+    """A templated `cronjob_gate_name` can't be resolved here, so it counts as ungated.
+
+    Same fail-closed choice `_deployment_name` makes for a Jinja Deployment name: guessing
+    which CronJob a `{{ ... }}` resolves to is how a guard credits a workload nothing waits
+    on. The role reads as an offender instead, which an operator can then answer.
+    """
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(
+        "- name: Gate the widget deploy on a one-off run\n"
+        "  tags: [deploy]\n"
+        "  ansible.builtin.include_role:\n"
+        "    name: k8s/cronjob-gate\n"
+        "  vars:\n"
+        '    cronjob_gate_name: "{{ widget_cronjob }}"\n'
+    )
+    assert _batch_gated_names(role) == set()
+
+
+def test_a_poll_naming_only_complete_is_not_a_completion_gate() -> None:
+    """`_has_completion_gate` must reject the one-sided poll it exists to replace.
+
+    A poll that waits only for `Complete` is `kubectl wait --for=condition=complete` wearing
+    a different shape: with `backoffLimit: 0` a failed run settles in seconds and the poll
+    then burns its whole retry budget before reporting anything. Accepting it would let
+    cronjob-gate's poll be halved while `_GATING_SHARED_ROLES` stayed green — and
+    `_batch_gated_names` credits every caller of that role.
+    """
+    both = (
+        "  until: >-\n"
+        "    'Complete' in r.stdout or 'Failed' in r.stdout\n"
+        "  retries: 30\n"
+    )
+    complete_only = "  until: \"'Complete' in r.stdout\"\n  retries: 30\n"
+    assert _has_completion_gate(both)
+    assert not _has_completion_gate(complete_only)
+    # A comment naming both conditions is not a gate. `_uncommented` strips whole-line
+    # comments; reading the `until:` BLOCK rather than the file is what covers the rest.
+    assert not _has_completion_gate(
+        "  until: \"'Complete' in r.stdout\"  # not 'Failed', deliberately\n"
+    )
+    assert not _has_completion_gate(
+        "# 'Complete' and 'Failed' are the terminal conditions\n"
+    )
+
+
 def test_auto_deployable_roles_gate_every_batch_workload_they_render() -> None:
     """An auto-deployable role must wait on every Job/CronJob it renders.
 
@@ -329,8 +570,11 @@ def test_auto_deployable_roles_gate_every_batch_workload_they_render() -> None:
                     f"{role.name}: {template} renders {name or '<unnamed>'}"
                 )
     assert not offenders, (
-        "Auto-deployable role(s) rendering an ungated batch workload — add a "
-        "`wait --for=condition=complete job/<name>` after the apply, or set "
+        "Auto-deployable role(s) rendering an ungated batch workload. For a Job, add a "
+        "`wait --for=condition=complete job/<name>` after the apply. For a CronJob nothing "
+        "runs at deploy time and no such wait can be written — include k8s/cronjob-gate with "
+        "`cronjob_gate_name: <the CronJob's metadata.name>` instead, after checking that "
+        "CronJob against the two properties in roles/k8s/cronjob-gate/CLAUDE.md. Or set "
         "k8s_autodeploy: false with a k8s_autodeploy_reason:\n  "
         + "\n  ".join(offenders)
     )
@@ -339,23 +583,29 @@ def test_auto_deployable_roles_gate_every_batch_workload_they_render() -> None:
 def test_gating_shared_roles_actually_wait() -> None:
     """Every role `_GATING_SHARED_ROLES` names must hold a real, live completion gate.
 
-    Necessary, not sufficient. A `wait --for=condition=complete` proves the play blocks
-    until the Job finishes; it does not by itself prove a failed Job fails the deploy.
-    image-builder's own wait is `... || wait --for=condition=failed` with no `failed_when`
-    on that task, so it exits 0 on a failed build by design — what actually fails the play
-    is a separate `ansible.builtin.fail` task a few steps later. So this checks for a wait
-    AND an `ansible.builtin.fail` somewhere in the role's tasks, not that the two are wired
-    together end to end.
+    Necessary, not sufficient. A completion gate proves the play blocks until the Job
+    finishes; it does not by itself prove a failed Job fails the deploy. image-builder's own
+    wait is `... || wait --for=condition=failed` with no `failed_when` on that task, so it
+    exits 0 on a failed build by design — what actually fails the play is a separate
+    `ansible.builtin.fail` task a few steps later. cronjob-gate is the same shape: its poll
+    carries `failed_when: false` and reports nothing itself, and the escalation is the
+    `ansible.builtin.fail` after it. So this checks for a gate AND an
+    `ansible.builtin.fail` somewhere in the role's tasks, not that the two are wired together
+    end to end.
 
     `failed_when` is deliberately NOT accepted as the second half: `failed_when: false` and
     `failed_when: rc != 0` are opposite meanings sharing a prefix, and a substring test
     cannot tell them apart — accepting either would let a failure *suppressor* satisfy a
-    check written to prove failure escalates.
+    check written to prove failure escalates. Both roles here in fact carry
+    `failed_when: false` on the very task that observes the outcome, so accepting it would
+    have made this half of the check pass on its own inverse.
 
     Reads the file with whole-line comments stripped: `configarr/tasks/main.yml` (not a
-    member of this set, but the risk is general) explains in a comment why it deliberately
-    does NOT use `kubectl wait --for=condition=complete` — a bare substring check would have
-    read that explanation as the gate it is arguing against.
+    member of this set, but the risk is general) used to explain in a comment why it
+    deliberately did NOT use `kubectl wait --for=condition=complete` — a bare substring check
+    would have read that explanation as the gate it was arguing against. `_has_completion_gate`
+    carries the same discipline for the poll form: it reads the `until:` block, not the file,
+    so a comment naming both conditions cannot satisfy it.
     """
     for shared in sorted(_GATING_SHARED_ROLES):
         tasks = _K8S_ROLES / shared / "tasks/main.yml"
@@ -363,8 +613,10 @@ def test_gating_shared_roles_actually_wait() -> None:
             f"{shared}: trusted as a gating shared role but has no tasks"
         )
         text = _uncommented(tasks.read_text())
-        assert "wait --for=condition=complete" in text, (
-            f"{shared}: trusted as a gating shared role but never waits for completion"
+        assert _has_completion_gate(text), (
+            f"{shared}: trusted as a gating shared role but holds no completion gate — "
+            "neither a `wait --for=condition=complete` nor an `until:` poll naming both "
+            "the Complete and Failed conditions"
         )
         assert "ansible.builtin.fail" in text, (
             f"{shared}: waits for completion but has no ansible.builtin.fail to actually "

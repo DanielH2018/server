@@ -218,11 +218,22 @@ def test_configarr_drains_before_reconciling() -> None:
         "configarr no longer drains pending rollouts before reconciling. Its Job would fire into "
         "sonarr's ~5-minute startup and reconcile against a dead API."
     )
-    job_at = next(
-        i for i, t in enumerate(tasks) if "create job configarr-deploy" in _cmd(t)
+    # The reconcile Job is created by k8s/cronjob-gate now, not by an inline `kubectl create
+    # job` in this role, so the ordering is asserted against the include that reaches it.
+    gate_at = next(
+        (
+            i
+            for i, t in enumerate(tasks)
+            if "k8s/cronjob-gate" in str(t.get("ansible.builtin.include_role", ""))
+        ),
+        None,
     )
-    assert drain_at < job_at, (
-        "configarr's rollout drain must come BEFORE it creates the reconcile Job."
+    assert gate_at is not None, (
+        "configarr no longer gates its deploy on a one-off run, so a bad image would deploy "
+        "unobserved until the next 04:30 firing."
+    )
+    assert drain_at < gate_at, (
+        "configarr's rollout drain must come BEFORE the one-off reconcile Job."
     )
 
 
