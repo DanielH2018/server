@@ -610,13 +610,30 @@ def test_the_retake_uses_the_same_snapshot_name_as_the_original_apply() -> None:
     assert "createSnapshot: true" in stdin
 
 
-def test_the_retaken_snapshot_wait_reuses_the_same_register_as_the_first_attempt() -> (
-    None
-):
-    """Reusing `volume_snapshot_ready` is what lets the existing fail-task and prune-block
-    guards, written before 7b, keep working unmodified against whichever attempt actually ran."""
+def test_the_retaken_snapshot_wait_registers_to_its_own_name() -> None:
+    """INVERTED 2026-08-21 by the task-6 drill. This test previously asserted the OPPOSITE — that
+    the retake wait reuses `volume_snapshot_ready` so the pre-7b fail-task and prune guards
+    "keep working unmodified against whichever attempt actually ran". That design does not work,
+    and this test was pinning the bug in place: **a skipped task still sets the variable it
+    registers to**, to a result with no `stdout`. On the attached path the retake is skipped, so
+    it erased the first wait's real reading and the role failed every normal deploy of all
+    thirteen opted-in services.
+
+    Downstream tasks now read the `volume_snapshot_ready_out` fact, which folds the two waits by
+    the path actually taken. `test_skipped_retake_wait_keeps_first_read` in
+    test_volume_snapshot_register.py is the behavioural half — it runs the role and would have
+    caught what this source-text assertion could not."""
     task = _named(_CLAIM, "Wait for the retaken snapshot to become usable")
-    assert task["register"] == "volume_snapshot_ready"
+    assert task["register"] == "volume_snapshot_retake_ready"
+
+
+def test_the_downstream_fail_reads_the_folded_readiness_fact() -> None:
+    """The other half of the fix: the fail task must read the folded fact rather than either
+    wait's register directly, or the clobber comes back the moment someone reorders the file."""
+    task = _named(_CLAIM, "Fail on a snapshot that never became usable")
+    conditions = " ".join(task["when"])
+    assert "volume_snapshot_ready_out" in conditions
+    assert "volume_snapshot_ready." not in conditions
 
 
 def test_the_detach_after_maintenance_runs_whenever_the_attach_succeeded_regardless_of_the_snapshot_outcome() -> (

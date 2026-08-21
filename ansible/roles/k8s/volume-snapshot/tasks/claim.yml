@@ -343,11 +343,18 @@
   register: volume_snapshot_apply
   changed_when: "'created' in volume_snapshot_apply.stdout or 'configured' in volume_snapshot_apply.stdout"
 
-# Reuses `volume_snapshot_ready` — the same register the first attempt's wait used — so the
-# existing "Fail on a snapshot that never became usable" task and the prune block below, both
-# written before 7b, keep working unmodified against whichever attempt actually produced a
-# result. `failed_when: false`: an engine that attached but still can't snapshot in time must
-# fall through to the existing fail task below (which now fires, because the Fold task clears
+# Registers to its OWN name, never to `volume_snapshot_ready`. Sharing that register was this
+# role's first shipped bug and the task-6 drill's first failure: **a SKIPPED task still sets the
+# variable it registers to**, to a result carrying `skipped: true` and no `stdout` at all. On
+# the ordinary attached-volume path — the path all thirteen opted-in services take on every
+# normal deploy — this wait is skipped, so it overwrote the first wait's genuine `true|false`
+# with a stdout-less skip result, and the "Fail on a snapshot that never became usable" task
+# below then read `''` and failed a deploy whose snapshot was healthy and `readyToUse`.
+# Measured 2026-08-21 against speedtest-config; `test_skipped_retake_wait_keeps_first_read` in
+# test_volume_snapshot_register.py pins the semantics and the fix.
+#
+# `failed_when: false`: an engine that attached but still can't snapshot in time must fall
+# through to the existing fail task below (which fires because the Fold task clears
 # `volume_snapshot_detached` whenever the attach itself succeeded), not abort here with no
 # detach performed.
 - name: Wait for the retaken snapshot to become usable for {{ volume_snapshot_claim }}
@@ -369,11 +376,35 @@
       - 'jsonpath={.status.readyToUse}{"|"}{.status.markRemoved}'
   become: true
   changed_when: false
-  register: volume_snapshot_ready
-  until: volume_snapshot_ready.stdout | default('') | split('|') | first == 'true'
+  register: volume_snapshot_retake_ready
+  until: volume_snapshot_retake_ready.stdout | default('') | split('|') | first == 'true'
   retries: "{{ (volume_snapshot_timeout | int / 5) | round | int }}"
   delay: 5
   failed_when: false
+
+# The single readiness answer every task BELOW this point reads, folding the two waits into one
+# value so neither has to know which path ran. Computed here rather than left to a `default`
+# chain at each consumer, for two reasons the drill made concrete:
+#
+#   1. A `default` chain cannot tell "this claim skipped the retake" from "an EARLIER claim ran
+#      it". Registers persist across `include_tasks` loop iterations, so on a two-claim service
+#      (`tdarr`, `code-server`) claim 1's retake result would still be in scope for claim 2. The
+#      path guard below keys on this claim's own decision instead.
+#   2. It must run BEFORE the Fold task clears `volume_snapshot_detached`, and before the detach
+#      — hence its position here rather than next to its consumers.
+#
+# Unconditional whenever mutation is allowed at all, matching the "Decide whether this claim's
+# unready snapshot is a detached-volume case" task above and for the same reason: a task that
+# only ran on one branch would let a previous claim's verdict stand for this one.
+- name: Record which readiness read applies to {{ volume_snapshot_claim }}
+  tags: [deploy]
+  when: not (k8s_no_mutate | bool)
+  ansible.builtin.set_fact:
+    volume_snapshot_ready_out: >-
+      {{ ((volume_snapshot_retake_ready | default({})).stdout | default(''))
+         if ((volume_snapshot_detached | default(false) | bool)
+             and (volume_snapshot_maintenance_attached | default(false) | bool))
+         else ((volume_snapshot_ready | default({})).stdout | default('')) }}
 
 # Guarded on the attach outcome ALONE, never on whether the retaken snapshot became ready. A
 # snapshot that stays stuck after a successful attach must not leave the volume attached in
@@ -471,13 +502,13 @@
   tags: [deploy]
   when:
     - not (k8s_no_mutate | bool)
-    - volume_snapshot_ready.stdout | default('') | split('|') | first != 'true'
+    - volume_snapshot_ready_out | default('') | split('|') | first != 'true'
     - not (volume_snapshot_detached | bool)
   ansible.builtin.fail:
     msg: >-
       The pre-deploy snapshot {{ volume_snapshot_name }} of Longhorn volume
       {{ volume_snapshot_volume }} did not report readyToUse within
-      {{ volume_snapshot_timeout }}s (last read: '{{ volume_snapshot_ready.stdout | default('') }}',
+      {{ volume_snapshot_timeout }}s (last read: '{{ volume_snapshot_ready_out | default('') }}',
       as readyToUse|markRemoved; volume state:
       '{{ volume_snapshot_volume_state.stdout | default('') | trim or 'unknown' }}').
       {{ 'It is markRemoved. Every run gets its own token in the name, so a same-second collision
@@ -485,7 +516,7 @@
       concurrent prune deleting this run''s own snapshot during the wait produces the identical
       state. Check who or what deleted {{ volume_snapshot_name }} before assuming a collision.
       Retrying a moment later gets a fresh token and a fresh name regardless of the cause.'
-      if (volume_snapshot_ready.stdout | default('') | split('|') | last) == 'true'
+      if (volume_snapshot_ready_out | default('') | split('|') | last) == 'true'
       else 'The volume is attached and the engine did not complete the snapshot in time — this
       is not the detached-volume case (that one skips and warns instead of failing here), so it
       is a genuine stuck engine or an overloaded cluster. Retrying the deploy is reasonable;
