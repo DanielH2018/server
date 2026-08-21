@@ -1,0 +1,321 @@
+---
+# One claim's worth of the drill-proven revert: resolve its Longhorn volume, find the snapshot
+# this deploy took of it, then stop the workload, attach in maintenance mode, revert, detach.
+#
+# Included per claim from main.yml, which checks the caller's inputs and resolves the Longhorn
+# API once for all of them.
+#
+# THE ORDER IS THE DESIGN. Everything that can fail on its own account — the claim is not bound,
+# no snapshot matches, the listing is broken — is checked BEFORE `--replicas=0`. A step that
+# fails after the scale-down leaves the service down AND unreverted, which is worse than never
+# having tried. Measured 2026-08-21 on `speedtest-config`, Longhorn v1.12.1: a revert with the
+# frontend enabled returns HTTP 500 `failed to revert snapshot for volume ... with frontend
+# enabled`, and a revert on a plainly detached volume returns 500 because no engine is running.
+# Maintenance mode — attached with `disableFrontend: true` — is the only state that works.
+
+# ------------------------------------------------------------------ before anything moves
+#
+# The reads below are deliberately NOT guarded on k8s_no_mutate, and carry `check_mode: false`
+# so `--check` runs them for real. A dry run then answers the question that matters most about
+# this role: is there a snapshot to revert to? It changes nothing to find out.
+- name: Resolve the Longhorn volume backing {{ volume_revert_claim }}
+  tags: [deploy]
+  # argv, not a folded `cmd:` string. `ansible.builtin.command` shlex-splits a `cmd`, which
+  # silently tears any argument containing a space in half — how slice 4's gate never ran.
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - "{{ k8s_namespace }}"
+      - get
+      - pvc
+      - "{{ volume_revert_claim }}"
+      - -o
+      - 'jsonpath={.spec.volumeName}'
+  become: true
+  changed_when: false
+  check_mode: false
+  register: volume_revert_pvc
+
+- name: Check the Longhorn volume binding for {{ volume_revert_claim }}
+  tags: [deploy]
+  # A `get` against a Pending PVC returns rc 0 and an empty `volumeName`, so nothing above
+  # fails. Left unchecked, the listing below would filter on `spec.volume=""`, match nothing,
+  # and the missing-snapshot failure would blame the wrong thing.
+  ansible.builtin.assert:
+    that:
+      - volume_revert_pvc.stdout | default('') | trim | length > 0
+    fail_msg: >-
+      PVC {{ k8s_namespace }}/{{ volume_revert_claim }} has no spec.volumeName — it does not
+      exist, or it is still Pending. There is nothing to revert, so
+      {{ volume_revert_service }}'s rollback is stopping before it changes anything.
+    quiet: true
+
+- name: Name the snapshot prefix for {{ volume_revert_claim }}
+  tags: [deploy]
+  # `autodeploy-<service>-<sha8>-<claim>-` is what k8s/volume-snapshot names a snapshot with,
+  # minus the per-run token it appends last. The prefix therefore identifies THIS service, THIS
+  # deploy and THIS claim, and the token is what makes several snapshots share it: a retried
+  # deploy, or a dirty tree deployed twice from one commit, each get their own.
+  #
+  # The trailing `-` is load-bearing. Without it `code-server-config` also matches
+  # `code-server-configmap`, and both are plausible claim names on one service.
+  #
+  # `volume_revert_sha` is used verbatim. `git rev-parse --short=8` returns more than eight
+  # characters when eight are ambiguous, and the snapshot carries whatever it returned;
+  # truncating here would fail to match at the `-<claim>-` boundary. main.yml checks its shape.
+  ansible.builtin.set_fact:
+    volume_revert_volume: "{{ volume_revert_pvc.stdout | trim }}"
+    volume_revert_prefix: >-
+      autodeploy-{{ volume_revert_service }}-{{ volume_revert_sha }}-{{ volume_revert_claim }}-
+
+- name: List the snapshots taken by this deploy of {{ volume_revert_claim }}
+  tags: [deploy]
+  # Filtered by volume in the jsonpath and by name in Jinja, because kubectl's jsonpath has no
+  # `&&` — verified 2026-08-21, `unrecognized character in action: U+0026`. The volume filter is
+  # the one comparison it can express; the name prefix and markRemoved are filtered below.
+  #
+  # `{range ...}` over `.items`, never an indexed `[0]`: an indexed jsonpath against a
+  # zero-match query returns rc=1 with `array index out of bounds`, which aborts the task before
+  # any guard can run. A range over no items returns rc=0 and empty stdout.
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - longhorn-system
+      - get
+      - snapshots.longhorn.io
+      - -o
+      - 'jsonpath={range .items[?(@.spec.volume=="{{ volume_revert_volume }}")]}{.metadata.creationTimestamp}{"|"}{.status.markRemoved}{"|"}{.metadata.name}{"\n"}{end}'
+  become: true
+  changed_when: false
+  check_mode: false
+  register: volume_revert_existing
+
+- name: Choose the newest matching snapshot for {{ volume_revert_claim }}
+  tags: [deploy]
+  # Newest by `creationTimestamp`, never by name: the run token makes CR names sort
+  # lexicographically by wall-clock only while the format never changes, and a sort that is
+  # right by accident is how a rollback restores the wrong recovery point.
+  #
+  # `markRemoved` snapshots are rejected outright. Measured 2026-08-21: a snapshot already
+  # markRemoved cannot be reverted to, and a retention pass racing a rollback is exactly how the
+  # newest becomes one. `ne 'true'` rather than `equalto 'false'`: a snapshot read moments after
+  # creation can have the field unpopulated, and not-removed is the correct read of an empty
+  # value.
+  #
+  # `regex_escape` because `match` is a regex test and a claim name may legally contain a dot,
+  # which would otherwise match any character.
+  ansible.builtin.set_fact:
+    volume_revert_candidates: >-
+      {{ volume_revert_existing.stdout_lines | default([])
+         | map('split', '|')
+         | rejectattr('1', 'equalto', 'true')
+         | selectattr('2', 'match', volume_revert_prefix | trim | regex_escape)
+         | sort(attribute='0', reverse=true)
+         | map(attribute='2') | list }}
+
+- name: Fail when no snapshot matches this deploy for {{ volume_revert_claim }}
+  tags: [deploy]
+  # The fail-open direction is the bug this slice exists to close: a rollback that finds no
+  # snapshot and proceeds redeploys the old manifests against migrated data. There is no
+  # `failed_when: false` here and there must never be one.
+  #
+  # Two ways to reach this legitimately, and both mean the rollback cannot help: the service's
+  # first deploy took no snapshot (k8s/seed-volume leaves the volume detached, and a detached
+  # volume cannot be snapshotted), or a retention pass deleted the recovery point.
+  ansible.builtin.fail:
+    msg: >-
+      No snapshot named '{{ volume_revert_prefix | trim }}*' exists for Longhorn volume
+      {{ volume_revert_volume }} ({{ k8s_namespace }}/{{ volume_revert_claim }}), so
+      {{ volume_revert_service }} cannot be reverted to its pre-deploy state. The listing read
+      {{ volume_revert_existing.stdout_lines | default([]) | length }} snapshot(s) of that
+      volume. Either this deploy never took one — expected on a service's first deploy, and
+      whenever the volume was detached at snapshot time — or it has been deleted since.
+      Stopping with {{ volume_revert_service }} still running: reverting to the wrong snapshot
+      is worse than not reverting, and this play will not guess.
+  when: volume_revert_candidates | length == 0
+
+- name: Record the snapshot to revert to for {{ volume_revert_claim }}
+  tags: [deploy]
+  ansible.builtin.set_fact:
+    volume_revert_snapshot: "{{ volume_revert_candidates | first }}"
+
+# --------------------------------------------------------------- from here the service stops
+#
+# Every task below mutates the cluster or waits on a change one of them made, so every one is
+# guarded on `k8s_no_mutate` — which is `ansible_check_mode or (k8s_dry_run | bool)`, and
+# guarding on either half alone leaves the other half mutating a live cluster. An unguarded wait
+# is just as wrong as an unguarded write: it would poll for a transition nobody requested and
+# burn its whole timeout before failing a run that changed nothing.
+- name: Scale the Deployment to zero replicas for {{ volume_revert_service }}
+  tags: [deploy]
+  when: not (k8s_no_mutate | bool)
+  # The volume cannot be attached in maintenance mode while a pod holds it, and Longhorn cannot
+  # revert a snapshot on a volume whose frontend is live. This role never scales back up: the
+  # manifests carry an explicit `replicas: 1` and the apply that follows restores the
+  # Deployment, so scaling here too would roll the workload twice and race that apply.
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - "{{ k8s_namespace }}"
+      - scale
+      - deployment/{{ volume_revert_service }}
+      - --replicas=0
+  become: true
+  changed_when: true
+
+- name: Wait for the detach that precedes the attach for {{ volume_revert_claim }}
+  tags: [deploy]
+  when: not (k8s_no_mutate | bool)
+  # Longhorn detaches the volume when the last pod holding it goes away, so this waits on the
+  # scale-down above rather than on an action of its own. No `failed_when: false`: running out
+  # of retries here means the pod never terminated, and continuing would attach a volume that is
+  # still in use.
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - longhorn-system
+      - get
+      - volumes.longhorn.io
+      - "{{ volume_revert_volume }}"
+      - -o
+      - 'jsonpath={.status.state}'
+  become: true
+  changed_when: false
+  register: volume_revert_detached
+  until: volume_revert_detached.stdout | default('') | trim == 'detached'
+  retries: "{{ ((volume_revert_state_timeout | int) / (volume_revert_poll_interval | int)) | round | int }}"
+  delay: "{{ volume_revert_poll_interval }}"
+
+- name: Attach the volume in maintenance mode for {{ volume_revert_claim }}
+  tags: [deploy]
+  when: not (k8s_no_mutate | bool)
+  # `disableFrontend: true` IS maintenance mode, and it is the only attach a revert accepts.
+  #
+  # No `attachmentID`. Read from longhorn-manager v1.12.1: `manager.Attach` stores the
+  # attachment ticket under whatever `attachmentID` the caller sends, and `manager.Detach` does
+  # `delete(tickets, attachmentID)` — so the detach below can only remove a ticket whose key it
+  # names. Both calls omit the field, both therefore key the ticket `""`, and they pair. Sending
+  # one here and not there would leave the volume attached with its frontend disabled while the
+  # detach returned 200.
+  #
+  # `hostId` must be the node whose manager is answering: k8s/longhorn-api resolves the API to
+  # this node's own pod because the longhorn-manager NetworkPolicy refuses host-originated
+  # traffic from anywhere else.
+  ansible.builtin.uri:
+    url: "{{ longhorn_api }}/v1/volumes/{{ volume_revert_volume }}?action=attach"
+    method: POST
+    body_format: json
+    body:
+      hostId: "{{ longhorn_api_node }}"
+      disableFrontend: true
+    status_code: 200
+    timeout: "{{ volume_revert_api_timeout }}"
+
+- name: Wait for the maintenance-mode attach of {{ volume_revert_claim }}
+  tags: [deploy]
+  when: not (k8s_no_mutate | bool)
+  # State and the frontend flag are read together so the assert below can tell "not attached
+  # yet" from "attached with the frontend live". The `until` gates on the state alone; the flag
+  # is the assert's business.
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - longhorn-system
+      - get
+      - volumes.longhorn.io
+      - "{{ volume_revert_volume }}"
+      - -o
+      - 'jsonpath={.status.state}{"|"}{.spec.disableFrontend}'
+  become: true
+  changed_when: false
+  register: volume_revert_attached
+  until: volume_revert_attached.stdout | default('') | split('|') | first == 'attached'
+  retries: "{{ ((volume_revert_state_timeout | int) / (volume_revert_poll_interval | int)) | round | int }}"
+  delay: "{{ volume_revert_poll_interval }}"
+
+- name: Assert the attach really set disableFrontend for {{ volume_revert_claim }}
+  tags: [deploy]
+  when: not (k8s_no_mutate | bool)
+  # This is a precondition, not a formality. A revert against an attached volume whose frontend
+  # is live returns HTTP 500 `failed to revert snapshot for volume ... with frontend enabled` —
+  # measured 2026-08-21 — and by then the workload is already at zero replicas. Checking the
+  # flag here converts that late failure into an early one, with the service in the same state
+  # either way but the message naming the real cause.
+  ansible.builtin.assert:
+    that:
+      - volume_revert_attached.stdout | default('') | split('|') | last == 'true'
+    fail_msg: >-
+      Longhorn volume {{ volume_revert_volume }} came back as
+      '{{ volume_revert_attached.stdout | default('') }}' (state|disableFrontend) after the
+      maintenance-mode attach, so its frontend is live and a revert would return HTTP 500.
+      {{ volume_revert_service }} is at zero replicas and NOT reverted; the volume is attached
+      with its frontend enabled. Detach it and retry the rollback, or restore the workload with
+      a deploy of {{ volume_revert_service }} if the data is intact.
+    quiet: true
+
+- name: Revert the volume to the pre-deploy snapshot of {{ volume_revert_claim }}
+  tags: [deploy]
+  when: not (k8s_no_mutate | bool)
+  # `snapshotRevert` takes a `snapshotInput`, whose only field this needs is `name` — read from
+  # the server's own schema, not from memory. A single 200 is demanded rather than a range: a
+  # range accepts a 2xx that did not do the work.
+  ansible.builtin.uri:
+    url: "{{ longhorn_api }}/v1/volumes/{{ volume_revert_volume }}?action=snapshotRevert"
+    method: POST
+    body_format: json
+    body:
+      name: "{{ volume_revert_snapshot }}"
+    status_code: 200
+    timeout: "{{ volume_revert_api_timeout }}"
+
+- name: Detach the volume for {{ volume_revert_claim }}
+  tags: [deploy]
+  when: not (k8s_no_mutate | bool)
+  # An empty body, deliberately. `manager.Detach` deletes the attachment ticket keyed by
+  # `attachmentID` and IGNORES `hostId` entirely, so the detach pairs with the attach above only
+  # by sharing the empty ticket key. Sending `hostId` here would document a guarantee the server
+  # does not provide.
+  #
+  # A 200 proves the request was accepted, not that a ticket was removed — `delete()` on an
+  # absent key is a no-op the API reports as success. The wait below is what verifies it.
+  ansible.builtin.uri:
+    url: "{{ longhorn_api }}/v1/volumes/{{ volume_revert_volume }}?action=detach"
+    method: POST
+    body_format: json
+    body: {}
+    status_code: 200
+    timeout: "{{ volume_revert_api_timeout }}"
+
+- name: Wait for the detach after the revert for {{ volume_revert_claim }}
+  tags: [deploy]
+  when: not (k8s_no_mutate | bool)
+  # The only check that a detach which answered 200 actually detached. It must stay unsuppressed
+  # for that reason: leaving the volume attached in maintenance mode would make the apply that
+  # follows start a pod against a volume whose frontend is disabled.
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - longhorn-system
+      - get
+      - volumes.longhorn.io
+      - "{{ volume_revert_volume }}"
+      - -o
+      - 'jsonpath={.status.state}'
+  become: true
+  changed_when: false
+  register: volume_revert_final
+  until: volume_revert_final.stdout | default('') | trim == 'detached'
+  retries: "{{ ((volume_revert_state_timeout | int) / (volume_revert_poll_interval | int)) | round | int }}"
+  delay: "{{ volume_revert_poll_interval }}"

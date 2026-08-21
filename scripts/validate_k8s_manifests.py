@@ -99,6 +99,7 @@ SKIP_ROLES = {
     "cronjob-gate",
     "volume-snapshot",
     "longhorn-api",  # no manifest templates — resolves a fact only, same as cronjob-gate/volume-snapshot
+    "volume-revert",  # no manifest templates — reverts a volume through kubectl and the Longhorn API
 }
 
 

@@ -1,0 +1,67 @@
+---
+# Revert a service's Longhorn volumes to the snapshot `k8s/volume-snapshot` took immediately
+# before a failed deploy, so that the rollback restores data the old manifests can read.
+#
+# WHY. When a gitops auto-deploy fails, the deployer rolls the tree back and redeploys. Without
+# this role that restores the OLD manifests against ALREADY-MIGRATED data, which is worse than
+# useless for a stateful service: the old binary cannot read what the new one wrote. The
+# snapshot half of that problem is slice 7a's; reverting to it is this role's.
+#
+# WHAT THIS ROLE DOES NOT DO. It never scales the workload back up. Every manifest that opts
+# into a pre-deploy snapshot carries an explicit `replicas: 1`, so the apply that follows this
+# role restores the Deployment — one rollout instead of two, and no race between them.
+#
+# The caller sets:
+#   volume_revert_service  service name; also the Deployment name, and part of the snapshot name
+#   volume_revert_claims   PVC names in k8s_namespace whose volumes to revert
+#   volume_revert_sha      the deploy tag the snapshot was named with (see CLAUDE.md)
+
+- name: Check that volume-revert was given a service, a claim and a deploy tag
+  tags: [deploy]
+  # Every clause here is checked while the workload is still UP. A missing SHA renders the
+  # snapshot prefix `autodeploy-<svc>--<claim>-`, which matches nothing, and the role would
+  # otherwise discover that one task after `--replicas=0` — service down, nothing reverted.
+  #
+  # The SHA is checked for shape and used verbatim. `git rev-parse --short=8` returns MORE than
+  # eight characters when eight are ambiguous, and volume-snapshot names the snapshot from that
+  # raw stdout; truncating to eight here would fail to match a nine-character name at the
+  # `-<claim>-` boundary. So: eight or more lowercase hex digits, and no transformation.
+  ansible.builtin.assert:
+    that:
+      - volume_revert_service | default('') | length > 0
+      - volume_revert_claims | default([]) | length > 0
+      - volume_revert_sha | default('') | regex_search('^[0-9a-f]{8,}$')
+    fail_msg: >-
+      k8s/volume-revert needs volume_revert_service, a non-empty volume_revert_claims and a
+      volume_revert_sha of eight or more lowercase hex digits — the deploy tag
+      k8s/volume-snapshot named the snapshot with. Got service
+      '{{ volume_revert_service | default('') }}',
+      {{ volume_revert_claims | default([]) | length }} claim(s) and sha
+      '{{ volume_revert_sha | default('') }}'.
+    quiet: true
+
+# Resolved once, before the first claim is touched. `k8s/longhorn-api` fails when this node runs
+# no longhorn-manager, and that failure has nothing to do with any one service — reaching it
+# after the scale-down would take the workload out over a problem this role never even tried to
+# fix. `tasks_from: resolve.yml` is mandatory: that role's `tasks/main.yml` exists only to fail
+# loudly at a caller who forgets, because a bare include would otherwise run nothing and leave
+# `longhorn_api` undefined until something downstream templated a broken URL from it.
+- name: Resolve the node-local Longhorn API
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: k8s/longhorn-api
+    tasks_from: resolve.yml
+
+# One include per claim rather than a loop per task: each claim resolves to its own volume, its
+# own snapshot and its own attach/revert/detach cycle, and a per-task loop would leave every
+# register as a `.results` list the asserts would have to index in parallel.
+#
+# A multi-claim revert is NOT atomic. `tdarr` and `code-server` each hold two claims, and a
+# failure on the second leaves the first reverted and the second not. That is deliberate — the
+# alternative is continuing past a failed revert — and CLAUDE.md documents the recovery.
+- name: Revert every volume to its pre-deploy snapshot for {{ volume_revert_service }}
+  tags: [deploy]
+  ansible.builtin.include_tasks: claim.yml
+  loop: "{{ volume_revert_claims }}"
+  loop_control:
+    loop_var: volume_revert_claim
