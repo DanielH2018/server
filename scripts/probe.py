@@ -1103,6 +1103,10 @@ STATIC_MONITORS_PATH = os.path.join(
     "static-monitors.yaml.j2",
 )
 
+# Seconds of grace on top of a monitor's own interval before its absence counts as drift: Kuma's
+# exporter and Prometheus's scrape each sit between a heartbeat landing and this query seeing it.
+KUMA_EXPORT_SLACK = 120
+
 _ENTITY_NAME_RE = re.compile(r'"name":\s*"([^"]+)"')
 _ENTITY_TYPE_RE = re.compile(r'"type":\s*"([a-z]+)"')
 _ENTITY_INTERVAL_RE = re.compile(r'"interval":\s*(\d+)')
@@ -1143,11 +1147,18 @@ def format_kuma_drift(declared, live, kuma_age_seconds):
     been up, or None when that could not be read.
 
     Kuma's exporter emits a monitor only once it has received a heartbeat since the process
-    started, so a restart empties the series for every push monitor and each one returns on its
-    next beat. A push monitor whose interval has not elapsed since the restart is therefore
-    PENDING, not missing — reporting it as drift would make this check cry wolf after every
-    deploy. An unreadable pod age is treated as a long uptime: it fails loud rather than quiet,
-    matching `health`'s unreadable-restart-time rule.
+    started, so a restart empties the series for EVERY monitor — http and port tiles included,
+    not just push ones — and each returns on its next beat. A monitor whose interval has not
+    elapsed since the restart is therefore PENDING, not missing; reporting it as drift would
+    make this check cry wolf after every deploy. Measured on the 2026-08-21 rollout: 24 of 82
+    monitors were exported 88 seconds in, and the absent ones spanned every type.
+
+    KUMA_EXPORT_SLACK covers the two lags between a beat and this query seeing it: Kuma's own
+    scrape endpoint and Prometheus's scrape interval. Without it a 60s http monitor reads as
+    missing at 88s of uptime, which is what the first run of this check did.
+
+    An unreadable pod age is treated as a long uptime: it fails loud rather than quiet, matching
+    `health`'s unreadable-restart-time rule.
     """
     missing, pending, gated = [], [], []
     for name, spec in sorted(declared.items()):
@@ -1156,10 +1167,9 @@ def format_kuma_drift(declared, live, kuma_age_seconds):
         if spec["gated"]:
             gated.append(name)
         elif (
-            spec["type"] == "push"
-            and kuma_age_seconds is not None
+            kuma_age_seconds is not None
             and spec["interval"] is not None
-            and kuma_age_seconds < spec["interval"]
+            and kuma_age_seconds < spec["interval"] + KUMA_EXPORT_SLACK
         ):
             pending.append(f"  {name}: no beat due yet ({spec['interval']}s interval)")
         else:
@@ -1169,7 +1179,7 @@ def format_kuma_drift(declared, live, kuma_age_seconds):
     lines = [f"{len(live)} live / {len(declared)} declared"]
     if kuma_age_seconds is not None and pending:
         lines.append(
-            f"  (kuma up {int(kuma_age_seconds)}s — push monitors below not yet due)"
+            f"  (kuma up {int(kuma_age_seconds)}s — monitors below not yet due)"
         )
     lines.extend(missing + orphans + pending)
     if gated:

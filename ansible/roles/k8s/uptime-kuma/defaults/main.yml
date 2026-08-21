@@ -62,6 +62,12 @@ autokuma_k8s_mem_request: 32Mi
 # every push monitor).
 kuma_push_resend_interval_minutes: 360
 
+# CAVEAT, measured 2026-08-21: on the pinned AutoKuma v2.0.0 this value reaches the 25 http
+# monitors and NONE of the 50 push monitors. v2.0.0 declares `resendInterval` on MonitorHttp,
+# MonitorJsonQuery and MonitorKeyword only; MonitorPush has no such field, so serde drops it and
+# every push tile still notifies once per outage. Upstream fixed it in 2.1.0-rc.1 (#152), which
+# is a prerelease — see test_autokuma_pin_still_drops_resend_interval_on_push_monitors.
+
 # No monitor is held at 0. `k3s Longhorn Backup` was, from 2026-08-16 to 2026-08-21, while the
 # weekly tier had never completed a backup and every sharded volume reported uncovered — a
 # condition no operator could clear, so a 6-hourly resend would only have trained the channel to

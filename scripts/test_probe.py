@@ -1631,6 +1631,17 @@ def test_kuma_drift_calls_a_push_monitor_pending_inside_its_own_interval():
     assert "declared, not live" not in text
 
 
+def test_kuma_drift_treats_every_type_as_pending_after_a_restart():
+    # The first live run of this check reported 58 monitors missing 88 seconds into a rollout.
+    # Kuma's exporter emits a monitor only after it beats, and that applies to http/port/dns
+    # tiles too — restricting the pending rule to push monitors made a routine deploy look like
+    # mass drift. The slack covers the exporter's and Prometheus's scrape lag on top.
+    declared = probe.parse_declared_monitors(TEMPLATE_SAMPLE)
+    text, code = probe.format_kuma_drift(declared, set(), 88)
+    assert code == 0
+    assert "k3s Grafana: no beat due yet" in text
+
+
 def test_kuma_drift_fails_loud_when_the_pod_age_is_unreadable():
     # Same rule as `health`'s unreadable restart time: an unknown age must not silently excuse
     # a missing monitor, or the check reports green exactly when it cannot tell.
