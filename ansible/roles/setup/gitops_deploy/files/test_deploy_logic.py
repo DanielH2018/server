@@ -1,4 +1,7 @@
 # ansible/roles/setup/gitops_deploy/files/test_deploy_logic.py
+import ast
+import pathlib
+import sys
 from datetime import datetime
 
 from deploy_logic import (
@@ -1520,3 +1523,133 @@ def test_k8s_role_paths_order_does_not_matter():
     expected = {"sonarr": "ansible/roles/k8s/sonarr/defaults/main.yml"}
     assert k8s_role_paths(before_after) == expected
     assert k8s_role_paths(after_before) == expected
+
+
+# ── deploy_k8s ────────────────────────────────────────────────────────────────────────────────
+# gitops_deploy.py reads /etc/gitops-deploy/config.env at import time (`C = cfg()`), which
+# doesn't exist in CI — see test_gitops_discord_contract.py's docstring, which is why every other
+# guard on that module is an AST source check rather than an import. Stub host_lib.parse_env_file
+# with canned values BEFORE the only import of gitops_deploy in this file, so the import behaves
+# identically in CI and on a host where the real config.env exists, and this suite never reads
+# the real secrets file (forbidden — it's SOPS-managed, see the role CLAUDE.md).
+def _import_gitops_deploy():
+    import host_lib
+
+    real_parse_env_file = host_lib.parse_env_file
+    host_lib.parse_env_file = lambda _path: {
+        "REPO_DIR": "/tmp/gitops-test-repo",
+        "HOSTNAME": "test-host",
+        "DISCORD_WEBHOOK": "https://discord.example/webhook",
+    }
+    try:
+        sys.modules.pop("gitops_deploy", None)
+        import gitops_deploy
+    finally:
+        host_lib.parse_env_file = real_parse_env_file
+    return gitops_deploy
+
+
+gitops_deploy = _import_gitops_deploy()
+
+
+def _capture_run(monkeypatch):
+    """Patch gitops_deploy.run() to record every call instead of shelling out, and return the
+    list it appends to."""
+
+    class _Call:
+        def __init__(self, argv, kwargs):
+            self.argv = argv
+            self.kwargs = kwargs
+
+    calls: list[_Call] = []
+
+    def _fake_run(argv, **kwargs):
+        calls.append(_Call(argv, kwargs))
+        return ""
+
+    monkeypatch.setattr(gitops_deploy, "run", _fake_run)
+    return calls
+
+
+def test_deploy_k8s_passes_no_extra_vars_by_default(monkeypatch) -> None:
+    """The ordinary deploy must be byte-identical to what it was before this slice. ~50
+    services go through this call on every tick."""
+    calls = _capture_run(monkeypatch)
+    gitops_deploy.deploy_k8s({"sonarr"}, 900.0)
+    assert "-e" not in calls[0].argv
+
+
+def test_deploy_k8s_passes_the_restore_sha_when_given(monkeypatch) -> None:
+    calls = _capture_run(monkeypatch)
+    gitops_deploy.deploy_k8s({"sonarr"}, 900.0, restore_sha="deadbeef")
+    assert calls[0].argv[-2:] == ["-e", "k8s_restore_snapshot_sha=deadbeef"]
+
+
+def test_deploy_k8s_treats_a_whitespace_only_restore_sha_as_absent(monkeypatch) -> None:
+    """restore_sha="" or all-whitespace must stay inert, matching the manifests role's own
+    `| trim | length > 0` guard — a blank-but-truthy string must not add a broken `-e` arg."""
+    calls = _capture_run(monkeypatch)
+    gitops_deploy.deploy_k8s({"sonarr"}, 900.0, restore_sha="   ")
+    assert "-e" not in calls[0].argv
+
+
+# ── the rollback call site in main() ─────────────────────────────────────────────────────────
+# main() shells out to git, queries GitHub for a CI verdict over HTTP, posts to Discord, and
+# touches several state files under /var/lib/gitops-deploy — exercising it end-to-end would mean
+# mocking all of that for one two-line assertion. This parses the ACTUAL call arguments Python
+# executes (not comment text), the same AST-source-guard shape test_gitops_discord_contract.py
+# already uses for the rest of this un-importable-in-CI module.
+_GITOPS_SRC = pathlib.Path(__file__).with_name("gitops_deploy.py")
+
+
+def _deploy_k8s_calls_in_main() -> list[ast.Call]:
+    tree = ast.parse(_GITOPS_SRC.read_text())
+    main_fn = next(
+        n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "main"
+    )
+    return [
+        n
+        for n in ast.walk(main_fn)
+        if isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Name)
+        and n.func.id == "deploy_k8s"
+    ]
+
+
+def test_the_rollback_redeploy_passes_the_FAILED_sha_not_the_good_one():
+    """The snapshot worth reverting to was taken before the failed deploy, so it is named for
+    `origin` — the commit being rolled back FROM. Passing `local` here would look correct, find
+    no snapshot for a first-time rollback, and fail the deploy; worse, on a second rollback of
+    the same service it would find a stale snapshot and revert to the wrong point."""
+    calls = _deploy_k8s_calls_in_main()
+    assert len(calls) == 2, (
+        "expected exactly one forward deploy_k8s call and one rollback redeploy in main()"
+    )
+    forward, rollback = calls
+
+    forward_kwargs = {kw.arg for kw in forward.keywords}
+    assert "restore_sha" not in forward_kwargs, (
+        "the forward deploy must not pass restore_sha"
+    )
+
+    rollback_kwargs = {kw.arg: kw.value for kw in rollback.keywords}
+    assert "restore_sha" in rollback_kwargs, (
+        "the rollback redeploy must pass restore_sha"
+    )
+    sha_expr = ast.unparse(rollback_kwargs["restore_sha"])
+    assert sha_expr.startswith("origin"), (
+        f"rollback restore_sha must be derived from `origin` (the FAILED commit) — got "
+        f"`{sha_expr}`"
+    )
+    assert not sha_expr.startswith("local"), (
+        f"rollback restore_sha must not be `local` (the tree is already reset to it by this "
+        f"point) — got `{sha_expr}`"
+    )
+
+
+def test_the_rollback_redeploy_uses_its_own_timeout_budget():
+    """Task 4's addendum: give the rollback redeploy a distinct budget rather than sharing
+    K8S_DEPLOY_TIMEOUT_S, since it does strictly more work than the forward deploy."""
+    forward, rollback = _deploy_k8s_calls_in_main()
+    assert ast.unparse(forward.args[1]) == "K8S_DEPLOY_TIMEOUT_S"
+    assert ast.unparse(rollback.args[1]) == "K8S_ROLLBACK_TIMEOUT_S"

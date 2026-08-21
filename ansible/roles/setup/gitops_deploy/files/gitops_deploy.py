@@ -199,6 +199,13 @@ if K8S_AUTODEPLOY_ENABLED and not K8S_AUTODEPLOY_DENYLIST:
 # feeds gate_services(), the Docker health gate, which is inert on an all-k8s host — so without
 # this the only bound is systemd's TimeoutStartSec SIGTERM, which can land mid-rollback.
 K8S_DEPLOY_TIMEOUT_S = int(C.get("K8S_DEPLOY_TIMEOUT_S", "900"))
+# Bounds the ROLLBACK redeploy specifically — the run that also reverts each claimed volume to
+# its pre-deploy snapshot (k8s/volume-revert), which is strictly more work than a forward deploy:
+# per claim, worst case is 3 state waits + 3 API calls against Longhorn, and tdarr/code-server
+# each hold two claims. Defaults to K8S_DEPLOY_TIMEOUT_S's own default so this slice changes no
+# behaviour today. UNSIZED: nothing has measured a real revert cycle against this value yet.
+# Task 6's drill supplies that measurement; raise it only against that evidence, not a guess.
+K8S_ROLLBACK_TIMEOUT_S = int(C.get("K8S_ROLLBACK_TIMEOUT_S", "900"))
 
 # ── CI gate ───────────────────────────────────────────────────────────────────────────────────
 # Refuse to deploy a master tip whose CI is red or unfinished. Without this the deployer applies
@@ -572,7 +579,9 @@ def k8s_image_diff(local: str, origin: str, svc: str) -> str:
     )
 
 
-def deploy_k8s(services: set[str], timeout: float) -> None:
+def deploy_k8s(
+    services: set[str], timeout: float, restore_sha: str | None = None
+) -> None:
     """Deploy k8s services by tag. The rollout gate lives INSIDE the role.
 
     No health-poll phase here on purpose: the play already runs apply (roles/k8s/manifests)
@@ -586,21 +595,26 @@ def deploy_k8s(services: set[str], timeout: float) -> None:
     batched and the stabilisation window deferred to end-of-play; the sequence above is
     unchanged, but assert_stable.yml is no longer on this path (claude-otel still imports it
     as its own variant, since it rolls itself).
+
+    restore_sha, when given, is passed to the play as the `k8s_restore_snapshot_sha` extra-var,
+    which roles/k8s/manifests reads to revert each service's claimed volumes to the snapshot
+    named for that SHA before re-applying. Omitted (the ordinary deploy) or blank, the extra-var
+    is never added — the call is byte-identical to before this argument existed.
     """
     tags = ",".join(sorted(services))
     log(f"deploying k8s services: {tags} (timeout {timeout:.0f}s)")
-    run(
-        [
-            "uv",
-            "run",
-            "--frozen",
-            "ansible-playbook",
-            "ansible/deploy.yml",
-            "--tags",
-            tags,
-        ],
-        timeout=timeout,
-    )
+    argv = [
+        "uv",
+        "run",
+        "--frozen",
+        "ansible-playbook",
+        "ansible/deploy.yml",
+        "--tags",
+        tags,
+    ]
+    if restore_sha is not None and restore_sha.strip():
+        argv += ["-e", f"k8s_restore_snapshot_sha={restore_sha}"]
+    run(argv, timeout=timeout)
 
 
 def deploy(services: set[str]) -> None:
@@ -830,7 +844,15 @@ def main() -> int:
             write_hold(origin)
             run(["git", "reset", "--hard", local])
             try:
-                deploy_k8s(cs.k8s_deploy, K8S_DEPLOY_TIMEOUT_S)
+                # `origin`, not `local`: the tree is already reset to the last-good commit, so
+                # the snapshot worth reverting to is the one taken before the FAILED deploy —
+                # named for `origin`, the commit being rolled back FROM. Passing `local` looks
+                # right and is wrong twice over: on a first rollback it finds no snapshot and
+                # fails the deploy, and on a second rollback of the same service it finds a
+                # STALE snapshot and reverts to the wrong point.
+                deploy_k8s(
+                    cs.k8s_deploy, K8S_ROLLBACK_TIMEOUT_S, restore_sha=origin[:8]
+                )
             except Exception as exc2:  # noqa: BLE001 — best-effort restore; we still hold + alert
                 log(f"k8s rollback redeploy of the prior version also failed: {exc2}")
             posted = discord(
@@ -838,6 +860,9 @@ def main() -> int:
                 f"`{', '.join(sorted(cs.k8s_deploy))}` from `{origin[:8]}` failed its rollout "
                 f"gate:\n`{exc}`\n"
                 f"Rolled back locally to `{local[:8]}`.\n"
+                f"Volume revert to the pre-deploy snapshot was attempted for "
+                f"`{', '.join(sorted(cs.k8s_deploy))}` (a no-op for any of them that declares no "
+                f"`k8s_autodeploy_snapshot_pvcs`).\n"
                 f"**The bad pin is still live on master.** The hold only skips THIS commit — "
                 f"`skip_hold` matches while `origin_head == hold_sha`, so the next push past it "
                 f"redeploys the same pin.\n"
