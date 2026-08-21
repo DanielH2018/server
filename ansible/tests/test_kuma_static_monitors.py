@@ -60,6 +60,11 @@ STUBS = {
     "pi_sd_health_push_token": "t" * 32,
     "pi_recovery_push_token": "t" * 32,
     "secret_rotation_push_token": "t" * 32,
+    # Both of these gate their monitor behind `{% if <token> %}`, so omitting the stub does not
+    # fail a test — it renders the entity away and every guard below silently stops covering it.
+    # Added 2026-08-21, when the email-tier guard was the first assertion to notice.
+    "manifest_prune_push_token": "t" * 32,
+    "etcd_snapshot_push_token": "t" * 32,
 }
 
 # The resend intervals come from the role's real defaults, not from a stub. Stubbing them would
@@ -121,12 +126,11 @@ def test_push_monitors_never_retry():
 # would otherwise resend into a channel until it gets muted. Enumerated here rather than left to
 # the template so that adding one is a visible decision and forgetting to remove one is a test
 # that keeps naming it.
-RESEND_HELD = {
-    # Down since 04:30 2026-08-16; the weekly tier has never completed a backup, so every
-    # sharded volume reports uncovered until the first weekly-backup-dN run succeeds. Notifies
-    # email as well as Discord. LIFT: first green weekly shard run.
-    "k3s Longhorn Backup",
-}
+#
+# Empty since 2026-08-21. `k3s Longhorn Backup` was the only entry, held from 2026-08-16 while
+# the weekly tier had never completed a backup; its shard run completed at 04:30 on 2026-08-21
+# and the hold lifted. An empty set is the normal state — it means every push monitor re-notifies.
+RESEND_HELD: set[str] = set()
 
 
 def test_push_monitors_re_notify_while_still_down():
@@ -155,3 +159,36 @@ def test_both_managed_notifications_are_defined():
     entities = _entities()
     notifications = {n for n, e in entities.items() if e["type"] == "notification"}
     assert notifications == {"discord.json", "email.json"}
+
+
+# Monitors whose failure is invisible on Discord alone and cannot wait for someone to notice a
+# muted channel — the tier that also mails. Enumerated rather than pattern-matched: "has 'B2' in
+# the name" is exactly the rule that put B2's headroom tile on this tier and left R2's off it
+# until 2026-08-21, though both watch a Longhorn backup target's remaining free-tier capacity.
+EMAIL_TIER = {
+    "k3s Longhorn Backup",
+    "Longhorn Volume Redundancy",
+    "daniel-box Disk",
+    "Daniel Pi SD Health",
+    "Off-box etcd Snapshot",
+    "Root Disk",
+    "TLS Cert Expiry",
+    "B2 Reachable",
+    "B2 Free Tier Headroom",
+    "R2 Free Tier Headroom",
+    "SMART Data / Health",
+    "UPS Battery Health",
+    "Discord Delivery",
+}
+
+
+def test_email_tier_membership_is_exactly_declared():
+    # Both directions matter. A monitor dropping off the tier loses the leg that survives a
+    # degraded Discord; one drifting onto it dilutes an inbox that has to stay worth reading.
+    named = {
+        e["name"]
+        for e in _entities().values()
+        if e["type"] != "notification"
+        and "email" in e.get("notification_name_list", [])
+    }
+    assert named == EMAIL_TIER

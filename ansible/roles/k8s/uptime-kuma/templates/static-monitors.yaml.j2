@@ -37,8 +37,11 @@ stringData:
       "config": {"type": "discord", "discordWebhookUrl": "{{ monitor_discord_webhook_url }}", "discordUsername": "Uptime Kuma"}
     }
   # Fans out to BOTH channels: the Discord dead-man's-switch below, plus the critical tier
-  # (backup/B2, disks, SMART, SD, cert expiry, UPS) — a *degraded* Discord loses individual
-  # alerts while the watchdog stays green, and those are the ones that can't wait a day.
+  # (both backup targets, disks, SMART, SD, cert expiry, UPS) — a *degraded* Discord loses
+  # individual alerts while the watchdog stays green, and those are the ones that can't wait a
+  # day. "Both backup targets" was "backup/B2" until 2026-08-21: B2's headroom tile was on this
+  # tier and R2's was not, though R2 is a Longhorn backup target too and a full bucket stops its
+  # backups the same way. The membership test is what a monitor guards, not which vendor it names.
   email.json: |
     {
       "type": "notification",
@@ -173,7 +176,7 @@ stringData:
   cloudflare-ddns-direct-push.json: |
     {"type": "push", "name": "Cloudflare DDNS Direct", "interval": 300, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ cloudflare_ddns_direct_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   longhorn-backup.json: |
-    {"type": "push", "name": "k3s Longhorn Backup", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_longhorn_backup_resend_interval_minutes }}, "push_token": "{{ longhorn_backup_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "k3s Longhorn Backup", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ longhorn_backup_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   monitor-bridge-longhorn-volumes.json: |
     {"type": "push", "name": "Longhorn Volume Redundancy", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_longhorn_volumes_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   daniel-box-disk.json: |
@@ -259,7 +262,7 @@ stringData:
   monitor-bridge-k8s-workloads.json: |
     {"type": "push", "name": "k3s Workload Health", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_k8s_workloads_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-r2-usage.json: |
-    {"type": "push", "name": "R2 Free Tier Headroom", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_r2_usage_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "R2 Free Tier Headroom", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_r2_usage_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   monitor-bridge-b2-storage.json: |
     {"type": "push", "name": "B2 Free Tier Headroom", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_b2_storage_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   monitor-bridge-cluster-targets.json: |
