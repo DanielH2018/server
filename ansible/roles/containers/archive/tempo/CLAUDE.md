@@ -43,10 +43,13 @@ changes only apply to **new** Claude Code sessions.
   Verify any bump before deploying:
   `docker run --rm -v <cfg>:/etc/tempo/config.yaml:ro grafana/tempo:<tag> -config.file=/etc/tempo/config.yaml -config.verify=true`
   (the config must be mode 0644 for that check — see below).
-- **Excluded from CI's bare-boot image smoke** (`scripts/smoke_extract.py` `_SKIP_BARE_BOOT`).
-  Tempo has no default storage backend, so `docker run grafana/tempo` with no config exits at
-  once with `failed to create store: unknown backend ""` — the same hard-exit class as
-  authelia. Its real boot is covered by the gitops host health gate after merge.
+- **Fails CI's bare boot, which no longer matters.** Tempo has no default storage backend, so
+  `docker run grafana/tempo` with no config exits at once with
+  `failed to create store: unknown backend ""` — the same hard-exit class as authelia. That
+  used to exclude it from image-smoke via a `_SKIP_BARE_BOOT` list; since 2026-08-21 the bare
+  boot is advisory and the fatal checks never execute the image, so tempo is smoked like any
+  other ref and the exit shows up as a warning. Its real boot is covered by the gitops host
+  health gate after merge.
 - **Runs as uid 10001, not PUID 1000.** Not an LSIO image, so there is no PUID/PGID to set.
   Two consequences: the config is copied **0644** (not the repo's usual 0664) because 10001
   reads it only via the world bit, and the data volume must be 10001-writable.

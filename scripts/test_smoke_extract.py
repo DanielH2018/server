@@ -42,48 +42,26 @@ def test_dedupes():
     assert extract_changed_images(diff) == ["foo:2"]
 
 
-def test_skips_config_mandatory_images():
-    # authelia + couchdb + tempo crash on a bare `docker run` (no config/creds), so image-smoke
-    # must not try to boot them or the required check false-fails; any tag is skipped.
+def test_config_required_images_are_still_emitted():
+    # These four are the shapes that used to be filtered out by _SKIP_BARE_BOOT: two that
+    # hard-exit without their config, one whose baked healthcheck never reaches "healthy" in
+    # the poll window, and one whose Cmd is a CLI binary that prints help and exits 1.
+    #
+    # Emitting them is the point. The workflow's fatal checks do not execute the image, so a
+    # config-required entrypoint no longer decides anything; excluding them had also excluded
+    # them from the `docker pull`, leaving those refs verified by nothing at all.
     diff = (
         "+    image: authelia/authelia:4.39.20\n"
-        "+    image: couchdb:3.5.2\n"
-        "+    image: grafana/tempo:2.10.7\n"
+        "+    image: couchdb:3.5.2@sha256:abc123\n"
+        "+    image: ghcr.io/karakeep-app/karakeep:release\n"
+        "+karakeep_k8s_tagger_image: ghcr.io/astral-sh/uv:python3.14-bookworm-slim\n"
     )
-    assert extract_changed_images(diff) == []
-
-
-def test_skips_never_healthy_image():
-    # karakeep boots and stays up but its baked healthcheck never reaches "healthy" within
-    # image-smoke's poll window, so image-smoke false-fails on its Renovate digest bumps; skip
-    # it by repository like the hard-exit ones (its real config is covered by the host health gate).
-    diff = (
-        "+    image: ghcr.io/karakeep-app/karakeep:release"
-        "@sha256:64d6a9bbf2d37b5c808cf06b5d87f1f1c7846fdd3844724145a9741aeb06fd31\n"
-    )
-    assert extract_changed_images(diff) == []
-
-
-def test_skips_cli_entrypoint_image():
-    # The uv base image's Cmd is ["/usr/local/bin/uv"], so a bare `docker run` invokes the CLI
-    # with no arguments: help text, exit 1. It never satisfies the boot step's "stays up, or
-    # exits 0" rule at any tag, and the karakeep manifests override `command:` anyway.
-    diff = (
-        "+karakeep_k8s_tagger_image: ghcr.io/astral-sh/uv:python3.14-bookworm-slim"
-        "@sha256:7cf77f594be8042dab6daa9fe326f90962252268b4f120a7f5dccce4d947e6c1\n"
-    )
-    assert extract_changed_images(diff) == []
-
-
-def test_skip_list_is_repo_scoped_not_substring():
-    # A different repo whose name merely contains a skipped one is still smoked.
-    diff = "+    image: ghcr.io/example/couchdb-exporter:1.0\n"
-    assert extract_changed_images(diff) == ["ghcr.io/example/couchdb-exporter:1.0"]
-
-
-def test_skips_digest_pinned_skiplist_image():
-    diff = "+    image: couchdb:3.5.2@sha256:abc123\n"
-    assert extract_changed_images(diff) == []
+    assert extract_changed_images(diff) == [
+        "authelia/authelia:4.39.20",
+        "couchdb:3.5.2@sha256:abc123",
+        "ghcr.io/karakeep-app/karakeep:release",
+        "ghcr.io/astral-sh/uv:python3.14-bookworm-slim",
+    ]
 
 
 def test_extracts_k8s_default_image_var():
@@ -112,12 +90,15 @@ def test_k8s_default_jinja_templated_image_is_skipped():
     assert extract_changed_images(diff) == []
 
 
-def test_k8s_default_image_skiplist_repo_still_skipped():
+def test_k8s_default_image_var_emits_a_digest_pinned_ref():
     diff = (
         "+karakeep_k8s_image: ghcr.io/karakeep-app/karakeep:release"
         "@sha256:64d6a9bbf2d37b5c808cf06b5d87f1f1c7846fdd3844724145a9741aeb06fd31\n"
     )
-    assert extract_changed_images(diff) == []
+    assert extract_changed_images(diff) == [
+        "ghcr.io/karakeep-app/karakeep:release"
+        "@sha256:64d6a9bbf2d37b5c808cf06b5d87f1f1c7846fdd3844724145a9741aeb06fd31"
+    ]
 
 
 def test_k8s_default_image_ignores_removed_and_non_image_vars():
