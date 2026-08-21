@@ -5,8 +5,20 @@ name: image-smoke
 # stuck at "Expected — waiting for status". The job self-scopes instead — the
 # "Collect changed image refs" step diffs only the compose templates, so a PR that
 # touches none yields an empty list and the boot step is skipped (a fast green).
+#
+# workflow_dispatch takes an explicit list instead of the diff, for two jobs the PR trigger
+# cannot do. It is the only way to exercise a change to the check itself — a PR that edits this
+# file changes no image pin, so the diff is empty and the checks below never run. And it is how
+# to sweep refs the PR path has not seen: 12 of the 81 tracked pins were excluded from even the
+# `docker pull` until 2026-08-21, so nothing has ever verified that those tags resolve.
 on:
   pull_request:
+  workflow_dispatch:
+    inputs:
+      images:
+        description: "Image refs to check, whitespace-separated. Empty falls back to the PR diff, which is empty on a dispatch."
+        required: false
+        type: string
 
 # Cancel a superseded run when new commits land on the same PR (force-push / Renovate
 # rebases) — image-smoke pulls + boots images, so superseded runs waste real runner minutes.
@@ -44,7 +56,27 @@ jobs:
         id: images
         env:
           BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
+          DISPATCH_IMAGES: ${{ inputs.images }}  # same: data, never shell source
         run: |
+          set -euo pipefail
+          # A dispatch names its refs outright; there is no base branch to diff against.
+          if [ -n "${DISPATCH_IMAGES:-}" ]; then
+            images="$(printf '%s' "$DISPATCH_IMAGES" | tr -s '[:space:]' '\n' | sed '/^$/d')"
+            {
+              echo "list<<EOF"
+              echo "$images"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+            echo "Dispatched images:"; echo "$images"
+            exit 0
+          fi
+          if [ -z "${BASE_REF:-}" ]; then
+            # A dispatch that named no images. Nothing to diff against; say so rather than
+            # letting `git fetch origin ""` fail the job.
+            printf 'list<<EOF\nEOF\n' >> "$GITHUB_OUTPUT"
+            echo "No images given and no base branch to diff — nothing to check."
+            exit 0
+          fi
           # No --depth here. The checkout above is full (fetch-depth: 0) precisely so the
           # three-dot diff below can find a merge base; a shallow fetch writes a shallow
           # boundary over origin/$BASE_REF and the merge base becomes unreachable, failing
