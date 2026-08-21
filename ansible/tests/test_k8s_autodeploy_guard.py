@@ -247,6 +247,67 @@ def test_batch_templates_sees_every_document_in_a_multi_job_template() -> None:
     assert found == {"registry-selftest-pull", "registry-selftest-pull-agent"}
 
 
+def test_commented_out_wait_does_not_count_as_gated(tmp_path: Path) -> None:
+    """A `wait --for=condition=complete job/<name>` inside a `#` comment must not gate.
+
+    Synthetic rather than a live role, per R5's own standard: a fixture pins the behavior
+    against a mutation instead of a role that might be retired. The vulnerable shape is a
+    single-line comment — the whole `wait ... job/<name>` command on one line with a `#`
+    only at its start, so nothing sits between "complete" and "job/" to break the match. A
+    disabled task folded across two YAML lines (each independently `#`-prefixed) happens to
+    self-defeat the same regex for an unrelated reason — the `#` on the second line lands
+    between "complete" and "job/" — so that shape would pass even before this fix and is not
+    the case this test needs to cover.
+    """
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(
+        "# disabled: k3s kubectl -n ns wait --for=condition=complete "
+        "job/widget-probe --timeout=120s\n"
+    )
+    assert _batch_gated_names(role) == set()
+
+
+def test_single_wait_naming_two_jobs_credits_both(tmp_path: Path) -> None:
+    """One `wait --for=condition=complete` naming two Jobs must credit both names.
+
+    Synthetic mirror of registry's real `wait ... job/registry-selftest-pull
+    job/registry-selftest-pull-agent`, pinned independently so the guard's behavior on a
+    multi-name wait doesn't depend on that role continuing to exist or stay denylisted.
+    """
+    role = tmp_path / "widget"
+    (role / "tasks").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text(
+        "- ansible.builtin.command:\n"
+        "    cmd: >-\n"
+        "      k3s kubectl -n ns wait --for=condition=complete\n"
+        "      job/widget-a job/widget-b --timeout=120s\n"
+    )
+    assert _batch_gated_names(role) == {"widget-a", "widget-b"}
+
+
+def test_batch_templates_sees_quoted_and_commented_kind(tmp_path: Path) -> None:
+    """`kind: "Job"` and `kind: Job  # comment` must both be seen as batch templates.
+
+    Both are valid YAML that kubectl applies identically to the bare `kind: Job` form. No
+    live template uses either spelling today, so this is prophylactic — pinned here rather
+    than left to a mutation that was only ever run by hand.
+    """
+    role = tmp_path / "widget"
+    (role / "templates").mkdir(parents=True)
+    (role / "templates" / "quoted-job.yaml.j2").write_text(
+        'apiVersion: batch/v1\nkind: "Job"\nmetadata:\n  name: widget-quoted\n'
+    )
+    (role / "templates" / "commented-job.yaml.j2").write_text(
+        "apiVersion: batch/v1\nkind: Job  # one-shot\nmetadata:\n  name: widget-commented\n"
+    )
+    found = dict(_batch_templates(role))
+    assert found == {
+        "quoted-job.yaml.j2": "widget-quoted",
+        "commented-job.yaml.j2": "widget-commented",
+    }
+
+
 def test_auto_deployable_roles_gate_every_batch_workload_they_render() -> None:
     """An auto-deployable role must wait on every Job/CronJob it renders.
 
@@ -254,8 +315,8 @@ def test_auto_deployable_roles_gate_every_batch_workload_they_render() -> None:
     no Deployment to watch, `manifests_rollout: ''` skips the stability soak too, and a bad
     image is reported as a successful deploy. A role delegating its batch workload to a
     shared role (image-builder) renders no Job/CronJob template of its own, so the inner
-    loop below never runs for it — that is what makes the delegation safe, with no
-    exemption branch needed here.
+    loop below never runs for it and the role passes vacuously — a known limit, not a hole
+    an exemption branch was ever needed to close (see the module docstring).
     """
     offenders = []
     for role in _roles():
@@ -283,8 +344,13 @@ def test_gating_shared_roles_actually_wait() -> None:
     image-builder's own wait is `... || wait --for=condition=failed` with no `failed_when`
     on that task, so it exits 0 on a failed build by design — what actually fails the play
     is a separate `ansible.builtin.fail` task a few steps later. So this checks for a wait
-    AND a failure escalation (`ansible.builtin.fail` or `failed_when`) somewhere in the
-    role's tasks, not that the two are wired together end to end.
+    AND an `ansible.builtin.fail` somewhere in the role's tasks, not that the two are wired
+    together end to end.
+
+    `failed_when` is deliberately NOT accepted as the second half: `failed_when: false` and
+    `failed_when: rc != 0` are opposite meanings sharing a prefix, and a substring test
+    cannot tell them apart — accepting either would let a failure *suppressor* satisfy a
+    check written to prove failure escalates.
 
     Reads the file with whole-line comments stripped: `configarr/tasks/main.yml` (not a
     member of this set, but the risk is general) explains in a comment why it deliberately
@@ -300,9 +366,9 @@ def test_gating_shared_roles_actually_wait() -> None:
         assert "wait --for=condition=complete" in text, (
             f"{shared}: trusted as a gating shared role but never waits for completion"
         )
-        assert "ansible.builtin.fail" in text or "failed_when" in text, (
-            f"{shared}: waits for completion but has no failure escalation "
-            "(ansible.builtin.fail / failed_when) to actually fail the deploy"
+        assert "ansible.builtin.fail" in text, (
+            f"{shared}: waits for completion but has no ansible.builtin.fail to actually "
+            "fail the deploy on a bad image"
         )
 
 
