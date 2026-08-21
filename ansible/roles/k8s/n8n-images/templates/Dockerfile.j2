@@ -28,7 +28,7 @@
 # repositories publish a `stable` tag and both resolved to 2.35.4 when this was written, and
 # renovate.json groups them into one PR. test_renovate_managers.py asserts the two carry the same
 # TAG — their digests differ by design, since they are different images.
-FROM n8nio/n8n:stable@sha256:2f9c115b71c9c2f3e856ba8debecf26dfd6a8fca67a6790e32d63b3931b7c2d4
+FROM n8nio/n8n:stable@sha256:c5861e6016c8f283142584190e3874e6aa6f322eca8771ceead09d08b4766a1e
 
 # Switch to the root user to install packages
 USER root
