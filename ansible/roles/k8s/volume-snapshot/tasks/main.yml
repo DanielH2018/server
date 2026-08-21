@@ -70,6 +70,22 @@
       snapshot slice 7b would not be able to find.
     quiet: true
 
+# Set ONCE here, not inside claim.yml's per-claim loop. Redeploying an older commit is the
+# manual rollback this slice exists to enable, and `autodeploy-<svc>-<sha8>-<claim>` alone
+# already names a Snapshot CR from that commit's earlier deploy — markRemoved but not yet gone,
+# because the delete's finalizer only clears at the next detach (see CLAUDE.md). `apply` against
+# that name reports "unchanged" rather than taking a new snapshot, so the rollback would either
+# reuse a stale recovery point or fail against a markRemoved CR. Appending this token makes every
+# run's name distinct while `autodeploy-<svc>-<sha8>-<claim>` survives as a PREFIX 7b reconstructs.
+#
+# `now(utc=true, ...)` needs no gathered facts, unlike `ansible_date_time`. A token recomputed
+# inside the per-claim loop would drift mid-role: the wait task a few steps later polls for the
+# exact name the apply task created, and two different `now()` calls would not agree on it.
+- name: Compute a per-run token for {{ volume_snapshot_service }}
+  tags: [deploy]
+  ansible.builtin.set_fact:
+    volume_snapshot_run_token: "{{ now(utc=true, fmt='%Y%m%d%H%M%S') }}"
+
 # One include per claim rather than a loop per task: each claim resolves to its own volume, its
 # own snapshot name and its own prune set, and a per-task loop would leave every register as a
 # `.results` list that the asserts and the Jinja below would have to index in parallel. That

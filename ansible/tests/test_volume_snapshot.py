@@ -241,6 +241,7 @@ def test_the_snapshot_name_starts_with_the_prefix_the_prune_selects_on() -> None
         "volume_snapshot_claim": "widget-config",
         "volume_snapshot_sha": {"stdout": "a1b2c3d4\n"},
         "volume_snapshot_pvc": {"stdout": "pvc-0000\n"},
+        "volume_snapshot_run_token": "20260821120000",
     }
     name = str(_render(facts["volume_snapshot_name"], **context)).strip()
     prefix = str(_render(facts["volume_snapshot_prefix"], **context))
@@ -250,6 +251,52 @@ def test_the_snapshot_name_starts_with_the_prefix_the_prune_selects_on() -> None
     # reconstructs that string from the service and the deploy tag and matches on it.
     assert name.startswith("autodeploy-widget-a1b2c3d4")
     assert _prune([_line("2026-08-21T10:00:00Z", name)], 0, prefix) == []
+
+
+def test_the_full_name_has_the_sha_claim_string_as_a_strict_prefix() -> None:
+    """R2: the run token makes `autodeploy-<svc>-<sha8>-<claim>` non-unique by design (a
+    rollback redeploy must not collide with that commit's earlier snapshot), so 7b's
+    reconstruction is a prefix match rather than an equality test. Pin that the reconstructable
+    string — service, sha8, and claim, with no run token — is still an exact prefix of whatever
+    this role actually names the CR, and that the token is what comes after it.
+    """
+    facts = _named(_CLAIM, "Name the pre-deploy snapshot")["ansible.builtin.set_fact"]
+    context = {
+        "volume_snapshot_service": "widget",
+        "volume_snapshot_claim": "widget-config",
+        "volume_snapshot_sha": {"stdout": "a1b2c3d4\n"},
+        "volume_snapshot_run_token": "20260821120000",
+    }
+    name = str(_render(facts["volume_snapshot_name"], **context)).strip()
+    assert name == "autodeploy-widget-a1b2c3d4-widget-config-20260821120000"
+    assert name.startswith("autodeploy-widget-a1b2c3d4-widget-config")
+
+
+def test_two_deploys_of_the_same_sha_get_two_names() -> None:
+    """R2: redeploying an older commit is the manual rollback this slice exists to enable, and
+    it must not be refused by its own snapshot step colliding with that commit's earlier,
+    markRemoved-but-not-gone CR. Two runs with different tokens for the same service/claim/sha
+    must produce two distinct names, both sharing the reconstructable prefix.
+    """
+    expression = _named(_CLAIM, "Name the pre-deploy snapshot")[
+        "ansible.builtin.set_fact"
+    ]["volume_snapshot_name"]
+    names = {
+        str(
+            _render(
+                expression,
+                volume_snapshot_service="widget",
+                volume_snapshot_claim="widget-config",
+                volume_snapshot_sha={"stdout": "a1b2c3d4"},
+                volume_snapshot_run_token=token,
+            )
+        ).strip()
+        for token in ("20260810090000", "20260821120000")
+    }
+    assert len(names) == 2
+    assert all(
+        name.startswith("autodeploy-widget-a1b2c3d4-widget-config") for name in names
+    )
 
 
 def test_two_claims_of_one_service_get_two_names() -> None:
@@ -265,11 +312,39 @@ def test_two_claims_of_one_service_get_two_names() -> None:
                 volume_snapshot_service="pihole",
                 volume_snapshot_claim=claim,
                 volume_snapshot_sha={"stdout": "a1b2c3d4"},
+                volume_snapshot_run_token="20260821120000",
             )
         ).strip()
         for claim in ("pihole-etc", "pihole-dnsmasq")
     }
     assert len(names) == 2
+
+
+def test_the_run_token_is_computed_once_in_main_not_inside_the_claim_loop() -> None:
+    """A token recomputed per claim would drift mid-role: the wait task in claim.yml polls for
+    the exact name the apply task in the SAME claim.yml pass created, so two different `now()`
+    calls for the same claim would never agree on it. Pin that the fact is set in main.yml
+    (which runs once per role, before the per-claim loop) and nowhere in claim.yml (which runs
+    once per claim, inside that loop).
+    """
+    main_task = _named(_MAIN, "Compute a per-run token")["ansible.builtin.set_fact"]
+    assert "volume_snapshot_run_token" in main_task
+    assert not any(
+        "volume_snapshot_run_token" in (task.get("ansible.builtin.set_fact") or {})
+        for task in _tasks(_CLAIM)
+    ), (
+        "the run token must be set once in main.yml, not recomputed inside claim.yml's loop"
+    )
+
+
+def test_the_run_token_uses_now_with_no_gathered_facts() -> None:
+    """`now(utc=true, ...)` needs no `ansible_date_time` fact, unlike the alternative. Pinned so
+    a future edit can't quietly reintroduce a `gather_facts` dependency this role doesn't have."""
+    expression = _named(_MAIN, "Compute a per-run token")["ansible.builtin.set_fact"][
+        "volume_snapshot_run_token"
+    ]
+    assert "now(utc=true" in expression.replace(" ", "").replace("'", "")
+    assert "ansible_date_time" not in expression
 
 
 # ------------------------------------------------------------------------- the detached-volume skip
