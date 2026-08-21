@@ -102,6 +102,28 @@ def check_kuma_monitors():
     return OK, f"{count} monitors provisioned"
 
 
+def check_kuma_drift():
+    """§9.1 — a monitor that is declared and never created reads as green everywhere else.
+
+    The check above counts what the exporter emits, which is also the denominator, so a tile
+    that vanishes cannot move it. `probe.py kuma-drift` compares that set against the
+    declaration file instead; see its docstring for the 2026-08-20 instance and for why a push
+    monitor inside its own interval after a Kuma restart is PENDING rather than missing.
+    """
+    status, body = _cluster_prom_query('monitor_status{job="uptime-kuma"}')
+    if status != 200:
+        return FAIL, f"cluster prometheus query returned {status}"
+    live = {
+        (s.get("metric") or {}).get("monitor_name")
+        for s in json.loads(body).get("data", {}).get("result", [])
+    }
+    live.discard(None)
+    with open(probe.STATIC_MONITORS_PATH) as f:
+        declared = probe.parse_declared_monitors(f.read())
+    text, code = probe.format_kuma_drift(declared, live, probe.kuma_pod_age_seconds())
+    return (FAIL if code else OK), text.replace("\n", "; ").strip()
+
+
 def check_kuma_scrape():
     """§9.2 — a stale prometheus_kuma_api_key leaves the uptime-kuma target at 401.
     Reads `up{job=...}` rather than the targets API: the cluster route only admits
@@ -202,6 +224,7 @@ def check_authelia():
 
 CHECKS = [
     ("9.1", "Uptime-Kuma admin", check_kuma_monitors),
+    ("9.1", "Uptime-Kuma monitor drift", check_kuma_drift),
     ("9.2", "Kuma API key (prometheus scrape)", check_kuma_scrape),
     *[
         ("9.3", f"{app} API key", (lambda a: lambda: check_arr_key(a))(app))

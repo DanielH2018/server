@@ -290,10 +290,16 @@ Hand-running an auto-approved *write* verb creates drift from the Ansible source
 - **`scripts/probe.py`** — read-only homelab diagnostics, allow-listed (no prompt). Resolves the
   live container IP via `docker inspect`, so prefer it over curling bridge IPs (which change on
   recreate): `uv run python scripts/probe.py <targets | metric '<promql>' | loki-query '<logql>' |
-  alerts | scrutiny | pi <path> | cert <host> | health <svc> | ha <state|automation|get> …>`.
+  alerts | monitors | kuma-drift | scrutiny | pi <path> | cert <host> | health <svc> |
+  ha <state|automation|get> …>`.
   `alerts [--days N --check X]` reconstructs monitor-bridge's DOWN alert history from Loki (Kuma
   keeps only current state) — one row per firing episode; the same view is the "Alert History"
-  Grafana board (Infrastructure folder). `health <svc>` is a k8s post-deploy gate: it exits 0 only
+  Grafana board (Infrastructure folder). `monitors` answers "what is down"; **`kuma-drift`
+  answers "what is missing"**, which `monitors` structurally cannot — it counts the exporter's
+  own set, so a monitor that is gone rather than down leaves the ratio at N/N up (a fenced-off
+  push tile read green for a day on 2026-08-20). `kuma-drift` diffs that set against
+  `static-monitors.yaml.j2` and treats a push monitor inside its own interval after a Kuma
+  restart as pending, since Kuma exports a monitor only once it has beaten. `health <svc>` is a k8s post-deploy gate: it exits 0 only
   when the Deployment **or DaemonSet** is fully rolled out (observed generation caught up, every
   replica updated + ready + available) **and** no container restarted in the last 180s. An
   unreadable restart time counts as recent, so it fails closed. Both halves matter — readiness

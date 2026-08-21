@@ -1079,6 +1079,153 @@ def format_monitor_status(data):
     return summary, 0
 
 
+# --- kuma-drift: declared monitors vs live ones ------------------------------
+#
+# `monitors` divides the exporter's monitor count by itself, so it reports "N/N up" over
+# whatever Kuma happens to be exporting. A monitor that is declared and never created, or
+# created and then paused, is absent from that set and therefore absent from the ratio — it
+# reads as green. `test_kuma_static_monitors.py` has the same blind spot from the other end:
+# it validates the declaration file against itself and never asks what is live.
+#
+# The instance that motivated this: `WG Pi Peer Backup` lost its heartbeat to a NetworkPolicy
+# on 2026-08-20, and `monitors` reported 81/81 up for a day with the tile simply gone.
+#
+# Declared names are read straight out of the template rather than rendered through Jinja: every
+# `"name"` in it is a literal, and parsing beats standing up a Jinja environment with a stub for
+# every push token just to recover strings that were never templated.
+STATIC_MONITORS_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "ansible",
+    "roles",
+    "k8s",
+    "uptime-kuma",
+    "templates",
+    "static-monitors.yaml.j2",
+)
+
+_ENTITY_NAME_RE = re.compile(r'"name":\s*"([^"]+)"')
+_ENTITY_TYPE_RE = re.compile(r'"type":\s*"([a-z]+)"')
+_ENTITY_INTERVAL_RE = re.compile(r'"interval":\s*(\d+)')
+_JINJA_IF_RE = re.compile(r"{%-?\s*if\b")
+_JINJA_ENDIF_RE = re.compile(r"{%-?\s*endif\b")
+
+
+def parse_declared_monitors(text):
+    """Monitor declarations from the static-monitors template.
+
+    Returns {name: {"type": str, "interval": int|None, "gated": bool}}. `gated` marks an entity
+    inside a `{% if <token> %}` block — those render away when the secret is unset, so their
+    absence from Kuma is a configuration state and not drift.
+    """
+    declared, depth = {}, 0
+    for line in text.splitlines():
+        depth += len(_JINJA_IF_RE.findall(line))
+        depth -= len(_JINJA_ENDIF_RE.findall(line))
+        name = _ENTITY_NAME_RE.search(line)
+        kind = _ENTITY_TYPE_RE.search(line)
+        if not name or not kind:
+            continue
+        if kind.group(1) == "notification":  # not a monitor; never in monitor_status
+            continue
+        interval = _ENTITY_INTERVAL_RE.search(line)
+        declared[name.group(1)] = {
+            "type": kind.group(1),
+            "interval": int(interval.group(1)) if interval else None,
+            "gated": depth > 0,
+        }
+    return declared
+
+
+def format_kuma_drift(declared, live, kuma_age_seconds):
+    """Compare declared monitor names against the live exporter's. Pure.
+
+    `live` is the set of monitor_name labels; `kuma_age_seconds` is how long the Kuma pod has
+    been up, or None when that could not be read.
+
+    Kuma's exporter emits a monitor only once it has received a heartbeat since the process
+    started, so a restart empties the series for every push monitor and each one returns on its
+    next beat. A push monitor whose interval has not elapsed since the restart is therefore
+    PENDING, not missing — reporting it as drift would make this check cry wolf after every
+    deploy. An unreadable pod age is treated as a long uptime: it fails loud rather than quiet,
+    matching `health`'s unreadable-restart-time rule.
+    """
+    missing, pending, gated = [], [], []
+    for name, spec in sorted(declared.items()):
+        if name in live:
+            continue
+        if spec["gated"]:
+            gated.append(name)
+        elif (
+            spec["type"] == "push"
+            and kuma_age_seconds is not None
+            and spec["interval"] is not None
+            and kuma_age_seconds < spec["interval"]
+        ):
+            pending.append(f"  {name}: no beat due yet ({spec['interval']}s interval)")
+        else:
+            missing.append(f"  {name}: declared, not live")
+    orphans = [f"  {n}: live, not declared" for n in sorted(live - set(declared))]
+
+    lines = [f"{len(live)} live / {len(declared)} declared"]
+    if kuma_age_seconds is not None and pending:
+        lines.append(
+            f"  (kuma up {int(kuma_age_seconds)}s — push monitors below not yet due)"
+        )
+    lines.extend(missing + orphans + pending)
+    if gated:
+        lines.append(
+            f"  {len(gated)} gated on an unset token, skipped: {', '.join(gated)}"
+        )
+    if missing or orphans:
+        return "\n".join(lines), 1
+    return "\n".join(lines), 0
+
+
+def run_kuma_drift(ns):
+    """Reconcile the declared monitor set against the live one (exit 0 = no drift)."""
+    base, pin = prom_endpoint()
+    url = prom_query_url(base, 'monitor_status{job="uptime-kuma"}')
+    if ns.dry_run:
+        print(" ".join(curl_argv(url, resolve=pin)))
+        return 0
+    with open(STATIC_MONITORS_PATH) as f:
+        declared = parse_declared_monitors(f.read())
+    try:
+        data = json.loads(fetch(url, resolve=pin))
+    except json.JSONDecodeError:
+        print("prometheus returned non-JSON (query endpoint down?)")
+        return 1
+    live = {
+        (s.get("metric") or {}).get("monitor_name")
+        for s in data.get("data", {}).get("result", [])
+    }
+    live.discard(None)
+    text, code = format_kuma_drift(declared, live, kuma_pod_age_seconds())
+    print(text)
+    return code
+
+
+def kuma_pod_age_seconds():
+    """Seconds since the uptime-kuma pod started, or None if that cannot be read."""
+    out = subprocess.run(
+        k8s_pods_argv("uptime-kuma", k8s_namespace()), capture_output=True, text=True
+    )
+    if out.returncode != 0:
+        return None
+    try:
+        pods = json.loads(out.stdout).get("items", [])
+    except json.JSONDecodeError:
+        return None
+    starts = [
+        _seconds_since(
+            (p.get("status") or {}).get("startTime"), datetime.now(timezone.utc)
+        )
+        for p in pods
+    ]
+    starts = [s for s in starts if s is not None]
+    return min(starts) if starts else None
+
+
 def format_loki(data):
     """Human view of a Loki query_range result: just the log lines, sorted oldest
     -> newest across all streams (nanosecond-epoch timestamps), so the newest sits
@@ -1206,6 +1353,11 @@ def _build_parser():
     )
     sub.add_parser("targets", help="Prometheus scrape-target health")
     sub.add_parser("monitors", help="Kuma down-monitors rollup (exit 0 = all up)")
+    sub.add_parser(
+        "kuma-drift",
+        help="declared monitors vs live ones — catches a tile that is gone rather "
+        "than down, which `monitors` counts as green (exit 0 = no drift)",
+    )
     sub.add_parser("loki-labels", help="Loki label names")
     lq = sub.add_parser("loki-query", help="Loki range query")
     lq.add_argument("logql")
@@ -1858,6 +2010,8 @@ def main(argv=None):
         return run_ha_state(ns)
     if ns.cmd == "monitors":
         return run_monitors(ns)
+    if ns.cmd == "kuma-drift":
+        return run_kuma_drift(ns)
     # metric / loki-query default to a formatted view; --json and --dry-run fall
     # through to the raw streaming path below.
     if ns.cmd in ("metric", "loki-query") and not ns.json and not ns.dry_run:

@@ -1578,3 +1578,82 @@ def test_no_cluster_route_carries_the_retired_k8s_suffix():
 
     assert asked, "expected plan() to route these subcommands through k8s_endpoint"
     assert not [h for h in asked if h.endswith("-k8s")]
+
+
+# --- kuma-drift ---------------------------------------------------------------
+
+TEMPLATE_SAMPLE = """\
+stringData:
+  discord.json: |
+    {"type": "notification", "name": "Homelab Alerts", "active": true}
+  root-disk.json: |
+    {"type": "push", "name": "Root Disk", "interval": 60, "push_token": "x"}
+  peer-backup.json: |
+    {"type": "push", "name": "WG Pi Peer Backup", "interval": 216000, "push_token": "x"}
+  grafana.json: |
+    {"type": "http", "name": "k3s Grafana", "url": "https://g.example", "interval": 60}
+{% if etcd_snapshot_push_token | default('') %}
+  etcd.json: |
+    {"type": "push", "name": "Off-box etcd Snapshot", "interval": 90000, "push_token": "x"}
+{% endif %}
+"""
+
+
+def test_parse_declared_monitors_reads_names_types_and_gating():
+    declared = probe.parse_declared_monitors(TEMPLATE_SAMPLE)
+    # Notifications are not monitors and never appear in monitor_status — counting them would
+    # make every run report two phantom missing entries.
+    assert "Homelab Alerts" not in declared
+    assert declared["Root Disk"] == {"type": "push", "interval": 60, "gated": False}
+    assert declared["k3s Grafana"]["type"] == "http"
+    assert declared["Off-box etcd Snapshot"]["gated"] is True
+
+
+def test_kuma_drift_reports_a_declared_monitor_that_is_not_live():
+    # The 2026-08-20 case: the tile is absent from the exporter, not down, so `monitors`
+    # reported 81/81 up for a day. Long-uptime Kuma, so PENDING cannot be the explanation.
+    declared = probe.parse_declared_monitors(TEMPLATE_SAMPLE)
+    live = {"Root Disk", "k3s Grafana"}
+    text, code = probe.format_kuma_drift(declared, live, 86400 * 3)
+    assert code == 1
+    assert "WG Pi Peer Backup: declared, not live" in text
+
+
+def test_kuma_drift_calls_a_push_monitor_pending_inside_its_own_interval():
+    # Kuma exports a monitor only after it beats, so a restart empties every push series. A
+    # monitor whose interval has not elapsed since the restart is not yet due — flagging it
+    # would make this check fail after every deploy.
+    declared = probe.parse_declared_monitors(TEMPLATE_SAMPLE)
+    live = {"k3s Grafana"}
+    text, code = probe.format_kuma_drift(declared, live, 30)
+    assert code == 0
+    assert "no beat due yet" in text
+    assert "declared, not live" not in text
+
+
+def test_kuma_drift_fails_loud_when_the_pod_age_is_unreadable():
+    # Same rule as `health`'s unreadable restart time: an unknown age must not silently excuse
+    # a missing monitor, or the check reports green exactly when it cannot tell.
+    declared = probe.parse_declared_monitors(TEMPLATE_SAMPLE)
+    text, code = probe.format_kuma_drift(declared, {"k3s Grafana"}, None)
+    assert code == 1
+    assert "Root Disk: declared, not live" in text
+
+
+def test_kuma_drift_reports_a_live_monitor_nobody_declared():
+    # `kubectl apply` leaves orphaned objects behind, and AutoKuma's on_delete=delete only
+    # removes what it still tracks — a monitor whose declaration was dropped can outlive it.
+    declared = probe.parse_declared_monitors(TEMPLATE_SAMPLE)
+    live = {"Root Disk", "WG Pi Peer Backup", "k3s Grafana", "Retired Tile"}
+    text, code = probe.format_kuma_drift(declared, live, 86400)
+    assert code == 1
+    assert "Retired Tile: live, not declared" in text
+
+
+def test_kuma_drift_skips_a_token_gated_monitor():
+    declared = probe.parse_declared_monitors(TEMPLATE_SAMPLE)
+    live = {"Root Disk", "WG Pi Peer Backup", "k3s Grafana"}
+    text, code = probe.format_kuma_drift(declared, live, 86400)
+    assert code == 0
+    assert "Off-box etcd Snapshot" in text
+    assert "gated on an unset token" in text
