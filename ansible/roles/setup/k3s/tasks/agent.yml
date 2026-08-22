@@ -84,10 +84,23 @@
   become: true
   failed_when: false
 
+- name: Read the installed k3s-agent version
+  tags: [k3s_agent]
+  # See the server install for why the args guard alone cannot see a version bump. The agent
+  # needs its own read: it is a separate host, so the server's reading says nothing about it,
+  # and an agent left a minor behind its server is the skew k3s does not support.
+  ansible.builtin.command:
+    cmd: /usr/local/bin/k3s --version
+  register: k3s_agent_installed_version
+  become: true
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
 - name: Install or reconfigure the k3s agent
   tags: [k3s_agent]
-  # Same unit-args guard as the server install (see main.yml): detects missing/changed
-  # flags, not removed ones. The installer writes K3S_URL/K3S_TOKEN into
+  # Same unit-args-plus-version guard as the server install (see main.yml): detects
+  # missing/changed flags, not removed ones. The installer writes K3S_URL/K3S_TOKEN into
   # /etc/systemd/system/k3s-agent.service.env (0600 root), rewrites the unit,
   # daemon-reloads and restarts the agent itself.
   ansible.builtin.command:
@@ -100,9 +113,10 @@
   become: true
   no_log: true  # K3S_TOKEN is a cluster credential
   when: >-
-    k3s_agent_args.split() | reject('equalto', 'agent')
-    | difference(k3s_agent_unit.content | default('') | b64decode | replace("'", "") | split())
-    | length > 0
+    (k3s_agent_args.split() | reject('equalto', 'agent')
+     | difference(k3s_agent_unit.content | default('') | b64decode | replace("'", "") | split())
+     | length > 0)
+    or (k3s_version not in (k3s_agent_installed_version.stdout | default('')))
   changed_when: true
 
 # ── Registry mirror (2026-08-14, nut→k8s port) ────────────────────────────────────────

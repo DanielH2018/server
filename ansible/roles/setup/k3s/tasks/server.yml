@@ -71,9 +71,25 @@
   become: true
   failed_when: false
 
+- name: Read the installed k3s version
+  tags: [k3s_server]
+  # The args guard below cannot see a version bump: changing k3s_version leaves every
+  # argument identical, so the guard reads false and the installer never runs — the pin moves
+  # while the node stays put, and the play still reports ok. `check_mode: false` because a
+  # skipped command leaves this register undefined and the guard consuming it several tasks
+  # later is what breaks, not the read.
+  ansible.builtin.command:
+    cmd: /usr/local/bin/k3s --version
+  register: k3s_installed_version
+  become: true
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
 - name: Install or reconfigure the k3s server
   tags: [k3s_server]
-  # Guarded on the unit's arguments, not on /usr/local/bin/k3s existing. The old
+  # Guarded on the unit's arguments and the installed version, not on /usr/local/bin/k3s
+  # existing. The old
   # `creates:` guard meant a change to k3s_server_args never reached an already-installed
   # host: the play reported ok while the unit kept its original ExecStart. That is how the
   # node IP stayed pinned to a NIC that had been removed. The installer rewrites the unit,
@@ -84,6 +100,12 @@
   # a flag; it does not detect one that was *removed* from k3s_server_args, so a removal
   # needs the installer re-run by hand. Deliberate: a stricter set comparison that
   # misjudged the unit's quoting would restart k3s on every play.
+  #
+  # The second clause covers the version. `k3s --version` prints "k3s version v1.36.2+k3s1
+  # (<hash>)", and the pin carries its +k3sN suffix, so a substring test cannot collide the
+  # way a bare "v1.36.2" in "v1.36.20" would. An unreadable binary yields an empty string,
+  # which reads as "not installed at this version" and runs the installer — the right
+  # direction on a fresh host.
   ansible.builtin.command:
     cmd: /usr/local/bin/k3s-install.sh
   environment:
@@ -91,9 +113,10 @@
     INSTALL_K3S_VERSION: "{{ k3s_version }}"
   become: true
   when: >-
-    k3s_server_args.split() | reject('equalto', 'server')
-    | difference(k3s_unit.content | default('') | b64decode | replace("'", "") | split())
-    | length > 0
+    (k3s_server_args.split() | reject('equalto', 'server')
+     | difference(k3s_unit.content | default('') | b64decode | replace("'", "") | split())
+     | length > 0)
+    or (k3s_version not in (k3s_installed_version.stdout | default('')))
   changed_when: true
 
 - name: Wait for the node to report Ready
