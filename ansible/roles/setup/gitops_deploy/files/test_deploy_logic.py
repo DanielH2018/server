@@ -1,8 +1,14 @@
 # ansible/roles/setup/gitops_deploy/files/test_deploy_logic.py
 import ast
+import os
 import pathlib
+import subprocess
 import sys
+import time
 from datetime import datetime
+
+import pytest
+import yaml
 
 from deploy_logic import (
     ChangeSet,
@@ -1519,6 +1525,39 @@ def test_declares_snapshot_claims_ignores_an_indented_key():
     )
 
 
+# declares_snapshot_claims() is a regex over source text, used only to word gitops-deploy's
+# rollback alert. roles/k8s/manifests decides the REAL revert from `yaml.safe_load`'d defaults —
+# a different reader of the same file. All 13 roles that declare
+# `k8s_autodeploy_snapshot_pvcs` today write it as a single-line list literal, so nothing has
+# ever exercised the gap: reformat one to block style and the regex returns False (no revert
+# applies, says the alert) while the volume still reverts for real. This walks every role's
+# actual defaults/main.yml and pins that the two readers agree on all of them, so a future
+# reformat fails this test instead of surfacing as an incident alert that names the wrong thing.
+_K8S_ROLES_DIR = pathlib.Path(__file__).parents[3] / "k8s"
+
+
+def _yaml_declares_claims(text: str) -> bool:
+    data = yaml.safe_load(text) or {}
+    return bool(data.get("k8s_autodeploy_snapshot_pvcs"))
+
+
+def test_declares_snapshot_claims_agrees_with_yaml_for_every_k8s_role():
+    mismatches = []
+    for defaults_path in sorted(_K8S_ROLES_DIR.glob("*/defaults/main.yml")):
+        text = defaults_path.read_text()
+        regex_verdict = declares_snapshot_claims(text)
+        yaml_verdict = _yaml_declares_claims(text)
+        if regex_verdict != yaml_verdict:
+            mismatches.append(
+                f"{defaults_path.relative_to(_K8S_ROLES_DIR.parent)}: "
+                f"regex={regex_verdict} yaml={yaml_verdict}"
+            )
+    assert not mismatches, (
+        "declares_snapshot_claims()'s regex disagrees with what roles/k8s/manifests actually "
+        "reads via yaml.safe_load for:\n" + "\n".join(mismatches)
+    )
+
+
 def test_rollback_volume_revert_note_reports_the_redeploy_failure_when_it_failed():
     """The redeploy raising means the revert task inside roles/k8s/manifests may never have
     run — the note must say so, not claim a revert was attempted."""
@@ -1730,3 +1769,70 @@ def test_the_rollback_redeploy_uses_its_own_timeout_budget():
     forward, rollback = _deploy_k8s_calls_in_main()
     assert ast.unparse(forward.args[1]) == "K8S_DEPLOY_TIMEOUT_S"
     assert ast.unparse(rollback.args[1]) == "K8S_ROLLBACK_TIMEOUT_S"
+
+
+# ── run()'s timeout must kill the whole process group ───────────────────────────────────────────
+# `uv run ansible-playbook ...` is a GRANDCHILD of run()'s subprocess (uv forks it rather than
+# exec'ing into it). `subprocess.run(timeout=)` DOES return promptly on timeout — its internal
+# communicate() raises on the wall-clock deadline, not on pipe EOF — but it kills only the DIRECT
+# child (uv). Verified empirically against the pre-fix implementation: the call returns on time
+# and the grandchild is still alive at that moment, left running as an orphan with nothing
+# watching it. That is how K8S_ROLLBACK_TIMEOUT_S stopped being an actual bound on the underlying
+# ansible-playbook: gitops_deploy.py moves on while the timed-out run keeps mutating the cluster,
+# and the real stop becomes systemd's TimeoutStartSec SIGTERM against the wrapping unit, which can
+# land mid-rollback. This shape reproduces it directly: a shell script backgrounds a grandchild
+# that outlives a naive kill-the-direct-child-only fix, so the test fails against the OLD run()
+# and passes only once the whole process group is killed.
+_GRANDCHILD_SHAPE = """#!/bin/sh
+sh -c 'echo $$ > "{pidfile}"; sleep 30' &
+wait
+"""
+
+
+def _pid_is_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+def test_run_timeout_kills_the_whole_process_group(tmp_path) -> None:
+    pidfile = tmp_path / "grandchild.pid"
+    script = tmp_path / "parent.sh"
+    script.write_text(_GRANDCHILD_SHAPE.format(pidfile=pidfile))
+    script.chmod(0o755)
+
+    start = time.monotonic()
+    with pytest.raises(subprocess.TimeoutExpired):
+        gitops_deploy.run(["sh", str(script)], cwd=str(tmp_path), timeout=1.0)
+    elapsed = time.monotonic() - start
+
+    # Both the buggy and the fixed run() return around the 1.0s deadline — the deadline is a
+    # wall-clock check inside communicate(), not a wait for pipe EOF, so this alone does not
+    # discriminate them. It is here as a sanity bound; the real regression check is the
+    # grandchild-liveness assert below.
+    assert elapsed < 10, (
+        f"run() took {elapsed:.1f}s to return after a 1.0s timeout — expected it to return "
+        f"around the deadline regardless of whether the fix is applied"
+    )
+
+    deadline = time.monotonic() + 2
+    grandchild_pid = None
+    while grandchild_pid is None and time.monotonic() < deadline:
+        if pidfile.exists():
+            grandchild_pid = int(pidfile.read_text().strip())
+        else:
+            time.sleep(0.05)
+    assert grandchild_pid is not None, "the grandchild never started"
+
+    # SIGKILL is instant but reaping is not: once its own parent (the script) is also killed,
+    # the grandchild is reparented and reaped by the nearest subreaper — poll briefly instead
+    # of asserting the instant killpg returns.
+    deadline = time.monotonic() + 3
+    while _pid_is_alive(grandchild_pid) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert not _pid_is_alive(grandchild_pid), (
+        f"grandchild pid {grandchild_pid} outlived the timeout — only the direct child was "
+        f"killed, not its process group"
+    )

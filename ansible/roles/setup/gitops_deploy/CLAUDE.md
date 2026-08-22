@@ -166,6 +166,38 @@ stay).
     tick leaves `local == origin` and every subsequent `next_action()` is a noop. The pilot list
     used to bound this at one service; since it was cleared (2026-08-16) the cap is the only
     bound, which is what it was written for.
+  - **Accepted, not fixed here: the batch-abort blast radius is this branch's most likely bad
+    day.** `K8S_AUTODEPLOY_MAX_PER_TICK` (3) and `ansible/tasks/k8s_batch.yml` share one
+    `ansible-playbook` run with no `rescue` — so one service's revert failing during a rollback
+    aborts the WHOLE batch's rollback, not just that service's. Every co-batched service that had
+    already been reset for its own revert is left mid-rollback: on the failed commit's manifests
+    (or worse, mid-revert with a volume still attached in maintenance mode) over migrated data —
+    exactly the state this slice exists to prevent, reached in a single tick rather than needing
+    a separate independent failure. The proper fix is per-service invocation on the rollback
+    path (each service's rollback in its own `ansible-playbook` run, so one failure can't abort
+    a sibling's), not attempted in this pass. See the rollback-timeout section below for the
+    same batching mechanism's effect on `K8S_ROLLBACK_TIMEOUT_S`.
+  - **Accepted: a silently skipped snapshot is only an Ansible `debug` line, and that is what
+    makes the batch-abort item above reachable in a single tick.** When
+    `k8s/volume-snapshot`'s maintenance-mode attach fails on a detached volume, the deploy
+    proceeds unprotected with a loud `ansible.builtin.debug` warning — but nothing forwards that
+    warning to Discord, and a later rollback's revert-status note
+    (`rollback_volume_revert_note`) names a service as one the revert targets purely by reading
+    its role DEFAULTS (`k8s_autodeploy_snapshot_pvcs`), not what the snapshot phase actually did
+    on THIS run. So an operator reading the rollback alert has no signal that this particular
+    snapshot never happened, and no reason to suspect the revert that follows will fail loudly
+    rather than silently do nothing.
+  - **Accepted: nothing self-heals a volume left attached in Longhorn maintenance mode after a
+    failed rollback, and the next deploy's seed pod mounts the same RWO claim.** If
+    `k8s/volume-revert` stops partway (a wait exhausts, an API call fails) the volume can be left
+    attached with `disableFrontend: true` and the workload at zero replicas — see
+    `k8s/volume-revert/CLAUDE.md`'s manual-recovery steps. `k8s/seed-volume` runs ahead of
+    `k8s/manifests` on every one of the 13 opted-in roles' NEXT deploy and mounts the same claim
+    to seed it; whether that mount succeeds, hangs, or fails against a volume already attached in
+    maintenance mode by a different (non-pod) attachment is untested — nothing in this repo
+    exercises a real Longhorn revert (see `k8s/volume-revert/CLAUDE.md`'s "What is not covered by
+    tests"). Treat a stuck maintenance-mode attach as blocking the affected service's next deploy
+    until cleared by hand, not as something the pipeline will route around on its own.
   - **The pilot list is empty, so the denylist alone decides.** `gitops_deploy_k8s_autodeploy_pilot`
     scoped eligibility to `speedtest` from 2026-08-14 until slice 3 cleared it. An empty list means
     "every non-denylisted service", not "none" — the opposite of the empty-denylist guard right
@@ -329,6 +361,27 @@ prefix check — the full 40-char `origin` also starts with `"origin"` and would
 since volume-snapshot names with `git rev-parse --short=8`) and never `local`, and its own
 `K8S_ROLLBACK_TIMEOUT_S` budget, not the forward deploy's `K8S_DEPLOY_TIMEOUT_S`.
 
+**Accepted, docs reconciled rather than code changed: `origin[:8]` is a fixed 8-character slice
+of the full 40-char SHA, and `git rev-parse --short=8` is a MINIMUM width, not a fixed one.**
+`origin = run(["git", "rev-parse", f"origin/{BRANCH}"])` returns the full 40-char SHA (no
+`--short`); `origin[:8]` truncates it to exactly 8 characters, always. `k8s/volume-snapshot`
+names its snapshots from `git rev-parse --short=8 HEAD`'s raw stdout, which is git's shortest
+UNAMBIGUOUS abbreviation — 8 characters in the overwhelmingly common case, but MORE when 8
+collides with another object in the repo's history, and both `k8s/volume-revert/CLAUDE.md` and
+`k8s/volume-snapshot/CLAUDE.md` say plainly that the role "uses it verbatim" / "transforms
+nothing", because truncating a longer short-SHA back down to 8 would build a snapshot-name
+prefix that no longer matches. That is exactly what `origin[:8]` does at this one call site.
+Since git's longer abbreviation is always a superset-prefix of the shorter one, the two agree in
+the common case (8 chars is already unambiguous) and diverge only in the rare case where it
+isn't — at which point `origin[:8]`'s prefix stops matching one character short of the real
+snapshot name (a literal `-` in the constructed prefix lands where the real name has a 9th hex
+digit instead), and `k8s/volume-revert`'s "no snapshot matches this deploy" assert fires —
+loud, and before the scale-down, the same safe failure mode as every other unmatched-prefix
+case. Probability is negligible for this repo's history size; not changed here because the
+failure mode is already the correct, safe one and `restore_sha=origin[:8]` is pinned by the test
+above — this note exists so the inconsistency between this call site and the two roles' own
+"never truncate" documentation is not mistaken for an oversight.
+
 `deploy_logic.declares_snapshot_claims()` and `rollback_volume_revert_note()` are pure and fully
 unit-tested: they decide the rollback alert's one revert-status line — whether the rollback
 redeploy itself failed (in which case the note says the revert task may never have run, not that
@@ -342,10 +395,53 @@ against the working tree AFTER `git reset --hard local`, matching exactly what
 The rollback redeploy also reverts each claimed volume to its pre-deploy snapshot
 (`k8s/volume-revert`), which is strictly more work than the forward deploy — per claim, worst
 case is 3 state waits + 3 API calls against Longhorn, and `tdarr`/`code-server` each hold two
-claims. It gets its own timeout rather than sharing `K8S_DEPLOY_TIMEOUT_S`, and stays at 900s
-(**sized, task 6b**, against Task 6's drill measurement — see
-`ansible/roles/k8s/volume-revert/CLAUDE.md`). A two-claim service's worst-case REVERT is 720s,
-leaving 180s; the realistic case is far smaller — a two-claim revert measured close to ~150s.
+claims. It gets its own timeout rather than sharing `K8S_DEPLOY_TIMEOUT_S`.
+
+**Re-sized (round 2 of this slice's fix pass) from 900s to 1320s: the prior number never named
+the forward apply's own rollout wait, and was never checked against the true worst promoted
+service.** The 900s figure (task 6b) budgeted 720s for a two-claim revert plus 180s of
+unnamed "the rest" — which silently assumed the forward apply's own rollout wait
+(`manifests_rollout_timeout`) fit inside that 180s. It defaults to 300s, but `radarr`/`sonarr`
+override it to 660s for first-boot DOCKER_MODS installs — already more than the unnamed
+residual on its own. Computed per currently-promoted (`k8s_autodeploy: true`), claim-declaring
+role, at task 6b's drill-sized `volume_revert_state_timeout`/`api_timeout` (90/30) and
+`volume_snapshot_timeout` (120):
+
+```
+ceiling = claims x (volume_snapshot_timeout + 3xvolume_revert_state_timeout + 3xvolume_revert_api_timeout)
+          + manifests_rollout_timeout + k8s_rollout_stabilise_seconds
+        = claims x 480 + manifests_rollout_timeout + 60
+```
+
+`radarr`/`sonarr` (1 claim, 660s rollout) come to 1200s — the number an earlier draft of this
+fix used as *the* ceiling, because they are the only roles with a non-default rollout timeout
+and so the most visible case. `tdarr` (2 claims, default 300s rollout) is actually worse:
+2x480 + 300 + 60 = **1320s**. `K8S_ROLLBACK_TIMEOUT_S` is set to 1320 to cover the true worst
+case among currently-promoted services, not the loudest one.
+`ansible/roles/setup/gitops_deploy/files/test_gitops_discord_contract.py::test_k8s_rollback_budget_covers_the_worst_single_promoted_service`
+computes this from role sources rather than pinning a number, so a future rollout-timeout bump
+or a new promoted claim-declaring role fails it instead of silently under-sizing the budget.
+
+**NOT covered by this number: two or more claim-declaring services landing in the SAME batch.**
+One tick can promote up to `gitops_deploy_k8s_autodeploy_max_per_tick` (3) services into a single
+`ansible-playbook` run. Inside that run, each role's snapshot+revert phase runs in sequence — only
+the ROLLOUT WAIT is deduped/batched across services, via `roles/k8s/rollout-drain`'s
+`max()`-not-`sum()` drain — so a batch with two claim-declaring services stacks their
+snapshot+revert costs additively. Two `radarr`/`sonarr`-shaped services batched together would
+need roughly 2x480 + 660 + 60 = 1680s, already past 1320s. This is the same mechanism as "The
+batch-abort blast radius" below (`K8S_AUTODEPLOY_MAX_PER_TICK` is 3, one shared run, no rescue);
+the proper fix for both is per-service invocation on the rollback path rather than a larger
+constant here — not done in this pass.
+
+**Also newly true at 1320s: a rollback redeploy pays an EXTRA full Recreate cycle.** The revert
+leaves the workload at zero replicas; the apply that follows restores `replicas: 1` from the
+manifest, which starts the pod — but the reset tree (from `git reset --hard local`) makes
+`manifests_render` register as `changed` for every role in the batch, so the "Roll the
+deployment after a config change" task ALSO fires and tears that just-started pod straight back
+down for a `rollout restart`. Roughly a minute (see the scale-down/attach cycle timings in
+`ansible/roles/k8s/volume-revert/CLAUDE.md`), charged exactly when the budget is tightest —
+right after the revert's own worst-case cost. Folded into the 60s stabilisation term above only
+by coincidence of rounding, not by design; not separately budgeted.
 
 **Corrected (task 6b, second pass): a failure aborts the play, so failure-driven worst
 cases from different phases cannot stack.** `k8s/volume-revert`'s three waits are `until:` with
@@ -382,9 +478,23 @@ changes whether a SLOW SUCCESS gets cut short.
 **The forward attempt and the rollback run sequentially, not concurrently, inside one systemd
 unit activation.** A failed forward deploy can spend its full `K8S_DEPLOY_TIMEOUT_S` (900s)
 before `gitops_deploy.py` gives up on it; the rollback that follows can then spend its full
-`K8S_ROLLBACK_TIMEOUT_S` (900s). `gitops-deploy.service.j2`'s `TimeoutStartSec` was raised from
-25min to 35min (task 6b) so 180s max flock wait + 900 + 900 = 1980s fits with margin — see that
-template's own arithmetic comment for both the Docker-path and k8s-path budgets it now covers.
+`K8S_ROLLBACK_TIMEOUT_S` (1320s, re-sized above). `gitops-deploy.service.j2`'s `TimeoutStartSec`
+was raised from 25min to 35min (task 6b), then to 45min (this fix) so 180s max flock wait +
+900 + 1320 = 2400s fits with margin — see that template's own arithmetic comment for both the
+Docker-path and k8s-path budgets it now covers.
+
+**Consequence for the lock, newly true at 1320s: this unit's own lock hold can now exceed the
+30-minute timer interval, where at 900s it landed exactly at the edge (900 + 900 = 1800s = 30min
+flat) without crossing it.** `ExecStart` wraps the whole run in `flock -w 180
+/var/lock/server-git-tree.lock` — the same lock `./scripts/deploy.sh` and the weekly
+secret-rotate cron take. In the pathological case (a stalled forward deploy followed by a
+stalled rollback), this unit can hold that lock for up to 2220s (900 + 1320, excluding its own
+flock wait) — past the 30-minute (1800s) timer interval. A concurrent `./scripts/deploy.sh`
+during that window waits its own `-w 180` and then returns **exit 75** (nothing deployed, not a
+playbook failure — see the root CLAUDE.md); the secret-rotate cron waits on the same lock rather
+than failing outright. Neither is silently wrong — both correctly report "the lock stayed busy"
+— but an operator seeing exit 75 during this window should check whether gitops-deploy is mid
+double-timeout before assuming the lock is stuck.
 
 **Consequence for the operator: a pathological double-timeout run can overrun the 30-minute
 timer tick — verified live against the real unit, not inferred from the man page alone.**

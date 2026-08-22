@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import signal
 import subprocess
 import sys
 import time
@@ -164,8 +165,45 @@ def run(
     timeout: float | None = None,
 ) -> str:
     # timeout defaults to None so the long deploy/git calls are unbounded as before;
-    # only the health-gate's docker inspects pass a short bound (see health_ok).
-    r = subprocess.run(args, cwd=cwd, text=True, capture_output=True, timeout=timeout)
+    # only the health-gate's docker inspects and the k8s deploy/rollback calls pass one.
+    if timeout is None:
+        r = subprocess.run(args, cwd=cwd, text=True, capture_output=True, timeout=None)
+    else:
+        # `uv run ansible-playbook ...` is a GRANDCHILD of this process (uv forks it rather
+        # than exec'ing into it). `subprocess.run(timeout=)` DOES return on time even so — its
+        # internal communicate() raises on the wall-clock deadline, not on pipe EOF — but on
+        # timeout it kills only the direct child (uv). The grandchild (ansible-playbook) is
+        # left running, unkilled, an orphan mutating the cluster with nothing left watching it.
+        # Verified empirically: a plain subprocess.run(timeout=) returns promptly, and the
+        # grandchild is still alive at that moment. That is how K8S_ROLLBACK_TIMEOUT_S stopped
+        # being an actual bound on the underlying work: gitops_deploy.py moves on (to a second
+        # rollback attempt, or exits and lets the next tick start a fresh run) while the timed-
+        # out ansible-playbook keeps applying manifests in the background — the real stop
+        # becomes whatever kills that orphan, normally nothing, or systemd's TimeoutStartSec
+        # SIGTERM against the WRAPPING unit, which can land mid-rollback.
+        #
+        # start_new_session puts the direct child in a NEW process group (its pgid equals its
+        # own pid), which every process it forks inherits unless one of them calls setsid
+        # itself. killpg on timeout then signals that whole group at once, so uv and
+        # ansible-playbook die together instead of one outliving the other.
+        proc = subprocess.Popen(
+            args,
+            cwd=cwd,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass  # the group is already gone
+            proc.communicate()  # reap; the process is being killed, not reported
+            raise
+        r = subprocess.CompletedProcess(args, proc.returncode, stdout, stderr)
     if check and r.returncode != 0:
         raise RuntimeError(f"{' '.join(args)} -> {r.returncode}\n{r.stderr}")
     return r.stdout.strip()
@@ -203,22 +241,11 @@ if K8S_AUTODEPLOY_ENABLED and not K8S_AUTODEPLOY_DENYLIST:
 # this the only bound is systemd's TimeoutStartSec SIGTERM, which can land mid-rollback.
 K8S_DEPLOY_TIMEOUT_S = int(C.get("K8S_DEPLOY_TIMEOUT_S", "900"))
 # Bounds the ROLLBACK redeploy specifically — the run that also reverts each claimed volume to
-# its pre-deploy snapshot (k8s/volume-revert), which is strictly more work than a forward deploy:
-# per claim, worst case is 3 state waits + 3 API calls against Longhorn, and tdarr/code-server
-# each hold two claims. Sized (task 6b) against Task 6's drill: 900s covers a two-claim service's
-# 720s worst-case revert (at the drill-sized volume_revert_state_timeout/volume_revert_api_timeout,
-# 90/30) with 180s left for the rest of the SAME run's REALISTIC cost (~38s measured, one claim);
-# the realistic revert itself measures closer to ~150s. 720s is reached by every wait/call
-# succeeding right at its own ceiling (or by the last one failing after the rest succeeded
-# slowly) — a failure aborts the play immediately (no ignore_errors/failed_when in
-# k8s/volume-revert), so it can never compound with an independent failure in another phase.
-# The real residual: a SLOW BUT SUCCESSFUL snapshot phase (up to 240s for two claims) is
-# additive to a slow-but-successful revert on one continuous timeline where nothing fails, and
-# that combined total is not proven to fit in the 180s left — see gitops_deploy/CLAUDE.md's
-# rollback-timeout section. This run is SEQUENTIAL with K8S_DEPLOY_TIMEOUT_S inside one systemd
-# unit activation (a failed forward deploy, then this rollback) — see gitops-deploy.service.j2's
-# TimeoutStartSec, raised to 35min to fit both.
-K8S_ROLLBACK_TIMEOUT_S = int(C.get("K8S_ROLLBACK_TIMEOUT_S", "900"))
+# its pre-deploy snapshot (k8s/volume-revert), which is strictly more work than a forward deploy.
+# Sizing, the batch-summation gap this does NOT cover, and the lock-hold consequence all live in
+# defaults/main.yml's gitops_deploy_k8s_rollback_timeout_s comment — this fallback is only what a
+# host runs on before its config.env is re-templated with the new value.
+K8S_ROLLBACK_TIMEOUT_S = int(C.get("K8S_ROLLBACK_TIMEOUT_S", "1320"))
 
 # ── CI gate ───────────────────────────────────────────────────────────────────────────────────
 # Refuse to deploy a master tip whose CI is red or unfinished. Without this the deployer applies

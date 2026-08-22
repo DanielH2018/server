@@ -11,17 +11,18 @@ Type=oneshot
 # intervention.
 #
 # Two independent worst cases must fit inside this ceiling, and task 6b's k8s one is why it is
-# 35min rather than 25min:
+# 45min rather than 25min:
 #   - Docker path: 180s max flock wait + RUN_BUDGET_S (1020s, the health-gate phase) +
 #     HEALTH_TIMEOUT_S (300s, the rollback redeploy) = 1500s = 25min exactly, still true and
 #     now with slack under the larger ceiling. See config.env.j2.
 #   - k8s path: a failed forward deploy can spend its whole K8S_DEPLOY_TIMEOUT_S (900s) before
 #     gitops_deploy.py catches the timeout, THEN the rollback redeploy can spend its whole
-#     K8S_ROLLBACK_TIMEOUT_S (900s) — the two run SEQUENTIALLY in one unit activation, not
-#     concurrently, and neither shares the Docker path's RUN_BUDGET_S. 180 (max flock wait) +
-#     900 + 900 = 1980s, which needs more than 25min (1500s) and is why this moved to 35min
-#     (2100s) — see ansible/roles/k8s/volume-revert/CLAUDE.md for the drill that sized the two
-#     revert-role timeouts feeding K8S_ROLLBACK_TIMEOUT_S.
+#     K8S_ROLLBACK_TIMEOUT_S (1320s, re-sized against the real per-service ceiling — see
+#     defaults/main.yml) — the two run SEQUENTIALLY in one unit activation, not concurrently,
+#     and neither shares the Docker path's RUN_BUDGET_S. 180 (max flock wait) + 900 + 1320 =
+#     2400s, which needs more than 25min (1500s) and is why this is 45min (2700s) — see
+#     ansible/roles/k8s/volume-revert/CLAUDE.md for the drill that sized the two revert-role
+#     timeouts feeding K8S_ROLLBACK_TIMEOUT_S.
 #
 # This deliberately GIVES UP the old invariant ("stay under the 30-min interval so the next tick
 # always fires on schedule") in exchange for the k8s rollback getting a budget that can actually
@@ -33,7 +34,13 @@ Type=oneshot
 # `activating` and coalesces the timer's start request into the run already in flight, rather
 # than spawning another one. The practical effect is a delayed/absorbed tick, not a stacked
 # deploy — see that CLAUDE.md section for what is and is not verified about the cadence.
-TimeoutStartSec=35min
+#
+# The lock this unit's ExecStart holds (`/var/lock/server-git-tree.lock`, below) is now held for
+# up to this same pathological duration, which EXCEEDS the 30-min timer interval — a concurrent
+# `./scripts/deploy.sh` waits its own `-w 180`, then returns exit 75 (nothing deployed) if this
+# unit is still running; the weekly secret-rotate cron waits on the same lock. See
+# ansible/roles/setup/gitops_deploy/CLAUDE.md.
+TimeoutStartSec=45min
 User={{ sys_user }}
 WorkingDirectory=/home/{{ sys_user }}/server
 # Need ~/.local/bin on PATH for `uv` (the deployer runs `uv run ansible-playbook`,

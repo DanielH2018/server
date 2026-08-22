@@ -64,21 +64,41 @@ gitops_deploy_k8s_timeout_s: 900
 
 # Wall-clock cap for the ROLLBACK redeploy specifically — the run that also reverts each claimed
 # volume to its pre-deploy snapshot (k8s/volume-revert), which does strictly more work than a
-# forward deploy: per claim, worst case is 3 state waits + 3 API calls against Longhorn, and
-# tdarr/code-server each hold two claims. Sized (task 6b) against Task 6's drill: at the drill's
-# recommended volume_revert_state_timeout/volume_revert_api_timeout (90/30), a two-claim
-# service's worst-case revert is 720s, leaving 180s in this 900s for the rest of the SAME run
-# (a pre-revert snapshot wait per claim, then apply and rollout) at their REALISTIC cost, not
-# their own ceiling. 720s is reached by every wait/call succeeding at its own ceiling, or by the
-# last one failing after the rest succeeded slowly — a failure aborts the whole play immediately
-# (k8s/volume-revert's waits carry no ignore_errors/failed_when), so it can never compound with
-# an independent failure in another phase. The real residual: a SLOW BUT SUCCESSFUL snapshot
-# phase (up to 240s for two claims) is additive to a slow-but-successful revert on one
-# continuous timeline where nothing fails, and that combined total is not proven to fit the 180s
-# left; see ansible/roles/setup/gitops_deploy/CLAUDE.md's rollback-timeout section. The realistic
-# revert case is far smaller — the drill's own two-claim-shaped cycle was closer to ~150s. This
-# value has its OWN budget rather than sharing gitops_deploy_k8s_timeout_s
-# (900) at runtime because the two runs are sequential within one systemd unit activation —
-# see gitops-deploy.service.j2's TimeoutStartSec (raised to 35min for exactly this) and that
-# template's own arithmetic comment.
-gitops_deploy_k8s_rollback_timeout_s: 900
+# forward deploy: per claim, worst case is 3 state waits + 3 API calls against Longhorn on the
+# revert, plus its own pre-revert snapshot wait, plus the forward apply's own rollout wait and
+# the post-rollout stabilisation soak — all inside the SAME playbook run, on one continuous
+# timeline where nothing fails (a failure aborts the whole play immediately — no
+# ignore_errors/failed_when anywhere in this chain — so it can never compound with an
+# independent failure elsewhere; see CLAUDE.md's rollback-timeout section).
+#
+# Re-sized (round 2, this fix): the prior 900s residual named 180s for "the rest of the run"
+# and never named the forward apply's OWN rollout wait — `manifests_rollout_timeout`, which
+# `radarr`/`sonarr` override to 660s (first-boot DOCKER_MODS install) while everything else
+# defaults to 300s. Sized here against every currently-promoted (`k8s_autodeploy: true`) role
+# that also declares `k8s_autodeploy_snapshot_pvcs`, at task 6b's drill-sized
+# volume_revert_state_timeout/api_timeout (90/30) and volume_snapshot_timeout (120):
+#   ceiling = claims x (volume_snapshot_timeout + 3xvolume_revert_state_timeout
+#             + 3xvolume_revert_api_timeout) + manifests_rollout_timeout
+#             + k8s_rollout_stabilise_seconds (60)
+# `tdarr` (2 claims, default 300s rollout) is the worst of the set today at
+# 2x(120+360) + 300 + 60 = 1320s — NOT radarr/sonarr's single-claim 660s-rollout case, which
+# comes to 1200s. Set to 1320 to cover the actual worst single service, not the loudest one.
+#
+# NOT covered: two or more claim-declaring services landing in the SAME batch (one tick can
+# promote up to gitops_deploy_k8s_autodeploy_max_per_tick). Every role in a batch runs its own
+# snapshot+revert phase in sequence inside the one playbook run (only the rollout WAIT is
+# batched/deduped via roles/k8s/rollout-drain), so a multi-service batch's snapshot+revert cost
+# is additive across services, not bounded by this single-service ceiling — e.g. radarr and
+# sonarr batched together would need roughly 2x(120+360) + 660 + 60 = 1620s. This is the same
+# gap as the batch-abort blast radius documented in CLAUDE.md; the real fix for both is
+# per-service invocation on the rollback path, not a larger constant here.
+#
+# This value has its OWN budget rather than sharing gitops_deploy_k8s_timeout_s (900) at runtime
+# because the two runs are sequential within one systemd unit activation — see
+# gitops-deploy.service.j2's TimeoutStartSec (raised to 45min for exactly this) and that
+# template's own arithmetic comment. Consequence: the lock this unit holds
+# (/var/lock/server-git-tree.lock, the same one ./scripts/deploy.sh and the weekly secret-rotate
+# cron take) can now be held past the 30-minute timer interval in the pathological case both
+# k8s timeouts are spent in full — see CLAUDE.md for what that does to a concurrent
+# ./scripts/deploy.sh (exit 75, nothing deployed) or the secret-rotate cron (waits on the lock).
+gitops_deploy_k8s_rollback_timeout_s: 1320
