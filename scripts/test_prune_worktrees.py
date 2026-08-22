@@ -21,6 +21,7 @@ from prune_worktrees import (
     cherry_says_merged,
     classify,
     find_orphan_dirs,
+    merge_tree_says_contained,
     parse_worktree_list,
     remove,
     session_is_alive,
@@ -195,6 +196,52 @@ def test_nothing_ahead_of_upstream_reads_as_merged():
 
 def test_blank_lines_do_not_change_the_verdict():
     assert cherry_says_merged("\n- aaaaaaa\n\n") is True
+
+
+# --- merge_tree_says_contained(): the squash case ------------------------------------------
+# Squash merges defeat ancestry AND patch-id, so before this check landed every squash-merged
+# worktree was kept forever. Measured 2026-08-22: five of the six worktrees on disk were
+# squash-merged and none was collectable. The YES direction is what makes the script useful;
+# the NO direction is what keeps it safe, since a false positive deletes unlanded work.
+
+_MASTER_TREE = "7d278b4e4cbba850de748c2265a8eefc05d3b72b"
+
+
+def test_a_merge_that_changes_nothing_reads_as_merged():
+    # The squash case: merging the branch produces master's own tree, so the content is
+    # already there even though no commit and no patch-id survived the squash.
+    assert merge_tree_says_contained(f"{_MASTER_TREE}\n", _MASTER_TREE) is True
+
+
+def test_a_merge_that_would_change_master_is_not_merged():
+    # An open PR's head. Real value, measured against PR #244 on 2026-08-22.
+    assert (
+        merge_tree_says_contained(
+            "e86afc98b5b1b42935f5853c758c6a865bb7dc88\n", _MASTER_TREE
+        )
+        is False
+    )
+
+
+def test_only_the_first_line_is_the_tree():
+    # On a conflict git prints the tree, then conflict detail. is_merged gates on the exit
+    # code so that output never reaches here, but the parse must not be confused by it.
+    assert (
+        merge_tree_says_contained(f"{_MASTER_TREE}\nCONFLICT (content)\n", _MASTER_TREE)
+        is True
+    )
+
+
+def test_no_output_is_not_a_match():
+    # A git too old for --write-tree prints nothing. Empty must never read as merged, or an
+    # unsupported git would make every worktree collectable.
+    assert merge_tree_says_contained("", _MASTER_TREE) is False
+
+
+def test_an_unreadable_master_tree_is_not_a_match():
+    # Both sides empty would compare equal on a naive implementation, and delete everything.
+    assert merge_tree_says_contained("", "") is False
+    assert merge_tree_says_contained(f"{_MASTER_TREE}\n", "") is False
 
 
 # --- remove(): the removal loop never had a test, which is why the unlock-before-remove

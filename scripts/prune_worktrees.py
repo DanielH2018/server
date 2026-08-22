@@ -8,10 +8,12 @@ it stopped being obvious which was which.
 A worktree is removable only when all three hold: its branch is merged into
 origin/master, it has no uncommitted changes, and no live session holds its lock.
 
-"Merged" is checked by ancestry AND by patch-id. PRs land here with `gh pr merge --rebase`,
-which replays commits onto master as new objects, so a landed branch is never an ancestor of
+"Merged" is checked three ways, cheapest first: ancestry, then patch-id, then content. PRs
+land here rebased or squashed, never fast-forwarded, so the branch tip is not an ancestor of
 origin/master — on ancestry alone this script reported "nothing to remove" while merged trees
-piled up. See is_merged.
+piled up. `git cherry` compares by patch-id and settles the rebase case. A squash defeats
+both, because collapsing several commits into one leaves no patch-id to match; `git merge-tree`
+settles that by asking whether merging the branch would change master at all. See is_merged.
 
 The lock is the interesting one. Claude Code locks a session's worktree with a reason
 naming the owning process — `claude session <name> (pid 1285937 start 2164388)` — and does
@@ -149,6 +151,28 @@ def cherry_says_merged(cherry_output: str) -> bool:
     return all(line.startswith("-") for line in lines)
 
 
+def merge_tree_says_contained(merge_tree_stdout: str, master_tree: str) -> bool:
+    """Read `git merge-tree --write-tree origin/master <head>`: True when the merge is a no-op.
+
+    The command prints the OID of the tree merging the branch would produce. When that equals
+    origin/master's own tree, the branch has nothing master does not already hold — which is
+    what a squash merge leaves behind, and what neither ancestry nor patch-id can see, because
+    a squash keeps the content while discarding the commits that carried it.
+
+    This asks about content, not history, so it also covers the ancestry and rebase cases the
+    two cheaper checks handle first. It is last because it is the expensive one: it performs a
+    real merge.
+
+    Empty input is a failure to read a verdict, not a match, so it returns False — both
+    arguments must be present for a comparison to mean anything.
+    """
+    lines = [line.strip() for line in merge_tree_stdout.splitlines() if line.strip()]
+    master = master_tree.strip()
+    if not lines or not master:
+        return False
+    return lines[0] == master
+
+
 def is_merged(repo: str, head: str) -> bool:
     """True when `head`'s work is already on origin/master, by ancestry or by patch.
 
@@ -159,9 +183,13 @@ def is_merged(repo: str, head: str) -> bool:
     ancestry check is kept because it is cheap and settles the fast-forward and merge-commit
     cases; `git cherry` compares by patch-id and settles the rebase case.
 
-    Squash merges remain undetected: several commits collapse into one, so no patch-id
-    matches. Those worktrees are kept, which is the safe direction — this decides what to
-    DELETE, so an unknown must never read as merged.
+    Squash merges defeat both: several commits collapse into one, so the tip is not an
+    ancestor and no patch-id matches either. `git merge-tree` settles that case by asking a
+    different question — not "are these commits upstream" but "does this branch still have
+    anything to give master". See merge_tree_says_contained.
+
+    All three failures are closed: an unknown reads as NOT merged, because this decides what
+    to DELETE.
     """
     ancestor = subprocess.run(
         ["git", "merge-base", "--is-ancestor", head, "origin/master"],
@@ -182,7 +210,29 @@ def is_merged(repo: str, head: str) -> bool:
     # the return code has to gate this, or an unknown ref would read as safe to delete.
     if cherry.returncode != 0:
         return False
-    return cherry_says_merged(cherry.stdout)
+    if cherry_says_merged(cherry.stdout):
+        return True
+    master_tree = subprocess.run(
+        ["git", "rev-parse", "origin/master^{tree}"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if master_tree.returncode != 0:
+        return False
+    # Exit is non-zero on a conflict, and on a git too old for --write-tree (added in 2.38).
+    # Both mean "no verdict", which must read as not merged.
+    merged_tree = subprocess.run(
+        ["git", "merge-tree", "--write-tree", "origin/master", head],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if merged_tree.returncode != 0:
+        return False
+    return merge_tree_says_contained(merged_tree.stdout, master_tree.stdout)
 
 
 def is_dirty(path: str) -> bool:
