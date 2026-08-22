@@ -309,7 +309,9 @@
     # `deployment.apps/x created` and `daemonset.apps/x created`. Deriving it from the kind
     # keeps the two in step — a mismatch here never matches, so a freshly created workload
     # would be restarted mid-creation, which is the race this condition exists to prevent.
-    - not manifests_apply.stdout is search(
+    # `| default('')` — an unreadable register falls through to "not created" and restarts,
+    # which is the recoverable direction. See the same guard in k8s/claude-otel.
+    - not (manifests_apply.stdout | default('')) is search(
         (manifests_rollout_kind | default('deploy') == 'daemonset') | ternary('daemonset.apps/', 'deployment.apps/')
         ~ (manifests_rollout | default(manifests_service)) ~ ' created')
 
@@ -366,7 +368,8 @@
     - manifests_render is changed or manifests_secret_render is changed
       or (item.image | default(item.name)) in (k8s_rebuilt_images | default([]))
     # Same apply-output-prefix derivation as the primary rollout above — see that comment.
-    - not manifests_apply.stdout is search(
+    # `| default('')` — same guard as the primary rollout above.
+    - not (manifests_apply.stdout | default('')) is search(
         (item.kind | default(manifests_rollout_kind | default('deploy')) == 'daemonset') | ternary('daemonset.apps/', 'deployment.apps/')
         ~ item.name ~ ' created')
 
