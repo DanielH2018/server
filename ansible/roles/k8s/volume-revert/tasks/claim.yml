@@ -354,3 +354,29 @@
   until: volume_revert_final.stdout | default('') | trim == 'detached'
   retries: "{{ ((volume_revert_state_timeout | int) / (volume_revert_poll_interval | int)) | round | int }}"
   delay: "{{ volume_revert_poll_interval }}"
+
+# Reverse state for k8s/seed-volume's short-circuit annotation. That role skips its whole seed
+# pod cycle when the PVC says `homelab.daniel-hunter.com/seeded=true`, which is a claim about
+# the volume's CONTENTS — and this task has just replaced those contents wholesale.
+#
+# In practice the two cannot diverge: every snapshot this role can revert to is taken during a
+# deploy, long after the volume was seeded, so the in-volume `.seeded` marker is present in all
+# of them. Stripping the annotation anyway removes the need for that invariant to hold. The
+# cost of stripping it unnecessarily is one seed pod cycle (~2s) on the next deploy of this
+# service, which then re-reads the marker and re-annotates; the cost of NOT stripping it after
+# a revert that did land pre-seed would be a volume permanently believed seeded when it is not.
+- name: Clear the seeded annotation on {{ volume_revert_claim }}
+  tags: [deploy]
+  when: not (k8s_no_mutate | bool)
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - "{{ k8s_namespace }}"
+      - annotate
+      - pvc
+      - "{{ volume_revert_claim }}"
+      - homelab.daniel-hunter.com/seeded-
+  become: true
+  changed_when: true

@@ -17,6 +17,13 @@
 # marker is load-bearing in the other direction too: rerunning against a volume the
 # application has since written to would overwrite live data with a stale snapshot.
 #
+# AND CHEAP, because that no-op runs 25 times on every deploy. Reading the marker means mounting
+# the volume, which means the seed pod — five tasks to learn nothing changed. So a successful seed
+# also annotates the PVC `homelab.daniel-hunter.com/seeded=true`, and a run that sees the
+# annotation skips the pod cycle entirely. The annotation is a projection of the marker, not a
+# replacement for it: the marker remains the authority, and any run that does start a seed pod
+# still reads it. See THE SHORT-CIRCUIT below.
+#
 # A ROLE THAT SEEDS TWO CLAIMS WILL TRIP THE SSH RATE-LIMITER. Each seed opens several
 # connections to the source host, and `ufw limit ssh` there REJECTs the 6th within 30 s, so the
 # second claim dies on
@@ -71,17 +78,61 @@
 # back empty on a first seed — the PVC is unbound and nothing is attached yet — and the
 # template then omits the nodeSelector, leaving the scheduler free to place the pod, which
 # is correct: there is no workload to collide with.
-- name: Find the PersistentVolume bound to {{ seed_volume_claim }}
-  tags: [config]
+#
+# Two reads in one kubectl call, because this is the hot path: 25 claims are seeded on every
+# deploy and every one of them is already seeded, so the whole cost of this role in steady
+# state is module executions that conclude "nothing to do". Folding the seed-state read into
+# the lookup that had to happen anyway makes the short-circuit below free.
+#
+# `always`, not `config`, because the fact below crosses the config/deploy split — see the note
+# on that task.
+- name: Find the PersistentVolume and prior seed state for {{ seed_volume_claim }}
+  tags: always
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} get pvc {{ seed_volume_claim }}
-      -o jsonpath={.spec.volumeName}
+      -o jsonpath={.spec.volumeName}|{.metadata.annotations.homelab\.daniel-hunter\.com/seeded}
   register: seed_volume_pv
   become: true
   changed_when: false
   # A missing PVC is the first-seed case, not an error.
   failed_when: false
+
+# THE SHORT-CIRCUIT. When the annotation says this claim is already seeded, everything the seed
+# pod exists to do — start it, wait for it, read the in-volume `.seeded` marker, delete it — is
+# a round trip to learn something already recorded on the PVC. Skipping it drops five tasks per
+# claim — the attached-node lookup, the pod start, the readiness wait, the marker exec and the
+# pod delete — plus one of the render loop's two items.
+#
+# It reads the annotation rather than the `.seeded` marker because the marker is INSIDE the
+# volume, and the only way to read it is the pod cycle this is trying to avoid. The annotation
+# is that marker projected somewhere readable without mounting anything; the task at the bottom
+# of this file is what keeps the two in step.
+#
+# `kubectl apply` does not prune it. The PVC template declares no annotations, and client-side
+# apply only removes keys that were in the previous last-applied-configuration — verified live
+# on freshrss-config, whose baseline carries `"annotations":{}` while four controller-set
+# annotations survive every apply.
+#
+# FORCE ALWAYS TAKES THE LONG PATH. seed_volume_force exists precisely to overrule the marker at
+# a cutover (see this file's header), so a gate that outranked it would silently turn the one
+# run that matters into a no-op — the same failure test_seed_volume_force.py guards from the
+# other direction.
+#
+# `always` ON BOTH THIS AND THE LOOKUP ABOVE, because this is the role's first fact read across
+# the config/deploy tag split: it is produced here and consumed by six deploy-tagged tasks. A
+# selection that reached deploy without config would leave it undefined — but the worse mode is
+# that set_fact persists for the host across role invocations, so a skipped lookup leaves the
+# PREVIOUS claim's value in scope. A stale `true` skips the pod cycle for a claim that was never
+# seeded, and the workload then starts against an empty volume. `| default(false)` does not help
+# with that; only always running the producer does.
+- name: Note the PV and whether the seed pod can be skipped for {{ seed_volume_claim }}
+  tags: always
+  ansible.builtin.set_fact:
+    seed_volume_pv_name: "{{ seed_volume_pv.stdout | default('') | split('|') | first | trim }}"
+    seed_volume_short_circuit: >-
+      {{ (seed_volume_pv.stdout | default('') | split('|') | last | trim) == 'true'
+         and not (seed_volume_force | default(false) | bool) }}
 
 # VolumeAttachment is the authoritative answer to "which node is this volume on" — it is
 # what the attach/detach controller writes, and it is what the Multi-Attach check reads.
@@ -93,14 +144,23 @@
       set -o pipefail;
       k3s kubectl get volumeattachment --no-headers
       -o custom-columns=PV:.spec.source.persistentVolumeName,NODE:.spec.nodeName,ATTACHED:.status.attached
-      | awk -v pv={{ seed_volume_pv.stdout | quote }} '$1==pv && $3=="true" {print $2; exit}'
+      | awk -v pv={{ seed_volume_pv_name | quote }} '$1==pv && $3=="true" {print $2; exit}'
     executable: /bin/bash
   register: seed_volume_attachment
   become: true
   changed_when: false
   failed_when: false
-  when: seed_volume_pv.stdout | default('') | length > 0
+  # Only the seed pod needs pinning, so a run that starts no seed pod needs no answer.
+  when:
+    - not (seed_volume_short_circuit | bool)
+    - seed_volume_pv_name | length > 0
 
+# Deliberately NOT gated on the short-circuit, unlike the lookup that feeds it. set_fact
+# persists for the host across role invocations, so skipping this would leave the PREVIOUS
+# claim's node pinned here — and the next claim that does render a seed pod would inherit it.
+# Running it always is cheap and self-clearing: a skipped lookup registers no stdout, so the
+# default below resolves to the empty string, which is the same "let the scheduler choose"
+# answer a first seed gets.
 - name: Note which node the seed pod must be pinned to
   tags: [config]
   ansible.builtin.set_fact:
@@ -114,9 +174,11 @@
     mode: "0644"
     owner: root
     group: root
-  loop:
-    - pvc.yaml
-    - seed-pod.yaml
+  # pvc.yaml always: this role is the only thing that creates the PVC for the 16 caller roles
+  # that render no PVC template of their own, so the short-circuit must never skip it.
+  # seed-pod.yaml only when a seed pod is going to be started.
+  loop: >-
+    {{ ['pvc.yaml'] + ([] if seed_volume_short_circuit | bool else ['seed-pod.yaml']) }}
   become: true
 
 - name: Create the PVC for {{ seed_volume_claim }}
@@ -129,6 +191,7 @@
 
 - name: Start the seed pod for {{ seed_volume_claim }}
   tags: [deploy]
+  when: not (seed_volume_short_circuit | bool)
   ansible.builtin.command:
     cmd: "k3s kubectl apply -f /etc/rancher/k3s/manifests/{{ seed_volume_service }}/seed-pod.yaml"
   register: seed_volume_pod
@@ -137,6 +200,7 @@
 
 - name: Wait for the seed pod to be ready
   tags: [deploy]
+  when: not (seed_volume_short_circuit | bool)
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} wait --for=condition=Ready
@@ -146,6 +210,7 @@
 
 - name: Check the seed marker on {{ seed_volume_claim }}
   tags: [deploy]
+  when: not (seed_volume_short_circuit | bool)
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} exec seed-{{ seed_volume_claim }} --
@@ -160,10 +225,24 @@
 # to, so it fails the moment the two diverge — which, for a service under coexistence, is
 # within minutes. That made every later deploy of an already-seeded service fail on a
 # difference that is expected and correct.
+# The short-circuit branch is FIRST and returns a hard false, which matters more here than
+# anywhere else in this file. Skipping the seed pod skips the marker check with it, so there is
+# no marker reading to consult — and a skipped Ansible task still registers, as a dict with no
+# `rc`, so an expression that reaches for it gets whatever that dict happens to yield rather
+# than an answer. Any form that consults the marker here resolves to "copy": measured by
+# mutating this expression to the tidier `(seed_volume_marker.rc | default(1)) != 0 or force`,
+# which renders True and would tar a long-gone source over all 25 live volumes.
+#
+# The else branch deliberately has no default on `.rc`: it is only reachable when the marker
+# task ran, so an undefined `.rc` there means an invariant broke, and stopping the play is the
+# correct answer to that. A default would convert it into a silent copy. Jinja's conditional
+# expression is lazy, so the else branch is not evaluated when the short-circuit is taken.
 - name: Decide whether this run copies
   tags: [deploy]
   ansible.builtin.set_fact:
-    seed_volume_copying: "{{ seed_volume_marker.rc != 0 or seed_volume_force | default(false) | bool }}"
+    seed_volume_copying: >-
+      {{ false if (seed_volume_short_circuit | bool)
+         else (seed_volume_marker.rc != 0 or seed_volume_force | default(false) | bool) }}
 
 # Scaled to zero BEFORE the source is read, not just before the tar, because the destination
 # checksum below must see a volume nothing is writing to. Leaving the workload up does not
@@ -234,9 +313,32 @@
         - '"NotFound" not in seed_volume_restored.stderr'
 - name: Remove the seed pod
   tags: [deploy]
+  when: not (seed_volume_short_circuit | bool)
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} delete pod seed-{{ seed_volume_claim }}
       --ignore-not-found --wait=false
   become: true
+  changed_when: true
+
+# Project the in-volume `.seeded` marker onto the PVC, where the next deploy can read it
+# without mounting anything. Reaching this task means the volume is seeded: either the marker
+# check found it, or copy.yml verified a fresh copy — a copy that failed verification aborts
+# the play well before here.
+#
+# Unconditional on the long path, so this self-heals. On the first deploy after this change no
+# PVC carries the annotation, so all 25 claims run the full pod cycle once and are annotated;
+# every deploy after that short-circuits. The same recovery covers an annotation stripped by
+# k8s/volume-revert.
+- name: Record the seeded state of {{ seed_volume_claim }}
+  tags: [deploy]
+  when: not (seed_volume_short_circuit | bool)
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} annotate pvc {{ seed_volume_claim }}
+      homelab.daniel-hunter.com/seeded=true --overwrite
+  become: true
+  # Always changed rather than parsing kubectl's wording: the long path is the exceptional one
+  # (a first seed, a forced re-seed, or a recovery after a revert), so this reports changed on
+  # the runs where something genuinely did happen and never runs at all on a steady-state deploy.
   changed_when: true
