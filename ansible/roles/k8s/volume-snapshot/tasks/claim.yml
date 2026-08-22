@@ -583,12 +583,18 @@
   # snapshot AND the earlier pre-deploy snapshot the revert is about to need. A floor of 1 keeps
   # only the newest (this run's own) and deletes the very recovery point the revert step right
   # after it depends on. See CLAUDE.md's "The revert needs two, not one" section.
+  #
+  # `regex_escape` for the same reason k8s/volume-revert escapes its own prefix: `match` is a
+  # regex test, not a literal prefix test, so a metacharacter in the service or claim name would
+  # widen or narrow the candidate set — and this set feeds a `kubectl delete`. Unreachable today
+  # (both are DNS-1123 labels) and separately bounded three ways, but the two files make the same
+  # decision and only one of them said so.
   ansible.builtin.set_fact:
     volume_snapshot_live: >-
       {{ volume_snapshot_existing.stdout_lines | default([])
          | map('split', '|')
          | rejectattr('1', 'equalto', 'true')
-         | selectattr('2', 'match', volume_snapshot_prefix)
+         | selectattr('2', 'match', volume_snapshot_prefix | trim | regex_escape)
          | sort(attribute='0', reverse=true)
          | map(attribute='2') | list }}
     volume_snapshot_keep: "{{ [volume_snapshot_retain | int, 2] | max }}"

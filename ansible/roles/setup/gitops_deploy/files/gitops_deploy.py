@@ -231,6 +231,12 @@ K8S_AUTODEPLOY_PILOT = _csv_set(C.get("K8S_AUTODEPLOY_PILOT", ""))
 # ansible-playbook run and one K8S_DEPLOY_TIMEOUT_S, and a timeout rolls the batch back
 # together.
 K8S_AUTODEPLOY_MAX_PER_TICK = int(C.get("K8S_AUTODEPLOY_MAX_PER_TICK", "0"))
+# Defaults to 1, not 0: an older config.env rendered before this key existed must get the SAFE
+# cap, not an absent one. 0 here would silently restore the unbounded-batch behaviour this
+# closes, on exactly the hosts whose config is stale (2026-08-22 review H2).
+K8S_AUTODEPLOY_MAX_CLAIM_SERVICES_PER_TICK = int(
+    C.get("K8S_AUTODEPLOY_MAX_CLAIM_SERVICES_PER_TICK", "1")
+)
 K8S_AUTODEPLOY_DENYLIST = _csv_set(C.get("K8S_AUTODEPLOY_DENYLIST", ""))
 if K8S_AUTODEPLOY_ENABLED and not K8S_AUTODEPLOY_DENYLIST:
     # Fail closed. An absent or empty denylist means "nothing is eligible", never "everything
@@ -833,14 +839,17 @@ def main() -> int:
     # host would keep acting on the old list, leaving a role that was just denied still
     # auto-deployable. Disarm loudly rather than acting on a stale boundary.
     autodeploy_enabled = K8S_AUTODEPLOY_ENABLED
+    k8s_defaults_at_origin: dict[str, str | None] = {}
     if autodeploy_enabled:
         try:
             # `origin` (the SHA pinned above, not f"origin/{BRANCH}") — the diff and the alert
             # already evaluate against that exact commit; re-resolving the ref here would open a
             # TOCTOU where a concurrent fetch lands between the two reads.
-            declared = declared_denylist(k8s_declarations_at(origin))
+            k8s_defaults_at_origin = k8s_declarations_at(origin)
+            declared = declared_denylist(k8s_defaults_at_origin)
             read_error = None
         except Exception as exc:  # noqa: BLE001 - any failure here must disarm, not crash
+            k8s_defaults_at_origin = {}
             declared = None
             read_error = f"{type(exc).__name__}: {exc}"
             log(f"could not read k8s declarations at origin: {read_error}")
@@ -892,6 +901,15 @@ def main() -> int:
         enabled=autodeploy_enabled,
         image_only=lambda svc: is_image_only_diff(k8s_image_diff(local, origin, svc)),
         max_per_tick=K8S_AUTODEPLOY_MAX_PER_TICK,
+        # Read at the PINNED origin, like the denylist above and for the same reason — the
+        # promotion decision runs before the ff-merge, so the working tree still holds the
+        # pre-merge declarations. `.get(svc)` (not `[svc]`): a role absent from the listing is
+        # already denied by the stale-denylist comparison, and an absent entry must not raise
+        # here.
+        declares_claims=lambda svc: declares_snapshot_claims(
+            k8s_defaults_at_origin.get(svc)
+        ),
+        max_claim_services_per_tick=K8S_AUTODEPLOY_MAX_CLAIM_SERVICES_PER_TICK,
     )
 
     if cs.broad:
