@@ -728,6 +728,19 @@ def main() -> int:
             fetch.stderr.strip() or f"git fetch exited {fetch.returncode}"
         )
     local = run(["git", "rev-parse", "HEAD"])
+    # Pinned ONCE, and every decision below plus every merge uses this value rather than
+    # re-resolving `origin/<branch>`. The CI verdict, the changed-path diff, the denylist read and
+    # the broad marker all evaluate against this exact commit; a merge that re-resolved the ref
+    # could land a DIFFERENT one, and `--ff-only` would happily accept it because it is still a
+    # descendant. That commit's CI was never checked (REQUIRE_CI defaults true), its paths were
+    # never classified — and because the tree then equals origin, next_action() returns "noop"
+    # from that point on, so it is never deployed and never defer-and-alerted either, with the
+    # hold marker and the behind-origin watchdog both reading green.
+    #
+    # The window is real, not theoretical: `scripts/deploy.sh` runs deploy_staleness.py (which
+    # fetches) BEFORE it takes /var/lock/server-git-tree.lock, and --dry-run returns before the
+    # lock entirely — so a dry run in another session moves this repo's remote-tracking ref
+    # mid-tick. The ref lives in the shared .git dir every worktree points at.
     origin = run(["git", "rev-parse", f"origin/{BRANCH}"])
     hold = read_hold()
 
@@ -897,7 +910,7 @@ def main() -> int:
         )
         return 0
     if cs.k8s_deploy:
-        run(["git", "merge", "--ff-only", f"origin/{BRANCH}"])
+        run(["git", "merge", "--ff-only", origin])
         try:
             deploy_k8s(cs.k8s_deploy, K8S_DEPLOY_TIMEOUT_S)
         except Exception as exc:  # noqa: BLE001 — any playbook failure, or the timeout above
@@ -955,7 +968,7 @@ def main() -> int:
         alert_deferred(origin, cs.k8s_deploy, cs)
         return 0
     if not cs.services:
-        run(["git", "merge", "--ff-only", f"origin/{BRANCH}"])  # docs-only etc.
+        run(["git", "merge", "--ff-only", origin])  # docs-only etc.
         # A secrets-only push (rotated value, no service template changed) maps to nothing,
         # so the ff-merge above is all we can do automatically — but the new value only
         # reaches a container on its next deploy. Defer-and-alert (once per SHA) so the
@@ -976,7 +989,7 @@ def main() -> int:
         alert_deferred(origin, set(), cs)
         return 0
 
-    run(["git", "merge", "--ff-only", f"origin/{BRANCH}"])
+    run(["git", "merge", "--ff-only", origin])
     try:
         deploy(cs.services)
     except Exception as exc:  # noqa: BLE001 — any ansible-playbook failure
