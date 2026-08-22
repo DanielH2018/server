@@ -189,15 +189,82 @@ def test_target_problems_filters_scaled_to_zero_deployments(monkeypatch):
     assert not any("terraria-stats" in line for line in bad)
 
 
+# --- master_moved_problems ----------------------------------------------------
+
+
+def test_master_moved_silent_when_current(monkeypatch):
+    monkeypatch.setattr(_mod, "_run", lambda *a, **k: _result("0\n"))
+    assert _mod.master_moved_problems() == []
+
+
+def test_master_moved_reports_commit_count(monkeypatch):
+    monkeypatch.setattr(_mod, "_run", lambda *a, **k: _result("3\n"))
+    lines = _mod.master_moved_problems()
+    assert len(lines) == 1
+    assert "3 commits behind origin/master" in lines[0]
+
+
+def test_master_moved_singular_commit(monkeypatch):
+    monkeypatch.setattr(_mod, "_run", lambda *a, **k: _result("1\n"))
+    lines = _mod.master_moved_problems()
+    assert "1 commit behind" in lines[0]  # not "1 commits"
+
+
+def test_master_moved_never_fetches(monkeypatch):
+    # The whole point of a read-only, always-runs SessionStart hook: this must be answerable
+    # from the local object store alone, never a network call.
+    seen = []
+    monkeypatch.setattr(
+        _mod, "_run", lambda cmd, *a, **k: seen.append(cmd) or _result("0\n")
+    )
+    _mod.master_moved_problems()
+    assert seen and "fetch" not in seen[0]
+
+
+def test_master_moved_silent_on_nonzero_git_exit(monkeypatch):
+    # e.g. no origin/master ref in this checkout at all -- not this hook's job to diagnose.
+    monkeypatch.setattr(
+        _mod,
+        "_run",
+        lambda *a, **k: types.SimpleNamespace(stdout="", stderr="x", returncode=128),
+    )
+    assert _mod.master_moved_problems() == []
+
+
+def test_master_moved_silent_on_timeout(monkeypatch):
+    def boom(*a, **k):
+        raise subprocess.TimeoutExpired("git", 5)
+
+    monkeypatch.setattr(_mod, "_run", boom)
+    assert _mod.master_moved_problems() == []
+
+
+def test_master_moved_silent_on_unparseable_output(monkeypatch):
+    monkeypatch.setattr(_mod, "_run", lambda *a, **k: _result("not a number\n"))
+    assert _mod.master_moved_problems() == []
+
+
 # --- main orchestration ------------------------------------------------------
 
 
 def _run_main(
-    monkeypatch, stdin, *, dock=None, ok=True, targets=None, env=None, sessions=None
+    monkeypatch,
+    stdin,
+    *,
+    dock=None,
+    ok=True,
+    targets=None,
+    master_moved=None,
+    env=None,
+    sessions=None,
 ):
     monkeypatch.setattr(_mod.sys, "stdin", io.StringIO(stdin))
     monkeypatch.setattr(_mod, "docker_problems", lambda: (dock or [], ok))
     monkeypatch.setattr(_mod, "target_problems", lambda: targets or [])
+    # stubbed by default: the real one reads this checkout's actual relationship to
+    # origin/master, which would make every main() assertion depend on the branch state
+    # of whatever worktree happens to be running the suite
+    monkeypatch.setattr(_mod, "master_moved_problems", lambda: master_moved or [])
     # stubbed by default: the real one reads this machine's live worktrees, which would
     # make every main() assertion depend on what else happens to be open right now
     monkeypatch.setattr(_mod, "other_live_sessions", lambda cwd: sessions or [])
@@ -280,3 +347,15 @@ def test_main_runs_targets_even_when_docker_down(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "docker unreachable" in out
     assert "loki" in out
+
+
+def test_main_prints_master_moved_line(monkeypatch, capsys):
+    _run_main(
+        monkeypatch,
+        '{"source":"startup"}',
+        master_moved=[
+            "  ⚠ this branch is 3 commits behind origin/master (as of the last fetch)"
+        ],
+    )
+    assert _mod.main() == 0
+    assert "3 commits behind origin/master" in capsys.readouterr().out
