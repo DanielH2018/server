@@ -1,5 +1,8 @@
 ---
-registry_k8s_image: registry:3.0.0
+# 3.0.0 -> 3.1.1 (2026-08-22) for CVE-2026-41888 and a bounds check in the PurgeUploads walk.
+# Same major, filesystem driver unchanged — 3.1.x's other headline is S3 Express support, which
+# this registry does not use (REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY, see deployment.yaml.j2).
+registry_k8s_image: registry:3.1.1
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Dependency edges: this deployer models no intra-tick ordering, and registry is the
