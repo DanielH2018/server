@@ -30,7 +30,6 @@ _NO_READINESS = {
         "access-log-rotate",
     ): "sidecar; a tail/rotate hiccup must never gate the edge proxy's Service",
     ("authelia", "crowdsec-agent"): "same shape as traefik's sidecar; would gate SSO",
-    ("crowdsec", "metabase"): "startupProbe already gates it; pod Ready is the AND",
     (
         "uptime-kuma",
         "autokuma",

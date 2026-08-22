@@ -16,8 +16,8 @@ spec:
    networkpolicy-traefik.yaml.j2. All THREE rules below sit inside this conditional -- leaving
    any of them outside it would keep crowdsec fenced through a rollback. #}
 {% if netpol_baseline_enforced | bool %}
-    # LAPI (8080) and AppSec (7422): the Traefik bouncer plugin. The dashboard (3000) is
-    # reached through Traefik like any route.
+    # LAPI (8080) and AppSec (7422): the Traefik bouncer plugin. Port 3000 was here for the
+    # Metabase dashboard, which shared this pod until 2026-08-22; nothing listens on it now.
     - from:
         - podSelector:
             matchLabels:
@@ -27,13 +27,10 @@ spec:
           protocol: TCP
         - port: 7422
           protocol: TCP
-        - port: 3000
-          protocol: TCP
     # The node agents only ever dial the LAPI (node-agent-daemonset.yaml.j2:68,
-    # LOCAL_API_URL="http://crowdsec:8080") -- never AppSec or the dashboard. Kept as its own
-    # from item rather than folded into traefik's rule above: sibling `from` peers share the
-    # whole rule's ports list, so grouping them would hand the node agents AppSec and the
-    # dashboard for free.
+    # LOCAL_API_URL="http://crowdsec:8080") -- never AppSec. Kept as its own from item rather
+    # than folded into traefik's rule above: sibling `from` peers share the whole rule's ports
+    # list, so grouping them would hand the node agents AppSec for free.
     - from:
         - podSelector:
             matchLabels:

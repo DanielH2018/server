@@ -70,11 +70,6 @@ containers_list:
     hostname: "crowdsec-lapi"
     port: 8080
     use_authelia: false
-    # The Metabase dashboard rides in the engine pod (B2c) — a second routed workload under
-    # one entry, so its name goes through extra_hostnames (the claude-otel mechanism) or its
-    # DNS falls through the wildcard to daniel-server's Traefik and 404s.
-    extra_hostnames:
-      - "crowdsec"
   - name: traefik
     platform: k8s
     port: 8080
