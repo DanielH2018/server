@@ -528,7 +528,10 @@ stalled rollback), this unit can hold that lock for up to 2220s (900 + 1320, exc
 flock wait) — past the 30-minute (1800s) timer interval. A concurrent `./scripts/deploy.sh`
 during that window waits its own `-w 180` and then returns **exit 75** (nothing deployed, not a
 playbook failure — see the root CLAUDE.md); the secret-rotate cron waits on the same lock rather
-than failing outright. Neither is silently wrong — both correctly report "the lock stayed busy"
+than failing outright, which is true only because its `flock -w` is 2700s and so clears that
+2220s hold. It was 1200s until 2026-08-22, at which point this paragraph was wrong in the
+direction that matters: the cron gave up mid-incident and skipped that week's rotation, with no
+retry until the next weekly tick. Neither is silently wrong — both correctly report "the lock stayed busy"
 — but an operator seeing exit 75 during this window should check whether gitops-deploy is mid
 double-timeout before assuming the lock is stuck.
 
