@@ -431,6 +431,12 @@ K8S_RESTART_MAX = int(_env("K8S_RESTART_MAX", "3"))
 SCRUTINY_URL = _env("SCRUTINY_URL", "http://scrutiny:8080").rstrip("/")
 SCRUTINY_MAX_AGE_H = float(_env("SCRUTINY_MAX_AGE_H", "26"))
 SCRUTINY_TEMP_MAX = float(_env("SCRUTINY_TEMP_MAX", "0"))
+# NVMe endurance ceiling (percentage_used, where 100 means the controller's rated write endurance
+# is spent). Scrutiny ships this attribute with thresh=100, so its own evaluation cannot fold a
+# breach into device_status until the drive is fully consumed — days of warning where the wear
+# curve offers months. Verified against the live API 2026-08-22: daniel-server's SHPP41-500GM
+# reads 7 at 30,959 power-on hours, daniel-box's CT1000E100SSD8 reads 0 at 576. 0 = disabled.
+SCRUTINY_WEAR_MAX = float(_env("SCRUTINY_WEAR_MAX", "80"))
 
 # UPS battery health via Home Assistant's Prometheus scrape (the APC UPS is on NUT/peanut; HA's
 # prometheus integration exposes its sensors as hass_sensor_*). The only pre-existing UPS alert is
@@ -1564,6 +1570,80 @@ def scrutiny_health(summary, temp_max=0):
     return True, "SMART health ok"
 
 
+def scrutiny_device_wear(details):
+    """Pure: one device's `percentage_used`, or None where the device does not report it.
+
+    `details` is the parsed /api/device/<wwn>/details body. `smart_results` is a history array,
+    newest first, so only [0] is read. None is not a fault: `percentage_used` is an NVMe attribute,
+    so a SATA disk added later legitimately has none and must not page.
+    """
+    results = ((details or {}).get("data") or {}).get("smart_results") or []
+    if not results:
+        return None
+    attrs = (results[0] or {}).get("attrs") or {}
+    entry = attrs.get("percentage_used")
+    if not isinstance(entry, dict):
+        return None
+    value = entry.get("value")
+    return value if isinstance(value, (int, float)) else None
+
+
+def scrutiny_wear_verdict(devices, wear_max):
+    """Pure: (ok, msg) for NVMe endurance. `devices` is a list of (label, percentage_used|None).
+
+    A list rather than a dict because both live drives report `device_name` "nvme0" — one per
+    host — so keying by name would collapse them into one entry.
+
+    Unreadable wear reports as INERT and names the drives it is not watching, the shape
+    `extended_resource_verdict` uses: a check that cannot read its input must not answer as though
+    it did, in either direction. DOWN-on-missing-field would page for every non-NVMe disk.
+    """
+    if not wear_max:
+        return True, "NVMe wear check disabled"
+    watched = [(label, used) for label, used in devices if used is not None]
+    unwatched = [label for label, used in devices if used is None]
+    if not watched:
+        return True, (
+            "NVMe wear check INERT: no device reports percentage_used; %s unwatched"
+            % (", ".join(unwatched) or "no devices")
+        )
+    worn = [
+        "%s (%g%% used > %g%%)" % (label, used, wear_max)
+        for label, used in watched
+        if used > wear_max
+    ]
+    if worn:
+        return False, "NVMe wear: " + ", ".join(worn)
+    msg = "NVMe wear ok (max %g%% used of %g%%)" % (
+        max(used for _, used in watched),
+        wear_max,
+    )
+    if unwatched:
+        msg += "; no percentage_used from %s (unwatched)" % ", ".join(unwatched)
+    return True, msg
+
+
+def scrutiny_wear_devices(summary):
+    """One /api/device/<wwn>/details fetch per non-archived device.
+
+    The wear attributes are not in /api/summary, which is what makes this N calls per cycle rather
+    than none — same shape as check_k8s_workloads' six Prometheus queries. Each payload is ~19 KB
+    and only smart_results[0] is read. A failing fetch raises out of _get_json and the runner
+    reports DOWN; that is deliberate and must not be caught here.
+    """
+    devices = []
+    for wwn, entry in (summary or {}).items():
+        dev = entry.get("device") or {}
+        if dev.get("archived"):
+            continue
+        name = dev.get("device_name") or wwn
+        model = dev.get("model_name")
+        label = "%s (%s)" % (name, model) if model else name
+        details = _get_json("%s/api/device/%s/details" % (SCRUTINY_URL, wwn))
+        devices.append((label, scrutiny_device_wear(details)))
+    return devices
+
+
 def check_scrutiny():
     data = _get_json(SCRUTINY_URL + "/api/summary")
     summary = (data.get("data") or {}).get("summary")
@@ -1573,7 +1653,18 @@ def check_scrutiny():
     health_ok, health_msg = scrutiny_health(summary, SCRUTINY_TEMP_MAX)
     if not health_ok:
         return False, health_msg
-    return True, "%s; %s" % (fresh_msg, health_msg)
+    # Folded into this monitor rather than given its own: a new Kuma monitor needs a new push
+    # token in SOPS, and wear answers the same question device_status does — is the drive still
+    # fit to hold the data on it — just months earlier. Fetched only once freshness passes, so a
+    # dead collector costs no per-device calls.
+    if not SCRUTINY_WEAR_MAX:
+        return True, "%s; %s" % (fresh_msg, health_msg)
+    wear_ok, wear_msg = scrutiny_wear_verdict(
+        scrutiny_wear_devices(summary), SCRUTINY_WEAR_MAX
+    )
+    if not wear_ok:
+        return False, wear_msg
+    return True, "%s; %s; %s" % (fresh_msg, health_msg, wear_msg)
 
 
 def ups_health(charge_pct, runtime_s, replace_battery, charge_min_pct, runtime_min_s):
