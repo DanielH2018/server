@@ -26,6 +26,10 @@ k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC, now 
 # Declared regardless of k8s_autodeploy — protects a manual deploy too, and slice 7b's revert
 # is what this role's auto-deploy now depends on.
 k8s_autodeploy_snapshot_pvcs: [bazarr-config]  # noqa var-naming[no-role-prefix]
+# Claims this role MOUNTS but does not revert — the WEIGHED clause in the reason above, stated
+# where a test can read it. media-data is rendered by k8s/media-volume, so no guard that reads
+# what this role creates can see the coupling (2026-08-22 review M2).
+k8s_autodeploy_unreverted_claims: [media-data]  # noqa var-naming[no-role-prefix]
 
 # 3.7 M at B4a — the smallest config in the slice, but still the database holding the paths.
 bazarr_k8s_claim: bazarr-config
