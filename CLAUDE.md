@@ -275,6 +275,14 @@ feedback + MLD discipline):
   pytest guard, a prek hook, a `validate-compose`/`auto-approve` rule). A rule a machine enforces
   beats a paragraph an agent has to remember. Before adding a don't-re-flag verdict, ask: is this a
   *class* (are there sibling instances the same principle governs), and should it be a lint instead?
+- **Mark a settled trade-off `# DECIDED:` at the line it governs.** A decision recorded only in a
+  memory file or a commit message is a decision every future reviewer re-derives; one written as a
+  comment where the code makes the trade-off is one they trip over before they spend an hour on it.
+  Write the marker, then the reasoning — `# DECIDED: 8 chars, not 12 — minimum-not-width, and the
+  assert fires before the scale-down. See gitops_deploy/CLAUDE.md:364.` Reviewer briefs grep for it
+  (`.claude/skills/homelab-review/SKILL.md`, step 3), so the marker is what carries the decision to
+  the agent that would otherwise re-open it. It is a prior, not a verdict: contradict one with new
+  evidence at a cited `file:line` and name the marker you are contradicting.
 
 ## Parallel Claude Sessions
 Several sessions work this repo at once, each in its own `.claude/worktrees/<name>` checkout.
