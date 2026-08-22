@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from pathlib import Path
 
 from prune_worktrees import (
     KEEP,
@@ -244,17 +245,27 @@ def test_remove_never_passes_force(monkeypatch):
     assert not any("-f" in c or "--force" in c for c in calls)
 
 
-def _init_scratch_repo(path):
-    subprocess.run(
-        ["git", "init", "-q", "--initial-branch=master", str(path)], check=True
-    )
-    subprocess.run(
-        ["git", "-C", str(path), "config", "user.email", "t@t.com"], check=True
-    )
-    subprocess.run(["git", "-C", str(path), "config", "user.name", "t"], check=True)
+def _git(repo: Path, *args: str) -> None:
+    """Run git in `repo` with every inherited GIT_* variable removed.
+
+    The identity goes in the environment rather than into `git config`, because a
+    `git config user.email` call resolves GIT_DIR before it resolves `-C` — under a
+    pre-commit hook that writes the test identity into the real repository, which is
+    how t@t.com came to author 170 real commits (2026-08-17). Same pattern as
+    scripts/test_deploy_staleness.py.
+    """
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env["GIT_AUTHOR_NAME"] = env["GIT_COMMITTER_NAME"] = "t"
+    env["GIT_AUTHOR_EMAIL"] = env["GIT_COMMITTER_EMAIL"] = "t@example.invalid"
+    subprocess.run(["git", *args], cwd=repo, env=env, check=True)
+
+
+def _init_scratch_repo(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    _git(path, "init", "-q", "--initial-branch=master")
     (path / "a.txt").write_text("one\n")
-    subprocess.run(["git", "-C", str(path), "add", "a.txt"], check=True)
-    subprocess.run(["git", "-C", str(path), "commit", "-q", "-m", "init"], check=True)
+    _git(path, "add", "a.txt")
+    _git(path, "commit", "-q", "-m", "init", "--no-gpg-sign")
 
 
 def test_remove_actually_deletes_a_locked_worktree_on_disk(tmp_path, monkeypatch):
@@ -263,25 +274,19 @@ def test_remove_actually_deletes_a_locked_worktree_on_disk(tmp_path, monkeypatch
     # tree fails outright ("cannot remove a locked working tree") and the caller would
     # report success while removing nothing — this is the bug itself, reproduced.
     #
-    # Scrub GIT_* first. git exports GIT_DIR and GIT_INDEX_FILE into hook processes, and
-    # `git -C <path>` does NOT override them, so under the prek pre-commit hook every git
-    # call below — including remove()'s own — targets the real repository rather than the
-    # scratch one. Observed: it tried to commit into the live worktree and only an existing
-    # index.lock stopped it.
+    # Scrub GIT_* for remove()'s own git calls: it takes no environment argument, so this
+    # is the only way to keep them off the real repository. git exports GIT_DIR and
+    # GIT_INDEX_FILE into hook processes and `git -C <path>` does NOT override them, so
+    # under the prek pre-commit hook an unscrubbed remove() unlocks and deletes worktrees
+    # of the live repo. The fixture's own calls go through _git, which scrubs for itself.
     for var in [name for name in os.environ if name.startswith("GIT_")]:
         monkeypatch.delenv(var, raising=False)
 
     repo = tmp_path / "repo"
     _init_scratch_repo(repo)
     wt = tmp_path / "wt"
-    subprocess.run(
-        ["git", "-C", str(repo), "worktree", "add", "-q", "-b", "feature", str(wt)],
-        check=True,
-    )
-    subprocess.run(
-        ["git", "-C", str(repo), "worktree", "lock", str(wt), "--reason", "test lock"],
-        check=True,
-    )
+    _git(repo, "worktree", "add", "-q", "-b", "feature", str(wt))
+    _git(repo, "worktree", "lock", str(wt), "--reason", "test lock")
 
     ok, err = remove(
         str(repo), Worktree(path=str(wt), head="x", branch="feature", locked=True)
