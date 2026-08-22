@@ -9,7 +9,7 @@ registry_k8s_image: registry:3.0.0
 # also migrate its own stored blobs before the gate observes a fault, compounding the
 # dependency-edge risk with a migrating-state-shaped risk on registry's own data.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "dependency edges — image-supply path for n8n/homelab-mcp/ical-proxy/nut/pi-peer-backup/code-server; no intra-tick ordering. ALSO Recreate + its own PVC (blob store) — two independent reasons"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "dependency edges — image-supply path for n8n/homelab-mcp/ical-proxy/nut/pi-peer-backup/code-server; no intra-tick ordering. ALSO Recreate + its own PVC (blob store) — two independent reasons. COUPLING NOTE for a future promotion: a revert drops recently-pushed digests from the blob store while nodes that already pulled them keep running until their next pull 404s"  # noqa var-naming[no-role-prefix]
 
 # The address vars (k8s_registry_port / _host_ip / _pull_host) live in group_vars/all.yml
 # because roles/setup/k3s needs them too, to write containerd's trust config.

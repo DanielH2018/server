@@ -11,7 +11,7 @@ traefik_k8s_crd_version: v3.7
 # of outage. Also Recreate + a PVC (the acme.json cert store) on its own state, which compounds
 # the risk but isn't the primary reason.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "platform — ingress edge; a failed deploy removes the ability to reach or fix anything else, and host probes stay green through that kind of outage"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "platform — ingress edge; a failed deploy removes the ability to reach or fix anything else, and host probes stay green through that kind of outage. COUPLING NOTE for a future promotion: the traefik-acme PVC holds the ACME account key and issued certs; reverting past a real rotation reinstates stale cert state"  # noqa var-naming[no-role-prefix]
 
 # Unprivileged ports inside the pod; the Service maps 80 -> http and 443 -> https. Binding
 # :80/:443 in the container would need NET_BIND_SERVICE and a root-ish user for no gain.

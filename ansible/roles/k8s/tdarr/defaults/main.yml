@@ -5,9 +5,12 @@
 tdarr_k8s_enabled: true
 
 # Pinned by DIGEST, carried across from the compose template along with its reason: tdarr is
-# stateful AND rewrites library files in place, so it must not auto-update unvetted. Upstream
-# ships dev-tagged builds Renovate cannot track by version (this digest = dev_2.78.01,
-# 2026-06-12), so version updates stay manual: pull :latest, take the new digest, redeploy.
+# stateful AND rewrites library files in place. Upstream ships dev-tagged builds Renovate
+# cannot track by version (this digest = dev_2.78.01, 2026-06-12), so a VERSION bump stays
+# manual: pull :latest, take the new digest, redeploy. That is NOT the same as a DIGEST bump
+# staying manual — renovate.json's k8s digest-bump packageRule automerges a re-push of this
+# same tag after a 3-day soak (see the k8s_autodeploy_reason below), so this pin alone does not
+# keep tdarr off auto-update.
 #
 # The `:latest` prefix is NOT redundant with the digest, and the compose copy does without it
 # only because a different lint governs there. The digest is what pins; the tag is what
@@ -17,22 +20,31 @@ tdarr_k8s_enabled: true
 tdarr_k8s_image: ghcr.io/haveagitgat/tdarr:latest@sha256:e5163f305367b47baacee761aa98f420fb4e46a8e5db22b197f23a550f96dd6b
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
-# Migrating state — strategy is Recreate and both config claims are seeded through
-# k8s/seed-volume (hardcoded ReadWriteOnce). Sharper than most of this class: tdarr is
-# stateful AND rewrites library files in place, and the comment above already documents why
-# version bumps stay manual — an unvetted auto-deploy is exactly the risk that pin exists to
-# avoid, on top of the migrating-state PVC hazard.
-# Promoted in slice 7b (2026-08-21): k8s/manifests now takes a pre-apply Longhorn snapshot of
-# both claims below and reverts them (non-atomically — see the Global Constraints in the slice
-# 7b plan) if the deploy fails, so a bad swap reverts to the snapshots instead of leaving the
-# library state and flow/plugin definitions unreadable by the old image. The digest pin still
-# means Renovate never proposes an unvetted version bump on its own.
-k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVCs (two, non-atomic revert), now protected by the pre-apply Longhorn snapshot and revert; also rewrites library files in place and stays digest-pinned so Renovate can't auto-merge a version bump on its own"  # noqa var-naming[no-role-prefix]
+# Promoted in slice 7b (2026-08-21) on deploy mechanics alone: k8s/manifests takes a pre-apply
+# Longhorn snapshot of both config claims below and reverts them on a failed deploy. Two
+# read-only audits then held it back (2026-08-22) — the snapshot/revert machinery itself works
+# fine here, so this is not that hazard recurring. Three compounding reasons:
+#   1. tdarr also mounts `media-data` (tdarr_k8s_media_claim below) — a shared RWX volume that
+#      is NOT in k8s_autodeploy_snapshot_pvcs and is never reverted — and rewrites library files
+#      on it IN PLACE, replacing the original with the transcode. Reverting the job/library DB
+#      to before a completed transcode cannot undo that rewrite: the DB then points at an
+#      untranscoded original that no longer exists on media-data, or re-transcodes a file it
+#      already finished. Destructive and irreversible, unlike the recoverable bookkeeping desync
+#      its siblings (zigbee2mqtt, livesync, qbittorrent) have for the same "state coupled
+#      outside the volume" reason.
+#   2. It declares two claims (tdarr-configs, tdarr-server) and volume-revert reverts per claim,
+#      so a failed deploy can leave the pair at different points in time.
+#   3. The digest pin's "stays manual" intent is enforced by nothing: it is true only for
+#      VERSION bumps, since upstream ships no stable tag Renovate can read a semver out of. A
+#      digest re-push is a different kind of update, and renovate.json's digest-bump rule
+#      matches ansible/roles/k8s/** with automerge + platformAutomerge true after a 3-day soak,
+#      with no tdarr exclusion — exactly what a `:latest@sha256:` pin receives.
+# k8s_autodeploy_snapshot_pvcs stays declared below: it still protects a manual deploy.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "state coupled outside the volume — rewrites media-data (shared RWX, not reverted) in place, an irreversible transcode the snapshot/revert can't undo; ALSO non-atomic two-claim revert (tdarr-configs, tdarr-server); ALSO the digest pin's 'stays manual' intent is unenforced — renovate.json automerges a digest re-push after a 3-day soak with no tdarr exclusion"  # noqa var-naming[no-role-prefix]
 # Slice 7a task 3 — the pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
 # Two claims, two seeds — same pairing as tdarr_k8s_server_claim/tdarr_k8s_configs_claim below.
-# Declared regardless of k8s_autodeploy — protects a manual deploy too, and slice 7b's revert
-# is what this role's auto-deploy now depends on.
+# Declared regardless of k8s_autodeploy — protects a manual deploy.
 k8s_autodeploy_snapshot_pvcs: [tdarr-configs, tdarr-server]  # noqa var-naming[no-role-prefix]
 
 # ── two config claims, not one ──────────────────────────────────────────────────────────────

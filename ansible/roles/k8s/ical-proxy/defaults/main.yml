@@ -8,7 +8,7 @@ ical_proxy_k8s_image: "{{ k8s_registry_pull_host }}/ical-proxy:latest"
 # Stateless RollingUpdate Deployment, no PVC, readinessProbe. Internal-only (no public route),
 # image is in-cluster-built via image-builder, not an upstream tag Renovate bumps blind.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe, in-cluster-built image, internal-only route"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe, in-cluster-built image, internal-only route. NOTHING CAN TRIGGER THIS PROMOTION: ical_proxy_k8s_image is a registry-built <pull-host>/ical-proxy:latest ref, listed in REGISTRY_BUILT_IMAGES (scripts/test_renovate_managers.py) — no upstream ref for Renovate to compare against and no version for it to offer. Only templates/Dockerfile.j2's FROM line moves, which is not the defaults/main.yml-only diff split_k8s_auto_deploy requires. The promotion is correct and harmless, not active"  # noqa var-naming[no-role-prefix]
 
 # Resource caps mirrored from the compose template (M1 values, k8s-native units).
 ical_proxy_k8s_cpu_limit: 500m

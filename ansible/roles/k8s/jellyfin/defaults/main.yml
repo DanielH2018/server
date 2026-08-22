@@ -22,7 +22,7 @@ jellyfin_k8s_image: lscr.io/linuxserver/jellyfin:10.11.10ubu2404-ls35
 # the claim below and reverts it if the deploy fails, so a bad swap reverts to the snapshot
 # instead of leaving the library database, artwork and trickplay data unreadable by the old image.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC, now protected by the pre-apply Longhorn snapshot and revert; also the only GPU (devic.es/dri) workload in the fleet"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC, now protected by the pre-apply Longhorn snapshot and revert; also the only GPU (devic.es/dri) workload in the fleet. WEIGHED: jellyfin also mounts media-data (shared RWX, not reverted); a revert rewinds the library cache and watch history, self-healing on a rescan"  # noqa var-naming[no-role-prefix]
 # Slice 7a task 3 — the pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
 # Declared regardless of k8s_autodeploy — protects a manual deploy too, and slice 7b's revert
 # is what this role's auto-deploy now depends on.
