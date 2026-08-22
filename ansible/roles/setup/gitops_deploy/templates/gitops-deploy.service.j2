@@ -56,7 +56,7 @@ SyslogLevel=notice
 # this same git working tree, and this deployer's `git reset --hard` on a failed health gate
 # could silently discard a half-rotated secret. RUN_START (and so RUN_BUDGET_S, see
 # gitops_deploy.py) is measured from process start, AFTER flock acquires — so time spent
-# waiting here is pure overhead against this unit's 35min TimeoutStartSec, uncounted by that
+# waiting here is pure overhead against this unit's 45min TimeoutStartSec, uncounted by that
 # budget. -w 180 outlasts any normal deploy-step contention (secret-rotate is short — 0-2
 # tokens) but fails fast enough to leave the health-gate/rollback budget intact; on timeout
 # flock exits 1, failing the unit cleanly (OnFailure alerts) and the next 30-min timer tick

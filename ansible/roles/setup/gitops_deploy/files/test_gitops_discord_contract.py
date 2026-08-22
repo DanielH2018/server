@@ -481,6 +481,42 @@ def test_k8s_deploy_timeout_budget_survives_max_flock_contention():
     )
 
 
+_SECRET_ROTATE = (
+    pathlib.Path(__file__).parents[2]
+    / "initial_setup"
+    / "templates"
+    / "secret-rotate.sh.j2"
+)
+
+
+def test_secret_rotate_lock_wait_clears_the_deployers_worst_case_hold():
+    # 2026-08-22 review M4. gitops-deploy.service wraps its whole ExecStart in
+    # /var/lock/server-git-tree.lock, and one activation can run the forward deploy budget and
+    # then, in the failure path, the rollback budget — sequentially, inside that one hold. The
+    # weekly secret-rotate cron waits on the same lock.
+    #
+    # At `flock -w 1200` against a 2220s worst case the cron gave up mid-incident and SKIPPED
+    # that week's rotation. crons.yml installs one weekly entry with no retry, and
+    # ROTATE_LEAD_DAYS=8 against a 7-day cadence means a token usually gets exactly one eligible
+    # run — so a skipped week can put a token overdue.
+    #
+    # Derived from the same sources the two budgets above read, so bumping either deploy timeout
+    # fails this test instead of silently re-opening the gap. A single failing service reaches
+    # the worst case; it does not need a batch.
+    defaults = yaml.safe_load(_DEFAULTS.read_text())
+    forward_timeout = int(defaults["gitops_deploy_k8s_timeout_s"])
+    rollback_timeout = int(defaults["gitops_deploy_k8s_rollback_timeout_s"])
+    worst_hold = forward_timeout + rollback_timeout
+
+    cron_wait = int(_search1(r"^flock\s+-w\s+(\d+)\s+9", _SECRET_ROTATE.read_text()))
+    assert cron_wait >= worst_hold, (
+        f"secret-rotate's `flock -w {cron_wait}` must clear gitops-deploy's worst-case lock hold "
+        f"(K8S_DEPLOY_TIMEOUT_S {forward_timeout} + K8S_ROLLBACK_TIMEOUT_S {rollback_timeout} = "
+        f"{worst_hold}s), or a legitimate long rollback makes the weekly rotation skip a week "
+        f"with no retry (2026-08-22 review M4)."
+    )
+
+
 # --- k8s rollback-timeout ceiling arithmetic (re-sized against the real per-service ceiling) --
 # K8S_ROLLBACK_TIMEOUT_S must cover one full rollback cycle for the most expensive currently-
 # promoted (k8s_autodeploy: true) service that also declares k8s_autodeploy_snapshot_pvcs: the
