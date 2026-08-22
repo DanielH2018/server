@@ -380,6 +380,7 @@ def test_the_whole_sequence_is_in_the_drill_proven_order() -> None:
         "Revert the volume",
         "Detach the volume",
         "the detach after the revert",
+        "Clear the seeded annotation",
     ]
     names = _task_names(_CLAIM)
     assert len(names) == len(expected), (
@@ -480,17 +481,18 @@ def test_every_mutation_is_guarded_on_k8s_no_mutate() -> None:
     """`k8s_no_mutate` is `ansible_check_mode or (k8s_dry_run | bool)`. Guarding on either half
     alone leaves the other half mutating a live cluster during a run that promised not to.
 
-    WHICH TEST COVERS WHICH GUARD. Nine tasks in `claim.yml` carry the guard, and three
-    mechanisms divide them — jointly exhaustive as of 2026-08-21, and nothing makes them stay
+    WHICH TEST COVERS WHICH GUARD. Ten tasks in `claim.yml` carry the guard, and three
+    mechanisms divide them — jointly exhaustive as of 2026-08-22, and nothing makes them stay
     that way:
 
-      * seven by this census — the scale-down, the three waits, and the three API calls;
+      * eight by this census — the scale-down, the three waits, the three API calls, and the
+        seeded-annotation strip that pairs with k8s/seed-volume's short-circuit;
       * one by `test_nothing_unguarded_reads_a_guarded_tasks_output` — the frontend assert,
         caught through its read of `volume_revert_attached` rather than as a mutation;
       * one by two dedicated tests — `Fail when no snapshot matches this deploy`, which is a
         `fail` with no register and no kubectl verb, so BOTH generic rules are blind to it.
 
-    A tenth guarded task is therefore not automatically covered. Work out which of the three
+    An eleventh guarded task is therefore not automatically covered. Work out which of the three
     would notice it, and if the answer is none, write the test that does.
     """
     mutating = _mutating_tasks()
@@ -498,8 +500,8 @@ def test_every_mutation_is_guarded_on_k8s_no_mutate() -> None:
     # `kubernetes.core.*` module and every polling wait — but a task shaped like none of those
     # would still be invisible, and a floor would let it arrive unguarded with this test green.
     # Pinning the number makes whoever adds a task read this comment.
-    assert len(mutating) == 7, (
-        f"the mutating-task census found {len(mutating)} tasks, not 7. If you added a mutation, "
+    assert len(mutating) == 8, (
+        f"the mutating-task census found {len(mutating)} tasks, not 8. If you added a mutation, "
         f"guard it and update this count; if the census stopped recognising one, fix "
         f"_mutating_tasks — a task it cannot see is a task this test does not check."
     )
