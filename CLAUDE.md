@@ -140,6 +140,10 @@ sops ansible/vars/secrets.yml
 # List the services --dry-run refuses to cover (k8s_dry_run_unsupported)
 grep -A20 "^k8s_dry_run_unsupported:" ansible/inventory/group_vars/all.yml
 
+# Trigger a GitOps tick now instead of waiting for the 30-min timer (daniel-box only).
+# Runs the identical code path the timer runs — there is no dry-run mode.
+./scripts/gitops_tick.sh
+
 # Initial server setup — first-host bring-up ORDER (uv → SOPS onboarding → this) is in ansible/README.md
 uv run ansible-playbook ansible/initial_setup.yml
 ```
