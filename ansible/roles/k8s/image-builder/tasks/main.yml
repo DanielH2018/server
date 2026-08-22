@@ -16,6 +16,12 @@
 #
 # Left unguarded, every dry run reached "Fail on an unsuccessful build" — check mode skips the
 # Job apply, so nothing ever succeeded — and failed the whole play with an empty build log.
+#
+# THE BUILD IS ALSO SKIPPED when the rendered context is byte-identical to the last run's and
+# the registry already serves the tag. `image_builder_building` (below) is the single fact every
+# build-path task is gated on, and the same reasoning as check mode applies to the reads: they
+# still run, both digests come back equal, and no rollout is queued. `image_builder_force=true`
+# overrides it — see defaults/main.yml for the base-image CVE case it exists for.
 
 - name: Assert the builder was given something to build
   tags: [config]
@@ -54,16 +60,12 @@
     - build-job.yaml
   become: true
   no_log: true
-
-- name: Apply the build context for {{ image_builder_name }}
-  tags: [deploy]
-  when: not k8s_no_mutate
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl apply -f
-      /etc/rancher/k3s/manifests/build-{{ image_builder_name }}/context-configmap.yaml
-  become: true
-  changed_when: true
+  # This register IS the build gate — `template` already compares content, so nothing else has
+  # to hash it. On a loop the flag is the OR across items, which is what the gate wants: either
+  # file changing means rebuild. `no_log` censors the register's CONTENT, not its `changed`
+  # flag; measured 2026-08-22 in both the looped and unlooped shapes, because a suppressed flag
+  # would fail silently as a permanently stale image rather than as an error.
+  register: image_builder_render
 
 # The digest the tag resolves to BEFORE the build, so it can be compared with the one after.
 # Every image here is pushed to a mutable tag (`:latest`), which means a rebuild changes what
@@ -85,12 +87,54 @@
   # Reads only, and its counterpart below reads the same tag — see the header.
   check_mode: false
 
+# The gate. Every image here rebuilt on every full deploy before this existed, costing ~106s
+# across the seven of them for a result that was byte-identical five times out of seven.
+#
+# It answers only "is there anything to build". Whether we are ALLOWED to build stays a separate
+# `not k8s_no_mutate` clause on each task below, deliberately not folded in here: that guard is
+# what keeps a dry run from pushing an image, and `ansible/tests/test_k8s_dry_run.py` reads it
+# textually at each mutating task. Folding it behind this fact would still be correct and would
+# make the check unable to see it — a safety test that has to follow an indirection is one that
+# stops catching the next role to get this wrong.
+#
+# Every clause resolves toward BUILDING when it cannot tell, because the two failure directions
+# are not symmetric: a needless build costs 15 seconds and is visible in the log, while a
+# wrongly skipped one ships a stale image indefinitely and reports success. So an absent or
+# skipped render register builds, and a registry that answers anything but 200 builds.
+#
+# `.changed | default(true)` rather than the idiomatic `is changed`, which reads a missing key
+# as False and so treats a register carrying no comparison at all as "nothing changed" — the
+# one direction this gate must never fail in.
+- name: Decide whether a build is needed for {{ image_builder_name }}
+  tags: [deploy]
+  ansible.builtin.set_fact:
+    image_builder_building: >-
+      {{ image_builder_force | bool
+         or image_builder_digest_before.status | default(0) != 200
+         or image_builder_render is not defined
+         or image_builder_render.skipped | default(false)
+         or image_builder_render.changed | default(true) }}
+
+- name: Apply the build context for {{ image_builder_name }}
+  tags: [deploy]
+  when:
+    - not k8s_no_mutate
+    - image_builder_building | bool
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl apply -f
+      /etc/rancher/k3s/manifests/build-{{ image_builder_name }}/context-configmap.yaml
+  become: true
+  changed_when: true
+
 # A Job's pod template is immutable, so an existing Job cannot be re-applied — and re-applying
 # a COMPLETED one would report success from the previous run's result, which is the failure
 # this whole role exists to make impossible.
 - name: Clear the previous build of {{ image_builder_name }}
   tags: [deploy]
-  when: not k8s_no_mutate
+  when:
+    - not k8s_no_mutate
+    - image_builder_building | bool
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} delete job build-{{ image_builder_name }}
@@ -100,7 +144,9 @@
 
 - name: Build and push {{ image_builder_name }}
   tags: [deploy]
-  when: not k8s_no_mutate
+  when:
+    - not k8s_no_mutate
+    - image_builder_building | bool
   ansible.builtin.command:
     cmd: >-
       k3s kubectl apply -f
@@ -113,7 +159,9 @@
 # assert below is what turns "finished" into "succeeded".
 - name: Wait for the build to finish for {{ image_builder_name }}
   tags: [deploy]
-  when: not k8s_no_mutate
+  when:
+    - not k8s_no_mutate
+    - image_builder_building | bool
   ansible.builtin.shell:
     cmd: >-
       set -o pipefail &&
@@ -127,11 +175,14 @@
 
 - name: Read the build result for {{ image_builder_name }}
   tags: [deploy]
-  # Skipped WITH the build rather than run as a read: it reads the Job the tasks above create,
-  # and in a no-mutation run there is none. The two consumers below therefore lead with
-  # `not k8s_no_mutate` — Ansible short-circuits a `when` list, so that clause is what keeps
-  # them from dereferencing this task's absent stdout.
-  when: not k8s_no_mutate
+  # Skipped WITH the build rather than run as a read. It reads the Job the tasks above create,
+  # which in a no-mutation run does not exist — and in a skipped-build run is the PREVIOUS
+  # build's Job, whose success says nothing about this one. The two consumers below therefore
+  # lead with `image_builder_building` — Ansible short-circuits a `when` list, so that clause is
+  # what keeps them from dereferencing this task's absent stdout.
+  when:
+    - not k8s_no_mutate
+    - image_builder_building | bool
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} get job build-{{ image_builder_name }}
@@ -147,6 +198,7 @@
   tags: [deploy]
   when:
     - not k8s_no_mutate
+    - image_builder_building | bool
     - image_builder_result.stdout | trim != "1"
   ansible.builtin.command:
     cmd: >-
@@ -160,6 +212,7 @@
   tags: [deploy]
   when:
     - not k8s_no_mutate
+    - image_builder_building | bool
     - image_builder_result.stdout | trim != "1"
   ansible.builtin.fail:
     msg: >-
