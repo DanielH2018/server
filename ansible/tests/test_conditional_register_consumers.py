@@ -21,9 +21,14 @@ assigns a register. But the specific structural shape above IS statically visibl
 the shape both incidents took. Catching it costs one parse; catching it behaviourally costs a
 stubbed end-to-end run per role.
 
-The rule: if a task carries `when:` and a `register:`, every task that dereferences that
-register must either carry the producer's condition too, or filter the skip results out of
-its loop (`rejectattr('skipped', 'defined')`).
+The rule: if a task carries `when:` and a `register:`, every task that LOOPS that register's
+`results` and reads `item.<attr>` off the entries must either carry the producer's condition
+too, or filter the skips out (`rejectattr('skipped', 'defined')`).
+
+Scalar derefs are deliberately out of scope -- see `_unguarded_deref`. Flagging them cost a
+red master on 2026-08-22, because a scalar deref can be guarded by a lazy Jinja conditional
+that no static check can see, and the fix such a check demands is actively harmful in at
+least one place in this tree.
 """
 
 from __future__ import annotations
@@ -82,20 +87,29 @@ def _expressions(task: dict) -> str:
 
 
 def _unguarded_deref(body: str, reg: str, attr: str) -> bool:
-    """True when `body` reads `<reg>.<attr>` (directly, or as `item.<attr>` over
-    `<reg>.results`) without a `| default(...)` immediately absorbing it.
+    """True when `body` loops `<reg>.results` and reads `item.<attr>` off the entries, with
+    no `| default(...)` absorbing it.
 
-    Jinja resolves a missing key to Undefined rather than raising, so `x.stdout | default('')`
-    is safe on a skip result and `x.stdout | trim` is not. Without this distinction the check
-    flags every defensive consumer in the tree -- nut_host's `| default('') | trim` was the
-    first false positive it produced.
+    SCOPE, and why it is only the loop shape. A SCALAR deref (`<reg>.stdout` directly) can be
+    made safe by a guard this check cannot see. k8s/seed-volume reads `seed_volume_marker.rc`
+    inside `{{ false if (seed_volume_short_circuit | bool) else (...) }}` -- Jinja's
+    conditional expression is lazy, so that branch is evaluated only on the runs where the
+    producer ran. It is correct, it is commented as deliberate, and the comment records that
+    adding the `| default(1)` this check would otherwise demand renders True and "would tar a
+    long-gone source over all 25 live volumes". Flagging it cost a red master on 2026-08-22.
+
+    A loop cannot be guarded that way: `loop:` evaluates every entry of `results`, including
+    the skips, before any conditional in the task body runs. So the loop shape is decidable
+    statically and the scalar shape is not -- and the loop shape is the one that actually
+    broke a deploy (k8s/claude-otel, same day).
+
+    `| default(...)` still exempts, because Jinja resolves a missing key to Undefined rather
+    than raising: `item.stdout | default('')` survives a skip result and `item.stdout | trim`
+    does not.
     """
-    guarded = r"\s*\|\s*default\("
-    if re.search(rf"\b{re.escape(reg)}\.{attr}\b(?!{guarded})", body):
-        return True
-    if re.search(rf"\b{re.escape(reg)}\.results\b", body):
-        return bool(re.search(rf"\bitem\.{attr}\b(?!{guarded})", body))
-    return False
+    if not re.search(rf"\b{re.escape(reg)}\.results\b", body):
+        return False
+    return bool(re.search(rf"\bitem\.{attr}\b(?!\s*\|\s*default\()", body))
 
 
 def _conditions(task: dict) -> list[str]:
@@ -204,6 +218,30 @@ def test_the_check_finds_the_claude_otel_shape(tmp_path: Path) -> None:
     problems = _offenders(bug)
     assert len(problems) == 1
     assert "restarts_before.stdout" in problems[0]
+
+
+def test_the_check_accepts_a_lazily_guarded_scalar_deref(tmp_path: Path) -> None:
+    """k8s/seed-volume's real shape, which this check flagged and should not.
+
+    The deref sits in the `else` of a Jinja conditional whose test is the producer's own
+    guard, so it is evaluated only on runs where the producer ran. Demanding a `| default()`
+    here is not a no-op: seed.yml records that the tidier form renders True and would tar a
+    long-gone source over all 25 live volumes.
+    """
+    tasks = tmp_path / "tasks"
+    tasks.mkdir()
+    lazy = tasks / "main.yml"
+    lazy.write_text(
+        "- name: Read the seeded marker\n"
+        "  ansible.builtin.command: test -f /mnt/.seeded\n"
+        "  register: marker\n"
+        "  when: not (short_circuit | bool)\n"
+        "- name: Decide whether this run copies\n"
+        "  ansible.builtin.set_fact:\n"
+        "    copying: >-\n"
+        "      {{ false if (short_circuit | bool) else (marker.rc != 0) }}\n"
+    )
+    assert _offenders(lazy) == []
 
 
 def test_the_check_accepts_a_filtered_loop(tmp_path: Path) -> None:
