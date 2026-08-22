@@ -106,7 +106,7 @@ jobs:
           key: galaxy-${{ runner.os }}-${{ hashFiles('ansible/requirements.yml') }}
 
       - name: Install prek
-        run: pip install prek==0.4.10  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
+        run: pip install prek==0.4.13  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
 
       # On a PR, run every hook against only the files the PR actually touches — the same thing
       # prek does locally at commit time, and what each hook's `files` regex in prek.toml is
