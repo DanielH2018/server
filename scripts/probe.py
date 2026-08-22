@@ -1129,19 +1129,41 @@ _ENTITY_TYPE_RE = re.compile(r'"type":\s*"([a-z]+)"')
 _ENTITY_INTERVAL_RE = re.compile(r'"interval":\s*(\d+)')
 _JINJA_IF_RE = re.compile(r"{%-?\s*if\b")
 _JINJA_ENDIF_RE = re.compile(r"{%-?\s*endif\b")
+# The condition itself, so a gated monitor can be checked against the variable rather than
+# excused on the strength of the `{% if %}` existing. First identifier wins: every gate in
+# this template is `{% if <secret_name> | default('') %}`.
+_JINJA_IF_COND_RE = re.compile(r"{%-?\s*if\s+([a-zA-Z_][a-zA-Z0-9_]*)")
 
 
 def parse_declared_monitors(text):
     """Monitor declarations from the static-monitors template.
 
-    Returns {name: {"type": str, "interval": int|None, "gated": bool}}. `gated` marks an entity
-    inside a `{% if <token> %}` block — those render away when the secret is unset, so their
-    absence from Kuma is a configuration state and not drift.
+    Returns {name: {"type": str, "interval": int|None, "gated": bool, "gate": str|None}}.
+    `gated` marks an entity inside a `{% if <token> %}` block and `gate` names the variable it
+    is gated on, innermost first.
+
+    `gate` exists because `gated` alone was a licence to ignore. Until 2026-08-22 a gated
+    monitor's absence was excused unconditionally, on the reasoning that it "renders away when
+    the secret is unset" — which is an assumption about the secret, not a reading of it.
+    Measured that day: `etcd_snapshot_push_token` was set (32 chars, in the rotation registry
+    since 2026-07-04), the Off-box etcd Snapshot monitor was NOT live, and this check reported
+    it as correctly skipped. A gated monitor that vanishes is invisible twice over — absent
+    from the exporter, and excused by the drift check written to catch exactly that. Naming
+    the variable lets the caller resolve it and tell the two cases apart.
     """
-    declared, depth = {}, 0
+    declared, gates = {}, []
     for line in text.splitlines():
-        depth += len(_JINJA_IF_RE.findall(line))
-        depth -= len(_JINJA_ENDIF_RE.findall(line))
+        for cond in _JINJA_IF_COND_RE.findall(line):
+            gates.append(cond)
+        # A bare `{% if %}` with no leading identifier still opens a scope; keep the stack
+        # aligned with the nesting rather than with the conditions we could parse.
+        gates.extend(
+            [None]
+            * (len(_JINJA_IF_RE.findall(line)) - len(_JINJA_IF_COND_RE.findall(line)))
+        )
+        for _ in range(len(_JINJA_ENDIF_RE.findall(line))):
+            if gates:
+                gates.pop()
         name = _ENTITY_NAME_RE.search(line)
         kind = _ENTITY_TYPE_RE.search(line)
         if not name or not kind:
@@ -1149,15 +1171,34 @@ def parse_declared_monitors(text):
         if kind.group(1) == "notification":  # not a monitor; never in monitor_status
             continue
         interval = _ENTITY_INTERVAL_RE.search(line)
+        innermost = next((g for g in reversed(gates) if g), None)
         declared[name.group(1)] = {
             "type": kind.group(1),
             "interval": int(interval.group(1)) if interval else None,
-            "gated": depth > 0,
+            "gated": bool(gates),
+            "gate": innermost,
         }
     return declared
 
 
-def format_kuma_drift(declared, live, kuma_age_seconds):
+def gate_var_state(var):
+    """True / False / None for whether a gating secret has a non-empty value.
+
+    None means "could not be read" — no age key on this host, sops missing, key absent — and
+    is deliberately distinct from False. Reporting an unreadable gate as unset is what made
+    the old check silent; an unreadable input and an empty one must not look alike.
+    """
+    out = subprocess.run(
+        ["sops", "-d", "--extract", f'["{var}"]', SECRETS_PATH],
+        capture_output=True,
+        text=True,
+    )
+    if out.returncode != 0:
+        return None
+    return bool(out.stdout.strip())
+
+
+def format_kuma_drift(declared, live, kuma_age_seconds, gate_states=None):
     """Compare declared monitor names against the live exporter's. Pure.
 
     `live` is the set of monitor_name labels; `kuma_age_seconds` is how long the Kuma pod has
@@ -1177,11 +1218,17 @@ def format_kuma_drift(declared, live, kuma_age_seconds):
     An unreadable pod age is treated as a long uptime: it fails loud rather than quiet, matching
     `health`'s unreadable-restart-time rule.
     """
-    missing, pending, gated = [], [], []
+    gate_states = gate_states or {}
+    missing, pending, gated, unverified = [], [], [], []
     for name, spec in sorted(declared.items()):
         if name in live:
             continue
-        if spec["gated"]:
+        state = gate_states.get(spec.get("gate")) if spec["gated"] else False
+        if spec["gated"] and state is None:
+            unverified.append(
+                f"  {name}: gated on {spec['gate']}, which could not be read"
+            )
+        elif spec["gated"] and state is False:
             gated.append(name)
         elif (
             kuma_age_seconds is not None
@@ -1198,10 +1245,11 @@ def format_kuma_drift(declared, live, kuma_age_seconds):
         lines.append(
             f"  (kuma up {int(kuma_age_seconds)}s — monitors below not yet due)"
         )
-    lines.extend(missing + orphans + pending)
+    lines.extend(missing + orphans + pending + unverified)
     if gated:
         lines.append(
-            f"  {len(gated)} gated on an unset token, skipped: {', '.join(gated)}"
+            f"  {len(gated)} gated on a secret that is genuinely unset, skipped: "
+            f"{', '.join(gated)}"
         )
     if missing or orphans:
         return "\n".join(lines), 1
@@ -1227,7 +1275,16 @@ def run_kuma_drift(ns):
         for s in data.get("data", {}).get("result", [])
     }
     live.discard(None)
-    text, code = format_kuma_drift(declared, live, kuma_pod_age_seconds())
+    # Resolved only for gates whose monitor is actually absent — a sops call per gate is the
+    # cost, and a monitor that is live needs no explanation for why it might not be.
+    gate_states = {
+        spec["gate"]: gate_var_state(spec["gate"])
+        for name, spec in declared.items()
+        if spec["gate"] and name not in live
+    }
+    text, code = format_kuma_drift(
+        declared, live, kuma_pod_age_seconds(), gate_states=gate_states
+    )
     print(text)
     return code
 
