@@ -65,6 +65,14 @@ Nothing was wrong. Two behaviours combine to produce that appearance:
    cluster side, and only one of them is fixed by anything in this role. Re-auth is
    interactive and cannot be done from another host.
 
+   Resolved the same day, which confirms the diagnosis rather than closing it: after re-auth,
+   one `claude -p` probe put 77 log lines and 7 `claude_code_*` series carrying
+   `node=daniel-server` into the stack within minutes, against seven days of exactly zero.
+   Note the ordering when you re-run this — logs appear first (`OTEL_LOGS_EXPORT_INTERVAL`
+   5s) and metrics lag (`OTEL_METRIC_EXPORT_INTERVAL` 10s, plus the Prometheus scrape), so a
+   metrics query run straight after a short probe reads as failure while the logs already
+   prove it worked. Check the logs first.
+
 So: **do not diagnose this stack from counters alone.** Rising metric points prove the
 transport works, not that anything useful is flowing. `telemetry-health.sh` deliberately
 checks reachability and export *failures* — it cannot detect "nobody is using it", and a

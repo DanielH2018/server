@@ -48,7 +48,7 @@
       "id": 3,
       "type": "timeseries",
       "title": "Claude Code log volume by host",
-      "description": "os_version is the host proxy: 6.8.0-137-generic is daniel-box, 7.0.0-28-generic is daniel-server (this cluster's Loki has no other kernel). A host with a flat zero line here while its collector shows up=1 above means Claude Code itself is not exporting on that host, not that the pipeline is broken. Two causes, cheapest check first: the host cannot authenticate (daniel-server, measured 2026-08-22 — `claude -p` exits 'OAuth session expired and could not be refreshed', so no session starts and nothing is exported), or a session started before the telemetry config landed and is reading the old one (config is read once, at process start — restart it).",
+      "description": "os_version is the host proxy: 6.8.0-137-generic is daniel-box, 7.0.0-28-generic is daniel-server (this cluster's Loki has no other kernel). A host with a flat zero line here while its collector shows up=1 above means Claude Code itself is not exporting on that host, not that the pipeline is broken. Two causes, cheapest check first: the host cannot authenticate (daniel-server hit this on 2026-08-22 — `claude -p` exited 'OAuth session expired and could not be refreshed', so no session started and nothing was exported; re-auth restored both signals within minutes), or a session started before the telemetry config landed and is reading the old one (config is read once, at process start — restart it).",
       "gridPos": { "h": 6, "w": 16, "x": 8, "y": 1 },
       "datasource": { "type": "loki", "uid": "bf4q19tuivta8e" },
       "fieldConfig": {
@@ -70,7 +70,7 @@
       "id": 4,
       "type": "timeseries",
       "title": "claude_code_session_count_total by node",
-      "description": "The metrics pipeline's own per-node coverage. As of 2026-08-22 this series has never carried node=daniel-server — and neither have the logs: a 300-entry sample over 7 days is 100% daniel-box's kernel. The cause is not the pipeline. daniel-server's collector is up and its Claude Code settings.json is correct (telemetry on, OTLP to localhost:4317), but Claude Code there cannot start a session at all: it exits with 'Failed to authenticate: OAuth session expired and could not be refreshed'. A host that exports nothing is unauthenticated until proven otherwise — re-auth on that host, do not chase the exporter. Confirm with: otelq metric 'sum by (node) (claude_code_session_count_total)' --rows",
+      "description": "The metrics pipeline's own per-node coverage — both nodes should appear once each has run a session. daniel-server was absent from this series entirely until 2026-08-22, and from the logs too, while its collector was up and its settings.json was correct. The cause was never the pipeline: Claude Code on that host could not start a session at all, exiting 'Failed to authenticate: OAuth session expired and could not be refreshed'. Re-auth fixed it the same day and both signals arrived within minutes. Keep the lesson, not the incident: a node flat at zero here is unauthenticated or idle before it is broken — run `claude -p` on it before investigating its collector. Confirm with: otelq metric 'sum by (node) (claude_code_session_count_total)' --rows",
       "gridPos": { "h": 7, "w": 24, "x": 0, "y": 7 },
       "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" },
       "fieldConfig": {
@@ -101,7 +101,7 @@
       "id": 6,
       "type": "timeseries",
       "title": "Token usage rate by node",
-      "description": "Same claude_code_token_usage series as the main Claude Code board, broken down by node instead of model/type — the dimension that board doesn't carry. Carries daniel-box only while daniel-server is unauthenticated — see the coverage panel above for the cause.",
+      "description": "Same claude_code_token_usage series as the main Claude Code board, broken down by node instead of model/type — the dimension that board doesn't carry. A node missing here has run no session in the window, not necessarily nothing at all — see the coverage panel above.",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
       "datasource": { "type": "prometheus", "uid": "EGdsQqhVk" },
       "fieldConfig": {
