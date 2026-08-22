@@ -25,6 +25,7 @@ import os
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -280,6 +281,12 @@ def _run_longhorn_api_scratch_play(
         env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
         env["ANSIBLE_LOG_PATH"] = str(tmp_path / "ansible.log")
         env["ANSIBLE_NOCOLOR"] = "1"
+        # Pin the interpreter instead of letting Ansible discover it. ansible.cfg caches facts
+        # under ~/.cache/ansible/facts keyed on the host — `localhost` from every worktree —
+        # so the last tree to run Ansible pins its own .venv for all the others for two hours.
+        # Once that tree is pruned this play dies with rc 127 on a path that no longer exists.
+        # Setting it also skips discovery, so this run writes no path back for anyone else.
+        env["ANSIBLE_PYTHON_INTERPRETER"] = sys.executable
 
         return subprocess.run(
             ["ansible-playbook", str(playbook), "-i", "localhost,"],

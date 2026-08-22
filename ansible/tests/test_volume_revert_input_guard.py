@@ -23,6 +23,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -102,6 +103,9 @@ def _run_revert_guard(
         env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
         env["ANSIBLE_LOG_PATH"] = str(tmp_path / "ansible.log")
         env["ANSIBLE_NOCOLOR"] = "1"
+        # Pin the interpreter rather than discovering it: the fact cache is keyed on `localhost`
+        # and shared by every worktree, so a pruned tree's .venv fails this play with rc 127.
+        env["ANSIBLE_PYTHON_INTERPRETER"] = sys.executable
 
         return subprocess.run(
             ["ansible-playbook", str(playbook), "-i", "localhost,"],
