@@ -284,6 +284,23 @@ def parse_duration_seconds(text):
     return int(m.group(1)) * _DURATION_UNITS[m.group(2)]
 
 
+def since_window_ns(since):
+    """`--since` -> the (start_ns, end_ns) pair Loki's query_range takes, (None, None) if unset.
+
+    ONE helper because two call sites need the same window and diverged when they each had
+    their own copy: `plan()` builds the argv that `--dry-run`/`--json` run, while `run_query()`
+    builds the URL the default formatted path fetches. `run_query()` passed no window at all,
+    so the default path silently inherited Loki's server-side one-hour default while `--json`
+    honoured `--since` — a 3d query returned a 60-minute slice and printed `no logs` for
+    anything older. Keep both paths on this function rather than reintroducing the copy.
+    """
+    if not since:
+        return None, None
+    end_s = datetime.now(_CHICAGO).timestamp()
+    start_ns = int((end_s - parse_duration_seconds(since)) * 1e9)
+    return start_ns, int(end_s * 1e9)
+
+
 # Longhorn logs one of these per backup, naming the delta it processed:
 #   "Created snapshot changed blocks: 46 mappings, 46 blocks and 45 new blocks"
 # `blocks` is the delta it walks, and it issues one HeadObject per block to decide whether the
@@ -1258,6 +1275,14 @@ def format_loki(data):
 # any check that's firing. Kuma keeps only current state; Loki keeps the log lines
 # (31d retention), so the history of *what alerted, when* is these DOWN lines. This
 # collapses the every-cycle repeats into one row per firing episode.
+#
+# It is NOT the only alert path, which is why this command reads two streams. Several host
+# crons push their own Kuma monitors directly and never pass through monitor-bridge, so
+# monitor-bridge's container log contains nothing about them — it polls no Kuma state. Reading
+# only that stream made the backup plane's sole DOWN signal invisible: measured 2026-08-22,
+# 465 `longhorn-backup-health: status=down` lines over 7 days appeared in no episode list,
+# while `monitor_status{monitor_name="Manifest Prune Drift"}` read 0 and `alerts --check
+# manifest` printed "no DOWN alerts". See SYSLOG_ALERT_LOGQL below for the second stream.
 ALERT_LOGQL = '{container="monitor-bridge"} |= "DOWN"'
 _CHICAGO = ZoneInfo("America/Chicago")
 # "[2026-07-21T08:37:00] DOWN n8n - 1 active workflow(s) failed ... (2 cycles)"
@@ -1272,6 +1297,66 @@ def parse_down_line(line):
     if not m:
         return None
     return m["name"], _CYCLES_SUFFIX_RE.sub("", m["msg"])
+
+
+# The second alert path: host crons that push Kuma directly and log through `logger`. rsyslog
+# prefixes every one of those lines, so the shape is NOT the bare "<tag>: status=down <msg>" a
+# reading of the cron scripts suggests — it is
+#   "<iso-ts> <host> <tag>: status=down <msg>"
+# and, when the push itself fails (the case where syslog is the ONLY record, since Kuma never
+# learned),
+#   "<iso-ts> <host> <tag>: push failed (status=down: <msg>)"
+# Measured over 7 days on 2026-08-22, `|= "status=down"` matched exactly three tags —
+# longhorn-backup-health (465 lines), manifest-prune-check (2) and claude-otel-health (1) — so
+# the filter is precise, not a net that drags in unrelated syslog traffic.
+#
+# COVERAGE IS PARTIAL AND DELIBERATE. Two pushers emit no `status=` token at all and stay
+# invisible here: secret-rotation-audit logs a bare reason string, and live_drift_check's cron
+# pipes nothing to `logger`. Both fixes are one-line edits to files this change does not own
+# (roles/k8s/.../secret-rotation-audit.sh.j2 and setup/k3s/tasks/health-crons.yml). Confirmed
+# absent, not merely unmatched: a 7-day Loki query for either name returned "no logs".
+SYSLOG_ALERT_LOGQL = '{job="syslog"} |= "status=down"'
+_SYSLOG_LINE_RE = re.compile(
+    r"^\S+\s+\S+\s+(?P<name>[A-Za-z0-9_.-]+?)(?:\[\d+\])?:\s+(?P<rest>.*status=down.*)$"
+)
+# The closing paren is OPTIONAL because rsyslog truncates a long line — observed on
+# longhorn-backup-health, whose status message runs past the limit and arrives with no closing
+# paren at all. Anchoring on `\)$` dropped those lines to the raw fallback below, printing the
+# "push failed (status=down: " scaffolding as if it were the message.
+_SYSLOG_PUSH_FAILED_RE = re.compile(r"^push failed \(status=down:\s*(?P<msg>.*?)\)?$")
+_SYSLOG_STATUS_RE = re.compile(r"^status=down\s*(?P<msg>.*)$")
+
+
+def parse_syslog_down_line(line):
+    """(cron_tag, msg) for a host cron's syslog DOWN line, else None.
+
+    The tag is the episode name, matching what `--check` filters on — `manifest-prune-check`,
+    `longhorn-backup-health`. Those are machine names like monitor-bridge's own check names,
+    not Kuma display names, so one `--check` substring keeps working across both streams.
+
+    A failed push keeps its "push failed:" prefix in the message. That is the operator's cue
+    that Kuma never learned about this DOWN, so syslog is the only place it is recorded.
+    """
+    m = _SYSLOG_LINE_RE.match(line)
+    if not m:
+        return None
+    rest = m["rest"]
+    hit = _SYSLOG_STATUS_RE.match(rest)
+    if hit:
+        return m["name"], hit["msg"].strip()
+    hit = _SYSLOG_PUSH_FAILED_RE.match(rest)
+    if hit:
+        return m["name"], f"push failed: {hit['msg'].strip()}"
+    return m["name"], rest.strip()
+
+
+# Each alert stream with the parser that reads its line shape. run_alerts queries both and
+# merges the rows: LogQL cannot OR two stream selectors that share no label name, and
+# `container` (monitor-bridge) and `job` (syslog) share none.
+ALERT_SOURCES = (
+    (ALERT_LOGQL, parse_down_line),
+    (SYSLOG_ALERT_LOGQL, parse_syslog_down_line),
+)
 
 
 def alert_episodes(rows, gap_s=1800):
@@ -1330,7 +1415,8 @@ def format_alert_episodes(episodes, days):
         return f"no DOWN alerts in the last {days:g}d"
     width = max(len(e["name"]) for e in episodes)
     header = (
-        f"{len(episodes)} DOWN episode(s), last {days:g}d (monitor-bridge -> Kuma):"
+        f"{len(episodes)} DOWN episode(s), last {days:g}d "
+        "(monitor-bridge + host crons -> Kuma):"
     )
     lines = [header, ""]
     for e in episodes:
@@ -1535,11 +1621,7 @@ def plan(args, resolve_ip, k8s_endpoint=k8s_endpoint, pi_resolve=pi_resolve):
         return [curl_argv(loki_labels_url(base), resolve=pin)]
     if cmd == "loki-query":
         base, pin = k8s_endpoint("loki-homelab")
-        start = end = None
-        if getattr(ns, "since", None):
-            end_s = datetime.now(_CHICAGO).timestamp()
-            start = int((end_s - parse_duration_seconds(ns.since)) * 1e9)
-            end = int(end_s * 1e9)
+        start, end = since_window_ns(getattr(ns, "since", None))
         return [
             curl_argv(
                 loki_query_url(base, ns.logql, ns.limit, start=start, end=end),
@@ -1637,7 +1719,12 @@ def run_query(ns):
         formatter = format_metric
     else:
         base, pin = loki_endpoint()
-        url = loki_query_url(base, ns.logql, ns.limit)
+        # `metric` shares this function and its subparser declares no --since, so read the
+        # attribute defensively. No `direction`: Loki's default `backward` is what makes
+        # --limit return the NEWEST N lines, which format_loki then sorts oldest-first.
+        # run_alerts' `direction=forward` is for episode reconstruction and does not belong here.
+        start, end = since_window_ns(getattr(ns, "since", None))
+        url = loki_query_url(base, ns.logql, ns.limit, start=start, end=end)
         formatter = format_loki
     body = fetch(url, resolve=pin)
     try:
@@ -1679,44 +1766,71 @@ def _rows_from_loki(data: dict) -> list[tuple[int, str]]:
     return rows
 
 
-def run_alerts(ns):
-    """Fetch monitor-bridge's DOWN log lines over the window and print firing episodes."""
+def alert_source_urls(base, days, limit):
+    """The Loki URLs `alerts` fetches, one per stream in ALERT_SOURCES.
+
+    `direction=forward` because episode reconstruction walks samples oldest-first; that is this
+    command's need, not loki-query's — see run_query.
+    """
     end_s = datetime.now(_CHICAGO).timestamp()
-    start_s = end_s - ns.days * 86400
+    start_s = end_s - days * 86400
+    return [
+        loki_query_url(
+            base,
+            logql,
+            limit,
+            start=int(start_s * 1e9),
+            end=int(end_s * 1e9),
+            direction="forward",
+        )
+        for logql, _ in ALERT_SOURCES
+    ]
+
+
+def run_alerts(ns):
+    """Fetch DOWN log lines from every alert stream over the window and print firing episodes.
+
+    Both streams are queried and their rows merged before episodes are built, so one episode
+    list covers monitor-bridge's checks and the host crons that push Kuma directly. `--check`
+    filters both, because both name episodes with a machine name rather than a Kuma display
+    name.
+    """
     base, pin = loki_endpoint()
-    url = loki_query_url(
-        base,
-        ALERT_LOGQL,
-        ns.limit,
-        start=int(start_s * 1e9),
-        end=int(end_s * 1e9),
-        direction="forward",
-    )
+    urls = alert_source_urls(base, ns.days, ns.limit)
     if ns.dry_run:
-        print(" ".join(curl_argv(url, resolve=pin)))
+        for url in urls:
+            print(" ".join(curl_argv(url, resolve=pin)))
         return 0
-    raw = _rows_from_loki(json.loads(fetch(url, resolve=pin)))
-    if ns.raw:
-        print("\n".join(line for _, line in raw) or "no logs")
-    else:
-        rows = []
-        for ns_ts, line in raw:
-            parsed = parse_down_line(line)
+    raw, rows, truncated = [], [], []
+    for url, (logql, parser) in zip(urls, ALERT_SOURCES):
+        fetched = _rows_from_loki(json.loads(fetch(url, resolve=pin)))
+        # Per stream, not on the merged list: one stream hitting the cap says nothing about
+        # the other, and reporting the union would cry truncation whenever the totals summed
+        # past the limit.
+        if len(fetched) >= ns.limit:
+            truncated.append(logql)
+        raw.extend(fetched)
+        for ns_ts, line in fetched:
+            parsed = parser(line)
             if parsed is None:
                 continue
             name, msg = parsed
             if ns.check and ns.check.lower() not in name.lower():
                 continue
             rows.append((ns_ts, name, msg))
+    raw.sort()
+    if ns.raw:
+        print("\n".join(line for _, line in raw) or "no logs")
+    else:
         episodes = alert_episodes(rows, ns.gap_min * 60)
         if ns.json:
             print(json.dumps(episodes, indent=2))
         else:
             print(format_alert_episodes(episodes, ns.days))
-    if len(raw) >= ns.limit:
+    for logql in truncated:
         print(
-            f"\n(warning: hit --limit {ns.limit} log lines — results may be truncated; "
-            "raise --limit or narrow --days)"
+            f"\n(warning: hit --limit {ns.limit} log lines on {logql} — results may be "
+            "truncated; raise --limit or narrow --days)"
         )
     return 0
 

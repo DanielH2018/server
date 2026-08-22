@@ -201,9 +201,12 @@ Per-verb tiers, the RBAC evidence and the rule-matching measurements: `docs/clau
   recreate): `uv run python scripts/probe.py <targets | metric '<promql>' | loki-query '<logql>' |
   alerts | monitors | kuma-drift | scrutiny | pi <path> | cert <host> | health <svc> |
   ha <state|automation|get> …>`.
-  `alerts [--days N --check X]` reconstructs monitor-bridge's DOWN alert history from Loki (Kuma
-  keeps only current state) — one row per firing episode; the same view is the "Alert History"
-  Grafana board (Infrastructure folder). `monitors` answers "what is down"; **`kuma-drift`
+  `alerts [--days N --check X]` reconstructs DOWN alert history from Loki (Kuma keeps only
+  current state) — one row per firing episode; the same view is the "Alert History" Grafana
+  board (Infrastructure folder). It reads **two** streams: monitor-bridge's container log, and
+  the `{job="syslog"}` `status=down` lines the host crons emit, which push Kuma directly and so
+  have no other durable record. Until 2026-08-22 it read only the first, and the whole
+  backup/drift plane left no episode anywhere. `monitors` answers "what is down"; **`kuma-drift`
   answers "what is missing"**, which `monitors` structurally cannot — it counts the exporter's
   own set, so a monitor that is gone rather than down leaves the ratio at N/N up (a fenced-off
   push tile read green for a day on 2026-08-20). `kuma-drift` diffs that set against
