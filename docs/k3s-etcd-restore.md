@@ -1,9 +1,40 @@
 # Restoring the k3s control plane from an off-box etcd snapshot
 
-**Status: procedure documented, NOT drilled.** Written when the off-box snapshot cron landed
-(2026-08-16). Unlike `kopia-disaster-recovery.md`, no restore has been performed from these
-snapshots yet — treat every step as needing verification the first time it is used, and update
-this file with what actually happened.
+**Status, 2026-08-22: the off-box leg is proven; the restore is still NOT drilled.** Written
+when the off-box snapshot cron landed (2026-08-16). Unlike `kopia-disaster-recovery.md`, no
+restore has been performed from these snapshots — treat every step below as needing
+verification the first time it is used, and update this file with what actually happened.
+
+What was verified on 2026-08-22, with `scripts/etcd_restore_drill.sh --list-only` and the runs
+that followed it:
+
+- The credentials, bucket and folder work, and `k3s etcd-snapshot list --s3` returns real
+  snapshots.
+- `offbox-daniel-box-1787366702.zip` — the 02:45 snapshot that day — **downloaded and
+  decompressed**. So the nightly cron is producing artefacts that are retrievable and intact
+  enough for k3s to open.
+- Nothing beyond that. The object graph has never been read back out of one of these snapshots,
+  which is the claim a restore actually rests on.
+
+**A scratch restore alongside the running k3s does not work, and is not worth more attempts.**
+`k3s server --cluster-reset` assumes it is the only k3s on the host. Five obstacles were found
+and the first four fixed — the token file must exist rather than be passed, isolation flags
+belong on both invocations, `--disable-agent` leaves the load-balancer on 6444
+(`--lb-server-port` moves it), and `--cluster-reset-restore-path` is a name relative to
+`<data-dir>/server/db/snapshots` that k3s joins unconditionally, so absolute paths double and
+`--etcd-s3` doubles them for you. The fifth is a wedge in "Waiting to retrieve agent
+configuration" that ran 17 minutes on 6 seconds of CPU. The script's header records each one.
+
+Two paths finish the job, and neither is more patching:
+
+1. **Run the drill on a host with no k3s of its own** — a throwaway VM. Every obstacle above
+   comes from sharing the host, so they all evaporate. This is the cheap one and it stays
+   non-destructive.
+2. **Take a scheduled outage and do the real restore below.** It proves the most, including the
+   agent rejoin and the Longhorn reattach that no scratch drill can exercise.
+
+The isolation itself held: across all five failed runs the live cluster stayed Ready, both nodes
+included, and every write landed under `/var/tmp`.
 
 ## What these snapshots do and do not cover
 
@@ -47,7 +78,9 @@ cron exists to find), and anything created outside the repo.
 
 - Local, k3s's own schedule: `/var/lib/rancher/k3s/server/db/snapshots/`, 00:00 and 12:00, 5 retained.
 - Off-box, the cron this doc is about: R2, `s3://<r2_bucket>/etcd-snapshots/`, daily at 02:45,
-  14 retained. Named `offbox-<node>-<unix-timestamp>`, zstd-compressed.
+  14 retained. Named `offbox-<node>-<unix-timestamp>.zip` — compressed, and the extension is
+  literally `.zip`, not zstd as this line claimed until 2026-08-22. The name matters: it is what
+  `--cluster-reset-restore-path` takes, and it takes it as a NAME, never a path (see below).
 - Credentials: `/etc/rancher/k3s/etcd-s3.env` on daniel-box (0600 root), rendered by the k3s role
   from the `r2_*` SOPS secrets.
 
