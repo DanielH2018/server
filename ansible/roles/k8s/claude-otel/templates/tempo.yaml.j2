@@ -16,12 +16,29 @@ data:
               # In-cluster only. No hostPort here: Claude Code exports everything to the
               # collector, which fans out — nothing sends spans to Tempo directly.
               endpoint: 0.0.0.0:4317
-    ingester:
-      # Flush blocks often so a span is queryable minutes after the turn that produced it,
-      # rather than at the 30m default. This stack gets read interactively while working,
-      # so a trace that only appears half an hour later is a trace nobody looks at.
-      max_block_duration: 5m
-    compactor:
+    # No `ingester:` block. Tempo 3.0 removed the ingester module outright, and the override
+    # that used to live here is obsolete rather than relocated: it set max_block_duration to 5m
+    # against a 30m default, so a span was queryable minutes after the turn that produced it.
+    # The 3.0 live-store cuts blocks every 30s by default, which serves that intent better than
+    # the override did. Setting live_store.max_block_duration would only make it slower.
+    #
+    # `backend_scheduler:` replaces `compactor:`. The nesting is not a typo — `provider.compaction`
+    # is the compaction JOB config, and the `compaction` inside it is the compaction SETTINGS
+    # block. Getting the path wrong is silent: retention falls back to its 336h default, halving
+    # this window to a fortnight with nothing logged. Verified after deploying by reading
+    # block_retention back from Tempo's own /status/config.
+    backend_scheduler:
+      provider:
+        compaction:
+          compaction:
+            block_retention: {{ claude_otel_tempo_retention }}
+    # Set on the worker too. 3.0 splits compaction across a scheduler that decides which blocks
+    # to act on and a worker that executes the jobs, and each carries its own copy of the
+    # compaction settings — setting only the scheduler left the worker reading the 336h default,
+    # confirmed by finding both values live in /status/config after the first deploy. Which of
+    # the two governs deletion is not worth resolving from docs when the failure mode is a
+    # silent halving of the window: pin both to the same value and the question cannot arise.
+    backend_worker:
       compaction:
         block_retention: {{ claude_otel_tempo_retention }}
     storage:

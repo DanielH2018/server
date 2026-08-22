@@ -87,7 +87,11 @@ claude_otel_prometheus_retention_size: 3GB
 # Traces (slice 3). Claude Code emits spans only with both CLAUDE_CODE_ENHANCED_TELEMETRY_BETA
 # and OTEL_TRACES_EXPORTER set — the chezmoi settings template already sets both, so this is
 # purely a matter of giving them somewhere to land.
-claude_otel_tempo_image: grafana/tempo:2.10.8
+# 2.10.8 -> 3.0.3 (2026-08-22). 3.0 removed the ingester module and replaced the compactor with
+# backend_scheduler/backend_worker; tempo.yaml.j2 carries both changes and says why. The hard
+# prerequisite was the block format — 3.0 refuses vParquet3 and earlier, and this instance was
+# already writing vParquet4 (read off /status/config before upgrading).
+claude_otel_tempo_image: grafana/tempo:3.0.3
 claude_otel_tempo_storage: 5Gi
 # 720h (30d) — the same window as the Prometheus retention, a day under Loki's 744h. Its own
 # variable rather than a shared one because spans are per-turn and far bulkier than counters,
