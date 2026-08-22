@@ -62,7 +62,14 @@
   changed_when: true
   when:
     - manifests_render is changed or manifests_secret_render is changed
-    - not manifests_apply.stdout is search('\.apps/' ~ item.name ~ ' created')
+    # `| default('')`: if the apply's stdout cannot be read, fall through to "not created" and
+    # restart. Read the two failure directions before changing it — they are not symmetric. A
+    # spurious restart races only a first-ever creation, which happens once per workload and
+    # recovers; a missed restart leaves the pod serving the previous config with the deploy
+    # fully green, which is the bug this task exists to prevent and which was actually
+    # observed. Without the default, an unreadable register is not a wrong answer but a hard
+    # failure: `object of type 'dict' has no attribute 'stdout'`, mid-loop.
+    - not (manifests_apply.stdout | default('')) is search('\.apps/' ~ item.name ~ ' created')
 
 - name: Wait for the telemetry workloads to roll out
   tags: [deploy]

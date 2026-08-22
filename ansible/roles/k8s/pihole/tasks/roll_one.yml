@@ -7,7 +7,9 @@
 # restart` here races the initial rollout instead of following it.
 - name: Roll instance if this run did not just create it {{ pihole_instance }}
   tags: [deploy]
-  when: not (manifests_apply.stdout is search('deployment.apps/' ~ pihole_instance ~ ' created'))
+  # `| default('')` — see the same guard in k8s/claude-otel for why an unreadable register
+  # must mean "restart" rather than raise.
+  when: not ((manifests_apply.stdout | default('')) is search('deployment.apps/' ~ pihole_instance ~ ' created'))
   block:
     - name: Determine the sibling of {{ pihole_instance }}
       ansible.builtin.set_fact:

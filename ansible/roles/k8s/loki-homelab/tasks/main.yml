@@ -38,4 +38,6 @@
   changed_when: true
   when:
     - manifests_render is changed
-    - not manifests_apply.stdout is search('daemonset\.apps/promtail created')
+    # `| default('')` — see the same guard in k8s/claude-otel for why an unreadable register
+    # must mean "restart" rather than raise.
+    - not (manifests_apply.stdout | default('')) is search('daemonset\.apps/promtail created')
