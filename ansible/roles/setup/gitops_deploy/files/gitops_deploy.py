@@ -201,7 +201,11 @@ def run(
                 os.killpg(proc.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass  # the group is already gone
-            proc.communicate()  # reap; the process is being killed, not reported
+            # wait(), not communicate(): if a descendant escaped the group by calling setsid
+            # itself, its end of the pipe stays open and communicate() would block on it
+            # forever. wait() only reaps the direct child's exit status and doesn't touch the
+            # pipes — CPython's own subprocess.run() does the same on this path.
+            proc.wait()
             raise
         r = subprocess.CompletedProcess(args, proc.returncode, stdout, stderr)
     if check and r.returncode != 0:
