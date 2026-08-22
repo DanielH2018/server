@@ -98,6 +98,43 @@ def _unguarded_deref(body: str, reg: str, attr: str) -> bool:
     return False
 
 
+_GATE_VAR = re.compile(r"\b([a-z_][a-z0-9_]*)\b")
+# Words that appear in every condition and so identify nothing.
+_GATE_NOISE = frozenset(
+    {"not", "and", "or", "bool", "default", "true", "false", "is", "in"}
+)
+
+
+def _lazily_guarded(
+    body: str, reg: str, attr: str, producer_conditions: list[str]
+) -> bool:
+    """True when the deref sits in the else-branch of a Jinja conditional testing the same
+    variable the producer is gated on.
+
+    `{{ false if (x | bool) else (reg.rc != 0) }}` never touches `reg.rc` when `x` is true,
+    because Jinja's conditional expression is lazy — so a producer gated on `not (x | bool)`
+    and this consumer are reachable under exactly the same condition.
+
+    Without this, the check demands a `| default()` on the else branch. That is not a tidier
+    spelling of the same thing: k8s/seed-volume measured it, and defaulting there renders the
+    whole expression True and would tar a long-gone source over all 25 live volumes. The
+    absence of a default in that branch is load-bearing, so the check has to understand the
+    laziness rather than ask for it to be papered over.
+    """
+    gate_vars = {
+        w for cond in producer_conditions for w in _GATE_VAR.findall(cond)
+    } - _GATE_NOISE
+    if not gate_vars:
+        return False
+    for match in re.finditer(r"\bif\b(.*?)\belse\b(.*)", body, re.DOTALL):
+        test, else_branch = match.group(1), match.group(2)
+        if not re.search(rf"\b{re.escape(reg)}\.{attr}\b", else_branch):
+            continue
+        if gate_vars & (set(_GATE_VAR.findall(test)) - _GATE_NOISE):
+            return True
+    return False
+
+
 def _conditions(task: dict) -> list[str]:
     when = task.get("when")
     if when is None:
@@ -161,6 +198,10 @@ def _offenders(path: Path) -> list[str]:
                 continue  # consumer repeats every risky guard the producer carries
             if any(f in loop for f in _SKIP_FILTERS):
                 continue  # consumer filters the skip results out
+            if any(
+                _lazily_guarded(body, reg, attr, producer_conditions) for attr in deref
+            ):
+                continue  # deref sits behind a lazy `if <same gate> else` and is unreachable
             producer_when = " and ".join(producer_conditions)
             try:
                 where = path.relative_to(_REPO_ROOT)
@@ -204,6 +245,56 @@ def test_the_check_finds_the_claude_otel_shape(tmp_path: Path) -> None:
     problems = _offenders(bug)
     assert len(problems) == 1
     assert "restarts_before.stdout" in problems[0]
+
+
+def test_the_check_accepts_a_lazy_conditional_guard(tmp_path: Path) -> None:
+    """k8s/seed-volume's shape: the deref sits behind `if <same gate> else`.
+
+    Jinja's conditional expression is lazy, so `seed_volume_marker.rc` is never evaluated on
+    the run where its producer was skipped. Demanding a `| default()` here is not a tidier
+    spelling — that role measured it, and the default renders the expression True and would
+    tar a long-gone source over every live volume.
+    """
+    tasks = tmp_path / "tasks"
+    tasks.mkdir()
+    ok = tasks / "seed.yml"
+    ok.write_text(
+        "- name: Check the seed marker\n"
+        "  when: not (seed_volume_short_circuit | bool)\n"
+        "  ansible.builtin.command: kubectl exec test -f .seeded\n"
+        "  register: seed_volume_marker\n"
+        "- name: Decide whether this run copies\n"
+        "  ansible.builtin.set_fact:\n"
+        "    seed_volume_copying: >-\n"
+        "      {{ false if (seed_volume_short_circuit | bool)\n"
+        "         else (seed_volume_marker.rc != 0) }}\n"
+    )
+    assert _offenders(ok) == []
+
+
+def test_the_lazy_guard_still_catches_an_unrelated_gate(tmp_path: Path) -> None:
+    """Control: the exemption must key on the producer's OWN gate, not on any `if/else`.
+
+    A conditional testing some other variable proves nothing about whether the producer ran,
+    so the deref is still reachable on a skip and must still be reported.
+    """
+    tasks = tmp_path / "tasks"
+    tasks.mkdir()
+    bad = tasks / "seed.yml"
+    bad.write_text(
+        "- name: Check the seed marker\n"
+        "  when: not (seed_volume_short_circuit | bool)\n"
+        "  ansible.builtin.command: kubectl exec test -f .seeded\n"
+        "  register: seed_volume_marker\n"
+        "- name: Decide whether this run copies\n"
+        "  ansible.builtin.set_fact:\n"
+        "    seed_volume_copying: >-\n"
+        "      {{ false if (some_other_flag | bool)\n"
+        "         else (seed_volume_marker.rc != 0) }}\n"
+    )
+    problems = _offenders(bad)
+    assert len(problems) == 1
+    assert "seed_volume_marker.rc" in problems[0]
 
 
 def test_the_check_accepts_a_filtered_loop(tmp_path: Path) -> None:
