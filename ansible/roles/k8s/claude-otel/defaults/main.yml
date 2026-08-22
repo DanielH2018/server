@@ -102,3 +102,16 @@ claude_otel_tempo_retention: 720h
 # does not move faster than that. The Kuma monitor's heartbeat interval must stay above this
 # (see the uptime-kuma role) so a dead cron trips the watchdog.
 claude_otel_health_cron_minute: "*/10"
+
+# The six telemetry workloads, as the {kind, name} pairs post_tasks/k8s_stabilise_gate.yml reads.
+# A variable rather than a third inline copy of the list: tasks/main.yml already spells it out
+# twice (the restart loop and the wait loop), and the stabilisation tasks that consume it must
+# iterate the SAME set or the gate silently watches fewer workloads than rolled.
+# ansible/tests/test_claude_otel_stabilise_coverage.py holds the three in step.
+claude_otel_stabilise_workloads:
+  - { kind: deploy, name: loki }
+  - { kind: deploy, name: prometheus }
+  - { kind: deploy, name: kube-state-metrics }
+  - { kind: deploy, name: tempo }
+  - { kind: daemonset, name: otel-collector }
+  - { kind: deploy, name: grafana }

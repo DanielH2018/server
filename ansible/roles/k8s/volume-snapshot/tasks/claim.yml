@@ -129,8 +129,18 @@
   changed_when: false
   register: volume_snapshot_ready
   until: volume_snapshot_ready.stdout | default('') | split('|') | first == 'true'
-  retries: "{{ (volume_snapshot_timeout | int / 5) | round | int }}"
-  delay: 5
+  # Polls at volume_snapshot_poll_interval, the cadence the maintenance-attach waits below
+  # already use — not the hardcoded 5 this carried until 2026-08-22. Nothing here got faster;
+  # the deploy was paying poll granularity rather than snapshot time. Measured on a full deploy
+  # (pid 2004861): all 15 of these waits took 5.54-5.59s, which is one failed first poll plus a
+  # full five-second sleep. The snapshots were ready well inside that sleep — a Longhorn
+  # snapshot is a marker in the volume's chain, not a data copy, as volume_snapshot_timeout's
+  # own comment says.
+  #
+  # retries is derived from the interval so the timeout budget stays volume_snapshot_timeout
+  # seconds either way; only the granularity changed.
+  retries: "{{ (volume_snapshot_timeout | int / volume_snapshot_poll_interval | int) | round | int }}"
+  delay: "{{ volume_snapshot_poll_interval }}"
   # Suppressed so the tasks below can explain WHY, rather than Ansible aborting on the last
   # attempt's rc with nothing but "ran out of retries". It is not a silent swallow: one of the
   # next two tasks always resolves the same condition, either into a fail or a named skip.
@@ -378,8 +388,11 @@
   changed_when: false
   register: volume_snapshot_retake_ready
   until: volume_snapshot_retake_ready.stdout | default('') | split('|') | first == 'true'
-  retries: "{{ (volume_snapshot_timeout | int / 5) | round | int }}"
-  delay: 5
+  # Same poll cadence as the first wait above, for the same reason. This path only runs for a
+  # detached volume, which a deploy does not reach (see the role's CLAUDE.md), so the change
+  # buys no measured time here — it is kept in step so the two waits cannot drift apart.
+  retries: "{{ (volume_snapshot_timeout | int / volume_snapshot_poll_interval | int) | round | int }}"
+  delay: "{{ volume_snapshot_poll_interval }}"
   failed_when: false
 
 # The single readiness answer every task BELOW this point reads, folding the two waits into one
