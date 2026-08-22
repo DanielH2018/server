@@ -38,3 +38,17 @@ image_builder_context_files: {}
 # warm layers is quick. Bounds a wedged build so a deploy fails with a message instead of
 # hanging on the wait's own timeout.
 image_builder_timeout: 900
+
+# Build even when the rendered context is byte-identical to the last run's.
+#
+# The gate below skips a build whose context has not changed, which is correct for every source
+# the context carries — and blind to the one it does not. A base image moves underneath a
+# pinned `FROM alpine:3.24` when Alpine patches a CVE, and nothing this role renders changes,
+# so the gate legitimately reports "no build needed" while the image is stale. Rebuilding on a
+# CVE is therefore an operator decision with no signal in the repo, taken with:
+#
+#   ./scripts/deploy.sh --tags n8n -e image_builder_force=true
+#
+# Passing it on a full deploy rebuilds all of them, which is the ~106s this gate exists to
+# avoid — so pass it with --tags unless a base-image bump really is fleet-wide.
+image_builder_force: false
