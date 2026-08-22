@@ -680,10 +680,22 @@ _SNAPSHOT_CLAIM_RE = re.compile(
 
 def declares_snapshot_claims(text: str | None) -> bool:
     """Whether a role's defaults/main.yml declares at least one PVC for k8s/volume-revert to
-    consider — used only to word gitops-deploy's rollback alert accurately (which services in
-    the batch a volume revert can affect), NOT to gate anything: the real decision is made by
-    roles/k8s/manifests reading actual YAML. Absent, empty (`[]`), multi-line, or unparseable all
-    read as False, which is the safe direction for a line that must never overclaim.
+    consider.
+
+    Two consumers, and they want opposite things from an unparseable input:
+
+    * wording gitops-deploy's rollback alert (which services in the batch a volume revert can
+      affect) — False under-claims, which is safe for a line that must never overclaim;
+    * gating `split_k8s_auto_deploy`'s per-tick cap on claim-declaring services (2026-08-22
+      review H2) — False reads as claim-free and lets the service batch, which is the overrun
+      the cap exists to prevent.
+
+    Absent, empty (`[]`), multi-line, or unparseable all read as False. What keeps the second
+    consumer honest is not this function but
+    test_deploy_logic.py::test_declares_snapshot_claims_agrees_with_yaml_for_every_k8s_role,
+    which pins this regex against `yaml.safe_load` for every k8s role — so a reformat to block
+    style fails CI instead of silently widening the cap. Neither consumer is the authority on
+    the revert itself: roles/k8s/manifests decides that from real YAML.
     """
     if not text:
         return False
@@ -765,6 +777,8 @@ def split_k8s_auto_deploy(
     enabled: bool,
     image_only: Callable[[str], bool],
     max_per_tick: int = 0,
+    declares_claims: Callable[[str], bool] | None = None,
+    max_claim_services_per_tick: int = 0,
 ) -> ChangeSet:
     """Promote image-bump-only k8s changes from `cs.k8s` into `cs.k8s_deploy`.
 
@@ -780,6 +794,11 @@ def split_k8s_auto_deploy(
     The path check and the diff check are BOTH required: the path check alone would admit a push
     editing defaults/main.yml's non-image vars, and the diff check alone would admit a push that
     also edits tasks/.
+
+    Two caps then bound what one tick takes on: `max_per_tick` on the batch as a whole, and
+    `max_claim_services_per_tick` on services declaring `k8s_autodeploy_snapshot_pvcs` — whose
+    snapshot+revert cost is additive across a batch while the rollback budget is derived for one.
+    Surplus in either direction stays in `cs.k8s` and defer-and-alerts.
 
     Fail-closed by construction — anything not promoted stays in `cs.k8s`, which defer-and-alerts
     exactly as it does today.
@@ -826,8 +845,52 @@ def split_k8s_auto_deploy(
     #
     # Do NOT "fix" this by deferring the ff-merge: that strands the tree behind pods already
     # running the new images.
-    if max_per_tick > 0 and len(promoted) > max_per_tick:
+    #
+    # SECOND cap, on claim-declaring services specifically (2026-08-22 review H2). The rollback
+    # budget K8S_ROLLBACK_TIMEOUT_S is derived for the worst SINGLE promoted service that
+    # declares k8s_autodeploy_snapshot_pvcs — but deploy_k8s joins the whole batch into one
+    # playbook run, and each such service pays its own snapshot + revert phase serially inside
+    # it (only the rollout WAIT is deduped, by k8s/rollout-drain). Measured from role sources:
+    # one radarr/sonarr-shaped service is ~1200s against a 1320s budget, two co-batched ~1680s,
+    # three ~2160s. Past the budget `run()`'s killpg fires MID-REVERT — after volume-revert has
+    # scaled the workload to zero replicas and attached the volume with disableFrontend: true —
+    # stranding a service at zero replicas with its volume in Longhorn maintenance mode.
+    #
+    # Not hypothetical: slice 7b co-promoted five lscr.io/linuxserver/* siblings (bazarr,
+    # jellyfin, prowlarr, radarr, sonarr) that share one Renovate automerge window with no
+    # stagger, so a 2-3 sibling tick is ordinary.
+    #
+    # Capping claim-declaring services rather than lowering max_per_tick is deliberate: claim-free
+    # services cost nothing on the revert path and should still batch. Per-service ROLLBACK
+    # invocation — the alternative the role CLAUDE.md proposes — does NOT fit: 3 x 1200 + 900
+    # forward + 180 flock exceeds the unit's 2700s TimeoutStartSec.
+    #
+    # `declares_claims` is injected (like `image_only`) so this stays a pure function; the caller
+    # reads each role's defaults at the PINNED origin SHA. It resolves False for a declaration the
+    # regex cannot parse, which for ALERT WORDING was the safe direction and for GATING is not —
+    # a multi-line declaration would read as claim-free and batch. What holds that closed is
+    # test_deploy_logic.py::test_declares_snapshot_claims_agrees_with_yaml_for_every_k8s_role,
+    # which pins the regex verdict against yaml.safe_load for every k8s role, so a reformat fails
+    # CI rather than silently widening this cap.
+    if declares_claims is not None and max_claim_services_per_tick > 0:
+        ordered = sorted(promoted)
+        claim_services = [svc for svc in ordered if declares_claims(svc)]
+        claim_free = [svc for svc in ordered if svc not in set(claim_services)]
+        kept = claim_services[:max_claim_services_per_tick]
+        room = (
+            len(claim_free) if max_per_tick <= 0 else max(0, max_per_tick - len(kept))
+        )
+        promoted = set(kept + claim_free[:room])
+    elif max_per_tick > 0 and len(promoted) > max_per_tick:
         promoted = set(sorted(promoted)[:max_per_tick])
+    # Both branches above already respect max_per_tick (the first via `room`), so there is no
+    # third clamp here — one would be able to drop the claim-declaring service the first branch
+    # deliberately kept.
+    if not promoted:
+        # Every promotable service was a surplus claim-declaring one. Returning `cs` unchanged
+        # leaves them all in cs.k8s, which defer-and-alerts — the same fail-closed path as any
+        # unpromotable change.
+        return cs
     return replace(cs, k8s=cs.k8s - promoted, k8s_deploy=cs.k8s_deploy | promoted)
 
 

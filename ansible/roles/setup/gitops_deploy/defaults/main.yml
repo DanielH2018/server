@@ -43,6 +43,23 @@ gitops_deploy_k8s_autodeploy_pilot: []
 # safety gain, since three services fit the timeout with room to spare.
 gitops_deploy_k8s_autodeploy_max_per_tick: 3
 
+# Most services declaring `k8s_autodeploy_snapshot_pvcs` one tick may promote; 0 disables the cap.
+# Separate from the cap above because the two bound different costs. max_per_tick bounds the
+# FORWARD deploy, where every service costs about the same. This bounds the ROLLBACK, where only
+# claim-declaring services pay a snapshot+revert phase — serially, inside the one playbook run —
+# while gitops_deploy_k8s_rollback_timeout_s is derived for the worst SINGLE such service.
+#
+# Two co-batched claim-declaring services need ~1680s against that 1320s budget and three ~2160s;
+# past it killpg fires mid-revert, leaving a workload at zero replicas with its volume attached in
+# Longhorn maintenance mode. Slice 7b co-promoted five lscr.io/linuxserver/* siblings sharing one
+# Renovate automerge window with no stagger, so a 2-3 sibling tick is ordinary rather than rare.
+#
+# 1, not a larger number: this is what makes the single-service rollback ceiling the binding one.
+# Claim-FREE services still batch up to max_per_tick — they cost nothing on the revert path — so
+# this defers far less than lowering max_per_tick to 1 would. Surplus stays in cs.k8s and
+# defer-and-alerts, naming the services and their deploy tags.
+gitops_deploy_k8s_autodeploy_max_claim_services_per_tick: 1
+
 # Roles that must never be auto-deployed, derived from each role's own declaration:
 # roles/k8s/<name>/defaults/main.yml sets `k8s_autodeploy` plus a `k8s_autodeploy_reason`
 # giving the mechanism. The reasons that used to be comments here now live beside the role
@@ -80,18 +97,25 @@ gitops_deploy_k8s_timeout_s: 900
 #   ceiling = claims x (volume_snapshot_timeout + 3xvolume_revert_state_timeout
 #             + 3xvolume_revert_api_timeout) + manifests_rollout_timeout
 #             + k8s_rollout_stabilise_seconds (60)
-# `tdarr` (2 claims, default 300s rollout) is the worst of the set today at
-# 2x(120+360) + 300 + 60 = 1320s — NOT radarr/sonarr's single-claim 660s-rollout case, which
-# comes to 1200s. Set to 1320 to cover the actual worst single service, not the loudest one.
+# 1320 was derived from `tdarr` (2 claims, default 300s rollout): 2x(120+360) + 300 + 60. tdarr
+# has since been re-denied (`k8s_autodeploy: false`, 2026-08-22) over its shared-media coupling,
+# so it is no longer in the promoted set and no longer the worst PROMOTED service — that is now
+# radarr/sonarr's single-claim 660s-rollout case at 1200s. The constant is therefore 120s larger
+# than today's worst case, which errs safe; the test below computes the real ceiling from role
+# sources rather than trusting this number, so a future promotion re-tightens it automatically.
 #
-# NOT covered: two or more claim-declaring services landing in the SAME batch (one tick can
-# promote up to gitops_deploy_k8s_autodeploy_max_per_tick). Every role in a batch runs its own
-# snapshot+revert phase in sequence inside the one playbook run (only the rollout WAIT is
-# batched/deduped via roles/k8s/rollout-drain), so a multi-service batch's snapshot+revert cost
-# is additive across services, not bounded by this single-service ceiling — e.g. radarr and
-# sonarr batched together would need roughly 2x(120+360) + 660 + 60 = 1620s. This is the same
-# gap as the batch-abort blast radius documented in CLAUDE.md; the real fix for both is
-# per-service invocation on the rollback path, not a larger constant here.
+# The multi-service case is NOT covered by this constant and is not meant to be. Every role in a
+# batch runs its own snapshot+revert phase in sequence inside the one playbook run (only the
+# rollout WAIT is batched/deduped via roles/k8s/rollout-drain), so a batch's snapshot+revert cost
+# is additive — radarr and sonarr together come to 2x(120+360) + 660 + 60 = 1680s, and three
+# such services to ~2160s. Past this budget `run()`'s killpg fires MID-REVERT, after
+# k8s/volume-revert has scaled the workload to zero replicas and attached its volume with
+# disableFrontend: true.
+#
+# What closes it is gitops_deploy_k8s_autodeploy_max_claim_services_per_tick (below), which caps
+# claim-declaring services per tick so this single-service ceiling is always the binding one.
+# Per-service invocation on the rollback path — the fix this comment used to name — does NOT fit:
+# 3 x 1200 + 900 forward + 180 flock exceeds the unit's 2700s TimeoutStartSec.
 #
 # This value has its OWN budget rather than sharing gitops_deploy_k8s_timeout_s (900) at runtime
 # because the two runs are sequential within one systemd unit activation — see

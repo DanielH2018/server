@@ -33,6 +33,7 @@ coercions collapse identically.
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -1011,3 +1012,33 @@ def test_the_listing_fields_exist_on_a_real_snapshot() -> None:
             f"would silently retain a snapshot that should have dropped out of the window"
         )
         assert name
+
+
+def test_both_prefix_matchers_regex_escape_their_prefix():
+    """`match` is a regex test, so a literal prefix must be escaped before it is used as one.
+
+    2026-08-22 review. k8s/volume-revert escaped its prefix and said why in-line; the prune here
+    did not, and the prune's result feeds a `kubectl delete`. Unreachable today — both the service
+    and the claim are DNS-1123 labels, which carry no regex metacharacters — but the two files
+    make the SAME decision and only one of them encoded it, which is the shape that becomes true
+    after one rename.
+
+    Reverting either escape fails this test: the assertion is on the filter chain in the role
+    source, so an unescaped `selectattr(..., 'match', <prefix>)` no longer matches.
+    """
+    revert_claim = (_ROLE.parent / "volume-revert/tasks/claim.yml").read_text()
+    for label, text in (
+        ("volume-snapshot", _CLAIM.read_text()),
+        ("volume-revert", revert_claim),
+    ):
+        matchers = re.findall(r"selectattr\(\s*'2',\s*'match',([^)]*)\)", text)
+        assert matchers, (
+            f"{label}: no `selectattr('2', 'match', ...)` prefix filter found"
+        )
+        for expr in matchers:
+            assert "regex_escape" in expr, (
+                f"{label}: `selectattr('2', 'match', {expr.strip()})` uses an UNESCAPED prefix. "
+                f"`match` is a regex test, not a literal-prefix test, so a metacharacter in the "
+                f"service or claim name would widen or narrow the set — and on the snapshot side "
+                f"that set feeds a `kubectl delete`."
+            )

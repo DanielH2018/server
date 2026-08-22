@@ -1175,6 +1175,8 @@ def _split(
     enabled=True,
     image_only=True,
     max_per_tick=0,
+    claim_services=(),
+    max_claim_services_per_tick=0,
 ):
     cs = services_from_changed_paths(paths)
     return split_k8s_auto_deploy(
@@ -1185,6 +1187,8 @@ def _split(
         enabled=enabled,
         image_only=lambda _svc: image_only,
         max_per_tick=max_per_tick,
+        declares_claims=lambda svc: svc in set(claim_services),
+        max_claim_services_per_tick=max_claim_services_per_tick,
     )
 
 
@@ -1525,8 +1529,14 @@ def test_declares_snapshot_claims_ignores_an_indented_key():
     )
 
 
-# declares_snapshot_claims() is a regex over source text, used only to word gitops-deploy's
-# rollback alert. roles/k8s/manifests decides the REAL revert from `yaml.safe_load`'d defaults —
+# declares_snapshot_claims() is a regex over source text. Since 2026-08-22 it is LOAD-BEARING,
+# not just cosmetic: split_k8s_auto_deploy() uses it to decide which promotions count against
+# gitops_deploy_k8s_autodeploy_max_claim_services_per_tick. That inverts the safe direction —
+# for alert wording a False on unparseable input under-claims (harmless), but for gating it
+# reads as claim-free and lets the service batch, which is the exact overrun the cap prevents.
+# This test is what holds that closed, so treat a failure here as a deploy-safety failure.
+#
+# roles/k8s/manifests decides the REAL revert from `yaml.safe_load`'d defaults —
 # a different reader of the same file. All 13 roles that declare
 # `k8s_autodeploy_snapshot_pvcs` today write it as a single-line list literal, so nothing has
 # ever exercised the gap: reformat one to block style and the regex returns False (no revert
@@ -1836,3 +1846,82 @@ def test_run_timeout_kills_the_whole_process_group(tmp_path) -> None:
         f"grandchild pid {grandchild_pid} outlived the timeout — only the direct child was "
         f"killed, not its process group"
     )
+
+
+# ── the claim-declaring cap (2026-08-22 review H2) ──────────────────────────────────────────
+# Each claim-declaring service pays its own snapshot+revert phase SERIALLY inside the single
+# rollback playbook run, while K8S_ROLLBACK_TIMEOUT_S is derived for the worst SINGLE one — so
+# two co-batched already exceed it and killpg lands mid-revert, after volume-revert has scaled
+# the workload to zero and attached its volume in maintenance mode. The budget arithmetic itself
+# is pinned by ansible/tests/test_rollback_timeout_budget.py; these cover the partition.
+
+
+def test_split_k8s_caps_claim_declaring_services_separately():
+    paths = [_defaults_for(s) for s in ("radarr", "sonarr", "bazarr")]
+    cs = _split(
+        paths,
+        claim_services=("radarr", "sonarr", "bazarr"),
+        max_claim_services_per_tick=1,
+    )
+    assert len(cs.k8s_deploy) == 1
+    assert cs.k8s == {"radarr", "sonarr", "bazarr"} - cs.k8s_deploy
+
+
+def test_split_k8s_claim_cap_still_batches_claim_free_services():
+    # Why a SEPARATE cap rather than max_per_tick=1: claim-free services cost nothing on the
+    # revert path, so they must keep batching.
+    paths = [_defaults_for(s) for s in ("radarr", "sonarr", "speedtest", "littlelink")]
+    cs = _split(
+        paths,
+        claim_services=("radarr", "sonarr"),
+        max_claim_services_per_tick=1,
+        max_per_tick=3,
+    )
+    assert len([s for s in cs.k8s_deploy if s in ("radarr", "sonarr")]) == 1
+    assert {"speedtest", "littlelink"} <= cs.k8s_deploy
+
+
+def test_split_k8s_claim_cap_respects_max_per_tick_too():
+    # Both caps bind; the claim cap must not become a way to exceed the batch cap.
+    paths = [
+        _defaults_for(s) for s in ("radarr", "speedtest", "littlelink", "freshrss")
+    ]
+    cs = _split(
+        paths,
+        claim_services=("radarr",),
+        max_claim_services_per_tick=1,
+        max_per_tick=2,
+    )
+    assert len(cs.k8s_deploy) == 2
+
+
+def test_split_k8s_claim_cap_is_deterministic():
+    paths = [_defaults_for(s) for s in ("radarr", "sonarr", "bazarr")]
+    claims = ("radarr", "sonarr", "bazarr")
+    first = _split(
+        paths, claim_services=claims, max_claim_services_per_tick=1
+    ).k8s_deploy
+    second = _split(
+        paths, claim_services=claims, max_claim_services_per_tick=1
+    ).k8s_deploy
+    assert first == second
+
+
+def test_split_k8s_defers_the_surplus_when_every_promotable_declares_claims():
+    # No claim-free service to fill the batch: promote exactly one, and the rest stay in cs.k8s,
+    # which defer-and-alerts.
+    paths = [_defaults_for(s) for s in ("radarr", "sonarr")]
+    cs = _split(
+        paths, claim_services=("radarr", "sonarr"), max_claim_services_per_tick=1
+    )
+    assert len(cs.k8s_deploy) == 1
+    assert len(cs.k8s) == 1
+
+
+def test_split_k8s_claim_cap_of_zero_leaves_the_old_behaviour():
+    # 0 disables the claim cap; max_per_tick alone then governs, exactly as before this landed.
+    paths = [_defaults_for(s) for s in ("radarr", "sonarr")]
+    cs = _split(
+        paths, claim_services=("radarr", "sonarr"), max_claim_services_per_tick=0
+    )
+    assert cs.k8s_deploy == {"radarr", "sonarr"}
