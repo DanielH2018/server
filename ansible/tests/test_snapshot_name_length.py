@@ -50,9 +50,23 @@ LIMIT = 63
 
 # `now(utc=true, fmt='%Y%m%d%H%M%S')` — volume-snapshot/tasks/main.yml.
 TOKEN_LEN = len("20260822141923")
-# `git rev-parse --short=8`. It returns MORE than 8 when 8 are ambiguous, and the snapshot
-# carries whatever it returned, so the headroom reported below matters as much as the pass.
-SHA_LEN = 8
+# `git rev-parse --short=8` — but checked at 12, DELIBERATELY LONGER THAN PRODUCTION USES.
+#
+# git returns MORE than 8 characters when 8 are ambiguous, one at a time as the repo grows, and
+# the role names the snapshot from that raw stdout. Checking at 8 would therefore pass while
+# production names quietly grew past the ceiling, and the first sign would be a deploy failing
+# at the assert — which is safe, but late, and by then the fix is renaming a live service.
+#
+# 12 is git's own ceiling for a very large repository (the Linux kernel abbreviates to 12), so
+# it is a real bound rather than an arbitrary pad. Measured 2026-08-22: this repo has ~40k
+# objects and `--short=8` returns 8, giving an 8-hex collision chance near 0.02%. The margin is
+# insurance against slow growth, not a live problem.
+#
+# THE COST IS DELIBERATE AND WILL SURPRISE SOMEONE. Reserving 4 bytes for a sha nobody has yet
+# leaves 23 for service + claim segment, where production today would allow 27. So this file can
+# fail a name that the live 8-character sha would fit. That is the point: it fails while there is
+# still slack, rather than at the moment production runs out.
+SHA_LEN = 12
 
 
 def _name_expression() -> str:
@@ -115,9 +129,14 @@ def test_snapshot_name_fits(service, claim):
     name = _name(service, claim)
     assert len(name.encode()) <= LIMIT, (
         f"{service}/{claim} produces a {len(name.encode())}-byte snapshot name ({name}), over "
-        f"Longhorn's {LIMIT}-byte delete ceiling. It would be created fine and then be "
-        "impossible to prune, failing every deploy once retention caught up. Shorten the "
-        "service or claim name."
+        f"Longhorn's {LIMIT}-byte delete ceiling. Such a snapshot is created fine and is then "
+        "impossible to prune, failing every deploy once retention catches up. Shorten the "
+        f"service or claim name.\n\n"
+        f"Measured with a {SHA_LEN}-character sha on purpose, where production uses 8 today. "
+        "The live name is shorter than the one above and may still fit — that is not a reason "
+        "to dismiss this. git lengthens the abbreviation as the repo grows, so the margin is "
+        "what makes this fail while there is still room to rename, rather than at the deploy "
+        "that runs out. See the SHA_LEN comment."
     )
 
 
