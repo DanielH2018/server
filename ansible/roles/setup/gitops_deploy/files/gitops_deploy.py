@@ -946,6 +946,12 @@ def main() -> int:
                 # right and is wrong twice over: on a first rollback it finds no snapshot and
                 # fails the deploy, and on a second rollback of the same service it finds a
                 # STALE snapshot and reverts to the wrong point.
+                # DECIDED: `origin[:8]` is a fixed slice while volume-snapshot names with
+                # `--short=8`, a MINIMUM width. They diverge only when 8 chars collide, and
+                # then the prefix misses by one character and volume-revert's no-snapshot
+                # assert fires before the scale-down — the safe failure. Measured zero
+                # ambiguous 8-char prefixes across ~39k objects. Full analysis in this role's
+                # CLAUDE.md; two reviewers re-derived it on 2026-08-22, hence the marker.
                 deploy_k8s(
                     cs.k8s_deploy, K8S_ROLLBACK_TIMEOUT_S, restore_sha=origin[:8]
                 )

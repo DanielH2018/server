@@ -86,6 +86,13 @@ must include:
 - the **falsify-before-flag rule**: cite the specific `file:line` that makes a finding true, and cite
   the `file:line` of the defense when clearing one — a comment, a reassuring name (`*_valid`,
   `# intentional`), or "handled by Traefik/Authelia/upstream" is NOT evidence; verify it in code;
+- the **`# DECIDED:` rule**: before flagging anything in a role, `grep -rn '# DECIDED:'` that role's
+  tree and its `CLAUDE.md`. A `# DECIDED:` marker records a trade-off that was analysed and settled,
+  with the reasoning at that line. Re-deriving one costs the operator real time — two reviewers
+  re-derived the `restore_sha` prefix trade-off in a single run on 2026-08-22, against an analysis
+  written out in `gitops_deploy/CLAUDE.md` specifically to stop it. A marker is still a prior, not a
+  verdict: contradict it only with new evidence at a cited `file:line`, and say which marker you are
+  contradicting;
 - the **output format** below.
 
 **Three surfaces fall between the six areas — name them in the brief or nobody reviews them.**

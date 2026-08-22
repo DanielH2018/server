@@ -89,13 +89,15 @@ spec:
               value: "{{ container_item.port }}"
             - name: N8N_PROTOCOL
               value: https
-            # Two proxy hops, unconditional since the `-k8s` suffix retired (2026-08-15) — the
-            # value the bridged route has carried all along, kept verbatim rather than
-            # re-derived here. Getting this wrong does not break routing; it makes n8n
-            # attribute every request to the wrong client IP, which is what its login
-            # throttling and audit log key on. NOTE: the second hop was the Docker edge
-            # Traefik, uninstalled 2026-08-14 — re-measure `X-Forwarded-For` depth before
-            # trusting this, and drop to 1 if the cluster Traefik is now the only hop.
+            # DECIDED: 2 hops, and it must not drop to 1. Getting this wrong does not break
+            # routing; it makes n8n attribute every request to the wrong client IP, which is
+            # what its login throttling and audit log key on. The two hops on a public request
+            # are Cloudflare and the cluster Traefik — Cloudflare's ranges sit in
+            # `forwardedHeaders.trustedIPs` on both entrypoints (see the traefik role's
+            # cloudflare-ip-drift.sh.j2), so it is a trusted proxy that sets X-Forwarded-For
+            # and counts. This is NOT a leftover from the Docker edge Traefik uninstalled
+            # 2026-08-14; that host was never one of these two. An earlier version of this
+            # comment said the opposite and invited exactly the change that breaks it.
             - name: N8N_PROXY_HOPS
               value: "2"
             - name: N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS
