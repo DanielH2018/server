@@ -47,6 +47,7 @@ import os
 import re
 import subprocess
 import sys
+import syslog
 import urllib.parse
 import urllib.request
 
@@ -248,7 +249,25 @@ def verdict(drifted: list, unannotated: list, errors: list) -> tuple[int, str]:
 
 
 def push(status: str, message: str) -> None:
-    """Push the result to Uptime Kuma, if a token is configured."""
+    """Push the result to Uptime Kuma, if a token is configured, and record it in syslog.
+
+    The syslog line is not a duplicate of the push. Kuma keeps CURRENT state only, so a DOWN
+    that has since recovered leaves no trace there — `probe.py alerts` and the Alert History
+    board reconstruct episodes for host-cron pushers by matching `status=down` in syslog, and
+    without this line this check was invisible to both (2026-08-22 review M3).
+
+    Emitted BEFORE the push and outside the token guard, so it still lands when the push fails
+    or no token is configured — the cases where syslog is the only record there will ever be.
+    """
+    syslog.openlog(ident="live-drift-check", facility=syslog.LOG_DAEMON)
+    try:
+        syslog.syslog(
+            syslog.LOG_WARNING if status == "down" else syslog.LOG_INFO,
+            f"status={status} {message[:900]}",
+        )
+    finally:
+        syslog.closelog()
+
     token = os.environ.get("PUSH_TOKEN", "")
     host = os.environ.get("KUMA_HOST", "")
     if not token or not host:

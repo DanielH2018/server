@@ -2,7 +2,7 @@
   "annotations": {
     "list": []
   },
-  "description": "Historical view of which monitor-bridge checks alerted (pushed DOWN to Uptime-Kuma) and when, reconstructed from the sidecar's log stream in Loki (31-day retention). Kuma itself keeps only current state; this is the history. CLI equivalent: `uv run python scripts/probe.py alerts`.",
+  "description": "Historical view of which checks alerted (pushed DOWN to Uptime-Kuma) and when, reconstructed from Loki (31-day retention). Kuma itself keeps only current state; this is the history. TWO alert paths are read, because monitor-bridge polls no Kuma state and so logs nothing about the crons that push Kuma themselves: query A is monitor-bridge's container log, query B is `{job=\"syslog\"} |= \"status=down\"` from the host crons (longhorn-backup-health, manifest-prune-check, claude-otel-health). NOT covered: secret-rotation-audit and live-drift-check emit no `status=` token, so they are invisible to B until their scripts log one. CLI equivalent: `uv run python scripts/probe.py alerts`.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -74,10 +74,22 @@
           "legendFormat": "{{name}}",
           "queryType": "instant",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "sum by (name) (count_over_time({job=\"syslog\"} |= \"status=down\" |~ \"$check\" | regexp `^\\S+ \\S+ (?P<name>[\\w.-]+):` [$__range]))",
+          "legendFormat": "{{name}}",
+          "queryType": "instant",
+          "refId": "B"
         }
       ],
       "title": "DOWN cycles by check (range total)",
-      "description": "How many cycles each monitor-bridge check spent DOWN over the dashboard's time range. A cycle is one ~5-min evaluation, so this is firing *duration*, not distinct incidents.",
+      "description": "How many cycles each check spent DOWN over the dashboard's time range. A cycle is one evaluation (~5 min for monitor-bridge, the cron's own period for a host cron), so this is firing *duration*, not distinct incidents. Two queries because two alert paths exist: A reads monitor-bridge's container log, B reads the host crons that push Kuma directly and log through `logger` — monitor-bridge polls no Kuma state, so its log carries nothing about them.",
       "type": "bargauge"
     },
     {
@@ -170,10 +182,22 @@
           "legendFormat": "{{name}}",
           "queryType": "range",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "sum by (name) (count_over_time({job=\"syslog\"} |= \"status=down\" |~ \"$check\" | regexp `^\\S+ \\S+ (?P<name>[\\w.-]+):` [$__auto]))",
+          "legendFormat": "{{name}}",
+          "queryType": "range",
+          "refId": "B"
         }
       ],
       "title": "DOWN cycles over time, by check",
-      "description": "Stacked per-check DOWN cycles over time \u2014 shows when alerts fired and which checks clustered together (a shared spike usually means one root cause, e.g. a host reboot).",
+      "description": "Stacked per-check DOWN cycles over time \u2014 shows when alerts fired and which checks clustered together (a shared spike usually means one root cause, e.g. a host reboot). A covers monitor-bridge's checks, B the host crons that push Kuma directly.",
       "type": "timeseries"
     },
     {
@@ -211,10 +235,22 @@
           "legendFormat": "",
           "queryType": "range",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "{job=\"syslog\"} |= \"status=down\" |~ \"$check\"",
+          "legendFormat": "",
+          "queryType": "range",
+          "refId": "B"
         }
       ],
       "title": "DOWN alert log (raw)",
-      "description": "Every monitor-bridge DOWN log line. Each check re-pushes every ~5 min while firing, so a single incident repeats many lines. Use the `check` filter to narrow to one.",
+      "description": "Every DOWN log line from both alert paths: monitor-bridge's own checks (A) and the host crons that push Kuma directly (B). Each check re-pushes every evaluation while firing, so a single incident repeats many lines. Use the `check` filter to narrow to one.",
       "type": "logs"
     }
   ],
