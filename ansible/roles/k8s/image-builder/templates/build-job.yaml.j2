@@ -69,7 +69,8 @@ spec:
             # resulting image that min exports. max would cost registry space for nothing.
             #
             # image-manifest+oci-mediatypes are what make the cache storable in a standard
-            # distribution registry (ours is registry:3.0.0) rather than needing a
+            # distribution registry (ours is the `registry` image, pinned in
+            # roles/k8s/registry/defaults/main.yml) rather than needing a
             # buildkit-aware one.
             #
             # The `:buildcache` tag is a real tag, so registry GC — which only sweeps
