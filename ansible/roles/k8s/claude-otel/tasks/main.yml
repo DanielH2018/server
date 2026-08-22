@@ -136,7 +136,14 @@
       Either the workload sets a different pod label than `app: {{ item.item.name }}`,
       or it has no pods at all.
     quiet: true
-  loop: "{{ claude_otel_restarts_before.results | default([]) }}"
+  # The producer above is gated on `manifests_render is changed or manifests_secret_render is
+  # changed`. A SKIPPED task still sets the variable it registers to — to a result carrying
+  # `skipped: true` and NO `stdout` key — so on any deploy that changes something other than
+  # the manifests (a dashboards-only change is the common one) every entry here is a skip
+  # result and `item.stdout` raises "object of type 'dict' has no attribute 'stdout'". Filter
+  # to what the producer actually ran rather than mirroring its `when:`, so a partial skip
+  # still asserts over the entries that did produce output.
+  loop: "{{ claude_otel_restarts_before.results | default([]) | rejectattr('skipped', 'defined') | list }}"
   loop_control:
     label: "{{ item.item.name }}"
   when: not ansible_check_mode
@@ -158,7 +165,10 @@
               'kind': item.item.kind,
               'restarts_before': item.stdout,
             }] }}
-  loop: "{{ claude_otel_restarts_before.results | default([]) }}"
+  # Same skipped-register filter as the assert above, and for the same reason: `item.stdout`
+  # does not exist on a skip result. Without it this task fails identically once the assert
+  # stops failing first.
+  loop: "{{ claude_otel_restarts_before.results | default([]) | rejectattr('skipped', 'defined') | list }}"
   loop_control:
     label: "{{ item.item.name }}"
   when: not ansible_check_mode
