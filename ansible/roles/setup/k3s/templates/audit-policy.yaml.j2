@@ -9,10 +9,18 @@
 # that" — at a fraction of the volume of `Request`/`RequestResponse`, which would write every
 # manifest this cluster applies into a file on the control-plane disk.
 #
-# Secrets are the deliberate exception in the other direction: they are logged at `Metadata`
-# too, NOT at `RequestResponse`. Logging Secret bodies would write every credential in the
-# cluster to a plaintext file on disk, which is the exact exposure --secrets-encryption is
-# armed to close. An audit log that leaks what encryption protects is worse than no audit log.
+# Secrets are the deliberate exception, and in both directions. Secret WRITES reach the
+# `Metadata` catch-all at the bottom, like every other write. Secret READS have their own
+# `Metadata` rule ahead of the blanket read drop, because --secrets-encryption defends the
+# etcd snapshot and does nothing against an API-level read. That rule is the only record
+# that anyone read a credential, including a read RBAC refused. The control plane's own
+# machine identities are dropped just ahead of it, so kubelet and apiserver Secret reads
+# stay out of the file. How much volume that rule adds is unmeasured: this Prometheus does
+# not scrape apiserver_request_total, so nobody can report the event rate.
+#
+# No level here ever records a Secret body. Logging bodies would write every credential in
+# the cluster to a plaintext file on disk, which is the exact exposure --secrets-encryption
+# is armed to close. An audit log that leaks what encryption protects is worse than none.
 apiVersion: audit.k8s.io/v1
 kind: Policy
 
@@ -27,15 +35,49 @@ rules:
   # Ordering matters — the FIRST matching rule wins, so every `level: None` rule has to
   # precede the catch-all at the bottom or the catch-all logs everything anyway.
 
+  # Secret reads by the control plane's own machine identities. The apiserver and kube-proxy
+  # are dropped unconditionally at the `system:kube-proxy` rule below, but the Secret-read
+  # rule that follows this one sits above that drop and would start logging them. The
+  # `system:nodes` rule below is scoped to leases, so it never dropped a kubelet Secret read
+  # at all — every kubelet mounting a Secret would land in the file without this.
+  #
+  # Both rules name the read verbs. A kubelet Secret WRITE is refused by the Node authorizer,
+  # so an attempt is anomalous and must keep reaching the catch-all at the bottom.
+  - level: None
+    users: ["system:kube-proxy", "system:apiserver"]
+    verbs: ["get", "list", "watch"]
+    resources:
+      - group: ""
+        resources: ["secrets"]
+  - level: None
+    userGroups: ["system:nodes"]
+    verbs: ["get", "list", "watch"]
+    resources:
+      - group: ""
+        resources: ["secrets"]
+
+  # Secret reads by everyone else — the one access --secrets-encryption cannot defend. It
+  # encrypts what etcd stores, so an API-level read returns the value regardless, and this
+  # rule is the only thing that records the read happened. It has to precede the blanket
+  # read drop below, which would otherwise swallow it, and it deliberately precedes the
+  # readonly ServiceAccount's own drop, because that SA's refused Secret reads are exactly
+  # the signal wanted. `Metadata` names the reader, the Secret and the time, never the value.
+  - level: Metadata
+    verbs: ["get", "list", "watch"]
+    resources:
+      - group: ""
+        resources: ["secrets"]
+
   # Reads. This cluster's controllers watch continuously, and a `get`/`list`/`watch` cannot
   # change state, so logging them buys nothing and would dominate the file.
   - level: None
     verbs: ["get", "list", "watch"]
 
   # The readonly ServiceAccount Claude sessions authenticate as. It holds `get list watch`
-  # and nothing else (k3s_readonly_sa_name), so every request it makes is already covered by
-  # the read rule above; this is belt-and-braces against the SA ever being widened by
-  # accident, which would otherwise flood the log rather than surface.
+  # and nothing else (k3s_readonly_sa_name), so every request it makes except a Secret read
+  # is already covered by the read rule above; this is belt-and-braces against the SA ever
+  # being widened by accident, which would otherwise flood the log rather than surface. Keep
+  # it below the Secret-read rule: this SA's Secret attempts must stay logged, refused or not.
   - level: None
     users: ["system:serviceaccount:{{ k3s_readonly_sa_namespace }}:{{ k3s_readonly_sa_name }}"]
     verbs: ["get", "list", "watch"]

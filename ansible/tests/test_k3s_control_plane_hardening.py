@@ -254,6 +254,72 @@ def test_secret_bodies_are_never_written_to_the_audit_log():
         )
 
 
+def _named_resources(rule: dict) -> set[str]:
+    return {
+        r for entry in rule.get("resources") or [] for r in entry.get("resources") or []
+    }
+
+
+# The identities whose Secret reads the policy may drop ahead of the Metadata rule. Both
+# entries are machine identities the policy already drops wholesale further down; widening
+# this set is how the finding comes back, so it is pinned here rather than derived.
+SECRET_READ_DROP_USERS = {"system:apiserver", "system:kube-proxy"}
+SECRET_READ_DROP_GROUPS = {"system:nodes"}
+READ_VERBS = {"get", "list", "watch"}
+
+
+def test_secret_reads_are_logged_at_metadata():
+    """Encryption defends the etcd snapshot; only this rule records an API-level read.
+
+    Position is the whole test. Until 2026-08-22 the policy's first rule dropped every
+    `get`/`list`/`watch` unconditionally, so a Metadata rule naming secrets was present in
+    spirit and matched nothing — a `kubectl get secrets` the readonly SA was refused left no
+    trace at all. Asserting only that some rule logs secrets passes with that bug live.
+    """
+    rules = _audit_policy()["rules"]
+    at = next(
+        (
+            i
+            for i, rule in enumerate(rules)
+            if rule.get("level") == "Metadata" and "secrets" in _named_resources(rule)
+        ),
+        -1,
+    )
+    assert at >= 0, (
+        "No audit rule logs Secret access at Metadata. --secrets-encryption protects the "
+        "etcd snapshot and nothing else, so without this rule an API-level Secret read — "
+        "the access the encryption exists to guard against — is never recorded."
+    )
+    verbs = set(rules[at].get("verbs") or [])
+    assert not verbs or READ_VERBS <= verbs, (
+        f"The Metadata Secret rule covers verbs {sorted(verbs)}. It must cover get, list "
+        "and watch, or omit `verbs` entirely — a read it does not name is not logged."
+    )
+
+    for i, rule in enumerate(rules[:at]):
+        if rule.get("level") not in ("None", None):
+            continue
+        if rule.get("nonResourceURLs"):
+            continue
+        rule_verbs = set(rule.get("verbs") or [])
+        if rule_verbs and not rule_verbs & READ_VERBS:
+            continue
+        if rule.get("resources") and "secrets" not in _named_resources(rule):
+            continue
+        users = set(rule.get("users") or [])
+        groups = set(rule.get("userGroups") or [])
+        assert (
+            (users or groups)
+            and users <= SECRET_READ_DROP_USERS
+            and groups <= SECRET_READ_DROP_GROUPS
+        ), (
+            f"Audit rule {i} ({rule}) drops Secret reads ahead of the Metadata rule at "
+            f"{at}, and it is not scoped to the machine identities the policy drops "
+            "wholesale anyway. The first matching rule wins, so this rule swallows the "
+            "human and ServiceAccount Secret reads the Metadata rule exists to record."
+        )
+
+
 def test_promtail_tails_the_audit_log():
     """A log nobody can read is not a control — and the tail has two halves."""
     loki = ANSIBLE / "roles" / "k8s" / "loki-homelab" / "templates"
