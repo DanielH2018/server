@@ -31,8 +31,10 @@
   #
   # `rollout status`, not `wait --for=condition=Available`: this Deployment is single-replica,
   # so the OLD pod satisfies Available and the wait returns instantly. Returns immediately when
-  # nothing rolled, so the no-change deploy pays nothing. 300s covers the worst measured roll
-  # (~3.5 min, cold metabase image pull; 73s warm).
+  # nothing rolled, so the no-change deploy pays nothing. 300s was sized against the worst
+  # measured roll while the Metabase dashboard shared this pod (~3.5 min on a cold metabase
+  # image pull; 73s warm). Metabase was removed 2026-08-22, so the real worst case is now the
+  # engine's own pull — the headroom is kept rather than retuned on one observation.
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} rollout status deploy/crowdsec --timeout=300s

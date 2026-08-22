@@ -148,7 +148,9 @@ spec:
       # so a LAPI gap on every roll is EXPECTED, not exceptional: 2026-08-16 a routine
       # crowdsec roll took the whole fleet 403 for 2 minutes.
       #
-      # 5 ≈ 6 min of tolerance, which covers a roll whose metabase image pull is cold.
+      # 5 ≈ 6 min of tolerance. Sized when a cold metabase image pull was the slowest part of
+      # a crowdsec roll; metabase left the pod 2026-08-22, so this is now headroom rather than
+      # a fitted bound. Kept — the cost of spare tolerance is bounded by the paragraph below.
       # Safe because the cache lookup happens BEFORE this health gate: an IP already in the
       # decision cache is still blocked, and AppSec below still inspects inline. Only a
       # NEWLY added ban is delayed by up to the tolerance window. Not -1 (never flip) — a

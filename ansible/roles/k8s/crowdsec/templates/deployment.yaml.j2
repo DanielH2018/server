@@ -53,50 +53,6 @@ spec:
             requests:
               cpu: 10m
               memory: 16Mi
-        # Seeds Metabase's pre-configured CrowdSec dashboards — the same wget+unzip the
-        # Docker image BAKED at build time (which is also the proof the metabase image
-        # carries wget and unzip). Runs every pod start into an emptyDir; see the defaults
-        # for why ephemerality is deliberate.
-        #
-        # EXITS 0 EVEN WHEN THE FETCH FAILS, deliberately. This is an initContainer, so it
-        # blocks EVERY app container in the pod — including the crowdsec engine. A non-zero
-        # exit therefore meant an S3 bucket could stop the edge WAF's LAPI from starting at
-        # all: the pod backs off in Init:Error, publishes no Service endpoints, and Traefik's
-        # bouncer loses the LAPI it fronts. A dashboard's seed data must not be able to do
-        # that. Losing the fetch now costs empty dashboards until the next restart; the
-        # engine comes up regardless.
-        #
-        # The `||` covers the whole chain, not just the wget: a partial download must leave
-        # /data EMPTY rather than half-unzipped, because metabase self-initialises a fresh
-        # H2 db when MB_DB_FILE is absent but has no such recovery from a corrupt one.
-        # Bounded retries so a slow S3 delays the engine by seconds, not minutes.
-        - name: metabase-seed
-          image: {{ crowdsec_k8s_metabase_image }}
-          command:
-            - /bin/sh
-            - -c
-            - >-
-              { wget -q -T 20 -t 3 {{ crowdsec_k8s_metabase_seed_url }}
-              -O /tmp/metabase_sqlite.zip &&
-              unzip -q -o /tmp/metabase_sqlite.zip -d /data/ ; } ||
-              echo "metabase seed unavailable — starting with empty dashboards"
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-          volumeMounts:
-            - name: metabase-data
-              mountPath: /data
-            - name: tmp
-              mountPath: /tmp
-          resources:
-            limits:
-              cpu: 250m
-              memory: 512Mi
-            requests:
-              cpu: 10m
-              memory: 16Mi
       automountServiceAccountToken: false
       priorityClassName: homelab-critical
       containers:
@@ -161,64 +117,6 @@ spec:
             requests:
               cpu: "{{ crowdsec_k8s_cpu_request }}"
               memory: {{ crowdsec_k8s_mem_request }}
-        # Metabase dashboard (B2c) — reads the engine's decision DB off the shared PVC,
-        # exactly as the Docker pair shared the crowdsec-db volume. Root start is the
-        # image's own flow: run_metabase.sh chowns its H2 dir then su's to the metabase
-        # user, hence CHOWN/SETUID/SETGID. -Xmx pinned or Metabase sizes the heap to 25%
-        # of the cgroup limit and OOM-crash-loops under it.
-        - name: metabase
-          image: {{ crowdsec_k8s_metabase_image }}
-          ports:
-            - name: dashboard
-              containerPort: {{ crowdsec_k8s_dashboard_port }}
-          env:
-            - name: TZ
-              value: "{{ tz }}"
-            - name: MB_DB_FILE
-              value: /data/metabase.db
-            - name: JAVA_TOOL_OPTIONS
-              value: "-Xmx1g"
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-              add:
-                - CHOWN
-                - SETUID
-                - SETGID
-          volumeMounts:
-            - name: metabase-data
-              mountPath: /data
-            - name: db
-              mountPath: /metabase-data
-          # Slow-booting JVM + H2 init — mirror the Docker 90s start_period as a
-          # startupProbe. NOTE: this does NOT isolate the dashboard from LAPI/AppSec, as
-          # was once assumed here. Pod Ready is the AND of all containers, and a container
-          # with no readinessProbe counts Ready only once its startupProbe passes — so a
-          # slow metabase withholds the crowdsec Service endpoints that front LAPI/AppSec.
-          # Observed 2026-08-16: LAPI was serving while the pod sat 1/2 with no endpoints.
-          # Isolating it properly means a separate Deployment, which is not free — metabase
-          # mounts the same RWO `db` PVC as the engine. The edge tolerates the gap instead,
-          # via updateMaxFailure in the bouncer middleware (k8s/traefik dynamic.yaml.j2).
-          startupProbe:
-            httpGet:
-              path: /
-              port: dashboard
-            periodSeconds: 10
-            failureThreshold: 30
-          livenessProbe:
-            httpGet:
-              path: /
-              port: dashboard
-            periodSeconds: 60
-          resources:
-            limits:
-              cpu: "{{ crowdsec_k8s_metabase_cpu_limit }}"
-              memory: {{ crowdsec_k8s_metabase_mem_limit }}
-            requests:
-              cpu: "{{ crowdsec_k8s_metabase_cpu_request }}"
-              memory: {{ crowdsec_k8s_metabase_mem_request }}
       volumes:
         - name: seed
           secret:
@@ -228,7 +126,5 @@ spec:
         - name: db
           persistentVolumeClaim:
             claimName: {{ crowdsec_k8s_claim }}
-        - name: metabase-data
-          emptyDir: {}
         - name: tmp
           emptyDir: {}
