@@ -48,6 +48,18 @@ spec:
           env:
             - name: MEILI_NO_ANALYTICS
               value: "true"
+            # Migrate the index in place when the image tag moves, instead of refusing to start.
+            # Meilisearch reads this flag ONLY inside the version-mismatch branch (lib.rs's
+            # `if db_version != bin_version { if opt.upgrade_db { ... } else { VersionMismatch } }`),
+            # so it is inert on an ordinary restart and does work only on the one that follows a
+            # bump — which is what makes it a standing setting rather than a one-shot.
+            # Named MEILI_EXPERIMENTAL_DUMPLESS_UPGRADE before the rename; v1.53's binary wants
+            # this spelling, so a rollback to a pre-rename image would need it renamed back.
+            # Upstream warns the migration is not atomic and recommends a snapshot first. This
+            # index is deliberately longhorn-nobackup derived state, so the accepted recovery is
+            # karakeep's "Reindex All Bookmarks" — the same one a refused start would have forced.
+            - name: MEILI_UPGRADE_DB
+              value: "true"
             - name: MEILI_MASTER_KEY
               valueFrom:
                 secretKeyRef:
