@@ -290,10 +290,19 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
   session declares, so check it before editing a file several sessions are near (`CLAUDE.md`,
   `group_vars/`, a shared role) rather than assuming you're alone.
 - **Deploys serialize on a lock** — use `./scripts/deploy.sh`, see *Common Commands*.
+- **`ExitWorktree` refuses to remove a squash-merged or rebase-merged worktree**, reporting
+  "N commits on <branch>" — both land the content on master under new SHAs, so the tool
+  cannot see that the work survived. Do **not** pass `discard_changes` to argue with it: the
+  branch reads identically to one holding real unlanded work. Verify by content instead —
+  `git merge-tree --write-tree origin/master <branch>` equals `git rev-parse
+  origin/master^{tree}` when the branch has nothing left to give — then leave the tree for
+  the pruner.
 - **`uv run python scripts/prune_worktrees.py`** reports which worktrees are finished with;
-  `--prune` removes the merged, clean, unlocked ones. A lock held by a *running* session is
-  never overridden; a lock whose process is gone is ignored, because Claude Code doesn't
-  release the lock when a session ends.
+  `--prune` removes the merged, clean, unlocked ones. It applies the same content check, so
+  it collects what `ExitWorktree` refused. A lock held by a *running* session is never
+  overridden; a lock whose process is gone is ignored, because Claude Code doesn't release
+  the lock when a session ends — which is why a worktree this session still holds stays
+  `keep` until the session exits.
 
 ## Secrets Management
 - Secrets live in `ansible/vars/secrets.yml`, encrypted with SOPS + age
