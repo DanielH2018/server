@@ -52,9 +52,9 @@ sonarr_k8s_mem_limit: 1024Mi
 sonarr_k8s_cpu_request: "100m"
 sonarr_k8s_mem_request: 128Mi
 
-# Kept after the isolation-probe harness was retired (2026-08-17): qbittorrent's verify.yml
-# consumes this var for its own probe pod, with its own alpine:3.22 fallback if this role's
-# defaults are not loaded.
+# Kept after the isolation-probe harness was retired (2026-08-17). qbittorrent's verify.yml read
+# this var for its own probe pod until 2026-08-22 and now carries its own; nothing outside this
+# role consumes it.
 sonarr_k8s_probe_image: alpine:3.24
 
 # Logging, bound through Sonarr's own config system rather than config.xml — the *arr apps read
