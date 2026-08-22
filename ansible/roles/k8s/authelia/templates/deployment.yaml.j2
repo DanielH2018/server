@@ -115,15 +115,15 @@ spec:
           volumeMounts:
             # Config and the users database come from the Secret, mounted OUTSIDE /config so
             # the PVC can own /config for the database Authelia writes.
-            - name: secrets
+            - name: authelia-secrets
               mountPath: /secrets
               readOnly: true
-            - name: config
+            - name: authelia-config
               mountPath: /config
             # Kept even though the root filesystem is writable again: as uid 1000 the process
             # can write nowhere else outside its mounts, so scratch space still has to come
             # from somewhere.
-            - name: tmp
+            - name: authelia-tmp
               mountPath: /tmp
             # Shared with the crowdsec-agent sidecar below.
             - name: authelia-logs
@@ -205,16 +205,16 @@ spec:
               cpu: "{{ authelia_k8s_agent_cpu_request }}"
               memory: {{ authelia_k8s_agent_mem_request }}
       volumes:
-        - name: secrets
+        - name: authelia-secrets
           secret:
             secretName: authelia-config
             # 0440, not 0400: secret files are owned root:fsGroup, so a non-root container
             # reads them via the group bit. 0400 leaves the group nothing.
             defaultMode: 0440
-        - name: config
+        - name: authelia-config
           persistentVolumeClaim:
             claimName: authelia-config
-        - name: tmp
+        - name: authelia-tmp
           emptyDir: {}
         - name: authelia-logs
           emptyDir:

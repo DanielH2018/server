@@ -99,10 +99,10 @@ spec:
             # a jail bug could surface is SOPS ciphertext. hostPath rather than a
             # git-clone sidecar for the same reason image-builder embeds its context:
             # this node already holds the checkout Ansible deploys from.
-            - name: ansible-src
+            - name: homelab-mcp-ansible-src
               mountPath: /srv/ansible-src
               readOnly: true
-            - name: tmp
+            - name: homelab-mcp-tmp
               mountPath: /tmp
           readinessProbe:
             tcpSocket:
@@ -122,9 +122,9 @@ spec:
               cpu: "{{ homelab_mcp_k8s_cpu_request }}"
               memory: {{ homelab_mcp_k8s_mem_request }}
       volumes:
-        - name: ansible-src
+        - name: homelab-mcp-ansible-src
           hostPath:
             path: /home/{{ sys_user }}/server/ansible
             type: Directory
-        - name: tmp
+        - name: homelab-mcp-tmp
           emptyDir: {}

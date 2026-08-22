@@ -54,10 +54,10 @@ spec:
               volumeMounts:
                 # readOnly because configarr never writes here — the live Docker config dir has
                 # held exactly one file, config.yml, with Ansible's own mtime, since 2026-07-17.
-                - name: config
+                - name: configarr-config
                   mountPath: /app/config
                   readOnly: true
-                - name: repos
+                - name: configarr-repos
                   mountPath: /app/repos
               resources:
                 limits:
@@ -67,11 +67,11 @@ spec:
                   cpu: "{{ configarr_k8s_cpu_request }}"
                   memory: {{ configarr_k8s_mem_request }}
           volumes:
-            - name: config
+            - name: configarr-config
               secret:
                 secretName: configarr-config
             # The TRaSH-guide and recyclarr-template clones. An emptyDir, not a PVC: it is a cache
             # of two public git repos, re-cloned in seconds, and a Longhorn volume would mean an
             # attach/detach on every nightly pod for no durability anyone needs.
-            - name: repos
+            - name: configarr-repos
               emptyDir: {}

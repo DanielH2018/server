@@ -63,10 +63,10 @@ spec:
             - name: TZ
               value: "{{ tz }}"
           volumeMounts:
-            - name: config
+            - name: freshrss-config
               mountPath: /config
             # FreshRSS favicon/content cache — kopia excluded it; re-fetched on demand.
-            - name: app-cache
+            - name: freshrss-app-cache
               mountPath: /config/www/freshrss/data/cache
           readinessProbe:
             httpGet:
@@ -88,8 +88,8 @@ spec:
               cpu: "{{ freshrss_k8s_cpu_request }}"
               memory: {{ freshrss_k8s_mem_request }}
       volumes:
-        - name: config
+        - name: freshrss-config
           persistentVolumeClaim:
             claimName: {{ freshrss_k8s_claim }}
-        - name: app-cache
+        - name: freshrss-app-cache
           emptyDir: {}

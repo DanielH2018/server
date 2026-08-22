@@ -74,12 +74,12 @@ spec:
             - name: nodeID
               value: "{{ inventory_hostname }}"
           volumeMounts:
-            - name: server
+            - name: tdarr-server
               mountPath: /app/server
             # Tdarr's internal DB backup zips — backups-of-a-backup (kopia excluded them); the live DB2/ tree stays on the PVC.
-            - name: db-backups
+            - name: tdarr-db-backups
               mountPath: /app/server/Tdarr/Backups
-            - name: configs
+            - name: tdarr-configs
               mountPath: /app/configs
             # THE PATH CONTRACT (D4), and the one mount here that is read-write.
             - name: media
@@ -89,9 +89,9 @@ spec:
             # intermediate video files and is rewritten constantly; the logs are capped at
             # maxLogSizeMB and rotate. Both are regenerable, and replicating either would spend
             # the cluster's storage on data nothing would ever restore.
-            - name: transcode-cache
+            - name: tdarr-transcode-cache
               mountPath: /temp
-            - name: logs
+            - name: tdarr-logs
               mountPath: /app/logs
           readinessProbe:
             httpGet:
@@ -119,16 +119,16 @@ spec:
               # Extended resources must request exactly what they limit.
               devic.es/dri: 1
       volumes:
-        - name: server
+        - name: tdarr-server
           persistentVolumeClaim:
             claimName: {{ tdarr_k8s_server_claim }}
-        - name: configs
+        - name: tdarr-configs
           persistentVolumeClaim:
             claimName: {{ tdarr_k8s_configs_claim }}
         - name: media
           persistentVolumeClaim:
             claimName: {{ tdarr_k8s_media_claim }}
-        - name: db-backups
+        - name: tdarr-db-backups
           emptyDir:
             sizeLimit: 2Gi
         # sizeLimit IS THE POINT, not tidiness. An unbounded emptyDir is backed by the node's
@@ -138,9 +138,9 @@ spec:
         # with it. With a limit the kubelet evicts this pod instead, which is a recoverable
         # failure affecting one service. 100Gi against 815G free and a 6.1G largest library file
         # (measured 2026-08-08) is ample headroom for concurrent jobs while still bounding it.
-        - name: transcode-cache
+        - name: tdarr-transcode-cache
           emptyDir:
             sizeLimit: 100Gi
-        - name: logs
+        - name: tdarr-logs
           emptyDir:
             sizeLimit: 2Gi

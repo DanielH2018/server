@@ -89,9 +89,9 @@ spec:
                 - DAC_OVERRIDE
                 - FOWNER
           volumeMounts:
-            - name: config
+            - name: code-server-config
               mountPath: /config
-            - name: workspace
+            - name: code-server-workspace
               mountPath: /keep
           resources:
             limits:
@@ -132,18 +132,18 @@ spec:
             - secretRef:
                 name: code-server-env
           volumeMounts:
-            - name: config
+            - name: code-server-config
               mountPath: /config
             # The backed-up paths, carved out of /config by subPath. Order does not matter —
             # kubelet mounts parents before children — but each of these must exist in the
             # claim, which is what the initContainer guarantees.
-            - name: workspace
+            - name: code-server-workspace
               mountPath: /config/workspace
               subPath: workspace
-            - name: workspace
+            - name: code-server-workspace
               mountPath: /config/.ssh
               subPath: ssh
-            - name: workspace
+            - name: code-server-workspace
               mountPath: /config/.config
               subPath: config
           # First boot runs 10-extensions.sh (installs the baked vsix set into /config)
@@ -172,9 +172,9 @@ spec:
               cpu: "{{ code_server_k8s_cpu_request }}"
               memory: {{ code_server_k8s_mem_request }}
       volumes:
-        - name: config
+        - name: code-server-config
           persistentVolumeClaim:
             claimName: {{ code_server_k8s_claim }}
-        - name: workspace
+        - name: code-server-workspace
           persistentVolumeClaim:
             claimName: {{ code_server_k8s_workspace_claim }}

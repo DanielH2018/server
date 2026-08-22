@@ -109,14 +109,14 @@ spec:
             runAsUser: 1000
             runAsGroup: 1000
           volumeMounts:
-            - name: context
+            - name: image-builder-context
               mountPath: /workspace
               readOnly: true
             # buildkitd's state. Still an emptyDir, and still not a PVC — but for a different
             # reason than before: cross-build caching now lives in the registry (see
             # --export-cache above), so this only has to survive one build. A Longhorn volume
             # would duplicate that at higher cost, and would pin builds to one node.
-            - name: buildkitd
+            - name: image-builder-buildkitd
               mountPath: /home/user/.local/share/buildkit
           resources:
             limits:
@@ -126,8 +126,8 @@ spec:
               cpu: "200m"
               memory: 256Mi
       volumes:
-        - name: context
+        - name: image-builder-context
           configMap:
             name: build-context-{{ image_builder_name }}
-        - name: buildkitd
+        - name: image-builder-buildkitd
           emptyDir: {}

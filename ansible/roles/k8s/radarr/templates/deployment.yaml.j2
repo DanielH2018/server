@@ -60,7 +60,7 @@ spec:
             - name: DOCKER_MODS
               value: "{{ radarr_k8s_docker_mods }}"
           volumeMounts:
-            - name: config
+            - name: radarr-config
               mountPath: /config
             # THE PATH CONTRACT (D4). radarr.db stores absolute in-container paths. Mount this anywhere else and the
             # library still loads, the UI still works, and every import silently fails.
@@ -97,7 +97,7 @@ spec:
               cpu: "{{ radarr_k8s_cpu_request }}"
               memory: {{ radarr_k8s_mem_request }}
       volumes:
-        - name: config
+        - name: radarr-config
           persistentVolumeClaim:
             claimName: {{ radarr_k8s_claim }}
         - name: media

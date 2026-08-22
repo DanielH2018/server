@@ -166,9 +166,9 @@ spec:
             - name: http
               containerPort: 3000
           volumeMounts:
-            - name: provisioning-datasources
+            - name: grafana-provisioning-datasources
               mountPath: /etc/grafana/provisioning/datasources
-            - name: provisioning-dashboards
+            - name: grafana-provisioning-dashboards
               mountPath: /etc/grafana/provisioning/dashboards
 {% for folder in claude_otel_dashboard_folders %}
             - name: dashboards-{{ folder | lower }}
@@ -194,13 +194,13 @@ spec:
         # so it is projected twice with a subPath-style item selector rather than mounted
         # whole — a whole-ConfigMap mount would put datasources.yaml into the dashboards
         # provisioning directory, where Grafana tries to parse it as a dashboard provider.
-        - name: provisioning-datasources
+        - name: grafana-provisioning-datasources
           configMap:
             name: grafana-provisioning
             items:
               - key: datasources.yaml
                 path: datasources.yaml
-        - name: provisioning-dashboards
+        - name: grafana-provisioning-dashboards
           configMap:
             name: grafana-provisioning
             items:

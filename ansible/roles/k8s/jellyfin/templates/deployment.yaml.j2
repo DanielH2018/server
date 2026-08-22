@@ -85,7 +85,7 @@ spec:
             runAsUser: {{ puid }}
             runAsGroup: {{ pgid }}
           volumeMounts:
-            - name: config
+            - name: jellyfin-config
               mountPath: /config
           resources:
             limits:
@@ -124,7 +124,7 @@ spec:
             - name: JELLYFIN_PublishedServerUrl
               value: "{{ jellyfin_k8s_published_url }}"
           volumeMounts:
-            - name: config
+            - name: jellyfin-config
               mountPath: /config
             # BOTH media mounts are read-only, carried over from the Compose template (2026-07-03):
             # jellyfin only READS the library. SaveLocalMetadata is off in every library, artwork
@@ -173,7 +173,7 @@ spec:
             # backed up. The durable library — /config/data, /config/*.xml — stays on the PVC.
             #
             # Losing this on a pod move is intended and costs a rebuild, nothing more.
-            - name: cache
+            - name: jellyfin-cache
               mountPath: /config/cache
           readinessProbe:
             httpGet:
@@ -201,11 +201,11 @@ spec:
               # mismatch, and omitting the request entirely defaults it to the limit anyway.
               {{ jellyfin_k8s_dri_resource }}: 1
       volumes:
-        - name: config
+        - name: jellyfin-config
           persistentVolumeClaim:
             claimName: {{ jellyfin_k8s_claim }}
         - name: media
           persistentVolumeClaim:
             claimName: {{ jellyfin_k8s_media_claim }}
-        - name: cache
+        - name: jellyfin-cache
           emptyDir: {}

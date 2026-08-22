@@ -94,15 +94,15 @@ spec:
                 # variant. Same cap the Docker promtail carries for the same files.
                 - DAC_READ_SEARCH
           volumeMounts:
-            - name: config
+            - name: promtail-config
               mountPath: /etc/promtail
-            - name: varlog
+            - name: promtail-varlog
               mountPath: /var/log
               readOnly: true
             # The tailing cursor — losing it re-reads every log from the start, which is
             # what the Loki ingest limits guard against (the Docker promtail_positions
             # volume's whole reason to exist).
-            - name: positions
+            - name: promtail-positions
               mountPath: /positions
 {% if k3s_audit_log_enabled | default(false) %}
             # The apiserver audit log, mounted at its real host path so the promtail config's
@@ -120,16 +120,16 @@ spec:
               cpu: "50m"
               memory: 64Mi
       volumes:
-        - name: config
+        - name: promtail-config
           configMap:
             name: loki-homelab-config
             items:
               - key: promtail.yaml
                 path: promtail.yaml
-        - name: varlog
+        - name: promtail-varlog
           hostPath:
             path: /var/log
-        - name: positions
+        - name: promtail-positions
           hostPath:
             path: /var/lib/promtail-positions
             type: DirectoryOrCreate

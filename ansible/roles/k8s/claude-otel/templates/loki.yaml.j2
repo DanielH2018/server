@@ -106,9 +106,9 @@ spec:
               hostPort: 3100
               hostIP: {{ claude_otel_query_host_ip }}
           volumeMounts:
-            - name: config
+            - name: loki-config
               mountPath: /etc/loki
-            - name: data
+            - name: loki-data
               mountPath: /loki
           readinessProbe:
             httpGet:
@@ -124,10 +124,10 @@ spec:
               cpu: "1"
               memory: 1Gi
       volumes:
-        - name: config
+        - name: loki-config
           configMap:
             name: loki-config
-        - name: data
+        - name: loki-data
           persistentVolumeClaim:
             claimName: loki-data
 ---

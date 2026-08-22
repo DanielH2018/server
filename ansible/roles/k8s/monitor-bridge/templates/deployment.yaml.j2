@@ -64,15 +64,15 @@ spec:
             periodSeconds: 60
             failureThreshold: 3
           volumeMounts:
-            - name: script
+            - name: monitor-bridge-script
               mountPath: /app
               readOnly: true
-            - name: credentials
+            - name: monitor-bridge-credentials
               mountPath: /etc/bridge-credentials
               readOnly: true
-            - name: tmp
+            - name: monitor-bridge-tmp
               mountPath: /tmp
-            - name: gitops-state
+            - name: monitor-bridge-gitops-state
               mountPath: /gitops-state
               readOnly: true
           resources:
@@ -83,10 +83,10 @@ spec:
               cpu: 200m
               memory: 96Mi
       volumes:
-        - name: script
+        - name: monitor-bridge-script
           configMap:
             name: monitor-bridge-script
-        - name: credentials
+        - name: monitor-bridge-credentials
           # Deliberately NOT monitor-bridge-env: that Secret is consumed by envFrom, which
           # injects every key it holds as an env var. See credentials-secret.yaml.j2.
           secret:
@@ -99,13 +99,13 @@ spec:
                 path: b2_probe_application_key
               - key: cf_analytics_token # gitleaks:allow — a Secret item NAME, not a value
                 path: cf_analytics_token
-        - name: tmp
+        - name: monitor-bridge-tmp
           emptyDir: {}
         # daniel-box's own gitops-deploy state — this pod is pinned to that node (the
         # alerting-brain placement above), which is exactly what makes a hostPath read
         # of the deployer it watches legitimate. Took over from the retired Docker
         # remnant at the uninstall (2026-08-14).
-        - name: gitops-state
+        - name: monitor-bridge-gitops-state
           hostPath:
             path: /var/lib/gitops-deploy
             type: Directory

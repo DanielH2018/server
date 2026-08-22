@@ -71,7 +71,7 @@ spec:
             # /etc, not /run/secrets: this image (scratch-based) lacks the /var/run
             # symlink so the old path happened to work, but the convention guard bans the
             # class — on any distro-based image it shadows the ServiceAccount token mount.
-            - name: token
+            - name: cloudflare-ddns-token
               mountPath: /etc/ddns-secrets
               readOnly: true
           resources:
@@ -82,7 +82,7 @@ spec:
               cpu: "{{ cloudflare_ddns_k8s_cpu_request }}"
               memory: {{ cloudflare_ddns_k8s_mem_request }}
       volumes:
-        - name: token
+        - name: cloudflare-ddns-token
           secret:
             secretName: cloudflare-ddns
             items:

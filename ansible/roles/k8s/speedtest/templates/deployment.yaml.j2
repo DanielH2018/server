@@ -94,7 +94,7 @@ spec:
             - secretRef:
                 name: speedtest
           volumeMounts:
-            - name: config
+            - name: speedtest-config
               mountPath: /config
           readinessProbe:
             httpGet:
@@ -116,6 +116,6 @@ spec:
               cpu: "{{ speedtest_k8s_cpu_request }}"
               memory: {{ speedtest_k8s_mem_request }}
       volumes:
-        - name: config
+        - name: speedtest-config
           persistentVolumeClaim:
             claimName: {{ speedtest_k8s_claim }}

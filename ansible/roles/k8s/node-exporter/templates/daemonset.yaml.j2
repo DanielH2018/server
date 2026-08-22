@@ -67,16 +67,16 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 3
           volumeMounts:
-            - name: proc
+            - name: node-exporter-proc
               mountPath: /host/proc
               readOnly: true
-            - name: sys
+            - name: node-exporter-sys
               mountPath: /host/sys
               readOnly: true
-            - name: rootfs
+            - name: node-exporter-rootfs
               mountPath: /rootfs
               readOnly: true
-            - name: textfile
+            - name: node-exporter-textfile
               mountPath: /textfile
               readOnly: true
           resources:
@@ -87,18 +87,18 @@ spec:
               cpu: 200m
               memory: 128Mi
       volumes:
-        - name: proc
+        - name: node-exporter-proc
           hostPath:
             path: /proc
-        - name: sys
+        - name: node-exporter-sys
           hostPath:
             path: /sys
-        - name: rootfs
+        - name: node-exporter-rootfs
           hostPath:
             path: /
         # Host cron scripts may drop *.prom gauges here (the kopia-era B2-usage pattern);
         # empty today, kept as the hook so a future host gauge needs no exporter change.
-        - name: textfile
+        - name: node-exporter-textfile
           hostPath:
             path: /var/lib/node-exporter-textfile
             type: DirectoryOrCreate

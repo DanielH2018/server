@@ -80,7 +80,7 @@ spec:
             - name: TZ
               value: "{{ tz }}"
           volumeMounts:
-            - name: config
+            - name: flaresolverr-config
               mountPath: /config
           readinessProbe:
             httpGet:
@@ -102,7 +102,7 @@ spec:
               cpu: "{{ prowlarr_k8s_fs_cpu_request }}"
               memory: {{ prowlarr_k8s_fs_mem_request }}
       volumes:
-        - name: config
+        - name: flaresolverr-config
           # sizeLimit preserves the cap the retired 1Gi PVC used to provide. Most siblings here
           # use a bare `emptyDir: {}`, but this one holds a Chrome profile: uncapped, runaway
           # growth becomes node ephemeral-storage pressure and the kubelet evicts OTHER pods on

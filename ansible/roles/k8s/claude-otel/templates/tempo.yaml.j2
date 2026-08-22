@@ -115,9 +115,9 @@ spec:
             - name: otlp-grpc
               containerPort: 4317
           volumeMounts:
-            - name: config
+            - name: tempo-config
               mountPath: /etc/tempo
-            - name: data
+            - name: tempo-data
               mountPath: /var/tempo
           readinessProbe:
             httpGet:
@@ -133,10 +133,10 @@ spec:
               cpu: "1"
               memory: 1Gi
       volumes:
-        - name: config
+        - name: tempo-config
           configMap:
             name: tempo-config
-        - name: data
+        - name: tempo-data
           persistentVolumeClaim:
             claimName: tempo-data
 ---

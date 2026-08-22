@@ -411,13 +411,13 @@ spec:
               hostPort: 9090
               hostIP: {{ claude_otel_query_host_ip }}
           volumeMounts:
-            - name: config
+            - name: prometheus-config
               mountPath: /etc/prometheus
-            - name: data
+            - name: prometheus-data
               mountPath: /prometheus
             # /etc, not /run/secrets (the ServiceAccount-token-shadow guard); 0444 because
             # prometheus runs as nobody and secret-volume files are root-owned.
-            - name: scrape-creds
+            - name: prometheus-scrape-creds
               mountPath: /etc/prometheus-scrape-creds
               readOnly: true
           readinessProbe:
@@ -434,13 +434,13 @@ spec:
               cpu: "1"
               memory: 1Gi
       volumes:
-        - name: config
+        - name: prometheus-config
           configMap:
             name: prometheus-config
-        - name: data
+        - name: prometheus-data
           persistentVolumeClaim:
             claimName: prometheus-data
-        - name: scrape-creds
+        - name: prometheus-scrape-creds
           secret:
             secretName: prometheus-scrape-credentials
             defaultMode: 0o444

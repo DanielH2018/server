@@ -88,10 +88,10 @@ spec:
             - secretRef:
                 name: healthchecks
           volumeMounts:
-            - name: config
+            - name: healthchecks-config
               mountPath: /config
             # LSIO app logs — kopia's logs/ rule.
-            - name: log
+            - name: healthchecks-log
               mountPath: /config/log
           readinessProbe:
             httpGet:
@@ -121,8 +121,8 @@ spec:
               cpu: "{{ healthchecks_k8s_cpu_request }}"
               memory: {{ healthchecks_k8s_mem_request }}
       volumes:
-        - name: config
+        - name: healthchecks-config
           persistentVolumeClaim:
             claimName: {{ healthchecks_k8s_claim }}
-        - name: log
+        - name: healthchecks-log
           emptyDir: {}

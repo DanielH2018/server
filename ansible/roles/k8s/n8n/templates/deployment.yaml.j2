@@ -135,12 +135,12 @@ spec:
                   name: n8n
                   key: N8N_RUNNERS_AUTH_TOKEN
           volumeMounts:
-            - name: data
+            - name: n8n-data
               mountPath: /home/node/.n8n
-            - name: files
+            - name: n8n-files
               mountPath: /files
             # n8n's .cache is re-derived (kopia's .cache/ rule).
-            - name: cache
+            - name: n8n-cache
               mountPath: /home/node/.n8n/.cache
           # The compose healthcheck's endpoint, as an httpGet. /healthz answers 200 without
           # credentials — it is n8n's own liveness endpoint, not a routed one, so Authelia is
@@ -168,11 +168,11 @@ spec:
               cpu: "{{ n8n_k8s_cpu_request }}"
               memory: {{ n8n_k8s_mem_request }}
       volumes:
-        - name: data
+        - name: n8n-data
           persistentVolumeClaim:
             claimName: {{ n8n_k8s_claim }}
-        - name: files
+        - name: n8n-files
           persistentVolumeClaim:
             claimName: {{ n8n_k8s_files_claim }}
-        - name: cache
+        - name: n8n-cache
           emptyDir: {}

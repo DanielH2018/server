@@ -51,9 +51,9 @@ spec:
             - name: http
               containerPort: 3100
           volumeMounts:
-            - name: config
+            - name: loki-homelab-config
               mountPath: /etc/loki
-            - name: data
+            - name: loki-homelab-data
               mountPath: /loki
           readinessProbe:
             httpGet:
@@ -75,12 +75,12 @@ spec:
               cpu: "{{ loki_homelab_cpu_request }}"
               memory: {{ loki_homelab_mem_request }}
       volumes:
-        - name: config
+        - name: loki-homelab-config
           configMap:
             name: loki-homelab-config
             items:
               - key: loki.yaml
                 path: loki.yaml
-        - name: data
+        - name: loki-homelab-data
           persistentVolumeClaim:
             claimName: {{ loki_homelab_claim }}

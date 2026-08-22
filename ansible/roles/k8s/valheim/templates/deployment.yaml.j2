@@ -87,9 +87,9 @@ spec:
                 # writing root-owned files needs no override. Add it only if a world save
                 # ever fails on the backup step.
           volumeMounts:
-            - name: config
+            - name: valheim-config
               mountPath: /config
-            - name: server
+            - name: valheim-server
               mountPath: /opt/valheim
           # Valheim speaks UDP, so terraria's /proc/net/tcp LISTEN check cannot work here —
           # a UDP socket has no LISTEN state and never appears in that table. This greps
@@ -125,9 +125,9 @@ spec:
           # 30s; the exact shutdown behaviour of this image has not been observed here.
       terminationGracePeriodSeconds: 120
       volumes:
-        - name: config
+        - name: valheim-config
           persistentVolumeClaim:
             claimName: {{ valheim_k8s_claim }}
-        - name: server
+        - name: valheim-server
           persistentVolumeClaim:
             claimName: {{ valheim_k8s_server_claim }}

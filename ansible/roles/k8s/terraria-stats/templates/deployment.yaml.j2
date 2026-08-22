@@ -93,12 +93,12 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 10
           volumeMounts:
-            - name: data
+            - name: terraria-stats-data
               mountPath: /data
-            - name: script
+            - name: terraria-stats-script
               mountPath: /app
               readOnly: true
-            - name: tmp
+            - name: terraria-stats-tmp
               mountPath: /tmp
           resources:
             requests:
@@ -108,11 +108,11 @@ spec:
               cpu: 500m
               memory: 128Mi
       volumes:
-        - name: data
+        - name: terraria-stats-data
           persistentVolumeClaim:
             claimName: terraria-stats-data
-        - name: script
+        - name: terraria-stats-script
           configMap:
             name: terraria-stats-script
-        - name: tmp
+        - name: terraria-stats-tmp
           emptyDir: {}

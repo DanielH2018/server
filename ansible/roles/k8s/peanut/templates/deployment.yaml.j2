@@ -45,10 +45,10 @@ spec:
               drop:
                 - ALL
           volumeMounts:
-            - name: settings
+            - name: peanut-settings
               mountPath: /config-seed
               readOnly: true
-            - name: config
+            - name: peanut-config
               mountPath: /config
           resources:
             limits:
@@ -97,12 +97,12 @@ spec:
                   key: WEB_PASSWORD
           volumeMounts:
             # Writable /config seeded with settings.yml by the init container above.
-            - name: config
+            - name: peanut-config
               mountPath: /config
             # auth.yaml is regenerated from WEB_USERNAME/WEB_PASSWORD at every boot (absent from
             # the image, not part of the settings mount above) — the compose template's
             # `tmpfs: /app/config:mode=1777` equivalent.
-            - name: app-config
+            - name: peanut-app-config
               mountPath: /app/config
           readinessProbe:
             httpGet:
@@ -124,13 +124,13 @@ spec:
               cpu: "{{ peanut_k8s_cpu_request }}"
               memory: {{ peanut_k8s_mem_request }}
       volumes:
-        - name: settings
+        - name: peanut-settings
           secret:
             secretName: peanut-secrets
             items:
               - key: settings.yml
                 path: settings.yml
-        - name: app-config
+        - name: peanut-app-config
           emptyDir: {}
-        - name: config
+        - name: peanut-config
           emptyDir: {}

@@ -57,7 +57,7 @@ spec:
             - name: REGISTRY_STORAGE_DELETE_ENABLED
               value: "true"
           volumeMounts:
-            - name: data
+            - name: registry-data
               mountPath: /var/lib/registry
           resources:
             limits:
@@ -67,6 +67,6 @@ spec:
               cpu: "100m"
               memory: 64Mi
       volumes:
-        - name: data
+        - name: registry-data
           persistentVolumeClaim:
             claimName: {{ registry_k8s_claim }}

@@ -52,7 +52,7 @@ spec:
               drop:
                 - ALL
           volumeMounts:
-            - name: tmp
+            - name: ical-proxy-tmp
               mountPath: /tmp
           readinessProbe:
             tcpSocket:
@@ -72,5 +72,5 @@ spec:
               cpu: "{{ ical_proxy_k8s_cpu_request }}"
               memory: {{ ical_proxy_k8s_mem_request }}
       volumes:
-        - name: tmp
+        - name: ical-proxy-tmp
           emptyDir: {}

@@ -73,9 +73,9 @@ spec:
             - name: LAN_NETWORKS
               value: "{{ qbittorrent_k8s_lan_networks }}"
           volumeMounts:
-            - name: config
+            - name: qbittorrent-config
               mountPath: /config
-            - name: mullvad
+            - name: qbittorrent-mullvad
               mountPath: {{ qbittorrent_k8s_secret_mount }}
               readOnly: true
           startupProbe:
@@ -150,7 +150,7 @@ spec:
             - name: TORRENTING_PORT
               value: "{{ qbittorrent_k8s_torrenting_port }}"
           volumeMounts:
-            - name: config
+            - name: qbittorrent-config
               mountPath: /config
             # subPath, so this container sees ONLY torrents/ out of the shared media volume —
             # the Compose mount's scoping, reproduced.
@@ -192,13 +192,13 @@ spec:
               cpu: "{{ qbittorrent_k8s_cpu_request }}"
               memory: {{ qbittorrent_k8s_mem_request }}
       volumes:
-        - name: config
+        - name: qbittorrent-config
           persistentVolumeClaim:
             claimName: {{ qbittorrent_k8s_claim }}
         - name: media
           persistentVolumeClaim:
             claimName: {{ qbittorrent_k8s_media_claim }}
-        - name: mullvad
+        - name: qbittorrent-mullvad
           secret:
             secretName: qbittorrent-mullvad
             defaultMode: 0400

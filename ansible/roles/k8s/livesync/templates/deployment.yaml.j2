@@ -38,9 +38,9 @@ spec:
             - -c
             - cp /config/local.ini /opt/couchdb/etc/local.d/local.ini
           volumeMounts:
-            - name: config
+            - name: livesync-config
               mountPath: /config
-            - name: local-d
+            - name: livesync-local-d
               mountPath: /opt/couchdb/etc/local.d
           securityContext:
             allowPrivilegeEscalation: false
@@ -109,9 +109,9 @@ spec:
                   name: livesync
                   key: COUCHDB_PASSWORD
           volumeMounts:
-            - name: data
+            - name: livesync-data
               mountPath: /opt/couchdb/data
-            - name: local-d
+            - name: livesync-local-d
               mountPath: /opt/couchdb/etc/local.d
           # An exec probe, not httpGet, because local.ini sets require_valid_user = true: BOTH
           # `/` and `/_up` answer 401 to an unauthenticated request. Measured against the running
@@ -146,11 +146,11 @@ spec:
               cpu: "{{ livesync_k8s_cpu_request }}"
               memory: {{ livesync_k8s_mem_request }}
       volumes:
-        - name: data
+        - name: livesync-data
           persistentVolumeClaim:
             claimName: {{ livesync_k8s_claim }}
-        - name: config
+        - name: livesync-config
           configMap:
             name: livesync-config
-        - name: local-d
+        - name: livesync-local-d
           emptyDir: {}
