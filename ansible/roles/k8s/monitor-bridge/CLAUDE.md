@@ -232,8 +232,21 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     fresh data — nothing else alerts on that (Scrutiny writes to InfluxDB not Prometheus, and its
     own Shoutrrr notifier is unconfigured, so this bridge check is the only drive-failure alert
     path). Also `down` when scrutiny lists no devices at all. `SCRUTINY_TEMP_MAX` (°C, default
-    0 = off) adds an optional early-warning temperature ceiling on top. Pure `scrutiny_freshness()`
-    + `scrutiny_health()` are unit-tested.)
+    0 = off) adds an optional early-warning temperature ceiling on top.
+    **A third arm watches NVMe endurance** (added 2026-08-22): `percentage_used` against
+    `SCRUTINY_WEAR_MAX` (default 80). Scrutiny ships that attribute with `thresh=100`, so its own
+    evaluation cannot fold a breach into `device_status` until the drive's rated write endurance is
+    fully spent — the wear curve offers months of warning where `device_status` offers days.
+    It is the one arm NOT served by `/api/summary`, whose `smart` block carries `collector_date`,
+    `temp` and `power_on_hours` but no wear attributes: it costs one
+    `/api/device/<wwn>/details` fetch per non-archived device per
+    cycle (~19 KB each, only `smart_results[0]` read), taken after freshness passes so a dead
+    collector costs no per-device calls. A device that reports no `percentage_used` is **unwatched,
+    not healthy** — the message names it, and says INERT when no device reports the field at all.
+    Missing must not page either: `percentage_used` is NVMe-only, so a SATA disk added later
+    legitimately has none. Pure `scrutiny_freshness()`, `scrutiny_health()`,
+    `scrutiny_device_wear()` and `scrutiny_wear_verdict()` are unit-tested; those tests mock the
+    payload, so they prove the verdict logic and nothing about the endpoint path.)
   - **UPS Battery Health** (the APC UPS's charge % + estimated runtime + the replace-battery
     self-test verdict, via HA's Prometheus-scraped sensors over `monitoring` — the UPS is on
     NUT/peanut and HA's prometheus integration exports it). `down` on a low battery RUNWAY: charge <
@@ -322,8 +335,28 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     `kube_daemonset_status_number_unavailable`, with its own `K8S_MIN_DAEMONSETS` floor (9) and
     the same fail-closed-on-absent-series logic — a Deployment-shaped census cannot see promtail,
     node-exporter or the otel collector, which run one pod per node and are exactly the workloads
-    a node problem takes out first. A third arm reports crash-looping restarts. Pure
-    `k8s_workloads_verdict()` is unit-tested; `CLUSTER_DEPENDENT` is guarded against the live
+    a node problem takes out first. A third arm reports crash-looping restarts.
+    **A fourth arm watches extended resources** (added 2026-08-20, PR #281):
+    every name in `K8S_EXTENDED_RESOURCES` (comma-separated, default `devic.es/dri`) must still be
+    advertised at non-zero quantity by at least one node, read from
+    `kube_node_status_allocatable`. This is the blast radius of a wedged device plugin, not the
+    plugin's own liveness: `dri-device-plugin` has no readinessProbe, and a container without one
+    is Ready the instant it starts, so a plugin whose gRPC registration hangs keeps a Running,
+    Ready, fully-available DaemonSet while kubelet deregisters `devic.es/dri` — invisible to the
+    DaemonSet arm above. **The obvious socket-stat probe is worse than nothing** (rationale
+    recorded in commit `1b2aa497`): the registration socket file persists through the wedge, so
+    the probe reads green through the fault, and kubelet clears that directory on restart, so the
+    same probe restart-loops a healthy plugin. `ksm_resource_label()` sanitizes the configured
+    Kubernetes name into the label kube-state-metrics actually emits (`devic.es/dri` →
+    `devic_es_dri`) — querying the unsanitised name matches no series, which this arm would read
+    as a deregistered resource; that is the 2026-08-20 false page in **Traps** below. The arm
+    needs kube-state-metrics' `nodes` collector: with no `kube_node_status_allocatable` series at
+    all it reports **INERT** and names what it is not watching, rather than passing silently.
+    Folded into this monitor rather than given its own, because a new Kuma monitor needs a new
+    push token in SOPS and this arm answers the DaemonSet arm's question. A resource fault wins
+    the message and keeps the workload arm's text after it. Pure
+    `k8s_workloads_verdict()` and `extended_resource_verdict()` are unit-tested;
+    `CLUSTER_DEPENDENT` is guarded against the live
     `CHECKS` and asserted disjoint from the other three skip sets.)
   - **Loki Log Ingestion** (two-arm LogQL freshness against the cluster `loki-homelab` via
     its in-cluster Service, `down`
