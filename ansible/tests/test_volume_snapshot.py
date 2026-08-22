@@ -151,9 +151,19 @@ def test_the_newest_snapshot_is_never_pruned() -> None:
         )
 
 
-def test_retain_zero_clamps_to_the_newest_rather_than_deleting_everything() -> None:
-    assert _kept(_FIVE, 0) == [_NEWEST]
-    assert len(_prune(_FIVE, 0)) == 4
+def test_retain_zero_clamps_to_two_rather_than_deleting_the_rollback_recovery_point() -> (
+    None
+):
+    """Not a floor of 1: a rollback run takes its own snapshot and prunes BEFORE
+    k8s/volume-revert reads the chain, so the chain must keep this run's own snapshot AND the
+    earlier one the revert needs. See CLAUDE.md's "The revert needs two, not one"."""
+    assert _kept(_FIVE, 0) == [_NEWEST, "autodeploy-widget-44444444-widget-config"]
+    assert len(_prune(_FIVE, 0)) == 3
+
+
+def test_retain_one_also_clamps_to_two() -> None:
+    assert _kept(_FIVE, 1) == [_NEWEST, "autodeploy-widget-44444444-widget-config"]
+    assert len(_prune(_FIVE, 1)) == 3
 
 
 def test_it_keeps_the_newest_n_and_prunes_the_rest_oldest_first() -> None:

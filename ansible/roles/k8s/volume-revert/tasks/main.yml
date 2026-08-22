@@ -30,11 +30,16 @@
   # `is sequence` and `is not string` because a bare string passes a length check: Ansible would
   # then loop its CHARACTERS, and the first claim would be a PVC named `t`. The failure is safe —
   # it lands on the unbound-claim assert, before anything moves — but it names the wrong problem.
+  #
+  # `is not mapping` for the same reason: Jinja's `sequence` test is satisfied by a dict too (it
+  # only checks for `__getitem__` plus the absence of `strip`), so a dict clears `is sequence` and
+  # `is not string` both and reaches `loop:` in main.yml's per-claim include.
   ansible.builtin.assert:
     that:
       - volume_revert_service | default('') | length > 0
       - volume_revert_claims | default([]) is sequence
       - volume_revert_claims | default([]) is not string
+      - volume_revert_claims | default([]) is not mapping
       - volume_revert_claims | default([]) | length > 0
       # `is not none`, not the bare filter. `regex_search` returns the MATCHED STRING or None,
       # and ansible-core 2.21 refuses a conditional whose result is not a boolean: "Conditional

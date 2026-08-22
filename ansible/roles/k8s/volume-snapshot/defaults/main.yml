@@ -3,8 +3,12 @@
 # most recent, and keeping a spare means a rollback is still possible if the newest snapshot is
 # the one that is corrupt or still coalescing.
 #
-# Clamped to a floor of 1 where it is used, so a caller passing `0` prunes down to the newest
-# rather than deleting the recovery point this role exists to produce.
+# Clamped to a floor of 2 where it is used (claim.yml), not 1: a rollback run takes its OWN
+# snapshot and prunes BEFORE k8s/volume-revert reads the chain, so at prune time the chain holds
+# that new snapshot AND the earlier pre-deploy one the revert is about to need. A floor of 1
+# would keep only the newest and delete the very recovery point the revert step right after it
+# depends on — see this role's CLAUDE.md ("The revert needs two, not one"). A caller passing `0`
+# or `1` still keeps both.
 volume_snapshot_retain: 3
 
 # Seconds to wait for a snapshot to report `readyToUse`. A Longhorn snapshot is a marker in the

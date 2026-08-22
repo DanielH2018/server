@@ -51,9 +51,10 @@ something else, at which point the fix is adding them to the `vars:` block at
 `roles/k8s/manifests/tasks/main.yml:186`, not a role default.
 
 The one guarantee that holds regardless of what a caller passes: `volume_snapshot_retain` is
-clamped to a floor of 1 at `claim.yml`'s prune (`[volume_snapshot_retain | int, 1] | max`). A
-caller cannot delete the only recovery point by passing `retain: 0`, even once retain becomes
-callable.
+clamped to a floor of 2 at `claim.yml`'s prune (`[volume_snapshot_retain | int, 2] | max`). A
+caller cannot prune down to a single recovery point by passing `retain: 0` or `1`, even once
+retain becomes callable — see "The revert needs two, not one" below for why the floor is 2, not
+1.
 
 ## Why a `Recreate` + RWO role needs this
 
@@ -134,8 +135,22 @@ for the volume to coalesce the data. Two consequences the prune is written aroun
 three dead CRs as the retained three would make the next pass delete live snapshots to make room.
 
 **The newest snapshot is never pruned, whatever `volume_snapshot_retain` says.** The value is
-clamped to a floor of 1 at the point of use. 7b reverts to the most recent snapshot, and a
-retention pass that races a rollback would destroy the recovery point it exists to protect.
+clamped to a floor of 2, not 1. 7b reverts to the most recent snapshot, and a retention pass
+that races a rollback would destroy the recovery point it exists to protect.
+
+### The revert needs two, not one
+
+A floor of 1 was the original design and was wrong: it protects against the wrong run. **A
+rollback redeploy takes its OWN snapshot before it prunes, and prunes BEFORE `k8s/volume-revert`
+reads the chain** — `roles/k8s/manifests/tasks/main.yml` runs "Snapshot the stateful volumes"
+(which includes this role, prune and all) immediately before "Revert the stateful volumes"
+(`k8s/volume-revert`), in that order, every time a claim is declared, whether or not
+`k8s_restore_snapshot_sha` is set. So at the moment THIS run's prune executes, the chain holds
+two snapshots that both matter: the one just taken of the current (already-migrated) data, and
+the earlier pre-deploy snapshot the revert step right after it is about to need. A floor of 1
+keeps only the newest — this run's own — and deletes the recovery point out from under the
+revert that immediately follows it in the same play. The floor is 2 so both always survive one
+run's own prune, regardless of what `volume_snapshot_retain` is set to.
 
 **The retention window holds the 3 most recent deploy runs, not the 3 most recent distinct
 commits.** The per-run token (see "The snapshot name is deterministic" above) gives every run its
@@ -144,6 +159,16 @@ that one commit and prunes out whatever came before it — including a pre-migra
 was the actual recovery point this role exists to hold. An operator who redeploys the same
 commit after a migration, to pick up an unrelated config change, loses that recovery point on the
 third redeploy without touching a different commit at all.
+
+**This is not hypothetical for a rollback specifically.** `gitops-deploy`'s hold only skips the
+exact held SHA (`skip_hold` matches `origin_head == hold_sha`); redeploying that same failed
+commit again — including a hand-run `./scripts/deploy.sh --tags <service>` while an operator
+debugs a partial revert per `k8s/volume-revert/CLAUDE.md`'s recovery steps — takes another fresh
+snapshot of it under the same commit's tag. A third such redeploy of the SAME failed SHA (at the
+default `retain: 3`) prunes the ORIGINAL pre-deploy snapshot out of the window, and any further
+automated rollback of that commit then finds no snapshot to revert to — the fail-closed "no
+snapshot matches" error in `k8s/volume-revert` is correct in that case, not a bug, but it means
+the recovery point is gone for good, not merely unreachable this run.
 
 The trade was made deliberately, not overlooked: without the token, redeploying the same commit
 named the exact same CR its own earlier deploy already created, and `apply` against a CR that
@@ -228,6 +253,21 @@ whether the retake succeeded. **Both of 7a's cases — the deliberate scale-to-z
 service's first deploy — now get a real snapshot through this attach**, not the warning. Any
 other unready cause on the FIRST attempt (a same-second name collision on a `markRemoved` CR, or
 a stuck engine on a volume that *is* attached) still fails the deploy, unchanged from 7a.
+
+**Accepted, not fixed here: `!= 'attached'` is not `== 'detached'`.**
+`volume_snapshot_detached` is set from `status.state != 'attached'`, which is also true for
+`faulted`, `attaching` and `detaching` — none of which are the two legitimate cases this section
+exists for. On a `faulted` volume specifically, this block runs, its attach attempt fails against
+a genuinely broken volume (not a merely-detached one), and that failure falls through to the
+same unprotected "THIS DEPLOY IS UNPROTECTED" warning below as an ordinary detached-and-attach-
+failed case — so the deploy proceeds on a volume that was never just detached, with no way for
+the warning's reader to tell the two apart. Narrowing the condition to the two legitimate
+`detached` cases (checking `== 'detached'` and treating every other non-`attached` state as the
+"attached and stuck" failure it already is for other states) would fix this; not done here
+because the maintenance-attach block this guards is itself dead on this Longhorn version (see
+"The premise was never true on this Longhorn version" below) — narrowing a condition inside code
+that is already unreachable on the one deploy path that exists buys nothing until that block is
+either retired or proven reachable.
 
 **The warning survives, narrowed to one case: the maintenance-mode attach itself fails.** No
 longhorn-manager reachable on this node, or the attach/wait sequence timing out, both fall

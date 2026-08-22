@@ -69,7 +69,7 @@ _PLAY = """- hosts: localhost
         name: k8s/volume-revert
       vars:
         volume_revert_service: drillsvc
-        volume_revert_claims: [drillsvc-config]
+        volume_revert_claims: {claims}
         volume_revert_sha: "{sha}"
     - name: Prove the guard let us through
       ansible.builtin.debug:
@@ -77,7 +77,9 @@ _PLAY = """- hosts: localhost
 """
 
 
-def _run_revert_guard(sha: str) -> subprocess.CompletedProcess[str]:
+def _run_revert_guard(
+    sha: str, claims: str = "[drillsvc-config]"
+) -> subprocess.CompletedProcess[str]:
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         bin_dir = tmp_path / "bin"
@@ -92,7 +94,9 @@ def _run_revert_guard(sha: str) -> subprocess.CompletedProcess[str]:
         fake_become.chmod(0o755)
 
         playbook = tmp_path / "play.yml"
-        playbook.write_text(_PLAY.format(become_exe=fake_become, sha=sha))
+        playbook.write_text(
+            _PLAY.format(become_exe=fake_become, sha=sha, claims=claims)
+        )
 
         env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
         env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
@@ -141,3 +145,16 @@ def test_volume_revert_input_guard_still_rejects_a_bad_sha() -> None:
     assert result.returncode != 0
     assert "GUARD_PASSED" not in result.stdout
     assert "volume_revert_sha of eight or more lowercase hex digits" in result.stdout
+
+
+@pytest.mark.skipif(
+    shutil.which("ansible-playbook") is None, reason="ansible-playbook not on PATH"
+)
+def test_volume_revert_input_guard_rejects_a_mapping() -> None:
+    """Jinja's `sequence` test is satisfied by a dict — it only checks for `__getitem__` and the
+    absence of `strip` — so a mapping clears both `is sequence` and `is not string` and would
+    otherwise reach `loop:` in main.yml's per-claim include. `is not mapping` closes that."""
+    result = _run_revert_guard("cc101c62", claims="{drillsvc-config: 1}")
+    assert result.returncode != 0
+    assert "GUARD_PASSED" not in result.stdout
+    assert "volume_revert_claims LIST" in result.stdout

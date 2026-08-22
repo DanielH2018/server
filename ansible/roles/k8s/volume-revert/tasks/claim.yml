@@ -6,18 +6,23 @@
 # API once for all of them.
 #
 # THE ORDER IS THE DESIGN. Everything that can fail on its own account — the claim is not bound,
-# no snapshot matches, the listing is broken — is checked BEFORE `--replicas=0`. A step that
-# fails after the scale-down leaves the service down AND unreverted, which is worse than never
-# having tried. Measured 2026-08-21 on `speedtest-config`, Longhorn v1.12.1: a revert with the
-# frontend enabled returns HTTP 500 `failed to revert snapshot for volume ... with frontend
-# enabled`, and a revert on a plainly detached volume returns 500 because no engine is running.
-# Maintenance mode — attached with `disableFrontend: true` — is the only state that works.
+# no snapshot matches, the listing is broken — is checked BEFORE `--replicas=0`, PER CLAIM. On a
+# multi-claim service (tdarr, code-server) claim 2's own checks run AFTER claim 1 has already
+# scaled the Deployment to zero, so "before the scale-down" bounds each claim's own failure, not
+# the service's overall replica count — see CLAUDE.md. A step that fails after ITS OWN scale-down
+# leaves the service down AND unreverted, which is worse than never having tried. Measured
+# 2026-08-21 on `speedtest-config`, Longhorn v1.12.1: a revert with the frontend enabled returns
+# HTTP 500 `failed to revert snapshot for volume ... with frontend enabled`, and a revert on a
+# plainly detached volume returns 500 because no engine is running. Maintenance mode — attached
+# with `disableFrontend: true` — is the only state that works.
 
 # ------------------------------------------------------------------ before anything moves
 #
-# The reads below are deliberately NOT guarded on k8s_no_mutate, and carry `check_mode: false`
-# so `--check` runs them for real. A dry run then answers the question that matters most about
-# this role: is there a snapshot to revert to? It changes nothing to find out.
+# The reads below are deliberately NOT guarded on k8s_no_mutate, and carry `check_mode: false` so
+# `--check` runs them for real, matching every other guarded task in this file — but the caller in
+# roles/k8s/manifests gates the WHOLE include of this role on `not (k8s_no_mutate | bool)`, so
+# neither `--check` nor `--dry-run` ever reaches this file at all. See CLAUDE.md's "The guard is
+# k8s_no_mutate" section: these two tasks are correct in isolation and untested as reached.
 - name: Resolve the Longhorn volume backing {{ volume_revert_claim }}
   tags: [deploy]
   # argv, not a folded `cmd:` string. `ansible.builtin.command` shlex-splits a `cmd`, which
@@ -127,10 +132,11 @@
   # first deploy took no snapshot (k8s/seed-volume leaves the volume detached, and a detached
   # volume cannot be snapshotted), or a retention pass deleted the recovery point.
   #
-  # Guarded on `k8s_no_mutate` like every other decision that stops the play. A dry run reads
-  # the same two facts for real and REPORTS the absence in the next task instead of aborting:
-  # a service that has never deployed legitimately has no snapshot, and failing `--check` for
-  # it would make the dry run useless exactly where it is most informative.
+  # Guarded on `k8s_no_mutate` like every other decision that stops the play, and REPORTS the
+  # absence in the next task instead of aborting, rather than failing `--check`/`--dry-run` too.
+  # Defence in depth only — the include of this whole role is itself gated on
+  # `not (k8s_no_mutate | bool)` in roles/k8s/manifests, so neither mode reaches this task in the
+  # one call site that exists today. See CLAUDE.md's "The guard is k8s_no_mutate" section.
   ansible.builtin.fail:
     msg: >-
       No snapshot named '{{ volume_revert_prefix | trim }}*' exists for Longhorn volume
@@ -139,17 +145,21 @@
       {{ volume_revert_existing.stdout_lines | default([]) | length }} snapshot(s) of that
       volume. Either this deploy never took one — expected on a service's first deploy, and
       whenever the volume was detached at snapshot time — or it has been deleted since.
-      Stopping with {{ volume_revert_service }} still running: reverting to the wrong snapshot
-      is worse than not reverting, and this play will not guess.
+      Stopping without reverting {{ volume_revert_claim }}: reverting to the wrong snapshot is
+      worse than not reverting, and this play will not guess. On a multi-claim service, an
+      earlier claim's revert in this same run may already have scaled
+      {{ volume_revert_service }} to zero replicas — check its current replica count rather
+      than assuming it is still up.
   when:
     - not (k8s_no_mutate | bool)
     - volume_revert_candidates | length == 0
 
 - name: Report a dry run with nothing to revert for {{ volume_revert_claim }}
   tags: [deploy]
-  # The dry-run half of the task above. `--check` and `--dry-run` run the two reads for real, so
-  # this is the one thing a dry run of this role can genuinely answer, and it must be visible
-  # rather than a silent skip.
+  # The dry-run half of the task above. Unreachable today (see the note on that task): the
+  # include of this role never runs under `--check`/`--dry-run` in roles/k8s/manifests, so this
+  # debug never fires in this repo. Kept as defence in depth for a future call site that includes
+  # this role unconditionally — see CLAUDE.md.
   when:
     - k8s_no_mutate | bool
     - volume_revert_candidates | length == 0
