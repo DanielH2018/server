@@ -56,9 +56,10 @@ registry_k8s_probe_repo: registry-selftest
 # control. Two ingress rules admit legitimate pushers; everything else on that port is refused.
 # See networkpolicy.yaml.j2 for the full reasoning, including the PULL-path caveat.
 #
-# alpine:3.22 for the same reason prowlarr's and sonarr's probes use it: busybox `nc` and musl
-# `getent` both need to be present, and this image already ships in the cluster as
-# registry_k8s_probe_source above.
+# alpine for the same reason prowlarr's, sonarr's and qbittorrent's probes use it: busybox `nc`
+# and musl `getent` both need to be present. It tracks those probes at 3.24, NOT
+# registry_k8s_probe_source above — that one is deliberately held apart from what the fleet
+# runs, so the two are different images and pulling one does not warm the other.
 registry_k8s_netpol_probe_image: alpine:3.24
 
 # The CNI bridge gateway on daniel-box — `ip -4 addr show cni0` reads `10.42.0.1/24`, matching
