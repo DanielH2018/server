@@ -86,12 +86,20 @@
 #
 # `always`, not `config`, because the fact below crosses the config/deploy split — see the note
 # on that task.
+#
+# The jsonpath is SINGLE-QUOTED, and it has to be. `command` shlex-splits `cmd`, and shlex
+# eats the `\.` escapes that separate the annotation key's dots from jsonpath's field
+# traversal. Unquoted, kubectl looks for a nested map at `.homelab.daniel-hunter.com.seeded`,
+# finds nothing, and returns EMPTY with rc 0 — so the short-circuit compares '' to 'true',
+# never fires, and the only symptom is a deploy that is slower than it should be. That is
+# exactly what shipped: 25 of 25 claims ran the full seed-pod cycle on both deploys after the
+# short-circuit landed, while the annotation sat correctly on every PVC.
 - name: Find the PersistentVolume and prior seed state for {{ seed_volume_claim }}
   tags: always
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} get pvc {{ seed_volume_claim }}
-      -o jsonpath={.spec.volumeName}|{.metadata.annotations.homelab\.daniel-hunter\.com/seeded}
+      -o 'jsonpath={.spec.volumeName}|{.metadata.annotations.homelab\.daniel-hunter\.com/seeded}'
   register: seed_volume_pv
   become: true
   changed_when: false
