@@ -27,6 +27,23 @@ spec:
       labels:
         app: registry-selftest-push
     spec:
+      # DECIDED: no nodeSelector — an intermittent ~34s here is the price of proving both nodes.
+      #
+      # This Job lands wherever the scheduler puts it, so its cost is a coin flip. The crane
+      # image is cached on one node and not the other, and a cold node pays the pull from
+      # gcr.io while crane's own work takes 1s. Measured 2026-08-22 across two deploys:
+      # 3.02s on daniel-box ("already present on machine") against 37.57s on daniel-server
+      # ("Successfully pulled ... in 34.36s"), with 1s of copy in both.
+      #
+      # Pinning this to whichever node is warm would make it cheap and stop it proving anything
+      # about the other one. The push path is pod → the registry's ClusterIP, and ClusterIP
+      # routing is programmed independently on each node — so a self-test that only ever runs
+      # on one node leaves the other's routing unproven, which is the thing this Job exists to
+      # catch. Mirroring crane into the local registry is circular for the same reason: this
+      # Job is what proves that registry accepts a write.
+      #
+      # So a 37s reading here is not a regression and not a target. Check which node the pod
+      # landed on before treating it as either.
       restartPolicy: Never
       enableServiceLinks: false
       automountServiceAccountToken: false
