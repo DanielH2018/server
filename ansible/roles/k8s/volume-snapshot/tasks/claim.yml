@@ -69,11 +69,52 @@
   #
   # `volume_snapshot_prefix` deliberately omits the tag AND the token: it is what the prune below
   # selects on, and it must match this service's snapshots from EVERY deploy, not just this one.
+  #
+  # THE CLAIM SEGMENT DROPS A LEADING `<service>-`, AND THE NAME MUST STAY UNDER 64 BYTES.
+  # Longhorn 1.12 validates a snapshot DELETE by building a label selector carrying the
+  # snapshot's own name as a label VALUE (`longhorn.io/linked-clone-source-snapshot`, part of
+  # 1.12's linked-clone feature). Kubernetes caps a label value at 63 bytes, so a longer name
+  # makes that selector invalid and the webhook denies the delete:
+  #
+  #     admission webhook "validator.longhorn.io" denied the request: failed to check if
+  #     snapshot ... is a linked-clone entrypoint: ... must be no more than 63 bytes
+  #
+  # Creation never builds that selector, so an over-long snapshot is created happily and can
+  # then never be pruned. It bit on 2026-08-22: `autodeploy-qbittorrent-8a74b5b8-
+  # qbittorrent-config-<token>` is 65 bytes, and the fourth deploy of the day — the first to
+  # prune past `volume_snapshot_retain` — died on it, as would every deploy after.
+  #
+  # Nearly every claim here is named `<service>-<something>`, so the service name was being
+  # spent twice. Dropping the redundant copy takes the worst offender (home-assistant, 71) to
+  # 55. `volume-revert` applies the IDENTICAL expression when it reconstructs this prefix — the
+  # two must stay in step or 7b silently matches nothing, which is why
+  # `ansible/tests/test_snapshot_name_length.py` compares them rather than trusting a comment.
+  #
+  # Stripping is skipped when it would empty the segment (a claim named exactly for its
+  # service), because `autodeploy-<svc>-<sha>--<token>` is the degenerate name volume-revert's
+  # main.yml already calls out as matching nothing.
   ansible.builtin.set_fact:
     volume_snapshot_volume: "{{ volume_snapshot_pvc.stdout | trim }}"
     volume_snapshot_prefix: "autodeploy-{{ volume_snapshot_service }}-"
     volume_snapshot_name: >-
-      autodeploy-{{ volume_snapshot_service }}-{{ volume_snapshot_sha.stdout | trim }}-{{ volume_snapshot_claim }}-{{ volume_snapshot_run_token }}
+      autodeploy-{{ volume_snapshot_service }}-{{ volume_snapshot_sha.stdout | trim }}-{{ volume_snapshot_claim | regex_replace('^' ~ (volume_snapshot_service | regex_escape) ~ '-', '') | default(volume_snapshot_claim, true) }}-{{ volume_snapshot_run_token }}
+
+# The assert, not just the shortening. Shortening fixes the four claims that are over today;
+# this is what stops a fifth arriving unnoticed. The failure it replaces is the worst kind —
+# silent at creation, then a hard deploy failure three deploys later, in a different role, with
+# a message about linked clones that says nothing about names being too long.
+- name: Assert the snapshot name fits Longhorn's delete validation for {{ volume_snapshot_claim }}
+  tags: [deploy]
+  ansible.builtin.assert:
+    that:
+      - volume_snapshot_name | trim | length <= 63
+    fail_msg: >-
+      The snapshot name for {{ volume_snapshot_claim }} is
+      {{ volume_snapshot_name | trim | length }} bytes ({{ volume_snapshot_name | trim }}),
+      over the 63-byte ceiling Longhorn's delete webhook imposes. It would be created fine and
+      then be impossible to prune, failing every deploy once retention caught up. Shorten the
+      service or claim name, or shorten volume_snapshot_run_token.
+    quiet: true
 
 # `apply`, not `create`: `create` would fail with AlreadyExists on the one case the run token
 # doesn't rule out — two runs of this role landing in the same wall-clock second, so
@@ -671,3 +712,30 @@
   # side is only for symmetry, not because a bad value would otherwise matter.
   loop: "{{ (volume_snapshot_live | default([]))[(volume_snapshot_keep | default(1) | int) :] }}"
   changed_when: true
+  # Tolerate ONE rejection: Longhorn 1.12's delete webhook refusing a snapshot whose name is
+  # over 63 bytes. Those snapshots were created before the naming fix above and cannot be
+  # deleted through the Kubernetes API at all, so without this every deploy dies here on a
+  # backlog it can do nothing about. 13 such snapshots existed across 4 volumes on 2026-08-22.
+  #
+  # Matched on the message rather than blanket-ignored, because every other prune failure is
+  # still a real one — a webhook that is down, RBAC, a wedged finalizer — and swallowing those
+  # would turn a recovery point silently not being taken into a green deploy. The tolerated
+  # case is surfaced by the task below rather than passing unremarked.
+  register: volume_snapshot_prune
+  failed_when:
+    - volume_snapshot_prune.rc != 0
+    - "'must be no more than 63 bytes' not in (volume_snapshot_prune.stderr | default(''))"
+
+# A tolerated rejection is not a non-event: the snapshot stays forever, keeps being selected for
+# pruning, and costs space the retention window was meant to bound. Named here so it appears in
+# the deploy output instead of only in a register nobody reads.
+- name: Report snapshots Longhorn refuses to delete for {{ volume_snapshot_claim }}
+  tags: [deploy]
+  when: volume_snapshot_prune.results | default([]) | selectattr('rc', 'defined')
+        | selectattr('rc', 'ne', 0) | list | length > 0
+  ansible.builtin.debug:
+    msg: >-
+      {{ volume_snapshot_prune.results | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0)
+         | map(attribute='item') | list }} exceed Longhorn's 63-byte delete limit and will
+      persist until removed out of band. New snapshots are no longer named this way; these
+      predate the fix.
