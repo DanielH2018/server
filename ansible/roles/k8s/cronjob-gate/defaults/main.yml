@@ -31,7 +31,7 @@ cronjob_gate_timeout: 660  # noqa var-naming[no-role-prefix]
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "deploys no workload of its own — a gate other roles include; the Job it creates is built from the caller's CronJob, and it pins no image for Renovate to bump"  # noqa var-naming[no-role-prefix]
 
-# --------------------------------------------------------------------- failure classification
+# failure classification
 #
 # The gate proves the new IMAGE RUNS. It does not prove the workload succeeded — see CLAUDE.md,
 # which states that limit plainly. The split below is what makes that contract true, and it

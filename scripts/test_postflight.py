@@ -49,9 +49,6 @@ def target(job, health="up", last_error=""):
     return {"labels": {"job": job}, "health": health, "lastError": last_error}
 
 
-# --- §9.1 Uptime-Kuma admin --------------------------------------------------
-
-
 def test_kuma_monitors_ok(monkeypatch):
     body = json.dumps({"data": {"result": [{"value": [0, "118"]}]}})
     respond(monkeypatch, 200, body)
@@ -69,9 +66,6 @@ def test_kuma_monitors_empty_result_fails(monkeypatch):
     assert "0 monitors" in detail
 
 
-# --- §9.2 Kuma API key -------------------------------------------------------
-
-
 def test_kuma_scrape_down_reports_the_scrape_error(monkeypatch):
     # up{job="uptime-kuma"} == 0 — since the PG1 port the check reads the up series
     # through the cluster query route (the targets API isn't admitted by it).
@@ -86,9 +80,6 @@ def test_kuma_scrape_absent_target_skips(monkeypatch):
     """A cluster that doesn't scrape Kuma hasn't failed the step — it doesn't have it."""
     respond(monkeypatch, 200, json.dumps({"data": {"result": []}}))
     assert postflight.check_kuma_scrape()[0] == postflight.SKIP
-
-
-# --- §9.3 *arr / jellyfin keys -----------------------------------------------
 
 
 def test_arr_key_mismatch_fails(monkeypatch):
@@ -108,9 +99,6 @@ def test_jellyfin_key_mismatch_fails(monkeypatch):
     assert postflight.check_jellyfin_key()[0] == postflight.FAIL
 
 
-# --- §9.4 HA tokens ----------------------------------------------------------
-
-
 def test_ha_token_rejected_fails(monkeypatch):
     respond(monkeypatch, 401)
     assert postflight.check_ha_token("claude_ha_token")[0] == postflight.FAIL
@@ -125,9 +113,6 @@ def test_ha_token_missing_from_sops_fails(monkeypatch):
     )
 
 
-# --- §9.5 Authelia -----------------------------------------------------------
-
-
 def test_authelia_missing_oidc_material_fails(monkeypatch):
     respond(monkeypatch, 200, json.dumps({"status": "OK"}))
     monkeypatch.setattr(
@@ -138,9 +123,6 @@ def test_authelia_missing_oidc_material_fails(monkeypatch):
     status, detail = postflight.check_authelia()
     assert status == postflight.FAIL
     assert "authelia_oidc_hmac_secret" in detail
-
-
-# --- runner ------------------------------------------------------------------
 
 
 def test_missing_container_skips_not_fails(monkeypatch):

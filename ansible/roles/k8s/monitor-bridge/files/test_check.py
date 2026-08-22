@@ -29,7 +29,6 @@ def _seq(*values):
     return lambda *a, **k: next(it)
 
 
-# --- _env_file --------------------------------------------------------------
 def test_env_file_reads_from_file_and_strips(monkeypatch, tmp_path):
     f = tmp_path / "secret"
     # trailing newline from a rendered file must be stripped
@@ -68,9 +67,6 @@ def test_env_file_directory_path_falls_back_to_env(monkeypatch, tmp_path):
     assert check._env_file("HA_TOKEN", "") == "inline-fallback"
 
 
-# --- parse_rfc3339 ----------------------------------------------------------
-
-
 def test_nanosecond_precision_with_z():
     # Real Kopia value: 9 fractional digits + trailing Z
     dt = check.parse_rfc3339("2026-06-06T00:00:00.011699074Z")
@@ -88,9 +84,6 @@ def test_offset_after_fraction():
     dt = check.parse_rfc3339("2026-06-06T01:00:00.123456789+01:00")
     assert dt.utcoffset().total_seconds() == 3600
     assert dt.microsecond == 123456
-
-
-# --- check_disk -------------------------------------------------------------
 
 
 def test_disk_under_threshold_is_ok(monkeypatch):
@@ -194,9 +187,6 @@ def test_mem_metric_unavailable_alerts(monkeypatch):
     assert "unavailable" in msg
 
 
-# --- check_cert -------------------------------------------------------------
-
-
 def test_cert_valid_is_ok(monkeypatch):
     # default CERT_MIN_DAYS=14; 30 days left -> ok
     monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: 30.0)
@@ -220,9 +210,6 @@ def test_cert_metric_unavailable_alerts(monkeypatch):
     assert "unavailable" in msg
 
 
-# --- parse_duration ---------------------------------------------------------
-
-
 def test_parse_duration_units():
     assert check.parse_duration("900s") == 900
     assert check.parse_duration("15m") == 900
@@ -230,8 +217,6 @@ def test_parse_duration_units():
     assert check.parse_duration("2d") == 172800
     assert check.parse_duration("300") == 300  # bare number = seconds
 
-
-# --- n8n consecutive-failure streaks ----------------------------------------
 
 N8N_NOW = datetime(2026, 6, 8, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -340,9 +325,6 @@ def test_n8n_naive_timestamp_treated_as_utc():
     assert check.n8n_update_streaks(wf, ex, {}, N8N_NOW, 7200) == {"Prod Flow": 1}
 
 
-# --- check_n8n --------------------------------------------------------------
-
-
 def test_n8n_disabled_without_key():
     # N8N_API_KEY defaults to "" in tests -> monitoring disabled, never a false page
     ok, msg = check.check_n8n()
@@ -397,9 +379,6 @@ def test_n8n_check_single_failure_does_not_page(monkeypatch):
     monkeypatch.setattr(check, "_get_json", _seq(wf, ex))
     ok, _ = check.check_n8n()
     assert ok
-
-
-# --- queue_warnings (pure) ---------------------------------------------------
 
 
 def _queue(*records):
@@ -538,9 +517,6 @@ def test_queue_warnings_multiple_records_all_named():
     assert titles == {"Bad One", "Bad Two"}
 
 
-# --- check_arr_queue ---------------------------------------------------------
-
-
 def test_arr_queue_disabled_without_keys():
     # SONARR_API_KEY/RADARR_API_KEY default to "" in tests -> monitoring disabled
     ok, msg = check.check_arr_queue()
@@ -627,9 +603,6 @@ def test_arr_queue_only_checks_configured_app(monkeypatch):
     assert "sonarr" in calls[0]
 
 
-# --- gitops_alive / gitops_status (pure) ------------------------------------
-
-
 def test_gitops_alive_fresh():
     ok, msg = check.gitops_alive(60, 5400)
     assert ok
@@ -676,9 +649,6 @@ def test_gitops_status_hold_takes_priority_over_diverged():
     ok, msg = check.gitops_status("abc123def4567890", "def456abc7890123")
     assert not ok
     assert "held" in msg
-
-
-# --- check_gitops_alive / check_gitops_status (file I/O) ---------------------
 
 
 def _gw(tmp_path, name, content):
@@ -1229,9 +1199,6 @@ def test_pi_pressure_zero_cores_alerts_not_divides():
     assert "missing" in msg
 
 
-# --- check_pi_pressure -------------------------------------------------------
-
-
 def test_pi_check_disabled_without_url():
     # PI_GLANCES_URL defaults to "" in tests -> monitoring disabled, never a false page
     ok, msg = check.check_pi_pressure()
@@ -1379,7 +1346,6 @@ def test_ha_heartbeat_disabled_when_no_url_token(monkeypatch):
     assert "disabled" in msg
 
 
-# --- loki ingestion freshness -----------------------------------------------
 # Loki's Kuma /ready probe stays green even if promtail stops shipping (DOCKER_HOST
 # break, positions-file corruption, label regression) — a silently-dead log pipeline.
 # This check counts ingested log lines for an always-active stream over a window and
@@ -1472,9 +1438,6 @@ def test_check_loki_ingestion_filetail_silent_is_down(monkeypatch):
     assert "file-tail" in msg
 
 
-# --- loki_reachable (the Loki-dependent gate) -------------------------------
-
-
 def test_loki_reachable_ok(monkeypatch):
     monkeypatch.setattr(
         check, "_get_json", lambda *a, **k: {"status": "success", "data": ["job"]}
@@ -1489,9 +1452,6 @@ def test_loki_reachable_non_success_raises(monkeypatch):
     monkeypatch.setattr(check, "_get_json", lambda *a, **k: {"status": "error"})
     with pytest.raises(RuntimeError):
         check.loki_reachable()
-
-
-# --- discord_webhook_ok / check_discord -------------------------------------
 
 
 def test_discord_webhook_ok_200_is_up():
@@ -1670,9 +1630,6 @@ def test_discord_healthchecks_webhook_failure_pages(monkeypatch):
     ok, msg = check.check_discord()  # streak 2, pages
     assert not ok
     assert "Healthchecks" in msg and "404" in msg
-
-
-# --- email_backstop (throttled SMTP deliverability) -------------------------
 
 
 def test_email_backstop_disabled_without_password(monkeypatch):
@@ -2026,9 +1983,6 @@ def test_k8s_daemonsets_healthy_alongside_healthy_deployments():
     ok, msg = check.k8s_workloads_verdict(18, [], 5, ds_total=9, min_daemonsets=9)
     assert ok is True
     assert "18 k8s workloads healthy" == msg
-
-
-# --- estate pinning once one Prometheus holds two estates (slice 3, B5) ------
 
 
 def test_origin_sel_is_empty_without_a_pin(monkeypatch):
@@ -2466,9 +2420,6 @@ def test_run_once_suppresses_node_dependents_when_node_exporter_down(monkeypatch
     assert "exporter" in by_tok["tok_disk"][1].lower()
 
 
-# --- restarts / oom / cpu-throttle (retargeted onto kubernetes-cadvisor, by pod) ---
-
-
 def _fake_vectors(monkeypatch, by_query):
     """prom_vector stub keyed by substring of the query."""
 
@@ -2589,8 +2540,6 @@ def test_run_once_up_probe_failure_does_not_suppress(monkeypatch):
     assert "disk" in ran  # not suppressed
 
 
-# --- indexers_down (pure) ---------------------------------------------------
-
 INX_NOW = datetime(2026, 7, 4, 12, 0, 0, tzinfo=timezone.utc)
 INX_NAMES = {1: "EZTV", 2: "1337x", 3: "YTS"}
 
@@ -2662,9 +2611,6 @@ def test_indexers_down_ignore_only_named_indexer():
     assert [n for n, _ in out] == ["1337x"]
 
 
-# --- check_prowlarr_indexers (wrapper) --------------------------------------
-
-
 def test_prowlarr_indexers_disabled_without_key(monkeypatch):
     monkeypatch.setattr(check, "PROWLARR_API_KEY", "")
     ok, msg = check.check_prowlarr_indexers()
@@ -2706,9 +2652,6 @@ def test_prowlarr_indexers_ignore_list_suppresses_page(monkeypatch):
     assert "ok" in msg
 
 
-# --- sanitize (adversary-controlled alert text) — Security L1 ----------------
-
-
 def test_sanitize_defuses_discord_mentions_and_markdown():
     # A poisoned release title / indexer name must not ping the channel or break formatting.
     out = check.sanitize("@everyone `rm -rf`\nsee @here")
@@ -2743,9 +2686,6 @@ def test_arr_queue_msg_is_sanitized(monkeypatch):
     assert ok is False
     assert "@everyone" not in msg
     assert "(at)everyone" in msg
-
-
-# --- CHECKS <-> compose (env + monitors) consistency — CI/CD L2 --------------
 
 
 def _read_sibling(relpath):
@@ -2795,9 +2735,6 @@ def test_every_push_token_env_is_wired_to_a_monitor():
     )
 
 
-# --- down_streak: the shared consecutive-down hysteresis primitive ------------
-
-
 def test_down_streak_holds_up_below_threshold():
     count, ok, msg = check.down_streak(0, 2, "boom", "grace")
     assert (count, ok) == (1, True)
@@ -2816,9 +2753,6 @@ def test_down_streak_custom_label_and_note():
     )
     assert ok
     assert msg == "throttling streak 1/3 (not alerting yet): x"
-
-
-# --- startup/redeploy grace for the reach-out checks (STARTUP_GRACE) ----------
 
 
 def test_apply_startup_grace_single_down_is_suppressed():
@@ -2998,7 +2932,6 @@ def test_check_promtail_dropped_uses_increase(monkeypatch):
     )
 
 
-# --- gitops_status: behind-origin arm ----------------------------------------
 # The case that caught nothing before: a deferred BROAD change never fast-forwards, so the host
 # parks on an old tree while last_run keeps ticking and is_diverged stays false. daniel-server ran
 # a 12-commit-old tree for hours that way on 2026-08-02 with every GitOps signal green.
@@ -3051,7 +2984,6 @@ def test_gitops_status_unparseable_behind_marker_is_ok():
         assert ok, marker
 
 
-# --- fetch-failure messages -------------------------------------------------
 #
 # The 2026-08-02 B2 transaction-cap outage paged for 13h as "backup check error: timed out",
 # which names neither the service nor the cause. These cover what the message must now carry —
@@ -3151,8 +3083,6 @@ def test_get_json_wraps_non_http_errors_without_leaking_the_url(monkeypatch):
     assert "s3cr3t" not in str(ei.value)
 
 
-# --- CHECKS_ONLY / CHECKS_SKIP (the Phase F twin/remnant split) ---------------------------
-
 # The remnant's real config: only the host-state-file checks, every gate off. Three
 # since the 2026-08-14 host flips (pi_peers + renovate_alive became direct pushers).
 # A representative CHECKS_ONLY subset. No deployment carries a filter since the Docker
@@ -3219,9 +3149,6 @@ def test_run_once_with_only_filter_touches_no_gate(monkeypatch):
     check.run_once()
     assert set(evaluated) == SUBSET_ONLY
     assert len(pushed) == len(SUBSET_ONLY)
-
-
-# --- R2 free-tier headroom ----------------------------------------------------
 
 
 def _ops(**counts):
@@ -3389,9 +3316,7 @@ def test_r2_usage_reprobes_after_a_failure(monkeypatch):
     assert len(calls) == 2
 
 
-# ---------------------------------------------------------------------------
 # check_longhorn_volumes — replica redundancy on the storage layer
-# ---------------------------------------------------------------------------
 
 
 def _longhorn_series(pvc, state, pod="longhorn-manager-a"):
@@ -3501,7 +3426,6 @@ def test_longhorn_selects_on_the_state_label_not_a_value_ordinal():
     assert "== 2" not in queries[0]
 
 
-# --- extended_resource_verdict ------------------------------------------------------------------
 #
 # dri-device-plugin has no probe, and a container without a readinessProbe is Ready the instant it
 # starts. So a plugin that wedges internally keeps a Running, Ready, fully-available DaemonSet

@@ -109,9 +109,6 @@ STEADY = dict(
 )
 
 
-# ------------------------------------------------------------------- the gate's truth table
-
-
 def test_steady_state_skips_the_build():
     """The saving. Nothing changed and the image exists, so there is nothing to rebuild."""
     assert _render(**STEADY) == "False", (
@@ -188,9 +185,6 @@ def test_the_gate_does_not_absorb_the_dry_run_guard():
         "the gate absorbed the dry-run guard. That makes every build-path task's protection "
         "invisible to test_k8s_dry_run.py, which then stops catching the next role to omit it."
     )
-
-
-# ----------------------------------------------------------------------- structural coverage
 
 
 def _clauses(prefix) -> list[str]:

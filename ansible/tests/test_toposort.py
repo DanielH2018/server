@@ -39,9 +39,6 @@ def _names(containers):
     return [c["name"] for c in containers]
 
 
-# --- toposort_containers ----------------------------------------------------
-
-
 class TestToposort:
     def test_linear_chain_orders_deps_first(self):
         # a depends on b, b depends on c  =>  c, b, a
@@ -82,9 +79,6 @@ class TestToposort:
         cl = _containers("a", "b")
         result = toposort_containers(cl, {"a": ["b"], "b": []})
         assert result[0] is cl[1] and result[1] is cl[0]
-
-
-# --- build_dep_map ----------------------------------------------------------
 
 
 class TestBuildDepMap:
@@ -137,9 +131,6 @@ class TestBuildDepMap:
         assert build_dep_map(cl, str(tmp_path), []) == {"a": ["b"], "b": []}
 
 
-# --- dep_closure ------------------------------------------------------------
-
-
 class TestDepClosure:
     def test_returns_transitive_deps_excluding_requested(self):
         # request 'a' (tag a); a -> b -> c. closure = {b, c}, NOT a.
@@ -155,9 +146,6 @@ class TestDepClosure:
         cl = _containers("a", "b", "shared")
         deps = {"a": ["shared"], "b": ["shared"], "shared": []}
         assert _names(dep_closure(cl, deps, ["a"])) == ["shared"]
-
-
-# --- expand_with_deps -------------------------------------------------------
 
 
 class TestExpandWithDeps:
@@ -186,9 +174,6 @@ class TestExpandWithDeps:
         # b running but c down -> redeploy a and c, skip b
         result = expand_with_deps(cl, deps, ["a"], running_names=["b"])
         assert set(_names(result)) == {"a", "c"}
-
-
-# --- implicit tags (no `tags:` key => acts as [name]) ------------------------
 
 
 class TestImplicitTags:

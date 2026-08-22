@@ -112,7 +112,7 @@ def loki_range_params(logql: str, limit: int, hours: float, now: float) -> dict:
     }
 
 
-# --- Downstream URL-path guards ---------------------------------------------
+# Downstream URL-path guards
 # `name` (docker) and `entity_id` (Home Assistant) get interpolated into an
 # outbound URL path, and httpx does not percent-encode an f-string path segment.
 # A value carrying `/`, `?`, `..`, or `%` would steer the request to a different
@@ -142,7 +142,7 @@ def entity_id_valid(entity_id: str) -> bool:
     return dot == "." and "." not in obj and _is_ha_slug(domain) and _is_ha_slug(obj)
 
 
-# --- File-read jail ---------------------------------------------------------
+# File-read jail
 # The container bind-mounts ansible/ read-only; these guards keep a read_file
 # tool inside it. The age private key lives outside the mount (~/.config/sops),
 # so the worst a jail bug could leak is ansible/ content — and secrets.yml is

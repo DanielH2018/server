@@ -238,9 +238,6 @@ def test_main_fails_closed_when_shellcheck_missing(monkeypatch):
     assert v.main() == 1
 
 
-# --------------------------------------------------------------------------- cron PATH rule
-
-
 def test_cron_job_scripts_resolves_a_dest_rename():
     # claude-otel deploys templates/telemetry-health.sh.j2 to
     # /usr/local/bin/claude-otel-health.sh — the cron `job:` only ever names the dest, so this

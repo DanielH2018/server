@@ -244,7 +244,6 @@ def test_sync_preserves_a_manual_tier_override():
     assert reg["secrets"]["special_push_token"]["tier"] == "ignore"
 
 
-# --- registry persistence round-trip ----------------------------------------
 # The registry is the single plaintext source of names/tiers/dates. A save/load
 # corruption is SILENT (the next sync/audit reads garbage), so pin the contract:
 # round-trips losslessly, keeps the MANAGED header, and sorts keys deterministically

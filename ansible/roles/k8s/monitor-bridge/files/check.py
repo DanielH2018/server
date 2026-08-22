@@ -614,7 +614,7 @@ SMTP_PASSWORD = _env("SMTP_PASSWORD", "")
 EMAIL_PROBE_INTERVAL_S = float(_env("EMAIL_PROBE_INTERVAL_S", "21600"))  # 6h
 
 
-# --- HTTP / parsing helpers (pure-ish, unit-tested) -------------------------
+# HTTP / parsing helpers (pure-ish, unit-tested)
 
 
 FETCH_BODY_MAX = 180
@@ -775,7 +775,7 @@ def parse_duration(s):
     return float(s)
 
 
-# --- checks: each returns (ok, msg) -----------------------------------------
+# checks: each returns (ok, msg)
 
 
 def check_disk():

@@ -26,9 +26,6 @@ def _result(stdout):
     return types.SimpleNamespace(stdout=stdout, stderr="", returncode=0)
 
 
-# --- format_banner -----------------------------------------------------------
-
-
 def test_banner_empty_when_no_problems():
     assert _mod.format_banner([]) == ""
 
@@ -38,9 +35,6 @@ def test_banner_lists_problems_and_triage():
     assert "issues detected" in out
     assert "jellyfin" in out
     assert "triage" in out  # always points the reader at the probe commands
-
-
-# --- docker_problems ---------------------------------------------------------
 
 
 def test_docker_problems_parses_unhealthy_and_restarting(monkeypatch):
@@ -96,8 +90,6 @@ def test_missing_docker_binary_is_silent(monkeypatch):
     # even_when_docker_down).
     assert ok is False
 
-
-# --- target_problems ---------------------------------------------------------
 
 _TARGETS_ONE_DOWN = (
     '{"data":{"activeTargets":['
@@ -189,9 +181,6 @@ def test_target_problems_filters_scaled_to_zero_deployments(monkeypatch):
     assert not any("terraria-stats" in line for line in bad)
 
 
-# --- master_moved_problems ----------------------------------------------------
-
-
 def test_master_moved_silent_when_current(monkeypatch):
     monkeypatch.setattr(_mod, "_run", lambda *a, **k: _result("0\n"))
     assert _mod.master_moved_problems() == []
@@ -242,9 +231,6 @@ def test_master_moved_silent_on_timeout(monkeypatch):
 def test_master_moved_silent_on_unparseable_output(monkeypatch):
     monkeypatch.setattr(_mod, "_run", lambda *a, **k: _result("not a number\n"))
     assert _mod.master_moved_problems() == []
-
-
-# --- main orchestration ------------------------------------------------------
 
 
 def _run_main(

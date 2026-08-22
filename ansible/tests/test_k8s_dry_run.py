@@ -70,9 +70,6 @@ def _when(task: dict) -> str:
     return str(task.get("when", ""))
 
 
-# --------------------------------------------------------------------------- render location
-
-
 def test_render_and_apply_share_one_directory_fact() -> None:
     """Rendering and applying must never name the directory independently."""
     tasks = _tasks(_MANIFESTS)
@@ -117,9 +114,6 @@ def test_dry_run_renders_to_a_tempdir_and_discards_it() -> None:
     )
 
 
-# ------------------------------------------------------------------------------------ apply
-
-
 def test_apply_is_server_dry_run_under_the_flag() -> None:
     cmd = _cmd(_named(_tasks(_MANIFESTS), "Apply manifests"))
     assert "--dry-run=server" in cmd, (
@@ -143,9 +137,6 @@ def test_apply_reports_unchanged_under_the_flag() -> None:
         "'created'/'configured' words as a real apply, so the run reports changed and the "
         "stabilisation gate soaks a workload nothing touched."
     )
-
-
-# ------------------------------------------------------------- everything downstream is off
 
 
 def test_mutating_downstream_tasks_are_guarded() -> None:
@@ -200,9 +191,6 @@ def test_the_render_directory_fact_survives_every_tag_selection() -> None:
         )
 
 
-# ------------------------------------------------------------------- the play-level refusal
-
-
 def _k8s_play() -> dict:
     for play in yaml.safe_load(_DEPLOY.read_text()) or []:
         if "k8s" in str(play.get("name", "")).lower():
@@ -228,9 +216,6 @@ def test_namespace_apply_is_guarded() -> None:
     assert _GUARD in _when(task), (
         "the namespace apply writes to the cluster on a dry run"
     )
-
-
-# --------------------------------------------------------------------------------- the vars
 
 
 def _all_vars() -> dict:
@@ -574,9 +559,6 @@ def test_no_mutate_covers_check_mode_and_dry_run() -> None:
         "neither in practice — image-builder was fully --check-clean and would still have "
         "built and pushed an image under a dry run."
     )
-
-
-# ------------------------------------------------------------------------------- the wrapper
 
 
 def test_wrapper_translates_dry_run_and_skips_the_lock() -> None:

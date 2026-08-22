@@ -22,11 +22,8 @@ classify = _mod.classify
 classify_remote = _mod.classify_remote
 
 
-# --- (command, label) tables ------------------------------------------------
-
 # MUST auto-approve: provably read-only.
 APPROVE = [
-    # --- existing behavior (regression) ---
     ("ls", "bare ls"),
     ("cat foo.txt", "cat a file"),
     ("git status", "git read-only subcommand"),
@@ -37,7 +34,6 @@ APPROVE = [
     ("find . -name '*.yml'", "find without write actions"),
     ("cat a.txt | grep foo | head -5", "pure read-only pipeline"),
     ("pwd", "pwd builtin"),
-    # --- NEW: read-only commands on a homelab host over ssh ---
     ("ssh daniel-server docker ps", "bare remote read-only command"),
     ("ssh daniel-pi uptime", "the other homelab host"),
     ("ssh ubuntu@daniel-server hostname", "user@host form"),
@@ -61,28 +57,22 @@ APPROVE = [
         "ssh daniel-server 'cd /home/ubuntu/server; git status'",
         "; sequence, both stages read-only",
     ),
-    # --- NEW: cd is read-only ---
     ("cd /home/ubuntu/server", "cd changes cwd only"),
     ("cd /srv && ls", "cd then ls"),
-    # --- NEW: sequential operators ; && || ---
     ("cat a; cat b", "two reads joined by ;"),
     ("echo hi; ls; pwd", "three reads joined by ;"),
     ("ls && cat foo", "&& sequence"),
     ("false || ls", "|| sequence"),
-    # --- NEW: newline-separated statements ---
     ("cat a\ncat b", "two reads on separate lines"),
     ("echo '=== a ==='\ncat a\necho '=== b ==='\ncat b", "header/cat blocks"),
-    # --- NEW: write-free redirects ---
     ("cat .yamllint 2>/dev/null", "stderr to /dev/null"),
     ("ls >/dev/null", "stdout to /dev/null"),
     ("docker ps 2>&1", "fd duplication 2>&1"),
     ("grep -r foo . 2>/dev/null | head", "redirect inside pipeline"),
-    # --- NEW: awk read-only programs ---
     ("awk '{ print length, FILENAME }' file", "awk print length"),
     ("awk -F: '{print $1}' /etc/passwd", "awk with -F field sep"),
     ("ls | awk '{print $9}'", "awk in a pipeline"),
     ("awk 'NR==1' file", "awk line selection"),
-    # --- NEW: sed read-only scripts ---
     ("sed -n '1,5p' file", "sed print range"),
     ("sed 's/foo/bar/' file", "sed substitution to stdout"),
     ("echo x | sed 's/x/y/'", "sed in a pipeline"),
@@ -90,11 +80,9 @@ APPROVE = [
         r"sed -E 's/(public key:|private key:).*/\1 [redacted]/'",
         "the wireguard redaction sed",
     ),
-    # --- adversarial edge cases that are genuinely read-only ---
     ("grep foo file >/dev/null 2>&1", "combined >/dev/null 2>&1"),
     ('echo "a; rm b"', "operators inside quotes are data, not syntax"),
     ('echo "x && y | z"', "quoted pipe/and is data"),
-    # --- NEW: the original motivating command ---
     (
         "cd /home/ubuntu/server\n"
         'echo "=== .ansible-lint ==="; cat .ansible-lint\n'
@@ -102,7 +90,6 @@ APPROVE = [
         "awk '{ print length, FILENAME }' ansible/roles/containers/x/tasks/main.yml",
         "full multi-line exploration command",
     ),
-    # --- NEW: host package / diagnostic queries (each was a one-off allow entry) ---
     ("lsb_release -d", "lsb_release describe"),
     ("lsb_release -a", "lsb_release all"),
     ("mailq", "mail queue listing"),
@@ -131,7 +118,6 @@ APPROVE = [
 
 # MUST NOT auto-approve: can write, delete, or execute (or unparseable).
 REJECT = [
-    # --- existing behavior (regression) ---
     ("rm -rf /tmp/x", "rm deletes"),
     ("git push", "git push mutates"),
     ("docker run alpine", "docker run executes"),
@@ -142,7 +128,6 @@ REJECT = [
     ("dd if=/dev/zero of=f", "dd writes"),
     ("mv a b", "mv renames"),
     ("python3 script.py", "interpreter executes arbitrary code"),
-    # --- NEW-feature dangerous forms must still reject ---
     ("ls > out.txt", "redirect writes a real file"),
     ("cat a >> log.txt", "append writes a real file"),
     ("ls &", "backgrounding"),
@@ -152,28 +137,24 @@ REJECT = [
     ("cat a | tee out", "tee write inside pipeline"),
     ("cat a && echo $(rm x)", "substitution hidden after &&"),
     ("cat a\nrm b", "bad stage on a second line"),
-    # --- awk dangerous forms ---
     ("awk 'BEGIN{system(\"rm -rf x\")}'", "awk system() executes"),
     ("awk '{print > \"out.txt\"}' file", "awk redirects to a file"),
     ("awk '{print | \"sh\"}' file", "awk pipes to a command"),
     ("awk 'BEGIN{while((\"ls\"|getline l)>0) print l}'", "awk getline from command"),
     ("awk -f prog.awk file", "awk -f program file (uninspectable)"),
     ("gawk -i inplace '{print}' file", "gawk -i inplace edits files"),
-    # --- adversarial false-approve guards (the dangerous direction) ---
     ("awk '{print}' > out.txt", "shell redirect to file after a safe awk"),
     ("diff <(ls) <(ls)", "process substitution"),
     ("cat a|rm b", "no-space pipe into a mutator"),
     (">/dev/null", "redirect with no command"),
     ("sed '/foo/w out' file", "sed w command reached via address"),
     ("cat a > b 2>/dev/null", "real-file write alongside a safe redirect"),
-    # --- sed dangerous forms ---
     ("sed -i 's/a/b/' file", "sed -i edits in place"),
     ("sed 's/a/b/w out.txt' file", "sed s///w writes a file"),
     ("sed 's/a/b/e' file", "sed s///e executes"),
     ("sed -n 'w out.txt' file", "sed w command writes"),
     ("sed '1e cat /etc/shadow' file", "sed e command executes"),
     ("sed -f script.sed file", "sed -f program file (uninspectable)"),
-    # --- package-query guards must reject the WRITE mode of the same binary ---
     ("dpkg", "bare dpkg has no read action -> not provably read-only"),
     ("dpkg -i pkg.deb", "dpkg -i installs"),
     ("dpkg --install pkg.deb", "dpkg --install installs"),
@@ -202,7 +183,6 @@ REJECT = [
     ("crontab -u ubuntu -r", "crontab -r for a user still deletes"),
     ("sensors -s", "sensors -s applies config to hardware"),
     ("sensors --set", "sensors --set writes"),
-    # --- ssh: the remote command is held to the same standard as a local one ---
     ("ssh daniel-server", "no remote command -> interactive shell"),
     ("ssh daniel-server rm -rf /tmp/x", "remote rm deletes"),
     ("ssh daniel-server docker run alpine", "remote docker run executes"),
@@ -256,7 +236,6 @@ def test_rejects_unsafe_commands():
     )
 
 
-# --- the PermissionRequest entry point ---------------------------------------
 # classify_remote answers `ask` rules, so it must speak only for the traffic that
 # needs it. A read-only command with no ssh in it is already handled at PreToolUse.
 

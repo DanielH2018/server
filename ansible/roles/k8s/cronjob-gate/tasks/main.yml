@@ -68,7 +68,6 @@
   # fails the task on that regardless of this setting.
   failed_when: false
 
-# ---------------------------------------------------------------------------------------------
 # From here down the run did NOT complete, and the role decides whether that fails the deploy.
 #
 # It does not always, and the split rests on when auto-deploy fires: only on an `_image:`-only

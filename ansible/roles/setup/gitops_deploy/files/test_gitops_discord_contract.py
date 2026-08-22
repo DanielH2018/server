@@ -63,7 +63,6 @@ def test_discord_delegates_to_shared_discord_post():
     )
 
 
-# --- transient `git fetch` skip contract -------------------------------------
 # A retryable fetch failure raises RetryableFetchError, which __main__ turns into a CLEAN skip:
 # exit 0 (no OnFailure page), no in-script Discord crash-post, and — critically — no last_run
 # refresh (so a persistent fetch break still surfaces via GitOps-Alive going stale).
@@ -164,7 +163,6 @@ def test_generic_crash_handler_still_pages():
     )
 
 
-# --- write_hold-before-rollback ordering (run-4 M1) + deploy --frozen ---------
 # main() can't be imported (module-level `C = cfg()` reads /etc config absent in CI), so these AST
 # guards pin two source invariants that no behavioural test can reach.
 
@@ -277,9 +275,6 @@ def test_deploy_uses_frozen():
     )
 
 
-# --- pending-alert queue (H1): no post-merge alert silently lost on a webhook blip ---
-
-
 def test_drain_pending_runs_before_short_circuits():
     # The ff-merged secrets/tasks/meta/combined paths never re-reach their alert code on the next
     # (noop) tick, so a transient webhook failure is only recoverable by draining the queue at the TOP
@@ -343,7 +338,6 @@ def test_rollback_return_is_gated_on_delivered_post():
     )
 
 
-# --- divergence-marker write wiring (2026-07-15 review L3) ---------------------
 # The pure is_diverged() (test_deploy_logic.py) and the read side (check_gitops_status,
 # test_check.py) are covered, but the WRITE — that main() emits the diverged-SHA marker every tick,
 # gated on is_diverged, ahead of the action short-circuits — lives only in the un-importable main().
@@ -395,7 +389,6 @@ def test_diverged_marker_write_is_gated_and_precedes_action_branching():
     )
 
 
-# --- deploy-timeout budget arithmetic (2026-07-16 review M1) ------------------
 # "The rollback survives max flock contention" is an invariant split across two templates:
 #   config.env.j2            -> RUN_BUDGET_S (health-gate budget) + HEALTH_TIMEOUT_S (rollback redeploy)
 #   gitops-deploy.service.j2 -> flock -w <N> (max lock wait) + TimeoutStartSec (systemd hard kill)
@@ -422,7 +415,6 @@ def _systemd_seconds(span: str) -> int:
     return int(m.group(1)) * (60 if m.group(2) in ("min", "m") else 1)
 
 
-# --- k8s defer-and-alert wiring (verified 2026-08-13: every ansible/roles/k8s/** change on
 # daniel-box fell into an empty ChangeSet -> the docs-only silent ff-merge, on the only host
 # where every one of 41 services is platform: k8s). deploy_logic's ChangeSet.k8s / _ACTIVE_K8S are
 # covered behaviourally (test_deploy_logic.py); main() itself is un-importable (module-level
@@ -454,7 +446,6 @@ def test_deploy_timeout_budget_survives_max_flock_contention():
     )
 
 
-# --- k8s deploy-timeout budget arithmetic (task 6b) ---------------------------
 # A second, independent invariant from the Docker one above: on the k8s path, a failed forward
 # deploy and its rollback redeploy run SEQUENTIALLY inside one systemd unit activation, each
 # bounded by its own K8S_DEPLOY_TIMEOUT_S / K8S_ROLLBACK_TIMEOUT_S rather than by RUN_BUDGET_S.
@@ -517,7 +508,6 @@ def test_secret_rotate_lock_wait_clears_the_deployers_worst_case_hold():
     )
 
 
-# --- k8s rollback-timeout ceiling arithmetic (re-sized against the real per-service ceiling) --
 # K8S_ROLLBACK_TIMEOUT_S must cover one full rollback cycle for the most expensive currently-
 # promoted (k8s_autodeploy: true) service that also declares k8s_autodeploy_snapshot_pvcs: the
 # pre-revert snapshot wait, the revert itself, the forward apply's own rollout wait, and the
