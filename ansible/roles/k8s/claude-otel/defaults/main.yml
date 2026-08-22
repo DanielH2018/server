@@ -13,7 +13,13 @@
 claude_otel_collector_image: otel/opentelemetry-collector-contrib:0.158.0
 claude_otel_loki_image: grafana/loki:3.7.6
 claude_otel_prometheus_image: prom/prometheus:v3.0.1
-claude_otel_grafana_image: grafana/grafana:11.6.16
+# 11.6.16 -> 13.2.0 (2026-08-22), crossing the Grafana 12 removal of Angular. Safe only
+# because the 19 `graph` panels this repo shipped were converted to `timeseries` first and
+# deployed against 11.6.16 — do that before any future major, not alongside it.
+# grafana-data is longhorn-nobackup and Grafana's schema migrations are one-way, which is
+# tolerable here precisely because dashboards and datasources are provisioned from git: the
+# DB holds only preferences, version history and annotations. Recovery is deleting the PVC.
+claude_otel_grafana_image: grafana/grafana:13.2.0
 # Slice 3 (D8). Distinct from the metrics-server k3s already bundles: that serves the
 # resource-metrics API for `kubectl top`/HPA, while this exports kube_pod_status_ready and
 # kube_deployment_status_* — the only readiness signal the seven routeless workloads have.
