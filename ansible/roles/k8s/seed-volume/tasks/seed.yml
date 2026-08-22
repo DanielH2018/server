@@ -18,7 +18,7 @@
 # application has since written to would overwrite live data with a stale snapshot.
 #
 # AND CHEAP, because that no-op runs 25 times on every deploy. Reading the marker means mounting
-# the volume, which means the seed pod — 8 tasks to learn nothing changed. So a successful seed
+# the volume, which means the seed pod — five tasks to learn nothing changed. So a successful seed
 # also annotates the PVC `homelab.daniel-hunter.com/seeded=true`, and a run that sees the
 # annotation skips the pod cycle entirely. The annotation is a projection of the marker, not a
 # replacement for it: the marker remains the authority, and any run that does start a seed pod
@@ -83,8 +83,11 @@
 # deploy and every one of them is already seeded, so the whole cost of this role in steady
 # state is module executions that conclude "nothing to do". Folding the seed-state read into
 # the lookup that had to happen anyway makes the short-circuit below free.
+#
+# `always`, not `config`, because the fact below crosses the config/deploy split — see the note
+# on that task.
 - name: Find the PersistentVolume and prior seed state for {{ seed_volume_claim }}
-  tags: [config]
+  tags: always
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} get pvc {{ seed_volume_claim }}
@@ -97,8 +100,9 @@
 
 # THE SHORT-CIRCUIT. When the annotation says this claim is already seeded, everything the seed
 # pod exists to do — start it, wait for it, read the in-volume `.seeded` marker, delete it — is
-# a round trip to learn something already recorded on the PVC. Skipping it drops 8 of this
-# role's 12 tasks per claim.
+# a round trip to learn something already recorded on the PVC. Skipping it drops five tasks per
+# claim — the attached-node lookup, the pod start, the readiness wait, the marker exec and the
+# pod delete — plus one of the render loop's two items.
 #
 # It reads the annotation rather than the `.seeded` marker because the marker is INSIDE the
 # volume, and the only way to read it is the pod cycle this is trying to avoid. The annotation
@@ -114,8 +118,16 @@
 # a cutover (see this file's header), so a gate that outranked it would silently turn the one
 # run that matters into a no-op — the same failure test_seed_volume_force.py guards from the
 # other direction.
+#
+# `always` ON BOTH THIS AND THE LOOKUP ABOVE, because this is the role's first fact read across
+# the config/deploy tag split: it is produced here and consumed by six deploy-tagged tasks. A
+# selection that reached deploy without config would leave it undefined — but the worse mode is
+# that set_fact persists for the host across role invocations, so a skipped lookup leaves the
+# PREVIOUS claim's value in scope. A stale `true` skips the pod cycle for a claim that was never
+# seeded, and the workload then starts against an empty volume. `| default(false)` does not help
+# with that; only always running the producer does.
 - name: Note the PV and whether the seed pod can be skipped for {{ seed_volume_claim }}
-  tags: [config]
+  tags: always
   ansible.builtin.set_fact:
     seed_volume_pv_name: "{{ seed_volume_pv.stdout | default('') | split('|') | first | trim }}"
     seed_volume_short_circuit: >-

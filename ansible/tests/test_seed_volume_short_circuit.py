@@ -25,6 +25,7 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 from ansible.plugins.filter.core import FilterModule
 from ansible.template import AnsibleUndefined
 from jinja2 import Environment
@@ -220,4 +221,33 @@ def test_the_pvc_render_is_never_short_circuited():
         )
         assert ("seed-pod.yaml" in rendered) is not short_circuit, (
             "seed-pod.yaml should be rendered exactly when a seed pod is going to start"
+        )
+
+
+def test_the_gates_producers_are_tagged_always():
+    """`seed_volume_short_circuit` is the role's first fact read across the config/deploy split.
+
+    Ansible unions tags for selection but excludes on any tag, and `set_fact` persists for the
+    host across role invocations. So a `config`-tagged producer that gets filtered out does not
+    leave the fact undefined — it leaves the PREVIOUS claim's value in scope. A stale `true`
+    skips the seed pod for a claim that was never seeded, and its workload starts against an
+    empty volume.
+    """
+    tasks = yaml.safe_load(SEED.read_text())
+    producers = [
+        task
+        for task in tasks
+        # By the set_fact's KEYS, not its rendered text: `Decide whether this run copies` reads
+        # the gate inside its expression and would otherwise match as a producer of it.
+        if "seed_volume_short_circuit" in (task.get("ansible.builtin.set_fact") or {})
+        or task.get("register") == "seed_volume_pv"
+    ]
+    assert len(producers) == 2, (
+        f"expected the lookup and the set_fact to produce the gate, found {len(producers)}"
+    )
+    for task in producers:
+        assert task.get("tags") == "always", (
+            f"{task['name']!r} is tagged {task.get('tags')!r}, not `always`. It produces the fact "
+            "six deploy-tagged tasks gate on — see this test's docstring for what a stale value "
+            "does."
         )
