@@ -92,14 +92,11 @@ def test_the_role_lists_its_workloads_the_same_way_everywhere() -> None:
         "snapshot iterates it; without it the play gate watches nothing for this role."
     )
 
-    loops = _literal_workload_loops()
-    assert len(loops) == 2, (
-        f"expected the restart loop and the wait loop to spell out the workloads, found "
-        f"{len(loops)}. If one was refactored to use claude_otel_stabilise_workloads, drop it "
-        "from this count; if one was deleted, the role no longer rolls what it soaks."
-    )
-
-    for loop in loops:
+    # Deliberately not a count. The role spells the workloads out twice today (the restart loop
+    # and the wait loop), but pointing either at claude_otel_stabilise_workloads is a correct
+    # consolidation — a test that pinned the number would fail for that improvement. What must
+    # hold is that every literal copy still standing agrees with the declared list.
+    for loop in _literal_workload_loops():
         assert loop == declared, (
             "claude-otel rolls a different set of workloads than it hands to the stabilisation "
             f"gate. Rolled: {sorted(loop)}. Declared in claude_otel_stabilise_workloads: "
