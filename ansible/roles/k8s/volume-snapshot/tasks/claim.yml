@@ -577,9 +577,12 @@
   # empty value; only an explicit `true` means removed.
   #
   # Sorted on the creationTimestamp field, newest first, so the slice below keeps the newest N
-  # and hands back the rest. `volume_snapshot_retain` is clamped to a floor of 1: the newest
-  # snapshot is never a candidate whatever the caller passes, because 7b reverts to it and a
-  # retention pass that races a rollback destroys the recovery point it exists to protect.
+  # and hands back the rest. `volume_snapshot_retain` is clamped to a floor of 2, not 1: a
+  # ROLLBACK run takes this run's own snapshot (this task's caller) and then prunes BEFORE
+  # k8s/volume-revert reads the chain — so at prune time the chain holds this run's brand-new
+  # snapshot AND the earlier pre-deploy snapshot the revert is about to need. A floor of 1 keeps
+  # only the newest (this run's own) and deletes the very recovery point the revert step right
+  # after it depends on. See CLAUDE.md's "The revert needs two, not one" section.
   ansible.builtin.set_fact:
     volume_snapshot_live: >-
       {{ volume_snapshot_existing.stdout_lines | default([])
@@ -588,7 +591,7 @@
          | selectattr('2', 'match', volume_snapshot_prefix)
          | sort(attribute='0', reverse=true)
          | map(attribute='2') | list }}
-    volume_snapshot_keep: "{{ [volume_snapshot_retain | int, 1] | max }}"
+    volume_snapshot_keep: "{{ [volume_snapshot_retain | int, 2] | max }}"
 
 - name: Check that the snapshot listing found this run's snapshot for {{ volume_snapshot_claim }}
   tags: [deploy]

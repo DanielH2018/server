@@ -16,6 +16,13 @@ Two transpositions that look harmless are outages: scaling down AFTER the mainte
 attach leaves the pod holding the volume, and detaching BEFORE the revert gives the revert a
 volume with no engine. Read the table below before reordering anything.
 
+**"Checked before the scale-down" is a per-claim guarantee, not a per-service one.** `tdarr` and
+`code-server` each hold two claims (see "A multi-claim revert is not atomic" below), and
+main.yml includes this file once per claim. On the second claim, its own checks — including the
+"no snapshot matches" fail below — run AFTER the first claim already scaled the Deployment to
+zero. So a failure on claim 2 finds the service already DOWN, not still running; the failure
+message says so rather than claiming otherwise.
+
 ## What the caller passes
 
 ```yaml
@@ -37,6 +44,16 @@ being rolled back — the output of `git rev-parse --short=8 HEAD` at that commi
 `--short=8` is a minimum, not a width: git returns more characters when eight are ambiguous, and
 the snapshot carries whatever it returned. So this role checks the shape (`^[0-9a-f]{8,}$`) and
 transforms nothing. Truncating to eight would fail to match a nine-character name.
+
+**The one caller that does not follow this rule: `gitops-deploy`'s automated rollback.**
+`gitops_deploy.py` passes `restore_sha=origin[:8]` — a fixed 8-character slice of the FULL
+40-char SHA, not `git rev-parse --short=8`'s own (possibly longer) output. The two agree
+whenever 8 characters is already unambiguous, which is the overwhelmingly common case, and
+diverge only on an 8-hex-char collision in the repo's history — negligibly likely, and safe when
+it happens: the prefix this role builds then fails to match, and "no snapshot matches this
+deploy" fires before anything moves, the same fail-closed outcome as every other unmatched
+prefix. See `ansible/roles/setup/gitops_deploy/CLAUDE.md`'s "Logic tests" section for the full
+reconciliation; not changed here because the failure mode it falls into is already correct.
 
 ## The sequence, and why every step is there
 
@@ -67,15 +84,32 @@ Per claim, in this order:
 7. **`POST ?action=snapshotRevert {name}`**, demanding HTTP 200.
 8. **`POST ?action=detach {}`, then wait for `detached`.**
 
-Steps 1 and 2 are reads. They run under `--check` too (`check_mode: false`), so a dry run
-answers the question that matters most about a rollback — is there a snapshot to revert to? —
-without changing anything.
+Steps 1 and 2 are reads, and carry `check_mode: false` — but that only matters if this role
+starts at all. See "The guard is `k8s_no_mutate`, and neither `--check` nor `--dry-run` reaches
+this role" below: today, they don't.
 
-A dry run **reports** a missing snapshot; only a real run fails on one. `Fail when no snapshot
-matches this deploy` carries the same `k8s_no_mutate` guard as every mutation, and
-`Report a dry run with nothing to revert` is its other half. A service that has never deployed
-has no snapshot, so an unguarded failure would abort `--check` and `--dry-run` for exactly the
-services those modes are most useful on.
+## The guard is `k8s_no_mutate`, and neither `--check` nor `--dry-run` reaches this role
+
+**Corrected**: an earlier version of this doc claimed a dry run "answers the question that
+matters most about a rollback — is there a snapshot to revert to?" That is false as this role is
+actually called. `roles/k8s/manifests/tasks/main.yml` gates the whole
+`include_role: k8s/volume-revert` on `when: not (k8s_no_mutate | bool)` — the same fact
+(`ansible_check_mode or (k8s_dry_run | bool)`) every mutating task inside this role also checks.
+So under `--check` or `--dry-run`, this role never starts: not step 1's PVC lookup, not step 2's
+snapshot listing, not the `Fail when no snapshot matches this deploy` task, and not its dry-run
+sibling below. Running a dry run and getting silence proves nothing about whether a snapshot
+exists — the role that would have checked never ran. `k8s/volume-snapshot`'s CLAUDE.md documents
+the identical trap for its own call site.
+
+`Fail when no snapshot matches this deploy` still carries `when: not (k8s_no_mutate | bool)`,
+and `Report a dry run with nothing to revert` still carries the opposite guard
+(`when: k8s_no_mutate | bool`) as its sibling. Keeping both is deliberate, not a leftover: these
+internal guards are defence in depth for a future call site that includes this role
+unconditionally (or under `--check`/`--dry-run` directly), matching the same choice
+`k8s/volume-snapshot` made for its own internal guards. Nothing in this repo exercises the
+`k8s_no_mutate: true` branch today — the one call site that exists already keeps the role from
+starting under either mode — so `test_volume_revert.py`'s coverage of it pins the branch's own
+correctness in isolation, not that anything reaches it.
 
 ## The attach and the detach pair on an empty ticket key
 
