@@ -668,10 +668,20 @@ has_gitops: true
 # bazarr / tdarr (migrating state), livesync (stateful), valheim (probe-less), valheim-stats
 # (games). Clearing the pilot without that audit would have armed all six.
 #
-# What is eligible now: bento-pdf, headlamp, homepage, littlelink, peanut and speedtest — every
-# one stateless or throwaway-state, with a real readinessProbe and no dependents. code-server,
-# homelab-mcp and ical-proxy are absent from the denylist deliberately: their pins are Jinja
-# registry refs Renovate cannot reach, so they can never qualify (design §7).
+# DO NOT hand-maintain the eligible list here. Run `uv run python scripts/k8s_autodeploy_counts.py`
+# — it derives eligible/denied from the role sources, and the partition is CI-enforced by
+# test_k8s_autodeploy_guard.py::test_every_role_is_either_denied_or_declares_itself_deployable.
+#
+# A list written here goes stale silently and reads as current: this comment named six services
+# ("bento-pdf, headlamp, homepage, littlelink, peanut and speedtest") from 2026-08-16 until
+# 2026-08-22, by which point slice 7b's promotions had taken the real figure to 22 — a ~3.7x
+# understatement of auto-deploy blast radius, on an armed feature, with no test to catch it.
+# That is the fourth instance of the same drift; the other three were PR bodies, which at least
+# closed with the PR. See the memory `autodeploy-counts-must-be-measured-not-computed`.
+#
+# code-server, homelab-mcp and ical-proxy are absent from the denylist deliberately: their pins
+# are Jinja registry refs Renovate cannot reach, so they can never qualify (design §7). That is a
+# structural fact about those roles, not a count, so it keeps.
 #
 # NOT yet proven end-to-end: no real Renovate PR has ever traversed this path. The 2026-08-14
 # drill covered deploy → gate → restore; the deployer's git plumbing around it (detect → ff-merge

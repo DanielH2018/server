@@ -159,7 +159,9 @@ Nothing is staged, applied, patched or rolled. It does **not** catch scheduling,
 probe or rollout behaviour — those need a real deploy.
 
 Two limits worth knowing before you trust a green dry run:
-- **It refuses ~17 services.** Roles that mutate outside `roles/k8s/manifests` (sidecar
+- **It refuses the roles named in `k8s_dry_run_unsupported`** (count it with the grep two
+  sections above — don't hand-maintain the number here; it read "~17" against a real 15 for two
+  commits). Roles that mutate outside `roles/k8s/manifests` (sidecar
   ConfigMaps built with `kubectl create`, netpol-probe Jobs, `exec -i` into a live pod) would
   half-apply, so `deploy.yml` fails fast and names them. `k8s_dry_run_unsupported` in
   `group_vars/all.yml` is the list; `ansible/tests/test_k8s_dry_run.py` re-derives it from the

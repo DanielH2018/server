@@ -14,7 +14,7 @@ stub, so the port and hostname a manifest renders with are the ones a deploy wou
 Every parsed object is then validated against the Kubernetes OpenAPI schema for
 ``K8S_SCHEMA_VERSION`` (``strict=True``, so an undefined field is an error). That is the check
 ``--dry-run`` makes against the live API server, made offline instead: no cluster, on a PR, and
-covering the ~17 roles ``k8s_dry_run_unsupported`` refuses. CRDs have no upstream schema and are
+covering the roles ``k8s_dry_run_unsupported`` refuses. CRDs have no upstream schema and are
 reported as skipped rather than passed.
 
 Structural check only: secrets are stubbed (StubUndefined), so no SOPS access is needed. Run
@@ -407,7 +407,7 @@ def schema_error(doc: dict) -> str | None | object:
     Deployment applies clean and the probe simply never runs.
 
     This is the check ``--dry-run`` performs against the live API server, done offline and
-    without a cluster — so it also covers the ~17 roles k8s_dry_run_unsupported refuses.
+    without a cluster — so it also covers the roles k8s_dry_run_unsupported refuses.
     """
     try:
         kubernetes_validate.validate(
