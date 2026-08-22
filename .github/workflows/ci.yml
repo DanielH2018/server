@@ -213,7 +213,7 @@ jobs:
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: "22"
+          node-version: "24"
 
       # `npx --yes --package renovate` re-downloads Renovate on every run — 33-39s, and with
       # ansible-lint scoped to changed files this job is the longest in the workflow on a PR that
