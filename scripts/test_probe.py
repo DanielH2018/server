@@ -1826,9 +1826,17 @@ def test_parse_declared_monitors_reads_names_types_and_gating():
     # Notifications are not monitors and never appear in monitor_status — counting them would
     # make every run report two phantom missing entries.
     assert "Homelab Alerts" not in declared
-    assert declared["Root Disk"] == {"type": "push", "interval": 60, "gated": False}
+    assert declared["Root Disk"] == {
+        "type": "push",
+        "interval": 60,
+        "gated": False,
+        "gate": None,
+    }
     assert declared["k3s Grafana"]["type"] == "http"
     assert declared["Off-box etcd Snapshot"]["gated"] is True
+    # The variable is captured, not just the fact of being gated — that name is what lets the
+    # caller resolve the secret instead of assuming it is unset.
+    assert declared["Off-box etcd Snapshot"]["gate"] == "etcd_snapshot_push_token"
 
 
 def test_kuma_drift_reports_a_declared_monitor_that_is_not_live():
@@ -1883,10 +1891,46 @@ def test_kuma_drift_reports_a_live_monitor_nobody_declared():
     assert "Retired Tile: live, not declared" in text
 
 
-def test_kuma_drift_skips_a_token_gated_monitor():
+def test_kuma_drift_skips_a_monitor_whose_gate_is_genuinely_unset():
     declared = probe.parse_declared_monitors(TEMPLATE_SAMPLE)
     live = {"Root Disk", "WG Pi Peer Backup", "k3s Grafana"}
-    text, code = probe.format_kuma_drift(declared, live, 86400)
+    text, code = probe.format_kuma_drift(
+        declared, live, 86400, gate_states={"etcd_snapshot_push_token": False}
+    )
     assert code == 0
     assert "Off-box etcd Snapshot" in text
-    assert "gated on an unset token" in text
+    assert "genuinely unset" in text
+
+
+def test_kuma_drift_reports_drift_when_the_gate_is_set_but_the_monitor_is_absent():
+    """The 2026-08-22 case, and the reason `gate` exists.
+
+    etcd_snapshot_push_token was set (32 chars, in the rotation registry since 2026-07-04) and
+    Off-box etcd Snapshot was not live — and the old check called that correctly skipped. A
+    gated monitor that vanishes was invisible twice: absent from the exporter, and excused by
+    the drift check written to catch exactly that.
+    """
+    declared = probe.parse_declared_monitors(TEMPLATE_SAMPLE)
+    live = {"Root Disk", "WG Pi Peer Backup", "k3s Grafana"}
+    # Past the monitor's own 90000s interval, so `pending` cannot absorb it — a gate-set
+    # monitor inside its interval is still legitimately pending, not drift.
+    text, code = probe.format_kuma_drift(
+        declared, live, 86400 * 3, gate_states={"etcd_snapshot_push_token": True}
+    )
+    assert code == 1
+    assert "Off-box etcd Snapshot: declared, not live" in text
+    assert "genuinely unset" not in text
+
+
+def test_kuma_drift_says_so_when_a_gate_cannot_be_read():
+    """An unreadable gate and an unset one must not look alike — that equivalence is what let
+    the case above stay silent. Unreadable does not fail the exit code (no age key on this
+    host is a normal state), but it is named rather than swallowed."""
+    declared = probe.parse_declared_monitors(TEMPLATE_SAMPLE)
+    live = {"Root Disk", "WG Pi Peer Backup", "k3s Grafana"}
+    text, code = probe.format_kuma_drift(
+        declared, live, 86400, gate_states={"etcd_snapshot_push_token": None}
+    )
+    assert code == 0
+    assert "could not be read" in text
+    assert "genuinely unset" not in text
