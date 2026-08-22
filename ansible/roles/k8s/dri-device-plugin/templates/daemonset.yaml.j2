@@ -57,15 +57,15 @@ spec:
               cpu: 100m
               memory: 60Mi
           volumeMounts:
-            - name: device-plugin
+            - name: dri-device-plugin-socket
               mountPath: /var/lib/kubelet/device-plugins
-            - name: dev
+            - name: dri-device-plugin-dev
               mountPath: /dev
       volumes:
         # The kubelet's plugin-registration socket directory — how the plugin announces itself.
-        - name: device-plugin
+        - name: dri-device-plugin-socket
           hostPath:
             path: /var/lib/kubelet/device-plugins
-        - name: dev
+        - name: dri-device-plugin-dev
           hostPath:
             path: /dev

@@ -70,10 +70,10 @@ spec:
             - name: http
               containerPort: 8080
           volumeMounts:
-            - name: config
+            - name: scrutiny-web-config
               mountPath: /opt/scrutiny/config
             # /etc, NOT /run/secrets — see the influxdb manifest's note.
-            - name: credentials
+            - name: scrutiny-web-credentials
               mountPath: /etc/scrutiny-secrets
               readOnly: true
           readinessProbe:
@@ -96,10 +96,10 @@ spec:
               cpu: "50m"
               memory: 64Mi
       volumes:
-        - name: config
+        - name: scrutiny-web-config
           persistentVolumeClaim:
             claimName: {{ scrutiny_k8s_config_claim }}
-        - name: credentials
+        - name: scrutiny-web-credentials
           secret:
             secretName: scrutiny-influxdb-credentials
             defaultMode: 0o444

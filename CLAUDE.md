@@ -58,7 +58,11 @@ Docker at all, so a Compose role there deploys nothing.
 1. Create `ansible/roles/k8s/<name>/tasks/main.yml` plus the manifest templates it needs
    (`deployment.yaml.j2`, `service.yaml.j2`, `ingressroute.yaml.j2`, `pvc.yaml.j2`).
    Copy the shape from a close sibling — `roles/k8s/freshrss` for a plain web app,
-   `roles/k8s/sonarr` for one on the media volume.
+   `roles/k8s/sonarr` for one on the media volume. Name every `volumes[].name` for the
+   workload or component that owns it — `sonarr-config`, never `config` — so a mount reads
+   unambiguously in a diff or a `kubectl describe`. ENFORCED by
+   `ansible/tests/test_volume_names_descriptive.py`, which also catches the half-finished
+   rename (a `volumeMounts` entry with no matching volume) that no schema check can see.
 2. Add the service to `containers_list` in `ansible/inventory/host_vars/daniel-box.yml` with
    `platform: k8s`. **Position matters**: that play has no toposort and runs in list order,
    so place the entry *after* `traefik` (which installs the CRDs its IngressRoute needs) and

@@ -66,7 +66,7 @@ spec:
               add:
                 - CHOWN
           volumeMounts:
-            - name: config
+            - name: wg-easy-config
               mountPath: /etc/wireguard
           resources:
             limits:
@@ -123,7 +123,7 @@ spec:
                 - NET_ADMIN
                 - NET_RAW
           volumeMounts:
-            - name: config
+            - name: wg-easy-config
               mountPath: /etc/wireguard
           # TCP on the admin UI: proves the node app is up. The wg interface itself has no
           # cheap in-pod probe; the real gate is a client handshake after deploy.
@@ -145,6 +145,6 @@ spec:
               cpu: "{{ wg_easy_k8s_cpu_request }}"
               memory: {{ wg_easy_k8s_mem_request }}
       volumes:
-        - name: config
+        - name: wg-easy-config
           persistentVolumeClaim:
             claimName: {{ wg_easy_k8s_claim }}

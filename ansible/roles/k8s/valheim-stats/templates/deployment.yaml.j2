@@ -100,12 +100,12 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 10
           volumeMounts:
-            - name: data
+            - name: valheim-stats-data
               mountPath: /data
-            - name: script
+            - name: valheim-stats-script
               mountPath: /app
               readOnly: true
-            - name: tmp
+            - name: valheim-stats-tmp
               mountPath: /tmp
           resources:
             requests:
@@ -115,11 +115,11 @@ spec:
               cpu: 500m
               memory: 128Mi
       volumes:
-        - name: data
+        - name: valheim-stats-data
           persistentVolumeClaim:
             claimName: {{ valheim_stats_k8s_claim }}
-        - name: script
+        - name: valheim-stats-script
           configMap:
             name: valheim-stats-script
-        - name: tmp
+        - name: valheim-stats-tmp
           emptyDir: {}

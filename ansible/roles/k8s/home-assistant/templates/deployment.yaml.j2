@@ -60,16 +60,16 @@ spec:
               drop:
                 - ALL
           volumeMounts:
-            - name: config-files
+            - name: home-assistant-config-files
               mountPath: /cm
               readOnly: true
-            - name: custom-templates
+            - name: home-assistant-custom-templates
               mountPath: /ct
               readOnly: true
-            - name: config-secrets
+            - name: home-assistant-config-secrets
               mountPath: /sec
               readOnly: true
-            - name: config
+            - name: home-assistant-config
               mountPath: /config
           resources:
             limits:
@@ -109,10 +109,10 @@ spec:
             - name: DOCKER_MODS
               value: linuxserver/mods:homeassistant-hacs
           volumeMounts:
-            - name: config
+            - name: home-assistant-config
               mountPath: /config
             # HA's .cache is re-derived; kopia excluded it (.cache/), and on block-level backups its churn is what costs.
-            - name: cache
+            - name: home-assistant-cache
               mountPath: /config/.cache
           # HA is a slow first-booter (the LSIO permissions pass, then core start before :8123
           # binds) — the compose healthcheck carries start_period 120s for the same reason.
@@ -137,17 +137,17 @@ spec:
               cpu: "{{ home_assistant_k8s_cpu_request }}"
               memory: {{ home_assistant_k8s_mem_request }}
       volumes:
-        - name: config-files
+        - name: home-assistant-config-files
           configMap:
             name: home-assistant-config
-        - name: custom-templates
+        - name: home-assistant-custom-templates
           configMap:
             name: home-assistant-custom-templates
-        - name: config-secrets
+        - name: home-assistant-config-secrets
           secret:
             secretName: home-assistant-secrets
-        - name: config
+        - name: home-assistant-config
           persistentVolumeClaim:
             claimName: {{ home_assistant_k8s_claim }}
-        - name: cache
+        - name: home-assistant-cache
           emptyDir: {}

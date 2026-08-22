@@ -47,12 +47,12 @@ spec:
             - name: TZ
               value: {{ tz }}
           volumeMounts:
-            - name: udev
+            - name: scrutiny-collector-udev
               mountPath: /run/udev
               readOnly: true
-            - name: nvme
+            - name: scrutiny-collector-nvme
               mountPath: /dev/nvme0
-            - name: config
+            - name: scrutiny-collector-config
               mountPath: /opt/scrutiny/config
           resources:
             limits:
@@ -62,13 +62,13 @@ spec:
               cpu: "50m"
               memory: 32Mi
       volumes:
-        - name: udev
+        - name: scrutiny-collector-udev
           hostPath:
             path: /run/udev
-        - name: nvme
+        - name: scrutiny-collector-nvme
           hostPath:
             path: /dev/nvme0
             type: CharDevice
-        - name: config
+        - name: scrutiny-collector-config
           configMap:
             name: scrutiny-collector-config

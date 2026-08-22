@@ -39,7 +39,7 @@ spec:
             capabilities:
               drop: [ALL]
           volumeMounts:
-            - name: config
+            - name: janitorr-config
               mountPath: /config/application.yml
               subPath: application.yml
               readOnly: true
@@ -50,7 +50,7 @@ spec:
               mountPath: /data
             # The JVM writes /tmp/hsperfdata_* and a truststore even with everything else
             # read-only — the same two paths the Docker copy covers with a tmpfs.
-            - name: tmp
+            - name: janitorr-tmp
               mountPath: /tmp
           resources:
             limits:
@@ -67,11 +67,11 @@ spec:
             initialDelaySeconds: 60
             periodSeconds: 30
       volumes:
-        - name: config
+        - name: janitorr-config
           secret:
             secretName: janitorr-config
         - name: media
           persistentVolumeClaim:
             claimName: {{ janitorr_k8s_media_claim }}
-        - name: tmp
+        - name: janitorr-tmp
           emptyDir: {}

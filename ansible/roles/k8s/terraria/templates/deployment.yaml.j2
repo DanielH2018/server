@@ -50,7 +50,7 @@ spec:
                 # startup looks fine (the 39-restarts/11-days Docker lesson).
                 - DAC_OVERRIDE
           volumeMounts:
-            - name: config
+            - name: terraria-config
               mountPath: /config
           # Liveness = a LISTEN socket on 7777 in the kernel table, NOT a connect probe:
           # the binary protocol logs every accepted socket as "<ip> is connecting...", so
@@ -74,6 +74,6 @@ spec:
               cpu: "{{ terraria_k8s_cpu_request }}"
               memory: {{ terraria_k8s_mem_request }}
       volumes:
-        - name: config
+        - name: terraria-config
           persistentVolumeClaim:
             claimName: {{ terraria_k8s_claim }}

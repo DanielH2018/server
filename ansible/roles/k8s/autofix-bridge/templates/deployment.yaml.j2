@@ -57,10 +57,10 @@ spec:
             periodSeconds: 60
             failureThreshold: 3
           volumeMounts:
-            - name: script
+            - name: autofix-bridge-script
               mountPath: /app
               readOnly: true
-            - name: tmp
+            - name: autofix-bridge-tmp
               mountPath: /tmp
           resources:
             requests:
@@ -70,8 +70,8 @@ spec:
               cpu: 100m
               memory: 64Mi
       volumes:
-        - name: script
+        - name: autofix-bridge-script
           configMap:
             name: autofix-bridge-script
-        - name: tmp
+        - name: autofix-bridge-tmp
           emptyDir: {}

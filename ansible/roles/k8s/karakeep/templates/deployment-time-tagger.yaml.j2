@@ -109,12 +109,12 @@ spec:
                   name: karakeep
                   key: KARAKEEP_PYTHON_API_KEY
           volumeMounts:
-            - name: script
+            - name: time-tagger-script
               mountPath: /script
               readOnly: true
-            - name: uv-cache
+            - name: time-tagger-uv-cache
               mountPath: /root/.cache/uv
-            - name: work
+            - name: time-tagger-work
               mountPath: /work
           # The compose healthcheck, unchanged: /tmp/healthy is touched only after a SUCCESSFUL
           # run, so a hung or persistently failing tagger goes stale even though the process is
@@ -137,10 +137,10 @@ spec:
               cpu: "{{ karakeep_k8s_tagger_cpu_request }}"
               memory: {{ karakeep_k8s_tagger_mem_request }}
       volumes:
-        - name: script
+        - name: time-tagger-script
           configMap:
             name: karakeep-time-tagger
-        - name: uv-cache
+        - name: time-tagger-uv-cache
           emptyDir: {}
-        - name: work
+        - name: time-tagger-work
           emptyDir: {}

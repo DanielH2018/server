@@ -73,7 +73,7 @@ spec:
             - name: PROWLARR__LOG__ROTATE
               value: "{{ prowlarr_k8s_log_rotate }}"
           volumeMounts:
-            - name: config
+            - name: prowlarr-config
               mountPath: /config
           readinessProbe:
             httpGet:
@@ -95,6 +95,6 @@ spec:
               cpu: "{{ prowlarr_k8s_cpu_request }}"
               memory: {{ prowlarr_k8s_mem_request }}
       volumes:
-        - name: config
+        - name: prowlarr-config
           persistentVolumeClaim:
             claimName: {{ prowlarr_k8s_claim }}

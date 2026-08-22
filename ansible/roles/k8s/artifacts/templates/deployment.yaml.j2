@@ -68,7 +68,7 @@ spec:
             periodSeconds: 30
             failureThreshold: 3
           volumeMounts:
-            - name: script
+            - name: artifacts-script
               mountPath: /app
               readOnly: true
             - name: artifacts-{{ artifacts_k8s_node }}
@@ -87,7 +87,7 @@ spec:
               cpu: {{ artifacts_k8s_cpu_limit }}
               memory: {{ artifacts_k8s_mem_limit }}
       volumes:
-        - name: script
+        - name: artifacts-script
           configMap:
             name: artifacts-server
         # type: Directory, not DirectoryOrCreate — kubelet would create a missing directory

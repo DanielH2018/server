@@ -62,7 +62,7 @@ spec:
                 # The daniel-pi-host monitor is a real ICMP ping — compose parity.
                 - NET_RAW
           volumeMounts:
-            - name: data
+            - name: uptime-kuma-data
               mountPath: /app/data
           # / answers 302 to /dashboard; kubelet counts 200-399 as success.
           startupProbe:
@@ -164,12 +164,12 @@ spec:
           volumeMounts:
             - name: autokuma-data
               mountPath: /data
-            - name: static-monitors
+            - name: uptime-kuma-static-monitors
               mountPath: /monitors
               readOnly: true
             # NOT /run/secrets — that shadows the ServiceAccount token projection and the
             # container never starts (the guarded 2026-08-02 trap).
-            - name: credentials
+            - name: uptime-kuma-credentials
               mountPath: /etc/autokuma
               readOnly: true
           # /health answers 200 only while the last reconcile finished within sync_interval * 3
@@ -202,16 +202,16 @@ spec:
               cpu: "{{ autokuma_k8s_cpu_request }}"
               memory: {{ autokuma_k8s_mem_request }}
       volumes:
-        - name: data
+        - name: uptime-kuma-data
           persistentVolumeClaim:
             claimName: {{ uptime_kuma_k8s_claim }}
         - name: autokuma-data
           persistentVolumeClaim:
             claimName: {{ uptime_kuma_k8s_autokuma_claim }}
-        - name: static-monitors
+        - name: uptime-kuma-static-monitors
           secret:
             secretName: kuma-static-monitors
-        - name: credentials
+        - name: uptime-kuma-credentials
           secret:
             secretName: autokuma-credentials
             # 444, not 400: secret-volume files are root-owned (no fsGroup — it would

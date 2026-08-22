@@ -67,9 +67,9 @@ spec:
           volumeMounts:
             # Headlamp writes the kubeconfig it generates from the SA token ("main") under
             # its XDG config dir, which readOnlyRootFilesystem otherwise makes EROFS.
-            - name: config
+            - name: headlamp-config
               mountPath: /home/headlamp/.config
-            - name: tmp
+            - name: headlamp-tmp
               mountPath: /tmp
           readinessProbe:
             httpGet:
@@ -91,7 +91,7 @@ spec:
               cpu: "{{ headlamp_k8s_cpu_request }}"
               memory: {{ headlamp_k8s_mem_request }}
       volumes:
-        - name: config
+        - name: headlamp-config
           emptyDir: {}
-        - name: tmp
+        - name: headlamp-tmp
           emptyDir: {}

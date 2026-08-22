@@ -28,9 +28,9 @@ spec:
       image: {{ seed_volume_image }}
       command: ["sleep", "{{ seed_volume_pod_ttl }}"]
       volumeMounts:
-        - name: data
+        - name: seed-volume-data
           mountPath: {{ seed_volume_mount }}
   volumes:
-    - name: data
+    - name: seed-volume-data
       persistentVolumeClaim:
         claimName: {{ seed_volume_claim }}

@@ -41,10 +41,10 @@ spec:
               drop:
                 - ALL
           volumeMounts:
-            - name: config
+            - name: homepage-config
               mountPath: /config-secret
               readOnly: true
-            - name: config-live
+            - name: homepage-config-live
               mountPath: /config
           resources:
             limits:
@@ -98,10 +98,10 @@ spec:
               value: >-
                 homepage.{{ domain }},homepage.local.{{ domain }},homepage.{{ domain }},homepage.local.{{ domain }}
           volumeMounts:
-            - name: config-live
+            - name: homepage-config-live
               mountPath: /app/config
             # Bookmark icons (see icons-configmap.yaml.j2).
-            - name: icons
+            - name: homepage-icons
               mountPath: /app/public/icons
               readOnly: true
           readinessProbe:
@@ -134,13 +134,13 @@ spec:
               cpu: "{{ homepage_k8s_cpu_request }}"
               memory: {{ homepage_k8s_mem_request }}
       volumes:
-        - name: config
+        - name: homepage-config
           secret:
             secretName: homepage-config
         # The writable /app/config the init container seeds; logs no longer need their own
         # emptyDir carve-out (the whole dir is writable now).
-        - name: config-live
+        - name: homepage-config-live
           emptyDir: {}
-        - name: icons
+        - name: homepage-icons
           configMap:
             name: homepage-icons

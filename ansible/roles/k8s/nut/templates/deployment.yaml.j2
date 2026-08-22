@@ -55,7 +55,7 @@ spec:
             - name: nut-config
               mountPath: /nut-config
               readOnly: true
-            - name: usb
+            - name: nut-usb
               mountPath: /dev/bus/usb
           livenessProbe:
             exec:
@@ -85,6 +85,6 @@ spec:
         - name: nut-config
           secret:
             secretName: nut-config
-        - name: usb
+        - name: nut-usb
           hostPath:
             path: /dev/bus/usb

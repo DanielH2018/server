@@ -66,7 +66,7 @@ spec:
                   name: karakeep
                   key: MEILI_MASTER_KEY
           volumeMounts:
-            - name: data
+            - name: meilisearch-data
               mountPath: /meili_data
           # /health answers 200 without the master key (measured against the running container),
           # which is what makes an httpGet probe usable on an otherwise key-protected service.
@@ -93,6 +93,6 @@ spec:
         # Starts EMPTY and is never seeded — see the role defaults. The index is derived from
         # karakeep's db.db, so it is rebuilt with "Reindex All Bookmarks" rather than copied.
         # Until that runs, karakeep works and search returns nothing.
-        - name: data
+        - name: meilisearch-data
           persistentVolumeClaim:
             claimName: {{ karakeep_k8s_meili_claim }}

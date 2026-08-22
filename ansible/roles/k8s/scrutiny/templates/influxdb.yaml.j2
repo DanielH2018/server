@@ -71,16 +71,16 @@ spec:
             - name: http
               containerPort: 8086
           volumeMounts:
-            - name: data
+            - name: scrutiny-influxdb-data
               mountPath: /var/lib/influxdb2
             # The image declares VOLUME /etc/influxdb2 (the CLI's influx-configs file,
             # written only at first-run setup). emptyDir: the web talks token-auth over
             # HTTP and never reads it; losing it costs nothing.
-            - name: cli-config
+            - name: scrutiny-influxdb-cli-config
               mountPath: /etc/influxdb2
             # /etc, NOT /run/secrets — the Docker idiom shadows the ServiceAccount token
             # projection there and runc cannot create its mountpoint (CrashLoopBackOff).
-            - name: credentials
+            - name: scrutiny-influxdb-credentials
               mountPath: /etc/influxdb-secrets
               readOnly: true
           readinessProbe:
@@ -101,12 +101,12 @@ spec:
               cpu: "100m"
               memory: 128Mi
       volumes:
-        - name: data
+        - name: scrutiny-influxdb-data
           persistentVolumeClaim:
             claimName: {{ scrutiny_k8s_influxdb_claim }}
-        - name: cli-config
+        - name: scrutiny-influxdb-cli-config
           emptyDir: {}
-        - name: credentials
+        - name: scrutiny-influxdb-credentials
           secret:
             secretName: scrutiny-influxdb-credentials
             defaultMode: 0o444

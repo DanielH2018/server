@@ -97,7 +97,7 @@ spec:
           volumeMounts:
             # The compose template's `tmpfs: - /tmp`, kept for the same reason it was added
             # there: defensive cover for Node's os.tmpdir under a read-only rootfs.
-            - name: tmp
+            - name: littlelink-tmp
               mountPath: /tmp
           readinessProbe:
             httpGet:
@@ -119,5 +119,5 @@ spec:
               cpu: "{{ littlelink_k8s_cpu_request }}"
               memory: {{ littlelink_k8s_mem_request }}
       volumes:
-        - name: tmp
+        - name: littlelink-tmp
           emptyDir: {}

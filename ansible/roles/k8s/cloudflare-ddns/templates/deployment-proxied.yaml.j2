@@ -66,7 +66,7 @@ spec:
               value: "http://uptime-kuma:3001/api/push/$(KUMA_PUSH_TOKEN)"
           volumeMounts:
             # /etc, not /run/secrets — see deployment-direct's note (convention guard).
-            - name: token
+            - name: cloudflare-ddns-token
               mountPath: /etc/ddns-secrets
               readOnly: true
           resources:
@@ -77,7 +77,7 @@ spec:
               cpu: "{{ cloudflare_ddns_k8s_cpu_request }}"
               memory: {{ cloudflare_ddns_k8s_mem_request }}
       volumes:
-        - name: token
+        - name: cloudflare-ddns-token
           secret:
             secretName: cloudflare-ddns
             items:

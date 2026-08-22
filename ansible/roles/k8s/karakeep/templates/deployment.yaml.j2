@@ -125,9 +125,9 @@ spec:
                   name: karakeep
                   key: OPENAI_API_KEY
           volumeMounts:
-            - name: data
+            - name: karakeep-data
               mountPath: /data
-            - name: next-cache
+            - name: karakeep-next-cache
               mountPath: /app/apps/web/.next/cache
           # `/` answers 307 (measured against the running container), and k8s counts 2xx-3xx as
           # success, so httpGet is safe here — unlike livesync, whose endpoints answer 401.
@@ -151,7 +151,7 @@ spec:
               cpu: "{{ karakeep_k8s_cpu_request }}"
               memory: {{ karakeep_k8s_mem_request }}
       volumes:
-        - name: data
+        - name: karakeep-data
           persistentVolumeClaim:
             claimName: {{ karakeep_k8s_claim }}
         # The compose template's tmpfs, same 256 MiB. Next.js's image-optimisation cache: the
@@ -159,7 +159,7 @@ spec:
         # thumbnail writes EACCESed and every request re-optimised. medium: Memory reproduces
         # tmpfs, and the pages count against the container's memory limit exactly as they did
         # against the compose mem cap.
-        - name: next-cache
+        - name: karakeep-next-cache
           emptyDir:
             medium: Memory
             sizeLimit: 256Mi

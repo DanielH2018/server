@@ -64,7 +64,7 @@ spec:
               drop:
                 - ALL
           volumeMounts:
-            - name: acme
+            - name: traefik-acme
               mountPath: /data
           resources:
             limits:
@@ -141,10 +141,10 @@ spec:
               drop:
                 - ALL
           volumeMounts:
-            - name: config
+            - name: traefik-config
               mountPath: /config
               readOnly: true
-            - name: livesync-gate
+            - name: traefik-livesync-gate
               mountPath: /etc/traefik-file
               readOnly: true
             # NOT /run/secrets, which is the Docker convention this was ported from.
@@ -152,7 +152,7 @@ spec:
             # the ServiceAccount token — mounting a read-only Secret over it leaves runc unable
             # to create /run/secrets/kubernetes.io and the container never starts:
             #   mkdirat .../rootfs/run/secrets/kubernetes.io: read-only file system
-            - name: cloudflare
+            - name: traefik-cloudflare
               mountPath: /secrets
               readOnly: true
             # The bouncer plugin reads its LAPI key from here (crowdsecLapiKeyFile in the
@@ -160,7 +160,7 @@ spec:
             - name: crowdsec-key
               mountPath: /secrets/crowdsec
               readOnly: true
-            - name: acme
+            - name: traefik-acme
               mountPath: /data
             # Shared with the crowdsec-agent sidecar, which tails access.log (slice-6 D2).
             - name: traefik-logs
@@ -170,9 +170,9 @@ spec:
             # it does not fail the pod: it DISABLES plugins, the crowdsec Middleware never
             # materializes, and every router referencing it 404s. The whole edge went dark
             # this way on the first B1 rollout.
-            - name: plugins-storage
+            - name: traefik-plugins-storage
               mountPath: /plugins-storage
-            - name: tmp
+            - name: traefik-tmp
               mountPath: /tmp
           readinessProbe:
             httpGet:
@@ -238,7 +238,7 @@ spec:
             - name: traefik-logs
               mountPath: /var/log/traefik
               readOnly: true
-            - name: tmp-agent
+            - name: crowdsec-agent-tmp
               mountPath: /tmp
           livenessProbe:
             # Round-trips the LAPI with the agent's own credentials — alive means "parsing
@@ -375,24 +375,24 @@ spec:
               cpu: "{{ traefik_k8s_logrotate_cpu_request }}"
               memory: {{ traefik_k8s_logrotate_mem_request }}
       volumes:
-        - name: config
+        - name: traefik-config
           configMap:
             name: traefik-static
         # LiveSync token gate — file-provider dynamic config (see livesync-gate-secret.yaml.j2)
-        - name: livesync-gate
+        - name: traefik-livesync-gate
           secret:
             secretName: traefik-livesync-gate
-        - name: cloudflare
+        - name: traefik-cloudflare
           secret:
             secretName: traefik-cloudflare
             # 0440, not 0400: the kubelet owns secret files as root:fsGroup, so the container
             # user reaches them through the GROUP bit. 0400 grants the group nothing and the
             # token is unreadable to the process that needs it.
             defaultMode: 0440
-        - name: acme
+        - name: traefik-acme
           persistentVolumeClaim:
             claimName: traefik-acme
-        - name: tmp
+        - name: traefik-tmp
           emptyDir: {}
         - name: crowdsec-secret
           secret:
@@ -413,9 +413,9 @@ spec:
           emptyDir: {}
         - name: crowdsec-data
           emptyDir: {}
-        - name: plugins-storage
+        - name: traefik-plugins-storage
           emptyDir: {}
-        - name: tmp-agent
+        - name: crowdsec-agent-tmp
           emptyDir: {}
         # sizeLimit is a BACKSTOP against pod eviction, not the rotation mechanism — the
         # access-log-rotate sidecar copytruncates the log well before this is reached (see

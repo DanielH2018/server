@@ -53,10 +53,10 @@ spec:
               drop:
                 - ALL
           volumeMounts:
-            - name: config-secret
+            - name: mosquitto-config-secret
               mountPath: /secret
               readOnly: true
-            - name: config
+            - name: mosquitto-config
               mountPath: /config
           resources:
             limits:
@@ -82,15 +82,15 @@ spec:
             - name: TZ
               value: "{{ tz }}"
           volumeMounts:
-            - name: config
+            - name: mosquitto-config
               mountPath: /mosquitto/config
               readOnly: true
-            - name: data
+            - name: mosquitto-data
               mountPath: /mosquitto/data
             # Image declares VOLUME /mosquitto/log; mount scratch over it so the read-only
             # rootfs doesn't block the implicit volume. Stays empty (log_dest is stdout) —
             # same reason the compose template bind-mounts ./log.
-            - name: log
+            - name: mosquitto-log
               mountPath: /mosquitto/log
           # TCP probes, not the compose healthcheck's authenticated $SYS subscribe: an exec
           # probe would embed the SOPS MQTT password in the pod spec, which the read-only
@@ -113,16 +113,16 @@ spec:
               cpu: "{{ mosquitto_k8s_cpu_request }}"
               memory: {{ mosquitto_k8s_mem_request }}
       volumes:
-        - name: config-secret
+        - name: mosquitto-config-secret
           secret:
             secretName: mosquitto-config
             # 288 = 0440 (decimal — the YAML-1.1 parser behind kubectl reads 0o440 as a
             # string). Only the init container reads this; the broker gets the owned copy.
             defaultMode: 288
-        - name: config
+        - name: mosquitto-config
           emptyDir: {}
-        - name: data
+        - name: mosquitto-data
           persistentVolumeClaim:
             claimName: {{ mosquitto_k8s_claim }}
-        - name: log
+        - name: mosquitto-log
           emptyDir: {}

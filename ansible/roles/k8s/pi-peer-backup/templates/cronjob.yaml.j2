@@ -57,12 +57,12 @@ spec:
                   drop:
                     - ALL
               volumeMounts:
-                - name: data
+                - name: pi-peer-backup-data
                   mountPath: /data
-                - name: ssh
+                - name: pi-peer-backup-ssh
                   mountPath: /ssh
                   readOnly: true
-                - name: tmp
+                - name: pi-peer-backup-tmp
                   mountPath: /tmp
               resources:
                 limits:
@@ -72,15 +72,15 @@ spec:
                   cpu: "10m"
                   memory: 16Mi
           volumes:
-            - name: data
+            - name: pi-peer-backup-data
               persistentVolumeClaim:
                 claimName: {{ pi_peer_backup_k8s_claim }}
-            - name: ssh
+            - name: pi-peer-backup-ssh
               secret:
                 secretName: pi-peer-backup-ssh
                 # Group-readable for the fsGroup (root-owned files, same trap the bridge
                 # twin hit) — but ssh refuses a group-readable identity, so the script
                 # stages a 0400 copy under $HOME before connecting.
                 defaultMode: 0440
-            - name: tmp
+            - name: pi-peer-backup-tmp
               emptyDir: {}

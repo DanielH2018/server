@@ -52,7 +52,7 @@ spec:
             - name: TZ
               value: "{{ tz }}"
           volumeMounts:
-            - name: config
+            - name: bazarr-config
               mountPath: /config
             # /data/media ONLY, via subPath — narrower than the \*arrs on purpose, and it is
             # what the compose template mounts. bazarr writes subtitle files beside the media it
@@ -81,7 +81,7 @@ spec:
               cpu: "{{ bazarr_k8s_cpu_request }}"
               memory: {{ bazarr_k8s_mem_request }}
       volumes:
-        - name: config
+        - name: bazarr-config
           persistentVolumeClaim:
             claimName: {{ bazarr_k8s_claim }}
         - name: media

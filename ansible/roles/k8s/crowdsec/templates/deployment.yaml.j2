@@ -41,10 +41,10 @@ spec:
               drop:
                 - ALL
           volumeMounts:
-            - name: seed
+            - name: crowdsec-seed
               mountPath: /seed
               readOnly: true
-            - name: etc-crowdsec
+            - name: crowdsec-etc
               mountPath: /etc/crowdsec
           resources:
             limits:
@@ -88,11 +88,11 @@ spec:
                 - SETUID
                 - SETGID
           volumeMounts:
-            - name: etc-crowdsec
+            - name: crowdsec-etc
               mountPath: /etc/crowdsec
-            - name: db
+            - name: crowdsec-db
               mountPath: /var/lib/crowdsec/data
-            - name: tmp
+            - name: crowdsec-tmp
               mountPath: /tmp
           # Same rationale as the Docker healthcheck: `cscli lapi status` round-trips the
           # LAPI with real credentials, so ready means "the WAF/ban chain can answer", not
@@ -118,13 +118,13 @@ spec:
               cpu: "{{ crowdsec_k8s_cpu_request }}"
               memory: {{ crowdsec_k8s_mem_request }}
       volumes:
-        - name: seed
+        - name: crowdsec-seed
           secret:
             secretName: crowdsec-config
-        - name: etc-crowdsec
+        - name: crowdsec-etc
           emptyDir: {}
-        - name: db
+        - name: crowdsec-db
           persistentVolumeClaim:
             claimName: {{ crowdsec_k8s_claim }}
-        - name: tmp
+        - name: crowdsec-tmp
           emptyDir: {}
