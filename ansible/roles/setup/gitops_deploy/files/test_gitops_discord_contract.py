@@ -483,7 +483,7 @@ def test_k8s_rollback_budget_covers_the_worst_single_promoted_service():
     rollback_timeout = int(defaults["gitops_deploy_k8s_rollback_timeout_s"])
     per_claim = snapshot_timeout + 3 * state_timeout + 3 * api_timeout
 
-    worst_role, worst_ceiling = None, 0
+    worst_role, worst_ceiling, worst_claims = None, 0, 0
     for role_defaults_path in sorted(_K8S_ROLES_DIR.glob("*/defaults/main.yml")):
         role = role_defaults_path.parent.parent.name
         role_defaults = yaml.safe_load(role_defaults_path.read_text()) or {}
@@ -494,7 +494,7 @@ def test_k8s_rollback_budget_covers_the_worst_single_promoted_service():
             continue
         ceiling = len(claims) * per_claim + _rollout_timeout_s(role) + stabilise
         if ceiling > worst_ceiling:
-            worst_role, worst_ceiling = role, ceiling
+            worst_role, worst_ceiling, worst_claims = role, ceiling, len(claims)
 
     assert worst_role is not None, (
         "no promoted (k8s_autodeploy: true), claim-declaring k8s role found — the sizing model "
@@ -502,7 +502,7 @@ def test_k8s_rollback_budget_covers_the_worst_single_promoted_service():
     )
     assert worst_ceiling <= rollback_timeout, (
         f"{worst_role} needs {worst_ceiling}s for one full rollback cycle "
-        f"({len(role_defaults.get('k8s_autodeploy_snapshot_pvcs', []))} claim(s), "
+        f"({worst_claims} claim(s), "
         f"{_rollout_timeout_s(worst_role)}s rollout), which exceeds "
         f"gitops_deploy_k8s_rollback_timeout_s ({rollback_timeout}s) — its rollback can be "
         f"SIGTERMed mid-revert. Raise that default (and TimeoutStartSec, and re-check this "
