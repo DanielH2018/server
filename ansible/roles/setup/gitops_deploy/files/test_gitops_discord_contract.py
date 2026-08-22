@@ -433,3 +433,78 @@ def test_k8s_deploy_timeout_budget_survives_max_flock_contention():
         f"SIGTERMed mid-rollback, stranding the bad commit live with the volume revert possibly "
         f"half-done (task 6b)."
     )
+
+
+# --- k8s rollback-timeout ceiling arithmetic (re-sized against the real per-service ceiling) --
+# K8S_ROLLBACK_TIMEOUT_S must cover one full rollback cycle for the most expensive currently-
+# promoted (k8s_autodeploy: true) service that also declares k8s_autodeploy_snapshot_pvcs: the
+# pre-revert snapshot wait, the revert itself, the forward apply's own rollout wait, and the
+# post-rollout stabilisation soak — all inside the SAME playbook run, on one continuous timeline
+# where nothing fails (a failure aborts the whole play immediately, so it can never compound with
+# an independent failure elsewhere — see gitops_deploy/CLAUDE.md's rollback-timeout section).
+#
+# Deliberately a PER-SERVICE bound, not a per-batch one: co-batched claim-declaring services
+# stack their snapshot+revert phases (only the rollout WAIT is deduped across a batch, via
+# roles/k8s/rollout-drain), so a multi-service batch is NOT covered here — that gap is recorded
+# in gitops_deploy/CLAUDE.md ("the batch-abort blast radius") and in this same defaults/main.yml
+# comment, deliberately not modeled by this test.
+#
+# Computed from role SOURCES, not pinned numbers, so a future rollout-timeout bump or a new
+# promoted claim-declaring role fails this test instead of silently under-sizing the budget.
+
+_K8S_ROLES_DIR = pathlib.Path(__file__).parents[3] / "k8s"
+_ALL_VARS = pathlib.Path(__file__).parents[4] / "inventory" / "group_vars" / "all.yml"
+_MANIFESTS_ROLLOUT_DEFAULT_S = (
+    300  # k8s/manifests default: manifests_rollout_timeout | default('300s')
+)
+
+
+def _rollout_timeout_s(role: str) -> int:
+    tasks_path = _K8S_ROLES_DIR / role / "tasks" / "main.yml"
+    text = tasks_path.read_text() if tasks_path.exists() else ""
+    m = re.search(r"manifests_rollout_timeout:\s*(\d+)s", text)
+    return int(m.group(1)) if m else _MANIFESTS_ROLLOUT_DEFAULT_S
+
+
+def test_k8s_rollback_budget_covers_the_worst_single_promoted_service():
+    revert_defaults = yaml.safe_load(
+        (_K8S_ROLES_DIR / "volume-revert" / "defaults" / "main.yml").read_text()
+    )
+    snapshot_defaults = yaml.safe_load(
+        (_K8S_ROLES_DIR / "volume-snapshot" / "defaults" / "main.yml").read_text()
+    )
+    all_vars = yaml.safe_load(_ALL_VARS.read_text())
+    defaults = yaml.safe_load(_DEFAULTS.read_text())
+
+    state_timeout = int(revert_defaults["volume_revert_state_timeout"])
+    api_timeout = int(revert_defaults["volume_revert_api_timeout"])
+    snapshot_timeout = int(snapshot_defaults["volume_snapshot_timeout"])
+    stabilise = int(all_vars["k8s_rollout_stabilise_seconds"])
+    rollback_timeout = int(defaults["gitops_deploy_k8s_rollback_timeout_s"])
+    per_claim = snapshot_timeout + 3 * state_timeout + 3 * api_timeout
+
+    worst_role, worst_ceiling = None, 0
+    for role_defaults_path in sorted(_K8S_ROLES_DIR.glob("*/defaults/main.yml")):
+        role = role_defaults_path.parent.parent.name
+        role_defaults = yaml.safe_load(role_defaults_path.read_text()) or {}
+        if not role_defaults.get("k8s_autodeploy"):
+            continue
+        claims = role_defaults.get("k8s_autodeploy_snapshot_pvcs") or []
+        if not claims:
+            continue
+        ceiling = len(claims) * per_claim + _rollout_timeout_s(role) + stabilise
+        if ceiling > worst_ceiling:
+            worst_role, worst_ceiling = role, ceiling
+
+    assert worst_role is not None, (
+        "no promoted (k8s_autodeploy: true), claim-declaring k8s role found — the sizing model "
+        "this test encodes no longer matches the repo; update it rather than deleting it"
+    )
+    assert worst_ceiling <= rollback_timeout, (
+        f"{worst_role} needs {worst_ceiling}s for one full rollback cycle "
+        f"({len(role_defaults.get('k8s_autodeploy_snapshot_pvcs', []))} claim(s), "
+        f"{_rollout_timeout_s(worst_role)}s rollout), which exceeds "
+        f"gitops_deploy_k8s_rollback_timeout_s ({rollback_timeout}s) — its rollback can be "
+        f"SIGTERMed mid-revert. Raise that default (and TimeoutStartSec, and re-check this "
+        f"test's own comment on the batch-summation gap it does not cover)."
+    )
