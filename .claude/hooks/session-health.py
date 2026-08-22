@@ -3,6 +3,7 @@
 surface anything that's already broken so you don't start work blind:
   * containers that are unhealthy or stuck restarting (fast, local `docker ps`)
   * Prometheus scrape targets that are down (fleet-wide, via scripts/probe.py)
+  * this branch sitting behind origin/master's last-fetched ref (local-only, no `git fetch`)
 
 Design contract (mirrors the other hooks here):
   - SILENT when all-green: prints nothing, so it adds zero context noise on a
@@ -166,6 +167,36 @@ def target_problems():
     return bad
 
 
+def master_moved_problems():
+    """One line when this branch is behind origin/master's remote-tracking ref, else [].
+
+    `git rev-list --count HEAD..origin/master` reads only the local object store -- no
+    `git fetch` runs here, so this can only ever be as current as the last fetch this
+    checkout happened to do (a login shell's periodic fetch, a manual `git fetch`, an
+    earlier `deploy.sh` run). That is the honest answer for a read-only, always-runs
+    SessionStart hook: a live check would mean a network call on every session open. The
+    line says "last fetched" rather than claiming to be current, and deploy.sh's own
+    staleness gate (scripts/deploy_staleness.py, exit 4) is what actually refuses a stale
+    deploy -- this is only the earlier, cheaper warning. [] on any failure, including a
+    checkout with no origin/master ref at all -- diagnosing that is not this hook's job.
+    """
+    try:
+        res = _run(["git", "rev-list", "--count", "HEAD..origin/master"], 5)
+        if res.returncode != 0:
+            return []
+        count = int(res.stdout.strip())
+    except Exception:
+        return []
+    if count <= 0:
+        return []
+    plural = "s" if count != 1 else ""
+    return [
+        f"  ⚠ this branch is {count} commit{plural} behind origin/master (as of the last "
+        "fetch -- `git fetch` to refresh; a deploy from here would be refused, see "
+        "scripts/deploy_staleness.py)"
+    ]
+
+
 def other_live_sessions(cwd):
     """Lines describing the other Claude sessions working this repo right now.
 
@@ -226,7 +257,8 @@ def main():
 
     dock, _docker_ok = docker_problems()
     targets = target_problems()
-    problems = dock + targets
+    master_moved = master_moved_problems()
+    problems = dock + targets + master_moved
 
     banner = format_banner(problems)
     if banner:

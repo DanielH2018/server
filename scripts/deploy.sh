@@ -35,6 +35,16 @@
 #     so the derived list still goes through the same lock and tag validation below, and prints
 #     what it derived before doing anything else. Refuses (exit 3, nothing touched) on a broad
 #     change — shared templates/inventory/setup-plane paths that don't map to one service.
+#   --detach backgrounds the ansible-playbook run (the ~83% of a deploy that is waiting on
+#     rollout/stabilisation) and returns immediately. Tag validation, the staleness check, and
+#     the lock are still evaluated in THIS process before it returns, so exit 2/4 land exactly
+#     as they do today; lock contention (exit 75) is checked non-blocking instead of queued for
+#     LOCK_WAIT, since waiting 25 minutes before returning would defeat the point of detaching —
+#     it fails fast and asks you to retry rather than sitting on the terminal. Output goes to a
+#     log file (path printed on return); on completion it posts to the gitops-deploy Discord
+#     webhook, gated on `probe.py health <svc>` for every deployed tag that supports it.
+#     Meaningless combined with --check or --dry-run (both already return immediately without
+#     touching the lock) — refused with a nonzero exit rather than silently ignored.
 
 set -u
 
@@ -98,6 +108,7 @@ next_is_tags=0
 skip_tag_check=0
 skip_staleness_check=0
 dry_run=0
+detach=0
 
 for arg in "$@"; do
     if [[ "$next_is_tags" == 1 ]]; then
@@ -112,6 +123,9 @@ for arg in "$@"; do
             ;;
         --skip-staleness-check)
             skip_staleness_check=1
+            ;;
+        --detach)
+            detach=1
             ;;
         --dry-run)
             # Translated, not passed through: ansible-playbook has no --dry-run of its own
@@ -158,6 +172,23 @@ fi
 
 set -- "${args[@]}"
 
+# --detach + --check/--dry-run is meaningless: both of those already return immediately without
+# touching the lock, so there is nothing to background. Checked here, right after args are known
+# and before the (comparatively slow) staleness check, so a nonsensical combination fails fast
+# rather than doing something surprising.
+check_requested=0
+for arg in "$@"; do
+    if [[ "$arg" == "--check" ]]; then
+        check_requested=1
+        break
+    fi
+done
+if [[ "$detach" == 1 && ( "$check_requested" == 1 || "$dry_run" == 1 ) ]]; then
+    echo "deploy: --detach with --check or --dry-run is meaningless -- both already return" >&2
+    echo "  immediately without touching the lock, so there is nothing to background." >&2
+    exit 64
+fi
+
 # A tree behind origin/master renders stale templates and reverts live config for the roles
 # it targets, while every repo-side check still reads green -- the stale tree is consistent
 # with itself. Measured 2026-08-19; see scripts/deploy_staleness.py. This runs before --check
@@ -179,6 +210,72 @@ done
 # staging tree. Nothing for the lock to serialize against.
 if [[ "$dry_run" == 1 ]]; then
     exec uv run ansible-playbook ansible/deploy.yml "$@"
+fi
+
+if [[ "$detach" == 1 ]]; then
+    # The lock is still taken HERE, synchronously -- only the ansible-playbook run itself (the
+    # ~83% of a deploy spent waiting on rollout/stabilisation) moves to the background. Waiting
+    # up to LOCK_WAIT (25min) before returning would defeat the point of --detach, so contention
+    # is checked non-blocking: exit 75 means "try again shortly", not "waited 25 minutes then
+    # gave up" the way it does without --detach.
+    log_dir=/tmp/homelab-deploy-logs
+    mkdir -p "$log_dir"
+    health_tags=()
+    if [[ ${#tags[@]} -gt 0 ]]; then
+        old_ifs=$IFS
+        for tag_arg in "${tags[@]}"; do
+            IFS=','
+            # shellcheck disable=SC2086  # unquoted on purpose: this IS the comma split
+            for tag in $tag_arg; do
+                health_tags+=("$tag")
+            done
+            IFS=$old_ifs
+        done
+    fi
+    tag_label=$(
+        IFS=,
+        echo "${health_tags[*]:-full}"
+    )
+    log="$log_dir/deploy-${tag_label//[^A-Za-z0-9_.,-]/_}-$(date +%Y%m%d-%H%M%S)-$$.log"
+
+    exec {lockfd}>"$LOCK"
+    if ! flock -n "$lockfd"; then
+        echo "deploy --detach: could not take $LOCK right now -- nothing was deployed." >&2
+        echo "  A deploy is already running. Likely holders: gitops-deploy.service" >&2
+        echo "  (systemctl status gitops-deploy.service), the weekly secret-rotate cron," >&2
+        echo "  or another Claude session (uv run python scripts/prune_worktrees.py)." >&2
+        echo "  --detach fails fast on contention rather than queuing for ${LOCK_WAIT}s --" >&2
+        echo "  retry shortly, or drop --detach to queue normally." >&2
+        exit "$LOCK_BUSY"
+    fi
+
+    (
+        uv run ansible-playbook ansible/deploy.yml "$@" >"$log" 2>&1
+        run_status=$?
+        flock -u "$lockfd"
+        exec {lockfd}>&-
+        # shellcheck disable=SC2094  # false positive: the notifier only receives $log as a
+        # path string (to mention in its Discord post) and never opens it itself -- the only
+        # actual writer of the file is this append redirect.
+        uv run python scripts/deploy_detach_notify.py \
+            --status "$run_status" \
+            --log "$log" \
+            --tags "$(
+                IFS=,
+                echo "${health_tags[*]}"
+            )" \
+            >>"$log" 2>&1
+    ) &
+    bg_pid=$!
+    disown "$bg_pid" 2>/dev/null || true
+    exec {lockfd}>&-
+
+    echo "deploy --detach: running in background (pid $bg_pid)."
+    echo "  log:  $log"
+    echo "  tail: tail -f $log"
+    echo "  Posts to the gitops-deploy Discord webhook when it settles, gated on" \
+        "'probe.py health <svc>' for every deployed tag that supports it."
+    exit 0
 fi
 
 flock -w "$LOCK_WAIT" -E "$LOCK_BUSY" "$LOCK" uv run ansible-playbook ansible/deploy.yml "$@"
