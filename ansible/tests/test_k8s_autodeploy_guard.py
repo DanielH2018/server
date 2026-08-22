@@ -2558,9 +2558,9 @@ def _migrating_state(role: Path) -> bool:
     which is what made `test_auto_deployable_migrating_state_roles_declare_snapshot_pvcs` below
     vacuous. Task 7 made the two sets overlap on those twelve; the same-day scope decision then
     re-denied three of them (zigbee2mqtt, livesync, qbittorrent — state coupled outside the
-    volume, not a snapshot gap), so the overlap the guard actually exercises today is the
-    remaining nine. Either count is non-empty, so the guard bites instead of matching an empty
-    loop.
+    volume, not a snapshot gap), and a later audit re-denied tdarr for the same reason — so the
+    overlap the guard actually exercises today is the remaining eight. Every count along the way
+    is non-empty, so the guard bites instead of matching an empty loop.
 
     Almost every PVC `_rendered_pvc_claims` can find in this repo hardcodes
     `accessModes: [ReadWriteOnce]` (both direct templates and k8s/seed-volume's shared one), so a
@@ -2590,7 +2590,8 @@ def test_auto_deployable_migrating_state_roles_declare_snapshot_pvcs() -> None:
     scope decision found their volume's state coupled to something outside it (coordinator
     NVRAM, connected Obsidian clients, the referenced data volume) that a revert can
     desynchronise — a different question from whether the snapshot covers the volume, which it
-    does for all three. So this guard runs against a non-empty offender set of nine and asserts
+    does for all three — and tdarr, re-denied by a later audit for the same shared-media
+    coupling. So this guard runs against a non-empty offender set of eight and asserts
     it stays empty: every promoted role already declares its snapshot claims, so the assertion
     passes on real coverage rather than on nothing to check.
     `test_snapshot_pvc_declarations_match_rendered_claims` above is the guard that actually bit
@@ -2605,8 +2606,9 @@ def test_auto_deployable_migrating_state_roles_declare_snapshot_pvcs() -> None:
     ]
     assert candidates, (
         "no auto-deployable role has the Recreate + RWO-PVC shape — this guard has gone back "
-        "to vacuous. Reverting three of slice 7b's twelve promotions for state coupling "
-        "(zigbee2mqtt, livesync, qbittorrent) left nine, so this staying non-empty is expected; "
+        "to vacuous. Reverting four of slice 7b's twelve promotions for state coupling "
+        "(zigbee2mqtt, livesync, qbittorrent, then tdarr) left eight, so this staying non-empty "
+        "is expected; "
         "only a full revert of all twelve should relax this back to documenting vacuity. If it's "
         "empty for any other reason, _auto_deployable or _migrating_state has drifted from what "
         "the roles actually declare."
@@ -2622,4 +2624,89 @@ def test_auto_deployable_migrating_state_roles_declare_snapshot_pvcs() -> None:
         "auto-deployable role(s) with the Recreate + RWO-PVC shape declare no "
         "k8s_autodeploy_snapshot_pvcs, so a bad image swap can migrate the volume with no "
         "pre-apply recovery point:\n" + "\n".join(offenders)
+    )
+
+
+# ── state coupled OUTSIDE the volume (2026-08-22 review M2) ─────────────────────────────────
+# The exclusion class every other guard in this file misses. The checks above ask whether a role
+# protects the claims it OWNS; this one asks whether it mounts a claim it does not own and
+# therefore cannot revert.
+#
+# `_rendered_pvc_claims` reads only what a role CAUSES to exist — a PVC document in its own
+# templates, or a `k8s/seed-volume` include. `media-data` is rendered by `k8s/media-volume`, so
+# every *arr role mounting it is invisible to that reader. tdarr's promotion was caught by a
+# human audit on 2026-08-22, not by a test; sonarr/radarr/bazarr/jellyfin were weighed and kept.
+# The gap this closes is the NEXT role added with such a mount, promoted with nobody asked.
+#
+# The ack key is a list of claim names, not a prose reason — mechanically diffable, and the same
+# shape as k8s_autodeploy_snapshot_pvcs. It proves the question was asked, never that the answer
+# was right; that is the honest limit of a guard here, and it converts a silent omission into a
+# visible one, which is what tdarr needed.
+_CLAIM_REF_RE = re.compile(r"^\s*claimName:\s*(?P<token>\S.*?)\s*$", re.MULTILINE)
+
+
+def _claim_name_refs(role: Path) -> tuple[set[str], list[str]]:
+    """Claim names `role`'s own workload templates MOUNT, as `(resolved, unresolved_tokens)`.
+
+    Deliberately distinct from `_rendered_pvc_claims`, which reads what a role creates. A role
+    can mount a claim another role renders, and that is exactly the coupling being detected.
+
+    An unresolvable token is returned rather than dropped, and the caller treats it as a
+    violation — pihole's `claimName: {{ inst.claim }}` is a loop variable no single-var resolver
+    can reach, and a role like that must not slip through as "no refs found". It is denied today,
+    so this does not bite; it must stay a violation if one is ever promoted.
+    """
+    defaults = _role_defaults(role)
+    tdir = role / "templates"
+    resolved: set[str] = set()
+    unresolved: list[str] = []
+    for template in sorted(tdir.glob("*.j2")) if tdir.is_dir() else []:
+        for match in _CLAIM_REF_RE.finditer(template.read_text()):
+            name = _resolve_claim_token(match.group("token"), defaults)
+            if name is not None:
+                resolved.add(name)
+            else:
+                unresolved.append(f"{template.name}: {match.group('token')}")
+    return resolved, unresolved
+
+
+def test_auto_deployable_roles_account_for_every_claim_they_mount() -> None:
+    """Every claim an auto-deployable role mounts is either revert-covered or explicitly acked.
+
+    Reverting the fix — dropping `k8s_autodeploy_unreverted_claims` from a role that mounts
+    `media-data` — fails this test by name.
+    """
+    offenders = []
+    for role in sorted(_K8S_ROLES.iterdir()):
+        if not role.is_dir():
+            continue
+        defaults = _role_defaults(role)
+        if not defaults.get("k8s_autodeploy"):
+            continue
+
+        mounted, unresolved = _claim_name_refs(role)
+        owned, _ = _rendered_pvc_claims(role)
+        snapshotted = set(defaults.get("k8s_autodeploy_snapshot_pvcs") or [])
+        acked = set(defaults.get("k8s_autodeploy_unreverted_claims") or [])
+
+        foreign = mounted - owned - snapshotted - acked
+        if foreign:
+            offenders.append(
+                f"  {role.name}: mounts {sorted(foreign)}, which it neither renders nor "
+                f"declares in k8s_autodeploy_snapshot_pvcs nor acks in "
+                f"k8s_autodeploy_unreverted_claims"
+            )
+        if unresolved:
+            offenders.append(
+                f"  {role.name}: claimName token(s) this reader cannot resolve "
+                f"({unresolved}) — an auto-deployable role must not mount a claim whose name "
+                f"nothing here can check"
+            )
+
+    assert not offenders, (
+        "auto-deployable role(s) mount state that k8s/volume-revert will NOT roll back, with "
+        "nobody having recorded that the trade-off was weighed. Either add the claim to "
+        "k8s_autodeploy_snapshot_pvcs (if reverting it is safe) or list it in "
+        "k8s_autodeploy_unreverted_claims with the reason in k8s_autodeploy_reason:\n"
+        + "\n".join(offenders)
     )
