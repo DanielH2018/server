@@ -38,6 +38,7 @@ Route to the source of truth by what you're doing, before reading linearly:
 | Adding / changing a Docker service (the Pi only) | `## Adding a New Service` → *Adding a Docker service* · `/new-container` skill |
 | Deploying or redeploying a service | `/deploy` skill · `## Common Commands` |
 | Checking a k8s manifest change without deploying it | `## Common Commands` → *Checking a k8s change without deploying it* (`--dry-run` vs `--check` — they check different things) |
+| Running or testing a GitOps tick without waiting 30 min | `./scripts/gitops_tick.sh` · `ansible/roles/setup/gitops_deploy/CLAUDE.md` → *Triggering a tick by hand*. A real tick, not a rehearsal — there is no dry-run mode. |
 | Adding / rotating a secret | `/add-secret` skill · `docs/secret-rotation.md` · `## Secrets Management` |
 | A Bash or `kubectl` command keeps prompting, or you need the full permission tables | `## Shell Commands — Shape Them to Auto-Approve` below (summary) · `docs/claude-shell-permissions.md` (full detail) |
 | Editing HA automations / lighting / fans | `ansible/roles/k8s/home-assistant/CLAUDE.md` (config and workload both live there; it routes to `docs/` for per-topic behaviour) · `/ha-edit-automation` |
@@ -184,6 +185,13 @@ Write exploratory commands so they auto-approve; expect a prompt for the rest.
   shell control flow (`for`/`while` loops, `if/then/else/fi`); anything that writes or execs
   (`> file`, `tee`, `sed -i`, subshells `(…)`, backgrounding `&`).
 - Restructure rather than loop: one `grep`/`find`/`awk` usually replaces the control flow.
+
+- **`./scripts/gitops_tick.sh` is allow-listed but not guaranteed.** It is a write (it triggers
+  a real deploy), so the auto-mode classifier judges it on its own and denied it once in seven
+  runs on identical text. Measured 2026-08-22. A denial here is the classifier, not a broken
+  script or a missing polkit rule — re-run it, and check `last_run` before assuming nothing
+  happened. `Bash()` allow rules are suspended while `autoMode.classifyAllShell` is on, so the
+  allow-list entry helps only outside auto mode.
 
 Full tables, hook wiring and measurement history: `docs/claude-shell-permissions.md`.
 
