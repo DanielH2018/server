@@ -182,6 +182,52 @@ def _fn(name: str) -> ast.FunctionDef:
     return fn
 
 
+def _git_merge_calls(fn: ast.FunctionDef) -> list[ast.Call]:
+    """Every `run([... "git", "merge", "--ff-only", <target>])` call inside `fn`."""
+    out = []
+    for node in ast.walk(fn):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "run"
+            and node.args
+            and isinstance(node.args[0], ast.List)
+        ):
+            continue
+        consts = {e.value for e in node.args[0].elts if isinstance(e, ast.Constant)}
+        if {"merge", "--ff-only"} <= consts:
+            out.append(node)
+    return out
+
+
+def test_every_ff_merge_targets_the_pinned_sha_not_the_ref():
+    # 2026-08-22 review H1. main() pins the remote head ONCE (`origin = git rev-parse
+    # origin/<branch>`) and gates on that pin: the CI verdict, the changed-path diff, the denylist
+    # read and the broad marker all evaluate against that exact commit. Every merge must land the
+    # SAME commit.
+    #
+    # Merging `f"origin/{BRANCH}"` re-resolves the ref, and `--ff-only` accepts a newer descendant
+    # without complaint — so a concurrent fetch lands a commit whose CI was never checked and whose
+    # paths were never classified. Worse than the bypass: the tree then equals origin, so
+    # next_action() returns "noop" forever after and that commit is never deployed AND never
+    # defer-and-alerted, while hold_sha, diverged_sha and behind_since all read green.
+    #
+    # The race is reachable — `scripts/deploy.sh` fetches (via deploy_staleness.py) BEFORE taking
+    # /var/lock/server-git-tree.lock, and --dry-run returns without ever taking it.
+    #
+    # An AST guard rather than a behavioural one because gitops_deploy.py is not importable in CI
+    # (module-level `C = cfg()` reads /etc), the same reason the rest of this file is source-level.
+    merges = _git_merge_calls(_fn("main"))
+    assert merges, "no `git merge --ff-only` call found in main()"
+    for call in merges:
+        target = call.args[0].elts[-1]
+        assert isinstance(target, ast.Name) and target.id == "origin", (
+            "every `git merge --ff-only` in main() must merge the pinned `origin` SHA, not a "
+            "re-resolved `origin/<branch>` ref — a concurrent fetch would otherwise absorb an "
+            "un-CI'd commit that then reads as a permanent noop (2026-08-22 review H1)"
+        )
+
+
 def _is_git_reset_hard(node: ast.AST) -> bool:
     # A `run([... "git", "reset", "--hard", ...])` call — the rollback that reverts to the prior HEAD.
     if not (
