@@ -32,6 +32,12 @@ Two things make the plain `systemctl start` awkward, and the wrapper exists for 
   `--no-block`, waits on its own budget, then prints the journal for that run and exits with
   its status (75 = still running, the script stopped watching).
 
+An **uneventful tick logs nothing** — the deployer prints only on a deferral, an alert or a
+real deploy — so the journal alone renders a healthy run as `-- No entries --`, which reads
+like the unit never ran. The wrapper therefore also prints `last_run`, `hold_sha` and
+`behind_since` from `/var/lib/gitops-deploy`. A fresh `last_run` is what distinguishes
+"ticked, nothing to do" from "did not tick at all".
+
 A tick started while one is already in flight is **joined, not duplicated** — systemd
 coalesces the request into the run already `activating` (see the cadence section at the end of
 this file). The wrapper detects that case and says so.

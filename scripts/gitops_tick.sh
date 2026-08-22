@@ -110,6 +110,31 @@ echo "── journal ───────────────────�
 journalctl -u "$UNIT" --since "$since" --no-pager
 echo "─────────────────────────────────────────────────────────────────────────────"
 
+# An uneventful tick logs NOTHING — the deployer prints only on a deferral, an alert or a
+# real deploy — so the journal alone renders a healthy run as "-- No entries --", which
+# reads like the unit never ran. These three markers are the deployer's own state, and
+# they distinguish "ticked, nothing to do" from "did not tick at all".
+state_dir=/var/lib/gitops-deploy
+echo
+echo "── deployer state ───────────────────────────────────────────────────────────"
+if [[ -r "$state_dir/last_run" ]]; then
+  last_run="$(cut -d. -f1 <"$state_dir/last_run")"
+  echo "last_run:     $(date -d "@$last_run" '+%Y-%m-%d %H:%M:%S') ($((  $(date +%s) - last_run ))s ago)"
+else
+  echo "last_run:     unreadable — the tick did not get far enough to write it"
+fi
+if [[ -s "$state_dir/hold_sha" ]]; then
+  echo "hold_sha:     $(cat "$state_dir/hold_sha")  <-- a rolled-back SHA is held; see the role CLAUDE.md"
+else
+  echo "hold_sha:     empty (no rollback is being held)"
+fi
+if [[ -s "$state_dir/behind_since" ]]; then
+  echo "behind_since: $(cat "$state_dir/behind_since")  <-- parked behind origin since this SHA/time"
+else
+  echo "behind_since: empty (converged with origin)"
+fi
+echo "─────────────────────────────────────────────────────────────────────────────"
+
 state="$(show ActiveState)"
 if [[ "$state" == "activating" || "$state" == "deactivating" ]]; then
   echo
