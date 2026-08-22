@@ -70,6 +70,18 @@
     - Reload systemd
     - Run gitops-deploy once
 
+- name: Allow the deploy user to trigger a tick without root (polkit)
+  ansible.builtin.template:
+    src: 50-gitops-deploy.rules.j2
+    dest: /etc/polkit-1/rules.d/50-gitops-deploy.rules
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  # No handler: polkitd watches rules.d and reloads a changed rule on its own, so
+  # there is nothing to restart. The rule's own header explains the narrow scope
+  # (this unit, `start` only) and why it must not test subject.active.
+
 - name: Enable and start the timer
   ansible.builtin.systemd:
     name: gitops-deploy.timer

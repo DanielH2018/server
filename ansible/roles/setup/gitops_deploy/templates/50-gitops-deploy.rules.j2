@@ -1,0 +1,43 @@
+// Managed by Ansible (roles/setup/gitops_deploy) — do not edit on the host.
+//
+// Lets {{ sys_user }} START gitops-deploy.service without root, so an operator (or a
+// Claude session, which cannot use sudo at all — `Bash(sudo:*)` is a hard deny in
+// ~/.claude/settings.json) can trigger a GitOps tick on demand and exercise the real
+// pull → CI-gate → deploy → health-gate → rollback path. Without this rule the call
+// goes over D-Bus to PID 1, hits polkit's org.freedesktop.systemd1.manage-units action,
+// and fails with "Interactive authentication required".
+//
+// Scope is deliberately narrow: this one unit, and only the `start` verb.
+//   - stop/restart/kill stay privileged. A wedged run is an incident, not a routine
+//     action, and TimeoutStartSec=45min already bounds it.
+//   - Starting is safe to expose because it is idempotent in the way that matters:
+//     systemd coalesces a start request for a unit already `activating` into the run
+//     in flight rather than spawning a second one (see gitops-deploy.service.j2), and
+//     the run itself sits behind `flock /var/lock/server-git-tree.lock`.
+//   - The deployer is read-only against the remote (never pushes), CI-gated, and
+//     health-gated with rollback, so the worst case of an unwanted tick is the same
+//     worst case as the 30-minute timer firing.
+//
+// It does NOT test subject.active or subject.local, and returns YES rather than any
+// AUTH_* result. Both are load-bearing: a non-interactive shell (a systemd-run job, a
+// Claude Code Bash call, a cron) has no active local seat, so an active-gated rule or
+// an AUTH_* result would match and then still fail with "Interactive authentication
+// required" — which is the exact failure this rule exists to remove.
+//
+// Returning undefined falls through to the remaining rules, so nothing here widens or
+// narrows any other action.
+polkit.addRule(function (action, subject) {
+    if (action.id !== "org.freedesktop.systemd1.manage-units") {
+        return undefined;
+    }
+    if (subject.user !== "{{ sys_user }}") {
+        return undefined;
+    }
+    if (action.lookup("unit") !== "gitops-deploy.service") {
+        return undefined;
+    }
+    if (action.lookup("verb") !== "start") {
+        return undefined;
+    }
+    return polkit.Result.YES;
+});

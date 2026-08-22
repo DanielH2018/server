@@ -10,6 +10,36 @@ health-gated redeploy too (closing the loop so live config matches master), not 
 `tasks/` and the role `CLAUDE.md` are deliberately NOT auto-deployed (structural/docs — deploy
 those manually).
 
+## Triggering a tick by hand
+```bash
+./scripts/gitops_tick.sh            # trigger, wait up to 540s, print that run's journal
+./scripts/gitops_tick.sh --no-wait  # trigger and return immediately
+```
+The timer does nothing but activate `gitops-deploy.service`, so this runs the identical code
+path — there is **no dry-run mode**. A manual tick fetches, CI-gates, ff-merges, deploys,
+health-gates and rolls back for real.
+
+Two things make the plain `systemctl start` awkward, and the wrapper exists for both:
+- **polkit.** `gitops-deploy.service` is a system unit, so an unprivileged `systemctl start`
+  goes over D-Bus to PID 1 and is refused with *Interactive authentication required*.
+  `templates/50-gitops-deploy.rules.j2` grants the deploy user (`sys_user`) exactly one thing: the `start`
+  verb on this one unit. stop/restart/kill stay privileged. The rule must not test
+  `subject.active`/`subject.local` and must return `polkit.Result.YES` — a caller with no
+  active local seat (a cron, a `systemd-run` job, a Claude Code Bash call) otherwise matches
+  the rule and is still refused. `ansible/tests/test_gitops_manual_trigger.py` pins that.
+- **`Type=oneshot` + `TimeoutStartSec=45min`.** A blocking start returns only when the tick
+  finishes, which reads as a hang to anything with less patience. The wrapper starts with
+  `--no-block`, waits on its own budget, then prints the journal for that run and exits with
+  its status (75 = still running, the script stopped watching).
+
+A tick started while one is already in flight is **joined, not duplicated** — systemd
+coalesces the request into the run already `activating` (see the cadence section at the end of
+this file). The wrapper detects that case and says so.
+
+This is a *convenience* path, not the activation path: the role's `Run gitops-deploy once`
+handler already kicks a run whenever the script, config or units change, so provisioning stays
+fully IaC.
+
 ## Health gate + rollback
 After deploy it polls each container's health (`max(5min)` default, see HEALTH_TIMEOUT_S).
 On failure it `git reset --hard`es to the previous HEAD, redeploys the prior version,
