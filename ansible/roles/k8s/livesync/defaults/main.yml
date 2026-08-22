@@ -4,18 +4,18 @@
 livesync_k8s_image: couchdb:3.5.2
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
-# Migrating state — a CouchDB database, Recreate + a real PVC seeded through k8s/seed-volume
-# (hardcoded ReadWriteOnce). A bad image swap can migrate the B-tree file before the gate
-# observes a fault, then fail the rollback redeploy against data it can no longer read — same
-# class as home-assistant, just with a database engine instead of an *arr config store.
-# Promoted in slice 7b (2026-08-21): k8s/manifests now takes a pre-apply Longhorn snapshot of
-# the claim below and reverts it if the deploy fails, so a bad swap reverts to the snapshot
-# instead of leaving the B-tree unreadable by the old image.
-k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "migrating state — CouchDB database, Recreate + RWO seed-volume PVC, now protected by the pre-apply Longhorn snapshot and revert"  # noqa var-naming[no-role-prefix]
+# DENIED — state coupling, not missing recovery. Slice 7b task 7 promoted this role
+# (2026-08-21) on deploy mechanics alone: Recreate + RWO seed-volume PVC, now protected by
+# the pre-apply Longhorn snapshot and revert. The scope decision the same day held it back,
+# because the volume's state is coupled to something the snapshot cannot capture: the
+# CouchDB revisions on connected Obsidian clients. A revert rewinds the server's B-tree while
+# every synced client still holds the newer revisions it already pushed, and replaying those
+# against the reverted DB invites a conflict storm an un-reverted rollback would not cause.
+# The snapshot and revert machinery work fine here — they are not why this is denied.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "state coupled outside the volume — reverting the CouchDB B-tree to a snapshot desynchronises it from connected Obsidian clients' already-synced revisions, inviting a conflict storm an un-reverted rollback would not cause; the pre-apply snapshot and revert work fine and are not the blocker"  # noqa var-naming[no-role-prefix]
 # Slice 7a task 3 — the pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
-# Declared regardless of k8s_autodeploy — protects a manual deploy too, and slice 7b's revert
-# is what this role's auto-deploy now depends on.
+# Declared regardless of k8s_autodeploy — protects a manual deploy too.
 k8s_autodeploy_snapshot_pvcs: [livesync-data]  # noqa var-naming[no-role-prefix]
 # Mirrors resources('1.0', '1024M', '0.10', '128M') in the compose template.
 livesync_k8s_cpu_limit: "1"

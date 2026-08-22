@@ -4,18 +4,19 @@
 zigbee2mqtt_k8s_image: ghcr.io/koenkk/zigbee2mqtt:2.12.0
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
-# Migrating state — strategy is Recreate and the data volume (pairing state, coordinator
-# backup, device/group config, the pinned network key material) is seeded through
-# k8s/seed-volume (hardcoded ReadWriteOnce), so a bad image swap can migrate that volume before
-# the gate observes a fault. Losing it means re-pairing every Zigbee device by hand.
-# Promoted in slice 7b (2026-08-21): k8s/manifests now takes a pre-apply Longhorn snapshot of
-# the claim below and reverts it if the deploy fails, so a bad swap reverts to the snapshot
-# instead of stranding the pairing/coordinator state behind an image that can no longer read it.
-k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC holding pairing/coordinator state, now protected by the pre-apply Longhorn snapshot and revert; losing the volume outright still means re-pairing every device"  # noqa var-naming[no-role-prefix]
+# DENIED — state coupling, not missing recovery. Slice 7b task 7 promoted this role
+# (2026-08-21) on deploy mechanics alone: Recreate + RWO seed-volume PVC, now protected by
+# the pre-apply Longhorn snapshot and revert. The scope decision the same day held it back,
+# because the volume's state is coupled to something the snapshot cannot capture: the
+# SLZB-06M coordinator's own NVRAM keeps the network key and frame counters. A revert puts
+# database.db/devices.yaml/coordinator_backup.json back to the snapshot while the coordinator
+# keeps counting from where it actually got to, so paired devices can go silent and recovery
+# is re-pairing each one by hand. The snapshot and revert machinery work fine here — they are
+# not why this is denied.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "state coupled outside the volume — the SLZB-06M coordinator's NVRAM holds the network key and frame counters, so reverting zigbee2mqtt-data to a snapshot desynchronises it from the coordinator and can silence paired devices; the pre-apply snapshot and revert work fine and are not the blocker"  # noqa var-naming[no-role-prefix]
 # Slice 7a task 3 — the pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
-# Declared regardless of k8s_autodeploy — protects a manual deploy too, and slice 7b's revert
-# is what this role's auto-deploy now depends on.
+# Declared regardless of k8s_autodeploy — protects a manual deploy too.
 k8s_autodeploy_snapshot_pvcs: [zigbee2mqtt-data]  # noqa var-naming[no-role-prefix]
 
 # The config-install initContainer needs alpine (`install`). Same init image peanut and

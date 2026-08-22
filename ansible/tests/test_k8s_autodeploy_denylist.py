@@ -214,7 +214,7 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
     assert denied == sorted(set(denied)), "duplicated or unsorted"
     # Roles whose exclusion is load-bearing: losing the ingress or auth plane removes the
     # ability to see or fix a failed deploy. sonarr and speedtest sat here until slice 7b task 7
-    # promoted them (and ten siblings) behind the pre-apply Longhorn snapshot and revert — they
+    # promoted them (and seven siblings) behind the pre-apply Longhorn snapshot and revert — they
     # are asserted OUT of this list below, not just dropped, so a re-denial of either fails loud
     # rather than reading as this test simply not having been updated.
     for role in (
@@ -224,21 +224,35 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
         "code-server",
     ):
         assert role in denied
-    # The twelve slice 7b promoted, checked by name so a regression reads as a specific
-    # assertion failure rather than a shrunk floor further down.
+    # A SECOND, DISTINCT denial category — state coupled to something OUTSIDE the volume, so
+    # the pre-apply snapshot and revert cannot see it and a revert can desynchronise the two.
+    # Not the load-bearing reasons above, and not "migrating state with no recovery point"
+    # either (that is what the snapshot/revert solved for these three same roles). Slice 7b task
+    # 7 promoted all three on deploy mechanics alone; the scope decision the same day (2026-08-22)
+    # held them back once someone asked the coupling question per service:
+    #   - zigbee2mqtt — the SLZB-06M coordinator's own NVRAM (network key, frame counters)
+    #   - livesync    — CouchDB revisions already synced to connected Obsidian clients
+    #   - qbittorrent — the media-data volume qbittorrent-config's bookkeeping references
+    # Checked by name, like the load-bearing group above, so a re-promotion fails loud instead
+    # of reading as this test not having been updated.
+    for role in (
+        "livesync",
+        "qbittorrent",
+        "zigbee2mqtt",
+    ):
+        assert role in denied
+    # The nine slice 7b actually left promoted, checked by name so a regression reads as a
+    # specific assertion failure rather than a shrunk floor further down.
     for role in (
         "bazarr",
         "freshrss",
         "home-assistant",
         "jellyfin",
-        "livesync",
         "prowlarr",
-        "qbittorrent",
         "radarr",
         "sonarr",
         "speedtest",
         "tdarr",
-        "zigbee2mqtt",
     ):
         assert role not in denied
     # Every derived name must be a real role that really says false — catches a filter that
@@ -269,11 +283,12 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
         is False
     ]
     assert len(denied) == len(actually_false)
-    # Measured 32 on 2026-08-21 after slice 7b task 7's twelve promotions dropped this from 44
-    # (uv run python scripts/k8s_autodeploy_counts.py). The floor sits two below the measured
+    # Measured 35 on 2026-08-22 (uv run python scripts/k8s_autodeploy_counts.py): slice 7b task 7's
+    # twelve promotions dropped this from 44 to 32, then the same-day scope decision re-denied
+    # three of the twelve for state coupling, landing here. The floor sits two below the measured
     # count — enough to catch an accidental bulk flip without needing an edit for every
     # single-role promotion.
-    assert len(denied) >= 30
+    assert len(denied) >= 33
 
 
 def test_the_template_still_consumes_the_derived_variable() -> None:
