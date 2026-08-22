@@ -32,6 +32,15 @@ data:
         compaction:
           compaction:
             block_retention: {{ claude_otel_tempo_retention }}
+    # Set on the worker too. 3.0 splits compaction across a scheduler that decides which blocks
+    # to act on and a worker that executes the jobs, and each carries its own copy of the
+    # compaction settings — setting only the scheduler left the worker reading the 336h default,
+    # confirmed by finding both values live in /status/config after the first deploy. Which of
+    # the two governs deletion is not worth resolving from docs when the failure mode is a
+    # silent halving of the window: pin both to the same value and the question cannot arise.
+    backend_worker:
+      compaction:
+        block_retention: {{ claude_otel_tempo_retention }}
     storage:
       trace:
         backend: local
