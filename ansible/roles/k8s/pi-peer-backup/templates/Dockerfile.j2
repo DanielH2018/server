@@ -1,6 +1,13 @@
 # DIGEST-PINNED — see roles/k8s/ical-proxy/templates/Dockerfile.j2 for why a version tag alone is
-# not a pin. `alpine:3.22` re-points at every 3.22.x patch, so the tag reads pinned while the base
-# moves. Keep the tag alongside the digest — it is what holds the 3.22 line.
+# not a pin. An alpine minor tag re-points at every patch within it, so the tag reads pinned while
+# the base moves. Keep the tag alongside the digest — it BOUNDS the digest bumps Renovate raises,
+# so one cannot silently cross a minor. Crossing a minor is therefore a deliberate operator
+# decision (a tag-change PR), and taking one means rebuilding: this image is built and pushed to
+# the in-cluster registry, so merging the bump ships nothing until
+# `./scripts/deploy.sh --tags pi-peer-backup` rebuilds it.
+#
+# The version is deliberately NOT named here — a comment that quotes the line it guards is
+# falsified by the next bump, which is what happened to the 3.22 text this replaces.
 FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 
 RUN apk add --no-cache bash rsync openssh-client curl
