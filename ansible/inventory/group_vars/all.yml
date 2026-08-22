@@ -208,13 +208,14 @@ k8s_default_limitrange:
 k3s_audit_log_enabled: true
 k3s_audit_log_dir: /var/lib/rancher/k3s/server/logs
 k3s_audit_log_path: "{{ k3s_audit_log_dir }}/audit.log"
-# How long a k8s role holds after `rollout status` returns before declaring the deploy healthy
-# (post_tasks/k8s_stabilise_gate.yml; also claude-otel's own assert_stable.yml, which rolls
-# itself). `rollout status` returns on Available, which
+# How long the play holds after every `rollout status` returns before declaring the deploy
+# healthy (post_tasks/k8s_stabilise_gate.yml). `rollout status` returns on Available, which
 # READINESS alone satisfies, so a container killed by a failing LIVENESS probe reports a clean
 # deploy and then crashloops — observed 2026-08-07 with kube-state-metrics. Must exceed a probe's
 # initialDelaySeconds + failureThreshold x periodSeconds; the slowest in the repo is ~35s.
-# Global rather than a role default because the shared role and claude-otel's own loop both use it.
+#
+# Paid ONCE per play, not once per service. claude-otel ran a second window of its own until
+# 2026-08-22 and now feeds the same gate, so this is the only place the pause is spent.
 k8s_rollout_stabilise_seconds: 60
 
 # How many k8s roles deploy.yml applies before draining their rollouts (ansible/tasks/k8s_batch.yml).

@@ -85,29 +85,83 @@
   become: true
   changed_when: false
 
-- name: Confirm the telemetry workloads stayed healthy after their rollout
+# This role skips the shared role's wait (manifests_rollout: '') and rolls its own above, so it
+# must also opt into the stabilisation gate explicitly — the wait it replaced is exactly the one
+# that cannot see a post-readiness liveness failure. kube-state-metrics crashlooped through a
+# green deploy here on 2026-08-07.
+#
+# It used to opt in by importing assert_stable.yml, which carried its own 60s `pause`. That pause
+# was the single most expensive task in the role and it duplicated the play-level window in
+# post_tasks/k8s_stabilise_gate.yml: measured 2026-08-22 on a full deploy (pid 2004861), 60.02s
+# of the role's 69.0s. Handing the workloads to the play gate instead removes the second pause
+# and is STRICTER, not weaker — these six are deployed in batch 4 of 11, so the gate observes
+# them for the remainder of the run rather than for exactly 60s.
+#
+# Roles on the normal path get this snapshot from roles/k8s/rollout-drain, which never sees these
+# six because nothing queued them into k8s_pending_rollouts. Queueing them there instead is not
+# an option: the drain runs at the END of the batch, and "Sync the live Grafana admin password"
+# below `kubectl exec`s into deploy/grafana, so it needs the rollout above to have already
+# finished. The wait stays; only the pause moves.
+- name: Snapshot the telemetry workloads' restart counts for the end-of-play gate
   tags: [deploy]
-  # This role skips the shared role's wait (manifests_rollout: '') and rolls its own above, so it
-  # must also opt into the shared stabilisation gate explicitly — the wait it replaced is exactly
-  # the one that cannot see a post-readiness liveness failure. kube-state-metrics crashlooped
-  # through a green deploy here on 2026-08-07; see assert_stable.yml.
+  # AFTER the wait above, never before. Reading restart counts while the old pod is still
+  # terminating captures the OUTGOING pod's counts, and its replacement starts at zero — so the
+  # gate's `after <= before` comparison would pass no matter what happened. Same reasoning, and
+  # the same trap, as the snapshot task in roles/k8s/rollout-drain.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_observability_namespace }} get pods
+      -l app={{ item.name }}
+      -o jsonpath={.items[*].status.containerStatuses[*].restartCount}
+  loop: "{{ claude_otel_stabilise_workloads }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: claude_otel_restarts_before
+  become: true
+  changed_when: false
+  when:
+    - manifests_render is changed or manifests_secret_render is changed
+    - not ansible_check_mode
+
+- name: Fail if a telemetry pod selector matched no pods
+  tags: [deploy]
+  # Carried over from assert_stable.yml, and it is the one way this gate could go quietly
+  # false-green: a selector matching nothing reports zero restarts and passes every comparison.
+  # All six carry the repo-wide `app: <workload-name>` label; assert it rather than assume it.
+  ansible.builtin.assert:
+    that: item.stdout | trim | length > 0
+    fail_msg: >-
+      No pods matched `-l app={{ item.item.name }}` in namespace
+      {{ k8s_observability_namespace }}, so the stabilisation gate has nothing to watch.
+      Either the workload sets a different pod label than `app: {{ item.item.name }}`,
+      or it has no pods at all.
+    quiet: true
+  loop: "{{ claude_otel_restarts_before.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when: not ansible_check_mode
+
+- name: Hand the telemetry workloads to the end-of-play stabilisation gate
+  tags: [deploy]
+  # noqa var-naming[no-role-prefix] — k8s_stabilise_watch is play-scoped by design, an
+  # accumulator post_tasks/k8s_stabilise_gate.yml drains. Same reasoning as k8s_pending_rollouts
+  # in roles/k8s/manifests.
   #
-  # include_role/tasks_from, not include_tasks with a path: a bare relative include would resolve
-  # against THIS role's tasks dir, and a {{ playbook_dir }} path resolves at runtime but not for
-  # ansible-lint, which reads it as a missing file.
-  ansible.builtin.include_role:
-    name: k8s/manifests
-    tasks_from: assert_stable
-  vars:
-    manifests_stabilise_namespace: "{{ k8s_observability_namespace }}"
-    manifests_stabilise_deployments:
-      - loki
-      - prometheus
-      - kube-state-metrics
-      - tempo
-      - { kind: daemonset, name: otel-collector }
-      - grafana
-  when: manifests_render is changed or manifests_secret_render is changed
+  # `namespace` is carried per entry because the gate reads it per item — these six are the only
+  # workloads in the run that do not live in k8s_namespace.
+  ansible.builtin.set_fact:
+    k8s_stabilise_watch: >-
+      {{ (k8s_stabilise_watch | default([]))
+         + [{
+              'name': item.item.name,
+              'namespace': k8s_observability_namespace,
+              'kind': item.item.kind,
+              'restarts_before': item.stdout,
+            }] }}
+  loop: "{{ claude_otel_restarts_before.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when: not ansible_check_mode
 
 # GF_SECURITY_ADMIN_PASSWORD (the grafana-admin Secret) is only consulted when Grafana
 # initialises its database, so on an existing install a rotated grafana_admin_password
