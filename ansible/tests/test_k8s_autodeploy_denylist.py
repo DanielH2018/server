@@ -241,8 +241,19 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
         "zigbee2mqtt",
     ):
         assert role in denied
-    # The nine slice 7b actually left promoted, checked by name so a regression reads as a
-    # specific assertion failure rather than a shrunk floor further down.
+    # A FOURTH denial reason, tdarr alone. Slice 7b task 7 promoted it with the other eight on
+    # deploy mechanics; two read-only audits held it back the same day (2026-08-22), after this
+    # one. The snapshot/revert machinery works fine for tdarr — this is not the trio's hazard
+    # recurring — the compounding reasons are specific to it: it also mounts media-data (shared
+    # RWX, never reverted) and rewrites library files there IN PLACE, so a revert can't undo an
+    # already-committed transcode; its own two claims (tdarr-configs, tdarr-server) revert
+    # non-atomically; and the digest pin's "stays manual" intent is unenforced by renovate.json,
+    # which automerges a digest re-push after a 3-day soak. Checked by name for the same reason
+    # as the groups above.
+    for role in ("tdarr",):
+        assert role in denied
+    # The eight slice 7b roles actually left promoted, checked by name so a regression reads as
+    # a specific assertion failure rather than a shrunk floor further down.
     for role in (
         "bazarr",
         "freshrss",
@@ -252,7 +263,6 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
         "radarr",
         "sonarr",
         "speedtest",
-        "tdarr",
     ):
         assert role not in denied
     # Every derived name must be a real role that really says false — catches a filter that
@@ -283,12 +293,13 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
         is False
     ]
     assert len(denied) == len(actually_false)
-    # Measured 35 on 2026-08-22 (uv run python scripts/k8s_autodeploy_counts.py): slice 7b task 7's
-    # twelve promotions dropped this from 44 to 32, then the same-day scope decision re-denied
-    # three of the twelve for state coupling, landing here. The floor sits two below the measured
-    # count — enough to catch an accidental bulk flip without needing an edit for every
+    # Measured 36 on 2026-08-22 (uv run python scripts/k8s_autodeploy_counts.py): slice 7b task
+    # 7's twelve promotions dropped this from 44 to 32, the same-day scope decision re-denied
+    # three of the twelve for state coupling (35), then the two post-7b audits re-denied a
+    # fourth, tdarr, for a compounding reason of its own (36). The floor sits two below the
+    # measured count — enough to catch an accidental bulk flip without needing an edit for every
     # single-role promotion.
-    assert len(denied) >= 33
+    assert len(denied) >= 34
 
 
 def test_the_template_still_consumes_the_derived_variable() -> None:

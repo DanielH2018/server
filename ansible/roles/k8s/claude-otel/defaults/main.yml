@@ -26,7 +26,7 @@ claude_otel_kube_state_metrics_image: registry.k8s.io/kube-state-metrics/kube-st
 # prometheus-data, tempo-data) — several independently migrating-state-shaped Deployments behind
 # one role, which compounds the risk across more than one component at once.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "observability — Claude Code's own telemetry stack, six sub-images across several Deployments. ALSO each stateful component (loki/grafana/prometheus/tempo) is Recreate + its own PVC — compounding, not single-component"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "observability — Claude Code's own telemetry stack, six sub-images across several Deployments. ALSO each stateful component (loki/grafana/prometheus/tempo) is Recreate + its own PVC — compounding, not single-component. COUPLING NOTE for a future promotion: UI-edited Grafana dashboards live only in the PVC until an export script round-trips them to git; a revert discards unsaved edits"  # noqa var-naming[no-role-prefix]
 
 # longhorn-nobackup, NOT longhorn. Two reasons, either sufficient on its own:
 #   - Volume: Loki with content logging on grows fast, and Prometheus TSDB is high-churn.

@@ -20,7 +20,7 @@ radarr_k8s_image: lscr.io/linuxserver/radarr:6.1.1.10360-ls304
 # the claim below and reverts it if the deploy fails, so a bad swap reverts to the snapshot
 # instead of leaving the library database and root-folder paths unreadable by the old image.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC, now protected by the pre-apply Longhorn snapshot and revert; -lsNN versioning still hides a breaking bump"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC, now protected by the pre-apply Longhorn snapshot and revert; -lsNN versioning still hides a breaking bump. WEIGHED: radarr also mounts media-data (shared RWX, not reverted); a revert rewinds import/rename history while the files stay where they were left, so it desyncs into duplicate-import attempts or a missed-file state, recoverable by a library rescan"  # noqa var-naming[no-role-prefix]
 # Slice 7a task 3 — the pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
 # Declared regardless of k8s_autodeploy — protects a manual deploy too, and slice 7b's revert
 # is what this role's auto-deploy now depends on.

@@ -20,7 +20,7 @@ home_assistant_k8s_image: lscr.io/linuxserver/homeassistant:2026.6.3-ls221
 # the claim below and reverts it if the deploy fails, so a bad swap reverts to the snapshot
 # instead of leaving the .storage device/entity registries unreadable by the old image.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC, now protected by the pre-apply Longhorn snapshot and revert; -lsNN versioning still hides a breaking bump as a MINOR"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC, now protected by the pre-apply Longhorn snapshot and revert; -lsNN versioning still hides a breaking bump as a MINOR. WEIGHED: a companion-app long-lived token minted after the snapshot is invalidated by a revert, forcing that device to re-auth"  # noqa var-naming[no-role-prefix]
 # Slice 7a task 3 — the pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
 # Declared regardless of k8s_autodeploy: protects a manual deploy the same way it would an
 # auto-deploy, and slice 7b's revert is what this role's auto-deploy now depends on.
