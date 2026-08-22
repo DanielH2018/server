@@ -24,6 +24,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -119,6 +120,9 @@ def _run_attached_path() -> subprocess.CompletedProcess[str]:
         env["STUB_STATE"] = str(state_dir)
         env["ANSIBLE_LOG_PATH"] = str(tmp_path / "ansible.log")
         env["ANSIBLE_NOCOLOR"] = "1"
+        # Pin the interpreter rather than discovering it: the fact cache is keyed on `localhost`
+        # and shared by every worktree, so a pruned tree's .venv fails this play with rc 127.
+        env["ANSIBLE_PYTHON_INTERPRETER"] = sys.executable
 
         git_env = dict(env)
         git_env["GIT_AUTHOR_NAME"] = "drill"
