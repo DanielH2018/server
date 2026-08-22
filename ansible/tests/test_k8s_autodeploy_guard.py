@@ -2556,8 +2556,11 @@ def _migrating_state(role: Path) -> bool:
     role is auto-deployable. Before slice 7b task 7 promoted twelve of those thirteen, the 31
     roles this predicate flagged and the 14 `_auto_deployable` roles did not intersect at all,
     which is what made `test_auto_deployable_migrating_state_roles_declare_snapshot_pvcs` below
-    vacuous. Task 7 makes the two sets overlap on exactly those twelve, so the guard now
-    actually exercises its assertion instead of matching an empty loop.
+    vacuous. Task 7 made the two sets overlap on those twelve; the same-day scope decision then
+    re-denied three of them (zigbee2mqtt, livesync, qbittorrent — state coupled outside the
+    volume, not a snapshot gap), so the overlap the guard actually exercises today is the
+    remaining nine. Either count is non-empty, so the guard bites instead of matching an empty
+    loop.
 
     Almost every PVC `_rendered_pvc_claims` can find in this repo hardcodes
     `accessModes: [ReadWriteOnce]` (both direct templates and k8s/seed-volume's shared one), so a
@@ -2581,10 +2584,14 @@ def test_auto_deployable_migrating_state_roles_declare_snapshot_pvcs() -> None:
     than leaving a future reader to discover it: `_auto_deployable` was true for 14 roles (none
     `strategy: Recreate`), `_migrating_state` was true for the thirteen slice 7a task 3 declared
     `k8s_autodeploy_snapshot_pvcs` for, and the two sets did not intersect. Slice 7b task 7
-    promotes twelve of those thirteen (`code-server` stays denylisted, for an unrelated reason —
-    its image is an immutable `registry/…:latest` ref with no version signal to auto-deploy on),
-    so this guard now runs against a non-empty offender set for the first time and asserts it
-    stays empty: every promoted role already declares its snapshot claims, so the assertion
+    promoted twelve of those thirteen; four of the thirteen now stay denylisted — `code-server`
+    for an unrelated reason (its image is an immutable `registry/…:latest` ref with no version
+    signal to auto-deploy on), and `zigbee2mqtt`/`livesync`/`qbittorrent` because the same-day
+    scope decision found their volume's state coupled to something outside it (coordinator
+    NVRAM, connected Obsidian clients, the referenced data volume) that a revert can
+    desynchronise — a different question from whether the snapshot covers the volume, which it
+    does for all three. So this guard runs against a non-empty offender set of nine and asserts
+    it stays empty: every promoted role already declares its snapshot claims, so the assertion
     passes on real coverage rather than on nothing to check.
     `test_snapshot_pvc_declarations_match_rendered_claims` above is the guard that actually bit
     before this; this project has repeatedly shipped guards that matched nothing by accident,
@@ -2598,9 +2605,11 @@ def test_auto_deployable_migrating_state_roles_declare_snapshot_pvcs() -> None:
     ]
     assert candidates, (
         "no auto-deployable role has the Recreate + RWO-PVC shape — this guard has gone back "
-        "to vacuous. If slice 7b's twelve promotions were reverted, that's expected and this "
-        "assertion should be relaxed back to documenting vacuity; if they weren't, "
-        "_auto_deployable or _migrating_state has drifted from what the roles actually declare."
+        "to vacuous. Reverting three of slice 7b's twelve promotions for state coupling "
+        "(zigbee2mqtt, livesync, qbittorrent) left nine, so this staying non-empty is expected; "
+        "only a full revert of all twelve should relax this back to documenting vacuity. If it's "
+        "empty for any other reason, _auto_deployable or _migrating_state has drifted from what "
+        "the roles actually declare."
     )
     offenders = [
         role
