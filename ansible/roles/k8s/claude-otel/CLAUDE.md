@@ -55,6 +55,16 @@ Nothing was wrong. Two behaviours combine to produce that appearance:
    mints a fresh id even without `--fork-session`, so a query pinned to the old id reads
    as dead while the session is exporting normally.
 
+4. **A host that exports nothing may simply be unable to log in.** Measured on daniel-server
+   2026-08-22: telemetry enabled, `OTEL_EXPORTER_OTLP_ENDPOINT` correct, its collector pod
+   Running and scraped — and zero `claude_code_*` series and zero Loki lines from it, ever.
+   `claude -p` there exits `Failed to authenticate: OAuth session expired and could not be
+   refreshed`, so no session starts and nothing is exported. Every pipeline-side check reads
+   green because the pipeline is fine. **Run `claude -p` on the quiet host before
+   investigating its collector** — an auth failure and an idle host look identical from the
+   cluster side, and only one of them is fixed by anything in this role. Re-auth is
+   interactive and cannot be done from another host.
+
 So: **do not diagnose this stack from counters alone.** Rising metric points prove the
 transport works, not that anything useful is flowing. `telemetry-health.sh` deliberately
 checks reachability and export *failures* — it cannot detect "nobody is using it", and a
