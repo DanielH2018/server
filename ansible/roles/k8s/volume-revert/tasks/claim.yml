@@ -72,8 +72,14 @@
   # truncating here would fail to match at the `-<claim>-` boundary. main.yml checks its shape.
   ansible.builtin.set_fact:
     volume_revert_volume: "{{ volume_revert_pvc.stdout | trim }}"
+    # The claim segment drops a leading `<service>-`, and this expression must stay
+    # CHARACTER-FOR-CHARACTER the one in k8s/volume-snapshot's "Name the pre-deploy snapshot".
+    # It exists because Longhorn 1.12's delete webhook caps a snapshot name at 63 bytes; see
+    # that task for the full reasoning. If the two drift, this prefix matches nothing and the
+    # revert reports "no snapshot for this deploy" instead of failing — so
+    # `ansible/tests/test_snapshot_name_length.py` compares them directly.
     volume_revert_prefix: >-
-      autodeploy-{{ volume_revert_service }}-{{ volume_revert_sha }}-{{ volume_revert_claim }}-
+      autodeploy-{{ volume_revert_service }}-{{ volume_revert_sha }}-{{ volume_revert_claim | regex_replace('^' ~ (volume_revert_service | regex_escape) ~ '-', '') | default(volume_revert_claim, true) }}-
 
 - name: List the snapshots taken by this deploy of {{ volume_revert_claim }}
   tags: [deploy]

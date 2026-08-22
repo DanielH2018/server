@@ -669,8 +669,12 @@ def _selection(
     )
 
 
-_NEWEST = "2026-08-21T18:00:00Z|false|autodeploy-speedtest-abc12345-speedtest-config-20260821180000"
-_OLDER = "2026-08-21T09:00:00Z|false|autodeploy-speedtest-abc12345-speedtest-config-20260821090000"
+_NEWEST = (
+    "2026-08-21T18:00:00Z|false|autodeploy-speedtest-abc12345-config-20260821180000"
+)
+_OLDER = (
+    "2026-08-21T09:00:00Z|false|autodeploy-speedtest-abc12345-config-20260821090000"
+)
 
 
 def test_the_selection_takes_the_newest_by_creation_timestamp() -> None:
@@ -682,7 +686,9 @@ def test_the_selection_takes_the_newest_by_creation_timestamp() -> None:
     # The name and the timestamp deliberately disagree here: the newer CR carries the smaller
     # token. Sorting on the name would pick the other one, which is the whole reason the sort
     # names `creationTimestamp` — a listing where the two agree cannot tell the two sorts apart.
-    misnamed = "2026-08-21T19:00:00Z|false|autodeploy-speedtest-abc12345-speedtest-config-00000000000001"
+    misnamed = (
+        "2026-08-21T19:00:00Z|false|autodeploy-speedtest-abc12345-config-00000000000001"
+    )
     assert _selection([_NEWEST, misnamed])[0].endswith("00000000000001")
 
 
@@ -692,7 +698,7 @@ def test_the_selection_rejects_a_markremoved_snapshot() -> None:
     exactly how the newest becomes markRemoved."""
     removed = _NEWEST.replace("|false|", "|true|")
     assert _selection([_OLDER, removed]) == [
-        "autodeploy-speedtest-abc12345-speedtest-config-20260821090000"
+        "autodeploy-speedtest-abc12345-config-20260821090000"
     ]
 
 
@@ -701,7 +707,7 @@ def test_the_selection_reads_an_unpopulated_markremoved_as_live() -> None:
     renders as an empty field. Not-removed is the correct read of an empty value; only an
     explicit `true` means removed, and `equalto 'false'` would drop a live snapshot."""
     assert _selection([_NEWEST.replace("|false|", "||")]) == [
-        "autodeploy-speedtest-abc12345-speedtest-config-20260821180000"
+        "autodeploy-speedtest-abc12345-config-20260821180000"
     ]
 
 
@@ -710,7 +716,7 @@ def test_the_selection_ignores_another_deploys_snapshots() -> None:
     from a different commit restores data this deploy never wrote, and a different claim's
     snapshot belongs to a different volume entirely."""
     other_sha = _NEWEST.replace("abc12345", "def67890")
-    other_claim = _NEWEST.replace("speedtest-config", "speedtest-other")
+    other_claim = _NEWEST.replace("-config-", "-other-")
     assert _selection([other_sha, other_claim]) == []
 
 
@@ -747,7 +753,7 @@ def test_the_prefix_uses_the_callers_sha_verbatim() -> None:
     nine = "abc123456"
     line = _NEWEST.replace("abc12345-", f"{nine}-")
     assert _selection([line], sha=nine) == [
-        f"autodeploy-speedtest-{nine}-speedtest-config-20260821180000"
+        f"autodeploy-speedtest-{nine}-config-20260821180000"
     ]
 
 

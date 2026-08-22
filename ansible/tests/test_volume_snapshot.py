@@ -291,6 +291,12 @@ def test_the_full_name_has_the_sha_claim_string_as_a_strict_prefix() -> None:
     reconstruction is a prefix match rather than an equality test. Pin that the reconstructable
     string — service, sha8, and claim, with no run token — is still an exact prefix of whatever
     this role actually names the CR, and that the token is what comes after it.
+
+    THE CLAIM SEGMENT DROPS A LEADING `<service>-`, so `widget-config` contributes `config`.
+    That is not cosmetic: Longhorn's delete webhook caps a snapshot name at 63 bytes, and
+    spending the service name twice put four real claims over it. See
+    ansible/tests/test_snapshot_name_length.py. volume-revert applies the same transformation
+    when it reconstructs this prefix.
     """
     facts = _named(_CLAIM, "Name the pre-deploy snapshot")["ansible.builtin.set_fact"]
     context = {
@@ -300,8 +306,8 @@ def test_the_full_name_has_the_sha_claim_string_as_a_strict_prefix() -> None:
         "volume_snapshot_run_token": "20260821120000",
     }
     name = str(_render(facts["volume_snapshot_name"], **context)).strip()
-    assert name == "autodeploy-widget-a1b2c3d4-widget-config-20260821120000"
-    assert name.startswith("autodeploy-widget-a1b2c3d4-widget-config")
+    assert name == "autodeploy-widget-a1b2c3d4-config-20260821120000"
+    assert name.startswith("autodeploy-widget-a1b2c3d4-config")
 
 
 def test_two_deploys_of_the_same_sha_get_two_names() -> None:
@@ -326,9 +332,7 @@ def test_two_deploys_of_the_same_sha_get_two_names() -> None:
         for token in ("20260810090000", "20260821120000")
     }
     assert len(names) == 2
-    assert all(
-        name.startswith("autodeploy-widget-a1b2c3d4-widget-config") for name in names
-    )
+    assert all(name.startswith("autodeploy-widget-a1b2c3d4-config") for name in names)
 
 
 def test_two_claims_of_one_service_get_two_names() -> None:
@@ -808,10 +812,18 @@ def test_the_prune_loop_slices_cleanly_at_the_defaulted_floor_values() -> None:
 def test_every_mutating_task_is_guarded() -> None:
     """`test_k8s_dry_run.py` derives this cluster-wide; pinned here too because this role's
     mutations are a `delete` against Longhorn snapshots — the one thing a dry run must never do.
+    Matched on the MODULE'S ARGUMENTS, not on the whole task. Stringifying the task also sweeps
+    in its name and messages, so a read-only task that merely mentions "delete" in prose reads
+    as a mutation — and the only way to quiet it is to add a `k8s_no_mutate` guard to a task
+    that does not mutate, which silently removes that check from every dry run. Narrowing to the
+    arguments loses no real mutation: they are all `command`/`shell` running kubectl.
     """
     for task in _tasks(_CLAIM):
-        body = str(task)
-        if "apply" in body or "delete" in body:
+        args = "".join(
+            str(task.get(module, ""))
+            for module in ("ansible.builtin.command", "ansible.builtin.shell")
+        )
+        if "apply" in args or "delete" in args:
             assert _GUARD in str(task.get("when", "")), (
                 f"task {task.get('name')!r} mutates the cluster without the "
                 f"k8s_no_mutate guard"
