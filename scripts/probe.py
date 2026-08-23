@@ -2172,27 +2172,25 @@ def main(argv=None):
                 print(" ".join(k8s_pods_argv(ns.container, ns_name)))
             return 0
         return run_health(ns.container, docker=ns.docker)
-    # `ha` resolves a token + talks to the HA REST API rather than streaming a pipeline.
-    if ns.cmd == "ha":
-        return run_ha(ns)
-    if ns.cmd == "arr":
-        return run_arr(ns)
-    if ns.cmd == "alerts":
-        return run_alerts(ns)
-    if ns.cmd == "b2-longhorn":
-        return run_b2_longhorn(ns)
-    if ns.cmd == "b2-budget":
-        return run_b2_budget(ns)
-    if ns.cmd == "b2-spend":
-        return run_b2_spend(ns)
-    if ns.cmd == "b2-record":
-        return run_b2_record(ns)
-    if ns.cmd == "ha-state":
-        return run_ha_state(ns)
-    if ns.cmd == "monitors":
-        return run_monitors(ns)
-    if ns.cmd == "kuma-drift":
-        return run_kuma_drift(ns)
+    # Subcommands that answer from an API rather than streaming a shell pipeline. Each one is
+    # `run_X(ns) -> int`, so the table is the whole dispatch — adding a subcommand is a parser
+    # entry plus a row here. Built inside main() deliberately: run_b2_longhorn and its B2/Longhorn
+    # siblings are defined BELOW main(), so a module-level table would name them before they exist.
+    handlers = {
+        # `ha` resolves a token + talks to the HA REST API.
+        "ha": run_ha,
+        "arr": run_arr,
+        "alerts": run_alerts,
+        "b2-longhorn": run_b2_longhorn,
+        "b2-budget": run_b2_budget,
+        "b2-spend": run_b2_spend,
+        "b2-record": run_b2_record,
+        "ha-state": run_ha_state,
+        "monitors": run_monitors,
+        "kuma-drift": run_kuma_drift,
+    }
+    if ns.cmd in handlers:
+        return handlers[ns.cmd](ns)
     # metric / loki-query default to a formatted view; --json and --dry-run fall
     # through to the raw streaming path below.
     if ns.cmd in ("metric", "loki-query") and not ns.json and not ns.dry_run:

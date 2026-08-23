@@ -3157,17 +3157,28 @@ def _evaluate(name, fn):
         return False, "%s check error: %s" % (name, e)
 
 
+def _gate(name, fn, push_env):
+    """Evaluate one reachability gate: verdict, log line, heartbeat push. Returns (ok, msg).
+
+    A gate differs from an ordinary check only in what its verdict is used for — the CHECKS
+    loop in run_once() reads it to suppress that gate's dependents, so a single outage pages
+    once instead of storming. A disabled gate returns `True` so the filter suppresses nothing.
+    """
+    if not check_enabled(name):
+        return True, "disabled by check filter"
+    ok, msg = _evaluate(name, fn)
+    log("OK  " if ok else "DOWN", name, "-", msg)
+    push(_env(push_env, ""), ok, msg)
+    return ok, msg
+
+
 def run_once():
     # Prometheus reachability is evaluated FIRST and gates the prom-dependent checks: a single
     # Prometheus outage would otherwise page all of them at once (one root cause, an alert storm).
     # When it's down they're suppressed (pushed `up` with a skip msg, keeping each push monitor's
     # heartbeat alive) so only the Prometheus monitor pages; a real per-metric problem still alerts
     # whenever Prometheus is up.
-    prom_ok, prom_msg = True, "disabled by check filter"
-    if check_enabled("prometheus"):
-        prom_ok, prom_msg = _evaluate("prometheus", check_prometheus)
-        log("OK  " if prom_ok else "DOWN", "prometheus", "-", prom_msg)
-        push(_env("KUMA_PUSH_PROMETHEUS", ""), prom_ok, prom_msg)
+    prom_ok, prom_msg = _gate("prometheus", check_prometheus, "KUMA_PUSH_PROMETHEUS")
 
     # Exporter-reachability gate (one level below the Prometheus gate): when Prometheus is up, probe
     # `up` once and suppress each dead exporter's dependents so a node-exporter/cadvisor death is one
@@ -3183,11 +3194,9 @@ def run_once():
 
     # Loki-reachability gate (peer of the Prometheus gate): probe Loki once so a single Loki outage
     # is one page (Loki Reachable), not a storm across every Loki-querying check (LOKI_DEPENDENT).
-    loki_ok, loki_msg = True, "disabled by check filter"
-    if check_enabled("loki_reachable"):
-        loki_ok, loki_msg = _evaluate("loki_reachable", check_loki_reachable)
-        log("OK  " if loki_ok else "DOWN", "loki_reachable", "-", loki_msg)
-        push(_env("KUMA_PUSH_LOKI_REACHABLE", ""), loki_ok, loki_msg)
+    loki_ok, loki_msg = _gate(
+        "loki_reachable", check_loki_reachable, "KUMA_PUSH_LOKI_REACHABLE"
+    )
 
     # B2-reachability gate (peer of the two above): B2 caps TRANSACTIONS separately from storage
     # bytes, and the kopia-era state-file checks this used to gate all reported their last
@@ -3196,11 +3205,7 @@ def run_once():
     # needs B2. The probe is throttled inside b2_reachable (it must not spend the transaction
     # budget it is watching), but the cached verdict is pushed every cycle so this monitor's own
     # heartbeat stays alive.
-    b2_ok, b2_msg = True, "disabled by check filter"
-    if check_enabled("b2_reachable"):
-        b2_ok, b2_msg = _evaluate("b2_reachable", check_b2_reachable)
-        log("OK  " if b2_ok else "DOWN", "b2_reachable", "-", b2_msg)
-        push(_env("KUMA_PUSH_B2_REACHABLE", ""), b2_ok, b2_msg)
+    b2_ok, b2_msg = _gate("b2_reachable", check_b2_reachable, "KUMA_PUSH_B2_REACHABLE")
 
     # Cluster-Prometheus gate (peer of the Prometheus gate, for the OTHER instance): the cluster
     # checks read daniel-box's Prometheus over the cluster ingress, a path none of the other gates
@@ -3212,6 +3217,10 @@ def run_once():
     # on an answered question and, worse, light up two Kuma monitors for one fact, which reads as
     # more coverage than exists. So the verdict is reused when the URLs match, and only genuinely
     # separate endpoints get a separate probe and a separate page.
+    #
+    # DECIDED: this gate does NOT go through _gate() — the reuse branch below sits between the
+    # check_enabled() test and the log/push, which is exactly the span _gate() owns. Threading a
+    # precomputed verdict through would add a parameter for one caller and hide the reuse.
     cluster_ok, cluster_msg = True, "disabled by check filter"
     if check_enabled("cluster_prometheus"):
         # The same-instance reuse only holds when the prometheus gate actually probed.
