@@ -1,21 +1,15 @@
 ---
 # Slice-6 B5, pulled forward from slice 7 (2026-08-09): the router's forwards — 51820/udp
-# included — moved to daniel-box, so this move restores remote access.
-
-# The server keypair and client configs MUST survive the move (or every device re-imports).
-# The cutover stops and REMOVES the Docker container before this runs — the seed demands a
-# quiescent source, remote access is already down, and a stopped-but-present container would
-# leave its docker-type Kuma monitor flapping DOWN.
-- name: Seed the wg-easy config volume
-  tags: [deploy]
-  ansible.builtin.include_role:
-    name: k8s/seed-volume
-  vars:
-    seed_volume_service: wg-easy
-    seed_volume_claim: "{{ wg_easy_k8s_claim }}"
-    seed_volume_source_path: "{{ wg_easy_k8s_source_path }}"
-    seed_volume_storage_class: "{{ wg_easy_k8s_storage_class }}"
-    seed_volume_size: "{{ wg_easy_k8s_size }}"
+# included — moved to daniel-box, so this move restored remote access.
+#
+# The k8s/seed-volume include this role used to open was dropped at the v15 upgrade
+# (2026-08-23). It copied the Docker copy's bind mount from daniel-server, a host that has
+# had no Docker since 2026-08-14, and it short-circuits on the claim's own seeded annotation
+# anyway — so on the live PVC it had already been a no-op for every deploy since the cutover.
+# The PVC itself is created by the manifests role below, from pvc.yaml.j2.
+#
+# There is no automated way to repopulate this volume from empty. v15's only v14 import path
+# is the setup wizard in the browser; see the image pin's comment in defaults/main.yml.
 
 - name: Deploy wg-easy to the cluster
   ansible.builtin.include_role:
@@ -28,5 +22,13 @@
       - deployment.yaml
       - service.yaml
       - ingressroute.yaml
-    manifests_secret_files:
-      - secret.yaml
+    # No manifests_secret_files: v15 owns its admin credentials in its own SQLite DB, so the
+    # wg-easy-env Secret that carried v14's PASSWORD_HASH has no consumer. The template is
+    # deleted, but `kubectl apply` never prunes an object it stops rendering — the live
+    # Secret survives, orphaned, until someone deletes it by hand. It is unreferenced (the
+    # Deployment's envFrom went with it) but it still holds a real bcrypt hash, so deleting
+    # it and dropping wg_easy_password_hash from ansible/vars/secrets.yml AND from
+    # ansible/secret_rotation.yml is worth doing. Those last two move TOGETHER:
+    # secret_rotation.py's registry_drift reports a registry entry with no secrets.yml key as
+    # stale, and a secrets.yml key with no registry entry as missing, and the daily Kuma
+    # monitor goes red on either.

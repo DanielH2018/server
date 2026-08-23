@@ -3,32 +3,38 @@
 # including 51820/udp — to the device daniel-box, so wg-easy's move stopped being a
 # slice-7 nicety and became the restoration of remote access.
 
-# The exact pin the Docker role carried, trap included: v14 tag + digest. The `:14` keeps
-# Renovate tracking the major so it can OFFER v15 as a deliberate PR; the digest keeps it
-# immutable within v14.x. MUST NOT float to :latest → v15, which drops PASSWORD_HASH for an
-# interactive setup wizard and would silently reopen the admin API.
-wg_easy_k8s_image: ghcr.io/wg-easy/wg-easy:14@sha256:5f26407fd2ede54df76d63304ef184576a6c1bb73f934a58a11abdd852fab549
+# v15 tag + digest: the `:15` keeps Renovate tracking the major so a v16 arrives as a
+# deliberate PR, and the digest keeps it immutable within v15.x.
+#
+# The v14 pin this replaces carried a warning that v15 "drops PASSWORD_HASH for an
+# interactive setup wizard and would silently reopen the admin API". That was correct, and
+# the migration answered it rather than avoiding it: v15 owns its own credentials in a
+# SQLite DB under /etc/wireguard, created once through the setup wizard. Rotation is
+# `cli db:admin:reset` inside the pod, NOT a SOPS value — which is why
+# ansible/secret_rotation.yml no longer carries wg_easy_password_hash.
+#
+# The wizard is the ONLY v14 -> v15 import path (it takes the wg0.json the v14 UI's Backup
+# button produced); the CLI has no import command, and the INIT_* unattended variables skip
+# the wizard AND the import together, minting a fresh server keypair that invalidates every
+# client config. So a future rebuild from an empty volume is a manual step, not a redeploy.
+wg_easy_k8s_image: ghcr.io/wg-easy/wg-easy:15@sha256:0e7bc9d34e86ddcaa92bc700d4d7dc9b33291dbc07ac8d13382f7c2095f949ec
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Platform: the only remote-access path in (all router forwards, including 51820/udp, land on
 # this host). A failed deploy could cut the one path available to fix a broken cluster remotely.
-# It ALSO matches the migrating-state shape independently: Recreate + a real PVC seeded through
-# k8s/seed-volume (hardcoded ReadWriteOnce) holding the server keypair and every client config —
-# a bad image swap can migrate that volume before the gate observes a fault, same class as
-# sonarr/prowlarr. Either reason alone would justify the denylist entry.
+# It ALSO matches the migrating-state shape independently: Recreate + a real ReadWriteOnce
+# Longhorn PVC holding the server keypair and every client config — a bad image swap can
+# migrate that volume before the gate observes a fault, same class as sonarr/prowlarr. Either
+# reason alone would justify the denylist entry. Under v15 that volume is a SQLite DB the app
+# owns, so a migration is one-way and the Longhorn backup is the only revert.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "platform — sole remote-access path; a failed deploy can cut off remote recovery. ALSO Recreate + RWO seed-volume PVC (migrating-state shape, same class as sonarr/prowlarr) — two independent reasons. COUPLING NOTE for a future promotion: the PVC holds the server keypair and peer list, but each peer's own key lives on a client device outside it — a revert can un-revoke a removed peer or orphan an added one"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "platform — sole remote-access path; a failed deploy can cut off remote recovery. ALSO Recreate + RWO Longhorn PVC (migrating-state shape, same class as sonarr/prowlarr) — two independent reasons. COUPLING NOTE for a future promotion: the PVC holds the server keypair and peer list, but each peer's own key lives on a client device outside it — a revert can un-revoke a removed peer or orphan an added one"  # noqa var-naming[no-role-prefix]
 
 wg_easy_k8s_claim: wg-easy-config
 # `longhorn`, NOT nobackup: /etc/wireguard holds the server keypair and every client
 # config — losing it means re-importing every device. Tiny volume, real state.
 wg_easy_k8s_storage_class: longhorn
 wg_easy_k8s_size: 1Gi
-
-# Seed source: the Docker copy's bind mount on daniel-server. The cutover stops (and
-# removes) that container first — the seed demands a quiescent source, and remote access
-# is already down (the forwards left .161), so the stop costs nothing.
-wg_easy_k8s_source_path: /home/ubuntu/server/containers/wg-easy/config
 
 # Resource caps mirrored from the compose template (M1 values, k8s-native units).
 wg_easy_k8s_cpu_limit: 500m

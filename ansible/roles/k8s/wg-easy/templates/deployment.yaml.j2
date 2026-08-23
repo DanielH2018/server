@@ -88,32 +88,35 @@ spec:
               protocol: UDP
             - containerPort: {{ container_item.port }}
               protocol: TCP
+          # v15 reads almost no environment. LANG, WG_HOST, WG_PORT,
+          # WG_PERSISTENT_KEEPALIVE, WG_DEFAULT_DNS and PASSWORD_HASH were all v14 keys and
+          # were removed at the v15 upgrade — the endpoint hostname, the UDP port, the
+          # keepalive and the client DNS now live in the app's own SQLite DB, set through the
+          # Admin Panel. `container_item.default_dns` in host_vars is what seeded that value
+          # and stays as the record of what it should be; nothing renders it any more.
           env:
-            - name: LANG
-              value: en
-            # The endpoint clients dial: a DIRECT (non-proxied) DNS record on the WAN IP —
-            # UDP cannot ride Cloudflare's proxy. Unchanged by the move; the router's
-            # 51820/udp forward now lands on this node's IP (the Service's externalIP).
-            - name: WG_HOST
-              value: "wireguard.{{ domain }}"
-            - name: WG_PORT
-              value: "{{ container_item.udp_port }}"
-            - name: WG_PERSISTENT_KEEPALIVE
-              value: "25"
-            # DNS baked into GENERATED client configs (existing imports keep whatever they
-            # carry) — the cluster Pi-hole VIP, same value the Docker role moved to at B3.
-            - name: WG_DEFAULT_DNS
-              value: "{{ container_item.default_dns }}"
-          envFrom:
-            # PASSWORD_HASH — the admin UI/API gate (Authelia only fronts the IngressRoute;
-            # in-cluster peers reach :51821 directly, same reasoning as the Docker role's
-            # monitoring-net exposure). envFrom keeps the hash out of the pod spec the
-            # read-only kubeconfig can read.
-            - secretRef:
-                name: wg-easy-env
-          # NET_ADMIN for the wg interface and its routing/fwmark rules; NET_RAW because
-          # wg-quick runs iptables, whose CLI opens a raw socket to init the nat table.
-          # No SYS_MODULE — the wireguard module is loaded on the host.
+            # Traefik terminates TLS at the edge and proxies PLAIN HTTP to this port, so
+            # without INSECURE v15 refuses the request — including the first-boot setup
+            # wizard, which is the only v14 -> v15 import path. Not a downgrade of the
+            # external route: that is https, Authelia-fronted, and unchanged.
+            - name: INSECURE
+              value: "true"
+            # kubelet's allowed-unsafe-sysctls is exactly
+            # net.ipv4.conf.all.src_valid_mark,net.ipv4.ip_forward (roles/setup/k3s
+            # defaults), and the net.ipv6.* sysctls upstream's compose sets are excluded
+            # there ON PURPOSE. Rather than widen that allow-list — a k3s server-arg change
+            # and a restart of BOTH nodes, on the sole remote-access path — turn v15's IPv6
+            # support off. NOTE the UI still displays IPv6 addresses it will not route, and
+            # the CLI overrides this with its own --no-ipv6 flag, so check a freshly
+            # generated peer config before handing it to a device.
+            - name: DISABLE_IPV6
+              value: "true"
+          # NET_ADMIN for the wg interface and its routing/fwmark rules. NET_RAW is carried
+          # over from v14, where wg-quick ran iptables and its CLI opened a raw socket to
+          # init the nat table; v15 marks NET_RAW as Podman-only, so it is a candidate to
+          # drop once v15 is proven running — verified removal, not a same-commit guess.
+          # No SYS_MODULE — the wireguard module is loaded on the host, and /lib/modules is
+          # mounted read-only below.
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -125,6 +128,13 @@ spec:
           volumeMounts:
             - name: wg-easy-config
               mountPath: /etc/wireguard
+            # Added at the v15 upgrade to match upstream's own compose file. v15 checks for
+            # the wireguard module here; the module is loaded on the host, so this read-only
+            # view is enough and SYS_MODULE stays dropped. If a v15 startup ever fails on
+            # modprobe, that capability is the next thing to add — not before.
+            - name: host-lib-modules
+              mountPath: /lib/modules
+              readOnly: true
           # TCP on the admin UI: proves the node app is up. The wg interface itself has no
           # cheap in-pod probe; the real gate is a client handshake after deploy.
           readinessProbe:
@@ -148,3 +158,7 @@ spec:
         - name: wg-easy-config
           persistentVolumeClaim:
             claimName: {{ wg_easy_k8s_claim }}
+        - name: host-lib-modules
+          hostPath:
+            path: /lib/modules
+            type: Directory
