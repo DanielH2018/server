@@ -134,7 +134,7 @@ A host-side script plus a thin Ansible play to supply the SOPS credentials.
 `ansible/roles/k8s/monitor-bridge/files/check.py` already has a tested B2 client —
 `b2_authorize_data`, `b2_storage_api` (tolerant of the v1/v2/v3 response shapes),
 `b2_list_versions` (already the versions call, already paginating on
-`nextFileName`/`nextFileId`), and `b2_sum_versions`, with tests in `test_check.py`.
+`nextFileName`/`nextFileId`), and `b2_sum_versions`, with tests in `test_b2_storage.py`.
 
 Import it, or copy it? **Copy the roughly 60 lines.** `check.py` is 3,109 lines and evaluates
 ~60 environment-derived constants at import time; pulling a monitor's entire configuration
