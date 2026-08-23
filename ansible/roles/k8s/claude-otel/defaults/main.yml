@@ -71,11 +71,9 @@ claude_otel_query_host_ip: 127.0.0.1
 # ports on a hostPort bound to claude_otel_query_host_ip — so only the node they happen to
 # run on answers on loopback. A reboot on 2026-08-23 moved all three from daniel-box to
 # daniel-server, and every host-side query tool broke while the telemetry itself stayed
-# healthy. The fix is for `otelq` and `otel-sweep` (chezmoi: home/dot_local/bin/) to try
-# loopback first and these addresses second, which works from either node. That fallback is
-# only sound while the addresses cannot be reassigned under it, which is what pinning buys,
-# so the pin lands first and on its own. As of 2026-08-23 neither tool implements the
-# fallback — each dials 127.0.0.1 and stops there. Read the tool before relying on it.
+# healthy. `otelq` and `otel-sweep` (chezmoi: home/dot_local/bin/) now try loopback first
+# and these addresses second, which works from either node. That fallback is only sound
+# while the addresses cannot be reassigned under it, which is what pinning buys.
 #
 # spec.clusterIP is immutable: changing a value here is rejected on apply, and actually
 # moving one means deleting the Service and updating the constants in both repos together.
