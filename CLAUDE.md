@@ -247,6 +247,11 @@ Per-verb tiers, the RBAC evidence and the rule-matching measurements: `docs/clau
   un-escaped `$` in a `command`/`entrypoint`/`healthcheck.test` (Compose interpolates a lone
   `$VAR`/`$(…)` at parse time — shell `$` must be doubled `$$`; legit `${VAR-…}` in
   `environment:` is not flagged).
+  This hook plus `ansible-lint` is what an edit here actually costs. Measured 2026-08-23 over
+  24h: `PostToolUse:Edit` averaged 559 ms against `PostToolUse:Write`'s 234 ms, on the *same*
+  six hooks — both match `Edit|Write`, and the gap is these two firing on a role template and
+  on nothing else. That is the price of the coverage, not overhead to trim; it is recorded so
+  a slow-feeling edit isn't mistaken for a stuck hook.
 - **permission auditing** — no longer lives here. A `log-permission` hook used to count tool calls
   and prompts into `.claude/logs/permissions.json` for `audit-permissions.py` to read; Claude Code's
   own OTEL `tool_decision` events carry that now, and name the deciding authority (`config` rule,
