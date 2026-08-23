@@ -1,0 +1,16 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
+
+# An edited unit takes effect at deploy time instead of waiting for the weekly restart
+# timer. Guarded because a handler restart would otherwise START a host that is deliberately
+# stopped — the same reason claude-rc-restart.service uses try-restart rather than restart.
+- name: Restart claude-rc
+  ansible.builtin.systemd:
+    name: claude-rc.service
+    state: restarted
+    daemon_reload: true
+  become: true
+  when: claude_code_rc_enabled

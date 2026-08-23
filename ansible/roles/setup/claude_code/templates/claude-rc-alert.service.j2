@@ -1,0 +1,17 @@
+[Unit]
+Description=Alert when the Claude Code Remote Control host fails
+
+[Service]
+Type=oneshot
+# Webhook is EMBEDDED (rendered from SOPS at deploy) rather than sourced from a file the
+# failing service also owns — same reasoning as gitops-deploy-alert.service and
+# renovate-notify-alert.service, which this mirrors. Installed mode 0600 (see tasks/main.yml)
+# so the embedded webhook isn't world-readable.
+#
+# What this CANNOT catch: an expired login. The host keeps running and systemd keeps
+# reporting `active` while every session fails, so no OnFailure= ever fires. See this role's
+# CLAUDE.md — that gap needs a check that asserts the host is registered, not that the
+# process is up.
+ExecStart=/usr/bin/curl -fsS -m 10 -H "Content-Type: application/json" \
+  -d '{"content":"🚨 claude-rc unit failed on {{ inventory_hostname }} — Remote Control sessions cannot be started from the phone. Check `journalctl -u claude-rc`."}' \
+  "{{ gitops_deploy_discord_webhook }}"

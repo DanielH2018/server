@@ -1,0 +1,13 @@
+[Unit]
+Description=Weekly restart of the Claude Code Remote Control host
+
+[Timer]
+OnCalendar={{ claude_code_rc_restart_schedule }}
+# The host is down whenever the box was off, and a missed restart still needs to happen —
+# otherwise a reboot at the wrong moment defers the update adoption by another whole week.
+Persistent=true
+# Nothing waits on this, so spread it off the top of the hour with every other weekly timer.
+RandomizedDelaySec=30m
+
+[Install]
+WantedBy=timers.target

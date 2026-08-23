@@ -1,0 +1,54 @@
+[Unit]
+Description=Claude Code Remote Control host ({{ claude_code_rc_spawn_mode }} sessions in {{ claude_code_rc_workdir }})
+Documentation=https://github.com/anthropics/claude-code
+# The host opens an outbound connection to claude.ai and does nothing useful without it.
+After=network-online.target
+Wants=network-online.target
+OnFailure=claude-rc-alert.service
+
+[Service]
+Type=simple
+User={{ sys_user }}
+Group={{ sys_user }}
+WorkingDirectory={{ claude_code_rc_workdir }}
+
+# Claude Code is a PER-USER install (binary under ~/.local/share/claude, launcher symlinked
+# at ~/.local/bin/claude) and reads its OAuth token from ~/.claude/.credentials.json, so
+# HOME must be the real user's home and not systemd's default. Same reasoning the role's
+# tasks give for become: false — running any of this as root would read /root/.claude.
+Environment=HOME=/home/{{ sys_user }}
+
+# systemd supplies a minimal PATH, exactly as cron does, and this is the same trap already
+# recorded for the host crons: without /usr/local/bin a spawned session loses kubectl and
+# uv, then reports an EMPTY CLUSTER rather than failing. The failure is silent in precisely
+# the direction that reads like a working session.
+Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=KUBECONFIG=/home/{{ sys_user }}/.kube/config
+
+# DECIDED: --spawn is passed EXPLICITLY and must stay that way. With it omitted the process
+# builds a readline interface on stdin to ask which spawn mode to use (it guards that on
+# process.stdin.isTTY). Under systemd there is no stdin to answer, so the host would sit
+# there having never connected — a hang, not an error. ENFORCED by
+# ansible/tests/test_claude_rc_unit.py.
+ExecStart=/home/{{ sys_user }}/.local/bin/claude rc \
+  --spawn={{ claude_code_rc_spawn_mode }} \
+  --permission-mode {{ claude_code_rc_permission_mode }} \
+  --capacity {{ claude_code_rc_capacity }}
+
+Restart=always
+RestartSec=10
+
+# DECIDED: MemoryHigh only, deliberately NO MemoryMax. systemd applies a memory cap to the
+# whole cgroup — the host process plus every session it has spawned — so one runaway
+# session would take the OOM kill for all of them, and Restart=always would then bring back
+# an empty host with every phone session gone. MemoryHigh throttles instead of killing, and
+# claude_code_rc_capacity is the real bound.
+MemoryHigh=6G
+
+# Stopping the host is meant to stop the sessions it spawned; they are its children, so the
+# default control-group kill is the wanted behaviour. The timeout gives them a chance to
+# flush transcripts first.
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
