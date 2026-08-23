@@ -7,7 +7,7 @@
 # podSelector on `app: qbittorrent` covers it. The PORT is the WebUI port, not container_item.port.
 #
 # This rule is PORT-SCOPED, and for the callers below that scoping is the whole grant: the baseline
-# admits neither sonarr, radarr nor qbittorrent-reach-probe, so they reach this pod only through
+# admits none of sonarr, radarr, qbittorrent-reach-probe or homepage, so they reach this pod only through
 # this rule and only on the WebUI port.
 #
 # TRAEFIK IS LISTED HERE DELIBERATELY — do not remove it as redundant — but be accurate about why.
@@ -32,6 +32,11 @@
 # registry-selftest-push/registry-selftest-pull Jobs. The probe pod carries this app label only
 # because tasks/verify.yml's `kubectl run` sets it with `--labels` — kubectl's default `run:`
 # label would not match a podSelector on `app`.
+#
+# homepage's dashboard widget authenticates to the WebUI over the ClusterIP
+# (roles/k8s/homepage/templates/services.yaml.j2). It goes direct rather than through Traefik
+# because qbittorrent's public route is Authelia-gated — so this entry is the whole grant, and
+# fencing it out breaks the widget.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -56,6 +61,7 @@ spec:
                   - sonarr
                   - radarr
                   - qbittorrent-reach-probe  # tasks/verify.yml pod-CIDR reachability check
+                  - homepage                 # dashboard widget, ClusterIP — see header
       ports:
         - protocol: TCP
           port: {{ qbittorrent_k8s_webui_port }}

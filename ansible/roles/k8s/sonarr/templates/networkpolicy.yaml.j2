@@ -5,7 +5,7 @@
 # baseline.
 #
 # This rule is PORT-SCOPED, and for the callers below that scoping is the whole grant: the baseline
-# admits none of janitorr, configarr, monitor-bridge, autofix-bridge, bazarr or prowlarr, so they
+# admits none of janitorr, configarr, monitor-bridge, autofix-bridge, bazarr, prowlarr or homepage, so
 # reach sonarr only through this rule and only on this one port.
 #
 # TRAEFIK IS LISTED HERE DELIBERATELY — do not remove it as redundant — but be accurate about why.
@@ -30,6 +30,11 @@
 # Fenced, sonarr silently keeps stale indexer definitions and nothing alerts, because
 # monitor-bridge's "Prowlarr Indexers" check reads prowlarr's own /api/v1/indexerstatus, which
 # this breakage does not touch.
+#
+# homepage's dashboard widget reads /api/v3/queue over the ClusterIP
+# (roles/k8s/homepage/templates/services.yaml.j2). It goes direct rather than through Traefik
+# because sonarr's public route is Authelia-gated and its monitoring IngressRoute exposes only
+# that one path — so this entry is the whole grant, and fencing it out breaks the widget.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -57,6 +62,7 @@ spec:
                   - autofix-bridge  # env-secret.yaml.j2, cluster FQDN
                   - bazarr          # app DB, bare name — see header
                   - prowlarr        # Application Sync writes indexers in — see header
+                  - homepage        # dashboard widget, ClusterIP — see header
       ports:
         - protocol: TCP
           port: {{ container_item.port }}
