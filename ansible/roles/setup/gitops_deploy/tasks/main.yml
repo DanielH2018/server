@@ -108,3 +108,17 @@
     state: started
     daemon_reload: true
   become: true
+
+# Render provenance for manifest-prune-check.sh's stale-script arm. Until 2026-08-23b that arm
+# hardcoded the k3s role's template directory, so these units were watched by nothing at all —
+# and the exit-75 fix sat merged-but-undeployed on this host for exactly that reason (review H1).
+# Last in the role so a failed run leaves the previous checksums rather than claiming these.
+- name: Stamp the rendered gitops-deploy units
+  ansible.builtin.include_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: gitops-deploy
+    stamp_render_templates:
+      - ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2
+      - ansible/roles/setup/gitops_deploy/templates/gitops-deploy-alert.service.j2
+      - ansible/roles/setup/gitops_deploy/templates/gitops-deploy.timer.j2
+      - ansible/roles/setup/gitops_deploy/templates/50-gitops-deploy.rules.j2

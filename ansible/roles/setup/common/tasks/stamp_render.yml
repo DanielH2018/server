@@ -1,0 +1,58 @@
+---
+# Stamp the source checksum of a group of setup-plane templates this host has just rendered.
+#
+# WHY A FRAGMENT PER GROUP, not one manifest for the host. The single manifest this replaces was
+# written by one task that looped EVERY declared template and checksummed the repo source of each,
+# unconditionally and before any `template:` task ran. So a tag-scoped run — `--tags
+# manifest-prune`, the natural command for redeploying the drift check itself — restamped all
+# eight k3s scripts while rendering one, making HAVE == WANT trivially true for the seven it never
+# touched (2026-08-23b review M6). A fragment is written only by a run that carries its group's
+# tags, so a partial run leaves the other groups' fragments alone, and they stay stale — which is
+# the truth the check exists to report.
+#
+# WHY REPO-RELATIVE PATHS. The check used to join each bare filename onto a hardcoded
+# `roles/setup/k3s/templates`, which made it structurally incapable of seeing any other role's
+# artifacts — nine of them on daniel-box, including secret-rotate.sh, a weekly state-changing cron
+# that commits and pushes (2026-08-23b review H1). Each entry now carries its own path from the
+# repo root, so a role stamps its own templates and the check needs to know about none of them.
+#
+# PER-HOST BY CONSTRUCTION. A fragment exists only where its role ran. optimize_pi renders
+# pi-sd-health.sh and pi-recovery-health.sh on daniel-pi, which runs no manifest-prune-check, so
+# those simply produce no fragment here rather than being stamped as covered by a host that never
+# renders them. That is why this is not a glob over the whole tree.
+#
+# Callers pass:
+#   stamp_render_name       a filename-safe group id, unique across roles (e.g. k3s-backup-health)
+#   stamp_render_templates  repo-relative paths to the .j2 sources rendered by this group
+
+- name: Create the setup-plane render manifest directory
+  ansible.builtin.file:
+    path: /var/lib/homelab/setup-render-manifest.d
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: "Stamp the rendered sources for {{ stamp_render_name }}"
+  ansible.builtin.copy:
+    dest: "/var/lib/homelab/setup-render-manifest.d/{{ stamp_render_name }}"
+    mode: "0644"
+    owner: root
+    group: root
+    # `rstrip=False` is load-bearing and was missing from the mechanism this replaces. Ansible's
+    # file lookup strips a trailing newline by default, so `lookup('file', x) | hash('sha256')`
+    # hashes the file MINUS its final byte — while manifest-prune-check.sh compares against
+    # `sha256sum x`, which does not. Measured here: the same template hashes 206d21e3… stripped
+    # and aea704c2… whole, and `head -c -1 file | sha256sum` reproduces the stripped value
+    # exactly. Every entry would therefore have read stale from the first armed run.
+    #
+    # Nothing caught it because the arm has never run: it shipped 2026-08-23, the host has not
+    # executed initial_setup.yml since, and with no manifest present the check takes its
+    # absent branch and says so. A latent guard fails the first time it is armed, which is the
+    # worst moment — it arrives as eight simultaneous stale-script alerts on a healthy host.
+    content: |
+      {% for tpl in stamp_render_templates %}
+      {{ tpl }} {{ lookup('file', playbook_dir ~ '/../' ~ tpl, rstrip=False) | hash('sha256') }}
+      {% endfor %}
+  become: true

@@ -93,3 +93,14 @@
     state: started
     daemon_reload: true
   become: true
+
+# Render provenance for manifest-prune-check.sh's stale-script arm — see the gitops_deploy role
+# for why these were previously watched by nothing (2026-08-23b review H1).
+- name: Stamp the rendered renovate-notify units
+  ansible.builtin.include_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: renovate-notify
+    stamp_render_templates:
+      - ansible/roles/setup/renovate_notify/templates/renovate-notify.service.j2
+      - ansible/roles/setup/renovate_notify/templates/renovate-notify-alert.service.j2
+      - ansible/roles/setup/renovate_notify/templates/renovate-notify.timer.j2

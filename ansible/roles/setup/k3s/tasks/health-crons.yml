@@ -13,32 +13,26 @@
     group: root
   become: true
 
-- name: Record which revision of each setup script this host has rendered
-  tags: [backup-health, disk-health, manifest-prune]
-  # The provenance half of the drift check in manifest-prune-check.sh. That script can compare
-  # `copy:`-deployed artifacts byte-for-byte, but NOT the `template:`-rendered scripts beside it:
-  # a rendered file legitimately differs from its .j2, and re-rendering to compare would need
-  # every role's vars and secrets. So the comparison moves up a level — this task stamps the
-  # SOURCE checksum of each template at render time, and the check re-computes those checksums
-  # from the repo. Equal means this host has run initial_setup.yml since the templates last
-  # changed; unequal means it has not, and is still executing the old rendered copy.
-  #
-  # THE FAILURE THIS CLOSES (2026-08-23): /usr/local/bin/longhorn-backup-health.sh was two
-  # commits behind for two days while manifest-prune-check pushed "deployed scripts match the
-  # repo" — true of the three files it compared, false of the twenty it did not, including
-  # itself. roles/setup/ changes are deferred-and-alerted by the gitops tick, but that alert
-  # clears the moment the tree ff-merges, leaving the stale render with nothing watching it
-  # (the mechanism deploy_logic.py:86-100 already predicted in a comment).
-  ansible.builtin.copy:
-    dest: /var/lib/homelab/setup-render-manifest
-    mode: "0644"
-    owner: root
-    group: root
-    content: |
-      {% for tpl in k3s_rendered_setup_scripts %}
-      {{ tpl }} {{ lookup('file', role_path ~ '/templates/' ~ tpl) | hash('sha256') }}
-      {% endfor %}
-  become: true
+# The provenance half of the drift check in manifest-prune-check.sh. That script can compare
+# `copy:`-deployed artifacts byte-for-byte, but NOT the `template:`-rendered scripts beside it:
+# a rendered file legitimately differs from its .j2, and re-rendering to compare would need
+# every role's vars and secrets. So the comparison moves up a level — these tasks stamp the
+# SOURCE checksum of each template at render time, and the check re-computes those checksums
+# from the repo. Equal means this host has run initial_setup.yml since the templates last
+# changed; unequal means it has not, and is still executing the old rendered copy.
+#
+# THE FAILURE THIS CLOSES (2026-08-23): /usr/local/bin/longhorn-backup-health.sh was two
+# commits behind for two days while manifest-prune-check pushed "deployed scripts match the
+# repo" — true of the three files it compared, false of the twenty it did not, including
+# itself. roles/setup/ changes are deferred-and-alerted by the gitops tick, but that alert
+# clears the moment the tree ff-merges, leaving the stale render with nothing watching it
+# (the mechanism deploy_logic.py:86-100 already predicted in a comment).
+#
+# ONE STAMP PER TAG FAMILY, each carrying that family's tags — see k3s_render_stamp_groups in
+# defaults/main.yml for why a single untagged stamp over all eight was worse than none. The
+# stamps live at the END of this file, AFTER every template: task, for the second half of the
+# same problem: the old stamp ran first, so a run that died partway through had still declared
+# every script current.
 
 - name: Deploy the Kuma push credentials for the heartbeat scripts
   tags: [backup-health, disk-health, manifest-prune, etcd-snapshot]
@@ -340,3 +334,34 @@
     job: "/usr/local/bin/etcd-snapshot-offbox.sh"
     cron_file: etcd-snapshot-offbox
   become: true
+
+# Render provenance, stamped LAST so a run that fails partway through leaves the previous
+# checksums in place rather than declaring the scripts it never reached to be current. Each
+# group carries only its own tag family, so a tag-scoped run restamps only what it rendered.
+- name: Stamp the backup-plane scripts this host has rendered
+  tags: [backup-health]
+  ansible.builtin.include_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: k3s-backup-health
+    stamp_render_templates: "{{ (k3s_render_stamp_groups | selectattr('name', 'eq', 'k3s-backup-health') | first).templates }}"
+
+- name: Stamp the disk-health script this host has rendered
+  tags: [disk-health]
+  ansible.builtin.include_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: k3s-disk-health
+    stamp_render_templates: "{{ (k3s_render_stamp_groups | selectattr('name', 'eq', 'k3s-disk-health') | first).templates }}"
+
+- name: Stamp the manifest-prune script this host has rendered
+  tags: [manifest-prune]
+  ansible.builtin.include_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: k3s-manifest-prune
+    stamp_render_templates: "{{ (k3s_render_stamp_groups | selectattr('name', 'eq', 'k3s-manifest-prune') | first).templates }}"
+
+- name: Stamp the etcd-snapshot script this host has rendered
+  tags: [etcd-snapshot]
+  ansible.builtin.include_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: k3s-etcd-snapshot
+    stamp_render_templates: "{{ (k3s_render_stamp_groups | selectattr('name', 'eq', 'k3s-etcd-snapshot') | first).templates }}"

@@ -244,23 +244,50 @@ check_deployed /opt/gitops-deploy/host_lib.py \
 #
 # Missing manifest is NOT drift: initial_setup.yml writes it, so its absence means this host
 # predates the mechanism. Say so rather than paging — the arm is unproven, not failing.
-RENDER_MANIFEST=/var/lib/homelab/setup-render-manifest
-TPL_DIR="${REPO_DIR}/ansible/roles/setup/k3s/templates"
+# A DIRECTORY of fragments, one per role and tag family, each written by the run that rendered
+# those templates. Two things changed here on 2026-08-23b and both were coverage bugs:
+#
+#   * It was a single file whose entries were bare filenames joined onto a hardcoded k3s
+#     templates dir, so this arm was structurally incapable of seeing any other role's
+#     artifacts. Nine on this host were watched by nothing — both gitops-deploy units, both
+#     renovate-notify units, secret-rotate.sh and its audit sibling, and fake-remux-health.sh.
+#     The exit-75 unit fix sat merged-and-undeployed here for exactly that reason (review H1).
+#     Entries now carry their own repo-relative path and this joins nothing.
+#   * That one file was rewritten wholesale by every partial run, so `--tags manifest-prune`
+#     declared all eight k3s scripts current while rendering one (review M6). A fragment is
+#     rewritten only by a run carrying its own tags, so the others stay as they were — stale,
+#     and reported as such.
+#
+# Per-host by construction: a fragment exists only where its role ran. daniel-pi's optimize_pi
+# scripts are NOT covered by anything — that host runs no manifest-prune-check — and a flat glob
+# over the repo would have stamped them here as if this host rendered them.
+#
+# Missing manifest is NOT drift: initial_setup.yml writes it, so its absence means this host
+# predates the mechanism. Say so rather than paging — the arm is unproven, not failing.
+RENDER_MANIFEST_DIR=/var/lib/homelab/setup-render-manifest.d
 STALE=""
 MANIFEST_NOTE=""
+MANIFEST_ENTRIES=0
 
-if [[ -r "$RENDER_MANIFEST" ]]; then
+# `-s`, not `-r`: a zero-byte fragment is readable, contributes no lines, and would otherwise
+# take the present branch and disarm this arm behind a confident green (review L2). The entry
+# counter below is the same guard one level up, for a directory of empty or absent fragments.
+for FRAGMENT in "$RENDER_MANIFEST_DIR"/*; do
+  [[ -s "$FRAGMENT" ]] || continue
   while read -r TPL WANT; do
-    [[ -n "$TPL" ]] || continue
-    if [[ ! -r "${TPL_DIR}/${TPL}" ]]; then
+    [[ -n "$TPL" && -n "$WANT" ]] || continue
+    MANIFEST_ENTRIES=$((MANIFEST_ENTRIES + 1))
+    if [[ ! -r "${REPO_DIR}/${TPL}" ]]; then
       STALE="${STALE:+$STALE, }${TPL} (template gone from the repo)"
       continue
     fi
-    HAVE=$(sha256sum "${TPL_DIR}/${TPL}" | cut -d' ' -f1)
+    HAVE=$(sha256sum "${REPO_DIR}/${TPL}" | cut -d' ' -f1)
     [[ "$HAVE" == "$WANT" ]] || STALE="${STALE:+$STALE, }${TPL}"
-  done < "$RENDER_MANIFEST"
-else
-  MANIFEST_NOTE="; render manifest absent (run initial_setup.yml once to arm the stale-script arm)"
+  done < "$FRAGMENT"
+done
+
+if [[ "$MANIFEST_ENTRIES" -eq 0 ]]; then
+  MANIFEST_NOTE="; render manifest absent or empty (run initial_setup.yml once to arm the stale-script arm)"
 fi
 
 if [[ -z "$ORPHANS" && -z "$DRIFTED" && -z "$STALE" ]]; then
