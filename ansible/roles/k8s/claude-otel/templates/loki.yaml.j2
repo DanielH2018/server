@@ -144,6 +144,9 @@ metadata:
   name: loki
   namespace: {{ k8s_observability_namespace }}
 spec:
+  # Pinned: host-side query tools carry this address as a constant. See
+  # claude_otel_loki_cluster_ip in defaults/main.yml for why.
+  clusterIP: {{ claude_otel_loki_cluster_ip }}
   selector:
     app: loki
   ports:
