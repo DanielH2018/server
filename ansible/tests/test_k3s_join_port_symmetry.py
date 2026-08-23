@@ -17,9 +17,11 @@ dropping host memory and /boot coverage entirely. The server-side mirror closed 
 asymmetric list is that outage, pre-staged, and nothing else in the repo would notice.
 
 WHAT THIS DOES NOT CATCH, and it matters: a port missing from BOTH lists is symmetric by
-construction. MetalLB's memberlist port 7946 is exactly that — absent from both, blocked on both
-nodes, and gossip has never converged. A symmetry test is structurally blind to it. This guards
-one shape of firewall defect, not firewall completeness.
+construction. MetalLB's memberlist port 7946 sat in exactly that blind spot from the day the
+agent joined until 2026-08-23b — absent from both lists, blocked on both nodes, gossip never
+converging — and no symmetry test could have found it. It is in both lists now, which changes
+nothing about the blind spot. This guards one shape of firewall defect, not firewall
+completeness; only a live probe from the node that needs a port can establish that.
 
 Run: uv run pytest ansible/tests/test_k3s_join_port_symmetry.py
 """

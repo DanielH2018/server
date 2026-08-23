@@ -813,9 +813,11 @@ k3s_render_stamp_groups:
 # API and the server never dials theirs. ansible/tests/test_k3s_join_port_symmetry.py enforces
 # that; until 2026-08-23b the invariant was prose with no reader.
 #
-# NOT a complete inventory of what this cluster needs open — a port missing from both lists is
-# symmetric and unguarded. MetalLB's memberlist 7946/tcp+udp is exactly that case and is
-# currently blocked on both nodes.
+# NOT a complete inventory of what this cluster needs open. A port missing from BOTH lists is
+# symmetric by construction, so the test is blind to it — MetalLB's memberlist 7946 sat in that
+# blind spot from the day the agent joined until 2026-08-23b, blocked on both nodes with the
+# speakers never converging. Completeness is not a property any check here can establish; the
+# only evidence is a live probe from the node that needs the port.
 k3s_join_server_ports:  # allowed FROM each agent, ON the server
   - { port: "6443", proto: tcp }
   - { port: "8472", proto: udp }
@@ -829,6 +831,15 @@ k3s_join_server_ports:  # allowed FROM each agent, ON the server
   # surviving node; see monitor-bridge check.py). Fix the firewall, not the placement: pinning
   # prometheus back to daniel-box would re-break this the first time the pin is lifted.
   - { port: "9100", proto: tcp }
+  # MetalLB memberlist gossip. Blocked on both nodes since the agent joined, so the speakers
+  # have never converged — verified live on 2026-08-23 with `ss` and the speaker logs
+  # (2026-08-23b review M2). INERT TODAY: L2Advertisement homelab-l2 pins every pool to
+  # daniel-box, so one speaker owns every VIP and has nobody to gossip with. It stops being
+  # inert the moment that pin is lifted, at which point two speakers each believe they own the
+  # address. Symmetric on both lists, which is why the symmetry test could never have caught
+  # it — a port missing from both sides is symmetric by construction.
+  - { port: "7946", proto: tcp }
+  - { port: "7946", proto: udp }
 k3s_join_agent_ports:  # allowed FROM the server, ON the agent
   - { port: "8472", proto: udp }
   - { port: "10250", proto: tcp }
@@ -838,6 +849,10 @@ k3s_join_agent_ports:  # allowed FROM the server, ON the agent
   # target sat down from the DS's first day; pod-IP scrapes (promtail) ride 8472 and
   # masked the gap.
   - { port: "9100", proto: tcp }
+  # The mirror of the server-side MetalLB memberlist rule above — see it for why this is
+  # currently inert and why it must land before the L2Advertisement node pin is lifted.
+  - { port: "7946", proto: tcp }
+  - { port: "7946", proto: udp }
 
 # Agent node IPs the server-side firewall admits. Set in daniel-box host_vars once an
 # agent exists; empty means the allow tasks are no-ops.
