@@ -1,0 +1,13 @@
+[Unit]
+Description=Restart the Claude Code Remote Control host to adopt a background auto-update
+
+[Service]
+Type=oneshot
+# DECIDED: a separate timer + `systemctl try-restart`, NOT RuntimeMaxSec= on
+# claude-rc.service. RuntimeMaxSec expiry is recorded as a failure (result: timeout), so it
+# would fire OnFailure=claude-rc-alert.service and page Discord once a week on a healthy
+# host — training the alert to be ignored, which is worse than no alert.
+#
+# try-restart, not restart: restarting a stopped host would START it, and starting it must
+# stay a deliberate act (claude_code_rc_enabled). try-restart is a no-op while it is down.
+ExecStart=/usr/bin/systemctl try-restart claude-rc.service

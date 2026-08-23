@@ -69,3 +69,70 @@
       ~/.claude/.credentials.json. Log in once, by hand, on {{ inventory_hostname }}:
       run `claude` and follow the browser prompt. Ansible cannot do this step.
   when: not claude_code_credentials.stat.exists
+
+# ── Remote Control host ────────────────────────────────────────────────────────────────
+# claude-rc.service keeps `claude rc` running so sessions can be created from the phone
+# with nothing started at the terminal first. Claude Code 2.1.241 reports "Service install
+# is disabled in this version — the daemon runs on demand and exits when the last client
+# disconnects", so there is no built-in always-on host to enable and systemd supervises it
+# instead. See this role's CLAUDE.md.
+
+- name: Install the Remote Control host units
+  tags: [claude_code]
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - claude-rc.service
+    - claude-rc-restart.service
+    - claude-rc-restart.timer
+  become: true
+  notify:
+    - Reload systemd
+    - Restart claude-rc
+
+- name: Install the Remote Control alert unit (0600 — embeds the SOPS Discord webhook)
+  tags: [claude_code]
+  ansible.builtin.template:
+    src: claude-rc-alert.service.j2   # OnFailure target — pages Discord if the host dies
+    dest: /etc/systemd/system/claude-rc-alert.service
+    mode: "0600"
+  become: true
+  no_log: true
+  notify: Reload systemd
+
+# Both states are driven from the one var so the service has a way out as well as a way in:
+# false stops AND disables it, which is the rollback if a phone-reachable session on the
+# control-plane node turns out to be a bad idea.
+- name: Set the Remote Control host's running state
+  tags: [claude_code]
+  ansible.builtin.systemd:
+    name: claude-rc.service
+    enabled: "{{ claude_code_rc_enabled }}"
+    state: "{{ 'started' if claude_code_rc_enabled else 'stopped' }}"
+    daemon_reload: true
+  become: true
+
+- name: Set the Remote Control restart timer's running state
+  tags: [claude_code]
+  # Follows the host: a timer restarting a service that is meant to be down is noise, and
+  # try-restart would no-op anyway.
+  ansible.builtin.systemd:
+    name: claude-rc-restart.timer
+    enabled: "{{ claude_code_rc_enabled }}"
+    state: "{{ 'started' if claude_code_rc_enabled else 'stopped' }}"
+    daemon_reload: true
+  become: true
+
+- name: Report that the Remote Control host is installed but not started
+  tags: [claude_code]
+  ansible.builtin.debug:
+    msg: >-
+      claude-rc.service is installed and left stopped. Before enabling it, run
+      `claude rc --spawn={{ claude_code_rc_spawn_mode }} --permission-mode
+      {{ claude_code_rc_permission_mode }} --capacity 2` by hand on {{ inventory_hostname }}
+      and confirm a session created from the phone reaches a prompt in its own worktree —
+      a workspace-trust dialog there cannot be answered remotely. Then set
+      claude_code_rc_enabled=true.
+  when: not claude_code_rc_enabled

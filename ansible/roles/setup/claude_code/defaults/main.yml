@@ -1,0 +1,40 @@
+---
+# Remote Control host (claude-rc.service). See CLAUDE.md in this role for what the
+# service is and why it exists.
+#
+# Every var here carries the role's `claude_code_` prefix (ansible-lint
+# var-naming[no-role-prefix]), so the Remote Control ones read `claude_code_rc_*`.
+
+# DECIDED: installed disabled, activated by flipping this to true — NOT enabled on first
+# deploy. The service hands anything holding the claude.ai account a session on the k3s
+# control-plane node, and the one prerequisite Ansible cannot check is whether a
+# phone-spawned worktree can clear the workspace-trust dialog. Deploying the unit is
+# reversible; starting it before that is proven is not. Setting this true both enables and
+# starts it; setting it back to false stops and disables it.
+claude_code_rc_enabled: false
+
+# The directory the host runs in. Sessions spawned on demand get their own worktree
+# underneath it; the pre-created session stays here.
+claude_code_rc_workdir: "/home/{{ sys_user }}/server"
+
+# DECIDED: worktree, not same-dir. Concurrent sessions sharing one checkout is the exact
+# thing this repo's parallel-session rule forbids, and `prune_worktrees.py` already
+# collects finished worktrees while respecting a live session's lock.
+claude_code_rc_spawn_mode: worktree
+
+# DECIDED: auto, matching interactive sessions on this host. `default` prompts on nearly
+# every tool call, which from a phone means a session that stops constantly. Falling back
+# to `default` is the supported answer if auto degrades without a TTY — answering prompts
+# remotely is what Remote Control is for.
+claude_code_rc_permission_mode: auto
+
+# DECIDED: 3, not the CLI's default of 32. Measured on daniel-box, a `claude` process sits
+# at 200-400 MB RSS, so 32 sessions could ask for more than 12 GB against ~15 GB available
+# with k3s already running. Capacity is the real memory bound here (see the unit template
+# on why there is no MemoryMax), so it is set from measurement and raised on evidence.
+claude_code_rc_capacity: 3
+
+# How often to restart the host so it picks up a Claude Code auto-update. The binary
+# updates itself in the background, but a long-lived process keeps running the version it
+# started with. systemd OnCalendar syntax.
+claude_code_rc_restart_schedule: weekly
