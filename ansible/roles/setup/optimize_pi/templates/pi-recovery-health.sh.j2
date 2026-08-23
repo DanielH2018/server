@@ -14,7 +14,10 @@
 set -uo pipefail
 
 # shellcheck source=/dev/null
-source /usr/local/lib/pi-kuma-push-lib.sh
+source /usr/local/lib/kuma-push-lib.sh || {
+  logger -t pi-recovery-health "kuma-push-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
 
 {# `domain` is the SOPS-loaded server domain (same reasoning as pi-sd-health.sh.j2). #}
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
@@ -39,4 +42,4 @@ else
   STATUS=down; MSG="not running: ${DOWN}"
 fi
 
-pi_kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" pi-recovery-health
+kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" pi-recovery-health

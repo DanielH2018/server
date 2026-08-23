@@ -44,6 +44,12 @@
 # retiring a manifest: until that role next runs, its stale staged file is still on disk.
 set -uo pipefail
 
+# shellcheck source=/dev/null
+source /usr/local/lib/kuma-push-lib.sh || {
+  logger -t manifest-prune-check "kuma-push-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+
 # Runs as root under cron, whose default PATH (/usr/bin:/bin) omits /usr/local/bin — where
 # the k3s install script puts the binary. Without this, `k3s` resolves to nothing, the
 # `kubectl get` calls below silently no-op (stderr swallowed by check_kind's 2>/dev/null),
@@ -86,12 +92,7 @@ PUSH_URL="https://${KUMA_HOST}/api/push/${PUSH_TOKEN}"
 if [[ ! -d "$MANIFEST_ROOT" ]]; then
   STATUS=down
   MSG="${MANIFEST_ROOT} missing — no staged manifests to compare against"
-  curl -fsS --max-time 10 -G \
-    --resolve "${KUMA_HOST}:443:${KUMA_RESOLVE_IP}" \
-    --data-urlencode "status=${STATUS}" \
-    --data-urlencode "msg=${MSG}" \
-    "$PUSH_URL" >/dev/null \
-    || logger -t manifest-prune-check "push failed (status=${STATUS}: ${MSG})"
+  kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" manifest-prune-check
   exit 0
 fi
 
@@ -240,12 +241,7 @@ fi
 # DOWN leaves no durable record and `probe.py alerts` can never reconstruct this monitor.
 logger -t manifest-prune-check "status=${STATUS} ${MSG}"
 
-curl -fsS --max-time 10 -G \
-  --resolve "${KUMA_HOST}:443:${KUMA_RESOLVE_IP}" \
-  --data-urlencode "status=${STATUS}" \
-  --data-urlencode "msg=${MSG}" \
-  "$PUSH_URL" >/dev/null \
-  || logger -t manifest-prune-check "push failed (status=${STATUS}: ${MSG})"
+kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" manifest-prune-check
 
 # Off-premises dead-man's switch — see longhorn-backup-health.sh.j2 for the full rationale.
 # Short version: Kuma runs on the cluster this watches, so an outage silences both the push and

@@ -24,6 +24,12 @@
 
 set -uo pipefail
 
+# shellcheck source=/dev/null
+source /usr/local/lib/kuma-push-lib.sh || {
+  logger -t registry-gc "kuma-push-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+
 # Cron's default PATH (/usr/bin:/bin) omits /usr/local/bin, where the k3s installer puts the
 # binary. Without this every kubectl call below silently resolves to nothing.
 export PATH="/usr/local/bin:${PATH}"
@@ -53,12 +59,8 @@ finish() {
   chmod 0644 "$STATE_FILE"
 
   if [[ -n "$PUSH_TOKEN" ]]; then
-    curl -fsS --max-time 10 -G \
-      --resolve "${KUMA_HOST}:443:${KUMA_RESOLVE_IP}" \
-      --data-urlencode "status=${STATUS}" \
-      --data-urlencode "msg=${MSG}" \
-      "https://${KUMA_HOST}/api/push/${PUSH_TOKEN}" >/dev/null \
-      || logger -t registry-gc "push failed (status=${STATUS}: ${MSG})"
+    kuma_push "$STATUS" "$MSG" "https://${KUMA_HOST}/api/push/${PUSH_TOKEN}" \
+      "$KUMA_HOST" "$KUMA_RESOLVE_IP" registry-gc
   else
     logger -t registry-gc "registry_gc_push_token not set — skipping push (see /add-secret)"
   fi

@@ -22,6 +22,12 @@
 # onto daniel-box with its disk intact is unaffected — the key is already there.
 set -uo pipefail
 
+# shellcheck source=/dev/null
+source /usr/local/lib/kuma-push-lib.sh || {
+  logger -t etcd-snapshot-offbox "kuma-push-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+
 # Cron's PATH (/usr/bin:/bin) omits /usr/local/bin, where the k3s install script puts the binary.
 # Without this the snapshot silently never runs and this script pushes a permanent false "up" —
 # the same trap documented in cron-path-omits-usr-local-bin.md and guarded the same way in
@@ -37,12 +43,8 @@ PUSH_TOKEN="{{ etcd_snapshot_push_token | default('') }}"
 push_kuma() {
   local status="$1" msg="$2"
   [[ -z "$PUSH_TOKEN" ]] && return 0
-  curl -fsS --max-time 10 -G \
-    --resolve "${KUMA_HOST}:443:${KUMA_RESOLVE_IP}" \
-    --data-urlencode "status=${status}" \
-    --data-urlencode "msg=${msg}" \
-    "https://${KUMA_HOST}/api/push/${PUSH_TOKEN}" >/dev/null \
-    || logger -t etcd-snapshot-offbox "push failed (status=${status}: ${msg})"
+  kuma_push "$status" "$msg" "https://${KUMA_HOST}/api/push/${PUSH_TOKEN}" \
+    "$KUMA_HOST" "$KUMA_RESOLVE_IP" etcd-snapshot-offbox
 }
 
 # Off-premises dead-man's switch — see longhorn-backup-health.sh.j2 for the full rationale. Kuma
