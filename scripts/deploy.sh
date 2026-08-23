@@ -39,7 +39,7 @@
 #     rollout/stabilisation) and returns immediately. Tag validation, the staleness check, and
 #     the lock are still evaluated in THIS process before it returns, so exit 2/4 land exactly
 #     as they do today; lock contention (exit 75) is checked non-blocking instead of queued for
-#     LOCK_WAIT, since waiting 25 minutes before returning would defeat the point of detaching —
+#     LOCK_WAIT, since waiting 45 minutes before returning would defeat the point of detaching —
 #     it fails fast and asks you to retry rather than sitting on the terminal. Output goes to a
 #     log file (path printed on return); on completion it posts to the gitops-deploy Discord
 #     webhook, gated on `probe.py health <svc>` for every deployed tag that supports it.
@@ -49,7 +49,12 @@
 set -u
 
 LOCK=/var/lock/server-git-tree.lock
-LOCK_WAIT=1500 # matches gitops-deploy's own end-to-end budget (TimeoutStartSec=25min)
+# Covers gitops-deploy's worst-case hold of 2220s (K8S_DEPLOY_TIMEOUT_S 900 +
+# K8S_ROLLBACK_TIMEOUT_S 1320), not its TimeoutStartSec. Was 1500 from d1a5b6c9 until 2026-08-23,
+# when the unit's TimeoutStartSec really was 25min; it then went 25 -> 35 -> 45min and this value
+# was left behind, so a deploy launched during a pathological gitops run gave up having deployed
+# nothing while the run it was queued behind was still legitimately working.
+LOCK_WAIT=2700
 LOCK_BUSY=75
 
 # The checkout this session is working in, not the primary one — a session in a worktree
@@ -215,8 +220,8 @@ fi
 if [[ "$detach" == 1 ]]; then
     # The lock is still taken HERE, synchronously -- only the ansible-playbook run itself (the
     # ~83% of a deploy spent waiting on rollout/stabilisation) moves to the background. Waiting
-    # up to LOCK_WAIT (25min) before returning would defeat the point of --detach, so contention
-    # is checked non-blocking: exit 75 means "try again shortly", not "waited 25 minutes then
+    # up to LOCK_WAIT (45min) before returning would defeat the point of --detach, so contention
+    # is checked non-blocking: exit 75 means "try again shortly", not "waited 45 minutes then
     # gave up" the way it does without --detach.
     log_dir=/tmp/homelab-deploy-logs
     mkdir -p "$log_dir"

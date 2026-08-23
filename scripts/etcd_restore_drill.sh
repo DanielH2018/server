@@ -88,6 +88,17 @@ LOCAL_SNAPSHOT=""
 # Generous: a cold API server on a busy box takes longer than a warm one, and a false
 # "did not come up" is the failure mode that would get this drill ignored.
 READY_TIMEOUT=180
+# Where a passing run records itself. Until 2026-08-23 a pass was recorded only by the operator
+# editing docs/k3s-etcd-restore.md by hand, which means "when did this last pass" had no
+# machine-readable answer and nothing could detect the drill silently stopping. The Longhorn
+# restore drill beside it already learned this (its stamp dir is read by checks 7 and 8 of
+# longhorn-backup-health.sh, added after that drill spent months as an unscheduled one-off in a
+# home directory). Two modes stamp separately and MUST NOT be conflated: `list-only` proves the
+# off-box leg — credentials, bucket, folder, download, decompression — while `full` additionally
+# proves the object graph comes back. A watchdog that accepted a list-only stamp as drill
+# coverage would be the "one tier hiding behind another tier's evidence" shape this estate has
+# already been bitten by, so the mode is written into the stamp, not just the timestamp.
+STAMP_DIR="${ETCD_DRILL_STAMP_DIR:-/var/lib/etcd-restore-drill}"
 # The restore stage needs its own bound. Measured 2026-08-22: a run wedged in k3s's
 # "Waiting to retrieve agent configuration; server is not ready" retry loop sat for 17
 # minutes on 6 seconds of CPU and would have sat there indefinitely — a drill with no
@@ -97,6 +108,20 @@ RESTORE_TIMEOUT=600
 
 die() { echo "etcd-restore-drill: $*" >&2; exit 1; }
 log() { echo "[$(date -u +%H:%M:%S)] $*"; }
+
+# Record a pass. $1 is the mode — `list-only` or `full` — and it is written into the file so a
+# reader cannot mistake the cheaper proof for the stronger one. Best-effort: a drill that passed
+# must not be reported as failed because its stamp could not be written, so failures here warn.
+stamp_success() {
+  local mode="$1"
+  mkdir -p "$STAMP_DIR" 2>/dev/null || { echo "warning: cannot create $STAMP_DIR" >&2; return 0; }
+  chmod 0755 "$STAMP_DIR" 2>/dev/null || true
+  printf 'mode=%s\nsnapshot=%s\nutc=%s\nepoch=%s\n' \
+    "$mode" "${SNAPSHOT:-unknown}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(date -u +%s)" \
+    > "${STAMP_DIR}/last-success-${mode}" \
+    || echo "warning: could not write the ${mode} stamp" >&2
+  return 0
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -214,6 +239,7 @@ log "drilling snapshot: $SNAPSHOT"
 if [[ "$LIST_ONLY" == "1" ]]; then
   log "--list-only: the off-box leg works (credentials, bucket, folder, a named snapshot)"
   log "nothing was restored; re-run without --list-only for the actual drill"
+  stamp_success list-only
   exit 0
 fi
 
@@ -289,5 +315,6 @@ echo
 [[ "$deploys" -ge 1 ]] || die "no deployments in the restored set"
 [[ "$pvcs" -ge 1 ]]    || die "no PVCs in the restored set — a rebuild would have nothing to reattach"
 
+stamp_success full
 log "DRILL PASSED — this snapshot restores and serves its objects"
-log "record the date in docs/k3s-etcd-restore.md; the value is in when it last passed"
+log "stamped ${STAMP_DIR}/last-success-full; also record the date in docs/k3s-etcd-restore.md"

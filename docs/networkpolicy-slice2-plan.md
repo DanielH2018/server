@@ -176,7 +176,7 @@ spec:
 #
 # sonarr and radarr reach prowlarr by bare name from their own application databases — the indexer
 # definitions live on their PVCs, not in this repo. Recorded in
-# roles/k8s/sonarr/templates/isolation-probe-job.yaml.j2.
+# roles/k8s/sonarr/tasks/main.yml (the probe itself was retired 2026-08-17).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

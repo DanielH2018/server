@@ -385,7 +385,7 @@ uv run python scripts/probe.py metric 'count(up == 1)'
 uv run python scripts/probe.py metric 'sum(increase(otelcol_exporter_send_failed_spans[15m])) or vector(0)'
 ```
 
-Record the scrape-target count and the send-failed total as the **Step 1 baseline** — every later comparison in this task chains off these numbers, not off each other. Kuma is the out-of-band witness here, and not because `probe.py alerts` is compromised by this fence — it isn't: `run_alerts` (`scripts/probe.py:1152`) calls `loki_endpoint()` (`:104-106`), which returns `k8s_endpoint("loki-homelab")`, the **homelab** Loki, unaffected by a fence that only covers `observability`. Kuma is still the better pick because its state is independent of anything this deploy touches at all.
+Record the scrape-target count and the send-failed total as the **Step 1 baseline** — every later comparison in this task chains off these numbers, not off each other. Kuma is the out-of-band witness here, and not because `probe.py alerts` is compromised by this fence — it isn't: `run_alerts` (`scripts/probe.py`) calls `loki_endpoint()` (moved to `scripts/probe_core.py` in the 2026-08-23 module split — grep the symbol, not a line), which returns `k8s_endpoint("loki-homelab")`, the **homelab** Loki, unaffected by a fence that only covers `observability`. Kuma is still the better pick because its state is independent of anything this deploy touches at all.
 
 - [ ] **Step 2: Stage A — labels only, unfenced**
 

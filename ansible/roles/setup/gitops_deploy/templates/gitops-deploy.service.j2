@@ -58,16 +58,27 @@ SyslogLevel=notice
 # gitops_deploy.py) is measured from process start, AFTER flock acquires — so time spent
 # waiting here is pure overhead against this unit's 45min TimeoutStartSec, uncounted by that
 # budget. -w 180 outlasts any normal deploy-step contention (secret-rotate is short — 0-2
-# tokens) but fails fast enough to leave the health-gate/rollback budget intact; on timeout
-# flock exits 1, failing the unit cleanly (OnFailure alerts) and the next 30-min timer tick
-# retries rather than racing. /run/lock is world-writable+sticky, so the unprivileged
-# {{ sys_user }} can create the lockfile.
+# tokens) but fails fast enough to leave the health-gate/rollback budget intact; /run/lock is
+# world-writable+sticky, so the unprivileged {{ sys_user }} can create the lockfile.
+#
+# DECIDED: contention exits 75 and the unit SUCCEEDS — do not "fix" this back to a failure, and
+# do not raise -w to compensate. Until 2026-08-23 a timeout exited 1, so every long operator
+# `./scripts/deploy.sh` (~20min, holding this same lock) paged via OnFailure: seven such silent
+# exit-1 ticks in the seven days to 2026-08-23, each logging nothing at all because flock died
+# before the deployer started. Raising -w cannot fix it — this unit's own worst case is
+# K8S_DEPLOY_TIMEOUT_S + K8S_ROLLBACK_TIMEOUT_S = 2220s against TimeoutStartSec 2700s, so the
+# largest legal -w is 480s, still short of a routine 20-minute deploy; test_gitops_discord_
+# contract.py:458 asserts that bound and goes red if you try. So -E 75 + SuccessExitStatus=75
+# instead, the same "lock busy, nothing deployed" contract scripts/deploy.sh:281 already uses.
+# Contention is not silent starvation: the flock path never writes last_run, so contention
+# lasting past GITOPS_MAX_AGE_S (90min, check.py:148) still pages via GitOps-Alive.
+SuccessExitStatus=75
 # Deliberately WITHOUT --no-python-downloads, unlike every other host invocation in this repo.
 # Elsewhere the flag turns a missing pinned interpreter into a loud failure instead of a silent
 # fetch, which is what makes the pin a pin. Here the loud failure would be the deploy pipeline
 # refusing to start — removing the machine that would ship the correction — so this one keeps uv's
 # self-healing download. The asymmetry is intentional and is pinned by
 # ansible/tests/test_host_python_invocations.py; do not "fix" it for consistency.
-ExecStart=/usr/bin/flock -w 180 /var/lock/server-git-tree.lock /usr/local/bin/uv run --no-project --python {{ host_python_version }} /opt/gitops-deploy/gitops_deploy.py
+ExecStart=/usr/bin/flock -w 180 -E 75 /var/lock/server-git-tree.lock /usr/local/bin/uv run --no-project --python {{ host_python_version }} /opt/gitops-deploy/gitops_deploy.py
 # SOPS age key is already in the user's home; filter plugins auto-load next to
 # ansible/deploy.yml, so no ANSIBLE_CONFIG is needed.

@@ -76,3 +76,76 @@ def test_storage_is_gated_by_b2_reachable():
     monitors, which is precisely what the B2 gate is for."""
     assert "b2_storage" in check.B2_DEPENDENT
     assert "b2_storage" in {name for name, _, _ in check.CHECKS}
+
+
+# ── the pagination cursor ─────────────────────────────────────────────────────────────────────
+# Carried as an open register row for four review runs as "the live B2 call shape is deliberately
+# unverified — testing it spends the cap it guards". That reasoning covers the AUTH shape, which
+# is pinned above; it never covered the cursor. b2_list_versions had no test of any kind until
+# 2026-08-23, and its failure direction is the dangerous one: `truncated` is set True ONLY by
+# exhausting B2_STORAGE_MAX_PAGES, so ANY early stop — a renamed cursor field, a page carrying
+# files but neither nextFileName nor nextFileId — returns (pages, False) and b2_storage_verdict
+# reports a partial sum as a confident total. Dormant in production today (753 versions against a
+# 1000 maxFileCount, so one page), which is exactly the shape that breaks silently the first time
+# the bucket crosses 1000. None of this needs a live call: _post_json is stubbed, zero B2 spend.
+
+
+def _paging_stub(pages):
+    """Stub for check._post_json that replays `pages` and records each request payload."""
+    sent = []
+    it = iter(pages)
+
+    def fake(url, payload, headers=None):
+        sent.append(payload)
+        return next(it)
+
+    return fake, sent
+
+
+def test_the_cursor_is_threaded_into_the_next_request(monkeypatch):
+    fake, sent = _paging_stub(
+        [
+            {"files": [], "nextFileName": "b.txt", "nextFileId": "4_zid"},
+            {"files": []},
+        ]
+    )
+    monkeypatch.setattr(check, "_post_json", fake)
+    pages, truncated = check.b2_list_versions("https://api", "tok", "bkt")
+    assert len(pages) == 2
+    assert truncated is False
+    assert sent[1]["startFileName"] == "b.txt", "second request must carry nextFileName"
+    assert sent[1]["startFileId"] == "4_zid", "second request must carry nextFileId"
+
+
+def test_a_page_with_no_cursor_ends_the_walk(monkeypatch):
+    fake, sent = _paging_stub([{"files": [{"contentLength": 1}]}])
+    monkeypatch.setattr(check, "_post_json", fake)
+    pages, truncated = check.b2_list_versions("https://api", "tok", "bkt")
+    assert len(pages) == 1
+    assert truncated is False
+    assert "startFileName" not in sent[0] and "startFileId" not in sent[0]
+
+
+def test_a_cursor_that_never_clears_reports_truncated(monkeypatch):
+    """The page cap must fail LOUD rather than silently under-counting — b2_storage_verdict keys
+    on this flag to refuse a verdict it cannot stand behind."""
+    fake, _ = _paging_stub(
+        [{"files": [], "nextFileName": "n", "nextFileId": "i"}]
+        * check.B2_STORAGE_MAX_PAGES
+    )
+    monkeypatch.setattr(check, "_post_json", fake)
+    pages, truncated = check.b2_list_versions("https://api", "tok", "bkt")
+    assert len(pages) == check.B2_STORAGE_MAX_PAGES
+    assert truncated is True
+
+
+def test_a_name_only_cursor_still_paginates(monkeypatch):
+    """B2 can return nextFileName without nextFileId. Requiring both would end the walk early and
+    under-count — the silent direction."""
+    fake, sent = _paging_stub([{"files": [], "nextFileName": "b.txt"}, {"files": []}])
+    monkeypatch.setattr(check, "_post_json", fake)
+    pages, truncated = check.b2_list_versions("https://api", "tok", "bkt")
+    assert len(pages) == 2
+    assert truncated is False
+    assert sent[1]["startFileName"] == "b.txt"
+    assert "startFileId" not in sent[1]

@@ -19,7 +19,12 @@ def _seq(*values):
 def test_disk_under_threshold_is_ok(monkeypatch):
     monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
     monkeypatch.setattr(
-        check, "prom_vector", lambda q: [({"origin": "daniel-box"}, 50.0)]
+        check,
+        "prom_vector",
+        lambda q: [
+            ({"origin": "daniel-box"}, 50.0),
+            ({"origin": "daniel-server"}, 44.0),
+        ],
     )
     ok, msg = check.check_disk()
     assert ok
@@ -29,7 +34,12 @@ def test_disk_under_threshold_is_ok(monkeypatch):
 def test_disk_over_threshold_names_mount(monkeypatch):
     monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
     monkeypatch.setattr(
-        check, "prom_vector", lambda q: [({"origin": "daniel-box"}, 95.0)]
+        check,
+        "prom_vector",
+        lambda q: [
+            ({"origin": "daniel-box"}, 95.0),
+            ({"origin": "daniel-server"}, 12.0),
+        ],
     )
     ok, msg = check.check_disk()
     assert not ok
@@ -830,3 +840,87 @@ def test_several_resources_are_all_checked():
 def test_nothing_expected_is_trivially_ok():
     ok, _ = check.extended_resource_verdict([], {}, 12)
     assert ok is True
+
+
+# ── host-coverage floor (HOST_ORIGINS_MIN) ────────────────────────────────────────────────────
+# THE BUG THESE PIN (2026-08-23): check_disk/check_mem grouped by origin but failed only on a
+# WHOLLY empty vector, so when daniel-box's node-exporter became unreachable for 5.4h both checks
+# evaluated over daniel-server alone and pushed OK — daniel-box's memory and /boot were unwatched
+# behind two green tiles. Scrape Targets cannot stand in for this: node-exporter's normal failure
+# mode is per-collector, which leaves `up == 1` and that check green.
+
+
+def _reset_origin_streaks():
+    check._host_origin_streaks.clear()
+
+
+def test_mem_pages_when_a_host_stops_reporting(monkeypatch):
+    _reset_origin_streaks()
+    monkeypatch.setattr(check, "HOST_ORIGINS_CONSECUTIVE", 1)
+    monkeypatch.setattr(
+        check, "prom_vector", lambda q: [({"origin": "daniel-server"}, 21.0)]
+    )
+    ok, msg = check.check_mem()
+    assert not ok
+    assert "1 of 2" in msg
+    assert "daniel-server" in msg
+
+
+def test_disk_pages_when_a_host_stops_reporting(monkeypatch):
+    _reset_origin_streaks()
+    monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
+    monkeypatch.setattr(check, "HOST_ORIGINS_CONSECUTIVE", 1)
+    monkeypatch.setattr(
+        check, "prom_vector", lambda q: [({"origin": "daniel-server"}, 30.0)]
+    )
+    ok, msg = check.check_disk()
+    assert not ok
+    assert "1 of 2" in msg
+
+
+def test_a_reboot_length_shortfall_does_not_page(monkeypatch):
+    """The weekly reboot removes a node's node-exporter for minutes against a 5m check loop, so a
+    bare floor would page every Sunday. Only the HOST_ORIGINS_CONSECUTIVE'th cycle fails."""
+    _reset_origin_streaks()
+    monkeypatch.setattr(check, "HOST_ORIGINS_CONSECUTIVE", 3)
+    monkeypatch.setattr(
+        check, "prom_vector", lambda q: [({"origin": "daniel-server"}, 21.0)]
+    )
+    assert check.check_mem()[0] is True
+    assert check.check_mem()[0] is True
+    assert check.check_mem()[0] is False
+
+
+def test_full_coverage_resets_the_shortfall_streak(monkeypatch):
+    _reset_origin_streaks()
+    monkeypatch.setattr(check, "HOST_ORIGINS_CONSECUTIVE", 2)
+    one = [({"origin": "daniel-server"}, 21.0)]
+    both = [({"origin": "daniel-server"}, 21.0), ({"origin": "daniel-box"}, 30.0)]
+    monkeypatch.setattr(check, "prom_vector", lambda q: one)
+    assert check.check_mem()[0] is True
+    monkeypatch.setattr(check, "prom_vector", lambda q: both)
+    assert check.check_mem()[0] is True
+    monkeypatch.setattr(check, "prom_vector", lambda q: one)
+    assert check.check_mem()[0] is True
+
+
+def test_a_breaching_present_host_outranks_the_coverage_complaint(monkeypatch):
+    """A survivor that is genuinely full must still page as full. Ordering the floor ahead of the
+    breach scan would have replaced a real disk-full alert with 'only 1 of 2 hosts reporting'."""
+    _reset_origin_streaks()
+    monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
+    monkeypatch.setattr(check, "HOST_ORIGINS_CONSECUTIVE", 1)
+    monkeypatch.setattr(
+        check, "prom_vector", lambda q: [({"origin": "daniel-server"}, 97.0)]
+    )
+    ok, msg = check.check_disk()
+    assert not ok
+    assert "97" in msg
+
+    _reset_origin_streaks()
+    monkeypatch.setattr(
+        check, "prom_vector", lambda q: [({"origin": "daniel-server"}, 99.0)]
+    )
+    ok, msg = check.check_mem()
+    assert not ok
+    assert "99" in msg

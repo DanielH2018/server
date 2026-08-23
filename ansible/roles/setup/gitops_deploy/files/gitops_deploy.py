@@ -58,7 +58,8 @@ from host_lib import atomic_write, discord_post, parse_env_file  # noqa: E402
 
 
 class RetryableFetchError(Exception):
-    """A transient `git fetch origin` failure (GitHub blip, momentary DNS). __main__ turns this into
+    """A transient git failure — `git fetch origin` (GitHub blip, momentary DNS) or a `git status`
+    that momentarily cannot read the work tree. __main__ turns this into
     a CLEAN skip of the tick — exit 0, NO in-script Discord crash-page, NO OnFailure — that also does
     NOT refresh last_run. So a one-off blip is silently retried next tick, while a PERSISTENT fetch
     failure still surfaces via GitOps-Alive going stale over several missed ticks. Distinct from a
@@ -722,7 +723,23 @@ def main() -> int:
     # outage: we never deploy from it, but the tick completes and writes last_run so
     # a long edit session doesn't falsely trip the GitOps-Alive monitor.
     # (git fetch is safe on a dirty tree — it only updates remote-tracking refs.)
-    dirty = bool(run(["git", "status", "--porcelain"]))
+    #
+    # NOT `run(...)`, for the same reason the fetch below isn't: on 2026-08-17 14:33 this raised
+    # `RuntimeError: git status --porcelain -> 128 / fatal: this operation must be run in a work
+    # tree` and double-paged (crash Discord + OnFailure), while the very next tick ran normally —
+    # a transient tree state, not a broken checkout. Reads the same work tree as the fetch and is
+    # equally exposed to a parallel `git worktree` operation, which takes no lock. Skipping is safe
+    # precisely because it does NOT write last_run: a checkout that is genuinely broken keeps
+    # failing, ages the marker past GITOPS_MAX_AGE_S and still pages via GitOps-Alive ~60min later,
+    # instead of double-paging 48x/day forever.
+    status = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=REPO, text=True, capture_output=True
+    )
+    if status.returncode != 0:
+        raise RetryableFetchError(
+            status.stderr.strip() or f"git status exited {status.returncode}"
+        )
+    dirty = bool(status.stdout.strip())
 
     # NOT `run(...)` (which raises RuntimeError → the generic crash-page): a transient fetch failure
     # is retryable, so raise RetryableFetchError and let __main__ skip the tick cleanly. subprocess

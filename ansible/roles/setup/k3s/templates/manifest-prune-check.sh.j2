@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Deployed-artifact drift check — managed by Ansible (k3s role); edits overwritten.
 #
-# Two arms, both answering "is what is live still what the repo says?": orphaned cluster objects
-# that no staged manifest declares (below), and setup-plane scripts on this host that no longer
-# match their source in the repo (second arm, further down).
+# Three arms, all answering "is what is live still what the repo says?": orphaned cluster objects
+# that no staged manifest declares (below); copy:-deployed setup code that differs byte-for-byte
+# from its source (second arm); and template:-rendered setup scripts whose SOURCE has changed
+# since this host last rendered them (third arm, which the second structurally cannot cover).
 #
 # `kubectl apply -f <staged-dir>/` (k8s/manifests role) only ADDS/UPDATES what is IN the
 # staged manifest set — it never removes a live object whose entry was deleted from the
@@ -79,7 +80,12 @@ KUMA_HOST="uptime-kuma.local.{{ domain }}"
 # Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
 # edge's bridge route for this name was removed in the slice-7 bridge teardown.
 KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-PUSH_TOKEN="{{ manifest_prune_push_token | default('') }}"
+# Sourced, never inlined: this script lands 0755, so an inlined token is readable by every local
+# account. 0640 root:{{ sys_user }} env file, same split as ping.env further down.
+MANIFEST_PRUNE_PUSH_TOKEN=""
+# shellcheck source=/dev/null
+[[ -r /etc/rancher/k3s/kuma-push.env ]] && . /etc/rancher/k3s/kuma-push.env
+PUSH_TOKEN="$MANIFEST_PRUNE_PUSH_TOKEN"
 
 # The role must deploy cleanly before the operator has registered this secret (/add-secret) —
 # skip the push rather than fail the cron until manifest_prune_push_token exists.
@@ -226,14 +232,49 @@ check_deployed /opt/gitops-deploy/deploy_logic.py \
 check_deployed /opt/gitops-deploy/host_lib.py \
   "${REPO_DIR}/ansible/roles/setup/common/files/host_lib.py"
 
-if [[ -z "$ORPHANS" && -z "$DRIFTED" ]]; then
+# THIRD ARM: are the TEMPLATE-rendered scripts current?
+#
+# The arm above deliberately cannot answer this — a rendered file differs from its .j2 by design.
+# So the comparison happens one level up, on the source: health-crons.yml stamps each template's
+# sha256 into the manifest below at render time, and this recomputes them from the repo. A
+# mismatch means this host has not run initial_setup.yml since that template changed, so it is
+# still executing the old rendered copy. Found 2026-08-23: longhorn-backup-health.sh was two
+# commits stale for two days, and THIS script was six days stale, while the message below still
+# read "deployed scripts match the repo".
+#
+# Missing manifest is NOT drift: initial_setup.yml writes it, so its absence means this host
+# predates the mechanism. Say so rather than paging — the arm is unproven, not failing.
+RENDER_MANIFEST=/var/lib/homelab/setup-render-manifest
+TPL_DIR="${REPO_DIR}/ansible/roles/setup/k3s/templates"
+STALE=""
+MANIFEST_NOTE=""
+
+if [[ -r "$RENDER_MANIFEST" ]]; then
+  while read -r TPL WANT; do
+    [[ -n "$TPL" ]] || continue
+    if [[ ! -r "${TPL_DIR}/${TPL}" ]]; then
+      STALE="${STALE:+$STALE, }${TPL} (template gone from the repo)"
+      continue
+    fi
+    HAVE=$(sha256sum "${TPL_DIR}/${TPL}" | cut -d' ' -f1)
+    [[ "$HAVE" == "$WANT" ]] || STALE="${STALE:+$STALE, }${TPL}"
+  done < "$RENDER_MANIFEST"
+else
+  MANIFEST_NOTE="; render manifest absent (run initial_setup.yml once to arm the stale-script arm)"
+fi
+
+if [[ -z "$ORPHANS" && -z "$DRIFTED" && -z "$STALE" ]]; then
   STATUS=up
-  MSG="no orphaned routing (IngressRoute/Middleware/Service/TLSOption), workload (Deployment/DaemonSet/CronJob) or policy (NetworkPolicy) objects found; deployed scripts match the repo"
+  # Names the arms it actually covered. The old wording — "deployed scripts match the repo" —
+  # was true of the three copy:-deployed files and silently claimed the other twenty.
+  MSG="no orphaned routing (IngressRoute/Middleware/Service/TLSOption), workload (Deployment/DaemonSet/CronJob) or policy (NetworkPolicy) objects found; deployed code and rendered setup scripts match the repo${MANIFEST_NOTE}"
 else
   STATUS=down
   MSG=""
   [[ -n "$ORPHANS" ]] && MSG="live but absent from staged manifests: ${ORPHANS}"
   [[ -n "$DRIFTED" ]] && MSG="${MSG:+$MSG; }deployed code differs from the repo (run initial_setup.yml): ${DRIFTED}"
+  [[ -n "$STALE" ]] && MSG="${MSG:+$MSG; }host is running an OLD render of (run initial_setup.yml): ${STALE}"
+  MSG="${MSG}${MANIFEST_NOTE}"
 fi
 
 # Unconditional, before the push — see longhorn-backup-health.sh.j2 for the full rationale.
