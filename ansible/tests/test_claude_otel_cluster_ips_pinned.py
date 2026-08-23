@@ -1,11 +1,13 @@
 """The claude-otel query Services must keep an explicitly pinned ClusterIP.
 
-Host-side tools quote these addresses as compile-time constants. `otelq` and
-`otel-sweep` (chezmoi, `home/dot_local/bin/`) try the node-local hostPort first
-and the ClusterIP second, which is what lets them keep working when a reboot
-reschedules a backend onto the other node — the 2026-08-23 failure, where all
-three Deployments moved to daniel-server and every loopback probe from
-daniel-box read "unreachable" while telemetry was entirely healthy.
+Host-side tools are to quote these addresses as compile-time constants. `otelq`
+and `otel-sweep` (chezmoi, `home/dot_local/bin/`) are to try the node-local
+hostPort first and the ClusterIP second, which is what lets them keep working
+when a reboot reschedules a backend onto the other node — the 2026-08-23
+failure, where all three Deployments moved to daniel-server and every loopback
+probe from daniel-box read "unreachable" while telemetry was entirely healthy.
+As of 2026-08-23 neither tool implements that fallback yet; the pin lands first
+because the fallback cannot be written against an address that may move.
 
 That fallback is only sound while the addresses cannot change under it. A
 Service with no `clusterIP:` draws whatever the allocator hands out the next
