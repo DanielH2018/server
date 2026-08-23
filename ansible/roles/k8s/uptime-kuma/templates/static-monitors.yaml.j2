@@ -182,7 +182,10 @@ stringData:
   # DECIDED: 360s, not 300 — the deadline must exceed the producer's PERIOD, and the period
   # is the cron plus the work. Both DDNS pods run the image's default UPDATE_CRON=@every 5m
   # and ping Kuma at the END of each cycle, after IP detection and the record check, so a
-  # beat lands at 300s + a few seconds. At interval 300 that raced the deadline every cycle
+  # beat lands at 300s + that cycle's work. The image caps the work at 5s (IP detection) +
+  # 30s (record updating), so the pathological beat is 335s and 360 leaves 25s of margin —
+  # not the 60s the round number suggests. Re-derive from those two timeouts, not from the
+  # observed few seconds, if the image's defaults ever move. At interval 300 it raced every cycle
   # and lost ~7 times a day: 47 + 40 flap episodes over the 7 days to 2026-08-23, each a
   # ~2-minute dip with nothing actually wrong. Fixed here rather than by setting
   # UPDATE_CRON=@every 4m in both deployments — that edits two files and makes the
