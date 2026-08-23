@@ -119,7 +119,7 @@
                 # different kind of thing. The cost is that block mode pairs a value to a label
                 # by ARRAY POSITION, so the indices below depend on the `or` operand order in
                 # homepage_k8s_headlamp_cluster_query. Accepted because a reordering shows up as
-                # "97 NODES READY" — wrong at a glance rather than plausibly wrong. Keep the
+                # "97 NODES" — wrong at a glance rather than plausibly wrong. Keep the
                 # query's operand order and this list in the same order; changing one alone is
                 # the only way to break this quietly. ENFORCED by
                 # ansible/tests/test_headlamp_widget_mapping_order.py, which fails on a
@@ -129,16 +129,16 @@
                 # "value": [<ts>, "<n>"]}, …]}} — hence `data.result.<n>.value.1` for each number.
                 mappings:
                     - field: data.result.0.value.1
-                      label: Nodes Ready
+                      label: Nodes
                       format: number
                     - field: data.result.1.value.1
-                      label: Pods Running
+                      label: Running
                       format: number
                     - field: data.result.2.value.1
-                      label: Pods Not Running
+                      label: Not Running
                       format: number
                     - field: data.result.3.value.1
-                      label: Deploys Degraded
+                      label: Degraded
                       format: number
         - Home Assistant:
             icon: home-assistant.png
