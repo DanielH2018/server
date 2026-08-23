@@ -66,11 +66,12 @@ pythonpath = [
 
 [tool.ruff]
 # DECIDED: Markdown stays out of ruff's scope. ruff 0.16 began formatting Python code
-# blocks inside .md, which pulled 147 prose files into a gate whose stated job is
-# first-party Python — and its output mangles the plan docs, exploding readable
-# two-element dict keys across four lines. Excluding *.md keeps the gate at exactly the
-# 231 Python files ruff 0.15 covered. `ansible/collections` is the vendored third-party
-# tree, never linted or formatted.
+# blocks inside .md, which pulled every prose file in the repo into a gate whose stated
+# job is first-party Python — and its output mangles the plan docs, exploding readable
+# two-element dict keys across four lines. Excluding *.md holds the gate to the same
+# Python files ruff 0.15 covered; `uv run ruff format --check` prints the count, so
+# don't restate one here. `ansible/collections` is the vendored third-party tree, never
+# linted or formatted.
 extend-exclude = ["ansible/collections", "*.md"]
 
 [tool.ruff.lint]
