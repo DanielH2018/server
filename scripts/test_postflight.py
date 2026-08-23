@@ -29,9 +29,9 @@ def stub_host(monkeypatch):
     # check_ha_token reaches HA via probe.ha_base(), which decrypts the domain from
     # SOPS — stub it so no test needs the age key (CI has none). Same for the cluster
     # prometheus route the Kuma checks query since the PG1 scrape port.
-    monkeypatch.setattr(postflight.probe, "ha_base", lambda: "https://ha.test")
+    monkeypatch.setattr(postflight.core, "ha_base", lambda: "https://ha.test")
     monkeypatch.setattr(
-        postflight.probe,
+        postflight.core,
         "k8s_endpoint",
         lambda h: (f"https://{h}.test", f"{h}.test:443:10.0.0.240"),
     )

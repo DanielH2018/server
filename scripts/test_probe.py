@@ -17,6 +17,8 @@ _spec = importlib.util.spec_from_file_location("probe", _MOD)
 probe = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(probe)
 
+import probe_core as core  # noqa: E402  (probe.py must load first, by path)
+
 # Fake resolver: maps container name -> a recognizable IP. A wrong container name
 # raises KeyError, so a misrouted subcommand fails loudly.
 IPS = {"prometheus": "10.0.0.1", "loki": "10.0.0.2", "scrutiny": "10.0.0.3"}
@@ -30,26 +32,26 @@ def fake_k8s_endpoint(hostname):
 
 
 def test_prom_query_url_encodes_promql():
-    url = probe.prom_query_url("https://prom.example", "up == 0")
+    url = core.prom_query_url("https://prom.example", "up == 0")
     assert url == "https://prom.example/api/v1/query?query=up+%3D%3D+0"
 
 
 def test_prom_targets_url():
     assert (
-        probe.prom_targets_url("https://prom.example")
+        core.prom_targets_url("https://prom.example")
         == "https://prom.example/api/v1/targets"
     )
 
 
 def test_loki_labels_url():
     assert (
-        probe.loki_labels_url("https://loki.example")
+        core.loki_labels_url("https://loki.example")
         == "https://loki.example/loki/api/v1/labels"
     )
 
 
 def test_loki_query_url_encodes_logql_and_limit():
-    url = probe.loki_query_url("https://loki.example", '{job="x"}', 50)
+    url = core.loki_query_url("https://loki.example", '{job="x"}', 50)
     assert (
         url
         == "https://loki.example/loki/api/v1/query_range?query=%7Bjob%3D%22x%22%7D&limit=50"
@@ -58,30 +60,30 @@ def test_loki_query_url_encodes_logql_and_limit():
 
 def test_scrutiny_url():
     assert (
-        probe.scrutiny_url("https://scrutiny.example")
+        core.scrutiny_url("https://scrutiny.example")
         == "https://scrutiny.example/api/summary"
     )
 
 
 def test_pi_url():
-    assert probe.pi_url("fs") == "http://daniel-pi.lan:61208/api/4/fs"
+    assert core.pi_url("fs") == "http://daniel-pi.lan:61208/api/4/fs"
 
 
 def test_pi_ip_reads_real_inventory():
     # hosts.ini is plaintext, not a secret — same class of dead-path bug as
     # test_verify_automations_path_exists below: a wrong path or regex would only ever
     # be caught by opening the real file.
-    ip = probe.pi_ip()
+    ip = core.pi_ip()
     assert re.match(r"^\d+\.\d+\.\d+\.\d+$", ip), ip
 
 
 def test_pi_resolve_pins_the_lan_ip(monkeypatch):
-    monkeypatch.setattr(probe, "pi_ip", lambda: "10.0.0.139")
-    assert probe.pi_resolve() == "daniel-pi.lan:61208:10.0.0.139"
+    monkeypatch.setattr(core, "pi_ip", lambda: "10.0.0.139")
+    assert core.pi_resolve() == "daniel-pi.lan:61208:10.0.0.139"
 
 
 def test_curl_argv():
-    assert probe.curl_argv("http://x") == [
+    assert core.curl_argv("http://x") == [
         "curl",
         "-sS",
         "--max-time",
@@ -117,7 +119,7 @@ def test_plan_metric_uses_cluster_prometheus_route():
     # The Docker prometheus (resolve_ip target) retired 2026-08-14 with the drain.
     stages = probe.plan(["metric", "up == 0"], fake_resolve, fake_k8s_endpoint)
     assert stages == [
-        probe.curl_argv(
+        core.curl_argv(
             "https://prometheus.example/api/v1/query?query=up+%3D%3D+0",
             resolve="prometheus.example:443:10.0.0.240",
         )
@@ -127,7 +129,7 @@ def test_plan_metric_uses_cluster_prometheus_route():
 def test_plan_targets_uses_cluster_prometheus_route():
     stages = probe.plan(["targets"], fake_resolve, fake_k8s_endpoint)
     assert stages == [
-        probe.curl_argv(
+        core.curl_argv(
             "https://prometheus.example/api/v1/targets",
             resolve="prometheus.example:443:10.0.0.240",
         )
@@ -137,7 +139,7 @@ def test_plan_targets_uses_cluster_prometheus_route():
 def test_plan_loki_labels_uses_cluster_endpoint_with_vip_pin():
     stages = probe.plan(["loki-labels"], fake_resolve, fake_k8s_endpoint)
     assert stages == [
-        probe.curl_argv(
+        core.curl_argv(
             "https://loki-homelab.example/loki/api/v1/labels",
             resolve="loki-homelab.example:443:10.0.0.240",
         )
@@ -149,8 +151,8 @@ def test_plan_loki_query_with_limit():
         ["loki-query", '{job="x"}', "--limit", "50"], fake_resolve, fake_k8s_endpoint
     )
     assert stages == [
-        probe.curl_argv(
-            probe.loki_query_url("https://loki-homelab.example", '{job="x"}', 50),
+        core.curl_argv(
+            core.loki_query_url("https://loki-homelab.example", '{job="x"}', 50),
             resolve="loki-homelab.example:443:10.0.0.240",
         )
     ]
@@ -159,7 +161,7 @@ def test_plan_loki_query_with_limit():
 def test_plan_scrutiny_uses_cluster_endpoint_with_vip_pin():
     stages = probe.plan(["scrutiny"], fake_resolve, fake_k8s_endpoint)
     assert stages == [
-        probe.curl_argv(
+        core.curl_argv(
             "https://scrutiny.example/api/summary",
             resolve="scrutiny.example:443:10.0.0.240",
         )
@@ -175,7 +177,7 @@ def test_plan_pi_does_not_resolve_docker():
         ["pi", "fs"], boom, pi_resolve=lambda: "daniel-pi.lan:61208:10.0.0.139"
     )
     assert stages == [
-        probe.curl_argv(
+        core.curl_argv(
             "http://daniel-pi.lan:61208/api/4/fs",
             resolve="daniel-pi.lan:61208:10.0.0.139",
         )
@@ -414,7 +416,7 @@ def test_arr_curl_config_is_not_bearer():
 
 def test_arr_request_never_puts_key_in_argv():
     # Regression guard mirroring the ha token: the key travels via stdin --config, never argv.
-    argv = probe.ha_curl_argv(probe.arr_url("h", "sonarr", "health"))
+    argv = core.ha_curl_argv(probe.arr_url("h", "sonarr", "health"))
     assert "--config" in argv
     assert not any("Api-Key" in a or "SECRET" in a for a in argv)
 
@@ -423,7 +425,7 @@ def test_resolve_arr_ip_uses_kubectl_not_docker(monkeypatch):
     # Regression guard for the dead command: sonarr/radarr/prowlarr have run as k8s
     # Deployments since 2026-08-07 and have no Docker container to `docker inspect` an IP
     # from — resolve_arr_ip must reach the app's ClusterIP via kubectl instead.
-    monkeypatch.setattr(probe, "k8s_namespace", lambda: "homelab")
+    monkeypatch.setattr(core, "k8s_namespace", lambda: "homelab")
 
     class FakeResult:
         returncode = 0
@@ -443,7 +445,7 @@ def test_resolve_arr_ip_uses_kubectl_not_docker(monkeypatch):
 
 
 def test_resolve_arr_ip_raises_on_kubectl_failure(monkeypatch):
-    monkeypatch.setattr(probe, "k8s_namespace", lambda: "homelab")
+    monkeypatch.setattr(core, "k8s_namespace", lambda: "homelab")
 
     class FakeResult:
         returncode = 1
@@ -459,7 +461,7 @@ def test_resolve_arr_ip_raises_on_kubectl_failure(monkeypatch):
 
 
 def test_resolve_arr_ip_raises_on_empty_cluster_ip(monkeypatch):
-    monkeypatch.setattr(probe, "k8s_namespace", lambda: "homelab")
+    monkeypatch.setattr(core, "k8s_namespace", lambda: "homelab")
 
     class FakeResult:
         returncode = 0

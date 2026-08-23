@@ -16,6 +16,7 @@ _spec = importlib.util.spec_from_file_location("probe", _MOD)
 probe = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(probe)
 
+
 # Fake resolver: maps container name -> a recognizable IP. A wrong container name
 # raises KeyError, so a misrouted subcommand fails loudly.
 IPS = {"prometheus": "10.0.0.1", "loki": "10.0.0.2", "scrutiny": "10.0.0.3"}

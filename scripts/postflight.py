@@ -19,6 +19,8 @@ import subprocess
 import sys
 
 import probe
+import probe_core as core
+import probe_ha as probe_ha
 
 TIMEOUT = 10
 
@@ -32,7 +34,7 @@ class Skip(Exception):
 def get(url, header=None, timeout=TIMEOUT, resolve=None):
     """GET url, returning (http_status, body). `header` is a full `curl --config`
     body (e.g. `header = "X-Api-Key: ..."`) fed via stdin so credentials stay out
-    of argv. `resolve` is a curl --resolve pin (probe.k8s_endpoint's second element)
+    of argv. `resolve` is a curl --resolve pin (core.k8s_endpoint's second element)
     for cluster routes the host shell can't resolve. status 0 means curl itself failed
     (connection refused, DNS, timeout)."""
     argv = [
@@ -67,7 +69,7 @@ def container_ip(name):
 
 def secret(name):
     try:
-        value = probe.sops_extract(name)
+        value = core.sops_extract(name)
     except SystemExit as exc:
         return "", str(exc)
     return value, ""
@@ -83,7 +85,7 @@ def _cluster_prom_query(promql):
     """Query the CLUSTER prometheus through its LAN query route (the uptime-kuma job
     moved there at the Phase D dashboard triage, PG1). VIP-pinned — this host's
     resolver bypasses the LAN DNS, so the name alone does not reach the cluster edge."""
-    base, pin = probe.k8s_endpoint("prometheus")
+    base, pin = core.k8s_endpoint("prometheus")
     from urllib.parse import urlencode
 
     url = f"{base}/api/v1/query?" + urlencode({"query": promql})
@@ -182,12 +184,14 @@ HA_TOKENS = [
 
 
 def check_ha_token(name):
-    # Since slice-5 B3 HA runs in the cluster — probe.ha_base() is the bridge URL, the same
+    # Since slice-5 B3 HA runs in the cluster — core.ha_base() is the bridge URL, the same
     # endpoint before and after the cutover (no container to inspect).
     token, err = secret(name)
     if not token:
         return FAIL, err
-    status, _ = get(probe.ha_get_url(probe.ha_base(), ""), probe.ha_curl_config(token))
+    status, _ = get(
+        probe_ha.ha_get_url(core.ha_base(), ""), probe_ha.ha_curl_config(token)
+    )
     if status == 200:
         return OK, "token accepted"
     return FAIL, f"HTTP {status} — re-mint under Profile → Security"
