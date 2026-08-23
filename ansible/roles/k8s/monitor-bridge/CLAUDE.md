@@ -306,9 +306,18 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     source IP stays locked out. This arm is the visibility half. Folded into this monitor rather
     than given its own for the same reason as the extended-resource arm: a new Kuma monitor needs a
     new push token in SOPS, and a ban is an HA fault. A ban wins the message and keeps the
-    heartbeat's text after it. It also **skips `down_streak`** — a ban persists in
-    `/config/ip_bans.yaml` until a human deletes the line, so there is no transient to ride out,
-    and re-reporting it each cycle is correct rather than noise.
+    heartbeat's text after it. It also **skips `down_streak`** — that exists to ride out a
+    transient, and a ban either happened in the window or did not, so a second cycle's confirmation
+    adds nothing.
+    **It watches the ban EVENT, not the ban STATE.** `Banned IP` is logged once, at ban time, so
+    the arm pages for `HA_BAN_WINDOW` and then SELF-CLEARS while the entry is still in
+    `/config/ip_bans.yaml`. A ban older than the window — or one reloaded from that file by an HA
+    restart, which logs nothing — is invisible. **A green `ha_heartbeat` does not mean "no IP is
+    banned"**; it means "no ban was issued in the last `HA_BAN_WINDOW`". That is the only signal
+    available: HA does not log its ongoing 403s to a banned peer, and this pod cannot read HA's PVC.
+    The durable artifact is the **Discord notification** Kuma fires on the down transition, not the
+    monitor's colour — when one fires, read `/config/ip_bans.yaml` by hand rather than waiting for
+    the monitor to clear.
     **`ha_heartbeat` is deliberately NOT in `LOKI_DEPENDENT`**: membership there suppresses the
     WHOLE check during a Loki outage, which would blind the real heartbeat. The ban arm instead
     fails open on a Loki error and keeps the heartbeat's own verdict. Pure `ha_ban_verdict()` is

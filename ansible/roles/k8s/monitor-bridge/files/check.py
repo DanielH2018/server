@@ -569,8 +569,20 @@ HA_CONSECUTIVE = int(_env("HA_CONSECUTIVE", "2"))
 # it, and the probes then arriving from that IP got 403 and crash-looped the pod. The probes no
 # longer arrive from a bannable address (they exec curl to 127.0.0.1), which fixes the crash loop
 # but makes a ban SILENT: HA keeps serving, while whatever shares that source IP stays locked out.
-# This arm is the visibility half. The window is deliberately wider than INTERVAL — bans persist
-# in /config/ip_bans.yaml until a human deletes the line, so re-reporting one is correct, not noise.
+# This arm is the visibility half.
+#
+# IT WATCHES THE BAN EVENT, NOT THE BAN STATE, and the difference matters when you read it at
+# 03:00. `Banned IP` is logged once, at ban time. The arm therefore pages for HA_BAN_WINDOW after a
+# ban is issued and then SELF-CLEARS, while the entry is still sitting in /config/ip_bans.yaml. A
+# ban that predates the window — or one reloaded from that file by an HA restart, which logs
+# nothing — is invisible here. So a green ha_heartbeat does NOT mean "no IP is banned"; it means
+# "no ban was issued in the last HA_BAN_WINDOW".
+#
+# That is the only signal available: HA does not log its ongoing 403s to a banned peer, and this
+# pod cannot read HA's PVC. The DURABLE artifact is the Discord notification Kuma fires on the
+# down transition (push monitors run max_retries=0, so the push flips state and notifies
+# immediately) — not the monitor's colour, which is transient by construction. When one fires,
+# check /config/ip_bans.yaml by hand; do not wait for the monitor to go green.
 HA_BAN_WINDOW = _env("HA_BAN_WINDOW", "1h")
 # `container=`, NOT `app=`. Promtail's k8s stream carries container/pod/job/machine/namespace/
 # service_name/stream — there is no `app` label, so `app="home-assistant"` matched no stream and
@@ -1936,8 +1948,11 @@ def with_ha_ban(ok, msg):
     # DECIDED: fails OPEN on a Loki error instead of adding ha_heartbeat to LOKI_DEPENDENT.
     # Membership there suppresses the WHOLE check during a Loki outage, which would blind the
     # real heartbeat — trading a live wedge-detector for a secondary arm is the wrong way round.
-    # The ban arm also skips down_streak: a ban persists in a file until a human clears it, so
-    # there is no transient to ride out.
+    # The ban arm also skips down_streak: down_streak exists to ride out a transient, and a ban is
+    # a discrete event that either happened in the window or did not — a second cycle's confirmation
+    # would add nothing. Note this arm reports the ban EVENT, not the ban STATE: it self-clears
+    # HA_BAN_WINDOW after the ban is issued even though the entry survives in
+    # /config/ip_bans.yaml. See the HA_BAN_WINDOW comment for why that is the only signal available.
     """
     try:
         banned = loki_count(HA_BAN_SELECTOR, HA_BAN_WINDOW)
