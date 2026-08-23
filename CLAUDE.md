@@ -247,6 +247,15 @@ Per-verb tiers, the RBAC evidence and the rule-matching measurements: `docs/clau
   un-escaped `$` in a `command`/`entrypoint`/`healthcheck.test` (Compose interpolates a lone
   `$VAR`/`$(…)` at parse time — shell `$` must be doubled `$$`; legit `${VAR-…}` in
   `environment:` is not flagged).
+  **What an edit costs, by file type.** Six hooks match `Edit|Write`, and each is a ~7 ms
+  no-op except on the paths it owns. Measured directly 2026-08-23, one payload per hook:
+  `ansible-lint` takes **1,642 ms** on `roles/*/tasks/main.yml` and 7 ms on a `.j2` manifest,
+  a Compose template or a Markdown file; `validate-compose` takes **177 ms** on
+  `docker-compose.yml.j2` and 7 ms on everything else. Over the same 24h the OTEL telemetry
+  put `PostToolUse:Edit` at a 559 ms average and `PostToolUse:Write` at 234 ms — the two
+  populations differ in which file types they touch, not in which hooks run. So editing a
+  tasks file is the slow case by an order of magnitude, and that is the price of the coverage
+  rather than overhead to trim. Recorded so a slow-feeling edit isn't mistaken for a stuck hook.
 - **permission auditing** — no longer lives here. A `log-permission` hook used to count tool calls
   and prompts into `.claude/logs/permissions.json` for `audit-permissions.py` to read; Claude Code's
   own OTEL `tool_decision` events carry that now, and name the deciding authority (`config` rule,

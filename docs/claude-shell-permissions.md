@@ -11,6 +11,10 @@ read-only commands to fit it. Anything that writes or executes still prompts —
 
 **Auto-approves (no prompt):**
 - Single read-only commands and pipelines: `grep … | sort | head`
+- `rg` on the same terms as `grep` — the classifier answers `allow · read-only: rg`, verified
+  2026-08-23 by piping both through `auto-approve-readonly.sh`. Worth knowing because usage is
+  lopsided: 9 `rg` calls against 10,092 `grep` over the 7 days to 2026-08-23. Neither is better
+  for permissions; pick on merit, not on fear of a prompt.
 - Read-only stages sequenced with `;`, `&&`, `||`, or newlines: `cd dir && grep … *.j2`
 - Write-free redirects: `… 2>/dev/null`, `>/dev/null 2>&1`
 - Read-only `git`/`docker`/`find` (no `-exec`/`-delete`) and read-only `awk`/`sed`
