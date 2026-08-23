@@ -16,6 +16,14 @@ automations do.
     unban). Bans the REAL client IP because the CF→Traefik→HA chain forwards X-Forwarded-For
     (Traefik `forwardedHeaders.trustedIPs=cloudflare_ips` + HA `use_x_forwarded_for`). Only
     failed PASSWORD logins count — tokens/app/webhooks unaffected.
+    **The ban applies to every request, not just logins, and that reaches infrastructure.** HA's
+    ban middleware keys on the peer address, so an unauthenticated burst from inside the cluster
+    bans an INTERNAL ip. On 2026-08-23 five ad-hoc `curl` calls from daniel-box banned
+    `10.42.0.1`, the node's pod-network gateway — which is also where kubelet probes come from —
+    and HA then 403'd its own probes into a crash loop. The probes are immune now (they exec curl
+    to `127.0.0.1`; see `deployment.yaml.j2`), and monitor-bridge's HA monitor has an `ip_ban` arm
+    so a ban is visible rather than silent. Note the counter has no decay: those five failures
+    accumulated over 21 minutes.
   - **TOTP/MFA: enrolled (2026-06-18).** This route is internet-facing (Cloudflare-proxied
     `home-assistant.<domain>`), so MFA is the compensating control for Authelia-off; `ip_ban` is
     defense-in-depth on top. If MFA is ever reset/lost, re-enrol: HA → Profile → Multi-factor
