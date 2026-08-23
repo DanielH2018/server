@@ -224,6 +224,19 @@ refuses outright — and then say which command and why.
    and skips the `hold_sha` machinery. Read the wrapper's `last_run` / `hold_sha` / `behind_since`
    lines: a non-empty `hold_sha` means a previous SHA is held, and you diagnose that before
    deploying anything.
+
+   **The tick evaluates the whole `local..origin` range, not just your merge — so another
+   session's change can park your pull.** A **broad** change anywhere in that range (a
+   `_BROAD_SETUP_PREFIXES` or `_BROAD_DEPLOY_PREFIXES` path — `ansible/roles/setup/`,
+   `ansible/inventory/`, `ansible/templates/`, `ansible.cfg`, the bring-up playbooks) makes the
+   deployer defer-and-alert and **return without fast-forwarding at all**
+   (`gitops_deploy.py:933`). Your docs-only commit then never lands locally either, and the
+   symptom is a tick that exits 0, logs nothing, and writes `behind_since`. Diagnose it by
+   diffing the range — `git diff --name-only <local-HEAD>..origin/master` — and read the
+   Discord alert, which names the playbook to run. Clearing it means running that playbook and
+   then `git merge --ff-only origin/master` in the primary checkout. **If the broad change is
+   another session's, that is theirs to clear, not yours**: say so and stop, rather than
+   applying a setup-plane change you did not write.
 4. **Deploy what the tick deferred, from the primary checkout.** `deploy.sh` resolves its
    checkout with `git rev-parse --show-toplevel`, so it renders from the **working directory**,
    not from the path you invoked it by. After a squash merge the worktree branch is behind
@@ -263,6 +276,8 @@ Say which of these applies, then stop:
 
 - Master CI is red or still pending.
 - The host holds a non-empty `hold_sha` — a previous SHA already failed its health gate.
+- A broad change from **another session** sits in the `local..origin` range and parks the tick's
+  fast-forward. Clearing it means applying their setup- or shared-plane change; name it and stop.
 - `deploy.sh` exits 3: the change is broad (shared templates, inventory, the setup plane) and
   maps to no single service.
 - The change is docs- or `tasks/`-only — the deployer skips those deliberately, and so do you.
