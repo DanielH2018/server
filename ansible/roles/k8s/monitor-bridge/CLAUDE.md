@@ -361,7 +361,15 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     `kube_daemonset_status_number_unavailable`, with its own `K8S_MIN_DAEMONSETS` floor (9) and
     the same fail-closed-on-absent-series logic — a Deployment-shaped census cannot see promtail,
     node-exporter or the otel collector, which run one pod per node and are exactly the workloads
-    a node problem takes out first. A third arm reports crash-looping restarts.
+    a node problem takes out first. A third arm reports crash-looping restarts —
+    `increase(...[K8S_RESTART_WINDOW]) > K8S_RESTART_MAX` (1h / 3), **and** a restart inside
+    `K8S_RESTART_RECENT_WINDOW` (30m). The recency clause is what lets a RECOVERED pod leave the
+    arm: `increase` is a pure lookback, so without it the restarts that already happened hold the
+    monitor DOWN for the rest of the hour — zigbee2mqtt recovered at 09:47 on 2026-08-23 and the
+    arm still read `restarts in window: 9`. The 30m floor is the worst observed inter-restart
+    SPACING, not the 5-min backoff cap: the homepage incident above spaced 31 restarts ~15-19 min
+    apart, and a window inside that spacing goes up in the gaps and flaps, which at
+    `max_retries: 0` is a notification per transition.
     **A fourth arm watches extended resources** (added 2026-08-20, PR #281):
     every name in `K8S_EXTENDED_RESOURCES` (comma-separated, default `devic.es/dri`) must still be
     advertised at non-zero quantity by at least one node, read from

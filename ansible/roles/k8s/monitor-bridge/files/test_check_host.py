@@ -924,3 +924,50 @@ def test_a_breaching_present_host_outranks_the_coverage_complaint(monkeypatch):
     ok, msg = check.check_mem()
     assert not ok
     assert "99" in msg
+
+
+def test_crash_loop_arm_gates_on_a_recent_restart_not_just_the_hour_window(monkeypatch):
+    """A recovered pod must drop out of the arm instead of holding the tile red for an hour.
+
+    `increase(...[1h]) > 3` is a pure lookback, so zigbee2mqtt kept `k3s Workload Health` DOWN
+    on `restarts in window: 9` for ~30 min after it recovered on 2026-08-23. The recency clause
+    is the fix and it is invisible to k8s_workloads_verdict, which receives the offenders as an
+    already-filtered list — the query text is the only place it can be enforced. Verified live
+    the same day: with a 2m recency window the recovered pod dropped out while the ungated
+    query still matched it.
+    """
+    queries = []
+
+    def record(promql, *a, **k):
+        queries.append(promql)
+        return []
+
+    monkeypatch.setattr(check, "CLUSTER_PROM_URL", "http://cluster-prom:9090")
+    monkeypatch.setattr(check, "prom_vector", record)
+    monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: 66.0)
+    check.check_k8s_workloads()
+
+    restart_queries = [q for q in queries if "status_restarts_total" in q]
+    assert len(restart_queries) == 1
+    q = restart_queries[0]
+    # Both windows present, and the recency one joined with `and` so it filters rather than
+    # replaces — an `or` here would widen the arm instead of narrowing it.
+    assert "[%s]" % check.K8S_RESTART_WINDOW in q
+    assert "[%s]) > 0" % check.K8S_RESTART_RECENT_WINDOW in q
+    assert " and " in q
+    assert " or " not in q
+
+
+def test_the_recency_window_is_wider_than_the_worst_observed_restart_spacing():
+    """Below the spacing the arm flaps, and `k3s Workload Health` is max_retries: 0.
+
+    The 2026-08-13 homepage incident spread 31 restarts over a night, ~15-19 min apart. A
+    recency window inside that spacing goes UP in the gaps, and every flap is an immediate
+    DOWN plus a notification (the crowdsec-appsec failure: 24 transitions in 3h). Pin the
+    floor so a later "make it clear faster" edit cannot cross it silently.
+    """
+    assert check.duration_seconds(check.K8S_RESTART_RECENT_WINDOW) >= 20 * 60
+    # And it must still be shorter than the evidence window, or it gates nothing.
+    assert check.duration_seconds(
+        check.K8S_RESTART_RECENT_WINDOW
+    ) < check.duration_seconds(check.K8S_RESTART_WINDOW)

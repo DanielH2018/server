@@ -418,6 +418,22 @@ LONGHORN_CONSECUTIVE = int(_env("LONGHORN_CONSECUTIVE", "3"))
 # 3-in-1h ≈ steady-state backoff cadence; a legitimate deploy rollout restarts once.
 K8S_RESTART_WINDOW = _env("K8S_RESTART_WINDOW", "1h")
 K8S_RESTART_MAX = int(_env("K8S_RESTART_MAX", "3"))
+# Recency gate on the same arm: `increase(...[1h])` is a pure lookback, so a pod that
+# crash-looped and then RECOVERED keeps the monitor DOWN until the restarts age out of the
+# 1h window — up to an hour of red on a healthy pod (2026-08-23 zigbee2mqtt: recovered
+# 09:47, arm still firing on `restarts in window: 9`). Requiring a restart inside the last
+# K8S_RESTART_RECENT_WINDOW as well clears the tile ~30m after the pod steadies while
+# leaving the 1h evidence base untouched — an ongoing loop always has a recent restart.
+#
+# DECIDED: 30m, and the floor is the worst inter-restart SPACING, not the CrashLoopBackOff
+# 5-min backoff cap. The 2026-08-13 homepage incident above spread 31 restarts over a
+# night, ~15-19 min apart; a window inside that spacing goes UP in the gaps and flaps —
+# and `k3s Workload Health` is `max_retries: 0` (uptime-kuma static-monitors.yaml.j2:293),
+# so every flap is an immediate DOWN plus a notification. That is the crowdsec-appsec
+# failure recorded at static-monitors.yaml.j2:283-289 (24 transitions in 3h). 30m clears
+# two spacings and six bridge cycles. The spacing could not be re-measured — cluster
+# Prometheus retains 7d and the incident is older — so this is the conservative floor.
+K8S_RESTART_RECENT_WINDOW = _env("K8S_RESTART_RECENT_WINDOW", "30m")
 
 # Scrutiny SMART freshness + health: the collector cron runs daily (00:00) and has no usable
 # container healthcheck (cron is PID 1) — a silently-dead collector only shows as aging
@@ -2739,9 +2755,14 @@ def check_k8s_workloads():
         base=CLUSTER_PROM_URL,
         source="cluster prometheus",
     )
+    # The second clause is the recency gate (K8S_RESTART_RECENT_WINDOW): it keeps a recovered
+    # pod from holding the tile red for the rest of the 1h evidence window. `and` is a vector
+    # match on the full label set, so it filters the first clause's series rather than
+    # replacing them — the offender labels reaching the verdict are unchanged.
     restart_offenders = prom_vector(
         "increase(kube_pod_container_status_restarts_total[%s]) > %d"
-        % (K8S_RESTART_WINDOW, K8S_RESTART_MAX),
+        " and increase(kube_pod_container_status_restarts_total[%s]) > 0"
+        % (K8S_RESTART_WINDOW, K8S_RESTART_MAX, K8S_RESTART_RECENT_WINDOW),
         base=CLUSTER_PROM_URL,
         source="cluster prometheus",
     )
