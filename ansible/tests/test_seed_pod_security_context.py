@@ -119,3 +119,30 @@ def test_seed_pod_runs_as_root_deliberately_and_says_why():
     assert "numeric-owner" in raw, (
         "the reason runAsUser: 0 is required must stay written at the line that requires it"
     )
+
+
+def test_seed_pod_does_not_add_capabilities():
+    """The absence of `capabilities.add` — which is NOT the barred cap-set question above.
+
+    This file's docstring rules out proposing `drop: ALL`, because the sufficient set under
+    busybox `tar -p --numeric-owner` is unsettled and no gate here can validate a guess. Asserting
+    that nothing is *added* needs neither answer: it does not change the running cap set, and a
+    forced re-seed cannot disprove it.
+
+    The gap it closes is real. None of the four tests above reference `capabilities` or
+    `allowPrivilegeEscalation`, and `test_container_security_context.py:57-62` hands ownership of
+    this pod to this file — so an edit adding `capabilities: {add: [SYS_ADMIN]}` passed every
+    guard in the repo. That is the whole distance between "keeps the runtime default set" and
+    "privileged in all but name", on a pod that mounts arbitrary Longhorn PVCs (2026-08-23b
+    review M16).
+    """
+    sc = _container(_seed_pod()).get("securityContext") or {}
+    added = (sc.get("capabilities") or {}).get("add") or []
+    assert not added, (
+        f"seed pod adds capabilities {added}. The default set is deliberate and unexamined; "
+        f"adding to it is a privilege change no other guard in this repo would catch."
+    )
+    assert sc.get("allowPrivilegeEscalation") is not True, (
+        "seed pod must not set allowPrivilegeEscalation: true — with runAsUser: 0 and the "
+        "default cap set, that is privileged in all but name."
+    )
