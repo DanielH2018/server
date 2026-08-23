@@ -628,6 +628,14 @@ def test_ha_heartbeat_unreachable_api_rides_grace(monkeypatch):
 # HA's ban middleware keys on the peer address, so a burst of bad /api/ calls can ban the node's
 # pod-network gateway. The probes now exec curl to 127.0.0.1 and are immune; this arm is what
 # keeps the ban itself from being silent.
+# Two limits, so this guard is not over-trusted:
+#   1. It reads each constant's IN-CODE DEFAULT. `env-secret.yaml.j2` overrides LOKI_STREAM at
+#      deploy time, and this role's CLAUDE.md already flags in-code-default != deployed-value as a
+#      live trap for exactly that constant. Both happen to select on `job`, so it passes either
+#      way — but a deployed override is NOT what is being checked here.
+#   2. The vocabulary below came from one k8s pod stream. LOKI_STREAM selects file-tail streams,
+#      which may legitimately carry labels this set does not list. Widen the set against a live
+#      stream if a genuine selector ever fails — do not delete the guard.
 # Promtail's k8s stream vocabulary, read off a live Loki stream on 2026-08-23. `app` is NOT in
 # it — HA_BAN_SELECTOR shipped with app="home-assistant", matched no stream, and reported "no
 # ip_ban events" forever. A fail-open arm cannot tell "nothing to report" from "wrong question",
