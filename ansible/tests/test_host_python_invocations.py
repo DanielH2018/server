@@ -38,7 +38,13 @@ def _candidate_files():
         for path in root.rglob("*"):
             if path.suffix not in _SUFFIXES or not path.is_file():
                 continue
-            if "archive" in path.parts or _CONTAINER_CONTEXT.search(str(path)):
+            # Match the repo-relative path, never the absolute one: a checkout directory
+            # carrying one of these words (a worktree named for the healthchecks service, say)
+            # would otherwise exclude every file and leave BOTH assertions below vacuously
+            # true. DECIDED: relative_to(_REPO), not a suffix match -- the container contexts
+            # this skips are named by their in-repo path.
+            rel = path.relative_to(_REPO)
+            if "archive" in rel.parts or _CONTAINER_CONTEXT.search(str(rel)):
                 continue
             yield path
 
