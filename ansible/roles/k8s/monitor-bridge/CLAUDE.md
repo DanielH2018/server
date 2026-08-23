@@ -296,6 +296,23 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     are the deploy, not a wedge; a genuinely wedged/auth-broken HA stays bad across cycles and still
     pages. Empty `HA_URL`/`HA_TOKEN` = disabled (stays up). Pure `ha_heartbeat_fresh()` + the
     streak wrapper are unit-tested.
+    **A second arm watches HA's own ip_ban** (added 2026-08-23): a `count_over_time` LogQL query
+    for `Banned IP` lines over `HA_BAN_WINDOW` (1h), `down` on any hit. HA's ban middleware runs on
+    every request and keys on the peer address, so an unauthenticated burst from inside the cluster
+    bans an INFRASTRUCTURE ip — on 2026-08-23 five ad-hoc `curl` calls banned `10.42.0.1`, the
+    node's pod-network gateway, and HA 403'd the kubelet probes arriving from it into a crash loop
+    that paged k3s Workload Health. The probes now exec curl to `127.0.0.1` and cannot be banned,
+    which fixes the crash loop and makes a ban SILENT — HA keeps serving while whatever shares that
+    source IP stays locked out. This arm is the visibility half. Folded into this monitor rather
+    than given its own for the same reason as the extended-resource arm: a new Kuma monitor needs a
+    new push token in SOPS, and a ban is an HA fault. A ban wins the message and keeps the
+    heartbeat's text after it. It also **skips `down_streak`** — a ban persists in
+    `/config/ip_bans.yaml` until a human deletes the line, so there is no transient to ride out,
+    and re-reporting it each cycle is correct rather than noise.
+    **`ha_heartbeat` is deliberately NOT in `LOKI_DEPENDENT`**: membership there suppresses the
+    WHOLE check during a Loki outage, which would blind the real heartbeat. The ban arm instead
+    fails open on a Loki error and keeps the heartbeat's own verdict. Pure `ha_ban_verdict()` is
+    unit-tested.
     Spec: `docs/superpowers/specs/2026-06-19-ha-automation-heartbeat-watchdog-design.md`.)
   - **Renovate Notifier — Alive** — RETIRED from this container at the host flips (2026-08-14).
     The notifier pushes its own Kuma monitor from an `ExecStartPost` now, so there is no

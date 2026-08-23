@@ -116,19 +116,30 @@ spec:
               mountPath: /config/.cache
           # HA is a slow first-booter (the LSIO permissions pass, then core start before :8123
           # binds) — the compose healthcheck carries start_period 120s for the same reason.
+          # DECIDED: exec-curl to 127.0.0.1, not httpGet — HA's ip_ban middleware runs on EVERY
+          # request, and it keys on the peer address. A kubelet httpGet arrives from the node's
+          # pod-network gateway (10.42.0.1), so once anything gets that IP banned HA answers 403
+          # and kubelet kills the container it just banned — a self-inflicted crash loop (2026-08-23:
+          # 3 restarts, paging k3s Workload Health). From inside the container the peer is
+          # 127.0.0.1, which no ban can reach. Readiness moves too: fixing liveness alone just
+          # relocates the outage to a yanked Service endpoint.
+          # curl over tcpSocket: tcpSocket also escapes the ban but stops proving HTTP works, so a
+          # wedged HA still holding the listener would pass. curl is proven present in this image —
+          # it was the Compose healthcheck (`curl --fail -s http://localhost:8123/`) pre-migration.
+          # timeoutSeconds: exec probes default to 1s; curl -m 4 keeps curl's deadline inside it.
           readinessProbe:
-            httpGet:
-              path: /
-              port: {{ container_item.port }}
+            exec:
+              command: ["sh", "-c", "curl -fsm 4 http://127.0.0.1:{{ container_item.port }}/ >/dev/null"]
             initialDelaySeconds: 30
             periodSeconds: 10
+            timeoutSeconds: 5
             failureThreshold: 12
           livenessProbe:
-            httpGet:
-              path: /
-              port: {{ container_item.port }}
+            exec:
+              command: ["sh", "-c", "curl -fsm 4 http://127.0.0.1:{{ container_item.port }}/ >/dev/null"]
             initialDelaySeconds: 180
             periodSeconds: 30
+            timeoutSeconds: 5
           resources:
             limits:
               cpu: "{{ home_assistant_k8s_cpu_limit }}"
