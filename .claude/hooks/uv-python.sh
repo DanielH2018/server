@@ -36,22 +36,68 @@ cmd=$(printf '%s' "$input" | jq -r '
 # would otherwise slip past every python-named pattern here.
 PROGS='(python3?|pytest|py\.test|ansible-playbook|[^[:space:]]*\.py)'
 
-# Two rewrite scopes, and the narrow one exists purely to stay out of quoted text.
-#
-# A segment-start rewrite has to split on `;`, `&&`, `||` and `|`, and those characters
-# also occur *inside* quoted arguments — `python3 -c 'a; python3 b'` would take a
-# `uv run` spliced into the middle of the -c program. So when the command contains a
-# quote, a backtick or a `$`, only position 0 is rewritten: the leading program of a
-# command is unambiguous no matter what follows it.
-if [[ "$cmd" == *[\'\"\`\$]* ]]; then
-    updated=$(printf '%s' "$cmd" | sed -E "1s@^([[:space:]]*)$PROGS([[:space:]]|\$)@\1uv run \2\3@")
-else
-    updated=$(printf '%s' "$cmd" | sed -E "s@(^|[;&|])([[:space:]]*)$PROGS([[:space:]]|\$)@\1\2uv run \3\4@g")
-fi
+# Fast reject before any scanning. Measured on this repo's traffic the overwhelming
+# majority of Bash calls name none of these, and they should pay a single regex rather
+# than the character walk below.
+[[ "$cmd" =~ (python|pytest|py\.test|ansible-playbook|\.py) ]] || exit 0
 
-# Idempotent by construction, not by a check: `uv run pytest` has `uv` as its segment's
-# first word, so no pattern here matches it. An already-wrapped command falls through as
-# unchanged and this exits silently.
+# Find the offsets a command starts at: position 0, and every position just past a `;`,
+# `&`, `|` or newline that the shell would read as a separator.
+#
+# The subtlety this walk exists for is that those same characters occur inside quoted
+# arguments, where they separate nothing — `python3 -c 'a; python3 b'` must not take a
+# `uv run` spliced into the middle of its -c program. A regex cannot tell the two apart,
+# so quote state is tracked explicitly. Separators inside `$(...)` are left as
+# separators on purpose: `echo $(cd x; pytest)` really does run pytest as a command
+# there, so rewriting it is correct rather than a splice.
+declare -a starts=(0)
+state=none
+i=0
+n=${#cmd}
+while ((i < n)); do
+    c=${cmd:i:1}
+    case "$state" in
+        none)
+            case "$c" in
+                "'") state=single ;;
+                '"') state=double ;;
+                "\\") ((i++)) ;;
+                ';' | '&' | '|' | $'\n') starts+=("$((i + 1))") ;;
+            esac
+            ;;
+        single)
+            # Single quotes take no escapes; only another quote ends them.
+            [[ "$c" == "'" ]] && state=none
+            ;;
+        double)
+            if [[ "$c" == "\\" ]]; then
+                ((i++))
+            elif [[ "$c" == '"' ]]; then
+                state=none
+            fi
+            ;;
+    esac
+    ((i++))
+done
+
+# An unterminated quote means the walk lost track of what is quoted, so every offset
+# after it is a guess. Leave the command alone rather than splice on a guess.
+[[ "$state" == none ]] || exit 0
+
+# Insert from the last offset backwards so the earlier ones stay valid.
+updated=$cmd
+for ((k = ${#starts[@]} - 1; k >= 0; k--)); do
+    p=${starts[k]}
+    rest=${updated:p}
+    # Idempotent by construction, not by a check: an already-wrapped segment begins with
+    # `uv`, which no alternative in $PROGS matches, so it falls through untouched.
+    # The terminator class is wider than whitespace so a program can end at the thing that
+    # ends its segment — `$(cd x; pytest)` ends at `)`, not at a space.
+    [[ "$rest" =~ ^([[:space:]]*)$PROGS([[:space:];\&|\)]|$) ]] || continue
+    ins=$((p + ${#BASH_REMATCH[1]}))
+    updated="${updated:0:ins}uv run ${updated:ins}"
+done
+
 [[ "$updated" == "$cmd" ]] && exit 0
 
 jq -n --arg c "$updated" '{

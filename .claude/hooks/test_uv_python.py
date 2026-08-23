@@ -15,10 +15,12 @@ Two properties matter more than any single vector:
 * **Idempotence.** `uv run pytest` must not become `uv run uv run pytest`. The hook gets
   this from its pattern (a wrapped segment's first word is `uv`), not from a check, so a
   pattern edit can lose it without any other test noticing.
-* **Quoted text is never spliced.** Segment splitting on `;`/`&&`/`|` is only safe when
-  those characters cannot also be inside an argument, so a command containing a quote,
-  a backtick or a `$` gets the leading-program-only rewrite. Losing that turns
-  `python3 -c 'a; python3 b'` into a corrupted program.
+* **Quoted text is never spliced.** `;`/`&&`/`|` separate commands outside quotes and
+  separate nothing inside them, so the hook tracks quote state rather than pattern-matching
+  the characters. Losing that turns `python3 -c 'a; python3 b'` into a corrupted program —
+  while a guard crude enough to bail on any quote at all would miss
+  `cd "$HOME/server" && pytest`, the most common multi-segment invocation in a worktree.
+  Both directions are covered below.
 """
 
 import json
@@ -68,6 +70,12 @@ def test_hook_exits_silently_without_jq():
 def test_hook_documents_why_it_rewrites_rather_than_pins_a_path():
     """A PATH pin at the primary checkout's .venv would cross worktrees silently."""
     assert "uv run` resolves the venv from the *caller's* working" in HOOK_TEXT
+
+
+def test_hook_bails_on_an_unterminated_quote():
+    """Losing quote state makes every later offset a guess; splicing on a guess is worse
+    than not rewriting."""
+    assert '[[ "$state" == none ]] || exit 0' in HOOK_TEXT
 
 
 # --- the programs that must be routed -----------------------------------------------------
@@ -153,9 +161,26 @@ def test_leading_program_is_still_rewritten_when_arguments_are_quoted():
 
 
 @_runnable
-def test_a_quoted_command_leaves_later_segments_alone():
-    """Deliberate under-reach: with a quote present the hook only touches position 0, so
-    the second `pytest` stays bare. Documented here so the limit is a decision, not a
-    surprise — widening it needs a real parser, not a wider regex."""
-    out = rewrite("""echo 'hi' && pytest""")
-    assert out is None
+def test_a_quoted_cd_prefix_still_reaches_the_test_command():
+    """The shape a worktree session actually types. A guard that bailed on the mere
+    presence of a quote would leave this `pytest` bare — the exact failure the hook
+    exists to prevent, and silently."""
+    assert (
+        rewrite('cd "$HOME/server" && pytest') == 'cd "$HOME/server" && uv run pytest'
+    )
+
+
+@_runnable
+def test_a_separator_inside_a_quoted_argument_is_not_a_segment_start():
+    assert rewrite("""echo 'a && pytest' """) is None
+
+
+@_runnable
+def test_a_command_substitution_separator_is_a_real_separator():
+    """`;` inside `$(...)` genuinely separates commands, so rewriting there is correct."""
+    assert rewrite("echo $(cd x; pytest)") == "echo $(cd x; uv run pytest)"
+
+
+@_runnable
+def test_an_unterminated_quote_leaves_the_command_alone():
+    assert rewrite("""python3 -c 'unterminated && pytest""") is None
