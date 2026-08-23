@@ -1,38 +1,19 @@
 ---
 server_ip: 10.0.0.215
-# Phase F (2026-08-13): daniel-server joined as a k3s agent — its node-to-node traffic
-# (6443/8472/10250, k3s_join_server_ports) is UFW-allowed here via the k3s role's
-# join-firewall tag.
+# daniel-server's node-to-node traffic (6443/8472/10250, k3s_join_server_ports) is
+# UFW-allowed here via the k3s role's join-firewall tag.
 k3s_agent_node_ips:
   - 10.0.0.161
-# Cloud-init (subiquity) image, like the Pi: sshd's real config is the drop-in, not the
-# bare /etc/ssh/sshd_config. Verified on the host — /etc/ssh/sshd_config.d/ contains only
-# 50-cloud-init.conf. The SSH-hardening tasks have no `create:` fallback, so a wrong value
-# here fails initial_setup.yml outright.
+# Cloud-init (subiquity) image: sshd's real config is the drop-in, not the bare
+# /etc/ssh/sshd_config. The SSH-hardening tasks have no `create:` fallback, so a wrong
+# value here fails initial_setup.yml outright.
 ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
-# Slice 1 of the k3s migration (docs/k3s-migration/slice-1-ingress-sso-leaf.md). Every entry
-# is platform: k8s, so deploy.yml's Docker play filters them all out and its k8s play picks
-# them up — the keys are otherwise the same ones the Docker entries use, which is the point
-# of the platform key.
-#
-# ORDER IS LOAD-BEARING and there is no toposort on this play: the traefik role installs the
-# Traefik CRDs that every IngressRoute and Middleware below depends on, and bento-pdf's route
-# references the `authelia` Middleware the authelia role creates.
-#
-# `hostname` is the service's ONE name — the plain one. It carried a `-k8s` suffix while a
-# Docker twin still served the unsuffixed name; both the twins and the suffix are gone
-# (2026-08-14 / 2026-08-15), and `unsuffixed_hostname` retired with them.
-# Single-label on purpose — bento-pdf.local.<domain> is covered by the existing
-# *.local.<domain> wildcard cert; a nested bento-pdf.k8s.local.<domain> would not be.
-# fake-remux detector + reconciler, moved here from daniel-server on 2026-08-08 (slice 4, B7c)
-# with the media stack they read. The scripts still live in the autofix-bridge role, which keeps
-# its sidecar and disk-prune on that host; only these two crons and their tunables moved.
-# Reconciler mode: live = grab a genuine replacement, verify (host ffprobe), delete the fake + import.
-# Pre-live-tested end-to-end on 2026-07-17 (4 blocking bugs found + fixed). off/shadow also available.
+# Reconciler mode: live = grab a genuine replacement, verify (host ffprobe), delete the
+# fake + import. off/shadow also available.
 autofix_fake_remux_replace_mode: live
-# fake-remux reconciler's git-tracked selection policy, rendered to policy.json (autofix-bridge
-# role). Quality range is deferred to Sonarr's profile — no resolution floor, no codec ban;
-# authenticity is enforced post-download, codec-agnostically. See the 2026-07-17 design doc.
+# The reconciler's git-tracked selection policy, rendered to policy.json by the
+# autofix-bridge role. Quality range is deferred to Sonarr's profile — no resolution floor,
+# no codec ban; authenticity is enforced post-download, codec-agnostically.
 autofix_fake_remux_policy:
   deny_release_groups: [NTRX]
   prefer_release_groups: [VARYG]
@@ -40,7 +21,7 @@ autofix_fake_remux_policy:
   depreference_codecs: [av1]
   gop_max_s: 5
   min_size_gb: 0.4
-  max_size_gb: 8.0  # sanity ceiling — wide enough for a genuine 2160p WEB-DL episode (no quality cap)
+  max_size_gb: 8.0  # sanity ceiling — wide enough for a genuine 2160p WEB-DL episode
   max_concurrent_replacements: 5
   searches_per_tick: 2
   search_spacing_s: 20
@@ -50,23 +31,24 @@ autofix_fake_remux_policy:
   max_attempts: 3
   history_retention_days: 14
 
+# ORDER IS LOAD-BEARING and this play has no toposort. The traefik role installs the
+# Traefik CRDs every IngressRoute and Middleware below depends on, and the authelia role
+# creates the `authelia` Middleware their routes reference. Per-entry ordering constraints
+# are noted where they apply.
 containers_list:
-  # Slice 6, B1. BEFORE traefik deliberately: the traefik pod carries a crowdsec agent
-  # sidecar that logs into this engine's LAPI, and the machine credential is registered by
-  # a post-deploy task in this role — so the engine must be up (and the machine exist)
-  # before a traefik rollout starts the sidecar. This ordering is asserted by
-  # ansible/tests/test_containers_list_ordering.py, which also holds the reason.
+  # BEFORE traefik deliberately: the traefik pod carries a crowdsec agent sidecar that logs
+  # into this engine's LAPI, and a post-deploy task in this role registers the machine
+  # credential — so the engine must exist before a traefik rollout starts the sidecar.
+  # Asserted by ansible/tests/test_containers_list_ordering.py.
   #
-  # The claim this comment used to make -- "safe on fresh bring-up: this role uses no
-  # Traefik CRDs" -- stopped being true when the LAPI IngressRoute landed at B2 and moved
-  # into this role. It renders one, ahead of traefik installing the CRDs. Harmless on the
-  # running cluster, where they already exist; on a rebuild this role's apply is the one
-  # first-run ordering cost we accept, because the credential constraint above outranks it.
+  # The cost accepted for that: this role renders an IngressRoute (the LAPI's LAN face)
+  # ahead of traefik installing the CRDs. Harmless on the running cluster; on a rebuild it
+  # is the one first-run ordering failure we accept, because the credential constraint wins.
   - name: crowdsec
     platform: k8s
-    # B2 (D3): the LAPI's LAN face — daniel-server's demoted agent + its traefik bouncer
-    # authenticate here with machine/bouncer keys. hostname also feeds the Pi-hole
-    # per-service DNS override (→ ingress VIP); use_authelia false is load-bearing.
+    # daniel-server's agent and its traefik bouncer authenticate here with machine/bouncer
+    # keys, so use_authelia false is load-bearing. hostname also feeds the Pi-hole
+    # per-service DNS override.
     hostname: "crowdsec-lapi"
     port: 8080
     use_authelia: false
@@ -75,160 +57,90 @@ containers_list:
     port: 8080
   - name: authelia
     platform: k8s
+    # This portal's name is the OIDC issuer Jellyfin's SSO plugin points at.
     hostname: "auth"
     port: 9091
     use_authelia: false
-    # E7 (2026-08-13): this portal claims the unsuffixed auth.<domain> from the Docker
-    # portal — it is the OIDC issuer name Jellyfin's SSO plugin points at, carried over
-    # verbatim so the plugin needs no change. The reverse bridge (whose sole tenant was
-    # the Docker portal on this name) retires in the same deploy.
   - name: bento-pdf
     platform: k8s
+    # Single-label on purpose — bento-pdf.local.<domain> is covered by the existing
+    # *.local.<domain> wildcard cert; a nested bento-pdf.k8s.local.<domain> would not be.
     hostname: "bento-pdf"
     port: 8080
     use_authelia: true
-    # Docker twin retired 2026-08-10 (slice-7 Phase C) — it had run in PARALLEL since this
-    # slice-1 canary went live, never retired. The plain name it held is now this entry's
-    # only name: LAN via the wildcard, external via the native public route.
-  # Read-only cluster UI. It has no Docker twin and never had one, so unlike its siblings it
-  # never carried a second name to collapse. use_authelia is load-bearing rather than
-  # decorative here — the pod runs with -unsafe-use-service-account-token, so this Middleware
-  # is the only thing between a browser and the dashboard's (read-only) cluster identity.
+  # Read-only cluster UI. use_authelia is load-bearing rather than decorative: the pod runs
+  # with -unsafe-use-service-account-token, so this Middleware is the only thing between a
+  # browser and the dashboard's (read-only) cluster identity.
   - name: headlamp
     platform: k8s
     hostname: "headlamp"
     port: 4466
     use_authelia: true
   # Route-only entry: Longhorn's workloads come from the upstream manifest roles/setup/k3s
-  # applies, and this role adds nothing but the IngressRoute (plus the middleware copies it
-  # needs inside longhorn-system). `port` is longhorn-frontend's Service port, and the UI is
-  # LAN-only by choice — see the role's ingressroute.yaml.j2 for why. use_authelia is the
-  # entire access control: Longhorn's UI has no login of its own.
+  # applies, and this role adds nothing but the IngressRoute plus the middleware copies it
+  # needs inside longhorn-system. `port` is longhorn-frontend's Service port. use_authelia
+  # is the entire access control — Longhorn's UI has no login of its own.
   - name: longhorn-ui
     platform: k8s
     hostname: "longhorn"
     port: 80
     use_authelia: true
-  # Claude Code telemetry sink. No `port` and no `hostname` on purpose: it has no Traefik
-  # route at all. Claude Code runs on this HOST and exports to 127.0.0.1:4317, reaching the
-  # collector through a hostPort rather than the ingress — content logging is on, so nothing
-  # here should be reachable from the LAN. Grafana (slice 2) is what will earn a hostname.
-  #
-  # Ordering IS load-bearing on this list (no toposort in the k8s play): this must follow
-  # traefik, whose CRDs the IngressRoute and Middlewares below depend on, and authelia,
-  # whose Service the forward-auth Middleware points at.
-  #
-  # `hostname`/`port` describe Grafana specifically — the only routed workload here. The
-  # collector, Loki, Prometheus and Tempo are all reached on the node's loopback via
-  # hostPort rather than the ingress — the three query backends so that `otelq`, which
-  # hardcodes 127.0.0.1, can read them from the host. None of them has an ingress route.
-  # Cluster infrastructure, not a service: makes /dev/dri/renderD128 schedulable as
-  # `devic.es/dri` so jellyfin and tdarr can request it without being privileged (slice 4, B1).
-  # No port/hostname — nothing routes to it.
+  # Makes /dev/dri/renderD128 schedulable as `devic.es/dri` so jellyfin and tdarr can
+  # request it without being privileged. No port/hostname — nothing routes to it.
   - name: dri-device-plugin
     platform: k8s
-  # The shared /data volume the nine media workloads mount (slice 4, B2). Storage, not a
-  # service: no port, no hostname, nothing routes to it. Must precede every media workload —
-  # a pod that mounts an undeclared claim stays Pending, and WaitForFirstConsumer makes that
-  # look like a scheduling problem rather than a missing volume.
+  # The shared /data volume the nine media workloads mount. Storage, not a service.
+  # Must precede every media workload — a pod that mounts an undeclared claim stays
+  # Pending, and WaitForFirstConsumer makes that look like a scheduling problem rather
+  # than a missing volume.
   #
-  # Its 19 G seeding copy does NOT run on an ordinary deploy. It is gated behind
-  # `-e media_volume_sync=true` because the rsync mirrors with --delete: harmless before
-  # cutover, and after cutover it would erase whatever qbittorrent has downloaded since.
+  # Its seeding copy does NOT run on an ordinary deploy: it is gated behind
+  # `-e media_volume_sync=true` because the rsync mirrors with --delete, which would erase
+  # whatever qbittorrent has downloaded. See the role's tasks/sync.yml.
   - name: media-volume
     platform: k8s
-  # Slice 4, B3 — the first \*arr in the cluster, and NOT the authoritative one. Runs a copy of
-  # the live config against the B2 media volume while Docker's sonarr keeps serving, to rehearse
-  # the footgun this slice is built around: sonarr stores ABSOLUTE in-container paths, so the
-  # library looks intact right up until an import fails.
-  #
-  # Must follow media-volume: it mounts that claim at /data, and a pod whose claim does not exist
-  # stays Pending.
-  #
-  # It holds the real indexers and download client, so what keeps it from acting on them matters:
-  # every one of those targets is a DOCKER network name that does not resolve in the cluster. An
-  # egress NetworkPolicy was tried first and is NOT enforced here — the boundary that actually
-  # holds is name resolution, not a policy. Measurement recorded in the role's tasks/main.yml
-  # header; the probe harness that tested it was retired 2026-08-17 as dead code.
+  # Must follow media-volume: it mounts that claim at /data.
   - name: sonarr
     platform: k8s
     hostname: "sonarr"
     port: 8989
     use_authelia: true
-    # Cut over 2026-08-07 (B4c). The Docker copy is stopped and unmanaged, so daniel-server's
-    # Traefik forwards the UNSUFFIXED names here — restoring bookmarks and any client pointing
-    # at sonarr.local, which 404'd between the cutover and this.
-  # Slice 4, B4b — BUILT BUT NOT DEPLOYED. The entry has to exist (a k8s role without one fails
-  # validate_k8s_manifests.py), but `qbittorrent_k8s_enabled` defaults to FALSE and every task
-  # in the role is gated on it. Without that gate this entry alone would be enough: gitops runs
-  # ansible/deploy.yml, which is a plain containers_list loop, so the next tick would stand up a
-  # second qbittorrent holding the same torrent state. Released in B4c.
-  #
-  # The slice's only genuinely new shape — a WireGuard/Mullvad sidecar sharing the pod's netns,
-  # gating qbittorrent's start so it cannot talk to a tracker before the kill-switch exists.
+  # Runs a WireGuard/Mullvad sidecar sharing the pod's netns, gating qbittorrent's start so
+  # it cannot talk to a tracker before the kill-switch exists.
   - name: qbittorrent
     platform: k8s
     hostname: "qbittorrent"
     port: 8080
     use_authelia: true
-    # Cut over 2026-08-07 (B4c). The Docker copy is stopped and unmanaged, so daniel-server's
-    # Traefik forwards the UNSUFFIXED names here — restoring bookmarks and any client pointing
-    # at qbittorrent.local, which 404'd between the cutover and this.
-  # Slice 4, B4a — the three remaining \*arrs, ALL held by their own `<svc>_k8s_enabled: false`
-  # for the same reason as qbittorrent above: the entry is mandatory for
-  # validate_k8s_manifests.py, and gitops would otherwise deploy them unattended.
-  #
-  # They were also not deployable one at a time during the slice-4 rehearsal, and the reason is
-  # worth keeping: standing up prowlarr makes the bare name `prowlarr` resolve, which is the
-  # moment a rehearsing sonarr could reach its real indexers. That window closed at B4c
-  # (2026-08-07) when this copy became authoritative, so the constraint is history — the ordering
-  # requirement above (manifest validation + unattended gitops) is the one still live.
   - name: radarr
     platform: k8s
     hostname: "radarr"
     port: 7878
     use_authelia: true
-    # Cut over 2026-08-07 (B4c). The Docker copy is stopped and unmanaged, so daniel-server's
-    # Traefik forwards the UNSUFFIXED names here — restoring bookmarks and any client pointing
-    # at radarr.local, which 404'd between the cutover and this.
-  # Brings a second workload with it — flaresolverr, which renders attacker-supplied Cloudflare
-  # pages. Under Compose that sat on its own network; here an INGRESS NetworkPolicy keeps it
-  # reachable from prowlarr alone, so the move to one namespace is a narrowing rather than a
-  # widening. Ingress is the direction that is actually enforced on this cluster (B3).
+  # Brings a second workload with it — flaresolverr, which renders attacker-supplied
+  # Cloudflare pages. An INGRESS NetworkPolicy keeps it reachable from prowlarr alone;
+  # ingress is the direction actually enforced on this cluster.
   - name: prowlarr
     platform: k8s
     hostname: "prowlarr"
     port: 9696
     use_authelia: true
-    # Cut over 2026-08-07 (B4c). The Docker copy is stopped and unmanaged, so daniel-server's
-    # Traefik forwards the UNSUFFIXED names here — restoring bookmarks and any client pointing
-    # at prowlarr.local, which 404'd between the cutover and this.
   - name: bazarr
     platform: k8s
     hostname: "bazarr"
     port: 6767
     use_authelia: true
-    # Cut over 2026-08-07 (B4c). The Docker copy is stopped and unmanaged, so daniel-server's
-    # Traefik forwards the UNSUFFIXED names here — restoring bookmarks and any client pointing
-    # at bazarr.local, which 404'd between the cutover and this.
 
-  # The slice's exit criterion (B5), and the first workload anywhere to request the
-  # `devic.es/dri` extended resource the B1 device plugin advertises.
-  #
-  # use_authelia stays FALSE, as it was under Compose, and that is load-bearing rather than an
-  # oversight: Jellyfin's clients are TV and phone apps that cannot complete a web SSO flow. The
-  # public route keeps flowing through daniel-server's Traefik and CrowdSec while
-  # k8s_public_route is false, and the bridge only applies Authelia when use_authelia is true —
-  # so the unsuffixed name below stays open to those clients exactly as before.
+  # use_authelia stays FALSE, and that is load-bearing rather than an oversight: Jellyfin's
+  # clients are TV and phone apps that cannot complete a web SSO flow.
   - name: jellyfin
     platform: k8s
     hostname: "jellyfin"
     port: 8096
     use_authelia: false
 
-  # B6. Alone like jellyfin, and for a related reason — it shares no hardlink seam. What sets it
-  # apart is that it holds the GPU for minutes at a time on real files and rewrites the library
-  # IN PLACE: the one media service where a wrong mount does lasting damage rather than a failed
+  # Holds the GPU for minutes at a time on real files and rewrites the library IN PLACE —
+  # the one media service where a wrong mount does lasting damage rather than a failed
   # request. Its /media mount is consequently the only read-write one among the consumers.
   - name: tdarr
     platform: k8s
@@ -236,295 +148,181 @@ containers_list:
     port: 8265
     use_authelia: true
 
-  # Slice 4, B7a. No `port`, no `hostname`, no `bridge_hostname` — and none of that is an
-  # omission. configarr is a nightly reconcile that reads the two *arrs and exits, so it ports to
-  # a CronJob with no Service and nothing to route to. Must follow sonarr and radarr: it addresses
-  # them by bare Service name, which is why `base_url: http://sonarr:8989` survives the port
-  # unchanged.
+  # A nightly reconcile that reads the two *arrs and exits, so it is a CronJob with no
+  # Service and nothing to route to. Must follow sonarr and radarr: it addresses them by
+  # bare Service name.
   - name: configarr
     platform: k8s
 
-  # Slice 4, B7b. Like configarr: no port, no hostname, no route — janitorr has no web UI. Order
-  # is load-bearing on this list (no toposort in the k8s play) and it must follow sonarr, radarr
-  # AND jellyfin: it addresses all three by bare Service name, and its verify step reads a
-  # symlink from inside the jellyfin pod.
-  #
-  # Ships with janitorr_k8s_dry_run true. It deletes real media, and the Docker copy is still
-  # running, so nothing here is allowed to act until the path contract is proven.
+  # No web UI, so no route. Must follow sonarr, radarr AND jellyfin: it addresses all three
+  # by bare Service name, and its verify step reads a symlink from inside the jellyfin pod.
   - name: janitorr
     platform: k8s
 
   - name: claude-otel
     platform: k8s
+    # `hostname`/`port` describe Grafana — the only routed workload here. The OTEL
+    # collector, Loki, Prometheus and Tempo are reached on the node's loopback via hostPort
+    # so `otelq`, which hardcodes 127.0.0.1, can read them from the host. Content logging is
+    # on, so none of them gets an ingress route.
     hostname: "grafana"
     port: 3000
     use_authelia: true
-    # E1 retirement (2026-08-12): the cluster grafana owns the pre-migration name — its
-    # Docker twin is gone (the compose's loki/promtail siblings live until the 08-17 cut).
-    # Slice 3 (D8). Prometheus' own name, so Pi-hole answers it with the cluster VIP instead of
-    # the local.<domain> wildcard that points at daniel-server. monitor-bridge runs there and
-    # cannot reach this host's ClusterIP or its loopback-pinned hostPort, so this name plus the
-    # role's query-only `prometheus-monitoring` IngressRoute is the whole path in. Keep the two
-    # in step: the route matches this exact host, hardcoded as prometheus.
+    # Prometheus' own name, so Pi-hole answers it with the cluster VIP instead of the
+    # local.<domain> wildcard pointing at daniel-server. monitor-bridge runs there and
+    # cannot reach this host's ClusterIP or its loopback-pinned hostPort, so this name plus
+    # the role's query-only `prometheus-monitoring` IngressRoute is the whole path in. Keep
+    # the two in step — that route hardcodes `prometheus`.
     extra_hostnames:
       - "prometheus"
-  # Slice 2, batch A (docs/k3s-migration/slice-2-leaf-apps.md). The Docker twin serves `www`;
-  # this one answers on www-k8s until cutover. use_authelia mirrors the Docker entry and its
-  # reason: this is the public link-in-bio landing page, so a login gate would break it.
+  # The public link-in-bio landing page, so a login gate would break it.
   - name: littlelink
     platform: k8s
     hostname: "www"
     port: 3000
     use_authelia: false
-    # Cut over 2026-08-05. No bridge_probe_path, and that is not an omission: with no
-    # forward-auth in front of it, the ordinary littlelink-bridge monitor already reaches the
-    # app itself, so this is the one bridged service whose normal monitor is end-to-end. That
-    # makes it the canary for the bridge mechanism the gated services depend on.
-  # Slice 2, batch B. First PVC seeded from daniel-server, and the first k8s Secret
-  # (Laravel's APP_KEY) — deliberately on a service whose data is disposable, so the
-  # seed-volume mechanic is proven where a botched copy costs nothing.
   - name: speedtest
     platform: k8s
     hostname: "speedtest"
     port: 80
     use_authelia: true
-    # First service behind the strangler bridge. Setting this adds a second, ClientIP-guarded
-    # IngressRoute route for the UNSUFFIXED hostnames, which daniel-server forwards here once
-    # its Docker copy is gone. Unset for a service whose Docker twin is still serving them.
-    # No bridge_lan_prefixes. There was one for /api/ — homepage's speedtest widget reads
-    # /api/speedtest/latest — but the widget now resolves speedtest.local to the cluster VIP
-    # directly and never reaches the Docker edge. This was the weaker of the two: homepage
-    # passes no credentials to speedtest, so the route really was unauthenticated, and it
-    # covered the entire API rather than the one endpoint the probe above matches. Removed
-    # 2026-08-06 with no caller left to break — see the freshrss entry for the log evidence.
-  # No hostname/port: two headless DDNS clients with no web UI and no Traefik route, the
-  # same shape as claude-otel's collector. Both copies run until cutover and write the same
-  # values to the same records, which is idempotent at Cloudflare.
+  # Headless DDNS client: no web UI, no Traefik route.
   - name: cloudflare-ddns
     platform: k8s
-  # Slice 2, batch C — the first services whose data actually matters. Both seed a
-  # `longhorn` (backed-up) PVC from daniel-server.
   - name: freshrss
     platform: k8s
     hostname: "freshrss"
     port: 80
     use_authelia: true
-    # Cut over 2026-08-05. Nothing else changes: FreshRSS keeps its base_url in the seeded
-    # config.php, which already reads https://freshrss.<domain> — it was written by the Docker
-    # copy, so the cutover makes it correct rather than requiring an edit.
-    # No bridge_lan_prefixes. There was one for /api/greader.php/ — homepage's FreshRSS widget
-    # reads unread counts over the GReader API — but the widget no longer takes that path: it
-    # resolves freshrss.local to the cluster VIP directly (homepage's extra_hosts), so it never
-    # reaches the Docker edge. Traefik's access log over the route's whole lifetime recorded
-    # four requests across both LAN routers, all from daniel-server and all mine while
-    # debugging; no other client ever used it. Removed 2026-08-06 because it was strictly wider
-    # than the probe above: Path() matches one endpoint, PathPrefix() opened the whole GReader
-    # subtree without forward-auth. Restore it if a LAN RSS client should reach the GReader API
-    # at freshrss.local without SSO — FreshRSS's own 401 is the gate, not this route.
-  # port 8000, not 80 — uWSGI serves directly, there is no nginx in front of it. The Docker
-  # entry has said 8000 all along; assuming 80 here cost a five-minute rollout timeout with a
-  # perfectly healthy app behind a probe pointed at a closed port.
+  # port 8000, not 80 — uWSGI serves directly, there is no nginx in front of it. Assuming
+  # 80 costs a five-minute rollout timeout with a perfectly healthy app behind a probe
+  # pointed at a closed port.
   - name: healthchecks
     platform: k8s
     hostname: "healthchecks"
     port: 8000
     use_authelia: true
-    # No bridge_probe_path: the role's own `healthchecks-ping` route already reaches the app
-    # without a session, so a second unauthenticated route would be a second hole for no extra
-    # signal. The monitor probes /ping/<all-zero uuid> and treats 404 as healthy — Django
-    # answering 404 for an unknown check proves the app ran, and a 400 instead would mean
-    # ALLOWED_HOSTS is wrong.
-    #
-    # No bridge_bypass_prefixes either, dropped when the -k8s suffix retired (2026-08-15). It
-    # emitted `healthchecks-public-ping` — public-name-only /ping/ — back when
-    # `healthchecks-ping` covered just the -k8s names. Collapsed onto one hostname, that route
-    # covers the public name too, so the macro's copy became a strict subset: one fewer
-    # unauthenticated public route for exactly the same reachability.
-  # Slice 2, batch E. CouchDB for Obsidian LiveSync. use_authelia mirrors the Docker entry and
-  # its reason: the LiveSync client uses non-interactive basic auth and cannot pass 2FA, so
-  # CouchDB's own require_valid_user is the gate.
-  #
-  # Its data volume is longhorn-NOBACKUP (see the role's defaults), which makes this the first
-  # migrated service whose PVC the backup plane deliberately ignores — kopiaignore.j2 excludes
-  # the same directory today, for the B2-churn reason recorded there. The slice-2 doc's claim
-  # that batch E "grows the backed-up set" is therefore wrong for livesync.
+  # CouchDB for Obsidian LiveSync. use_authelia is false because the LiveSync client uses
+  # non-interactive basic auth and cannot pass 2FA — CouchDB's own require_valid_user is
+  # the gate. Its data volume is longhorn-NOBACKUP, so the backup plane ignores this PVC
+  # deliberately (see the role's defaults).
   - name: livesync
     platform: k8s
     hostname: "livesync"
     port: 5984
     use_authelia: false
-    # Cut over 2026-08-06. NO IngressRoute at all — this role renders none, and that is
-    # load-bearing rather than an omission. Its names are served by the X-Sync-Token gate
-    # in the k8s Traefik's Secret-mounted file provider
+    # NO IngressRoute at all, and that is load-bearing rather than an omission. Its names
+    # are served by the X-Sync-Token gate in the k8s Traefik's Secret-mounted file provider
     # (roles/k8s/traefik/templates/livesync-gate-secret.yaml.j2 — token router, Authelia'd
     # /_utils carve-out at priority 200, and the LAN-only Kuma probe router whose CouchDB
     # 401 is the end-to-end signal). The token stays out of CRDs because the readonly
     # kubeconfig can read IngressRoutes but is RBAC-denied Secrets. Replication keeps its
-    # 20x limiter there (rate-limit-public-livesync — the default 300/min 429'd a phone
-    # mid-pull within an hour of cutover, measured 2026-08-06).
+    # 20x limiter there — the default 300/min 429'd a phone mid-pull within an hour.
     #
-    # The `-k8s` route this entry used to carry was DELETED, not renamed, when the suffix
-    # retired (2026-08-15). Collapsing it onto the plain name would have put a bare
-    # `Host(livesync…)` router beside the gate's, breaking the gate's whole invariant —
-    # that a request without the token matches NO router and 404s before CouchDB.
-    # `hostname` stays only to feed the Pi-hole override and Kuma's hostAliases.
-  # Slice 2, batch E. Four workloads — the app, headless Chrome, Meilisearch and the time-tagger
-  # — which is the largest single service in the slice. Only the app is routed; the other three
-  # Phase E3 (2026-08-12): the dashboard follows its widgets, which already call the
-  # cluster's -k8s monitoring routes. The Docker twin retires after this one verifies.
+    # No bare `Host(livesync…)` router may be added beside the gate's: that would break the
+    # gate's whole invariant, that a request without the token matches NO router and 404s
+    # before CouchDB. `hostname` stays only to feed the Pi-hole override and Kuma's
+    # hostAliases.
   - name: homepage
     platform: k8s
     hostname: "homepage"
     port: 3000
     use_authelia: true
-  # Phase E4 (2026-08-12): UPS web UI. Since 2026-08-14 (D6 reversed) it reads upsd over
-  # the in-cluster `nut` Service instead of the retired daniel-server LAN publish.
+  # UPS web UI. Reads upsd over the in-cluster `nut` Service.
   - name: peanut
     platform: k8s
     hostname: "peanut"
     port: 8080
     use_authelia: true
-  # Browses every host's ~/.claude/artifacts (the plans, specs and review write-ups Claude
-  # Code renders) at one authenticated URL, with search over their indexed metadata. Serves
-  # hostPath trees, so the pod is pinned to daniel-box and daniel-server's copy is rsynced
-  # in by a cron there. Answers on both the LAN and the public name, behind Authelia — a
-  # link is the only way anyone reaches an artifact, so one that resolves from inside the
-  # LAN alone fails wherever the reader is.
+  # Browses every host's ~/.claude/artifacts at one authenticated URL. Serves hostPath
+  # trees, so the pod is pinned to daniel-box and daniel-server's copy is rsynced in by a
+  # cron there. Answers on both the LAN and the public name — a link is the only way anyone
+  # reaches an artifact, so one that resolves inside the LAN alone fails wherever the
+  # reader is.
   - name: artifacts
     platform: k8s
     hostname: "artifacts"
     port: 8080
     use_authelia: true
-  # Phase E (2026-08-13): read-only MCP server, the Docker edge's last routed tenant.
-  # No hostname/ingressroute — its bearer-token router lives in the edge gate Secret
-  # (roles/k8s/traefik/templates/livesync-gate-secret.yaml.j2), matching only
-  # mcp.local.<domain>, so no dnsmasq override or public router may exist for it.
+  # Read-only MCP server. No hostname/ingressroute — its bearer-token router lives in the
+  # edge gate Secret (roles/k8s/traefik/templates/livesync-gate-secret.yaml.j2), matching
+  # only mcp.local.<domain>, so no dnsmasq override or public router may exist for it.
   - name: homelab-mcp
     platform: k8s
     port: 8000
     use_authelia: false
-  # are reached in-cluster by Service name, and those names are load-bearing because karakeep
-  # addresses them exactly as it addressed the Compose service keys.
+  # Brings three unrouted workloads with it — headless Chrome, Meilisearch and the
+  # time-tagger — reached in-cluster by Service name. Those names are load-bearing:
+  # karakeep addresses them exactly as it addressed the Compose service keys.
   - name: karakeep
     platform: k8s
     hostname: "karakeep"
     port: 3000
     use_authelia: true
-    # Cut over 2026-08-06. NEXTAUTH_URL follows this (see the role's deployment template): the
-    # sign-in redirect has to name the hostname the browser actually arrived on, and getting it
-    # wrong does not fail at startup — the pod goes ready and login bounces users somewhere that
-    # does not resolve for them.
-    # Reproduces the karakeep-api Docker router, which has always been public: /api/v1 is
-    # Bearer-token authenticated, and the browser extension and mobile app cannot pass 2FA. This
-    # carries an existing hole across rather than opening one — but it is still public, hence the
-    # entry in BRIDGE_BYPASS_PREFIXES.
-    #
-    # The trailing slash is load-bearing, carried across from that label: PathPrefix(`/api`)
-    # would also match siblings like /api-docs and widen the bypass to them.
-    #
-    # No bridge_lan_prefixes for homepage's widget: this bypass generates a `.local` router as
-    # well as a public one, and the widget calls /api/. A second route would be a second hole
-    # for nothing.
-    #
-    # No bridge_rate_limit either. Unlike livesync there is no rate-limit-karakeep at the edge —
-    # karakeep has always run under the shared 300/min `rate-limit`, and rate-limit-bridge is
-    # the same 300/150/1m keyed the same way, so the double-metering the macro guards against
-    # meters it at the ceiling it already lives under.
+    # /api/v1 is Bearer-token authenticated and the browser extension and mobile app cannot
+    # pass 2FA, so this route is public on purpose. The trailing slash is load-bearing:
+    # PathPrefix(`/api`) would also match siblings like /api-docs and widen the bypass.
     bridge_bypass_prefixes:
       - /api/
-  # Slice 2, batch R. No hostname/port and no Traefik route on purpose: this is an
-  # unauthenticated plain-HTTP registry, reachable only on the node's loopback via hostPort
-  # and in-cluster via its Service. Giving it an ingress would put push access on the LAN.
+  # An unauthenticated plain-HTTP registry, reachable only on the node's loopback via
+  # hostPort and in-cluster via its Service. Giving it an ingress would put push access on
+  # the LAN.
   - name: registry
     platform: k8s
-  # Slice 2, batch D. Not a service — a deploy-time image build, entered here because that is
-  # how a k8s role gets invoked and tagged. No hostname, no port, no route: it produces the two
-  # images n8n runs and exits. Separate from k8s/n8n rather than folded into it because a
-  # BuildKit rebuild is minutes of work that every n8n redeploy would otherwise pay.
+  # Not a service — a deploy-time image build, entered here because that is how a k8s role
+  # gets invoked and tagged. It produces the two images n8n runs and exits. Separate from
+  # k8s/n8n because a BuildKit rebuild is minutes every n8n redeploy would otherwise pay.
   - name: n8n-images
     platform: k8s
-  # Migrated 2026-08-06, batch D. THE ONLY SERVICE IN THIS SLICE WITH NO COEXISTENCE WINDOW:
-  # its scheduled workflows (RSS polls, a daily email, a TickTick calendar sync) would each
-  # fire twice with both copies running, and the TickTick sync writes to a third party. So the
-  # Docker copy was stopped before the seed and the first deploy WAS the cutover — hence
-  # bridge_hostname being set from the outset, unlike every entry above it.
   - name: n8n
     platform: k8s
     hostname: "n8n"
     port: 5678
     use_authelia: true
-    # Reproduces the compose template's `n8n-webhook` router. External services POST here with
-    # no session — Authelia would not fail loudly, it would silently break every registered
-    # webhook while the callers keep reporting success. Public on purpose; the trailing slash
-    # keeps /webhook-test/ (the dev-only endpoint) out, exactly as the Docker rule did.
+    # External services POST here with no session. Authelia would not fail loudly — it
+    # would silently break every registered webhook while the callers keep reporting
+    # success. The trailing slash keeps /webhook-test/ (dev-only) out.
     bridge_bypass_prefixes:
       - /webhook/
-    # No bridge_lan_prefixes for monitor-bridge's check_n8n API poll, and that is not an
-    # omission. A route via the Docker edge is unreachable from the container that needs it:
-    # Traefik publishes its ports from the `apps` network, and a container cannot reach
-    # hostIP:publishedPort when the publishing container shares its own bridge (same-bridge
-    # hairpin NAT — see docs/k3s-migration/slice-2-leaf-apps.md). The check talks to the -k8s
-    # name and the cluster VIP directly instead — see the -monitoring IngressRoute in the
-    # role's ingressroute.yaml.j2.
 
-  # Slice 5, B1. Shadow broker: deployed alongside the Docker mosquitto, serving nobody until
-  # the clients (z2m, HA) repoint one at a time. No port/hostname/route — MQTT is raw TCP and
-  # crosses hosts on the role's pinned MetalLB VIP (mosquitto_k8s_lan_ip), not through Traefik.
-  # The Docker copy on daniel-server retires only after the B1 gates in
-  # docs/k3s-migration/slice-5-smart-home.md pass.
+  # No port/hostname/route — MQTT is raw TCP and crosses hosts on the role's pinned MetalLB
+  # VIP (mosquitto_k8s_lan_ip), not through Traefik.
   - name: mosquitto
     platform: k8s
 
-  # Slice 5, B2. Order matters: after mosquitto — z2m resolves the broker by bare Service name.
-  # The SLZB coordinator accepts one client, so this NEVER coexists with the Docker copy
-  # (strategy: Recreate in the role; cutover is stop-Docker → seed → start). bridge_hostname
-  # keeps the unsuffixed name working once daniel-server's copy is gone, same as qbittorrent.
+  # Must follow mosquitto — z2m resolves the broker by bare Service name. The SLZB
+  # coordinator accepts one client, hence `strategy: Recreate` in the role.
   - name: zigbee2mqtt
     platform: k8s
     hostname: "zigbee2mqtt"
     port: 8080
     use_authelia: true
 
-  # Slice 5, B3 — cut over 2026-08-09. use_authelia stays false for the Docker route's reason:
-  # forward-auth breaks the companion app; HA's own login + TOTP is the gate. bridge_hostname
-  # keeps the unsuffixed (Cloudflare-proxied) name working, so the companion app never notices.
-  # Reaches mosquitto by Service name, upsd on daniel-server's LAN 3493 (B3 prereqs).
+  # use_authelia false: forward-auth breaks the companion app, so HA's own login + TOTP is
+  # the gate. Reaches mosquitto by Service name.
   - name: home-assistant
     platform: k8s
     hostname: "home-assistant"
     port: 8123
     use_authelia: false
 
-  # Slice 6, B3 (build half) — LAN DNS on its own pinned VIP (dns_k8s_vip, D4), coexisting
-  # with the Docker copy until the router's DHCP DNS option flips at cutover. Not seeded:
-  # blocklist state is declared in the role defaults (pihole_k8s_adlists) and everything else
-  # in /etc/pihole regenerates. No bridge_hostname — the Docker copy keeps pihole.<domain>
-  # until it is retired, and DNS clients arrive by VIP, not by name.
+  # LAN DNS on its own pinned VIP (dns_k8s_vip). Not seeded: blocklist state is declared in
+  # the role defaults (pihole_k8s_adlists) and everything else in /etc/pihole regenerates.
   - name: pihole
     platform: k8s
     hostname: "pihole"
     port: 80
     use_authelia: true
-    # E7 follow-through (2026-08-13): claims the unsuffixed name from the retired Docker
-    # pihole — the homepage tile's pihole.<domain> href 404'd at the k8s edge without it.
 
-  # Slice-6 B5, pulled forward from slice 7 (2026-08-09): the operator moved ALL router
-  # forwards — 51820/udp included — to this node, so wg-easy followed its port. The tunnel
-  # answers on the node IP (the wg-easy-udp Service's externalIP; router UIs forward to
-  # devices, and VIPs have no lease). Config volume seeded from daniel-server, so the server
-  # keypair and every imported client config survived. bridge_hostname keeps the unsuffixed
-  # admin-UI name serving (natively, behind the cluster Authelia). password_hash lives in the
-  # role's Secret template, not here.
-  # Slice-7 Phase C (2026-08-10): stateless straight port, image built in-cluster. hostname
-  # feeds the Pi-hole override so homepage (still Docker on daniel-server) reaches the
-  # ClientIP-guarded feed route by the -k8s name. No public anything — monitoring_route
-  # ignores k8s_public_route by design.
   - name: ical-proxy
     platform: k8s
     hostname: "ical-proxy"
     port: 5000
     use_authelia: false
 
+  # The tunnel answers on the node IP (the wg-easy-udp Service's externalIP) rather than a
+  # VIP: router UIs forward to devices, and VIPs have no lease. password_hash lives in the
+  # role's Secret template, not here.
   - name: wg-easy
     platform: k8s
     hostname: "wg-easy"
@@ -533,95 +331,72 @@ containers_list:
     use_authelia: true
     default_dns: "{{ dns_k8s_vip }}"
 
-  # Slice-7 Phase D step 4 (2026-08-10): the alerting spine, cut over in one window (no
-  # coexistence — two Kumas would double-fire every alert). bridge_hostname keeps every
-  # push consumer's https://uptime-kuma.local.<domain> URL working unchanged through the
-  # forward bridge; tokens unchanged, so monitors and their history survived the move.
   - name: uptime-kuma
     platform: k8s
     hostname: "uptime-kuma"
     port: 3001
     use_authelia: true
 
-  # Slice-7 Phase C (2026-08-10): ported WITHOUT its docker plumbing (operator decision) —
-  # no DOCKER_HOST, so the in-IDE docker CLI and devcontainers are gone. Image built
-  # in-cluster from the containers role's Dockerfile (that role stays the build source).
-  # Unsuffixed code-server.<domain> keeps working via bridge_hostname.
+  # Ported WITHOUT its docker plumbing (operator decision) — no DOCKER_HOST, so the in-IDE
+  # docker CLI and devcontainers are gone. Image built in-cluster from the containers
+  # role's Dockerfile, which stays the build source.
   - name: code-server
     platform: k8s
     hostname: "code-server"
     port: 8443
     use_authelia: true
 
-  # Backup consolidation BL1 (2026-08-10): pulled ahead of its slot — the worlds were the
-  # only irreplaceable data kopia still uniquely protected. No port/hostname: nothing
-  # routes over HTTP; the game's TCP 7777 answers on the node IP via its Service
-  # (the wg-easy-udp pattern — the router's forward already points at this device).
+  # No port/hostname: nothing routes over HTTP. The game's TCP 7777 answers on the node IP
+  # via its Service (the wg-easy pattern — the router's forward points at this device).
   - name: terraria
     platform: k8s
 
-  # Reactivated 2026-08-13, straight onto k3s rather than back onto the retired Docker edge
-  # (the archived compose role and archive/CLAUDE.md's reactivation recipe both predate E7).
-  # Same shape as terraria above: no port/hostname, because nothing about it is HTTP — the
-  # game answers UDP 2456-2457 on the node IP via its own Service. The world was last saved
-  # 2025-11-22 and is seeded from the Docker copy still on daniel-server.
+  # Same shape as terraria: nothing about it is HTTP — the game answers UDP 2456-2457 on
+  # the node IP via its own Service.
   - name: valheim
     platform: k8s
 
-  # Slice-7 Phase D.2 KL1 (2026-08-10): the homelab log store — a SECOND cluster Loki,
-  # deliberately separate from claude-otel's (that one holds verbatim prompts and stays
-  # loopback-only; the D1 exception is documented in slice-7-phase-d-loki.md). hostname
-  # feeds the Pi-hole override; the route is ClientIP-gated (monitoring_route), so
-  # use_authelia is moot but stated. Ships with the KL3 pod-log promtail DaemonSet.
+  # The homelab log store — a SECOND cluster Loki, deliberately separate from claude-otel's,
+  # which holds verbatim prompts and stays loopback-only. The route is ClientIP-gated
+  # (monitoring_route), so use_authelia is moot but stated. Ships with the pod-log promtail
+  # DaemonSet.
   - name: loki-homelab
     platform: k8s
     hostname: "loki-homelab"
     port: 3100
     use_authelia: false
-  # Phase F drain (2026-08-13): the player-stats aggregator, moved from daniel-server.
-  # MUST follow loki-homelab (order is load-bearing on this list): it tails the terraria
-  # pod's console lines from that Loki. No web UI — its :9420 exporter is scraped
-  # in-cluster (claude-otel prometheus job terraria-stats), so no port/route derives.
+  # MUST follow loki-homelab: it tails the terraria pod's console lines from that Loki.
+  # No web UI — its :9420 exporter is scraped in-cluster (claude-otel prometheus job
+  # terraria-stats), so no port/route derives.
   - name: terraria-stats
     platform: k8s
-  # Phase F drain (2026-08-14): the bridge twins. monitor-bridge runs every metric/API
-  # check (same check.py as the Docker remnant, split by CHECKS_SKIP/CHECKS_ONLY — the
-  # remnant keeps only the five daniel-server host-state-file checks); autofix-bridge is
-  # the *arr remediation loop (its disk-prune host cron stays with daniel-server's
-  # Docker daemon). Neither has a route — both are pushers.
+  # The bridge twins, neither of which has a route — both are pushers. monitor-bridge runs
+  # every metric/API check (same check.py as the Docker remnant, split by
+  # CHECKS_SKIP/CHECKS_ONLY); autofix-bridge is the *arr remediation loop.
   - name: monitor-bridge
     platform: k8s
-  # Phase F drain (2026-08-14): host metrics for BOTH nodes (daniel-box never had a
-  # node-exporter before); successor to the prometheus role's Docker sidecar.
+  # Host metrics for BOTH nodes.
   - name: node-exporter
     platform: k8s
   - name: autofix-bridge
     platform: k8s
-  # D6 REVERSED (operator, 2026-08-14): the NUT primary (upsd + usbhid-ups + upsmon)
-  # moves in-cluster so Docker can leave daniel-server entirely. The pod is pinned to
-  # daniel-server (the UPS's USB host — a physical pin, never unwinds) and its built
-  # image pulls through the agent-side registries.yaml mirror this change plumbed. The
-  # host's secondary upsmon — the thing that actually powers daniel-server off on FSD —
-  # is the nut_host role and keeps its 127.0.0.1:3493 target via hostPort.
+  # The NUT primary (upsd + usbhid-ups + upsmon). The pod is pinned to daniel-server, the
+  # UPS's USB host — a physical pin that never unwinds. The host's secondary upsmon, the
+  # thing that actually powers daniel-server off on FSD, is the nut_host role and keeps its
+  # 127.0.0.1:3493 target via hostPort.
   - name: nut
     platform: k8s
-  # Host flip 1 (2026-08-14): the daniel-server peer-pull host cron became this nightly
-  # CronJob — the Pi's WireGuard peer keys land on a Longhorn PVC the 03:30 daily-backup
-  # group carries to B2 (successor to the retired Kopia scope), and the job pushes the
-  # "WG Pi Peer Backup" monitor directly (the bridge's pi_peers check retired with it).
+  # Nightly CronJob: the Pi's WireGuard peer keys land on a Longhorn PVC the 03:30
+  # daily-backup group carries to B2, and the job pushes the "WG Pi Peer Backup" monitor
+  # directly.
   - name: pi-peer-backup
     platform: k8s
-  # The Valheim sibling (2026-08-13), added with that server's reactivation. Same
-  # ordering constraint as terraria-stats above — it tails the valheim pod's console out
-  # of loki-homelab, so it MUST follow it. No port/route: its :9420 exporter is scraped
-  # in-cluster (claude-otel prometheus job valheim-stats), there is no web UI.
+  # Same ordering constraint as terraria-stats — it tails the valheim pod's console out of
+  # loki-homelab, so it MUST follow it.
   - name: valheim-stats
     platform: k8s
-  # Slice-7 Phase D (2026-08-10, slice-7-phase-d-scrutiny.md): SMART monitoring. The
-  # collector DaemonSet adds this host's never-monitored NVMe; daniel-server's Docker
-  # collector pushes into the same web API as a spoke until the Phase F join. UI behind
-  # Authelia; /api/* bypassed for LAN machine traffic (the spoke's POSTs and
-  # monitor-bridge's summary reads) in the authelia role's config.
+  # SMART monitoring. UI behind Authelia; /api/* is bypassed for LAN machine traffic (the
+  # collector's POSTs and monitor-bridge's summary reads) in the authelia role's config.
   - name: scrutiny
     platform: k8s
     hostname: "scrutiny"
@@ -629,91 +404,66 @@ containers_list:
     use_authelia: true
   # LAST on purpose, and it must NOT sit in traefik's rollout batch.
   #
-  # It does not need to follow traefik for the usual "after traefik" reason — that convention
-  # exists because IngressRoute/Middleware are Traefik CRDs the traefik role installs, and this
-  # role renders neither. NetworkPolicy is core `networking.k8s.io/v1`, and a peer podSelector
-  # is a label match evaluated at connection time, so `app: traefik` resolves whether or not a
-  # traefik pod exists when the policy is applied.
+  # Not for the usual "after traefik" reason — this role renders no Traefik CRDs, and a
+  # NetworkPolicy peer podSelector is a label match evaluated at connection time, so
+  # `app: traefik` resolves whether or not a traefik pod exists when the policy is applied.
   #
   # What DOES constrain the position is the role's probe job. tasks/k8s_batch.yml drains
-  # rollouts only at the END of a batch, and traefik is replicas: 1 with strategy: Recreate, so
-  # inside traefik's own batch there is a window with zero traefik pods — and the probe's first
-  # assertion dials traefik:80. Sharing a batch would make the probe fail on timing, aborting
-  # the play with the fencing already applied. Running last also guarantees littlelink (the
-  # probe's liveness and isolation target) is deployed and settled before the probe runs.
+  # rollouts only at the END of a batch, and traefik is replicas: 1 with strategy: Recreate,
+  # so inside traefik's own batch there is a window with zero traefik pods — and the probe's
+  # first assertion dials traefik:80. Sharing a batch would fail the probe on timing,
+  # aborting the play with the fencing already applied. Running last also guarantees
+  # littlelink (the probe's liveness and isolation target) is settled before the probe runs.
   #
   # Being last is safe: the selector is the opt-in label `netpol-baseline: enforced`, so the
-  # policy only ever affects pods that already carry it, and those pods being unfenced until
-  # this entry runs is exactly today's steady state.
+  # policy only affects pods already carrying it.
   - name: netpol-baseline
     platform: k8s
-# Enabled 2026-08-01, once this host's first manual initial_setup.yml + deploy.yml run
-# finished green — the condition README §4 sets. It stays false before that because the
-# gitops_deploy handler shells a full deploy at the end of initial_setup.yml and fails the
-# play with it, so a single bad service would take down the whole OS-hardening run.
+# False until this host's first manual initial_setup.yml + deploy.yml run finishes green
+# (README §4): the gitops_deploy handler shells a full deploy at the end of
+# initial_setup.yml and fails the play with it, so one bad service would take down the
+# whole OS-hardening run.
 has_gitops: true
 # k8s auto-deploy. Eligibility is an image-only diff to a non-denylisted service's
-# defaults/main.yml — see roles/setup/gitops_deploy/defaults/main.yml, where every denylist entry
-# carries its reason.
+# defaults/main.yml — see roles/setup/gitops_deploy/defaults/main.yml, where every denylist
+# entry carries its reason. The cleared pilot list means the denylist alone governs.
 #
-# Pilot list CLEARED 2026-08-16 (design slice 3), so the denylist alone governs. That handed the
-# denylist safety work the pilot had been doing incidentally, and it was not complete: six
-# services matched an existing exclusion class while sitting outside the list purely because the
-# pilot named neither them nor anything else. They were added in the same commit — qbittorrent /
-# bazarr / tdarr (migrating state), livesync (stateful), valheim (probe-less), valheim-stats
-# (games). Clearing the pilot without that audit would have armed all six.
-#
-# DO NOT hand-maintain the eligible list here. Run `uv run python scripts/k8s_autodeploy_counts.py`
-# — it derives eligible/denied from the role sources, and the partition is CI-enforced by
+# DO NOT hand-maintain the eligible list here. Run
+# `uv run python scripts/k8s_autodeploy_counts.py` — it derives eligible/denied from the
+# role sources, and the partition is CI-enforced by
 # test_k8s_autodeploy_guard.py::test_every_role_is_either_denied_or_declares_itself_deployable.
+# A list written here goes stale silently and reads as current; see the memory
+# `autodeploy-counts-must-be-measured-not-computed`.
 #
-# A list written here goes stale silently and reads as current: this comment named six services
-# ("bento-pdf, headlamp, homepage, littlelink, peanut and speedtest") from 2026-08-16 until
-# 2026-08-22, by which point slice 7b's promotions had taken the real figure to 22 — a ~3.7x
-# understatement of auto-deploy blast radius, on an armed feature, with no test to catch it.
-# That is the fourth instance of the same drift; the other three were PR bodies, which at least
-# closed with the PR. See the memory `autodeploy-counts-must-be-measured-not-computed`.
+# code-server, homelab-mcp and ical-proxy are absent from the denylist deliberately: their
+# pins are Jinja registry refs Renovate cannot reach, so they can never qualify (design §7).
+# That is a structural fact about those roles, not a count, so it keeps.
 #
-# code-server, homelab-mcp and ical-proxy are absent from the denylist deliberately: their pins
-# are Jinja registry refs Renovate cannot reach, so they can never qualify (design §7). That is a
-# structural fact about those roles, not a count, so it keeps.
-#
-# NOT yet proven end-to-end: no real Renovate PR has ever traversed this path. The 2026-08-14
-# drill covered deploy → gate → restore; the deployer's git plumbing around it (detect → ff-merge
-# → deploy → catch → hold → reset → redeploy → Discord) has never run. Widening to six stateless
-# leaves is the cheapest way to get that first real transit, on the workloads where a failed
-# rollout costs least.
+# NOT yet proven end-to-end: no real Renovate PR has ever traversed this path. The drill
+# covered deploy → gate → restore; the deployer's git plumbing around it (detect → ff-merge
+# → deploy → catch → hold → reset → redeploy → Discord) has never run.
 gitops_deploy_k8s_autodeploy_enabled: true
 gitops_deploy_k8s_autodeploy_pilot: []
 # This is the k3s node — it must NOT have Docker. k3s brings its own containerd and its
-# flannel/kube-proxy iptables rules; daniel-box was chosen to go first precisely because it
-# had no container runtime. A bare `initial_setup.yml` (no --tags) installed Docker here on
-# 2026-08-01, which tripped the k3s role's fail-closed guard and blocked k3s-bringup.yml.
-# Docker was purged the same day. Keep this false — it is what makes the removal hold.
+# flannel/kube-proxy iptables rules. A bare `initial_setup.yml` (no --tags) once installed
+# Docker here, which tripped the k3s role's fail-closed guard and blocked k3s-bringup.yml.
+# Keep this false — it is what makes the removal hold.
 has_docker: false
-# Developer environment, opted in (both default false in group_vars/all.yml). profile
-# "server" matches daniel-server and pulls the full CLI toolchain on first apply.
-# Claude Code still needs one interactive `claude login` on this host afterwards —
-# the role installs the binary but cannot mint the OAuth credential.
+# Developer environment, opted in (both default false in group_vars/all.yml). Claude Code
+# still needs one interactive `claude login` here afterwards — the role installs the binary
+# but cannot mint the OAuth credential.
 has_github_cli: true
 has_chezmoi: true
 has_claude_code: true
-# Deliberately unset. This is an AMD Ryzen 7 8845HS with a Radeon 780M — /dev/dri/renderD128
-# already exists, and `has_igpu` means "pass /dev/dri through", which AMD uses for VAAPI too
-# (README §7). It gates nothing while containers_list is empty; set it when jellyfin/tdarr
-# land here. The i915 modprobe task self-skips on a non-Intel GPU either way.
+# `has_igpu` is deliberately unset. It means "pass /dev/dri through" (README §7) and is the
+# Docker-side switch; for the k8s workloads render_gid below supersedes it, because in the
+# cluster a container reaches the render node through the device plugin plus group
+# membership rather than a device passthrough flag.
 #
-# Superseded for the k8s workloads by render_gid below: in the cluster a container reaches the
-# render node through the device plugin plus group membership, not through a device passthrough
-# flag. has_igpu remains the Docker-side switch.
-# has_igpu: true
-
-# The `render` group's GID on THIS host, verified 2026-08-08 (`getent group render` → 993).
-#
-# Host-specific by nature, which is why it is here rather than in a role default. The device
-# plugin gets a container past the cgroup v2 device filter; this gets it past the file mode
-# (/dev/dri/renderD128 is crw-rw---- root:render and the pods run as uid 1000). Nothing
-# guarantees 993 on another machine, and daniel-server joining the cluster at slice 7 is exactly
-# when a hardcoded one would silently become wrong — the symptom would be EACCES on open,
-# distinct from the EPERM that means the cgroup filter refused (B1/D2).
+# The `render` group's GID on THIS host. Host-specific by nature, which is why it is here
+# rather than in a role default. The device plugin gets a container past the cgroup v2
+# device filter; this gets it past the file mode (/dev/dri/renderD128 is crw-rw----
+# root:render and the pods run as uid 1000). Nothing guarantees 993 on another machine, and
+# the symptom of a wrong value is EACCES on open — distinct from the EPERM that means the
+# cgroup filter refused.
 render_gid: 993
