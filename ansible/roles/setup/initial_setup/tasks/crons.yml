@@ -219,7 +219,7 @@
 - name: Stamp the rendered secret-rotation wrappers (gitops host only)
   tags: [crons]
   when: has_gitops
-  ansible.builtin.include_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
   vars:
     stamp_render_name: secret-rotation
     stamp_render_templates:
