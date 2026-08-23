@@ -17,6 +17,12 @@
 # so resolving beats hardcoding.
 set -uo pipefail
 
+# shellcheck source=/dev/null
+source /usr/local/lib/kuma-push-lib.sh || {
+  logger -t claude-otel-health "kuma-push-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+
 # Cron's PATH is /usr/bin:/bin, which omits /usr/local/bin where k3s lives. Without this the
 # cron run dies on "k3s: command not found" instead of reporting cluster state.
 export PATH="/usr/local/bin:${PATH}"
@@ -93,9 +99,4 @@ else
   MSG="$PROBLEMS"
 fi
 
-curl -fsS --max-time 10 -G \
-  --resolve "${KUMA_HOST}:443:${KUMA_RESOLVE_IP}" \
-  --data-urlencode "status=${STATUS}" \
-  --data-urlencode "msg=${MSG}" \
-  "$PUSH_URL" >/dev/null \
-  || logger -t claude-otel-health "push failed (status=${STATUS}: ${MSG})"
+kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" claude-otel-health

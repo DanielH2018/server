@@ -45,6 +45,7 @@ from _render_guard import (
     ANSIBLE,
     BASE_CONTEXT,
     SHARED_TPL,
+    HOST_VARS as HOST_VARS_DIR,
     dump_numbered,
     load_yaml,
     make_env,
@@ -73,7 +74,9 @@ def register_ansible_filters(env):
 
 
 K8S_ROLES = ANSIBLE / "roles" / "k8s"
-HOST_VARS = ANSIBLE / "inventory" / "host_vars" / "daniel-box.yml"
+# The one host that declares k8s services, so this is a single file where the other inventory
+# readers walk the whole directory.
+HOST_VARS = HOST_VARS_DIR / "daniel-box.yml"
 # Helper roles, included by service roles rather than deployed on their own. They have no
 # containers_list entry because they are not services, so the platform check below would
 # always fail for them. seed-volume's templates still render — they just render with vars the

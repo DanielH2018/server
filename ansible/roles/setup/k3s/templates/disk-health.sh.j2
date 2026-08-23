@@ -11,6 +11,12 @@
 # would fire after the storage plane already degraded.
 set -uo pipefail
 
+# shellcheck source=/dev/null
+source /usr/local/lib/kuma-push-lib.sh || {
+  logger -t disk-health "kuma-push-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 # Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
 # edge's bridge route for this name was removed in the slice-7 bridge teardown.
@@ -36,12 +42,7 @@ fi
 # DOWN leaves no durable record and `probe.py alerts` can never reconstruct this monitor.
 logger -t disk-health "status=${STATUS} ${MSG}"
 
-curl -fsS --max-time 10 -G \
-  --resolve "${KUMA_HOST}:443:${KUMA_RESOLVE_IP}" \
-  --data-urlencode "status=${STATUS}" \
-  --data-urlencode "msg=${MSG}" \
-  "$PUSH_URL" >/dev/null \
-  || logger -t disk-health "push failed (status=${STATUS}: ${MSG})"
+kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" disk-health
 
 # Off-premises dead-man's switch — see longhorn-backup-health.sh.j2 for the full rationale.
 # Short version: Kuma runs on the cluster this watches, so an outage silences both the push and

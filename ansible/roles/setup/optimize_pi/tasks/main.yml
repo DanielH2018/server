@@ -374,16 +374,18 @@
     state: started
   become: true
 
-- name: Deploy the shared Pi Kuma-push helper
+# The Kuma-push helper both health crons below source is no longer installed here. It moved to
+# the initial_setup role as /usr/local/lib/kuma-push-lib.sh once the cluster's own health crons
+# needed the same six-line curl; initial_setup runs on every host and runs earlier in
+# initial_setup.yml than this role, so the file is on disk before either script is rendered.
+
+- name: Remove the superseded Pi-only Kuma-push helper
   tags: [sd-health, recovery-health]
-  # Sourced by both health crons (pi-sd-health / pi-recovery-health) for the identical Kuma push tail.
-  # Same-role lib (both consumers live here); deployed before either script so it's on disk first.
-  ansible.builtin.copy:
-    src: pi-kuma-push-lib.sh
-    dest: /usr/local/lib/pi-kuma-push-lib.sh
-    owner: root
-    group: root
-    mode: "0644"
+  # Nothing sources it after the rename, and an orphaned copy on disk is the one that gets
+  # edited by mistake. Ansible does not reap a file it stopped managing.
+  ansible.builtin.file:
+    path: /usr/local/lib/pi-kuma-push-lib.sh
+    state: absent
   become: true
 
 - name: Deploy the SD-card health heartbeat script

@@ -3,6 +3,28 @@
 # pruning, ansible.log truncation, and the infrastructure-map refresh.
 # Split out of main.yml on 2026-08-15; task content and tags are unchanged.
 
+- name: Deploy the shared Kuma-push helper
+  # DECIDED: `always`, not `crons` — this is a dependency of tasks in OTHER roles under other
+  # tags, so any tag that selects a consumer must also select this. optimize_pi's Pi crons are
+  # tagged `sd-health` / `recovery-health`, so the one-liner that role's CLAUDE.md documents
+  # (`initial_setup.yml --tags recovery-health -e target=daniel-pi`) rendered a cron that
+  # sources a file the same run never copied. Enumerating consumer tags here would re-break the
+  # next time a cron picks up a new tag; `always` cannot drift. Cost is one idempotent copy per
+  # tag-scoped run of initial_setup.yml.
+  tags: [always]
+  # FIRST in this file, and initial_setup runs before deploy.yml (ansible/README.md §4): every
+  # health cron on every host sources this, including secret-rotate.sh.j2 further down, so it
+  # has to be on disk before any of them are rendered. Consumers source it with a `|| exit 1`
+  # guard, so a host that somehow misses it fails its cron loudly and drops the heartbeat
+  # rather than skipping the push and reporting green.
+  ansible.builtin.copy:
+    src: kuma-push-lib.sh
+    dest: /usr/local/lib/kuma-push-lib.sh
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: Deploy the daily secret-rotation audit wrapper (gitops host only)
   tags: [crons]
   # Gated on has_gitops, not a hostname: this reads ansible/secret_rotation.yml and the key

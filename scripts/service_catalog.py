@@ -61,9 +61,14 @@ from typing import Any
 
 import yaml
 
-REPO = Path(__file__).resolve().parents[1]
-HOST_VARS = REPO / "ansible" / "inventory" / "host_vars"
-ALL_VARS = REPO / "ansible" / "inventory" / "group_vars" / "all.yml"
+from _render_guard import (
+    ALL_VARS,
+    HOST_VARS,
+    REPO,
+    containers_entries,
+    host_files,
+)
+
 K8S_ROLES = REPO / "ansible" / "roles" / "k8s"
 K3S_DEFAULTS = REPO / "ansible" / "roles" / "setup" / "k3s" / "defaults" / "main.yml"
 
@@ -91,9 +96,10 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 # containers_list — same source and shape scripts/deploy_tags.py already parses.
 
 
-def iter_host_files(host_vars: Path = HOST_VARS) -> list[Path]:
-    # `_example.yml` is a template, not a real host — same exclusion deploy_tags.py makes.
-    return sorted(p for p in host_vars.glob("*.yml") if not p.name.startswith("_"))
+# Kept as a name of its own: `describe` and the row builder both call it, and the tests import
+# it directly. It is now a thin alias for the shared reader rather than a second copy of the
+# `_`-prefix exclusion.
+iter_host_files = host_files
 
 
 def host_expose_mode(host_data: dict[str, Any]) -> str | None:
@@ -290,10 +296,8 @@ def build_rows(
     for path in iter_host_files(host_vars):
         host_data = _load_yaml(path)
         host = path.stem
-        for entry in host_data.get("containers_list") or []:
-            name = entry.get("name")
-            if not name:
-                continue
+        for entry in containers_entries(path):
+            name = entry["name"]
             platform = entry.get("platform", "docker")
             rows.append(
                 ServiceRow(

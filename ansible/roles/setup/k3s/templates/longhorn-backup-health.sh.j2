@@ -9,13 +9,20 @@
 #
 # monitor-bridge runs on the SERVER and cannot see this cluster, so this pushes rather than
 # being polled — the same shape as the Pi's health crons (optimize_pi role), for the same
-# reason. The curl is inlined rather than sharing optimize_pi's pi-kuma-push-lib.sh: that lib
-# lives in a Pi-only role, and promoting it to a shared location is a refactor worth doing
-# when monitoring itself moves onto this host, not before.
+# reason. The push itself comes from /usr/local/lib/kuma-push-lib.sh, which the initial_setup
+# role installs on every host. This file used to inline the curl and said promoting the Pi-only
+# lib was "a refactor worth doing when monitoring itself moves onto this host, not before" —
+# the k3s migration moved Kuma and monitor-bridge into the cluster on 2026-08-14, so it was.
 #
 # Reads the cluster through the read-only ServiceAccount kubeconfig (k3s role), so the cron
 # needs no sudo and cannot mutate anything.
 set -uo pipefail
+
+# shellcheck source=/dev/null
+source /usr/local/lib/kuma-push-lib.sh || {
+  logger -t longhorn-backup-health "kuma-push-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
 
 # Cron's PATH is /usr/bin:/bin, which omits /usr/local/bin where k3s lives. Without this the
 # cron run dies on "k3s: command not found" instead of reporting backup state.
@@ -575,13 +582,8 @@ fi
 # how long it lasted. promtail's node-syslog job carries this line into Loki.
 logger -t longhorn-backup-health "status=${STATUS} ${MSG}"
 
-KUMA_PUSH_OK=1
-curl -fsS --max-time 10 -G \
-  --resolve "${KUMA_HOST}:443:${KUMA_RESOLVE_IP}" \
-  --data-urlencode "status=${STATUS}" \
-  --data-urlencode "msg=${PUSH_MSG}" \
-  "$PUSH_URL" >/dev/null \
-  || { KUMA_PUSH_OK=0; logger -t longhorn-backup-health "push failed (status=${STATUS}: ${PUSH_MSG})"; }
+# kuma_push sets KUMA_PUSH_OK; the dead-man's-switch ping below reads it.
+kuma_push "$STATUS" "$PUSH_MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" longhorn-backup-health
 
 # Off-premises dead-man's switch. The push above targets Kuma, which runs ON the cluster this
 # script watches — a cluster or WAN outage kills the push AND the monitor waiting for it, so
