@@ -966,7 +966,10 @@ def test_the_recency_window_is_wider_than_the_worst_observed_restart_spacing():
     DOWN plus a notification (the crowdsec-appsec failure: 24 transitions in 3h). Pin the
     floor so a later "make it clear faster" edit cannot cross it silently.
     """
-    assert check.duration_seconds(check.K8S_RESTART_RECENT_WINDOW) >= 20 * 60
+    # 30m, not 20m: the observed spacing RANGE tops out at ~19 min, so a 20m floor sits at the
+    # edge of the flapping band rather than outside it — and would let a later edit to 20m or
+    # 25m pass the very test written to stop it.
+    assert check.duration_seconds(check.K8S_RESTART_RECENT_WINDOW) >= 30 * 60
     # And it must still be shorter than the evidence window, or it gates nothing.
     assert check.duration_seconds(
         check.K8S_RESTART_RECENT_WINDOW
