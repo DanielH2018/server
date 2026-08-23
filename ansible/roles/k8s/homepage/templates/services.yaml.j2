@@ -114,13 +114,32 @@
                 # 60s, against homepage's 10s default: this is a Prometheus query per dashboard
                 # load per browser, and cluster counts do not move on a 10-second scale.
                 refreshInterval: 60000
-                display: dynamic-list
+                # DECIDED: `display: block` (homepage's default), not `dynamic-list` — every
+                # other widget on this dashboard renders as blocks, and a list tile reads as a
+                # different kind of thing. The cost is that block mode pairs a value to a label
+                # by ARRAY POSITION, so the indices below depend on the `or` operand order in
+                # homepage_k8s_headlamp_cluster_query. Accepted because a reordering shows up as
+                # "97 NODES READY" — wrong at a glance rather than plausibly wrong. Keep the
+                # query's operand order and this list in the same order; changing one alone is
+                # the only way to break this quietly. ENFORCED by
+                # ansible/tests/test_headlamp_widget_mapping_order.py, which fails on a
+                # reordered, renamed, missing or duplicated counter.
+                #
+                # Prometheus wraps its vector as {"data": {"result": [{"metric": {...},
+                # "value": [<ts>, "<n>"]}, …]}} — hence `data.result.<n>.value.1` for each number.
                 mappings:
-                    # Prometheus wraps its vector as {"data": {"result": [{"metric": {...},
-                    # "value": [<ts>, "<n>"]}, …]}} — hence the `value.1` index for the number.
-                    items: data.result
-                    name: metric.k
-                    label: value.1
+                    - field: data.result.0.value.1
+                      label: Nodes Ready
+                      format: number
+                    - field: data.result.1.value.1
+                      label: Pods Running
+                      format: number
+                    - field: data.result.2.value.1
+                      label: Pods Not Running
+                      format: number
+                    - field: data.result.3.value.1
+                      label: Deploys Degraded
+                      format: number
         - Home Assistant:
             icon: home-assistant.png
             href: https://home-assistant.{{ domain }}/

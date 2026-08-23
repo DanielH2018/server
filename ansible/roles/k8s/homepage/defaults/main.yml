@@ -32,9 +32,12 @@ homepage_k8s_mem_request: 32Mi
 #   - the inner `or vector(0)` is what makes an EMPTY match render as 0. Without it `count()`
 #     over nothing returns no series, `scalar()` of that is NaN, and the tile reads "NaN" for
 #     exactly the healthy case (zero degraded deployments) it exists to confirm.
-#   - `label_replace` names each sample, which is what lets the widget pair name to value by
-#     LABEL rather than by array position (`display: dynamic-list`, `name: metric.k`). Positional
-#     mappings would silently mislabel if Prometheus ever reordered the result set.
+#   - `label_replace` is LOAD-BEARING, and not for display: `or` is set union over series
+#     SIGNATURES, and four bare `vector()` samples all carry the empty signature — so without a
+#     distinguishing label the union collapses to ONE result and the tile renders a single
+#     number. Measured 2026-08-23: dropping label_replace returned `result` of length 1, not 4.
+#     The names it assigns are also what makes the query legible when curled by hand, which is
+#     how you check the widget's positional mappings still line up (services.yaml.j2).
 # Counts, not gauges: cluster and node CPU/memory are already on this dashboard twice
 # (config/widgets.yaml.j2's kubernetes info widget, and this tile's own namespace/podSelector pod
 # stats), so repeating them here would add nothing visible.
