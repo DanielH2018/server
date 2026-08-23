@@ -17,7 +17,6 @@ k8s_autodeploy_reason: "state coupled outside the volume — reverting the Couch
 # Slice 7a task 3 — the pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
 # Declared regardless of k8s_autodeploy — protects a manual deploy too.
 k8s_autodeploy_snapshot_pvcs: [livesync-data]  # noqa var-naming[no-role-prefix]
-# Mirrors resources('1.0', '1024M', '0.10', '128M') in the compose template.
 livesync_k8s_cpu_limit: "1"
 livesync_k8s_mem_limit: 1024Mi
 livesync_k8s_cpu_request: "100m"

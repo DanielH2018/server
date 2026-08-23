@@ -72,7 +72,6 @@ jellyfin_k8s_dri_resource: devic.es/dri
 # under Compose; the LAN VIP above is the same idea on the new host.
 jellyfin_k8s_published_url: "http://{{ jellyfin_k8s_lan_ip }}:8096"
 
-# Mirrors resources('4.0', '4096M', '0.25', '256M') in the compose template.
 jellyfin_k8s_cpu_limit: "4"
 jellyfin_k8s_mem_limit: 4096Mi
 jellyfin_k8s_cpu_request: "250m"
