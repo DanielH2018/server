@@ -114,7 +114,7 @@
 # and the exit-75 fix sat merged-but-undeployed on this host for exactly that reason (review H1).
 # Last in the role so a failed run leaves the previous checksums rather than claiming these.
 - name: Stamp the rendered gitops-deploy units
-  ansible.builtin.include_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
   vars:
     stamp_render_name: gitops-deploy
     stamp_render_templates:
