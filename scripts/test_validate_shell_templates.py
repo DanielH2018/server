@@ -241,26 +241,34 @@ def test_main_fails_closed_when_shellcheck_missing(monkeypatch):
 # --------------------------------------------------------------------------- cron PATH rule
 
 
-def test_cron_job_scripts_resolves_a_dest_rename():
+@pytest.fixture(scope="module")
+def cron_map():
+    """Every cron-installed shell template in the real tree, resolved once.
+
+    The resolver walks every role's tasks and crons to map template -> installing task file,
+    which costs ~0.6s. Four guards below read the same mapping and none mutates it, so they
+    share one. A test that needs a different roles dir calls v.cron_job_scripts(roots) itself.
+    """
+    return v.cron_job_scripts()
+
+
+def test_cron_job_scripts_resolves_a_dest_rename(cron_map):
     # claude-otel deploys templates/telemetry-health.sh.j2 to
     # /usr/local/bin/claude-otel-health.sh — the cron `job:` only ever names the dest, so this
     # must resolve through the template task's `src:`, not assume dest basename == template name.
-    mapping = v.cron_job_scripts()
     telemetry = v.ROLES / "k8s/claude-otel/templates/telemetry-health.sh.j2"
-    assert telemetry in mapping
-    assert mapping[telemetry].name == "main.yml"
+    assert telemetry in cron_map
+    assert cron_map[telemetry].name == "main.yml"
 
 
-def test_cron_job_scripts_excludes_archive():
-    mapping = v.cron_job_scripts()
-    assert not any("archive" in str(t) for t in mapping)
+def test_cron_job_scripts_excludes_archive(cron_map):
+    assert not any("archive" in str(t) for t in cron_map)
 
 
-def test_cron_job_scripts_excludes_the_deliberately_unscheduled_reaper():
+def test_cron_job_scripts_excludes_the_deliberately_unscheduled_reaper(cron_map):
     # longhorn-reap-orphan-backups.sh.j2 uses the same bare `k3s kubectl` as the two real
     # offenders but health-crons.yml deliberately never schedules it — it must not appear here.
-    mapping = v.cron_job_scripts()
-    assert not any(t.name == "longhorn-reap-orphan-backups.sh.j2" for t in mapping)
+    assert not any(t.name == "longhorn-reap-orphan-backups.sh.j2" for t in cron_map)
 
 
 def test_cron_path_error_flags_a_bare_invocation_with_no_path_fix(tmp_path):
@@ -334,12 +342,11 @@ def test_cron_path_error_passes_when_the_crontab_sets_path(tmp_path):
     assert v.cron_path_error(template, rendered, {template: task_file}) is None
 
 
-def test_no_cron_job_template_in_the_tree_violates_the_path_rule():
+def test_no_cron_job_template_in_the_tree_violates_the_path_rule(cron_map):
     # The rule shipped with two real offenders (telemetry-health, longhorn-backup-health);
     # both were fixed in the same change, so there is no allowlist. Asserting zero against
     # the real tree keeps that true without a list to go stale.
     ctx = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **v.SHELL_STUB_OVERRIDES}
-    cron_map = v.cron_job_scripts()
     assert cron_map, (
         "cron_job_scripts() found no cron-installed templates — resolver broke"
     )
