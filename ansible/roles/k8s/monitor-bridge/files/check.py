@@ -572,7 +572,13 @@ HA_CONSECUTIVE = int(_env("HA_CONSECUTIVE", "2"))
 # This arm is the visibility half. The window is deliberately wider than INTERVAL — bans persist
 # in /config/ip_bans.yaml until a human deletes the line, so re-reporting one is correct, not noise.
 HA_BAN_WINDOW = _env("HA_BAN_WINDOW", "1h")
-HA_BAN_SELECTOR = '{namespace="homelab",app="home-assistant"} |~ "Banned IP"'
+# `container=`, NOT `app=`. Promtail's k8s stream carries container/pod/job/machine/namespace/
+# service_name/stream — there is no `app` label, so `app="home-assistant"` matched no stream and
+# the arm reported "no ip_ban events" forever: a monitor green because it is blind. It shipped that
+# way and was caught the same day (2026-08-23) by running the selector against live Loki over a
+# window containing a KNOWN ban. Same lesson as the kube-state-metrics label trap in this role's
+# CLAUDE.md — a fail-open arm cannot tell "nothing to report" from "I asked the wrong question".
+HA_BAN_SELECTOR = '{namespace="homelab",container="home-assistant"} |~ "Banned IP"'
 
 # Discord delivery: Kuma fires every alert by POSTing to its Discord webhook
 # (monitor_discord_webhook_url). A rotated/revoked/deleted webhook leaves every monitor

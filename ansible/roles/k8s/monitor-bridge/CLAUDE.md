@@ -297,7 +297,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     pages. Empty `HA_URL`/`HA_TOKEN` = disabled (stays up). Pure `ha_heartbeat_fresh()` + the
     streak wrapper are unit-tested.
     **A second arm watches HA's own ip_ban** (added 2026-08-23): a `count_over_time` LogQL query
-    for `Banned IP` lines over `HA_BAN_WINDOW` (1h), `down` on any hit. HA's ban middleware runs on
+    for `Banned IP` lines over `HA_BAN_WINDOW` (1h), keyed on `container="home-assistant"` (see the no-`app`-label trap below), `down` on any hit. HA's ban middleware runs on
     every request and keys on the peer address, so an unauthenticated burst from inside the cluster
     bans an INFRASTRUCTURE ip — on 2026-08-23 five ad-hoc `curl` calls banned `10.42.0.1`, the
     node's pod-network gateway, and HA 403'd the kubelet probes arriving from it into a crash loop
@@ -630,6 +630,28 @@ Before trusting a new metric-backed check, run its exact query against live Prom
 confirm it returns rows; the unit tests mock the payload, so they prove the verdict logic and
 nothing about the selector. Guarded by `ksm_resource_label` in `files/check.py` and its test;
 landed in PR #286 the same day PR #281 introduced it.
+
+### Promtail's k8s streams have no `app` label
+`kubectl` selects pods with `-l app=home-assistant`, so a LogQL selector written from that habit
+reads naturally and matches nothing. Promtail's k8s stream carries
+`container` / `pod` / `job` / `machine` / `namespace` / `service_name` / `stream` / `filename` —
+no `app`. `LOKI_DOCKER_STREAM` already used `container=~".+"`; the ip_ban arm added 2026-08-23
+did not follow it.
+
+`HA_BAN_SELECTOR` shipped as `{namespace="homelab",app="home-assistant"}`, matched no stream, and
+pushed `no ip_ban events in 1h` — through a window that provably contained
+`Banned IP 10.42.0.1 for too many login attempts`. The arm fails open by design, so a wrong
+question and a clean bill of health are the same output. Same shape as the
+kube-state-metrics label trap above, and the same lesson: **a fail-closed check pages on a typo,
+a fail-open check goes green on one.**
+
+Unit tests could not catch it — they mock the payload, so they prove the verdict logic and
+nothing about the selector. What caught it was running the selector against live Loki over a
+window containing a KNOWN event, which is the only check that distinguishes "nothing happened"
+from "nothing matched". Do that before trusting any new log- or metric-backed arm; a green first
+cycle is not evidence. `LOKI_STREAM_LABELS` +
+`test_loki_selectors_use_real_stream_labels` in `test_check_service.py` now pin the vocabulary
+for all three Loki selectors.
 
 ### The bracketed log timestamps are Central time, not UTC
 Log lines like `[2026-08-16T07:26:57] DOWN b2_reachable ...` carry the container's local
