@@ -145,6 +145,33 @@
     marker: "# {mark} ANSIBLE MANAGED BLOCK - sys user forwarding"
     block: |
       Match User {{ sys_user }}
-          AllowTcpForwarding local
+          # `all`, not `local`. The clipboard bridge (chezmoi
+          # home/dot_local/bin/executable_clip-bridge) needs the sys user to open ONE
+          # reverse forward: a unix socket on this host that carries a clipboard read back
+          # to the workstation, so Claude Code running here can answer an image paste.
+          #
+          # Setting only AllowStreamLocalForwarding does NOT achieve that, which cost an
+          # afternoon to establish. sshd builds the channel layer from AllowTcpForwarding
+          # alone: when it excludes FORWARD_REMOTE it calls channel_disable_admin() for
+          # remote listens, and check_rfwd_permission then refuses EVERY remote forward --
+          # unix-domain ones included -- before AllowStreamLocalForwarding is consulted.
+          # The giveaway is the log line "to remote forward to path ... but the request was
+          # denied", which comes from that permission check rather than from the forwarding
+          # allowlist (whose refusal reads "Server has disabled port forwarding").
+          #
+          # So reverse TCP forwarding is unavoidably re-enabled here. It is a real widening
+          # and the reason it is acceptable is that this user already has a full shell:
+          # AllowTcpForwarding restricts a key used purely as a tunnel, not an account that
+          # can run sshd -R itself. GatewayPorts stays at its default of no, so a reverse
+          # forward binds this host's loopback only.
+          AllowTcpForwarding all
+          # Narrows the streamlocal side back down to the one direction the bridge needs.
+          AllowStreamLocalForwarding remote
+          # sshd, not the client, creates and removes the socket for a REMOTE forward, so
+          # the client-side StreamLocalBindUnlink does nothing here and this is the one that
+          # counts. Default is no: a tunnel killed uncleanly (suspend, network drop, reboot)
+          # leaves the socket file behind, the next bind fails on it, and the workstation's
+          # Restart=always tunnel then loops forever with nothing to self-heal against.
+          StreamLocalBindUnlink yes
           DisableForwarding no
   notify: Restart SSH
