@@ -179,10 +179,21 @@ stringData:
     {"type": "push", "name": "k3s CPU Throttling", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_cpu_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   crowdsec-home-allowlist.json: |
     {"type": "push", "name": "CrowdSec Home Allowlist", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_home_allowlist_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # DECIDED: 360s, not 300 — the deadline must exceed the producer's PERIOD, and the period
+  # is the cron plus the work. Both DDNS pods run the image's default UPDATE_CRON=@every 5m
+  # and ping Kuma at the END of each cycle, after IP detection and the record check, so a
+  # beat lands at 300s + that cycle's work. The image caps the work at 5s (IP detection) +
+  # 30s (record updating), so the pathological beat is 335s and 360 leaves 25s of margin —
+  # not the 60s the round number suggests. Re-derive from those two timeouts, not from the
+  # observed few seconds, if the image's defaults ever move. At interval 300 it raced every cycle
+  # and lost ~7 times a day: 47 + 40 flap episodes over the 7 days to 2026-08-23, each a
+  # ~2-minute dip with nothing actually wrong. Fixed here rather than by setting
+  # UPDATE_CRON=@every 4m in both deployments — that edits two files and makes the
+  # Cloudflare API busier to cure a monitoring artifact. Raise this if the cadence changes.
   cloudflare-ddns-proxied-push.json: |
-    {"type": "push", "name": "Cloudflare DDNS Proxied", "interval": 300, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ cloudflare_ddns_proxied_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Cloudflare DDNS Proxied", "interval": 360, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ cloudflare_ddns_proxied_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   cloudflare-ddns-direct-push.json: |
-    {"type": "push", "name": "Cloudflare DDNS Direct", "interval": 300, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ cloudflare_ddns_direct_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Cloudflare DDNS Direct", "interval": 360, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ cloudflare_ddns_direct_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   longhorn-backup.json: |
     {"type": "push", "name": "k3s Longhorn Backup", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ longhorn_backup_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   monitor-bridge-longhorn-volumes.json: |
