@@ -41,8 +41,16 @@ homepage_k8s_mem_request: 32Mi
 # Counts, not gauges: cluster and node CPU/memory are already on this dashboard twice
 # (config/widgets.yaml.j2's kubernetes info widget, and this tile's own namespace/podSelector pod
 # stats), so repeating them here would add nothing visible.
+#
+# DECIDED: the third counter is named "Stopped" but matches Pending|Failed|Unknown, and a Pending
+# pod is starting rather than stopped. The mismatch is deliberate and chosen for the dashboard,
+# where one word fits the block and "Not Running" wrapped to two lines. Do not "correct" the name
+# to match the phases; the two honest alternatives are to keep a two-word label, or to narrow the
+# match to Failed|Unknown and lose sight of a pod stuck Pending — which is the failure this
+# counter is most likely to catch. The visible consequence: every rollout, including homepage's
+# own, briefly shows a non-zero STOPPED while new pods schedule.
 homepage_k8s_headlamp_cluster_query: >-
   label_replace(vector(scalar(count(kube_node_status_condition{condition="Ready",status="true"} == 1) or vector(0))), "k", "Nodes", "", "")
   or label_replace(vector(scalar(count(kube_pod_status_phase{phase="Running"} == 1) or vector(0))), "k", "Running", "", "")
-  or label_replace(vector(scalar(count(kube_pod_status_phase{phase=~"Pending|Failed|Unknown"} == 1) or vector(0))), "k", "Not Running", "", "")
+  or label_replace(vector(scalar(count(kube_pod_status_phase{phase=~"Pending|Failed|Unknown"} == 1) or vector(0))), "k", "Stopped", "", "")
   or label_replace(vector(scalar(count(kube_deployment_status_replicas_unavailable > 0) or vector(0))), "k", "Degraded", "", "")
