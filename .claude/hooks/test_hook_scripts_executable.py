@@ -16,9 +16,11 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 SETTINGS = REPO / ".claude" / "settings.json"
 
-# `command` values look like `~/server/.claude/hooks/foo.sh` or `.claude/hooks/foo.sh`,
-# optionally with arguments after the path.
-_SCRIPT_RE = re.compile(r"(?:~/server/|\./)?(\.claude/[^\s\"']+\.(?:sh|py))")
+# Only the command's FIRST token is executed, so only it needs the exec bit. A repo path
+# appearing later is an argument to an interpreter (`uv run python .claude/hooks/foo.py`)
+# and is read, not executed. Anchoring here keeps the test from demanding a bit that
+# shape does not need, and from reaching outside the repo for a `~/.claude/...` hook.
+_SCRIPT_RE = re.compile(r"^(?:~/server/|\./)(\.claude/[^\s\"']+\.(?:sh|py))(?:\s|$)")
 
 
 def _hook_scripts() -> set[str]:
@@ -28,7 +30,9 @@ def _hook_scripts() -> set[str]:
         for matcher in matchers:
             for hook in matcher.get("hooks", []):
                 command = hook.get("command", "")
-                paths.update(_SCRIPT_RE.findall(command))
+                match = _SCRIPT_RE.match(command.strip())
+                if match:
+                    paths.add(match.group(1))
     return paths
 
 
