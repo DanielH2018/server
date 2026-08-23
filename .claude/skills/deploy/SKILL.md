@@ -8,6 +8,13 @@ Deploy a service using Ansible.
 
 If the user provided a service name as an argument, use it directly. Otherwise ask which service to deploy.
 
+**In the post-merge path, do not ask anything.** When this deploy is the follow-through on a PR
+that just merged (`CLAUDE.md` → *After a PR Merges — Pull, Deploy, Verify*), the service is
+already determined by the merged diff and the user has already asked. Skip step 2's dry-run
+question and go straight to the deploy, from `/home/ubuntu/server` on master rather than from a
+worktree. Everything else below — the platform split, the lock, the verification gate — is
+unchanged.
+
 **First, determine the platform** — the verification step differs and the Docker one is dead
 on the cluster nodes:
 

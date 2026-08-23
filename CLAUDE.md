@@ -37,6 +37,7 @@ Route to the source of truth by what you're doing, before reading linearly:
 | Adding / changing a service (k3s — the default) | `## Adding a New Service` below · a sibling role in `ansible/roles/k8s/` |
 | Adding / changing a Docker service (the Pi only) | `## Adding a New Service` → *Adding a Docker service* · `/new-container` skill |
 | Deploying or redeploying a service | `/deploy` skill · `## Common Commands` |
+| A PR just merged — what now | `## After a PR Merges — Pull, Deploy, Verify` below. Default is pull → deploy → verify in the same session, no ask. |
 | Checking a k8s manifest change without deploying it | `## Common Commands` → *Checking a k8s change without deploying it* (`--dry-run` vs `--check` — they check different things) |
 | Running or testing a GitOps tick without waiting 30 min | `./scripts/gitops_tick.sh` · `ansible/roles/setup/gitops_deploy/CLAUDE.md` → *Triggering a tick by hand*. A real tick, not a rehearsal — there is no dry-run mode. |
 | Adding / rotating a secret | `/add-secret` skill · `docs/secret-rotation.md` · `## Secrets Management` |
@@ -178,6 +179,96 @@ Two limits worth knowing before you trust a green dry run:
 - **A brand-new service is only half-checked.** `seed-volume` is skipped (it is a dependency of
   25 roles and mutates), and nothing at admission verifies that a referenced PVC exists — so
   the Deployment validates while the volume is never proven provisionable.
+
+## After a PR Merges — Pull, Deploy, Verify
+
+**The default is that a merge is followed through to a verified deploy, in the same session,
+without asking.** Merging is not shipping here: the GitOps deployer auto-deploys a k8s role
+**only** for an image-pin bump to a non-denylisted service, so an ordinary manifest or template
+change is fast-forwarded onto the primary checkout and never applied. Left there it sits
+undeployed behind a green master until someone notices, and the next session to deploy that
+service ships it as a side effect of unrelated work.
+
+Do not ask permission between the steps. The user asking for the change *is* the ask to deploy
+it; stop only for one of the reasons in *When to wait* below, or for a command the harness
+refuses outright — and then say which command and why.
+
+### The procedure
+
+1. **Merge, and record the pre-merge master SHA first.** `git rev-parse origin/master` before
+   `gh pr merge --squash`. Step 4 needs it, and `--changed`'s default ref (`origin/master`)
+   is useless once the pull has happened.
+2. **Wait for master CI to go green on the merge commit specifically.** Take the SHA from
+   `gh pr view <n> --json mergeCommit -q .mergeCommit.oid`, then poll the same endpoint the
+   deployer reads:
+   ```bash
+   gh api repos/DanielH2018/server/commits/<merge-sha>/check-runs \
+     --jq '.check_runs[] | "\(.name) \(.status) \(.conclusion)"'
+   ```
+   Do **not** gate on `gh run list --branch master --limit 1`. GitHub creates the run for a
+   freshly-pushed merge commit a moment after the push, so that query returns the *previous*
+   master run — green — and the wait returns instantly having watched the wrong commit.
+   **An empty or incomplete list is pending, never green**, which is how `ci_verdict` reads it
+   too (`ansible/roles/setup/gitops_deploy/files/deploy_logic.py:262`): a required name with no
+   runs yet holds the verdict at pending. Reading the same endpoint as the deployer is what
+   makes your verdict and the tick's agree by construction.
+
+   This is a gate, not politeness. PR CI is scoped to changed files, so whole-tree tests can
+   only fail after merge. A **pending** master CI also blocks the fast-forward itself —
+   `next_action` returns `ci_pending` *before* the `--ff-only` merge (`deploy_logic.py:301`), so
+   a tick fired seconds after the merge pulls nothing and every later step reads as stale.
+3. **Pull with `./scripts/gitops_tick.sh`, never a hand `git pull`.** The tick fetches,
+   CI-gates, `--ff-only` merges, deploys what is eligible, health-gates it and rolls back on
+   failure — all under `/var/lock/server-git-tree.lock`, which is what keeps it from racing the
+   30-minute timer or another session. A bare `git pull` in the primary checkout takes no lock
+   and skips the `hold_sha` machinery. Read the wrapper's `last_run` / `hold_sha` / `behind_since`
+   lines: a non-empty `hold_sha` means a previous SHA is held, and you diagnose that before
+   deploying anything.
+4. **Deploy what the tick deferred, from the primary checkout.** `deploy.sh` resolves its
+   checkout with `git rev-parse --show-toplevel`, so it renders from the **working directory**,
+   not from the path you invoked it by. After a squash merge the worktree branch is behind
+   master, so deploying from the worktree is refused (exit 4) — and would render stale templates
+   if it weren't.
+   ```bash
+   cd /home/ubuntu/server && ./scripts/deploy.sh --changed <pre-merge-SHA>
+   ```
+   `--changed` derives the tags from `git diff <ref>...HEAD` and refuses a broad change (exit 3).
+   The three-dot form diffs from the merge base, which equals the plain `<ref>..HEAD` range here
+   because the pre-merge SHA is an ancestor of the new master — so pass the pre-merge SHA and not
+   a branch name, whose merge base would be older.
+   Use explicit `--tags` instead when another session's PR merged in the same window — the SHA
+   range then covers their services too, and deploying someone else's half-finished landing is
+   not yours to do.
+5. **Verify twice — the workload, then the change.** `uv run python scripts/probe.py health
+   <svc>` per deployed tag gates the rollout and the 180s restart window. It cannot see whether
+   *your change* took effect: an Authelia 302 fires in the middleware before the backend is
+   reached, and 19 dead Grafana panels sat behind a 1/1 pod. Exercise the thing you actually
+   changed as well.
+
+### Working alongside other sessions
+
+- **The lock serializes; exit codes are resume points, not failures.** 75 = the lock stayed busy
+  (the timer or another session) — retry. 4 = the tree is behind origin/master — pull again,
+  never `--skip-staleness-check`. 2 = the tag matched nothing.
+- **The tick pulls all of master, not just your commit.** Another session's merged work
+  fast-forwards with yours. Scope your deploy to your own services; don't widen it to cover theirs.
+- **Check the SessionStart banner before deploying a shared role.** It lists the other live
+  sessions and the paths each has touched.
+- **`--detach` returning is not a verified deploy.** It backgrounds the rollout wait, which is
+  most of the deploy. Wait for the health gate before reporting success.
+
+### When to wait
+
+Say which of these applies, then stop:
+
+- Master CI is red or still pending.
+- The host holds a non-empty `hold_sha` — a previous SHA already failed its health gate.
+- `deploy.sh` exits 3: the change is broad (shared templates, inventory, the setup plane) and
+  maps to no single service.
+- The change is docs- or `tasks/`-only — the deployer skips those deliberately, and so do you.
+- The change is in the policies-first ordering plane, where a partial run leaves the exact state
+  the ordering exists to prevent.
+- A classifier denial. Report the denied command; do not reach for a bypass flag.
 
 ## Shell Commands — Shape Them to Auto-Approve
 Write exploratory commands so they auto-approve; expect a prompt for the rest.
