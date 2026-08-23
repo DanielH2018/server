@@ -34,8 +34,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_ROLES = _REPO_ROOT / "ansible" / "roles"
+from _helpers import REPO as _REPO_ROOT
+from _helpers import ROLES as _ROLES
+from _helpers import walk_tasks
 
 # Attributes a skip result does not carry. `results` is deliberately absent: a skipped
 # looped task DOES carry `results`, which is why looping it is safe and reading `.stdout`
@@ -52,19 +53,6 @@ _SKIP_FILTERS = (
 
 def _task_files() -> list[Path]:
     return sorted(p for p in _ROLES.rglob("tasks/*.yml") if "archive" not in p.parts)
-
-
-def _flatten(tasks) -> list[dict]:
-    """Walk block/rescue/always so a nested task is not invisible to the check."""
-    out: list[dict] = []
-    for task in tasks or []:
-        if not isinstance(task, dict):
-            continue
-        out.append(task)
-        for key in ("block", "rescue", "always"):
-            if key in task:
-                out.extend(_flatten(task[key]))
-    return out
 
 
 def _when_text(task: dict) -> str:
@@ -174,7 +162,7 @@ def _producers(tasks: list[dict]) -> dict[str, list[str]]:
 
 def _offenders(path: Path) -> list[str]:
     try:
-        tasks = _flatten(yaml.safe_load(path.read_text()))
+        tasks = list(walk_tasks(yaml.safe_load(path.read_text())))
     except yaml.YAMLError:
         return []  # the manifest/lint hooks own YAML validity; this check owns semantics
     conditional = _producers(tasks)

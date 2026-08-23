@@ -21,12 +21,9 @@ inherited from whatever the ambient umask happens to be.
 Run: uv run pytest ansible/tests/test_apt_keyring_permissions.py
 """
 
-from pathlib import Path
-
 import pytest
-import yaml
 
-SETUP_ROLES = Path(__file__).resolve().parents[1] / "roles" / "setup"
+from _helpers import SETUP_ROLES, load_tasks, walk_tasks
 
 KEYRING_DIRS = ("/etc/apt/keyrings", "/usr/share/keyrings")
 
@@ -44,20 +41,9 @@ def _task_files():
     return sorted(SETUP_ROLES.glob("*/tasks/*.yml"))
 
 
-def _flatten(tasks):
-    """Yield tasks, descending into block/rescue/always."""
-    for task in tasks or []:
-        if not isinstance(task, dict):
-            continue
-        yield task
-        for key in ("block", "rescue", "always"):
-            yield from _flatten(task.get(key))
-
-
 def _all_tasks():
     for path in _task_files():
-        loaded = yaml.safe_load(path.read_text())
-        for task in _flatten(loaded):
+        for task in walk_tasks(load_tasks(path)):
             yield path, task
 
 
@@ -73,7 +59,7 @@ def test_no_command_dearmors_a_keyring(path):
     # apt reads ASCII-armored keys referenced by Signed-By, so fetch the .asc directly
     # with get_url and an explicit mode instead — see docker_install/tasks/install.yml.
     offenders = []
-    for task in _flatten(yaml.safe_load(path.read_text())):
+    for task in walk_tasks(load_tasks(path)):
         for module in COMMAND_MODULES:
             spec = task.get(module)
             if not spec:
@@ -98,7 +84,7 @@ def test_no_command_dearmors_a_keyring(path):
 )
 def test_keyring_writes_set_an_explicit_mode(path):
     offenders = []
-    for task in _flatten(yaml.safe_load(path.read_text())):
+    for task in walk_tasks(load_tasks(path)):
         for module in FILE_WRITING_MODULES:
             spec = task.get(module)
             if not isinstance(spec, dict):

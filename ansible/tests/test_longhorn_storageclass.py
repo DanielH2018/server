@@ -23,35 +23,14 @@ newer upstream and pasting the parameter back in, which is what these tests catc
 Run: uv run pytest ansible/tests/test_longhorn_storageclass.py
 """
 
-from pathlib import Path
-
 import yaml
 
 from _k8s_render import rendered_docs
 
-ANSIBLE = Path(__file__).resolve().parents[1]
-K3S = ANSIBLE / "roles" / "setup" / "k3s"
+from _helpers import K8S_ROLES, SETUP_ROLES, leaf_tasks
+
+K3S = SETUP_ROLES / "k3s"
 STORAGECLASS = K3S / "files" / "longhorn-storageclass.yaml"
-
-
-def _flatten(entries):
-    """Tasks in run order, descending into block/rescue/always.
-
-    The walk was flat until 2026-08-15, which made it blind to anything nested: kubeconfig.yml
-    and longhorn.yml both use `block:`, so every task inside them was invisible to the ordering
-    and command assertions here while the suite still read as covering the role.
-    """
-    out: list[dict] = []
-    for entry in entries or []:
-        if not isinstance(entry, dict):
-            continue
-        nested = [entry.get(k) for k in ("block", "rescue", "always") if entry.get(k)]
-        if nested:
-            for section in nested:
-                out += _flatten(section)
-        else:
-            out.append(entry)
-    return out
 
 
 def _tasks():
@@ -65,10 +44,10 @@ def _tasks():
     for entry in yaml.safe_load((K3S / "tasks" / "main.yml").read_text()) or []:
         imported = entry.get("ansible.builtin.import_tasks")
         if not imported:
-            tasks += _flatten([entry])
+            tasks += leaf_tasks([entry])
             continue
         loaded = yaml.safe_load((K3S / "tasks" / imported).read_text()) or []
-        tasks += _flatten(loaded)
+        tasks += leaf_tasks(loaded)
     return tasks
 
 
@@ -216,7 +195,7 @@ def _declared_pvcs() -> set[str]:
         if doc.get("kind") == "PersistentVolumeClaim"
         and doc.get("metadata", {}).get("name")
     }
-    for defaults_file in (ANSIBLE / "roles" / "k8s").glob("*/defaults/main.yml"):
+    for defaults_file in K8S_ROLES.glob("*/defaults/main.yml"):
         values = yaml.safe_load(defaults_file.read_text()) or {}
         names |= {
             value
@@ -225,7 +204,7 @@ def _declared_pvcs() -> set[str]:
         }
     # A few roles pass the claim name to seed-volume as a literal rather than through a
     # defaults var (terraria-stats), so the defaults sweep alone misses them.
-    for tasks_file in (ANSIBLE / "roles" / "k8s").glob("*/tasks/*.yml"):
+    for tasks_file in K8S_ROLES.glob("*/tasks/*.yml"):
         for line in tasks_file.read_text().splitlines():
             stripped = line.strip()
             if stripped.startswith("seed_volume_claim:") and "{{" not in stripped:

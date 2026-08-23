@@ -20,25 +20,13 @@ config_files, which hardcodes the same path for the same reason.
 Run: uv run pytest ansible/tests/test_per_user_home_resolution.py
 """
 
-from pathlib import Path
-
 import pytest
-import yaml
 
-SETUP_ROLES = Path(__file__).resolve().parents[1] / "roles" / "setup"
+from _helpers import SETUP_ROLES, load_tasks, walk_tasks
 
 
 def _task_files():
     return sorted(SETUP_ROLES.glob("*/tasks/*.yml"))
-
-
-def _flatten(tasks):
-    for task in tasks or []:
-        if not isinstance(task, dict):
-            continue
-        yield task
-        for key in ("block", "rescue", "always"):
-            yield from _flatten(task.get(key))
 
 
 @pytest.mark.parametrize(
@@ -47,7 +35,7 @@ def _flatten(tasks):
 def test_unescalated_tasks_do_not_use_ansible_env_home(path):
     offenders = [
         task.get("name", "<unnamed>")
-        for task in _flatten(yaml.safe_load(path.read_text()))
+        for task in walk_tasks(load_tasks(path))
         if task.get("become") is False and "ansible_env.HOME" in str(task)
     ]
 
