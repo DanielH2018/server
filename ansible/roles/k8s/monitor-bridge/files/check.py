@@ -563,6 +563,16 @@ HA_HEARTBEAT_ENTITY = "input_datetime.ha_heartbeat"
 # the API unreachable for ~120s and then leaves the scheduler a beat behind — doesn't page.
 # 2 straight down cycles (~one full INTERVAL of continuous badness) before `down`.
 HA_CONSECUTIVE = int(_env("HA_CONSECUTIVE", "2"))
+# ip_ban arm of the HA monitor. HA's ban middleware runs on every request and keys on the peer
+# address, so a burst of unauthenticated /api/ calls can ban an INFRASTRUCTURE ip rather than an
+# attacker — on 2026-08-23 five bad calls from the node's pod-network gateway (10.42.0.1) banned
+# it, and the probes then arriving from that IP got 403 and crash-looped the pod. The probes no
+# longer arrive from a bannable address (they exec curl to 127.0.0.1), which fixes the crash loop
+# but makes a ban SILENT: HA keeps serving, while whatever shares that source IP stays locked out.
+# This arm is the visibility half. The window is deliberately wider than INTERVAL — bans persist
+# in /config/ip_bans.yaml until a human deletes the line, so re-reporting one is correct, not noise.
+HA_BAN_WINDOW = _env("HA_BAN_WINDOW", "1h")
+HA_BAN_SELECTOR = '{namespace="homelab",app="home-assistant"} |~ "Banned IP"'
 
 # Discord delivery: Kuma fires every alert by POSTing to its Discord webhook
 # (monitor_discord_webhook_url). A rotated/revoked/deleted webhook leaves every monitor
@@ -1894,6 +1904,45 @@ def ha_heartbeat_fresh(state, max_age_s, now=None):
     return True, "fresh — automations ran %.0fs ago" % age
 
 
+def ha_ban_verdict(banned_count, window):
+    """Decide the ip_ban arm from the "Banned IP" line count over `window` (None = no series).
+
+    None and 0 are the SAME healthy answer here, unlike loki_ingestion_fresh where a silent
+    stream is itself the fault: HA logs nothing when it bans nobody, so an empty vector is what
+    a healthy cluster looks like.
+    """
+    if not banned_count:
+        return True, "no ip_ban events in %s" % window
+    return False, (
+        "HA ip_ban fired %d time(s) in %s — an internal source IP is likely banned and is now "
+        "getting 403s; check the pod log for the address and delete its line from "
+        "/config/ip_bans.yaml to clear" % (int(banned_count), window)
+    )
+
+
+def with_ha_ban(ok, msg):
+    """Fold the ip_ban arm into a heartbeat verdict, ban winning the message.
+
+    Folded into this monitor rather than given its own for the reason recorded at
+    check_k8s_workloads' extended-resource arm: a new Kuma monitor costs a new push token in
+    SOPS, and a ban is an HA fault, which is what this monitor already reports.
+
+    # DECIDED: fails OPEN on a Loki error instead of adding ha_heartbeat to LOKI_DEPENDENT.
+    # Membership there suppresses the WHOLE check during a Loki outage, which would blind the
+    # real heartbeat — trading a live wedge-detector for a secondary arm is the wrong way round.
+    # The ban arm also skips down_streak: a ban persists in a file until a human clears it, so
+    # there is no transient to ride out.
+    """
+    try:
+        banned = loki_count(HA_BAN_SELECTOR, HA_BAN_WINDOW)
+    except Exception as e:
+        return ok, "%s, ip_ban arm unavailable (%s)" % (msg, e)
+    ban_ok, ban_msg = ha_ban_verdict(banned, HA_BAN_WINDOW)
+    if ban_ok:
+        return ok, "%s, %s" % (msg, ban_msg)
+    return False, "%s | %s" % (ban_msg, msg)
+
+
 _ha_down_streak = 0
 
 
@@ -1926,11 +1975,11 @@ def check_ha_heartbeat():
         ok, msg = False, "HA API unreachable: %s" % e
     if ok:
         _ha_down_streak = 0
-        return True, msg
+        return with_ha_ban(True, msg)
     _ha_down_streak, ok, msg = down_streak(
         _ha_down_streak, HA_CONSECUTIVE, msg, "deploy/restart grace"
     )
-    return ok, msg
+    return with_ha_ban(ok, msg)
 
 
 def loki_count(selector, window):

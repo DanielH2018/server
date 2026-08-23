@@ -566,9 +566,13 @@ def _ha_payload(age_s):
     return _ha_state(lc)
 
 
-def _ha_cycle(monkeypatch, age_s=600, raises=False):
+def _ha_cycle(monkeypatch, age_s=600, raises=False, banned=0):
     monkeypatch.setattr(check, "HA_URL", "http://home-assistant:8123")
     monkeypatch.setattr(check, "HA_TOKEN", "tok")
+    # The ip_ban arm queries Loki via loki_count. Patch it explicitly rather than letting it fall
+    # through the _get_json stub below: that stub returns an HA state payload, so the arm would
+    # take its fail-open path for an accidental reason and stop testing the hysteresis cleanly.
+    monkeypatch.setattr(check, "loki_count", lambda *a, **k: banned)
     if raises:
 
         def boom(*a, **k):
@@ -617,6 +621,67 @@ def test_ha_heartbeat_unreachable_api_rides_grace(monkeypatch):
     ok, msg = _ha_cycle(monkeypatch, raises=True)
     assert ok
     assert "1/2" in msg
+
+
+# ── HA ip_ban arm (2026-08-23: a banned infra IP 403'd the probes into a crash loop) ────────
+# HA's ban middleware keys on the peer address, so a burst of bad /api/ calls can ban the node's
+# pod-network gateway. The probes now exec curl to 127.0.0.1 and are immune; this arm is what
+# keeps the ban itself from being silent.
+def test_ha_ban_no_events_is_ok():
+    ok, msg = check.ha_ban_verdict(0, "1h")
+    assert ok
+    assert "no ip_ban events" in msg
+
+
+def test_ha_ban_none_series_is_ok():
+    # None and 0 are the same healthy answer: HA logs nothing when it bans nobody, so an empty
+    # vector is what a healthy cluster looks like — unlike loki_ingestion_fresh, where silence
+    # IS the fault.
+    ok, _ = check.ha_ban_verdict(None, "1h")
+    assert ok
+
+
+def test_ha_ban_event_is_down():
+    ok, msg = check.ha_ban_verdict(1, "1h")
+    assert not ok
+    assert "ip_ban fired 1 time(s)" in msg
+    assert "ip_bans.yaml" in msg
+
+
+def test_ha_ban_wins_the_message_over_a_healthy_heartbeat(monkeypatch):
+    # A ban pages even while the heartbeat itself is fresh — the two arms are independent, and
+    # the ban text leads because it names the actionable fault.
+    monkeypatch.setattr(check, "_ha_down_streak", 0)
+    ok, msg = _ha_cycle(monkeypatch, age_s=60, banned=3)
+    assert not ok
+    assert msg.startswith("HA ip_ban fired 3 time(s)")
+    assert "fresh" in msg  # the heartbeat's own verdict is preserved, not dropped
+
+
+def test_ha_ban_skips_the_deploy_grace(monkeypatch):
+    # down_streak exists for transients. A ban persists in /config/ip_bans.yaml until a human
+    # clears it, so it must page on the FIRST cycle rather than ride the 2-cycle grace.
+    monkeypatch.setattr(check, "_ha_down_streak", 0)
+    ok, _ = _ha_cycle(monkeypatch, age_s=60, banned=1)
+    assert not ok
+
+
+def test_ha_ban_arm_fails_open_when_loki_errors(monkeypatch):
+    # A Loki outage must not page the HA monitor. ha_heartbeat is deliberately NOT in
+    # LOKI_DEPENDENT (that would suppress the whole check and blind the real heartbeat), so the
+    # arm swallows the error and keeps the heartbeat's verdict.
+    monkeypatch.setattr(check, "_ha_down_streak", 0)
+
+    def boom(*a, **k):
+        raise OSError("loki unreachable")
+
+    monkeypatch.setattr(check, "loki_count", boom)
+    monkeypatch.setattr(check, "HA_URL", "http://home-assistant:8123")
+    monkeypatch.setattr(check, "HA_TOKEN", "tok")
+    monkeypatch.setattr(check, "_get_json", lambda *a, **k: _ha_payload(60))
+    ok, msg = check.check_ha_heartbeat()
+    assert ok
+    assert "ip_ban arm unavailable" in msg
 
 
 def test_ha_heartbeat_disabled_when_no_url_token(monkeypatch):
