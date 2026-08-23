@@ -240,7 +240,7 @@ stay).
     above it, which disarms the feature. Six services were added to the denylist in the same commit
     (qbittorrent/bazarr/tdarr, livesync, valheim, valheim-stats): each matched a published exclusion
     class already, and was outside the list only because the pilot made the list non-binding.
-    `ansible/tests/test_k8s_autodeploy_guard.py` now enforces the three role shapes that must never
+    The `ansible/tests/test_k8s_autodeploy_*.py` family now enforces the three role shapes that must never
     be eligible — a rendered Deployment whose name isn't in the gated set (a role gating a second
     Deployment by name via `manifests_extra_rollouts` is fine; a name that can't be resolved
     statically counts as ungated), `manifests_rollout: ''`, and a gated Deployment with no

@@ -1,9 +1,10 @@
 ---
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
-# Covered by every guard in ansible/tests/test_k8s_autodeploy_guard.py — _SHARED there excludes
-# a role only if it pins no `_image:` var (manifests and rollout-drain both have no
-# defaults/main.yml at all); seed-volume pins seed_volume_image, so it does NOT belong in
-# _SHARED and is evaluated like any other role. Also in gitops_deploy_k8s_autodeploy_denylist,
+# Covered by every guard in the ansible/tests/test_k8s_autodeploy_*.py family — _SHARED, in
+# ansible/tests/_autodeploy.py, excludes a role only if it pins no `_image:` var (manifests and
+# rollout-drain both have no defaults/main.yml at all); seed-volume pins seed_volume_image, so
+# it does NOT belong in _SHARED and is evaluated like any other role. Also in
+# gitops_deploy_k8s_autodeploy_denylist,
 # matching this declaration. Declared false because it renders a bare Pod (seed-pod.yaml.j2),
 # never a Deployment, so there is nothing for `rollout status` to gate, and it is the shared
 # PVC-seeding path every migrating-state role above (prowlarr, sonarr, home-assistant, ...)

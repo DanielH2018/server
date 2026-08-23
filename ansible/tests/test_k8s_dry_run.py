@@ -392,7 +392,7 @@ def _unguarded_mutations(role: Path) -> list[str]:
     `block:` rather than the tasks inside it would be reported here, even though Ansible would
     propagate that `when`. No role in this tree does that today; if one is written, either move
     the guard onto the tasks or make this walker read block ancestry the way
-    `test_k8s_autodeploy_guard.py::_iter_task_dicts` does.
+    `_autodeploy.py::_iter_task_dicts` does.
     """
     covered = _guard_covered_files(role)
     offenders = []
