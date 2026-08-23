@@ -313,14 +313,53 @@ def test_the_tag_scoping_actually_selects_one_stamp_per_family():
             f"--tags {tag} selects {len(selected)} stamp tasks ({selected}); exactly one group "
             f"is rendered by that family, so exactly one may be restamped by it."
         )
-        stamped = yaml.safe_load(_HEALTH_CRONS.read_text())
-        wanted = next(
-            task["name"]
-            for task in stamped
-            if isinstance(task, dict)
-            and (task.get("vars") or {}).get("stamp_render_name") == name
-        )
+        # It must be the task that WRITES the fragment, not a wrapper that pulls it in. That
+        # distinction is the whole test: with `include_tasks` the wrapper was selected and its
+        # children were not, so `--tags disk-health` printed `included: .../stamp_render.yml`,
+        # reported changed=0, and wrote no fragment. Only a deploy caught it — the first version
+        # of this test matched the wrapper's own name and passed throughout.
+        #
+        # `import_tasks` is static, so --list-tasks prints the imported task's name before
+        # `stamp_render_name` is resolved. Every group therefore shows the same literal, and the
+        # group it belongs to is established by the count plus _GROUP_TAGS above, not by parsing
+        # a name out of this line.
+        wanted = "Stamp the rendered sources for {{ stamp_render_name }}"
         assert selected[0] == wanted, (
-            f"--tags {tag} selects the stamp task {selected[0]!r}, but {name} is stamped by "
-            f"{wanted!r}. The tag family and the group it stamps have come apart."
+            f"--tags {tag} selects {selected[0]!r}, expected the copy: task inside "
+            f"stamp_render.yml ({wanted!r}). A wrapper name here means the stamp went back to "
+            f"include_tasks, and a tag-scoped run writes no fragment at all."
+        )
+
+
+_STAMP_SITES = (
+    "ansible/roles/setup/k3s/tasks/health-crons.yml",
+    "ansible/roles/setup/gitops_deploy/tasks/main.yml",
+    "ansible/roles/setup/renovate_notify/tasks/main.yml",
+    "ansible/roles/setup/fake_remux/tasks/main.yml",
+    "ansible/roles/setup/initial_setup/tasks/crons.yml",
+)
+_STAMP_REF = '"{{ role_path }}/../common/tasks/stamp_render.yml"'
+
+
+def test_every_stamp_site_imports_rather_than_includes():
+    """`include_tasks` silently disarms every tag-scoped stamp, and only a deploy showed it.
+
+    A DYNAMIC include's children inherit the parent's tags, but `--tags` selection still filters
+    those children on tags they do not carry. So under `--tags disk-health` the wrapper was
+    selected, Ansible printed `included: .../stamp_render.yml`, the `copy:` inside it was
+    filtered out, and the run reported changed=0 with no fragment on disk. `import_tasks` is
+    static — the tags are attached to the imported tasks at parse time, so they are selected too.
+
+    The four other roles hid it. Their stamps sit under a ROLE-level tag (`gitops_deploy`,
+    `renovate_notify`, `fake_remux`), which does reach a dynamic include's children — so three
+    of the eight fragments wrote correctly on the first deploy and four did not.
+    """
+    for rel in _STAMP_SITES:
+        text = (_REPO / rel).read_text()
+        assert f"include_tasks: {_STAMP_REF}" not in text, (
+            f"{rel} pulls in stamp_render.yml with include_tasks. Use import_tasks: a dynamic "
+            f"include's children are filtered out by --tags, so no fragment is ever written."
+        )
+        assert f"import_tasks: {_STAMP_REF}" in text, (
+            f"{rel} no longer imports the shared render stamp."
         )
