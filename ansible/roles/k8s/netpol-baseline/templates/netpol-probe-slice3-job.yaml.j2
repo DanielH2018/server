@@ -1,18 +1,19 @@
 ---
 # Slice 3 fences the observability namespace, and its question is again different from slices 1
 # and 2: prometheus and loki each admit a named set of cross-namespace callers, both sets drawn
-# from {{ k8s_namespace }} but NOT identical — prometheus-callers admits monitor-bridge and
-# homelab-mcp, loki-callers admits homelab-mcp only (networkpolicy-prometheus.yaml.j2's and
+# from {{ k8s_namespace }} but NOT identical — prometheus-callers admits monitor-bridge,
+# homelab-mcp and homepage, loki-callers admits homelab-mcp only (networkpolicy-prometheus.yaml.j2's and
 # networkpolicy-loki.yaml.j2's respective `values:` lists). This probe asserts that a pod in
-# {{ k8s_namespace }} carrying neither of those two labels is refused by both.
+# {{ k8s_namespace }} carrying none of those labels is refused by both.
 #
 # THIS JOB RUNS IN {{ k8s_namespace }}, NOT {{ k8s_observability_namespace }} — the single
 # easiest thing to get wrong in this slice. The observability baseline
 # (networkpolicy-observability.yaml.j2) admits `podSelector: {}`, i.e. every pod in that
 # namespace, as an intra-namespace peer. A probe pod placed inside observability would therefore
 # NOT be blocked by anything, and it would report the fence broken while the policy is working
-# exactly as designed. The label below (netpol-probe-slice3) also deliberately matches neither
-# `monitor-bridge` nor `homelab-mcp`, so Task 4's per-workload policies do not admit it either.
+# exactly as designed. The label below (netpol-probe-slice3) also deliberately matches none of
+# `monitor-bridge`, `homelab-mcp` or `homepage`, so Task 4's per-workload policies do not admit
+# it either.
 #
 # What this probe does NOT cover: the intra-namespace podSelector: {} peer itself (grafana ->
 # prometheus/loki/tempo and friends). The readiness gate below proves the four targets are up;
@@ -80,8 +81,8 @@ spec:
               echo "control ok: traefik:80 reachable"
 
               # 2. THE ASSERTIONS — cross-namespace, direct pod-to-service must FAIL. Inverted:
-              #    success here is the failure case. This pod carries neither the monitor-bridge
-              #    nor homelab-mcp label that prometheus-callers or loki-callers admit
+              #    success here is the failure case. This pod carries none of the monitor-bridge,
+              #    homelab-mcp or homepage labels that prometheus-callers or loki-callers admit
               #    (networkpolicy-prometheus.yaml.j2, networkpolicy-loki.yaml.j2 — the two
               #    policies admit different caller sets, see the header above), so if either
               #    connects, that policy admits more than its documented callers.
@@ -95,7 +96,7 @@ spec:
               #    are the ports they serve.
               if nc -w 5 -z prometheus.{{ k8s_observability_namespace }} 9090; then
                 echo "POLICY NOT ENFORCED: reached prometheus.{{ k8s_observability_namespace }}:9090"
-                echo "from a pod that is neither monitor-bridge nor homelab-mcp. Either"
+                echo "from a pod that is none of monitor-bridge, homelab-mcp or homepage. Either"
                 echo "netpol_baseline_obs_enforced is false, or prometheus-callers"
                 echo "(networkpolicy-prometheus.yaml.j2) admits too much."
                 exit 1

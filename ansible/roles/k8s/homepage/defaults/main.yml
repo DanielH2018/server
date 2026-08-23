@@ -18,3 +18,28 @@ homepage_k8s_cpu_limit: "500m"
 homepage_k8s_mem_limit: 256Mi
 homepage_k8s_cpu_request: "50m"
 homepage_k8s_mem_request: 32Mi
+
+# The PromQL behind the Headlamp tile's customapi widget (services.yaml.j2). It lives here
+# rather than inline because services.yaml.j2 renders it through `| urlencode` into a GET query
+# string, and the percent-encoded form is unreviewable.
+#
+# ONE QUERY, FOUR COUNTERS, and the shape is load-bearing. homepage's customapi widget takes a
+# single URL, so four counts have to arrive in one response. Each counter is wrapped
+# `label_replace(vector(scalar(<count> or vector(0))), "k", "<name>", "", "")` and the four are
+# joined with `or`:
+#   - `scalar()` collapses a count to a bare number and `vector()` lifts it back to a one-sample
+#     series, which is what lets `or` concatenate four otherwise-unrelated counts.
+#   - the inner `or vector(0)` is what makes an EMPTY match render as 0. Without it `count()`
+#     over nothing returns no series, `scalar()` of that is NaN, and the tile reads "NaN" for
+#     exactly the healthy case (zero degraded deployments) it exists to confirm.
+#   - `label_replace` names each sample, which is what lets the widget pair name to value by
+#     LABEL rather than by array position (`display: dynamic-list`, `name: metric.k`). Positional
+#     mappings would silently mislabel if Prometheus ever reordered the result set.
+# Counts, not gauges: cluster and node CPU/memory are already on this dashboard twice
+# (config/widgets.yaml.j2's kubernetes info widget, and this tile's own namespace/podSelector pod
+# stats), so repeating them here would add nothing visible.
+homepage_k8s_headlamp_cluster_query: >-
+  label_replace(vector(scalar(count(kube_node_status_condition{condition="Ready",status="true"} == 1) or vector(0))), "k", "Nodes Ready", "", "")
+  or label_replace(vector(scalar(count(kube_pod_status_phase{phase="Running"} == 1) or vector(0))), "k", "Pods Running", "", "")
+  or label_replace(vector(scalar(count(kube_pod_status_phase{phase=~"Pending|Failed|Unknown"} == 1) or vector(0))), "k", "Pods Not Running", "", "")
+  or label_replace(vector(scalar(count(kube_deployment_status_replicas_unavailable > 0) or vector(0))), "k", "Deploys Degraded", "", "")

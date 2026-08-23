@@ -1,8 +1,9 @@
 ---
 # prometheus is one of two observability workloads (with loki) that need a per-workload grant
-# for an in-cluster, cross-namespace caller: monitor-bridge and homelab-mcp both run in
+# for an in-cluster, cross-namespace caller: monitor-bridge, homelab-mcp and homepage all run in
 # {{ k8s_namespace }} and reach it over the network (PROMETHEUS_URL / CLUSTER_PROMETHEUS_URL on
-# monitor-bridge, PROMETHEUS_URL on homelab-mcp). prometheus itself is ALSO read on host loopback
+# monitor-bridge, PROMETHEUS_URL on homelab-mcp, and the Headlamp tile's customapi widget URL on
+# homepage — roles/k8s/homepage/templates/services.yaml.j2). prometheus itself is ALSO read on host loopback
 # by `otelq` (a workstation host process — see claude-otel/CLAUDE.md), covered the same way as
 # tempo/otel-collector below, not by this file. The other four need no per-workload policy, each
 # for a different reason — don't collapse them into one mechanism:
@@ -37,9 +38,9 @@ spec:
 {% if netpol_baseline_obs_enforced | bool %}
     - from:
         # namespaceSelector and podSelector are SIBLING KEYS in ONE list item, so they AND
-        # together: monitor-bridge or homelab-mcp, but only inside {{ k8s_namespace }}. As two
+        # together: one of the named apps, but only inside {{ k8s_namespace }}. As two
         # separate list items they would OR, admitting the entire {{ k8s_namespace }} namespace
-        # (or any pod anywhere labelled monitor-bridge/homelab-mcp) rather than just these two
+        # (or any pod anywhere carrying one of these labels) rather than just these three
         # callers.
         - namespaceSelector:
             matchLabels:
@@ -48,14 +49,16 @@ spec:
             matchExpressions:
               - key: app
                 operator: In
-                values: [monitor-bridge, homelab-mcp]
+                values: [monitor-bridge, homelab-mcp, homepage]
       # Port-9090-wide is the finest an L3/L4 NetworkPolicy can express — it does not
       # distinguish a read (query) from a write/admin call on the same port. That is only safe
       # because Prometheus runs today without --web.enable-admin-api, --web.enable-lifecycle or
       # --web.enable-remote-write-receiver (all three absent from claude-otel/prometheus.yaml.j2
       # as of this writing). If any of those flags is ever added, this grant silently becomes a
-      # write/admin grant to monitor-bridge and homelab-mcp with no NetworkPolicy-side change to
-      # flag in review — check for that when reviewing a future flag addition.
+      # write/admin grant to all three callers with no NetworkPolicy-side change to
+      # flag in review — check for that when reviewing a future flag addition. homepage is the
+      # caller that makes that check matter most: its widget proxy fetches whatever URL its
+      # rendered config names, so its reach here is only ever as narrow as services.yaml.j2.
       ports:
         - protocol: TCP
           port: 9090
