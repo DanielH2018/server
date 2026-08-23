@@ -28,12 +28,25 @@ always-on host to enable, and systemd supervises it instead.
 
 ## Activating it
 
-The unit ships **installed and stopped** (`claude_code_rc_enabled: false`). Before flipping
-it, run the host by hand on daniel-box and create a session from the phone:
+`claude_code_rc_enabled: true` — the host is enabled and started. It shipped stopped until
+the prerequisite Ansible cannot check was confirmed by hand on 2026-08-23: a session created
+from the phone produced `.claude/worktrees/test-scratch` on branch `worktree-test-scratch`
+and reached a prompt, with no workspace-trust dialog.
+
+Setting the var back to `false` stops **and** disables the host and its restart timer. That
+is the rollback, and `ansible/tests/test_claude_rc_unit.py` pins that both directions stay
+wired.
+
+To re-run that check after a change that could affect it — a Claude Code upgrade, a different
+spawn mode — start a host by hand and create a session from the phone:
 
 ```bash
 claude rc --spawn=worktree --permission-mode auto --capacity 2
 ```
+
+Create a **new** session from the phone, not the one already waiting. `--create-session-in-dir`
+is on by default, so one session is pre-created in the host's own directory; using that
+proves the connection works and never exercises the spawn path at all.
 
 Confirm four things, because the first cannot be checked from the repo:
 
@@ -44,8 +57,9 @@ Confirm four things, because the first cannot be checked from the repo:
 | The host does not fight terminal sessions for Remote Control | Every terminal session here also claims RC via `remoteControlAtStartup`. |
 | A phone-spawned session gets real auto mode | Claude Code has a distinct headless classifier path. If auto degrades without a TTY, `claude_code_rc_permission_mode: default` is the fallback — answering prompts remotely is what Remote Control is for. |
 
-Then set `claude_code_rc_enabled: true` and re-run the play. Setting it back to `false`
-stops **and** disables the host and its restart timer; that is the rollback.
+**Stop any hand-run host before deploying.** The service and a manually started `claude rc`
+are two hosts competing for the same account and directory; the by-hand one is for the check
+only.
 
 ## What monitoring does and does not cover
 

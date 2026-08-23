@@ -5,13 +5,14 @@
 # Every var here carries the role's `claude_code_` prefix (ansible-lint
 # var-naming[no-role-prefix]), so the Remote Control ones read `claude_code_rc_*`.
 
-# DECIDED: installed disabled, activated by flipping this to true — NOT enabled on first
-# deploy. The service hands anything holding the claude.ai account a session on the k3s
-# control-plane node, and the one prerequisite Ansible cannot check is whether a
-# phone-spawned worktree can clear the workspace-trust dialog. Deploying the unit is
-# reversible; starting it before that is proven is not. Setting this true both enables and
-# starts it; setting it back to false stops and disables it.
-claude_code_rc_enabled: false
+# The service hands anything holding the claude.ai account a session on the k3s
+# control-plane node, so it shipped disabled until the prerequisite Ansible cannot check was
+# confirmed by hand: whether a phone-spawned worktree clears the workspace-trust dialog,
+# which nobody can answer remotely. Confirmed on daniel-box 2026-08-23 — a session created
+# from the phone produced `.claude/worktrees/test-scratch` on branch `worktree-test-scratch`
+# and reached a prompt, with no dialog. Setting this back to false stops AND disables the
+# host and its restart timer; that is the rollback.
+claude_code_rc_enabled: true
 
 # The directory the host runs in. Sessions spawned on demand get their own worktree
 # underneath it; the pre-created session stays here.

@@ -124,13 +124,29 @@ def test_restart_timer_does_not_start_a_stopped_host(unit: str) -> None:
     )
 
 
-def test_ships_disabled_by_default() -> None:
-    """The host is installed but not started until the trust dialog is proven answerable."""
-    text = DEFAULTS.read_text()
-    match = re.search(r"^claude_code_rc_enabled:\s*(\S+)", text, re.M)
-    assert match, "claude_code_rc_enabled is missing from the role defaults"
-    assert match.group(1) == "false", (
-        "claude_code_rc_enabled must default to false. Ansible cannot verify that a "
-        "phone-spawned worktree clears the workspace-trust dialog, so enabling it is a "
-        "deliberate act after that is checked by hand."
+def test_enable_flag_also_turns_the_host_off() -> None:
+    """The flag must drive both directions, not just the way in.
+
+    A var that only enables leaves no rollback: the host keeps running and keeps starting at
+    boot after someone sets it back to false. Both systemd tasks therefore have to read the
+    flag for `enabled:` AND for `state:`.
+    """
+    tasks = (
+        ANSIBLE / "roles" / "setup" / "claude_code" / "tasks" / "main.yml"
+    ).read_text()
+    assert re.search(r"^claude_code_rc_enabled:", DEFAULTS.read_text(), re.M), (
+        "claude_code_rc_enabled is missing from the role defaults"
     )
+    for unit_name in ("claude-rc.service", "claude-rc-restart.timer"):
+        block = re.search(
+            rf"name: {re.escape(unit_name)}\n(.*?)(?=\n- name:|\Z)", tasks, re.S
+        )
+        assert block, f"no systemd task manages {unit_name}"
+        body = block.group(1)
+        assert 'enabled: "{{ claude_code_rc_enabled }}"' in body, (
+            f"{unit_name} must take `enabled:` from claude_code_rc_enabled"
+        )
+        assert "if claude_code_rc_enabled else 'stopped'" in body, (
+            f"{unit_name} must be STOPPED when claude_code_rc_enabled is false, not merely "
+            "left disabled — otherwise the flag has no rollback."
+        )
