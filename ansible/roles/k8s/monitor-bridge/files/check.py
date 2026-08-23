@@ -941,8 +941,11 @@ def check_mem():
     )
     if not vec:
         return False, "memory metric unavailable"
-    # Evaluated after the breach scan below, for the same reason as check_disk: a reporting host
-    # that is actually out of memory outranks a complaint about the absent one.
+    # Computed here, but REPORTED only after the breach scan below — the `if short is not None`
+    # return sits under it. Same ordering as check_disk and for the same reason: a reporting host
+    # that is actually out of memory outranks a complaint about the absent one. The comment used
+    # to say "evaluated after", describing a line position this call has never had (2026-08-23b
+    # review L9); what is deferred is the return, not the evaluation.
     short = _host_origin_shortfall("mem", vec, "memory")
     breaching = [
         "%s %.0f%%" % (_origin_name(labels), pct)

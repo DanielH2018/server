@@ -146,3 +146,13 @@ def test_seed_pod_does_not_add_capabilities():
         "seed pod must not set allowPrivilegeEscalation: true — with runAsUser: 0 and the "
         "default cap set, that is privileged in all but name."
     )
+
+
+def test_seed_pod_does_not_mount_a_service_account_token():
+    """It runs `sleep` and is written into by `kubectl exec` from the Ansible controller
+    (seed.yml:224), making no API calls of its own. The default SA token grants only discovery
+    today — nothing in this repo binds a Role to the `default` SA — but it is still a credential
+    mounted into a root container that mounts arbitrary Longhorn PVCs (2026-08-23b review L1)."""
+    assert _seed_pod()["spec"].get("automountServiceAccountToken") is False, (
+        "seed pod must set automountServiceAccountToken: false — it makes no API calls."
+    )

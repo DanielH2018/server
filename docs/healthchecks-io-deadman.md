@@ -15,7 +15,7 @@ it is a second destination for the handful of jobs whose silence actually matter
 | `longhorn-backup-health` | `roles/setup/k3s/templates/longhorn-backup-health.sh.j2` | every 10 min | target unavailable, backups stale/missing/errored, or the daily count exceeds the B2 budget |
 | `daniel-box-disk-health` | `roles/setup/k3s/templates/disk-health.sh.j2` | every 10 min | `/` over the headroom threshold, or `df` fails |
 | `etcd-snapshot-offbox` | `roles/setup/k3s/templates/etcd-snapshot-offbox.sh.j2` | 02:45 daily | the snapshot or its R2 upload failed, the credentials file is missing or incomplete, or snapshots are disarmed |
-| `manifest-prune-check` | `roles/setup/k3s/templates/manifest-prune-check.sh.j2` | 05:15 daily | live routing or workload objects absent from the staged manifests |
+| `manifest-prune-check` | `roles/setup/k3s/templates/manifest-prune-check.sh.j2` | 05:15 daily | any of its three arms: live routing or workload objects absent from the staged manifests; a `copy:`-deployed artifact differing byte-for-byte from the repo; or a `template:`-rendered setup script whose source checksum no longer matches the render manifest this host wrote |
 | `pi-peer-backup` | `roles/k8s/pi-peer-backup/files/pull-pi-peers.sh` | 23:30 daily | rsync failed, or fewer than 2 peer files landed |
 | `registry-gc` | `roles/k8s/registry/templates/registry-gc.sh.j2` | 04:20 Sundays (UTC) | GC job exceeded its deadline, the registry pod would not terminate, the job manifest failed to apply, or the registry did not come back afterwards |
 | `uptime-kuma-alive` | `roles/setup/k3s/templates/longhorn-backup-health.sh.j2` | every 10 min | that script's Kuma push returned non-zero — see *Watching the spine itself* below |

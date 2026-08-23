@@ -69,6 +69,11 @@
 #   sudo ./scripts/etcd_restore_drill.sh                 # newest off-box snapshot in R2
 #   sudo ./scripts/etcd_restore_drill.sh --snapshot NAME # a specific one from the S3 listing
 #   sudo ./scripts/etcd_restore_drill.sh --keep          # leave the scratch dir for poking at
+#   sudo ./scripts/etcd_restore_drill.sh --clean         # remove every kept scratch dir, now
+#
+# A failed run always keeps its scratch dir — the logs are the evidence — and every run sweeps
+# dirs older than 30 days on the way in (ETCD_DRILL_SCRATCH_RETENTION_DAYS to change it).
+# `--clean` is the immediate form and needs no R2 credentials.
 #
 # Exit 0 = the snapshot restored and served objects. Non-zero = it did not, and the message
 # says which stage. Run it after any change to the snapshot cron, and periodically regardless:
@@ -88,6 +93,11 @@ PORT=7443
 SUPERVISOR_PORT=7444
 LB_PORT=7445
 KEEP=0
+CLEAN_ONLY=0
+# How long a kept scratch dir survives. Only failed runs and --keep runs leave one, so these are
+# evidence rather than litter — long enough to still be there when someone gets round to reading
+# it, short enough that a forgotten failure does not hold a restored etcd database indefinitely.
+SCRATCH_RETENTION_DAYS="${ETCD_DRILL_SCRATCH_RETENTION_DAYS:-30}"
 LIST_ONLY=0
 SNAPSHOT=""
 LOCAL_SNAPSHOT=""
@@ -115,6 +125,24 @@ RESTORE_TIMEOUT=600
 die() { echo "etcd-restore-drill: $*" >&2; exit 1; }
 log() { echo "[$(date -u +%H:%M:%S)] $*"; }
 
+# DECIDED: the stamp is deliberately write-only until this drill has a cron. Nothing reads
+# /var/lib/etcd-restore-drill/last-success-{full,list-only}; the only consumer of any
+# last-success file is longhorn-backup-health.sh.j2:457, which reads the LONGHORN drill's stamp
+# (2026-08-23b review M7). That asymmetry is the point rather than an oversight: this script is
+# never deployed to a cron target and is never referenced from ansible/ at all — it is invoked
+# by hand, and health-crons.yml:184-196 schedules the Longhorn drill and the etcd *snapshot*,
+# never this. A fail-closed staleness reader against a stamp nothing keeps fresh would sit red
+# essentially always, which is a pager that trains the operator to ignore it.
+#
+# So the order is fixed: add a cron running `--list-only` on a schedule FIRST, and only then
+# wire a reader. When that happens, monitor-bridge/check.py is the right owner — it already
+# aggregates unrelated stamps — not longhorn-backup-health.sh, which would be reading a second
+# drill's evidence out of the first drill's watchdog.
+#
+# The stamp still earns its place unread: it is what makes "when did this last pass" answerable
+# at all, where before 2026-08-23 the only record was a hand-edited line in
+# docs/k3s-etcd-restore.md.
+#
 # Record a pass. $1 is the mode — `list-only` or `full` — and it is written into the file so a
 # reader cannot mistake the cheaper proof for the stronger one. Best-effort: a drill that passed
 # must not be reported as failed because its stamp could not be written, so failures here warn.
@@ -146,12 +174,33 @@ while [[ $# -gt 0 ]]; do
     # nothing. Run this form first on any host where the drill has not run before: it proves the
     # off-box leg without ever reaching `k3s server --cluster-reset`.
     --list-only) LIST_ONLY=1; shift ;;
-    -h|--help)  sed -n '2,50p' "$0"; exit 0 ;;
+    --clean)    CLEAN_ONLY=1; shift ;;
+    # Prints the comment header, however long it grows — a hardcoded line range silently
+    # truncates the moment anything is added above.
+    -h|--help)  awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
     *)          die "unknown argument: $1" ;;
   esac
 done
 
 [[ "$(id -u)" == "0" ]] || die "must run as root (k3s server needs it); use sudo"
+
+# Before the R2/k3s preflight below, deliberately: clearing scratch dirs is useful precisely on a
+# host where the drill cannot run, and gating it on credentials it does not use would make the
+# cleanup unavailable exactly when someone wants it. This is the reverse of --keep — a flag that
+# creates state needs a matching way to remove it. It ignores the age bound, since an operator
+# asking for it has finished reading the logs.
+if [[ "$CLEAN_ONLY" == "1" ]]; then
+  cleared=0
+  for dir in /var/tmp/etcd-restore-drill.*; do
+    [[ -d "$dir" ]] || continue
+    log "removing $dir"
+    rm -rf "$dir"
+    cleared=$((cleared + 1))
+  done
+  log "cleared $cleared scratch dir(s)"
+  exit 0
+fi
+
 [[ -r "$S3_ENV" ]] || die "cannot read $S3_ENV — this host does not hold the R2 credentials"
 [[ -r "$LIVE_TOKEN" ]] || die "cannot read $LIVE_TOKEN — run this on the k3s server node"
 command -v k3s >/dev/null || die "k3s not on PATH"
@@ -161,6 +210,34 @@ command -v k3s >/dev/null || die "k3s not on PATH"
 case "$SCRATCH" in
   "$LIVE_DATA_DIR"*) die "refusing: scratch dir resolves inside the live data-dir" ;;
 esac
+
+# Kept scratch dirs have no expiry anywhere else. cleanup() sets KEEP=1 on ANY non-zero exit, so
+# every failed drill leaves a restored etcd database plus a cluster-token copy behind — and the
+# 2026-08-22 session alone produced five failures. Nothing sweeps them: /var/tmp survives
+# reboots on the root ext4 LV, and systemd-tmpfiles ships its /var/tmp age rule COMMENTED OUT on
+# this host (`systemd-tmpfiles --cat-config` shows only systemd-private-* lines). Since the drill
+# has no cron, accumulation is operator-paced — which is why the five above were removed by hand,
+# and why that is the finding rather than the fix (2026-08-23b review M8).
+#
+# Swept here rather than in cleanup(): a run that dies before its trap installs still gets the
+# previous mess cleared, and this way the sweep is exercised on every invocation instead of only
+# the successful ones.
+sweep_old_scratch_dirs() {
+  local found=0 dir
+  for dir in /var/tmp/etcd-restore-drill.*; do
+    # An unmatched glob expands to itself; -d rejects that as well as any stray file.
+    [[ -d "$dir" ]] || continue
+    [[ "$dir" == "$SCRATCH" ]] && continue
+    [[ -n "$(find "$dir" -maxdepth 0 -mtime "+${SCRATCH_RETENTION_DAYS}" 2>/dev/null)" ]] || continue
+    log "removing scratch dir older than ${SCRATCH_RETENTION_DAYS} days: $dir"
+    rm -rf "$dir"
+    found=$((found + 1))
+  done
+  [[ "$found" -gt 0 ]] && log "swept $found stale scratch dir(s)"
+  return 0
+}
+
+sweep_old_scratch_dirs
 
 # A root-only env file rendered by the k3s role, so it is not in this repo for shellcheck to
 # follow. Sourced with `set -a` so AWS_* reach k3s as environment rather than as argv.
@@ -249,7 +326,14 @@ if [[ "$LIST_ONLY" == "1" ]]; then
   exit 0
 fi
 
-mkdir -p "$SCRATCH/server"
+# `install -d -m 700`, not `mkdir -p`. This holds a copy of the cluster token and a restored
+# etcd database, and /var/tmp is world-traversable. It is NOT currently exposed: /etc/login.defs
+# UMASK 027, applied to sudo sessions via pam_umask.so, means a bare `mkdir -p` here yields 0750
+# and "other" is already blocked (2026-08-23b review M8, whose stated 0755 mechanism was refuted
+# on exactly this point). The explicit mode is defence against that umask changing under the
+# script, which nothing here would notice.
+install -d -m 700 "$SCRATCH"
+install -d -m 700 "$SCRATCH/server"
 # `--cluster-reset` reads the token from <data-dir>/server/token and checks for that FILE, not
 # for a --token/--token-file argument: passing --token-file left the same fatal
 # "server/token does not exist, please pass --token" (measured twice, 2026-08-22). Seeding the

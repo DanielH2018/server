@@ -76,7 +76,10 @@
   # covers both callers — manifest-prune-check runs as root (owner), the other two as
   # {{ sys_user }} (group). Same shape as /etc/renovate-notify/config.env.
   ansible.builtin.copy:
-    content: "HC_PING_KEY={{ healthchecks_ping_key | default('') }}\n"
+    # Single-quoted for the same reason as kuma-push.env and live-drift-check.env: this file is
+    # `.`-sourced by root and {{ sys_user }} scripts, so an unquoted value is shell input rather
+    # than data (2026-08-23b review L5, applied to the whole class rather than the one instance).
+    content: "HC_PING_KEY='{{ healthchecks_ping_key | default('') }}'\n"
     dest: /etc/healthchecks/ping.env
     mode: "0640"
     owner: root
@@ -89,13 +92,16 @@
   # Runs as {{ sys_user }}, not root: it reads the cluster through that user's read-only
   # kubeconfig, which is the whole point — the cron cannot mutate anything.
   ansible.builtin.template:
+    # No no_log: this renders no secret. The Kuma push token moved to kuma-push.env on
+    # 2026-08-23 (the task at :43) and the script sources it at runtime. The `no_log: true
+    # # renders the Kuma push token` that used to sit here outlived the thing it described and
+    # told the next reader the opposite of what that extraction achieved (2026-08-23b L4).
     src: longhorn-backup-health.sh.j2
     dest: /usr/local/bin/longhorn-backup-health.sh
     mode: "0755"
     owner: root
     group: root
   become: true
-  no_log: true  # renders the Kuma push token
 
 - name: Deploy the orphaned-backup reaper
   tags: [backup-health]
@@ -205,7 +211,6 @@
     owner: root
     group: root
   become: true
-  no_log: true  # renders the Kuma push token
 
 - name: Schedule the root-disk headroom heartbeat
   tags: [disk-health]
@@ -231,7 +236,6 @@
     owner: root
     group: root
   become: true
-  no_log: true  # renders the Kuma push token
 
 - name: Schedule the manifest-prune drift check
   tags: [manifest-prune]
@@ -325,7 +329,6 @@
     owner: root
     group: root
   become: true
-  no_log: true  # renders the Kuma push token
 
 - name: Schedule the off-box etcd snapshot
   tags: [etcd-snapshot]

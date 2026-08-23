@@ -771,11 +771,6 @@ k3s_agent_args: >-
   --node-label node.longhorn.io/create-default-disk=false
   --kubelet-arg=allowed-unsafe-sysctls=net.ipv4.conf.all.src_valid_mark,net.ipv4.ip_forward
 
-# Node-to-node traffic UFW must admit (both hosts default-deny INPUT, and unlike every
-# service port this traffic terminates in host processes, not Docker/kube NAT):
-#   6443/tcp  agent -> server   apiserver registration + watch
-#   8472/udp  both directions   flannel VXLAN (pod-to-pod)
-#   10250/tcp both directions   kubelet API (logs/exec/metrics-server)
 # The `template:`-rendered scripts this role puts in /usr/local/bin, checksummed at render time
 # into /var/lib/homelab/setup-render-manifest so manifest-prune-check.sh can tell whether this
 # host has run initial_setup.yml since they last changed. Names are relative to templates/.
@@ -791,6 +786,19 @@ k3s_rendered_setup_scripts:
   - longhorn-trim-volumes.sh.j2
   - manifest-prune-check.sh.j2
 
+# Node-to-node traffic UFW must admit (both hosts default-deny INPUT, and unlike every
+# service port this traffic terminates in host processes, not Docker/kube NAT):
+#   6443/tcp  agent -> server   apiserver registration + watch
+#   8472/udp  both directions   flannel VXLAN (pod-to-pod)
+#   10250/tcp both directions   kubelet API (logs/exec/metrics-server)
+#   9100/tcp  both directions   node-exporter scrape (see the two rules below)
+# The two lists below are mirrors apart from 6443, which is server-only because agents dial the
+# API and the server never dials theirs. ansible/tests/test_k3s_join_port_symmetry.py enforces
+# that; until 2026-08-23b the invariant was prose with no reader.
+#
+# NOT a complete inventory of what this cluster needs open — a port missing from both lists is
+# symmetric and unguarded. MetalLB's memberlist 7946/tcp+udp is exactly that case and is
+# currently blocked on both nodes.
 k3s_join_server_ports:  # allowed FROM each agent, ON the server
   - { port: "6443", proto: tcp }
   - { port: "8472", proto: udp }
