@@ -580,8 +580,17 @@ def run_kuma_drift(ns):
     live.discard(None)
     # Resolved only for gates whose monitor is actually absent — a sops call per gate is the
     # cost, and a monitor that is live needs no explanation for why it might not be.
+    #
+    # DECIDED: the decrypt stays ON by default, and `--no-secrets` is the opt-out — not the
+    # reverse. This subcommand is allow-listed and so runs unprompted, which is a fair reason to
+    # want no SOPS read on the path; but assuming a gate was unset is exactly the miss 16cf5721
+    # fixed on 2026-08-22, and defaulting to --no-secrets would reinstate it. The read is
+    # narrow: `var` comes from _JINJA_IF_COND_RE, constrained to [a-zA-Z_][a-zA-Z0-9_]*, and is
+    # passed as an argv element rather than through a shell, so no value and no injection point
+    # escapes gate_var_state — only bool(stdout) does. Reach for --no-secrets when the age key
+    # should not be touched at all; accept "unverified" as the cost.
     gate_states = {
-        spec["gate"]: gate_var_state(spec["gate"])
+        spec["gate"]: None if ns.no_secrets else gate_var_state(spec["gate"])
         for name, spec in declared.items()
         if spec["gate"] and name not in live
     }
@@ -589,6 +598,11 @@ def run_kuma_drift(ns):
         declared, live, kuma_pod_age_seconds(), gate_states=gate_states
     )
     print(text)
+    if ns.no_secrets and gate_states:
+        # Without this the gates read "could not be read", which is the wording for a genuine
+        # failure — no age key, sops missing. Deliberately not reading and failing to read must
+        # not look alike; that conflation is the recurring shape this estate keeps paying for.
+        print("  (gates unverified by request: --no-secrets, no SOPS read attempted)")
     return code
 
 
@@ -811,10 +825,16 @@ def _build_parser():
     )
     sub.add_parser("targets", help="Prometheus scrape-target health")
     sub.add_parser("monitors", help="Kuma down-monitors rollup (exit 0 = all up)")
-    sub.add_parser(
+    kd = sub.add_parser(
         "kuma-drift",
         help="declared monitors vs live ones — catches a tile that is gone rather "
         "than down, which `monitors` counts as green (exit 0 = no drift)",
+    )
+    kd.add_argument(
+        "--no-secrets",
+        action="store_true",
+        help="skip the SOPS reads that resolve why a gated monitor is absent; those gates "
+        "report as unverified instead of gated/ungated",
     )
     sub.add_parser("loki-labels", help="Loki label names")
     lq = sub.add_parser("loki-query", help="Loki range query")
