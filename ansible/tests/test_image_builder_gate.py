@@ -28,13 +28,13 @@ Run: uv run pytest ansible/tests/test_image_builder_gate.py
 """
 
 import re
-from pathlib import Path
 
 import pytest
 import yaml
 from ansible.template import Templar, trust_as_template
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
+
 ROLE = ANSIBLE / "roles" / "k8s" / "image-builder"
 TASKS = ROLE / "tasks" / "main.yml"
 DEFAULTS = ROLE / "defaults" / "main.yml"

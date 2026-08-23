@@ -9,9 +9,9 @@ to be bumped in lockstep whenever lockFileMaintenance moves uv.lock.
 """
 
 import re
-from pathlib import Path
+from _helpers import REPO
 
-REPO = Path(__file__).resolve().parents[2]
+
 DOCKERFILE = REPO / "ansible/roles/k8s/ical-proxy/templates/Dockerfile.j2"
 UV_LOCK = REPO / "uv.lock"
 

@@ -45,8 +45,9 @@ from _k8s_render import rendered_docs
 from ansible.plugins.filter.core import FilterModule
 from ansible.plugins.test.core import TestModule as _AnsibleTests
 from jinja2.nativetypes import NativeEnvironment
+from _helpers import REPO as _REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+
 _ROLE = _REPO / "ansible/roles/k8s/volume-revert"
 _CLAIM = _ROLE / "tasks/claim.yml"
 _MAIN = _ROLE / "tasks/main.yml"

@@ -33,8 +33,9 @@ import re
 from pathlib import Path
 
 import yaml
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
+
 K3S = ANSIBLE / "roles" / "setup" / "k3s"
 DRILL = K3S / "templates" / "longhorn-restore-drill.sh.j2"
 HEALTH = K3S / "templates" / "longhorn-backup-health.sh.j2"

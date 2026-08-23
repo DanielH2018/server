@@ -29,11 +29,10 @@ Each test here encodes a way the fix regresses while everything still reads gree
 Run: uv run pytest ansible/tests/test_k3s_version_guard.py
 """
 
-from pathlib import Path
-
 import yaml
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
+
 K3S_TASKS = ANSIBLE / "roles" / "setup" / "k3s" / "tasks"
 
 # (task file, install-task name, the register its version read must fill)

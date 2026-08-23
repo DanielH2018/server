@@ -21,11 +21,10 @@ Run: uv run pytest ansible/tests/test_vip_pins.py
 """
 
 import re
-from pathlib import Path
 
 import pytest
+from _helpers import K8S_ROLES
 
-K8S_ROLES = Path(__file__).resolve().parents[1] / "roles" / "k8s"
 
 ANNOUNCING_NODE = "daniel-box"
 

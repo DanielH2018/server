@@ -22,15 +22,15 @@ Run: uv run pytest ansible/tests/test_seed_volume_short_circuit.py
 """
 
 import re
-from pathlib import Path
 
 import pytest
 import yaml
 from ansible.plugins.filter.core import FilterModule
 from ansible.template import AnsibleUndefined
 from jinja2 import Environment
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
+
 SEED = ANSIBLE / "roles" / "k8s" / "seed-volume" / "tasks" / "seed.yml"
 REVERT = ANSIBLE / "roles" / "k8s" / "volume-revert" / "tasks" / "claim.yml"
 

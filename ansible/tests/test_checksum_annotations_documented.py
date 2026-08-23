@@ -13,8 +13,9 @@ import re
 from pathlib import Path
 
 import pytest
+from _helpers import REPO
 
-REPO = Path(__file__).resolve().parents[2]
+
 K8S_ROLES = REPO / "ansible" / "roles" / "k8s"
 
 # `checksum/foo` in prose, including inside backticks. The trailing char class stops at the

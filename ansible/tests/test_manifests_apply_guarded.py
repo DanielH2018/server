@@ -27,9 +27,8 @@ Run: uv run pytest ansible/tests/test_manifests_apply_guarded.py
 """
 
 import re
-from pathlib import Path
+from _helpers import ROLES
 
-ROLES = Path(__file__).resolve().parents[1] / "roles"
 
 # The task that registers it evaluates `.stdout` in its own changed_when, where the command has
 # by definition just run. Guarding that one would hide a genuine failure rather than survive one.

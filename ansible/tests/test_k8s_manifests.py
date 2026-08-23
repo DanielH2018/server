@@ -17,8 +17,9 @@ import yaml
 from jinja2 import Environment, FileSystemLoader
 
 from validate_k8s_manifests import ansible_bool
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
+
 K3S = ANSIBLE / "roles" / "setup" / "k3s"
 K8S = ANSIBLE / "roles" / "k8s"
 ALL_VARS = yaml.safe_load(

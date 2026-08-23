@@ -14,9 +14,7 @@ what put master red for six consecutive pushes on 2026-08-15.
 """
 
 import tomllib
-from pathlib import Path
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from _helpers import REPO as REPO_ROOT
 
 
 def _pytest_hook() -> dict:

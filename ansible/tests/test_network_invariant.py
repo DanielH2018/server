@@ -17,11 +17,8 @@ something real regardless of which host runs an edge.
 Run: uv run pytest ansible/tests/test_network_invariant.py
 """
 
-import pathlib
-
 import yaml
-
-_ANSIBLE = pathlib.Path(__file__).resolve().parents[1]
+from _helpers import ANSIBLE as _ANSIBLE
 
 
 def _created_networks() -> set[str]:

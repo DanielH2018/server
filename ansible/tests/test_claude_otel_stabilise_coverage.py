@@ -30,11 +30,11 @@ Three things can silently break that, and none of them fails a deploy:
 
 from __future__ import annotations
 
-from pathlib import Path
 
 import yaml
+from _helpers import REPO as _REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+
 _ROLE = _REPO / "ansible/roles/k8s/claude-otel"
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests"
 

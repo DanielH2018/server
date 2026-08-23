@@ -53,11 +53,11 @@ batches them).
 
 from __future__ import annotations
 
-import pathlib
 
 import yaml
+from _helpers import REPO as _REPO
 
-_REPO = pathlib.Path(__file__).resolve().parents[2]
+
 _K8S_ROLES = _REPO / "ansible/roles/k8s"
 _VOLUME_REVERT_DEFAULTS = _K8S_ROLES / "volume-revert/defaults/main.yml"
 _GITOPS_DEPLOY_DEFAULTS = _REPO / "ansible/roles/setup/gitops_deploy/defaults/main.yml"

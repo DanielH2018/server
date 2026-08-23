@@ -31,10 +31,10 @@ from pathlib import Path
 
 import pytest
 import yaml
+from _helpers import REPO as _REPO_ROOT
 
 _ROLE = Path(__file__).resolve().parents[2] / "ansible/roles/k8s/longhorn-api"
 _RESOLVE = _ROLE / "tasks/resolve.yml"
-_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _tasks(path: Path) -> list[dict]:

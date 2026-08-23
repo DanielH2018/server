@@ -18,11 +18,10 @@ that looks like a simplification.
 Run: uv run pytest ansible/tests/test_drop_migrated_backup_chain.py
 """
 
-from pathlib import Path
-
 import yaml
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
+
 PLAY = ANSIBLE / "drop_migrated_backup_chain.yml"
 
 

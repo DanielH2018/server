@@ -17,11 +17,11 @@ follows. test_python_version_pins_in_lockstep already couples it to both workflo
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import yaml
+from _helpers import REPO as _REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+
 _ALL_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
 _PYTHON_VERSION = _REPO / ".python-version"
 

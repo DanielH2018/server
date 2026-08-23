@@ -26,12 +26,12 @@ Run: uv run pytest ansible/tests/test_k3s_control_plane_hardening.py
 """
 
 import re
-from pathlib import Path
 
 import jinja2
 import yaml
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
+
 K3S = ANSIBLE / "roles" / "setup" / "k3s"
 ALL_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
 

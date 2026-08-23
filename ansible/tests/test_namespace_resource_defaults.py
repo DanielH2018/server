@@ -27,14 +27,14 @@ k8s_default_limitrange in group_vars/all.yml for why the ceiling is set where it
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
 
 import yaml
 from _k8s_render import rendered_docs
 from ansible.plugins.filter.core import combine
 from jinja2.nativetypes import NativeEnvironment
+from _helpers import REPO as _REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+
 _DEPLOY = _REPO / "ansible/deploy.yml"
 _ALL_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
 

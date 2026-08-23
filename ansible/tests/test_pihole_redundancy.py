@@ -14,13 +14,13 @@ Each of them fails green — the deploy succeeds and DNS goes down anyway:
 
 from __future__ import annotations
 
-from pathlib import Path
 
 import yaml
 
 from _k8s_render import rendered_docs
+from _helpers import REPO as _REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+
 _TASKS = _REPO / "ansible/roles/k8s/pihole/tasks/main.yml"
 _ROLL_ONE = _REPO / "ansible/roles/k8s/pihole/tasks/roll_one.yml"
 

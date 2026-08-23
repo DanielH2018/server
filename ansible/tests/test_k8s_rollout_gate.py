@@ -26,8 +26,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
+from _helpers import REPO as _REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
 _DRAIN = _REPO / "ansible/roles/k8s/rollout-drain/tasks/main.yml"
 _CONFIGARR = _REPO / "ansible/roles/k8s/configarr/tasks/main.yml"

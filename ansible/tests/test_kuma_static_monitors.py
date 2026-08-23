@@ -16,12 +16,12 @@ the filenames — must stay unique.
 """
 
 import json
-from pathlib import Path
 
 import yaml
 from jinja2 import Environment, FileSystemLoader
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
+
 TEMPLATE = ANSIBLE / "roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2"
 
 STUBS = {
