@@ -24,6 +24,8 @@ import pytest
 import yaml
 
 import gen_infra_map as g
+import infra_map_live as live
+import infra_map_render as render
 
 REPO_ROOT = g.REPO_ROOT
 
@@ -471,13 +473,13 @@ def test_find_tool_returns_none_for_a_genuinely_absent_binary(monkeypatch):
 
 def test_collect_k8s_raises_rather_than_reporting_a_clean_empty_result(monkeypatch):
     """A missing binary is a broken setup, not 'the cluster has no deployments'."""
-    monkeypatch.setattr(g, "find_tool", lambda name: None)
+    monkeypatch.setattr(live, "find_tool", lambda name: None)
     with pytest.raises(g.MissingToolError):
         g.collect_k8s("box", "box")
 
 
 def test_collect_docker_raises_when_ssh_is_absent(monkeypatch):
-    monkeypatch.setattr(g, "find_tool", lambda name: None)
+    monkeypatch.setattr(live, "find_tool", lambda name: None)
     with pytest.raises(g.MissingToolError):
         g.collect_docker("daniel-server", "daniel-box")
 
@@ -525,8 +527,8 @@ def test_find_kubeconfig_skips_an_unreadable_candidate(monkeypatch, tmp_path):
 
 def test_collect_k8s_raises_when_no_kubeconfig_is_readable(monkeypatch):
     """Must not degrade to 'declared only' — that renders as a healthy page."""
-    monkeypatch.setattr(g, "find_tool", lambda name: "/usr/local/bin/kubectl")
-    monkeypatch.setattr(g, "find_kubeconfig", lambda: None)
+    monkeypatch.setattr(live, "find_tool", lambda name: "/usr/local/bin/kubectl")
+    monkeypatch.setattr(live, "find_kubeconfig", lambda: None)
     with pytest.raises(g.MissingToolError):
         g.collect_k8s("box", "box")
 
@@ -541,9 +543,9 @@ def test_collect_k8s_passes_the_resolved_kubeconfig_to_kubectl(monkeypatch, tmp_
         seen["cmd"] = cmd
         return True, json.dumps({"items": []})
 
-    monkeypatch.setattr(g, "find_tool", lambda name: "/usr/local/bin/kubectl")
-    monkeypatch.setattr(g, "find_kubeconfig", lambda: cfg)
-    monkeypatch.setattr(g, "_run", fake_run)
+    monkeypatch.setattr(live, "find_tool", lambda name: "/usr/local/bin/kubectl")
+    monkeypatch.setattr(live, "find_kubeconfig", lambda: cfg)
+    monkeypatch.setattr(live, "_run", fake_run)
     g.collect_k8s("box", "box")
     assert "--kubeconfig" in seen["cmd"]
     assert str(cfg) in seen["cmd"]
@@ -782,7 +784,7 @@ def test_the_diagram_is_well_formed_svg():
     """Hand-authored markup — one stray tag would break the whole page."""
     from xml.etree import ElementTree
 
-    figure = g._diagram_view(model_for({}))
+    figure = render._diagram_view(model_for({}))
     fragment = figure[figure.index("<svg") : figure.index("</svg>") + len("</svg>")]
     ElementTree.fromstring(fragment)
 
@@ -797,7 +799,7 @@ def test_the_diagram_labels_edges_with_addresses_from_the_inventory():
     model = g.build_model(
         global_vars, {"daniel-box": docker_host([])}, {}, "now", ROLES
     )
-    diagram = g._diagram_view(model)
+    diagram = render._diagram_view(model)
     assert "10.9.9.9" in diagram
     assert "example.test" in diagram
 
@@ -814,19 +816,19 @@ def test_the_diagram_reports_a_disarmed_backup_target():
             {"name": "r2", "url": "", "armed": False, "available": False}
         ],
     }
-    assert "disarmed" in g._diagram_view(model_for({}, cluster))
+    assert "disarmed" in render._diagram_view(model_for({}, cluster))
 
 
 def test_an_uncollected_cluster_does_not_claim_the_backups_are_disarmed():
     """Disarmed is a deliberate state here — a failed query must not announce it."""
-    diagram = g._diagram_view(model_for({}))
+    diagram = render._diagram_view(model_for({}))
     assert "disarmed" not in diagram
     assert "not collected" in diagram
 
 
 def test_an_uncollected_cluster_does_not_paint_its_nodes_down():
     """Same false alarm on the nodes: unknown is not NotReady."""
-    diagram = g._diagram_view(model_for({}))
+    diagram = render._diagram_view(model_for({}))
     assert "s-down" not in diagram
     assert "s-unknown" in diagram
 
@@ -843,7 +845,7 @@ def test_the_storage_plane_is_not_reddened_by_a_route_only_service():
         "volumes": 42,
         "backup_targets": [],
     }
-    diagram = g._diagram_view(model_for({}, cluster))
+    diagram = render._diagram_view(model_for({}, cluster))
     longhorn = diagram[diagram.index('y="706"') - 60 : diagram.index('y="706"')]
     assert "s-missing" not in longhorn
 
@@ -862,4 +864,4 @@ def test_a_services_node_placement_reaches_the_page():
         "detail": "",
         "nodes": ["daniel-server"],
     }
-    assert "daniel-server" in g._service_row(service)
+    assert "daniel-server" in render._service_row(service)
