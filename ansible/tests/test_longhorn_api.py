@@ -30,25 +30,16 @@ import tempfile
 from pathlib import Path
 
 import pytest
-import yaml
 from _helpers import REPO as _REPO_ROOT
+from _helpers import load_tasks as _tasks
+from _helpers import task_named
 
 _ROLE = Path(__file__).resolve().parents[2] / "ansible/roles/k8s/longhorn-api"
 _RESOLVE = _ROLE / "tasks/resolve.yml"
 
 
-def _tasks(path: Path) -> list[dict]:
-    return yaml.safe_load(path.read_text()) or []
-
-
 def _named(path: Path, fragment: str) -> dict:
-    for task in _tasks(path):
-        if fragment in str(task.get("name", "")):
-            return task
-    raise AssertionError(
-        f"no task in {path.name} whose name contains {fragment!r} — the task was renamed or "
-        f"removed, and this test would otherwise silently check nothing."
-    )
+    return task_named(_tasks(path), fragment)
 
 
 def test_the_resolve_selects_this_nodes_own_manager_pod() -> None:

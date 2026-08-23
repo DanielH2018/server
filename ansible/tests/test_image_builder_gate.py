@@ -33,6 +33,7 @@ import pytest
 import yaml
 from ansible.template import Templar, trust_as_template
 from _helpers import ANSIBLE
+from _helpers import load_tasks
 
 
 ROLE = ANSIBLE / "roles" / "k8s" / "image-builder"
@@ -60,7 +61,7 @@ DEREFERENCING = [
 
 
 def _tasks():
-    return yaml.safe_load(TASKS.read_text())
+    return load_tasks(TASKS)
 
 
 def _task(prefix: str):

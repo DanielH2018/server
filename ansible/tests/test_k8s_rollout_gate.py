@@ -23,10 +23,11 @@ simply never ran:
 
 from __future__ import annotations
 
-from pathlib import Path
 
 import yaml
 from _helpers import REPO as _REPO
+from _helpers import load_tasks as _tasks
+from _helpers import command_of as _cmd
 
 
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
@@ -38,10 +39,6 @@ _BATCH = _REPO / "ansible/tasks/k8s_batch.yml"
 _ALL_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
 
 
-def _tasks(path: Path) -> list[dict]:
-    return yaml.safe_load(path.read_text()) or []
-
-
 def _plays() -> list[dict]:
     return yaml.safe_load(_DEPLOY.read_text()) or []
 
@@ -51,17 +48,6 @@ def _k8s_play() -> dict:
         if play.get("name") == "Deploy k8s workloads":
             return play
     raise AssertionError("deploy.yml no longer has a 'Deploy k8s workloads' play")
-
-
-def _cmd(task: dict) -> str:
-    """The command string a task runs, whichever module shape it uses."""
-    for key in ("ansible.builtin.command", "ansible.builtin.shell"):
-        mod = task.get(key)
-        if isinstance(mod, dict):
-            return str(mod.get("cmd", ""))
-        if isinstance(mod, str):
-            return mod
-    return ""
 
 
 def test_manifests_queues_the_rollout_instead_of_waiting() -> None:

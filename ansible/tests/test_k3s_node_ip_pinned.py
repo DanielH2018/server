@@ -27,12 +27,13 @@ from pathlib import Path
 import yaml
 
 from _helpers import SETUP_ROLES, leaf_tasks
+from _helpers import load_yaml
 
 K3S = SETUP_ROLES / "k3s"
 
 
 def _defaults() -> dict:
-    return yaml.safe_load((K3S / "defaults" / "main.yml").read_text())
+    return load_yaml(K3S / "defaults" / "main.yml")
 
 
 # main.yml became a list of import_tasks in the 2026-08-15 split, so expand the imports —

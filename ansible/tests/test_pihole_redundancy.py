@@ -19,6 +19,8 @@ import yaml
 
 from _k8s_render import rendered_docs
 from _helpers import REPO as _REPO
+from _helpers import load_tasks
+from _helpers import walk_tasks as _flatten_tasks
 
 
 _TASKS = _REPO / "ansible/roles/k8s/pihole/tasks/main.yml"
@@ -125,14 +127,7 @@ def test_only_the_web_service_is_pinned_to_one_instance():
 
 
 def _tasks() -> list[dict]:
-    return yaml.safe_load(_TASKS.read_text())
-
-
-def _flatten_tasks(tasks: list[dict]):
-    for task in tasks:
-        yield task
-        if "block" in task:
-            yield from _flatten_tasks(task["block"])
+    return load_tasks(_TASKS)
 
 
 def _roll_one_tasks() -> list[dict]:

@@ -34,6 +34,7 @@ from pathlib import Path
 
 import yaml
 from _helpers import ANSIBLE
+from _helpers import load_yaml
 
 
 K3S = ANSIBLE / "roles" / "setup" / "k3s"
@@ -302,7 +303,7 @@ def test_check_seven_pages_below_backup_failure_severity() -> None:
 
 
 def _tasks():
-    docs = yaml.safe_load(CRONS.read_text())
+    docs = load_yaml(CRONS)
     return docs if isinstance(docs, list) else []
 
 
