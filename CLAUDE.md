@@ -367,6 +367,15 @@ uv run pytest                 # all repo unit tests (auto-syncs the env from uv.
 uv run pytest scripts         # just one suite
 ```
 
+- **Bare `python3` cannot parse this repo.** `requires-python = ">=3.14"`, and eight files use
+  PEP 758 syntax — unparenthesized `except OSError, yaml.YAMLError:` — including
+  `scripts/probe.py`, `ansible/filter_plugins/toposort.py` and
+  `ansible/roles/k8s/monitor-bridge/files/check.py`. Ubuntu's `/usr/bin/python3` is 3.12, so a
+  bare `pytest` reports a `SyntaxError` naming a repo file, which reads as a repo bug. ENFORCED
+  by `.claude/hooks/uv-python.sh`, a PreToolUse hook that rewrites a bare
+  `python`/`python3`/`pytest`/`ansible-playbook`/`*.py` invocation into `uv run …`. It rewrites
+  rather than pins a PATH, because `uv run` resolves the venv from the caller's working
+  directory and a pinned `/home/ubuntu/server/.venv/bin` would cross worktrees.
 - **What runs is defined once** in `pyproject.toml` `[tool.pytest.ini_options]` `testpaths` —
   consumed by both `uv run pytest` and the prek `pytest` hook. It deliberately excludes the
   vendored `ansible/collections/**` third-party tests.
