@@ -62,6 +62,25 @@ claude_otel_otlp_host_ip: 127.0.0.1
 # listener must never bind 0.0.0.0.
 claude_otel_query_host_ip: 127.0.0.1
 
+# Pinned ClusterIPs for the three query backends. These are the addresses they already
+# hold; declaring them makes an existing allocation explicit rather than requesting a
+# change, so an apply is a no-op.
+#
+# They are pinned because they are quoted as constants outside this repo. Loki, Prometheus
+# and Tempo are single-replica Deployments with no nodeSelector, publishing their query
+# ports on a hostPort bound to claude_otel_query_host_ip — so only the node they happen to
+# run on answers on loopback. A reboot on 2026-08-23 moved all three from daniel-box to
+# daniel-server, and every host-side query tool broke while the telemetry itself stayed
+# healthy. `otelq` and `otel-sweep` (chezmoi: home/dot_local/bin/) now try loopback first
+# and these addresses second, which works from either node. That fallback is only sound
+# while the addresses cannot be reassigned under it, which is what pinning buys.
+#
+# spec.clusterIP is immutable: changing a value here is rejected on apply, and actually
+# moving one means deleting the Service and updating the constants in both repos together.
+claude_otel_loki_cluster_ip: 10.43.99.158
+claude_otel_prometheus_cluster_ip: 10.43.39.218
+claude_otel_tempo_cluster_ip: 10.43.4.147
+
 # 744h (31d), carried over from the bundle's loki-config.yaml along with the compactor that
 # enforces it. Retention matters more here than in a normal log store: every prompt and
 # response is retained verbatim for this window.
