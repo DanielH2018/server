@@ -31,6 +31,7 @@ from _render_guard import (
     ALL_VARS,
     ANSIBLE,
     BASE_CONTEXT,
+    HOST_VARS,
     SHARED_TPL,
     dump_numbered,
     load_yaml,
@@ -45,7 +46,6 @@ def _ansible_hash(value, algo="sha1"):
 
 
 ROLES = ANSIBLE / "roles" / "containers"
-HOST_VARS = ANSIBLE / "inventory" / "host_vars"
 
 
 def build_env(role: str) -> Environment:
