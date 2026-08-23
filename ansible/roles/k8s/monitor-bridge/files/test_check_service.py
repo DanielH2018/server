@@ -18,8 +18,6 @@ def _seq(*values):
     return lambda *a, **k: next(it)
 
 
-# --- n8n consecutive-failure streaks ----------------------------------------
-
 N8N_NOW = datetime(2026, 6, 8, 12, 0, 0, tzinfo=timezone.utc)
 
 
@@ -127,9 +125,6 @@ def test_n8n_naive_timestamp_treated_as_utc():
     assert check.n8n_update_streaks(wf, ex, {}, N8N_NOW, 7200) == {"Prod Flow": 1}
 
 
-# --- check_n8n --------------------------------------------------------------
-
-
 def test_n8n_disabled_without_key():
     # N8N_API_KEY defaults to "" in tests -> monitoring disabled, never a false page
     ok, msg = check.check_n8n()
@@ -184,9 +179,6 @@ def test_n8n_check_single_failure_does_not_page(monkeypatch):
     monkeypatch.setattr(check, "_get_json", _seq(wf, ex))
     ok, _ = check.check_n8n()
     assert ok
-
-
-# --- queue_warnings (pure) ---------------------------------------------------
 
 
 def _queue(*records):
@@ -325,9 +317,6 @@ def test_queue_warnings_multiple_records_all_named():
     assert titles == {"Bad One", "Bad Two"}
 
 
-# --- check_arr_queue ---------------------------------------------------------
-
-
 def test_arr_queue_disabled_without_keys():
     # SONARR_API_KEY/RADARR_API_KEY default to "" in tests -> monitoring disabled
     ok, msg = check.check_arr_queue()
@@ -414,9 +403,6 @@ def test_arr_queue_only_checks_configured_app(monkeypatch):
     assert "sonarr" in calls[0]
 
 
-# --- gitops_alive / gitops_status (pure) ------------------------------------
-
-
 def test_gitops_alive_fresh():
     ok, msg = check.gitops_alive(60, 5400)
     assert ok
@@ -463,9 +449,6 @@ def test_gitops_status_hold_takes_priority_over_diverged():
     ok, msg = check.gitops_status("abc123def4567890", "def456abc7890123")
     assert not ok
     assert "held" in msg
-
-
-# --- check_gitops_alive / check_gitops_status (file I/O) ---------------------
 
 
 def _gw(tmp_path, name, content):
@@ -644,7 +627,6 @@ def test_ha_heartbeat_disabled_when_no_url_token(monkeypatch):
     assert "disabled" in msg
 
 
-# --- loki ingestion freshness -----------------------------------------------
 # Loki's Kuma /ready probe stays green even if promtail stops shipping (DOCKER_HOST
 # break, positions-file corruption, label regression) — a silently-dead log pipeline.
 # This check counts ingested log lines for an always-active stream over a window and
@@ -737,8 +719,6 @@ def test_check_loki_ingestion_filetail_silent_is_down(monkeypatch):
     assert "file-tail" in msg
 
 
-# --- indexers_down (pure) ---------------------------------------------------
-
 INX_NOW = datetime(2026, 7, 4, 12, 0, 0, tzinfo=timezone.utc)
 INX_NAMES = {1: "EZTV", 2: "1337x", 3: "YTS"}
 
@@ -810,9 +790,6 @@ def test_indexers_down_ignore_only_named_indexer():
     assert [n for n, _ in out] == ["1337x"]
 
 
-# --- check_prowlarr_indexers (wrapper) --------------------------------------
-
-
 def test_prowlarr_indexers_disabled_without_key(monkeypatch):
     monkeypatch.setattr(check, "PROWLARR_API_KEY", "")
     ok, msg = check.check_prowlarr_indexers()
@@ -854,7 +831,6 @@ def test_prowlarr_indexers_ignore_list_suppresses_page(monkeypatch):
     assert "ok" in msg
 
 
-# --- gitops_status: behind-origin arm ----------------------------------------
 # The case that caught nothing before: a deferred BROAD change never fast-forwards, so the host
 # parks on an old tree while last_run keeps ticking and is_diverged stays false. daniel-server ran
 # a 12-commit-old tree for hours that way on 2026-08-02 with every GitOps signal green.
@@ -905,9 +881,6 @@ def test_gitops_status_unparseable_behind_marker_is_ok():
     for marker in ("garbage", "abc123 notanumber", "abc123", ""):
         ok, _ = check.gitops_status(None, None, marker, now=1e9)
         assert ok, marker
-
-
-# --- R2 free-tier headroom ----------------------------------------------------
 
 
 def _ops(**counts):

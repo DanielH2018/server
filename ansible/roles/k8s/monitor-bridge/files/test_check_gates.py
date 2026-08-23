@@ -17,9 +17,6 @@ import pytest
 import check
 
 
-# --- loki_reachable (the Loki-dependent gate) -------------------------------
-
-
 def test_loki_reachable_ok(monkeypatch):
     monkeypatch.setattr(
         check, "_get_json", lambda *a, **k: {"status": "success", "data": ["job"]}
@@ -318,9 +315,6 @@ def test_k8s_daemonsets_healthy_alongside_healthy_deployments():
     ok, msg = check.k8s_workloads_verdict(18, [], 5, ds_total=9, min_daemonsets=9)
     assert ok is True
     assert "18 k8s workloads healthy" == msg
-
-
-# --- estate pinning once one Prometheus holds two estates (slice 3, B5) ------
 
 
 def test_origin_sel_is_empty_without_a_pin(monkeypatch):
@@ -758,9 +752,6 @@ def test_run_once_suppresses_node_dependents_when_node_exporter_down(monkeypatch
     assert "exporter" in by_tok["tok_disk"][1].lower()
 
 
-# --- restarts / oom / cpu-throttle (retargeted onto kubernetes-cadvisor, by pod) ---
-
-
 def _fake_vectors(monkeypatch, by_query):
     """prom_vector stub keyed by substring of the query."""
 
@@ -881,9 +872,6 @@ def test_run_once_up_probe_failure_does_not_suppress(monkeypatch):
     assert "disk" in ran  # not suppressed
 
 
-# --- down_streak: the shared consecutive-down hysteresis primitive ------------
-
-
 def test_down_streak_holds_up_below_threshold():
     count, ok, msg = check.down_streak(0, 2, "boom", "grace")
     assert (count, ok) == (1, True)
@@ -902,9 +890,6 @@ def test_down_streak_custom_label_and_note():
     )
     assert ok
     assert msg == "throttling streak 1/3 (not alerting yet): x"
-
-
-# --- startup/redeploy grace for the reach-out checks (STARTUP_GRACE) ----------
 
 
 def test_apply_startup_grace_single_down_is_suppressed():

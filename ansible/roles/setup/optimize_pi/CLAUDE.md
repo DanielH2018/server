@@ -17,6 +17,10 @@ See repo-root `CLAUDE.md` for conventions.
   `[gpu-mem, zram]`; the config.txt path detection → `[gpu-mem, watchdog]`) so
   tag-scoped runs still get the facts they consume. `log2ram` also covers the log
   RAM-budget tasks (journald cap, acct retention) — they exist because of the tmpfs.
+- **The two health crons source `/usr/local/lib/kuma-push-lib.sh`**, installed by the
+  `initial_setup` role under `tags: [always]` so a `--tags sd-health` or `--tags recovery-health`
+  run still copies it. Both scripts guard the `source` with `|| exit 1`, so a host missing the
+  lib drops its heartbeat loudly instead of reporting green.
 
 ## What it does (`tasks/main.yml`)
 1. **Config path detection** — picks `/boot/firmware/config.txt` (Bookworm) vs
@@ -65,7 +69,8 @@ See repo-root `CLAUDE.md` for conventions.
     (uptime-kuma role), same LAN-only `^/api/push/` bypass. Either down = explicit `down`; a
     dead cron/host trips the 600s watchdog. Token: `pi_recovery_push_token` in `secrets.yml`.
     **Two deploys to activate** (Pi is manual-deploy): install the cron with
-    `initial_setup.yml --tags recovery-health -e target=daniel-pi`, then redeploy `uptime-kuma`
+    `initial_setup.yml --tags recovery-health -e target=daniel-pi` (which also copies the shared
+    push lib — see *Granular tags*), then redeploy `uptime-kuma`
     on the server so AutoKuma provisions the monitor — do both close together or the fresh push
     monitor false-DOWNs until the first heartbeat lands.
 

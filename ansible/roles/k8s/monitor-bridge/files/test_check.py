@@ -33,9 +33,6 @@ def test_touch_heartbeat_never_raises(monkeypatch):
     check.touch_heartbeat()
 
 
-# --- CHECKS <-> compose (env + monitors) consistency — CI/CD L2 --------------
-
-
 def _read_sibling(relpath):
     return (Path(__file__).resolve().parent / relpath).read_text()
 
@@ -82,8 +79,6 @@ def test_every_push_token_env_is_wired_to_a_monitor():
         "env push tokens with no monitor declared: %s" % sorted(env_vars - label_vars)
     )
 
-
-# --- CHECKS_ONLY / CHECKS_SKIP (the Phase F twin/remnant split) ---------------------------
 
 # The remnant's real config: only the host-state-file checks, every gate off. Three
 # since the 2026-08-14 host flips (pi_peers + renovate_alive became direct pushers).

@@ -388,7 +388,6 @@ def test_no_workload_is_both_labelled_and_exempt() -> None:
     )
 
 
-# --- Both namespaces must have a CLUSTER-side exempt gate, not just a template-side one -------
 #
 # Slice 5 flipped both baselines to namespace scope, i.e. from opt-in to opt-out. Under opt-out the
 # exempt set IS the boundary, so who carries the label stops being bookkeeping and becomes the

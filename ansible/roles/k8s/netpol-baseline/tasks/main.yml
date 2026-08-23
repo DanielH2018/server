@@ -152,6 +152,18 @@
       - networkpolicy-wg-easy.yaml
 
 # ── prove the policy is enforced, rather than merely applied ────────────────────────────────
+# DECIDED: the five probe blocks below stay hand-copied — do not fold them into an
+# `include_tasks` loop. Tried 2026-08-23: it works and it shrinks this file from 955 lines to
+# 470, with ansible-lint green at production profile. It also breaks
+# `test_k8s_autodeploy_guard.py::test_auto_deployable_roles_gate_every_batch_workload_they_render`.
+# That test's `_batch_gated_names` matches each rendered Job name against a LITERAL
+# `wait --for=condition=complete job/<name>` in the task text. Under a loop the wait reads
+# `job/netpol-baseline-probe{{ probe.suffix }}`, which the scanner cannot match: the wait still
+# runs, but the check that catches a genuinely ungated probe Job stops working for this role.
+# N Jobs need N literal wait statements, so the duplication is the guard's substrate — and
+# planting literal names somewhere the scanner happens to read would be a dodge, not a fix.
+# Same class as textual-guard-checks-break-on-indirection.
+#
 # Its own directory: `kubectl apply -f <dir>` reads every file in the directory it is given, and
 # a Job's pod template is immutable, so a Job left beside the policy would be re-applied as
 # either a no-op or an error.

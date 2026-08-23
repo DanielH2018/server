@@ -130,9 +130,6 @@ def test_real_inventory_has_no_empty_service_names():
     assert all(tag for tag in deploy_tags.service_tags())
 
 
-# --------------------------------------------------------------------------------- describe
-
-
 def test_service_records_carry_host_and_platform(host_vars):
     records = deploy_tags.service_records(host_vars)
     assert ("host_a", "k8s", "jellyfin") in records
@@ -159,9 +156,6 @@ def test_describe_does_not_change_lists_own_shape(capsys):
     deploy_tags.main(["describe"])
     describe_out = capsys.readouterr().out
     assert list_out != describe_out
-
-
-# ----------------------------------------------------------------------------------- changed
 
 
 def test_changed_prints_tags_for_a_service_and_k8s_change(capsys, monkeypatch):

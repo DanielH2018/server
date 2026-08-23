@@ -16,9 +16,6 @@ def _seq(*values):
     return lambda *a, **k: next(it)
 
 
-# --- check_disk -------------------------------------------------------------
-
-
 def test_disk_under_threshold_is_ok(monkeypatch):
     monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
     monkeypatch.setattr(
@@ -118,9 +115,6 @@ def test_mem_metric_unavailable_alerts(monkeypatch):
     ok, msg = check.check_mem()
     assert not ok
     assert "unavailable" in msg
-
-
-# --- check_cert -------------------------------------------------------------
 
 
 def test_cert_valid_is_ok(monkeypatch):
@@ -619,9 +613,6 @@ def test_pi_pressure_zero_cores_alerts_not_divides():
     assert "missing" in msg
 
 
-# --- check_pi_pressure -------------------------------------------------------
-
-
 def test_pi_check_disabled_without_url():
     # PI_GLANCES_URL defaults to "" in tests -> monitoring disabled, never a false page
     ok, msg = check.check_pi_pressure()
@@ -648,9 +639,7 @@ def test_pi_check_up_when_quiet(monkeypatch):
     assert ok
 
 
-# ---------------------------------------------------------------------------
 # check_longhorn_volumes — replica redundancy on the storage layer
-# ---------------------------------------------------------------------------
 
 
 def _longhorn_series(pvc, state, pod="longhorn-manager-a"):
@@ -760,7 +749,6 @@ def test_longhorn_selects_on_the_state_label_not_a_value_ordinal():
     assert "== 2" not in queries[0]
 
 
-# --- extended_resource_verdict ------------------------------------------------------------------
 #
 # dri-device-plugin has no probe, and a container without a readinessProbe is Ready the instant it
 # starts. So a plugin that wedges internally keeps a Running, Ready, fully-available DaemonSet

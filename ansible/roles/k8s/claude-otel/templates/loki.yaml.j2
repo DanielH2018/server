@@ -7,6 +7,13 @@ metadata:
 data:
   loki.yaml: |
     auth_enabled: false
+    # Loki's usage reporter defaults to on and POSTs to stats.grafana.org, which Pi-hole
+    # blocks. Every 4h cycle then burns its whole 5-retry budget (an A plus an AAAA lookup
+    # per attempt) against a name that never resolves, so the only product is DNS noise.
+    # The key is analytics.reporting_enabled -- Tempo's is usage_report.reporting_enabled,
+    # and Loki rejects an unknown config field at startup rather than ignoring it.
+    analytics:
+      reporting_enabled: false
     server:
       http_listen_port: 3100
       grpc_listen_port: 9096

@@ -7,7 +7,7 @@
 # Never put a secret here — inventory/ is NOT SOPS-auto-encrypted and NOT hook-guarded
 # (see .claude/rules/secrets.md). Secrets go in vars/secrets.yml and are referenced by name.
 
-# --- Required: no default exists, and a role will fail or misbehave without it ----------
+# Required: no default exists, and a role will fail or misbehave without it
 
 # The host's LAN IP. Needed by every role that publishes a LAN-bound port or firewalls by
 # IP, and read cross-host as hostvars[<other>].server_ip.
@@ -29,7 +29,7 @@ ssh_config_path: /etc/ssh/sshd_config
 # Compose services. See docs/superpowers/plans/ for the current migration slice.
 containers_list: []
 
-# --- Bring-up: revert once the host is established --------------------------------------
+# Bring-up: revert once the host is established
 
 # Default: true. Keep it false until this host's first `deploy.yml` succeeds by hand. The
 # gitops_deploy role's "Run gitops-deploy once" handler shells a full deploy at the end of
@@ -37,7 +37,7 @@ containers_list: []
 # down the OS-hardening run. Flip to true and re-run `--tags gitops_deploy` afterwards.
 has_gitops: false
 
-# --- Hardware / capability flags: set only what this host actually has ------------------
+# Hardware / capability flags: set only what this host actually has
 
 # Default: false. Intel iGPU present → /dev/dri passthrough for jellyfin/tdarr transcode.
 # has_igpu: true
@@ -52,7 +52,7 @@ has_gitops: false
 # lat: 38.89
 # long: -77.08
 
-# --- Optional overrides -----------------------------------------------------------------
+# Optional overrides
 
 # Default: traefik. Use `lan` on a host that should publish web UIs bound to server_ip
 # instead of routing through Traefik (how daniel-pi is set up).
@@ -67,8 +67,8 @@ has_gitops: false
 # pi_swapfile_path: /swapfile
 # pi_swapfile_size: 1G
 
-# --- Fleet-role assignments (defined in group_vars/all.yml, all defaulting to -----------
-# --- daniel-server). Override only when MOVING a role to this host, and make sure --------
-# --- the old host stops claiming it. -----------------------------------------------------
+# Fleet-role assignments (defined in group_vars/all.yml, all defaulting to
+# daniel-server). Override only when MOVING a role to this host, and make sure
+# the old host stops claiming it.
 # monitoring_controller_host: <hostname>
 # renovate_notify_host: <hostname>

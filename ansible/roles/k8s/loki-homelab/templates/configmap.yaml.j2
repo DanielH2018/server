@@ -7,6 +7,12 @@ metadata:
 data:
   loki.yaml: |
     auth_enabled: false
+    # See the same block in roles/k8s/claude-otel/templates/loki.yaml.j2: the usage reporter
+    # defaults to on, Pi-hole blocks stats.grafana.org, and each 4h cycle spends its full
+    # 5-retry budget on a name that never resolves. promtail.yaml below gets no such block --
+    # promtail has no analytics reporter, and it rejects the unknown field at startup.
+    analytics:
+      reporting_enabled: false
     server:
       http_listen_port: 3100
       grpc_listen_port: 9096

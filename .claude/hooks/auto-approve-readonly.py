@@ -33,7 +33,7 @@ import sys
 
 from _hook_common import emit_permissionrequest_allow, emit_pretooluse_decision
 
-# --- Programs that cannot write or exec under ANY arguments --------------------
+# Programs that cannot write or exec under ANY arguments
 # Deliberately excludes commands with a write/exec mode: env (`env CMD`),
 # less/more (`!cmd` escape), command/xargs/timeout/nice/... (exec wrappers),
 # sed/awk (-i, system()), tee/dd/xxd/mount/stty (write), sort/uniq/find/ip/...
@@ -530,7 +530,7 @@ def _sed(argv):
     return "sed"
 
 
-# --- package-manager / host-query guards ------------------------------------
+# package-manager / host-query guards
 # Same binaries query read-only but mutate under install/remove/etc. actions, so
 # each is gated to its read-only forms (deny by default). The always-read-only
 # query tools (apt-cache, dpkg-query, lsb_release, mailq) live in TIER1 instead.

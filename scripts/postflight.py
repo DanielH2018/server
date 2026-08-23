@@ -73,7 +73,7 @@ def secret(name):
     return value, ""
 
 
-# --- §9.1 + §9.2: Uptime-Kuma ------------------------------------------------
+# §9.1 + §9.2: Uptime-Kuma
 # Both are checked through Prometheus rather than Kuma itself: Kuma 2.x drives its
 # admin wizard and API-key minting over Socket.IO only, so there is no REST route to
 # ask "does an admin exist". The scrape is the observable consequence of both steps.
@@ -139,7 +139,7 @@ def check_kuma_scrape():
     return FAIL, "uptime-kuma target down (stale prometheus_kuma_api_key?)"
 
 
-# --- §9.3: *arr + jellyfin API keys ------------------------------------------
+# §9.3: *arr + jellyfin API keys
 # A fresh *arr generates its own random key on first start, so the SOPS value that
 # configarr / janitorr / homepage / monitor-bridge / autofix-bridge authenticate with
 # is wrong until it's pasted in. Every consumer then 401s against a healthy service.
@@ -169,7 +169,7 @@ def check_jellyfin_key():
     return FAIL, f"HTTP {status} — mint the key in Jellyfin and sops set it"
 
 
-# --- §9.4: Home Assistant long-lived tokens ----------------------------------
+# §9.4: Home Assistant long-lived tokens
 # Four separate consumers each hold their own token; one bad token silently disables
 # just that consumer, so they're checked individually rather than as a group.
 
@@ -193,7 +193,7 @@ def check_ha_token(name):
     return FAIL, f"HTTP {status} — re-mint under Profile → Security"
 
 
-# --- §9.5: Authelia ----------------------------------------------------------
+# §9.5: Authelia
 # The role asserts the OIDC material exists, so a missing secret fails the deploy
 # rather than failing silently. What it can't tell you is whether the running
 # instance actually came up with it.

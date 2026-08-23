@@ -16,7 +16,10 @@
 set -uo pipefail
 
 # shellcheck source=/dev/null
-source /usr/local/lib/pi-kuma-push-lib.sh
+source /usr/local/lib/kuma-push-lib.sh || {
+  logger -t pi-sd-health "kuma-push-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
 
 COUNTER=/sys/fs/ext4/mmcblk0p2/errors_count
 {# `domain` here is the SOPS-loaded server domain (community.sops.load_vars in
@@ -41,4 +44,4 @@ else
   STATUS=down; MSG="cannot read ${COUNTER}"
 fi
 
-pi_kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" pi-sd-health
+kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" pi-sd-health

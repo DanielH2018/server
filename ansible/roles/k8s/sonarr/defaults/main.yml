@@ -46,7 +46,6 @@ sonarr_k8s_media_claim: media-data
 # `sonarr-striptracks` — the radarr-named image auto-detects which app it is in).
 sonarr_k8s_docker_mods: linuxserver/mods:radarr-striptracks
 
-# Mirrors resources('1.0', '1024M', '0.10', '128M') in the compose template.
 sonarr_k8s_cpu_limit: "1"
 sonarr_k8s_mem_limit: 1024Mi
 sonarr_k8s_cpu_request: "100m"

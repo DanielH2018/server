@@ -20,7 +20,6 @@ k8s_autodeploy_reason: "migrating state — Recreate + an RWO seed-volume PVC, n
 # is what this role's auto-deploy now depends on.
 k8s_autodeploy_snapshot_pvcs: [speedtest-config]  # noqa var-naming[no-role-prefix]
 
-# Mirrors resources('1.0', '512M', '0.10', '64M') in the compose template.
 speedtest_k8s_cpu_limit: "1"
 speedtest_k8s_mem_limit: 512Mi
 speedtest_k8s_cpu_request: "100m"

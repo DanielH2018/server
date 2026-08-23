@@ -95,9 +95,7 @@ NAMESPACE_OWNERS = {"claude-otel": "k8s_observability_namespace"}
 _JINJA_VAR = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
 
 
-# --------------------------------------------------------------------------
 # Inventory (declared state)
-# --------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -229,9 +227,7 @@ def declared_services(host: str, host_vars: dict, global_vars: dict) -> list[dic
     return services
 
 
-# --------------------------------------------------------------------------
 # Live state
-# --------------------------------------------------------------------------
 
 
 # Directories searched for the collector binaries, on top of whatever PATH the
@@ -581,9 +577,7 @@ def collect_cluster(local_hostname: str, longhorn_namespace: str) -> dict:
     }
 
 
-# --------------------------------------------------------------------------
 # Reconciliation
-# --------------------------------------------------------------------------
 
 
 def match_k8s_workloads(
@@ -895,9 +889,7 @@ def build_model(
     }
 
 
-# --------------------------------------------------------------------------
 # Rendering
-# --------------------------------------------------------------------------
 
 # Catppuccin Mocha, matching the terminal these pages are generated from.
 STYLE = """
@@ -1606,9 +1598,7 @@ Regenerate with <code>uv run python scripts/gen_infra_map.py</code>.
 """
 
 
-# --------------------------------------------------------------------------
 # Entry point
-# --------------------------------------------------------------------------
 
 
 def collect_live(

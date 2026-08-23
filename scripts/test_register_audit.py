@@ -63,9 +63,6 @@ def make_repo(tmp_path: Path, *relpaths: str) -> Path:
     return repo
 
 
-# --- table parsing -----------------------------------------------------
-
-
 def test_find_section_is_heading_anchored():
     text = "## A\nignored\n## Open and recurring — report as recurrence, not discovery\nbody\n## C\nignored"
     assert find_section(text, "Open and recurring").strip() == "body"
@@ -92,9 +89,6 @@ def test_parse_table_rows_stops_at_next_section(tmp_path):
     assert rows[0].runs_carried == "1"
     # the decoy row above the heading, and the closed row below it, must not leak in
     assert all("decoy" not in r.item and "never appear" not in r.item for r in rows)
-
-
-# --- classification ------------------------------------------------------
 
 
 def test_unresolved_when_no_reference_extractable(tmp_path):
@@ -248,9 +242,6 @@ def test_multiple_rows_all_reported(tmp_path):
     assert len(results) == 3
     statuses = {r.status for r in results}
     assert statuses == {STATUS_CLOSED, STATUS_UNRESOLVED, STATUS_OPEN}
-
-
-# --- CLI / exit code ------------------------------------------------------
 
 
 def test_main_exits_zero_always(tmp_path, capsys):

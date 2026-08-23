@@ -17,6 +17,12 @@
 # cannot mutate anything.
 set -uo pipefail
 
+# shellcheck source=/dev/null
+source /usr/local/lib/kuma-push-lib.sh || {
+  logger -t configarr-health "kuma-push-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+
 export KUBECONFIG=/home/{{ sys_user }}/.kube/config
 export CONFIGARR_NAMESPACE={{ k8s_namespace }}
 export CONFIGARR_MAX_AGE_H={{ configarr_k8s_max_age_hours }}
@@ -38,9 +44,4 @@ else
   MSG="${OUT#*$'\t'}"
 fi
 
-curl -fsS --max-time 10 -G \
-  --resolve "${KUMA_HOST}:443:${KUMA_RESOLVE_IP}" \
-  --data-urlencode "status=${STATUS}" \
-  --data-urlencode "msg=${MSG}" \
-  "$PUSH_URL" >/dev/null \
-  || logger -t configarr-health "push failed (status=${STATUS}: ${MSG})"
+kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" configarr-health

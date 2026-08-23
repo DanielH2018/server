@@ -24,9 +24,9 @@ cloudflare_ips:
   - "2a06:98c0::/29"
   - "2c0f:f248::/32"
 
-# Exact patch, not `3.14`. uv resolves a bare minor to whatever it already has, which is how the
-# two hosts ended up on 3.14.6 and 3.14.5 with nothing asking for either. Eighteen host scripts
-# run on this, and they must be the same interpreter on both machines. The minor must track
+# Exact patch, not `3.14`. uv resolves a bare minor to whatever it already has, which is how
+# the two hosts ended up on 3.14.6 and 3.14.5 with nothing asking for either. Eighteen host
+# scripts run on this and must be the same interpreter on both machines. The minor must track
 # .python-version — ansible/tests/test_host_python_pin.py enforces both halves.
 host_python_version: "3.14.6"
 
@@ -50,12 +50,11 @@ kuma_notification_id: discord
 # Uptime Kuma "docker host" id referenced by AutoKuma docker monitors; the same id on
 # every host so far, so it lives here — override per-host if one ever diverges.
 kuma_docker_host: 1
-# Slice-7 Phase D KD2 (2026-08-10): docker-type monitors retired fleet-wide — the kuma()
-# macro suppresses its docker branch and the per-container tiles are superseded by the
-# `docker-fleet` push check (uptime-kuma role's host cron). Cluster-side AutoKuma can never
-# reach the private docker-proxy socket, so these monitors could not survive the Phase D
-# move anyway. Flip back to true to restore every docker monitor unchanged (AutoKuma
-# recreates them from the labels; history does not survive the round-trip).
+# Docker-type monitors are retired fleet-wide: the kuma() macro suppresses its docker branch
+# and the per-container tiles are superseded by the `docker-fleet` push check (uptime-kuma
+# role's host cron). Cluster-side AutoKuma cannot reach the private docker-proxy socket
+# anyway. Flip back to true to restore every docker monitor unchanged — AutoKuma recreates
+# them from the labels, but history does not survive the round-trip.
 kuma_docker_monitors: false
 # Physical LAN subnet, narrow /24 (not the broader RFC1918 range — see traefik's trustedIPs
 # comment for why that distinction matters). Same for every host so far; override per-host
@@ -69,18 +68,13 @@ has_code_server: false
 monitoring_controller_host: daniel-server
 # The k3s cluster's ingress VIP, served by MetalLB from a dedicated autoAssign: false pool.
 # Global rather than a k3s role default because two hosts consume it: daniel-box's k8s
-# Traefik Service claims it, and daniel-server's Pi-hole answers the cluster hostnames with
-# it. The router's port-forward moves here at slice 6 — until then this is LAN-only.
+# Traefik Service claims it, and Pi-hole answers the cluster hostnames with it.
 k3s_metallb_ingress_vip: 10.0.0.240
-# The cluster MQTT broker's pinned LoadBalancer VIP (slice 5, D2). Global for the same
-# two-hosts reason: daniel-box's mosquitto-lan Service claims it, and daniel-server's
-# Docker-side MQTT clients (z2m, HA) point at it during coexistence. MQTT is raw TCP —
-# this VIP, not a Traefik hostname, is how it crosses hosts.
+# The cluster MQTT broker's pinned LoadBalancer VIP. Global for the same two-hosts reason.
+# MQTT is raw TCP — this VIP, not a Traefik hostname, is how it crosses hosts.
 mqtt_k8s_vip: 10.0.0.242
-# Slice-6 B3: the cluster Pi-hole's pinned LAN DNS VIP (D4). Global for the same two-hosts
-# reason — daniel-box's pihole-dns Service claims it, and at cutover daniel-server repoints
-# wg-easy's WG_DEFAULT_DNS and its own resolv.conf primary (pihole_host_dns_primary) here.
-# Until the router's DHCP DNS option flips, nothing resolves through it.
+# The cluster Pi-hole's pinned LAN DNS VIP. Global for the same two-hosts reason —
+# daniel-box's pihole-dns Service claims it, and wg-easy's WG_DEFAULT_DNS points here.
 dns_k8s_vip: 10.0.0.243
 # The same Service's ClusterIP, pinned. Global because two roles need it and neither owns
 # the other: roles/k8s/pihole claims it on the Service, and roles/setup/k3s names it in the
@@ -89,100 +83,83 @@ dns_k8s_vip: 10.0.0.243
 # where the LoadBalancer's externalTrafficPolicy: Local blackholes traffic the MetalLB
 # announcer would have to forward to another node.
 dns_k8s_cluster_ip: 10.43.252.187
-# Jellyfin's dedicated LAN LoadBalancer VIP (slice 4, B5) — a second path distinct from the
-# Traefik ingress VIP. Global for the same cross-role reason: roles/k8s/jellyfin's
-# service-lan claims it, and roles/k8s/uptime-kuma's VIP port tile probes it.
+# Jellyfin's dedicated LAN LoadBalancer VIP — a second path distinct from the Traefik
+# ingress VIP. Global for the same cross-role reason: roles/k8s/jellyfin's service-lan
+# claims it, and roles/k8s/uptime-kuma's VIP port tile probes it.
 jellyfin_k8s_lan_ip: 10.0.0.241
-# Slice-6 B1: shared between roles/k8s/crowdsec (the engine that runs LAPI+AppSec) and
-# roles/k8s/traefik (the bouncer plugin middleware + the log-tailing agent sidecar).
-# Cross-role like mqtt_k8s_vip above — role defaults are invisible across roles.
+# Shared between roles/k8s/crowdsec (the engine that runs LAPI+AppSec) and roles/k8s/traefik
+# (the bouncer plugin middleware + the log-tailing agent sidecar). Cross-role, and role
+# defaults are invisible across roles.
 crowdsec_k8s_image: crowdsecurity/crowdsec:v1.7.8
 crowdsec_k8s_agent_username: k8s-traefik-agent
-# daniel-server's demoted engine logs in as this machine from B2 on (registered by the
-# k8s/crowdsec role; consumed by the containers/traefik role rendering ON daniel-server).
 crowdsec_k8s_server_agent_machine: daniel-server-agent
 # The authelia pod's agent sidecar. Here, not in the authelia role's defaults, because the
 # k8s/crowdsec role registers the machine and only group_vars crosses that boundary.
 crowdsec_k8s_authelia_agent_machine: k8s-authelia-agent
 crowdsec_k8s_lapi_port: 8080
 crowdsec_k8s_appsec_port: 7422
-# SLZB-06M Zigbee coordinator (network-attached) + pinned Zigbee PAN identity. Moved here
-# from daniel-server's host_vars at slice-5 B2 — z2m's config renders on daniel-box now, and
-# the values were never host-specific. pan_id/ext_pan_id are network identifiers (not
-# secrets) fixed so a templated-config redeploy never regenerates the mesh; the matching
-# network_key IS sensitive and lives in SOPS as zigbee_network_key.
+# SLZB-06M Zigbee coordinator (network-attached) + pinned Zigbee PAN identity. pan_id and
+# ext_pan_id are network identifiers, not secrets, and are fixed so a templated-config
+# redeploy never regenerates the mesh; the matching network_key IS sensitive and lives in
+# SOPS as zigbee_network_key.
 slzb_ip: 10.0.0.127
 zigbee_pan_id: 6754
 zigbee_ext_pan_id: [221, 187, 17, 34, 51, 68, 85, 102]
-# `k8s_hostname_suffix` (was "-k8s") RETIRED 2026-08-15. It distinguished a k8s-hosted
-# service's hostname from its Docker twin while both ran; Docker was uninstalled from both
-# cluster nodes on 2026-08-14, so every service now answers on its plain name and nothing
-# needs distinguishing. Do not reintroduce it — `hostname:` in host_vars is the whole story.
-# Namespace every migrated workload lands in. One namespace rather than one per service:
-# Traefik Middleware references are namespace-scoped, and cross-namespace references cost a
-# qualified name on all ~33 routes that follow for no isolation this homelab needs.
+# `k8s_hostname_suffix` (was "-k8s") is retired: every service answers on its plain name.
+# Do not reintroduce it — `hostname:` in host_vars is the whole story.
+#
+# Namespace every workload lands in. One namespace rather than one per service: Traefik
+# Middleware references are namespace-scoped, and cross-namespace references would cost a
+# qualified name on every route that follows, for no isolation this homelab needs.
 k8s_namespace: homelab
 
-# ── Pod Security Admission labels, applied to homelab and observability ─────────────────
+# Pod Security Admission labels, applied to homelab and observability.
+#
 # WARN AND AUDIT ONLY — deliberately no `enforce`. PSA is a namespace-level control and this
-# cluster puts 241 manifests in one namespace, so a single level has to cover `nut` and the
-# `scrutiny` collector (privileged), `node-exporter` (hostNetwork), four hostPath mounts and
-# `registry`'s hostPort alongside every ordinary web app. Enforcing `baseline` today would
-# refuse seven workloads in homelab and four more in observability, where loki, tempo,
-# prometheus and the collector each publish a loopback hostPort.
+# cluster puts 241 manifests in one namespace, so a single level would have to cover `nut`
+# and the `scrutiny` collector (privileged), `node-exporter` (hostNetwork), four hostPath
+# mounts and `registry`'s hostPort alongside every ordinary web app. Enforcing `baseline`
+# today would refuse seven workloads in homelab and four more in observability.
 #
-# So this is the measuring instrument, not the fence. `warn` returns the violation to whoever
-# applies the manifest; `audit` records it as an annotation in the apiserver audit log, which
-# k3s_audit_log_enabled now writes. Together they produce the exact rejection list, from the
-# admission controller rather than from a grep — which is what a decision about splitting
-# namespaces needs and nobody has today.
+# So this is the measuring instrument, not the fence. `warn` returns the violation to
+# whoever applies the manifest; `audit` records it in the apiserver audit log. Together they
+# produce the exact rejection list a decision about splitting namespaces needs.
 #
-# PSA evaluates at pod CREATE and UPDATE only, so adding these evicts nothing and restarts
-# nothing. Read the warnings for a week before considering `enforce` on either namespace.
+# PSA evaluates at pod CREATE and UPDATE only, so adding these evicts nothing.
 #
-# ROLLBACK: set to {} and redeploy. Unlike the k3s server flags, this one is a real rollback —
+# ROLLBACK: set to {} and redeploy. Unlike the k3s server flags this is a real rollback —
 # `kubectl apply` owns these labels, so removing them from the manifest removes them live.
 k8s_psa_labels:
   pod-security.kubernetes.io/warn: baseline
   pod-security.kubernetes.io/audit: baseline
 
-# ── Default container resources, applied to homelab and observability ───────────────────
-# A LimitRange, and deliberately NOT a ResourceQuota. Every one of the 105 containers this
-# repo renders already carries requests and limits, so this changes nothing on the Ansible
-# path. It exists for the objects that never took that path: the `ctx-probe` pod in homelab
-# is the standing example, hand-created on 2026-08-14 with no resources at all. A Helm chart,
-# a `kubectl run`, or a future operator lands the same way.
+# Default container resources, applied to homelab and observability.
 #
-# DEFAULTS ONLY — no `min`, no `max`. The difference is what happens to a container that
-# breaks the rule: a `min`/`max` REJECTS every pod outside the band, including ones this repo
-# already renders at 2Gi and 4Gi, while a default only fills in what was left out. Same
-# reason there is no ResourceQuota: a namespace CPU/memory quota makes requests and limits
-# MANDATORY on every pod in it, turning a missing value from "gets a default" into "the
-# deploy fails admission".
+# A LimitRange, and deliberately NOT a ResourceQuota. Every container this repo renders
+# already carries requests and limits, so this changes nothing on the Ansible path. It
+# exists for the objects that never take that path — a hand-created pod, a Helm chart, a
+# `kubectl run`.
 #
-# DEFAULTS STILL HAVE ONE REJECTION PATH, and it is why the ceiling below is not tighter. A
+# DEFAULTS ONLY — no `min`, no `max`. A `min`/`max` REJECTS every pod outside the band,
+# including ones this repo already renders at 2Gi and 4Gi, while a default only fills in
+# what was left out. Same reason there is no ResourceQuota: a namespace CPU/memory quota
+# makes requests and limits MANDATORY on every pod in it.
+#
+# DEFAULTS STILL HAVE ONE REJECTION PATH, and it is why the ceiling is not tighter. A
 # container that sets a REQUEST and no limit is given `default` as its limit — and if that
-# limit lands below the request it stated, the API server refuses the pod, because requests
-# must be ≤ limits. Requests-only is exactly how a lot of Helm charts ship, so the ceiling
-# has to sit above anything one plausibly asks for.
+# lands below the request it stated, the API server refuses the pod. Requests-only is how a
+# lot of Helm charts ship, so the ceiling must sit above anything one plausibly asks for.
+# Hence 2Gi: already the joint-most-common memory limit here and 1/14th of a node, so it
+# bounds a runaway while leaving the rejection path essentially unreachable.
 #
-# Hence 2Gi rather than the 512Mi midpoint of the estate: 2Gi is already the joint-most-common
-# memory limit here (16 of 105 containers) and it is 1/14th of a node, so it still bounds a
-# runaway while leaving the rejection path essentially unreachable. A pod that requests more
-# than 2Gi and declares no limit gets refused, and that pod is worth looking at. The requests
-# are the estate's own floor — 50m is the modal CPU request across homelab, at 34 of 105.
-#
-# LimitRange evaluates at pod CREATE only, so adding this evicts nothing and restarts
-# nothing. Existing pods keep the resources they were admitted with.
+# LimitRange evaluates at pod CREATE only, so adding this evicts nothing.
 #
 # NOT WATCHED BY manifest-prune-check. `limitrange` is absent from its kind list, and adding
 # it would make the check red on day one: homelab's copy is applied inline from deploy.yml
 # beside the namespace, so it appears in no staged manifest dir and reads as an orphan.
-# Observability's copy IS staged (claude-otel), so the two would not behave alike.
 #
 # ROLLBACK: set to {} and redeploy. That stops it being APPLIED; it does not remove the live
-# object, because ceasing to render a whole object never prunes it (the same trap as
-# kubectl-apply-leaves-orphaned-objects). To remove it live:
+# object (the same trap as kubectl-apply-leaves-orphaned-objects). To remove it live:
 #   kubectl delete limitrange default-container-limits -n homelab
 #   kubectl delete limitrange default-container-limits -n observability
 k8s_default_limitrange:
@@ -193,53 +170,49 @@ k8s_default_limitrange:
     cpu: "2"
     memory: 2Gi
 
-# ── apiserver audit log ─────────────────────────────────────────────────────────────────
-# Here rather than in roles/setup/k3s/defaults because TWO roles read them: setup/k3s arms
-# the flags and writes the policy, and loki-homelab's promtail tails the file so the log is
-# readable in Grafana instead of only by root on daniel-box. A role default is invisible to
-# another role's templates — the same reason k3s_metallb_ingress_vip lives in this file.
+# apiserver audit log. Here rather than in roles/setup/k3s/defaults because TWO roles read
+# these: setup/k3s arms the flags and writes the policy, and loki-homelab's promtail tails
+# the file so the log is readable in Grafana instead of only by root on daniel-box.
 #
-# Only daniel-box writes a log: the path is under the k3s SERVER data directory and the agent
-# node runs no apiserver. Promtail declares the job on both nodes anyway, because a DaemonSet
-# carries one config; on daniel-server the path matches nothing.
+# Only daniel-box writes a log — the path is under the k3s SERVER data directory and the
+# agent node runs no apiserver. Promtail declares the job on both nodes anyway, because a
+# DaemonSet carries one config; on daniel-server the path matches nothing.
 #
-# The rest of the audit settings — the policy path and the three rotation limits — stay in
-# the k3s role, because nothing outside it reads them.
+# The policy path and the three rotation limits stay in the k3s role; nothing outside it
+# reads them.
 k3s_audit_log_enabled: true
 k3s_audit_log_dir: /var/lib/rancher/k3s/server/logs
 k3s_audit_log_path: "{{ k3s_audit_log_dir }}/audit.log"
 # How long the play holds after every `rollout status` returns before declaring the deploy
 # healthy (post_tasks/k8s_stabilise_gate.yml). `rollout status` returns on Available, which
-# READINESS alone satisfies, so a container killed by a failing LIVENESS probe reports a clean
-# deploy and then crashloops — observed 2026-08-07 with kube-state-metrics. Must exceed a probe's
-# initialDelaySeconds + failureThreshold x periodSeconds; the slowest in the repo is ~35s.
-#
-# Paid ONCE per play, not once per service. claude-otel ran a second window of its own until
-# 2026-08-22 and now feeds the same gate, so this is the only place the pause is spent.
+# READINESS alone satisfies, so a container killed by a failing LIVENESS probe reports a
+# clean deploy and then crashloops. Must exceed a probe's initialDelaySeconds +
+# failureThreshold x periodSeconds; the slowest in the repo is ~35s. Paid ONCE per play.
 k8s_rollout_stabilise_seconds: 60
 
-# How many k8s roles deploy.yml applies before draining their rollouts (ansible/tasks/k8s_batch.yml).
-# THIS IS A CONCURRENCY LIMIT ON ROLLOUTS, NOT ON WATCHING THEM. The inline `rollout status` that
-# used to sit in every role is what held the cluster to one rolling service at a time; batching
-# removes it, so the width is now the only thing bounding how many workloads restart at once.
+# How many k8s roles deploy.yml applies before draining their rollouts (tasks/k8s_batch.yml).
+# THIS IS A CONCURRENCY LIMIT ON ROLLOUTS, NOT ON WATCHING THEM. The inline `rollout status`
+# that used to sit in every role is what held the cluster to one rolling service at a time;
+# batching removes it, so the width is now the only thing bounding how many workloads
+# restart at once.
 #
-# Sized deliberately low. 37 of the 50 Deployments here use strategy `Recreate`, which deletes the
-# old pod before starting the new one — so a wide batch is not "extra surge replicas", it is N
-# simultaneous Longhorn RWO detach/attach cycles and N simultaneous availability gaps. This cluster
-# has been bitten by Longhorn under exactly that kind of load (the retry storm, the seed-pod
-# Multi-Attach abort). Widen only against a measured run.
+# Sized deliberately low. 37 of the 50 Deployments here use strategy `Recreate`, which
+# deletes the old pod before starting the new one — so a wide batch is not "extra surge
+# replicas", it is N simultaneous Longhorn RWO detach/attach cycles and N simultaneous
+# availability gaps. This cluster has been bitten by Longhorn under exactly that load.
+# Widen only against a measured run.
 k8s_rollout_batch_width: 5
 
 # Opt-in no-mutation mode for the k8s plane: `-e k8s_dry_run=true`, or `scripts/deploy.sh
 # --dry-run`. Renders every manifest to a temp dir and runs `kubectl apply --dry-run=server`
-# against the LIVE API server, so CRDs, admission and schema defaulting all judge the manifests
-# for real, then throws the temp dir away. Nothing is staged, applied, patched or rolled.
+# against the LIVE API server, so CRDs, admission and schema defaulting all judge the
+# manifests for real, then throws the temp dir away.
 #
-# This is deliberately weaker than a staging cluster and stronger than `--check`: --check skips
-# the apply entirely (the command module no-ops), so the manifests are never seen by an API
-# server at all, and its skipped tasks break downstream consumers besides. Dry-run catches
-# render bugs, bad apiVersions/field names, CRD-ordering mistakes and schema drift. It does NOT
-# catch scheduling, PVC binding, probe or rollout behaviour — that needs a real cluster.
+# Deliberately weaker than a staging cluster and stronger than `--check`: --check skips the
+# apply entirely, so the manifests are never seen by an API server at all, and its skipped
+# tasks break downstream consumers besides. Dry-run catches render bugs, bad
+# apiVersions/field names, CRD-ordering mistakes and schema drift. It does NOT catch
+# scheduling, PVC binding, probe or rollout behaviour — that needs a real cluster.
 #
 # Global rather than a role default: deploy.yml's own pre_tasks apply the namespace, so the
 # flag must be visible before any role runs.
@@ -255,18 +228,15 @@ k8s_no_mutate: "{{ ansible_check_mode or (k8s_dry_run | bool) }}"
 # seed-volume scaling Deployments to zero. Dry-running these would half-apply: the manifest
 # apply is suppressed while the side-car mutation still fires.
 #
-# deploy.yml asserts against this list and REFUSES the run rather than half-applying. Shrinking
-# it means guarding a role's own kubectl calls on k8s_no_mutate and deleting its entry.
+# deploy.yml asserts against this list and REFUSES the run rather than half-applying.
+# Shrinking it means guarding a role's own kubectl calls on k8s_no_mutate and deleting its
+# entry.
 #
-# The refusal keys on `ansible_run_tags`, so it only reaches roles the operator NAMES. That is
-# sound for every role below because none of them is reachable as a dependency — verified by
-# test_k8s_dry_run.py, since the k8s roles carry no meta/main.yml and include one another only
-# by literal name. `seed-volume`, `image-builder` and `cronjob-gate` ARE reachable that way,
-# which is why they are guarded internally on k8s_no_mutate instead of listed here.
-#
-# `configarr` was listed here until its inline `kubectl create job` moved into k8s/cronjob-gate.
-# It now mutates the cluster only through roles that guard themselves, so dry-run covers it and
-# listing it would refuse a run that is safe.
+# The refusal keys on `ansible_run_tags`, so it only reaches roles the operator NAMES. That
+# is sound for every role below because none is reachable as a dependency — verified by
+# test_k8s_dry_run.py, since the k8s roles carry no meta/main.yml and include one another
+# only by literal name. `seed-volume`, `image-builder` and `cronjob-gate` ARE reachable that
+# way, which is why they are guarded internally on k8s_no_mutate instead of listed here.
 k8s_dry_run_unsupported:
   - autofix-bridge
   - claude-otel
@@ -284,42 +254,37 @@ k8s_dry_run_unsupported:
   - traefik
   - valheim-stats
 
-# Telemetry lives apart from the service workloads. Global rather than a role default because
-# TWO roles need it: claude-otel puts its workloads here, and the traefik role must list it
-# under the CRD provider's watched namespaces — Traefik ignores IngressRoutes in namespaces
-# it is not told to watch, silently, with the route reporting no error at all.
+# Telemetry lives apart from the service workloads. Global rather than a role default
+# because TWO roles need it: claude-otel puts its workloads here, and the traefik role must
+# list it under the CRD provider's watched namespaces — Traefik ignores IngressRoutes in
+# namespaces it is not told to watch, silently, with the route reporting no error at all.
 k8s_observability_namespace: observability
 # Longhorn's own namespace, fixed by the upstream manifest roles/setup/k3s applies. Named
 # here because TWO roles need it: longhorn-ui puts its route and middleware copies there,
 # and the traefik role must list it under the CRD provider's watched namespaces.
 k8s_longhorn_namespace: longhorn-system
 # Whether k8s IngressRoutes also match the PUBLIC host (`<svc>.<domain>`) alongside the LAN
-# `<svc>.local.<domain>`. Flipped at slice-6 B4 (2026-08-09), once the k8s edge carried the
-# CrowdSec bouncer + AppSec (B1) and the reverse bridge existed for Docker-hosted names —
-# the pairing test_routes_stay_lan_only_* enforces. External traffic still lands on the
-# Docker edge until B5 moves the router's 80/443 forward to the ingress VIP; until then the
-# public rules are answerable only from the LAN. Infrastructure APIs opt out per-route with
-# the macro's public=false (the CrowdSec LAPI is the standing example).
+# `<svc>.local.<domain>`. The pairing test_routes_stay_lan_only_* enforces the invariant.
+# Infrastructure APIs opt out per-route with the macro's public=false (the CrowdSec LAPI is
+# the standing example).
 k8s_public_route: true
-# The Docker edge's address as the k8s cluster sees it on the wire — daniel-server. Slice 2
-# retires each Docker copy behind a strangler bridge rather than a DNS change, so its real
-# hostnames keep arriving at daniel-server and are forwarded here; the bridged IngressRoute
-# routes match on this address so that an un-Authelia'd route is reachable from the edge and
-# from nowhere else on the LAN. See ingressroute.yml.j2 for why ClientIP is sound here.
+# daniel-server's address as the cluster sees it on the wire. Monitoring routes are
+# ClientIP-gated to it so an un-Authelia'd route is reachable from that host and from
+# nowhere else on the LAN — see ingressroute.yml.j2 for why ClientIP is sound here.
 #
 # A literal rather than hostvars['daniel-server'].server_ip: the k8s play runs against
 # daniel-box, and daniel-server is not necessarily in its play's hostvars.
 k8s_bridge_client_ip: 10.0.0.161
-# In-cluster image registry (slice 2, batch R). Two addresses for the same registry, and both
-# are needed because the two consumers sit on opposite sides of the pod boundary:
+# In-cluster image registry. Two addresses for the same registry, and both are needed
+# because the two consumers sit on opposite sides of the pod boundary:
 #
 #   PUSH  — a builder pod reaches it over the Service, `registry.<namespace>.svc:<port>`.
 #           `localhost` inside a pod means that pod, not the node.
 #   PULL  — containerd reaches it at k8s_registry_pull_host, through a loopback hostPort.
 #           containerd is a host process with no route to a ClusterIP by name.
 #
-# Here rather than in the registry role's defaults because roles/setup/k3s also needs them, to
-# write the containerd trust config — a role cannot read another role's defaults.
+# Here rather than in the registry role's defaults because roles/setup/k3s also needs them,
+# to write the containerd trust config — a role cannot read another role's defaults.
 k8s_registry_port: 5000
 # Loopback for the same reason claude-otel's OTLP receiver is: this registry has no auth and
 # no TLS, so it must not be reachable from the LAN.
@@ -328,23 +293,21 @@ k8s_registry_host_ip: 127.0.0.1
 # KEY in every node's registries.yaml is this same string, so one image reference is
 # node-portable — what differs per node is the mirror ENDPOINT behind it: daniel-box (which
 # runs the registry) resolves it to the loopback hostPort, agents to the pinned ClusterIP
-# below over flannel. Re-plumbed 2026-08-14 (nut→k8s port); before that the mirror only
-# existed on daniel-box and built images could not run anywhere else.
+# below over flannel.
 k8s_registry_pull_host: "localhost:{{ k8s_registry_port }}"
 # The registry Service's pinned ClusterIP (spec.clusterIP in the registry role) — pinned
 # because agents' registries.yaml must name it as the mirror endpoint, and containerd is a
-# host process that resolves no cluster DNS. The value is what the Service already held when
-# the pin landed. Plain HTTP between nodes crosses the LAN inside the flannel vxlan,
-# unencrypted — accepted for the homelab tier (both endpoints are our own hosts on our own
-# switch; the alternative is a CA + cert rotation for one hop).
+# host process that resolves no cluster DNS. Plain HTTP between nodes crosses the LAN inside
+# the flannel vxlan, unencrypted — accepted for the homelab tier (both endpoints are our own
+# hosts on our own switch; the alternative is a CA + cert rotation for one hop).
 k8s_registry_cluster_ip: 10.43.51.14
 # The node that runs the registry Deployment (nodeSelector) and therefore resolves the
 # mirror to its own loopback hostPort.
 k8s_registry_node: daniel-box
 # The PUSH half of the pair described above. Fully qualified rather than bare `registry`,
-# because a builder Job's pod may not carry a search domain that resolves the short name, and a
-# wrong namespace here surfaces inside the pod as a DNS failure that reads like a network fault
-# rather than a config one.
+# because a builder Job's pod may not carry a search domain that resolves the short name,
+# and a wrong namespace here surfaces inside the pod as a DNS failure that reads like a
+# network fault rather than a config one.
 k8s_registry_push_host: "registry.{{ k8s_namespace }}.svc.cluster.local:{{ k8s_registry_port }}"
 # The UPS's USB host: gates the nut_host role (host-side secondary upsmon + udev rule) in
 # initial_setup.yml, paired with the k8s/nut pod's nodeSelector.
@@ -354,61 +317,49 @@ ups_host: daniel-server
 # `when:` in initial_setup.yml, which is why it lives here rather than in the role's defaults
 # alongside the other `_armed` switches.
 #
-# daniel-box DOES draw from the same UPS, measured 2026-08-20: sampling `upsc apc-ups@127.0.0.1`
-# every 3s while modulating a 16-core burn on daniel-box (daniel-server idle) moved ups.load by
-# ~5 points ≈ 45 W, three transitions phase-locked to the burn across two cycles. The repo had
-# recorded nothing either way, and sensor.apc_ups_load at 35% was suggestive but not proof.
-# So today, on mains failure, daniel-server powers off cleanly while daniel-box — etcd,
-# Longhorn's primary replicas, Kuma, Prometheus, Traefik, LAN DNS — is hard-cut at battery end.
+# daniel-box DOES draw from the same UPS, measured 2026-08-20: sampling `upsc
+# apc-ups@127.0.0.1` every 3s while modulating a 16-core burn on daniel-box (daniel-server
+# idle) moved ups.load by ~5 points ≈ 45 W, three transitions phase-locked to the burn across
+# two cycles. So today, on mains failure, daniel-server powers off cleanly while daniel-box —
+# etcd, Longhorn's primary replicas, Kuma, Prometheus, Traefik, LAN DNS — is hard-cut at
+# battery end.
 #
 # DEFAULT FALSE ON PURPOSE. A secondary upsmon's entire job is to power the machine off, so a
-# mistake here is an unplanned shutdown of the control-plane node, and a wrong SHUTDOWNCMD or an
-# unreachable upsd is indistinguishable from a working one while mains power is up. Set this per
-# host only after the console-attended `upsmon -c fsd` drill has passed there.
+# mistake here is an unplanned shutdown of the control-plane node, and a wrong SHUTDOWNCMD or
+# an unreachable upsd is indistinguishable from a working one while mains power is up. Set
+# this per host only after the console-attended `upsmon -c fsd` drill has passed there.
 nut_host_secondary_armed: false
-# backup_controller_host removed 2026-08-14 (host flip 1): the daniel-server peer-pull
-# host cron became the k8s/pi-peer-backup CronJob (Longhorn PVC → the 03:30 B2 nightly),
-# so no host holds a backup-controller role anymore.
-# portainer_manager_host removed 2026-08-09 — retired with the Portainer cohort (slice-7
-# Phase B, design decision 4). It admitted daniel-server to the Pi's agent port; both ends
-# are gone.
 # The one host that checks for open Renovate PRs and posts the Discord digest (see
-# renovate_notify CLAUDE.md) — fleet-wide by nature (queries the GitHub repo, not
-# anything host-local), so running it on more than one host would just duplicate
-# every notification. Doesn't matter which host, but must be exactly one — daniel-box
-# since 2026-08-14 (host flip 2, freeing daniel-server for the Docker removal); its
-# alive beat pushes Kuma directly now, not through the monitor-bridge remnant.
+# renovate_notify CLAUDE.md) — fleet-wide by nature (it queries the GitHub repo, not anything
+# host-local), so running it on more than one host would duplicate every notification.
+# Doesn't matter which host, but must be exactly one.
 renovate_notify_host: daniel-box
-# Slice 4, B7c. Which host runs the fake-remux detector + reconciler — daniel-box since the media
-# stack moved there. Lives here rather than in the role's defaults because initial_setup.yml's
-# `when:` on the role entry is evaluated before that role's defaults are in scope, the same reason
-# renovate_notify_host does.
+# Which host runs the fake-remux detector + reconciler — daniel-box, where the media stack
+# lives. Here rather than in the role's defaults because initial_setup.yml's `when:` on the
+# role entry is evaluated before that role's defaults are in scope, the same reason
+# renovate_notify_host is.
 fake_remux_host: daniel-box
-# Whether this host runs its own gitops_deploy pull-based auto-deployer. True by
-# default — every full host redeploys its own containers_list independently on a
-# git push (see gitops_deploy CLAUDE.md). daniel-pi overrides this false: it's
-# memory-constrained and driven manually over SSH, not by GitOps, by design.
+# Whether this host runs its own gitops_deploy pull-based auto-deployer. True by default —
+# every full host redeploys its own containers_list independently on a git push (see
+# gitops_deploy CLAUDE.md). daniel-pi overrides this false: it is memory-constrained and
+# driven manually over SSH, not by GitOps, by design.
 has_gitops: true
-# Whether this host runs Docker. True by default — it's the container runtime the whole
-# containers_list plane is built on. daniel-box overrides this false: it's the k3s node,
-# and k3s ships its own containerd plus flannel/kube-proxy iptables rules. A bare
-# initial_setup.yml run installed Docker there on 2026-08-01 and tripped the k3s role's
-# fail-closed "already runs Docker" guard; the gate is what stops that recurring, since
-# relying on the operator to remember --tags is what let it happen. See
-# docs/k3s-migration/slice-0-cluster-foundation.md.
+# Whether this host runs Docker. True by default — it is the container runtime the whole
+# containers_list plane is built on. daniel-box overrides this false: it is the k3s node, and
+# k3s ships its own containerd plus flannel/kube-proxy iptables rules. A bare
+# initial_setup.yml run once installed Docker there and tripped the k3s role's fail-closed
+# "already runs Docker" guard; this gate is what stops that recurring, since relying on the
+# operator to remember --tags is what let it happen.
 has_docker: true
 # Per-user developer environment: the chezmoi-managed dotfiles (DanielH2018/dotfiles) and
-# Claude Code. Both default OFF and are opted into per host — daniel-server already has
-# both installed by hand and shouldn't have them re-provisioned underneath it, and the Pi
-# (512 MB Zero 2 W) can carry neither. Set true in host_vars to enable.
-# The GitHub CLI plus the git credential helper that lets a host clone private repos.
-# Required by has_chezmoi (the dotfiles repo is private); useful on its own too.
+# Claude Code. Both default OFF and are opted into per host — daniel-server already has both
+# installed by hand and shouldn't have them re-provisioned underneath it, and the Pi
+# (512 MB Zero 2 W) can carry neither. has_github_cli brings the git credential helper that
+# lets a host clone private repos, which has_chezmoi requires.
 has_github_cli: false
 has_chezmoi: false
 has_claude_code: false
 
-# Physical location, feeds the homepage weather widget. Moved from daniel-server's
-# host_vars at E3 (2026-08-12): homepage renders on daniel-box now — same move the SLZB
-# vars made on 2026-08-09 when z2m's render host changed.
+# Physical location, feeds the homepage weather widget.
 lat: 38.89
 long: -77.08

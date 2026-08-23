@@ -28,9 +28,6 @@ def _docs(spec):
     return [{"services": {"svc": spec}}]
 
 
-# --- clean: $ correctly doubled, or no relevant key --------------------------
-
-
 def test_doubled_dollar_in_healthcheck_is_clean():
     docs = _docs(
         {"healthcheck": {"test": ["CMD-SHELL", 'x=$$(date) && [ "$${x:-0}" ]']}}
@@ -55,9 +52,6 @@ def test_environment_interpolation_is_not_flagged():
     # environment:, which the check intentionally does NOT inspect.
     docs = _docs({"environment": {"GID": "${GID-1000}"}, "command": "run --port 8080"})
     assert vct.find_dollar_escape_bugs(docs) == []
-
-
-# --- buggy: a lone (un-doubled) $ in a shell context -------------------------
 
 
 def test_lone_dollar_in_healthcheck_is_flagged():
@@ -88,9 +82,6 @@ def test_triple_dollar_still_flags_the_interpolated_remainder():
     assert len(vct.find_dollar_escape_bugs(docs)) == 1
 
 
-# --- structure walking / robustness -----------------------------------------
-
-
 def test_walks_all_services_and_attributes_the_right_one():
     docs = [{"services": {"a": {"command": "ok"}, "b": {"command": "echo $X"}}}]
     bugs = vct.find_dollar_escape_bugs(docs)
@@ -104,7 +95,6 @@ def test_tolerates_non_service_docs():
     )
 
 
-# --- watchtower label `=` guard ----------------------------------------------
 # Docker splits a LIST-form label on the first `=` only. A `:`-separated watchtower
 # label (e.g. `...depends-on:docker-proxy`) parses as a key with an EMPTY value, so the
 # directive silently no-ops. Renders cleanly + passes YAML lint, so nothing else caught it.
@@ -146,7 +136,6 @@ def test_non_watchtower_label_without_equals_is_ignored():
     assert vct.find_watchtower_label_bugs(docs) == []
 
 
-# --- real-render regression guard --------------------------------------------
 # The synthetic tests above only exercise the two detector functions. This is the
 # ONLY pytest coverage of the *real* render path (every service in both hosts'
 # containers_list, through ALL the shared macros: networks/resources/healthcheck/
@@ -161,7 +150,6 @@ def test_real_templates_render_clean():
     assert vct.main() == 0
 
 
-# --- cap_drop policy guard ---------------------------------------------------
 # Every service should drop ALL capabilities (defense in depth), adding back only what it
 # proves it needs. New services kept silently drifting out of this (n8n-runners/nut/unbound
 # post-dated the hardening sprints), so enforce it; documented exceptions go in CAP_DROP_EXEMPT.
@@ -193,7 +181,6 @@ def test_cap_drop_walks_all_services():
     assert vct.find_missing_cap_drop(docs) == ["b"]
 
 
-# --- no-new-privileges policy guard ------------------------------------------
 # The companion of cap_drop: [ALL]. Enforced symmetrically so a new service (or a copy-paste that
 # silently drops the security_opt line) can't omit it; documented exceptions go in NO_NEW_PRIV_EXEMPT.
 

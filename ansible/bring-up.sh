@@ -53,7 +53,7 @@ cd "$(dirname "$(readlink -f "$0")")/.."
 HOSTS_INI=ansible/inventory/hosts.ini
 HOST_VARS="ansible/inventory/host_vars/${HOST}.yml"
 
-# --- §3: install uv (the only manual prerequisite) ----------------------------------
+# §3: install uv (the only manual prerequisite)
 # `uv run` then self-provisions Python 3.14 + ansible-core from uv.lock for every playbook
 # below, so no system-wide Ansible is needed. Done first because the inventory check and
 # every later step run through it.
@@ -68,7 +68,7 @@ command -v uv >/dev/null 2>&1 ||
   { echo "error: uv still not on PATH after install — add ~/.local/bin to PATH" >&2; exit 1; }
 echo ">> uv $(uv --version)"
 
-# --- §4: inventory scaffolding (opt-in) ---------------------------------------------
+# §4: inventory scaffolding (opt-in)
 # Both files are git-tracked, so a wrong guess here is reviewable rather than destructive.
 # Never overwrite: an existing entry is the operator's, not ours.
 if [[ "$SCAFFOLD" == true ]]; then
@@ -104,7 +104,7 @@ EOF
   exit 0
 fi
 
-# --- §4: the host must resolve to exactly one host ----------------------------------
+# §4: the host must resolve to exactly one host
 # `--limit <host>` alone is NOT enough: bootstrap.yml's `hosts:` is
 # `{{ target | default(lookup('pipe','hostname')) }}`, so without `-e target=` the play
 # resolves to the CONTROLLER and --limit intersects that to zero hosts — exit 0, no output,
@@ -118,7 +118,7 @@ if uv run ansible-playbook ansible/bootstrap.yml -e target="$HOST" --limit "$HOS
   exit 1
 fi
 
-# --- §8: hand off to Ansible (opt-in, after the SOPS exchange) ------------------------
+# §8: hand off to Ansible (opt-in, after the SOPS exchange)
 if [[ "$CONTINUE" == true ]]; then
   echo ">> preflight (read-only) ..."
   uv run ansible-playbook ansible/preflight.yml -e target="$HOST"
@@ -138,7 +138,7 @@ EOF
   exit 0
 fi
 
-# --- §5: SOPS bootstrap (installs age/sops + collections, generates this host's age ---
+# §5: SOPS bootstrap (installs age/sops + collections, generates this host's age
 # key, prints its public key). No secret dependency — this is what breaks the
 # chicken-and-egg before initial_setup.yml's secret-loading pre_tasks.
 echo ">> bootstrapping SOPS on host '$HOST' ..."

@@ -81,8 +81,6 @@ data:
     assert error is not None, "duplicate key in embedded YAML accepted"
 
 
-# --------------------------------------------------------------------- PVC claimName cross-check
-
 DEPLOYMENT_WITH_CLAIM = """\
 apiVersion: apps/v1
 kind: Deployment

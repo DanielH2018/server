@@ -10,9 +10,7 @@
     optimize_pi_gpu_memory_mb: 16
     optimize_pi_zram_percentage: 75
 
-# -------------------------------------------------------
 # 1. DYNAMIC CONFIG PATH DETECTION (Bookworm vs Bullseye)
-# -------------------------------------------------------
 - name: Check if /boot/firmware/config.txt exists (Bookworm)
   # Dual-tagged: the resolved config path is used by gpu_mem AND the watchdog dtparam.
   tags: [gpu-mem, watchdog]
@@ -25,9 +23,7 @@
   ansible.builtin.set_fact:
     optimize_pi_rpi_config_path: "{{ '/boot/firmware/config.txt' if optimize_pi_firmware_config.stat.exists else '/boot/config.txt' }}"
 
-# -------------------------------------------------------
 # 2. GPU MEMORY SPLIT (Reclaim RAM)
-# -------------------------------------------------------
 - name: Set GPU memory MB to {{ optimize_pi_gpu_memory_mb }}
   tags: [gpu-mem]
   ansible.builtin.lineinfile:
@@ -38,9 +34,7 @@
     create: true
   notify: Reboot Pi
 
-# -------------------------------------------------------
 # 3. ZRAM CONFIGURATION (Compressed RAM)
-# -------------------------------------------------------
 - name: Install zram-tools
   tags: [zram]
   ansible.builtin.apt:
@@ -92,9 +86,7 @@
     sysctl_set: true
   become: true
 
-# -------------------------------------------------------
 # 4. LOG2RAM (Save SD Card)
-# -------------------------------------------------------
 - name: Install python3-debian (required by deb822_repository, below)
   tags: [log2ram]
   ansible.builtin.apt:
@@ -154,9 +146,7 @@
   notify: Reboot Pi
   become: true
 
-# -------------------------------------------------------
 # 5. HARDWARE WATCHDOG (Auto-Reboot on Freeze)
-# -------------------------------------------------------
 - name: Enable watchdog kernel module in {{ optimize_pi_rpi_config_path }}
   tags: [watchdog]
   ansible.builtin.lineinfile:
@@ -194,9 +184,7 @@
     enabled: true
     state: started
 
-# -------------------------------------------------------
 # 6. DEBLOAT (Reclaim RAM on the 512 MB board)
-# -------------------------------------------------------
 - name: Purge Open vSwitch (unused) and snapd (no snaps installed)
   tags: [debloat]
   # Found 2026-06-11: openvswitch-switch-dpdk was installed (apt-mark: manual) but
@@ -321,9 +309,7 @@
     state: absent
   become: true
 
-# -------------------------------------------------------
 # 7. LOG RAM BUDGET (log2ram tmpfs is 128 MB of REAL RAM)
-# -------------------------------------------------------
 # Everything under /var/log lives in log2ram's RAM-backed tmpfs. Found 2026-06-11
 # at 81% (103/128 MB): journald carried the server-sized 1G cap from initial_setup
 # (would overflow the tmpfs and fail log writes), and acct's savelog kept 30 daily
@@ -356,9 +342,7 @@
     line: 'ACCT_LOGGING="3"'
   become: true
 
-# -------------------------------------------------------
 # 8. EARLYOOM (kill the hog before the watchdog reboots)
-# -------------------------------------------------------
 - name: Install earlyoom
   tags: [earlyoom]
   ansible.builtin.apt:
@@ -390,16 +374,18 @@
     state: started
   become: true
 
-- name: Deploy the shared Pi Kuma-push helper
+# The Kuma-push helper both health crons below source is no longer installed here. It moved to
+# the initial_setup role as /usr/local/lib/kuma-push-lib.sh once the cluster's own health crons
+# needed the same six-line curl; initial_setup runs on every host and runs earlier in
+# initial_setup.yml than this role, so the file is on disk before either script is rendered.
+
+- name: Remove the superseded Pi-only Kuma-push helper
   tags: [sd-health, recovery-health]
-  # Sourced by both health crons (pi-sd-health / pi-recovery-health) for the identical Kuma push tail.
-  # Same-role lib (both consumers live here); deployed before either script so it's on disk first.
-  ansible.builtin.copy:
-    src: pi-kuma-push-lib.sh
-    dest: /usr/local/lib/pi-kuma-push-lib.sh
-    owner: root
-    group: root
-    mode: "0644"
+  # Nothing sources it after the rename, and an orphaned copy on disk is the one that gets
+  # edited by mistake. Ansible does not reap a file it stopped managing.
+  ansible.builtin.file:
+    path: /usr/local/lib/pi-kuma-push-lib.sh
+    state: absent
   become: true
 
 - name: Deploy the SD-card health heartbeat script

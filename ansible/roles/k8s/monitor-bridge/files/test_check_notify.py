@@ -13,9 +13,6 @@ import pytest
 import check
 
 
-# --- discord_webhook_ok / check_discord -------------------------------------
-
-
 def test_discord_webhook_ok_200_is_up():
     ok, msg = check.discord_webhook_ok(200, "Homelab Alerts")
     assert ok
@@ -194,9 +191,6 @@ def test_discord_healthchecks_webhook_failure_pages(monkeypatch):
     assert "Healthchecks" in msg and "404" in msg
 
 
-# --- email_backstop (throttled SMTP deliverability) -------------------------
-
-
 def test_email_backstop_disabled_without_password(monkeypatch):
     monkeypatch.setattr(check, "SMTP_PASSWORD", "")
     ok, msg = check.email_backstop()
@@ -266,7 +260,6 @@ def test_check_discord_email_backstop_failure_pages(monkeypatch):
     assert "email backstop" in msg
 
 
-# --- fetch-failure messages -------------------------------------------------
 #
 # The 2026-08-02 B2 transaction-cap outage paged for 13h as "backup check error: timed out",
 # which names neither the service nor the cause. These cover what the message must now carry —

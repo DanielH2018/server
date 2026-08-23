@@ -1,7 +1,5 @@
 ---
-# -------------------------------------------------------
 # 1. INSTALLATION
-# -------------------------------------------------------
 - name: Ensure 'age' is installed (Debian/Ubuntu)
   tags: [sops-install]
   ansible.builtin.apt:
@@ -44,9 +42,7 @@
     -p {{ playbook_dir }}/collections
   changed_when: false
 
-# -------------------------------------------------------
 # 2. KEY GENERATION
-# -------------------------------------------------------
 
 - name: Setup SOPS config directory
   tags: [age-key]
@@ -94,9 +90,7 @@
   ansible.builtin.debug:
     msg: "Your Public Key is: {{ sops_setup_public_key.stdout }}"
 
-# -------------------------------------------------------
 # 3. CONFIGURATION (.sops.yaml)
-# -------------------------------------------------------
 - name: Seed ansible/.sops.yaml (first-host bootstrap only)
   # Tagged age-key (not its own tag): consumes sops_setup_public_key registered above,
   # so it can only run as part of the key-generation block.

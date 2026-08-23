@@ -82,7 +82,7 @@ def sanitize(s, maxlen=120):
     return s
 
 
-# --- pure decision core ------------------------------------------------------
+# pure decision core
 def item_messages(item):
     """All statusMessage strings for a queue item, flattened."""
     out = []
@@ -217,7 +217,7 @@ def format_action(dry_run, app_name, title, reason, streak, grace):
     )
 
 
-# --- I/O ---------------------------------------------------------------------
+# I/O
 def log(*args):
     print("[%s]" % time.strftime("%Y-%m-%dT%H:%M:%S"), *args, flush=True)
 

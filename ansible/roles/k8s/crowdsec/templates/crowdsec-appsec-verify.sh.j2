@@ -25,6 +25,16 @@ push() { # up|down msg
     || logger -t crowdsec-appsec-verify "kuma push failed ($1: $2)"
 }
 
+# Every DOWN goes to syslog as well as to Kuma. Kuma keeps only CURRENT state, so a reason
+# pushed and nowhere else is unrecoverable the moment the episode clears — this check
+# flapped 461 times between 2026-08-16 and 2026-08-21 and left no retrievable message
+# anywhere, because push() loggers only when curl ITSELF fails. `probe.py alerts`
+# reconstructs host-cron episodes from `{job="syslog"} |= "status=down"`, so the literal
+# prefix is load-bearing: it is what parse_syslog_down_line() matches (probe.py:1384).
+# DECIDED: `status=down $1`, not a bare "$1" — the sibling home-allowlist fail() logs the
+# bare message and is therefore still invisible to that reconstruction.
+fail() { push down "$1"; logger -t crowdsec-appsec-verify "status=down $1"; exit 1; }
+
 cscli_pod() {
   /usr/local/bin/k3s kubectl -n {{ k8s_namespace }} exec deploy/crowdsec -c crowdsec -- cscli "$@"
 }
@@ -41,12 +51,10 @@ fi
 CONFIGS=$(cscli_pod appsec-configs list -o json 2>/dev/null \
   | jq '[.["appsec-configs"][]? | select(.status == "enabled")] | length' 2>/dev/null)
 if [ -z "$CONFIGS" ]; then
-  push down "cscli appsec-configs list failed though LAPI is up (appsec query error)"
-  exit 1
+  fail "cscli appsec-configs list failed though LAPI is up (appsec query error)"
 fi
 if [ "$CONFIGS" -lt 1 ]; then
-  push down "no enabled appsec-configs — inline WAF not loaded, edge is ban-list-only"
-  exit 1
+  fail "no enabled appsec-configs — inline WAF not loaded, edge is ban-list-only"
 fi
 
 # `status == "enabled"` — a loaded, non-disabled rule — is the closest traffic-independent
@@ -55,12 +63,10 @@ fi
 RULES=$(cscli_pod appsec-rules list -o json 2>/dev/null \
   | jq '[.["appsec-rules"][]? | select(.status == "enabled")] | length' 2>/dev/null)
 if [ -z "$RULES" ]; then
-  push down "cscli appsec-rules list failed though LAPI is up (appsec query error)"
-  exit 1
+  fail "cscli appsec-rules list failed though LAPI is up (appsec query error)"
 fi
 if [ "$RULES" -lt 1 ]; then
-  push down "0 enabled appsec-rules loaded — WAF config present but not enforcing"
-  exit 1
+  fail "0 enabled appsec-rules loaded — WAF config present but not enforcing"
 fi
 
 push up "$CONFIGS appsec-configs enabled, $RULES enabled rules loaded"

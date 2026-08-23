@@ -16,9 +16,6 @@ def _result(returncode, stdout="", stderr=""):
     return types.SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
 
 
-# --- check_one ----------------------------------------------------------------
-
-
 def test_check_one_ok_on_k8s_first_try():
     calls = []
 
@@ -81,9 +78,6 @@ def test_check_one_survives_a_timeout():
     assert "timed out" in detail
 
 
-# --- gate -----------------------------------------------------------------------
-
-
 def test_gate_fails_fast_on_ansible_failure_without_health_checking():
     called = {"n": 0}
 
@@ -134,9 +128,6 @@ def test_gate_degrades_gracefully_with_no_tags():
     assert any("no --tags given" in line for line in lines)
 
 
-# --- notify -----------------------------------------------------------------------
-
-
 def test_notify_skips_silently_without_webhook_config(monkeypatch, capsys):
     monkeypatch.setattr(
         notify_mod, "HOST_LIB_PATH", notify_mod.REPO / "nonexistent-host-lib.py"
@@ -163,9 +154,6 @@ def test_notify_never_raises_on_a_broken_host_lib(monkeypatch, tmp_path, capsys)
     notify_mod.notify("some content")  # must not raise
     out = capsys.readouterr().out
     assert "notify failed" in out
-
-
-# --- main -----------------------------------------------------------------------
 
 
 def test_main_returns_nonzero_on_unsettled_deploy(monkeypatch, capsys):

@@ -11,7 +11,6 @@ from datetime import datetime, timezone
 import check
 
 
-# --- _env_file --------------------------------------------------------------
 def test_env_file_reads_from_file_and_strips(monkeypatch, tmp_path):
     f = tmp_path / "secret"
     # trailing newline from a rendered file must be stripped
@@ -50,9 +49,6 @@ def test_env_file_directory_path_falls_back_to_env(monkeypatch, tmp_path):
     assert check._env_file("HA_TOKEN", "") == "inline-fallback"
 
 
-# --- parse_rfc3339 ----------------------------------------------------------
-
-
 def test_nanosecond_precision_with_z():
     # Real Kopia value: 9 fractional digits + trailing Z
     dt = check.parse_rfc3339("2026-06-06T00:00:00.011699074Z")
@@ -72,18 +68,12 @@ def test_offset_after_fraction():
     assert dt.microsecond == 123456
 
 
-# --- parse_duration ---------------------------------------------------------
-
-
 def test_parse_duration_units():
     assert check.parse_duration("900s") == 900
     assert check.parse_duration("15m") == 900
     assert check.parse_duration("1h") == 3600
     assert check.parse_duration("2d") == 172800
     assert check.parse_duration("300") == 300  # bare number = seconds
-
-
-# --- sanitize (adversary-controlled alert text) — Security L1 ----------------
 
 
 def test_sanitize_defuses_discord_mentions_and_markdown():

@@ -29,9 +29,6 @@ def fake_k8s_endpoint(hostname):
     return f"https://{hostname}.example", f"{hostname}.example:443:10.0.0.240"
 
 
-# --- URL builders -----------------------------------------------------------
-
-
 def test_prom_query_url_encodes_promql():
     url = probe.prom_query_url("https://prom.example", "up == 0")
     assert url == "https://prom.example/api/v1/query?query=up+%3D%3D+0"
@@ -83,9 +80,6 @@ def test_pi_resolve_pins_the_lan_ip(monkeypatch):
     assert probe.pi_resolve() == "daniel-pi.lan:61208:10.0.0.139"
 
 
-# --- low-level argv / parsing helpers ---------------------------------------
-
-
 def test_curl_argv():
     assert probe.curl_argv("http://x") == [
         "curl",
@@ -117,9 +111,6 @@ def test_k8s_service_ip_argv_targets_the_service():
     assert argv[-1] == "jsonpath={.spec.clusterIP}"
     assert "sonarr" in argv
     assert "homelab" in argv
-
-
-# --- plan(): routing for each subcommand ------------------------------------
 
 
 def test_plan_metric_uses_cluster_prometheus_route():
@@ -223,7 +214,6 @@ def test_cert_stages_is_a_two_stage_pipeline():
     assert s2[:2] == ["openssl", "x509"]
 
 
-# --- metric / loki-query output formatters ----------------------------------
 # These replace the `probe.py metric … | python3 -c "…reshape JSON…"` one-liners
 # that kept prompting: the reshape now lives in the allow-listed script instead.
 
@@ -375,7 +365,6 @@ def test_loki_query_defaults_to_formatted_with_json_escape_hatch():
     assert p.parse_args(["loki-query", '{job="x"}', "--json"]).json is True
 
 
-# --- arr subcommand: read-only *arr API GET (key from SOPS, fed via stdin) ----
 # Replaces `docker exec <arr> curl -H "X-Api-Key: <hex>" …/api/… | python3`,
 # which both prompted AND leaked the key into argv / shell history / the log.
 

@@ -11,7 +11,6 @@ def prefixed(msg):
     return PREFIX + msg
 
 
-# --- parsing ----------------------------------------------------------------
 def test_parse_spawn():
     line = prefixed("Got character ZDOID from Testvazz : 954855457:113")
     assert stats.parse_line(line) == ("spawn", "Testvazz")
@@ -85,7 +84,6 @@ def test_unmatched_detector_ignores_ordinary_noise():
     assert stats.is_unparsed_player_line(prefixed("Registering lobby")) is False
 
 
-# --- state machine ----------------------------------------------------------
 def _connected(st, steam_id, name, ts):
     st.apply("connect", steam_id, ts)
     st.apply("spawn", name, ts)
@@ -173,7 +171,6 @@ def test_playtime_includes_the_open_session():
     assert st.playtime("Bob", 160.0) == 60.0
 
 
-# --- exposition -------------------------------------------------------------
 def test_render_metrics_emits_deaths_and_online():
     st = stats.StatsState()
     _connected(st, "111", "Bob", 0.0)
@@ -194,7 +191,6 @@ def test_render_metrics_escapes_quotes_in_player_names():
     assert 'player="He said \\"hi\\""' in out
 
 
-# --- ingestion --------------------------------------------------------------
 def test_apply_entries_counts_unmatched_and_skips_heartbeat_events():
     st = stats.StatsState()
     entries = [
@@ -219,7 +215,6 @@ def test_extract_entries_sorts_ascending():
     assert stats.extract_entries(payload) == [(10, "a"), (20, "b")]
 
 
-# --- persistence ------------------------------------------------------------
 def test_store_round_trips_deaths_and_the_steamid_map(tmp_path):
     db = str(tmp_path / "s.db")
     store = stats.Store(db)

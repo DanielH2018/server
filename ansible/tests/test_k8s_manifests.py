@@ -77,9 +77,6 @@ def _ip_to_int(addr: str) -> int:
     return (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]
 
 
-# --- 1. the ingress VIP is reserved, structurally -----------------------------------------
-
-
 def _pool_docs() -> list[dict]:
     """IPAddressPool documents in FILE order — the order kubectl applies them in."""
     rendered = _render(
@@ -152,9 +149,6 @@ def test_the_k8s_play_does_not_filter_an_already_filtered_list():
     ) < names.index("Restrict this play to Docker-platform containers"), (
         "the snapshot must be taken before the list is narrowed"
     )
-
-
-# --- 2. the k8s Authelia's state stays its own ----------------------------------------------
 
 
 def _k8s_authelia_config() -> dict:
@@ -322,9 +316,6 @@ def test_every_deployment_disables_service_link_env_vars():
             assert doc["spec"]["template"]["spec"].get("enableServiceLinks") is False, (
                 f"{entry['name']} inherits Docker-link env vars for every Service in the namespace"
             )
-
-
-# --- 3. protected services are actually protected -------------------------------------------
 
 
 # IngressRoutes that deliberately skip forward-auth on a service whose `use_authelia` is true.
@@ -500,7 +491,6 @@ def test_every_public_host_rule_is_reachable_only_from_the_docker_edge():
                 )
 
 
-# --- 5. the read-only cluster identity really is read-only --------------------------------
 #
 # This one exists because the failure is invisible in exactly the wrong direction. A binding
 # that grants too much does not error, does not warn, and does not change any output — the
@@ -682,9 +672,6 @@ def test_readonly_role_covers_the_crd_groups_this_homelab_deploys():
     assert "traefik.io" in groups, "IngressRoute/Middleware unreadable without sudo"
 
 
-# --- 6. no jsonpath can address a Secret key containing a dot ------------------------------
-
-
 def test_no_task_reads_a_dotted_secret_key_by_jsonpath():
     """`kubectl get secret -o jsonpath={.data.users_database\\.yml}` does not error on a key
     whose name contains a dot — it prints nothing and exits 0.
@@ -704,9 +691,6 @@ def test_no_task_reads_a_dotted_secret_key_by_jsonpath():
                 )
 
 
-# --- 7. MetalLB Service annotations use the namespace MetalLB actually reads ---------------
-
-
 def test_metallb_service_annotations_use_the_universe_tf_namespace():
     """metallb.io is the API GROUP of the CRDs; Service annotations keep metallb.universe.tf.
 
@@ -723,9 +707,6 @@ def test_metallb_service_annotations_use_the_universe_tf_namespace():
                     f"{tpl.relative_to(ANSIBLE)}:{i} uses a metallb.io/ Service annotation, "
                     f"which MetalLB silently ignores — use metallb.universe.tf/. Line: {line.strip()}"
                 )
-
-
-# --- 8. the TLS options the routes name must actually exist under that name ---------------
 
 
 def _tlsoption_names() -> set:

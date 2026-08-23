@@ -27,9 +27,6 @@ def fake_k8s_endpoint(hostname):
     return f"https://{hostname}.example", f"{hostname}.example:443:10.0.0.240"
 
 
-# --- alerts (monitor-bridge DOWN history) -----------------------------------
-
-
 def test_loki_query_url_with_range_adds_start_end_direction():
     url = probe.loki_query_url(
         "10.0.0.2", '{job="x"}', 5000, start=1000, end=2000, direction="forward"
@@ -95,7 +92,6 @@ def test_format_alert_episodes_renders_name_and_msg():
     assert "1 DOWN episode(s)" in out and "n8n" in out and "boom" in out
 
 
-# --- --since reaches the wire on the DEFAULT (formatted) path ---------------
 #
 # These pin the TRANSPORT, deliberately, and the reason is recorded rather than assumed. Three
 # assertions already covered `loki_query_url` output and `plan()` argv, and every one of them
@@ -173,7 +169,6 @@ def test_run_query_serves_metric_which_has_no_since_flag(monkeypatch):
     assert "/api/v1/query?" in seen[0]
 
 
-# --- alerts reads BOTH alert paths ------------------------------------------
 #
 # monitor-bridge polls no Kuma state, so its container log says nothing about the host crons
 # that push Kuma directly. Reading only that log left the backup plane's sole DOWN signal

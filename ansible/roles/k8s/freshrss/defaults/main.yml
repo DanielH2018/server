@@ -24,7 +24,6 @@ k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC, now 
 # Declared regardless of k8s_autodeploy — protects a manual deploy too, and slice 7b's revert
 # is what this role's auto-deploy now depends on.
 k8s_autodeploy_snapshot_pvcs: [freshrss-config]  # noqa var-naming[no-role-prefix]
-# Mirrors resources('1.0', '512M', '0.10', '64M') in the compose template.
 freshrss_k8s_cpu_limit: "1"
 freshrss_k8s_mem_limit: 512Mi
 freshrss_k8s_cpu_request: "100m"

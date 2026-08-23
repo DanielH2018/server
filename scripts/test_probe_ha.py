@@ -26,9 +26,6 @@ def fake_k8s_endpoint(hostname):
     return f"https://{hostname}.example", f"{hostname}.example:443:10.0.0.240"
 
 
-# --- ha subcommand: URL builders --------------------------------------------
-
-
 def test_ha_base_builds_on_ha_host(monkeypatch):
     # ha_host() decrypts the domain from SOPS; stub it — CI has no age key.
     monkeypatch.setattr(probe, "sops_extract", lambda key: "example.test")
@@ -69,9 +66,6 @@ def test_ha_get_url_normalizes_leading_slash_and_api_prefix():
     # A user may type any of these; all mean the same endpoint.
     for path in ("error_log", "/error_log", "api/error_log", "/api/error_log"):
         assert probe.ha_get_url("https://h", path) == "https://h/api/error_log"
-
-
-# --- ha subcommand: match_automation (the alias-slug-vs-id trap) -------------
 
 
 def _auto(
@@ -131,9 +125,6 @@ def test_match_automation_ignores_non_automation_domain():
     assert probe.match_automation(_HA_STATES, "tower_fan") is None
 
 
-# --- ha subcommand: curl argv must never carry the token ---------------------
-
-
 def test_ha_curl_argv_reads_header_from_stdin_config():
     argv = probe.ha_curl_argv("http://h:8123/api/states/x")
     assert "--config" in argv and "-" in argv
@@ -149,9 +140,6 @@ def test_ha_curl_argv_carries_no_token():
 def test_ha_curl_config_has_bearer_header():
     cfg = probe.ha_curl_config("SECRET_TOKEN")
     assert 'header = "Authorization: Bearer SECRET_TOKEN"' in cfg
-
-
-# --- ha subcommand: output formatters ---------------------------------------
 
 
 def test_format_ha_state_shows_entity_state_and_name():
@@ -174,9 +162,6 @@ def test_format_ha_automation_includes_id_and_last_triggered():
     assert "presence_1" in out
     assert "last_triggered=2026-06-20T12:00:00+00:00" in out
     assert "Bedroom Presence On" in out
-
-
-# --- WebSocket frame codec --------------------------------------------------
 
 
 def test_ws_encode_is_masked_client_text_frame():
@@ -219,8 +204,6 @@ def test_ws_read_frame_decodes_extended_length():
 
     assert probe._ws_read_frame(recv_exact) == "y" * 300
 
-
-# --- ha why / ha trace: format_trace parser ----------------------------------
 
 _TRACE_BLOCKED = {
     # Real HA trace/get shape (confirmed against live daniel-server 2026-06-22):

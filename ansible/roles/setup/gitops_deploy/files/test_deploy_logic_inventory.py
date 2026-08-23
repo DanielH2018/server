@@ -45,9 +45,6 @@ def test_behind_marker_restamps_when_marker_unparseable():
     assert behind_marker(True, "originX", "garbage", now=200.0) == "originX 200.0"
 
 
-# --- stale-compose watchdog (2nd occurrence of the trap -> machine check) ---------------
-
-
 def test_declared_services_parses_containers_list_names():
     text = (
         "containers_list:\n"
@@ -89,7 +86,6 @@ def test_declared_services_last_entry_platform_k8s_with_no_trailing_entry():
     assert declared_services(text) == {"traefik"}
 
 
-# --- declared_k8s_services / reroute_k8s_services -----------------------------------------
 # A path under ansible/roles/containers/<svc>/{templates,files}/ maps to <svc> by NAME ALONE
 # (services_from_changed_paths), with no knowledge of which platform THIS host actually runs
 # that service under. wg-easy is a real case: a Docker role (used by daniel-pi), but

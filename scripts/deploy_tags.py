@@ -41,9 +41,14 @@ from pathlib import Path
 
 import yaml
 
-REPO = Path(__file__).resolve().parents[1]
-HOST_VARS = REPO / "ansible" / "inventory" / "host_vars"
-ALL_VARS = REPO / "ansible" / "inventory" / "group_vars" / "all.yml"
+from _render_guard import (
+    ALL_VARS,
+    HOST_VARS,
+    REPO,
+    containers_entries,
+    host_files,
+)
+
 # deploy_logic.py lives under the gitops_deploy role's files/ because that role's own script
 # (gitops_deploy.py) imports it as a same-directory sibling. scripts/ needs the same pure
 # git-diff-to-service-set logic for `changed`, and copying it would drift the two the first time
@@ -63,20 +68,12 @@ RESERVED_TAGS = frozenset({"always"})
 def service_tags(host_vars: Path = HOST_VARS) -> set[str]:
     """Every tag that selects a service, across all hosts and both platforms."""
     tags: set[str] = set()
-    # `_example.yml` is a template, not a host — same exclusion the role-existence test
-    # makes (ansible/tests/test_containers_list_roles_exist.py).
-    for path in sorted(
-        p for p in host_vars.glob("*.yml") if not p.name.startswith("_")
-    ):
-        loaded = yaml.safe_load(path.read_text()) or {}
-        for entry in loaded.get("containers_list") or []:
-            name = entry.get("name")
-            if not name:
-                continue
+    for path in host_files(host_vars):
+        for entry in containers_entries(path):
             # deploy.yml:116 — `container_item.tags | default([container_item.name])`.
             # Mirror that precedence exactly, or an entry that overrides its tags would
             # be validated against a name that no longer selects it.
-            tags.update(entry.get("tags") or [name])
+            tags.update(entry.get("tags") or [entry["name"]])
     return tags
 
 
@@ -88,19 +85,13 @@ def service_records(host_vars: Path = HOST_VARS) -> list[tuple[str, str, str]]:
     the host and platform back.
     """
     records: list[tuple[str, str, str]] = []
-    for path in sorted(
-        p for p in host_vars.glob("*.yml") if not p.name.startswith("_")
-    ):
-        loaded = yaml.safe_load(path.read_text()) or {}
-        for entry in loaded.get("containers_list") or []:
-            name = entry.get("name")
-            if not name:
-                continue
+    for path in host_files(host_vars):
+        for entry in containers_entries(path):
             # No host_vars file sets `platform` on a docker entry today (daniel-pi's don't
             # carry the key at all) — k8s is the one that's always explicit, so docker is the
             # default rather than an unlabelled third state.
             platform = entry.get("platform", "docker")
-            for tag in entry.get("tags") or [name]:
+            for tag in entry.get("tags") or [entry["name"]]:
                 records.append((path.stem, platform, tag))
     return records
 

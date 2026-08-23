@@ -23,7 +23,6 @@ k8s_autodeploy_snapshot_pvcs: [zigbee2mqtt-data]  # noqa var-naming[no-role-pref
 # home-assistant use.
 zigbee2mqtt_k8s_init_image: alpine:3.24
 
-# Mirrors resources('0.50', '256M', '0.05', '64M') in the compose template.
 zigbee2mqtt_k8s_cpu_limit: "500m"
 zigbee2mqtt_k8s_mem_limit: 256Mi
 zigbee2mqtt_k8s_cpu_request: "50m"

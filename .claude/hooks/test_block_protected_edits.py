@@ -32,7 +32,6 @@ find_repo_root = _mod.find_repo_root
 # failure. Mirrors the hook's own repo_root computation in block-protected-edits.py.
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# --- containers guard (regression — unchanged behavior) ---------------------
 
 BLOCK_CONTAINERS = [
     ("containers/jellyfin/docker-compose.yml", "relative path in containers"),
@@ -67,7 +66,6 @@ def test_containers_reason_points_at_template_dir():
     assert "ansible/roles/containers" in reason
 
 
-# --- SOPS content detection (pure) ------------------------------------------
 # Fixtures are built by concatenation so a SOPS signature never appears as a
 # contiguous string in THIS source file — otherwise the guard would block editing
 # this very test. _ENC keeps "ENC[" + "AES256_GCM" split across the +; the encrypted
@@ -102,9 +100,6 @@ def test_is_sops_encrypted_false_on_prose_mention():
     assert is_sops_encrypted(PROSE_MENTIONING_MARKER) is False
 
 
-# --- SOPS guard via classify (content-based, hermetic via tmp files) --------
-
-
 def test_blocks_edit_of_encrypted_file(tmp_path):
     f = tmp_path / "secrets.yml"
     f.write_text(SOPS_TEXT)
@@ -130,7 +125,6 @@ def test_blocks_the_real_secrets_file():
     assert classify("ansible/vars/secrets.yml", REPO) is not None
 
 
-# --- repo_root derivation (parallel-session worktrees) ----------------------
 # settings.json always invokes the PRIMARY checkout's copy of the hook, so repo_root
 # must come from the edited file, not from __file__ — otherwise the containers/ guard
 # stays aimed at the primary checkout and a worktree edit sidesteps it entirely.

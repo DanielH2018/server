@@ -28,7 +28,6 @@ def fake_k8s_endpoint(hostname):
     return f"https://{hostname}.example", f"{hostname}.example:443:10.0.0.240"
 
 
-# --- b2-longhorn ------------------------------------------------------------
 #
 # Longhorn reports a backup `Completed` once its metadata is written, so "Completed" is not
 # evidence the DATA reached B2. These cover the distinction the command exists to make, and
@@ -142,7 +141,7 @@ def test_b2_longhorn_command_does_not_shell_out_to_docker_or_rclone():
 
     # And no `"docker"` argv literal survives anywhere in this section's executable code.
     with open(_MOD) as fh:
-        section = fh.read().split("# --- B2 / Longhorn backup objects")[1]
+        section = fh.read().split("# B2 / Longhorn backup objects")[1]
     code = "\n".join(
         line for line in section.splitlines() if not line.strip().startswith("#")
     )
@@ -428,8 +427,6 @@ def test_no_cluster_route_carries_the_retired_k8s_suffix():
     assert asked, "expected plan() to route these subcommands through k8s_endpoint"
     assert not [h for h in asked if h.endswith("-k8s")]
 
-
-# --- kuma-drift ---------------------------------------------------------------
 
 TEMPLATE_SAMPLE = """\
 stringData:

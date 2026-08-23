@@ -28,9 +28,6 @@ def fake_k8s_endpoint(hostname):
     return f"https://{hostname}.example", f"{hostname}.example:443:10.0.0.240"
 
 
-# --- health: container state + healthcheck rollup ---------------------------
-
-
 def _inspect(state, restarts=0):
     return [{"State": state, "RestartCount": restarts}]
 
@@ -89,7 +86,6 @@ def test_health_not_found_exits_one():
     assert "not found" in text
 
 
-# --- health: the k8s path ---------------------------------------------------
 #
 # `health` ran `docker inspect` unconditionally until 2026-08-16 and had been dead on both
 # cluster nodes since the 2026-08-14 Docker retirement — neither has the binary, so it raised

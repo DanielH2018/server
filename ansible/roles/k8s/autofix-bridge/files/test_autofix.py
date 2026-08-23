@@ -47,7 +47,6 @@ def _item(
     return it
 
 
-# --- dangerous ---------------------------------------------------------------
 def test_dangerous_matches_executable_message_case_insensitively():
     msgs = ["Caution: Found EXECUTABLE File With Extension: '.exe'"]
     assert autofix.dangerous(msgs, PATTERNS) is True
@@ -66,7 +65,6 @@ def test_dangerous_matches_mixed_case_pattern():
     assert autofix.dangerous(["found a Sample file"], ["SaMpLe"]) is True
 
 
-# --- is_candidate ------------------------------------------------------------
 def test_candidate_hard_bad_status_error():
     assert autofix.is_candidate(_item(status="error"), PATTERNS) is True
 
@@ -115,7 +113,6 @@ def test_import_pending_with_messages_is_not_a_candidate():
     )
 
 
-# --- client_comm_error / bare-error exclusion --------------------------------
 def test_client_comm_error_helper_checks_both_sources():
     in_status = _item(
         status="error", messages=["Unable to communicate with qBittorrent."]
@@ -159,7 +156,6 @@ def test_malware_signature_still_candidate_with_client_patterns():
     assert autofix.is_candidate(item, PATTERNS, CLIENT_PATTERNS) is True
 
 
-# --- eligible (grace + blast radius) -----------------------------------------
 def test_not_eligible_until_grace_met():
     streaks = {}
     assert autofix.eligible({"a"}, streaks, grace=3, max_actions=5) == ([], [])
@@ -200,7 +196,6 @@ def test_exactly_at_cap_all_act():
     assert held == []
 
 
-# --- item_key ------------------------------------------------------------------
 def test_item_key_stable_across_repeated_calls():
     it = _item(download_id="hash123", qid=7)
     assert autofix.item_key("Sonarr", it) == autofix.item_key("Sonarr", it)
@@ -235,7 +230,6 @@ def test_item_key_numeric_download_id_does_not_collide_with_id_fallback():
     assert autofix.item_key("Sonarr", dl_item) != autofix.item_key("Sonarr", id_item)
 
 
-# --- search_command ----------------------------------------------------------
 def test_search_command_sonarr_series_level():
     cmd = autofix.search_command("Sonarr", _item(series_id=42))
     assert cmd == {"name": "SeriesSearch", "seriesId": 42}
@@ -250,7 +244,6 @@ def test_search_command_missing_id_returns_none():
     assert autofix.search_command("Sonarr", _item()) is None
 
 
-# --- item_reason / format_action ---------------------------------------------
 def test_item_reason_prefers_status_messages():
     it = _item(
         status="warning", messages=["Found executable file with extension: '.exe'"]
@@ -277,7 +270,6 @@ def test_sanitize_defuses_discord_mentions_and_backticks():
     assert "@" not in autofix.sanitize("@everyone `rm`")
 
 
-# --- _dry_run_enabled (fail-safe parsing) -------------------------------------
 def test_dry_run_enabled_true_for_explicit_true_values():
     assert autofix._dry_run_enabled("true") is True
     assert autofix._dry_run_enabled("1") is True
@@ -299,7 +291,6 @@ def test_dry_run_enabled_false_for_explicit_disable_values():
     assert autofix._dry_run_enabled("FALSE") is False
 
 
-# --- run_once (I/O-mocked integration) ----------------------------------------
 def _configure_sonarr_only(monkeypatch):
     monkeypatch.setattr(autofix, "post_discord", lambda msg: None)
     monkeypatch.setattr(autofix, "push", lambda ok, msg: None)

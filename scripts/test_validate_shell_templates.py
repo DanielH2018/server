@@ -238,9 +238,6 @@ def test_main_fails_closed_when_shellcheck_missing(monkeypatch):
     assert v.main() == 1
 
 
-# --------------------------------------------------------------------------- cron PATH rule
-
-
 @pytest.fixture(scope="module")
 def cron_map():
     """Every cron-installed shell template in the real tree, resolved once.

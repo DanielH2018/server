@@ -60,9 +60,6 @@ def request(command):
     return {"tool_input": {"command": command}}
 
 
-# --- static: the wrapper/classifier contract ---------------------------------------------
-
-
 def test_wrapper_passes_a_flag_the_classifier_recognises():
     """A renamed flag would leave the wrapper running and approving nothing, silently."""
     assert "--permission-request" in WRAPPER_TEXT
@@ -75,9 +72,6 @@ def test_wrapper_fails_open_when_the_repo_is_missing():
     """cd must not be able to strand the hook: a failed cd has to exit 0, not run the exec
     from whatever directory it happened to land in."""
     assert "|| exit 0" in WRAPPER_TEXT, "cd has no fail-open guard"
-
-
-# --- end to end: what actually reaches Claude Code ----------------------------------------
 
 
 @_runnable
