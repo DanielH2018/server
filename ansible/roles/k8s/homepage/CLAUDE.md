@@ -25,6 +25,14 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
 
 ## Notable
 - Pulls calendar data from the internal `ical-proxy`.
+- **The Headlamp tile's widget reads Prometheus, not Headlamp.** Headlamp exposes no service
+  API — its backend only proxies the Kubernetes API — and dialling its ClusterIP is fenced off
+  on purpose (`roles/k8s/headlamp/templates/networkpolicy.yaml.j2`, re-asserted every deploy by
+  that role's netpol-probe Job). So the tile shows cluster-state counts from a `customapi`
+  widget against `prometheus.<observability-ns>:9090`, with the PromQL in `defaults/main.yml`
+  as `homepage_k8s_headlamp_cluster_query`. That call is cross-namespace, so
+  `prometheus-callers` (`roles/k8s/netpol-baseline/templates/networkpolicy-prometheus.yaml.j2`)
+  names `homepage` — a widget-proxy error on that tile is the symptom of it being dropped.
 - The `docker.yaml` status dots have no k8s equivalent yet, so `docker.yaml.j2` renders empty
   and `services.yaml.j2` drops the matching `server:`/`container:` keys — tiles render
   dot-less rather than erroring on a `my-docker` host that does not exist here.

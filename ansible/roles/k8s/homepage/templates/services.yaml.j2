@@ -80,15 +80,47 @@
             description: Cluster UI
             # k8s-only tile, and the one place this fork diverges from the Docker template
             # beyond the documented server/container drop: Headlamp has no Docker twin, and
-            # namespace/podSelector are meaningless to a Docker homepage. It also has no
-            # service widget of its own — these two keys are homepage's built-in pod stats
-            # (CPU/memory), which need kubernetes.yaml's `mode: cluster`.
+            # namespace/podSelector are meaningless to a Docker homepage. These two keys are
+            # homepage's built-in pod stats (CPU/memory) for headlamp's OWN pod, and need
+            # kubernetes.yaml's `mode: cluster`. They are separate from the `widget:` block
+            # below, which shows whole-cluster counts — see its comment for why it is not a
+            # native Headlamp widget.
             #
             # podSelector rather than `app:`: homepage's `app:` key expands to the label
             # selector app.kubernetes.io/name=<value>, and this homelab labels its pods with
             # the plain `app` key instead. `app: headlamp` would match nothing and render blank.
             namespace: {{ k8s_namespace }}
             podSelector: app=headlamp
+            # The widget reads PROMETHEUS, NOT HEADLAMP, and that is the whole design decision.
+            # Headlamp has no service API of its own — its backend only proxies the Kubernetes
+            # API — so the only "Headlamp widget" would be homepage dialling headlamp's
+            # ClusterIP. That is exactly the exposure roles/k8s/headlamp/networkpolicy.yaml.j2
+            # closes: the pod runs `-unsafe-use-service-account-token`, so anything that reaches
+            # it acts as a cluster-wide reader with no auth, and netpol-probe-job.yaml.j2
+            # re-asserts on every deploy that no non-traefik pod can. Admitting homepage there
+            # would widen that fence and invalidate the probe. Prometheus gives the same numbers
+            # with none of that, so the tile shows CLUSTER STATE and links to Headlamp to act on
+            # it. Query and its shape: homepage_k8s_headlamp_cluster_query in defaults/main.yml.
+            #
+            # ClusterIP, not the `prometheus.local.{{ domain }}` Traefik route: monitor-bridge
+            # and homelab-mcp already read prometheus this way, and that route's ClientIP list
+            # is written for callers that cannot reach the ClusterIP. Cross-namespace, so
+            # `prometheus-callers` (roles/k8s/netpol-baseline/networkpolicy-prometheus.yaml.j2)
+            # must name homepage — fenced out, this fails as a widget-proxy error that reads
+            # nothing like a NetworkPolicy problem.
+            widget:
+                type: customapi
+                url: "http://prometheus.{{ k8s_observability_namespace }}.svc.cluster.local:9090/api/v1/query?query={{ homepage_k8s_headlamp_cluster_query | urlencode }}"
+                # 60s, against homepage's 10s default: this is a Prometheus query per dashboard
+                # load per browser, and cluster counts do not move on a 10-second scale.
+                refreshInterval: 60000
+                display: dynamic-list
+                mappings:
+                    # Prometheus wraps its vector as {"data": {"result": [{"metric": {...},
+                    # "value": [<ts>, "<n>"]}, …]}} — hence the `value.1` index for the number.
+                    items: data.result
+                    name: metric.k
+                    label: value.1
         - Home Assistant:
             icon: home-assistant.png
             href: https://home-assistant.{{ domain }}/
