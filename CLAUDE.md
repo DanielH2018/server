@@ -198,12 +198,25 @@ refuses outright — and then say which command and why.
 1. **Merge, and record the pre-merge master SHA first.** `git rev-parse origin/master` before
    `gh pr merge --squash`. Step 4 needs it, and `--changed`'s default ref (`origin/master`)
    is useless once the pull has happened.
-2. **Wait for master CI to go green.** `gh run list --branch master --limit 1 --json
-   databaseId,status,conclusion`, then `gh run watch <id> --exit-status`. This is a gate, not
-   politeness: PR CI is scoped to changed files, so whole-tree tests can only fail after merge.
-   A **pending** master CI also blocks the fast-forward itself — `next_action` returns
-   `ci_pending` *before* the `--ff-only` merge (`ansible/roles/setup/gitops_deploy/files/deploy_logic.py:301`),
-   so a tick fired seconds after the merge pulls nothing and every later step reads as stale.
+2. **Wait for master CI to go green on the merge commit specifically.** Take the SHA from
+   `gh pr view <n> --json mergeCommit -q .mergeCommit.oid`, then poll the same endpoint the
+   deployer reads:
+   ```bash
+   gh api repos/DanielH2018/server/commits/<merge-sha>/check-runs \
+     --jq '.check_runs[] | "\(.name) \(.status) \(.conclusion)"'
+   ```
+   Do **not** gate on `gh run list --branch master --limit 1`. GitHub creates the run for a
+   freshly-pushed merge commit a moment after the push, so that query returns the *previous*
+   master run — green — and the wait returns instantly having watched the wrong commit.
+   **An empty or incomplete list is pending, never green**, which is how `ci_verdict` reads it
+   too (`ansible/roles/setup/gitops_deploy/files/deploy_logic.py:262`): a required name with no
+   runs yet holds the verdict at pending. Reading the same endpoint as the deployer is what
+   makes your verdict and the tick's agree by construction.
+
+   This is a gate, not politeness. PR CI is scoped to changed files, so whole-tree tests can
+   only fail after merge. A **pending** master CI also blocks the fast-forward itself —
+   `next_action` returns `ci_pending` *before* the `--ff-only` merge (`deploy_logic.py:301`), so
+   a tick fired seconds after the merge pulls nothing and every later step reads as stale.
 3. **Pull with `./scripts/gitops_tick.sh`, never a hand `git pull`.** The tick fetches,
    CI-gates, `--ff-only` merges, deploys what is eligible, health-gates it and rolls back on
    failure — all under `/var/lock/server-git-tree.lock`, which is what keeps it from racing the
@@ -219,7 +232,10 @@ refuses outright — and then say which command and why.
    ```bash
    cd /home/ubuntu/server && ./scripts/deploy.sh --changed <pre-merge-SHA>
    ```
-   `--changed` derives the tags from the changed paths and refuses a broad change (exit 3).
+   `--changed` derives the tags from `git diff <ref>...HEAD` and refuses a broad change (exit 3).
+   The three-dot form diffs from the merge base, which equals the plain `<ref>..HEAD` range here
+   because the pre-merge SHA is an ancestor of the new master — so pass the pre-merge SHA and not
+   a branch name, whose merge base would be older.
    Use explicit `--tags` instead when another session's PR merged in the same window — the SHA
    range then covers their services too, and deploying someone else's half-finished landing is
    not yours to do.
