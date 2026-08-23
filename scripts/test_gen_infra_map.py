@@ -62,9 +62,6 @@ def container(state="running", status="Up 2 days (healthy)", image="img:1"):
     }
 
 
-# --- resolve_vars -----------------------------------------------------------
-
-
 def test_resolve_vars_substitutes_known_names():
     assert g.resolve_vars("auth{{ k8s_hostname_suffix }}", GLOBALS) == "auth-k8s"
 
@@ -87,9 +84,6 @@ def test_resolve_vars_resolves_nested_references():
 def test_resolve_vars_survives_a_reference_cycle():
     variables = {"a": "{{ b }}", "b": "{{ a }}"}
     assert "{{" in g.resolve_vars("{{ a }}", variables)
-
-
-# --- declared_services ------------------------------------------------------
 
 
 def test_declared_services_defaults_to_docker_platform():
@@ -139,9 +133,6 @@ def test_declared_services_skips_entries_without_a_name():
     assert [s["name"] for s in g.declared_services("h", hv, GLOBALS)] == ["real"]
 
 
-# --- parse_docker_ps --------------------------------------------------------
-
-
 def test_parse_docker_ps_reads_health_from_the_status_string():
     out = "a\trunning\tUp 2 days (healthy)\timg:1\nb\trunning\tUp 1 day (unhealthy)\timg:2\n"
     parsed = g.parse_docker_ps(out)
@@ -151,9 +142,6 @@ def test_parse_docker_ps_reads_health_from_the_status_string():
 
 def test_parse_docker_ps_ignores_malformed_and_blank_lines():
     assert g.parse_docker_ps("garbage\n\n\tx\t\t\n") == {}
-
-
-# --- parse_kubectl_deployments ---------------------------------------------
 
 
 def deployment(name, ns="homelab", ready=1, desired=1, image="img:1"):
@@ -183,9 +171,6 @@ def test_parse_kubectl_deployments_treats_absent_ready_replicas_as_zero():
 
 def test_parse_kubectl_deployments_returns_empty_on_bad_json():
     assert g.parse_kubectl_deployments("not json") == {}
-
-
-# --- match_k8s_workloads ----------------------------------------------------
 
 
 WORKLOADS = {
@@ -224,9 +209,6 @@ def test_match_k8s_workloads_gives_a_namespace_owner_everything_in_it():
 def test_match_k8s_workloads_does_not_cross_namespaces():
     service = {"name": "loki", "namespace": "homelab"}
     assert g.match_k8s_workloads(service, WORKLOADS) == []
-
-
-# --- reconcile_docker -------------------------------------------------------
 
 
 def service(name="sonarr", **overrides):
@@ -273,9 +255,6 @@ def test_reconcile_docker_calls_a_batch_role_a_job_not_missing():
     assert result["status"] == "job"
 
 
-# --- reconcile_k8s ----------------------------------------------------------
-
-
 def test_reconcile_k8s_is_healthy_when_all_replicas_are_ready():
     svc = service("n8n", platform="k8s", namespace="homelab")
     assert g.reconcile_k8s(svc, WORKLOADS, ROLES)["status"] == "healthy"
@@ -305,9 +284,6 @@ def test_reconcile_k8s_marks_a_genuinely_absent_deployment_missing():
     assert g.reconcile_k8s(svc, {}, ROLES)["status"] == "missing"
 
 
-# --- find_extra_containers --------------------------------------------------
-
-
 def test_find_extra_containers_attributes_a_companion_to_its_role():
     """node-exporter has no inventory entry; the prometheus role creates it."""
     live = {"prometheus": container(), "node-exporter": container()}
@@ -333,7 +309,6 @@ def test_find_extra_containers_marks_a_stopped_extra_down():
     assert g.find_extra_containers(live, set(), ROLES)[0]["status"] == "down"
 
 
-# --- services_on_host -------------------------------------------------------
 #
 # The inventory declares every k8s service under daniel-box, so a host panel
 # built from `containers_list` rendered daniel-server as empty while it ran 47
@@ -364,9 +339,6 @@ def test_services_on_host_keeps_an_unplaced_service_with_its_declaring_host():
     assert [s["name"] for s in g.services_on_host("daniel-box", declared, [])] == [
         "configarr"
     ]
-
-
-# --- build_model ------------------------------------------------------------
 
 
 def model_for(live, cluster=None):
@@ -430,9 +402,6 @@ def test_build_model_counts_routed_and_sso_gated_services():
     assert server["authelia_count"] == 1
 
 
-# --- render_html ------------------------------------------------------------
-
-
 def rendered():
     return g.render_html(
         model_for(
@@ -479,7 +448,6 @@ def test_render_html_names_an_unreachable_host_in_the_page():
     assert "ssh timed out" in g.render_html(model)
 
 
-# --- tool resolution ---------------------------------------------------------
 #
 # These guard a bug that already happened once: cron runs with PATH=/usr/bin:/bin,
 # which omits /usr/local/bin where kubectl lives. The run still exited 0 and wrote
@@ -611,9 +579,6 @@ def test_refresh_cron_puts_usr_local_bin_on_the_path():
     assert "/usr/local/bin" in job, "kubectl would not resolve under cron's PATH"
 
 
-# --- load_roles (reads the real repo) ---------------------------------------
-
-
 def test_load_roles_derives_ownership_from_the_role_trees():
     """The whole companion/job distinction rests on this being repo-derived."""
     roles = g.load_roles()
@@ -628,9 +593,6 @@ def test_load_roles_derives_ownership_from_the_role_trees():
     # manifests now — and pi-peer-backup, which the compose rule never saw, qualifies too.
     assert "configarr" in roles.batch_roles
     assert "pi-peer-backup" in roles.batch_roles
-
-
-# --- cluster collection -----------------------------------------------------
 
 
 def node(name, ready=True, roles=(), ip="10.0.0.1"):
@@ -708,9 +670,6 @@ def test_parse_backup_targets_returns_empty_on_bad_json():
     assert g.parse_backup_targets("not json") == []
 
 
-# --- place_on_nodes ---------------------------------------------------------
-
-
 PODS = [
     {
         "namespace": "homelab",
@@ -753,7 +712,6 @@ def test_place_on_nodes_is_empty_for_a_service_with_no_workloads():
     assert g.place_on_nodes({"workloads": []}, PODS)["nodes"] == []
 
 
-# --- host planes ------------------------------------------------------------
 #
 # The bug these guard: daniel-server's Docker was uninstalled on 2026-08-14 and
 # its containers_list emptied, so inferring the plane from that list fell through
@@ -801,9 +759,6 @@ def test_build_model_carries_node_state_onto_its_host():
     server = next(h for h in model["hosts"] if h["name"] == "daniel-server")
     assert server["node"]["pods"] == 1
     assert model["cluster"]["volumes"] == 42
-
-
-# --- grouping and the diagram -----------------------------------------------
 
 
 def test_group_services_buckets_by_function_and_by_host():

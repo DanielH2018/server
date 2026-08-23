@@ -198,7 +198,6 @@ def test_blank_lines_do_not_change_the_verdict():
     assert cherry_says_merged("\n- aaaaaaa\n\n") is True
 
 
-# --- merge_tree_says_contained(): the squash case ------------------------------------------
 # Squash merges defeat ancestry AND patch-id, so before this check landed every squash-merged
 # worktree was kept forever. Measured 2026-08-22: five of the six worktrees on disk were
 # squash-merged and none was collectable. The YES direction is what makes the script useful;
@@ -244,7 +243,6 @@ def test_an_unreadable_master_tree_is_not_a_match():
     assert merge_tree_says_contained(f"{_MASTER_TREE}\n", "") is False
 
 
-# --- remove(): the removal loop never had a test, which is why the unlock-before-remove
 # bug survived CI — every test above exercises classify()/is_merged()/session_is_alive()/
 # parse_worktree_list, none of them the actual `git worktree remove` call.
 

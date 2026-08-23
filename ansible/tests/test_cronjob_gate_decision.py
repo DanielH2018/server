@@ -263,9 +263,6 @@ def test_every_outcome_task_stays_off_a_no_mutation_run() -> None:
         )
 
 
-# ------------------------------------------------------------------------------- the transport
-
-
 def _read_module() -> dict:
     return _task(_READ)["ansible.builtin.command"]
 
@@ -362,9 +359,6 @@ def test_the_jsonpath_parses_against_the_live_api() -> None:
         f"kubectl rejected the role's jsonpath: {done.stderr.strip()!r}. The expression is "
         "wrong, or the argv form lost a token boundary."
     )
-
-
-# --------------------------------------------------------------- the timeout ordering contract
 
 
 def _gate_include(role: Path) -> dict | None:

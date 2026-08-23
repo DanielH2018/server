@@ -32,7 +32,6 @@ karakeep_k8s_tagger_image: ghcr.io/astral-sh/uv:python3.14-bookworm-slim@sha256:
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "three reasons: (1) stateful — meilisearch migrates its index in place on a bump, non-atomically; (2) probe-less time-tagger sub-deployment; (3) migrating state — Recreate + RWO seed-volume PVC. COUPLING NOTE for a future promotion: karakeep-meili is deliberately excluded from the snapshot, so reverting karakeep-data alone desyncs the search index until a manual reindex"  # noqa var-naming[no-role-prefix]
 
-# Mirrors resources('2.0', '2048M', '0.10', '128M') in the compose template.
 karakeep_k8s_cpu_limit: "2"
 karakeep_k8s_mem_limit: 2048Mi
 karakeep_k8s_cpu_request: "100m"

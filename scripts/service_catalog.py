@@ -88,9 +88,7 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return loaded if isinstance(loaded, dict) else {}
 
 
-# ---------------------------------------------------------------------------
 # containers_list — same source and shape scripts/deploy_tags.py already parses.
-# ---------------------------------------------------------------------------
 
 
 def iter_host_files(host_vars: Path = HOST_VARS) -> list[Path]:
@@ -102,9 +100,7 @@ def host_expose_mode(host_data: dict[str, Any]) -> str | None:
     return host_data.get("expose_mode")
 
 
-# ---------------------------------------------------------------------------
 # Route
-# ---------------------------------------------------------------------------
 
 
 def k8s_route(entry: dict[str, Any], k8s_roles: Path = K8S_ROLES) -> str:
@@ -136,11 +132,9 @@ def route_for(
     return docker_route(entry, host_data)
 
 
-# ---------------------------------------------------------------------------
 # Auth tier — containers_list.use_authelia is read directly by the IngressRoute macro
 # (`container_item.use_authelia`) and by the docker traefik.yml.j2 macro alike, so this
 # is a direct field read, not an inference from the route template.
-# ---------------------------------------------------------------------------
 
 
 def auth_tier(entry: dict[str, Any]) -> str:
@@ -149,9 +143,7 @@ def auth_tier(entry: dict[str, Any]) -> str:
     return "Authelia" if entry["use_authelia"] else "none (public/no-auth)"
 
 
-# ---------------------------------------------------------------------------
 # Backup tier (k8s / Longhorn only — Pi's Docker volumes are not Longhorn-backed)
-# ---------------------------------------------------------------------------
 
 _PVC_BLOCK_RE = re.compile(
     r"kind:\s*PersistentVolumeClaim.*?metadata:\s*\n\s*name:\s*(\{\{.*?\}\}|\S+)",
@@ -256,9 +248,7 @@ def backup_tier(
     return "; ".join(seen)
 
 
-# ---------------------------------------------------------------------------
 # Auto-deploy eligibility (k8s only — daniel-pi sets has_gitops: false)
-# ---------------------------------------------------------------------------
 
 
 def autodeploy_eligibility(
@@ -284,9 +274,7 @@ def autodeploy_eligibility(
     return "denylisted (no reason given)"
 
 
-# ---------------------------------------------------------------------------
 # Assembly
-# ---------------------------------------------------------------------------
 
 
 def build_rows(
@@ -330,9 +318,7 @@ def build_rows(
     return rows
 
 
-# ---------------------------------------------------------------------------
 # HTML rendering — Catppuccin Mocha, self-contained, inline CSS.
-# ---------------------------------------------------------------------------
 
 _CSS = """
 :root {

@@ -87,7 +87,6 @@ tdarr_k8s_webui_port: 8265
 # Exposing it would publish an unauthenticated control channel for a process that rewrites media.
 tdarr_k8s_server_port: 8266
 
-# Mirrors resources('6.0', '4096M', '0.25', '256M') in the compose template.
 tdarr_k8s_cpu_limit: "6"
 tdarr_k8s_mem_limit: 4096Mi
 tdarr_k8s_cpu_request: "250m"

@@ -1,12 +1,7 @@
 ---
-# HELD UNTIL B4c — see the qbittorrent role's defaults for why the flag has to exist: the
-# inventory entry is mandatory (validate_k8s_manifests.py), and gitops runs deploy.yml as a plain
-# containers_list loop, so the entry alone would deploy this unattended.
-#
-# Unlike sonarr there is no rehearsal mode here. B3 already rehearsed the \*arr path footgun on
-# one service and it passed; repeating it three more times would buy a second copy of the same
-# answer while giving three more live databases something to act on.
-radarr_k8s_enabled: true  # flipped 2026-08-07 by B4c — the Docker copy is stopped and unmanaged
+# See the qbittorrent role's defaults for why this flag exists rather than the entry simply
+# being absent.
+radarr_k8s_enabled: true
 
 radarr_k8s_image: lscr.io/linuxserver/radarr:6.1.1.10360-ls304
 

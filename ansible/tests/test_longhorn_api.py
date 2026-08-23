@@ -120,9 +120,6 @@ def test_the_recorded_facts_are_the_documented_interface() -> None:
     assert record["longhorn_api_node"] == "{{ ansible_hostname }}"
 
 
-# --------------------------------------------------------------------------------- transport
-
-
 _UNREACHABLE_TOKENS = (
     "connection refused",
     "was refused",
@@ -213,7 +210,6 @@ def test_the_resolve_returns_a_pod_ip_on_this_node() -> None:
     )
 
 
-# ------------------------------------------------------- the soft-mode MECHANISM, not the YAML
 #
 # `ignore_errors: true` on a dynamic `include_role` does not catch a failure of a task the
 # include pulls in — only a failure of the include statement itself. That is documented Ansible

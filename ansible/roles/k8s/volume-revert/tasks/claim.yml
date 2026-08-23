@@ -16,7 +16,7 @@
 # plainly detached volume returns 500 because no engine is running. Maintenance mode — attached
 # with `disableFrontend: true` — is the only state that works.
 
-# ------------------------------------------------------------------ before anything moves
+# before anything moves
 #
 # The reads below are deliberately NOT guarded on k8s_no_mutate, and carry `check_mode: false` so
 # `--check` runs them for real, matching every other guarded task in this file — but the caller in
@@ -184,7 +184,7 @@
   ansible.builtin.set_fact:
     volume_revert_snapshot: "{{ volume_revert_candidates | first | default('', true) }}"
 
-# --------------------------------------------------------------- from here the service stops
+# from here the service stops
 #
 # Every task below mutates the cluster or waits on a change one of them made, so every one is
 # guarded on `k8s_no_mutate` — which is `ansible_check_mode or (k8s_dry_run | bool)`, and

@@ -39,7 +39,7 @@ BACKFILL_DAYS = float(_env("BACKFILL_DAYS", "28"))
 LOKI_PAGE_LIMIT = int(_env("LOKI_PAGE_LIMIT", "5000"))
 HEALTH_MAX_AGE = int(_env("HEALTH_MAX_AGE", str(3 * POLL_INTERVAL + 30)))
 
-# --- parsing (pure) ---------------------------------------------------------
+# parsing (pure)
 JOIN_RE = re.compile(r"^(?P<name>.+) has joined\.$")
 LEAVE_RE = re.compile(r"^(?P<name>.+) has left\.$")
 RESTART_MARKERS = ("Listening on port", "Server started")
@@ -73,7 +73,7 @@ def is_unparsed_player_line(line):
     return "joined" in low or "has left" in low
 
 
-# --- state (pure, testable) -------------------------------------------------
+# state (pure, testable)
 class StatsState:
     """In-memory all-time stats. Timestamps are unix seconds (float)."""
 
@@ -129,7 +129,7 @@ class StatsState:
         return base
 
 
-# --- Prometheus exposition (pure) -------------------------------------------
+# Prometheus exposition (pure)
 def escape_label_value(v):
     return v.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
@@ -168,7 +168,7 @@ def render_metrics(state, now):
     return "\n".join(out) + "\n"
 
 
-# --- Loki ingestion ---------------------------------------------------------
+# Loki ingestion
 def extract_entries(loki_json):
     """Flatten a Loki query_range response to [(ts_ns:int, line:str)] ascending."""
     out = []
@@ -200,7 +200,7 @@ def apply_entries(state, entries):
     return events, max_ts
 
 
-# --- SQLite source of truth -------------------------------------------------
+# SQLite source of truth
 class Store:
     def __init__(self, path):
         self.conn = sqlite3.connect(path)
@@ -279,7 +279,7 @@ class Store:
         c.commit()
 
 
-# --- HTTP I/O + main loop ---------------------------------------------------
+# HTTP I/O + main loop
 def http_get_json(url):
     req = urllib.request.Request(url, headers={"User-Agent": "terraria-stats"})
     with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:  # noqa: S310 internal

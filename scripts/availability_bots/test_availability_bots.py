@@ -31,9 +31,6 @@ class _Resp:
         pass
 
 
-# --- parse_availability (pure) ----------------------------------------------
-
-
 def test_parse_availability_returns_party_sizes_when_time_offered():
     payload = {
         "people_box": "Table for 2 people or 4 people",
@@ -56,9 +53,6 @@ def test_parse_availability_tolerates_missing_keys():
     assert osteria.parse_availability({}, "12:30") == []
 
 
-# --- Discord notification carries the homelab UA (Cloudflare 1010 guard) -----
-
-
 def test_discord_notification_sets_user_agent(monkeypatch):
     captured = {}
 
@@ -79,9 +73,6 @@ def test_discord_notification_never_raises_on_failure(monkeypatch):
     monkeypatch.setattr(common.requests, "post", boom)
     # must not raise — the caller has already found availability by this point
     common.send_discord_notification("http://example/webhook", "hi", _LOG)
-
-
-# --- ping_healthcheck /fail routing -----------------------------------------
 
 
 def test_ping_healthcheck_success_hits_base_url(monkeypatch):

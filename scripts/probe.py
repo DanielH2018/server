@@ -170,7 +170,7 @@ EXTERNAL_ENTITIES_YAML = os.path.join(
 # dependency-free, consistent with expected_automation_ids above.
 _SNAPSHOT_ENTITY_RE = re.compile(r"^\s*-\s+([a-z_]+\.[A-Za-z0-9_]+)\s*$", re.MULTILINE)
 
-# --- URL builders (pure) ----------------------------------------------------
+# URL builders (pure)
 
 
 def prom_query_url(base, promql):
@@ -430,7 +430,7 @@ def pi_resolve():
     return f"daniel-pi.lan:61208:{pi_ip()}"
 
 
-# --- Home Assistant (pure) --------------------------------------------------
+# Home Assistant (pure)
 
 
 def ha_state_url(base, entity_id):
@@ -461,7 +461,7 @@ def ha_curl_config(token):
     return f'header = "Authorization: Bearer {token}"\n'
 
 
-# --- *arr apps (sonarr/radarr/prowlarr) read-only API (pure) ----------------
+# *arr apps (sonarr/radarr/prowlarr) read-only API (pure)
 # Sonarr/Radarr speak /api/v3, Prowlarr /api/v1. The X-Api-Key comes from SOPS
 # and is fed to curl via stdin (arr_curl_config), never argv — same guard as ha.
 #
@@ -496,7 +496,7 @@ def arr_curl_config(api_key):
     return f'header = "X-Api-Key: {api_key}"\n'
 
 
-# --- Minimal synchronous WebSocket client (stdlib only — no `websockets` dep) -----------------
+# Minimal synchronous WebSocket client (stdlib only — no `websockets` dep)
 # Used ONLY for the read-only automation-trace API (Task: ha trace/why). A client text frame MUST
 # be masked (RFC 6455); server frames are unmasked. We assume one JSON message per unfragmented
 # frame, which is how HA sends WS responses.
@@ -784,7 +784,7 @@ def ha_state_rows(states, model):
     return "\n".join(lines)
 
 
-# --- low-level argv / parsing helpers (pure) --------------------------------
+# low-level argv / parsing helpers (pure)
 
 
 def curl_argv(url, timeout=DEFAULT_TIMEOUT, resolve=None):
@@ -1096,7 +1096,7 @@ def format_monitor_status(data):
     return summary, 0
 
 
-# --- kuma-drift: declared monitors vs live ones ------------------------------
+# kuma-drift: declared monitors vs live ones
 #
 # `monitors` divides the exporter's monitor count by itself, so it reports "N/N up" over
 # whatever Kuma happens to be exporting. A monitor that is declared and never created, or
@@ -1326,7 +1326,7 @@ def format_loki(data):
     return "\n".join(line for _, line in rows)
 
 
-# --- alert history (pure) ---------------------------------------------------
+# alert history (pure)
 # monitor-bridge is the homelab's alert brain: every INTERVAL it pushes each check's
 # state to a Kuma push monitor and logs "[<ts>] DOWN <name> - <msg> (<n> cycles)" for
 # any check that's firing. Kuma keeps only current state; Loki keeps the log lines
@@ -1485,7 +1485,7 @@ def format_alert_episodes(episodes, days):
     return "\n".join(lines)
 
 
-# --- routing (pure given resolve_ip) ----------------------------------------
+# routing (pure given resolve_ip)
 
 
 def _build_parser():
@@ -1699,7 +1699,7 @@ def plan(args, resolve_ip, k8s_endpoint=k8s_endpoint, pi_resolve=pi_resolve):
     raise SystemExit(f"unknown command: {cmd}")  # pragma: no cover
 
 
-# --- runtime (impure) -------------------------------------------------------
+# runtime (impure)
 
 
 def resolve_ip(container):
@@ -2205,7 +2205,7 @@ def main(argv=None):
     return run_pipeline(stages)
 
 
-# --- B2 / Longhorn backup objects -------------------------------------------
+# B2 / Longhorn backup objects
 
 LONGHORN_PREFIX = "longhorn"
 B2_API_VERSION = "v3"

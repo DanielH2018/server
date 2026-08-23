@@ -29,9 +29,6 @@ IPS = {"prometheus": "10.0.0.1", "loki": "10.0.0.2", "scrutiny": "10.0.0.3"}
 fake_resolve = IPS.__getitem__
 
 
-# --- URL builders -----------------------------------------------------------
-
-
 def test_prom_query_url_encodes_promql():
     url = probe.prom_query_url("https://prom.example", "up == 0")
     assert url == "https://prom.example/api/v1/query?query=up+%3D%3D+0"
@@ -83,9 +80,6 @@ def test_pi_resolve_pins_the_lan_ip(monkeypatch):
     assert probe.pi_resolve() == "daniel-pi.lan:61208:10.0.0.139"
 
 
-# --- low-level argv / parsing helpers ---------------------------------------
-
-
 def test_curl_argv():
     assert probe.curl_argv("http://x") == [
         "curl",
@@ -117,9 +111,6 @@ def test_k8s_service_ip_argv_targets_the_service():
     assert argv[-1] == "jsonpath={.spec.clusterIP}"
     assert "sonarr" in argv
     assert "homelab" in argv
-
-
-# --- plan(): routing for each subcommand ------------------------------------
 
 
 def test_plan_metric_uses_cluster_prometheus_route():
@@ -229,9 +220,6 @@ def test_cert_stages_is_a_two_stage_pipeline():
     assert s2[:2] == ["openssl", "x509"]
 
 
-# --- health: container state + healthcheck rollup ---------------------------
-
-
 def _inspect(state, restarts=0):
     return [{"State": state, "RestartCount": restarts}]
 
@@ -290,7 +278,6 @@ def test_health_not_found_exits_one():
     assert "not found" in text
 
 
-# --- health: the k8s path ---------------------------------------------------
 #
 # `health` ran `docker inspect` unconditionally until 2026-08-16 and had been dead on both
 # cluster nodes since the 2026-08-14 Docker retirement — neither has the binary, so it raised
@@ -478,9 +465,6 @@ def test_k8s_health_argv_targets_the_named_namespace():
     assert "app=freshrss" in probe.k8s_pods_argv("freshrss", "homelab")
 
 
-# --- ha subcommand: URL builders --------------------------------------------
-
-
 def test_ha_base_builds_on_ha_host(monkeypatch):
     # ha_host() decrypts the domain from SOPS; stub it — CI has no age key.
     monkeypatch.setattr(probe, "sops_extract", lambda key: "example.test")
@@ -521,9 +505,6 @@ def test_ha_get_url_normalizes_leading_slash_and_api_prefix():
     # A user may type any of these; all mean the same endpoint.
     for path in ("error_log", "/error_log", "api/error_log", "/api/error_log"):
         assert probe.ha_get_url("https://h", path) == "https://h/api/error_log"
-
-
-# --- ha subcommand: match_automation (the alias-slug-vs-id trap) -------------
 
 
 def _auto(
@@ -583,9 +564,6 @@ def test_match_automation_ignores_non_automation_domain():
     assert probe.match_automation(_HA_STATES, "tower_fan") is None
 
 
-# --- ha subcommand: curl argv must never carry the token ---------------------
-
-
 def test_ha_curl_argv_reads_header_from_stdin_config():
     argv = probe.ha_curl_argv("http://h:8123/api/states/x")
     assert "--config" in argv and "-" in argv
@@ -601,9 +579,6 @@ def test_ha_curl_argv_carries_no_token():
 def test_ha_curl_config_has_bearer_header():
     cfg = probe.ha_curl_config("SECRET_TOKEN")
     assert 'header = "Authorization: Bearer SECRET_TOKEN"' in cfg
-
-
-# --- ha subcommand: output formatters ---------------------------------------
 
 
 def test_format_ha_state_shows_entity_state_and_name():
@@ -626,9 +601,6 @@ def test_format_ha_automation_includes_id_and_last_triggered():
     assert "presence_1" in out
     assert "last_triggered=2026-06-20T12:00:00+00:00" in out
     assert "Bedroom Presence On" in out
-
-
-# --- WebSocket frame codec --------------------------------------------------
 
 
 def test_ws_encode_is_masked_client_text_frame():
@@ -671,8 +643,6 @@ def test_ws_read_frame_decodes_extended_length():
 
     assert probe._ws_read_frame(recv_exact) == "y" * 300
 
-
-# --- ha why / ha trace: format_trace parser ----------------------------------
 
 _TRACE_BLOCKED = {
     # Real HA trace/get shape (confirmed against live daniel-server 2026-06-22):
@@ -830,7 +800,6 @@ def test_verify_automations_path_exists():
     assert ids, "no automation ids parsed from the git-managed source"
 
 
-# --- metric / loki-query output formatters ----------------------------------
 # These replace the `probe.py metric … | python3 -c "…reshape JSON…"` one-liners
 # that kept prompting: the reshape now lives in the allow-listed script instead.
 
@@ -982,7 +951,6 @@ def test_loki_query_defaults_to_formatted_with_json_escape_hatch():
     assert p.parse_args(["loki-query", '{job="x"}', "--json"]).json is True
 
 
-# --- arr subcommand: read-only *arr API GET (key from SOPS, fed via stdin) ----
 # Replaces `docker exec <arr> curl -H "X-Api-Key: <hex>" …/api/… | python3`,
 # which both prompted AND leaked the key into argv / shell history / the log.
 
@@ -1111,9 +1079,6 @@ def test_arr_subcommand_rejects_unknown_app():
         probe._build_parser().parse_args(["arr", "lidarr", "health"])
 
 
-# --- alerts (monitor-bridge DOWN history) -----------------------------------
-
-
 def test_loki_query_url_with_range_adds_start_end_direction():
     url = probe.loki_query_url(
         "10.0.0.2", '{job="x"}', 5000, start=1000, end=2000, direction="forward"
@@ -1179,7 +1144,6 @@ def test_format_alert_episodes_renders_name_and_msg():
     assert "1 DOWN episode(s)" in out and "n8n" in out and "boom" in out
 
 
-# --- --since reaches the wire on the DEFAULT (formatted) path ---------------
 #
 # These pin the TRANSPORT, deliberately, and the reason is recorded rather than assumed. Three
 # assertions already covered `loki_query_url` output and `plan()` argv, and every one of them
@@ -1257,7 +1221,6 @@ def test_run_query_serves_metric_which_has_no_since_flag(monkeypatch):
     assert "/api/v1/query?" in seen[0]
 
 
-# --- alerts reads BOTH alert paths ------------------------------------------
 #
 # monitor-bridge polls no Kuma state, so its container log says nothing about the host crons
 # that push Kuma directly. Reading only that log left the backup plane's sole DOWN signal
@@ -1401,7 +1364,6 @@ def test_alerts_dry_run_prints_a_command_per_stream(monkeypatch, capsys):
     assert out.count("query_range") == len(probe.ALERT_SOURCES)
 
 
-# --- b2-longhorn ------------------------------------------------------------
 #
 # Longhorn reports a backup `Completed` once its metadata is written, so "Completed" is not
 # evidence the DATA reached B2. These cover the distinction the command exists to make, and
@@ -1515,7 +1477,7 @@ def test_b2_longhorn_command_does_not_shell_out_to_docker_or_rclone():
 
     # And no `"docker"` argv literal survives anywhere in this section's executable code.
     with open(_MOD) as fh:
-        section = fh.read().split("# --- B2 / Longhorn backup objects")[1]
+        section = fh.read().split("# B2 / Longhorn backup objects")[1]
     code = "\n".join(
         line for line in section.splitlines() if not line.strip().startswith("#")
     )
@@ -1801,8 +1763,6 @@ def test_no_cluster_route_carries_the_retired_k8s_suffix():
     assert asked, "expected plan() to route these subcommands through k8s_endpoint"
     assert not [h for h in asked if h.endswith("-k8s")]
 
-
-# --- kuma-drift ---------------------------------------------------------------
 
 TEMPLATE_SAMPLE = """\
 stringData:

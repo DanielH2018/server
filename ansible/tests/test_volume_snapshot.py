@@ -137,9 +137,6 @@ _FIVE = [
 _NEWEST = "autodeploy-widget-55555555-widget-config"
 
 
-# ----------------------------------------------------------------------- the retention window
-
-
 def test_the_newest_snapshot_is_never_pruned() -> None:
     """Slice 7b reverts to the most recent snapshot.
 
@@ -254,9 +251,6 @@ def test_snapshots_this_role_did_not_take_are_never_candidates() -> None:
 
 def test_an_empty_listing_prunes_nothing_rather_than_erroring() -> None:
     assert _prune([], 3) == []
-
-
-# ------------------------------------------------------------------ the name/prefix coupling
 
 
 def test_the_snapshot_name_starts_with_the_prefix_the_prune_selects_on() -> None:
@@ -383,9 +377,6 @@ def test_the_run_token_uses_now_with_no_gathered_facts() -> None:
     assert "ansible_date_time" not in expression
 
 
-# ------------------------------------------------------------------------- the detached-volume skip
-
-
 def _detached_expression() -> str:
     return _named(
         _CLAIM, "Decide whether this claim's unready snapshot is a detached-volume case"
@@ -429,7 +420,6 @@ def test_an_unread_volume_state_is_treated_as_not_attached() -> None:
     assert _detached("false|false", "") is True
 
 
-# --------------------------------------------------- the maintenance-mode attach (slice 7b)
 #
 # 7a skipped a detached volume outright, because Longhorn needs a running engine to snapshot
 # it. 7b reuses k8s/longhorn-api and the maintenance-mode attach k8s/volume-revert proved: a
@@ -806,9 +796,6 @@ def test_the_prune_loop_slices_cleanly_at_the_defaulted_floor_values() -> None:
     assert _render(loop_expr, volume_snapshot_live=[], volume_snapshot_keep=1) == []
 
 
-# ------------------------------------------------------------------------------- the plumbing
-
-
 def test_every_mutating_task_is_guarded() -> None:
     """`test_k8s_dry_run.py` derives this cluster-wide; pinned here too because this role's
     mutations are a `delete` against Longhorn snapshots — the one thing a dry run must never do.
@@ -895,7 +882,6 @@ def test_the_role_declares_an_autodeploy_stance() -> None:
     assert defaults["k8s_autodeploy_reason"].strip()
 
 
-# ------------------------------------------------------------------------ the manifests wiring
 #
 # This role's whole value is a snapshot taken BEFORE the apply that can destroy what it protects.
 # A snapshot moved after the apply would still create a CR, still pass readiness, still prune,
@@ -945,9 +931,6 @@ def test_the_snapshot_include_calls_the_right_role_with_the_right_vars() -> None
     call_vars = task["vars"]
     assert call_vars["volume_snapshot_claims"] == "{{ k8s_autodeploy_snapshot_pvcs }}"
     assert "manifests_service" in call_vars["volume_snapshot_service"]
-
-
-# --------------------------------------------------------------------------------- transport
 
 
 @pytest.mark.skipif(shutil.which("kubectl") is None, reason="no kubectl on this host")

@@ -25,7 +25,6 @@ def _pr(
     )
 
 
-# --- parse_automerge ---
 def test_parse_automerge_enabled():
     assert nl.parse_automerge("🚦 **Automerge**: Enabled.") is True
 
@@ -39,7 +38,6 @@ def test_parse_automerge_absent_defaults_false():
     assert nl.parse_automerge("") is False
 
 
-# --- ci_rollup ---
 def test_ci_rollup_all_success():
     runs = [{"status": "completed", "conclusion": "success"}]
     statuses = [{"state": "success"}]
@@ -84,7 +82,6 @@ def test_ci_rollup_neutral_and_skipped_are_ok():
     assert nl.ci_rollup(runs, []) == "success"
 
 
-# --- classify_pr ---
 def test_classify_manual_when_automerge_disabled():
     assert nl.classify_pr(_pr(automerge=False, ci="success")) == "manual"
 
@@ -111,7 +108,6 @@ def test_classify_on_track_automerge_pending():
     assert nl.classify_pr(_pr(automerge=True, ci="pending")) == "on-track"
 
 
-# --- actionable ---
 def test_actionable_keeps_stuck_and_manual_drops_ontrack():
     prs = [
         _pr(number=8, automerge=True, ci="failure"),  # stuck
@@ -122,7 +118,6 @@ def test_actionable_keeps_stuck_and_manual_drops_ontrack():
     assert [(pr.number, b) for pr, b in out] == [(8, "stuck"), (9, "manual")]
 
 
-# --- fingerprint ---
 def test_fingerprint_is_sorted_and_stable():
     a = [(_pr(number=9), "manual"), (_pr(number=8), "stuck")]
     b = [(_pr(number=8), "stuck"), (_pr(number=9), "manual")]
@@ -194,7 +189,6 @@ def test_should_notify_repages_when_stuck_pr_crosses_age_threshold():
     assert nl.should_notify(day1, day3) == (True, "digest")
 
 
-# --- should_notify ---
 def test_should_notify_unchanged_is_silent():
     assert nl.should_notify("#8:stuck", "#8:stuck") == (False, "none")
 
@@ -215,7 +209,6 @@ def test_should_notify_empty_to_empty_is_silent():
     assert nl.should_notify("", "") == (False, "none")
 
 
-# --- render_digest ---
 def test_render_digest_groups_and_links():
     items = [
         (
@@ -266,7 +259,6 @@ def test_render_digest_truncates_and_counts_overflow():
     assert "more" in msg
 
 
-# --- dashboard_stale (Renovate fail-loud backstop) ---
 # Renovate rewrites its Dependency Dashboard issue every run (~daily here). A stale or
 # absent dashboard means the Renovate App/config is broken — and in that state there are
 # no PRs, so the PR digest alone reads as a healthy "backlog cleared". This is the gap.
@@ -291,7 +283,6 @@ def test_dashboard_stale_boundary_not_yet_stale():
     assert nl.dashboard_stale("2026-06-18T00:00:00Z", now=now) is False
 
 
-# --- find_dashboard ---
 def _issue(title, login="renovate[bot]", updated="2026-06-25T00:00:00Z", pr=False):
     d = {"title": title, "user": {"login": login}, "updated_at": updated}
     if pr:
@@ -321,7 +312,6 @@ def test_find_dashboard_ignores_non_renovate_author():
     assert nl.find_dashboard([_issue("Dependency Dashboard", login="someuser")]) is None
 
 
-# --- parse_repository_problems / find_dashboard_problems ---
 # A package whose lookup starts failing (karakeep's gcr.io image, 2026-08) gets no PR and
 # doesn't touch dashboard staleness — the dashboard still updates on schedule. This section
 # is the only signal, so it must be parsed into the notify path or it silently stops
@@ -373,7 +363,6 @@ def test_find_dashboard_problems_dashboard_without_section_is_empty():
     assert nl.find_dashboard_problems(issues) == set()
 
 
-# --- problems_fingerprint / re-page behavior ---
 def test_problems_fingerprint_sorted_and_stable():
     a = {"z problem", "a problem"}
     b = {"a problem", "z problem"}
@@ -411,14 +400,12 @@ def test_should_notify_problems_first_appearing_pages():
     assert kind == "digest"
 
 
-# --- render_problems ---
 def test_render_problems_lists_each_problem():
     msg = nl.render_problems({"WARN: lookup failed for karakeep"})
     assert "Repository Problems" in msg
     assert "WARN: lookup failed for karakeep" in msg
 
 
-# --- Dead-path PRs: conflicting against files that no longer exist ------------------------------
 #
 # Renovate holds one branch per branchName, so a branch conflicting against a DELETED path blocks
 # the dependency it tracks from ever producing a mergeable PR — while the dashboard keeps detecting

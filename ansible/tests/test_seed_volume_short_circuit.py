@@ -74,8 +74,6 @@ def _render(expr: str, **ctx):
     return env.from_string("{{ " + expr + " }}").render(**ctx)
 
 
-# --------------------------------------------------------------------------- the copy decision
-
 # A skipped task's register: present, but carrying no `rc`. This is the shape that makes a
 # careless `| default(1)` resolve to "not seeded, therefore copy".
 SKIPPED_REGISTER = {"changed": False, "skipped": True}
@@ -141,9 +139,6 @@ def test_copying_on_the_long_path_is_unchanged(rc, force, expected):
     )
 
 
-# ------------------------------------------------------------------------------- the gate itself
-
-
 @pytest.mark.parametrize(
     ("stdout", "force", "expected"),
     [
@@ -174,9 +169,6 @@ def test_force_defeats_the_short_circuit():
     assert "seed_volume_force" in _expr("seed_volume_short_circuit")
 
 
-# ------------------------------------------------------------------------------ the key agreement
-
-
 def test_jsonpath_reads_the_key_the_annotate_writes():
     text = SEED.read_text()
     assert JSONPATH_KEY in text, (
@@ -200,9 +192,6 @@ def test_volume_revert_strips_the_annotation():
         f"k8s/volume-revert never removes the {ANNOTATION} annotation. seed-volume skips its "
         "whole seed pod cycle on that key, so a reverted volume would keep claiming to be seeded."
     )
-
-
-# ---------------------------------------------------------------------------- what must not skip
 
 
 def test_the_pvc_render_is_never_short_circuited():

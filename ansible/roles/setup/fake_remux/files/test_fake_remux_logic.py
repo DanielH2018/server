@@ -14,7 +14,6 @@ NTRX_ENCODER = "Lavc61.19.101 hevc_qsv"
 NTRX_KEYFRAMES = [0.0, 10.427, 20.854, 31.281]
 
 
-# --- encoder_is_reencoder ----------------------------------------------------
 def test_encoder_flags_the_ntrx_reencode():
     assert frl.encoder_is_reencoder(NTRX_ENCODER, MARKERS) is True
 
@@ -31,7 +30,6 @@ def test_encoder_empty_or_disc_tag_is_not_a_reencoder():
     assert frl.encoder_is_reencoder("Sony BVE HDCAM", MARKERS) is False
 
 
-# --- max_keyframe_gap / gop_exceeds ------------------------------------------
 def test_gap_is_max_consecutive_keyframe_distance():
     assert frl.max_keyframe_gap(NTRX_KEYFRAMES, 40) == 10.427
 
@@ -51,7 +49,6 @@ def test_single_keyframe_in_window_means_gop_at_least_window():
     assert frl.gop_exceeds([0.0], 40, 5) is True
 
 
-# --- reencode_evidence -------------------------------------------------------
 def test_evidence_prefers_encoder_tag_over_gop():
     ev = frl.reencode_evidence(
         "Bluray-1080p Remux", NTRX_ENCODER, NTRX_KEYFRAMES, 40, 5, MARKERS
@@ -93,7 +90,6 @@ def test_2160p_reencode_labeled_remux_is_still_caught():
     assert ev is not None
 
 
-# --- remux_candidates --------------------------------------------------------
 def _episodefile(
     quality, codec, fid=1, series_id=9, path="/data/media/tv/S/S01E01.mkv"
 ):
@@ -122,7 +118,6 @@ def test_remux_candidates_selects_only_remux_qualities_with_a_path():
     assert out[0]["path"].startswith("/data/media/tv/")
 
 
-# --- select_fakes ------------------------------------------------------------
 def _probed(
     quality="Bluray-1080p Remux", encoder=None, keyframes=None, fid=1, series_id=9
 ):
@@ -159,7 +154,6 @@ def test_episode_file_map_only_monitored():
     assert frl.episode_file_map(eps) == {100: 1}
 
 
-# --- seed_ledger --------------------------------------------------------------
 def test_seed_ledger_adds_new_and_blasts_over_cap():
     fakes = [
         {
@@ -204,7 +198,6 @@ def test_seed_ledger_skips_already_seeded_and_preserves_existing_state():
     assert led["1"]["state"] == "detected"  # newly seeded
 
 
-# --- ffprobe output parsers --------------------------------------------------
 def test_parse_encoder_tag_reads_video_stream_encoder():
     # shape of `ffprobe -select_streams v:0 -show_entries stream_tags=ENCODER -of json`
     j = '{"streams":[{"tags":{"ENCODER":"Lavc61.19.101 hevc_qsv"}}]}'
@@ -223,12 +216,10 @@ def test_parse_keyframe_csv_keeps_only_keyframe_times():
     assert frl.parse_keyframe_csv(csv) == [0.0, 10.427, 20.854]
 
 
-# --- sanitize ----------------------------------------------------------------
 def test_sanitize_defuses_mentions_and_backticks():
     assert "@" not in frl.sanitize("@everyone `rm -rf`")
 
 
-# --- host_path: Sonarr's /data view -> a path an ffprobe on this host can open ----------------
 # Shared by both crons since 2026-08-08: the reconciler always probed on the host, and the scan
 # does too now that it runs on daniel-box, which has no Docker to exec into.
 

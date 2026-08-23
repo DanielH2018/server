@@ -32,9 +32,6 @@ def scalars(**overrides):
     return {**SCALARS, **overrides}
 
 
-# --- resolve ----------------------------------------------------------------
-
-
 def test_resolve_substitutes_a_known_var():
     assert g.resolve("auth{{ k8s_hostname_suffix }}", SCALARS) == "auth-k8s"
 
@@ -47,9 +44,6 @@ def test_resolve_raises_on_unknown_var():
     """Silently leaving `{{ foo }}` in place would emit a hosts entry for a bogus name."""
     with pytest.raises(KeyError):
         g.resolve("auth{{ not_a_var }}", SCALARS)
-
-
-# --- entries ----------------------------------------------------------------
 
 
 def test_docker_service_maps_to_the_server_ip():
@@ -122,9 +116,6 @@ def test_entries_are_deduplicated():
     s = scalars(**{"daniel-server:containers_list": [{"name": "n8n", "port": 5678}]})
     result = g.entries(s)
     assert len(result) == len(set(result))
-
-
-# --- against the real inventory ---------------------------------------------
 
 
 @pytest.fixture(scope="module")

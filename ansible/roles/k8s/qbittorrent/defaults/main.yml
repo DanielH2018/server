@@ -1,62 +1,44 @@
 ---
-# HELD UNTIL THE CUTOVER WINDOW, and this flag is what holds it.
-#
-# The role has to appear in containers_list — a k8s role without an inventory entry fails
-# scripts/validate_k8s_manifests.py, which is how the repo notices a role nobody deploys. But
-# daniel-box runs has_gitops: true, and the gitops deployer runs `ansible/deploy.yml`, which is a
-# plain containers_list loop. So the entry alone would stand this pod up unattended on the next
-# tick — two qbittorrents holding the same torrent state, announcing to trackers from different
-# addresses.
-#
-# Flip to true (`-e qbittorrent_k8s_enabled=true`, then in host_vars) as part of B4c, once the
-# Docker copy is stopped.
-qbittorrent_k8s_enabled: true  # flipped 2026-08-07 by B4c — the Docker copy is stopped and unmanaged
+# The switch that lets this role have an inventory entry without being deployed. The entry is
+# mandatory — a k8s role without one fails scripts/validate_k8s_manifests.py — but daniel-box
+# runs has_gitops: true and the deployer runs `ansible/deploy.yml`, a plain containers_list
+# loop, so the entry alone would stand the pod up unattended on the next tick.
+qbittorrent_k8s_enabled: true
 
-# Same tags the Docker copies run, so a behavioural difference between the two is never the image.
 # Tag KEPT alongside the digest (repo:latest@sha256) so Renovate's k8s-defaults manager still
 # tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal
 # (2026-08-13 pin).
 qbittorrent_k8s_image: lscr.io/linuxserver/qbittorrent:latest@sha256:6816d2b144b1eb97665f886e41e18a14d026ba78c9d0953fc68a1211ea819433
 qbittorrent_k8s_wireguard_image: lscr.io/linuxserver/wireguard:latest@sha256:3abfd4b82212106e357989750b9c0c9859aa511f5305a9a55c18c8de7198b655
 
-# The throwaway pod verify.yml runs to prove the tunnel's return path. It lives here rather than
-# being read from the sonarr role, which owned it until 2026-08-22: a cross-role default is only
-# in scope when that role ran in the same play, so the real value was whichever of the two the
-# play happened to load. The fallback that covered the miss was a Jinja `default()`, which
-# Renovate's k8s-defaults manager cannot see — so it sat on alpine:3.22 while every other alpine
-# pin in the tree moved to 3.24, with nothing to raise a PR about it. As a defaults key it is
-# tracked like any other image pin.
+# The throwaway pod verify.yml runs to prove the tunnel's return path. It is a defaults key
+# here rather than a cross-role read from sonarr, because a cross-role default is only in
+# scope when that role ran in the same play. The Jinja `default()` that covered the miss was
+# invisible to Renovate's k8s-defaults manager, so it sat on alpine:3.22 while every other
+# alpine pin moved to 3.24 with nothing to raise a PR about it.
 qbittorrent_k8s_probe_image: alpine:3.24
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
-# DENIED — state coupling, not missing recovery. Slice 7b task 7 promoted this role
-# (2026-08-21) on deploy mechanics alone: Recreate + RWO seed-volume PVC, now protected by
-# the pre-apply Longhorn snapshot and revert. The scope decision the same day held it back,
-# because the config volume's state is coupled to something the snapshot cannot capture: the
-# data volume (media-data, torrents/ subpath) that qbittorrent-config's bookkeeping references.
-# A revert rewinds the config volume's in-flight torrent bookkeeping while the data volume it
-# points at does not move, so the two disagree about what is actually on disk. The WireGuard
-# sidecar's kill-switch iptables living past a container restart (9h / 107 restarts,
-# 2026-08-16, killswitch-survives-container-restart.md) is a separate, still-live trap: the
-# revert does not clear it either, and that still needs deleting the pod. The snapshot and
-# revert machinery work fine here — neither trap is why this is denied.
+# DENIED for state coupling, not missing recovery. The snapshot and revert machinery work
+# fine here; the problem is that the config volume's state is coupled to something a snapshot
+# cannot capture — the data volume (media-data, torrents/ subpath) its bookkeeping references.
+# A revert rewinds in-flight torrent bookkeeping while the data volume does not move, so the
+# two disagree about what is on disk. The WireGuard kill-switch surviving a container restart
+# is a separate live trap that a revert does not clear either; see this role's CLAUDE.md.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "state coupled outside the volume — reverting qbittorrent-config to a snapshot rewinds in-flight torrent bookkeeping while the media-data volume it references does not move; the pre-apply snapshot and revert work fine and are not the blocker"  # noqa var-naming[no-role-prefix]
-# Slice 7a task 3 — the pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
-# Declared regardless of k8s_autodeploy — protects a manual deploy too.
+# The pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot. Declared
+# regardless of k8s_autodeploy — it protects a manual deploy too.
 k8s_autodeploy_snapshot_pvcs: [qbittorrent-config]  # noqa var-naming[no-role-prefix]
 
-# ── one config volume, two containers ───────────────────────────────────────────────────────
-# Reproduces the Compose file exactly: wireguard and qbittorrent both mount `./config` at
-# /config. It looks like a mistake and is not — they write different subtrees of it, and
-# splitting them would strand wg0.conf away from the mod that regenerates it.
+# One config volume, two containers: wireguard and qbittorrent both mount it at /config. It
+# looks like a mistake and is not — they write different subtrees, and splitting them would
+# strand wg0.conf away from the mod that regenerates it.
 qbittorrent_k8s_claim: qbittorrent-config
-# `longhorn` — backed up. Briefly `longhorn-nobackup` on 2026-08-08, after B2's TRANSACTION cap
-# fired twice in a week (08-02, 08-08) as slice 4 took Longhorn's daily run from 4 to 15 backups and
-# incremental backups bound bandwidth, not transactions. Returned the same day: the exclusion left
-# this volume with a single frozen 08-08 restore point, and whether steady-state incrementals are
-# actually the problem cannot be read off anything Longhorn or B2 expose. So it is being tested
-# rather than assumed, with B2 Reachable as the readout. docs/b2-transaction-cap-monitoring-gaps.md.
+# Backed up. Excluding it was tried and reverted the same day: the exclusion left this volume
+# with a single frozen restore point, and whether steady-state incrementals actually drive
+# B2's transaction cap cannot be read off anything Longhorn or B2 expose. So it is being
+# tested rather than assumed — docs/b2-transaction-cap-monitoring-gaps.md.
 qbittorrent_k8s_storage_class: longhorn
 qbittorrent_k8s_size: 1Gi
 qbittorrent_k8s_source_path: /home/ubuntu/server/containers/qbittorrent/config
@@ -101,8 +83,6 @@ qbittorrent_k8s_lan_networks: "192.168.0.0/24,{{ lan_subnet }},172.16.0.0/12,10.
 # exactly this (ansible/tests/test_k8s_manifests.py).
 qbittorrent_k8s_secret_mount: /mullvad
 
-# Mirrors resources('1.0', '256M', '0.05', '32M') for wireguard and
-# resources('2.0', '2048M', '0.10', '256M') for qbittorrent in the compose template.
 qbittorrent_k8s_wg_cpu_limit: "1"
 qbittorrent_k8s_wg_mem_limit: 256Mi
 qbittorrent_k8s_wg_cpu_request: "50m"

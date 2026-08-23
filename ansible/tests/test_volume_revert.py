@@ -269,9 +269,6 @@ def _body_with_prose(task: dict) -> str:
     return yaml.safe_dump({key: value for key, value in task.items() if key != "name"})
 
 
-# --------------------------------------------------------------------------------- ordering
-
-
 def test_the_revert_asserts_the_frontend_is_disabled_before_reverting() -> None:
     """Measured 2026-08-21: a revert with the frontend enabled returns HTTP 500 `failed to
     revert snapshot for volume ... with frontend enabled`. The assert is the precondition, not
@@ -415,9 +412,6 @@ def test_the_api_resolve_names_the_resolve_entry_point() -> None:
     assert include["tasks_from"] == "resolve.yml"
 
 
-# ------------------------------------------------------------------------- the API calls
-
-
 def test_neither_attach_nor_detach_sends_an_attachment_id() -> None:
     """The two calls pair on the attachment ticket's key, and the key is the empty string.
 
@@ -472,9 +466,6 @@ def test_the_post_revert_detach_is_verified_by_state() -> None:
     assert "failed_when: false" not in dumped
     assert "ignore_errors" not in dumped
     assert task["until"].strip().endswith("== 'detached'")
-
-
-# ------------------------------------------------------------------- guards and mechanics
 
 
 def test_every_mutation_is_guarded_on_k8s_no_mutate() -> None:
@@ -637,9 +628,6 @@ def test_the_role_is_absent_from_the_dry_run_refusal_list() -> None:
         (_REPO / "ansible/inventory/group_vars/all.yml").read_text()
     )["k8s_dry_run_unsupported"]
     assert "volume-revert" not in listed
-
-
-# ------------------------------------------------------------------ the snapshot selection
 
 
 def _selection(
@@ -836,9 +824,6 @@ def test_the_sha_shape_is_checked_against_the_hex_it_must_be() -> None:
     assert not compiled.match("ABC12345")
 
 
-# ---------------------------------------------------------------------------- the seam
-
-
 def test_the_listing_jsonpath_parses() -> None:
     """The synthetic listings above are worth something only if the real command produces that
     shape. Run the role's own argv against the live API server.
@@ -880,9 +865,6 @@ def test_the_revert_body_matches_the_servers_own_schema() -> None:
     assert task["body"]["name"] == "{{ volume_revert_snapshot }}"
     assert task["body_format"] == "json"
     assert json.dumps(task["body"])  # the body must be JSON-serialisable as written
-
-
-# ------------------------------------------------- the invariant that makes the design safe
 
 
 def _snapshot_roles() -> dict[str, list[str]]:
@@ -937,9 +919,6 @@ def test_every_snapshot_role_restores_its_own_replicas() -> None:
                 f"{role}'s Deployment has replicas={replicas!r}. It must be an explicit count "
                 f"of at least one: the apply after a revert is what brings the workload back."
             )
-
-
-# ------------------------------------------------------------------- the manifests call site
 
 
 def test_the_revert_runs_after_the_snapshot_and_before_the_apply() -> None:

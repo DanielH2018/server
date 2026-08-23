@@ -233,7 +233,7 @@
          and (volume_snapshot_ready.stdout | default('') | split('|') | last) != 'true'
          and (volume_snapshot_volume_state.stdout | default('') | trim) != 'attached' }}
 
-# --------------------------------------------------- the maintenance-mode attach (slice 7b)
+# the maintenance-mode attach (slice 7b)
 #
 # 7a stopped here and warned: a detached volume has no running engine, so the snapshot above
 # could not complete. 7b reuses k8s/longhorn-api and the maintenance-mode attach k8s/volume-revert
@@ -578,7 +578,7 @@
       Stopping before the apply: {{ volume_snapshot_service }} would be deployed with no way
       back.
 
-# ------------------------------------------------------------------------------------ pruning
+# pruning
 #
 # Guarded as a whole, not just at the delete. Under a no-mutation run the snapshot above was
 # never taken, so a prune computed from the live list would be counting a retention window that
