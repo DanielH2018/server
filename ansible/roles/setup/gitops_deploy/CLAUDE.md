@@ -30,7 +30,8 @@ Two things make the plain `systemctl start` awkward, and the wrapper exists for 
 - **`Type=oneshot` + `TimeoutStartSec=45min`.** A blocking start returns only when the tick
   finishes, which reads as a hang to anything with less patience. The wrapper starts with
   `--no-block`, waits on its own budget, then prints the journal for that run and exits with
-  its status (75 = still running, the script stopped watching).
+  its status (75 = still running, the script stopped watching; 3 = the tick was skipped for
+  lock contention, nothing deployed and nothing alerted).
 
 An **uneventful tick logs nothing** — the deployer prints only on a deferral, an alert or a
 real deploy — so the journal alone renders a healthy run as `-- No entries --`, which reads
@@ -326,18 +327,30 @@ eligibility, the CI gate, rollback). Run via the repo pytest hook
 Do not wrap `initial_setup.yml --tags gitops_deploy` in
 `flock /var/lock/server-git-tree.lock`. "Run gitops-deploy once" is a handler
 (`handlers/main.yml:11`), notified by five tasks in `tasks/main.yml`, and it invokes the
-deployer, whose systemd ExecStart is `flock -w 180 /var/lock/server-git-tree.lock …`.
-Holding the lock from outside makes the smoke run wait its full 180s, then fail the play.
+deployer, whose systemd ExecStart is
+`flock -w 180 -E 75 /var/lock/server-git-tree.lock …`. Holding the lock from outside makes the
+smoke run wait its full 180s and deploy nothing.
 
-Observed 2026-08-20 clearing a broad-change park: `PLAY RECAP … changed=2 failed=1`, with
-`gitops_deploy : Run gitops-deploy once` timing at **180.30s** — the flock wait, not a slow
-task. The config had already rendered, so only the smoke run failed. Re-running with no
-outer flock succeeded (`ok=10 changed=0 failed=0`).
+**Since 2026-08-23 that failure is silent.** `-E 75` plus `SuccessExitStatus=75`
+(`gitops-deploy.service.j2:75`) make systemd report the unit `Result=success`, so
+`handlers/main.yml:11-16`'s `ansible.builtin.systemd: state: started` returns rc 0 and the play
+recaps green. Nothing deployed, `last_run` untouched, no Discord message (the webhook belongs to
+the deployer, which never started), no `OnFailure`. The first alert of any kind is GitOps-Alive,
+once `last_run` ages past `GITOPS_MAX_AGE_S` — up to 90 minutes later (`check.py:148`). The one
+immediate signal is the unit's `ExecStopPost` marker in the journal, `tick skipped (lock
+contention)`, which `scripts/gitops_tick.sh` also reads to exit 3.
+
+Observed 2026-08-20, *before* that change, when contention still failed the play:
+`PLAY RECAP … changed=2 failed=1`, with `gitops_deploy : Run gitops-deploy once` timing at
+**180.30s** — the flock wait, not a slow task. The config had already rendered, so only the smoke
+run failed. Re-running with no outer flock succeeded (`ok=10 changed=0 failed=0`). That recap is
+kept as the empirical proof of the mechanism: a non-zero flock exit did propagate, which is
+exactly why a zero one now yields `ok`.
 
 Run it unlocked. The deployer takes the lock itself, which is what serializes it against the
-30-minute timer; the outer flock adds nothing and converts serialization into deadlock. This
-is a counter-example to the repo-root `CLAUDE.md` guidance that a deploy should take the tree
-lock, and it applies to any role whose tasks re-enter a lock-taking command.
+30-minute timer; the outer flock adds nothing and converts serialization into a silent no-op.
+This is a counter-example to the repo-root `CLAUDE.md` guidance that a deploy should take the
+tree lock, and it applies to any role whose tasks re-enter a lock-taking command.
 
 Because the smoke run is a handler, it fires only when something changed. A no-op run
 (`changed=0`) never invokes the deployer and cannot deadlock however it is wrapped —
@@ -529,14 +542,25 @@ flat) without crossing it.** `ExecStart` wraps the whole run in `flock -w 180
 secret-rotate cron take. In the pathological case (a stalled forward deploy followed by a
 stalled rollback), this unit can hold that lock for up to 2220s (900 + 1320, excluding its own
 flock wait) — past the 30-minute (1800s) timer interval. A concurrent `./scripts/deploy.sh`
-during that window waits its own `-w 180` and then returns **exit 75** (nothing deployed, not a
-playbook failure — see the root CLAUDE.md); the secret-rotate cron waits on the same lock rather
-than failing outright, which is true only because its `flock -w` is 2700s and so clears that
-2220s hold. It was 1200s until 2026-08-22, at which point this paragraph was wrong in the
-direction that matters: the cron gave up mid-incident and skipped that week's rotation, with no
-retry until the next weekly tick. Neither is silently wrong — both correctly report "the lock stayed busy"
-— but an operator seeing exit 75 during this window should check whether gitops-deploy is mid
-double-timeout before assuming the lock is stuck.
+during that window waits `LOCK_WAIT=2700` (`deploy.sh:57`, used at `:286`) — **not** the unit's
+own `-w 180`, which governs only the deployer — so it **outlasts the 2220s hold and then
+deploys**, rather than returning exit 75. It returns exit 75 only if the lock stays busy past
+the full 2700s. The secret-rotate cron waits on the same lock rather than failing outright,
+which is true only because its `flock -w` is likewise 2700s and so clears that 2220s hold. The
+cron's was 1200s until 2026-08-22, at which point this paragraph was wrong in the direction that
+matters: the cron gave up mid-incident and skipped that week's rotation, with no retry until the
+next weekly tick.
+
+Both 2700s waits are derived from the same two timeouts and are machine-pinned against them —
+`files/test_gitops_discord_contract.py`, `test_secret_rotate_lock_wait_clears_the_deployers_worst_case_hold`
+and `test_deploy_sh_lock_wait_clears_the_deployers_worst_case_hold`. Raising either
+`gitops_deploy_k8s_timeout_s` or `gitops_deploy_k8s_rollback_timeout_s` fails those tests rather
+than silently shortening an operator's wait, which is how `deploy.sh`'s copy rotted once already
+(it sat at 1500 through two `TimeoutStartSec` bumps).
+
+Neither wait is silently wrong — both correctly report "the lock stayed busy" — but an operator
+seeing exit 75 during this window should check whether gitops-deploy is mid double-timeout before
+assuming the lock is stuck.
 
 **Consequence for the operator: a pathological double-timeout run can overrun the 30-minute
 timer tick — verified live against the real unit, not inferred from the man page alone.**

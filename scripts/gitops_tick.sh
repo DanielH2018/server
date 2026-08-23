@@ -27,6 +27,12 @@
 #   0   the tick ran to completion (which includes a healthy noop / deferral)
 #   1   the tick failed — the unit exited non-zero, or it could not be started
 #   2   the unit is not installed on this host (has_gitops is false here)
+#   3   the tick was skipped for lock contention — the unit's `flock -E 75` fired and
+#       `SuccessExitStatus=75` makes systemd call that a success. Nothing deployed,
+#       nothing failed, and nothing alerted. Detected from the unit's ExecStopPost
+#       journal marker, not from the exit code, which systemd discards when a oneshot
+#       unit goes inactive. NOT 75: this script already uses 75 for its own wait
+#       budget, and the two mean opposite things about the run.
 #   75  the wait budget elapsed while the run was still in flight (nothing is wrong
 #       with the run; only this script gave up watching). Matches deploy.sh's use of
 #       75 for "we backed off, no verdict".
@@ -34,6 +40,12 @@ set -euo pipefail
 
 UNIT="gitops-deploy.service"
 WAIT_S=540
+
+# Emitted by the unit's ExecStopPost when `flock -E 75` fired. Must stay identical to the
+# phrase in roles/setup/gitops_deploy/templates/gitops-deploy.service.j2 — the exit code is
+# unreadable after a oneshot unit goes inactive, so this string is the whole signal.
+# ansible/tests/test_gitops_manual_trigger.py asserts the two match.
+CONTENTION_MARKER="tick skipped (lock contention)"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -46,7 +58,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     -h | --help)
-      sed -n '2,32p' "$0"
+      awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"
       exit 0
       ;;
     *)
@@ -146,6 +158,25 @@ fi
 result="$(show Result)"
 status="$(show ExecMainStatus)"
 echo
+
+# Contention is checked BEFORE the success gate, and by journal marker rather than exit code.
+# The unit sets `flock -E 75` + SuccessExitStatus=75, so contention leaves the unit successful
+# and never `failed`. The exit code itself is not recoverable afterwards: gitops-deploy.service
+# is Type=oneshot with no RemainAfterExit, and systemd resets ExecMainStatus to 0 once such a
+# unit goes inactive (measured 2026-08-23, systemd 255.4). So a contention tick and a real
+# deploy both read back `Result=success ExecMainStatus=0`, and only the unit's ExecStopPost
+# marker distinguishes them. A genuinely failed unit is different — it stays in `failed`, which
+# is why the branch below can still trust $status.
+if journalctl -u "$UNIT" --since "$since" --no-pager 2>/dev/null |
+  grep -qF "$CONTENTION_MARKER"; then
+  echo "Tick did not run: another holder had /var/lock/server-git-tree.lock for the"
+  echo "unit's full flock wait. Nothing was deployed and last_run is untouched."
+  echo "No alert fires for this — OnFailure cannot fire on a unit systemd considers"
+  echo "successful, and GitOps-Alive only pages once last_run passes GITOPS_MAX_AGE_S"
+  echo "(90 min). Re-run once the other deploy or secret-rotate cron finishes."
+  exit 3
+fi
+
 if [[ "$result" == "success" && "$status" == "0" ]]; then
   echo "Tick completed (Result=$result, exit=$status)."
   echo "A noop or a deferral (dirty tree, ci_pending, hold) also completes successfully —"

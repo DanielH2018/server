@@ -82,3 +82,23 @@ SuccessExitStatus=75
 ExecStart=/usr/bin/flock -w 180 -E 75 /var/lock/server-git-tree.lock /usr/local/bin/uv run --no-project --python {{ host_python_version }} /opt/gitops-deploy/gitops_deploy.py
 # SOPS age key is already in the user's home; filter plugins auto-load next to
 # ansible/deploy.yml, so no ANSIBLE_CONFIG is needed.
+
+# 2026-08-23b review M12. SuccessExitStatus=75 above is the right call, but it also removed the
+# last on-host trace of contention: a 75 tick logs only "Deactivated successfully" at info, and
+# initial_setup/tasks/system-tuning.yml:27-28 sets MaxLevelStore=notice AND MaxLevelSyslog=notice
+# — so that line reaches neither the journal nor /var/log/syslog, and therefore never reaches
+# Loki's job="syslog" stream either. ExecStopPost= is the only hook that sees $EXIT_STATUS
+# (ExecStartPost= genuinely cannot), and SyslogLevel=notice above puts this line at PRIORITY=5,
+# above both caps. This restores the forensic record without re-arming the false OnFailure pages
+# the DECIDED block above rejects — the unit still succeeds and OnFailure still cannot fire.
+# `|| true` matters: a non-zero ExecStopPost would itself fail the unit.
+#
+# The marker text is a contract, not a log line: this unit is Type=oneshot with no
+# RemainAfterExit, and systemd RESETS ExecMainStatus to 0 once such a unit goes inactive —
+# measured 2026-08-23 on systemd 255.4, where a control unit exiting 75 read back
+# `Result=success ExecMainStatus=0` after completing. (A *failed* unit keeps its code, because
+# it stays in `failed` until reset-failed.) So after a contention tick the 75 is genuinely
+# unreadable from `systemctl show`, and this line is the only durable record of it.
+# scripts/gitops_tick.sh greps for the parenthesised phrase; ansible/tests/
+# test_gitops_manual_trigger.py pins the two together. Do not reword it in isolation.
+ExecStopPost=/bin/sh -c 'test "$EXIT_STATUS" = 75 && echo "gitops-deploy: tick skipped (lock contention) — /var/lock/server-git-tree.lock was held for the full flock wait; nothing deployed, last_run untouched" || true'
