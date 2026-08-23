@@ -30,30 +30,22 @@ Three things can silently break that, and none of them fails a deploy:
 
 from __future__ import annotations
 
-from pathlib import Path
 
-import yaml
+from _helpers import REPO as _REPO
+from _helpers import load_tasks, load_yaml
+from _helpers import command_of as _cmd
 
-_REPO = Path(__file__).resolve().parents[2]
+
 _ROLE = _REPO / "ansible/roles/k8s/claude-otel"
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests"
 
 
 def _tasks() -> list[dict]:
-    return yaml.safe_load((_ROLE / "tasks" / "main.yml").read_text()) or []
+    return load_tasks(_ROLE / "tasks" / "main.yml")
 
 
 def _defaults() -> dict:
-    return yaml.safe_load((_ROLE / "defaults" / "main.yml").read_text()) or {}
-
-
-def _cmd(task: dict) -> str:
-    module = task.get("ansible.builtin.command")
-    if isinstance(module, dict):
-        return str(module.get("cmd", ""))
-    if isinstance(module, str):
-        return module
-    return ""
+    return load_yaml(_ROLE / "defaults" / "main.yml") or {}
 
 
 def _index_of(predicate) -> int:

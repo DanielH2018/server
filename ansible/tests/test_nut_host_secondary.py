@@ -23,11 +23,10 @@ that never fires — indistinguishable from a working one until the power cut it
 Run: uv run pytest ansible/tests/test_nut_host_secondary.py
 """
 
-from pathlib import Path
-
 import yaml
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
+
 ROLE = ANSIBLE / "roles" / "nut_host"
 TASKS = (ROLE / "tasks" / "main.yml").read_text()
 UPSMON = (ROLE / "templates" / "host-upsmon.conf.j2").read_text()

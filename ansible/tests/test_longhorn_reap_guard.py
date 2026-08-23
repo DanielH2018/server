@@ -20,8 +20,9 @@ Run: uv run pytest ansible/tests/test_longhorn_reap_guard.py
 
 import re
 from pathlib import Path
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
+
 K3S_TEMPLATES = ANSIBLE / "roles" / "setup" / "k3s" / "templates"
 REAPER = K3S_TEMPLATES / "longhorn-reap-orphan-backups.sh.j2"
 

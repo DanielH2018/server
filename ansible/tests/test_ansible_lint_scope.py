@@ -24,11 +24,9 @@ import fnmatch
 import re
 import subprocess
 import tomllib
-from pathlib import Path
 
 import yaml
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from _helpers import REPO as REPO_ROOT
 
 
 def _ansible_lint_hook() -> dict:

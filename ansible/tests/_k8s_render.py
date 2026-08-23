@@ -36,7 +36,7 @@ from validate_k8s_manifests import (  # noqa: E402 — needs the path insert abo
 )
 
 
-def rendered_docs():
+def _render_all():
     """(role, template name, parsed doc) for every manifest the validator would render.
 
     Raises on a render failure rather than skipping it — a template that stopped rendering
@@ -64,3 +64,24 @@ def rendered_docs():
             for doc in yaml.safe_load_all(rendered):
                 if isinstance(doc, dict) and doc.get("kind"):
                     yield role, tpl.name, doc
+
+
+_CACHE: tuple | None = None
+
+
+def rendered_docs():
+    """The rendered manifests, rendering the tree at most once per process.
+
+    A full render costs ~0.95s and 22 call sites across 13 modules used to each pay it — 43
+    renders and 42s of a 196s suite, measured 2026-08-23. The render is a pure function of the
+    repo tree, which no test writes to, so one result serves the whole session.
+
+    # DECIDED: shared docs, not deep copies. Every call site iterates and asserts; none mutates
+    # a doc, and copying 323 dicts per call would spend a slice of what the cache saves. A test
+    # that needs to mutate one must copy it itself — mutating in place corrupts every later
+    # test in the same worker.
+    """
+    global _CACHE
+    if _CACHE is None:
+        _CACHE = tuple(_render_all())
+    return iter(_CACHE)

@@ -26,22 +26,23 @@ Run: uv run pytest ansible/tests/test_k3s_control_plane_hardening.py
 """
 
 import re
-from pathlib import Path
 
 import jinja2
 import yaml
+from _helpers import ANSIBLE
+from _helpers import load_yaml
 
-ANSIBLE = Path(__file__).resolve().parents[1]
+
 K3S = ANSIBLE / "roles" / "setup" / "k3s"
 ALL_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
 
 
 def _defaults() -> dict:
-    return yaml.safe_load((K3S / "defaults" / "main.yml").read_text())
+    return load_yaml(K3S / "defaults" / "main.yml")
 
 
 def _all_vars() -> dict:
-    return yaml.safe_load(ALL_VARS.read_text())
+    return load_yaml(ALL_VARS)
 
 
 def _env() -> jinja2.Environment:

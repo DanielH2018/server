@@ -45,8 +45,11 @@ from _k8s_render import rendered_docs
 from ansible.plugins.filter.core import FilterModule
 from ansible.plugins.test.core import TestModule as _AnsibleTests
 from jinja2.nativetypes import NativeEnvironment
+from _helpers import REPO as _REPO
+from _helpers import load_tasks as _tasks
+from _helpers import task_named
 
-_REPO = Path(__file__).resolve().parents[2]
+
 _ROLE = _REPO / "ansible/roles/k8s/volume-revert"
 _CLAIM = _ROLE / "tasks/claim.yml"
 _MAIN = _ROLE / "tasks/main.yml"
@@ -55,10 +58,6 @@ _VALIDATOR = _REPO / "scripts/validate_k8s_manifests.py"
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
 
 _GUARD = "not (k8s_no_mutate | bool)"
-
-
-def _tasks(path: Path) -> list[dict]:
-    return yaml.safe_load(path.read_text()) or []
 
 
 def _iter_task_dicts(path: Path) -> list[dict]:
@@ -70,13 +69,7 @@ def _task_names(path: Path) -> list[str]:
 
 
 def _named(path: Path, fragment: str) -> dict:
-    for task in _tasks(path):
-        if fragment in str(task.get("name", "")):
-            return task
-    raise AssertionError(
-        f"no task in {path.name} whose name contains {fragment!r} — the task was renamed or "
-        f"removed, and these tests would otherwise silently check nothing."
-    )
+    return task_named(_tasks(path), fragment)
 
 
 def _index(names: list[str], fragment: str) -> int:

@@ -23,9 +23,9 @@ Scope is also asserted: the rule covers this one unit and only the `start` verb.
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from _helpers import REPO as _REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+
 _ROLE = _REPO / "ansible/roles/setup/gitops_deploy"
 _RULE = _ROLE / "templates/50-gitops-deploy.rules.j2"
 _TASKS = _ROLE / "tasks/main.yml"

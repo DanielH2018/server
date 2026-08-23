@@ -37,8 +37,8 @@ import pytest
 import yaml
 
 from _k8s_render import rendered_docs
+from _helpers import HOST_VARS
 
-HOST_VARS = Path(__file__).resolve().parents[1] / "inventory" / "host_vars"
 
 # A role may render a Traefik CRD before traefik itself ONLY with a reason recorded here.
 # Deliberately a written note rather than a bare set: the whole failure mode this file

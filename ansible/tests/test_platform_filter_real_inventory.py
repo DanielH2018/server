@@ -13,14 +13,11 @@ gaining `platform: k8s`, which is exactly what the assertions check for.
 Run: uv run pytest ansible/tests/test_platform_filter_real_inventory.py
 """
 
-from pathlib import Path
-
 import pytest
 import yaml
 
 from toposort import filter_by_platform
-
-HOST_VARS = Path(__file__).resolve().parents[1] / "inventory" / "host_vars"
+from _helpers import HOST_VARS
 
 
 def _host_var_files():

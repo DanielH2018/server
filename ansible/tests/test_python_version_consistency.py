@@ -7,9 +7,9 @@ copied into policy code and fixtures" anti-pattern). Fails the instant any copy 
 """
 
 import re
-from pathlib import Path
+from _helpers import REPO
 
-REPO = Path(__file__).resolve().parents[2]
+
 PYTHON_VERSION_FILE = REPO / ".python-version"
 PYPROJECT = REPO / "pyproject.toml"
 WORKFLOWS = REPO / ".github/workflows"

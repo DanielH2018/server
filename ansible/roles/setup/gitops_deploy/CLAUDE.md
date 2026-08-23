@@ -240,7 +240,7 @@ stay).
     above it, which disarms the feature. Six services were added to the denylist in the same commit
     (qbittorrent/bazarr/tdarr, livesync, valheim, valheim-stats): each matched a published exclusion
     class already, and was outside the list only because the pilot made the list non-binding.
-    `ansible/tests/test_k8s_autodeploy_guard.py` now enforces the three role shapes that must never
+    The `ansible/tests/test_k8s_autodeploy_*.py` family now enforces the three role shapes that must never
     be eligible — a rendered Deployment whose name isn't in the gated set (a role gating a second
     Deployment by name via `manifests_extra_rollouts` is fine; a name that can't be resolved
     statically counts as ungated), `manifests_rollout: ''`, and a gated Deployment with no
@@ -311,10 +311,13 @@ stay).
 to drive the GitOps-Alive Uptime-Kuma monitor — no Kuma pushing from the deployer.
 
 ## Logic tests
-`files/test_deploy_logic.py` covers path→service mapping, the next-action decision, and
-`container_names()` (the health gate inspects every `container_name:` in the changed
-service's rendered compose — a role often runs several containers and the bumped image's
-container is usually not the role-named one). Run via the repo pytest hook
+`files/test_deploy_logic*.py` covers `deploy_logic.py`, split by which decision each group is
+about: `_diff` (path→service mapping), `_git` (the next-action decision, divergence, and
+`container_names()` — the health gate inspects every `container_name:` in the changed service's
+rendered compose, since a role often runs several containers and the bumped image's container is
+usually not the role-named one), `_health` (health gating and the Discord queue), `_inventory`
+(declared services and platform routing), and `test_deploy_logic.py` itself (auto-deploy
+eligibility, the CI gate, rollback). Run via the repo pytest hook
 (`uv run pytest ansible/roles/setup/gitops_deploy/files`).
 
 ## Traps
@@ -384,9 +387,9 @@ A set difference tells you what diverged, never why, so a remediation inferred f
 direction is a guess. On a pull-based host origin is the source of truth, so the re-render is
 the right lead in both directions and the push case belongs as a secondary check. Fixed in
 `7f5f629b`. The alert-direction logic lives in `gitops_deploy.py`'s `main()`, which no test
-imports — `test_deploy_logic.py` covers only `deploy_logic.py`.
+imports — the `test_deploy_logic*.py` family covers only `deploy_logic.py`.
 
-The same file also covers `deploy_k8s()` and the two `deploy_k8s()` call sites inside `main()`.
+`test_deploy_logic.py` itself also covers `deploy_k8s()` and its two call sites inside `main()`.
 `gitops_deploy.py` can't be imported the normal way in CI (`C = cfg()` reads
 `/etc/gitops-deploy/config.env` at module level, which doesn't exist there) — it stubs
 `host_lib.parse_env_file` with canned values before the one import, so it works the same in CI

@@ -37,8 +37,9 @@ import re
 from pathlib import Path
 
 import yaml
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
+
 _SKIP_DIRS = {"collections"}  # vendored third-party, not ours to fix
 
 # A `jsonpath=` argument that is NOT immediately single-quoted but contains a double quote

@@ -33,8 +33,10 @@ import re
 from pathlib import Path
 
 import yaml
+from _helpers import ANSIBLE
+from _helpers import load_yaml
 
-ANSIBLE = Path(__file__).resolve().parents[1]
+
 K3S = ANSIBLE / "roles" / "setup" / "k3s"
 DRILL = K3S / "templates" / "longhorn-restore-drill.sh.j2"
 HEALTH = K3S / "templates" / "longhorn-backup-health.sh.j2"
@@ -301,7 +303,7 @@ def test_check_seven_pages_below_backup_failure_severity() -> None:
 
 
 def _tasks():
-    docs = yaml.safe_load(CRONS.read_text())
+    docs = load_yaml(CRONS)
     return docs if isinstance(docs, list) else []
 
 

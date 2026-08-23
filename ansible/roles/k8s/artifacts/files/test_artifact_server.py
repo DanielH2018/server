@@ -429,7 +429,12 @@ class TestServing:
         monkeypatch.setattr(srv, "ROOT", root)
         srv.Handler.cache = srv.IndexCache(root)
         server = ThreadingHTTPServer(("127.0.0.1", 0), srv.Handler)
-        threading.Thread(target=server.serve_forever, daemon=True).start()
+        # shutdown() blocks until serve_forever notices, which it does once per poll interval —
+        # 0.5s by default, paid by every test in this class as teardown. Each test still gets
+        # its own server, because each mutates its own `root`.
+        threading.Thread(
+            target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True
+        ).start()
         conn = HTTPConnection("127.0.0.1", server.server_address[1])
         yield conn
         conn.close()

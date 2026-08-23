@@ -10,9 +10,14 @@ two edits met in a rebase.
 Run: uv run pytest scripts/test_validate_k8s_manifests.py
 """
 
+import contextlib
 import importlib.util
+import io
 import os
 import re
+
+import pytest
+
 
 _MOD = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "validate_k8s_manifests.py"
@@ -168,12 +173,30 @@ spec:
     assert sorted(vkm.find_claim_name_refs(doc)) == ["claim-a", "claim-b"]
 
 
-def test_real_tree_has_no_unresolved_claim_name(capsys):
+@pytest.fixture(scope="module")
+def real_tree_run():
+    """Run the validator over the real tree once, and hand back its exit code and stderr.
+
+    A full run renders every k8s role and costs ~3.8s. Two guards below assert on different
+    parts of the same run's stderr, and each used to pay for its own — the run is a pure
+    function of the repo tree, so one serves both.
+
+    # DECIDED: redirect_stderr, not capsys. capsys is function-scoped and pytest refuses to
+    # inject it into a module-scoped fixture; main() writes with print(file=sys.stderr), which
+    # redirect_stderr captures because it rebinds sys.stderr at call time.
+    """
+    buf = io.StringIO()
+    with contextlib.redirect_stderr(buf):
+        rc = vkm.main()
+    return rc, buf.getvalue()
+
+
+def test_real_tree_has_no_unresolved_claim_name(real_tree_run):
     # The actual regression guard: every claimName across the real k8s roles must resolve
     # against a rendered PVC (or a seed-volume-backed one) — a brand-new service naming a PVC
     # that was never wired up must show here, since nothing else in the tree checks this.
-    assert vkm.main() == 0
-    err = capsys.readouterr().err
+    rc, err = real_tree_run
+    assert rc == 0
     assert "matches no rendered PersistentVolumeClaim" not in err
 
 
@@ -297,8 +320,9 @@ def test_schema_version_matches_the_cluster():
     )
 
 
-def test_real_tree_passes_the_schema(capsys):
+def test_real_tree_passes_the_schema(real_tree_run):
     # The regression guard: no rendered object in the tree fails its schema. Paired with
     # main()'s own exit code so a new failure cannot hide behind a passing older check.
-    assert vkm.main() == 0
-    assert "fails the v" not in capsys.readouterr().err
+    rc, err = real_tree_run
+    assert rc == 0
+    assert "fails the v" not in err

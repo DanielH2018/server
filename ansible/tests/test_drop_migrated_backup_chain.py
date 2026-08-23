@@ -18,16 +18,15 @@ that looks like a simplification.
 Run: uv run pytest ansible/tests/test_drop_migrated_backup_chain.py
 """
 
-from pathlib import Path
+from _helpers import ANSIBLE
+from _helpers import load_yaml
 
-import yaml
 
-ANSIBLE = Path(__file__).resolve().parents[1]
 PLAY = ANSIBLE / "drop_migrated_backup_chain.yml"
 
 
 def _tasks() -> list:
-    return yaml.safe_load(PLAY.read_text())[0]["tasks"]
+    return load_yaml(PLAY)[0]["tasks"]
 
 
 def _names() -> list[str]:

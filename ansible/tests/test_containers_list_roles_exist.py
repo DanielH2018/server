@@ -14,12 +14,11 @@ role that only survives there is unreachable and counts as missing.
 Run: uv run pytest ansible/tests/test_containers_list_roles_exist.py
 """
 
-from pathlib import Path
-
 import pytest
 import yaml
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
+
 HOST_VARS = ANSIBLE / "inventory" / "host_vars"
 DOCKER_ROLES = ANSIBLE / "roles" / "containers"
 K8S_ROLES = ANSIBLE / "roles" / "k8s"

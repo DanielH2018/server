@@ -28,8 +28,8 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from _helpers import REPO as _REPO_ROOT
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 _K3S_STUB = """#!/bin/sh
 case "$*" in

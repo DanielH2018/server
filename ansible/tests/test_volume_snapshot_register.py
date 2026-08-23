@@ -29,8 +29,8 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from _helpers import REPO as _REPO_ROOT
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # The stub stands in for `k3s kubectl`. It answers each call this role makes, and it learns the
 # snapshot's name from the `apply` it receives on stdin rather than guessing it — the name

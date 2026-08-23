@@ -35,7 +35,7 @@ imperatively from the CronJob — `kubectl create job <name>-deploy-gate --from=
 which copies the CronJob's pod template exactly, so the run exercises the same image, the same
 config and the same volumes the schedule will.
 
-`ansible/tests/test_k8s_autodeploy_guard.py` knows about this role: a role that renders a
+`ansible/tests/test_k8s_autodeploy_batch_gates.py` knows about this role: a role that renders a
 CronJob and includes `k8s/cronjob-gate` with a matching `cronjob_gate_name` counts as gating
 that workload, and is therefore allowed to declare `k8s_autodeploy: true`.
 

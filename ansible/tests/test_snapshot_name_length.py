@@ -35,13 +35,13 @@ Run: uv run pytest ansible/tests/test_snapshot_name_length.py
 """
 
 import re
-from pathlib import Path
 
 import pytest
 import yaml
 from ansible.template import Templar, trust_as_template
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
+
 K8S_ROLES = ANSIBLE / "roles" / "k8s"
 SNAPSHOT = K8S_ROLES / "volume-snapshot" / "tasks" / "claim.yml"
 REVERT = K8S_ROLES / "volume-revert" / "tasks" / "claim.yml"

@@ -62,6 +62,8 @@ from pathlib import Path
 import pytest
 import yaml
 from jinja2.nativetypes import NativeEnvironment
+from _helpers import load_tasks, load_yaml
+from _helpers import task_named
 
 _ROLE = Path(__file__).resolve().parents[2] / "ansible/roles/k8s/cronjob-gate"
 _READ = "Read the container states of the failed gate run"
@@ -72,21 +74,15 @@ _FAIL = "Fail on a gate run whose container never started"
 
 
 def _tasks() -> list[dict]:
-    return yaml.safe_load((_ROLE / "tasks/main.yml").read_text()) or []
+    return load_tasks(_ROLE / "tasks/main.yml")
 
 
 def _task(fragment: str) -> dict:
-    for task in _tasks():
-        if fragment in str(task.get("name", "")):
-            return task
-    raise AssertionError(
-        f"no task in cronjob-gate whose name contains {fragment!r} — the role was renamed or "
-        "restructured, and these tests would otherwise assert nothing"
-    )
+    return task_named(_tasks(), fragment)
 
 
 def _defaults() -> dict:
-    return yaml.safe_load((_ROLE / "defaults/main.yml").read_text()) or {}
+    return load_yaml(_ROLE / "defaults/main.yml") or {}
 
 
 def _classify(stdout_lines: list[str]) -> dict:

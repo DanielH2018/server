@@ -26,12 +26,14 @@ from pathlib import Path
 
 import yaml
 
-ANSIBLE = Path(__file__).resolve().parents[1]
-K3S = ANSIBLE / "roles" / "setup" / "k3s"
+from _helpers import SETUP_ROLES, leaf_tasks
+from _helpers import load_yaml
+
+K3S = SETUP_ROLES / "k3s"
 
 
 def _defaults() -> dict:
-    return yaml.safe_load((K3S / "defaults" / "main.yml").read_text())
+    return load_yaml(K3S / "defaults" / "main.yml")
 
 
 # main.yml became a list of import_tasks in the 2026-08-15 split, so expand the imports —
@@ -52,31 +54,11 @@ def _task_text() -> str:
     return "\n".join(p.read_text() for p in _imported_files())
 
 
-def _flatten(entries) -> list[dict]:
-    """Tasks in run order, descending into block/rescue/always.
-
-    The walk was flat until 2026-08-15, which made it blind to anything nested: kubeconfig.yml
-    and longhorn.yml both use `block:`, so tasks inside them were invisible here — including,
-    potentially, the k3s-install.sh task these assertions are built around.
-    """
-    out: list[dict] = []
-    for entry in entries or []:
-        if not isinstance(entry, dict):
-            continue
-        nested = [entry.get(k) for k in ("block", "rescue", "always") if entry.get(k)]
-        if nested:
-            for section in nested:
-                out += _flatten(section)
-        else:
-            out.append(entry)
-    return out
-
-
 def _tasks() -> list[dict]:
     tasks: list[dict] = []
     for path in _imported_files():
         loaded = yaml.safe_load(path.read_text()) or []
-        tasks += _flatten(loaded)
+        tasks += leaf_tasks(loaded)
     return tasks
 
 

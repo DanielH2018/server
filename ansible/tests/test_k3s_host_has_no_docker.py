@@ -28,8 +28,8 @@ from pathlib import Path
 
 import pytest
 import yaml
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
 
 # The k3s-bringup.yml play asserts `inventory_hostname == 'daniel-box'`, so the
 # cluster *server* is a single named host rather than an inventory group today.

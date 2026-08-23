@@ -7,7 +7,7 @@ This project has stated a wrong count in a PR body three times running (slice 4,
 and the slice 7b plan) — print the counts instead of computing them by hand.
 
 Both numbers read the same source `ansible/filter_plugins/k8s_autodeploy.py` derives the
-gitops_deploy denylist from, and the same source `ansible/tests/test_k8s_autodeploy_guard.py`'s
+gitops_deploy denylist from, and the same source `ansible/tests/_autodeploy.py`'s
 `_auto_deployable` reads for eligibility: each role's own `k8s_autodeploy` declaration in
 `ansible/roles/k8s/<role>/defaults/main.yml`. The guard test's
 `test_every_role_is_either_denied_or_declares_itself_deployable` asserts the two sets partition

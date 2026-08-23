@@ -18,12 +18,11 @@ modes this suite guards are now:
 Run: uv run pytest ansible/tests/test_strangler_bridge.py
 """
 
-from pathlib import Path
-
 import yaml
 from jinja2 import ChainableUndefined, Environment, FileSystemLoader
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
+
 HOST_VARS = ANSIBLE / "inventory" / "host_vars"
 TRAEFIK = ANSIBLE / "roles" / "containers" / "traefik" / "templates"
 GATE = (

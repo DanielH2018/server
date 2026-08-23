@@ -25,9 +25,9 @@ Run: uv run pytest ansible/tests/test_longhorn_backup_job_failure_check.py
 """
 
 import re
-from pathlib import Path
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
+
 HEALTH = (
     ANSIBLE / "roles" / "setup" / "k3s" / "templates" / "longhorn-backup-health.sh.j2"
 )

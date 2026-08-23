@@ -16,8 +16,9 @@ import yaml
 from ansible.errors import AnsibleFilterError
 
 from k8s_autodeploy import SHARED_ROLES, k8s_autodeploy_denylist
+from _helpers import REPO as _REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+
 _ANSIBLE = _REPO / "ansible"
 
 

@@ -25,8 +25,8 @@ import re
 from pathlib import Path
 
 import pytest
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
 
 PING_HOST = "hc-ping.com"
 

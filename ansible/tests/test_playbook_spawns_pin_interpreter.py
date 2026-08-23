@@ -28,8 +28,9 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+from _helpers import REPO as _REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+
 _SCAN_DIRS = (_REPO / "ansible/tests", _REPO / "scripts")
 _ENV_KEY = "ANSIBLE_PYTHON_INTERPRETER"
 

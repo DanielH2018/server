@@ -23,11 +23,11 @@ is the failure mode this file exists to prevent.
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 from _k8s_render import rendered_docs
+from _helpers import REPO as _REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+
 _TASKS = _REPO / "ansible/roles/k8s/prowlarr/tasks/main.yml"
 
 

@@ -16,9 +16,9 @@ interpreter inside its own digest-pinned image, which has nothing to do with the
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from _helpers import REPO as _REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+
 _SEARCH_ROOTS = [_REPO / "ansible/roles", _REPO / ".claude/hooks"]
 _SUFFIXES = {".j2", ".yml", ".sh"}
 

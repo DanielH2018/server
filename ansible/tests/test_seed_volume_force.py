@@ -31,8 +31,9 @@ Run: uv run pytest ansible/tests/test_seed_volume_force.py
 from pathlib import Path
 
 import yaml
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
+
 K8S_ROLES = ANSIBLE / "roles" / "k8s"
 
 

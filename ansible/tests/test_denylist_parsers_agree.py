@@ -12,8 +12,9 @@ from pathlib import Path
 
 from deploy_logic import SHARED_K8S_ROLES, declared_denylist
 from k8s_autodeploy import SHARED_ROLES, k8s_autodeploy_denylist
+from _helpers import REPO as _REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+
 _ANSIBLE = _REPO / "ansible"
 _K8S_ROLES = _ANSIBLE / "roles/k8s"
 

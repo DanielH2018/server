@@ -338,8 +338,8 @@ def test_rollback_return_is_gated_on_delivered_post():
     )
 
 
-# The pure is_diverged() (test_deploy_logic.py) and the read side (check_gitops_status,
-# test_check.py) are covered, but the WRITE — that main() emits the diverged-SHA marker every tick,
+# The pure is_diverged() (test_deploy_logic_git.py) and the read side (check_gitops_status,
+# test_check_service.py) are covered, but the WRITE — that main() emits the diverged-SHA marker every tick,
 # gated on is_diverged, ahead of the action short-circuits — lives only in the un-importable main().
 # A refactor dropping it or stranding it behind an early `return` would silently lose the watchdog
 # (a diverged tree noops forever while origin's commits never deploy, both other GitOps signals
@@ -417,7 +417,7 @@ def _systemd_seconds(span: str) -> int:
 
 # daniel-box fell into an empty ChangeSet -> the docs-only silent ff-merge, on the only host
 # where every one of 41 services is platform: k8s). deploy_logic's ChangeSet.k8s / _ACTIVE_K8S are
-# covered behaviourally (test_deploy_logic.py); main() itself is un-importable (module-level
+# covered behaviourally (test_deploy_logic_diff.py); main() itself is un-importable (module-level
 # cfg() reads /etc config absent in CI), so this pins that alert_deferred() — the sole call site
 # reached on BOTH the no-services branch and the post-deploy branch — actually reads cs.k8s,
 # instead of silently never alerting on it.

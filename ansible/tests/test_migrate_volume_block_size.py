@@ -19,11 +19,10 @@ Three orders carry the weight:
 Run: uv run pytest ansible/tests/test_migrate_volume_block_size.py
 """
 
-from pathlib import Path
-
 import yaml
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
+
 PLAY = ANSIBLE / "migrate_volume_block_size.yml"
 COPY = ANSIBLE / "tasks" / "blockmig_copy.yml"
 

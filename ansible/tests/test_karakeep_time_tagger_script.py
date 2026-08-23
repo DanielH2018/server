@@ -19,9 +19,9 @@ Run: uv run pytest ansible/tests/test_karakeep_time_tagger_script.py
 
 import hashlib
 import re
-from pathlib import Path
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
+
 VENDORED = ANSIBLE / "roles" / "k8s" / "karakeep" / "files" / "karakeep-time-tagger.py"
 DOCKER_TASKS = (
     ANSIBLE / "roles" / "containers" / "archive" / "karakeep" / "tasks" / "main.yml"
