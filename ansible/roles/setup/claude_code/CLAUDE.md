@@ -52,6 +52,12 @@ stops **and** disables the host and its restart timer; that is the rollback.
 `OnFailure=claude-rc-alert.service` pages Discord when the host **crashes**, reusing the
 shared `gitops_deploy_discord_webhook` like `gitops-deploy-alert` and `renovate-notify-alert`.
 
+The alert task carries `no_log: true` because it renders the webhook. That also hides an
+undefined-variable failure, so if `gitops_deploy_discord_webhook` is ever out of scope — the
+secret is loaded by `initial_setup.yml`'s `pre_tasks`, tagged `always` — the task fails
+opaquely rather than naming the missing var. Check that first if this task fails for no
+apparent reason.
+
 **It cannot catch an expired login.** The host keeps running and systemd keeps reporting
 `active` while every session fails, so no `OnFailure=` ever fires and `Restart=always` has
 nothing to restart. Closing that needs a check asserting the host is *registered*, not that
