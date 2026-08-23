@@ -15,6 +15,8 @@ _spec = importlib.util.spec_from_file_location("probe", _MOD)
 probe = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(probe)
 
+import probe_core as core  # noqa: E402  (probe.py must load first, by path)
+
 # Fake resolver: maps container name -> a recognizable IP. A wrong container name
 # raises KeyError, so a misrouted subcommand fails loudly.
 IPS = {"prometheus": "10.0.0.1", "loki": "10.0.0.2", "scrutiny": "10.0.0.3"}
@@ -28,7 +30,7 @@ def fake_k8s_endpoint(hostname):
 
 
 def test_loki_query_url_with_range_adds_start_end_direction():
-    url = probe.loki_query_url(
+    url = core.loki_query_url(
         "10.0.0.2", '{job="x"}', 5000, start=1000, end=2000, direction="forward"
     )
     assert "start=1000" in url and "end=2000" in url and "direction=forward" in url
@@ -111,9 +113,9 @@ def _capture_fetch(monkeypatch, body='{"data":{"result":[]}}'):
         seen.append(url)
         return body
 
-    monkeypatch.setattr(probe, "fetch", fake_fetch)
-    monkeypatch.setattr(probe, "sops_extract", lambda key: "example.test")
-    monkeypatch.setattr(probe, "metallb_vip", lambda: "10.0.0.240")
+    monkeypatch.setattr(core, "fetch", fake_fetch)
+    monkeypatch.setattr(core, "sops_extract", lambda key: "example.test")
+    monkeypatch.setattr(core, "metallb_vip", lambda: "10.0.0.240")
     return seen
 
 
@@ -138,12 +140,12 @@ def test_run_query_sends_the_since_window_to_loki(monkeypatch):
 
 
 def test_run_query_without_since_sends_no_window():
-    assert probe.since_window_ns(None) == (None, None)
-    assert probe.since_window_ns("") == (None, None)
+    assert core.since_window_ns(None) == (None, None)
+    assert core.since_window_ns("") == (None, None)
 
 
 def test_since_window_ns_span_matches_the_requested_duration():
-    start, end = probe.since_window_ns("2d")
+    start, end = core.since_window_ns("2d")
     assert abs((end - start) / 1e9 - 2 * 86400) < 2
 
 
@@ -238,9 +240,9 @@ def _route_alert_fetch(monkeypatch, per_query):
         logql = _query_params(url)["query"][0]
         return _json.dumps(_fake_loki(per_query.get(logql, [])))
 
-    monkeypatch.setattr(probe, "fetch", fake_fetch)
-    monkeypatch.setattr(probe, "sops_extract", lambda key: "example.test")
-    monkeypatch.setattr(probe, "metallb_vip", lambda: "10.0.0.240")
+    monkeypatch.setattr(core, "fetch", fake_fetch)
+    monkeypatch.setattr(core, "sops_extract", lambda key: "example.test")
+    monkeypatch.setattr(core, "metallb_vip", lambda: "10.0.0.240")
     return seen
 
 
@@ -304,8 +306,8 @@ def test_alerts_check_filter_matches_a_host_cron_tag(monkeypatch, capsys):
 
 
 def test_alerts_dry_run_prints_a_command_per_stream(monkeypatch, capsys):
-    monkeypatch.setattr(probe, "sops_extract", lambda key: "example.test")
-    monkeypatch.setattr(probe, "metallb_vip", lambda: "10.0.0.240")
+    monkeypatch.setattr(core, "sops_extract", lambda key: "example.test")
+    monkeypatch.setattr(core, "metallb_vip", lambda: "10.0.0.240")
     ns = probe._build_parser().parse_args(["--dry-run", "alerts", "--days", "3"])
     assert probe.run_alerts(ns) == 0
     out = capsys.readouterr().out

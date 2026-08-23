@@ -797,7 +797,7 @@ def test_system_log_fire_event_handles_list_event_type():
     assert hsm.system_log_fire_event_errors(config) == []
 
 
-import probe
+import probe_ha
 
 
 def test_ha_state_rows_renders_cell_values_and_anomaly():
@@ -819,6 +819,6 @@ def test_ha_state_rows_renders_cell_values_and_anomaly():
             "last_changed": "2026-06-21T12:00:00+00:00",
         }
     ]
-    out = probe.ha_state_rows(states, model)
+    out = probe_ha.ha_state_rows(states, model)
     assert "input_boolean.bedroom_sleep_mode" in out
     assert "on" in out

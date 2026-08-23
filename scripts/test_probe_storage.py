@@ -16,6 +16,9 @@ _spec = importlib.util.spec_from_file_location("probe", _MOD)
 probe = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(probe)
 
+import probe_core as core  # noqa: E402  (probe.py must load first, by path)
+import probe_storage as storage  # noqa: E402
+
 # Fake resolver: maps container name -> a recognizable IP. A wrong container name
 # raises KeyError, so a misrouted subcommand fails loudly.
 IPS = {"prometheus": "10.0.0.1", "loki": "10.0.0.2", "scrutiny": "10.0.0.3"}
@@ -49,13 +52,13 @@ def test_b2_credentials_travel_in_the_stdin_config_not_argv():
     inherit it; curl's `--config -` is the same guard by the route the rest of this file
     already uses for HA and the *arr apps.
     """
-    body = probe.b2_authorize_config("keyid123", "appkey456")
+    body = storage.b2_authorize_config("keyid123", "appkey456")
     assert 'user = "keyid123:appkey456"' in body
-    assert probe.B2_AUTHORIZE_URL in body
+    assert storage.B2_AUTHORIZE_URL in body
 
 
 def test_b2_list_config_carries_the_token_as_a_header_and_scopes_the_prefix():
-    body = probe.b2_list_files_config("https://api.example", "tok", "bid", "longhorn")
+    body = storage.b2_list_files_config("https://api.example", "tok", "bid", "longhorn")
     assert 'header = "Authorization: tok"' in body
     assert "prefix=longhorn%2F" in body and "bucketId=bid" in body
 
@@ -94,7 +97,7 @@ def test_b2_longhorn_lines_strips_the_prefix_and_pages():
         },
     ]
     calls = iter(pages)
-    lines = probe.b2_longhorn_lines(
+    lines = storage.b2_longhorn_lines(
         "k", "s", "bucket", "longhorn", _call=lambda _body: next(calls)
     )
     assert lines == [
@@ -102,7 +105,7 @@ def test_b2_longhorn_lines_strips_the_prefix_and_pages():
         "backupstore/volumes/aa/bb/pvc-x/volume.cfg;120",
     ]
     # The whole point: these lines survive the parser that the real command feeds them to.
-    vols = probe.parse_longhorn_listing(lines)
+    vols = storage.parse_longhorn_listing(lines)
     assert vols["pvc-x"]["blocks"] == 1 and vols["pvc-x"]["cfgs"] == 1
 
 
@@ -130,7 +133,7 @@ def test_b2_longhorn_command_does_not_shell_out_to_docker_or_rclone():
     real_run = probe.subprocess.run
     probe.subprocess.run = fake_run
     try:
-        probe.b2_curl('url = "https://api.example"\n')
+        storage.b2_curl('url = "https://api.example"\n')
     finally:
         probe.subprocess.run = real_run
 
@@ -139,17 +142,19 @@ def test_b2_longhorn_command_does_not_shell_out_to_docker_or_rclone():
     # The url/credentials reach curl through stdin, so argv stays free of both.
     assert seen["stdin"].startswith("url = ")
 
-    # And no `"docker"` argv literal survives anywhere in this section's executable code.
-    with open(_MOD) as fh:
-        section = fh.read().split("# B2 / Longhorn backup objects")[1]
+    # And no `"docker"` argv literal survives anywhere in this module's executable code.
+    # Scans the whole file, not a section split on a comment banner: the B2/Longhorn code
+    # is its own module now, so the module boundary carries what the marker used to.
+    with open(storage.__file__) as fh:
+        source = fh.read()
     code = "\n".join(
-        line for line in section.splitlines() if not line.strip().startswith("#")
+        line for line in source.splitlines() if not line.strip().startswith("#")
     )
     assert '"docker"' not in code
 
 
 def test_parse_longhorn_listing_separates_data_from_metadata():
-    vols = probe.parse_longhorn_listing(LSF)
+    vols = storage.parse_longhorn_listing(LSF)
     assert vols["pvc-authelia"]["blocks"] == 2
     assert vols["pvc-authelia"]["block_bytes"] == 2097152 + 1048576
     assert vols["pvc-authelia"]["cfgs"] == 2
@@ -157,7 +162,7 @@ def test_parse_longhorn_listing_separates_data_from_metadata():
 
 
 def test_parse_longhorn_listing_ignores_unrelated_and_malformed_lines():
-    vols = probe.parse_longhorn_listing(
+    vols = storage.parse_longhorn_listing(
         ["", "   ", "kopia/p1234.f;99", "backupstore/volumes/aa;10", "no-semicolon"]
     )
     assert vols == {}
@@ -166,26 +171,26 @@ def test_parse_longhorn_listing_ignores_unrelated_and_malformed_lines():
 def test_format_longhorn_summary_fails_when_a_volume_has_no_data_blocks():
     """Metadata without blocks is the silent-corruption case worth exiting non-zero on."""
     vols = {"pvc-empty": {"blocks": 0, "block_bytes": 0, "cfgs": 3}}
-    text, code = probe.format_longhorn_summary(vols)
+    text, code = storage.format_longhorn_summary(vols)
     assert code == 1
     assert "NO DATA BLOCKS" in text and "pvc-empty" in text
 
 
 def test_format_longhorn_summary_passes_when_every_volume_has_blocks():
-    text, code = probe.format_longhorn_summary(probe.parse_longhorn_listing(LSF))
+    text, code = storage.format_longhorn_summary(storage.parse_longhorn_listing(LSF))
     assert code == 0
     assert "pvc-authelia" in text and "NO DATA BLOCKS" not in text
 
 
 def test_format_longhorn_summary_treats_no_objects_as_failure():
-    text, code = probe.format_longhorn_summary({})
+    text, code = storage.format_longhorn_summary({})
     assert code == 1 and "no Longhorn backup objects" in text
 
 
 def test_parse_backup_budget_prices_a_prune_by_directories_not_blocks():
     """A prune's cost is one ListObjects per block directory, so two blocks sharing a
     second-level directory cost less than two that do not."""
-    vols = probe.parse_backup_budget(LSF)
+    vols = storage.parse_backup_budget(LSF)
     # pvc-authelia: blocks/ + 1a/ + (1a,2b) + (1a,2c) = 4
     assert vols["pvc-authelia"]["prune"] == 4
     assert vols["pvc-authelia"]["blocks"] == 2
@@ -196,9 +201,9 @@ def test_parse_backup_budget_prices_a_prune_by_directories_not_blocks():
 
 
 def test_format_backup_budget_flags_a_shard_over_the_daily_cap():
-    over = probe.B2_CLASS_C_DAILY_CAP - probe.B2_BUDGET_RESERVE + 1
+    over = storage.B2_CLASS_C_DAILY_CAP - storage.B2_BUDGET_RESERVE + 1
     vols = {"pvc-big": {"prune": over, "blocks": 9000, "backups": 4}}
-    text, code = probe.format_backup_budget(vols, {"pvc-big": "weekly-backup-d2"})
+    text, code = storage.format_backup_budget(vols, {"pvc-big": "weekly-backup-d2"})
     assert code == 1
     assert "OVER BUDGET" in text and "weekly-backup-d2" in text
 
@@ -213,7 +218,7 @@ def test_stranded_counts_backups_the_current_tier_does_not_own():
     """
     vols = {"pvc-moved": {"prune": 10, "blocks": 100, "backups": 5}}
     owners = {"pvc-moved": {"daily-backup": 4, "weekly-backup-d2": 1}}
-    text, _ = probe.format_backup_budget(
+    text, _ = storage.format_backup_budget(
         vols, {"pvc-moved": "weekly-backup-d2"}, retain=2, owners=owners
     )
     assert "4 stranded backup(s)" in text, text
@@ -223,7 +228,7 @@ def test_backups_the_current_tier_owns_are_not_stranded_even_past_retain():
     """The owning job prunes them on its next run, so they are queued, not abandoned."""
     vols = {"pvc-busy": {"prune": 10, "blocks": 100, "backups": 5}}
     owners = {"pvc-busy": {"weekly-backup-d2": 5}}
-    text, _ = probe.format_backup_budget(
+    text, _ = storage.format_backup_budget(
         vols, {"pvc-busy": "weekly-backup-d2"}, retain=2, owners=owners
     )
     assert "stranded" not in text, text
@@ -232,7 +237,9 @@ def test_backups_the_current_tier_owns_are_not_stranded_even_past_retain():
 def test_stranded_falls_back_to_zero_without_ownership_data():
     """No owners map means nothing is PROVEN stranded — never guess high and prompt a delete."""
     vols = {"pvc-x": {"prune": 10, "blocks": 100, "backups": 5}}
-    text, _ = probe.format_backup_budget(vols, {"pvc-x": "weekly-backup-d2"}, retain=2)
+    text, _ = storage.format_backup_budget(
+        vols, {"pvc-x": "weekly-backup-d2"}, retain=2
+    )
     assert "stranded" not in text, text
 
 
@@ -240,7 +247,7 @@ def test_format_backup_budget_does_not_charge_a_day_for_an_unscheduled_volume():
     """A volume with no recurring job never runs a backup and so never prunes — charging its
     blocks to a shard would read as an over-budget day that cannot actually happen."""
     vols = {"pvc-idle": {"prune": 99999, "blocks": 9000, "backups": 3}}
-    text, code = probe.format_backup_budget(vols, {"pvc-idle": "no-backup"})
+    text, code = storage.format_backup_budget(vols, {"pvc-idle": "no-backup"})
     assert code == 0
     assert "never pruned" in text and "pvc-idle" in text
 
@@ -261,10 +268,10 @@ SPEND_LOG = [
 
 
 def test_parse_duration_seconds_accepts_the_documented_forms():
-    assert probe.parse_duration_seconds("30m") == 1800
-    assert probe.parse_duration_seconds("6h") == 21600
-    assert probe.parse_duration_seconds("2d") == 172800
-    assert probe.parse_duration_seconds("1w") == 604800
+    assert core.parse_duration_seconds("30m") == 1800
+    assert core.parse_duration_seconds("6h") == 21600
+    assert core.parse_duration_seconds("2d") == 172800
+    assert core.parse_duration_seconds("1w") == 604800
 
 
 def test_parse_duration_seconds_rejects_junk_rather_than_defaulting():
@@ -272,13 +279,13 @@ def test_parse_duration_seconds_rejects_junk_rather_than_defaulting():
     window as 'nothing ran', which is the failure this flag exists to prevent."""
     for bad in ("6", "h", "6y", "-2d", "", "6 h"):
         with pytest.raises(SystemExit):
-            probe.parse_duration_seconds(bad)
+            core.parse_duration_seconds(bad)
 
 
 def test_parse_backup_spend_counts_delta_blocks_per_volume():
     """`blocks` is the delta Longhorn walks, and it HeadObjects each one — so that count is the
     backup's Class B cost. `new blocks` is what it uploaded, which is Class A and free."""
-    vols = probe.parse_backup_spend(SPEND_LOG)
+    vols = storage.parse_backup_spend(SPEND_LOG)
     assert vols["pvc-1c0e18da-dd0a-4059-af81-f5f346c7eabc"]["blocks"] == 104
     assert vols["pvc-1c0e18da-dd0a-4059-af81-f5f346c7eabc"]["new_blocks"] == 75
     assert vols["pvc-00d8210a-e38d-49f9-ba22-3aff333f59ab"]["backups"] == 1
@@ -289,7 +296,7 @@ def test_parse_backup_spend_counts_delta_blocks_per_volume():
 def test_parse_backup_spend_keeps_lines_whose_replica_prefix_was_trimmed():
     """Dropping an unattributable line would understate spend, and understating is the failure
     mode that matters — the cap does not care which volume it was."""
-    vols = probe.parse_backup_spend(
+    vols = storage.parse_backup_spend(
         [
             (
                 1,
@@ -301,14 +308,14 @@ def test_parse_backup_spend_keeps_lines_whose_replica_prefix_was_trimmed():
 
 
 def test_format_backup_spend_totals_and_says_when_the_window_was_empty():
-    text = probe.format_backup_spend(probe.parse_backup_spend(SPEND_LOG), "6h")
+    text = storage.format_backup_spend(storage.parse_backup_spend(SPEND_LOG), "6h")
     assert "backups over 6h: 181 Class B measured" in text
-    empty = probe.format_backup_spend({}, "6h")
+    empty = storage.format_backup_spend({}, "6h")
     assert "no backups logged" in empty and "widen --since" in empty
 
 
 def test_parse_b2_ledger_totals_per_tool_and_skips_malformed_lines():
-    tools = probe.parse_b2_ledger(
+    tools = storage.parse_b2_ledger(
         [
             "2026-08-17T12:00:00Z\tdrain\t972\t59\t5\tretain 2",
             "2026-08-17T13:00:00Z\tdrain\t179\t5\t4\tradarr",
@@ -325,15 +332,17 @@ def test_parse_b2_ledger_totals_per_tool_and_skips_malformed_lines():
 def test_record_b2_spend_never_raises_when_the_ledger_is_unwritable(monkeypatch):
     """A ledger failure must not fail the real work — the accounting is secondary to the
     operation it is accounting for."""
-    monkeypatch.setattr(probe, "B2_LEDGER_DIR", "/proc/cannot/create/this")
-    probe.record_b2_spend("drain", class_c=5)  # must not raise
+    monkeypatch.setattr(storage, "B2_LEDGER_DIR", "/proc/cannot/create/this")
+    storage.record_b2_spend("drain", class_c=5)  # must not raise
 
 
 def test_record_then_read_round_trips(tmp_path, monkeypatch):
-    monkeypatch.setattr(probe, "B2_LEDGER_DIR", str(tmp_path))
-    probe.record_b2_spend("drain", class_a=100, class_b=59, class_c=5, note="retain 2")
-    probe.record_b2_spend("b2-budget", class_c=5)
-    tools = probe.read_b2_ledger()
+    monkeypatch.setattr(storage, "B2_LEDGER_DIR", str(tmp_path))
+    storage.record_b2_spend(
+        "drain", class_a=100, class_b=59, class_c=5, note="retain 2"
+    )
+    storage.record_b2_spend("b2-budget", class_c=5)
+    tools = storage.read_b2_ledger()
     assert tools["drain"]["class_b"] == 59
     assert tools["b2-budget"]["class_c"] == 5
 
@@ -360,15 +369,15 @@ def test_b2_longhorn_lines_reports_pages_plus_the_authorize_as_class_c():
         return pages.pop(0)
 
     stats = {}
-    probe.b2_longhorn_lines("k", "s", "bucket", _call=fake, _stats=stats)
+    storage.b2_longhorn_lines("k", "s", "bucket", _call=fake, _stats=stats)
     assert stats == {"class_c": 3, "pages": 2}
 
 
 def test_format_backup_spend_shows_maintenance_and_never_sums_the_two_windows():
     """Backups span --since; the ledger covers the UTC day. A combined total would match
     neither, so the report must keep them apart."""
-    text = probe.format_backup_spend(
-        probe.parse_backup_spend(SPEND_LOG),
+    text = storage.format_backup_spend(
+        storage.parse_backup_spend(SPEND_LOG),
         "6h",
         ledger={"drain": {"runs": 2, "class_a": 0, "class_b": 64, "class_c": 9}},
     )
@@ -381,7 +390,7 @@ def test_format_backup_budget_flags_a_b2_volume_left_on_the_daily_tier():
     """A PVC provisioned from the longhorn StorageClass lands in `default` until a deploy
     reconciles its label, which on B2 means a prune every night against a weekly budget."""
     vols = {"pvc-new": {"prune": 300, "blocks": 200, "backups": 4}}
-    text, code = probe.format_backup_budget(vols, {"pvc-new": "default"})
+    text, code = storage.format_backup_budget(vols, {"pvc-new": "default"})
     assert code == 1
     assert "ON THE DAILY TIER AND ON B2" in text and "pvc-new" in text
 
@@ -397,7 +406,7 @@ def test_format_backup_budget_reports_stranded_backups_not_pending_deletes():
     """
     vols = {"pvc-a": {"prune": 100, "blocks": 50, "backups": 11}}
     owners = {"pvc-a": {"daily-backup": 9, "weekly-backup-d5": 2}}
-    text, code = probe.format_backup_budget(
+    text, code = storage.format_backup_budget(
         vols, {"pvc-a": "weekly-backup-d5"}, retain=4, owners=owners
     )
     assert code == 0
