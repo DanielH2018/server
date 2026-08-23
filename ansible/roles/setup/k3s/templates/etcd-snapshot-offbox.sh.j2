@@ -16,10 +16,15 @@
 #
 # IT ALSO NO LONGER CARRIES THE SECRETS IN A USABLE FORM. Since --secrets-encryption was armed
 # (2026-08-20) Secrets are encrypted in etcd, so restoring this snapshot onto a REBUILT host
-# needs /var/lib/rancher/k3s/server/cred/encryption-config.json from daniel-box put in place
-# first. That key is deliberately NOT uploaded beside the snapshot: storing it in this bucket
-# would hand anyone with the bucket both halves and undo the encryption entirely. Restoring
-# onto daniel-box with its disk intact is unaffected — the key is already there.
+# needs the CLUSTER TOKEN (/var/lib/rancher/k3s/server/token) supplied first. The token is
+# deliberately NOT uploaded beside the snapshot: storing it in this bucket would hand anyone with
+# the bucket both halves and undo the encryption entirely. Restoring onto daniel-box with its
+# disk intact is unaffected.
+#
+# Corrected 2026-08-23: this comment used to name encryption-config.json as the thing to preserve.
+# That file's CONTENTS ride inside the snapshot's own /bootstrap blob (verified against k3s
+# v1.36.3+k3s1), encrypted with the token — so the token is the artifact that must survive
+# daniel-box, and it is the only one. docs/k3s-etcd-restore.md carries the evidence.
 set -uo pipefail
 
 # shellcheck source=/dev/null

@@ -29,10 +29,16 @@
 # WHAT IT PROVES, AND WHAT IT CANNOT. It proves the snapshot is complete, readable by this k3s
 # version, and that the Kubernetes objects come back — namespaces, workloads, PVCs, the object
 # graph a rebuild depends on. It does NOT prove Secrets are usable: since 2026-08-20 those are
-# encrypted with a key at /var/lib/rancher/k3s/server/cred/encryption-config.json that is not in
-# the snapshot. The drill reports Secret COUNT (presence) and deliberately never decodes one —
-# see docs/k3s-etcd-restore.md for why that key surviving daniel-box is a separate,
-# larger question than this drill answers.
+# encrypted at rest, and this drill runs against a host whose own copy of the key is already in
+# place, so it never exercises the path a rebuilt host takes. The drill reports Secret COUNT
+# (presence) and deliberately never decodes one.
+#
+# Corrected 2026-08-23: this comment used to say the key "is not in the snapshot". It is — the
+# contents of encryption-config.json ride inside the snapshot's /bootstrap blob (verified against
+# k3s v1.36.3+k3s1), encrypted with the cluster token. The artifact that has to survive daniel-box
+# is therefore /var/lib/rancher/k3s/server/token, which this script already depends on for exactly
+# that reason (LIVE_TOKEN below, and the --cluster-reset note further down). An out-of-band copy
+# was taken 2026-08-23; docs/k3s-etcd-restore.md carries the evidence and the re-verify command.
 #
 # STATUS, 2026-08-22. `--list-only` WORKS and is the useful part today: it proved the off-box
 # leg end to end for the first time — credentials, bucket, folder, download and decompression
@@ -306,7 +312,7 @@ echo "namespaces    : $ns"
 echo "deployments   : $deploys"
 echo "PVCs          : $pvcs"
 echo "CRDs          : $crds"
-echo "secrets       : $secrets (presence only — encrypted at rest, key not in the snapshot)"
+echo "secrets       : $secrets (presence only — encrypted at rest, never decoded by this drill)"
 echo
 
 # A restore that yields an empty or near-empty object set is the silent failure worth catching:

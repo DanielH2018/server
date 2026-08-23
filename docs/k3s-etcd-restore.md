@@ -49,25 +49,50 @@ CRs, and the PVC objects with their volume bindings. It is **not** the contents 
 A full rebuild needs both, **etcd first**: restore the objects so the PVCs exist, then restore the
 volumes into them.
 
-### Since 2026-08-20, a snapshot alone cannot give you the Secrets back
+### Since 2026-08-20, a snapshot alone cannot give you the Secrets back — the CLUSTER TOKEN is what must survive
 
 `--secrets-encryption` is armed (`k3s_secrets_encryption` in the k3s role), so Secrets are stored
 in etcd encrypted with a key held at `/var/lib/rancher/k3s/server/cred/encryption-config.json` on
-daniel-box. That key is **not in the snapshot** and is not in this repo.
+daniel-box.
 
-- **Restoring onto daniel-box with its disk intact**: nothing changes, the key is already there.
-- **Restoring onto a rebuilt or replacement host**: you must put the same
-  `encryption-config.json` in place *before* starting k3s, or every Secret in the restored
-  cluster decodes to garbage. The objects restore fine and the failure surfaces later, as pods
-  that cannot read their credentials — which is the worst time to discover it.
+**Corrected 2026-08-23: that key IS in the snapshot, and this section previously said it was
+not.** k3s stores the bootstrap set's file *contents* in the datastore under `/bootstrap`,
+encrypted with the cluster token — `ControlRuntimeBootstrap` includes `EncryptionConfig`
+(`pkg/daemons/config/types.go`), `ReadFromDisk` reads each path's bytes into `File.Content`
+(`pkg/bootstrap/bootstrap.go`), and `pkg/cluster/storage.go` describes the blob as "CA certs and
+keys, encryption passphrases, etc — encrypted with the join token". `secrets-encrypt rotate-keys`
+calls `cluster.Save`, so the stored copy tracks rotations. Verified against k3s v1.36.3+k3s1, the
+running version. An etcd snapshot is an unfiltered datastore image, so it carries that blob.
+
+**The artifact that has to survive daniel-box is therefore `/var/lib/rancher/k3s/server/token`,
+not `encryption-config.json`.** Without the token nothing in the blob decrypts — CA certs, service
+key and encryption config alike — so a rebuilt host restores *nothing*, not merely Secrets. It is
+not in this repo: `grep -ci k3s ansible/vars/secrets.yml` returns 0, and `k3s-bringup.yml` slurps
+it off daniel-box's own disk at join time.
+
+**Out-of-band copy taken 2026-08-23** — the operator's password manager. That is the whole fix for
+the failure mode, and it is deliberately not machine-checkable: no automated check asserts the
+copy still exists, so this dated line is the only record. Re-verify by hash rather than by eye,
+which exposes nothing:
+
+```bash
+sudo sha256sum /var/lib/rancher/k3s/server/token   # compare against the saved copy's hash
+```
+
+The token changes only on a deliberate rotation, so the copy stays valid until one happens. **If
+you ever rotate it, this line is stale the moment you do** — re-copy first, then update the date.
+
+- **Restoring onto daniel-box with its disk intact**: nothing changes, everything is already there.
+- **Restoring onto a rebuilt or replacement host**: supply the token. `--cluster-reset` reads it
+  from `<data-dir>/server/token` and checks for that FILE — `--token-file` does not satisfy it
+  (measured twice, 2026-08-22; see `scripts/etcd_restore_drill.sh`).
 
 This is the trade the encryption buys: the daily snapshot in R2 no longer carries every homelab
-credential in plaintext, and in exchange the key becomes a second thing that has to survive
-daniel-box. Keep a copy somewhere that is not daniel-box's disk and not the R2 bucket the
-snapshot is in — putting the key next to the snapshot restores exactly the exposure the
-encryption removed.
+credential in plaintext, and in exchange the token becomes a second thing that has to survive
+daniel-box. Keep it somewhere that is neither daniel-box's disk nor the R2 bucket the snapshot is
+in — putting the token next to the snapshot restores exactly the exposure the encryption removed.
 
-Snapshots taken **before** 2026-08-20 predate the change and restore without the key.
+Snapshots taken **before** 2026-08-20 predate the change and restore without any of this.
 
 Redeploying from Ansible is the other recovery path and is usually the better one — it rebuilds
 from the repo, which is the source of truth. The snapshot matters for what Ansible does *not*
