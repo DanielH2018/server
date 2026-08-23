@@ -44,9 +44,12 @@ def test_checks_and_env_secret_push_tokens_agree():
     # Docker uninstall (2026-08-14) — the remnant compose this used to partition
     # against is archived.
 
-    in_code = set(
-        re.findall(r'_env\("(KUMA_PUSH_[A-Z0-9_]+)"', _read_sibling("check.py"))
-    )
+    # Matched as a bare quoted literal, NOT as `_env("...")`: the token reaches _env() through
+    # _gate() for the three reachability gates, and a scanner keyed to one call shape stops
+    # seeing a token the moment it moves one call outward — it reads green while checking
+    # nothing. Shape-independent is also exact here: every quoted KUMA_PUSH_* in check.py is a
+    # token this file reads.
+    in_code = set(re.findall(r'"(KUMA_PUSH_[A-Z0-9_]+)"', _read_sibling("check.py")))
     in_twin = set(
         re.findall(
             r"^\s*(KUMA_PUSH_[A-Z0-9_]+):",
