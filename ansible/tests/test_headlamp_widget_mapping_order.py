@@ -10,7 +10,7 @@ operand order in homepage_k8s_headlamp_cluster_query are one fact written in two
 Edit either alone and the tile keeps rendering four plausible numbers under the wrong headings.
 Nothing else catches it: the YAML is valid, the manifest schema is satisfied, the URL still
 returns HTTP 200, and `probe.py health homepage` reports a healthy pod. Only a human reading
-"97" under NODES READY would notice, and only if they knew the cluster has two nodes.
+"97" under NODES would notice, and only if they knew the cluster has two nodes.
 
 This is the executable form of the `# DECIDED:` marker in services.yaml.j2, which accepts
 positional pairing so the tile matches every other widget on the dashboard.

@@ -42,7 +42,7 @@ homepage_k8s_mem_request: 32Mi
 # (config/widgets.yaml.j2's kubernetes info widget, and this tile's own namespace/podSelector pod
 # stats), so repeating them here would add nothing visible.
 homepage_k8s_headlamp_cluster_query: >-
-  label_replace(vector(scalar(count(kube_node_status_condition{condition="Ready",status="true"} == 1) or vector(0))), "k", "Nodes Ready", "", "")
-  or label_replace(vector(scalar(count(kube_pod_status_phase{phase="Running"} == 1) or vector(0))), "k", "Pods Running", "", "")
-  or label_replace(vector(scalar(count(kube_pod_status_phase{phase=~"Pending|Failed|Unknown"} == 1) or vector(0))), "k", "Pods Not Running", "", "")
-  or label_replace(vector(scalar(count(kube_deployment_status_replicas_unavailable > 0) or vector(0))), "k", "Deploys Degraded", "", "")
+  label_replace(vector(scalar(count(kube_node_status_condition{condition="Ready",status="true"} == 1) or vector(0))), "k", "Nodes", "", "")
+  or label_replace(vector(scalar(count(kube_pod_status_phase{phase="Running"} == 1) or vector(0))), "k", "Running", "", "")
+  or label_replace(vector(scalar(count(kube_pod_status_phase{phase=~"Pending|Failed|Unknown"} == 1) or vector(0))), "k", "Not Running", "", "")
+  or label_replace(vector(scalar(count(kube_deployment_status_replicas_unavailable > 0) or vector(0))), "k", "Degraded", "", "")
