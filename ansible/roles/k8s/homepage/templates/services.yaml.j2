@@ -149,13 +149,21 @@
 - Media:
     # The four media services moved to the k8s cluster (slice 4), so the Docker-DNS widget URLs
     # (http://jellyfin:8096, …) stopped resolving — each dashboard load burned ~15 widget-proxy
-    # 500s (the Traefik `homepage@docker` 5xx signal, 2026-08-08). Jellyfin's -k8s route carries
-    # no Authelia, so its widget follows the service. The sonarr/radarr/qbittorrent -k8s routes
-    # are Authelia-gated and their monitoring IngressRoutes deliberately expose only
-    # /api/v3/queue — restoring those widgets means consciously widening the route path list
-    # (see ansible/templates/ingressroute.yml.j2 monitoring_route), so they are dropped, not
-    # repointed. The `server:`/`container:` docker-status pairs referenced containers that no
-    # longer exist on this host.
+    # 500s (the Traefik `homepage@docker` 5xx signal, 2026-08-08). The `server:`/`container:`
+    # docker-status pairs referenced containers that no longer exist on this host and are gone.
+    #
+    # THE THREE URL SHAPES BELOW DIFFER ON PURPOSE — do not normalise them.
+    # Jellyfin's -k8s route carries no Authelia, so its widget goes through Traefik at
+    # `jellyfin.local.{{ domain }}`. The sonarr/radarr/qbittorrent routes ARE Authelia-gated, and
+    # their monitoring IngressRoutes deliberately expose only /api/v3/queue, so no Traefik URL
+    # reaches their widget APIs. Those three therefore address the ClusterIP directly, which
+    # bypasses Traefik and Authelia entirely and leaves `monitoring_route`
+    # (ansible/templates/ingressroute.yml.j2) as narrow as it was. Same URL shape monitor-bridge
+    # already uses (roles/k8s/monitor-bridge/templates/env-secret.yaml.j2).
+    #
+    # Reaching a ClusterIP is pod → pod, so each target's NetworkPolicy must admit `app: homepage`
+    # on that port — see roles/k8s/{sonarr,radarr,qbittorrent}/templates/networkpolicy.yaml.j2.
+    # Fenced out, the widget fails as a widget-proxy error, not as an auth error.
     - Jellyfin:
         href: https://jellyfin.{{ domain }}
         icon: jellyfin.png
@@ -168,14 +176,27 @@
         icon: sonarr.png
         href: https://sonarr.{{ domain }}/
         description: Series management
+        widget:
+            type: sonarr
+            url: http://sonarr.{{ k8s_namespace }}.svc.cluster.local:8989
+            key: {{ sonarr_api_key }}
     - Radarr:
         icon: radarr.png
         href: https://radarr.{{ domain }}/
         description: Movie management
+        widget:
+            type: radarr
+            url: http://radarr.{{ k8s_namespace }}.svc.cluster.local:7878
+            key: {{ radarr_api_key }}
     - qBittorrent:
         icon: qbittorrent.png
         href: https://qBittorrent.{{ domain }}
         description: Download management
+        widget:
+            type: qbittorrent
+            url: http://qbittorrent.{{ k8s_namespace }}.svc.cluster.local:8080  # literal: qbittorrent_k8s_webui_port is that role's default, not in scope here
+            username: {{ qbittorrent_username }}
+            password: {{ qbittorrent_password }}
 
 - Tracking:
     - Crypto:
