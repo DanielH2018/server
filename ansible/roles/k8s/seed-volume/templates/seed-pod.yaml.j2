@@ -18,6 +18,12 @@ spec:
   # Never restart. If the sleep dies the copy is already broken, and a restart would silently
   # present an empty-looking pod to a play that is waiting to stream into it.
   restartPolicy: Never
+  # This pod runs `sleep` and is written into by `kubectl exec` from the Ansible controller
+  # (seed.yml:224); it makes no API calls of its own, so the default ServiceAccount token is a
+  # credential mounted into a root container mounting arbitrary Longhorn PVCs, for nothing. The
+  # token grants only discovery today — no RoleBinding or ClusterRoleBinding template in this
+  # repo targets the `default` SA — which is why this is small, not why it should stay.
+  automountServiceAccountToken: false
   # Root on purpose. `tar -p --numeric-owner` has to be able to restore the source's UIDs, so
   # the workload finds the ownership it had under Docker. Nothing else runs in this pod and it
   # is deleted at the end of the play.

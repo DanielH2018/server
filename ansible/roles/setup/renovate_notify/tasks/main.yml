@@ -59,13 +59,29 @@
     - Reload systemd
     - Run renovate-notify once
 
-- name: Install the alert unit (0600 — embeds the SOPS Discord webhook)
+- name: Write the alert webhook where only systemd reads it
   ansible.builtin.template:
-    src: renovate-notify-alert.service.j2   # OnFailure target — pages Discord if the notifier crashes
-    dest: /etc/systemd/system/renovate-notify-alert.service
+    src: alert-webhook.env.j2
+    dest: /etc/renovate-notify/alert-webhook.env
+    owner: root
+    group: root
     mode: "0600"
   become: true
   no_log: true
+  notify:
+    - Reload systemd
+    - Run renovate-notify once
+
+# 2026-08-23b review M5, the same defect as gitops-deploy-alert.service: embedding the webhook
+# and installing 0600 did not protect it, because `systemctl show <unit> -p ExecStart` serves
+# unit content over the system bus regardless of file mode. 0644 is the honest mode now that the
+# unit holds no secret.
+- name: Install the alert unit
+  ansible.builtin.template:
+    src: renovate-notify-alert.service.j2   # OnFailure target — pages Discord if the notifier crashes
+    dest: /etc/systemd/system/renovate-notify-alert.service
+    mode: "0644"
+  become: true
   notify:
     - Reload systemd
     - Run renovate-notify once
@@ -77,3 +93,14 @@
     state: started
     daemon_reload: true
   become: true
+
+# Render provenance for manifest-prune-check.sh's stale-script arm — see the gitops_deploy role
+# for why these were previously watched by nothing (2026-08-23b review H1).
+- name: Stamp the rendered renovate-notify units
+  ansible.builtin.include_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: renovate-notify
+    stamp_render_templates:
+      - ansible/roles/setup/renovate_notify/templates/renovate-notify.service.j2
+      - ansible/roles/setup/renovate_notify/templates/renovate-notify-alert.service.j2
+      - ansible/roles/setup/renovate_notify/templates/renovate-notify.timer.j2

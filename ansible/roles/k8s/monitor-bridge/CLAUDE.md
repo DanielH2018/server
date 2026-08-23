@@ -50,6 +50,26 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     updates the same way; server-only, the Pi's disk lives in the Pi Pressure check)
   - **TLS Cert Expiry** (`traefik_tls_certs_not_after`)
   - **Memory** (host `node_memory_*` pressure only)
+  - **Host coverage floor** — not a monitor of its own, but a second arm inside **Root Disk** and
+    **Memory** (`_host_origin_shortfall`, added 2026-08-23; documented here 2026-08-23b review
+    M15, having previously existed only as code comments). Both checks group by `origin`, and
+    node-exporter is a DaemonSet on both nodes, so a vector covering fewer than
+    `HOST_ORIGINS_MIN` (2) distinct hosts has **lost** a host rather than measured a healthy
+    estate — at which point the surviving node's numbers would be reported as the estate's.
+    Live on 2026-08-23: a one-directional UFW rule left daniel-box's node-exporter unreachable
+    for 5.4h, and both checks pushed OK off daniel-server alone while daniel-box's host memory
+    and `/boot` went unwatched behind two green tiles.
+    **Why not lean on Scrape Targets:** that keys on `up`, and node-exporter's normal failure is
+    PER-COLLECTOR — a filesystem or meminfo collector can fail with `up == 1`, leaving Scrape
+    Targets green while the host silently drops out of these two checks. Same shape as
+    `check_ups`'s partial-absence arm: never monitor the survivor silently.
+    `HOST_ORIGINS_CONSECUTIVE` gives it hysteresis, for the reason `UPS_CONSECUTIVE` exists —
+    the weekly Sunday reboot takes a node's exporter away against a 1m scrape and a 5m loop.
+    Reported AFTER each check's own breach scan: a reporting host that is genuinely out of
+    memory outranks a complaint about the absent one.
+    `HOST_ORIGINS_MIN` is rendered in `templates/env-secret.yaml.j2` so a planned single-node
+    maintenance window can lower it and put it back; **at 1 the arm is inert**, which is the
+    original failure, so treat it as a temporary setting rather than a fix for a noisy tile.
   - **Container Restarts** (`changes(container_start_time_seconds[15m]) > RESTART_MAX`)
   - **Container OOM** (`increase(container_oom_events_total[1h]) by (name)` — names the
     offender; supersedes the old host-aggregate OOM that lived in the Memory check)
@@ -559,7 +579,8 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   connection config: `SONARR_URL`/`SONARR_API_KEY`/`RADARR_URL`/`RADARR_API_KEY`; GitOps
   liveness: `GITOPS_MAX_AGE_MIN`/`GITOPS_STATE_DIR`; Pi pressure:
   `PI_GLANCES_URL`/`PI_LOAD_MAX`/`PI_MEM_MIN_MB`/`PI_DISK_MAX_PCT`; HA heartbeat:
-  `HA_URL`/`HA_TOKEN`/`HA_HEARTBEAT_MAX_AGE`/`HA_CONSECUTIVE`). A failed
+  `HA_URL`/`HA_TOKEN`/`HA_HEARTBEAT_MAX_AGE`/`HA_CONSECUTIVE`; host-coverage floor:
+  `HOST_ORIGINS_MIN`/`HOST_ORIGINS_CONSECUTIVE`). A failed
   query/unreachable source makes that monitor `down` with an explanatory msg — a broken
   exporter is surfaced, not silently green.
 

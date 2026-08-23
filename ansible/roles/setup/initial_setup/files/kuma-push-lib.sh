@@ -32,11 +32,22 @@ kuma_push() {
   local status="$1" msg="$2" push_url="$3" kuma_host="$4" resolve_ip="$5" tag="$6"
   # shellcheck disable=SC2034  # read by the sourcing script, not by this file
   KUMA_PUSH_OK=1
-  curl -fsS --max-time 10 -G \
-    --resolve "${kuma_host}:443:${resolve_ip}" \
-    --data-urlencode "status=${status}" \
-    --data-urlencode "msg=${msg}" \
-    "$push_url" >/dev/null \
+  # The URL embeds the push token, so it goes in via a config file on stdin rather than as an
+  # argv element. /proc is mounted without hidepid here, so any local user can read another
+  # user's /proc/<pid>/cmdline; disk-health and longhorn-backup-health run every 10 minutes, and
+  # health-crons.yml:48 documents a mix of root and unprivileged cron owners. Moving the token
+  # out of the world-readable rendered scripts (2026-08-23) left this last argv exposure — a
+  # sub-second window per run instead of a persistent file, but not zero.
+  #
+  # Status and msg stay as --data-urlencode: they carry no secret, and -G appends them to the
+  # config-supplied URL exactly as before. No caller reads stdin, so `-K -` conflicts with
+  # nothing.
+  printf 'url = "%s"\n' "$push_url" |
+    curl -fsS --max-time 10 -G -K - \
+      --resolve "${kuma_host}:443:${resolve_ip}" \
+      --data-urlencode "status=${status}" \
+      --data-urlencode "msg=${msg}" \
+      >/dev/null \
     || { # shellcheck disable=SC2034  # read by the sourcing script, not by this file
       KUMA_PUSH_OK=0
       logger -t "$tag" "push failed (status=${status}: ${msg})"

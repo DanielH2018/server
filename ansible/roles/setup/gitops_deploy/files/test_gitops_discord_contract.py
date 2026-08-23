@@ -580,3 +580,66 @@ def test_k8s_rollback_budget_covers_the_worst_single_promoted_service():
         f"SIGTERMed mid-revert. Raise that default (and TimeoutStartSec, and re-check this "
         f"test's own comment on the batch-summation gap it does not cover)."
     )
+
+
+_DEPLOY_SH = pathlib.Path(__file__).parents[5] / "scripts" / "deploy.sh"
+
+
+def test_deploy_sh_lock_wait_clears_the_deployers_worst_case_hold():
+    # 2026-08-23b review M13. The sibling above pins the weekly secret-rotate cron's wait
+    # against the same worst case. deploy.sh computes the identical quantity by hand, and its
+    # own comment records that the hand-derived value already rotted once: 1500 stayed put
+    # through two TimeoutStartSec bumps. Deriving it from the same defaults the deployer reads
+    # means the next bump fails here instead of silently shortening an operator's wait.
+    defaults = yaml.safe_load(_DEFAULTS.read_text())
+    forward_timeout = int(defaults["gitops_deploy_k8s_timeout_s"])
+    rollback_timeout = int(defaults["gitops_deploy_k8s_rollback_timeout_s"])
+    worst_hold = forward_timeout + rollback_timeout
+
+    lock_wait = int(_search1(r"^LOCK_WAIT=(\d+)", _DEPLOY_SH.read_text()))
+    assert lock_wait >= worst_hold, (
+        f"deploy.sh's LOCK_WAIT={lock_wait} must clear gitops-deploy's worst-case lock hold "
+        f"(K8S_DEPLOY_TIMEOUT_S {forward_timeout} + K8S_ROLLBACK_TIMEOUT_S {rollback_timeout} = "
+        f"{worst_hold}s), or an operator deploy queued behind a legitimately long rollback exits "
+        f"75 having deployed nothing (2026-08-23b review M13)."
+    )
+
+
+_ALERT_UNITS = (
+    _TEMPLATES / "gitops-deploy-alert.service.j2",
+    pathlib.Path(__file__).parents[2]
+    / "renovate_notify"
+    / "templates"
+    / "renovate-notify-alert.service.j2",
+)
+
+
+def test_alert_units_do_not_embed_the_webhook_in_execstart():
+    # 2026-08-23b review M5. Both units used to interpolate the SOPS webhook straight into
+    # ExecStart and rely on `mode: 0600` to protect it. The mode is real and irrelevant: systemd
+    # serves unit content over the system bus, so `systemctl show <unit> -p ExecStart` printed
+    # the full webhook URL to any local user with no sudo. Reproduced on both units, and
+    # reproduced again after the fix to confirm EnvironmentFile makes the same command print the
+    # literal ${ALERT_WEBHOOK}.
+    #
+    # This is the run's "relocation is not remediation" theme, which landed three times in one
+    # diff. A comment claiming the protection is the least reliable evidence in the file, so the
+    # claim gets a test instead.
+    for unit_path in _ALERT_UNITS:
+        unit = unit_path.read_text()
+        exec_start = re.search(
+            r"^ExecStart=.*?(?=\n(?!\s)|\Z)", unit, re.MULTILINE | re.DOTALL
+        )
+        assert exec_start, f"{unit_path} has no ExecStart."
+        assert "gitops_deploy_discord_webhook" not in exec_start.group(0), (
+            f"{unit_path} interpolates the webhook into ExecStart. `systemctl show` will print "
+            f"it to any local user regardless of the unit file's mode. Reference it as "
+            f'"${{ALERT_WEBHOOK}}" and supply it with EnvironmentFile= instead.'
+        )
+        assert re.search(
+            r"^EnvironmentFile=\S*alert-webhook\.env$", unit, re.MULTILINE
+        ), (
+            f"{unit_path} no longer reads a dedicated alert-webhook.env. It must NOT fall back "
+            f"to the role's config.env — that file is exactly what can be unreadable when the "
+            f"thing this unit alerts for has failed."
+        )

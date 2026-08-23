@@ -32,6 +32,32 @@ PINNED = {
     "tempo": "claude_otel_tempo_cluster_ip",
 }
 
+ALL_VARS_FILE = (
+    pathlib.Path(__file__).resolve().parents[1] / "inventory" / "group_vars" / "all.yml"
+)
+
+# Every pinned ClusterIP in the repo, with the file that owns it. The distinctness check below
+# is only meaningful over the whole set: it used to read this role's three and pass while the
+# other two lived in group_vars/all.yml, outside its scope (2026-08-23b review M10).
+#
+# Deliberately an explicit registry rather than a glob over `*_cluster_ip`. A glob also collects
+# `pihole_k8s_dns_cluster_ip: "{{ dns_k8s_cluster_ip }}"` (pihole/defaults/main.yml:47), which is
+# a deliberate alias whose raw value is a Jinja string, not an address — so the glob version of
+# this fix false-positives on day one. Adding a sixth pin means adding a line here, which is the
+# point: a new pin that collides with an existing one is exactly what this catches.
+CROSS_ROLE_PINS = {
+    "claude_otel_loki_cluster_ip": DEFAULTS,
+    "claude_otel_prometheus_cluster_ip": DEFAULTS,
+    "claude_otel_tempo_cluster_ip": DEFAULTS,
+    "dns_k8s_cluster_ip": ALL_VARS_FILE,
+    "k8s_registry_cluster_ip": ALL_VARS_FILE,
+}
+
+# k3s's default Service CIDR. An address outside it is not merely unconventional — the API
+# server rejects it at apply time, so a typo like 10.0.0.158 for 10.43.0.158 passes an
+# is_private check and fails only on the cluster (2026-08-23b review L10).
+SERVICE_CIDR = ipaddress.ip_network("10.43.0.0/16")
+
 
 @pytest.fixture(scope="module")
 def defaults():
@@ -62,15 +88,39 @@ def test_service_pins_its_cluster_ip(name, variable):
     )
 
 
-@pytest.mark.parametrize("variable", sorted(PINNED.values()))
-def test_pinned_value_is_a_private_address(defaults, variable):
-    assert variable in defaults, f"{variable} must be defined in defaults/main.yml"
-    address = ipaddress.ip_address(str(defaults[variable]))
-    assert address.is_private, f"{variable} must be an RFC1918 address, got {address}"
+def _pin_values() -> dict[str, ipaddress.IPv4Address | ipaddress.IPv6Address]:
+    """Every pinned ClusterIP in the repo, read from whichever file owns it."""
+    by_file: dict[pathlib.Path, dict] = {}
+    resolved = {}
+    for variable, source in CROSS_ROLE_PINS.items():
+        if source not in by_file:
+            by_file[source] = yaml.safe_load(source.read_text())
+        content = by_file[source]
+        assert variable in content, f"{variable} must be defined in {source}"
+        resolved[variable] = ipaddress.ip_address(str(content[variable]))
+    return resolved
 
 
-def test_pinned_addresses_are_distinct(defaults):
-    values = [defaults[v] for v in PINNED.values()]
-    assert len(set(values)) == len(values), (
-        f"two backends cannot share a ClusterIP: {values}"
+@pytest.mark.parametrize("variable", sorted(CROSS_ROLE_PINS))
+def test_pinned_value_is_inside_the_service_cidr(variable):
+    address = _pin_values()[variable]
+    assert address in SERVICE_CIDR, (
+        f"{variable} is {address}, outside the Service CIDR {SERVICE_CIDR}. The API server "
+        f"rejects such an address at apply time, so an is_private check alone lets a typo like "
+        f"10.0.0.158 for 10.43.0.158 through every repo-side gate."
     )
+
+
+def test_pinned_addresses_are_distinct():
+    """Across every pinned ClusterIP in the repo, not just this role's three.
+
+    Two Services with the same clusterIP is an admission rejection at deploy time, and the error
+    names neither role — so catching it here is worth considerably more than catching it there.
+    """
+    values = _pin_values()
+    duplicates = {
+        address: sorted(name for name, value in values.items() if value == address)
+        for address in set(values.values())
+        if list(values.values()).count(address) > 1
+    }
+    assert not duplicates, f"two Services cannot share a ClusterIP: {duplicates}"

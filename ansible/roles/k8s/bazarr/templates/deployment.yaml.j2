@@ -35,7 +35,9 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               # The compose template's cap_drop/cap_add pair — the s6 privilege-drop set. No
-              # NET_BIND_SERVICE: bazarr listens on 8989, which needs no privilege.
+              # NET_BIND_SERVICE: bazarr listens on {{ container_item.port }} (>1024), which needs no
+# privilege. Interpolated rather than written out: this comment said 8989 — sonarr's port, from
+# the role it was copied from — until 2026-08-23b L6.
               drop:
                 - ALL
               add:

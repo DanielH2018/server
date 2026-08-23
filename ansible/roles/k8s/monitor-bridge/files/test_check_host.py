@@ -974,3 +974,30 @@ def test_the_recency_window_is_wider_than_the_worst_observed_restart_spacing():
     assert check.duration_seconds(
         check.K8S_RESTART_RECENT_WINDOW
     ) < check.duration_seconds(check.K8S_RESTART_WINDOW)
+
+
+def test_host_origins_floor_defaults_to_both_nodes():
+    """The floor is 2 because node-exporter is a DaemonSet on both nodes. At 1 the arm is inert
+    and check_disk/check_mem silently report the survivor's numbers as the estate's — which is
+    precisely the 2026-08-23 outage it was added for, where daniel-box went unwatched for 5.4h
+    behind two green tiles. Every other arm here monkeypatches the constant, so nothing pinned
+    the shipped value (2026-08-23b review L3)."""
+    assert check.HOST_ORIGINS_MIN == 2, (
+        "HOST_ORIGINS_MIN must default to 2 — one per node. Below that the host-coverage arm "
+        "cannot fire and both host checks go back to monitoring whichever node still reports."
+    )
+
+
+def test_host_origins_floor_is_overridable_from_the_env_secret():
+    """It must be a rendered key, not just a code default: a planned single-node maintenance
+    window otherwise turns check_disk and check_mem permanently red with no way to stand them
+    down. A one-way door is a bug even when the door is a threshold."""
+    import pathlib
+
+    env_secret = (
+        pathlib.Path(__file__).resolve().parents[1] / "templates" / "env-secret.yaml.j2"
+    )
+    assert 'HOST_ORIGINS_MIN: "2"' in env_secret.read_text(), (
+        "HOST_ORIGINS_MIN must be rendered in env-secret.yaml.j2 so an operator can lower it "
+        "for a maintenance window and put it back, rather than editing check.py."
+    )

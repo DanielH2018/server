@@ -372,6 +372,20 @@ Per-verb tiers, the RBAC evidence and the rule-matching measurements: `docs/clau
   own node's collector directly — the Docker forwarder is dissolved/archived. The reader is the
   `claude-permission-audit` plugin
   (`/audit-permissions`), installed globally rather than vendored per-repo.
+  **`/audit-permissions` breaks whenever Loki is not on the node you run it from, and the fix is
+  not in this repo.** Its `loki-source.js` hardcodes `LOKI_URL || http://127.0.0.1:3100` with no
+  ClusterIP fallback and no retry, reporting "could not read Loki … Set $LOKI_URL"; `$LOKI_URL`
+  is unset in `settings.json`, the chezmoi base template, the shell rc files and the plugin's own
+  frontmatter, so the loopback default is what runs. Loki, Prometheus and Tempo are Deployments
+  with **no `nodeSelector`**, bound to `hostIP: 127.0.0.1` hostPorts — all three sit on daniel-box
+  by scheduler luck, and a reboot can move them. The 2026-08-23 ClusterIP pin (`c0d8731e`) gave
+  `otelq` and `otel-sweep` a stable second address; the plugin never got it. Workaround now:
+  `LOKI_URL=http://10.43.99.158:3100`. Durable fix: apply the ClusterIP-fallback pattern in the
+  `daniel-tools` marketplace repo, which is where the plugin lives — an operator searching under
+  `ansible/` will not find it (2026-08-23b review M11). Do **not** pin the workloads to a node;
+  `roles/setup/k3s/defaults/main.yml:804-805` pre-rejects that — fix the firewall, not the
+  placement. In-cluster consumers (Grafana datasources, monitor-bridge, autofix-bridge) use
+  Service DNS and are unaffected.
 - **session-health** (SessionStart) — on opening a session here, prints a banner of any unhealthy/
   restarting containers + down Prometheus targets (silent when all-green; read-only, timeout-bounded).
 - **homelab-network-diagnostician** agent — connectivity/DNS/Traefik/WireGuard/CrowdSec triage (read-only).

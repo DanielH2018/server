@@ -771,26 +771,53 @@ k3s_agent_args: >-
   --node-label node.longhorn.io/create-default-disk=false
   --kubelet-arg=allowed-unsafe-sysctls=net.ipv4.conf.all.src_valid_mark,net.ipv4.ip_forward
 
+# The `template:`-rendered scripts this role puts in /usr/local/bin, checksummed at render time
+# into /var/lib/homelab/setup-render-manifest.d/ so manifest-prune-check.sh can tell whether this
+# host has run initial_setup.yml since they last changed.
+#
+# GROUPED BY TAG FAMILY, and the grouping is the correctness property, not organisation. Each
+# group is stamped by a task carrying that family's tags, so `--tags manifest-prune` restamps
+# only manifest-prune-check.sh. The single flat list this replaced was stamped by one untagged
+# loop over all eight, before any template: task ran — so a tag-scoped run declared all eight
+# current while rendering one, and the seven it never touched read as fresh forever
+# (2026-08-23b review M6). Keep each group's membership identical to the tags on the
+# `template:` task that renders it; ansible/tests/test_setup_render_manifest.py asserts that.
+#
+# Paths are relative to the REPO ROOT, not to templates/, because the manifest is now shared with
+# four other setup-plane roles — the check joins nothing onto a hardcoded directory any more.
+k3s_render_stamp_groups:
+  - name: k3s-backup-health         # tags: [backup-health]
+    templates:
+      - ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2
+      - ansible/roles/setup/k3s/templates/longhorn-reap-orphan-backups.sh.j2
+      - ansible/roles/setup/k3s/templates/longhorn-reap-orphan-snapshots.sh.j2
+      - ansible/roles/setup/k3s/templates/longhorn-restore-drill.sh.j2
+      - ansible/roles/setup/k3s/templates/longhorn-trim-volumes.sh.j2
+  - name: k3s-disk-health           # tags: [disk-health]
+    templates:
+      - ansible/roles/setup/k3s/templates/disk-health.sh.j2
+  - name: k3s-manifest-prune        # tags: [manifest-prune]
+    templates:
+      - ansible/roles/setup/k3s/templates/manifest-prune-check.sh.j2
+  - name: k3s-etcd-snapshot         # tags: [etcd-snapshot]
+    templates:
+      - ansible/roles/setup/k3s/templates/etcd-snapshot-offbox.sh.j2
+
 # Node-to-node traffic UFW must admit (both hosts default-deny INPUT, and unlike every
 # service port this traffic terminates in host processes, not Docker/kube NAT):
 #   6443/tcp  agent -> server   apiserver registration + watch
 #   8472/udp  both directions   flannel VXLAN (pod-to-pod)
 #   10250/tcp both directions   kubelet API (logs/exec/metrics-server)
-# The `template:`-rendered scripts this role puts in /usr/local/bin, checksummed at render time
-# into /var/lib/homelab/setup-render-manifest so manifest-prune-check.sh can tell whether this
-# host has run initial_setup.yml since they last changed. Names are relative to templates/.
-# A script added here without being added to the manifest list is invisible to that check —
-# ansible/tests/test_setup_render_manifest.py fails if the two drift apart.
-k3s_rendered_setup_scripts:
-  - disk-health.sh.j2
-  - etcd-snapshot-offbox.sh.j2
-  - longhorn-backup-health.sh.j2
-  - longhorn-reap-orphan-backups.sh.j2
-  - longhorn-reap-orphan-snapshots.sh.j2
-  - longhorn-restore-drill.sh.j2
-  - longhorn-trim-volumes.sh.j2
-  - manifest-prune-check.sh.j2
-
+#   9100/tcp  both directions   node-exporter scrape (see the two rules below)
+# The two lists below are mirrors apart from 6443, which is server-only because agents dial the
+# API and the server never dials theirs. ansible/tests/test_k3s_join_port_symmetry.py enforces
+# that; until 2026-08-23b the invariant was prose with no reader.
+#
+# NOT a complete inventory of what this cluster needs open. A port missing from BOTH lists is
+# symmetric by construction, so the test is blind to it — MetalLB's memberlist 7946 sat in that
+# blind spot from the day the agent joined until 2026-08-23b, blocked on both nodes with the
+# speakers never converging. Completeness is not a property any check here can establish; the
+# only evidence is a live probe from the node that needs the port.
 k3s_join_server_ports:  # allowed FROM each agent, ON the server
   - { port: "6443", proto: tcp }
   - { port: "8472", proto: udp }
@@ -804,6 +831,15 @@ k3s_join_server_ports:  # allowed FROM each agent, ON the server
   # surviving node; see monitor-bridge check.py). Fix the firewall, not the placement: pinning
   # prometheus back to daniel-box would re-break this the first time the pin is lifted.
   - { port: "9100", proto: tcp }
+  # MetalLB memberlist gossip. Blocked on both nodes since the agent joined, so the speakers
+  # have never converged — verified live on 2026-08-23 with `ss` and the speaker logs
+  # (2026-08-23b review M2). INERT TODAY: L2Advertisement homelab-l2 pins every pool to
+  # daniel-box, so one speaker owns every VIP and has nobody to gossip with. It stops being
+  # inert the moment that pin is lifted, at which point two speakers each believe they own the
+  # address. Symmetric on both lists, which is why the symmetry test could never have caught
+  # it — a port missing from both sides is symmetric by construction.
+  - { port: "7946", proto: tcp }
+  - { port: "7946", proto: udp }
 k3s_join_agent_ports:  # allowed FROM the server, ON the agent
   - { port: "8472", proto: udp }
   - { port: "10250", proto: tcp }
@@ -813,6 +849,10 @@ k3s_join_agent_ports:  # allowed FROM the server, ON the agent
   # target sat down from the DS's first day; pod-IP scrapes (promtail) ride 8472 and
   # masked the gap.
   - { port: "9100", proto: tcp }
+  # The mirror of the server-side MetalLB memberlist rule above — see it for why this is
+  # currently inert and why it must land before the L2Advertisement node pin is lifted.
+  - { port: "7946", proto: tcp }
+  - { port: "7946", proto: udp }
 
 # Agent node IPs the server-side firewall admits. Set in daniel-box host_vars once an
 # agent exists; empty means the allow tasks are no-ops.

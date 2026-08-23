@@ -97,3 +97,68 @@ def test_wrapper_starts_the_unit_without_blocking():
             f"{_WRAPPER} starts the unit blocking: {line!r}. Type=oneshot plus "
             "TimeoutStartSec=45min means that returns only when the tick finishes."
         )
+
+
+_UNIT_TEMPLATE = _ROLE / "templates/gitops-deploy.service.j2"
+
+
+def test_lock_contention_exit_code_is_one_contract_across_all_three_readers():
+    # 2026-08-23b review M1/M13. `flock -E N` in ExecStart, `SuccessExitStatus=N` in the unit,
+    # and the wrapper's handler for N are one contract expressed in three places. When -E 75 and
+    # SuccessExitStatus=75 landed, the wrapper was not updated: a contention tick took its
+    # failure branch and told the operator that gitops-deploy-alert.service had already posted
+    # to Discord. It cannot have — OnFailure never fires on a unit SuccessExitStatus makes
+    # succeed. Pinning the three together is what stops the next edit re-opening that.
+    unit = _UNIT_TEMPLATE.read_text()
+
+    flock_code = re.search(r"^ExecStart=.*?flock\s+.*?-E\s+(\d+)", unit, re.MULTILINE)
+    assert flock_code, (
+        f"{_UNIT_TEMPLATE} ExecStart no longer passes `flock -E N`. Without it contention "
+        "exits 1 and is indistinguishable from a real deploy failure."
+    )
+    success_code = re.search(r"^SuccessExitStatus=(\d+)", unit, re.MULTILINE)
+    assert success_code, (
+        f"{_UNIT_TEMPLATE} no longer sets SuccessExitStatus. Contention would page via "
+        "OnFailure again — the seven false Discord alerts in the week to 2026-08-23."
+    )
+
+    code = flock_code.group(1)
+    assert code == success_code.group(1), (
+        f"`flock -E {code}` and `SuccessExitStatus={success_code.group(1)}` disagree. Only the "
+        "exit code named by BOTH is treated as contention; a mismatch means contention pages "
+        "as a failure while some unrelated exit code is silently swallowed as success."
+    )
+    assert code != "0", (
+        "Contention must not exit 0: gitops_deploy.py's own success also exits 0, so the "
+        "wrapper could not tell a skipped tick from a completed one."
+    )
+
+    stop_post = re.search(r"^ExecStopPost=.*$", unit, re.MULTILINE)
+    assert stop_post, (
+        f"{_UNIT_TEMPLATE} has no ExecStopPost. It is the only hook that sees $EXIT_STATUS "
+        "(ExecStartPost cannot), and without it a contention tick leaves no on-host record at "
+        "all: SyslogLevel/MaxLevelStore=notice drop systemd's own info-level 'Deactivated "
+        "successfully' line."
+    )
+    assert re.search(rf'EXIT_STATUS"?\s*=\s*"?{code}\b', stop_post.group(0)), (
+        f"ExecStopPost does not guard on EXIT_STATUS = {code}, so it either never fires on "
+        f"contention or fires on every tick. Keep it in step with `flock -E {code}`."
+    )
+
+    # The marker string, not the exit code, is what couples the unit to the wrapper. A oneshot
+    # unit with no RemainAfterExit has its ExecMainStatus reset to 0 by systemd once it goes
+    # inactive (measured 2026-08-23, systemd 255.4), so `systemctl show` cannot tell a
+    # contention tick from a successful deploy afterwards. Reading the exit code back was the
+    # obvious fix for M1 and it would have been inert.
+    marker = re.search(
+        r'^CONTENTION_MARKER="([^"]+)"', _WRAPPER.read_text(), re.MULTILINE
+    )
+    assert marker, (
+        f"{_WRAPPER} no longer defines CONTENTION_MARKER, so it cannot distinguish a skipped "
+        "tick from a completed one and will report contention as a clean success."
+    )
+    assert marker.group(1) in stop_post.group(0), (
+        f"{_WRAPPER}'s CONTENTION_MARKER {marker.group(1)!r} does not appear in the unit's "
+        f"ExecStopPost line, so the wrapper greps for a phrase the unit never emits. The two "
+        f"strings are one contract — change them together."
+    )

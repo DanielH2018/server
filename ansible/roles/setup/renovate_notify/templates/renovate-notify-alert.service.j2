@@ -3,11 +3,17 @@ Description=Alert when renovate-notify fails
 
 [Service]
 Type=oneshot
-# Webhook is EMBEDDED (rendered from SOPS at deploy), NOT sourced from /etc/renovate-notify/config.env:
+# The webhook comes from a dedicated one-key file, NOT from /etc/renovate-notify/config.env:
 # config.env is exactly what can be broken/unreadable when the notifier fails, and a hard
-# EnvironmentFile= on that same file would leave THIS alert unable to start → no page. curl's own UA
-# is fine (Cloudflare only 1010-blocks python-urllib, not curl). This unit is therefore installed mode
-# 0600 (see tasks/main.yml) so the embedded webhook isn't world-readable. Mirrors gitops-deploy-alert.service.
+# EnvironmentFile= on that same file would leave THIS alert unable to start → no page. A one-key
+# file of its own has no such coupling. curl's own UA is fine (Cloudflare only 1010-blocks
+# python-urllib, not curl).
+#
+# It is NOT embedded in this unit. Embedding plus `mode: 0600` was the previous arrangement and
+# the mode did not protect the value: `systemctl show renovate-notify-alert -p ExecStart` printed
+# the full webhook to any local user with no sudo (2026-08-23b review M5). Mirrors
+# gitops-deploy-alert.service.
+EnvironmentFile=/etc/renovate-notify/alert-webhook.env
 ExecStart=/usr/bin/curl -fsS -m 10 -H "Content-Type: application/json" \
   -d '{"content":"🚨 renovate-notify unit failed on {{ inventory_hostname }} — check `journalctl -u renovate-notify`."}' \
-  "{{ gitops_deploy_discord_webhook }}"
+  "${ALERT_WEBHOOK}"

@@ -61,7 +61,10 @@ _UNCOVERED_ROLES = {
     # deliberately not covered here; test_seed_pod_security_context.py owns it.
     "seed-volume",
     # Builds images in-cluster; its Job carries reasoned Unconfined seccomp/AppArmor for
-    # rootless BuildKit (build-job.yaml.j2).
+    # rootless BuildKit (build-job.yaml.j2). That reason covers only the two profiles, where
+    # exemption here also waives uid, privileged, capabilities.add, hostPath and host
+    # namespaces — so per the contract above it has its own test:
+    # test_image_builder_security_context.py owns those (2026-08-23b review M17).
     "image-builder",
     # No manifest templates — each resolves a fact or drives kubectl/the Longhorn API directly.
     "rollout-drain",

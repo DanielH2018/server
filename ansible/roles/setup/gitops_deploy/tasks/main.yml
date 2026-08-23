@@ -59,13 +59,32 @@
     - Reload systemd
     - Run gitops-deploy once
 
-- name: Install the alert unit (0600 — embeds the SOPS Discord webhook)
+- name: Write the alert webhook where only systemd reads it
   ansible.builtin.template:
-    src: gitops-deploy-alert.service.j2
-    dest: /etc/systemd/system/gitops-deploy-alert.service
+    src: alert-webhook.env.j2
+    dest: /etc/gitops-deploy/alert-webhook.env
+    owner: root
+    group: root
     mode: "0600"
   become: true
   no_log: true
+  notify:
+    - Reload systemd
+    - Run gitops-deploy once
+
+# 2026-08-23b review M5. This unit used to embed the webhook and was installed 0600 to protect
+# it. The mode was real and did not protect the value: `systemctl show gitops-deploy-alert
+# -p ExecStart` as an unprivileged user with no sudo printed the full webhook URL, because
+# systemd serves unit content over the system bus regardless of file mode. Reproduced here, and
+# reproduced again to confirm the fix — with EnvironmentFile the same command prints the literal
+# `${ALERT_WEBHOOK}` and the value appears nowhere in `systemctl show` output. 0644 is now the
+# honest mode: the unit no longer contains a secret, and the 0600 was only ever guarding one.
+- name: Install the alert unit
+  ansible.builtin.template:
+    src: gitops-deploy-alert.service.j2
+    dest: /etc/systemd/system/gitops-deploy-alert.service
+    mode: "0644"
+  become: true
   notify:
     - Reload systemd
     - Run gitops-deploy once
@@ -89,3 +108,17 @@
     state: started
     daemon_reload: true
   become: true
+
+# Render provenance for manifest-prune-check.sh's stale-script arm. Until 2026-08-23b that arm
+# hardcoded the k3s role's template directory, so these units were watched by nothing at all —
+# and the exit-75 fix sat merged-but-undeployed on this host for exactly that reason (review H1).
+# Last in the role so a failed run leaves the previous checksums rather than claiming these.
+- name: Stamp the rendered gitops-deploy units
+  ansible.builtin.include_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: gitops-deploy
+    stamp_render_templates:
+      - ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2
+      - ansible/roles/setup/gitops_deploy/templates/gitops-deploy-alert.service.j2
+      - ansible/roles/setup/gitops_deploy/templates/gitops-deploy.timer.j2
+      - ansible/roles/setup/gitops_deploy/templates/50-gitops-deploy.rules.j2

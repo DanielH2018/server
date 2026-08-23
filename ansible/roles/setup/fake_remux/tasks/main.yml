@@ -146,3 +146,13 @@
     job: "/usr/local/bin/fake-remux-health.sh"
     cron_file: fake-remux-health
   become: true
+
+# Render provenance for manifest-prune-check.sh's stale-script arm (2026-08-23b review H1).
+# Stamped on whichever host fake_remux_host names — the manifest is per-host by construction,
+# so a host that does not run this role simply has no fragment for it.
+- name: Stamp the rendered fake-remux health script
+  ansible.builtin.include_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: fake-remux
+    stamp_render_templates:
+      - ansible/roles/setup/fake_remux/templates/fake-remux-health.sh.j2

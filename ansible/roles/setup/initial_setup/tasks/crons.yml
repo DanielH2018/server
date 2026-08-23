@@ -208,3 +208,20 @@
     job: "cd /home/{{ sys_user }}/server && PATH=/usr/local/bin:/usr/bin:/bin KUBECONFIG=/home/{{ sys_user }}/.kube/config /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/gen_infra_map.py -o /home/{{ sys_user }}/.claude/artifacts/homelab-infra-map.html"
     user: "{{ sys_user }}"
   become: true
+
+# Render provenance for manifest-prune-check.sh's stale-script arm (2026-08-23b review H1).
+# secret-rotate.sh is the reason this one matters most of the nine that were uncovered: it is a
+# weekly STATE-CHANGING cron that commits and pushes, so a stale render runs old rotation logic
+# against live secrets with every repo-side check reading green.
+#
+# Same has_gitops gate and same [crons] tag as the two wrappers above — a stamp that ran where
+# the wrappers do not would claim coverage this host never renders.
+- name: Stamp the rendered secret-rotation wrappers (gitops host only)
+  tags: [crons]
+  when: has_gitops
+  ansible.builtin.include_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: secret-rotation
+    stamp_render_templates:
+      - ansible/roles/setup/initial_setup/templates/secret-rotate.sh.j2
+      - ansible/roles/setup/initial_setup/templates/secret-rotation-audit.sh.j2
