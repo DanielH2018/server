@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 # daniel-box root-disk headroom heartbeat — managed by Ansible (k3s role); edits overwritten.
 #
-# Everything on this host — Longhorn replicas, container images, etcd — lives on the root LV,
-# and no node-exporter runs here (cluster monitoring is kube-state-metrics + remote-write), so
-# monitor-bridge's Prometheus-based check_disk cannot see this filesystem. Pushes to Kuma like
-# the Longhorn backup heartbeat beside it, for the same reason.
+# Everything on this host — Longhorn replicas, container images, etcd — lives on the root LV.
+#
+# Independent of Prometheus BY DESIGN: this is the leg that survives a node-exporter or Prometheus
+# outage. node-exporter has been a DaemonSet on both nodes since Phase F (this comment claimed
+# "no node-exporter runs here" until 2026-08-23), so check_disk does normally see this filesystem
+# — but on 2026-08-23 a one-directional UFW rule made daniel-box unscrapable for 5.4h and this
+# cron was the only thing still watching its root disk. Covers / ONLY; memory and the boot
+# partitions have no such fallback, which is why check_disk/check_mem now fail closed when a host
+# stops reporting (HOST_ORIGINS_MIN in monitor-bridge check.py). Do not delete this as redundant.
 #
 # The threshold is Longhorn's, not the fleet's 90%: with storageMinimalAvailablePercentage=25
 # (Longhorn default) replica scheduling stops once the disk passes 75% used, so paging at 90
@@ -21,7 +26,17 @@ KUMA_HOST="uptime-kuma.local.{{ domain }}"
 # Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
 # edge's bridge route for this name was removed in the slice-7 bridge teardown.
 KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-PUSH_URL="https://${KUMA_HOST}/api/push/{{ daniel_box_disk_push_token }}"
+# Token sourced, never inlined: this script lands 0755, so an inlined token is readable by every
+# local account and is enough to forge or suppress a heartbeat. 0640 root:{{ sys_user }} env file,
+# same split as ping.env below and live-drift-check.env.
+DANIEL_BOX_DISK_PUSH_TOKEN=""
+# shellcheck source=/dev/null
+[[ -r /etc/rancher/k3s/kuma-push.env ]] && . /etc/rancher/k3s/kuma-push.env
+if [[ -z "$DANIEL_BOX_DISK_PUSH_TOKEN" ]]; then
+  logger -t disk-health "kuma push token unreadable — skipping push (run initial_setup.yml)"
+  exit 0
+fi
+PUSH_URL="https://${KUMA_HOST}/api/push/${DANIEL_BOX_DISK_PUSH_TOKEN}"
 MAX_PCT={{ k3s_disk_max_pct }}
 
 read -r USED_PCT AVAIL_KB < <(df -P / | awk 'NR==2 { sub("%","",$5); print $5, $4 }')

@@ -168,9 +168,12 @@ BESPOKE_POLICY_WORKLOADS = {
 # stands in for a compromised pod with no allow-list entry, so labelling one would make it prove
 # nothing. This is a different category from BESPOKE_POLICY_WORKLOADS, which is "fenced by its own
 # policy" — these are fenced by nothing, on purpose.
+#
+# Entries are used only as a subtrahend, so one that matches no rendered doc is a silent no-op —
+# it neither widens nor narrows the gate, it just rots. ("sonarr", "sonarr-isolation-probe") sat
+# here until 2026-08-23 naming a job deleted on 2026-08-17.
 UNFENCED_BY_DESIGN_WORKLOADS = {
     ("prowlarr", "flaresolverr-netpol-probe"),
-    ("sonarr", "sonarr-isolation-probe"),
     ("n8n", "n8n-netpol-probe"),
 }
 

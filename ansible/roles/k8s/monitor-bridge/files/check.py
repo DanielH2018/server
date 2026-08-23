@@ -803,6 +803,70 @@ def parse_duration(s):
     return float(s)
 
 
+# Distinct `origin` values the host-metric checks must see. node-exporter is a DaemonSet on both
+# nodes, so a vector grouped by origin returning fewer than this has LOST a host, not measured a
+# healthy estate — and check_disk/check_mem would report the survivor's numbers as the estate's.
+# Live on 2026-08-23: daniel-box's node-exporter was unreachable for 5.4h (a one-directional UFW
+# rule, k3s defaults k3s_join_server_ports) and both checks pushed OK off daniel-server alone, so
+# daniel-box's host memory and /boot went unwatched behind two green tiles for the whole window.
+#
+# Why a floor here and not reliance on the Scrape Targets sentinel: that check keys on `up`, and
+# node-exporter's normal failure mode is PER-COLLECTOR — `node_scrape_collector_success == 0`
+# already returns five collectors on a host whose `up` is 1. A filesystem or meminfo collector
+# failing therefore leaves `up == 1`, leaves Scrape Targets green, and drops the host from these
+# two checks with nothing firing anywhere. Same shape as check_ups's partial-absence arm: never
+# monitor the survivor silently. Verified before setting the floor: /, /boot and /boot/efi each
+# report from both origins over the preceding 7d, so no mountpoint is legitimately single-host.
+HOST_ORIGINS_MIN = int(_env("HOST_ORIGINS_MIN", "2"))
+# Hysteresis, for the same reason UPS_CONSECUTIVE exists: the weekly Sunday reboot takes a node's
+# node-exporter away for minutes against a 1m scrape and a 5m check loop, and a bare floor would
+# page every week. Measured over the 7d to 2026-08-23, `count(node_memory_MemTotal_bytes) < 2`
+# held for 66 samples and ALL 66 were inside the real outage — so the floor is quiet in steady
+# state and this grace only has to cover reboots.
+HOST_ORIGINS_CONSECUTIVE = int(_env("HOST_ORIGINS_CONSECUTIVE", "3"))
+
+_host_origin_streaks: dict[str, int] = {}
+
+
+def _host_origin_shortfall(key, vec, what):
+    """(ok, msg) when `vec` covers fewer than HOST_ORIGINS_MIN hosts, else None.
+
+    Passes (green, but says so) while the shortfall is younger than HOST_ORIGINS_CONSECUTIVE
+    cycles, so a reboot doesn't page; fails once it persists. Any full-coverage cycle resets.
+    `key` separates the streaks so disk and memory age independently.
+    """
+    origins = {_origin_name(labels) for labels, _ in vec}
+    if len(origins) >= HOST_ORIGINS_MIN:
+        _host_origin_streaks[key] = 0
+        return None
+    streak = _host_origin_streaks.get(key, 0) + 1
+    _host_origin_streaks[key] = streak
+    seen = ", ".join(sorted(origins)) or "none"
+    if streak < HOST_ORIGINS_CONSECUTIVE:
+        return (
+            True,
+            "%s: only %d of %d hosts reporting (%s), cycle %d/%d — node rebooting?"
+            % (
+                what,
+                len(origins),
+                HOST_ORIGINS_MIN,
+                seen,
+                streak,
+                HOST_ORIGINS_CONSECUTIVE,
+            ),
+        )
+    return (
+        False,
+        "%s UNKNOWN: only %d of %d hosts reporting (%s) — the absent host is NOT being checked"
+        % (
+            what,
+            len(origins),
+            HOST_ORIGINS_MIN,
+            seen,
+        ),
+    )
+
+
 # checks: each returns (ok, msg)
 
 
@@ -813,6 +877,7 @@ def check_disk():
     # in this Prometheus it paired one host's avail with the other's size, and a filling disk on
     # the smaller host produced an arbitrarily wrong percentage rather than a high one.
     breaching = []
+    shortfalls = []
     for mp in DISK_MOUNTPOINTS:
         sel = '{mountpoint="%s"}' % mp
         vec = prom_vector(
@@ -821,11 +886,21 @@ def check_disk():
         )
         if not vec:
             return False, "metric unavailable for %s" % mp
+        # Collected, not returned, so a host that IS reporting and IS full still pages ahead of
+        # the coverage complaint — a real breach on the survivor outranks the absent host.
+        short = _host_origin_shortfall("disk:%s" % mp, vec, "disk %s" % mp)
+        if short is not None:
+            shortfalls.append(short)
         for labels, used_pct in vec:
             if used_pct > DISK_MAX_PCT:
                 breaching.append("%s %s %.0f%%" % (_origin_name(labels), mp, used_pct))
     if breaching:
         return False, "disk over %.0f%%: %s" % (DISK_MAX_PCT, ", ".join(breaching))
+    failed = [s for s in shortfalls if not s[0]]
+    if failed:
+        return False, "; ".join(msg for _, msg in failed)
+    if shortfalls:
+        return True, "; ".join(msg for _, msg in shortfalls)
     return True, "all mounts under %.0f%%" % DISK_MAX_PCT
 
 
@@ -850,6 +925,9 @@ def check_mem():
     )
     if not vec:
         return False, "memory metric unavailable"
+    # Evaluated after the breach scan below, for the same reason as check_disk: a reporting host
+    # that is actually out of memory outranks a complaint about the absent one.
+    short = _host_origin_shortfall("mem", vec, "memory")
     breaching = [
         "%s %.0f%%" % (_origin_name(labels), pct)
         for labels, pct in vec
@@ -857,6 +935,8 @@ def check_mem():
     ]
     if breaching:
         return False, "mem over %.0f%%: %s" % (MEM_MAX_PCT, ", ".join(breaching))
+    if short is not None:
+        return short
     worst = max(pct for _, pct in vec)
     return True, "mem %.0f%%" % worst
 

@@ -112,12 +112,12 @@ spec:
             limits:
               cpu: "{{ tdarr_k8s_cpu_limit }}"
               memory: {{ tdarr_k8s_mem_limit }}
-              devic.es/dri: 1
+              {{ tdarr_k8s_dri_resource }}: 1
             requests:
               cpu: "{{ tdarr_k8s_cpu_request }}"
               memory: {{ tdarr_k8s_mem_request }}
               # Extended resources must request exactly what they limit.
-              devic.es/dri: 1
+              {{ tdarr_k8s_dri_resource }}: 1
       volumes:
         - name: tdarr-server
           persistentVolumeClaim:

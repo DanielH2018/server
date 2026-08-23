@@ -287,9 +287,12 @@ the draft prescribed is gone — and with it the slice's largest continuity risk
 path* still moves, and that carries a continuity risk of its own with a nastier failure shape.
 
 **The risky step is pointing `monitor-bridge` at a cluster Prometheus, not moving Kuma.**
-`check.py:2896` defines `PROM_DEPENDENT` as exactly twelve checks — `disk`, `cert`, `memory`,
-`restarts`, `oom`, `cpu`, `targets`, `traefik5xx`, `b2_trend`, `ups`, `janitorr`,
-`promtail_dropped`. When the Prometheus Reachable gate reads down, all twelve are **suppressed**:
+`PROM_DEPENDENT` in `check.py` defined exactly twelve checks **as of this slice** — `disk`,
+`cert`, `memory`, `restarts`, `oom`, `cpu`, `targets`, `traefik5xx`, `b2_trend`, `ups`,
+`janitorr`, `promtail_dropped`. (Historical record, not current state: as of 2026-08-23 the set
+is eleven — `b2_trend` and `janitorr` are gone and `longhorn_volumes` was added. Read the symbol
+for the live membership.) When the Prometheus Reachable gate reads down, all of them are
+**suppressed**:
 pushed `up` with a "skipped" message so their heartbeats stay alive.
 
 That gate is doing exactly what it was built to do. But it means a cluster Prometheus that is

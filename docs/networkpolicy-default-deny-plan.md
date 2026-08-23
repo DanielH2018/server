@@ -78,7 +78,7 @@ netpol_baseline_node_cidrs:
 # policy in the repo mean something.
 #
 # INGRESS ONLY. An Egress policy selects pods correctly on this cluster and blocks nothing
-# (measured 2026-08-07, recorded in sonarr/templates/isolation-probe-job.yaml.j2). Writing one
+# (measured 2026-08-07, recorded in sonarr/tasks/main.yml). Writing one
 # would read like a control in the repo and do nothing in the cluster.
 #
 # Kubelet probe traffic needs no rule here: flaresolverr admits :8191 only from prowlarr yet is

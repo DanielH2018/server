@@ -384,7 +384,7 @@ about two pods behind one Service is that losing one is invisible: DNS keeps ans
 survivor, and you are back to a single instance with no signal until the next deploy takes LAN
 DNS down. That is covered. `monitor-bridge`'s `k8s_workloads` check queries
 `kube_deployment_status_replicas_unavailable > 0` with **no deployment-name filter**
-(`roles/k8s/monitor-bridge/files/check.py:2426`, registered in `CHECKS` at `:2677`), and each
+(`check_k8s_workloads` in `roles/k8s/monitor-bridge/files/check.py`, registered in `CHECKS` under `k8s_workloads` — cited by symbol, not line: that file is edited often enough that line numbers here went stale twice), and each
 instance is its own `replicas: 1` Deployment with readiness and liveness probes — so a dead
 `pihole-2` shows up as one unavailable replica regardless of what the Service is still serving.
 A crashlooper that flickers through readiness is caught by the same check's restart arm. The

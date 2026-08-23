@@ -776,10 +776,34 @@ k3s_agent_args: >-
 #   6443/tcp  agent -> server   apiserver registration + watch
 #   8472/udp  both directions   flannel VXLAN (pod-to-pod)
 #   10250/tcp both directions   kubelet API (logs/exec/metrics-server)
+# The `template:`-rendered scripts this role puts in /usr/local/bin, checksummed at render time
+# into /var/lib/homelab/setup-render-manifest so manifest-prune-check.sh can tell whether this
+# host has run initial_setup.yml since they last changed. Names are relative to templates/.
+# A script added here without being added to the manifest list is invisible to that check —
+# ansible/tests/test_setup_render_manifest.py fails if the two drift apart.
+k3s_rendered_setup_scripts:
+  - disk-health.sh.j2
+  - etcd-snapshot-offbox.sh.j2
+  - longhorn-backup-health.sh.j2
+  - longhorn-reap-orphan-backups.sh.j2
+  - longhorn-reap-orphan-snapshots.sh.j2
+  - longhorn-restore-drill.sh.j2
+  - longhorn-trim-volumes.sh.j2
+  - manifest-prune-check.sh.j2
+
 k3s_join_server_ports:  # allowed FROM each agent, ON the server
   - { port: "6443", proto: tcp }
   - { port: "8472", proto: udp }
   - { port: "10250", proto: tcp }
+  # The mirror of the agent-side 9100 rule below, and it must stay symmetric. Prometheus is a
+  # single-replica Deployment with NO nodeSelector and no affinity, so it lands wherever the
+  # scheduler puts it after a reboot; whichever node it is NOT on has to admit the scrape. The
+  # agent-side rule (added 2026-08-14) assumed "prometheus runs on the server", and on 2026-08-23
+  # the 07:38 reboot moved it to daniel-server — daniel-box's node target then sat down 5.4h,
+  # dropping its host memory and /boot coverage entirely (check_disk/check_mem read green off the
+  # surviving node; see monitor-bridge check.py). Fix the firewall, not the placement: pinning
+  # prometheus back to daniel-box would re-break this the first time the pin is lifted.
+  - { port: "9100", proto: tcp }
 k3s_join_agent_ports:  # allowed FROM the server, ON the agent
   - { port: "8472", proto: udp }
   - { port: "10250", proto: tcp }

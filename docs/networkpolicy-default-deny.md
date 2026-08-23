@@ -4,7 +4,11 @@ Design doc. Written 2026-08-16. Status: **all five slices deployed and enforcing
 2026-08-17, slice 3 on 2026-08-19, slices 4, 4.5 and 5 on 2026-08-20). `netpol_baseline_enforced`
 and `netpol_baseline_obs_enforced` are both `true`, and `netpol_baseline_scope` is `namespace` —
 so every pod in `homelab` and `observability` is fenced by default, and the only way out is the
-`netpol-baseline-exempt` label. Four workloads carry it: flaresolverr, headlamp, n8n and registry.
+`netpol-baseline-exempt` label. The exempt set is declared in
+`ansible/roles/k8s/netpol-baseline/defaults/main.yml` (`netpol_baseline_exempt_workloads`), each
+entry carrying its reason inline, and a cluster-side exact-set gate refuses the deploy if the live
+set drifts from it. It is deliberately not enumerated here — this sentence named four workloads
+from 2026-08-17 until 2026-08-23, by which point karakeep-chrome had made it five.
 
 Counts are deliberately not recorded here; they went stale within a day when they were. For live
 ones:
@@ -41,7 +45,7 @@ All measured on this cluster, not assumed.
 | Fact | Evidence |
 |---|---|
 | **Ingress policies are enforced**; kube-router's netpol controller runs (k3s default, `--disable-network-policy` not passed) | `n8n/templates/networkpolicy.yaml.j2` header; four live policies |
-| **Egress policies select pods and block nothing** | measured 2026-08-07, recorded in `sonarr/templates/isolation-probe-job.yaml.j2` |
+| **Egress policies select pods and block nothing** | measured 2026-08-07, recorded in `sonarr/tasks/main.yml` (probe retired 2026-08-17; prose is the only record) |
 | **Kubelet probe traffic needs no ingress rule** | `flaresolverr` admits :8191 only from prowlarr, yet is probed on :8191 and runs 1/1. Corroborated by `headlamp` (:4466 from traefik only, 1/1 for 28h) |
 | **hostNetwork pods cannot be policed by podSelector** | `node-exporter` (both nodes), metallb `speaker` — pod IP *is* the node IP |
 | **hostPort traffic arrives with a node IP**, needing an `ipBlock` | `registry`'s policy carries `ipBlock` entries for exactly this |
@@ -137,7 +141,7 @@ other label and so would pass that check while still breaking:
 - **`podSelector: {}` fences each probe's control target, not the probe pod itself.** Every probe
   leg in this repo is **outbound** (`netpol-probe-job.yaml.j2:44,61,104`;
   `netpol-probe-slice2-job.yaml.j2`; `netpol-probe-slice3-job.yaml.j2:72,93,102`;
-  `prowlarr/netpol-probe-job.yaml.j2:53,64`; `sonarr/isolation-probe-job.yaml.j2`) — nothing needs a
+  `prowlarr/netpol-probe-job.yaml.j2:53,64`; `sonarr/tasks/main.yml`) — nothing needs a
   probe pod to be reachable *inbound*. An Ingress-only policy selecting a probe pod governs what
   reaches it, not what it can reach, and return traffic rides conntrack, so being selected as a
   target cannot break an outbound assertion. What actually breaks is the mirror image:

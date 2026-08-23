@@ -44,6 +44,42 @@ _PRIVILEGED = {
 }
 
 
+# Roles this guard's corpus does NOT contain, each with the reason it is out.
+#
+# THE BLIND SPOT THIS PINS (2026-08-23): rendered_docs() filters on
+# validate_k8s_manifests.SKIP_ROLES — a list maintained for a DIFFERENT purpose, namely what the
+# manifest validator can render standalone. Coverage of this security guard was therefore a side
+# effect of someone else's list. seed-volume is on it, and seed-pod.yaml.j2 runs `runAsUser: 0`
+# with no container securityContext at all, so every assertion in this file passed while that pod
+# was never examined. Pinning the exempt set turns a role joining it into a failure here instead
+# of a silent contraction; anything added below needs a justification and, if it renders a pod
+# spec, its own test.
+_UNCOVERED_ROLES = {
+    # Renders no manifests of its own — it is the shared apply/rollout machinery.
+    "manifests",
+    # Per-deploy state, not a service manifest set. seed-pod.yaml.j2 IS a pod spec and is
+    # deliberately not covered here; test_seed_pod_security_context.py owns it.
+    "seed-volume",
+    # Builds images in-cluster; its Job carries reasoned Unconfined seccomp/AppArmor for
+    # rootless BuildKit (build-job.yaml.j2).
+    "image-builder",
+    # No manifest templates — each resolves a fact or drives kubectl/the Longhorn API directly.
+    "rollout-drain",
+    "cronjob-gate",
+    "volume-snapshot",
+    "longhorn-api",
+    "volume-revert",
+    # Dockerfiles and app config only — no Kubernetes objects at all.
+    "n8n-images",
+}
+
+# The real container count is ~103. A floor of 40 cannot distinguish a broken collector from
+# half the fleet dropping out, which is the failure this file exists to prevent. Kept a little
+# below the live count so adding a workload never breaks the build, but close enough to notice
+# a contraction.
+_MIN_CONTAINERS = 90
+
+
 def _pod_specs(doc: dict):
     spec = doc.get("spec", {})
     if doc["kind"] == "CronJob":
@@ -96,9 +132,35 @@ def test_every_container_drops_all_capabilities():
     assert seen > 40, (
         f"only inspected {seen} containers — the collector stopped matching"
     )
+    assert seen >= _MIN_CONTAINERS, (
+        f"only inspected {seen} containers, expected at least {_MIN_CONTAINERS} — coverage "
+        "shrank. A floor far below the real count cannot tell 'the collector broke' from "
+        "'half the fleet stopped being rendered'."
+    )
     assert not offenders, (
         "these containers keep the runtime's default capability set, because a pod-level "
         "securityContext does not grant one: " + ", ".join(sorted(offenders))
+    )
+
+
+def test_the_corpus_covers_every_role_except_a_named_set():
+    """Coverage is asserted, not assumed — see _UNCOVERED_ROLES."""
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parents[2]
+    all_roles = {
+        p.parent.parent.name
+        for p in (repo / "ansible/roles/k8s").glob("*/tasks/main.yml")
+    }
+    covered = {role for role, _, _ in rendered_docs()}
+    unexpected = (all_roles - covered) - _UNCOVERED_ROLES
+    assert not unexpected, (
+        "these roles are not in the security corpus and are not declared uncovered, so their "
+        "containers are unchecked: " + ", ".join(sorted(unexpected))
+    )
+    stale = _UNCOVERED_ROLES - all_roles
+    assert not stale, "_UNCOVERED_ROLES names roles that no longer exist: " + ", ".join(
+        sorted(stale)
     )
 
 

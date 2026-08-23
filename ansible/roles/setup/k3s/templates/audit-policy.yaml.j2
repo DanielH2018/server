@@ -68,6 +68,19 @@ rules:
       - group: ""
         resources: ["secrets"]
 
+  # Pod logs, for the same reason and with the same placement constraint as Secret reads above:
+  # reading a pod's log is a `get` on pods/log, so the blanket read drop below swallowed it and
+  # nothing recorded it. The kept pod-subresource rule further down does NOT cover this — exec,
+  # attach and portforward are connect/create verbs and so never meet the read drop, while this
+  # one does. Logs are part of the same auto-approved reach into a container that rule exists to
+  # record, and for several of these workloads they carry request detail, tokens in error traces,
+  # and Authelia/CrowdSec specifics. Metadata names the reader, the pod and the time, never a line.
+  - level: Metadata
+    verbs: ["get", "list", "watch"]
+    resources:
+      - group: ""
+        resources: ["pods/log"]
+
   # Reads. This cluster's controllers watch continuously, and a `get`/`list`/`watch` cannot
   # change state, so logging them buys nothing and would dominate the file.
   - level: None

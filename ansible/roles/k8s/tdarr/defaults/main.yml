@@ -87,6 +87,13 @@ tdarr_k8s_webui_port: 8265
 # Exposing it would publish an unauthenticated control channel for a process that rewrites media.
 tdarr_k8s_server_port: 8266
 
+# The extended resource the dri-device-plugin advertises (dri-device-plugin daemonset.yaml.j2).
+# Named here rather than spelled inline in the manifest so the estate's two GPU consumers stay in
+# lockstep: jellyfin already resolves the same string through jellyfin_k8s_dri_resource, and a
+# rename of the advertised resource that caught only one of the two would leave this one
+# requesting a resource nothing advertises — an unschedulable pod, not a loud error.
+tdarr_k8s_dri_resource: devic.es/dri
+
 tdarr_k8s_cpu_limit: "6"
 tdarr_k8s_mem_limit: 4096Mi
 tdarr_k8s_cpu_request: "250m"

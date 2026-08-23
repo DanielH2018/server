@@ -12,3 +12,15 @@ Type=oneshot
 ExecStart=/usr/bin/curl -fsS -m 10 -H "Content-Type: application/json" \
   -d '{"content":"🚨 gitops-deploy unit failed on {{ inventory_hostname }} — check `journalctl -u gitops-deploy`."}' \
   "{{ gitops_deploy_discord_webhook }}"
+# A delivered page left NO on-host record: `curl -fsS` is silent on success, and systemd's own
+# Starting/Finished lines are info-level, which journald drops here (MaxLevelStore=notice). So
+# `journalctl -u gitops-deploy-alert` read `-- No entries --` against real failures, which looks
+# identical to "the alert unit never fired". Both directives below are required and neither is
+# sufficient alone: SyslogLevel= governs only THIS unit's own stdout, never PID 1's lifecycle
+# messages, so without the echo it stores nothing; without SyslogLevel the echo lands at info and
+# is dropped. ExecStartPost runs only when ExecStart succeeded, so the line means "delivered",
+# not "attempted" — and a FAILED curl already logs at err, which survives the cap. Deliberately
+# not a `/bin/sh -c '… && echo …'` wrapper: that would re-quote the single-quoted JSON payload
+# around a secret in a 0600 file for no gain.
+SyslogLevel=notice
+ExecStartPost=/bin/echo gitops-deploy failure alert delivered
