@@ -4,6 +4,7 @@ Same shape as the host probes and split from them only by subject — a service 
 API and decides, where a host check reads a sensor.
 """
 
+import re
 import time
 from datetime import datetime, timezone, timedelta
 
@@ -627,6 +628,40 @@ def test_ha_heartbeat_unreachable_api_rides_grace(monkeypatch):
 # HA's ban middleware keys on the peer address, so a burst of bad /api/ calls can ban the node's
 # pod-network gateway. The probes now exec curl to 127.0.0.1 and are immune; this arm is what
 # keeps the ban itself from being silent.
+# Promtail's k8s stream vocabulary, read off a live Loki stream on 2026-08-23. `app` is NOT in
+# it — HA_BAN_SELECTOR shipped with app="home-assistant", matched no stream, and reported "no
+# ip_ban events" forever. A fail-open arm cannot tell "nothing to report" from "wrong question",
+# so the selector label has to be checked by something other than the check's own verdict.
+LOKI_STREAM_LABELS = frozenset(
+    {
+        "container",
+        "filename",
+        "job",
+        "machine",
+        "namespace",
+        "pod",
+        "service_name",
+        "stream",
+    }
+)
+
+
+def _selector_labels(selector):
+    """Label names in a LogQL stream selector — the `foo` of `{foo="bar",baz=~"qux"}`."""
+    head = selector.split("}", 1)[0]
+    return set(re.findall(r"(\w+)\s*(?:=~|!~|!=|=)", head))
+
+
+def test_loki_selectors_use_real_stream_labels():
+    for name in ("LOKI_STREAM", "LOKI_DOCKER_STREAM", "HA_BAN_SELECTOR"):
+        selector = getattr(check, name)
+        unknown = _selector_labels(selector) - LOKI_STREAM_LABELS
+        assert not unknown, (
+            "%s selects on %s, which promtail does not emit — the query matches no stream and "
+            "the check goes permanently green: %s" % (name, sorted(unknown), selector)
+        )
+
+
 def test_ha_ban_no_events_is_ok():
     ok, msg = check.ha_ban_verdict(0, "1h")
     assert ok
