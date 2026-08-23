@@ -48,7 +48,7 @@
     # exactly. Every entry would therefore have read stale from the first armed run.
     #
     # Nothing caught it because the arm has never run: it shipped 2026-08-23, the host has not
-    # executed initial_setup.yml since, and with no manifest present the check takes its
+    # executed k3s-bringup.yml since, and with no manifest present the check takes its
     # absent branch and says so. A latent guard fails the first time it is armed, which is the
     # worst moment — it arrives as eight simultaneous stale-script alerts on a healthy host.
     content: |

@@ -261,3 +261,66 @@ def test_every_exemption_is_real():
         f"the entry — an exemption for a file that does not exist quietly widens what this "
         f"check tolerates and reads as precedent for the next one."
     )
+
+
+def test_the_tag_scoping_actually_selects_one_stamp_per_family():
+    """The behavioural half of M6, and the reason it is here rather than left to the YAML check
+    above: reading the tag off the task proves the tag is written, not that Ansible selects on it.
+
+    That is theme 3 of the 2026-08-23b review — a guard that reads the right thing and asserts
+    nothing about behaviour. `--tags <family>` must reach exactly that family's stamp task and no
+    other; a stamp restamped by a run that did not render its templates is M6 verbatim.
+
+    `--list-tasks` executes nothing and needs no cluster, secrets or become password. The k3s role
+    is reached from k3s-bringup.yml, NOT initial_setup.yml — the four other roles' stamps live in
+    the latter and are covered by test_other_setup_roles_stamp_their_own_artifacts.
+    """
+    import os
+    import shutil
+    import subprocess
+    import sys
+
+    if shutil.which("ansible-playbook") is None:
+        import pytest
+
+        pytest.skip("ansible-playbook not on PATH")
+
+    # See test_playbook_spawns_pin_interpreter.py: ansible.cfg's fact cache is keyed on
+    # `localhost` across every worktree, so an unpinned spawn adopts — and republishes — another
+    # tree's .venv path. --list-tasks discovers no interpreter, but that guard is blanket and
+    # pinning costs nothing.
+    env = dict(os.environ)
+    env["ANSIBLE_PYTHON_INTERPRETER"] = sys.executable
+    playbook = _REPO / "ansible/k3s-bringup.yml"
+    for name, tag in sorted(_GROUP_TAGS.items()):
+        result = subprocess.run(
+            ["ansible-playbook", str(playbook), "--tags", tag, "--list-tasks"],
+            cwd=_REPO,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        assert result.returncode == 0, (
+            f"--list-tasks failed for --tags {tag}: {result.stderr[-800:]}"
+        )
+        selected = [
+            line.split(":", 1)[1].split("\t")[0].strip()
+            for line in result.stdout.splitlines()
+            if "Stamp the" in line
+        ]
+        assert len(selected) == 1, (
+            f"--tags {tag} selects {len(selected)} stamp tasks ({selected}); exactly one group "
+            f"is rendered by that family, so exactly one may be restamped by it."
+        )
+        stamped = yaml.safe_load(_HEALTH_CRONS.read_text())
+        wanted = next(
+            task["name"]
+            for task in stamped
+            if isinstance(task, dict)
+            and (task.get("vars") or {}).get("stamp_render_name") == name
+        )
+        assert selected[0] == wanted, (
+            f"--tags {tag} selects the stamp task {selected[0]!r}, but {name} is stamped by "
+            f"{wanted!r}. The tag family and the group it stamps have come apart."
+        )

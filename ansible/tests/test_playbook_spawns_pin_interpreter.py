@@ -41,6 +41,7 @@ _KNOWN = {
     "test_longhorn_api.py",
     "test_volume_revert_input_guard.py",
     "test_volume_snapshot_register.py",
+    "test_setup_render_manifest.py",
 }
 
 
