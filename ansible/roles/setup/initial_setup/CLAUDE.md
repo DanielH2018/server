@@ -36,13 +36,23 @@ invariant when adding tasks, or tag-scoped runs die on undefined variables.
   24.04+) and the Python CLI tooling as uv tools.
 - **Unattended upgrades:** `20auto-upgrades` turns the periodic timers on;
   `52unattended-upgrades-local` sets no-automatic-reboot (the Sunday 07:30 restart cron owns
-  reboots) plus obsolete-kernel cleanup, and **appends** `unattended_upgrades_extra_origins`
-  (`group_vars/all.yml`) to the distro's Allowed-Origins. Since 2026-08-24 that list adds the
-  `-updates` pocket and `gh:stable`, so the "N updates can be applied immediately" MOTD line
-  no longer accrues a permanent backlog. Set the var to `[]` on a host for security-only.
-  Use the `::` append syntax only — a `{ ... }` block reads as a replacement, and a
-  replacement drops the `-security` and ESM pockets. Verify with
-  `apt-config dump Unattended-Upgrade::Allowed-Origins`.
+  reboots) plus obsolete-kernel cleanup, and **appends** `unattended_upgrades_origins_patterns`
+  (`group_vars/all.yml`) as `Origins-Pattern::` entries. Since 2026-08-24 that list adds the
+  `-updates` pocket and the GitHub CLI repo, so the "N updates can be applied immediately" MOTD
+  line no longer accrues a permanent backlog. Set the var to `[]` on a host for security-only.
+  Two traps, both of which look correct at every stage except the one that matters:
+  - **Use `Origins-Pattern`, not `Allowed-Origins`.** The latter is the legacy `origin:archive`
+    form and is rewritten to `o=X,a=Y`, so it only matches a repo publishing a `Suite:` field.
+    The gh repo has none (`origin='gh', archive='', codename='stable'`), so `gh:stable` matched
+    nothing while `apt-config dump` listed it. ENFORCED by
+    `ansible/tests/test_unattended_origins_pattern.py`.
+  - **Use the `::` append syntax.** A `{ ... }` block reads as a replacement, and a replacement
+    drops the `-security` and ESM pockets.
+
+  Verify with `apt-config dump Unattended-Upgrade::Allowed-Origins` (must still list
+  `-security`) **and** `apt-config dump Unattended-Upgrade::Origins-Pattern` (must list the
+  extras). Note `unattended-upgrade --dry-run` needs root, so the only unprivileged proof that
+  a pattern matches is reading `archive`/`codename` off the package file via python-apt.
 - **SSH:** `.ssh` perms, an `ssh-users` group, sshd hardening, and a `Match` block re-enabling
   local TCP forwarding for `sys_user` (the global config disables agent/X11/TCP forwarding).
   → `notify: Restart SSH`.
