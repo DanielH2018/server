@@ -2,8 +2,6 @@
 # Slice 4, B6 — the heaviest transcode consumer, and the workload that will find VAAPI's edges.
 # B5 proved the device is reachable and that a 3-second synthetic encode succeeds; this one runs
 # real files through it for minutes at a time.
-tdarr_k8s_enabled: true
-
 # Pinned by DIGEST, carried across from the compose template along with its reason: tdarr is
 # stateful AND rewrites library files in place. Upstream ships dev-tagged builds Renovate
 # cannot track by version (this digest = dev_2.78.01, 2026-06-12), so a VERSION bump stays

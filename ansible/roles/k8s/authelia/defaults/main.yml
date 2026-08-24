@@ -19,7 +19,7 @@ k8s_autodeploy_reason: "platform — SSO/OIDC gate; a failed deploy locks out ac
 authelia_k8s_cookie_name: authelia_session_k8s
 
 # Its own SQLite database on its own volume. This is the slice-1 hazard named in
-# docs/k3s-migration/design.md: two Authelias writing one SQLite file corrupts it for both.
+# docs/archive/k3s-migration/design.md: two Authelias writing one SQLite file corrupts it for both.
 # The storage ENCRYPTION KEY is deliberately shared with the Docker instance
 # (authelia_storage) so the slice-6 cutover is a plain file copy with no re-encryption, and
 # so this adds no second `pinned` secret to the rotation registry.

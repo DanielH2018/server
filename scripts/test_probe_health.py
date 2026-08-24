@@ -6,27 +6,9 @@ killing it, so a rollout check alone reports green on a crashlooping pod. An unr
 time counts as recent, so the gate fails closed.
 """
 
-import importlib.util
-import os
 from datetime import datetime, timezone
 
-
-_MOD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "probe.py")
-_spec = importlib.util.spec_from_file_location("probe", _MOD)
-probe = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(probe)
-
-
-# Fake resolver: maps container name -> a recognizable IP. A wrong container name
-# raises KeyError, so a misrouted subcommand fails loudly.
-IPS = {"prometheus": "10.0.0.1", "loki": "10.0.0.2", "scrutiny": "10.0.0.3"}
-fake_resolve = IPS.__getitem__
-
-
-def fake_k8s_endpoint(hostname):
-    # The (base, --resolve pin) pair the live k8s_endpoint() derives from SOPS +
-    # inventory — faked so plan() stays testable without either.
-    return f"https://{hostname}.example", f"{hostname}.example:443:10.0.0.240"
+import probe
 
 
 def _inspect(state, restarts=0):

@@ -5,30 +5,12 @@ that catch a subcommand pointed at the wrong host or built with the wrong query 
 bug that returns a confident answer about the wrong thing.
 """
 
-import importlib.util
-import os
 import re
 
 import pytest
 
-
-_MOD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "probe.py")
-_spec = importlib.util.spec_from_file_location("probe", _MOD)
-probe = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(probe)
-
-import probe_core as core  # noqa: E402  (probe.py must load first, by path)
-
-# Fake resolver: maps container name -> a recognizable IP. A wrong container name
-# raises KeyError, so a misrouted subcommand fails loudly.
-IPS = {"prometheus": "10.0.0.1", "loki": "10.0.0.2", "scrutiny": "10.0.0.3"}
-fake_resolve = IPS.__getitem__
-
-
-def fake_k8s_endpoint(hostname):
-    # The (base, --resolve pin) pair the live k8s_endpoint() derives from SOPS +
-    # inventory — faked so plan() stays testable without either.
-    return f"https://{hostname}.example", f"{hostname}.example:443:10.0.0.240"
+import probe
+import probe_core as core
 
 
 def test_prom_query_url_encodes_promql():
@@ -115,7 +97,7 @@ def test_k8s_service_ip_argv_targets_the_service():
     assert "homelab" in argv
 
 
-def test_plan_metric_uses_cluster_prometheus_route():
+def test_plan_metric_uses_cluster_prometheus_route(fake_resolve, fake_k8s_endpoint):
     # The Docker prometheus (resolve_ip target) retired 2026-08-14 with the drain.
     stages = probe.plan(["metric", "up == 0"], fake_resolve, fake_k8s_endpoint)
     assert stages == [
@@ -126,7 +108,7 @@ def test_plan_metric_uses_cluster_prometheus_route():
     ]
 
 
-def test_plan_targets_uses_cluster_prometheus_route():
+def test_plan_targets_uses_cluster_prometheus_route(fake_resolve, fake_k8s_endpoint):
     stages = probe.plan(["targets"], fake_resolve, fake_k8s_endpoint)
     assert stages == [
         core.curl_argv(
@@ -136,7 +118,9 @@ def test_plan_targets_uses_cluster_prometheus_route():
     ]
 
 
-def test_plan_loki_labels_uses_cluster_endpoint_with_vip_pin():
+def test_plan_loki_labels_uses_cluster_endpoint_with_vip_pin(
+    fake_resolve, fake_k8s_endpoint
+):
     stages = probe.plan(["loki-labels"], fake_resolve, fake_k8s_endpoint)
     assert stages == [
         core.curl_argv(
@@ -146,7 +130,7 @@ def test_plan_loki_labels_uses_cluster_endpoint_with_vip_pin():
     ]
 
 
-def test_plan_loki_query_with_limit():
+def test_plan_loki_query_with_limit(fake_resolve, fake_k8s_endpoint):
     stages = probe.plan(
         ["loki-query", '{job="x"}', "--limit", "50"], fake_resolve, fake_k8s_endpoint
     )
@@ -158,7 +142,9 @@ def test_plan_loki_query_with_limit():
     ]
 
 
-def test_plan_scrutiny_uses_cluster_endpoint_with_vip_pin():
+def test_plan_scrutiny_uses_cluster_endpoint_with_vip_pin(
+    fake_resolve, fake_k8s_endpoint
+):
     stages = probe.plan(["scrutiny"], fake_resolve, fake_k8s_endpoint)
     assert stages == [
         core.curl_argv(
@@ -195,14 +181,14 @@ def test_plan_pi_resolves_to_a_reachable_pin_not_dns():
     assert "daniel-pi.lan:61208:10.0.0.139" in stages[0]
 
 
-def test_plan_cert_defaults_port_and_sni_to_host():
+def test_plan_cert_defaults_port_and_sni_to_host(fake_resolve):
     stages = probe.plan(["cert", "homepage.daniel-hunter.com"], fake_resolve)
     assert stages == probe.cert_stages(
         "homepage.daniel-hunter.com", 443, "homepage.daniel-hunter.com"
     )
 
 
-def test_plan_cert_explicit_port_and_sni():
+def test_plan_cert_explicit_port_and_sni(fake_resolve):
     stages = probe.plan(
         ["cert", "10.0.0.161:443", "--sni", "homepage.daniel-hunter.com"], fake_resolve
     )

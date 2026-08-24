@@ -576,35 +576,33 @@ def test_b2_reachable_disabled_without_credentials(monkeypatch):
     assert ok is True and "disabled" in msg
 
 
-def test_b2_authorize_ok_on_account_id(monkeypatch):
+@pytest.mark.parametrize(
+    ("response", "ok", "must_contain"),
+    [
+        pytest.param({"accountId": "a1"}, True, ("reachable",), id="ok_on_account_id"),
+        # Version-tolerant: Backblaze publishes a v4 body example (accountId top-level) but none
+        # for v3, so either field proves it's B2. Pinning one shape would page every cycle if it
+        # moved.
+        pytest.param(
+            {"authorizationToken": "t"},
+            True,
+            (),
+            id="accepts_authorization_token_only",
+        ),
+        # A 200 from something that isn't B2 must not read as healthy.
+        pytest.param(
+            {"unexpected": 1}, False, ("accountId",), id="rejects_unrecognised_response"
+        ),
+    ],
+)
+def test_b2_authorize(monkeypatch, response, ok, must_contain):
     monkeypatch.setattr(check, "B2_PROBE_KEY_ID", "kid")
     monkeypatch.setattr(check, "B2_PROBE_APPLICATION_KEY", "akey")
-    monkeypatch.setattr(
-        check, "_get_json", lambda url, headers=None: {"accountId": "a1"}
-    )
-    ok, msg = check.b2_authorize()
-    assert ok is True and "reachable" in msg
-
-
-def test_b2_authorize_accepts_authorization_token_only(monkeypatch):
-    # Version-tolerant: Backblaze publishes a v4 body example (accountId top-level) but none for
-    # v3, so either field proves it's B2. Pinning one shape would page every cycle if it moved.
-    monkeypatch.setattr(check, "B2_PROBE_KEY_ID", "kid")
-    monkeypatch.setattr(check, "B2_PROBE_APPLICATION_KEY", "akey")
-    monkeypatch.setattr(
-        check, "_get_json", lambda url, headers=None: {"authorizationToken": "t"}
-    )
-    ok, _ = check.b2_authorize()
-    assert ok is True
-
-
-def test_b2_authorize_rejects_unrecognised_response(monkeypatch):
-    # A 200 from something that isn't B2 must not read as healthy.
-    monkeypatch.setattr(check, "B2_PROBE_KEY_ID", "kid")
-    monkeypatch.setattr(check, "B2_PROBE_APPLICATION_KEY", "akey")
-    monkeypatch.setattr(check, "_get_json", lambda url, headers=None: {"unexpected": 1})
-    ok, msg = check.b2_authorize()
-    assert ok is False and "accountId" in msg
+    monkeypatch.setattr(check, "_get_json", lambda url, headers=None: response)
+    result_ok, msg = check.b2_authorize()
+    assert result_ok is ok
+    for s in must_contain:
+        assert s in msg
 
 
 def test_b2_reachable_surfaces_the_cap_error_text(monkeypatch):
@@ -716,31 +714,45 @@ def test_run_once_runs_b2_dependent_when_b2_up(monkeypatch):
 # ── Exporter-reachability gate (node-exporter / cadvisor) — Backups M3 ───────
 
 
-def test_down_exporters_flags_node_when_node_up_is_zero():
-    up = [
-        ({"job": "node"}, 0.0),
-        ({"job": "cadvisor"}, 1.0),
-        ({"job": "prometheus"}, 1.0),
-    ]
-    assert check.down_exporters(up) == {"node"}
-
-
-def test_down_exporters_flags_only_mapped_exporters():
-    # cadvisor left EXPORTER_DEPENDENT when it retired (2026-08-14) — a down series under
-    # its old job name must no longer trigger suppression of anything.
-    up = [({"job": "node"}, 0.0), ({"job": "cadvisor"}, 0.0)]
-    assert check.down_exporters(up) == {"node"}
-
-
-def test_down_exporters_empty_when_all_up():
-    up = [({"job": "node"}, 1.0), ({"job": "cadvisor"}, 1.0)]
-    assert check.down_exporters(up) == set()
-
-
-def test_down_exporters_ignores_non_exporter_jobs():
-    # A non-exporter target down (e.g. loki) is Scrape Targets' concern, not a suppression trigger.
-    up = [({"job": "loki"}, 0.0), ({"job": "node"}, 1.0), ({"job": "cadvisor"}, 1.0)]
-    assert check.down_exporters(up) == set()
+@pytest.mark.parametrize(
+    ("up", "expected"),
+    [
+        pytest.param(
+            [
+                ({"job": "node"}, 0.0),
+                ({"job": "cadvisor"}, 1.0),
+                ({"job": "prometheus"}, 1.0),
+            ],
+            {"node"},
+            id="flags_node_when_node_up_is_zero",
+        ),
+        pytest.param(
+            [({"job": "node"}, 0.0), ({"job": "cadvisor"}, 0.0)],
+            {"node"},
+            # cadvisor left EXPORTER_DEPENDENT when it retired (2026-08-14) — a down series under
+            # its old job name must no longer trigger suppression of anything.
+            id="flags_only_mapped_exporters",
+        ),
+        pytest.param(
+            [({"job": "node"}, 1.0), ({"job": "cadvisor"}, 1.0)],
+            set(),
+            id="empty_when_all_up",
+        ),
+        pytest.param(
+            [
+                ({"job": "loki"}, 0.0),
+                ({"job": "node"}, 1.0),
+                ({"job": "cadvisor"}, 1.0),
+            ],
+            set(),
+            # A non-exporter target down (e.g. loki) is Scrape Targets' concern, not a
+            # suppression trigger.
+            id="ignores_non_exporter_jobs",
+        ),
+    ],
+)
+def test_down_exporters(up, expected):
+    assert check.down_exporters(up) == expected
 
 
 def test_exporter_dependent_values_are_real_checks():
@@ -909,24 +921,68 @@ def test_run_once_up_probe_failure_does_not_suppress(monkeypatch):
     assert "disk" in ran  # not suppressed
 
 
-def test_down_streak_holds_up_below_threshold():
-    count, ok, msg = check.down_streak(0, 2, "boom", "grace")
-    assert (count, ok) == (1, True)
-    assert msg == "down streak 1/2 (grace): boom"
-
-
-def test_down_streak_pages_at_threshold():
-    count, ok, msg = check.down_streak(1, 2, "boom", "grace")
-    assert (count, ok) == (2, False)
-    assert msg == "boom (2 cycles)"
-
-
-def test_down_streak_custom_label_and_note():
-    _, ok, msg = check.down_streak(
-        0, 3, "x", "not alerting yet", held_label="throttling streak"
+@pytest.mark.parametrize(
+    (
+        "count",
+        "threshold",
+        "msg_in",
+        "note",
+        "held_label",
+        "expected_count",
+        "expected_ok",
+        "expected_msg",
+    ),
+    [
+        pytest.param(
+            0,
+            2,
+            "boom",
+            "grace",
+            "down streak",
+            1,
+            True,
+            "down streak 1/2 (grace): boom",
+            id="holds_up_below_threshold",
+        ),
+        pytest.param(
+            1,
+            2,
+            "boom",
+            "grace",
+            "down streak",
+            2,
+            False,
+            "boom (2 cycles)",
+            id="pages_at_threshold",
+        ),
+        pytest.param(
+            0,
+            3,
+            "x",
+            "not alerting yet",
+            "throttling streak",
+            1,
+            True,
+            "throttling streak 1/3 (not alerting yet): x",
+            id="custom_label_and_note",
+        ),
+    ],
+)
+def test_down_streak(
+    count,
+    threshold,
+    msg_in,
+    note,
+    held_label,
+    expected_count,
+    expected_ok,
+    expected_msg,
+):
+    new_count, ok, msg = check.down_streak(
+        count, threshold, msg_in, note, held_label=held_label
     )
-    assert ok
-    assert msg == "throttling streak 1/3 (not alerting yet): x"
+    assert (new_count, ok) == (expected_count, expected_ok)
+    assert msg == expected_msg
 
 
 def test_apply_startup_grace_single_down_is_suppressed():
@@ -1064,29 +1120,24 @@ def test_run_once_graced_check_recovers_without_paging(monkeypatch):
 # ── promtail dropped-entries watchdog (Prometheus counter; partial log loss) ──
 
 
-def test_promtail_dropped_under_threshold_is_ok():
-    ok, msg = check.promtail_dropped(50, "1h", 1000)
-    assert ok
-    assert "ok" in msg
-
-
-def test_promtail_dropped_over_threshold_is_down():
-    ok, msg = check.promtail_dropped(5000, "1h", 1000)
-    assert not ok
-    assert "5000" in msg
-    assert "partial log loss" in msg
-
-
-def test_promtail_dropped_none_is_ok():
-    # No series (counter never incremented) -> None -> 0 -> up.
-    ok, _ = check.promtail_dropped(None, "1h", 1000)
-    assert ok
-
-
-def test_promtail_dropped_at_threshold_is_ok():
-    # Exactly at the threshold must NOT alert (strictly greater).
-    ok, _ = check.promtail_dropped(1000, "1h", 1000)
-    assert ok
+@pytest.mark.parametrize(
+    ("count", "ok", "must_contain"),
+    [
+        pytest.param(50, True, ("ok",), id="under_threshold_is_ok"),
+        pytest.param(
+            5000, False, ("5000", "partial log loss"), id="over_threshold_is_down"
+        ),
+        # No series (counter never incremented) -> None -> 0 -> up.
+        pytest.param(None, True, (), id="none_is_ok"),
+        # Exactly at the threshold must NOT alert (strictly greater).
+        pytest.param(1000, True, (), id="at_threshold_is_ok"),
+    ],
+)
+def test_promtail_dropped(count, ok, must_contain):
+    result_ok, msg = check.promtail_dropped(count, "1h", 1000)
+    assert result_ok is ok
+    for s in must_contain:
+        assert s in msg
 
 
 def test_check_promtail_dropped_uses_increase(monkeypatch):

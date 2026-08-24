@@ -2,7 +2,7 @@
 # Slice 6, B1 — the in-cluster CrowdSec engine: LAPI + AppSec + the decision DB.
 # Log-parsing agents live NEXT TO the logs, not here: the k8s traefik pod carries a
 # tailing sidecar (roles/k8s/traefik), and daniel-server's engine demotes to an agent
-# against this LAPI at B2. See docs/k3s-migration/slice-6-edge-cutover.md (D1-D3).
+# against this LAPI at B2. See docs/archive/k3s-migration/slice-6-edge-cutover.md (D1-D3).
 
 # crowdsec_k8s_image / crowdsec_k8s_agent_username / crowdsec_k8s_lapi_port /
 # crowdsec_k8s_appsec_port live in group_vars/all.yml — the traefik role's sidecar and

@@ -19,7 +19,7 @@ happy_git_version: 3f161de70541b1cedaf0b7547ed70889d8dae22d
 # the nut pod's hardware, and the nut_host shutdown chain — nothing else. Every service
 # that used to be listed here moved to roles/k8s/ or retired to
 # roles/containers/archive/; the per-service migration record is in git history and
-# docs/k3s-migration/.
+# docs/archive/k3s-migration/.
 containers_list: []
 
 # No engine, so no deployer to run. The gitops watchdog lives on — the cluster bridge

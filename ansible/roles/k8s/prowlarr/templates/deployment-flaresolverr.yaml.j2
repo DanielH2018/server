@@ -1,3 +1,4 @@
+{% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 ---
 # Its own Deployment rather than a container in prowlarr's pod, deliberately: a sidecar shares the
 # pod's network namespace, and "reachable only on localhost by its own pod" would be tighter than
@@ -51,16 +52,7 @@ spec:
       priorityClassName: homelab-standard
       # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
       # Weighted so the pod still schedules if daniel-server is cordoned or full.
-      affinity:
-        nodeAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              preference:
-                matchExpressions:
-                  - key: kubernetes.io/hostname
-                    operator: In
-                    values:
-                      - daniel-server
+{{ node_affinity_preference('daniel-server') }}
       containers:
         - name: flaresolverr
           image: {{ prowlarr_k8s_flaresolverr_image }}

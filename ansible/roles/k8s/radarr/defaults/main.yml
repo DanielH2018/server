@@ -1,8 +1,4 @@
 ---
-# See the qbittorrent role's defaults for why this flag exists rather than the entry simply
-# being absent.
-radarr_k8s_enabled: true
-
 radarr_k8s_image: lscr.io/linuxserver/radarr:6.1.1.10360-ls304
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).

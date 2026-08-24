@@ -1,10 +1,4 @@
 ---
-# The switch that lets this role have an inventory entry without being deployed. The entry is
-# mandatory — a k8s role without one fails scripts/validate_k8s_manifests.py — but daniel-box
-# runs has_gitops: true and the deployer runs `ansible/deploy.yml`, a plain containers_list
-# loop, so the entry alone would stand the pod up unattended on the next tick.
-qbittorrent_k8s_enabled: true
-
 # Tag KEPT alongside the digest (repo:latest@sha256) so Renovate's k8s-defaults manager still
 # tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal
 # (2026-08-13 pin).

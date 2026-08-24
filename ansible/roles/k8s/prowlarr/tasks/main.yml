@@ -1,23 +1,9 @@
 ---
 # Slice 4, B4a — the indexer proxy, plus the headless browser it drives.
 #
-# Was HELD until B4c by prowlarr_k8s_enabled, and this role was the reason the other four could
-# not be deployed incrementally either: standing it up makes the bare name `prowlarr` resolve,
-# which was precisely what the rehearsing sonarr's isolation probe failed the deploy on. That
-# harness was retired 2026-08-17; the hold ended 2026-08-07.
-
-- name: Report that prowlarr is held until the cutover
-  tags: [always]
-  when: not prowlarr_k8s_enabled | bool
-  ansible.builtin.debug:
-    msg: >-
-      prowlarr is built but NOT deployed (prowlarr_k8s_enabled is false). Deploying it makes
-      `prowlarr` resolve in {{ k8s_namespace }}, which is what the rehearsing sonarr is isolated
-      by — the two cannot both be true. Released in B4c.
 
 - name: Seed the prowlarr config volume
   tags: [deploy]
-  when: prowlarr_k8s_enabled | bool
   ansible.builtin.include_role:
     name: k8s/seed-volume
   vars:
@@ -33,7 +19,6 @@
 # use, which is also why its class is longhorn-nobackup — copying it would spend a migration
 # window on bytes the app rebuilds for free.
 - name: Deploy prowlarr and flaresolverr to the cluster
-  when: prowlarr_k8s_enabled | bool
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
@@ -67,7 +52,6 @@
 # lets it stay in the role rather than being a one-shot play someone has to remember to run.
 - name: Retire the flaresolverr config PVC
   tags: [deploy]
-  when: prowlarr_k8s_enabled | bool
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} delete pvc {{ prowlarr_k8s_flaresolverr_claim }}
@@ -85,7 +69,6 @@
 # either a no-op or an error.
 - name: Create the flaresolverr probe manifest directory
   tags: [config]
-  when: prowlarr_k8s_enabled | bool
   ansible.builtin.file:
     path: /etc/rancher/k3s/manifests/prowlarr-netpol
     state: directory
@@ -96,7 +79,6 @@
 
 - name: Render the flaresolverr isolation probe
   tags: [config]
-  when: prowlarr_k8s_enabled | bool
   ansible.builtin.template:
     src: netpol-probe-job.yaml.j2
     dest: /etc/rancher/k3s/manifests/prowlarr-netpol/netpol-probe-job.yaml
@@ -107,7 +89,6 @@
 
 - name: Clear the previous flaresolverr probe run
   tags: [deploy]
-  when: prowlarr_k8s_enabled | bool
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} delete job flaresolverr-netpol-probe
@@ -117,7 +98,6 @@
 
 - name: Run the flaresolverr isolation probe
   tags: [deploy]
-  when: prowlarr_k8s_enabled | bool
   ansible.builtin.command:
     cmd: >-
       k3s kubectl apply -f
@@ -135,7 +115,6 @@
   # Known wart, pre-existing and unchanged in kind: `--for=condition=complete` cannot also watch
   # for `failed`, so a Job that fails fast still burns this whole timeout before the play stops.
   # Raising the timeout makes that slower (was ~2min, now ~5min) on the failure path only.
-  when: prowlarr_k8s_enabled | bool
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
@@ -147,7 +126,6 @@
 
 - name: Report the flaresolverr isolation probe
   tags: [deploy]
-  when: prowlarr_k8s_enabled | bool
   ansible.builtin.command:
     cmd: "k3s kubectl -n {{ k8s_namespace }} logs job/flaresolverr-netpol-probe"
   become: true
@@ -156,6 +134,5 @@
 
 - name: Show the flaresolverr isolation result
   tags: [deploy]
-  when: prowlarr_k8s_enabled | bool
   ansible.builtin.debug:
     msg: "{{ prowlarr_k8s_netpol_log.stdout_lines }}"

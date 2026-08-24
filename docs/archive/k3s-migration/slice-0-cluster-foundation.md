@@ -8,7 +8,7 @@
 
 **Tech Stack:** k3s, MetalLB (L2), Longhorn, Backblaze B2 (S3-compatible API), Ansible, SOPS/age, pytest.
 
-**Design spec:** `docs/k3s-migration/design.md`
+**Design spec:** `docs/archive/k3s-migration/design.md`
 
 ## Global Constraints
 

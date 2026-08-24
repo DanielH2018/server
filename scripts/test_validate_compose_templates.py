@@ -12,15 +12,7 @@ flagged.
 Run: uv run pytest scripts/test_validate_compose_templates.py
 """
 
-import importlib.util
-import os
-
-_MOD = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "validate_compose_templates.py"
-)
-_spec = importlib.util.spec_from_file_location("validate_compose_templates", _MOD)
-vct = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(vct)
+import validate_compose_templates as vct
 
 
 def _docs(spec):

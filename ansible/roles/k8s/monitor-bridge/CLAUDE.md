@@ -196,7 +196,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     Content Verify, Backup Maintenance, B2 Storage Usage, B2 Usage Trend) that read green for nine
     and a half hours during that incident because they reported their cron's LAST SUCCESSFUL RUN
     rather than current B2 health. Those checks were removed 2026-08-10 — kopia is retired, backup
-    moved to Longhorn (`docs/k3s-migration/backup-consolidation-longhorn.md`) — which left
+    moved to Longhorn (`docs/archive/k3s-migration/backup-consolidation-longhorn.md`) — which left
     `B2_DEPENDENT` empty for five days. **It is not empty now:** `check_b2_storage` (B2 Storage
     Usage) was added 2026-08-15 and is gated here, so a transaction-cap incident does not page
     twice for one root cause. That check queries B2 live rather than reading a cron's state file,

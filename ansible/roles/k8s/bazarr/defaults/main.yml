@@ -1,7 +1,4 @@
 ---
-# See the qbittorrent role's defaults for why this flag exists rather than the entry simply
-# being absent.
-bazarr_k8s_enabled: true
 
 bazarr_k8s_image: lscr.io/linuxserver/bazarr:v1.5.6-ls350
 

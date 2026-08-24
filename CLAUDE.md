@@ -1,7 +1,7 @@
 # Server Homelab — Claude Code Context
 
 ## Project Overview
-Docker + k3s homelab managed with Ansible. ~50 containerized services deployed across three hosts via infrastructure-as-code, the k3s migration **completed 2026-08-14** — `docs/k3s-migration/` is now a historical record of executed work, not a plan. Docker survives only on `daniel-pi`. (Exact count: `grep -c '^  - name:' ansible/inventory/host_vars/*.yml` — don't hand-maintain a precise number here.)
+Docker + k3s homelab managed with Ansible. ~50 containerized services deployed across three hosts via infrastructure-as-code, the k3s migration **completed 2026-08-14** — `docs/archive/k3s-migration/` is now a historical record of executed work, not a plan. Docker survives only on `daniel-pi`. (Exact count: `grep -c '^  - name:' ansible/inventory/host_vars/*.yml` — don't hand-maintain a precise number here.)
 
 **Hosts:**
 - `daniel-box` — k3s server / control-plane node (Traefik edge, Authelia+OIDC, Pi-hole DNS, Longhorn storage, most workloads since 2026-08 migration). Ansible runs on this host.
@@ -20,7 +20,7 @@ ansible/          # Ansible playbooks, roles, inventory, templates  ← EDIT HER
     archive/        # Roles retired by the k3s migration, kept for reference
 scripts/          # Python helper scripts
 docs/             # Runbooks, design specs, security notes
-  k3s-migration/    # Historical record of the completed Docker → k3s migration
+  archive/          # Superseded planning docs, incl. the completed Docker → k3s migration
 ```
 
 > **`containers/` is not a directory in this repo** — it is untracked and rendered by Ansible onto the *target host* at `/home/<user>/server/containers/<svc>/docker-compose.yml`. Post-migration it exists only on `daniel-pi`; neither cluster node has one. It is still read-only: edits are overwritten on the next deploy, so always modify `ansible/roles/containers/*/templates/` instead. (The `block-protected-edits` hook enforces this.)

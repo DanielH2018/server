@@ -244,7 +244,7 @@ not a hand-run `cscli bouncers add`.
 > repo-root [`CLAUDE.md`](../CLAUDE.md) and [`README.md`](../README.md) and the
 > `new-container` skill — not duplicated here. **Backups** are Longhorn's since the
 > 2026-08-10 consolidation (nightly PVC backups to B2 —
-> `docs/k3s-migration/backup-consolidation-longhorn.md`); kopia is retired and Docker-tier
+> `docs/archive/k3s-migration/backup-consolidation-longhorn.md`); kopia is retired and Docker-tier
 > bind mounts are no longer backed up (the remaining Docker services hold regenerable or
 > migrating state only).
 

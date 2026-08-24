@@ -28,7 +28,7 @@ fake_remux_jellyfin_container: ""
 # a Service's life but NOT across a delete, which is the same reasoning telemetry-health.sh gives
 # for resolving rather than pinning. The *arr is not reachable by name from the host (no cluster
 # DNS) and the `-k8s` ingress name mis-resolves on this node specifically, so the ClusterIP is the
-# honest path — see the -k8s aside in docs/k3s-migration/slice-4-media-cluster.md.
+# honest path — see the -k8s aside in docs/archive/k3s-migration/slice-4-media-cluster.md.
 fake_remux_sonarr_namespace: homelab
 fake_remux_sonarr_service: sonarr
 fake_remux_sonarr_port: 8989

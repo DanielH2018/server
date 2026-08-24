@@ -18,7 +18,7 @@ grep -c '^  - name:' ansible/inventory/host_vars/*.yml   # the actual per-host t
 
 The migration from Docker Compose to k3s completed on **2026-08-14**, when Docker was
 uninstalled from `daniel-server`. The slice-by-slice record is in
-[`docs/k3s-migration/`](docs/k3s-migration/) — those documents are historical and describe
+[`docs/archive/k3s-migration/`](docs/archive/k3s-migration/) — those documents are historical and describe
 work already executed.
 
 ## Hosts
@@ -44,7 +44,7 @@ ansible/          # Playbooks, roles, inventory, templates   ← EDIT HERE
   vars/secrets.yml    # SOPS-encrypted secrets
 scripts/          # Helper scripts (template validation, …)
 docs/             # Runbooks, design specs, security notes
-  k3s-migration/      # Historical record of the Docker → k3s migration
+  archive/            # Superseded planning docs (incl. the Docker → k3s migration)
 ```
 
 **`containers/` is not in this repo.** It is a *runtime* directory Ansible renders on the

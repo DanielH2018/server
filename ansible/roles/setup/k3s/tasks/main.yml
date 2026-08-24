@@ -1,5 +1,5 @@
 ---
-# Originally slice 0 of the k3s migration — see docs/k3s-migration/slice-0-cluster-foundation.md.
+# Originally slice 0 of the k3s migration — see docs/archive/k3s-migration/slice-0-cluster-foundation.md.
 # This role installs the k3s SERVER (control plane) on daniel-box. daniel-server joined as an
 # agent in slice 7 (2026-08-14) via tasks/agent.yml, once its Docker workload had drained: k3s
 # ships its own containerd and flannel/kube-proxy iptables rules, and landing those alongside

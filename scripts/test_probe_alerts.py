@@ -6,27 +6,8 @@ host crons emit, which push Kuma directly and so leave no other durable record. 
 first left the whole backup/drift plane with no episode history anywhere.
 """
 
-import importlib.util
-import os
-
-
-_MOD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "probe.py")
-_spec = importlib.util.spec_from_file_location("probe", _MOD)
-probe = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(probe)
-
-import probe_core as core  # noqa: E402  (probe.py must load first, by path)
-
-# Fake resolver: maps container name -> a recognizable IP. A wrong container name
-# raises KeyError, so a misrouted subcommand fails loudly.
-IPS = {"prometheus": "10.0.0.1", "loki": "10.0.0.2", "scrutiny": "10.0.0.3"}
-fake_resolve = IPS.__getitem__
-
-
-def fake_k8s_endpoint(hostname):
-    # The (base, --resolve pin) pair the live k8s_endpoint() derives from SOPS +
-    # inventory — faked so plan() stays testable without either.
-    return f"https://{hostname}.example", f"{hostname}.example:443:10.0.0.240"
+import probe
+import probe_core as core
 
 
 def test_loki_query_url_with_range_adds_start_end_direction():

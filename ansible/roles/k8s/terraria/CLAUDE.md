@@ -29,7 +29,7 @@ irreplaceable data kopia still uniquely protected; the Docker role is in
   ride Cloudflare's HTTP proxy).
 - Seeding used a sudo-staged copy (world files are root-600; the unprivileged seed
   pipeline can't read them in place) — see the BL1 record in
-  `docs/k3s-migration/backup-consolidation-longhorn.md`.
+  `docs/archive/k3s-migration/backup-consolidation-longhorn.md`.
 
 ## Editing
 - Manifests: `templates/*.yaml.j2` · Defaults: `defaults/main.yml`

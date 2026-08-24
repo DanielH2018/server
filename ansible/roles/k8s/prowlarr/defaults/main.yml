@@ -1,8 +1,4 @@
 ---
-# See the qbittorrent role's defaults for why this flag exists rather than the entry simply
-# being absent.
-prowlarr_k8s_enabled: true
-
 prowlarr_k8s_image: lscr.io/linuxserver/prowlarr:2.4.0.5397-ls150
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).

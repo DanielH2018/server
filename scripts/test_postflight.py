@@ -8,17 +8,11 @@ through. HTTP and Docker are injected out, so these are hermetic.
 Run: uv run pytest scripts/test_postflight.py
 """
 
-import importlib.util
 import json
-import os
 
 import pytest
 
-
-_MOD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "postflight.py")
-_spec = importlib.util.spec_from_file_location("postflight", _MOD)
-postflight = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(postflight)
+import postflight
 
 
 @pytest.fixture(autouse=True)

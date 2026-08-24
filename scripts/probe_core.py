@@ -7,6 +7,7 @@ into another module's globals by ``from probe_core import sops_extract`` would
 not see the patch. One module attribute, one place to patch.
 """
 
+import json
 import os
 import re
 import subprocess
@@ -189,6 +190,13 @@ def curl_argv(url, timeout=DEFAULT_TIMEOUT, resolve=None):
     return argv
 
 
+def print_dry_run(url, resolve=None):
+    """Print the plain curl argv for --dry-run and return 0 — the shape shared by every
+    subcommand whose dry run is just "show the one GET this would make"."""
+    print(" ".join(curl_argv(url, resolve=resolve)))
+    return 0
+
+
 def fetch(url, resolve=None):
     """Run the read-only curl GET and return its body (raise on failure)."""
     out = subprocess.run(
@@ -197,6 +205,18 @@ def fetch(url, resolve=None):
     if out.returncode != 0:
         raise SystemExit(f"curl {url} failed: {out.stderr.strip()}")
     return out.stdout
+
+
+def fetch_json(url, resolve=None):
+    """fetch(url) parsed as JSON. Returns (data, None) on success, or (None, 1) after
+    printing the raw body — the JSONDecodeError guard a plain `core.fetch()` call
+    needs before its response can be trusted as JSON."""
+    body = fetch(url, resolve=resolve)
+    try:
+        return json.loads(body), None
+    except json.JSONDecodeError:
+        print(body.strip())
+        return None, 1
 
 
 def k8s_namespace():

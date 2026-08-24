@@ -1,10 +1,6 @@
+{% from 'pvc.yml.j2' import pvc with context %}
 ---
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: {{ karakeep_k8s_meili_claim }}
-  namespace: {{ k8s_namespace }}
-spec:
+{% call pvc(karakeep_k8s_meili_claim, karakeep_k8s_meili_storage_class, karakeep_k8s_meili_size) %}
   # A plain claim rather than a seeded one, and that is the whole point: the Meilisearch index
   # is derived from karakeep's db.db, so it is rebuilt with "Reindex All Bookmarks" instead of
   # copied. Seeding it would mean reading a root-owned Docker volume out of /var/lib/docker to
@@ -12,9 +8,4 @@ spec:
   #
   # longhorn-nobackup for the same reason the Docker side keeps it in a named volume outside
   # Kopia: a rebuildable search index is not worth B2 transactions.
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: {{ karakeep_k8s_meili_storage_class }}
-  resources:
-    requests:
-      storage: {{ karakeep_k8s_meili_size }}
+{% endcall %}

@@ -255,20 +255,31 @@ def test_drill_and_heartbeat_deploy_under_a_shared_tag() -> None:
     """Check 7 and the drill are one feature; shipping either alone pages for nothing.
 
     Deploying `restore-drill` alone installs a drill nothing watches. Deploying `backup-health`
-    alone installs a check whose stamp no drill writes, which then pages forever. Both tasks
-    carry `backup-health` so the pair moves together.
+    alone installs a check whose stamp no drill writes, which then pages forever. The two
+    scripts are rendered by the SAME looped task, tagged `backup-health`, so the pair can't be
+    split by a future edit the way separate tasks could be.
     """
-    names = {
-        "Deploy the Longhorn restore drill",
-        "Schedule the Longhorn restore drill",
-        "Deploy the Longhorn backup-plane heartbeat",
-    }
-    for task in _tasks():
-        if task.get("name") in names:
-            assert "backup-health" in task.get("tags", []), (
-                f"{task['name']} must carry the backup-health tag so the drill and the check "
-                "that reads its stamp are never deployed apart"
-            )
+    drill_task = _deploy_task_for("longhorn-restore-drill.sh.j2")
+    heartbeat_task = _deploy_task_for("longhorn-backup-health.sh.j2")
+    assert drill_task is not None and heartbeat_task is not None
+    # By name, not identity: every helper re-parses the YAML, so the same task is a different
+    # dict object on each call.
+    assert drill_task == heartbeat_task, (
+        "the restore drill and the backup-plane heartbeat are no longer deployed by the same "
+        "task, so a future edit could ship one without the other"
+    )
+    assert "backup-health" in drill_task.get("tags", []), (
+        "the shared deploy task must carry the backup-health tag so the drill and the check "
+        "that reads its stamp are never deployed apart"
+    )
+    schedule = next(
+        (t for t in _tasks() if t.get("name") == "Schedule the Longhorn restore drill"),
+        None,
+    )
+    assert schedule is not None and "backup-health" in schedule.get("tags", []), (
+        "Schedule the Longhorn restore drill must carry the backup-health tag so the drill and "
+        "the check that reads its stamp are never deployed apart"
+    )
 
 
 def test_check_seven_fails_closed_when_the_drill_never_ran() -> None:
@@ -307,6 +318,23 @@ def _tasks():
     return docs if isinstance(docs, list) else []
 
 
+def _deploy_task_for(src_basename: str):
+    """The template task that renders `src_basename`, whether via a plain `src:` or a `loop:`
+    item — health-crons.yml folds several same-shaped scripts into one looped
+    `ansible.builtin.template` task, so a source file's task is not always a 1:1 lookup by name.
+    """
+    for task in _tasks():
+        tpl = task.get("ansible.builtin.template")
+        if not isinstance(tpl, dict):
+            continue
+        if tpl.get("src") == src_basename:
+            return task
+        for item in task.get("loop") or []:
+            if isinstance(item, dict) and item.get("src") == src_basename:
+                return task
+    return None
+
+
 def test_drill_is_scheduled_as_root() -> None:
     """It creates and deletes cluster objects; the read-only SA is Forbidden on all of it."""
     cron = next(
@@ -323,10 +351,7 @@ def test_drill_is_scheduled_as_root() -> None:
 
 def test_drill_is_deployed_wherever_the_heartbeat_is() -> None:
     """Check 7 reads a stamp only the drill writes, so shipping one without the other pages."""
-    deploy = next(
-        (t for t in _tasks() if t.get("name") == "Deploy the Longhorn restore drill"),
-        None,
-    )
+    deploy = _deploy_task_for("longhorn-restore-drill.sh.j2")
     assert deploy is not None
     assert "backup-health" in deploy.get("tags", []), (
         "deploying backup-health alone would add check 7 while leaving the drill absent, "

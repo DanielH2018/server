@@ -5,28 +5,10 @@ than erroring — which reads as "the automation did not fire". `match_automatio
 that, and the WebSocket codec and trace parser are what `ha why` / `ha trace` are built on.
 """
 
-import importlib.util
 import os
 
-
-_MOD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "probe.py")
-_spec = importlib.util.spec_from_file_location("probe", _MOD)
-probe = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(probe)
-
-import probe_core as core  # noqa: E402  (probe.py must load first, by path)
-import probe_ha as ha  # noqa: E402
-
-# Fake resolver: maps container name -> a recognizable IP. A wrong container name
-# raises KeyError, so a misrouted subcommand fails loudly.
-IPS = {"prometheus": "10.0.0.1", "loki": "10.0.0.2", "scrutiny": "10.0.0.3"}
-fake_resolve = IPS.__getitem__
-
-
-def fake_k8s_endpoint(hostname):
-    # The (base, --resolve pin) pair the live k8s_endpoint() derives from SOPS +
-    # inventory — faked so plan() stays testable without either.
-    return f"https://{hostname}.example", f"{hostname}.example:443:10.0.0.240"
+import probe_core as core
+import probe_ha as ha
 
 
 def test_ha_base_builds_on_ha_host(monkeypatch):

@@ -1,7 +1,7 @@
 ---
 # The one volume the whole media stack shares (slice 4, B2). Nine workloads mount it at /data,
 # and they must all see ONE filesystem or sonarr/radarr imports silently become copies instead
-# of hardlinks — see docs/k3s-migration/slice-4-media-cluster.md, "the seam that shapes this
+# of hardlinks — see docs/archive/k3s-migration/slice-4-media-cluster.md, "the seam that shapes this
 # slice".
 media_volume_claim: media-data
 
