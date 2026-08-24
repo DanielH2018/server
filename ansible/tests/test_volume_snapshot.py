@@ -40,11 +40,11 @@ from pathlib import Path
 
 import pytest
 import yaml
-from ansible.plugins.filter.core import FilterModule
-from ansible.plugins.test.core import TestModule as _AnsibleTests
-from jinja2.nativetypes import NativeEnvironment
 from _helpers import load_tasks as _tasks
+from _helpers import render_expr as _render
 from _helpers import task_named
+from _volume_ops import assert_every_api_call_pins_a_single_status_code
+from _volume_ops import assert_the_role_declares_an_autodeploy_stance
 
 _ROLE = Path(__file__).resolve().parents[2] / "ansible/roles/k8s/volume-snapshot"
 _CLAIM = _ROLE / "tasks/claim.yml"
@@ -57,17 +57,6 @@ _GUARD = "not (k8s_no_mutate | bool)"
 
 def _named(path: Path, fragment: str) -> dict:
     return task_named(_tasks(path), fragment)
-
-
-def _env() -> NativeEnvironment:
-    env = NativeEnvironment()
-    env.filters.update(FilterModule().filters())
-    env.tests.update(_AnsibleTests().tests())
-    return env
-
-
-def _render(expression: str, **context):
-    return _env().from_string(expression).render(**context)
 
 
 # The retention expressions, read out of the live role by task name rather than copied here. A
@@ -476,12 +465,7 @@ def test_the_maintenance_detach_sends_neither_hostid_nor_attachment_id() -> None
 
 
 def test_every_maintenance_api_call_pins_a_single_status_code() -> None:
-    for task in _tasks(_CLAIM):
-        uri = task.get("ansible.builtin.uri")
-        if uri is None:
-            continue
-        assert uri["status_code"] == 200, task["name"]
-        assert uri["url"].startswith("{{ longhorn_api }}/v1/volumes/"), task["name"]
+    assert_every_api_call_pins_a_single_status_code(_CLAIM)
 
 
 def _maintenance_attached_expression() -> str:
@@ -869,9 +853,7 @@ def test_the_reads_every_later_task_depends_on_survive_check_mode() -> None:
 
 def test_the_role_declares_an_autodeploy_stance() -> None:
     """Every role under roles/k8s/ must, or `k8s_autodeploy_denylist` refuses to render."""
-    defaults = yaml.safe_load(_DEFAULTS.read_text())
-    assert defaults["k8s_autodeploy"] is False
-    assert defaults["k8s_autodeploy_reason"].strip()
+    assert_the_role_declares_an_autodeploy_stance(_DEFAULTS)
 
 
 #

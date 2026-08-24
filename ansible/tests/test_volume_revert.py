@@ -42,12 +42,12 @@ from pathlib import Path
 import pytest
 import yaml
 from _k8s_render import rendered_docs
-from ansible.plugins.filter.core import FilterModule
-from ansible.plugins.test.core import TestModule as _AnsibleTests
-from jinja2.nativetypes import NativeEnvironment
 from _helpers import REPO as _REPO
 from _helpers import load_tasks as _tasks
+from _helpers import render_expr as _render
 from _helpers import task_named
+from _volume_ops import assert_every_api_call_pins_a_single_status_code
+from _volume_ops import assert_the_role_declares_an_autodeploy_stance
 
 
 _ROLE = _REPO / "ansible/roles/k8s/volume-revert"
@@ -58,10 +58,6 @@ _VALIDATOR = _REPO / "scripts/validate_k8s_manifests.py"
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
 
 _GUARD = "not (k8s_no_mutate | bool)"
-
-
-def _iter_task_dicts(path: Path) -> list[dict]:
-    return _tasks(path)
 
 
 def _task_names(path: Path) -> list[str]:
@@ -139,17 +135,6 @@ def test_the_seam_test_skips_a_missing_cluster_and_fails_a_bad_jsonpath() -> Non
     # The combination that matters most: an unreachable-looking message must not excuse a
     # jsonpath kubectl rejected.
     assert not _no_cluster_to_ask(rejected + " connection refused")
-
-
-def _env() -> NativeEnvironment:
-    env = NativeEnvironment()
-    env.filters.update(FilterModule().filters())
-    env.tests.update(_AnsibleTests().tests())
-    return env
-
-
-def _render(expression: str, **context):
-    return _env().from_string(expression).render(**context)
 
 
 # kubectl verbs that change the cluster. `get`, `describe` and friends are deliberately absent:
@@ -440,14 +425,7 @@ def test_the_attach_requests_maintenance_mode_on_this_node() -> None:
 
 
 def test_every_api_call_pins_a_single_status_code() -> None:
-    """A range accepts a 2xx that did not do the work. Longhorn answers a successful action
-    with 200, so 200 is what each call demands."""
-    for task in _tasks(_CLAIM):
-        uri = task.get("ansible.builtin.uri")
-        if uri is None:
-            continue
-        assert uri["status_code"] == 200, task["name"]
-        assert uri["url"].startswith("{{ longhorn_api }}/v1/volumes/"), task["name"]
+    assert_every_api_call_pins_a_single_status_code(_CLAIM)
 
 
 def test_the_post_revert_detach_is_verified_by_state() -> None:
@@ -588,9 +566,7 @@ def test_no_command_uses_a_shlex_split_string() -> None:
 def test_the_role_declares_its_autodeploy_stance() -> None:
     """Every role under roles/k8s/ must declare `k8s_autodeploy`; the denylist is derived from
     those declarations and a role that omits one fails four guard tests instead of this one."""
-    defaults = yaml.safe_load(_DEFAULTS.read_text())
-    assert defaults["k8s_autodeploy"] is False
-    assert defaults["k8s_autodeploy_reason"]
+    assert_the_role_declares_an_autodeploy_stance(_DEFAULTS)
 
 
 def test_the_validator_skips_a_role_with_no_manifests() -> None:

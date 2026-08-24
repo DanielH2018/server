@@ -43,23 +43,22 @@
     update_cache: true
   become: true
 
-- name: Configure ZRAM percentage
+- name: Configure ZRAM percentage and compression algorithm
   tags: [zram]
   ansible.builtin.lineinfile:
     path: /etc/default/zramswap
-    regexp: "^PERCENT="
-    line: "PERCENT={{ optimize_pi_zram_percentage }}"
-  notify: Restart ZRAM
-
-- name: Compress ZRAM with zstd instead of lz4
-  tags: [zram]
-  # ~3.5:1 vs lz4's ~2.5:1 on this workload — the better ratio is what makes the
-  # 75% device size affordable. zstd costs more CPU per page than lz4, but the
-  # A53 cores idle ~95% here; the SD-card swapfile this avoids is FAR slower.
-  ansible.builtin.lineinfile:
-    path: /etc/default/zramswap
-    regexp: "^#?ALGO="
-    line: "ALGO=zstd"
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+  loop:
+    - regexp: "^PERCENT="
+      line: "PERCENT={{ optimize_pi_zram_percentage }}"
+    # zstd is ~3.5:1 vs lz4's ~2.5:1 on this workload — the better ratio is what makes the
+    # 75% device size affordable. zstd costs more CPU per page than lz4, but the A53 cores
+    # idle ~95% here; the SD-card swapfile this avoids is FAR slower.
+    - regexp: "^#?ALGO="
+      line: "ALGO=zstd"
+  loop_control:
+    label: "{{ item.regexp }}"
   notify: Restart ZRAM
 
 - name: Prefer zram swap over page-cache eviction (vm.swappiness=130)
