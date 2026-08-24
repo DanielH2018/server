@@ -21,6 +21,13 @@ data:
             return 200 'ok';
         }
 
+        # The build stamp is the signal that the docs-refresh cron is alive, so a cached
+        # copy would report a dead cron as healthy — the one file here that must never be
+        # served from cache.
+        location = /build-info.json {
+            add_header Cache-Control "no-store";
+        }
+
         # MkDocs `use_directory_urls: true` emits page/index.html, so a request for /page/
         # resolves by directory index. try_files keeps a missing page a 404 rather than a
         # directory listing.
