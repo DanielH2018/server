@@ -165,3 +165,33 @@ def k8s_workloads_verdict(
         )
         return False, "k8s pods crash-looping (restarts in window): %s" % named
     return True, "%d k8s workloads healthy" % int(total)
+
+
+def log_error_verdict(matches, total, threshold, window, ignore=frozenset()):
+    """Per-container counts of fatal log lines -> a verdict. Pure.
+
+    A cluster verdict rather than a service one: it folds into k8s Workload Health, and it
+    answers the question that check's other three arms structurally cannot. They read replicas,
+    restarts and allocatable — every one of which reports a container that is Ready while
+    failing at its actual job as healthy, because by their measure it is. Readiness asks whether
+    the port is open.
+
+    `total` is the selector's own volume, and it is what keeps this honest. The arm fails OPEN
+    (see check.py's with_log_errors), so a selector matching no stream returns no matches and
+    reads exactly like a healthy estate — the trap that shipped HA_BAN_SELECTOR with an `app`
+    label promtail does not emit and reported "no ip_ban events" through a window containing a
+    real ban. Counting the volume separates "nothing is wrong" from "I asked the wrong
+    question", so a zero here reports INERT rather than OK.
+    """
+    if not total:
+        return True, "log-error arm INERT (selector matched no lines)"
+    offenders = [
+        (labels.get("container", "?"), count)
+        for labels, count in matches
+        if count > threshold and labels.get("container", "").lower() not in ignore
+    ]
+    if not offenders:
+        return True, "no log-error bursts in %s" % window
+    offenders.sort(key=lambda nc: -nc[1])
+    named = ", ".join("%s (%d)" % (name, count) for name, count in offenders[:5])
+    return False, "fatal log lines in %s: %s" % (window, named)

@@ -1070,6 +1070,27 @@ def test_the_exclusion_keeps_series_that_carry_no_origin_label():
     assert "!~" in sel, "must be a negative match, not an origin allowlist"
 
 
+def test_the_exclusion_is_rendered_in_the_env_secret():
+    """The deployed value must exist, not be inherited from check.py's default.
+
+    check.py's `_env` default and the env-secret are two places one fact can live, and only the
+    env-secret is what actually runs. Rendering it explicitly is also what lets a maintenance
+    window widen or clear the exclusion the way HOST_ORIGINS_MIN can be lowered.
+    """
+    from pathlib import Path
+
+    env_secret = (
+        Path(__file__).resolve().parents[1] / "templates" / "env-secret.yaml.j2"
+    )
+    text = env_secret.read_text()
+
+    assert "HOST_METRIC_ORIGIN_EXCLUDE:" in text
+    assert "LOG_ERROR_SELECTOR:" in text, (
+        "the log-pattern arm's selector must be rendered too — it is the field most likely to "
+        "need changing without a code edit, and a wrong one makes the arm silently inert"
+    )
+
+
 def test_the_exclusion_is_overridable_without_editing_the_file(monkeypatch):
     """An operator can widen or clear the exclusion from the env, like every other threshold."""
     monkeypatch.setattr(check, "HOST_METRIC_ORIGIN_EXCLUDE", "daniel-pi|daniel-spare")

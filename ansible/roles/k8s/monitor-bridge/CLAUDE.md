@@ -298,9 +298,20 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     card's usage percent. A filling SD card is the classic slow Pi death the server-only
     Root Disk check can't see. The 512MB
     Zero 2 W dies by swap-thrash — 2026-06-11 fwupd episodes ran load5/core >1.7 with
-    healthcheck-timeout storms no other monitor saw. Polls glances rather than adding a
-    Pi node-exporter: zero Pi-side RAM cost, and a second node-exporter would have broken
-    the instance-blind `node_*` queries in the Memory/Root Disk checks. Empty
+    healthcheck-timeout storms no other monitor saw.
+    **This check still owns Pi disk and memory, but the reason it polls glances has changed.**
+    It read "rather than adding a Pi node-exporter: zero Pi-side RAM cost, and a second
+    node-exporter would have broken the instance-blind `node_*` queries in the Memory/Root Disk
+    checks." The Pi HAS a node-exporter since 2026-08-24 — the collision that argument named is
+    real, and it was fixed rather than avoided: `HOST_METRIC_ORIGIN_EXCLUDE` keeps daniel-pi out
+    of both those queries (`host_metric_sel`), so they stay two-host checks and this one stays
+    the single source of truth for Pi pressure. What the exporter adds is the half glances never
+    could — retained time series, so Pi memory and SD usage can be graphed and trended instead of
+    only tripping a threshold. The RAM cost is no longer zero: node-exporter measures ~20 MiB on
+    a 456 MB box, which is why its collector set is trimmed in the role's compose template.
+    **If you add a third node-exporter host, decide explicitly whether it belongs in the
+    estate-wide Memory/Root Disk checks or in a check of its own** — that choice is what this
+    bullet exists to force. Empty
     `PI_GLANCES_URL` = disabled (stays up); the static Kuma HTTP monitor
     `daniel-pi-glances` covers glances itself being down.)
   - **Home Assistant Automations** (HA's REST API `/api/states/input_datetime.ha_heartbeat` over

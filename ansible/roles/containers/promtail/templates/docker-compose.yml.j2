@@ -11,6 +11,12 @@ services:
     image: grafana/promtail:latest
     restart: unless-stopped
     command: -config.file=/etc/promtail/promtail.yml
+    # The image's own uid is 10001, and setup_dirs.yml creates the bind-mount source owned by
+    # the deploy user (1000). Left at the default, promtail cannot write its positions file:
+    # `open /positions/.positions.yaml...: permission denied`, once every few seconds. That is
+    # not a cosmetic error — with no positions to resume from, every restart re-reads every
+    # container's log from the beginning and re-ships it. Matches the estate's PUID/PGID.
+    user: "1000:1000"
     cap_drop:
       - ALL
     security_opt:
