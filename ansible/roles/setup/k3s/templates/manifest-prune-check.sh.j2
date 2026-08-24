@@ -214,6 +214,9 @@ done
 # same reason the orphan arm above reads staged manifests rather than templates.
 REPO_DIR=/home/{{ sys_user }}/server
 DRIFTED=""
+DEPLOYED_MANIFEST_DIR=/var/lib/homelab/setup-deployed-manifest.d
+DEPLOYED_NOTE=""
+DEPLOYED_ENTRIES=0
 
 check_deployed() {
   local live="$1" src="$2"
@@ -225,12 +228,28 @@ check_deployed() {
   cmp -s "$live" "$src" || DRIFTED="${DRIFTED:+$DRIFTED, }${live}"
 }
 
-check_deployed /opt/gitops-deploy/gitops_deploy.py \
-  "${REPO_DIR}/ansible/roles/setup/gitops_deploy/files/gitops_deploy.py"
-check_deployed /opt/gitops-deploy/deploy_logic.py \
-  "${REPO_DIR}/ansible/roles/setup/gitops_deploy/files/deploy_logic.py"
-check_deployed /opt/gitops-deploy/host_lib.py \
-  "${REPO_DIR}/ansible/roles/setup/common/files/host_lib.py"
+# The pairs come from a DIRECTORY of fragments, one per role, each written by the run that
+# deployed those artifacts — not from a list hardcoded here. Three paths were hardcoded until
+# 2026-08-24, all of them gitops-deploy's, so this arm was structurally incapable of seeing the
+# other nine `copy:`-deployed files on this host: renovate-notify's notifier and its host_lib
+# copy, fake-remux's five scripts, live-drift-check.py, and the shared kuma-push-lib.sh. Each
+# could run arbitrarily stale while this same script reported "deployed scripts match the repo"
+# — the exact 2026-08-16 failure this arm was built for, surviving inside the fix (review M-5).
+#
+# `-s`, not `-r`, and the entry counter: same two guards as the render arm below, for the same
+# reason — a zero-byte fragment or an empty directory must read as UNARMED, never as a green.
+for FRAGMENT in "$DEPLOYED_MANIFEST_DIR"/*; do
+  [[ -s "$FRAGMENT" ]] || continue
+  while read -r LIVE SRC; do
+    [[ -n "$LIVE" && -n "$SRC" ]] || continue
+    DEPLOYED_ENTRIES=$((DEPLOYED_ENTRIES + 1))
+    check_deployed "$LIVE" "${REPO_DIR}/${SRC}"
+  done < "$FRAGMENT"
+done
+
+if [[ "$DEPLOYED_ENTRIES" -eq 0 ]]; then
+  DEPLOYED_NOTE="; deployed manifest absent or empty (run initial_setup.yml and k3s-bringup.yml once each to arm the deployed-code arm)"
+fi
 
 # THIRD ARM: are the TEMPLATE-rendered scripts current?
 #
@@ -294,7 +313,7 @@ if [[ -z "$ORPHANS" && -z "$DRIFTED" && -z "$STALE" ]]; then
   STATUS=up
   # Names the arms it actually covered. The old wording — "deployed scripts match the repo" —
   # was true of the three copy:-deployed files and silently claimed the other twenty.
-  MSG="no orphaned routing (IngressRoute/Middleware/Service/TLSOption), workload (Deployment/DaemonSet/CronJob) or policy (NetworkPolicy) objects found; deployed code and rendered setup scripts match the repo${MANIFEST_NOTE}"
+  MSG="no orphaned routing (IngressRoute/Middleware/Service/TLSOption), workload (Deployment/DaemonSet/CronJob) or policy (NetworkPolicy) objects found; deployed code and rendered setup scripts match the repo${DEPLOYED_NOTE}${MANIFEST_NOTE}"
 else
   STATUS=down
   MSG=""
@@ -303,7 +322,7 @@ else
   # roles/setup/k3s/... comes from k3s-bringup.yml, every other setup role from initial_setup.yml.
   [[ -n "$DRIFTED" ]] && MSG="${MSG:+$MSG; }deployed code differs from the repo (re-run the playbook that renders it): ${DRIFTED}"
   [[ -n "$STALE" ]] && MSG="${MSG:+$MSG; }host is running an OLD render of (re-run the playbook that renders it): ${STALE}"
-  MSG="${MSG}${MANIFEST_NOTE}"
+  MSG="${MSG}${DEPLOYED_NOTE}${MANIFEST_NOTE}"
 fi
 
 # Unconditional, before the push — see longhorn-backup-health.sh.j2 for the full rationale.

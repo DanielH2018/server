@@ -274,3 +274,16 @@
     stamp_render_templates:
       - ansible/roles/setup/initial_setup/templates/secret-rotate.sh.j2
       - ansible/roles/setup/initial_setup/templates/secret-rotation-audit.sh.j2
+
+# kuma-push-lib.sh is sourced by EVERY health cron on every host, with a `|| exit 1` guard — so a
+# stale copy silently changes how every heartbeat pushes. It was watched by nothing until
+# 2026-08-24 (review M-5). `tags: [always]`, matching the copy task it records: this fragment must
+# not be left describing a version a tag-scoped run never deployed.
+- name: Record the deployed shared push library
+  tags: [always]
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
+  vars:
+    stamp_deployed_name: kuma-push-lib
+    stamp_deployed_pairs:
+      - live: /usr/local/lib/kuma-push-lib.sh
+        src: ansible/roles/setup/initial_setup/files/kuma-push-lib.sh
