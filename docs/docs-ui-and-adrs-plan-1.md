@@ -578,6 +578,20 @@ One module, because four generators will need it and a copy in each drifts.
 - Produces:
   - `generated_banner(source: str, *, when: datetime | None = None, sha: str | None = None) -> str` — the full Markdown preamble: YAML frontmatter plus a "do not edit" admonition. `source` is the generator's own path, e.g. `scripts/service_catalog.py`.
   - `head_sha(repo: Path | None = None) -> str` — the short commit SHA, or `"unknown"` when git is unavailable.
+  - `write_if_body_changed(path: Path, content: str) -> bool` — writes only when the body below the frontmatter differs. Returns whether it wrote. Tasks 4, 5 and 9 call this instead of `Path.write_text`.
+
+**The timestamp has two jobs that pull against each other, and this task resolves the conflict.**
+
+A stamp regenerated on every run proves the cron is alive. A stamp that changes only with content keeps diffs meaningful. Left unresolved, the first wins by default and the Task 7 cron commits on *every* run — the page is rewritten, `git diff --cached` is never empty, and twice a day becomes roughly 730 commits a year, each triggering master CI and a tick fast-forward. `generated_sha` does not escape this either: HEAD moves whenever anyone merges anything.
+
+The split:
+
+| Signal | Where it lives | What it means |
+|---|---|---|
+| `generated_at`, `generated_sha` | committed frontmatter | when the **content** last changed |
+| build time | the **served page only**, never committed | when the cron last ran |
+
+`write_if_body_changed` is what makes the first half true. The second half is Task 6, Step 6.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -750,7 +764,93 @@ Expected: PASS, all seven.
 
 If `test_banner_frontmatter_parses_as_yaml` fails on a `:` inside the source path, the frontmatter needs quoting. Quote the value rather than dropping the assertion.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Write the failing tests for `write_if_body_changed`**
+
+Append to `scripts/test_docs_provenance.py`:
+
+```python
+from docs_provenance import write_if_body_changed
+
+
+def _page(body: str, stamp: str) -> str:
+    return f"---\ngenerated_at: {stamp}\n---\n\n{body}"
+
+
+def test_writes_when_the_file_does_not_exist(tmp_path):
+    target = tmp_path / "new.md"
+    assert write_if_body_changed(target, _page("hello", "A")) is True
+    assert target.is_file()
+
+
+def test_writes_when_the_body_changed(tmp_path):
+    target = tmp_path / "p.md"
+    target.write_text(_page("old", "A"))
+    assert write_if_body_changed(target, _page("new", "B")) is True
+    assert "new" in target.read_text()
+
+
+def test_does_not_write_when_only_the_stamp_changed(tmp_path):
+    """The assertion the whole cron depends on.
+
+    Without it every run rewrites every page, the cron's `git diff --cached` is
+    never empty, and twice a day becomes ~730 commits a year -- each one a master
+    CI run and a tick fast-forward, for no content change at all.
+    """
+    target = tmp_path / "p.md"
+    target.write_text(_page("same", "A"))
+    before = target.read_text()
+    assert write_if_body_changed(target, _page("same", "B")) is False
+    assert target.read_text() == before, "file was rewritten despite an identical body"
+
+
+def test_creates_parent_directories(tmp_path):
+    target = tmp_path / "deep" / "nested" / "p.md"
+    assert write_if_body_changed(target, _page("x", "A")) is True
+```
+
+- [ ] **Step 6: Implement `write_if_body_changed`**
+
+```python
+def _body(text: str) -> str:
+    """Everything after the frontmatter block.
+
+    Splitting on the first two '---' delimiters, so a '---' inside the body (a
+    Markdown horizontal rule, which several pages use) does not truncate it.
+    """
+    if not text.startswith("---\n"):
+        return text
+    parts = text.split("---", 2)
+    return parts[2] if len(parts) == 3 else text
+
+
+def write_if_body_changed(path: Path, content: str) -> bool:
+    """Write `content` to `path` only if the body below the frontmatter differs.
+
+    Returns True when it wrote.
+
+    WHY. generated_at and generated_sha change on every run -- the clock moves, and
+    HEAD moves whenever anyone merges anything. Writing unconditionally would make
+    the docs-refresh cron commit on every run for no content change, which is the
+    commit noise this design accepted only in exchange for reviewable diffs. A diff
+    that is always a timestamp bump is not reviewable.
+
+    The freshness signal is not lost, it is relocated: the frontmatter stamp now
+    means "when the content last changed", and "when the cron last ran" is rendered
+    into the served page by build_docs (Task 6) without being committed.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.is_file() and _body(path.read_text()) == _body(content):
+        return False
+    path.write_text(content)
+    return True
+```
+
+- [ ] **Step 7: Run the tests to verify they pass**
+
+Run: `uv run pytest scripts/test_docs_provenance.py -v`
+Expected: PASS, all eleven.
+
+- [ ] **Step 8: Commit**
 
 Stage `scripts/docs_provenance.py` and `scripts/test_docs_provenance.py`. Commit with:
 
@@ -937,13 +1037,21 @@ In `main()`, change `--out`'s help text to drop "HTML", and add:
 Then replace the write line:
 
 ```python
-    render = render_markdown if args.format == "markdown" else render_html
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(render(rows))
-    print(f"service_catalog: wrote {len(rows)} service(s) to {args.out}")
+    from docs_provenance import write_if_body_changed
+
+    if args.format == "markdown":
+        # Not write_text: an unconditional write changes the timestamp on every run,
+        # which makes the docs-refresh cron commit on every run for no content change.
+        wrote = write_if_body_changed(args.out, render_markdown(rows))
+        print(f"service_catalog: {len(rows)} service(s), "
+              f"{'wrote' if wrote else 'unchanged'} {args.out}")
+    else:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(render_html(rows))
+        print(f"service_catalog: wrote {len(rows)} service(s) to {args.out}")
 ```
 
-The default stays `html` so the existing standalone artifact behaviour is unchanged.
+The default stays `html` so the existing standalone artifact behaviour is unchanged. The HTML path keeps the unconditional write — it targets `~/.claude/artifacts/`, which is not committed and has no diff to protect.
 
 - [ ] **Step 6: Run the full suite for this script**
 
@@ -1101,7 +1209,11 @@ In `scripts/gen_infra_map.py`, re-export `render_svg` alongside the other public
     )
 ```
 
-and select the renderer at the write site, exactly as Task 4 did for `service_catalog.py`. Default stays `html`, so the cron that writes `~/.claude/artifacts/homelab-infra-map.html` keeps working unchanged.
+and select the renderer at the write site, exactly as Task 4 did for `service_catalog.py` — including `write_if_body_changed` for the SVG path. The SVG carries no frontmatter, so the helper falls back to comparing the whole text, which is the behaviour wanted here.
+
+**Check whether `_diagram_view` stamps a generation time into the drawing.** If it does, the SVG differs on every run and the helper cannot suppress the write. Move that stamp out of the SVG and into `docs/reference/topology.md`'s prose, which is hand-written and therefore not rewritten by the generator at all.
+
+Default stays `html`, so the cron that writes `~/.claude/artifacts/homelab-infra-map.html` keeps working unchanged.
 
 - [ ] **Step 6: Run the tests to verify they pass**
 
@@ -1249,6 +1361,38 @@ def test_every_generator_output_lands_under_docs():
     """A generator writing outside docs/ would escape the hand-edit hook."""
     for _argv, out in build_docs.GENERATORS:
         assert out.startswith("docs/"), f"{out} is outside docs/"
+
+
+def test_a_failed_build_leaves_the_previous_site_in_place(tmp_path, monkeypatch):
+    """The pod serves this directory. A failed build must not empty it.
+
+    mkdocs cleans its --site-dir before writing, so building straight into the served
+    path would blank the site on every failure and for several seconds on every
+    success.
+    """
+    final = tmp_path / "site"
+    final.mkdir()
+    (final / "index.html").write_text("previous")
+
+    def fake_run(argv, **kwargs):
+        return subprocess.CompletedProcess(argv, 1, "", "build error")
+
+    monkeypatch.setattr(build_docs.subprocess, "run", fake_run)
+    assert build_docs.build_site(str(final)) is False
+    assert (final / "index.html").read_text() == "previous"
+
+
+def test_the_build_stamp_is_written_into_the_site_not_the_repo(tmp_path):
+    """The cron-liveness signal must never be committed.
+
+    Committing it would rewrite a tracked file on every run, which is exactly the
+    commit-per-run problem write_if_body_changed exists to prevent.
+    """
+    site = tmp_path / "site"
+    site.mkdir()
+    build_docs._write_build_stamp(site)
+    assert (site / "build-info.json").is_file()
+    assert not (build_docs.REPO / "build-info.json").exists()
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -1281,6 +1425,10 @@ to. The site build is not conditional on it.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
+import json
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -1328,14 +1476,28 @@ def run_generators() -> list[str]:
 
 
 def build_site(site_dir: str) -> bool:
-    """`mkdocs build --strict` into site_dir. Returns True on success.
+    """`mkdocs build --strict`, swapped into place atomically. Returns True on success.
 
     --strict turns a broken internal link into a build failure. A docs site that
     silently serves dead links is the failure this whole system exists to prevent, so
     the strictness is not negotiable here.
+
+    WHY NOT BUILD STRAIGHT INTO site_dir. mkdocs cleans its --site-dir first, so a
+    direct build empties the tree the docs pod is serving and refills it over several
+    seconds. The role's own defaults already record the principle -- "replacing a
+    served directory mid-request is a failure mode with no upside" -- which is why
+    site_dir sits outside the repo checkout. Building to a sibling and renaming into
+    place applies the same principle to the build itself. os.replace is atomic within
+    a filesystem, and the sibling is deliberately in the same parent so it is one.
+
+    A failed build leaves the previous site serving, untouched.
     """
+    final = Path(site_dir)
+    staging = final.parent / f"{final.name}.new"
+    previous = final.parent / f"{final.name}.old"
+
     result = subprocess.run(
-        ["uv", "run", "mkdocs", "build", "--strict", "--site-dir", site_dir],
+        ["uv", "run", "mkdocs", "build", "--strict", "--site-dir", str(staging)],
         cwd=REPO,
         capture_output=True,
         text=True,
@@ -1343,11 +1505,35 @@ def build_site(site_dir: str) -> bool:
         check=False,
     )
     if result.returncode != 0:
-        print("build_docs: mkdocs build FAILED", file=sys.stderr)
+        print("build_docs: mkdocs build FAILED (previous site left serving)",
+              file=sys.stderr)
         print(result.stderr.strip()[:4000], file=sys.stderr)
+        shutil.rmtree(staging, ignore_errors=True)
         return False
-    print(f"build_docs: site built -> {site_dir}")
+
+    _write_build_stamp(staging)
+
+    shutil.rmtree(previous, ignore_errors=True)
+    if final.exists():
+        os.replace(final, previous)
+    os.replace(staging, final)
+    shutil.rmtree(previous, ignore_errors=True)
+    print(f"build_docs: site built -> {final}")
     return True
+
+
+def _write_build_stamp(site: Path) -> None:
+    """When the cron last ran, written into the SERVED site and never committed.
+
+    This is the other half of the split Task 3 makes. The committed frontmatter says
+    when a page's content last changed; this says when the build last ran, which is
+    what proves the cron is alive. Keeping it out of the repo is what stops every run
+    producing a commit.
+    """
+    stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    (site / "build-info.json").write_text(
+        json.dumps({"built_at": stamp}, indent=2) + "\n"
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1390,11 +1576,23 @@ uv run python scripts/build_docs.py --site-dir /home/ubuntu/docs-site
 
 Expected: exits 0, prints one `ok ->` line per generator and one `site built ->` line.
 
-Then `git status` — the regenerated pages should be unchanged from what Tasks 4 and 5 committed, or differ only in the provenance timestamp. **Any other difference means a generator is not deterministic**, which will make the Task 7 cron commit on every run. Find the non-deterministic field and fix it before continuing.
+Then run it a **second** time and check `git status`.
 
-- [ ] **Step 6: Commit**
+Expected: completely clean, and each generator printing `unchanged`. This is the assertion the whole cron depends on — `write_if_body_changed` should have suppressed every write, because nothing about the tree changed between the two runs.
 
-Stage `scripts/build_docs.py` and `scripts/test_build_docs.py`. Commit with:
+**A dirty tree here means the Task 7 cron will commit on every run.** Find the field that moved. The usual causes are a timestamp inside a generator's body rather than in its frontmatter, and dictionary or set iteration that is not sorted. Fix it before continuing; do not proceed and rely on catching it in Task 7.
+
+Confirm `build-info.json` exists in `/home/ubuntu/docs-site/` and is **not** in `git status`.
+
+- [ ] **Step 6: Surface the build stamp on the page**
+
+`build-info.json` proves the cron ran, but only to someone who fetches it. Make it visible: add a small script to `docs/index.md` that fetches `/build-info.json` and writes the timestamp into the page, degrading silently when the fetch fails.
+
+This is the reader-facing half of the staleness signal. A page's own frontmatter says when its content last changed; this says when the site was last built. Both are needed, and neither substitutes for the other — a page that has not changed in three months is fine, and a site that has not built in three months is not.
+
+- [ ] **Step 7: Commit**
+
+Stage `scripts/build_docs.py`, `scripts/test_build_docs.py` and `docs/index.md`. Commit with:
 
 ```
 Add build_docs.py: regenerate the reference pages, then build the site
@@ -1443,6 +1641,11 @@ Create `ansible/roles/setup/initial_setup/templates/docs-refresh.sh.j2`:
 # alternative -- rendering at serve time -- is always current and completely invisible:
 # a generator bug would reach the page with nothing to catch it.
 #
+# IT PUSHES DIRECTLY TO MASTER. Inherited rather than decided: secret-rotate.sh already
+# does this, so the path and its permissions are proven. Worth seeing as a conscious choice
+# -- a docs commit bypasses PR review, which is acceptable only because every byte it
+# commits was produced by a generator whose output is itself tested.
+#
 # NO DEADMAN. Deliberate, and the same call the infra-map cron makes. Every generated page
 # carries the timestamp and SHA it was built from, so a cron that stops working shows up as
 # a visibly stale date on the page itself. A monitor would add an alert channel to maintain
@@ -1472,11 +1675,16 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
   exit 0
 fi
 
-if ! git pull --rebase >/dev/null 2>&1; then
-  git rebase --abort >/dev/null 2>&1
-  alert "docs-refresh: git pull failed; skipped"
-  exit 1
-fi
+# DELIBERATELY NO `git pull`. gitops-deploy.service already fast-forwards this checkout
+# every 30 minutes, and it CI-gates the range first: a commit whose master CI is red or
+# pending is refused, and a failed health gate parks the SHA in hold_sha. A bare pull here
+# would take the lock correctly and still skip all of that, fast-forwarding onto whatever
+# origin/master holds — including a commit the tick would have refused. The next deploy
+# then renders templates from that tree.
+#
+# This cron runs twice a day and the tick runs 48 times, so reading whatever the tick has
+# already gated in costs at most one interval of freshness and removes the interaction
+# entirely.
 
 # --frozen: install from the committed uv.lock, never rewrite it on the host. A lock
 # rewrite here would show up as an unrelated dirty file on the next run.
@@ -1497,7 +1705,12 @@ fi
 
 # Hooks run. Unlike secret-rotate, this commit has no live-but-uncommitted state to
 # strand: if a hook rejects it, nothing has been deployed and the right outcome is a
-# clean abort. The staged paths only ever hit the cheap whitespace and lint hooks.
+# clean abort.
+#
+# A hook that can fail on GENERATED content wedges this cron permanently -- it would
+# abort, alert and exit 1 on every run until someone fixed the generator. Plan 2's Vale
+# hook is therefore scoped to exclude docs/reference/. Before adding any hook that
+# matches a path staged above, check it cannot fail on generator output.
 if ! git commit -m "docs: refresh generated reference pages" >/dev/null 2>&1; then
   git reset >/dev/null 2>&1
   alert "docs-refresh: commit failed (hook rejection?); unstaged, no change pushed"
@@ -1570,7 +1783,9 @@ journalctl -t docs-refresh --since "5 min ago"
 
 Expected: one `no change` line, because Tasks 4 through 6 already committed current output.
 
-If it logs a change instead, a generator is not deterministic across runs. Find the field — most likely the provenance timestamp being regenerated when nothing else moved — and decide whether the page should be rewritten when only the timestamp differs. **Rewriting on timestamp alone produces a commit every single run**; suppress it by comparing the body below the frontmatter, not the whole file.
+If it logs a change and commits instead, `write_if_body_changed` is not suppressing a write it should. That means some field inside a page **body** moves between runs — a timestamp rendered below the frontmatter rather than in it, or unsorted iteration over a dict or set. Find it and fix the generator.
+
+Do not work around it by widening what the helper ignores. The helper compares bodies precisely so that a real content change is never missed; loosening it to swallow a moving field would hide real changes too.
 
 - [ ] **Step 5: Prove the lock holds**
 

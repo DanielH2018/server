@@ -185,11 +185,34 @@ SVG, and pushes. This is the shape `secret-rotate.sh` already uses.
 `deploy.sh` hold, so the docs cron cannot interleave with a GitOps tick, a deploy, or another
 session's work on the tree.
 
-**Every generated page carries its own provenance** — `generated: <timestamp> from <sha>` in
-frontmatter, rendered in the page footer. A cron that stops working shows up as a visibly stale
-date on the page itself. This is the reasoning `crons.yml` already states for why the infra-map
-cron carries no Healthchecks ping: a failed run leaves the previous page in place rather than
-corrupting anything.
+**It does not pull.** The GitOps tick already fast-forwards this checkout every 30 minutes, and
+it CI-gates the range first. A pull here would take the lock correctly and still skip that gate,
+fast-forwarding onto a commit the tick would have refused. The docs cron reads whatever the tick
+has already admitted.
+
+**Freshness is two signals, not one, because the two pull against each other.** A stamp
+regenerated every run proves the cron is alive; a stamp that changes only with content keeps
+diffs meaningful. Left as one field the first wins, every run rewrites every page, and the cron
+commits roughly 730 times a year for no content change — which would spend the commit noise this
+design accepted in exchange for reviewable diffs, and get nothing back.
+
+| Signal | Where it lives | What it means |
+|---|---|---|
+| `generated_at`, `generated_sha` | committed frontmatter | when the page's **content** last changed |
+| build time | the served site only, never committed | when the cron last ran |
+
+A generator writes a page only when the body below the frontmatter differs. The build stamp goes
+into the built site as `build-info.json` and is never committed.
+
+Both are needed. A page that has not changed in three months is fine; a site that has not built
+in three months is not. This keeps the property `crons.yml` already states for the infra-map
+cron — a failed run leaves the previous page in place rather than corrupting anything — without
+paying for it in commits.
+
+**The build is atomic.** `mkdocs build` cleans its `--site-dir` first, so building straight into
+the served path would empty the docs pod's tree and refill it over several seconds, twice a day.
+The build goes to a sibling directory and is renamed into place. A failed build leaves the
+previous site serving.
 
 **A prek hook denies hand-edits to `docs/reference/**`,** in the shape of the existing
 `block-protected-edits` hook. The generated pages also carry a "generated file, do not edit"
@@ -202,10 +225,17 @@ subset. A generated page cannot drift from its source. Only prose can.
 
 [Vale](https://vale.sh) with Google's published style package, run as a prek hook and in CI.
 
-**Scoped, not tree-wide.** `.vale.ini` covers `docs/reference/`, `docs/adr/`, and `docs/index.md`.
-The existing 19 documents and 87 role `CLAUDE.md` files are grandfathered. A tree-wide lint on
-this corpus lands red on day one and gets switched off, which is worse than a narrow one that
-holds.
+**Scoped, not tree-wide.** `.vale.ini` covers `docs/adr/` and `docs/index.md`. The existing 19
+documents and 87 role `CLAUDE.md` files are grandfathered. A tree-wide lint on this corpus lands
+red on day one and gets switched off, which is worse than a narrow one that holds.
+
+**`docs/reference/` is excluded, and the reason is mechanical rather than editorial.** The
+refresh cron stages exactly those paths and commits with hooks running, so a Vale error on
+generated content would abort that commit, alert, and exit non-zero on every run until someone
+fixed the generator — a style rule wedging the pipeline that keeps the docs current. A generated
+page's prose lives in its render function, which is reviewed as code and covered by that
+generator's tests. Running Vale over the generated output by hand is still worthwhile; making it
+a gate is not.
 
 Google's package already covers most of the rules CLAUDE.md states — `Google.Will` is the
 present-tense rule, and passive voice, headings, and word choice are covered. A small custom

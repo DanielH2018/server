@@ -426,9 +426,17 @@ Packages = Google
 # Scoped deliberately. The existing 19 documents in docs/ and the 87 role CLAUDE.md files
 # are grandfathered: a tree-wide lint over this corpus lands red on day one and gets
 # switched off, which is worse than a narrow gate that holds.
-[docs/reference/*.md]
-BasedOnStyles = Vale, Google, Homelab
-
+#
+# docs/reference/ is EXCLUDED, and that exclusion is load-bearing rather than lazy. The
+# docs-refresh cron (plan 1, task 7) stages exactly those paths and commits with hooks
+# running. A Vale error on generated content would abort that commit, alert and exit 1 on
+# every run until someone fixed the generator -- a style rule wedging the pipeline that
+# keeps the docs current.
+#
+# Nothing is lost. A generated page's prose lives in its generator's render function, which
+# is reviewed as code and covered by that generator's tests. Linting the emitted Markdown
+# would flag the template's author at a place they cannot edit -- the hand-edit hook denies
+# exactly those files.
 [docs/adr/*.md]
 BasedOnStyles = Vale, Google, Homelab
 
@@ -473,16 +481,24 @@ tokens:
 - [ ] **Step 4: Run it and fix what it finds**
 
 ```bash
-vale docs/reference docs/adr docs/index.md
+vale docs/adr docs/index.md
 ```
 
-Fix every error in the hand-written pages. **For an error in a generated page, fix the generator's output template, never the page** — the next cron run overwrites the page.
+Fix every error. These pages are hand-written, so the fix is always in the page itself.
+
+Run it against `docs/reference/` **once, by hand**, to see what the generators emit:
+
+```bash
+vale --no-exit docs/reference
+```
+
+Anything it reports is a note for the generator's render function, not a gate. Fix what is worth fixing there, in the code. Do not add `docs/reference/` back to `.vale.ini` to enforce it — the cron commits those paths with hooks running, and a style error would wedge it.
 
 If a rule fires repeatedly on something genuinely correct, adjust the rule and say why in a comment. Do not add per-file exceptions; an exception list is how a style gate becomes decorative.
 
 - [ ] **Step 5: Add the prek hook**
 
-Add to `prek.toml`, following the shape of the existing local hooks. Restrict `files:` to the same three paths as `.vale.ini` — a hook that invokes Vale on every file relies on `.vale.ini` alone for scoping, and the two then drift.
+Add to `prek.toml`, following the shape of the existing local hooks. Restrict `files:` to the same two paths as `.vale.ini` — `docs/adr/` and `docs/index.md`, never `docs/reference/` — a hook that invokes Vale on every file relies on `.vale.ini` alone for scoping, and the two then drift.
 
 Run: `uv run prek run --all-files`
 Expected: the Vale hook passes.
@@ -501,10 +517,16 @@ Add Vale, scoped to the generated docs and ADRs
 Google's published style package plus two rules it lacks: a datedness ban
 and a noun-stack warning.
 
-Scoped to docs/reference/, docs/adr/ and docs/index.md. The existing 19
-documents and 87 role CLAUDE.md files are grandfathered -- a tree-wide lint
-over this corpus lands red on day one and gets switched off, which is worse
-than a narrow gate that holds.
+Scoped to docs/adr/ and docs/index.md. The existing 19 documents and 87 role
+CLAUDE.md files are grandfathered -- a tree-wide lint over this corpus lands
+red on day one and gets switched off, which is worse than a narrow gate that
+holds.
+
+docs/reference/ is excluded for a different and load-bearing reason: the
+docs-refresh cron stages exactly those paths and commits with hooks running,
+so a style error on generated content would abort that commit on every run
+until someone fixed the generator. A generated page's prose lives in its
+render function, which is reviewed as code.
 
 Dated.yml omits 'new', 'now', 'latest' and 'existing' on purpose. All four
 have legitimate literal uses, and a rule that fires on those trains people
