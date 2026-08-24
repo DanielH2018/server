@@ -67,6 +67,14 @@ GENERATORS: list[tuple[list[str], str]] = [
     ),
     (
         [
+            "scripts/gen_reference_networking.py",
+            "--out",
+            "docs/reference/networking.md",
+        ],
+        "docs/reference/networking.md",
+    ),
+    (
+        [
             "scripts/gen_infra_map.py",
             "--format",
             "svg",
