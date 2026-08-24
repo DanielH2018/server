@@ -25,18 +25,38 @@ STATE_FILE="$STATE_DIR/ipv4"
 STATE_FILE6="$STATE_DIR/ipv6"
 PUSH_URL="https://uptime-kuma.local.{{ domain }}/api/push/{{ monitor_bridge_home_allowlist_push_token }}"
 
+# DECIDED: `--retry 3 --retry-all-errors`, not the bare `--retry 3` the sibling push crons use.
+# Every curl here is one transient failure away from a red monitor: the monitor is push-type
+# with max_retries 0, so a single bad run IS an immediate DOWN. Measured over the 3 days to
+# 2026-08-24 the monitor made 18 transitions (9 down/up cycles) with the allowlist itself never
+# once out of sync.
+#
+# `--retry-all-errors` buys CONNECTION REFUSED, and only that — measured on curl 8.5.0,
+# 2026-08-24, against a dead port and an unresolvable name:
+#   exit 7 (refused):  bare --retry 0.004s (no retry)  |  --retry-all-errors 7.04s (retried)
+#   exit 6 (DNS):      bare --retry 7.05s (retried)    |  --retry-all-errors 7.05s (retried)
+# So the widely-repeated "bare --retry skips DNS failures" is FALSE on this curl; do not restate
+# it. The refused case is the one that matters for the LAN push to Kuma, which is why the flag
+# stays. Accepted cost: a 4xx push (a bad token) now burns the backoff before failing.
+#
+# Worst case is 4 attempts x 10s plus curl's 1/2/4s backoff per call, ~47s, and three calls
+# still fit the 5-minute cron interval.
 push() { # up|down msg
-  curl -fsS --max-time 10 -G "$PUSH_URL" \
+  curl -fsS --max-time 10 --retry 3 --retry-all-errors -G "$PUSH_URL" \
     --data-urlencode "status=$1" --data-urlencode "msg=$2" -o /dev/null \
     || logger -t crowdsec-home-allowlist "kuma push failed ($1: $2)"
 }
-fail() { push down "$1"; logger -t crowdsec-home-allowlist "$1"; exit 1; }
+# The `status=down` prefix is load-bearing: `probe.py alerts` reconstructs host-cron episodes
+# from `{job="syslog"} |= "status=down"` (parse_syslog_down_line), so a bare message leaves the
+# episode unrecoverable once Kuma's current state clears. This logged bare until 2026-08-24,
+# which is why 7 days of these flaps produced zero rows in `probe.py alerts`.
+fail() { push down "$1"; logger -t crowdsec-home-allowlist "status=down $1"; exit 1; }
 
 cscli_lapi() {
   /usr/local/bin/k3s kubectl -n {{ k8s_namespace }} exec deploy/crowdsec -c crowdsec -- cscli "$@"
 }
 
-if ! CURRENT_IP=$(curl -sf --max-time 10 https://api4.ipify.org); then
+if ! CURRENT_IP=$(curl -sf --max-time 10 --retry 3 --retry-all-errors https://api4.ipify.org); then
   fail "failed to resolve public IPv4 from ipify"
 fi
 
@@ -51,7 +71,7 @@ fi
 # a stale entry and the next rotation 403s everyone at home).
 CURRENT_PREFIX6=""
 if ip -6 addr show scope global 2>/dev/null | grep -q inet6; then
-  if ! CURRENT_IP6=$(curl -sf --max-time 10 https://api6.ipify.org); then
+  if ! CURRENT_IP6=$(curl -sf --max-time 10 --retry 3 --retry-all-errors https://api6.ipify.org); then
     fail "host has global IPv6 but failed to resolve public IPv6 from ipify"
   fi
   # Validate AND mask to the /64 in one step; ip_network raises on junk, so a bad value fails
