@@ -26,7 +26,7 @@ netpol_baseline_scope: namespace
 # against the rendered templates; the gate exists because the templates and the cluster can
 # disagree, and did for ~16 hours during slice 4.5.
 netpol_baseline_exempt_workloads:
-  - flaresolverr    # roles/k8s/prowlarr/templates/networkpolicy.yaml.j2 (app=prowlarr, :8191)
+  - flaresolverr    # roles/k8s/prowlarr/templates/networkpolicy-flaresolverr.yaml.j2 (app=prowlarr, :8191)
   - headlamp        # roles/k8s/headlamp/templates/networkpolicy.yaml.j2
   - n8n             # roles/k8s/n8n/templates/networkpolicy.yaml.j2 (live name `n8n-broker`)
   - registry        # roles/k8s/registry/templates/networkpolicy.yaml.j2

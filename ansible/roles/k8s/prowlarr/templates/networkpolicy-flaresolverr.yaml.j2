@@ -1,4 +1,10 @@
 ---
+# The subject of this policy is FLARESOLVERR, not prowlarr — it lives in the prowlarr role
+# because flaresolverr has no role of its own, and prowlarr is its only caller. prowlarr's own
+# policy is the sibling `networkpolicy-prowlarr.yaml.j2`. The file was called
+# `networkpolicy.yaml.j2` until 2026-08-24, where the generic name next to a `-prowlarr` sibling
+# read as "prowlarr's policy" and a review took it for one.
+#
 # Reproduces the `prowlarr-flaresolverr` Docker network, which existed so that a headless browser
 # rendering attacker-supplied Cloudflare pages was reachable by prowlarr and nothing else.
 # Collapsing the fleet into one namespace would have widened that to every workload in
