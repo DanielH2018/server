@@ -1,25 +1,16 @@
 ---
 # qbittorrent behind its Mullvad tunnel (slice 4, B4b). The slice's only genuinely new shape:
 # two containers in one pod, a VPN sidecar that gates the app's start, and a kill-switch that
-# has to be taught the cluster's CIDRs. See D11 in docs/k3s-migration/slice-4-media-cluster.md.
+# has to be taught the cluster's CIDRs. See D11 in docs/archive/k3s-migration/slice-4-media-cluster.md.
 #
 # NOT DEPLOYED BEFORE THE CUTOVER WINDOW. Two qbittorrents holding the same torrent state would
 # both announce to trackers from different addresses, and the second one's view of what is
 # complete is stale the moment the first one writes. There is no coexistence mode for this
 # service the way there is for a read-mostly \*arr — which is D3's "one window", again.
 
-- name: Report that qbittorrent is held until the cutover
-  tags: [always]
-  when: not qbittorrent_k8s_enabled | bool
-  ansible.builtin.debug:
-    msg: >-
-      qbittorrent is built but NOT deployed (qbittorrent_k8s_enabled is false). Two copies
-      holding the same torrent state cannot coexist — this is released in B4c, once the Docker
-      copy is stopped. See the role defaults.
 
 - name: Seed the qbittorrent config volume
   tags: [deploy]
-  when: qbittorrent_k8s_enabled | bool
   # ONE volume for both containers, matching the Compose file — wireguard's wg0.conf and
   # qbittorrent's settings live in the same tree.
   #
@@ -38,7 +29,6 @@
       - qbittorrent
 
 - name: Deploy qbittorrent to the cluster
-  when: qbittorrent_k8s_enabled | bool
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
@@ -60,5 +50,4 @@
 
 - name: Prove the tunnel carries the traffic
   tags: [deploy]
-  when: qbittorrent_k8s_enabled | bool
   ansible.builtin.include_tasks: verify.yml

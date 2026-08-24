@@ -1,10 +1,4 @@
 ---
-# Flipped true at the B3 cutover (2026-08-09) — the Docker copy is stopped and removed, so the
-# flag's original job (keeping gitops from standing up a second HA next to it, slice-5 D5) is
-# done. It remains the emergency brake: false + a redeploy tears the cluster copy's management
-# down without touching the PVC.
-home_assistant_k8s_enabled: true
-
 # Same image the Docker role runs — both copies stay on the same tag through coexistence so a
 # difference in behaviour between them is never the image. DOCKER_MODS rides along (HACS);
 # whether the mod layer applies under containerd is a B3 gate, checked at first boot.

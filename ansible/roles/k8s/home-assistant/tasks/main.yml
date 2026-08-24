@@ -1,21 +1,11 @@
 ---
 # Slice 5, B3 — built ahead of the cutover window, held by the enabled flag (see defaults).
 
-- name: Report that home-assistant is held
-  tags: [always]
-  when: not home_assistant_k8s_enabled | bool
-  ansible.builtin.debug:
-    msg: >-
-      home-assistant is built but NOT deployed (home_assistant_k8s_enabled is false).
-      daniel-box runs has_gitops and deploy.yml is a plain containers_list loop, so the
-      inventory entry alone would stand HA up unattended alongside the running Docker copy —
-      two HAs on one MQTT broker and one recorder lineage.
 
 # Cutover seed: run with -e seed_volume_force=true AFTER stopping the Docker HA — the recorder
 # is SQLite and a running source is torn by construction.
 - name: Seed the home-assistant config volume
   tags: [deploy]
-  when: home_assistant_k8s_enabled | bool
   ansible.builtin.include_role:
     name: k8s/seed-volume
   vars:
@@ -26,7 +16,6 @@
     seed_volume_size: "{{ home_assistant_k8s_size }}"
 
 - name: Deploy home-assistant to the cluster
-  when: home_assistant_k8s_enabled | bool
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:

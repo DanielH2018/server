@@ -1,23 +1,12 @@
 ---
 # Slice 4, B4a — subtitles. Mounts /data/media only — it never imports.
 #
-# HELD until B4c by bazarr_k8s_enabled. See the role defaults for why the flag exists rather than
-# the inventory entry simply being absent.
 
-- name: Report that bazarr is held until the cutover
-  tags: [always]
-  when: not bazarr_k8s_enabled | bool
-  ansible.builtin.debug:
-    msg: >-
-      bazarr is built but NOT deployed (bazarr_k8s_enabled is false). The five services that share
-      the hardlink seam cut over in one window (D3); this is released in B4c.
 
 # Seeded BEFORE the workload, so the app never runs its first-boot setup against an empty /config
 # that is about to be overwritten. The Docker copy is still writing, so a coexistence seed is torn
-# by construction — only B4c's force=true seed against a STOPPED source is authoritative.
 - name: Seed the bazarr config volume
   tags: [deploy]
-  when: bazarr_k8s_enabled | bool
   ansible.builtin.include_role:
     name: k8s/seed-volume
   vars:
@@ -25,12 +14,10 @@
     seed_volume_claim: "{{ bazarr_k8s_claim }}"
     seed_volume_source_path: "{{ bazarr_k8s_source_path }}"
     seed_volume_storage_class: "{{ bazarr_k8s_storage_class }}"
-    seed_volume_size: "{{ bazarr_k8s_size }}"
     seed_volume_quiesce:
       - bazarr
 
 - name: Deploy bazarr to the cluster
-  when: bazarr_k8s_enabled | bool
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:

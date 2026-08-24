@@ -91,8 +91,6 @@ lan_subnet: "10.0.0.0/24"
 # tagged `deploy.yml --tags docker-proxy` set_facts containers_list to the filtered
 # dependency closure, which would drop code-server and render False). Override per-host.
 has_code_server: false
-# The host Uptime Kuma / the Pi's push-monitor heartbeats resolve to.
-monitoring_controller_host: daniel-server
 # The k3s cluster's ingress VIP, served by MetalLB from a dedicated autoAssign: false pool.
 # Global rather than a k3s role default because two hosts consume it: daniel-box's k8s
 # Traefik Service claims it, and Pi-hole answers the cluster hostnames with it.

@@ -70,5 +70,4 @@ has_gitops: false
 # Fleet-role assignments (defined in group_vars/all.yml, all defaulting to
 # daniel-server). Override only when MOVING a role to this host, and make sure
 # the old host stops claiming it.
-# monitoring_controller_host: <hostname>
 # renovate_notify_host: <hostname>

@@ -5,8 +5,6 @@
 # library. What makes it the exit criterion is the GPU — it is the first workload to request the
 # `devic.es/dri` extended resource the B1 device plugin advertises, so a wrong answer here is a
 # wrong answer about the whole media plane on this host.
-jellyfin_k8s_enabled: true
-
 # The same tag the Docker copy ran, so a behavioural difference between the two is never the
 # image. NOT the opencl-intel DOCKER_MODS variant — see D8/D12.
 jellyfin_k8s_image: lscr.io/linuxserver/jellyfin:10.11.10ubu2404-ls35
