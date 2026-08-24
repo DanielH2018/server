@@ -1,0 +1,66 @@
+{#
+  The Traefik dashboard's door. It existed at the Docker edge as a file-provider router
+  named `dashboard` in roles/containers/traefik/templates/config.yml.j2, and went away with
+  that host in e9a9569c ("E7 slice 3: the Docker edge stands down") — the migration ported
+  every app route but not Traefik's own, so `traefik.local.<domain>` has 404'd since.
+  `api.dashboard: true` stayed set the whole time (static-config.yaml.j2:10), so the
+  dashboard was running with nothing routed to it.
+
+  NOT the shared ingressroute() macro, and it cannot be: that macro emits
+  `services[].name` + `port`, which resolves to a k8s Service. The dashboard is served by
+  Traefik's own internal service, which is reached by NAME with `kind: TraefikService` and
+  NO port. Give it the default kind and Traefik looks for a Service called `api@internal`
+  in this namespace, finds nothing, and the route 404s exactly as if it were absent.
+  Neither pre-deploy gate can catch that mistake: IngressRoute is a CRD so prek only proves
+  the YAML parses, and `traefik` is in k8s_dry_run_unsupported so --dry-run refuses the role
+  outright. It is verified live or not at all.
+#}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: traefik-dashboard
+  namespace: {{ k8s_namespace }}
+spec:
+  entryPoints:
+    - https
+  routes:
+    - kind: Rule
+      # DECIDED: LAN-only. The retired Docker router also matched the public
+      # `traefik.<domain>`, and that host is deliberately NOT reproduced here — the
+      # dashboard enumerates every router, service and middleware on this edge, which is a
+      # map of the whole homelab, and Authelia in front of it does not make publishing that
+      # map worthwhile. This route ignores k8s_public_route for the same reason
+      # prometheus-monitoring does: `public=false` is the convention for infrastructure APIs
+      # (see ansible/templates/ingressroute.yml.j2's macro header). WireGuard peers still
+      # reach it — they resolve `.local.` names through Pi-hole — because the gate here is
+      # the hostname, not a ClientIP matcher.
+      #
+      # Host-only, no PathPrefix, matching the retired router. The documented upstream form
+      # adds (PathPrefix(`/dashboard`) || PathPrefix(`/api`)), which leaves a bare
+      # `https://traefik.local.<domain>/` at 404 — the exact symptom that sent someone
+      # looking for this route in the first place.
+      match: "Host(`traefik.local.{{ domain }}`)"
+      middlewares:
+        # rate-limit is per-router on this edge, not on the https entrypoint. default-headers
+        # is NOT listed: it is already global on the entrypoint (static-config.yaml.j2), so
+        # repeating it here would be a no-op — the same note the Docker router carried.
+        - name: rate-limit
+        - name: authelia
+      services:
+        # kind + absent port are both load-bearing. See the header.
+        - name: api@internal
+          kind: TraefikService
+  # Not boilerplate. An IngressRoute on the https entrypoint with no tls block becomes a
+  # NON-TLS router and is never a candidate for an HTTPS request — it does not lose a
+  # priority contest, it is not in the running at all. ENFORCED by
+  # ansible/tests/test_k8s_manifests.py. Do not shorten to the file provider's `tls: {}`;
+  # that shorthand is not IngressRoute syntax.
+  tls:
+    certResolver: cloudflare
+    options:
+      name: modern
+    domains:
+      - main: "{{ domain }}"
+        sans:
+          - "*.{{ domain }}"
+          - "*.local.{{ domain }}"
