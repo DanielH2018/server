@@ -669,14 +669,15 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
 
 ## Module layout — and the one rule that governs it
 
-`files/` holds five runtime modules. `check.py` is the entrypoint the Deployment runs and still
+`files/` holds six runtime modules. `check.py` is the entrypoint the Deployment runs and still
 owns the I/O, the env-derived config and the `CHECKS` registry; the others hold pure logic that
 takes its inputs as arguments.
 
 | module | holds |
 |---|---|
 | `check.py` | config constants, HTTP/PromQL fetching, every `check_*`, `CHECKS`, the run loop |
-| `bridge_parsing.py` | duration/timestamp parsing, `endpoint_label`, `describe_fetch_failure`, `sanitize` |
+| `bridge_common.py` | `_env`, `sanitize` — the two helpers shared verbatim with autofix-bridge's `autofix.py`, staged into that role's ConfigMap too (see its CLAUDE.md) |
+| `bridge_parsing.py` | duration/timestamp parsing, `endpoint_label`, `describe_fetch_failure` |
 | `verdicts_cluster.py` | `k8s_workloads_verdict`, `extended_resource_verdict`, `ksm_resource_label`, `targets_verdict` |
 | `verdicts_host.py` | `ups_health`, the `scrutiny_*` family, `pi_pressure` |
 | `verdicts_service.py` | n8n streaks, `queue_warnings`, `indexers_down`, `gitops_alive`, the HA/Loki/Discord verdicts |
@@ -692,6 +693,13 @@ A function reads globals from the module it is DEFINED in, so moving a patched f
 leaves the test patching a name nothing reads — the test then passes against unpatched production
 code instead of failing. That is a silent loss of coverage, not a visible break, which is why the
 rule is written here rather than left to be rediscovered.
+
+`bridge_common.py` answers to the same rule twice over: it's imported by `check.py` like the
+other split modules, AND it's imported by autofix-bridge's `autofix.py`, whose own suite
+(`test_autofix.py`) patches `push` and `_request` directly. `_env`/`sanitize` are the only two
+helpers that clear both bars — see `bridge_common.py`'s own header for the full account of what
+was considered and rejected (`log`, `push`, `touch_heartbeat`, the urllib wrapper, each file's
+`main()`).
 
 Two consequences that look like arbitrary omissions and are not:
 

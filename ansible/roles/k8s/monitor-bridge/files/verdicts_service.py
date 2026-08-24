@@ -12,7 +12,8 @@ live here.
 
 from datetime import datetime, timedelta, timezone
 
-from bridge_parsing import parse_rfc3339, sanitize
+from bridge_common import sanitize
+from bridge_parsing import parse_rfc3339
 
 
 def n8n_update_streaks(workflows_json, executions_json, state, now, window_s):

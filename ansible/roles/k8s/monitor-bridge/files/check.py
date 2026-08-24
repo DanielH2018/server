@@ -26,12 +26,12 @@ from datetime import datetime, timedelta, timezone
 # nothing patches them; anything the test suite patches must stay defined in THIS module,
 # or `monkeypatch.setattr(check, ...)` rebinds a name no code reads. bridge_parsing.py's
 # header carries the full rule.
+from bridge_common import _env, sanitize
 from bridge_parsing import (
     FETCH_BODY_MAX,
     describe_fetch_failure,
     endpoint_label,
     parse_duration,
-    sanitize,
 )
 from verdicts_cluster import (
     extended_resource_verdict,
@@ -60,10 +60,6 @@ from verdicts_service import (
     promtail_dropped,
     queue_warnings,
 )
-
-
-def _env(name, default):
-    return os.environ.get(name, default)
 
 
 def _env_file(name, default=""):

@@ -17,16 +17,12 @@ Design: docs/superpowers/specs/2026-07-06-autofix-bridge-disk-autoprune-design.m
 """
 
 import json
-import os
 import sys
 import time
 import urllib.parse
 import urllib.request
 
-
-def _env(name, default):
-    return os.environ.get(name, default)
-
+from bridge_common import _env, sanitize
 
 INTERVAL = int(_env("INTERVAL", "300"))
 HTTP_TIMEOUT = int(_env("HTTP_TIMEOUT", "10"))
@@ -69,17 +65,6 @@ CLIENT_ERROR_PATTERNS = [
 
 HARD_BAD_STATUS = frozenset({"error"})
 HARD_BAD_STATE = frozenset({"importBlocked", "importFailed"})
-
-
-def sanitize(s, maxlen=120):
-    """Neutralize adversary-controlled text (release titles, statusMessages) before it enters
-    a Discord-bound string: collapse whitespace, defuse @mentions/backticks, cap length."""
-    s = "?" if s is None else str(s)
-    s = " ".join(s.split())
-    s = s.replace("@", "(at)").replace("`", "'")
-    if len(s) > maxlen:
-        s = s[: maxlen - 3] + "..."
-    return s
 
 
 # pure decision core

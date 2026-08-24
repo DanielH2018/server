@@ -106,6 +106,7 @@ def test_every_module_check_py_imports_is_shipped():
 # `_evaluate` when this split was first measured.
 
 SPLIT_MODULES = [
+    "bridge_common",
     "bridge_parsing",
     "verdicts_cluster",
     "verdicts_host",

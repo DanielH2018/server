@@ -8,6 +8,7 @@ adversary-controlled alert text through reaches Discord verbatim.
 from datetime import datetime, timezone
 
 
+import bridge_common
 import bridge_parsing
 import check
 
@@ -79,22 +80,22 @@ def test_parse_duration_units():
 
 def test_sanitize_defuses_discord_mentions_and_markdown():
     # A poisoned release title / indexer name must not ping the channel or break formatting.
-    out = bridge_parsing.sanitize("@everyone `rm -rf`\nsee @here")
+    out = bridge_common.sanitize("@everyone `rm -rf`\nsee @here")
     assert "@" not in out
     assert "`" not in out
     assert "\n" not in out
 
 
 def test_sanitize_caps_length():
-    assert len(bridge_parsing.sanitize("A" * 500)) <= 120
+    assert len(bridge_common.sanitize("A" * 500)) <= 120
 
 
 def test_sanitize_handles_none():
-    assert bridge_parsing.sanitize(None) == "?"
+    assert bridge_common.sanitize(None) == "?"
 
 
 def test_sanitize_collapses_whitespace():
-    assert bridge_parsing.sanitize("a\t b\n\nc") == "a b c"
+    assert bridge_common.sanitize("a\t b\n\nc") == "a b c"
 
 
 def test_arr_queue_msg_is_sanitized(monkeypatch):
