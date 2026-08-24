@@ -56,6 +56,7 @@ nav:
   - Reference:
       - Services: reference/services.md
       - Hosts: reference/hosts.md
+      - Secrets: reference/secrets.md
       - Topology: reference/topology.md
   - Runbooks:
       - Secret rotation: secret-rotation.md

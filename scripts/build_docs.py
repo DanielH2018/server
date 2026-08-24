@@ -58,6 +58,10 @@ GENERATORS: list[tuple[list[str], str]] = [
         "docs/reference/hosts.md",
     ),
     (
+        ["scripts/gen_reference_secrets.py", "--out", "docs/reference/secrets.md"],
+        "docs/reference/secrets.md",
+    ),
+    (
         [
             "scripts/gen_infra_map.py",
             "--format",
