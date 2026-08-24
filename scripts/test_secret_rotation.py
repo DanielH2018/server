@@ -212,6 +212,40 @@ def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
     )
 
 
+def test_no_cross_host_token_is_badly_overdue():
+    # 2026-08-24 review M-3, second run of the same finding. The test above proves each
+    # cross-host token is DECLARED manual; nothing proved anyone was doing the manual part.
+    # `consumer_tag` returning None is deliberate and documented (secret_rotation.py:105-108):
+    # the pusher and the AutoKuma label live on different hosts, so one redeploy cannot update
+    # both halves atomically. But the design that skips them assumes an operator picks them up,
+    # and the only thing asking was the daily audit line — which reports the whole registry and
+    # is easy to skim past. Two consecutive reviews found the same tokens unrotated.
+    #
+    # So the reminder becomes a CI failure. This is deliberately NOT the audit's own due-date:
+    # the point is to catch sustained neglect, not to fail the build the day something comes
+    # due. Rotating one is a manual, two-host procedure — see docs/secret-rotation.md.
+    #
+    # NOT the fix the reviewer proposed. That was to give CROSS_HOST_PUSH_TOKENS a two-tag
+    # consumer list, which is not representable: consumer_tag is typed `str | None` and returns
+    # a SINGLE tag across four call sites, and a multi-tag return contradicts the rationale
+    # above rather than implementing it.
+    grace_days = 30
+    reg = sr.load_registry()
+    today = dt.date.today()
+    res = sr.audit(reg, today)
+    badly_overdue = [
+        (name, -days)
+        for name, _tier, _due, days in res["all"]
+        if name in sr.CROSS_HOST_PUSH_TOKENS and days < -grace_days
+    ]
+    assert not badly_overdue, (
+        f"cross-host push tokens more than {grace_days} days overdue: {badly_overdue}. These "
+        f"are skipped by the unattended weekly cron BY DESIGN, so nothing rotates them but a "
+        f"person. Rotate them (docs/secret-rotation.md), then `uv run python "
+        f"scripts/secret_rotation.py sync` and commit."
+    )
+
+
 def test_unattended_rotation_picks_tokens_up_before_they_go_overdue():
     # Weekly cron + rotate-only-when-overdue left every token overdue up to 6 days while
     # the daily audit paged DOWN on it (2026-07-09 review). The pick-up window must catch

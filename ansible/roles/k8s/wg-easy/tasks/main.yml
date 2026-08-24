@@ -26,9 +26,15 @@
     # wg-easy-env Secret that carried v14's PASSWORD_HASH has no consumer. The template is
     # deleted, but `kubectl apply` never prunes an object it stops rendering — the live
     # Secret survives, orphaned, until someone deletes it by hand. It is unreferenced (the
-    # Deployment's envFrom went with it) but it still holds a real bcrypt hash, so deleting
-    # it and dropping wg_easy_password_hash from ansible/vars/secrets.yml AND from
-    # ansible/secret_rotation.yml is worth doing. Those last two move TOGETHER:
+    # Deployment's envFrom went with it) but it still holds a real bcrypt hash.
+    #
+    # The repo side is DONE: `wg_easy_password_hash` was dropped from ansible/vars/secrets.yml
+    # and ansible/secret_rotation.yml together on 2026-08-24 (review M-7) — together because
     # secret_rotation.py's registry_drift reports a registry entry with no secrets.yml key as
-    # stale, and a secrets.yml key with no registry entry as missing, and the daily Kuma
-    # monitor goes red on either.
+    # stale and a secrets.yml key with no registry entry as missing, and the daily Kuma monitor
+    # goes red on either. Until then the audit reported the key "ok, due 2026-11-20", scheduling
+    # a rotation for a credential nothing reads.
+    #
+    # STILL OPERATOR WORK: `kubectl delete secret wg-easy-env`. Nothing in this repo can do it
+    # — the ServiceAccount Claude and the crons authenticate as is read-only, and `kubectl
+    # delete` is denied outright. The live Secret keeps the bcrypt hash until someone runs that.
