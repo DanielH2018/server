@@ -104,6 +104,8 @@ nav:
       - Docs UI and ADRs — plan 2: docs-ui-and-adrs-plan-2.md
       - Docs UI and ADRs — plan 3: docs-ui-and-adrs-plan-3.md
   - Operations:
+      - Deploying by hand: deploying.md
+      - The GitOps pipeline: gitops-pipeline.md
       - Claude shell permissions: claude-shell-permissions.md
       - Security tools: security-tools.md
       - WireGuard private access: wireguard-private-homelab-access.md
