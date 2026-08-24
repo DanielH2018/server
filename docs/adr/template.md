@@ -1,5 +1,5 @@
 ---
-id: NNNN
+id: "NNNN"
 title: Short present-tense statement of the decision
 status: Accepted
 date: YYYY-MM-DD

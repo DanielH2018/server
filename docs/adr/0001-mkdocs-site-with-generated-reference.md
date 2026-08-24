@@ -1,5 +1,5 @@
 ---
-id: 0001
+id: "0001"
 title: A MkDocs site whose reference pages are generated from the Ansible tree
 status: Accepted
 date: 2026-08-24

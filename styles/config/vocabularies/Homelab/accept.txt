@@ -16,6 +16,7 @@ Grafana
 [Ll]onghorn
 Loki
 MkDocs
+Portainer
 Prometheus
 Renovate
 SOPS
@@ -42,8 +43,10 @@ PVC
 k3s
 
 # Homelab and operations vocabulary
+[Aa]utoheal
 [Bb]ackfill
 [Cc]ron
+[Cc]utover
 [Cc]rons
 [Dd]enylist
 [Dd]enylisted
@@ -53,9 +56,11 @@ k3s
 # lowercase '[Gg]itops' entry would demand every 'GitOps' be downcased. Verified by running
 # the config over docs/reference/, which reported exactly that.
 GitOps
+[Hh]ealthcheck
 [Hh]omelab
 [Ii]node
 [Ll]int
+[Ll]oopback
 [Rr]epo
 [Rr]unbook
 [Rr]unbooks

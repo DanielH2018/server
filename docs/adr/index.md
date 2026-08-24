@@ -27,3 +27,5 @@ wrong is worth more than the record of one that did not.
 | ADR | Title | Status | Date |
 |---|---|---|---|
 | [0001](0001-mkdocs-site-with-generated-reference.md) | A MkDocs site whose reference pages are generated from the Ansible tree | Accepted | 2026-08-24 |
+| [0002](0002-k3s-over-docker-compose-for-the-cluster-nodes.md) | k3s replaces Docker Compose on the two cluster nodes | Accepted | 2026-08-01 |
+| [0013](0013-daniel-pi-stays-on-docker.md) | daniel-pi stays on Docker and out of the cluster | Accepted | 2026-08-01 |

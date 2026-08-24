@@ -128,9 +128,23 @@ def test_frontmatter_carries_every_required_key(adr):
 
 
 @pytest.mark.parametrize("adr", _adr_files(), ids=lambda p: p.name)
+def test_the_id_is_a_quoted_string(adr):
+    """Unquoted `id: 0013` is OCTAL in YAML 1.1, and yaml.safe_load returns 11.
+
+    It is silent for 0001-0007, where octal and decimal agree, and wrong from 0008 on. The
+    first ADR numbered past that caught it. Requiring the quoted form makes the trap
+    impossible rather than merely detected.
+    """
+    raw = adr.read_text().split("---", 2)[1]
+    assert re.search(r'^id:\s*"\d{4}"\s*$', raw, re.MULTILINE), (
+        f"{adr.name}: id must be quoted — unquoted 0013 parses as octal 11"
+    )
+
+
+@pytest.mark.parametrize("adr", _adr_files(), ids=lambda p: p.name)
 def test_the_id_matches_the_filename(adr):
     """The filename is how a reader finds a record; the id is how the tree references it."""
-    assert f"{_frontmatter(adr)['id']:04d}" == adr.name[:4]
+    assert f"{int(_frontmatter(adr)['id']):04d}" == adr.name[:4]
 
 
 @pytest.mark.parametrize("adr", _adr_files(), ids=lambda p: p.name)
