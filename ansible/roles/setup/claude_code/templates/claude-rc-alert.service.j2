@@ -3,15 +3,24 @@ Description=Alert when the Claude Code Remote Control host fails
 
 [Service]
 Type=oneshot
-# Webhook is EMBEDDED (rendered from SOPS at deploy) rather than sourced from a file the
-# failing service also owns — same reasoning as gitops-deploy-alert.service and
-# renovate-notify-alert.service, which this mirrors. Installed mode 0600 (see tasks/main.yml)
-# so the embedded webhook isn't world-readable.
+# The webhook comes from a dedicated one-key file, NOT from this unit's own text. Embedding it
+# plus `mode: 0600` was the previous arrangement here, and the mode did not protect the value:
+# systemd serves unit content over the system bus, so `systemctl show claude-rc-alert -p
+# ExecStart` printed the full webhook to any local user with no sudo — verified live during the
+# 2026-08-24 review, where `cat` on the same 0600 file was Permission denied. Referencing
+# "${ALERT_WEBHOOK}" makes that command print the literal variable name instead. This mirrors
+# gitops-deploy-alert.service and renovate-notify-alert.service; the header this replaces cited
+# those two units as justification for the embed, and was already false when it was written —
+# they were moved off it 79 minutes before this role landed.
+#
+# systemd's own EnvironmentFile parser runs no application code, so reading the webhook from a
+# file does not make the alert depend on anything claude-rc itself can break.
 #
 # What this CANNOT catch: an expired login. The host keeps running and systemd keeps
 # reporting `active` while every session fails, so no OnFailure= ever fires. See this role's
 # CLAUDE.md — that gap needs a check that asserts the host is registered, not that the
 # process is up.
+EnvironmentFile=/etc/claude-rc/alert-webhook.env
 ExecStart=/usr/bin/curl -fsS -m 10 -H "Content-Type: application/json" \
   -d '{"content":"🚨 claude-rc unit failed on {{ inventory_hostname }} — Remote Control sessions cannot be started from the phone. Check `journalctl -u claude-rc`."}' \
-  "{{ gitops_deploy_discord_webhook }}"
+  "${ALERT_WEBHOOK}"
