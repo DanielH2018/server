@@ -62,6 +62,10 @@ GENERATORS: list[tuple[list[str], str]] = [
         "docs/reference/secrets.md",
     ),
     (
+        ["scripts/gen_reference_crons.py", "--out", "docs/reference/crons.md"],
+        "docs/reference/crons.md",
+    ),
+    (
         [
             "scripts/gen_infra_map.py",
             "--format",
