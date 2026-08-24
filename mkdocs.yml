@@ -83,6 +83,7 @@ nav:
       - Docs UI and ADRs: docs-ui-and-adrs-design.md
       - Docs UI and ADRs — plan 1: docs-ui-and-adrs-plan-1.md
       - Docs UI and ADRs — plan 2: docs-ui-and-adrs-plan-2.md
+      - Docs UI and ADRs — plan 3: docs-ui-and-adrs-plan-3.md
   - Operations:
       - Claude shell permissions: claude-shell-permissions.md
       - Security tools: security-tools.md
