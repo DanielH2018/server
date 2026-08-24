@@ -55,6 +55,7 @@
       - deployment.yaml
       - service.yaml
       - metrics-service.yaml
+      - dashboard-ingressroute.yaml
     manifests_secret_files:
       - cf-token-secret.yaml
       - crowdsec-secret.yaml
