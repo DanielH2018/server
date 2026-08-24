@@ -57,6 +57,39 @@ LOCK=/var/lock/server-git-tree.lock
 LOCK_WAIT=2700
 LOCK_BUSY=75
 
+# Record a successful deploy where Grafana can draw it as a dashboard annotation.
+#
+# WHY A LOG LINE and not a POST to Grafana's /api/annotations. Grafana has no hostPort and no
+# pinned ClusterIP, and this script is a HOST process, so calling into the cluster would mean
+# either pinning a fourth address or routing through Traefik with a standing write credential.
+# Neither is needed: promtail already tails /var/log/syslog into loki-homelab on both nodes (the
+# same path the host crons' `status=down` lines take to the alert-history board), and Grafana
+# already reads that Loki by Service DNS. So the deployer writes locally and the cluster reads —
+# no address, no credential, no new component.
+#
+# It also puts the record somewhere that SURVIVES. grafana-data is on longhorn-nobackup, so
+# annotations stored in Grafana's own database have no offsite copy; reconstructing them from
+# Loki matches the existing decision that Grafana holds nothing worth backing up.
+#
+# Fire-and-forget by construction: `|| true` and a discarded stderr. An annotation is a
+# convenience, and a deploy that actually succeeded must never report failure because logging
+# it did not.
+emit_deploy_annotation() {
+    local status="$1"
+    [[ "$status" == 0 ]] || return 0
+
+    local label
+    label=$(
+        IFS=,
+        echo "${tags[*]:-full}"
+    )
+    # logfmt, so a Grafana annotation query can pull `services` out as the annotation text
+    # rather than showing the whole raw line.
+    logger -t deploy-annotation \
+        "event=deploy services=${label} sha=$(git rev-parse --short HEAD 2>/dev/null || echo unknown) result=ok" \
+        2>/dev/null || true
+}
+
 # The checkout this session is working in, not the primary one — a session in a worktree
 # has always deployed its own tree, and running the wrapper must not change that.
 repo_root=$(git rev-parse --show-toplevel)
@@ -259,6 +292,10 @@ if [[ "$detach" == 1 ]]; then
         run_status=$?
         flock -u "$lockfd"
         exec {lockfd}>&-
+        # Annotated from inside the subshell, where the run actually finished — the parent
+        # returned at exit 0 the moment it backgrounded this, long before there was anything
+        # to record.
+        emit_deploy_annotation "$run_status"
         # shellcheck disable=SC2094  # false positive: the notifier only receives $log as a
         # path string (to mention in its Discord post) and never opens it itself -- the only
         # actual writer of the file is this append redirect.
@@ -285,6 +322,10 @@ fi
 
 flock -w "$LOCK_WAIT" -E "$LOCK_BUSY" "$LOCK" uv run ansible-playbook ansible/deploy.yml "$@"
 status=$?
+
+# After the lock is released and only on success. `--check` and `--dry-run` never reach here —
+# both exec out well above — so a mode that changes nothing cannot annotate as though it had.
+emit_deploy_annotation "$status"
 
 if [[ "$status" == "$LOCK_BUSY" ]]; then
     echo "deploy: could not take $LOCK after ${LOCK_WAIT}s -- nothing was deployed." >&2

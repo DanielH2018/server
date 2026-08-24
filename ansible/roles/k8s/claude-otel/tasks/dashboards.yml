@@ -36,6 +36,9 @@
   loop:
     - /etc/rancher/k3s/manifests/claude-otel
     - /etc/rancher/k3s/dashboard-manifests
+    # The injector's output tree. Created here rather than left to the script so its
+    # ownership and mode match every other node-side directory this role writes.
+    - /etc/rancher/k3s/dashboards-annotated
   become: true
 
 - name: Remove dashboard ConfigMaps from the client-side apply directory
@@ -86,6 +89,31 @@
   become: true
   register: claude_otel_dashboards_staged
 
+# Grafana has no global annotation setting — the query lives in each dashboard's own JSON, and
+# all of these ship an empty annotations list. Injecting here covers every board, present and
+# future, from one place instead of sixteen hand-edits that would drift.
+#
+# Reads the STAGED tree and writes a DERIVED one, deliberately. Editing the staged copy in place
+# would make the copy task above see a checksum mismatch next deploy, restore the pristine JSON,
+# and the injector would re-inject — `changed` forever, and a Grafana rollout on every deploy.
+# The script is a pure function of its input, so this tree is stable when nothing changed.
+- name: Inject the deploy-annotation query into the staged dashboards
+  tags: [config]
+  ansible.builtin.command:
+    cmd: >-
+      {{ ansible_playbook_python }} {{ playbook_dir }}/../scripts/inject_dashboard_annotations.py
+      --src /etc/rancher/k3s/dashboards
+      --dest /etc/rancher/k3s/dashboards-annotated
+      --uid {{ claude_otel_loki_homelab_uid }}
+      --expr {{ claude_otel_deploy_annotation_expr | quote }}
+  become: true
+  register: claude_otel_dashboards_annotated
+  # The script writes a file only when its content actually differs, so the tree is the honest
+  # signal — but the command itself cannot report that. The ConfigMap build below reads this
+  # tree and the manifest write after it carries the real changed verdict, exactly as it did
+  # before this task existed.
+  changed_when: false
+
 - name: Build a ConfigMap manifest per dashboard folder
   tags: [config]
   # Generation only — writes nothing and touches no cluster state, hence changed_when: false.
@@ -94,7 +122,7 @@
     cmd: >-
       k3s kubectl create configmap grafana-dashboards-{{ item | lower }}
       --namespace {{ k8s_observability_namespace }}
-      --from-file=/etc/rancher/k3s/dashboards/{{ item }}
+      --from-file=/etc/rancher/k3s/dashboards-annotated/{{ item }}
       --dry-run=client -o yaml
   loop: "{{ claude_otel_dashboard_folders }}"
   become: true
