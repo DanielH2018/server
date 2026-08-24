@@ -181,6 +181,40 @@ data:
             regex: "9080"
           - source_labels: [__meta_kubernetes_pod_node_name]
             target_label: node
+      # daniel-pi, the one host outside the cluster. STATIC targets, not discovery: the two
+      # jobs above use `role: pod`, which by construction only ever finds pods — so the Pi,
+      # which runs no kubelet, could never appear in them however many exporters it grew.
+      # That is why it contributed zero time series until these two landed.
+      #
+      # `origin` is set by hand here. The pod-discovery jobs derive it from the node name via
+      # relabel; a static target has no such metadata, and without the label the Pi's series
+      # would land indistinguishable from the origin-less ones and break _origin_name's
+      # "the only host there is" assumption in monitor-bridge.
+      #
+      # Reached at the LAN IP, not a bridge address: Docker's published-port NAT bypasses the
+      # Pi's UFW INPUT chain (documented in initial_setup/tasks/network.yml, where the stale
+      # WireGuard allow was removed on exactly this evidence), so no firewall rule is needed
+      # and the exporters are LAN-reachable — the same posture glances and dozzle already
+      # have on that host.
+      - job_name: node-pi
+        scrape_interval: 1m
+        static_configs:
+          - targets: ['{{ k8s_pi_client_ip }}:9100']
+            labels:
+              origin: daniel-pi
+              instance: daniel-pi
+      # promtail's OWN metrics, the answer to "is the Pi still shipping logs". A log shipper
+      # fails quietly by design — the container stays up, /ready keeps answering, and lines
+      # simply stop arriving — so promtail_sent_entries_total and promtail_dropped_entries_total
+      # are what make that visible. check_promtail_dropped already reads the second one estate-
+      # wide, so this target joins an existing check rather than needing a new one.
+      - job_name: promtail-pi
+        scrape_interval: 1m
+        static_configs:
+          - targets: ['{{ k8s_pi_client_ip }}:9080']
+            labels:
+              origin: daniel-pi
+              instance: daniel-pi
       # Phase F drain (2026-08-13): the crowdsec_daniel-server job (the demoted Docker
       # agent's LAN-published 9103) retired with that agent. Its successor is the
       # node-agent DaemonSet — per-POD discovery like the otel jobs, one target per node.

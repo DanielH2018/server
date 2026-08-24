@@ -315,6 +315,14 @@ k8s_public_route: true
 # A literal rather than hostvars['daniel-server'].server_ip: the k8s play runs against
 # daniel-box, and daniel-server is not necessarily in its play's hostvars.
 k8s_bridge_client_ip: 10.0.0.161
+# daniel-pi's address as the cluster sees it. A literal for exactly the reason above: the k8s
+# play runs against daniel-box, and daniel-pi is not in that play's hostvars — `hostvars` is also
+# undefined in the manifest-render test harness, so a hostvars lookup here renders fine under
+# Ansible and fails the repo's own guards.
+#
+# Two consumers: loki-homelab's push-only IngressRoute (ClientIP allowlist) and the Pi's two
+# static Prometheus scrape jobs.
+k8s_pi_client_ip: 10.0.0.139
 # In-cluster image registry. Two addresses for the same registry, and both are needed
 # because the two consumers sit on opposite sides of the pod boundary:
 #

@@ -1,0 +1,64 @@
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
+---
+
+services:
+  promtail:
+    container_name: promtail
+    # Unpinned like every image on this host — the Pi has no GitOps path, so Renovate
+    # deliberately does not track roles/containers/**.
+    image: grafana/promtail:latest
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/promtail.yml
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    {{ service_networks() }}
+    volumes:
+      - ./config/promtail.yml:/etc/promtail/promtail.yml:ro
+      # Positions must survive a restart. Without this the container re-reads every
+      # container's log from the beginning on each recreate, which both duplicates lines in
+      # Loki and spends the Pi's uplink re-sending them.
+      - ./positions:/positions
+    environment:
+      # A HARD ceiling on the Go heap, not a hint. The cluster's promtail measures 58-73 MiB
+      # against ~50 pods; this one has 6 containers and almost no volume, but the Go runtime
+      # will happily grow to whatever the cgroup allows and only collect under pressure.
+      # GOMEMLIMIT makes it collect early instead, which is the right trade on a host with
+      # 162 MiB free — CPU is cheaper here than RAM.
+      - GOMEMLIMIT=48MiB
+      # One GC-visible processor. Promtail defaults to GOMAXPROCS=4 on this Pi and spawns a
+      # worker set to match, which is pure contention for a job this small on a box that
+      # already showed RCU stalls from fork rate.
+      - GOMAXPROCS=1
+    healthcheck:
+      # /ready is promtail's own readiness endpoint — it reports not-ready until at least one
+      # target is being tailed, so this catches a promtail that started but discovered
+      # nothing (a broken docker-proxy, a bad relabel) as well as one that died.
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9080/ready"]
+      interval: {{ container_healthcheck_interval | default('30s') }}
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    # Published on the LAN IP so Prometheus can scrape promtail's own metrics — dropped
+    # entries, batch retries and the send latency that says whether shipping is keeping up.
+    # A log shipper that silently stops is the failure this port exists to make visible.
+    ports:
+      - "{{ server_ip }}:9080:9080/tcp"
+    labels:
+      {{ kuma(container_item.name) }}
+
+      # Watchtower
+      - "com.centurylinklabs.watchtower.depends-on=docker-proxy"
+    # 96M is the containment cap, ~2x the 48 MiB GOMEMLIMIT above so a spike is collected
+    # rather than OOM-killed. Measure the real figure after the first deploy — if it sits
+    # near the cap rather than near 48 MiB, this host cannot afford it and the job should
+    # move to a syslog forwarder instead.
+    {{ resources('0.30', '96M', '0.02', '24M') }}
+
+{{ external_networks() }}

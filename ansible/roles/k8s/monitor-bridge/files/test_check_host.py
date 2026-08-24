@@ -1006,3 +1006,76 @@ def test_host_origins_floor_is_overridable_from_the_env_secret():
         "HOST_ORIGINS_MIN must be rendered in env-secret.yaml.j2 so an operator can lower it "
         "for a maintenance window and put it back, rather than editing check.py."
     )
+
+
+# ── the Pi is excluded from the host-level node_* checks ──────────────────────────────────
+#
+# daniel-pi runs node-exporter like the other two hosts, so node_memory_* and
+# node_filesystem_* carry its series. check_pi_pressure already owns Pi disk and memory,
+# against thresholds written for a 456 MB box — at rest the Pi sits near 65% memory used,
+# well inside check_mem's 90% but with little room, so without the exclusion an ordinary
+# working Pi pages check_mem AND check_pi_pressure for one fact.
+#
+# These assert the QUERY, not the verdict. A verdict test passes either way whenever the
+# stub returns no Pi series, which is exactly the shape that would let the exclusion be
+# dropped without a red test.
+
+
+def test_disk_query_excludes_the_pi_origin(monkeypatch):
+    seen = []
+    monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
+    monkeypatch.setattr(
+        check,
+        "prom_vector",
+        lambda q: (seen.append(q), [({"origin": "daniel-box"}, 10.0)])[1],
+    )
+
+    check.check_disk()
+
+    assert seen, "check_disk must query Prometheus"
+    assert 'origin!~"daniel-pi"' in seen[0], (
+        "check_disk must exclude the Pi — check_pi_pressure owns its disk"
+    )
+
+
+def test_mem_query_excludes_the_pi_origin(monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        check,
+        "prom_vector",
+        lambda q: (seen.append(q), [({"origin": "daniel-box"}, 10.0)])[1],
+    )
+
+    check.check_mem()
+
+    assert seen, "check_mem must query Prometheus"
+    assert seen[0].count('origin!~"daniel-pi"') == 2, (
+        "BOTH sides of the MemAvailable/MemTotal division need the matcher — the division "
+        "matches element-wise on labels, so excluding one side alone drops every series and "
+        "the check reports 'memory metric unavailable' instead of a reading"
+    )
+
+
+def test_the_exclusion_keeps_series_that_carry_no_origin_label():
+    """`!~` on a named host must not filter out an unlabelled series.
+
+    Prometheus reads an absent label as "", which does not match "daniel-pi" — so an
+    origin-less series survives. Pinned because the obvious alternative spelling, an
+    `origin=~"daniel-box|daniel-server"` allowlist, silently drops them instead, and the
+    difference only shows up on a Prometheus that applies no origin label at all.
+    """
+    sel = check.host_metric_sel()
+
+    assert sel.startswith("{") and sel.endswith("}")
+    assert "!~" in sel, "must be a negative match, not an origin allowlist"
+
+
+def test_the_exclusion_is_overridable_without_editing_the_file(monkeypatch):
+    """An operator can widen or clear the exclusion from the env, like every other threshold."""
+    monkeypatch.setattr(check, "HOST_METRIC_ORIGIN_EXCLUDE", "daniel-pi|daniel-spare")
+    assert 'origin!~"daniel-pi|daniel-spare"' in check.host_metric_sel()
+
+    monkeypatch.setattr(check, "HOST_METRIC_ORIGIN_EXCLUDE", "")
+    assert check.host_metric_sel() == "", (
+        "cleared, the selector must vanish entirely rather than render an empty matcher"
+    )

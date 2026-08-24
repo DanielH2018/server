@@ -1,0 +1,67 @@
+---
+# Promtail on daniel-pi. Ships this host's CONTAINER logs to loki-homelab, which is the
+# cluster's general-purpose log store and already holds both k3s nodes' pod logs.
+#
+# Scope is deliberately one job. This is a Zero 2 W with 456 MB of RAM and measurable CPU
+# pressure at idle, so every target costs something real — see the resource notes in
+# docker-compose.yml.j2. Host logs are NOT shipped: rsyslog is inactive here, so /var/log
+# holds no syslog to tail, and promtail's journal reader needs a build this image does not
+# guarantee on arm64. The host's own health is covered by node-exporter's metrics instead.
+server:
+  http_listen_port: 9080
+  # `warn`, not the default `info`: at info promtail logs a line per target discovery pass,
+  # which on a 60s refresh is its own steady write load onto the Pi's SD card.
+  log_level: warn
+
+positions:
+  filename: /positions/positions.yaml
+
+clients:
+  # The ClientIP-guarded monitoring route, not a ClusterIP — the Pi is outside the cluster
+  # and has no route to 10.43.0.0/16. That guard is an allowlist keyed on source address, so
+  # this host's IP must be in loki-homelab's `extra_client_cidrs` or every push 404s. The
+  # cert is the same *.local wildcard Traefik serves everywhere here, so it verifies against
+  # the system trust store and needs no tls_config.
+  - url: https://loki-homelab.local.{{ domain }}/loki/api/v1/push
+    # Small batches, long timeout. The default 1 MB / 1s suits a busy node; here it just
+    # holds more of a scarce heap, and the Pi's uplink is the slow half of the path.
+    batchsize: 65536
+    batchwait: 5s
+    timeout: 30s
+    backoff_config:
+      min_period: 1s
+      max_period: 5m
+      max_retries: 10
+
+scrape_configs:
+  # Container logs via the Docker API, NOT by tailing /var/lib/docker/containers/*-json.log.
+  # The file path carries only the container ID, so a file-glob job labels every stream with
+  # a 64-character hash and the container name has to be joined back from config.v2.json —
+  # which promtail cannot do. Service discovery gets the name from the API directly.
+  #
+  # Through docker-proxy, never the raw socket: the proxy is already on this host serving
+  # glances and dozzle, it is read-only (POST=0, EXEC=0), and CONTAINERS=1 covers both the
+  # container list and the log stream. Handing promtail the bare socket would give a log
+  # shipper full control of the daemon.
+  - job_name: pi-containers
+    docker_sd_configs:
+      - host: tcp://docker-proxy:2375
+        # 60s, matching this host's healthcheck cadence. Each pass is an API round trip plus
+        # a relabel over every container; at the 5s default that is a needless steady tick on
+        # a box where fork rate was itself the problem worth tuning.
+        refresh_interval: 60s
+    relabel_configs:
+      # Docker reports names with a leading slash — "/glances", not "glances". Left as-is the
+      # label does not match the `container` label the cluster's promtail writes, and a query
+      # spanning both estates silently returns only one of them.
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: container
+      # `job` and `machine` mirror the cluster promtail's contract (job=k8s there), so one
+      # LogQL query can span the estate and `machine` still tells the sources apart.
+      - target_label: job
+        replacement: pi
+      - target_label: machine
+        replacement: daniel-pi
+      - source_labels: ['__meta_docker_container_log_stream']
+        target_label: stream

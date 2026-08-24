@@ -113,6 +113,10 @@ DISK_MOUNTPOINTS = [
 DISK_MAX_PCT = float(_env("DISK_MAX_PCT", "90"))
 CERT_MIN_DAYS = float(_env("CERT_MIN_DAYS", "14"))
 MEM_MAX_PCT = float(_env("MEM_MAX_PCT", "90"))
+# Origins that check_disk/check_mem must NOT scan, as a regex alternation. See host_metric_sel:
+# daniel-pi runs node-exporter like the other hosts, but check_pi_pressure owns its disk and
+# memory with thresholds sized for a 456 MB box.
+HOST_METRIC_ORIGIN_EXCLUDE = _env("HOST_METRIC_ORIGIN_EXCLUDE", "daniel-pi")
 OOM_WINDOW = _env("OOM_WINDOW", "1h")
 CPU_WINDOW = _env("CPU_WINDOW", "15m")
 CPU_THROTTLE_PCT = float(_env("CPU_THROTTLE_PCT", "25"))
@@ -431,6 +435,34 @@ def cadvisor_sel(*matchers):
     check_mem — and this for anything cAdvisor emits.
     """
     parts = [m for m in matchers if m]
+    return "{%s}" % ", ".join(parts) if parts else ""
+
+
+def host_metric_sel(*matchers):
+    """A `{...}` block for the HOST-level node_* checks, minus origins owned by another check.
+
+    node_* is estate-wide the moment a host runs node-exporter, so check_disk and check_mem
+    scan whatever reports. daniel-pi joined that set when its exporter landed — and
+    check_pi_pressure already owns Pi disk and memory, with thresholds written for a 456 MB
+    box rather than the 90% that suits the two x86 hosts. Without this exclusion the Pi's
+    ordinary working state pages twice for one fact, which is exactly the duplication
+    check_mem avoids elsewhere by naming check_oom the single source of truth.
+
+    A regex matcher, so HOST_METRIC_ORIGIN_EXCLUDE can carry a `a|b` list. Series with no
+    `origin` label at all are KEPT: Prometheus reads a missing label as "", which `!~` on a
+    named host does not match.
+
+    DECIDED: an EXCLUDE, never origin_sel(). cadvisor_sel's note points at "the node-exporter
+    families behind check_disk and check_mem" as series that genuinely carry `origin`, which
+    reads like an invitation to pin them with origin_sel() — do not. PROM_ORIGIN resolves to
+    `origin="daniel-server"` whenever PROM_URL equals CLUSTER_PROM_URL, which the deployed
+    env-secret makes true. Pinning these two checks to one host would hide daniel-box's disk
+    and memory behind two green tiles, which is precisely the fault HOST_ORIGINS_MIN was added
+    for on 2026-08-23. Naming who is OUT keeps every other host in by default.
+    """
+    parts = [m for m in matchers if m]
+    if HOST_METRIC_ORIGIN_EXCLUDE:
+        parts.append('origin!~"%s"' % HOST_METRIC_ORIGIN_EXCLUDE)
     return "{%s}" % ", ".join(parts) if parts else ""
 
 
@@ -906,7 +938,7 @@ def check_disk():
     breaching = []
     shortfalls = []
     for mp in DISK_MOUNTPOINTS:
-        sel = '{mountpoint="%s"}' % mp
+        sel = host_metric_sel('mountpoint="%s"' % mp)
         vec = prom_vector(
             "max by (origin) (100 * (1 - node_filesystem_avail_bytes%s"
             " / node_filesystem_size_bytes%s))" % (sel, sel)
@@ -947,8 +979,10 @@ def check_mem():
     # Per-origin for the same reason as check_disk: the bare prom_scalar form took result[0],
     # so which host it reported was an ordering artifact of Prometheus's response once both
     # estates emitted node_memory_*. The division pairs each host's avail with its own total.
+    sel = host_metric_sel()
     vec = prom_vector(
-        "100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)"
+        "100 * (1 - node_memory_MemAvailable_bytes%s / node_memory_MemTotal_bytes%s)"
+        % (sel, sel)
     )
     if not vec:
         return False, "memory metric unavailable"
