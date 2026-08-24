@@ -22,6 +22,19 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
+# Pure helpers, split out of this file. They are imported rather than defined here because
+# nothing patches them; anything the test suite patches must stay defined in THIS module,
+# or `monkeypatch.setattr(check, ...)` rebinds a name no code reads. bridge_parsing.py's
+# header carries the full rule.
+from bridge_parsing import (
+    FETCH_BODY_MAX,
+    describe_fetch_failure,
+    endpoint_label,
+    parse_duration,
+    parse_rfc3339,
+    sanitize,
+)
+
 
 def _env(name, default):
     return os.environ.get(name, default)
@@ -572,15 +585,6 @@ PROMTAIL_DROPPED_WINDOW = _env("PROMTAIL_DROPPED_WINDOW", "1h")
 PROMTAIL_DROPPED_MAX = float(_env("PROMTAIL_DROPPED_MAX", "1000"))
 
 
-def duration_seconds(spec):
-    """Seconds in a Prometheus duration like `15m` / `2h` / `90s` / `1d`. Unit-tested."""
-    units = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
-    spec = spec.strip()
-    if not spec or spec[-1] not in units or not spec[:-1].isdigit():
-        raise ValueError("not a Prometheus duration: %r" % spec)
-    return int(spec[:-1]) * units[spec[-1]]
-
-
 # Pi pressure: the 512MB Zero 2 W dies by swap-thrash, not by clean failures —
 # 2026-06-11 (fwupd): hourly load5/core >1.7 episodes with healthcheck-timeout storms
 # that no other monitor saw (containers stayed "restarting", never down long enough).
@@ -691,41 +695,6 @@ EMAIL_PROBE_INTERVAL_S = float(_env("EMAIL_PROBE_INTERVAL_S", "21600"))  # 6h
 # HTTP / parsing helpers (pure-ish, unit-tested)
 
 
-FETCH_BODY_MAX = 180
-
-
-def endpoint_label(url):
-    """host:port for `url` — deliberately NOT the path or query.
-
-    This ends up in Kuma messages and therefore in Discord. `_get_json` is used for the
-    Discord webhook probe, whose URL carries the webhook token IN THE PATH, so including
-    the path would publish that token to the very channel it authenticates. Some *arr
-    callers put keys in headers rather than the URL, but host:port is enough to name the
-    service either way, which is the whole point.
-    """
-    netloc = urllib.parse.urlsplit(url).netloc
-    return netloc.rsplit("@", 1)[-1] or "unknown host"
-
-
-def describe_fetch_failure(url, exc, body=""):
-    """Compose the message an unreachable or erroring HTTP source should page with.
-
-    `_evaluate` otherwise renders a bare `str(exc)`, which for the common failures is close
-    to content-free: a socket timeout stringifies to just "timed out", naming neither the
-    endpoint nor the service. The 2026-08-02 B2 transaction-cap outage paged for 13h as
-    `backup check error: timed out` — indistinguishable from a Kopia hiccup, while the real
-    cause ("Transaction cap exceeded") sat in Kopia's own log.
-
-    Where the server did answer, its error body carries that cause, and urllib's HTTPError
-    discards it unless read explicitly — so the body is the most valuable part when present.
-    """
-    where = endpoint_label(url)
-    detail = " ".join((body or "").split())
-    if detail:
-        return "%s: %s: %s" % (where, exc, detail[:FETCH_BODY_MAX])
-    return "%s: %s" % (where, exc)
-
-
 def _get_json(url, headers=None):
     hdrs = {"User-Agent": "monitor-bridge"}
     if headers is not None:
@@ -810,43 +779,6 @@ def prom_vector(promql, base=None, source="prometheus"):
         (series.get("metric", {}), float(series["value"][1]))
         for series in _instant_query(base or PROM_URL, "/api/v1/query", promql, source)
     ]
-
-
-def parse_rfc3339(ts):
-    """Parse an RFC3339 timestamp, tolerating nanosecond precision and a trailing 'Z'.
-
-    datetime.fromisoformat only accepts 3- or 6-digit fractional seconds, but Kopia
-    emits 9 (nanoseconds), so truncate the fractional part to microseconds first.
-    """
-    ts = ts.strip()
-    if ts.endswith("Z"):
-        ts = ts[:-1] + "+00:00"
-    if "." in ts:
-        head, frac = ts.split(".", 1)
-        digits = ""
-        rest = ""
-        for i, ch in enumerate(frac):
-            if ch.isdigit():
-                digits += ch
-            else:
-                rest = frac[i:]
-                break
-        ts = head + "." + digits[:6] + rest
-    return datetime.fromisoformat(ts)
-
-
-def parse_duration(s):
-    """Parse a Prometheus-style duration ('900s', '15m', '1h', '2d') to seconds (float).
-
-    A bare number is treated as seconds. The n8n check evaluates its failure window in
-    Python (unlike the *_WINDOW vars that are interpolated straight into PromQL, which
-    Prometheus parses), so it needs this.
-    """
-    s = str(s).strip()
-    units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
-    if s and s[-1] in units:
-        return float(s[:-1]) * units[s[-1]]
-    return float(s)
 
 
 # Distinct `origin` values the host-metric checks must see. node-exporter is a DaemonSet on both
@@ -1445,22 +1377,6 @@ def gitops_status(
                 % (age_s / 3600, sha[:8], max_behind_s / 3600)
             )
     return True, "no held deploy"
-
-
-def sanitize(s, maxlen=120):
-    """Neutralize adversary-controlled text before it enters a Discord-bound alert msg.
-
-    Release titles, indexer names and n8n workflow names are attacker-influenced — a poisoned
-    indexer/release is the very thing the arr-queue/prowlarr checks exist to catch. Kuma forwards
-    the msg to Discord, which renders @mentions and markdown, so collapse newlines/whitespace,
-    defuse '@' (which forms @everyone/@here/user pings) and backticks, and cap the length.
-    """
-    s = "?" if s is None else str(s)
-    s = " ".join(s.split())
-    s = s.replace("@", "(at)").replace("`", "'")
-    if len(s) > maxlen:
-        s = s[: maxlen - 3] + "..."
-    return s
 
 
 def check_n8n():

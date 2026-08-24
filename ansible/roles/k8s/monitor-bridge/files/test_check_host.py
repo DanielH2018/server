@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+import bridge_parsing
 import check
 
 
@@ -973,11 +974,11 @@ def test_the_recency_window_is_wider_than_the_worst_observed_restart_spacing():
     # 30m, not 20m: the observed spacing RANGE tops out at ~19 min, so a 20m floor sits at the
     # edge of the flapping band rather than outside it — and would let a later edit to 20m or
     # 25m pass the very test written to stop it.
-    assert check.duration_seconds(check.K8S_RESTART_RECENT_WINDOW) >= 30 * 60
+    assert bridge_parsing.duration_seconds(check.K8S_RESTART_RECENT_WINDOW) >= 30 * 60
     # And it must still be shorter than the evidence window, or it gates nothing.
-    assert check.duration_seconds(
+    assert bridge_parsing.duration_seconds(
         check.K8S_RESTART_RECENT_WINDOW
-    ) < check.duration_seconds(check.K8S_RESTART_WINDOW)
+    ) < bridge_parsing.duration_seconds(check.K8S_RESTART_WINDOW)
 
 
 def test_host_origins_floor_defaults_to_both_nodes():

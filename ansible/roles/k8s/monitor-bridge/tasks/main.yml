@@ -14,26 +14,43 @@
     group: root
   become: true
 
-- name: Stage check.py on the node
+- name: Stage the bridge modules on the node
   tags: [config]
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/roles/k8s/monitor-bridge/files/check.py"
-    dest: /etc/rancher/k3s/monitor-bridge/check.py
+    src: "{{ playbook_dir }}/roles/k8s/monitor-bridge/files/{{ item }}"
+    dest: "/etc/rancher/k3s/monitor-bridge/{{ item }}"
     mode: "0644"
     owner: root
     group: root
   become: true
+  loop: "{{ monitor_bridge_modules }}"
   register: monitor_bridge_script
+
+# The pod-roll trigger must cover EVERY module, not just check.py. The ConfigMap updating is
+# not enough on its own: a mounted ConfigMap change does not restart a Deployment, so without
+# this the pod keeps running the code it started with until something else rolls it — and an
+# edit confined to a split-out module would deploy, read green, and change nothing live.
+- name: Combine the staged module checksums into one pod-roll trigger
+  tags: [config]
+  ansible.builtin.set_fact:
+    monitor_bridge_script_checksum: >-
+      {{ monitor_bridge_script.results | map(attribute='checksum') | join(',') | hash('sha1') }}
 
 # check.py is Jinja-hostile (PromQL selectors carry {…} braces), so it becomes a
 # ConfigMap via kubectl --from-file — the terraria-stats/claude-otel pattern.
+#
+# One --from-file per module rather than --from-file=<dir>: the staging directory also holds
+# the rendered configmap.yaml below, and the directory form would fold that into the ConfigMap
+# as a key of itself.
 - name: Render the script ConfigMap manifest
   tags: [config]
   ansible.builtin.shell:
     cmd: >-
       set -o pipefail;
       k3s kubectl -n {{ k8s_namespace }} create configmap monitor-bridge-script
-      --from-file=check.py=/etc/rancher/k3s/monitor-bridge/check.py
+      {% for module in monitor_bridge_modules %}
+      --from-file={{ module }}=/etc/rancher/k3s/monitor-bridge/{{ module }}
+      {% endfor %}
       --dry-run=client -o yaml > /etc/rancher/k3s/monitor-bridge/configmap.yaml
     executable: /bin/bash
   become: true

@@ -3,6 +3,19 @@
 # outlived its remnant. check.py lives in this role's files/ and every check runs here.
 monitor_bridge_k8s_image: python:3.14-alpine
 
+# The Python files that make up the running bridge. This is the SHIP LIST: a module missing
+# here never reaches the ConfigMap, and the pod dies at import with ModuleNotFoundError the
+# next time it rolls — while the test suite stays green, because pytest imports from files/
+# on disk and never consults this list.
+#
+# Deliberately explicit rather than a `files/*.py` glob: files/ also holds the pytest suite
+# and conftest.py, which must not reach the image.
+# ENFORCED by ansible/tests/test_monitor_bridge_modules.py, which fails when a runtime module
+# in files/ is absent here.
+monitor_bridge_modules:
+  - check.py
+  - bridge_parsing.py
+
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Observability: this IS the alert pipeline — every threshold check in the fleet pushes through
 # it, so a broken deploy cannot page about being broken. ALSO renders no readinessProbe on its
