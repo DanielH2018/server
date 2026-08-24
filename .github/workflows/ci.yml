@@ -108,6 +108,22 @@ jobs:
       - name: Install prek
         run: pip install prek==0.4.13  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
 
+      # The `vale` prek hook is `language = "system"`, so it runs whatever binary is on PATH
+      # and there is none on a fresh runner. Version-pinned to match the workstation, because
+      # a style package's rules change between releases and a gate that passes locally and
+      # fails in CI is one people route around.
+      #
+      # `vale sync` fetches the Google package into styles/, which .gitignore excludes on
+      # purpose — see the entry there. It has to run before the hooks, not inside them.
+      - name: Install Vale
+        run: |
+          set -euo pipefail
+          curl -sSL -o /tmp/vale.tar.gz \
+            https://github.com/vale-cli/vale/releases/download/v3.18.0/vale_3.18.0_Linux_64-bit.tar.gz
+          tar xzf /tmp/vale.tar.gz -C /usr/local/bin vale
+          vale --version
+          vale sync
+
       # On a PR, run every hook against only the files the PR actually touches — the same thing
       # prek does locally at commit time, and what each hook's `files` regex in prek.toml is
       # already written for. This is the largest single saving in the workflow: ansible-lint's

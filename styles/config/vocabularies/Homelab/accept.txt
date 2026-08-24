@@ -1,0 +1,63 @@
+# Terms this homelab uses that Vale's dictionary does not carry. A vocabulary is the
+# supported way to teach Vale a domain; the alternative is per-file exceptions, which is how
+# a style gate becomes decorative.
+#
+# Entries are case-insensitive regex. Keep this sorted and add a term only when it is real
+# vocabulary — a genuine typo must still fail.
+
+# Tooling and platforms
+[Aa]nsible
+[Aa]uthelia
+[Cc]loudflare
+CrowdSec
+Grafana
+[Kk]opia
+[Kk]uma
+[Ll]onghorn
+Loki
+MkDocs
+Prometheus
+Renovate
+SOPS
+Scrutiny
+Tempo
+[Tt]raefik
+Vale
+WireGuard
+[Zz]igbee
+
+# Kubernetes and container vocabulary
+ConfigMap
+DaemonSet
+IngressRoute
+Kubernetes
+NetworkPolicy
+PVC
+[Cc]laimName
+[Hh]ostPath
+[Kk]ubectl
+[Nn]etpol
+[Nn]ginx
+[Rr]eplicaSet
+k3s
+
+# Homelab and operations vocabulary
+[Bb]ackfill
+[Cc]ron
+[Cc]rons
+[Dd]enylist
+[Dd]enylisted
+[Dd]eployer
+[Ff]rontmatter
+# Capitalisation matters here: Vale.Terms enforces the spelling this file declares, so a
+# lowercase '[Gg]itops' entry would demand every 'GitOps' be downcased. Verified by running
+# the config over docs/reference/, which reported exactly that.
+GitOps
+[Hh]omelab
+[Ii]node
+[Ll]int
+[Rr]epo
+[Rr]unbook
+[Rr]unbooks
+[Tt]oposort
+[Uu]nsnooze

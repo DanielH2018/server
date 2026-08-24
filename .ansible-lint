@@ -13,6 +13,12 @@ exclude_paths:
   # the primary worktree's copy, so the whole subtree must be excluded here (ansible-lint walks
   # the filesystem, not git). Without this, ANY staged .yml fails the full-repo lint hook.
   - ".claude/worktrees/"
+  # Vale's style rules are YAML and are not Ansible. styles/Google/ is upstream content that
+  # `vale sync` downloads, and its EmDash.yml trips yaml[empty-lines]; styles/Homelab/ is
+  # ours but is still Vale's schema, not Ansible's. Same mechanism as the worktree exclude
+  # above — ansible-lint walks the filesystem, so a gitignored directory is still linted, and
+  # the full-tree hook then fails on any staged .yml.
+  - "styles/"
 
 skip_list:
   - no-changed-when
