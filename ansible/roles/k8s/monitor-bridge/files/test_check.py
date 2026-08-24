@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 
 
+import bridge_common
 import check
 
 
@@ -19,18 +20,18 @@ import check
 def test_touch_heartbeat_writes_and_refreshes(tmp_path, monkeypatch):
     hb = tmp_path / "heartbeat"
     monkeypatch.setattr(check, "HEARTBEAT_FILE", str(hb))
-    check.touch_heartbeat()
+    bridge_common.touch_heartbeat(check.HEARTBEAT_FILE)
     assert hb.exists()
     first = hb.stat().st_mtime
     os.utime(hb, (first - 100, first - 100))  # backdate, then refresh
-    check.touch_heartbeat()
+    bridge_common.touch_heartbeat(check.HEARTBEAT_FILE)
     assert hb.stat().st_mtime > first - 100
 
 
 def test_touch_heartbeat_never_raises(monkeypatch):
     # Best-effort like push(): a heartbeat failure must not kill the loop.
     monkeypatch.setattr(check, "HEARTBEAT_FILE", "/nonexistent-dir/heartbeat")
-    check.touch_heartbeat()
+    bridge_common.touch_heartbeat(check.HEARTBEAT_FILE)
 
 
 def _read_sibling(relpath):

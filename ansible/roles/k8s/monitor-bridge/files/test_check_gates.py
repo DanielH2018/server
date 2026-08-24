@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+import bridge_common
 import bridge_parsing
 import check
 
@@ -557,7 +558,7 @@ def _run_once_with_gates(monkeypatch, cluster_ok, checks, cluster_dependent):
     monkeypatch.setattr(
         check, "push", lambda token, ok, msg: pushed.__setitem__(token, (ok, msg))
     )
-    monkeypatch.setattr(check, "log", lambda *a, **k: None)
+    monkeypatch.setattr(bridge_common, "log", lambda *a, **k: None)
     check.run_once()
     return pushed
 
