@@ -75,11 +75,30 @@ spec:
               value: "true"
             - name: SPEEDTEST_SCHEDULE
               value: "0 */6 * * *"
-            # No SPEEDTEST_SERVERS pin: the app picks the nearest server per run. The old pin
-            # (1775, Comcast Baltimore) measured 1-2 Mbps down from this host in 2026-08 while a
-            # Chicago server did 48-140 Mbps over the same link, so the pin was measuring that
-            # server's congestion, not the WAN. Re-pin only to a server verified faster than
-            # auto-select, and expect server_name to vary between results now.
+            # Pinned to 41671 (x99.cloud, Chicago) on 2026-08-24, restoring the pin that came
+            # off on 2026-08-13 — to a different server, and this time on measured evidence.
+            #
+            # Auto-select did not fix what removing the old pin was meant to fix; it randomised
+            # it. Results under auto-select are BIMODAL, and the mode is decided by which server
+            # the run draws. Over 2026-08-14..24, all 20 runs that landed on 41671 returned a
+            # median 910 Mbps, and all 17 that landed on any of six other servers (SUMOFIBER,
+            # TNAHosting, Highline, Tata, GigeNET, Sangoma) returned a median 12.8 Mbps. The two
+            # groups do not overlap: worst run on 41671 was 119 Mbps, best run elsewhere 42.8.
+            # Upload read 37-41 Mbps throughout, so the link is fine on the bad runs and only
+            # the download leg collapses.
+            #
+            # The old pin's story stands and is the reason to distrust this one eventually:
+            # 1775 (Comcast, Baltimore) returned ~900 Mbps on all 54 runs from 07-25 to 08-07,
+            # then ~13 Mbps on all 21 runs from 08-08 to 08-13. A pin is only as good as its
+            # last verification, so re-check 41671 against auto-select periodically — the
+            # monitor-bridge `speedtest` check's 100 Mbps floor is what makes a repeat visible
+            # rather than silent.
+            #
+            # NOT A DIAGNOSIS. Six independent providers all congesting to the same ~13 Mbps is
+            # odd, and curl to two distant non-Ookla hosts showed the same shape. This pin fixes
+            # the measurement, not whatever the measurement is pointing at.
+            - name: SPEEDTEST_SERVERS
+              value: "41671"
             - name: PRUNE_RESULTS_OLDER_THAN
               value: "30"
           envFrom:

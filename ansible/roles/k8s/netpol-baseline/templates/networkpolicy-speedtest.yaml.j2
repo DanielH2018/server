@@ -1,0 +1,41 @@
+---
+# speedtest-tracker. One caller beyond the baseline; browsers arrive through traefik and
+# prometheus scrapes nothing here, both of which the baseline already carries.
+#
+#   monitor-bridge — SPEEDTEST_URL (monitor-bridge/templates/env-secret.yaml.j2), the check
+#                    that reads the newest result row. A failed run leaves no other trace:
+#                    the container logs only its pre-run connectivity ping.
+#
+# Without this policy the baseline denies the bridge, because netpol_baseline_node_cidrs is
+# two /32 cni0 HOST addresses — a pod-network caller is not covered by it.
+#
+# 80 is the containerPort AND the Service port — both read from the role's deployment and
+# service templates, which take them from `container_item.port`.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: speedtest
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: speedtest
+  policyTypes:
+    - Ingress
+  ingress:
+{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
+   lever. `| bool` for the string trap. Both explained in full in
+   networkpolicy-traefik.yaml.j2. #}
+{% if netpol_baseline_enforced | bool %}
+    - from:
+        - podSelector:
+            matchLabels:
+              app: monitor-bridge
+      ports:
+        - port: 80
+          protocol: TCP
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}

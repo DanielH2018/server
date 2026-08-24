@@ -343,6 +343,26 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     fails open on a Loki error and keeps the heartbeat's own verdict. Pure `ha_ban_verdict()` is
     unit-tested.
     Spec: `docs/superpowers/specs/2026-06-19-ha-automation-heartbeat-watchdog-design.md`.)
+  - **k3s Speedtest** (speedtest-tracker's `/api/v1/results`, newest row only, Bearer
+    `speedtest_api_token` from the mounted credentials Secret. Three arms in this order —
+    status, then age, then the download floor. The order is load-bearing: `download_bits` is
+    null on a failed row, so a floor comparison ahead of the status arm compares None.
+    **The floor is 100 Mbps because results are bimodal, not because 100 is a target.** Which
+    Ookla server a run draws decides the mode: over 2026-08-14..24, 20 runs on server 41671
+    had a median of 910 Mbps and a worst of 119, while 17 runs on six other servers had a
+    median of 12.8 and a best of 42.8. Nothing landed between. The speedtest role now pins
+    41671, and this floor is what makes that pin degrading visible — 1775 was clean for 54
+    runs and then was not.
+    The age arm (`SPEEDTEST_MAX_AGE_H`, 8h against a 6h schedule) is the one that notices the
+    scheduler dying, which has no other symptom: the pod keeps serving its UI and passing both
+    probes while writing no new rows.
+    **No hysteresis on the verdict, only on the fetch.** The app produces a row every 6h and
+    this loop runs every 5 min, so a consecutive-cycle streak would re-read one row up to 72
+    times — delaying the page and proving nothing. The fetch rides `SPEEDTEST_CONSECUTIVE`
+    because an app restart under a deploy is a real transient; `speedtest` is also in
+    `STARTUP_GRACE`. Same split as `check_ha_heartbeat`.
+    Reaching the app needs `netpol-baseline/templates/networkpolicy-speedtest.yaml.j2` — the
+    baseline admits traefik, prometheus and two cni0 /32s, none of which is this pod.)
   - **Renovate Notifier — Alive** — RETIRED from this container at the host flips (2026-08-14).
     The notifier pushes its own Kuma monitor from an `ExecStartPost` now, so there is no
     `/renovate-state/last_run` bind mount and no `renovate_alive()` check here. The monitor and
@@ -579,7 +599,9 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   connection config: `SONARR_URL`/`SONARR_API_KEY`/`RADARR_URL`/`RADARR_API_KEY`; GitOps
   liveness: `GITOPS_MAX_AGE_MIN`/`GITOPS_STATE_DIR`; Pi pressure:
   `PI_GLANCES_URL`/`PI_LOAD_MAX`/`PI_MEM_MIN_MB`/`PI_DISK_MAX_PCT`; HA heartbeat:
-  `HA_URL`/`HA_TOKEN`/`HA_HEARTBEAT_MAX_AGE`/`HA_CONSECUTIVE`; host-coverage floor:
+  `HA_URL`/`HA_TOKEN`/`HA_HEARTBEAT_MAX_AGE`/`HA_CONSECUTIVE`; speedtest:
+  `SPEEDTEST_URL`/`SPEEDTEST_TOKEN`/`SPEEDTEST_DOWNLOAD_MIN_MBPS`/`SPEEDTEST_MAX_AGE_H`/`SPEEDTEST_CONSECUTIVE`;
+  host-coverage floor:
   `HOST_ORIGINS_MIN`/`HOST_ORIGINS_CONSECUTIVE`). A failed
   query/unreachable source makes that monitor `down` with an explanatory msg — a broken
   exporter is surfaced, not silently green.
