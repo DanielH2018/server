@@ -1,5 +1,4 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
-{% from 'healthcheck.yml.j2' import healthcheck %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
 ---
@@ -46,7 +45,12 @@ services:
     # than pidof — with zero connection noise. start_period 120s covers the ~74s
     # world-load before the port binds (else autoheal would restart it mid-load);
     # a first-boot world *generation* can exceed this but is a rare one-time event.
-    {{ healthcheck("[\"CMD\", \"bash\", \"-c\", \"grep -q ':1E61 [0-9A-F]*:0000 0A ' /proc/net/tcp\"]", start_period='120s') }}
+    {% set hc_test = "[\"CMD\", \"bash\", \"-c\", \"grep -q ':1E61 [0-9A-F]*:0000 0A ' /proc/net/tcp\"]" %}{% set hc_start_period = '120s' %}{% set hc_interval = none %}{% set hc_timeout = '10s' %}{% set hc_retries = 3 %}{% set hc_name = '' %}{% if hc_interval is none %}{% set hc_interval = (30 + (((hc_name ~ hc_test) | hash('md5'))[:4] | int(0, 16) % 11)) ~ 's' %}{% endif %}healthcheck:
+      test: {{ hc_test }}
+      interval: {{ hc_interval }}
+      timeout: {{ hc_timeout }}
+      retries: {{ hc_retries }}
+      start_period: {{ hc_start_period }}
     {{ service_networks() }}
     labels:
       - "traefik.enable=true"

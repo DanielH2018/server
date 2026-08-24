@@ -1,5 +1,4 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
-{% from 'healthcheck.yml.j2' import healthcheck %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
 ---
@@ -22,7 +21,12 @@ services:
     # check.py touches /tmp/heartbeat (tmpfs) after every completed cycle; stale mtime
     # means the loop HUNG (death alone already exits the container) -> unhealthy -> autoheal
     # restart. 1000s ≈ 3×INTERVAL + slack. Kuma push silence remains the alerting path.
-    {{ healthcheck("[\"CMD\", \"python3\", \"-c\", \"import os,sys,time; sys.exit(0 if time.time()-os.stat('/tmp/heartbeat').st_mtime<1000 else 1)\"]", name=container_item.name) }}
+    {% set hc_test = "[\"CMD\", \"python3\", \"-c\", \"import os,sys,time; sys.exit(0 if time.time()-os.stat('/tmp/heartbeat').st_mtime<1000 else 1)\"]" %}{% set hc_start_period = '30s' %}{% set hc_interval = none %}{% set hc_timeout = '10s' %}{% set hc_retries = 3 %}{% set hc_name = container_item.name %}{% if hc_interval is none %}{% set hc_interval = (30 + (((hc_name ~ hc_test) | hash('md5'))[:4] | int(0, 16) % 11)) ~ 's' %}{% endif %}healthcheck:
+      test: {{ hc_test }}
+      interval: {{ hc_interval }}
+      timeout: {{ hc_timeout }}
+      retries: {{ hc_retries }}
+      start_period: {{ hc_start_period }}
     environment:
       - TZ={{ tz }}
       - PYTHONUNBUFFERED=1

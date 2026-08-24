@@ -1,8 +1,6 @@
-{% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
-{% from 'healthcheck.yml.j2' import healthcheck %}
 ---
 
 services:
@@ -37,19 +35,34 @@ services:
       - ./rclone:/app/rclone
       - ./scripts:/scripts:ro
       - /home/{{ sys_user }}/server/containers:/data/home/{{ sys_user }}/server/containers:ro
-    {{ healthcheck("[\"CMD-SHELL\", \"curl -so /dev/null -w '%{http_code}' http://localhost:51515/ | grep -qE '^(200|401)'\"]") }}
+    {% set hc_test = "[\"CMD-SHELL\", \"curl -so /dev/null -w '%{http_code}' http://localhost:51515/ | grep -qE '^(200|401)'\"]" %}{% set hc_start_period = '30s' %}{% set hc_interval = none %}{% set hc_timeout = '10s' %}{% set hc_retries = 3 %}{% set hc_name = '' %}{% if hc_interval is none %}{% set hc_interval = (30 + (((hc_name ~ hc_test) | hash('md5'))[:4] | int(0, 16) % 11)) ~ 's' %}{% endif %}healthcheck:
+      test: {{ hc_test }}
+      interval: {{ hc_interval }}
+      timeout: {{ hc_timeout }}
+      retries: {{ hc_retries }}
+      start_period: {{ hc_start_period }}
     {{ service_networks() }}
     labels:
       # Disable watchtower update — pinned + Renovate-managed
       - "com.centurylinklabs.watchtower.enable=false"
-      {# Generate labels(container, port, docker_network, use_authelia) -#}
-      {{ labels(
-          container_item.hostname | default(container_item.name),
-          container_item.port | string,
-          (container_item.networks | default([docker_network]))[0],
-          container_item.use_authelia
-        )
-      }}
+{% set tf_container = container_item.hostname | default(container_item.name) %}{% set tf_port = container_item.port | string %}{% set tf_docker_network = (container_item.networks | default([docker_network]))[0] %}{% set tf_authelia = container_item.use_authelia %}{% set tf_extra_middlewares = '' %}
+      - "traefik.enable=true"
+      - "traefik.docker.network={{ tf_docker_network }}"
+      - "traefik.http.routers.{{ tf_container }}.entrypoints=http"
+      - "traefik.http.routers.{{ tf_container }}.rule=Host(`{{ tf_container }}.{{ domain }}`) || Host(`{{ tf_container }}.local.{{ domain }}`)"
+      - "traefik.http.routers.{{ tf_container }}-secure.entrypoints=https"
+      - "traefik.http.routers.{{ tf_container }}-secure.rule=Host(`{{ tf_container }}.{{ domain }}`) || Host(`{{ tf_container }}.local.{{ domain }}`)"
+      - "traefik.http.routers.{{ tf_container }}-secure.tls=true"
+      - "traefik.http.routers.{{ tf_container }}-secure.tls.certresolver=cloudflare"
+      - "traefik.http.routers.{{ tf_container }}-secure.tls.domains[0].main={{ domain }}"
+      - "traefik.http.routers.{{ tf_container }}-secure.tls.domains[0].sans=*.{{ domain }},*.local.{{ domain }}"
+      - "traefik.http.routers.{{ tf_container }}-secure.service={{ tf_container }}"
+      - "traefik.http.services.{{ tf_container }}.loadbalancer.server.port={{ tf_port }}"
+      {% if tf_authelia -%}
+      - "traefik.http.routers.{{ tf_container }}-secure.middlewares=rate-limit@file,authelia@docker{% if tf_extra_middlewares %},{{ tf_extra_middlewares }}{% endif %}"
+      {%- else -%}
+      - "traefik.http.routers.{{ tf_container }}-secure.middlewares=rate-limit@file{% if tf_extra_middlewares %},{{ tf_extra_middlewares }}{% endif %}"
+      {%- endif +%}
       {{ kuma(container_item.name) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('4.0', '2048M', '0.10', '128M') }}

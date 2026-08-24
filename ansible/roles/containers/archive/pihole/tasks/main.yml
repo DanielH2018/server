@@ -23,11 +23,13 @@
     dest: "{{ pihole_base }}/{{ item.dest }}"
     mode: "0644"
   loop:
-    # Shared with roles/k8s/pihole since slice-6 B3 — they live in ansible/templates/ so both
-    # the compose bind-mounts and the cluster ConfigMap render from one source.
-    - src: pihole-unbound.conf.j2
+    # Shared with roles/k8s/pihole since slice-6 B3. The macro-bridge inlining moved these out
+    # of the old shared ansible/templates/ into roles/k8s/pihole/templates/config/ (a k8s role's
+    # non-manifest config lives one level under templates/, per repo-root CLAUDE.md), so this
+    # archived role reaches them by absolute path rather than the old bare filename.
+    - src: "{{ playbook_dir }}/roles/k8s/pihole/templates/config/pihole-unbound.conf.j2"
       dest: data/unbound/my_settings.conf
-    - src: pihole-dnsmasq.conf.j2
+    - src: "{{ playbook_dir }}/roles/k8s/pihole/templates/config/pihole-dnsmasq.conf.j2"
       dest: data/etc-dnsmasq.d/02-wildcard.conf
   register: pihole_cfg_resolver
 
