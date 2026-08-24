@@ -26,6 +26,15 @@ from pathlib import Path
 
 import yaml
 
+from route_facts import (
+    GROUP_VARS,
+    LAN,
+    ingressroute_templates,
+    linkify_fqdns,
+    reachability,
+    route_cell,
+)
+
 REPO = Path(__file__).resolve().parent.parent
 HOST_VARS = REPO / "ansible" / "inventory" / "host_vars"
 K8S_ROLES = REPO / "ansible" / "roles" / "k8s"
@@ -34,16 +43,8 @@ K8S_ROLES = REPO / "ansible" / "roles" / "k8s"
 # ansible/templates/ingressroute.yml.j2 rather than assumed; see _baseline_middlewares.
 _ALWAYS = "rate-limit"
 
-_PUBLIC_FALSE_RE = re.compile(r"public\s*=\s*false")
 _EXTRA_MW_RE = re.compile(r"extra_middlewares\s*=\s*\[([^\]]*)\]")
 _QUOTED_RE = re.compile(r"['\"]([^'\"]+)['\"]")
-
-
-def _ingressroute_templates(role_dir: Path) -> list[Path]:
-    templates = role_dir / "templates"
-    if not templates.is_dir():
-        return []
-    return sorted(p for p in templates.glob("*.j2") if "ingressroute" in p.name)
 
 
 def _load_host_vars(host_vars: Path) -> dict[str, dict]:
@@ -58,7 +59,9 @@ def _load_host_vars(host_vars: Path) -> dict[str, dict]:
 
 
 def build_rows(
-    host_vars: Path = HOST_VARS, k8s_roles: Path = K8S_ROLES
+    host_vars: Path = HOST_VARS,
+    k8s_roles: Path = K8S_ROLES,
+    group_vars: Path = GROUP_VARS,
 ) -> list[dict[str, str]]:
     """One row per k8s service that declares a route."""
     rows = []
@@ -69,7 +72,7 @@ def build_rows(
             name = entry.get("name")
             if not name:
                 continue
-            templates = _ingressroute_templates(k8s_roles / str(name))
+            templates = ingressroute_templates(k8s_roles / str(name))
             if not templates:
                 continue
             text = "\n".join(p.read_text() for p in templates)
@@ -81,14 +84,15 @@ def build_rows(
             if match:
                 middlewares.extend(_QUOTED_RE.findall(match.group(1)))
 
+            label = str(entry.get("hostname", name))
+            reach = reachability(k8s_roles / str(name), group_vars)
             rows.append(
                 {
                     "name": str(name),
                     "host": host,
-                    "hostname": str(entry.get("hostname", name)),
-                    "reach": "LAN only"
-                    if _PUBLIC_FALSE_RE.search(text)
-                    else "LAN + public (when k8s_public_route)",
+                    "hostname": label,
+                    "reach": "LAN only" if reach == LAN else "LAN + public",
+                    "route": route_cell(label, reach),
                     "middlewares": ", ".join(f"`{m}`" for m in middlewares),
                 }
             )
@@ -102,25 +106,27 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
     parts.append("# Networking\n")
     parts.append(f"{len(rows)} routed k8s service(s).\n")
     parts.append(
-        '!!! note "Hostname labels, not FQDNs"\n'
-        "    The route is built as `<label>.local.<domain>`, and `domain` is SOPS-sourced "
-        "with no static default. These pages are rendered by static parsing, so the label "
-        "is printed and the suffix is not guessed at.\n"
+        '!!! note "The domain is filled in by your browser"\n'
+        "    `domain` is SOPS-sourced with no static default, and these pages are rendered "
+        "by static parsing, so the generator writes `<domain>` rather than guessing. On the "
+        "docs site the routes below become links, built from the domain of the URL you are "
+        "reading this on — so you get LAN links on the LAN name and public links on the "
+        "public one.\n"
     )
 
     lan_only = [r for r in rows if r["reach"] == "LAN only"]
     parts.append(
-        f"\n{len(lan_only)} route(s) are LAN-only. Everything else becomes publicly "
-        "resolvable once `k8s_public_route` is set — the absent Host rule is the guard, "
-        "not DNS, because the Cloudflare wildcard resolves any name.\n"
+        f"\n{len(lan_only)} route(s) are LAN-only, and the rest answer on both names. "
+        "The absent Host rule is what keeps a LAN-only route off the internet, not DNS — "
+        "the Cloudflare wildcard resolves any name.\n"
     )
 
     parts.append("\n## Routes\n")
-    parts.append("| Service | Host | Hostname label | Reachable from | Middlewares |")
+    parts.append("| Service | Host | Route | Reachable from | Middlewares |")
     parts.append("|---|---|---|---|---|")
     for row in sorted(rows, key=lambda r: r["name"]):
         parts.append(
-            f"| {row['name']} | {row['host']} | `{row['hostname']}` | "
+            f"| {row['name']} | {row['host']} | {linkify_fqdns(row['route'])} | "
             f"{row['reach']} | {row['middlewares']} |"
         )
 

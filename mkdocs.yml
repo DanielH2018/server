@@ -47,6 +47,12 @@ markdown_extensions:
 plugins:
   - search
 
+# Resolves the `<span class="fqdn">` placeholders the reference generators emit into links,
+# using the domain of the URL the page was served from. The generators cannot bake an FQDN in:
+# they parse the tree statically and `domain` is SOPS-sourced. See the file's own header.
+extra_javascript:
+  - assets/fqdn-links.js
+
 # ENFORCED by scripts/test_mkdocs_config.py, in both directions: every entry below must
 # resolve to a file, and every docs/*.md must appear here. A document absent from the nav is
 # still built and served, but nothing links to it — which is indistinguishable from it not

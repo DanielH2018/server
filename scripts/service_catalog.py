@@ -24,9 +24,12 @@ expressions that do not render outside a real deploy. Every value below is read 
 FIELD NOTES (what is genuinely undecidable from the repo alone, and why):
 
   - Route domain suffix. `ingressroute.yml.j2` builds the hostname as
-    "{{ hostname }}.local.{{ domain }}" (and, if k8s_public_route, also the bare
-    domain). `domain` is SOPS-sourced with no static default, so the catalog shows
-    only the per-service hostname LABEL, not the resolved FQDN.
+    "{{ hostname }}.local.{{ domain }}" (and, when k8s_public_route is on and the role
+    does not pass public=false, also the bare domain). `domain` is SOPS-sourced with no
+    static default, so the catalog writes the suffix as the literal "<domain>". On the
+    docs site those placeholders become links, resolved in the browser against the URL
+    the reader is on — see scripts/route_facts.py. WHICH names a service answers on is
+    derivable and is stated outright; only the suffix is not.
   - Docker (Pi) routes. daniel-pi sets `expose_mode: lan` — its services are bound to
     the LAN IP directly rather than routed through Traefik (see host_vars comment), so
     "route" for a docker service is a fixed LAN-direct marker, never a hostname. A
@@ -68,6 +71,7 @@ from _render_guard import (
     containers_entries,
     host_files,
 )
+from route_facts import linkify_fqdns, reachability, route_cell
 
 K8S_ROLES = REPO / "ansible" / "roles" / "k8s"
 K3S_DEFAULTS = REPO / "ansible" / "roles" / "setup" / "k3s" / "defaults" / "main.yml"
@@ -109,16 +113,25 @@ def host_expose_mode(host_data: dict[str, Any]) -> str | None:
 # Route
 
 
-def k8s_route(entry: dict[str, Any], k8s_roles: Path = K8S_ROLES) -> str:
+def k8s_route(
+    entry: dict[str, Any],
+    k8s_roles: Path = K8S_ROLES,
+    all_vars: Path = ALL_VARS,
+) -> str:
     name = entry["name"]
-    role_templates = k8s_roles / name / "templates"
-    if not (role_templates / "ingressroute.yaml.j2").is_file():
+    role_dir = k8s_roles / name
+    if not (role_dir / "templates" / "ingressroute.yaml.j2").is_file():
         return "no route (infra role)"
     # ingressroute.yml.j2's own macro call is uniformly
     # `container_item.hostname | default(container_item.name)` — see the shared macro
     # docstring at ansible/templates/ingressroute.yml.j2.
     label = entry.get("hostname") or name
-    return f"{label}.local.<domain> (+ public if k8s_public_route)"
+    # Reachability comes from route_facts so this page and networking.md cannot disagree
+    # about the same service. It reads the role's own `public=false` and the cluster-wide
+    # k8s_public_route together, rather than hedging with "if k8s_public_route" — that flag
+    # has a value in plaintext group_vars, so printing the condition instead of the answer
+    # made the reader do a lookup this generator can do for them.
+    return route_cell(label, reachability(role_dir, all_vars))
 
 
 def docker_route(entry: dict[str, Any], host_data: dict[str, Any]) -> str:
@@ -132,9 +145,10 @@ def route_for(
     platform: str,
     host_data: dict[str, Any],
     k8s_roles: Path = K8S_ROLES,
+    all_vars: Path = ALL_VARS,
 ) -> str:
     if platform == "k8s":
-        return k8s_route(entry, k8s_roles)
+        return k8s_route(entry, k8s_roles, all_vars)
     return docker_route(entry, host_data)
 
 
@@ -304,7 +318,7 @@ def build_rows(
                     name=name,
                     host=host,
                     platform=platform,
-                    route=route_for(entry, platform, host_data, k8s_roles),
+                    route=route_for(entry, platform, host_data, k8s_roles, all_vars),
                     auth_tier=auth_tier(entry),
                     backup_tier=backup_tier(
                         entry,
@@ -433,7 +447,9 @@ def render_markdown(rows: list[ServiceRow]) -> str:
             cells = (
                 row.name,
                 row.platform,
-                row.route,
+                # Markdown only. The stored value stays plain text for render_html and
+                # every text consumer; only the docs site can resolve these into links.
+                linkify_fqdns(row.route),
                 row.auth_tier,
                 row.backup_tier,
                 row.autodeploy,

@@ -114,6 +114,49 @@ def test_k8s_route_uses_hostname_default_name_when_ingressroute_exists(tmp_path)
     assert row.route.startswith("jellyfin.local.<domain>")
 
 
+def test_k8s_route_is_lan_only_when_public_route_is_off(tmp_path):
+    """The fixture's group_vars sets no k8s_public_route, so nothing is public."""
+    paths = _make_repo(tmp_path)
+    role = paths["k8s_roles"] / "jellyfin" / "templates"
+    _write(role / "ingressroute.yaml.j2", "{{ ingressroute(...) }}\n")
+    rows = service_catalog.build_rows(**paths)
+    row = next(r for r in rows if r.name == "jellyfin")
+    assert row.route == "jellyfin.local.<domain> (LAN only)"
+
+
+def test_k8s_route_names_both_tiers_when_public_route_is_on(tmp_path):
+    paths = _make_repo(tmp_path)
+    _write(paths["all_vars"], "k8s_namespace: homelab\nk8s_public_route: true\n")
+    role = paths["k8s_roles"] / "jellyfin" / "templates"
+    _write(role / "ingressroute.yaml.j2", "{{ ingressroute(...) }}\n")
+    rows = service_catalog.build_rows(**paths)
+    row = next(r for r in rows if r.name == "jellyfin")
+    assert row.route == "jellyfin.<domain> · jellyfin.local.<domain>"
+
+
+def test_k8s_route_stays_lan_only_when_the_role_opts_out(tmp_path):
+    """`public=false` in the role's own macro call beats the cluster-wide flag."""
+    paths = _make_repo(tmp_path)
+    _write(paths["all_vars"], "k8s_namespace: homelab\nk8s_public_route: true\n")
+    role = paths["k8s_roles"] / "jellyfin" / "templates"
+    _write(role / "ingressroute.yaml.j2", "{{ ingressroute(..., public=false) }}\n")
+    rows = service_catalog.build_rows(**paths)
+    row = next(r for r in rows if r.name == "jellyfin")
+    assert row.route == "jellyfin.local.<domain> (LAN only)"
+
+
+def test_markdown_route_cells_are_linkable_but_the_row_value_is_not(tmp_path):
+    """render_html escapes the route, so markup must not live in the stored value."""
+    paths = _make_repo(tmp_path)
+    role = paths["k8s_roles"] / "jellyfin" / "templates"
+    _write(role / "ingressroute.yaml.j2", "{{ ingressroute(...) }}\n")
+    rows = service_catalog.build_rows(**paths)
+    assert all("<span" not in r.route for r in rows)
+    assert 'class="fqdn" data-host="jellyfin.local"' in service_catalog.render_markdown(
+        rows
+    )
+
+
 def test_k8s_route_is_no_route_when_role_has_no_ingressroute_template(tmp_path):
     paths = _make_repo(tmp_path)
     # authelia gets no ingressroute.yaml.j2 in this fixture (e.g. an infra-only role).
