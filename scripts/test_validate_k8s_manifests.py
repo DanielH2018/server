@@ -11,20 +11,12 @@ Run: uv run pytest scripts/test_validate_k8s_manifests.py
 """
 
 import contextlib
-import importlib.util
 import io
-import os
 import re
 
 import pytest
 
-
-_MOD = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "validate_k8s_manifests.py"
-)
-_spec = importlib.util.spec_from_file_location("validate_k8s_manifests", _MOD)
-vkm = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(vkm)
+import validate_k8s_manifests as vkm
 
 
 POD_SPEC = """\

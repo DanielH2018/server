@@ -20,7 +20,6 @@ import probe_core as core
 from probe_core import (
     _CHICAGO,
     _rows_from_loki,
-    curl_argv,
     DEFAULT_TIMEOUT,
     loki_endpoint,
     loki_query_url,
@@ -584,8 +583,7 @@ def run_b2_spend(ns):
         direction="forward",
     )
     if ns.dry_run:
-        print(" ".join(curl_argv(url, resolve=pin)))
-        return 0
+        return core.print_dry_run(url, resolve=pin)
     rows = _rows_from_loki(json.loads(core.fetch(url, resolve=pin)))
     # Reads Loki, not B2 — nothing to record for this command itself.
     print(

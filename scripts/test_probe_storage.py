@@ -5,31 +5,11 @@ structurally cannot — it counts the exporter's own set, so a monitor that is g
 down leaves the ratio at N/N up.
 """
 
-import importlib.util
-import os
-
 import pytest
 
-
-_MOD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "probe.py")
-_spec = importlib.util.spec_from_file_location("probe", _MOD)
-probe = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(probe)
-
-import probe_core as core  # noqa: E402  (probe.py must load first, by path)
-import probe_storage as storage  # noqa: E402
-
-# Fake resolver: maps container name -> a recognizable IP. A wrong container name
-# raises KeyError, so a misrouted subcommand fails loudly.
-IPS = {"prometheus": "10.0.0.1", "loki": "10.0.0.2", "scrutiny": "10.0.0.3"}
-fake_resolve = IPS.__getitem__
-
-
-def fake_k8s_endpoint(hostname):
-    # The (base, --resolve pin) pair the live k8s_endpoint() derives from SOPS +
-    # inventory — faked so plan() stays testable without either.
-    return f"https://{hostname}.example", f"{hostname}.example:443:10.0.0.240"
-
+import probe
+import probe_core as core
+import probe_storage as storage
 
 #
 # Longhorn reports a backup `Completed` once its metadata is written, so "Completed" is not
@@ -413,7 +393,9 @@ def test_format_backup_budget_reports_stranded_backups_not_pending_deletes():
     assert "9 stranded backup(s)" in text and "reaper" in text
 
 
-def test_no_cluster_route_carries_the_retired_k8s_suffix():
+def test_no_cluster_route_carries_the_retired_k8s_suffix(
+    fake_resolve, fake_k8s_endpoint
+):
     """The `-k8s` suffix retired 2026-08-15 (870723e8), but probe.py kept building it for
     another five hours: every cluster subcommand 404'd against Traefik's no-Host-match while
     the fixtures below asserted the stale name, so CI ratified the break. Assert on the

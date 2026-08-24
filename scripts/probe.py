@@ -564,8 +564,7 @@ def run_kuma_drift(ns):
     base, pin = prom_endpoint()
     url = prom_query_url(base, 'monitor_status{job="uptime-kuma"}')
     if ns.dry_run:
-        print(" ".join(curl_argv(url, resolve=pin)))
-        return 0
+        return core.print_dry_run(url, resolve=pin)
     with open(STATIC_MONITORS_PATH) as f:
         declared = parse_declared_monitors(f.read())
     try:
@@ -1132,12 +1131,9 @@ def run_query(ns):
         start, end = since_window_ns(getattr(ns, "since", None))
         url = loki_query_url(base, ns.logql, ns.limit, start=start, end=end)
         formatter = format_loki
-    body = core.fetch(url, resolve=pin)
-    try:
-        data = json.loads(body)
-    except json.JSONDecodeError:
-        print(body.strip())
-        return 1
+    data, err = core.fetch_json(url, resolve=pin)
+    if err:
+        return err
     print(formatter(data))
     return 0
 
@@ -1147,14 +1143,10 @@ def run_monitors(ns):
     base, pin = prom_endpoint()
     url = prom_query_url(base, "monitor_status")
     if ns.dry_run:
-        print(" ".join(curl_argv(url, resolve=pin)))
-        return 0
-    body = core.fetch(url, resolve=pin)
-    try:
-        data = json.loads(body)
-    except json.JSONDecodeError:
-        print(body.strip())
-        return 1
+        return core.print_dry_run(url, resolve=pin)
+    data, err = core.fetch_json(url, resolve=pin)
+    if err:
+        return err
     text, code = format_monitor_status(data)
     print(text)
     return code
