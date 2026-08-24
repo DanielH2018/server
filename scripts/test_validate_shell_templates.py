@@ -355,3 +355,37 @@ def test_no_cron_job_template_in_the_tree_violates_the_path_rule(cron_map):
         )
     }
     assert offenders == set()
+
+
+HOME_ALLOWLIST = (
+    v.ROLES / "k8s" / "crowdsec" / "templates" / "crowdsec-update-home-allowlist.sh.j2"
+)
+
+
+def test_home_allowlist_curls_all_retry():
+    # The monitor this script pushes is push-type with max_retries 0, so ONE transient curl
+    # failure is an immediate DOWN — 9 down/up cycles in the 3 days to 2026-08-24, none of them
+    # a real allowlist problem. Both `bash -n` and shellcheck pass a script with the flags
+    # stripped, so the DECIDED comment above them is the only thing holding them today, and a
+    # comment is not enforcement. Pin every curl instead.
+    lines = [
+        ln.strip()
+        for ln in HOME_ALLOWLIST.read_text().splitlines()
+        if "curl " in ln and not ln.lstrip().startswith("#")
+    ]
+    assert lines, "no curl invocations found — did the script move or get rewritten?"
+    for ln in lines:
+        assert "--retry 3" in ln, f"curl without --retry 3: {ln}"
+        # --retry-all-errors is what covers connection-refused. Measured on curl 8.5.0, bare
+        # --retry returns instantly on a refused port (exit 7); it DOES retry a DNS failure.
+        assert "--retry-all-errors" in ln, f"curl without --retry-all-errors: {ln}"
+
+
+def test_home_allowlist_fail_logs_the_status_down_prefix():
+    # `probe.py alerts` reconstructs host-cron episodes from `{job="syslog"} |= "status=down"`
+    # (parse_syslog_down_line). This script logged a bare message until 2026-08-24, so 7 days of
+    # flaps left zero rows there and nothing to diagnose from once Kuma's current state cleared.
+    fail_line = next(
+        ln for ln in HOME_ALLOWLIST.read_text().splitlines() if ln.startswith("fail()")
+    )
+    assert 'logger -t crowdsec-home-allowlist "status=down $1"' in fail_line, fail_line

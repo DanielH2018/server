@@ -40,7 +40,15 @@ PUSH_URL="https://uptime-kuma.local.{{ domain }}/api/push/{{ monitor_bridge_home
 # stays. Accepted cost: a 4xx push (a bad token) now burns the backoff before failing.
 #
 # Worst case is 4 attempts x 10s plus curl's 1/2/4s backoff per call, ~47s, and three calls
-# still fit the 5-minute cron interval.
+# still fit the 5-minute cron interval. `--max-time` is PER ATTEMPT, not per operation —
+# measured 2026-08-24, `--max-time 3 --retry 3` against a black-holed address took 19.05s
+# (4 x 3s + 7s backoff). Were it whole-operation, the retries would be inert on a timeout.
+#
+# LIMIT: this does NOT cover a Kuma outage. Two clusters of consecutive failed pushes on
+# 2026-08-20 (01:40/01:45/01:55 and 12:35/12:40/12:45) each have a crowdsec-appsec-verify push
+# failing in the same window, so the endpoint was down, not the call — and no 7s backoff spans
+# a 15-minute gap. The retry closes the ISOLATED misses; a Kuma restart still flaps this
+# monitor, and the fix for that belongs to uptime-kuma's own availability.
 push() { # up|down msg
   curl -fsS --max-time 10 --retry 3 --retry-all-errors -G "$PUSH_URL" \
     --data-urlencode "status=$1" --data-urlencode "msg=$2" -o /dev/null \
