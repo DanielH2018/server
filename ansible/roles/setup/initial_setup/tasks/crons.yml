@@ -131,6 +131,55 @@
     user: root
   become: true
 
+- name: Detect whether fwupd is installed on this host
+  tags: [crons, firmware]
+  # Only daniel-box has fwupd: optimize_pi purges it (the Zero 2 W swapped itself to death on
+  # every dbus activation) and daniel-server has never had it. Gate on the binary rather than
+  # on inventory_hostname so a future host is covered without editing this file.
+  ansible.builtin.stat:
+    path: /usr/bin/fwupdmgr
+  register: initial_setup_fwupdmgr
+  check_mode: false # read-only query; must run under --check or the when: below breaks
+
+- name: Schedule weekly firmware update
+  tags: [crons, firmware]
+  # Sunday 07:00 — 30 minutes ahead of the "Weekly system restart" above, which is what
+  # actually commits the update: a UEFI capsule is staged to the ESP and applied by the
+  # firmware on the next boot, so applying it without a reboot in the same window leaves it
+  # pending indefinitely. The write itself takes seconds; the 30 min is slack, not need.
+  #
+  # `refresh --force` because a plain refresh exits non-zero once the metadata is younger than
+  # its refresh interval, which is the normal weekly case, not an error. Output goes to syslog
+  # rather than /dev/null so a real failure is recoverable from Loki (`{job="syslog"}`) — and
+  # piping into logger makes the job's exit status logger's, which keeps cron from mailing
+  # root every week for the `update` exit code that means "nothing to do".
+  #
+  # `--no-reboot-check` because the reboot is the next cron's job, not this one's.
+  #
+  # Note on value: Secure Boot is DISABLED on daniel-box, so the db/dbx signature databases
+  # these updates carry are not consulted by anything. The cron is here for real firmware
+  # (BIOS, SSD) arriving later, and to stop the login MOTD accruing a permanent backlog.
+  ansible.builtin.cron:
+    name: "Weekly firmware update"
+    minute: "0"
+    hour: "7"
+    weekday: "0"
+    job: "/usr/bin/fwupdmgr refresh --force >/dev/null 2>&1 ; /usr/bin/fwupdmgr update -y --no-reboot-check 2>&1 | /usr/bin/logger -t fwupd-auto"
+    user: root
+  become: true
+  when: initial_setup_fwupdmgr.stat.exists
+
+- name: Remove the firmware cron on hosts without fwupd
+  tags: [crons, firmware]
+  # The way out of the task above. A host that later purges fwupd (as optimize_pi does on the
+  # Pi) would otherwise keep a cron that logs "command not found" to syslog every Sunday.
+  ansible.builtin.cron:
+    name: "Weekly firmware update"
+    state: absent
+    user: root
+  become: true
+  when: not initial_setup_fwupdmgr.stat.exists
+
 - name: Schedule Docker image cleanup
   # `until=168h` keeps anything created in the last week: after a bad Renovate
   # bump the previous pinned image is still local, so rollback = git revert +

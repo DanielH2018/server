@@ -21,12 +21,22 @@
   # Security origins are enabled by the distro's 50unattended-upgrades. This local
   # drop-in pins the bits we care about: no surprise reboots (the weekly "Weekly
   # system restart" cron owns reboots) and cleanup of obsolete kernels/deps.
+  #
+  # Allowed-Origins uses the `::` APPEND syntax, never a `{ ... }` block. Both forms in fact
+  # append rather than replace (measured on daniel-box 2026-08-24 with `apt-config -c`), but
+  # the block form READS like a replacement — and a replacement here would silently drop the
+  # -security and ESM pockets, i.e. delete the whole protection while looking like it added
+  # to it. `apt-config dump Unattended-Upgrade::Allowed-Origins` must list -security after
+  # any change to this task.
   ansible.builtin.copy:
     dest: /etc/apt/apt.conf.d/52unattended-upgrades-local
     content: |
       Unattended-Upgrade::Automatic-Reboot "false";
       Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
       Unattended-Upgrade::Remove-New-Unused-Dependencies "true";
+      {% for origin in unattended_upgrades_extra_origins %}
+      Unattended-Upgrade::Allowed-Origins:: "{{ origin }}";
+      {% endfor %}
     owner: root
     group: root
     mode: "0644"
