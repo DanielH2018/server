@@ -1,0 +1,49 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ical-proxy
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: ical-proxy
+  policyTypes:
+    - Ingress
+  ingress:
+{# Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
+   lever. `| bool` for the string trap. Both explained in full in
+   networkpolicy-traefik.yaml.j2. #}
+{% if netpol_baseline_enforced | bool %}
+    # ADDED 2026-08-24 with the ical-proxy route narrowing. This app serves unauthenticated
+    # private calendar feeds and has no path that is not sensitive content — /calendar{1,2,4}.ics
+    # is all of it, and there is no health endpoint. Its isolation used to be the Docker
+    # `homepage_private` network; the cluster equivalent was the route's ClientIP guard, which
+    # was then widened to the whole pod CIDR so the Kuma prober could reach it. That dissolved
+    # the isolation: any pod could read the calendars, demonstrated live with a 200 and 847,922
+    # bytes.
+    #
+    # So the two real callers moved off the edge onto this ClusterIP path, where a podSelector
+    # can actually tell them apart — which the route could not, since everything arriving through
+    # Traefik carries Traefik's identity. baseline-ingress admits ONLY traefik, prometheus and
+    # the node CIDRs, so without this policy that move would deny both callers outright.
+    #
+    # NetworkPolicies are additive, so this unions with baseline-ingress rather than replacing
+    # it: Traefik keeps its access and the daniel-server-guarded route still works.
+    - from:
+        # Homepage's three calendar widgets.
+        - podSelector:
+            matchLabels:
+              app: homepage
+        # The "iCal Proxy k8s" monitor, which probes /calendar1.ics.
+        - podSelector:
+            matchLabels:
+              app: uptime-kuma
+      ports:
+        - port: {{ ical_proxy_k8s_port | default(5000) }}
+          protocol: TCP
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}

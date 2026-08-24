@@ -30,6 +30,12 @@ spec:
         fsGroup: {{ pgid }}
         runAsNonRoot: true
       automountServiceAccountToken: false
+      # Every other Deployment in the fleet sets one of the four homelab-* classes; this was the
+      # only one that did not, which left it at Kubernetes' default priority of 0 — BELOW
+      # homelab-best-effort (1000), so under node pressure it was evicted ahead of everything
+      # else in the cluster, silently. best-effort is the right tier for a read-only viewer over
+      # a hostPath, but it should lose that race deliberately rather than by omission.
+      priorityClassName: homelab-best-effort
       containers:
         - name: artifacts
           image: {{ artifacts_k8s_image }}

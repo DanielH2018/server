@@ -45,6 +45,7 @@ from deploy_logic import (  # noqa: E402
     health_decision,
     is_diverged,
     is_image_only_diff,
+    k8s_remediation,
     k8s_role_paths,
     next_action,
     reroute_k8s_services,
@@ -231,7 +232,13 @@ K8S_AUTODEPLOY_PILOT = _csv_set(C.get("K8S_AUTODEPLOY_PILOT", ""))
 # 0 disables the cap. See split_k8s_auto_deploy: the whole promoted set shares one
 # ansible-playbook run and one K8S_DEPLOY_TIMEOUT_S, and a timeout rolls the batch back
 # together.
-K8S_AUTODEPLOY_MAX_PER_TICK = int(C.get("K8S_AUTODEPLOY_MAX_PER_TICK", "0"))
+# DECIDED: falls back to the role default 3, NOT to 0 — same argument as the claim cap below,
+# which this line did not carry until 2026-08-24. 0 means UNCAPPED, so a config.env that lost
+# this key would restore the unbounded batch on exactly the host whose config is damaged. The
+# live case is truncation, not age: in templates/config.env.j2 the denylist is line 23 and this
+# key is line 27, so a half-written file keeps a matching denylist plus ENABLED=true and drops
+# only the cap — passing the fail-closed denylist guard below while uncapped.
+K8S_AUTODEPLOY_MAX_PER_TICK = int(C.get("K8S_AUTODEPLOY_MAX_PER_TICK", "3"))
 # Defaults to 1, not 0: an older config.env rendered before this key existed must get the SAFE
 # cap, not an absent one. 0 here would silently restore the unbounded-batch behaviour this
 # closes, on exactly the hosts whose config is stale (2026-08-22 review H2).
@@ -443,7 +450,42 @@ def alert_once(marker_file: str, channel: str, origin: str, content: str) -> Non
     deliver(f"{channel}:{origin}", content)
 
 
-def alert_deferred(origin: str, deployed: set[str], cs: ChangeSet) -> None:
+def alert_secrets_deferred(origin: str, cs: ChangeSet) -> None:
+    """Alert (once per SHA) that `secrets.yml` was ff-merged with no consumer redeployed.
+
+    Split out of the no-services branch on 2026-08-24 so the k8s auto-deploy path can fire it too.
+    That path ff-merges, deploys the promoted service and returns without ever reading cs.secrets,
+    so a rotation push and a Renovate image bump landing in the same 30-minute window arrive as ONE
+    ChangeSet and the rotated secret goes silently stale — and because the merge already happened,
+    no later tick re-evaluates it.
+
+    Why it is safe to fire on the k8s path but NOT on the Docker deploy path: a k8s service is
+    promoted to auto-deploy only when its sole changed path is defaults/main.yml — image-bump-only
+    by construction (see split_k8s_auto_deploy) — so a promoted service can never itself be the
+    secret's consumer. The Docker path is the opposite case: the /add-secret flow ships secrets.yml
+    WITH its consuming template, so the consumer IS in cs.services and alerting there would
+    false-fire on the happy path. That asymmetry is why this is a separate helper rather than a
+    line inside alert_deferred(), which runs on both.
+    """
+    if not cs.secrets:
+        return
+    alert_once(
+        SECRETS_ALERT_FILE,
+        "secrets",
+        origin,
+        f"⚠️ gitops-deploy: `secrets.yml` changed in `{origin[:8]}` with no "
+        f"service template — fast-forwarded but **nothing was redeployed**. The "
+        f"rotated secret won't reach its container(s) until you redeploy them "
+        f"(`ansible-playbook ansible/deploy.yml --tags <svc>`).",
+    )
+
+
+def alert_deferred(
+    origin: str,
+    deployed: set[str],
+    cs: ChangeSet,
+    declared_k8s: set[str] | None = None,
+) -> None:
     """Fire the tasks/, meta/deps.yml, and k8s-role defer-and-alert for changes NOT redeployed
     this tick.
 
@@ -452,7 +494,15 @@ def alert_deferred(origin: str, deployed: set[str], cs: ChangeSet) -> None:
     leaves svcB's deploy-graph change ff-merged and unapplied. The pending remainder is the pure
     `deferred_service_alerts`; this is its I/O shell (per-SHA dedupe marker + deliver). Each channel
     alerts at most once per origin SHA; its marker advances on DETECTION (deliver() and the pending
-    queue own delivery + retry), so a transient webhook blip is redelivered, not silently dropped."""
+    queue own delivery + retry), so a transient webhook blip is redelivered, not silently dropped.
+
+    `declared_k8s` is this host's `platform: k8s` containers_list entries, used to decide whether
+    the k8s alert can name a `--tags` redeploy at all (see k8s_remediation). It defaults to None
+    for the caller that has not read the inventory; None is treated as the EMPTY set, which makes
+    every changed role read as untaggable and prescribes a full deploy. That is the fail-safe
+    direction: a full deploy is slower than necessary but always applies the change, whereas a
+    `--tags` line for a role with no entry exits 0 having applied nothing."""
+    declared_k8s = declared_k8s or set()
     pending_tasks, pending_meta = deferred_service_alerts(cs, deployed)
     if pending_tasks:
         alert_once(
@@ -484,8 +534,8 @@ def alert_deferred(origin: str, deployed: set[str], cs: ChangeSet) -> None:
             origin,
             f"⚠️ gitops-deploy: k8s role(s) `{', '.join(sorted(cs.k8s))}` changed in "
             f"`{origin[:8]}` — fast-forwarded but **not applied** (this deployer only "
-            f"auto-deploys Docker-platform services; k8s roles are defer-and-alert). Redeploy by "
-            f"hand: `ansible-playbook ansible/deploy.yml --tags <svc>`.",
+            f"auto-deploys Docker-platform services; k8s roles are defer-and-alert). "
+            + k8s_remediation(cs.k8s, declared_k8s),
         )
 
 
@@ -1007,7 +1057,10 @@ def main() -> int:
         # without this the first rollback would leave GitOps Deploy — Status red forever and
         # need a manual rm (the trap this role's CLAUDE.md documents).
         write_hold(None)
-        alert_deferred(origin, cs.k8s_deploy, cs)
+        # A promoted k8s service is image-bump-only, so it is never the consumer of a secret that
+        # rode along in the same tick. Without this the rotated value is ff-merged and forgotten.
+        alert_secrets_deferred(origin, cs)
+        alert_deferred(origin, cs.k8s_deploy, cs, k8s_services)
         return 0
     if not cs.services:
         run(["git", "merge", "--ff-only", origin])  # docs-only etc.
@@ -1015,20 +1068,11 @@ def main() -> int:
         # so the ff-merge above is all we can do automatically — but the new value only
         # reaches a container on its next deploy. Defer-and-alert (once per SHA) so the
         # operator redeploys the consumer(s); without this the rotated secret sits stale.
-        if cs.secrets:
-            alert_once(
-                SECRETS_ALERT_FILE,
-                "secrets",
-                origin,
-                f"⚠️ gitops-deploy: `secrets.yml` changed in `{origin[:8]}` with no "
-                f"service template — fast-forwarded but **nothing was redeployed**. The "
-                f"rotated secret won't reach its container(s) until you redeploy them "
-                f"(`ansible-playbook ansible/deploy.yml --tags <svc>`).",
-            )
+        alert_secrets_deferred(origin, cs)
         # tasks/ and meta/deps.yml changes aren't auto-deployed but DO change what a deploy does,
         # so they must not sit silently ff-merged. Nothing was deployed this tick (deployed=set()),
         # so the full sets are flagged. Same helper runs on the deploy path for a combined push.
-        alert_deferred(origin, set(), cs)
+        alert_deferred(origin, set(), cs, k8s_services)
         return 0
 
     run(["git", "merge", "--ff-only", origin])
@@ -1092,7 +1136,7 @@ def main() -> int:
         # the one(s) just deployed is ff-merged but unapplied — flag that remainder (a bundled
         # change to a DEPLOYED service rode its own --tags redeploy, so it's excluded). Only on a
         # clean deploy: a rollback below git-resets the whole commit, reverting those changes too.
-        alert_deferred(origin, cs.services, cs)
+        alert_deferred(origin, cs.services, cs, k8s_services)
         return 0
     if time.time() >= gate_deadline:
         log(f"health-gate budget ({RUN_BUDGET_S}s) exhausted before gating completed")

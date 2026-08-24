@@ -677,3 +677,44 @@ def test_alert_units_read_a_dedicated_webhook_file():
             f"must NOT fall back to the role's config.env — that file is exactly what can be "
             f"unreadable when the thing this unit alerts for has failed."
         )
+
+
+def _main_fn() -> ast.FunctionDef:
+    tree = ast.parse(_SRC.read_text())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "main":
+            return node
+    raise AssertionError("gitops_deploy.py has no main()")
+
+
+def test_the_k8s_autodeploy_branch_alerts_on_a_bundled_secrets_change():
+    """A secrets push riding along with an image bump must not be ff-merged silently.
+
+    The k8s auto-deploy branch ff-merges, deploys the promoted service and returns. Until
+    2026-08-24 it never read cs.secrets, so a rotation push and a Renovate image PR landing in
+    one 30-minute window arrived as a single ChangeSet: the secret was fast-forwarded, its real
+    consumer was never redeployed, and no later tick re-evaluated it because the merge had
+    already happened.
+
+    Guarded at the AST rather than behaviourally because gitops_deploy.py cannot be imported in
+    CI (module-level `C = cfg()` reads /etc) — the same constraint the rest of this file works
+    under.
+    """
+    for node in ast.walk(_main_fn()):
+        if not isinstance(node, ast.If):
+            continue
+        if ast.unparse(node.test) != "cs.k8s_deploy":
+            continue
+        called = {
+            ast.unparse(n.func)
+            for n in ast.walk(node)
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+        }
+        assert "alert_secrets_deferred" in called, (
+            "the cs.k8s_deploy branch returns without consulting cs.secrets. A rotation "
+            "bundled with an auto-deployed image bump is then ff-merged and forgotten — the "
+            "promoted service is image-bump-only by construction, so it is never the "
+            "secret's consumer."
+        )
+        return
+    raise AssertionError("main() no longer branches on cs.k8s_deploy")

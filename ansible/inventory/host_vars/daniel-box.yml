@@ -389,9 +389,11 @@ containers_list:
   # 127.0.0.1:3493 target via hostPort.
   - name: nut
     platform: k8s
-  # Nightly CronJob: the Pi's WireGuard peer keys land on a Longhorn PVC the 03:30
-  # daily-backup group carries to B2, and the job pushes the "WG Pi Peer Backup" monitor
-  # directly.
+  # Nightly CronJob: the Pi's WireGuard peer keys land on a Longhorn PVC the WEEKLY tier
+  # carries to B2 on its Saturday shard (`k3s_longhorn_weekly_volumes`, `# Sat`), and the job
+  # pushes the "WG Pi Peer Backup" monitor directly. The job is nightly; the OFF-SITE copy is
+  # weekly — this comment said "the 03:30 daily-backup group" until 2026-08-24, which would
+  # have an operator expect a same-day restore point that does not exist.
   - name: pi-peer-backup
     platform: k8s
   # Same ordering constraint as terraria-stats — it tails the valheim pod's console out of

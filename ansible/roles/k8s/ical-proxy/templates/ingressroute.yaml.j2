@@ -9,9 +9,31 @@
     container_item.name,
     container_item.hostname | default(container_item.name),
     container_item.port,
-    '/',
-    extra_client_cidrs=['10.42.0.0/16']
+    '/calendar',
   )
 }}
-{# 10.42.0.0/16: the iCal Proxy Kuma monitor probes from the cluster Kuma pod since the
-   Phase D cutover — pod-CIDR source, which the daniel-server-only guard rejected (404). #}
+{# DECIDED 2026-08-24: the `extra_client_cidrs=['10.42.0.0/16']` that used to be here is GONE,
+   and the two callers that needed it now use in-cluster Service DNS instead.
+
+   That CIDR is the whole pod network, so admitting it dissolved the very isolation this route's
+   comment claims to provide — "only homepage could read the unauthenticated private feeds"
+   became "any pod can". Demonstrated live rather than argued: a GET of /calendar1.ics from a
+   source matching only the pod-CIDR clause returned 200 and 847,922 bytes of private calendar.
+   The role's own CLAUDE.md still said only Homepage reads these feeds; it did not.
+
+   A NetworkPolicy cannot substitute for this. baseline-ingress admits `app=traefik` on all
+   ports and the traefik policy's first ingress rule has no `from:`, so every pod may reach
+   Traefik — and traffic arriving through this route carries Traefik's identity regardless of who
+   sent it. The route guard IS the control here.
+
+   Narrowing the path was the other obvious fix and buys nothing: this app serves only
+   /calendar{1,2,4}.ics, so every path it has is the sensitive content. There is no health
+   endpoint to expose instead.
+
+   So both pod callers moved off the edge and onto ClusterIP, where the pod-level NetworkPolicy
+   can actually distinguish them:
+     - homepage's widgets  -> roles/k8s/homepage/templates/config/services.yaml.j2
+     - the Kuma monitor    -> roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2
+   The cost is that the Kuma tile no longer exercises the Traefik route, only the app. Accepted:
+   nothing reaches this service through the edge any more, so an edge break for ical-proxy has no
+   consumer to affect. #}

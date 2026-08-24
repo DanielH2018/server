@@ -340,11 +340,18 @@ PROM_ORIGIN = _env(
 )
 
 # Floor below which the `up` vector is treated as missing rather than clean — see
-# targets_verdict. The cluster prometheus scrapes exactly two origin="daniel-server" jobs
-# since the Phase F drain retired the Docker promtail's 9102 (2026-08-14; its successor,
-# the unpinned promtail DaemonSet, is scraped per-pod under the cluster-native set, the
-# same move the crowdsec agent's 9103 made a day earlier): node, cadvisor. Their own
-# DaemonSet re-homes drop this to 0 and retire the check's origin arm.
+# targets_verdict.
+# CORRECTED 2026-08-24: this said "exactly two origin="daniel-server" jobs: node, cadvisor". It
+# is ONE — `node`. Only the node job is relabelled with `origin`
+# (claude-otel/templates/prometheus.yaml.j2:159); the cadvisor job never was, which is the whole
+# mechanism behind the blind restarts/oom/cpu checks fixed the same day. A reviewer checking that
+# finding against this comment would have cleared it, so the stale half is corrected here rather
+# than left to be re-derived.
+# The deployed TARGETS_MIN is 1 (env-secret.yaml.j2), which matches that single job and still
+# fails closed: targets_verdict tests `len(vec) < min_targets`, so an empty vector is 0 < 1 and
+# reports UNKNOWN. A floor of 1 cannot detect a PARTIAL shortfall, but with one expected series
+# there is no partial case to detect. The code default of 2 is kept only as the fail-safe for a
+# host whose env omits the key entirely.
 TARGETS_MIN = int(_env("TARGETS_MIN", "2"))
 # Same floor idea for the cluster's own scrape targets (see check_cluster_targets). Since the
 # otel-collector became a DaemonSet (Phase F drain, 2026-08-13) its two jobs are per-POD —
@@ -363,6 +370,29 @@ def origin_sel(*matchers):
     parts = [m for m in matchers if m]
     if PROM_ORIGIN:
         parts.append(PROM_ORIGIN)
+    return "{%s}" % ", ".join(parts) if parts else ""
+
+
+def cadvisor_sel(*matchers):
+    """A `{...}` block for cAdvisor series, which carry NO origin label — so no origin pin.
+
+    DECIDED: cAdvisor metrics must NOT go through origin_sel(). `origin` is applied by exactly
+    one relabel rule, on the `node` job (claude-otel/templates/prometheus.yaml.j2:159); the
+    kubernetes-cadvisor job has none. PromQL does not match an absent label, so an origin-pinned
+    cAdvisor query selects the empty vector and every check built on it reports green forever.
+
+    That is not hypothetical — it is what check_restarts, check_oom and check_cpu did from the
+    Phase G retarget until 2026-08-24. Live at the time of the fix: the unpinned selector matched
+    110 cAdvisor series and the pinned form returned `no data`, while the bridge logged
+    "OK restarts / OK oom / OK cpu" off empty vectors on every cycle. OOM kills and sustained CFS
+    throttling had no other alert path, so both were unmonitored outright.
+
+    The Docker cAdvisor these checks once shared with the cluster copy retired 2026-08-14, so
+    there is no longer a second estate for a pin to disambiguate. Use origin_sel() for series
+    that genuinely carry the label — `up`, and the node-exporter families behind check_disk and
+    check_mem — and this for anything cAdvisor emits.
+    """
+    parts = [m for m in matchers if m]
     return "{%s}" % ", ".join(parts) if parts else ""
 
 
@@ -974,7 +1004,7 @@ def check_restarts():
     """
     vec = prom_vector(
         "sum by (pod) (changes(container_start_time_seconds%s[%s]))"
-        % (origin_sel('container!=""', 'container!="POD"'), RESTART_WINDOW)
+        % (cadvisor_sel('container!=""', 'container!="POD"'), RESTART_WINDOW)
     )
     offenders = _top_offenders(vec, "pod", lambda v: v > RESTART_MAX)
     if offenders:
@@ -996,7 +1026,7 @@ def check_oom():
     """
     vec = prom_vector(
         "sum(increase(container_oom_events_total%s[%s])) by (pod)"
-        % (origin_sel('container!=""', 'container!="POD"'), OOM_WINDOW)
+        % (cadvisor_sel('container!=""', 'container!="POD"'), OOM_WINDOW)
     )
     offenders = _top_offenders(vec, "pod", lambda v: v > 0)
     if offenders:
@@ -1039,7 +1069,7 @@ def check_cpu_throttle():
     the evidence stays in the bridge log without paging. A clean cycle resets the streak.
     """
     global _cpu_breach_streak
-    sel = origin_sel('container!=""', 'container!="POD"')
+    sel = cadvisor_sel('container!=""', 'container!="POD"')
     ratio_vec = prom_vector(
         "sum(rate(container_cpu_cfs_throttled_periods_total%s[%s])) by (pod) "
         "/ sum(rate(container_cpu_cfs_periods_total%s[%s])) by (pod)"

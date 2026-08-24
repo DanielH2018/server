@@ -1,14 +1,51 @@
 {% from 'ingressroute.yml.j2' import monitoring_route with context %}
 ---
-{# monitoring_route, not ingressroute(): LogQL clients (promtail's pusher, probe.py,
-   terraria-stats, monitor-bridge, homelab-mcp) can't 302-dance through Authelia — the
-   ClientIP guard is the gate, as on every monitoring route. daniel-server plus the pod
-   CIDR (the cluster Kuma prober and any in-cluster reader). LAN-only by construction. #}
+{# monitoring_route, not ingressroute(): a LogQL client can't 302-dance through Authelia, so the
+   ClientIP guard is the gate, as on every monitoring route. LAN-only by construction.
+
+   The caller list this comment used to give — promtail's pusher, terraria-stats, monitor-bridge,
+   homelab-mcp — was already wrong: all of them reach Loki on the ClusterIP
+   (loki-homelab.<ns>.svc.cluster.local:3100), not through this route. As of 2026-08-24 the ONLY
+   caller here is probe.py, which runs on a host rather than in a pod. See below. #}
 {{ monitoring_route(
     container_item.name,
     container_item.hostname | default(container_item.name),
     container_item.port,
-    '/',
-    extra_client_cidrs=['10.42.0.0/16']
+    '/loki/api/v1/',
+    extra_client_cidrs=['10.42.0.1/32', '10.42.1.1/32']
   )
 }}
+{# DECIDED 2026-08-24: was PathPrefix(`/`) with extra_client_cidrs=['10.42.0.0/16'].
+
+   Those two together gave EVERY POD the entire Loki API on an `auth_enabled: false` instance
+   (configmap.yaml.j2). Not a theoretical reach — verified live from a source matching only the
+   pod-CIDR clause: /config returned 200 (full config disclosure), /metrics 200,
+   /loki/api/v1/push 405 (handler reached, so a POST would ingest) and /loki/api/v1/delete 400
+   (param validation, so the delete handler is routed and the compactor has retention enabled).
+   That is read of every log line the fleet emits, forged entries to poison the alert history
+   `probe.py alerts` reconstructs from Loki, and a delete path.
+
+   The macro's own contract said guard 2 should be "only the endpoint the check reads"; `/` was
+   one of just two call sites of eight ignoring it, and both are fixed in this change.
+
+   A NetworkPolicy could not have contained it. baseline-ingress admits `app=traefik` on all
+   ports and the traefik policy's first ingress rule has no `from:`, so any pod may reach Traefik
+   — and everything arriving through this route carries Traefik's identity, not the sender's.
+
+   The two callers that used this route:
+     - the Kuma "Loki" tile probed /ready, and is why the pod CIDR was admitted at all. It moved
+       to ClusterIP (uptime-kuma/static-monitors.yaml.j2), where networkpolicy-loki-homelab
+       admits it by podSelector. Everything else in-cluster — promtail, monitor-bridge,
+       homelab-mcp, terraria/valheim-stats, Grafana, Prometheus — already used ClusterIP and is
+       untouched.
+     - probe.py runs on a HOST, not in a pod, so it genuinely needs the edge. It reaches only
+       /loki/api/v1/labels and /loki/api/v1/query_range (scripts/probe_core.py:107,118), hence
+       the prefix.
+
+   The two /32s are the nodes' cni0 gateway addresses: host traffic to the VIP SNATs to them, so
+   this is "the two cluster nodes" and nothing else. Same pair as netpol_baseline_node_cidrs,
+   deliberately written out rather than referenced — that var is read by 16 workloads, and a
+   future widening of it must not silently widen this route too.
+
+   Residual, accepted: /loki/api/v1/ still contains push and delete, because PathPrefix cannot
+   exclude. Those are now reachable only from the two nodes rather than from any pod. #}

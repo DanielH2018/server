@@ -1,7 +1,7 @@
 ---
 # CRDs come from the pinned upstream by URL, exactly as the k3s setup role installs Longhorn
 # and MetalLB. They are a large, versioned, third-party set — not ours to hand-maintain. Only
-# the ClusterRoleBinding is authored locally (see files/rbac.yaml for why).
+# the ClusterRoleBinding is authored locally (see templates/rbac.yaml.j2 for why).
 - name: Install the Traefik CRDs
   tags: [config]
   ansible.builtin.command:
@@ -24,17 +24,25 @@
   become: true
   changed_when: false
 
-- name: Install the Traefik ClusterRole
+# Templated, not copied, since 2026-08-24: the file now carries one namespaced Role +
+# RoleBinding per watched namespace alongside the cluster-scoped role, and those need
+# k8s_namespace / k8s_observability_namespace / k8s_longhorn_namespace.
+#
+# Both halves ship in ONE manifest and ONE apply on purpose. Applying them as two tasks would
+# leave a window in which the cluster-wide grant is already gone and the namespaced Roles are
+# not yet in place — Traefik's Secret informers would lose their watch mid-flight, and it fails
+# green (see the header in templates/rbac.yaml.j2).
+- name: Install the Traefik RBAC (cluster-scoped role + per-namespace roles)
   tags: [config]
-  ansible.builtin.copy:
-    src: rbac.yaml
+  ansible.builtin.template:
+    src: rbac.yaml.j2
     dest: /etc/rancher/k3s/traefik-clusterrole.yaml
     mode: "0644"
     owner: root
     group: root
   become: true
 
-- name: Apply the Traefik ClusterRole
+- name: Apply the Traefik RBAC
   tags: [config]
   ansible.builtin.command:
     cmd: k3s kubectl apply -f /etc/rancher/k3s/traefik-clusterrole.yaml

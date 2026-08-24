@@ -47,6 +47,16 @@ spec:
         - podSelector:
             matchLabels:
               app: valheim-stats
+        # ADDED 2026-08-24. The "Loki" tile used to probe /ready through the edge route, which
+        # is why that route admitted the whole pod CIDR — and admitting the pod CIDR to a
+        # PathPrefix(`/`) route on an `auth_enabled: false` Loki gave every pod the full API:
+        # read any log line, push forged entries, reach the delete handler. Verified live at the
+        # time (/config 200, /push 405, /delete 400 from a pod-CIDR source). The tile moved to
+        # this ClusterIP path so a podSelector can gate it, which the route could not — through
+        # Traefik every caller arrives as `app=traefik`.
+        - podSelector:
+            matchLabels:
+              app: uptime-kuma
         # grafana lives in another namespace. namespaceSelector and podSelector are SIBLING KEYS
         # in ONE list item, so they AND together: the grafana pod in observability. Split into
         # two list items they would OR, admitting that entire namespace.
