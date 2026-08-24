@@ -1,0 +1,51 @@
+{#
+  NetworkPolicy for an *arr slice-2 ingress rule — sonarr and radarr's networkpolicy.yaml.j2
+  share this exact structure (podSelector on `app: <name>`, traefik admitted unconditionally,
+  a caller matchExpressions list, one TCP port) and differ only in the caller list and its
+  per-item comments. Those stay at the call site via `{% call %}` rather than being swallowed
+  here — the whole point of the comments is that they differ role to role: sonarr annotates
+  every caller, radarr only prowlarr and homepage. Do not harmonize the two call sites to make
+  them look more alike; the macro exists to hold the structure both already share, not to grow
+  the shared surface.
+
+  prowlarr's own networkpolicy.yaml.j2 is NOT this shape and is NOT converted: it's
+  flaresolverr's policy (podSelector `app: flaresolverr`, one caller `app: prowlarr`, no
+  traefik entry, no matchExpressions list, port from `prowlarr_k8s_flaresolverr_port`) — a
+  different subject with a different shape, not this policy under a different name.
+
+  Arguments:
+    name  Service/pod `app` label this policy selects, and the NetworkPolicy's own name.
+    port  TCP port the caller list is scoped to (`container_item.port` at both call sites).
+
+  Call with a body holding the `values:` list — one `- <caller>` line per entry, indented to
+  column 18 (the list's own column) with an optional trailing `# comment`, exactly as it reads
+  today in sonarr/radarr's own files. Call plain (no `{% call %}`) only if a future third site
+  has no callers to list, which neither current site does.
+#}
+{% macro arr_networkpolicy(name, port) -%}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ name }}
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ name }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: traefik
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+{% if caller is defined %}{{ caller() }}{% endif %}
+      ports:
+        - protocol: TCP
+          port: {{ port }}
+{% endmacro %}

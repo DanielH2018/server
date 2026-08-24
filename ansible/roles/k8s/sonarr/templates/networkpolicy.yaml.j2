@@ -1,3 +1,4 @@
+{% from 'networkpolicy.yml.j2' import arr_networkpolicy with context %}
 ---
 # Slice 2 of the ingress default-deny. The baseline (roles/k8s/netpol-baseline) admits traefik,
 # prometheus and the node bridges to every pod carrying `netpol-baseline: enforced`. This file adds
@@ -35,27 +36,7 @@
 # (roles/k8s/homepage/templates/services.yaml.j2). It goes direct rather than through Traefik
 # because sonarr's public route is Authelia-gated and its monitoring IngressRoute exposes only
 # that one path — so this entry is the whole grant, and fencing it out breaks the widget.
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: sonarr
-  namespace: {{ k8s_namespace }}
-spec:
-  podSelector:
-    matchLabels:
-      app: sonarr
-  policyTypes:
-    - Ingress
-  ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              app: traefik
-        - podSelector:
-            matchExpressions:
-              - key: app
-                operator: In
-                values:
+{% call arr_networkpolicy('sonarr', container_item.port) %}
                   - janitorr        # templates/config/application.yml.j2 — deploy-time verify too
                   - configarr       # CronJob; its pod template carries app: configarr
                   - monitor-bridge  # env-secret.yaml.j2, cluster FQDN
@@ -63,6 +44,4 @@ spec:
                   - bazarr          # app DB, bare name — see header
                   - prowlarr        # Application Sync writes indexers in — see header
                   - homepage        # dashboard widget, ClusterIP — see header
-      ports:
-        - protocol: TCP
-          port: {{ container_item.port }}
+{% endcall %}
