@@ -4,9 +4,14 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
 - **Image:** `nicolargo/glances:latest`
-- **Hosts:** daniel-server (Traefik + Authelia) · daniel-pi (LAN-bound, no Authelia)
-- **Port:** 61208 · **URL:** `glances.<domain>` (server) / `http://<pi-lan-ip>:61208` (Pi)
-- **Networks:** monitoring (server) · proxy (Pi)
+- **Hosts:** daniel-pi ONLY (LAN-bound, no Authelia)
+- **Port:** 61208 · **URL:** `http://<pi-lan-ip>:61208`
+- **Networks:** proxy
+
+> **The daniel-server instance is gone.** Docker was uninstalled there on 2026-08-14 as the k3s
+> migration's end state, and `host_vars/daniel-server.yml` now sets `containers_list: []`. The
+> Traefik-routed, Authelia-gated `glances.<domain>` this file used to describe no longer exists;
+> cluster-node metrics come from node-exporter and the observability stack instead.
 - **Depends on:** traefik, authelia (server only)
 - **Config in:** each `ansible/inventory/host_vars/<host>.yml` → `containers_list`
 
