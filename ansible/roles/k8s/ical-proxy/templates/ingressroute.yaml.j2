@@ -9,6 +9,7 @@
     container_item.name,
     container_item.hostname | default(container_item.name),
     container_item.port,
+    '/calendar',
   )
 }}
 {# DECIDED 2026-08-24: the `extra_client_cidrs=['10.42.0.0/16']` that used to be here is GONE,
