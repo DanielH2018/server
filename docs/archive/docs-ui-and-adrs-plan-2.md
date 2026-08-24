@@ -8,9 +8,9 @@
 
 **Tech Stack:** Vale + the Google style package, D2, Python 3.14 + uv, pytest, prek.
 
-**Spec:** `docs/docs-ui-and-adrs-design.md`
+**Spec:** `docs/archive/docs-ui-and-adrs-design.md`
 
-**Prerequisite:** `docs/docs-ui-and-adrs-plan-1.md` must be merged. This plan adds pages to a site that plan 1 builds and serves.
+**Prerequisite:** `docs/archive/docs-ui-and-adrs-plan-1.md` must be merged. This plan adds pages to a site that plan 1 builds and serves.
 
 ## Global Constraints
 
@@ -80,7 +80,7 @@ list must match; `ansible/tests/test_adr_links.py` checks both directions.
 
 - [ ] **Step 2: Write the first ADR**
 
-Create `docs/adr/0001-mkdocs-site-with-generated-reference.md`, filling the template from `docs/docs-ui-and-adrs-design.md`. Its Context covers the three problems the design opens with: no assembled view of the tree, hand-maintained facts drifting, and decisions scattered across four registries. Its Consequences cover the accepted trade-offs — the single-node pin, the commit noise, and the backfill cost.
+Create `docs/adr/0001-mkdocs-site-with-generated-reference.md`, filling the template from `docs/archive/docs-ui-and-adrs-design.md`. Its Context covers the three problems the design opens with: no assembled view of the tree, hand-maintained facts drifting, and decisions scattered across four registries. Its Consequences cover the accepted trade-offs — the single-node pin, the commit noise, and the backfill cost.
 
 `governs: []` — this decision is enforced by the existence of the site, not by a line.
 
@@ -362,7 +362,7 @@ The target set, in a sensible reading order. Each names its primary source:
 | 0009 | NetworkPolicy default-deny, and why egress is not enforced | `docs/networkpolicy-default-deny.md`, `docs/archive/networkpolicy-slice*.md` |
 | 0010 | Pull-based GitOps over Argo CD and Flux | `docs/gitops-argo-flux-evaluation.md` |
 | 0011 | One git-tree lock serializing every deploy path | `scripts/deploy.sh`, `ansible/roles/setup/gitops_deploy/CLAUDE.md` |
-| 0012 | Zero-downtime deploys: the rollout gate design | `docs/zero-downtime-deploys-design.md` |
+| 0012 | Zero-downtime deploys: the rollout gate design | `docs/archive/zero-downtime-deploys-design.md` |
 | 0013 | daniel-pi stays on Docker | repo-root `CLAUDE.md`, `ansible/roles/containers/` |
 | 0014 | Kopia retired; Longhorn owns the B2 credentials | `docs/kopia-disaster-recovery.md` |
 

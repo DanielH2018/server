@@ -8,7 +8,7 @@
 
 **Tech Stack:** k3s, Ansible, MetalLB, Jinja2-templated manifests, pytest.
 
-**Spec:** `docs/zero-downtime-deploys-design.md` (slice 2)
+**Spec:** `docs/archive/zero-downtime-deploys-design.md` (slice 2)
 
 ## The design changed after reading the cluster — read this before the tasks
 
@@ -464,7 +464,7 @@ daniel-box only."
 ### Task 5: Deploy and measure
 
 **Files:**
-- Modify: `docs/zero-downtime-deploys-design.md` (Measured results)
+- Modify: `docs/archive/zero-downtime-deploys-design.md` (Measured results)
 
 - [ ] **Step 1: Dry run first**
 
@@ -493,7 +493,7 @@ Exit 75 means the git-tree lock stayed busy and nothing deployed — wait and re
 
 - [ ] **Step 4: Record the result**
 
-Both probes should report zero failures. Add a row to the *Measured results* table in `docs/zero-downtime-deploys-design.md`:
+Both probes should report zero failures. Add a row to the *Measured results* table in `docs/archive/zero-downtime-deploys-design.md`:
 
 ```markdown
 | 2 | pihole | YYYY-MM-DD | N | 0 | 0.00s | DNS queries + ready endpoints |
@@ -504,7 +504,7 @@ If the DNS probe shows failures while the endpoints probe shows a backend throug
 Record what was measured, not what was hoped. A failure here is a finding, not a setback.
 
 ```bash
-git add docs/zero-downtime-deploys-design.md
+git add docs/archive/zero-downtime-deploys-design.md
 git commit -m "Record the measured Pi-hole redundancy result"
 ```
 

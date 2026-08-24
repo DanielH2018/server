@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12 + pytest (`uv run pytest`), Jinja2-templated k8s manifests, Ansible, prek.
 
-**Spec:** `docs/zero-downtime-deploys-design.md`
+**Spec:** `docs/archive/zero-downtime-deploys-design.md`
 
 **Execution status (worktree-zero-downtime-deploys-spec, commits `7a9bc10e`..`c1d473d5`):**
 Task 1 and Task 2 complete. Task 3 steps 1–11 complete (flaresolverr converted to
@@ -117,7 +117,7 @@ Create `scripts/measure_rollout_gap.py`:
 #!/usr/bin/env python3
 """Measure real downtime across a rollout by polling a service while it restarts.
 
-Every zero-downtime claim in docs/zero-downtime-deploys-design.md is graded by this and
+Every zero-downtime claim in docs/archive/zero-downtime-deploys-design.md is graded by this and
 not by a manifest: `strategy: RollingUpdate` in a template says what was configured, and
 this says what happened. A single-replica RollingUpdate only avoids a gap because maxSurge
 rounds up to 1 — that is a scheduler behaviour, not a guarantee, and it fails silently if
@@ -751,7 +751,7 @@ If the probe reports failures, the conversion is not done. The likely causes, in
 
 - [ ] **Step 15: Record the result**
 
-Append the measured result to `docs/zero-downtime-deploys-design.md` under a new `## Measured results` heading at the end of the file:
+Append the measured result to `docs/archive/zero-downtime-deploys-design.md` under a new `## Measured results` heading at the end of the file:
 
 ```markdown
 ## Measured results
@@ -764,7 +764,7 @@ Append the measured result to `docs/zero-downtime-deploys-design.md` under a new
 Fill in the real numbers from the probe output. Do not record a result you did not run.
 
 ```bash
-git add docs/zero-downtime-deploys-design.md
+git add docs/archive/zero-downtime-deploys-design.md
 git commit -m "Record the measured flaresolverr rollout result"
 ```
 
@@ -775,8 +775,8 @@ git commit -m "Record the measured flaresolverr rollout result"
 Approach B in the spec proposes tuning `terminationGracePeriodSeconds`, `minReadySeconds` and image pre-pull across the ~35 remaining `Recreate` workloads. Doing that blind would be a 35-role diff justified by an estimate. The gap's components are image pull, container start, and readiness — the grace period only contributes when an app ignores SIGTERM, and today exactly one template sets it (`valheim`, at 120s). This task measures before it changes anything, so the tuning that follows is aimed at what the data implicates.
 
 **Files:**
-- Create: `docs/zero-downtime-baseline.md`
-- Modify: `docs/zero-downtime-deploys-design.md`
+- Create: `docs/archive/zero-downtime-baseline.md`
+- Modify: `docs/archive/zero-downtime-deploys-design.md`
 
 **Interfaces:**
 - Consumes: `scripts/measure_rollout_gap.py` from Task 1.
@@ -818,7 +818,7 @@ Record `longest gap` from each run. Expect a non-zero gap for every one of them 
 
 - [ ] **Step 3: Write the baseline**
 
-Create `docs/zero-downtime-baseline.md`:
+Create `docs/archive/zero-downtime-baseline.md`:
 
 ```markdown
 # Recreate gap baseline
@@ -851,19 +851,19 @@ Fill in every row with a measured number. Leave no `—` behind.
 
 - [ ] **Step 4: Update the spec's estimate**
 
-In `docs/zero-downtime-deploys-design.md`, find the line in the *Approach B* section reading:
+In `docs/archive/zero-downtime-deploys-design.md`, find the line in the *Approach B* section reading:
 
 ```
 This does not reach zero. It is expected to move an estimated 15–45s window to roughly
 5–15s across the holdouts — an estimate to be replaced with measurement in slice 1.
 ```
 
-Replace the estimate with the measured range and a link to `docs/zero-downtime-baseline.md`.
+Replace the estimate with the measured range and a link to `docs/archive/zero-downtime-baseline.md`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add docs/zero-downtime-baseline.md docs/zero-downtime-deploys-design.md
+git add docs/archive/zero-downtime-baseline.md docs/archive/zero-downtime-deploys-design.md
 git commit -m "Baseline the real Recreate downtime gap before tuning anything
 
 Approach B proposed terminationGracePeriodSeconds and minReadySeconds tuning

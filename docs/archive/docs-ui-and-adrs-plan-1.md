@@ -8,9 +8,9 @@
 
 **Tech Stack:** MkDocs Material, nginx-unprivileged, Ansible, k3s, Python 3.14 + uv, pytest.
 
-**Spec:** `docs/docs-ui-and-adrs-design.md`
+**Spec:** `docs/archive/docs-ui-and-adrs-design.md`
 
-**Follow-on plan:** `docs/docs-ui-and-adrs-plan-2.md` covers ADRs, Vale, and D2. Do not start it until this plan is merged.
+**Follow-on plan:** `docs/archive/docs-ui-and-adrs-plan-2.md` covers ADRs, Vale, and D2. Do not start it until this plan is merged.
 
 ## Global Constraints
 
