@@ -751,3 +751,52 @@ def test_routes_reference_a_tlsoption_that_exists_and_is_not_named_default():
                 f"{doc['metadata']['name']} references TLS options '{named}', which the "
                 f"traefik role does not define (it defines {sorted(defined)})"
             )
+
+
+# monitoring_route() call sites allowed to serve PathPrefix(`/`). Empty on purpose — see the
+# test below. Adding a name here needs the reason written beside it, the same shape as
+# AUTHELIA_BYPASS_ROUTES above.
+_WIDE_MONITORING_ROUTES: dict[str, str] = {}
+
+
+def test_no_monitoring_route_serves_a_bare_path_prefix():
+    """A `-monitoring` route matching PathPrefix(`/`) exposes the whole backend API.
+
+    The macro says guard 2 is "only the endpoint the check reads" (ansible/templates/
+    ingressroute.yml.j2), and until 2026-08-24 two of eight call sites ignored it:
+    loki-homelab and ical-proxy, both also widened to the entire pod CIDR. On an
+    `auth_enabled: false` Loki that combination gave every pod read of every log line, a push
+    path to forge entries, and the delete handler — verified live, not inferred.
+
+    The ClientIP guard cannot be relied on to compensate. Everything arriving through Traefik
+    carries Traefik's identity, so a NetworkPolicy cannot tell callers apart, and the CIDR is
+    the only discriminator the route has.
+
+    A comment asking the next author to remember is what failed here, so this is a test.
+    """
+    offenders = []
+    for entry in _k8s_entries():
+        for route_tpl in sorted(
+            (K8S / entry["name"] / "templates").glob("ingressroute*.j2")
+        ):
+            rendered = _render(
+                route_tpl,
+                container_item=entry,
+                domain="example.com",
+                **ALL_VARS,
+            )
+            for doc in (d for d in yaml.safe_load_all(rendered) if d):
+                name = doc["metadata"]["name"]
+                if not name.endswith("-monitoring"):
+                    continue
+                for route in doc["spec"].get("routes", []):
+                    if "PathPrefix(`/`)" not in route.get("match", ""):
+                        continue
+                    if name in _WIDE_MONITORING_ROUTES:
+                        continue
+                    offenders.append(f"{name} ({entry['name']})")
+    assert not offenders, (
+        "monitoring route(s) serving PathPrefix(`/`), which exposes the whole backend API: "
+        f"{sorted(offenders)}. Narrow the prefix to the endpoint the caller actually reads, or "
+        "add the route to _WIDE_MONITORING_ROUTES with the reason."
+    )

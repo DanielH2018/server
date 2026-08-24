@@ -127,8 +127,13 @@ stringData:
   # ClientIP-gated route (this pod's CIDR is admitted; hostAliases pin the -k8s name to
   # the VIP). /ready 503s ~15s after a restart while the ingester warms — brief PENDING
   # after a deploy is normal, carried over from the Docker tile's notes.
+  # ClusterIP, not the edge route, since 2026-08-24 — see networkpolicy-loki-homelab.yaml.j2.
+  # Probing through the route is what forced that route to admit the whole pod CIDR, and with
+  # PathPrefix(`/`) on an auth_enabled:false Loki that handed every pod the full API. /ready
+  # still 503s ~15s after a restart while the ingester warms, so brief PENDING after a deploy
+  # remains normal.
   loki.json: |
-    {"type": "http", "name": "Loki", "url": "https://loki-homelab.local.{{ domain }}/ready", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "Loki", "url": "http://loki-homelab.{{ k8s_namespace }}.svc.cluster.local:3100/ready", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Phase D scrutiny move (2026-08-10, SC5): /api/health rides the LAN Authelia bypass
   # (this pod's CIDR ⊂ 10.0.0.0/8), so a plain 200 — no 302 dance. Covers the cluster
   # web+influxdb pair; the per-node collectors are covered by SMART Data Freshness.
@@ -136,8 +141,14 @@ stringData:
     {"type": "http", "name": "k3s Scrutiny", "url": "https://scrutiny.local.{{ domain }}/api/health", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   karakeep-k8s.json: |
     {"type": "http", "name": "k3s karakeep", "url": "https://karakeep.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # ClusterIP, not the edge route, since 2026-08-24. The route's ClientIP guard had been widened
+  # to the whole pod CIDR so this prober could reach it, which meant every pod could read the
+  # unauthenticated private calendars. Both callers moved in-cluster so a podSelector can gate
+  # them (networkpolicy-ical-proxy.yaml.j2 admits this pod and homepage). The tile therefore no
+  # longer exercises the Traefik route — accepted, because nothing reaches ical-proxy through the
+  # edge any more.
   ical-proxy-k8s.json: |
-    {"type": "http", "name": "iCal Proxy k8s", "url": "https://ical-proxy.local.{{ domain }}/calendar1.ics", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "iCal Proxy k8s", "url": "http://ical-proxy.{{ k8s_namespace }}.svc.cluster.local:5000/calendar1.ics", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   code-server-k8s.json: |
     {"type": "http", "name": "k3s code-server", "url": "https://code-server.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   pihole-k8s-dns.json: |

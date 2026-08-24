@@ -137,6 +137,7 @@
       - networkpolicy-mosquitto.yaml
       - networkpolicy-nut.yaml
       - networkpolicy-jellyfin.yaml
+      - networkpolicy-ical-proxy.yaml
       - networkpolicy-netpol-sentinel.yaml
       - networkpolicy-karakeep.yaml
       - networkpolicy-karakeep-chrome.yaml
