@@ -323,12 +323,20 @@ types = ["shell"]
 # Markdown file would read green while checking nothing outside the two configured paths —
 # and would ALSO hand it docs/reference/, whose commits come from the docs-refresh cron.
 #
+# The duplication is safe only because scripts/test_vale_scope.py asserts this regex covers
+# every .vale.ini section. It did not, for two commits: docs/deploying.md and
+# docs/gitops-pipeline.md entered .vale.ini in PR #418 and never entered this regex, so the
+# hook reported "no files to check" and both pages went ungated while reading green. Adding
+# a page to .vale.ini alone does not lint it — it has to be in both.
+#
 # NEVER widen this to docs/reference/. That cron stages those paths and commits with hooks
 # running, so a style error there aborts the commit and alerts on every run until someone
-# fixes the generator.
+# fixes the generator. ENFORCED by the same test.
 [[repos.hooks]]
 id = "vale"
-name = "Prose style (Vale, scoped to ADRs + docs index)"
+name = "Prose style (Vale, scoped to ADRs + every top-level docs page)"
 entry = "vale"
 language = "system"
-files = "^(docs/adr/.*\\.md|docs/index\\.md)$"
+# docs/[^/]+\.md is every top-level page and nothing below it, which is what keeps
+# docs/archive/ and docs/reference/ out. See .vale.ini for why each is excluded.
+files = "^(docs/adr/.*\\.md|docs/[^/]+\\.md)$"

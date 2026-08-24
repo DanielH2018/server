@@ -59,15 +59,15 @@ selecting the `r2` target, not `default`; see
 | sonarr/radarr/prowlarr/bazarr/qbittorrent-config | weekly (sharded) | B2 | MediaCover/logs/Definitions stay — weekly cadence bounds them |
 | tdarr-server, tdarr-configs | weekly (Mon/Tue) | B2 | `transcode_cache/` + logs already emptyDir; `Backups/` zips diverted |
 | terraria-config | weekly (Wed) | B2 | `.wld.bak*` churn accepted at weekly cadence (retired service; live `.wld` backed up, same operator call as kopia's) |
-| scrutiny-web-config | weekly (Sat) | B2 | clean |
+| `scrutiny`-web-config | weekly (Sat) | B2 | clean |
 | valheim-config | weekly (Tue) | B2 | post-doc addition (2026-08-13, pwd→SOPS recovery); world saves |
 | valheim-stats-data, terraria-stats-data | weekly (Mon/Sun) | B2 | post-doc additions; small stats DBs |
 | pi-peer-backup-data | weekly (Sat) | B2 | post-doc addition (2026-08-14); the Pi's nightly rsync lands at 04:30 UTC, so a Saturday 04:30 backup captures the previous day's sync — crash-consistent either way |
-| scrutiny-influxdb-data | **no-backup** | — | kopia: `scrutiny/influxdb2/` — the volume IS the TSDB (single mount, verified) |
+| `scrutiny`-influxdb-data | **no-backup** | — | kopia: `scrutiny/influxdb2/` — the volume IS the TSDB (single mount, verified) |
 | uptime-kuma-data | **no-backup** | — | kopia: `uptime-kuma/data*/` — monitors regenerate from the static-monitors Secret; admin recreated by hand; history not kept (kopia's own caveat, now in this doc) |
-| crowdsec-db | **no-backup** | — | Docker's crowdsec-db named volume was deliberately outside kopia scope |
+| `crowdsec`-db | **no-backup** | — | Docker's `crowdsec`-db named volume was deliberately outside kopia scope |
 | autokuma-data | **no-backup** | — | regenerates from the static-monitors Secret |
-| pihole-etc, livesync-data, grafana-data, registry/prometheus/loki/tempo/speedtest/karakeep-meili/mosquitto/flaresolverr | no-backup (pre-existing) | — | consistent with kopia: FTL/gravity, couchdb-data, plugins, TSDBs were all excluded; the configs kopia *kept* are Ansible-rendered here |
+| pihole-etc, `livesync`-data, `grafana`-data, registry/`prometheus`/`loki`/`tempo`/speedtest/karakeep-meili/mosquitto/flaresolverr | no-backup (pre-existing) | — | consistent with kopia: FTL/gravity, couchdb-data, plugins, TSDBs were all excluded; the configs kopia *kept* are Ansible-rendered here |
 
 ## The transaction budget (2026-08-17) — what this doc's framing was missing
 
@@ -110,7 +110,7 @@ is luck, not design — the split is by list position and the cost is by block c
 
 Verified 2026-08-17 by forcing `weekly-backup-d2` to run: `radarr-config` finished on 4
 `daily-backup` backups plus 1 `weekly-backup-d2`, and **deleted nothing**. A RecurringJob
-enforces its `retain` over its own backups only, and only for volumes currently in its `groups:`.
+enforces its `retain` over its own backups only, and only for volumes listed in its `groups:`.
 
 Two consequences that are easy to get backwards:
 
@@ -167,7 +167,7 @@ stored blocks rather than with anything a deploy touches.
   providers, and the tree is static-ish so its block-delta cost is small.
 - **SQLite WAL/SHM sidecars** (`*.db-wal` etc., kopia's biggest churn rule): inseparable
   from their DB at block level. This churn is the residual per-night cost of the daily
-  tier and is the main reason Kuma's constantly-heartbeating DB moved to no-backup.
+  tier and is the main reason Kuma's constantly heartbeating DB moved to no-backup.
 - ***arr logs.db / MediaCover / prowlarr Definitions+Sentry**: not diverted — weekly
   cadence already cut them 7×, and five more emptyDir mounts weren't worth the residual.
 

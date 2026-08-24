@@ -29,8 +29,9 @@
 # protects ConfigMap/Secret-only changes (the common case: blocklist/adlist edits, secret
 # rotation), which don't touch deployment.yaml.j2 and so aren't rolled by the controller at
 # apply time at all. Closing this gap means applying the two Deployments from separate
-# manifest files/applies so a template change also goes one instance at a time — future work,
-# see docs/zero-downtime-deploys-plan-2.md.
+# manifest files/applies so a template change also goes one instance at a time — future work.
+# That plan is archived at docs/archive/zero-downtime-deploys-plan-2.md because the redundancy
+# it specified shipped; this separate-manifests item is the unfinished remainder of it.
 - name: Roll the Pi-hole instances one at a time
   tags: [deploy]
   ansible.builtin.include_tasks: roll_one.yml

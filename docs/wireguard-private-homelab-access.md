@@ -106,7 +106,7 @@ error.
   query, so general DNS stays entirely on Mullvad — but that is also the trap: a name you
   **forget** to list emits no local query either. It falls straight through to Mullvad's
   resolver, which won't return a `10.0.0.x` answer, and the browser reports **"Server not
-  found"**. A new or newly-migrated service reaching you as a DNS failure is this, not an
+  found"**. A new or newly migrated service reaching you as a DNS failure is this, not an
   outage — check the file before you debug the homelab.
 - **Linux convenience — split-DNS *(recommended)*.** Keep
   `DNS = 10.0.0.243, local.daniel-hunter.com`. With `systemd-resolved` + `wg-quick`, the
@@ -225,7 +225,7 @@ Pi's LAN-only wg-easy is the only Docker copy left, and it isn't on this path.
 ## Notes
 - You still authenticate everywhere: WireGuard keypair + Authelia one_factor on `.local`.
   Nothing is exposed unauthenticated.
-- The Mullvad `/32` whitelist on the homelab WAF stays as a fallback for now. Once the
+- The Mullvad `/32` whitelist on the homelab WAF stays as a fallback. Once the
   private path is habitual it can be removed (a WAF improvement) — coordinate with the
   homelab operator before doing so.
 - This adds a private path; it changes nothing about the public path's security.

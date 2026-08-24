@@ -120,7 +120,7 @@ only in its own SQLite DB** — which is excluded from Kopia, so a fresh Kuma in
 The SOPS value is now stale, so the `uptime-kuma` scrape target comes up **DOWN (401)** — during the
 recovery, exactly when monitoring matters. After recreating the admin user, mint a new key in
 Kuma (**Settings → API Keys**), `sops ansible/vars/secrets.yml` to set `prometheus_kuma_api_key` to it,
-then redeploy prometheus (`uv run ansible-playbook ansible/deploy.yml --tags prometheus`). The
+then redeploy `prometheus` (`uv run ansible-playbook ansible/deploy.yml --tags prometheus`). The
 Scrape-Targets monitor flags this if you miss it.
 
 ## Notes / gotchas
@@ -143,7 +143,7 @@ Scrape-Targets monitor flags this if you miss it.
   total daniel-server / Uptime-Kuma death.** The whole alert brain (monitor-bridge → Uptime-Kuma →
   Discord) lives on daniel-server, so it cannot page about its own host going down. For that backstop
   to also cover a *uptime-kuma-container* death — not just a host/network outage — it MUST probe a
-  **Uptime-Kuma-served endpoint** (a public Kuma status page, e.g. `https://<kuma-host>/status/<slug>`,
+  **Uptime-Kuma-served endpoint** (a public Kuma status page, for example, `https://<kuma-host>/status/<slug>`,
   or the Kuma login page), **NOT** a generic Traefik-served URL: if the host + Traefik stay up while
   only the Kuma container dies, a generic URL still returns 200 and the backstop never fires — exactly
   when Kuma can no longer evaluate its own monitors. The monitor is deliberately out-of-repo (an

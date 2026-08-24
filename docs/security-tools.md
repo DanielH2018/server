@@ -31,7 +31,7 @@ Rootkits checked: 497    Possible rootkits: 0
 
 **False positives:** rkhunter is noisy after package upgrades — it will warn about changed binary hashes. **Routine upgrades are already handled:** `initial_setup` sets `APT_AUTOGEN=true` in `/etc/default/rkhunter`, so `--propupd` runs from the package-manager hook after every apt install/upgrade, including unattended-upgrades. That's the point — the only file-property changes the weekly scan flags are ones *not* explained by a trusted package event.
 
-So don't reflexively run this after an upgrade. Reset the baseline by hand only after an intentional change apt didn't make (a manually-installed binary, a hand-edited config in a watched path), and only once you've confirmed the warning is yours:
+So don't reflexively run this after an upgrade. Reset the baseline by hand only after an intentional change apt didn't make (a manually installed binary, a hand-edited config in a watched path), and only once you've confirmed the warning is yours:
 
 ```bash
 sudo rkhunter --propupd
@@ -122,7 +122,7 @@ Each result shows the user, process, timestamp, and whether the action succeeded
 
 ## sysstat
 
-**What it does:** Collects system performance data on a schedule (CPU, memory, I/O, network) and stores historical records. Not a security tool directly, but useful for spotting anomalies — e.g. unexpected I/O at 3 AM may indicate something scanning the disk.
+**What it does:** Collects system performance data on a schedule (CPU, memory, I/O, network) and stores historical records. Not a security tool directly, but useful for spotting anomalies — for example, unexpected I/O at 3 AM may indicate something scanning the disk.
 
 **Check historical data:**
 
@@ -233,7 +233,7 @@ systemctl list-timers 'apt-daily*'
 sudo unattended-upgrade --dry-run --debug
 ```
 
-> A lingering `/var/run/reboot-required` (e.g. after a kernel update) is **intentional** — reboots are deferred to the weekly restart cron, not applied automatically.
+> A lingering `/var/run/reboot-required` (for example, after a kernel update) is **intentional** — reboots are deferred to the weekly restart cron, not applied automatically.
 
 ---
 

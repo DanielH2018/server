@@ -25,7 +25,7 @@ registry, so git stays the source of truth.
 
 | Tier | Cadence | What it is | Rotation |
 |------|---------|-----------|----------|
-| `auto` | 180 d | locally-generated push tokens — no external coupling | `rotate --commit`, then redeploy the consumer |
+| `auto` | 180 d | locally generated push tokens — no external coupling | `rotate --commit`, then redeploy the consumer |
 | `assisted` | 365 d | app passwords / API keys / OIDC secrets | app-side step (below) |
 | `external` | 365 d | provider-managed (Cloudflare/Discord/Mullvad/SMTP/LLM) | mint in the provider console |
 | `pinned` | 730 d | **must not be naively swapped** | special procedure (below) |
@@ -37,16 +37,16 @@ its `tier` in the registry (`sync` preserves overrides).
 ## `auto` — automated
 
 `rotate --commit` generates a new 32-char token, writes it via `sops set`, and records the
-date. Then redeploy whatever reads it, e.g. `uv run ansible-playbook ansible/deploy.yml
+date. Then redeploy whatever reads it, for example, `uv run ansible-playbook ansible/deploy.yml
 --tags monitor-bridge`. Uptime Kuma honours the new push token on the next push — no Kuma
 UI step. Because only **coming-due** secrets rotate (due within `ROTATE_LEAD_DAYS` = 8 —
-one weekly-cron interval, so a token rotates the Sunday *before* it goes overdue and the
+one weekly cron interval, so a token rotates the Sunday *before* it goes overdue and the
 daily audit never pages DOWN on a rotation the cron was about to do), runs stay staggered.
 
 ### Auto-rotate contract (the weekly cron changes secrets unattended)
 The `rotate --commit` weekly cron is autonomous and state-changing — its authority, bounded
 (harness-engineering's versioned-contract pattern for a change-producing role):
-- **Scope / exclusions:** only `auto`-tier, locally-generated push tokens with **no external
+- **Scope / exclusions:** only `auto`-tier, locally generated push tokens with **no external
   coupling**, and only those **coming due** within `ROTATE_LEAD_DAYS` (8). `assisted` / `external` /
   `pinned` are **never** touched by the cron — a `pinned` swap loses data (see below).
 - **Mode:** change-producing — writes via `sops set`, commits the registry, and the operator
@@ -63,18 +63,19 @@ The `rotate --commit` weekly cron is autonomous and state-changing — its autho
 General shape: rotate/regenerate the credential **in the app**, `sops set
 ansible/vars/secrets.yml '["<name>"]' '"<new>"'`, update the registry date (`sync` won't,
 since the value already existed — set `last_rotated` by hand or re-run after editing), then
-redeploy the app **and** every consumer (e.g. Homepage, monitor-bridge, configarr). Examples:
+redeploy the app **and** every consumer (for example, Homepage, monitor-bridge, configarr). Examples:
 - `*_api_key` (sonarr/radarr/jellyfin/prowlarr): Settings → General → regenerate API key.
 - **CrowdSec bouncer keys** (`crowdsec_k8s_bouncer_api_key`, the cluster edge's — the only
   bouncer since E7 retired the Docker edge and its `dockertraefik` key) and the agent password
   (`crowdsec_k8s_agent_password`, shared by all four agents). Since slice-6 B2 the single
   LAPI lives in the cluster and registration is DECLARATIVE — the engine's `BOUNCER_KEY_*`
   env, not `cscli`. Rotation is therefore: `sops set` the new value → delete the old
-  registration on the engine (`kubectl -n homelab exec deploy/crowdsec -c crowdsec --
-  cscli bouncers delete k8straefik`; `cscli machines delete <name>` for the
+  registration on the engine
+  (`kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli bouncers delete k8straefik`;
+  `cscli machines delete <name>` for the
   agent password) → redeploy `--tags crowdsec` on daniel-box → redeploy the consumers
   (`--tags traefik`/`--tags authelia` on daniel-box for the sidecars; the node-agent
-  DaemonSet pods re-register themselves on the crowdsec redeploy). The delete is
+  DaemonSet pods re-register themselves on the `crowdsec` redeploy). The delete is
   required because re-registration never
   UPDATES an existing key. **Do NOT just `sops set`**: the plugin hot-reloads the new key
   while the LAPI still holds the old hash, and it fails OPEN — a silent WAF bypass. The

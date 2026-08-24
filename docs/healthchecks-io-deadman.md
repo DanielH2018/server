@@ -26,7 +26,7 @@ and fires false alarms.
 
 ## Watching the spine itself
 
-The five job checks above all answer "did this job run and succeed". `uptime-kuma-alive`
+The five job checks above all answer "did this job run and succeed." `uptime-kuma-alive`
 answers a different question: is the thing every alert terminates in still working.
 
 The gap it closes: `longhorn-backup-health` and `daniel-box-disk-health` ping hc-ping.com
@@ -55,7 +55,7 @@ name internal infrastructure, and one sends no body at all:
 
 | Check | Body sent off-site | Why |
 |---|---|---|
-| `longhorn-backup-health` | full message | Names namespaces/PVCs, and the backup-target condition can carry the B2 bucket. **Kept deliberately** — this is the one whose detail makes a 3am page actionable. Drop the `--data-raw` argument to send status only. |
+| `longhorn-backup-health` | full message | Names namespaces/PVCs, and the backup-target condition can carry the B2 bucket. **Kept deliberately** — this is the one whose detail makes a 3 AM page actionable. Drop the `--data-raw` argument to send status only. |
 | `daniel-box-disk-health` | full message | A disk percentage. Nothing to withhold. |
 | `etcd-snapshot-offbox` | none | Status only. Its failure message can carry the R2 bucket name and k3s's own error text; the bucket is the same one every Longhorn backup lives in, so nothing about it goes off-site. The detail is in Kuma. |
 | `manifest-prune-check` | generic | Its message names live IngressRoute/Middleware objects — internal service and hostname fragments. |
@@ -158,7 +158,7 @@ setting ages the oldest out — but it is not free either: it is a real etcd rea
 so do not loop it.
 
 Forcing `registry-gc` is not free: it takes the registry offline while the GC job runs, so
-nothing in the cluster can pull a locally-built image until it scales back up. Run it when no
+nothing in the cluster can pull a locally built image until it scales back up. Run it when no
 build is in flight (it will skip and report `up` if one is), or just wait for Sunday.
 
 A failed ping is logged locally (`logger -t <script>`, or the job's stderr) and nowhere else,
