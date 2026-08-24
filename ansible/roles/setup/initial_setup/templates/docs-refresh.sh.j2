@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# Regenerate docs/reference/, rebuild the MkDocs site, commit and push any change.
+#
+# THE LOCK IS THE POINT. This mutates the primary git tree, which gitops-deploy.service
+# rewrites with `git pull` on a 30-minute timer and which every deploy renders its
+# templates from. /var/lock/server-git-tree.lock is what makes those mutually exclusive.
+# Without it a `git pull` mid-run would leave this committing a tree it never read.
+#
+# IT DOES NOT PULL. gitops-deploy already fast-forwards this checkout, and it CI-gates the
+# range first: a commit whose master CI is red or pending is refused, and a failed health
+# gate parks the SHA in hold_sha. A bare pull here would take the lock correctly and still
+# skip all of that, fast-forwarding onto a commit the tick would have refused -- and the
+# next deploy renders templates from that tree. The tick runs 48 times a day to this
+# script's twice, so reading whatever it has already admitted costs at most one interval.
+#
+# WHY IT COMMITS. The generated pages are reviewable in a diff and survive the pod. The
+# alternative -- rendering at serve time -- is always current and completely invisible: a
+# generator bug would reach the page with nothing to catch it.
+#
+# IT PUSHES DIRECTLY TO MASTER. Inherited rather than decided: secret-rotate.sh already
+# does this, so the path and its permissions are proven. It bypasses PR review, which is
+# acceptable only because every byte it commits was produced by a generator whose output
+# is itself tested.
+#
+# NO DEADMAN. Deliberate, and the same call the infra-map cron makes. Every generated page
+# carries the timestamp its content was last built from, and the served site carries
+# build-info.json saying when this script last ran -- so a cron that stops working shows up
+# on the page rather than needing its own alert channel.
+set -uo pipefail
+
+REPO="/home/{{ sys_user }}/server"
+UV="/home/{{ sys_user }}/.local/bin/uv"
+SITE_DIR="{{ docs_host_site_dir | default('/home/' + sys_user + '/docs-site') }}"
+
+alert() { logger -t docs-refresh "$1"; }
+
+cd "$REPO" || { alert "docs-refresh: $REPO missing"; exit 1; }
+
+# fd 9 held for the script's life. -w 2700 matches secret-rotate: longer than a full
+# gitops deploy plus rollback, so a legitimately busy tree waits rather than skipping.
+exec 9>/var/lock/server-git-tree.lock
+flock -w 2700 9 || { alert "docs-refresh: git-tree lock held >45m; skipped"; exit 1; }
+
+# A dirty tree means a human or another job is mid-edit. Committing on top of that would
+# mix their work into a docs commit. Build the site anyway -- serving current docs costs
+# nothing and is the useful half -- but change no files.
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  alert "docs-refresh: working tree dirty; rebuilt site only, no regeneration"
+  "$UV" run --frozen python scripts/build_docs.py --skip-generators --site-dir "$SITE_DIR" \
+    || alert "docs-refresh: site build failed on dirty tree"
+  exit 0
+fi
+
+# --frozen: install from the committed uv.lock, never rewrite it on the host. A lock
+# rewrite here would show up as an unrelated dirty file on the next run.
+if ! "$UV" run --frozen python scripts/build_docs.py --site-dir "$SITE_DIR"; then
+  alert "docs-refresh: one or more generators failed (site was still built)"
+  # Deliberately NOT an exit. build_docs already skipped the failing generator and built
+  # the site from what succeeded, so the pages that did regenerate are worth committing.
+fi
+
+# Only the generated trees. A generator that wrote elsewhere would otherwise be committed
+# silently by a cron, which is exactly the class of change that must go through a PR.
+git add docs/reference docs/assets/generated
+
+if git diff --cached --quiet; then
+  logger -t docs-refresh "no change"
+  exit 0
+fi
+
+# Hooks run. Unlike secret-rotate, this commit has no live-but-uncommitted state to
+# strand: if a hook rejects it, nothing has been deployed and the right outcome is a clean
+# abort.
+#
+# A hook that can fail on GENERATED content wedges this cron permanently -- it would abort,
+# alert and exit 1 on every run until someone fixed the generator. Two already tried:
+# end-of-file-fixer rewrote both generated files until the generators were fixed to emit
+# exactly one trailing newline. Vale is scoped to exclude docs/reference/ for the same
+# reason. Before adding any hook that matches a path staged above, check it cannot fail on
+# generator output.
+if ! git commit -m "docs: refresh generated reference pages" >/dev/null 2>&1; then
+  git reset >/dev/null 2>&1
+  alert "docs-refresh: commit failed (hook rejection?); unstaged, no change pushed"
+  exit 1
+fi
+
+if git push >/dev/null 2>&1; then
+  logger -t docs-refresh "regenerated, committed and pushed"
+else
+  alert "docs-refresh: committed but git push FAILED (commit is local)"
+  exit 1
+fi
