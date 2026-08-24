@@ -191,6 +191,50 @@ def broad_remediation(broad_deploy: bool, broad_setup: bool) -> str:
     return " and ".join(cmds)
 
 
+def k8s_remediation(roles: set[str], declared: set[str]) -> str:
+    """The redeploy instruction for a set of changed k8s roles, given this host's declared set.
+
+    `_ACTIVE_K8S` matches every `ansible/roles/k8s/<role>/` path, but only a role with a
+    `containers_list` entry has a deploy tag. deploy.yml includes k8s roles per entry with
+    `tags: [<entry name>]`, so `--tags <role>` for a role with no entry matches nothing and
+    ANSIBLE EXITS 0 — the operator runs the prescribed command, sees green, and the change is
+    never applied. `scripts/deploy_tags.py` catches it downstream with exit 2, but the alert
+    itself was pointing at a command that cannot work.
+
+    Eight roles are in that position today (manifests, rollout-drain, seed-volume,
+    volume-snapshot, volume-revert, image-builder, longhorn-api, cronjob-gate) and they are the
+    shared plane: `manifests` is the apply+rollout path for EVERY workload and `volume-revert` is
+    the auto-deploy rollback path. They are not rare, either — 46 commits since 2026-06-01 touch
+    only roles in that set.
+
+    DECIDED: name a full deploy for the shared roles instead of routing them to `cs.broad`.
+    Broad routing was the review's proposed fix and it costs more than it fixes: main() returns on
+    `cs.broad` WITHOUT fast-forwarding, so every such commit would park the whole local..origin
+    range — holding back other sessions' commits and every k8s image-bump auto-deploy in the same
+    range until an operator ran a full deploy by hand. This keeps the ff-merge and corrects only
+    the instruction, which is where the defect actually was.
+    """
+    shared = sorted(roles - declared)
+    deployable = sorted(roles & declared)
+    if not shared:
+        return (
+            "Redeploy by hand: `ansible-playbook ansible/deploy.yml --tags "
+            f"{','.join(deployable)}`."
+        )
+    lead = (
+        f"`{', '.join(shared)}` " + ("has" if len(shared) == 1 else "have") + " no "
+        "`containers_list` entry, so **`--tags` matches nothing and Ansible exits 0** — a "
+        "tag-scoped redeploy would report success having applied nothing. Run a full deploy: "
+        "`ansible-playbook ansible/deploy.yml`."
+    )
+    if deployable:
+        lead += (
+            " The rest can be scoped: `ansible-playbook ansible/deploy.yml --tags "
+            f"{','.join(deployable)}`."
+        )
+    return lead
+
+
 def deferred_service_alerts(
     cs: ChangeSet, deployed: set[str]
 ) -> tuple[set[str], set[str]]:

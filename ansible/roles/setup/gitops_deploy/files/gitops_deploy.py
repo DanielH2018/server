@@ -45,6 +45,7 @@ from deploy_logic import (  # noqa: E402
     health_decision,
     is_diverged,
     is_image_only_diff,
+    k8s_remediation,
     k8s_role_paths,
     next_action,
     reroute_k8s_services,
@@ -479,7 +480,12 @@ def alert_secrets_deferred(origin: str, cs: ChangeSet) -> None:
     )
 
 
-def alert_deferred(origin: str, deployed: set[str], cs: ChangeSet) -> None:
+def alert_deferred(
+    origin: str,
+    deployed: set[str],
+    cs: ChangeSet,
+    declared_k8s: set[str] | None = None,
+) -> None:
     """Fire the tasks/, meta/deps.yml, and k8s-role defer-and-alert for changes NOT redeployed
     this tick.
 
@@ -488,7 +494,15 @@ def alert_deferred(origin: str, deployed: set[str], cs: ChangeSet) -> None:
     leaves svcB's deploy-graph change ff-merged and unapplied. The pending remainder is the pure
     `deferred_service_alerts`; this is its I/O shell (per-SHA dedupe marker + deliver). Each channel
     alerts at most once per origin SHA; its marker advances on DETECTION (deliver() and the pending
-    queue own delivery + retry), so a transient webhook blip is redelivered, not silently dropped."""
+    queue own delivery + retry), so a transient webhook blip is redelivered, not silently dropped.
+
+    `declared_k8s` is this host's `platform: k8s` containers_list entries, used to decide whether
+    the k8s alert can name a `--tags` redeploy at all (see k8s_remediation). It defaults to None
+    for the caller that has not read the inventory; None is treated as the EMPTY set, which makes
+    every changed role read as untaggable and prescribes a full deploy. That is the fail-safe
+    direction: a full deploy is slower than necessary but always applies the change, whereas a
+    `--tags` line for a role with no entry exits 0 having applied nothing."""
+    declared_k8s = declared_k8s or set()
     pending_tasks, pending_meta = deferred_service_alerts(cs, deployed)
     if pending_tasks:
         alert_once(
@@ -520,8 +534,8 @@ def alert_deferred(origin: str, deployed: set[str], cs: ChangeSet) -> None:
             origin,
             f"⚠️ gitops-deploy: k8s role(s) `{', '.join(sorted(cs.k8s))}` changed in "
             f"`{origin[:8]}` — fast-forwarded but **not applied** (this deployer only "
-            f"auto-deploys Docker-platform services; k8s roles are defer-and-alert). Redeploy by "
-            f"hand: `ansible-playbook ansible/deploy.yml --tags <svc>`.",
+            f"auto-deploys Docker-platform services; k8s roles are defer-and-alert). "
+            + k8s_remediation(cs.k8s, declared_k8s),
         )
 
 
@@ -1046,7 +1060,7 @@ def main() -> int:
         # A promoted k8s service is image-bump-only, so it is never the consumer of a secret that
         # rode along in the same tick. Without this the rotated value is ff-merged and forgotten.
         alert_secrets_deferred(origin, cs)
-        alert_deferred(origin, cs.k8s_deploy, cs)
+        alert_deferred(origin, cs.k8s_deploy, cs, k8s_services)
         return 0
     if not cs.services:
         run(["git", "merge", "--ff-only", origin])  # docs-only etc.
@@ -1058,7 +1072,7 @@ def main() -> int:
         # tasks/ and meta/deps.yml changes aren't auto-deployed but DO change what a deploy does,
         # so they must not sit silently ff-merged. Nothing was deployed this tick (deployed=set()),
         # so the full sets are flagged. Same helper runs on the deploy path for a combined push.
-        alert_deferred(origin, set(), cs)
+        alert_deferred(origin, set(), cs, k8s_services)
         return 0
 
     run(["git", "merge", "--ff-only", origin])
@@ -1122,7 +1136,7 @@ def main() -> int:
         # the one(s) just deployed is ff-merged but unapplied — flag that remainder (a bundled
         # change to a DEPLOYED service rode its own --tags redeploy, so it's excluded). Only on a
         # clean deploy: a rollback below git-resets the whole commit, reverting those changes too.
-        alert_deferred(origin, cs.services, cs)
+        alert_deferred(origin, cs.services, cs, k8s_services)
         return 0
     if time.time() >= gate_deadline:
         log(f"health-gate budget ({RUN_BUDGET_S}s) exhausted before gating completed")

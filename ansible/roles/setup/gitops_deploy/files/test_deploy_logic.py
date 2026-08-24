@@ -21,6 +21,7 @@ from deploy_logic import (
     services_from_changed_paths,
     next_action,
     is_image_only_diff,
+    k8s_remediation,
     split_k8s_auto_deploy,
     ci_verdict,
     declared_denylist,
@@ -854,3 +855,62 @@ def test_split_k8s_claim_cap_of_zero_leaves_the_old_behaviour():
         paths, claim_services=("radarr", "sonarr"), max_claim_services_per_tick=0
     )
     assert cs.k8s_deploy == {"radarr", "sonarr"}
+
+
+def _prescribed_tags(msg: str) -> set[str]:
+    """Every tag the remediation message actually tells an operator to pass to --tags."""
+    out: set[str] = set()
+    for chunk in msg.split("--tags ")[1:]:
+        out.update(t for t in chunk.split("`")[0].strip().split(",") if t)
+    return out
+
+
+def test_k8s_remediation_never_prescribes_a_tag_that_deploys_nothing():
+    """The alert must not name `--tags <role>` for a role with no containers_list entry.
+
+    deploy.yml includes k8s roles per containers_list entry with tags: [<entry name>], so a tag
+    matching no entry selects nothing and Ansible EXITS 0 — the operator runs the prescribed
+    command, sees green, and the change is never applied. Eight roles are in that position and
+    they are the shared plane (manifests is the apply+rollout path for every workload;
+    volume-revert is the auto-deploy rollback path).
+
+    Cross-checked against scripts/deploy_tags.known_tags(), the same source ./scripts/deploy.sh
+    validates against, so the alert and the wrapper cannot drift apart.
+    """
+    import sys
+
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[5] / "scripts"))
+    import deploy_tags
+
+    declared = deploy_tags.known_tags()
+    roles = {p.name for p in _K8S_ROLES_DIR.iterdir() if p.is_dir()}
+    shared = roles - declared
+    assert shared, (
+        "expected some roles/k8s/ dirs to have no deploy tag; if this is now empty the "
+        "remediation split is dead code and can be removed"
+    )
+
+    # An all-shared set must prescribe a full deploy and prescribe no tags at all. Asserting on
+    # PRESCRIBED tags rather than the literal string "--tags", which also appears in the message's
+    # own explanation of why a tag-scoped redeploy would not work.
+    msg = k8s_remediation(shared, declared)
+    assert _prescribed_tags(msg) == set(), (
+        "k8s_remediation prescribed a --tags redeploy for roles with no containers_list "
+        "entry: %s" % sorted(shared)
+    )
+    assert "`ansible-playbook ansible/deploy.yml`" in msg
+
+    # A declared role still gets the cheap scoped form.
+    one = sorted(roles & declared)[:1]
+    if one:
+        scoped = k8s_remediation(set(one), declared)
+        assert "--tags %s" % one[0] in scoped
+
+    # Every tag the mixed form prescribes must itself be deployable, and the shared roles must
+    # still get the full-deploy instruction alongside.
+    mixed = k8s_remediation(shared | set(one), declared)
+    assert _prescribed_tags(mixed) <= declared, (
+        "the mixed form prescribed undeployable tags: %s"
+        % sorted(_prescribed_tags(mixed) - declared)
+    )
+    assert "`ansible-playbook ansible/deploy.yml`" in mixed
