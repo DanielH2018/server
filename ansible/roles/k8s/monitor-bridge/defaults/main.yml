@@ -15,6 +15,9 @@ monitor_bridge_k8s_image: python:3.14-alpine
 monitor_bridge_modules:
   - check.py
   - bridge_parsing.py
+  - verdicts_cluster.py
+  - verdicts_host.py
+  - verdicts_service.py
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Observability: this IS the alert pipeline — every threshold check in the fleet pushes through

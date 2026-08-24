@@ -31,8 +31,34 @@ from bridge_parsing import (
     describe_fetch_failure,
     endpoint_label,
     parse_duration,
-    parse_rfc3339,
     sanitize,
+)
+from verdicts_cluster import (
+    extended_resource_verdict,
+    k8s_workloads_verdict,
+    ksm_resource_label,
+    targets_verdict,
+)
+from verdicts_host import (
+    pi_pressure,
+    scrutiny_device_wear,
+    scrutiny_freshness,
+    scrutiny_health,
+    scrutiny_wear_verdict,
+    ups_health,
+)
+from verdicts_service import (
+    _parse_behind,
+    discord_webhook_ok,
+    gitops_alive,
+    ha_ban_verdict,
+    ha_heartbeat_fresh,
+    indexers_down,
+    loki_ingestion_fresh,
+    n8n_update_streaks,
+    n8n_verdict,
+    promtail_dropped,
+    queue_warnings,
 )
 
 
@@ -1068,32 +1094,6 @@ def check_prometheus():
     return True, "Prometheus reachable"
 
 
-def targets_verdict(vec, min_targets):
-    """Pure: (ok, msg) from an `up` vector, failing closed when too few targets are visible.
-
-    THE HOLE THIS CLOSES, opened by B5. Before the repoint an empty `up` could only mean the
-    Prometheus being queried was down, and the PROM_DEPENDENT gate suppressed this check before it
-    ran. Pointed at the cluster copy those two facts come apart: the gate probes the CLUSTER, which
-    is up and answering, while `up{origin="daniel-server"}` goes empty the moment daniel-server's
-    Prometheus stops remote-writing. `len(down) == 0` is then trivially true and this reports
-    "all 0 targets up" — green, and blind to an entire estate having vanished.
-
-    Same fail-closed shape as the k8s workload floor: count first, and treat "fewer series than
-    could possibly be right" as UNKNOWN rather than healthy. This check is also the sentinel for
-    the other estate-pinned checks — restarts/oom/cpu legitimately return empty when nothing is
-    wrong, so they cannot tell "quiet" from "gone", and this one can.
-    """
-    if len(vec) < min_targets:
-        return False, (
-            "only %d scrape targets visible, below the floor of %d — the metrics estate is "
-            "missing, so target health is UNKNOWN, not OK" % (len(vec), min_targets)
-        )
-    down = sorted({m.get("job") or m.get("instance") or "?" for m, v in vec if v == 0})
-    if down:
-        return False, "%d target(s) down: %s" % (len(down), ", ".join(down))
-    return True, "all %d targets up" % len(vec)
-
-
 def check_targets_down():
     """Any Prometheus scrape target reporting up==0 (monitoring going blind)."""
     return targets_verdict(prom_vector("up%s" % origin_sel()), TARGETS_MIN)
@@ -1225,116 +1225,6 @@ def check_traefik_latency():
     )
 
 
-def n8n_update_streaks(workflows_json, executions_json, state, now, window_s):
-    """Advance per-workflow consecutive-failure streaks across check cycles.
-
-    n8n doesn't record successful executions (EXECUTIONS_DATA_SAVE_ON_SUCCESS=none), so a
-    streak can't be read from one snapshot — it's accumulated here. Per active ("Prod")
-    workflow we find its most-recent error execution; the streak advances by one each time
-    that id is NEW (a fresh failure since last cycle, so a single lingering failure isn't
-    double-counted across cycles), and resets to 0 once the most-recent error ages past
-    `window_s` (recovered / went idle) or no error is on record. `state` is a mutable
-    {workflow_id: {"last_id", "streak"}} dict persisted across cycles. Returns
-    {workflow_name: streak} for streak >= 1. Pure given (state, now) — unit-tested by
-    driving cycles.
-    """
-    active = {
-        w["id"]: (w.get("name") or w["id"])
-        for w in workflows_json.get("data", [])
-        if w.get("active")
-    }
-    latest = {}
-    for ex in executions_json.get("data", []):
-        wid = ex.get("workflowId")
-        if wid not in active:
-            continue
-        ts = ex.get("stoppedAt") or ex.get("startedAt")
-        if not ts:
-            continue
-        cur = latest.get(wid)
-        if cur is None or ts > cur[1]:  # RFC3339 'Z' timestamps sort lexicographically
-            latest[wid] = (ex.get("id"), ts)
-    for wid in list(state):  # forget workflows that are no longer active
-        if wid not in active:
-            del state[wid]
-    cutoff = now - timedelta(seconds=window_s)
-    result = {}
-    for wid, name in active.items():
-        st = state.setdefault(wid, {"last_id": None, "streak": 0})
-        info = latest.get(wid)
-        if info is None:
-            st["last_id"], st["streak"] = None, 0
-            continue
-        eid, ts = info
-        dt = parse_rfc3339(ts)
-        if (
-            dt.tzinfo is None
-        ):  # n8n emits UTC 'Z'; assume UTC if a naive ts slips through
-            dt = dt.replace(tzinfo=timezone.utc)
-        if dt < cutoff:
-            st["last_id"], st["streak"] = None, 0
-            continue
-        if eid != st["last_id"]:
-            st["streak"] += 1
-            st["last_id"] = eid
-        result[name] = st["streak"]
-    return result
-
-
-def n8n_verdict(streaks, consecutive_max, systemic_streak, systemic_max):
-    """Pure: turn per-workflow failure streaks into an up/down verdict + message.
-
-    Down if any single workflow has failed >= consecutive_max times in a row, OR if
-    >= systemic_max workflows are each failing >= systemic_streak times — the n8n-wide catch
-    that pages promptly as ONE alert (a broken n8n) instead of waiting for each workflow to
-    reach consecutive_max, and instead of a per-workflow flood.
-    """
-    if not streaks:
-        return True, "no active-workflow failures"
-    ranked = sorted(streaks.items(), key=lambda nc: (-nc[1], nc[0]))
-    systemic = [(n, c) for n, c in ranked if c >= systemic_streak]
-    if len(systemic) >= systemic_max:
-        names = ", ".join("%s (%d)" % (sanitize(n), c) for n, c in systemic[:5])
-        return False, "n8n systemic: %d workflows failing repeatedly (%s)" % (
-            len(systemic),
-            names,
-        )
-    broken = [(n, c) for n, c in ranked if c >= consecutive_max]
-    if broken:
-        desc = ", ".join("%s (%d)" % (sanitize(n), c) for n, c in broken)
-        return False, "n8n: %d active workflow(s) failed %d+ consecutive: %s" % (
-            len(broken),
-            consecutive_max,
-            desc,
-        )
-    return True, "%d active workflow(s) failing (< %d consecutive)" % (
-        len(ranked),
-        consecutive_max,
-    )
-
-
-def gitops_alive(age_s, max_age_s):
-    """Pure: is the deployer's last completed tick recent enough? Returns (ok, msg)."""
-    if age_s <= max_age_s:
-        return True, "deployer ran %.0fm ago" % (age_s / 60)
-    return False, "deployer last ran %.0fm ago (> %.0fm)" % (age_s / 60, max_age_s / 60)
-
-
-def _parse_behind(marker):
-    """Split the deployer's "<origin_sha> <unix_ts_first_seen>" marker. Returns (sha, since) with
-    since=None when absent or unparseable — an unreadable marker must read as "not behind" rather
-    than page forever on garbage."""
-    if not marker:
-        return "", None
-    parts = marker.split()
-    if len(parts) != 2:
-        return "", None
-    try:
-        return parts[0], float(parts[1])
-    except ValueError:
-        return "", None
-
-
 def gitops_status(
     hold_sha,
     diverged_sha=None,
@@ -1410,39 +1300,6 @@ def check_n8n():
     )
 
 
-def queue_warnings(queue_json, app_name):
-    """Pure: (app_name, title, reason) for each queue item needing an operator's eyes.
-
-    Fed a sonarr/radarr /api/v3/queue payload. trackedDownloadStatus == "warning" is the
-    2026-07-01 incident's signal — the *arr blocked the import itself but only flagged the
-    queue item, so it kept seeding for a day with nothing paging. "error" is the harder
-    sibling status (upstream enum: ok/warning/error) — at least as actionable, previously
-    skipped. trackedDownloadState == "importBlocked" is the harder-blocked sibling state,
-    "importFailed" its attempted-and-failed counterpart (both from the upstream
-    TrackedDownloadState enum); "importPending" WITH statusMessages covers the case where
-    the block reason shows up under the pending state instead. Plain "importPending" with
-    no messages is the ordinary just-finished-download queue waiting its turn — not a
-    problem, so it's left alone.
-    """
-    offenders = []
-    for item in queue_json.get("records", []):
-        status = item.get("trackedDownloadStatus")
-        state = item.get("trackedDownloadState")
-        messages = item.get("statusMessages") or []
-        flagged = (
-            status in ("warning", "error")
-            or state in ("importBlocked", "importFailed")
-            or (state == "importPending" and messages)
-        )
-        if not flagged:
-            continue
-        title = item.get("title") or "?"
-        reasons = [m for sm in messages for m in sm.get("messages", [])]
-        reason = "; ".join(reasons) or status or state or "warning"
-        offenders.append((app_name, title, reason))
-    return offenders
-
-
 def check_arr_queue():
     """Sonarr/Radarr queue warning/blocked-import watchdog (see queue_warnings).
 
@@ -1482,40 +1339,6 @@ def check_arr_queue():
         )
         return False, "%d queue item(s) need review: %s" % (len(offenders), desc)
     return True, "queue clean (%s)" % ", ".join(a[0] for a in configured)
-
-
-def indexers_down(status_json, name_by_id, now, min_down_min, ignore=None):
-    """Pure: (name, minutes_down) for each Prowlarr indexer failing >= min_down_min minutes.
-
-    Fed /api/v1/indexerstatus (a list of {indexerId, initialFailure, disabledTill, ...}) and an
-    indexerId->name map from /api/v1/indexer. An indexer is listed in indexerstatus only while
-    Prowlarr has it disabled due to failures; initialFailure is when the CURRENT failure run
-    started, so (now - initialFailure) is the outage duration — a flap that recovers before the
-    threshold drops out of the list and never qualifies. A null/absent/unparseable initialFailure
-    is skipped (treated as just-started) rather than crashing the whole check. `ignore` is an
-    iterable of indexer names (matched case-insensitively) that are never flagged — for
-    chronically-flaky public trackers (see PROWLARR_INDEXER_IGNORE). Sorted worst-first so the
-    longest outage leads the alert msg.
-    """
-    cutoff_s = min_down_min * 60
-    ignored = {n.strip().lower() for n in (ignore or ()) if n.strip()}
-    offenders = []
-    for s in status_json or []:
-        init = s.get("initialFailure")
-        if not init:
-            continue
-        try:
-            age_s = (now - parse_rfc3339(init)).total_seconds()
-        except ValueError, TypeError:
-            continue
-        if age_s >= cutoff_s:
-            iid = s.get("indexerId")
-            name = name_by_id.get(iid) or "indexer %s" % iid
-            if name.strip().lower() in ignored:
-                continue
-            offenders.append((name, age_s / 60.0))
-    offenders.sort(key=lambda nm: -nm[1])
-    return offenders
 
 
 def check_prowlarr_indexers():
@@ -1582,123 +1405,6 @@ def check_gitops_status():
     )
 
 
-def scrutiny_freshness(summary, max_age_h, now=None):
-    """`summary` is the data.summary dict of scrutiny's /api/summary."""
-    now = now or datetime.now(timezone.utc)
-    stale, n = [], 0
-    for wwn, entry in (summary or {}).items():
-        dev = entry.get("device") or {}
-        if dev.get("archived"):
-            continue
-        n += 1
-        name = dev.get("device_name") or wwn
-        cdate = (entry.get("smart") or {}).get("collector_date")
-        if not cdate:
-            stale.append("%s (no SMART data)" % name)
-            continue
-        age_h = (now - parse_rfc3339(cdate)).total_seconds() / 3600
-        if age_h > max_age_h:
-            stale.append("%s (last report %.1fh ago)" % (name, age_h))
-    if not n:
-        return False, "scrutiny reports no devices (collector never ran?)"
-    if stale:
-        return False, "stale SMART data: " + ", ".join(stale)
-    return True, "%d device(s) reported within %gh" % (n, max_age_h)
-
-
-def _scrutiny_status_desc(status):
-    """Human-readable reason for a non-zero Scrutiny device_status (a bitwise enum)."""
-    if not isinstance(status, int):
-        return "device_status %s" % status
-    reasons = []
-    if status & 1:
-        reasons.append("SMART self-assessment FAILED")
-    if status & 2:
-        reasons.append("Scrutiny attribute threshold breached")
-    return ", ".join(reasons) or ("device_status %s" % status)
-
-
-def scrutiny_health(summary, temp_max=0):
-    """Pure: any non-archived device reporting a drive failure or over-temp? (ok, msg).
-
-    `summary` is scrutiny's /api/summary data.summary dict. device_status is 0 when the drive
-    passes both SMART's own self-assessment AND Scrutiny's attribute thresholds, non-zero on a
-    failure — the actual drive-failure signal the freshness check (which only proves the collector
-    still reports) can't see. A missing device_status is treated as unknown -> ok (don't false-page
-    on an API that omits the field). temp_max > 0 adds a temperature ceiling (°C); 0 disables it.
-    """
-    failing, hot = [], []
-    for wwn, entry in (summary or {}).items():
-        dev = entry.get("device") or {}
-        if dev.get("archived"):
-            continue
-        name = dev.get("device_name") or wwn
-        status = dev.get("device_status")
-        if status not in (0, None):
-            failing.append("%s (%s)" % (name, _scrutiny_status_desc(status)))
-        if temp_max:
-            temp = (entry.get("smart") or {}).get("temp")
-            if temp is not None and temp > temp_max:
-                hot.append("%s (%g°C > %g°C)" % (name, temp, temp_max))
-    problems = failing + hot
-    if problems:
-        return False, "SMART health: " + ", ".join(problems)
-    return True, "SMART health ok"
-
-
-def scrutiny_device_wear(details):
-    """Pure: one device's `percentage_used`, or None where the device does not report it.
-
-    `details` is the parsed /api/device/<wwn>/details body. `smart_results` is a history array,
-    newest first, so only [0] is read. None is not a fault: `percentage_used` is an NVMe attribute,
-    so a SATA disk added later legitimately has none and must not page.
-    """
-    results = ((details or {}).get("data") or {}).get("smart_results") or []
-    if not results:
-        return None
-    attrs = (results[0] or {}).get("attrs") or {}
-    entry = attrs.get("percentage_used")
-    if not isinstance(entry, dict):
-        return None
-    value = entry.get("value")
-    return value if isinstance(value, (int, float)) else None
-
-
-def scrutiny_wear_verdict(devices, wear_max):
-    """Pure: (ok, msg) for NVMe endurance. `devices` is a list of (label, percentage_used|None).
-
-    A list rather than a dict because both live drives report `device_name` "nvme0" — one per
-    host — so keying by name would collapse them into one entry.
-
-    Unreadable wear reports as INERT and names the drives it is not watching, the shape
-    `extended_resource_verdict` uses: a check that cannot read its input must not answer as though
-    it did, in either direction. DOWN-on-missing-field would page for every non-NVMe disk.
-    """
-    if not wear_max:
-        return True, "NVMe wear check disabled"
-    watched = [(label, used) for label, used in devices if used is not None]
-    unwatched = [label for label, used in devices if used is None]
-    if not watched:
-        return True, (
-            "NVMe wear check INERT: no device reports percentage_used; %s unwatched"
-            % (", ".join(unwatched) or "no devices")
-        )
-    worn = [
-        "%s (%g%% used > %g%%)" % (label, used, wear_max)
-        for label, used in watched
-        if used > wear_max
-    ]
-    if worn:
-        return False, "NVMe wear: " + ", ".join(worn)
-    msg = "NVMe wear ok (max %g%% used of %g%%)" % (
-        max(used for _, used in watched),
-        wear_max,
-    )
-    if unwatched:
-        msg += "; no percentage_used from %s (unwatched)" % ", ".join(unwatched)
-    return True, msg
-
-
 def scrutiny_wear_devices(summary):
     """One /api/device/<wwn>/details fetch per non-archived device.
 
@@ -1741,38 +1447,6 @@ def check_scrutiny():
     if not wear_ok:
         return False, wear_msg
     return True, "%s; %s; %s" % (fresh_msg, health_msg, wear_msg)
-
-
-def ups_health(charge_pct, runtime_s, replace_battery, charge_min_pct, runtime_min_s):
-    """Pure: is the UPS battery healthy given charge (%), estimated runtime (s), and the replace-
-    battery verdict (0/1)? (ok, msg).
-
-    Any value may be None (that metric absent) — only present arms are judged, and the caller handles
-    the all-absent / partial-absence cases. A low charge means an active deep discharge on battery; a
-    low runtime means an aged battery whose full-charge runway has decayed OR a discharge nearing
-    shutdown; replace_battery>0 is the UPS's OWN self-test verdict (NUT RB flag), which can trip while
-    charge/runtime still read fine — the earliest replace-the-battery signal. Strict `<`, so a value
-    exactly at the floor is still ok.
-    """
-    problems = []
-    if charge_pct is not None and charge_pct < charge_min_pct:
-        problems.append("battery %.0f%% (< %.0f%%)" % (charge_pct, charge_min_pct))
-    if runtime_s is not None and runtime_s < runtime_min_s:
-        problems.append(
-            "runtime %.1fm (< %.1fm)" % (runtime_s / 60.0, runtime_min_s / 60.0)
-        )
-    if replace_battery is not None and replace_battery > 0.5:
-        problems.append("replace-battery (UPS self-test / RB flag)")
-    if problems:
-        return False, "; ".join(problems)
-    parts = []
-    if charge_pct is not None:
-        parts.append("battery %.0f%%" % charge_pct)
-    if runtime_s is not None:
-        parts.append("runtime %.1fm" % (runtime_s / 60.0))
-    if replace_battery is not None:
-        parts.append("self-test ok")
-    return True, ", ".join(parts)
 
 
 # Per-check consecutive-down count (check_ups/check_ha_heartbeat/check_discord/
@@ -1881,48 +1555,6 @@ def check_ups():
     return ok, msg
 
 
-def pi_pressure(load_json, mem_json, fs_json, load_max, mem_min_mb, disk_max_pct):
-    """Pure: load per core, available-memory floor, or a full filesystem on the Pi.
-
-    Fed glances /api/4/load, /api/4/mem and /api/4/fs payloads. load5 (not load1)
-    matches the 5-min poll interval and rides out single-probe spikes; `available`
-    (not `free`) is what the kernel can actually reclaim — the box thrashes when THAT
-    runs out. The fs list is glances' *container* view: every entry is a bind-mount
-    path, but they're all backed by the SD card device with the HOST usage percent —
-    so filesystems are deduped by device_name (a filling SD card is the classic slow
-    Pi death the server-only Root Disk check can't see). Missing fields and an empty
-    fs list alert rather than silently passing (a glances plugin regression must
-    surface, same principle as the other checks' unreachable-source handling).
-    """
-    cores = load_json.get("cpucore") or 0
-    load5 = load_json.get("min5")
-    avail = mem_json.get("available")
-    devices = {}
-    for fs in fs_json or []:
-        dev, pct = fs.get("device_name"), fs.get("percent")
-        if dev and pct is not None:
-            devices[dev] = max(pct, devices.get(dev, 0.0))
-    if not cores or load5 is None or avail is None or not devices:
-        return False, "glances payload missing load/mem/fs fields"
-    per_core = load5 / cores
-    avail_mb = avail / 1048576.0
-    problems = []
-    if per_core > load_max:
-        problems.append("load5 %.2f/core (> %.2f)" % (per_core, load_max))
-    if avail_mb < mem_min_mb:
-        problems.append("mem available %.0fMB (< %.0fMB)" % (avail_mb, mem_min_mb))
-    for dev, pct in sorted(devices.items(), key=lambda dp: -dp[1]):
-        if pct > disk_max_pct:
-            problems.append("disk %s %.0f%% (> %.0f%%)" % (dev, pct, disk_max_pct))
-    if problems:
-        return False, "; ".join(problems)
-    return True, "load5 %.2f/core, %.0fMB available, disk %.0f%%" % (
-        per_core,
-        avail_mb,
-        max(devices.values()),
-    )
-
-
 def check_pi_pressure():
     """Swap-thrash / overload early warning for the memory-constrained Pi.
 
@@ -1935,42 +1567,6 @@ def check_pi_pressure():
     mem = _get_json(PI_GLANCES_URL + "/api/4/mem")
     fs = _get_json(PI_GLANCES_URL + "/api/4/fs")
     return pi_pressure(load, mem, fs, PI_LOAD_MAX, PI_MEM_MIN_MB, PI_DISK_MAX_PCT)
-
-
-def ha_heartbeat_fresh(state, max_age_s, now=None):
-    """`state` is HA's /api/states/input_datetime.ha_heartbeat payload.
-
-    Its last_changed advances every minute only while HA's automation scheduler runs the
-    heartbeat automation, so a stale (or missing) last_changed means HA is wedged or the
-    automation never resumed after a restart — invisible to the HTTP healthcheck.
-    """
-    now = now or datetime.now(timezone.utc)
-    lc = (state or {}).get("last_changed")
-    if not lc:
-        return False, "no heartbeat state (entity missing or never set)"
-    age = (now - parse_rfc3339(lc)).total_seconds()
-    if age > max_age_s:
-        return False, "stale — automations last ran %.0fs ago (> %gs)" % (
-            age,
-            max_age_s,
-        )
-    return True, "fresh — automations ran %.0fs ago" % age
-
-
-def ha_ban_verdict(banned_count, window):
-    """Decide the ip_ban arm from the "Banned IP" line count over `window` (None = no series).
-
-    None and 0 are the SAME healthy answer here, unlike loki_ingestion_fresh where a silent
-    stream is itself the fault: HA logs nothing when it bans nobody, so an empty vector is what
-    a healthy cluster looks like.
-    """
-    if not banned_count:
-        return True, "no ip_ban events in %s" % window
-    return False, (
-        "HA ip_ban fired %d time(s) in %s — an internal source IP is likely banned and is now "
-        "getting 403s; check the pod log for the address and delete its line from "
-        "/config/ip_bans.yaml to clear" % (int(banned_count), window)
-    )
 
 
 def with_ha_ban(ok, msg):
@@ -2048,16 +1644,6 @@ def loki_count(selector, window):
     return float(result[0]["value"][1])
 
 
-def loki_ingestion_fresh(count, window):
-    """Decide log-pipeline freshness from the line count over `window` (None = no series)."""
-    if not count:  # None or 0 — nothing shipped: promtail dead, positions corrupt, etc.
-        return (
-            False,
-            "no log lines ingested in %s — promtail/Loki pipeline silent" % window,
-        )
-    return True, "%d log lines in %s" % (int(count), window)
-
-
 def check_loki_ingestion():
     # Two arms, down if EITHER pipeline is silent: the file-tail union (arm 1) catches a
     # file-tail break (all of authlog/syslog/traefik going silent — a total promtail death or
@@ -2077,23 +1663,6 @@ def check_loki_ingestion():
     if not ok_docker:
         return False, "container log stream silent — " + msg_docker
     return True, "%s (+ container stream)" % msg_all
-
-
-def promtail_dropped(count, window, threshold):
-    """Pure: did promtail drop more than `threshold` entries over `window`? (ok, msg).
-
-    `count` = sum(increase(promtail_dropped_entries_total[window])) over ALL drop reasons
-    (ingester_error / rate_limited / stream_limited / line_too_long), None when the counter has no
-    series (reads as 0). Above the threshold means Loki was rejecting entries and promtail gave up on
-    them — partial log loss the total-silence Loki Log Ingestion check can't see.
-    """
-    n = count or 0.0
-    if n > threshold:
-        return False, (
-            "promtail dropped %.0f log entries in %s (> %.0f) — partial log loss"
-            % (n, window, threshold)
-        )
-    return True, "promtail drops ok (%.0f in %s)" % (n, window)
 
 
 def check_promtail_dropped():
@@ -2540,137 +2109,6 @@ def check_r2_usage():
     return r2_usage()
 
 
-def ksm_resource_label(resource):
-    """Turn a Kubernetes resource name into the `resource` label kube-state-metrics emits.
-
-    KSM replaces every character outside [a-zA-Z0-9_] with `_`, so `devic_es_dri` is the only form
-    that matches a series — while `devic.es/dri` is what `kubectl describe node` prints and what an
-    operator would configure. Querying the unsanitised name matches nothing, and this check reads
-    "matches nothing" as the device plugin having deregistered. That is a DOWN on a healthy
-    cluster, which is what it did live from 18:05 to 18:35 UTC on 2026-08-20.
-    """
-    return "".join(c if c.isalnum() or c == "_" else "_" for c in resource)
-
-
-def extended_resource_verdict(expected, advertised, allocatable_series):
-    """Pure: (ok, msg) for extended resources that must stay advertised by some node.
-
-    `advertised` maps resource name -> number of nodes advertising a NON-ZERO quantity.
-    `allocatable_series` is the total count of kube_node_status_allocatable series, and it is what
-    separates the two ways this can come back empty:
-
-      - no series at all  -> kube-state-metrics is not collecting `nodes`, so the question was
-        never asked. Reported as INERT rather than as a fault, and named in the message: a check
-        that cannot read its input must not answer as though it did, in either direction. Silently
-        passing would be the failure this arm exists to fix; silently failing would page for a
-        collector change nobody made.
-      - series exist, resource absent -> the resource is genuinely gone. That is the fault.
-
-    A resource advertised by zero nodes is identical to one that never appears, and both are a
-    fault once the collector is confirmed running: the pods that need it cannot schedule either way.
-    """
-    if not expected:
-        return True, "no extended resources watched"
-    if not allocatable_series:
-        return True, (
-            "extended-resource check INERT: no kube_node_status_allocatable series "
-            "(kube-state-metrics is not collecting `nodes`); %s unwatched"
-            % ", ".join(expected)
-        )
-    missing = [r for r in expected if not advertised.get(r)]
-    if missing:
-        return False, (
-            "extended resource(s) advertised by no node: %s — the device plugin is Running but "
-            "its resource is deregistered; pods requesting it cannot schedule"
-            % ", ".join(
-                "%s (kube-state-metrics label %s)" % (r, ksm_resource_label(r))
-                for r in missing
-            )
-        )
-    return True, "extended resource(s) advertised: %s" % ", ".join(
-        "%s on %d node(s)" % (r, advertised.get(r, 0)) for r in expected
-    )
-
-
-def k8s_workloads_verdict(
-    total,
-    offenders,
-    min_workloads,
-    restart_offenders=(),
-    ds_total=None,
-    ds_offenders=(),
-    min_daemonsets=None,
-):
-    """Pure: (ok, msg) from the deployment-series COUNT and the unavailable-replica offenders.
-
-    The count argument is what makes this fail closed. `unavailable > 0` returning nothing is
-    ambiguous — it means either "every workload is healthy" or "there are no series at all" —
-    and only the second is a fault. Reading the first interpretation onto both is how a monitor
-    goes green while blind, so the count is checked BEFORE the offender list is trusted.
-
-    restart_offenders is the crash-loop arm (2026-08-13): a CrashLoopBackOff pod passes its
-    readiness probe for a brief window each backoff cycle, so replica availability AND a 60s
-    HTTP tile both mostly read healthy — homepage crash-looped 31 times overnight with this
-    check green. A restart counter that climbed past the threshold is down regardless of what
-    readiness says right now.
-
-    ds_total/ds_offenders/min_daemonsets are the DaemonSet arm (2026-08-13): a DaemonSet has no
-    Deployment-arm equivalent, so an absent or unschedulable DS pod (a node NotReady, a
-    node-selector mismatch, a node lacking a required resource) was invisible. Same fail-closed
-    shape as the deployment arm; min_daemonsets left None means the caller didn't supply
-    DaemonSet data (existing callers/tests), so this arm is skipped rather than treated as zero
-    DaemonSets.
-    """
-    if total is None:
-        return False, (
-            "kube_deployment_status_replicas_unavailable is absent from the cluster Prometheus "
-            "— kube-state-metrics is not being scraped, so workload health is UNKNOWN, not OK"
-        )
-    if total < min_workloads:
-        return False, (
-            "only %d deployment series in the cluster Prometheus, below the floor of %d — "
-            "kube-state-metrics is partially loaded, so workload health is UNKNOWN, not OK"
-            % (int(total), min_workloads)
-        )
-    if min_daemonsets is not None:
-        if ds_total is None:
-            return False, (
-                "kube_daemonset_status_number_unavailable is absent from the cluster Prometheus "
-                "— kube-state-metrics is not being scraped, so daemonset health is UNKNOWN, not OK"
-            )
-        if ds_total < min_daemonsets:
-            return False, (
-                "only %d daemonset series in the cluster Prometheus, below the floor of %d — "
-                "kube-state-metrics is partially loaded, so daemonset health is UNKNOWN, not OK"
-                % (int(ds_total), min_daemonsets)
-            )
-    if offenders:
-        named = ", ".join(
-            "%s(%d)" % (labels.get("deployment", "?"), int(value))
-            for labels, value in sorted(
-                offenders, key=lambda o: o[0].get("deployment", "")
-            )
-        )
-        return False, "k8s workloads with unavailable replicas: %s" % named
-    if ds_offenders:
-        named = ", ".join(
-            "%s(%d)" % (labels.get("daemonset", "?"), int(value))
-            for labels, value in sorted(
-                ds_offenders, key=lambda o: o[0].get("daemonset", "")
-            )
-        )
-        return False, "k8s daemonsets with unavailable pods: %s" % named
-    if restart_offenders:
-        named = ", ".join(
-            "%s(%d)" % (labels.get("pod", "?"), int(value))
-            for labels, value in sorted(
-                restart_offenders, key=lambda o: o[0].get("pod", "")
-            )
-        )
-        return False, "k8s pods crash-looping (restarts in window): %s" % named
-    return True, "%d k8s workloads healthy" % int(total)
-
-
 def check_k8s_workloads():
     """Deployment readiness for every workload in the k3s cluster.
 
@@ -2793,21 +2231,6 @@ def check_cluster_prometheus():
     if value is None:
         return False, "cluster Prometheus returned no result for vector(1)"
     return True, "cluster Prometheus reachable"
-
-
-def discord_webhook_ok(status_code, name=None):
-    """Pure: does a GET on a Discord webhook return 200 (still valid)? (ok, msg).
-
-    Discord answers a webhook GET with its JSON metadata (id/name) and HTTP 200 while the
-    webhook exists, and 404 once it's been rotated/revoked/deleted — so a non-200 means the
-    alert POSTs won't deliver. (A GET never posts a message, so this can't spam.)
-    """
-    if status_code == 200:
-        return True, "Discord webhook valid%s" % (" (%s)" % name if name else "")
-    return (
-        False,
-        "Discord webhook returned HTTP %s — alerts won't deliver" % status_code,
-    )
 
 
 def _discord_webhooks():
