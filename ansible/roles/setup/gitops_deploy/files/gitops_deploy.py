@@ -231,7 +231,13 @@ K8S_AUTODEPLOY_PILOT = _csv_set(C.get("K8S_AUTODEPLOY_PILOT", ""))
 # 0 disables the cap. See split_k8s_auto_deploy: the whole promoted set shares one
 # ansible-playbook run and one K8S_DEPLOY_TIMEOUT_S, and a timeout rolls the batch back
 # together.
-K8S_AUTODEPLOY_MAX_PER_TICK = int(C.get("K8S_AUTODEPLOY_MAX_PER_TICK", "0"))
+# DECIDED: falls back to the role default 3, NOT to 0 — same argument as the claim cap below,
+# which this line did not carry until 2026-08-24. 0 means UNCAPPED, so a config.env that lost
+# this key would restore the unbounded batch on exactly the host whose config is damaged. The
+# live case is truncation, not age: in templates/config.env.j2 the denylist is line 23 and this
+# key is line 27, so a half-written file keeps a matching denylist plus ENABLED=true and drops
+# only the cap — passing the fail-closed denylist guard below while uncapped.
+K8S_AUTODEPLOY_MAX_PER_TICK = int(C.get("K8S_AUTODEPLOY_MAX_PER_TICK", "3"))
 # Defaults to 1, not 0: an older config.env rendered before this key existed must get the SAFE
 # cap, not an absent one. 0 here would silently restore the unbounded-batch behaviour this
 # closes, on exactly the hosts whose config is stale (2026-08-22 review H2).

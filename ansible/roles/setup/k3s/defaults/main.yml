@@ -254,10 +254,16 @@ k3s_longhorn_restore_drill_pvc: ""
 # namespace off each volume, because candidates are no longer all in one place.
 k3s_longhorn_restore_drill_namespace: homelab
 # Skip a candidate whose actualSize exceeds this. Bounds one night's egress and wall-clock so a
-# slow restore cannot read as a failed one. Excludes NOTHING today — the largest candidate is
-# valheim-config at ~1.3 GB — it is a guard against a volume growing past what the timeout below
-# can cover. A volume excluded here is silently undrilled, so raise both together.
-k3s_longhorn_restore_drill_max_actual_bytes: 2147483648
+# slow restore cannot read as a failed one. A volume excluded here is silently undrilled, so raise
+# this and the timeout below together.
+# DECIDED: 4 GiB, raised from 2 GiB on 2026-08-24. The old value's rationale said it "excludes
+# NOTHING today — the largest candidate is valheim-config at ~1.3 GB", and both halves had gone
+# wrong: valheim-config was 2.83 GiB of actualSize and HAD been excluded (25 volumes declared
+# backed-up, 24 in the candidate file), and the 1.3 GB figure was its B2-STORED size while this cap
+# is applied to actualSize — the wrong quantity was compared when the cap was first set. Compare
+# `actualSize` from the Volume CR, never the stored-block total from `probe.py b2-longhorn`.
+# Cost of the raise is ~100 Class B GETs and ~1.34 GB egress once per 25-night rotation.
+k3s_longhorn_restore_drill_max_actual_bytes: 4294967296
 # A restored volume that mounts but is EMPTY is the failure mode this floor catches: an empty
 # filesystem passes every check that only asks whether the mount succeeded. Deliberately low —
 # this asserts "real data came back", not any particular size, so it does not need revisiting
@@ -268,7 +274,12 @@ k3s_longhorn_restore_drill_image: busybox:stable
 # volumes 25x that size: a slow restore is not itself a failure, but a hung one must not leave a
 # Volume CR attached forever, and a timeout fires as a restore failure that nothing distinguishes
 # from a real one. Keep this above what k3s_longhorn_restore_drill_max_actual_bytes can take.
-k3s_longhorn_restore_drill_timeout_s: 1800
+# DECIDED: 2700s, raised from 1800s with the cap on 2026-08-24 — and this is NOT free to raise
+# further. The 04:10 cron is placed to clear the 05:15 manifest-prune window, which would otherwise
+# see the drill's transient restore-drill-* objects, so the timeout ceiling is 05:15 minus 04:10
+# minus a margin. 2700s ends by 04:55. A larger cap therefore cannot simply buy more time here:
+# past ~3900s the two windows collide and the cron must move first.
+k3s_longhorn_restore_drill_timeout_s: 2700
 k3s_longhorn_restore_drill_stamp_dir: /var/lib/longhorn-restore-drill
 # 04:10 nightly: after the daily tier's 03:30 run and clear of every weekly shard's 04:30, so the
 # drill never contends with a backup in flight. Also clear of the 05:15 manifest-prune window,

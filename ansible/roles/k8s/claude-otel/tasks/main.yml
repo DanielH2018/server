@@ -242,9 +242,12 @@
   ansible.builtin.template:
     src: telemetry-health.sh.j2
     dest: /usr/local/bin/claude-otel-health.sh
-    mode: "0755"
-    owner: root
-    group: root
+    # DECIDED: 0700 owned by sys_user, not 0755 — embeds a live Kuma push token. Owner is
+    # sys_user because the cron below runs as sys_user; root:root 0700 would lock out its own
+    # caller. See the same marker in roles/k8s/janitorr/tasks/main.yml.
+    mode: "0700"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
   become: true
   no_log: true  # renders the Kuma push token
 
