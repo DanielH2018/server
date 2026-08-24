@@ -220,7 +220,17 @@ DEPLOYED_ENTRIES=0
 
 check_deployed() {
   local live="$1" src="$2"
-  [[ -r "$src" ]] || return 0            # not a file this repo ships on this host
+  # An unreadable SOURCE is drift, not an exemption. It meant "not a file this repo ships on
+  # this host" while the pairs were hardcoded — the repo source exists on every host, so the
+  # guard never actually gated anything. Once the pairs come from a fragment, a pair exists
+  # ONLY because a role deployed it here, so an unreadable source means the file was deleted
+  # from the repo while the artifact is still live on this host. Arm 3 reports exactly that
+  # (see "template gone from the repo" below); returning 0 here would swallow it, and worse,
+  # the entry still counts toward DEPLOYED_ENTRIES — armed, and checking nothing.
+  if [[ ! -r "$src" ]]; then
+    DRIFTED="${DRIFTED:+$DRIFTED, }${live} (source gone from the repo)"
+    return 0
+  fi
   if [[ ! -r "$live" ]]; then
     DRIFTED="${DRIFTED:+$DRIFTED, }${live} (missing)"
     return 0

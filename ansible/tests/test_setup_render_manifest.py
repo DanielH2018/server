@@ -221,6 +221,30 @@ def test_the_deployed_code_arm_derives_its_pairs_from_fragments():
     )
 
 
+def test_a_deleted_source_is_drift_not_an_exemption():
+    """The `[[ -r "$src" ]] || return 0` guard changes meaning with the fragment form.
+
+    Hardcoded, it was merely misleading: the repo source exists on every host, so it never
+    gated anything. Fragment-derived, a pair exists ONLY because a role deployed it here — so
+    an unreadable source means the file was deleted from the repo while the artifact is still
+    live. That is drift, and arm 3 reports the same case as "template gone from the repo".
+    Returning 0 swallows it, and the entry still counts toward DEPLOYED_ENTRIES: armed, and
+    checking nothing. Introduced and caught in the same change.
+    """
+    script = (_TEMPLATES / "manifest-prune-check.sh.j2").read_text()
+    fn = re.search(r"^check_deployed\(\) \{.*?^\}", script, re.MULTILINE | re.DOTALL)
+    assert fn, "check_deployed() is gone or no longer a plain function."
+    body = fn.group(0)
+    assert "return 0" not in body.split('if [[ ! -r "$src" ]]')[0], (
+        "check_deployed still short-circuits on an unreadable source. A source missing from "
+        "the repo is drift under the fragment form, not 'a file this repo does not ship here'."
+    )
+    assert "source gone from the repo" in body, (
+        "check_deployed no longer distinguishes a deleted source from a byte mismatch, so the "
+        "operator cannot tell 'redeploy this' from 'this template was retired'."
+    )
+
+
 def test_every_role_that_deploys_code_declares_its_pairs():
     """The companion enumeration: each role that `copy:`-deploys executable code records it.
 
