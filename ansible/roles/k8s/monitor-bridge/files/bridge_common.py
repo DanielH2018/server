@@ -4,27 +4,36 @@ Both bridges are stdlib-only Python loops that read config from the environment 
 result to Uptime Kuma. They grew as separate files and drifted into their own copies of the
 same few pure helpers — this module is the one place those bodies live now.
 
-WHAT MAY LIVE HERE, AND WHY MOST OF THE DUPLICATION STAYS
+WHAT MAY LIVE HERE, AND WHY SOME DUPLICATION STAYS
 ===========================================================
-This module is imported by check.py, so bridge_parsing.py's rule binds here too: a function may
-live here only if it is never monkeypatched by EITHER file's test suite AND reads no
-module-level name that either suite patches. `_env` and `sanitize` are the only two candidates
-that clear both bars. Everything else on the surface duplication list — `log`, `push`,
-`touch_heartbeat`, the urllib wrapper (`_get_json`/`_post_json` vs `_request`), and each file's
-`main()` sleep loop — stays duplicated because at least one suite patches it directly, or patches
-a config constant it reads:
-  - check.py: `log` (test_check_gates.py), `push`/`_get_json` (dozens of sites across the
-    suite), and `HEARTBEAT_FILE` — which touch_heartbeat reads (test_check.py).
-  - autofix.py: `push` and `_request` (test_autofix.py's `_configure_sonarr_only` and the
-    run_once tests).
-Moving any of those here would leave a `monkeypatch.setattr(check, "X", ...)` or
-`monkeypatch.setattr(autofix, "X", ...)` rebinding a name nothing reads, so the test would pass
-against unpatched production code. See bridge_parsing.py's header for the full argument.
+This module is imported by check.py, so bridge_parsing.py's rule binds here too, in a form the
+`scripts/test_probe_boundaries.py` precedent widens rather than a strict ban: a helper the test
+suites patch directly may still live here, PROVIDED every caller reaches it *qualified* —
+`bridge_common.log(...)`, never `from bridge_common import log` — since `monkeypatch.setattr`
+rebinds the attribute on this module object, and only a qualified lookup re-reads that attribute
+at call time. A from-import binds its own reference at import time and never sees the patch. This
+is enforced by `ansible/tests/test_bridge_patch_boundary.py`, which AST-walks every test suite for
+`setattr(bridge_common, "X", ...)` and asserts no non-test module reaches `X` via a from-import.
+Likewise a helper that reads a module-level constant either suite patches (e.g. `HEARTBEAT_FILE`)
+may live here if the constant is taken as an **argument** rather than read as a global — the
+caller still defines and patches its own constant, and passes it in at call time, so the existing
+`monkeypatch.setattr(check, "HEARTBEAT_FILE", ...)` keeps working. `log` and `touch_heartbeat(path)`
+are the two helpers here that rely on this: `log` is qualified everywhere, and `touch_heartbeat`
+takes its heartbeat path as an argument instead of reading a module-global.
+
+`_env` and `sanitize` need neither device — they are never patched by either suite, so a plain
+from-import is fine and preferred (churn-free; `_env` alone has 145 call sites in check.py).
+
+Everything else on the surface duplication list stays duplicated because unifying it is a
+behaviour change, not a patching-boundary problem: `push`, the urllib wrapper
+(`_get_json`/`_post_json` vs `_request`), and each file's `main()` sleep loop have genuinely
+drifted signatures (`check.push(token, ok, msg)` vs `autofix.push(ok, msg)`) and dozens of direct
+patch sites apiece. See bridge_parsing.py's header for the full argument on why a patched name
+can't just move without qualification or argument-passing.
 
 ENFORCED by ansible/tests/test_monitor_bridge_modules.py (bridge_common is in SPLIT_MODULES
-there, same as the verdicts_*/bridge_parsing modules) for the check.py side. autofix.py's suite
-has no equivalent automated guard — this docstring is what's checked before a future edit widens
-what lives here.
+there, same as the verdicts_*/bridge_parsing modules) for the check.py side, and by
+ansible/tests/test_bridge_patch_boundary.py for the qualified-access rule across both bridges.
 
 Ship path: this file is monitor-bridge's canonical copy. autofix-bridge stages a copy of it onto
 the node from here (`{{ playbook_dir }}/roles/k8s/monitor-bridge/files/bridge_common.py`), the
@@ -33,10 +42,36 @@ copy under autofix-bridge/files/.
 """
 
 import os
+import time
 
 
 def _env(name, default):
     return os.environ.get(name, default)
+
+
+def log(*args):
+    """Print a bracketed-timestamp log line.
+
+    The bracketed stamp is LOCAL time (America/Chicago via the container's TZ env), not UTC —
+    see the monitor-bridge CLAUDE.md's "bracketed log timestamps" trap for the incident that
+    came from reading it as UTC. Callers must reach this qualified as `bridge_common.log(...)`;
+    see this module's header.
+    """
+    print("[%s]" % time.strftime("%Y-%m-%dT%H:%M:%S"), *args, flush=True)
+
+
+def touch_heartbeat(path):
+    """Write the current time to `path`, the liveness-probe heartbeat file.
+
+    Takes the path as an argument rather than reading a module-level constant, so each caller's
+    own `HEARTBEAT_FILE` (which its test suite patches) still governs where this writes — see
+    this module's header.
+    """
+    try:
+        with open(path, "w") as fh:
+            fh.write("%s\n" % time.time())
+    except OSError as e:  # best-effort like push(); never crash the loop
+        log("WARN: heartbeat write failed:", e)
 
 
 def sanitize(s, maxlen=120):

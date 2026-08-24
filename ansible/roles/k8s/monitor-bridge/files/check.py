@@ -22,10 +22,14 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
-# Pure helpers, split out of this file. They are imported rather than defined here because
+# Pure helpers, split out of this file. `_env`/`sanitize` are imported by name because
 # nothing patches them; anything the test suite patches must stay defined in THIS module,
-# or `monkeypatch.setattr(check, ...)` rebinds a name no code reads. bridge_parsing.py's
-# header carries the full rule.
+# or `monkeypatch.setattr(check, ...)` rebinds a name no code reads — bridge_parsing.py's
+# header carries the full rule. `log`/`touch_heartbeat` ARE patched (indirectly, via
+# HEARTBEAT_FILE for the latter), so this file reaches them qualified as
+# `bridge_common.log`/`bridge_common.touch_heartbeat` rather than importing them by name —
+# enforced by ansible/tests/test_bridge_patch_boundary.py.
+import bridge_common
 from bridge_common import _env, sanitize
 from bridge_parsing import (
     FETCH_BODY_MAX,
@@ -2922,19 +2926,15 @@ def down_exporters(up_vector):
     return {job for job in EXPORTER_DEPENDENT if job in down_jobs}
 
 
-def log(*args):
-    print("[%s]" % datetime.now().isoformat(timespec="seconds"), *args, flush=True)
-
-
 def push(token, ok, msg):
     if not token:
-        log("WARN: no push token set; skipping push:", msg)
+        bridge_common.log("WARN: no push token set; skipping push:", msg)
         return
     qs = urllib.parse.urlencode({"status": "up" if ok else "down", "msg": msg})
     try:
         _get_json("%s/api/push/%s?%s" % (KUMA_URL, token, qs))
     except Exception as e:  # best-effort heartbeat; never crash the loop
-        log("push failed (%s):" % msg, e)
+        bridge_common.log("push failed (%s):" % msg, e)
 
 
 def _evaluate(name, fn):
@@ -2956,7 +2956,7 @@ def _gate(name, fn, push_env):
     if not check_enabled(name):
         return True, "disabled by check filter"
     ok, msg = _evaluate(name, fn)
-    log("OK  " if ok else "DOWN", name, "-", msg)
+    bridge_common.log("OK  " if ok else "DOWN", name, "-", msg)
     push(_env(push_env, ""), ok, msg)
     return ok, msg
 
@@ -2979,7 +2979,7 @@ def run_once():
             for job in down_exporters(prom_vector("up%s" % origin_sel())):
                 suppressed |= EXPORTER_DEPENDENT[job]
         except Exception as e:
-            log("WARN: exporter-health probe failed:", e)
+            bridge_common.log("WARN: exporter-health probe failed:", e)
 
     # Loki-reachability gate (peer of the Prometheus gate): probe Loki once so a single Loki outage
     # is one page (Loki Reachable), not a storm across every Loki-querying check (LOKI_DEPENDENT).
@@ -3026,7 +3026,9 @@ def run_once():
             cluster_ok, cluster_msg = _evaluate(
                 "cluster_prometheus", check_cluster_prometheus
             )
-        log("OK  " if cluster_ok else "DOWN", "cluster_prometheus", "-", cluster_msg)
+        bridge_common.log(
+            "OK  " if cluster_ok else "DOWN", "cluster_prometheus", "-", cluster_msg
+        )
         push(_env("KUMA_PUSH_CLUSTER_PROMETHEUS", ""), cluster_ok, cluster_msg)
 
     for name, token, fn in CHECKS:
@@ -3034,38 +3036,30 @@ def run_once():
             continue
         if not prom_ok and name in PROM_DEPENDENT:
             ok, msg = True, "skipped — Prometheus unreachable (see Prometheus monitor)"
-            log("SKIP", name, "-", msg)
+            bridge_common.log("SKIP", name, "-", msg)
         elif not loki_ok and name in LOKI_DEPENDENT:
             ok, msg = True, "skipped — Loki unreachable (see Loki Reachable monitor)"
-            log("SKIP", name, "-", msg)
+            bridge_common.log("SKIP", name, "-", msg)
         elif not b2_ok and name in B2_DEPENDENT:
             ok, msg = True, "skipped — B2 unreachable (see B2 Reachable monitor)"
-            log("SKIP", name, "-", msg)
+            bridge_common.log("SKIP", name, "-", msg)
         elif not cluster_ok and name in CLUSTER_DEPENDENT:
             ok, msg = (
                 True,
                 "skipped — cluster Prometheus unreachable (see Cluster Prometheus monitor)",
             )
-            log("SKIP", name, "-", msg)
+            bridge_common.log("SKIP", name, "-", msg)
         elif name in suppressed:
             ok, msg = True, "skipped — exporter down (see Scrape Targets)"
-            log("SKIP", name, "-", msg)
+            bridge_common.log("SKIP", name, "-", msg)
         else:
             ok, msg = _evaluate(name, fn)
             if name in STARTUP_GRACE:
                 ok, msg = apply_startup_grace(
                     name, ok, msg, GRACE_CYCLES, _grace_streaks
                 )
-            log("OK  " if ok else "DOWN", name, "-", msg)
+            bridge_common.log("OK  " if ok else "DOWN", name, "-", msg)
         push(token, ok, msg)
-
-
-def touch_heartbeat():
-    try:
-        with open(HEARTBEAT_FILE, "w") as fh:
-            fh.write("%s\n" % time.time())
-    except OSError as e:  # best-effort like push(); never crash the loop
-        log("WARN: heartbeat write failed:", e)
 
 
 def main():
@@ -3073,16 +3067,16 @@ def main():
     problems = validate_check_filter(CHECKS_ONLY, CHECKS_SKIP, CHECKS)
     if problems:
         for p in problems:
-            log("FATAL: bad CHECKS_ONLY/CHECKS_SKIP:", p)
+            bridge_common.log("FATAL: bad CHECKS_ONLY/CHECKS_SKIP:", p)
         sys.exit(2)
     enabled = [name for name, _, _ in CHECKS if check_enabled(name)]
-    log(
+    bridge_common.log(
         "monitor-bridge starting (interval=%ss, once=%s, checks=%d/%d)"
         % (INTERVAL, once, len(enabled), len(CHECKS))
     )
     while True:
         run_once()
-        touch_heartbeat()
+        bridge_common.touch_heartbeat(HEARTBEAT_FILE)
         if once:
             break
         time.sleep(INTERVAL)
