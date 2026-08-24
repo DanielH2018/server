@@ -35,6 +35,17 @@
     # goes red on either. Until then the audit reported the key "ok, due 2026-11-20", scheduling
     # a rotation for a credential nothing reads.
     #
-    # STILL OPERATOR WORK: `kubectl delete secret wg-easy-env`. Nothing in this repo can do it
-    # — the ServiceAccount Claude and the crons authenticate as is read-only, and `kubectl
-    # delete` is denied outright. The live Secret keeps the bcrypt hash until someone runs that.
+    # STILL OPERATOR WORK, and it needs BOTH of these or it fails:
+    #
+    #     sudo k3s kubectl delete secret wg-easy-env -n homelab
+    #
+    # `-n homelab`, not the default namespace — this role's objects live in homelab, and a
+    # bare `kubectl delete secret wg-easy-env` targets `default` and reports Forbidden or
+    # NotFound depending on identity, neither of which means what it looks like. `sudo k3s`,
+    # because plain kubectl here resolves the read-only ServiceAccount, which is Forbidden on
+    # secrets for `delete` AND for `get` — so an unprivileged caller cannot even confirm the
+    # Secret exists. Root's kubeconfig at /etc/rancher/k3s/k3s.yaml carries the admin cert.
+    #
+    # Nothing in this repo can do it: `sudo` is denied to the agent and Ansible's k8s write
+    # path here runs under the same read-only SA. The live Secret keeps the retired v14 bcrypt
+    # hash until a person runs the command above.
