@@ -181,6 +181,30 @@ data:
             regex: "9080"
           - source_labels: [__meta_kubernetes_pod_node_name]
             target_label: node
+      # The *arr stack's exportarr sidecars — queue depth, indexer health, per-root-folder free
+      # space, and the library counts none of which any other job here carries. Until these
+      # landed the entire application layer was up/down only: three roles in the whole estate
+      # exposed a metrics port.
+      #
+      # Discovery by PORT NUMBER, not by an `app` label. The sidecar shares its *arr's pod, so
+      # the pod labels say `app: sonarr` and selecting on them would also match the *arr's own
+      # container port and scrape an HTML page. 9707 is the sidecar's and nothing else's.
+      #
+      # `app` is relabelled onto `arr` rather than left alone so a dashboard can group the three
+      # without knowing their names, and `container` is dropped: every target is `exportarr`, so
+      # the label carries no information and only widens the series.
+      - job_name: exportarr
+        scrape_interval: 1m
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_container_port_number]
+            action: keep
+            regex: "9707"
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: arr
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: origin
       # daniel-pi, the one host outside the cluster. STATIC targets, not discovery: the two
       # jobs above use `role: pod`, which by construction only ever finds pods — so the Pi,
       # which runs no kubelet, could never appear in them however many exporters it grew.

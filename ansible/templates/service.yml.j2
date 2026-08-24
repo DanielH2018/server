@@ -10,8 +10,13 @@
     port_name  Set when a caller's Service needs a NAMED port (home-assistant, homelab-mcp,
                zigbee2mqtt) rather than the bare port list every other role uses. Omit to get
                the plain form.
+    extra_ports  Additional ports as [{name, port}] — a sidecar's, typically. Kubernetes REJECTS
+               a Service that mixes named and unnamed ports, and it rejects it at apply time,
+               after every repo-side check has read green. So passing extra_ports forces the
+               primary port to be named too (`http` unless port_name says otherwise) rather than
+               leaving that as something each caller has to remember.
 #}
-{% macro service(name, port, port_name=none) -%}
+{% macro service(name, port, port_name=none, extra_ports=[]) -%}
 apiVersion: v1
 kind: Service
 metadata:
@@ -21,12 +26,17 @@ spec:
   selector:
     app: {{ name }}
   ports:
-{% if port_name %}
-    - name: {{ port_name }}
+{% if port_name or extra_ports %}
+    - name: {{ port_name | default('http', true) }}
       port: {{ port }}
       targetPort: {{ port }}
 {% else %}
     - port: {{ port }}
       targetPort: {{ port }}
 {% endif %}
+{% for extra in extra_ports %}
+    - name: {{ extra.name }}
+      port: {{ extra.port }}
+      targetPort: {{ extra.port }}
+{% endfor %}
 {%- endmacro %}

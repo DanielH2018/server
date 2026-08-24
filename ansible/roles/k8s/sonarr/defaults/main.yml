@@ -73,3 +73,11 @@ sonarr_k8s_probe_image: alpine:3.24
 # developer setting upstream ships on. Rotate 10 caps the directory at ~10 MB.
 sonarr_k8s_log_level: info
 sonarr_k8s_log_rotate: "10"
+
+# The exportarr metrics sidecar (templates/exportarr.yml.j2). Pinned HERE, in the role's own
+# defaults, rather than once in group_vars: Renovate's k8s-images manager matches
+# `roles/k8s/*/defaults` and `_image:` keys only, so a shared var one directory up is invisible
+# to it and to the coverage test — the escape `crowdsec_k8s_image` made from group_vars.
+# radarr and prowlarr carry the same pin for the same reason, and
+# ansible/tests/test_exportarr_pins_in_lockstep.py fails if the three drift apart.
+sonarr_exportarr_image: ghcr.io/onedr0p/exportarr:v2.3.0

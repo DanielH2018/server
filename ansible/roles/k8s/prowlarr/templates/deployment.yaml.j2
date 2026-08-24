@@ -1,4 +1,5 @@
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
+{% from 'exportarr.yml.j2' import exportarr with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -88,6 +89,7 @@ spec:
             requests:
               cpu: "{{ prowlarr_k8s_cpu_request }}"
               memory: {{ prowlarr_k8s_mem_request }}
+        {{ exportarr('prowlarr', prowlarr_exportarr_image, container_item.port) }}
       volumes:
         - name: prowlarr-config
           persistentVolumeClaim:

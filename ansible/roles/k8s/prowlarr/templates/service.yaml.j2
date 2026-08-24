@@ -1,3 +1,10 @@
 {% from 'service.yml.j2' import service with context %}
 ---
-{{ service(container_item.name, container_item.port) -}}
+{# The second port is the exportarr sidecar's. The macro names the primary port itself when
+   extra_ports is passed — Kubernetes rejects a Service that mixes named and unnamed ports, and
+   rejects it at apply time rather than at render time. #}
+{{ service(
+    container_item.name,
+    container_item.port,
+    extra_ports=[{'name': 'metrics', 'port': 9707}]
+  ) -}}
