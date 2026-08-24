@@ -217,6 +217,13 @@ stringData:
     {"type": "push", "name": "Longhorn Volume Redundancy", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_longhorn_volumes_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   daniel-box-disk.json: |
     {"type": "push", "name": "daniel-box Disk", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ daniel_box_disk_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+  # DECIDED: 5400s, not the 1200 its host-cron siblings use — the deadline must exceed the
+  # PRODUCER'S PERIOD, and this producer is an hourly cron (k3s_remember_logs_cron_minute), not a
+  # */10 one. 3600s plus the run leaves 5400 with 30 min of margin. At 1200 it would fire DOWN
+  # every hour with nothing wrong, which is the failure the Cloudflare DDNS entries above record.
+  # Move this and the cron minute together or neither.
+  remember-logs-health.json: |
+    {"type": "push", "name": "Remember Log Rotation", "interval": 5400, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ remember_logs_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   claude-otel-health.json: |
     {"type": "push", "name": "k3s Telemetry Stack", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ claude_otel_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   configarr.json: |

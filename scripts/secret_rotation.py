@@ -116,6 +116,7 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         "manifest_prune_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
         "live_drift_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
         "etcd_snapshot_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
+        "remember_logs_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
         "secret_rotation_push_token",  # self-referential
     }
 )
