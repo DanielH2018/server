@@ -1,8 +1,6 @@
-{% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
-{% from 'healthcheck.yml.j2' import healthcheck %}
 ---
 services:
   nut:
@@ -48,7 +46,12 @@ services:
       # cluster (the UPS stays on this host by design). Locked to daniel-box + this host's own
       # bridges in DOCKER-USER — see nut-lan-firewall.sh.j2, applied before this deploy.
       - "{{ server_ip }}:3493:3493"
-    {{ healthcheck("[\"CMD-SHELL\", \"upsc " ~ (nut_ups_name | default('apc-ups')) ~ "@localhost battery.charge 2>/dev/null || exit 1\"]") }}
+    {% set hc_test = "[\"CMD-SHELL\", \"upsc " ~ (nut_ups_name | default('apc-ups')) ~ "@localhost battery.charge 2>/dev/null || exit 1\"]" %}{% set hc_start_period = '30s' %}{% set hc_interval = none %}{% set hc_timeout = '10s' %}{% set hc_retries = 3 %}{% set hc_name = '' %}{% if hc_interval is none %}{% set hc_interval = (30 + (((hc_name ~ hc_test) | hash('md5'))[:4] | int(0, 16) % 11)) ~ 's' %}{% endif %}healthcheck:
+      test: {{ hc_test }}
+      interval: {{ hc_interval }}
+      timeout: {{ hc_timeout }}
+      retries: {{ hc_retries }}
+      start_period: {{ hc_start_period }}
     labels:
       {{ kuma('nut', name='NUT') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
