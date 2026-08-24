@@ -2,7 +2,7 @@
 
 > **Current arming state (checked here, not restated in prose below):**
 > `k3s_longhorn_backup_armed` / `k3s_longhorn_r2_armed` in
-> [`ansible/roles/setup/k3s/defaults/main.yml`](../ansible/roles/setup/k3s/defaults/main.yml)
+> `ansible/roles/setup/k3s/defaults/main.yml`
 > are the live source of truth, updated at every arm/disarm. As of **2026-08-17 13:12 UTC both
 > targets are armed**: B2 (`default`) was re-armed once the over-retention backlog that caused
 > the seventh cap event was drained, and the weekly B2 shard schedule below is now current

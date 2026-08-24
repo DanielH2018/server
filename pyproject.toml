@@ -20,6 +20,7 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   "actionlint-py",                  # workflow lint gate (prek hook); ships the actionlint binary as a wheel
   "pytest-xdist",                   # -n auto in addopts below; pytest was 13.5s of CI's hook budget
   "kubernetes-validate==1.36.0",
+  "mkdocs-material>=9.5",           # the docs site; `uv run mkdocs build` renders docs/ into site/
 ]
 
 [tool.pytest.ini_options]

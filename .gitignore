@@ -21,6 +21,9 @@
 !/renovate.json
 !/pyproject.toml
 !/uv.lock
+# The docs site config. Its build output (site/) needs no rule — the `/*` deny above
+# already covers it, and scripts/build_docs.py builds to a host path outside the repo.
+!/mkdocs.yml
 !/.python-version
 !/PLANS.md
 # Track the SOPS-aware diff-driver attribute for secrets.yml. NB: rendering the
