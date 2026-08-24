@@ -45,6 +45,8 @@ PVC
 [Kk]ubectl
 [Mm]iddleware
 [Mm]iddlewares
+[Nn]amespace
+[Nn]arrowings
 [Nn]etpol
 [Nn]ginx
 [Oo]nboarded
@@ -53,10 +55,12 @@ PVC
 k3s
 
 # Homelab and operations vocabulary
+[Aa]llowlist
 [Aa]utoheal
 Backblaze
 [Bb]ackfill
 [Bb]ackupstore
+[Cc]rashloop
 [Cc]ron
 [Cc]utover
 [Cc]rons
@@ -73,15 +77,19 @@ GitOps
 [Hh]omelab
 [Ii]ncrementals
 [Ii]node
+[Ll]iveness
 [Ll]int
 [Ll]oopback
 [Pp]laintext
 [Rr]epo
+[Rr]ollout
+[Rr]ollouts
 [Rr]unbook
 [Rr]unbooks
 [Ss]ystemd
 [Tt]oposort
 [Uu]napplied
+[Uu]nprobeable
 [Uu]nexecuted
 [Ww]orktree
 [Ww]orktrees
