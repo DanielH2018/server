@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Guards on the slice-1 k8s manifests — the four things that fail silently.
 
-Each of these encodes a decision from docs/k3s-migration/slice-1-ingress-sso-leaf.md whose
+Each of these encodes a decision from docs/archive/k3s-migration/slice-1-ingress-sso-leaf.md whose
 failure mode is quiet rather than loud: nothing errors, the deploy goes green, and the
 consequence shows up later as a moved VIP, a corrupted session, an ungated service, or an
 unprotected edge. A rendered-YAML check cannot catch any of them (the manifests stay valid

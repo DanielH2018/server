@@ -4,7 +4,7 @@
 # email, a TickTick calendar sync — and two n8n processes against the same seeded database each
 # run their own scheduler. Coexistence would double-fire every schedule and double-write to
 # TickTick. So the Docker copy is stopped BEFORE the seed, and this role's first run is also the
-# cutover run. See docs/k3s-migration/slice-2-leaf-apps.md.
+# cutover run. See docs/archive/k3s-migration/slice-2-leaf-apps.md.
 
 - name: Seed the n8n data volume
   tags: [deploy]

@@ -391,7 +391,7 @@ def _read_pending() -> dict[str, str]:
     # Split (not `except (A, B)`): ruff (3.14 target, from requires-python) reformats a
     # parenthesized tuple into the 3.14-only `except A, B:` form. Two clauses give ruff nothing
     # to rewrite. Still load-bearing: unlike its siblings this unit has NOT yet moved to the
-    # pinned 3.14 (docs/host-python-314-plan.md, task 6), so it runs on the host's 3.12 today and
+    # pinned 3.14 (docs/archive/host-python-314-plan.md, task 6), so it runs on the host's 3.12 today and
     # the rewritten form would SyntaxError. Keep the split until that task lands.
     except FileNotFoundError:
         return {}

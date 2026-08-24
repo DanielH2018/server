@@ -4,7 +4,7 @@
 The failure this encodes actually happened (daniel-box, 2026-08-01). k3s ships its
 own containerd plus flannel/kube-proxy iptables rules, and daniel-box was chosen to
 host the cluster first precisely because it had no container runtime — see
-docs/k3s-migration/slice-0-cluster-foundation.md.
+docs/archive/k3s-migration/slice-0-cluster-foundation.md.
 
 A bare `initial_setup.yml` run (no --tags) then installed Docker there, because
 docker_install was unconditional. That put Docker's DOCKER/DOCKER-USER chains and

@@ -6,7 +6,7 @@
 # 2026-08-07 — the device node appears in the container with the right group and mode, and every
 # open() still fails with EPERM, because cgroup v2 governs device access via an eBPF filter and
 # nothing had declared the device to the CRI. A device plugin is what declares it, which is what
-# populates the allowlist. See docs/k3s-migration/slice-4-media-cluster.md D2.
+# populates the allowlist. See docs/archive/k3s-migration/slice-4-media-cluster.md D2.
 #
 # It is also the only privileged component in the media stack, and deliberately so: it holds the
 # privilege in one small auditable DaemonSet instead of spreading it across long-running media

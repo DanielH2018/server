@@ -1,6 +1,6 @@
 ---
 # Slice-7 Phase D (2026-08-10): scrutiny to the cluster — see
-# docs/k3s-migration/slice-7-phase-d-scrutiny.md (SC1–SC6). The collector DaemonSet adds
+# docs/archive/k3s-migration/slice-7-phase-d-scrutiny.md (SC1–SC6). The collector DaemonSet adds
 # daniel-box's never-monitored NVMe; daniel-server's Docker collector stays as a spoke
 # pushing to this web API until the Phase F join absorbs it.
 

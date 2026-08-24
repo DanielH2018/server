@@ -14,7 +14,7 @@ longhorn-storageclass ConfigMap, and a StorageClass parameter beats the global
 setting. On a one-node cluster that means every volume asks for 3 replicas it can
 never schedule and sits permanently Degraded — the exact "real fault buried in
 expected noise" k3s_longhorn_replica_count exists to prevent. It failed slice 0's
-exit criteria; see docs/k3s-migration/slice-0-cluster-foundation.md.
+exit criteria; see docs/archive/k3s-migration/slice-0-cluster-foundation.md.
 
 The fix replaces upstream's class with files/longhorn-storageclass.yaml, which omits
 the parameter so the setting governs. The risk now is re-syncing that file from a

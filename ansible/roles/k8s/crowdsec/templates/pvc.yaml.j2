@@ -1,16 +1,7 @@
+{% from 'pvc.yml.j2' import pvc with context %}
 ---
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: {{ crowdsec_k8s_claim }}
-  namespace: {{ k8s_namespace }}
-spec:
+{% call pvc(crowdsec_k8s_claim, crowdsec_k8s_storage_class, crowdsec_k8s_size) %}
   # Not seeded from the Docker copy: this engine starts as a SHADOW beside the Docker LAPI
   # (B1), so it accumulates its own decisions from day one; bans expire on their own and the
   # hub reinstalls from COLLECTIONS. Nothing in the old DB is worth carrying.
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: {{ crowdsec_k8s_storage_class }}
-  resources:
-    requests:
-      storage: {{ crowdsec_k8s_size }}
+{% endcall %}
