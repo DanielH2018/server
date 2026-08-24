@@ -246,8 +246,8 @@ containers_list:
     use_authelia: true
   # MkDocs Material site over docs/, built on this host by scripts/build_docs.py and served
   # from a hostPath. Sits next to artifacts because they are the same shape: nginx-class
-  # static serving over a daniel-box tree. LAN-only, unlike artifacts — the reference pages
-  # map every service, route and auth tier, and nothing here emits a link a reader is sent.
+  # static serving over a daniel-box tree, reachable on both the LAN and public names behind
+  # Authelia. The role's ingressroute template records why it stopped being LAN-only.
   - name: docs
     platform: k8s
     hostname: "docs"

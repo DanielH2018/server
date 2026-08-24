@@ -1,14 +1,19 @@
 {% from 'ingressroute.yml.j2' import ingressroute with context %}
 {#
-  LAN-only (`public=false`). The reference pages list every service, its hostname, its auth
-  tier and its backup posture — a complete map of what runs here and what fronts it.
+  Public as well as LAN, which is the macro's default — so this call passes no `public`
+  argument at all.
 
-  The artifacts browser next door is deliberately public, and the difference is worth stating:
-  a session emits an artifact link as the ONE way anyone reaches that document, so it has to
-  resolve wherever the reader is. Nothing here emits a link like that; the site is somewhere
-  you go, not somewhere you are sent.
+  It was `public=false` until 2026-08-24, on the reasoning that the reference pages map every
+  service, hostname, auth tier and backup posture, and that a complete map of the homelab
+  should not face the internet. That reasoning was retired deliberately, not overlooked: the
+  operator asked for a name reachable off the LAN, and the map is only as exposed as the gate
+  in front of it.
 
-  The `authelia` middleware gates it either way.
+  What makes that safe is that the gate covers EVERY path. There is one route, matched on the
+  Host rule alone, and `bypass_prefixes` is empty — so `/healthz` and `/build-info.json` sit
+  behind Authelia on the public name exactly as the pages do. Adding a bypass prefix here
+  would put an unauthenticated endpoint on the internet; there is no reason to want one, since
+  the readiness probe dials the pod directly and never traverses this route.
 #}
 ---
 {{ ingressroute(
@@ -16,6 +21,5 @@
     container_item.hostname | default(container_item.name),
     container_item.port,
     container_item.use_authelia,
-    public=false,
   )
 }}
