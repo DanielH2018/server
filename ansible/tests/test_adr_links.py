@@ -1,6 +1,6 @@
 """ADRs and `# DECIDED:` markers must reference each other, in both directions.
 
-WHY THIS IS A TEST. The repo already had a decision record before ADRs existed: 41
+WHY THIS IS A TEST. The repo already had a decision record before ADRs existed: 37
 `# DECIDED:` markers at the lines they govern, which `.claude/skills/homelab-review/
 SKILL.md` step 3 greps before a reviewer flags anything in a role. An ADR set that
 referenced those only by convention would be a second registry drifting from the first --
@@ -76,6 +76,13 @@ def _source_files() -> list[Path]:
         # "worktrees" is a part of every ABSOLUTE path here and an absolute check skips
         # the entire tree — leaving every link assertion vacuously true.
         if SKIP_PARTS & set(path.relative_to(REPO).parts):
+            continue
+        # A scanner must not scan itself. This file quotes the marker syntax five times —
+        # in its own docstring and in an assertion message — and each quote would count as
+        # a marker, inflating the corpus floor with prose about markers rather than markers.
+        # The same is true of any file whose subject is the convention; the headlamp
+        # mapping test is the one other case, and it names no ADR so it stays harmless.
+        if path == Path(__file__).resolve():
             continue
         out.append(path)
     return sorted(out)
@@ -221,12 +228,13 @@ def test_the_template_is_not_treated_as_a_record():
 def test_the_marker_scan_finds_the_known_corpus():
     """A regex that silently stops matching would make every link check vacuous.
 
-    41 markers across 29 code files on 2026-08-24 — counted by this scan and by an
-    independent grep, which agreed. Pinned as a floor, not an exact count, so adding a
-    marker does not fail the suite while removing the whole convention does.
+    37 markers across 28 code files on 2026-08-24, once this file is excluded from its own
+    scan. A raw grep reports 41 across 29 — the difference is the five times this file
+    quotes the marker syntax. Pinned as a floor, not an exact count, so adding a marker
+    does not fail the suite while removing the whole convention does.
     """
     markers = _markers()
-    assert len(markers) >= 38, (
+    assert len(markers) >= 34, (
         f"only {len(markers)} markers found — has the syntax moved?"
     )
-    assert len({p for p, _, _ in markers}) >= 26
+    assert len({p for p, _, _ in markers}) >= 24
