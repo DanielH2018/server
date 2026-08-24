@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+# Claude Code `remember` plugin log-rotation heartbeat — managed by Ansible (k3s role);
+# edits overwritten.
+#
+# WHAT THIS WATCHES, and why the obvious check does not work.
+#
+# The plugin writes ~1.5 MB/day of hook logs per store into <store>/.remember/logs/, and
+# bounds them itself: rotate_logs() tars memory-*.log older than 7 days into monthly
+# archives at roughly two orders of magnitude. Healthy steady state is therefore a 7-day
+# loose window and nothing older.
+#
+# rotate_logs() is reached from exactly ONE caller — run-consolidation.sh:49 — and it is
+# also the only writer of the .rotate-failed breadcrumb that /remember:doctor reports. So a
+# breadcrumb check is structurally unable to see the failure that matters: if consolidation
+# stalls, rotate_logs never runs, no breadcrumb is ever written, and the loose window grows
+# without limit while the check reads green. That is the whole reason this script measures
+# STATE (files that outlived the rotation horizon) instead of reading the plugin's own
+# self-report.
+#
+# One measurement therefore covers three distinct failures: tar failing inside rotate_logs,
+# consolidation not running at all, and this cron itself dying — the last via Kuma's push
+# deadline, which fires DOWN on silence. Nothing here parses a plugin internal, so a plugin
+# upgrade cannot silently retarget it.
+#
+# THE HORIZON IS DELIBERATELY NOT 7. rotate_logs uses -mtime +7, so a check at +7 races it:
+# a file that ages out minutes before consolidation's next hourly run is not a fault. The
+# {{ k3s_remember_log_max_age_days }}-day horizon leaves a full week of grace, so a file
+# reaching it means rotation has genuinely stopped, not that it is merely mid-cycle.
+# AUTONOMOUS-ROLE CONTRACT — this cron deletes files with no human in the loop, so its
+# authority is written here where the deletion happens, not only in a review note.
+#   Scope:      memory-*.log under a <store>/.remember/logs/ directory, older than
+#               {{ k3s_remember_log_prune_age_days }} days. Nothing else, ever. Never the memory files themselves
+#               (now.md, today-*.md, recent.md, archive.md), never the logs-*.tar.gz archives
+#               rotate_logs writes, never a path outside {{ k3s_remember_store_root }}.
+#   Authority:  runs as the store owner, not root, so the filesystem itself bounds a bad
+#               search root rather than the script's own correctness being the only guard.
+#   Evidence:   every run logs `status=… ` via logger and pushes the same verdict to Kuma, so
+#               a deletion is never silent and `probe.py alerts` can reconstruct it.
+#   Reversal:   set k3s_remember_log_prune_age_days far beyond the retention you want and
+#               redeploy — the check half keeps working with the prune half inert.
+set -uo pipefail
+
+# shellcheck source=/dev/null
+source /usr/local/lib/kuma-push-lib.sh || {
+  logger -t remember-logs-health "kuma-push-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+
+KUMA_HOST="uptime-kuma.local.{{ domain }}"
+# Pinned to the cluster ingress VIP, same as disk-health.sh: Kuma serves from the k8s edge.
+KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
+# Token sourced, never inlined — this script lands 0755, so an inlined token is readable by
+# every local account and is enough to forge or suppress a heartbeat. Same split as
+# disk-health.sh.
+REMEMBER_LOGS_PUSH_TOKEN=""
+# shellcheck source=/dev/null
+[[ -r /etc/rancher/k3s/kuma-push.env ]] && . /etc/rancher/k3s/kuma-push.env
+if [[ -z "$REMEMBER_LOGS_PUSH_TOKEN" ]]; then
+  logger -t remember-logs-health "kuma push token unreadable — skipping push (run initial_setup.yml)"
+  exit 0
+fi
+PUSH_URL="https://${KUMA_HOST}/api/push/${REMEMBER_LOGS_PUSH_TOKEN}"
+MAX_AGE_DAYS={{ k3s_remember_log_max_age_days }}
+
+# Every remember store under the user's home, found rather than listed: stores appear
+# whenever a session runs in a new project directory, and a hardcoded list would leave the
+# next one unwatched with nothing to say so. -maxdepth 4 reaches ~/.remember/logs and
+# ~/<project>/.remember/logs without descending whole project trees.
+#
+# Counted with grep -c rather than bash's ${'#'}array[@] length: this file is rendered by
+# Jinja, which reads the "{" + "#" of that expansion as a comment open and fails to render.
+STORE_LIST=$(
+  find "{{ k3s_remember_store_root }}" -maxdepth 4 -type d -path '*/.remember/logs' 2>/dev/null | sort
+)
+N_STORES=$(printf '%s\n' "$STORE_LIST" | grep -c '^/' || true)
+mapfile -t LOG_DIRS <<< "$STORE_LIST"
+
+if (( N_STORES == 0 )); then
+  # Not a fault: a host with no Claude Code sessions has no stores. Reported UP with the
+  # reason stated, so "nothing to check" never reads the same as "everything is fine".
+  STATUS=up
+  MSG="no remember stores under {{ k3s_remember_store_root }}"
+  logger -t remember-logs-health "status=${STATUS} ${MSG}"
+  kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" remember-logs-health
+  exit 0
+fi
+
+# MEASURED BEFORE THE PRUNE, and this ordering is the whole design. The prune below is what
+# bounds disk when rotation has stopped; if the status were read after it, the prune would
+# erase its own evidence and the monitor would flap UP every run while rotation stayed
+# broken. Pre-prune count answers "did rotation keep up", which is the actionable question.
+STALE_TOTAL=0
+STALE_WHERE=""
+for d in "${LOG_DIRS[@]}"; do
+  n=$(find "$d" -maxdepth 1 -name 'memory-*.log' -mtime "+${MAX_AGE_DAYS}" 2>/dev/null | wc -l)
+  (( n > 0 )) || continue
+  STALE_TOTAL=$(( STALE_TOTAL + n ))
+  STALE_WHERE="${STALE_WHERE:+${STALE_WHERE}, }${d}:${n}"
+done
+
+# The prune itself — option A of the plan, folded into the same unit as the check so that a
+# dead cron takes the heartbeat with it. Deleting rather than archiving: rotate_logs already
+# owns archiving, and a second archiver writing into the same directory would collide with
+# its monthly tarball naming. Anything this deletes is a debug log that rotation was supposed
+# to have tarballed weeks earlier; memory content lives in now.md / today-*.md / recent.md /
+# archive.md and is never touched.
+#
+# PRUNED AT A LONGER HORIZON THAN THE ALARM, and the gap between the two is load-bearing.
+# Pruning at the alarm horizon would delete the evidence that raised the alarm: the next run
+# would find nothing stale and report UP, so a permanent stall would show as one DOWN run per
+# day — a blip easy to miss — instead of staying DOWN. With the prune {{ k3s_remember_log_prune_age_days }}d out, a stalled
+# store accumulates files between the two horizons and the count stays above zero for as long
+# as rotation is broken, while disk is still bounded at the outer edge.
+PRUNE_AGE_DAYS={{ k3s_remember_log_prune_age_days }}
+PRUNED=0
+for d in "${LOG_DIRS[@]}"; do
+  k=$(find "$d" -maxdepth 1 -name 'memory-*.log' -mtime "+${PRUNE_AGE_DAYS}" -delete -print 2>/dev/null | wc -l)
+  PRUNED=$(( PRUNED + k ))
+done
+
+if (( STALE_TOTAL > 0 )); then
+  STATUS=down
+  MSG="${STALE_TOTAL} log(s) older than ${MAX_AGE_DAYS}d — rotation has stopped (${STALE_WHERE}); pruned ${PRUNED} past ${PRUNE_AGE_DAYS}d. Run /remember:doctor"
+else
+  STATUS=up
+  MSG="${N_STORES} store(s), no logs older than ${MAX_AGE_DAYS}d"
+fi
+
+# Unconditional, before the push — same rationale as disk-health.sh. The kuma_push failure
+# path only logs when curl fails, so a successfully-pushed DOWN would otherwise leave no
+# durable record and `probe.py alerts` could never reconstruct this monitor's history.
+logger -t remember-logs-health "status=${STATUS} ${MSG}"
+
+kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" remember-logs-health

@@ -35,7 +35,7 @@
 # every script current.
 
 - name: Deploy the Kuma push credentials for the heartbeat scripts
-  tags: [backup-health, disk-health, manifest-prune, etcd-snapshot]
+  tags: [backup-health, disk-health, manifest-prune, etcd-snapshot, remember-logs]
   # 0640 root:{{ sys_user }}, for the same reason as live-drift-check.env below: the scripts that
   # consume these land 0755, so a token rendered inline is readable by every local account — and
   # a Kuma push token is enough to forge or suppress a heartbeat, which hides a real outage. The
@@ -48,7 +48,7 @@
     owner: root
     group: "{{ sys_user }}"
   become: true
-  no_log: true  # renders four Kuma push tokens
+  no_log: true  # renders five Kuma push tokens
 
 - name: Create the Healthchecks.io credential directory
   tags: [backup-health, disk-health, manifest-prune]
@@ -194,6 +194,30 @@
     user: "{{ sys_user }}"
     job: "/usr/local/bin/disk-health.sh"
     cron_file: disk-health
+  become: true
+
+- name: Deploy the remember log-rotation heartbeat
+  tags: [remember-logs]
+  ansible.builtin.template:
+    src: remember-logs-health.sh.j2
+    dest: /usr/local/bin/remember-logs-health.sh
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Schedule the remember log-rotation heartbeat
+  tags: [remember-logs]
+  # Runs as {{ sys_user }}, not root, and that is a requirement rather than a convention: the
+  # stores it prunes are {{ sys_user }}-owned under /home/{{ sys_user }}, and a root prune would
+  # be free to delete outside them if the search path were ever wrong. It reads the shared
+  # kuma-push.env through the 0640 root:{{ sys_user }} group bit, same as disk-health.
+  ansible.builtin.cron:
+    name: "remember log rotation health"
+    minute: "{{ k3s_remember_logs_cron_minute }}"
+    user: "{{ sys_user }}"
+    job: "/usr/local/bin/remember-logs-health.sh"
+    cron_file: remember-logs-health
   become: true
 
 - name: Deploy the manifest-prune drift check
@@ -354,6 +378,13 @@
   vars:
     stamp_render_name: k3s-disk-health
     stamp_render_templates: "{{ (k3s_render_stamp_groups | selectattr('name', 'eq', 'k3s-disk-health') | first).templates }}"
+
+- name: Stamp the remember log-rotation script this host has rendered
+  tags: [remember-logs]
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: k3s-remember-logs
+    stamp_render_templates: "{{ (k3s_render_stamp_groups | selectattr('name', 'eq', 'k3s-remember-logs') | first).templates }}"
 
 - name: Stamp the manifest-prune script this host has rendered
   tags: [manifest-prune]
