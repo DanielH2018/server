@@ -36,7 +36,7 @@ dial Pi-hole, mosquitto, the registry, Longhorn's API or any app's service port 
 never passing the edge and so never meeting Authelia or CrowdSec.
 
 Default-deny is what turns lateral movement from "just connect" into "needs a policy
-exception".
+exception."
 
 ## Enforcement facts this design rests on
 
@@ -47,7 +47,7 @@ All measured on this cluster, not assumed.
 | **Ingress policies are enforced**; kube-router's netpol controller runs (k3s default, `--disable-network-policy` not passed) | `n8n/templates/networkpolicy.yaml.j2` header; four live policies |
 | **Egress policies select pods and block nothing** | measured 2026-08-07, recorded in `sonarr/tasks/main.yml` (probe retired 2026-08-17; prose is the only record) |
 | **Kubelet probe traffic needs no ingress rule** | `flaresolverr` admits :8191 only from prowlarr, yet is probed on :8191 and runs 1/1. Corroborated by `headlamp` (:4466 from traefik only, 1/1 for 28h) |
-| **hostNetwork pods cannot be policed by podSelector** | `node-exporter` (both nodes), metallb `speaker` — pod IP *is* the node IP |
+| **hostNetwork pods cannot be policed by podSelector** | `node-exporter` (both nodes), `metallb` `speaker` — pod IP *is* the node IP |
 | **hostPort traffic arrives with a node IP**, needing an `ipBlock` | `registry`'s policy carries `ipBlock` entries for exactly this |
 | Node bridge addresses are `10.42.0.1` (daniel-box) and `10.42.1.1` (daniel-server) | `ip -4 -o addr show cni0` on each |
 | All seven LoadBalancers are **ETP=Local**, so external client IPs are preserved | `kubectl get svc -o jsonpath=…externalTrafficPolicy` |
@@ -63,7 +63,7 @@ Two consequences worth stating so nobody "fixes" a non-problem later:
 ### Correction carried into this design
 
 An earlier draft of the baseline used `ipBlock: {cidr: 10.42.0.0/16}` to admit "the
-nodes". Both pod CIDRs sit inside that /16 and `ipBlock` matches on source IP regardless
+nodes." Both pod CIDRs sit inside that /16 and `ipBlock` matches on source IP regardless
 of whether the source is a pod, so that single line would have readmitted **every pod in
 the cluster** — cancelling the default-deny while reading like a node allowance. The
 baseline uses `/32` host addresses only.
@@ -147,7 +147,7 @@ other label and so would pass that check while still breaking:
   target cannot break an outbound assertion. What actually breaks is the mirror image:
   `podSelector: {}` also selects each probe's **control target**. `netpol-probe-slice3-job.yaml.j2:72`
   dials `traefik:80` for its control; under a namespace-scope baseline, traefik's own ingress policy
-  would admit only `app: traefik`, observability's prometheus, and the two cni0 `/32`s — the probe
+  would admit only `app: traefik`, observability's `prometheus`, and the two cni0 `/32`s — the probe
   pod matches none of those, the control fails, and the Job exits 1 with `CONTROL FAILED`, not with
   a failed inverted assertion. `netpol-probe-job.yaml.j2:51-55` already documents the same shape for
   its own NEGATIVE CONTROL leg (dialing homepage): "by construction there is no unfenced pod left"
@@ -158,7 +158,7 @@ other label and so would pass that check while still breaking:
   asserting flaresolverr is unreachable.
 
   **Superseded — this half of the bullet no longer holds.** The premise is that traefik's policy
-  admits only `app: traefik`, prometheus and the two cni0 `/32`s. Slice 4 then gave traefik an
+  admits only `app: traefik`, `prometheus` and the two cni0 `/32`s. Slice 4 then gave traefik an
   open-port rule, written after this paragraph. Read live 2026-08-20, its first ingress rule is
   `{"ports":[{"port":8000},{"port":8443}]}` with **no `from:`** — open to every source. So every
   control leg dialing `traefik:80` survives the flip untouched: slices 1-4 and headlamp's probe on
@@ -169,7 +169,7 @@ other label and so would pass that check while still breaking:
 - **The `flaresolverr` exemption's rationale expires.** It is exempt from the labelling guard today
   (Ruling 4, Task 1) because its own bespoke policy is *tighter* than the baseline. Under
   `podSelector: {}` the baseline selects it anyway regardless of the exemption, producing exactly
-  the widening — traefik, prometheus, and every node CIDR admitted to a pod that today accepts only
+  the widening — traefik, `prometheus`, and every node CIDR admitted to a pod that today accepts only
   `prowlarr` — the exemption was written to avoid.
 
 ### Rollback is a variable, never a deletion
@@ -186,8 +186,8 @@ The two shapes are exact inverses and are the easiest thing here to get backward
 
 ### `from` peers: OR vs AND
 
-Separate list items are OR'd; sibling keys within one item are AND'd. This is live in
-slice 1 (traefik → grafana:3000, prometheus:9090) and getting it wrong yields a policy that
+Separate list items combine with OR; sibling keys within one item combine with AND. This is live in
+slice 1 (traefik → `grafana`:3000, `prometheus`:9090) and getting it wrong yields a policy that
 admits an entire namespace while passing a negative probe:
 
 ```yaml
@@ -230,7 +230,7 @@ reason below.
 | **1** | Leaf apps: bento-pdf, littlelink, speedtest, healthchecks, ical-proxy, code-server | Traefik is the only in-cluster caller of these six. Exercises the whole mechanism — baseline policy, var flip, probe job — at near-zero blast radius, and a mistake surfaces as a 502, not silence. terraria and valheim are deliberately NOT here: they are reached over their own MetalLB VIPs by game clients on the LAN, not through Traefik, so the baseline's traefik rule would not cover them and fencing them would need per-workload peers this slice does not design |
 | **2** ✅ | Media stack + bridges: sonarr, radarr, prowlarr, bazarr, tdarr, qbittorrent, configarr, janitorr, monitor-bridge, autofix-bridge | Densest genuine app-to-app mesh; several callers are DB-configured and unprobeable. **Deployed 2026-08-17.** jellyfin moved to slice 4 — see below |
 | **3** ✅ | `observability` namespace | Four hostPort ingress paths, cross-namespace inbound from three homelab workloads, thick intra-namespace mesh. **Deployed 2026-08-19.** |
-| **4** ✅ | Infra tier: traefik, authelia, crowdsec, pihole, mosquitto, nut, jellyfin | Highest consequence; do it once the pattern is proven. **Deployed 2026-08-20.** registry/headlamp/n8n were NOT labelled — each already carries a bespoke policy *tighter* than the baseline, so labelling would widen it |
+| **4** ✅ | Infra tier: traefik, authelia, `crowdsec`, pihole, mosquitto, nut, jellyfin | Highest consequence; do it once the pattern is proven. **Deployed 2026-08-20.** registry/headlamp/n8n were NOT labelled — each already carries a bespoke policy *tighter* than the baseline, so labelling would widen it |
 | **5** | Switch `netpol_baseline_scope` to `namespace` | Makes a workload fenced-by-default instead of opt-in. Gated on zero unlabelled pods |
 
 **Services born fenced.** A leaf app added after slice 1 shipped belongs to no slice, but has
@@ -255,19 +255,19 @@ it first means debugging slices 2–4 with the monitoring possibly impaired.
   own `metadata.namespace`, so `observability` needed its own ingress baseline
   (`netpol-baseline-observability`, plus two per-workload policies) rather than more labels on the
   existing `homelab` one. It is one role's worth of templates (`netpol-baseline`) but fences six
-  workloads once it enforces — `claude-otel` renders prometheus, loki, tempo, the otel-collector,
-  grafana and kube-state-metrics as six separate pod-producing documents from one role. Counting
+  workloads once it enforces — `claude-otel` renders `prometheus`, `loki`, `tempo`, the otel-collector,
+  `grafana` and kube-state-metrics as six separate pod-producing documents from one role. Counting
   roles, the fenced total becomes 17 once this slice enforces (6 slice-1 + 10 slice-2 +
   `claude-otel`); counting workloads it is considerably higher — the two numbers answer different
   questions and this slice is the first place they diverge by more than one.
-- **There are two Lokis, and a name grep cannot tell them apart.** `homelab-mcp` (in `homelab`) is
+- **There are two Loki instances, and a name grep cannot tell them apart.** `homelab-mcp` (in `homelab`) is
   the only in-cluster caller of *this* Loki, reaching it via `CLAUDE_LOKI_URL`. `terraria-stats`,
   `valheim-stats` and `monitor-bridge` all target a different Service, `loki-homelab` in `homelab`,
   via the plain `LOKI_URL`. Both are plausibly "the Loki" from a manifest name alone; telling them
   apart needed the **env value the manifest actually sets**, not the Service name either role's
   template happens to use.
-- **Neither web route is unauthenticated, so the probe has no HTTP liveness leg.** grafana is
-  `use_authelia: true`. The prometheus route is **ClientIP LAN-gated plus rate-limit, not
+- **Neither web route is unauthenticated, so the probe has no HTTP liveness leg.** `grafana` is
+  `use_authelia: true`. The `prometheus` route is **ClientIP LAN-gated plus rate-limit, not
   Authelia** (`claude-otel/templates/prometheus-ingressroute.yaml.j2`) — worth stating precisely
   because an earlier draft of this section called it Authelia-gated, and the two middlewares fail
   identically to an unauthenticated-route probe (a 401 or a 302, see "The liveness target must be
@@ -290,7 +290,7 @@ it first means debugging slices 2–4 with the monitoring possibly impaired.
   `tempo:3200` over loopback hostPorts, admitted by the node-CIDR `ipBlock` peer (which carries no
   `ports` restriction — trimming that CIDR list to "nameable" entries would break otelq silently).
   Both `cni0` entries (`10.42.0.1/32`, `10.42.1.1/32`) are load-bearing, not just daniel-box's: a hostPort binds
-  only on the node the pod actually runs on, and prometheus/loki/tempo are unpinned single-replica
+  only on the node the pod actually runs on, and `prometheus`/`loki`/`tempo` are unpinned single-replica
   Deployments, so either node can be the one otelq's loopback path resolves to. Only
   `10.42.1.0/32` (daniel-server's `flannel.1`) has no caller nameable today; it stays as deliberate
   over-inclusion, at the same trust level the baseline already grants node bridges.
@@ -392,7 +392,7 @@ Measured against the live mosquitto:
 outside the cluster, not for a pod dialling its own cluster's LoadBalancer VIP** — that path
 hairpins through the node and is masqueraded. No pod IP appears in the log at all.
 
-Consequence for slice 4: **a `podSelector` cannot express "mosquitto accepts zigbee2mqtt".** The
+Consequence for slice 4: **a `podSelector` cannot express "mosquitto accepts zigbee2mqtt."** The
 rule must use the node `ipBlock`s, which also means it cannot distinguish zigbee2mqtt from any
 other pod on the same node — so fencing mosquitto by source is not achievable while the client
 dials the VIP. Either accept that, or move the client to the ClusterIP so pod identity survives.
@@ -460,7 +460,7 @@ Host → ClusterIP callers targeting a **fenced** pod:
    runs on daniel-box. This is the cross-node host path succeeding in production, and it is the
    evidence above.
 
-A fourth targets prometheus in `observability`, which no policy selects until slice 3 — the warning
+A fourth targets `prometheus` in `observability`, which no policy selects until slice 3 — the warning
 below.
 
 **The census method that missed one, and why.** Two passes used
@@ -483,25 +483,25 @@ exemption, Ruling 4), `n8n` (2), `loki-homelab` (2), `freshrss` (2), `crowdsec` 
 `cloudflare-ddns` (2). None of the unhandled ones are in scope for slices 1–3. Whichever slice
 fences one of these roles next must check for a second workload AND for an existing bespoke policy
 covering it, the way Task 1 did for flaresolverr — the role-granular habit silently leaves the
-second workload unfenced. Second: two services can share a **name** across namespaces — see "Two
-Lokis" in "Slice 3 specifics" above. Resolve the env value the manifest actually sets, not the
+second workload unfenced. Second: two services can share a **name** across namespaces — see "Two Loki
+instances" in "Slice 3 specifics" above. Resolve the env value the manifest actually sets, not the
 Service name a role's own template happens to use.
 
 **Warning for slice 3, where that stops being true — corrected below.**
-`roles/k8s/claude-otel/templates/telemetry-health.sh.j2` resolves prometheus's ClusterIP at runtime
+`roles/k8s/claude-otel/templates/telemetry-health.sh.j2` resolves `prometheus`'s ClusterIP at runtime
 (`kubectl get svc prometheus -o jsonpath='{.spec.clusterIP}'`, then curls it). An earlier draft of
 this section claimed the cron installing it "runs from a host cron on both nodes." **That is false,
 verified:** `claude-otel` appears in `containers_list` only in `host_vars/daniel-box.yml`;
 `daniel-server.yml` has no entry, and the cron task in `roles/k8s/claude-otel/tasks/main.yml` has no
 `delegate_to`. The cron installs and fires from daniel-box alone.
 
-That does not remove the cross-node exposure, it relocates it. prometheus has **no node pin** —
+That does not remove the cross-node exposure, it relocates it. `prometheus` has **no node pin** —
 `roles/k8s/claude-otel/templates/prometheus.yaml.j2` sets no `nodeSelector`, `nodeAffinity` or
-`nodeName` — so the moment prometheus lands on daniel-server, the daniel-box cron's call becomes
+`nodeName` — so the moment `prometheus` lands on daniel-server, the daniel-box cron's call becomes
 cross-node, silently and without a deploy to blame it on. By slice 2's own evidence ("Answers from
 slice 2" above, the `registry`/`flannel.1` finding), a cross-node host→pod packet arrives as the
 **sending** node's `flannel.1` address — so that caller needs daniel-box's own flannel.1
-(`10.42.0.0/32`), not daniel-server's. Slice 3 must either admit that address or leave prometheus
+(`10.42.0.0/32`), not daniel-server's. Slice 3 must either admit that address or leave `prometheus`
 reachable from both hosts before it labels the observability namespace. See "Slice 3 specifics"
 above for what it settled and verified per-node with `ip -4 -o addr show flannel.1`.
 
@@ -577,19 +577,19 @@ Deployed 2026-08-19 in two stages, as designed: `claude-otel` first to add the l
   assertions show the fence denies anything.
 - **The intra-namespace `podSelector: {}` peer is proven, and it proves additivity too.**
   Prometheus scrapes kube-state-metrics, `loki:3100` and `tempo:3200` — all three fenced, all
-  three reading `up == 1` after the fence. The loki case is the interesting one: `loki-callers`
-  admits only `homelab-mcp` on 3100, so prometheus reaches loki solely because the baseline's
+  three reading `up == 1` after the fence. The `loki` case is the interesting one: `loki-callers`
+  admits only `homelab-mcp` on 3100, so `prometheus` reaches `loki` solely because the baseline's
   `podSelector: {}` rule unions with it. Grafana's own outbound path to those three datasources
   rides the same rule but was not separately exercised — no dashboard was loaded in the
-  verification window, and an absence of errors in grafana's log is not evidence that it queried
+  verification window, and an absence of errors in `grafana`'s log is not evidence that it queried
   anything.
-- **A 302 from the grafana route proves nothing**, for the reason already recorded elsewhere in this
+- **A 302 from the `grafana` route proves nothing**, for the reason already recorded elsewhere in this
   doc: Authelia's redirect fires in the middleware, before Traefik proxies to the backend. The
   Traefik cross-namespace peer was proven instead through the `prometheus` route, which carries no
   Authelia — it returned HTTP 200 with a real result body.
-- **Only one of the four node CIDRs was exercised.** Both loki and prometheus were scheduled on
+- **Only one of the four node CIDRs was exercised.** Both `loki` and `prometheus` were scheduled on
   daniel-box, and both host callers run there too: the `telemetry-health.sh` heartbeat (exit 0
-  through the fence) and the loopback hostPort path to loki (HTTP 200). Both are therefore
+  through the fence) and the loopback hostPort path to `loki` (HTTP 200). Both are therefore
   same-node, which the earlier slices measured as arriving from `cni0` — consistent with the
   inference this slice made, and the same-node hostPort DNAT source is now exercised rather than
   merely inferred. The other three entries — daniel-server's `cni0` and both `flannel.1`
@@ -603,7 +603,7 @@ slices' probes now pass together for the first time; 29 pods carry `netpol-basel
 
 **Two defects survived every review and were found only by deploying.** Both are the same mistake
 in different clothing: the caller census asked *"which pods dial this Service, on which Service
-port"*. Both halves of that question are wrong.
+port."* Both halves of that question are wrong.
 
 - **A NetworkPolicy matches the POD's port, not the Service's.** kube-proxy has already DNAT'd
   Service port → targetPort by the time the policy is evaluated. traefik's Service maps 80→`http`
@@ -616,8 +616,8 @@ port"*. Both halves of that question are wrong.
   In this slice only traefik diverged; the other six map 1:1.
 - **A sidecar has no network identity of its own — it carries its POD's labels.** authelia runs a
   `crowdsec-agent` sidecar shipping auth logs to the LAPI, so that traffic arrives as
-  `app: authelia`, which the crowdsec policy did not admit. kube-router REJECTs rather than drops,
-  so the sidecar crash-looped on "connection refused", which made the whole pod unready, which
+  `app: authelia`, which the `crowdsec` policy did not admit. kube-router REJECTs rather than drops,
+  so the sidecar crash-looped on "connection refused," which made the whole pod unready, which
   pulled authelia out of its Service endpoints, which **broke SSO on every protected route for
   ~17 minutes**, while the authelia container itself stayed healthy throughout. Find them with
   `grep -rl crowdsec-agent ansible/roles/k8s --include='*.j2'` — here: traefik, authelia, and the
@@ -629,7 +629,7 @@ port"*. Both halves of that question are wrong.
   it is not masqueraded to cni0, which several earlier conclusions in this project assumed.
 - zigbee2mqtt logged `Connected to MQTT server` after mosquitto's roll. This is the live proof the
   mosquitto podSelectors are load-bearing: an earlier reading of the connection log concluded they
-  had "never matched a real connection", because z2m and HA hold **persistent** MQTT sessions that
+  had "never matched a real connection," because z2m and HA hold **persistent** MQTT sessions that
   never reappear in a log window, and the connections that *were* visible were kubelet probes at
   the readiness/liveness periods.
 
@@ -649,9 +649,9 @@ gate fails on any unlabelled pod. They fall in four groups:
 
 | Group | Count | Members |
 |---|---|---|
-| Standalone apps | 13 | home-assistant, homelab-mcp, homepage, freshrss, karakeep, livesync, loki-homelab, peanut, uptime-kuma, wg-easy, zigbee2mqtt, cloudflare-ddns-direct, cloudflare-ddns-proxied |
-| Sub-workloads of a parent role | 7 | karakeep-chrome, karakeep-meilisearch, karakeep-time-tagger, scrutiny-influxdb, scrutiny-web, freshrss-feed-cache, n8n-runners |
-| DaemonSets — fence or exempt | 4 | node-exporter, promtail, scrutiny-collector, crowdsec-node-agent *(already fenced in slice 4)* |
+| Standalone apps | 13 | home-assistant, homelab-mcp, homepage, freshrss, karakeep, `livesync`, `loki`-homelab, peanut, uptime-kuma, wg-easy, zigbee2mqtt, cloudflare-ddns-direct, cloudflare-ddns-proxied |
+| Sub-workloads of a parent role | 7 | karakeep-chrome, karakeep-meilisearch, karakeep-time-tagger, `scrutiny`-influxdb, `scrutiny`-web, freshrss-feed-cache, n8n-runners |
+| DaemonSets — fence or exempt | 4 | node-exporter, promtail, `scrutiny`-collector, `crowdsec`-node-agent *(already fenced in slice 4)* |
 | Deferred since slice 1 | 4 | terraria, valheim, terraria-stats, valheim-stats — LAN game clients reach them over their own MetalLB VIPs, so they need per-workload peers no slice has designed |
 
 Slice 4.5 must apply slice 4's two lessons from the start: check `targetPort`, not the Service
@@ -664,7 +664,7 @@ rollout settled that the plan did not predict.
 
 **The count was 27, not 28, and three named workloads are out of scope.** The cluster held 31
 unlabelled controllers, of which `headlamp`, `n8n`, `registry` and `flaresolverr` already carry
-their own policies. Labelling them would ADD the baseline's traefik + prometheus + node-CIDR
+their own policies. Labelling them would ADD the baseline's traefik + `prometheus` + node-CIDR
 allow-list on top of a tighter bespoke one, widening them. `n8n` is now recorded in the guard's
 `BESPOKE_POLICY_WORKLOADS` for that reason — slice 4.5 labels `n8n-runners`, which drags the role
 into the fenced set and would otherwise demand a label on `n8n` itself.
@@ -730,7 +730,7 @@ landed BEFORE running netpol-baseline.**
 prowlarr, headlamp and registry probes during stage A — **no probe needed changing**, which is the
 measured form of the correction above. 25 Prometheus targets up, monitor-bridge all-OK including
 `cluster_targets - all 24 targets up`. Spot checks across the fencing shapes: home-assistant 200,
-uptime-kuma / scrutiny / karakeep / n8n / headlamp 302, registry 200 over its node hostPort (it has
+uptime-kuma / `scrutiny` / karakeep / n8n / headlamp 302, registry 200 over its node hostPort (it has
 no public route, so the edge 404s by design) with both self-test pull Jobs complete.
 
 The two-stage deploy ran clean and nothing 5xx'd. That is the part worth not over-reading: slice
@@ -741,7 +741,7 @@ durable enough to record here rather than only there.
 
 **The selector is an opt-out, not `podSelector: {}`.** A bare `{}` would select the four workloads
 that own a policy *tighter* than the baseline — flaresolverr, headlamp, n8n, registry — and, because
-policies are additive, add traefik, prometheus and both node CIDRs on top of each. That is the exact
+policies are additive, add traefik, `prometheus` and both node CIDRs on top of each. That is the exact
 widening the flaresolverr guard exemption was written to avoid, and the spec above predicts its
 rationale expiring here. Instead the selector is `matchExpressions: [{key: netpol-baseline-exempt,
 operator: DoesNotExist}]`, and those four workloads carry the label. `DoesNotExist` rather than

@@ -60,7 +60,7 @@ not.** k3s stores the bootstrap set's file *contents* in the datastore under `/b
 encrypted with the cluster token — `ControlRuntimeBootstrap` includes `EncryptionConfig`
 (`pkg/daemons/config/types.go`), `ReadFromDisk` reads each path's bytes into `File.Content`
 (`pkg/bootstrap/bootstrap.go`), and `pkg/cluster/storage.go` describes the blob as "CA certs and
-keys, encryption passphrases, etc — encrypted with the join token". `secrets-encrypt rotate-keys`
+keys, encryption passphrases, etc — encrypted with the join token." `secrets-encrypt rotate-keys`
 calls `cluster.Save`, so the stored copy tracks rotations. Verified against k3s v1.36.3+k3s1, the
 running version. An etcd snapshot is an unfiltered datastore image, so it carries that blob.
 

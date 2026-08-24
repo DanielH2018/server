@@ -8,7 +8,7 @@
 > scheduled.
 
 **Recommendation: augment with Flux, in narrow slices, and keep Ansible.** Move the *apply*
-of non-secret k8s manifests to Flux's kustomize-controller; keep Ansible as the *renderer*,
+of non-secret k8s manifests to Flux's `kustomize`-controller; keep Ansible as the *renderer*,
 the host-config plane, and the secret plane. Do not replace `gitops_deploy.py` wholesale —
 its 784 lines of decision logic encode roughly ten recorded incidents, and most of them have
 no controller-native equivalent.
@@ -36,7 +36,7 @@ Argo-vs-Flux is downstream of one choice. Three options:
 ConfigMaps and repo-wide vars from `group_vars/all.yml`. Attempted all at once it is months of
 work whose only product is a different templating language. Attempted one role at a time, on
 top of option 2, it buys three things Jinja cannot (offline schema validation, Renovate's
-built-in kustomize manager, and no renderer for that role) — and the Jinja tail never has to
+built-in `kustomize` manager, and no renderer for that role) — and the Jinja tail never has to
 be finished.
 
 **Option 2 is viable, and one measurement is what makes it viable.** Every Jinja conditional
@@ -99,7 +99,7 @@ Today: one SOPS file (`ansible/vars/secrets.yml`, ~140 keys) decrypted at render
 host, interpolated into 18 `secret.yaml.j2` templates, written 0600 with `no_log`. Rendered
 output is plaintext, so it can never reach git.
 
-Flux decrypts SOPS/age natively in kustomize-controller — but only if the *encrypted Secret
+Flux decrypts SOPS/age natively in `kustomize`-controller — but only if the *encrypted Secret
 manifests* live in git, one per service. That inverts the single-file model and breaks
 `scripts/secret_rotation.py`, `ansible/secret_rotation.yml`, and the `sops updatekeys`
 onboarding flow. There is a tempting middle path — CI renders the secret templates and
@@ -184,7 +184,7 @@ per-host rendered state. Slices 1-3 cost little and answer the question with evi
 ## 8. Migrating off Jinja, role by role
 
 **Yes, it slices, and the slice boundary is the role — the same boundary option 2 already uses.**
-Flux's kustomize-controller generates a `kustomization.yaml` for any `spec.path` holding plain
+Flux's `kustomize`-controller generates a `kustomization.yaml` for any `spec.path` holding plain
 Kubernetes manifests, so a directory of Ansible-rendered YAML and a directory of hand-written
 Kustomize bases are both valid sources. Mixed mode costs nothing, which is what makes
 incremental migration possible at all. A role that finishes the port needs no renderer, so Flux
@@ -195,7 +195,7 @@ points at the repo directly and the deploy branch stops existing for that role.
 | Gain | Detail |
 |---|---|
 | **Offline schema validation** | There is none today. `validate_k8s_manifests.py` renders and parses YAML — it never checks a field name against a schema. `--dry-run` does, but it needs a live API server and refuses ~17 services. Native YAML means `kubeconform` in CI over every ported role, on a PR, with no cluster. This is a new capability, not a refactor. |
-| **Renovate's built-in kustomize manager** | Image pins are found today by a custom regex on `^ansible/roles/k8s/[^/]+/defaults/main\.yml$`. A `kustomization.yaml` `images:` block is read by the manager Renovate ships and tests. One less bespoke regex to keep correct. |
+| **Renovate's built-in `kustomize` manager** | Image pins are found today by a custom regex on `^ansible/roles/k8s/[^/]+/defaults/main\.yml$`. A `kustomization.yaml` `images:` block is read by the manager Renovate ships and tests. One less bespoke regex to keep correct. |
 | **`k8s_namespace` disappears** | 321 of 1,925 substitutions across all manifests are `k8s_namespace`. Kustomize's `namespace:` field sets it for every resource. A clean total win — one sixth of the templating is this one variable. |
 | **`tz` / `puid` / `pgid` dedupe** | 119 more substitutions, identical in every role. One shared Kustomize component patching the env block replaces all of them, and it is genuinely better than today: a component is applied by reference, whereas the Jinja is copied per template. |
 

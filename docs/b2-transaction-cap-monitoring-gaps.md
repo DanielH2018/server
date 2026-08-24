@@ -40,7 +40,7 @@ AccessDenied Transaction cap exceeded, see the Caps & Alerts page to increase yo
 ```
 
 The alerting was **not silent** — one monitor paged within nine minutes and stayed down. The
-problems are narrower and more specific than "nothing caught it", and worth fixing individually.
+problems are narrower and more specific than "nothing caught it," and worth fixing individually.
 
 ## Timeline (UTC)
 
@@ -152,7 +152,7 @@ once instead of storming — and, critically, so dependents cannot report green 
   Longhorn re-list the backup store. That is a plausible contributor, not a measured one — the
   split needs the B2 console. Deliberately not investigated further from this side to avoid
   spending more of the capped budget.
-- ~~**Whether the cap is daily-resetting or account-lifetime.**~~ **Answered by the second
+- ~~**Whether the cap is daily resetting or account-lifetime.**~~ **Answered by the second
   occurrence: it resets.** Backups ran normally 2026-08-03 through 2026-08-07 after the 08-02
   breach, and the caps refused again on 08-08. So an outage self-clears at the UTC day boundary
   without intervention — what does not self-clear is the capacity problem underneath it.
@@ -267,7 +267,7 @@ twice. Deciding it needs a decision about the cap itself, per the note on
 The eight are back in the `default` recurring-job group, and the list is declarative in both
 directions now — the reconcile was one-way, and the defaults file claimed the opposite. The reverse
 reads intent from the **StorageClass**, not from absence in the list: most no-backup volumes
-(prometheus, loki, registry, tempo, karakeep-meili, grafana, livesync, speedtest,
+(`prometheus`, `loki`, registry, `tempo`, karakeep-meili, `grafana`, `livesync`, speedtest,
 prowlarr-flaresolverr) were never in the list, and sweeping those in is the exact blowup being
 guarded against. Verified against live state before applying — 15 PVCs on class `longhorn`, 17
 volumes labelled no-backup, intersection exactly the eight — then confirmed idempotent on a re-run.
@@ -332,7 +332,7 @@ re-syncs it.
 ## Verdict — 2026-08-09, the first post-reset daily run
 
 **Green, decisively.** The revised sequence ran in the window (target restored 00:01, kopia
-connected first try, storm 0/min throughout), and the 03:30 daily-backup completed **17/17
+connected first try, storm 0/min throughout), and the 03:30 daily backup completed **17/17
 volumes in four minutes** (03:34–03:38) with the backup target `available: true` and zero
 `transaction_cap_exceeded` — the set even included the two Longhorn volumes slice-5 added that
 same night (zigbee2mqtt, home-assistant). Incrementals ARE the cheap part: the 08-08 cap hit
@@ -343,7 +343,7 @@ nobackup on its own merits — regenerable retained state).
 
 ## Recurrence — 2026-08-09, cap blown again by ~05:49 UTC
 
-The verdict above held for the *daily-backup run* but not for the *day*: `b2_reachable` flipped
+The verdict above held for the *daily backup run* but not for the *day*: `b2_reachable` flipped
 DOWN at 05:49 UTC (00:49 local) with `transaction_cap_exceeded` — about two hours after the
 03:38 green run — and stayed down. So something in the 03:38–05:49 window consumed the rest of
 the daily cap; the Longhorn daily itself is exonerated (17/17, zero cap errors). Kopia's
@@ -415,5 +415,5 @@ Containment 05:45 UTC: target blanked again (same lever). No kopia to stop this 
 Re-arm after the next 00:00 UTC reset: set `backupTargetURL` back to
 `s3://daniel-server-kopia@us-east-005/longhorn`, confirm `available: true`, and watch the
 03:30 nightly with a clean cap. The kopia B2 deletion (approved, no retention window)
-stays gated on ONE fully-green nightly — note the deletion itself spends class A/B/C
+stays gated on ONE fully green nightly — note the deletion itself spends class A/B/C
 transactions on the shared cap, so run it after the nightly verifies, not before.

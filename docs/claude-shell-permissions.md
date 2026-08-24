@@ -34,7 +34,7 @@ read-only commands to fit it. Anything that writes or executes still prompts —
 - **Command substitution** `$(…)`, backticks, `${…}` — rejected outright. Replace
   `svc=$(echo "$d" | cut -d/ -f4)` with a substitution-free pipeline, or split the step out.
 - **Shell control flow** — `for`/`while` loops, `if/then/else/fi`. Prefer one `grep`/`find`/`awk`
-  over a loop: e.g. `grep -L "limits:" …/*.j2` (files missing a pattern) + `grep -l "limits:" …`
+  over a loop: for example, `grep -L "limits:" …/*.j2` (files missing a pattern) + `grep -l "limits:" …`
   (files with it) instead of looping `if grep -q …; then …; fi`.
 - **Writes/exec** — `> file`, `tee`, `sed -i`, `sed s///e|w`, `awk 'system()'`/`print > "f"`,
   subshells `(…)`, backgrounding `&`. (Note: `awk` programs containing `>` — even as a

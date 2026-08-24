@@ -41,13 +41,27 @@ def _expand(pattern: str) -> list[str]:
     return [pattern.replace("*.md", "sample.md")]
 
 
+def _clears_all_styles(body: str) -> bool:
+    """True for an opt-out section -- one whose first setting empties BasedOnStyles.
+
+    docs/archive/ and docs/reference/ get a section precisely so every rule is off there.
+    They are the opposite of in-scope, so the coverage check below must not demand the hook
+    hand them to Vale.
+    """
+    first = next((line for line in body.splitlines() if line.strip()), "")
+    return first.replace(" ", "") == "BasedOnStyles="
+
+
 def vale_scoped_paths() -> list[str]:
-    """Every concrete path `.vale.ini` declares a section for."""
-    return [
-        path
-        for section in _SECTION_RE.findall(VALE_INI.read_text())
-        for path in _expand(section)
-    ]
+    """Every concrete path `.vale.ini` puts rules in force for."""
+    text = VALE_INI.read_text()
+    sections = _SECTION_RE.findall(text)
+    scoped = []
+    for section in sections:
+        if _clears_all_styles(text.split(f"[{section}]", 1)[1]):
+            continue
+        scoped.extend(_expand(section))
+    return scoped
 
 
 def vale_hook_regex() -> str:
@@ -75,10 +89,28 @@ def test_the_hook_regex_covers_every_vale_ini_section():
 def test_the_scope_is_not_empty():
     """A .vale.ini that parses to nothing would make the test above vacuously true."""
     scoped = vale_scoped_paths()
-    assert len(scoped) >= 5, (
-        f"only {len(scoped)} scoped paths parsed — has the syntax moved?"
+    assert scoped, "no sections parsed out of .vale.ini — has the syntax moved?"
+    assert "docs/sample.md" in scoped, scoped
+    assert "docs/adr/sample.md" in scoped, scoped
+
+
+def test_the_hook_regex_matches_the_documents_on_disk():
+    """The section globs could both parse and still cover nothing real.
+
+    Checking against actual files is what catches a scope that is syntactically fine and
+    factually empty — a regex matching `docs/*.markdown`, say.
+    """
+    pattern = re.compile(vale_hook_regex())
+    top_level = sorted(p.name for p in (REPO / "docs").glob("*.md"))
+    assert len(top_level) >= 15, (
+        f"only {len(top_level)} top-level docs found: {top_level}"
     )
-    assert "docs/index.md" in scoped, scoped
+    unmatched = [name for name in top_level if not pattern.match(f"docs/{name}")]
+    assert not unmatched, f"top-level docs the Vale hook would skip: {unmatched}"
+
+    adrs = sorted(p.name for p in (REPO / "docs" / "adr").glob("*.md"))
+    assert len(adrs) >= 14, f"only {len(adrs)} ADRs found"
+    assert not [name for name in adrs if not pattern.match(f"docs/adr/{name}")]
 
 
 def test_the_hook_never_covers_generated_reference_pages():
@@ -90,3 +122,23 @@ def test_the_hook_never_covers_generated_reference_pages():
     pattern = re.compile(vale_hook_regex())
     assert not pattern.match("docs/reference/services.md")
     assert not pattern.match("docs/reference/hosts.md")
+
+
+def test_vale_ini_turns_the_styles_off_for_archive_and_reference():
+    """The hook regex must not be the only thing excluding those trees.
+
+    Vale's section globs cross directory separators, so `[docs/*.md]` also matches
+    docs/archive/README.md and every docs/reference/ page -- measured at 101 findings in
+    reference/ before the opt-out sections existed. Without them a bare `vale docs` lints
+    generated pages, and the cron's protection lives in prek.toml rather than in the config
+    that documents it.
+    """
+    text = VALE_INI.read_text()
+    for tree in ("archive", "reference"):
+        section = f"[docs/{tree}/**]"
+        assert section in text, f"{section} missing from .vale.ini"
+        body = text.split(section, 1)[1]
+        first = next(line for line in body.splitlines() if line.strip())
+        assert first.replace(" ", "") == "BasedOnStyles=", (
+            f"{section} must clear BasedOnStyles to disable every rule, found {first!r}"
+        )

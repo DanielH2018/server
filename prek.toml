@@ -334,7 +334,9 @@ types = ["shell"]
 # fixes the generator. ENFORCED by the same test.
 [[repos.hooks]]
 id = "vale"
-name = "Prose style (Vale, scoped to ADRs + the hand-written docs pages)"
+name = "Prose style (Vale, scoped to ADRs + every top-level docs page)"
 entry = "vale"
 language = "system"
-files = "^(docs/adr/.*\\.md|docs/(index|deploying|gitops-pipeline|diagrams-plan)\\.md)$"
+# docs/[^/]+\.md is every top-level page and nothing below it, which is what keeps
+# docs/archive/ and docs/reference/ out. See .vale.ini for why each is excluded.
+files = "^(docs/adr/.*\\.md|docs/[^/]+\\.md)$"

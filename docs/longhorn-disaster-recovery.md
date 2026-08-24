@@ -82,10 +82,10 @@ the per-volume map and each exclusion's rationale:
 
   > **Transitional until roughly 2026-09-13, and worse than the line above reads.** "retain 4"
   > is the steady state; depth builds one backup per volume per week from the volume's first
-  > shard run. As of 2026-08-16 it is **zero** — no weekly-tier backup has ever completed
+  > shard run. As of 2026-08-16 it is **zero** — no backup in the weekly tier has ever completed
   > (the tier was created 2026-08-12 and every attempt has failed), so each of these volumes
   > has exactly one recovery point: the frozen `daily-backup` object it kept from before it
-  > moved tier. Restoring one of them today restores that date, not "up to a week old".
+  > moved tier. Restoring one of them today restores that date, not "up to a week old."
   >
   > Those frozen dailies are load-bearing until the weekly tier produces something —
   > `/usr/local/bin/longhorn-reap-orphan-backups.sh` refuses to touch a volume whose current
@@ -95,12 +95,12 @@ the per-volume map and each exclusion's rationale:
   > was written (seventh transaction-cap event) and stays that way on the terms in the
   > current-state note at the top of
   > [`longhorn-backup-tiering.md`](longhorn-backup-tiering.md). Depth-building here is stalled
-  > at zero until B2 re-arms; only the four R2-routed daily volumes above are currently
+  > at zero until B2 re-arms; only the four R2-routed daily volumes above are
   > accruing recovery points.
 - **No-backup** (16 volumes): rebuilt, not restored. The notable rebuild paths:
   uptime-kuma (recreate the first-run admin by hand; AutoKuma backfills monitors from the
-  static-monitors Secret; history is gone), scrutiny (TSDB refills from collector runs),
-  Pi-hole (`pihole -g` rebuilds gravity; config is Ansible-rendered), livesync (a client
+  static-monitors Secret; history is gone), `scrutiny` (TSDB refills from collector runs),
+  Pi-hole (`pihole -g` rebuilds gravity; config is Ansible-rendered), `livesync` (a client
   runs "Rebuild everything" — the vault's source of truth is the markdown on each
   Obsidian device), registry/caches/TSDBs (repopulate on use).
 - Restores are **crash-consistent** block snapshots: SQLite DBs recover as-of-last-
@@ -130,7 +130,7 @@ the per-volume map and each exclusion's rationale:
 
    **A cap denial does NOT surface as a 403 here.** The denied metadata GET arrives as
    `cannot find volume.cfg in backupstore` — which reads exactly like the backup is
-   missing, i.e. like data loss, at the worst possible moment. That is what the first
+   missing, that is, like data loss, at the worst possible moment. That is what the first
    drill hit (below). If you see it, check the caps in the B2 console **before**
    concluding anything about the backup: stop, blank the target
    (`k3s_longhorn_backup_armed: false` + deploy), and resume after the 00:00 UTC reset.
@@ -180,7 +180,7 @@ a pinned backup ID dies the day retention deletes it.
 and the only one that cannot drift from what the RecurringJobs really select. Each night the
 least-recently-*attempted* candidate is drilled, so a full cycle takes one night per candidate (25
 on 2026-08-20). Ordering by attempt rather than by success is deliberate: a volume that fails
-every drill would otherwise stay the least-recently-succeeded forever, be picked every night, and
+every drill would otherwise stay the least-recently succeeded forever, be picked every night, and
 starve the other 24.
 
 A candidate with no Completed backup is skipped rather than failed — check 4 already pages
@@ -210,7 +210,7 @@ joins the backup set later. A rotation-wide start date would flag every such vol
 joined.
 
 What is still not covered: each night proves one volume, so at any moment the fleet-wide claim is
-"every volume restored within the last cycle", not "every volume restores right now". A full-cluster restore is also still rationed — at 16 MiB blocks
+"every volume restored within the last cycle," not "every volume restores right now." A full-cluster restore is also still rationed — at 16 MiB blocks
 (set 2026-08-19) new volumes cost ~8x less to restore, but existing volumes remain at 2 MiB until
 recreated. Lean on the 7-day hidden-version window (`daysFromHidingToDeleting: 7` on the bucket)
 if something looks wrong mid-restore.

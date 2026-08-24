@@ -83,7 +83,7 @@ metadata) — it survives an in-place upgrade, but that is what a backup must pr
    sudo do-release-upgrade
    ```
    - It disables `docker.list` and the deadsnakes PPA — expected.
-   - On config-file prompts (e.g. `/etc/ssh/sshd_config`), **keep your existing
+   - On config-file prompts (for example, `/etc/ssh/sshd_config`), **keep your existing
      version** for anything you recognize. Reboots at the end.
 
 ## Phase 2 — Post-upgrade (re-point repos + verify)
@@ -116,7 +116,7 @@ metadata) — it survives an in-place upgrade, but that is what a backup must pr
 
 ## Phase 3 — ansible-core + collections  (Claude does this in the repo)
 
-9. Install ansible-core 2.21 cleanly. 24.04 enforces PEP 668 (externally-managed
+9. Install ansible-core 2.21 cleanly. 24.04 enforces PEP 668 (externally managed
    environment), so `pip install --user` is blocked by default.
 
    **This step is obsolete — do not copy it.** It used pipx; the homelab moved to **uv**
