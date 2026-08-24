@@ -1,0 +1,21 @@
+{% from 'ingressroute.yml.j2' import ingressroute with context %}
+{#
+  LAN-only (`public=false`). The reference pages list every service, its hostname, its auth
+  tier and its backup posture — a complete map of what runs here and what fronts it.
+
+  The artifacts browser next door is deliberately public, and the difference is worth stating:
+  a session emits an artifact link as the ONE way anyone reaches that document, so it has to
+  resolve wherever the reader is. Nothing here emits a link like that; the site is somewhere
+  you go, not somewhere you are sent.
+
+  The `authelia` middleware gates it either way.
+#}
+---
+{{ ingressroute(
+    container_item.name,
+    container_item.hostname | default(container_item.name),
+    container_item.port,
+    container_item.use_authelia,
+    public=false,
+  )
+}}

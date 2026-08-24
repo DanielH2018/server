@@ -52,6 +52,10 @@ SLICE_2_ROLES = {
 BORN_FENCED_ROLES = {
     # Serves each host's ~/.claude/artifacts read-only; makes no outbound connection at all.
     "artifacts",
+    # nginx over a hostPath of built MkDocs output. Same shape as artifacts, and for the same
+    # reason: Traefik is its only caller, and the pod dials nothing — the site is built on the
+    # host by the docs-refresh cron, so the container never fetches, clones or resolves.
+    "docs",
 }
 
 LABEL = ("netpol-baseline", "enforced")

@@ -1,0 +1,29 @@
+---
+# nginx-unprivileged rather than stock nginx: it listens on 8080 as a non-root uid out of the
+# box, so the pod needs neither a root user nor NET_BIND_SERVICE. Stock nginx binds 80, which
+# under `capabilities: drop: [ALL]` fails at startup rather than at request time.
+docs_k8s_image: nginxinc/nginx-unprivileged:1.29-alpine
+
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Stateless Deployment, RollingUpdate, no PVC, HTTP readinessProbe, and the tag above is a
+# real version rather than a mutable :latest.
+# Deliberately unprefixed: one constant key name every role uses, so the completeness guard
+# can check for it without knowing the role's own prefix.
+k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe gates the rollout, pinned image tag"  # noqa var-naming[no-role-prefix]
+
+# hostPath pins the pod to ONE node. daniel-box holds the repo checkout, uv, and the cron that
+# builds the site, so the built tree only ever exists there. Scheduling elsewhere would mount
+# an empty directory and serve a 404 index rather than fail visibly.
+docs_k8s_node: daniel-box
+
+# Where scripts/build_docs.py writes `mkdocs build` output, and what the pod serves.
+# NOT inside the repo checkout: a GitOps tick rewrites that tree with `git pull`, and
+# replacing a served directory mid-request is a failure mode with no upside.
+docs_host_site_dir: "/home/{{ sys_user }}/docs-site"
+
+# The site is static files served from page cache; nginx is idle between loads.
+docs_k8s_cpu_limit: "500m"
+docs_k8s_mem_limit: 128Mi
+docs_k8s_cpu_request: "10m"
+docs_k8s_mem_request: 32Mi

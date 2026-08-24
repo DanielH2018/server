@@ -1,0 +1,25 @@
+---
+# ── host side: the tree the pod mounts ─────────────────────────────────────────────────
+# The hostPath volume is `type: Directory`, so this must exist before the Deployment starts.
+# A missing path leaves the pod in ContainerCreating rather than serving an empty site.
+- name: Ensure the built docs site directory exists
+  tags: [config]
+  ansible.builtin.file:
+    path: "{{ docs_host_site_dir }}"
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  when: not k8s_dry_run | bool
+
+# ── cluster side ───────────────────────────────────────────────────────────────────────
+- name: Deploy the docs site to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: docs
+    manifests_files:
+      - configmap.yaml
+      - deployment.yaml
+      - service.yaml
+      - ingressroute.yaml

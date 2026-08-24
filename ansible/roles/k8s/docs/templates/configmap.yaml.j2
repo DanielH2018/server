@@ -1,0 +1,30 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: docs-nginx
+  namespace: {{ k8s_namespace }}
+data:
+  default.conf: |
+    server {
+        listen {{ container_item.port }};
+        server_name _;
+        root /usr/share/nginx/html;
+        index index.html;
+
+        # Answered from nginx itself, never from the mounted tree. A build that has not run
+        # yet leaves the tree empty; the pod must still pass its probes and serve a 404,
+        # because "the site is not built" is an operator problem, not a rollout failure.
+        location = /healthz {
+            access_log off;
+            add_header Content-Type text/plain;
+            return 200 'ok';
+        }
+
+        # MkDocs `use_directory_urls: true` emits page/index.html, so a request for /page/
+        # resolves by directory index. try_files keeps a missing page a 404 rather than a
+        # directory listing.
+        location / {
+            try_files $uri $uri/ $uri/index.html =404;
+        }
+    }
