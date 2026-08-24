@@ -146,7 +146,7 @@ SLICE_45C_ROLES = {role for role, _name in SLICE_45C_WORKLOADS}
 # baseline label. Each entry must name the policy that covers it: an unexplained exemption is
 # indistinguishable from a workload someone forgot to label.
 #
-# flaresolverr: roles/k8s/prowlarr/templates/networkpolicy.yaml.j2 admits app=prowlarr only, on one
+# flaresolverr: roles/k8s/prowlarr/templates/networkpolicy-flaresolverr.yaml.j2 admits app=prowlarr only, on one
 # port. That is TIGHTER than the baseline, which would also admit traefik, prometheus and the node
 # CIDRs — so labelling it would widen the fence around a headless browser that renders
 # attacker-supplied pages.
@@ -333,7 +333,7 @@ def test_exactly_the_slice_3_workloads_carry_the_baseline_label() -> None:
 EXEMPT_LABEL = ("netpol-baseline-exempt", "true")
 
 EXEMPT_WORKLOADS = {
-    # roles/k8s/prowlarr/templates/networkpolicy.yaml.j2 — admits app=prowlarr only, on :8191.
+    # roles/k8s/prowlarr/templates/networkpolicy-flaresolverr.yaml.j2 — admits app=prowlarr only, on :8191.
     ("prowlarr", "flaresolverr"),
     # roles/k8s/headlamp/templates/networkpolicy.yaml.j2
     ("headlamp", "headlamp"),

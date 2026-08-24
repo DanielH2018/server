@@ -34,9 +34,10 @@
       # Both policies are listed FIRST so they exist before their pods can be scheduled. Within a
       # single `kubectl apply -f <dir>` that ordering is not guaranteed, which is why the pods
       # also cannot be reached in the gap: they take seconds to pull and start, and the policies
-      # are applied in the same call. networkpolicy.yaml fences flaresolverr;
-      # networkpolicy-prowlarr.yaml (slice 2) fences prowlarr itself.
-      - networkpolicy.yaml
+      # are applied in the same call. Each policy names its own subject:
+      # networkpolicy-flaresolverr.yaml fences flaresolverr, networkpolicy-prowlarr.yaml
+      # (slice 2) fences prowlarr itself.
+      - networkpolicy-flaresolverr.yaml
       - networkpolicy-prowlarr.yaml
       - deployment-flaresolverr.yaml
       - service-flaresolverr.yaml

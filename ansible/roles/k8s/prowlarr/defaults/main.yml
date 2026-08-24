@@ -39,7 +39,7 @@ prowlarr_k8s_source_path: /home/ubuntu/server/containers/prowlarr/config
 # reachable by prowlarr and nothing else — a deliberate isolation, not an accident of layout.
 #
 # One flat namespace would silently WIDEN that to every workload in {{ k8s_namespace }}. So the
-# move is made a narrowing instead, by networkpolicy.yaml.j2: ingress on 8191 from pods labelled
+# move is made a narrowing instead, by networkpolicy-flaresolverr.yaml.j2: ingress on 8191 from pods labelled
 # app=prowlarr only. INGRESS is the enforced direction on this cluster — n8n-broker proves it,
 # and B3 proved egress policies here do nothing — so this is a control that actually holds, and
 # the probe beside it says so rather than assuming.
