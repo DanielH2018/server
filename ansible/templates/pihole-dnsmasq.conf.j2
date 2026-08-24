@@ -5,6 +5,24 @@
    cluster edge serves k8s natives and reverse-bridges Docker-hosted names. The old
    default(server_ip) fallback is gone on purpose: it made the answer depend on which host
    rendered the file. #}
+{# DECIDED (2026-08-24): a matching PUBLIC wildcard `*.local.<domain>` -> this same VIP is
+   authoritative on Cloudflare, and it STAYS. It is not managed by this repo — cloudflare-ddns
+   handles only the apex, terraria and valheim — so it reads as a stray record leaking the
+   internal ingress VIP to anyone who asks 1.1.1.1, including for names that do not exist.
+   Removing it was proposed and is WRONG, because two paths depend on it:
+
+     1. CoreDNS forwards `policy sequential` with health_check/max_fails 2 (see
+        roles/setup/k3s/templates/coredns-corefile.j2), Pi-hole first and the public resolvers
+        after. During a Pi-hole outage — the exact case that failover exists for — in-cluster
+        `.local.` lookups reach 1.1.1.1 and still land on the right VIP BECAUSE of the public
+        record. Drop it and that degradation becomes NXDOMAIN.
+     2. daniel-box's own host resolver is pinned to the public resolvers unconditionally
+        (roles/setup/k3s/templates/node-dns.conf.j2, `Domains=~.`), so every host-level
+        `.local.` lookup on the control-plane node resolves only via that record.
+
+   The exposure is reconnaissance only: 10.0.0.240 is unroutable from the internet, so the
+   record discloses an RFC1918 address and the existence of the naming scheme, nothing more.
+   ACME is unaffected either way — issuance uses the DNS-01 TXT challenge, not this A record. #}
 address=/local.{{ domain }}/{{ pihole_wildcard_ip | default(k3s_metallb_ingress_vip) }}
 address=/local.{{ domain }}/::
 

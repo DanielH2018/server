@@ -143,8 +143,14 @@
         volume: {{ volume_snapshot_volume }}
         createSnapshot: true
   become: true
-  register: volume_snapshot_apply
-  changed_when: "'created' in volume_snapshot_apply.stdout"
+  # Distinct name from the detached-path apply below. Both are conditional and mutually
+  # exclusive, and a SKIPPED task still sets the variable it registers to — so a shared name
+  # lets whichever ran second overwrite the real reading with a skipped one. Safe today only
+  # because each task's own changed_when is the sole reader; any future reader downstream would
+  # get the wrong result. This is the trap the comment further down this file already spells
+  # out for volume_snapshot_ready.
+  register: volume_snapshot_apply_attached
+  changed_when: "'created' in volume_snapshot_apply_attached.stdout"
 
 # Skipped rather than run under a no-mutation guard, for cronjob-gate's reason: the snapshot
 # this waits on is created by the task above, which the same guard skips. Reading a PREVIOUS
@@ -391,8 +397,8 @@
         volume: {{ volume_snapshot_volume }}
         createSnapshot: true
   become: true
-  register: volume_snapshot_apply
-  changed_when: "'created' in volume_snapshot_apply.stdout or 'configured' in volume_snapshot_apply.stdout"
+  register: volume_snapshot_apply_detached
+  changed_when: "'created' in volume_snapshot_apply_detached.stdout or 'configured' in volume_snapshot_apply_detached.stdout"
 
 # Registers to its OWN name, never to `volume_snapshot_ready`. Sharing that register was this
 # role's first shipped bug and the task-6 drill's first failure: **a SKIPPED task still sets the
