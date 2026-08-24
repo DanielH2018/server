@@ -656,9 +656,50 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
    `notification_name_list=["{{ kuma_notification_id }}"]`, linking it to the AutoKuma-managed
    Discord notification defined on the `uptime-kuma` container. No per-monitor UI clicking.
 
+## Module layout — and the one rule that governs it
+
+`files/` holds five runtime modules. `check.py` is the entrypoint the Deployment runs and still
+owns the I/O, the env-derived config and the `CHECKS` registry; the others hold pure logic that
+takes its inputs as arguments.
+
+| module | holds |
+|---|---|
+| `check.py` | config constants, HTTP/PromQL fetching, every `check_*`, `CHECKS`, the run loop |
+| `bridge_parsing.py` | duration/timestamp parsing, `endpoint_label`, `describe_fetch_failure`, `sanitize` |
+| `verdicts_cluster.py` | `k8s_workloads_verdict`, `extended_resource_verdict`, `ksm_resource_label`, `targets_verdict` |
+| `verdicts_host.py` | `ups_health`, the `scrutiny_*` family, `pi_pressure` |
+| `verdicts_service.py` | n8n streaks, `queue_warnings`, `indexers_down`, `gitops_alive`, the HA/Loki/Discord verdicts |
+
+`gitops_status` is the one verdict that stays in `check.py`, because it reads
+`GITOPS_BEHIND_MAX_S`; `gitops_alive` takes its threshold as an argument and moved. Its private
+helper `_parse_behind` sits beside `gitops_status` rather than with the other verdicts, so the
+only caller and the helper stay together.
+
+**A function may move out of `check.py` only if it is never monkeypatched AND reads no patched
+module-level name.** The test suite patches 208 times, always against the `check` module object.
+A function reads globals from the module it is DEFINED in, so moving a patched function elsewhere
+leaves the test patching a name nothing reads — the test then passes against unpatched production
+code instead of failing. That is a silent loss of coverage, not a visible break, which is why the
+rule is written here rather than left to be rediscovered.
+
+Two consequences that look like arbitrary omissions and are not:
+
+- **Config constants stay in `check.py`.** Beyond the patching rule, two tests call
+  `importlib.reload(check)` to re-derive `PROM_ORIGIN` from the environment. `reload` does not
+  re-execute an imported module's body, so a constant moved to a config module would leave those
+  tests asserting a stale value.
+- **The B2/R2 verdicts stay too.** They read their threshold constants as `None` fallbacks, so
+  they are constant-coupled; splitting the storage domain would mean moving config with it.
+
+**Adding a module means adding it to `monitor_bridge_modules`** in `defaults/main.yml` — the
+ConfigMap ships exactly that list, and a module missing from it kills the pod at import with
+`ModuleNotFoundError` on its next roll, on the one workload that cannot page about its own
+failure. pytest cannot catch that: it imports from `files/` on disk and never reads the list.
+`ansible/tests/test_monitor_bridge_modules.py` is what does.
+
 ## Editing & testing
 - Manifests: `templates/deployment.yaml.j2`, `templates/env-secret.yaml.j2` · Logic:
-  `files/check.py`
+  `files/check.py` plus the modules beside it (see *Module layout* above)
 - Unit tests (parsing + every check's decision logic):
   `uv run pytest ansible/roles/k8s/monitor-bridge/files`.
   Also run automatically by the `pytest` prek hook (`prek run pytest --all-files`).

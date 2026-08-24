@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+import bridge_parsing
 import check
 
 
@@ -490,13 +491,13 @@ def test_up_still_pins_the_origin_where_the_label_exists():
 
 
 def test_duration_seconds_parses_prometheus_durations():
-    assert check.duration_seconds("15m") == 900
-    assert check.duration_seconds("1h") == 3600
-    assert check.duration_seconds("90s") == 90
-    assert check.duration_seconds("1d") == 86400
+    assert bridge_parsing.duration_seconds("15m") == 900
+    assert bridge_parsing.duration_seconds("1h") == 3600
+    assert bridge_parsing.duration_seconds("90s") == 90
+    assert bridge_parsing.duration_seconds("1d") == 86400
     for bad in ("", "15", "m", "1y", "abc"):
         with pytest.raises(ValueError):
-            check.duration_seconds(bad)
+            bridge_parsing.duration_seconds(bad)
 
 
 def test_k8s_workloads_disabled_without_cluster_url(monkeypatch):
