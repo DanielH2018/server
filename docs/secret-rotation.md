@@ -123,7 +123,7 @@ instances of this discipline:
 
 - **`kopia_password`** — REMOVED (8edb11cd, 2026-08-13). The kopia B2 repo it anchored was
   deleted after the first verified Longhorn-only nightly, per the retirement plan
-  (`docs/k3s-migration/backup-consolidation-longhorn.md`), and the residual hidden object
+  (`docs/archive/k3s-migration/backup-consolidation-longhorn.md`), and the residual hidden object
   versions were hard-purged 2026-08-14 — the value opens nothing anymore. Kept here as the
   worked example of a pinned secret leaving the registry: the anchored data is destroyed
   first, deliberately, and only then does the key go. (The `kopia_b2_*` credentials are NOT

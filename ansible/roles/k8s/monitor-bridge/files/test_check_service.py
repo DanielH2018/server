@@ -407,107 +407,101 @@ def test_arr_queue_only_checks_configured_app(monkeypatch):
     assert "sonarr" in calls[0]
 
 
-def test_gitops_alive_fresh():
-    ok, msg = check.gitops_alive(60, 5400)
-    assert ok
-    assert "1m ago" in msg
+@pytest.mark.parametrize(
+    ("age_s", "max_age", "ok", "must_contain"),
+    [
+        pytest.param(60, 5400, True, ("1m ago",), id="fresh"),
+        # exactly at max age still counts as alive (<=)
+        pytest.param(5400, 5400, True, (), id="at_threshold_is_ok"),
+        pytest.param(6000, 5400, False, ("100m ago",), id="stale"),  # 100m > 90m
+    ],
+)
+def test_gitops_alive(age_s, max_age, ok, must_contain):
+    result_ok, msg = check.gitops_alive(age_s, max_age)
+    assert result_ok is ok
+    for s in must_contain:
+        assert s in msg
 
 
-def test_gitops_alive_at_threshold_is_ok():
-    # exactly at max age still counts as alive (<=)
-    ok, _ = check.gitops_alive(5400, 5400)
-    assert ok
-
-
-def test_gitops_alive_stale():
-    ok, msg = check.gitops_alive(6000, 5400)  # 100m > 90m
-    assert not ok
-    assert "100m ago" in msg
-
-
-def test_gitops_status_no_hold():
-    ok, msg = check.gitops_status(None)
-    assert ok
-    assert msg == "no held deploy"
-
-
-def test_gitops_status_empty_is_ok():
-    ok, _ = check.gitops_status("")
-    assert ok
-
-
-def test_gitops_status_held_names_sha():
-    ok, msg = check.gitops_status("abc123def4567890")
-    assert not ok
-    assert "abc123de" in msg
-
-
-def test_gitops_status_diverged_names_sha():
-    ok, msg = check.gitops_status(None, "def456abc7890123")
-    assert not ok
-    assert "diverged" in msg
-    assert "def456ab" in msg
-
-
-def test_gitops_status_hold_takes_priority_over_diverged():
-    ok, msg = check.gitops_status("abc123def4567890", "def456abc7890123")
-    assert not ok
-    assert "held" in msg
+@pytest.mark.parametrize(
+    ("hold", "diverged", "ok", "must_contain", "exact_msg"),
+    [
+        pytest.param(None, None, True, (), "no held deploy", id="no_hold"),
+        pytest.param("", None, True, (), None, id="empty_is_ok"),
+        pytest.param(
+            "abc123def4567890", None, False, ("abc123de",), None, id="held_names_sha"
+        ),
+        pytest.param(
+            None,
+            "def456abc7890123",
+            False,
+            ("diverged", "def456ab"),
+            None,
+            id="diverged_names_sha",
+        ),
+        pytest.param(
+            "abc123def4567890",
+            "def456abc7890123",
+            False,
+            ("held",),
+            None,
+            id="hold_takes_priority_over_diverged",
+        ),
+    ],
+)
+def test_gitops_status(hold, diverged, ok, must_contain, exact_msg):
+    result_ok, msg = check.gitops_status(hold, diverged)
+    assert result_ok is ok
+    if exact_msg is not None:
+        assert msg == exact_msg
+    for s in must_contain:
+        assert s in msg
 
 
 def _gw(tmp_path, name, content):
     (tmp_path / name).write_text(content)
 
 
-def test_check_gitops_alive_fresh_file(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    ("content_fn", "ok", "must_contain"),
+    [
+        pytest.param(lambda: str(time.time()), True, (), id="fresh_file"),
+        # 100m old > default 90m
+        pytest.param(lambda: str(time.time() - 100 * 60), False, (), id="stale_file"),
+        pytest.param(None, False, ("no last_run",), id="missing_file"),
+        pytest.param(lambda: "not-a-float", False, ("unparseable",), id="unparseable"),
+    ],
+)
+def test_check_gitops_alive(tmp_path, monkeypatch, content_fn, ok, must_contain):
     monkeypatch.setattr(check, "GITOPS_STATE_DIR", str(tmp_path))
-    _gw(tmp_path, "last_run", str(time.time()))
-    ok, _ = check.check_gitops_alive()
-    assert ok
+    if content_fn is not None:
+        _gw(tmp_path, "last_run", content_fn())
+    result_ok, msg = check.check_gitops_alive()
+    assert result_ok is ok
+    for s in must_contain:
+        assert s in msg
 
 
-def test_check_gitops_alive_stale_file(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    ("filename", "content", "ok", "must_contain"),
+    [
+        pytest.param(None, None, True, (), id="no_file_is_ok"),
+        pytest.param("hold_sha", "abc123def4567890", False, ("abc123de",), id="held"),
+        pytest.param(
+            "diverged_sha", "def456abc7890123", False, ("diverged",), id="diverged"
+        ),
+    ],
+)
+def test_check_gitops_status(
+    tmp_path, monkeypatch, filename, content, ok, must_contain
+):
     monkeypatch.setattr(check, "GITOPS_STATE_DIR", str(tmp_path))
-    _gw(tmp_path, "last_run", str(time.time() - 100 * 60))  # 100m old > default 90m
-    ok, _ = check.check_gitops_alive()
-    assert not ok
-
-
-def test_check_gitops_alive_missing_file(tmp_path, monkeypatch):
-    monkeypatch.setattr(check, "GITOPS_STATE_DIR", str(tmp_path))
-    ok, msg = check.check_gitops_alive()
-    assert not ok
-    assert "no last_run" in msg
-
-
-def test_check_gitops_alive_unparseable(tmp_path, monkeypatch):
-    monkeypatch.setattr(check, "GITOPS_STATE_DIR", str(tmp_path))
-    _gw(tmp_path, "last_run", "not-a-float")
-    ok, msg = check.check_gitops_alive()
-    assert not ok
-    assert "unparseable" in msg
-
-
-def test_check_gitops_status_no_file_is_ok(tmp_path, monkeypatch):
-    monkeypatch.setattr(check, "GITOPS_STATE_DIR", str(tmp_path))
-    ok, _ = check.check_gitops_status()
-    assert ok
-
-
-def test_check_gitops_status_held(tmp_path, monkeypatch):
-    monkeypatch.setattr(check, "GITOPS_STATE_DIR", str(tmp_path))
-    _gw(tmp_path, "hold_sha", "abc123def4567890")
-    ok, msg = check.check_gitops_status()
-    assert not ok
-    assert "abc123de" in msg
-
-
-def test_check_gitops_status_diverged(tmp_path, monkeypatch):
-    monkeypatch.setattr(check, "GITOPS_STATE_DIR", str(tmp_path))
-    _gw(tmp_path, "diverged_sha", "def456abc7890123")
-    ok, msg = check.check_gitops_status()
-    assert not ok
-    assert "diverged" in msg
+    if filename is not None:
+        _gw(tmp_path, filename, content)
+    result_ok, msg = check.check_gitops_status()
+    assert result_ok is ok
+    for s in must_contain:
+        assert s in msg
 
 
 # ── HA automation-engine heartbeat (input_datetime stamped by a 1-min automation) ──
@@ -526,37 +520,29 @@ def _ha_state(last_changed, state="2026-06-06 11:59:00"):
     }
 
 
-def test_ha_heartbeat_fresh_is_ok():
-    ok, msg = check.ha_heartbeat_fresh(
-        _ha_state("2026-06-06T11:59:00Z"), 300, now=HB_NOW
-    )  # 60s old
-    assert ok
-    assert "fresh" in msg
-
-
-def test_ha_heartbeat_stale_is_down():
-    ok, msg = check.ha_heartbeat_fresh(
-        _ha_state("2026-06-06T11:50:00Z"), 300, now=HB_NOW
-    )  # 600s old
-    assert not ok
-    assert "stale" in msg
-
-
-def test_ha_heartbeat_at_threshold_is_ok():
-    ok, _ = check.ha_heartbeat_fresh(
-        _ha_state("2026-06-06T11:55:00Z"), 300, now=HB_NOW
-    )  # exactly 300s
-    assert ok
-
-
-def test_ha_heartbeat_missing_last_changed_is_down():
-    ok, _ = check.ha_heartbeat_fresh({"state": "unknown"}, 300, now=HB_NOW)
-    assert not ok
-
-
-def test_ha_heartbeat_none_state_is_down():
-    ok, _ = check.ha_heartbeat_fresh(None, 300, now=HB_NOW)
-    assert not ok
+@pytest.mark.parametrize(
+    ("state", "ok", "must_contain"),
+    [
+        pytest.param(
+            _ha_state("2026-06-06T11:59:00Z"), True, ("fresh",), id="fresh_is_ok"
+        ),  # 60s old
+        pytest.param(
+            _ha_state("2026-06-06T11:50:00Z"), False, ("stale",), id="stale_is_down"
+        ),  # 600s old
+        pytest.param(
+            _ha_state("2026-06-06T11:55:00Z"), True, (), id="at_threshold_is_ok"
+        ),  # exactly 300s
+        pytest.param(
+            {"state": "unknown"}, False, (), id="missing_last_changed_is_down"
+        ),
+        pytest.param(None, False, (), id="none_state_is_down"),
+    ],
+)
+def test_ha_heartbeat_fresh(state, ok, must_contain):
+    result_ok, msg = check.ha_heartbeat_fresh(state, 300, now=HB_NOW)
+    assert result_ok is ok
+    for s in must_contain:
+        assert s in msg
 
 
 # ── check_ha_heartbeat hysteresis (rides out the ~120s deploy/restart) ──────
@@ -590,7 +576,6 @@ def _ha_cycle(monkeypatch, age_s=600, raises=False, banned=0):
 
 def test_ha_heartbeat_single_stale_cycle_is_suppressed(monkeypatch):
     # One stale cycle (a deploy mid-recreate) must NOT page — pushes up with a streak msg.
-    monkeypatch.setattr(check, "_ha_down_streak", 0)
     ok, msg = _ha_cycle(monkeypatch, age_s=600)
     assert ok
     assert "1/2" in msg  # streak progress vs default HA_CONSECUTIVE=2
@@ -598,7 +583,6 @@ def test_ha_heartbeat_single_stale_cycle_is_suppressed(monkeypatch):
 
 def test_ha_heartbeat_two_consecutive_stale_cycles_alert(monkeypatch):
     # Default HA_CONSECUTIVE=2: the 2nd straight stale cycle is a genuinely wedged HA -> down.
-    monkeypatch.setattr(check, "_ha_down_streak", 0)
     ok, _ = _ha_cycle(monkeypatch, age_s=600)
     assert ok
     ok, msg = _ha_cycle(monkeypatch, age_s=600)
@@ -608,7 +592,6 @@ def test_ha_heartbeat_two_consecutive_stale_cycles_alert(monkeypatch):
 
 def test_ha_heartbeat_fresh_read_resets_streak(monkeypatch):
     # stale, then fresh -> never down (a recovered deploy clears the streak).
-    monkeypatch.setattr(check, "_ha_down_streak", 0)
     assert _ha_cycle(monkeypatch, age_s=600)[0]
     ok, msg = _ha_cycle(monkeypatch, age_s=60)  # scheduler resumed, heartbeat fresh
     assert ok
@@ -621,7 +604,6 @@ def test_ha_heartbeat_fresh_read_resets_streak(monkeypatch):
 
 def test_ha_heartbeat_unreachable_api_rides_grace(monkeypatch):
     # The recreate-window connection error must ride the SAME grace, not page immediately.
-    monkeypatch.setattr(check, "_ha_down_streak", 0)
     ok, msg = _ha_cycle(monkeypatch, raises=True)
     assert ok
     assert "1/2" in msg
@@ -727,7 +709,6 @@ def test_ha_ban_event_is_down():
 def test_ha_ban_wins_the_message_over_a_healthy_heartbeat(monkeypatch):
     # A ban pages even while the heartbeat itself is fresh — the two arms are independent, and
     # the ban text leads because it names the actionable fault.
-    monkeypatch.setattr(check, "_ha_down_streak", 0)
     ok, msg = _ha_cycle(monkeypatch, age_s=60, banned=3)
     assert not ok
     assert msg.startswith("HA ip_ban fired 3 time(s)")
@@ -737,7 +718,6 @@ def test_ha_ban_wins_the_message_over_a_healthy_heartbeat(monkeypatch):
 def test_ha_ban_skips_the_deploy_grace(monkeypatch):
     # down_streak exists for transients. A ban persists in /config/ip_bans.yaml until a human
     # clears it, so it must page on the FIRST cycle rather than ride the 2-cycle grace.
-    monkeypatch.setattr(check, "_ha_down_streak", 0)
     ok, _ = _ha_cycle(monkeypatch, age_s=60, banned=1)
     assert not ok
 
@@ -746,7 +726,6 @@ def test_ha_ban_arm_fails_open_when_loki_errors(monkeypatch):
     # A Loki outage must not page the HA monitor. ha_heartbeat is deliberately NOT in
     # LOKI_DEPENDENT (that would suppress the whole check and blind the real heartbeat), so the
     # arm swallows the error and keeps the heartbeat's verdict.
-    monkeypatch.setattr(check, "_ha_down_streak", 0)
 
     def boom(*a, **k):
         raise OSError("loki unreachable")

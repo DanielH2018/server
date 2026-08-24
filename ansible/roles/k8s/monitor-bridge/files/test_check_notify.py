@@ -50,7 +50,6 @@ def _discord_cycle(monkeypatch, status=200, raises=None):
 
 def test_discord_single_failure_is_suppressed(monkeypatch):
     # One non-200 (a transient blip on the internet-facing check) must NOT page.
-    monkeypatch.setattr(check, "_discord_down_streak", 0)
     ok, msg = _discord_cycle(monkeypatch, status=404)
     assert ok
     assert "1/2" in msg
@@ -58,7 +57,6 @@ def test_discord_single_failure_is_suppressed(monkeypatch):
 
 def test_discord_two_consecutive_failures_alert(monkeypatch):
     # The 2nd straight failure is a genuinely dead webhook -> down.
-    monkeypatch.setattr(check, "_discord_down_streak", 0)
     assert _discord_cycle(monkeypatch, status=404)[0]
     ok, msg = _discord_cycle(monkeypatch, status=404)
     assert not ok
@@ -66,7 +64,6 @@ def test_discord_two_consecutive_failures_alert(monkeypatch):
 
 
 def test_discord_valid_read_resets_streak(monkeypatch):
-    monkeypatch.setattr(check, "_discord_down_streak", 0)
     assert _discord_cycle(monkeypatch, status=404)[0]  # streak 1
     ok, msg = _discord_cycle(monkeypatch, status=200)  # webhook recovered
     assert ok
@@ -77,7 +74,6 @@ def test_discord_valid_read_resets_streak(monkeypatch):
 
 
 def test_discord_unreachable_rides_grace(monkeypatch):
-    monkeypatch.setattr(check, "_discord_down_streak", 0)
     ok, msg = _discord_cycle(monkeypatch, raises=OSError("dns fail"))
     assert ok
     assert "1/2" in msg
@@ -107,7 +103,6 @@ def test_discord_verifies_all_configured_webhooks(monkeypatch):
         "DISCORD_GITOPS_WEBHOOK_URL",
         "https://discord.com/api/webhooks/3/gitops",
     )
-    monkeypatch.setattr(check, "_discord_down_streak", 0)
     monkeypatch.setattr(check, "_get_json", lambda *a, **k: {"name": "Homelab Alerts"})
     ok, msg = check.check_discord()
     assert ok
@@ -127,7 +122,6 @@ def test_discord_gitops_webhook_failure_pages(monkeypatch):
         "DISCORD_GITOPS_WEBHOOK_URL",
         "https://discord.com/api/webhooks/3/gitops",
     )
-    monkeypatch.setattr(check, "_discord_down_streak", 0)
 
     def get(url, *a, **k):
         if "gitops" in url:
@@ -152,7 +146,6 @@ def test_discord_crowdsec_webhook_failure_pages(monkeypatch):
         "DISCORD_CROWDSEC_WEBHOOK_URL",
         "https://discord.com/api/webhooks/2/crowdsec",
     )
-    monkeypatch.setattr(check, "_discord_down_streak", 0)
 
     def get(url, *a, **k):
         if "crowdsec" in url:
@@ -177,7 +170,6 @@ def test_discord_healthchecks_webhook_failure_pages(monkeypatch):
         "DISCORD_HEALTHCHECKS_WEBHOOK_URL",
         "https://discord.com/api/webhooks/5/hc",
     )
-    monkeypatch.setattr(check, "_discord_down_streak", 0)
 
     def get(url, *a, **k):
         if "/5/hc" in url:
@@ -245,7 +237,6 @@ def test_check_discord_email_backstop_failure_pages(monkeypatch):
     monkeypatch.setattr(check, "DISCORD_GITOPS_WEBHOOK_URL", "")
     monkeypatch.setattr(check, "DISCORD_ARR_WEBHOOK_URL", "")
     monkeypatch.setattr(check, "DISCORD_HEALTHCHECKS_WEBHOOK_URL", "")
-    monkeypatch.setattr(check, "_discord_down_streak", 0)
     monkeypatch.setattr(check, "SMTP_PASSWORD", "app-pw")
     monkeypatch.setattr(check, "_email_probe", {"ts": 0.0, "ok": True, "msg": ""})
     monkeypatch.setattr(check, "_get_json", lambda *a, **k: {"name": "Homelab Alerts"})

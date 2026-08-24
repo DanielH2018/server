@@ -23,7 +23,7 @@ A full `initial_setup.yml` run (no `--tags`) at 18:56 installed Docker and creat
 networks on the k3s control-plane node. That was explicitly what the migration's slice ordering
 was designed to prevent: k3s ships its own containerd plus flannel/kube-proxy iptables rules,
 and daniel-box was chosen to go first *because it had no container runtime*. See
-`docs/k3s-migration/slice-0-cluster-foundation.md`.
+`docs/archive/k3s-migration/slice-0-cluster-foundation.md`.
 
 **Resolved by removing Docker**, restoring a clean k3s node. Nothing was lost — Docker had zero
 containers, zero images and zero volumes; only the 12 empty bridge networks.
@@ -138,7 +138,7 @@ TTY, which is why it was not done from an agent session.
 
 ## 5. Slice 0 exit criteria — all met
 
-From `docs/k3s-migration/slice-0-cluster-foundation.md`. The bring-up playbook asserts node
+From `docs/archive/k3s-migration/slice-0-cluster-foundation.md`. The bring-up playbook asserts node
 readiness, the etcd datastore, and the absence of bundled Traefik/servicelb — all passed. Three
 were left for a human. Proving them found two real defects (§5's *replica failure* and §5a),
 both since fixed; the cluster was rebuilt on 2026-08-01 and every criterion passes on that

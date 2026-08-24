@@ -1,6 +1,6 @@
 ---
 # Slice 0 of the k3s migration: stand up a single-node cluster on daniel-box.
-# Plan: docs/k3s-migration/slice-0-cluster-foundation.md
+# Plan: docs/archive/k3s-migration/slice-0-cluster-foundation.md
 #
 # Run ON daniel-box (the play's hosts: defaults to the local hostname, same as deploy.yml):
 #   uv run ansible-playbook ansible/k3s-bringup.yml
@@ -92,7 +92,7 @@
       ansible.builtin.assert:
         that: inventory_hostname == 'daniel-server'
         fail_msg: >-
-          Phase F joins daniel-server only — see docs/k3s-migration/slice-7-drain-and-join.md.
+          Phase F joins daniel-server only — see docs/archive/k3s-migration/slice-7-drain-and-join.md.
       tags: always
   tasks:
     - name: Join this host as a k3s agent

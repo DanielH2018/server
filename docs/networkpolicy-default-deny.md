@@ -734,7 +734,7 @@ no public route, so the edge 404s by design) with both self-test pull Jobs compl
 The two-stage deploy ran clean and nothing 5xx'd. That is the part worth not over-reading: slice
 4.5's outage came from an abort mid-run, which stage discipline reduces but does not eliminate.
 
-The plan and its caller analysis are in `docs/networkpolicy-slice5-plan.md`. Four decisions are
+The plan and its caller analysis are in `docs/archive/networkpolicy-slice5-plan.md`. Four decisions are
 durable enough to record here rather than only there.
 
 **The selector is an opt-out, not `podSelector: {}`.** A bare `{}` would select the four workloads

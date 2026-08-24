@@ -176,7 +176,7 @@ GITOPS_BEHIND_MAX_S = float(_env("GITOPS_BEHIND_MAX_MIN", "360")) * 60
 # plan)" among them — for nine and a half hours while B2 refused every request. Worse than absent
 # — an operator triaging the one true alert was told by these that B2 was fine. Those checks were
 # removed 2026-08-10 (kopia is retired, backup moved to Longhorn — see
-# docs/k3s-migration/backup-consolidation-longhorn.md), but this probe stays: Longhorn still needs
+# docs/archive/k3s-migration/backup-consolidation-longhorn.md), but this probe stays: Longhorn still needs
 # B2 reachable.
 #
 # The probe authenticates against B2's native API. A cap breach answers b2_authorize_account with
@@ -297,7 +297,7 @@ R2_CLASS_B_ACTIONS = frozenset(
 R2_FREE_ACTIONS = frozenset({"DeleteObject", "DeleteBucket", "AbortMultipartUpload"})
 
 # k3s workload health, via the CLUSTER's Prometheus — a SECOND Prometheus, not the one PROM_URL
-# points at. Slice 3 D8 (docs/k3s-migration/slice-3-monitoring-plane.md). Seven k8s workloads ran
+# points at. Slice 3 D8 (docs/archive/k3s-migration/slice-3-monitoring-plane.md). Seven k8s workloads ran
 # from slice 2 with no monitor of any kind, n8n-runners among them, because none of them is
 # probeable from here: three expose only a ClusterIP, four expose no Service at all, and none has
 # an ingress route. Their health is a Kubernetes API property, so kube-state-metrics is the only
@@ -1009,6 +1009,9 @@ def check_oom():
     return True, "no OOM kills in %s" % OOM_WINDOW
 
 
+# Kept as its own module int rather than folded into _down_streaks below: its down branch
+# is bespoke (the page message embeds the throttle thresholds), unlike the other four
+# checks, which all call the shared down_streak() helper. See down_streak()'s docstring.
 _cpu_breach_streak = 0
 
 
@@ -1826,7 +1829,13 @@ def ups_health(charge_pct, runtime_s, replace_battery, charge_min_pct, runtime_m
     return True, ", ".join(parts)
 
 
-_ups_down_streak = 0
+# Per-check consecutive-down count (check_ups/check_ha_heartbeat/check_discord/
+# check_longhorn_volumes), keyed by check name, mutated via down_streak(). Reset to 0 on an
+# `ok` result by each check itself, and cleared between tests by conftest.py's autouse
+# fixture. Distinct from _grace_streaks below, which is apply_startup_grace's per-name
+# state for the reach-out checks' post-reboot startup grace, a different mechanism keyed
+# by a disjoint set of names.
+_down_streaks: dict[str, int] = {}
 
 
 def check_ups():
@@ -1850,7 +1859,6 @@ def check_ups():
     rides out a single-cycle runtime dip from a load spike or an HA-restart blip; only a sustained
     problem pages.
     """
-    global _ups_down_streak
     configured = [
         (name, q)
         for name, q in (
@@ -1874,7 +1882,7 @@ def check_ups():
         # monitor owns).
         ha_up = prom_scalar(UPS_HA_UP_QUERY) if UPS_HA_UP_QUERY else None
         if not (ha_up is not None and ha_up > 0.5 and "replace-battery" in values):
-            _ups_down_streak = 0
+            _down_streaks["ups"] = 0
             return (
                 True,
                 "no UPS data in Prometheus (HA scrape down? Scrape Targets owns source liveness)",
@@ -1894,7 +1902,7 @@ def check_ups():
         # the all-absent branch above. The nut pod liveness probe owns NUT-server death, so defer
         # rather than double-paging it through the partial-absence path below with a misdirecting
         # "entity renamed?" msg. A single numeric arm gone (charge XOR runtime) is still a real rename.
-        _ups_down_streak = 0
+        _down_streaks["ups"] = 0
         return (
             True,
             "NUT numeric arms (charge, runtime) absent — NUT server/integration down; "
@@ -1919,10 +1927,10 @@ def check_ups():
             UPS_RUNTIME_MIN_S,
         )
     if ok:
-        _ups_down_streak = 0
+        _down_streaks["ups"] = 0
         return True, msg
-    _ups_down_streak, ok, msg = down_streak(
-        _ups_down_streak, UPS_CONSECUTIVE, msg, "grace"
+    _down_streaks["ups"], ok, msg = down_streak(
+        _down_streaks.get("ups", 0), UPS_CONSECUTIVE, msg, "grace"
     )
     return ok, msg
 
@@ -1981,24 +1989,6 @@ def check_pi_pressure():
     mem = _get_json(PI_GLANCES_URL + "/api/4/mem")
     fs = _get_json(PI_GLANCES_URL + "/api/4/fs")
     return pi_pressure(load, mem, fs, PI_LOAD_MAX, PI_MEM_MIN_MB, PI_DISK_MAX_PCT)
-
-
-def _check_state_file(path, missing_msg, bad_msg, decide):
-    """Read a JSON state file written by a host cron and hand (state, age_s) to `decide`.
-
-    Shared IO half of the state-file monitors (pi-peers/disk-prune): every one reads the same
-    {ts, ok, msg} shape, so only the path, the two failure messages, and the pure decision differ.
-    Returns `decide(state, age_s)`, or (False, msg) when the file is missing/unparseable.
-    """
-    try:
-        with open(path) as fh:
-            state = json.load(fh)
-        age_s = time.time() - float(state.get("ts", 0))
-    except FileNotFoundError:
-        return False, missing_msg
-    except ValueError, TypeError:
-        return False, bad_msg
-    return decide(state, age_s)
 
 
 def ha_heartbeat_fresh(state, max_age_s, now=None):
@@ -2063,9 +2053,6 @@ def with_ha_ban(ok, msg):
     return False, "%s | %s" % (ban_msg, msg)
 
 
-_ha_down_streak = 0
-
-
 def check_ha_heartbeat():
     """Poll HA's automation-driven heartbeat over the apps network (Bearer token).
 
@@ -2080,7 +2067,6 @@ def check_ha_heartbeat():
     (not left to run_once) so the recreate-window connection error rides the same grace as
     staleness — both are the deploy, not a wedge.
     """
-    global _ha_down_streak
     if not HA_URL or not HA_TOKEN:
         return True, "HA heartbeat monitoring disabled (no URL/token)"
     try:
@@ -2094,10 +2080,10 @@ def check_ha_heartbeat():
     ) as e:  # unreachable/auth -> route through the streak, don't page yet
         ok, msg = False, "HA API unreachable: %s" % e
     if ok:
-        _ha_down_streak = 0
+        _down_streaks["ha"] = 0
         return with_ha_ban(True, msg)
-    _ha_down_streak, ok, msg = down_streak(
-        _ha_down_streak, HA_CONSECUTIVE, msg, "deploy/restart grace"
+    _down_streaks["ha"], ok, msg = down_streak(
+        _down_streaks.get("ha", 0), HA_CONSECUTIVE, msg, "deploy/restart grace"
     )
     return with_ha_ban(ok, msg)
 
@@ -2947,9 +2933,6 @@ def email_backstop(now=None):
     return ok, msg
 
 
-_discord_down_streak = 0
-
-
 def check_discord():
     """GET-verify EVERY configured Discord notification webhook still delivers, plus the email backstop.
 
@@ -2963,7 +2946,6 @@ def check_discord():
     blip pushes `up` with a streak msg and only the Nth straight failure pages — a genuinely dead
     webhook or SMTP credential stays bad and pages.
     """
-    global _discord_down_streak
     webhooks = _discord_webhooks()
     if not webhooks:
         return True, "Discord webhook check disabled (no URL)"
@@ -2989,15 +2971,12 @@ def check_discord():
         else:
             ok, msg = False, e_msg
     if ok:
-        _discord_down_streak = 0
+        _down_streaks["discord"] = 0
         return True, "delivery channels valid (%s)" % ", ".join(valid)
-    _discord_down_streak, ok, msg = down_streak(
-        _discord_down_streak, DISCORD_CONSECUTIVE, msg, "transient grace"
+    _down_streaks["discord"], ok, msg = down_streak(
+        _down_streaks.get("discord", 0), DISCORD_CONSECUTIVE, msg, "transient grace"
     )
     return ok, msg
-
-
-_longhorn_degraded_streak = 0
 
 
 def check_longhorn_volumes():
@@ -3026,11 +3005,10 @@ def check_longhorn_volumes():
     reaper's unpopulated owner map). The volume count doubles as that input assertion: the
     one-hot shape guarantees a `state="healthy"` series per volume even when its value is 0.
     """
-    global _longhorn_degraded_streak
     volumes = prom_scalar('count(longhorn_volume_robustness{state="healthy"})')
     if not volumes:
-        _longhorn_degraded_streak, ok, msg = down_streak(
-            _longhorn_degraded_streak,
+        _down_streaks["longhorn"], ok, msg = down_streak(
+            _down_streaks.get("longhorn", 0),
             LONGHORN_CONSECUTIVE,
             "no longhorn_volume_robustness series — replica redundancy is UNMONITORED "
             "(job=longhorn scrape down?), which is not the same as healthy",
@@ -3047,7 +3025,7 @@ def check_longhorn_volumes():
         if worst.get(name) != "faulted":
             worst[name] = state
     if not worst:
-        _longhorn_degraded_streak = 0
+        _down_streaks["longhorn"] = 0
         return True, "%d volume(s) redundant, none degraded or faulted" % int(volumes)
     faulted = sorted(n for n, s in worst.items() if s == "faulted")
     degraded = sorted(n for n, s in worst.items() if s != "faulted")
@@ -3058,8 +3036,8 @@ def check_longhorn_volumes():
         parts.append(
             "%d degraded, single-copy (%s)" % (len(degraded), ", ".join(degraded[:5]))
         )
-    _longhorn_degraded_streak, ok, msg = down_streak(
-        _longhorn_degraded_streak,
+    _down_streaks["longhorn"], ok, msg = down_streak(
+        _down_streaks.get("longhorn", 0),
         LONGHORN_CONSECUTIVE,
         "of %d volume(s): %s" % (int(volumes), "; ".join(parts)),
         "drain/reboot grace",
@@ -3169,7 +3147,7 @@ LOKI_DEPENDENT = frozenset({"loki_ingestion"})
 # crons, so they reported the LAST SUCCESSFUL RUN rather than current health: on 2026-08-02 they
 # read green through a nine-and-a-half-hour outage in which B2 refused every request. Those checks
 # were removed 2026-08-10 — kopia is retired, backup moved to Longhorn (see
-# docs/k3s-migration/backup-consolidation-longhorn.md) — leaving this empty. b2_reachable itself
+# docs/archive/k3s-migration/backup-consolidation-longhorn.md) — leaving this empty. b2_reachable itself
 # stays: Longhorn still needs B2.
 #
 # b2_storage re-populated it on 2026-08-15. It queries B2 live rather than reading a cron's state

@@ -6,6 +6,7 @@ live by `check.py --once` at deploy time, and the run-loop wiring is in test_che
 
 from datetime import datetime, timezone
 
+import pytest
 
 import check
 
@@ -127,27 +128,19 @@ def test_mem_metric_unavailable_alerts(monkeypatch):
     assert "unavailable" in msg
 
 
-def test_cert_valid_is_ok(monkeypatch):
-    # default CERT_MIN_DAYS=14; 30 days left -> ok
-    monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: 30.0)
-    ok, msg = check.check_cert()
-    assert ok
-    assert "valid" in msg
-
-
-def test_cert_expiring_alerts(monkeypatch):
-    # 5 days left < 14 -> down
-    monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: 5.0)
-    ok, msg = check.check_cert()
-    assert not ok
-    assert "expires" in msg
-
-
-def test_cert_metric_unavailable_alerts(monkeypatch):
-    monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: None)
-    ok, msg = check.check_cert()
-    assert not ok
-    assert "unavailable" in msg
+@pytest.mark.parametrize(
+    ("days_left", "ok", "expect"),
+    [
+        (30.0, True, "valid"),  # default CERT_MIN_DAYS=14; 30 days left -> ok
+        (5.0, False, "expires"),  # 5 days left < 14 -> down
+        (None, False, "unavailable"),
+    ],
+)
+def test_cert(monkeypatch, days_left, ok, expect):
+    monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: days_left)
+    result_ok, msg = check.check_cert()
+    assert result_ok is ok
+    assert expect in msg
 
 
 # ── scrutiny SMART-data freshness (collector runs daily; web API holds last report) ──
@@ -364,47 +357,71 @@ def test_scrutiny_wear_devices_skips_archived_and_labels_by_model(monkeypatch):
 # ── ups (battery health via HA's Prometheus-scraped UPS sensors) ─────────────
 
 
-def test_ups_health_ok():
-    ok, msg = check.ups_health(100, 900, 0, 50, 300)
-    assert ok
-    assert "battery 100%" in msg and "runtime 15.0m" in msg and "self-test ok" in msg
-
-
-def test_ups_health_low_charge_is_named():
-    ok, msg = check.ups_health(30, 900, 0, 50, 300)
-    assert not ok
-    assert "battery 30%" in msg and "runtime" not in msg
-
-
-def test_ups_health_low_runtime_is_named():
-    ok, msg = check.ups_health(100, 120, 0, 50, 300)
-    assert not ok
-    assert "runtime 2.0m" in msg and "battery" not in msg
-
-
-def test_ups_health_both_breaches_named():
-    ok, msg = check.ups_health(20, 60, 0, 50, 300)
-    assert not ok
-    assert "battery 20%" in msg and "runtime 1.0m" in msg
-
-
-def test_ups_health_replace_battery_pages_even_with_good_runway():
-    # The UPS's own RB self-test verdict trips even while charge/runtime read fine — earliest signal.
-    ok, msg = check.ups_health(100, 900, 1, 50, 300)
-    assert not ok
-    assert "replace-battery" in msg
-
-
-def test_ups_health_at_threshold_is_ok():
-    # strict `<`, so exactly at the floor is fine
-    assert check.ups_health(50, 300, 0, 50, 300)[0]
-
-
-def test_ups_health_absent_arm_is_skipped():
-    # only runtime present and low -> pages on runtime alone; the other arms are ignored
-    ok, msg = check.ups_health(None, 120, None, 50, 300)
-    assert not ok
-    assert "runtime" in msg and "battery" not in msg
+@pytest.mark.parametrize(
+    ("charge", "runtime", "replace", "ok", "must_contain", "must_not_contain"),
+    [
+        pytest.param(
+            100,
+            900,
+            0,
+            True,
+            ("battery 100%", "runtime 15.0m", "self-test ok"),
+            (),
+            id="ok",
+        ),
+        pytest.param(
+            30, 900, 0, False, ("battery 30%",), ("runtime",), id="low_charge_is_named"
+        ),
+        pytest.param(
+            100,
+            120,
+            0,
+            False,
+            ("runtime 2.0m",),
+            ("battery",),
+            id="low_runtime_is_named",
+        ),
+        pytest.param(
+            20,
+            60,
+            0,
+            False,
+            ("battery 20%", "runtime 1.0m"),
+            (),
+            id="both_breaches_named",
+        ),
+        pytest.param(
+            100,
+            900,
+            1,
+            False,
+            ("replace-battery",),
+            (),
+            # The UPS's own RB self-test verdict trips even while charge/runtime read fine —
+            # earliest signal.
+            id="replace_battery_pages_even_with_good_runway",
+        ),
+        # strict `<`, so exactly at the floor is fine
+        pytest.param(50, 300, 0, True, (), (), id="at_threshold_is_ok"),
+        pytest.param(
+            None,
+            120,
+            None,
+            False,
+            ("runtime",),
+            ("battery",),
+            # only runtime present and low -> pages on runtime alone; the other arms are ignored
+            id="absent_arm_is_skipped",
+        ),
+    ],
+)
+def test_ups_health(charge, runtime, replace, ok, must_contain, must_not_contain):
+    result_ok, msg = check.ups_health(charge, runtime, replace, 50, 300)
+    assert result_ok is ok
+    for s in must_contain:
+        assert s in msg
+    for s in must_not_contain:
+        assert s not in msg
 
 
 def _ups_scalars(monkeypatch, charge, runtime, replace=0.0, ha_up=None):
@@ -423,7 +440,6 @@ def _ups_scalars(monkeypatch, charge, runtime, replace=0.0, ha_up=None):
 
 
 def test_check_ups_healthy_is_up(monkeypatch):
-    check._ups_down_streak = 0
     _ups_scalars(monkeypatch, 100, 900)
     ok, msg = check.check_ups()
     assert ok and "battery 100%" in msg and "self-test ok" in msg
@@ -431,7 +447,6 @@ def test_check_ups_healthy_is_up(monkeypatch):
 
 def test_check_ups_absent_data_defers_to_scrape_targets(monkeypatch):
     # HA scrape down (ha_up None via the fake) -> all arms absent defers to Scrape Targets.
-    check._ups_down_streak = 0
     _ups_scalars(monkeypatch, None, None, replace=None)
     ok, msg = check.check_ups()
     assert ok and "no UPS data" in msg
@@ -441,19 +456,17 @@ def test_check_ups_all_absent_but_ha_scraping_pages(monkeypatch):
     # Every UPS entity renamed/removed at once while HA keeps scraping (up{home-assistant}==1):
     # Scrape Targets can't see it, so the old all-absent defer silently unmonitored the UPS. Now it
     # pages through the streak (naming the missing arms) instead of deferring.
-    check._ups_down_streak = 0
     _ups_scalars(monkeypatch, None, None, replace=None, ha_up=1.0)
     ok1, msg1 = check.check_ups()
     assert ok1 and "streak 1/2" in msg1
     ok2, msg2 = check.check_ups()
     assert not ok2 and "absent" in msg2
-    assert check._ups_down_streak == 2
+    assert check._down_streaks.get("ups", 0) == 2
 
 
 def test_check_ups_all_absent_ha_down_still_defers(monkeypatch):
     # HA scrape affirmatively down (up==0) with all arms absent -> still defer (Scrape Targets owns
     # the HA-source outage); the up-gate only flips the all-absent case to a page when HA is UP.
-    check._ups_down_streak = 0
     _ups_scalars(monkeypatch, None, None, replace=None, ha_up=0.0)
     ok, msg = check.check_ups()
     assert ok and "no UPS data" in msg
@@ -465,16 +478,14 @@ def test_check_ups_nut_server_down_defers_not_double_pages(monkeypatch):
     # charge=None, runtime=None, replace=0.0. That's the nut pod liveness probe's page, NOT an
     # entity rename, so check_ups must DEFER (up) — not partial-absence page with a misdirecting
     # "entity renamed?" msg (the 2026-07-14 review M1 double-page bug).
-    check._ups_down_streak = 0
     _ups_scalars(monkeypatch, None, None, replace=0.0)
     ok, msg = check.check_ups()
     assert ok and "NUT numeric arms" in msg
-    assert check._ups_down_streak == 0
+    assert check._down_streaks.get("ups", 0) == 0
 
 
 def test_check_ups_replace_battery_pages(monkeypatch):
     # RB verdict from the self-test -> down after the streak even with a full charge / good runtime.
-    check._ups_down_streak = 0
     _ups_scalars(monkeypatch, 100, 900, replace=1.0)
     ok1, _ = check.check_ups()
     assert ok1  # streak grace on the first cycle
@@ -485,7 +496,6 @@ def test_check_ups_replace_battery_pages(monkeypatch):
 def test_check_ups_partial_absence_pages_not_silently_survives(monkeypatch):
     # charge+runtime present but the replace arm vanished (entity rename) -> flag, don't monitor the
     # survivor silently. Goes through the streak (HA-restart grace) then pages, naming the missing arm.
-    check._ups_down_streak = 0
     _ups_scalars(monkeypatch, 100, 900, replace=None)
     ok1, msg1 = check.check_ups()
     assert ok1 and "streak 1/2" in msg1
@@ -494,7 +504,6 @@ def test_check_ups_partial_absence_pages_not_silently_survives(monkeypatch):
 
 
 def test_check_ups_single_low_runtime_is_suppressed_then_pages(monkeypatch):
-    check._ups_down_streak = 0
     _ups_scalars(monkeypatch, 100, 60)  # runtime 1m < 5m floor
     ok1, msg1 = check.check_ups()
     assert ok1 and "streak 1/2" in msg1  # UPS_CONSECUTIVE default 2
@@ -503,17 +512,15 @@ def test_check_ups_single_low_runtime_is_suppressed_then_pages(monkeypatch):
 
 
 def test_check_ups_recovery_resets_streak(monkeypatch):
-    check._ups_down_streak = 0
     _ups_scalars(monkeypatch, 100, 60)
     check.check_ups()  # streak advances to 1
     _ups_scalars(monkeypatch, 100, 900)  # healthy again
     ok, _ = check.check_ups()
     assert ok
-    assert check._ups_down_streak == 0
+    assert check._down_streaks.get("ups", 0) == 0
 
 
 def test_check_ups_disabled_when_no_queries(monkeypatch):
-    check._ups_down_streak = 0
     monkeypatch.setattr(check, "UPS_CHARGE_QUERY", "")
     monkeypatch.setattr(check, "UPS_RUNTIME_QUERY", "")
     monkeypatch.setattr(check, "UPS_REPLACE_QUERY", "")
@@ -603,22 +610,20 @@ def test_pi_pressure_at_threshold_is_ok():
     assert ok
 
 
-def test_pi_pressure_missing_fields_alert():
-    ok, msg = check.pi_pressure({}, MEM_OK, FS_OK, 1.5, 50, 90)
-    assert not ok
-    assert "missing" in msg
-
-
-def test_pi_pressure_empty_fs_alerts():
-    # a glances fs-plugin regression must surface, not silently pass (same principle
-    # as the load/mem missing-field handling)
-    ok, msg = check.pi_pressure(LOAD_OK, MEM_OK, [], 1.5, 50, 90)
-    assert not ok
-    assert "missing" in msg
-
-
-def test_pi_pressure_zero_cores_alerts_not_divides():
-    ok, msg = check.pi_pressure({"min5": 1.0, "cpucore": 0}, MEM_OK, FS_OK, 1.5, 50, 90)
+@pytest.mark.parametrize(
+    ("load", "fs"),
+    [
+        pytest.param({}, FS_OK, id="missing_fields_alert"),
+        # a glances fs-plugin regression must surface, not silently pass (same principle
+        # as the load/mem missing-field handling)
+        pytest.param(LOAD_OK, [], id="empty_fs_alerts"),
+        pytest.param(
+            {"min5": 1.0, "cpucore": 0}, FS_OK, id="zero_cores_alerts_not_divides"
+        ),
+    ],
+)
+def test_pi_pressure_missing_input_alerts(load, fs):
+    ok, msg = check.pi_pressure(load, MEM_OK, fs, 1.5, 50, 90)
     assert not ok
     assert "missing" in msg
 
@@ -657,7 +662,6 @@ def _longhorn_series(pvc, state, pod="longhorn-manager-a"):
 
 
 def _arm_longhorn(monkeypatch, vector, volumes=43.0, consecutive=3):
-    monkeypatch.setattr(check, "_longhorn_degraded_streak", 0)
     monkeypatch.setattr(check, "LONGHORN_CONSECUTIVE", consecutive)
     monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: volumes)
     monkeypatch.setattr(check, "prom_vector", lambda *a, **k: vector)
@@ -689,7 +693,7 @@ def test_longhorn_recovery_resets_the_streak(monkeypatch):
     check.check_longhorn_volumes()
     monkeypatch.setattr(check, "prom_vector", lambda *a, **k: [])
     assert check.check_longhorn_volumes()[0]
-    assert check._longhorn_degraded_streak == 0
+    assert check._down_streaks.get("longhorn", 0) == 0
 
 
 def test_longhorn_absent_metric_is_not_green(monkeypatch):
