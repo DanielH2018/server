@@ -19,6 +19,7 @@ MkDocs
 Portainer
 Prometheus
 Renovate
+prek
 SOPS
 Scrutiny
 [Ss]harded
@@ -33,6 +34,7 @@ ConfigMap
 DaemonSet
 IngressRoute
 Kubernetes
+Kustomize
 NetworkPolicy
 PVC
 [Cc]laimName
@@ -69,5 +71,10 @@ GitOps
 [Rr]epo
 [Rr]unbook
 [Rr]unbooks
+[Ss]ystemd
 [Tt]oposort
+[Uu]napplied
+[Uu]nexecuted
+[Ww]orktree
+[Ww]orktrees
 [Uu]nsnooze

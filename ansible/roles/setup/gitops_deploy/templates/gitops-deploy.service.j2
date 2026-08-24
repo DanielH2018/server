@@ -71,7 +71,7 @@ SyslogLevel=notice
 # contract.py:458 asserts that bound and goes red if you try. So -E 75 + SuccessExitStatus=75
 # instead, the same "lock busy, nothing deployed" contract scripts/deploy.sh:281 already uses.
 # Contention is not silent starvation: the flock path never writes last_run, so contention
-# lasting past GITOPS_MAX_AGE_S (90min, check.py:148) still pages via GitOps-Alive.
+# lasting past GITOPS_MAX_AGE_S (90min, check.py:148) still pages via GitOps-Alive. (ADR-0011)
 SuccessExitStatus=75
 # Deliberately WITHOUT --no-python-downloads, unlike every other host invocation in this repo.
 # Elsewhere the flag turns a missing pinned interpreter into a loud failure instead of a silent

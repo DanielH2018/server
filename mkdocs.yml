@@ -75,6 +75,8 @@ nav:
       - "ADR-0006 Longhorn for cluster storage": adr/0006-longhorn-for-cluster-storage.md
       - "ADR-0007 Backup tiering: R2 daily, B2 weekly": adr/0007-backup-tiering-r2-daily-b2-weekly.md
       - "ADR-0008 16 MiB Longhorn blocks": adr/0008-16-mib-longhorn-blocks.md
+      - "ADR-0010 Pull-based GitOps over Argo and Flux": adr/0010-pull-based-gitops-over-argo-and-flux.md
+      - "ADR-0011 One lock serialises every deploy path": adr/0011-one-lock-serialises-every-deploy-path.md
       - "ADR-0013 daniel-pi stays on Docker": adr/0013-daniel-pi-stays-on-docker.md
       - "ADR-0014 Kopia retired, Longhorn owns B2": adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md
   - Runbooks:
