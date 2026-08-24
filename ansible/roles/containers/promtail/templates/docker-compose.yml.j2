@@ -1,0 +1,77 @@
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
+---
+
+services:
+  promtail:
+    container_name: promtail
+    # Unpinned like every image on this host — the Pi has no GitOps path, so Renovate
+    # deliberately does not track roles/containers/**.
+    image: grafana/promtail:latest
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/promtail.yml
+    # The image's own uid is 10001, and setup_dirs.yml creates the bind-mount source owned by
+    # the deploy user (1000). Left at the default, promtail cannot write its positions file:
+    # `open /positions/.positions.yaml...: permission denied`, once every few seconds. That is
+    # not a cosmetic error — with no positions to resume from, every restart re-reads every
+    # container's log from the beginning and re-ships it. Matches the estate's PUID/PGID.
+    user: "1000:1000"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    {{ service_networks() }}
+    volumes:
+      - ./config/promtail.yml:/etc/promtail/promtail.yml:ro
+      # Positions must survive a restart. Without this the container re-reads every
+      # container's log from the beginning on each recreate, which both duplicates lines in
+      # Loki and spends the Pi's uplink re-sending them.
+      - ./positions:/positions
+    environment:
+      # A HARD ceiling on the Go heap, not a hint. The cluster's promtail measures 58-73 MiB
+      # against ~50 pods; this one has 6 containers and almost no volume, but the Go runtime
+      # will happily grow to whatever the cgroup allows and only collect under pressure.
+      # GOMEMLIMIT makes it collect early instead, which is the right trade on a host with
+      # 162 MiB free — CPU is cheaper here than RAM.
+      - GOMEMLIMIT=48MiB
+      # One GC-visible processor. Promtail defaults to GOMAXPROCS=4 on this Pi and spawns a
+      # worker set to match, which is pure contention for a job this small on a box that
+      # already showed RCU stalls from fork rate.
+      - GOMAXPROCS=1
+    # NO healthcheck, and this is a correction rather than an omission. This shipped probing
+    # promtail's /ready with wget, which looked right and could never work: `grafana/promtail`
+    # carries a shell and /usr/bin/promtail and NOTHING else — no wget, no curl, no nc, no
+    # busybox. Every probe therefore exited -1 with "executable file not found in $PATH", the
+    # container went `unhealthy` after its third failure, and autoheal restarted it on a loop.
+    # Measured live: FailingStreak 3, a fresh StartedAt every few minutes, and the sent-entries
+    # counter resetting each time on a 456 MB box that cannot afford the churn.
+    #
+    # It is the exact trap already written up in the sibling node-exporter template, made in the
+    # role next door — so the general rule is worth stating once: on this host a healthcheck is
+    # only available to an image that ships an HTTP client, and `test:` failing to EXEC is
+    # indistinguishable from the service being down.
+    #
+    # Liveness is covered from outside instead, and better: Prometheus scrapes 9080 as
+    # `promtail-pi`, so a dead shipper is `up == 0` on a target that check_cluster_targets
+    # already watches. That check sees a wedged promtail this probe could not have.
+    # Published on the LAN IP so Prometheus can scrape promtail's own metrics — dropped
+    # entries, batch retries and the send latency that says whether shipping is keeping up.
+    # A log shipper that silently stops is the failure this port exists to make visible.
+    ports:
+      - "{{ server_ip }}:9080:9080/tcp"
+    labels:
+      {{ kuma(container_item.name) }}
+
+      # Watchtower
+      - "com.centurylinklabs.watchtower.depends-on=docker-proxy"
+    # 96M is the containment cap, ~2x the 48 MiB GOMEMLIMIT above so a spike is collected
+    # rather than OOM-killed. Measure the real figure after the first deploy — if it sits
+    # near the cap rather than near 48 MiB, this host cannot afford it and the job should
+    # move to a syslog forwarder instead.
+    {{ resources('0.30', '96M', '0.02', '24M') }}
+
+{{ external_networks() }}

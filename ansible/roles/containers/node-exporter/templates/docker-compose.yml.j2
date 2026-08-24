@@ -1,0 +1,62 @@
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
+---
+
+services:
+  node-exporter:
+    container_name: node-exporter
+    # Unpinned, like every image on this host — the Pi has no GitOps path, so Renovate
+    # deliberately does not track roles/containers/** and a pin here only manufactures drift.
+    image: quay.io/prometheus/node-exporter:latest
+    restart: unless-stopped
+    # The host's /proc and /sys, not the container's. Every collector reads through these
+    # paths, so the netdev/cpu/meminfo/hwmon series describe daniel-pi even though the
+    # container sits on the bridge network rather than in the host's netns — which is what
+    # lets this publish a port through Docker instead of needing a UFW allow (see ports).
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/host/root'
+      # Docker's own overlay and container mounts are not disks anyone acts on, and on a
+      # 6-container host they trebled the filesystem series for no signal. `$$` because
+      # Compose interpolates a lone `$` at parse time.
+      - '--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|var/lib/docker/.+)($$|/)'
+      # A Zero 2 W does not need the full collector set, and each one costs CPU on a box
+      # that already shows measurable PSI at idle. Dropped: per-process accounting, ARP/
+      # netclass churn, and the textfile collector nothing writes to.
+      - '--no-collector.arp'
+      - '--no-collector.netclass'
+      - '--no-collector.textfile'
+      - '--no-collector.wifi'
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    pid: host
+    {{ service_networks() }}
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      # rslave so mounts made on the host after this container starts stay visible; without
+      # it a later mount is invisible and its filesystem series silently never appear.
+      - /:/host/root:ro,rslave
+    # No healthcheck: the upstream image is FROM scratch and carries no shell, wget or curl,
+    # so every CMD form fails and the container would sit permanently `unhealthy` — which
+    # autoheal would then restart in a loop. Liveness is covered from the other side instead,
+    # by Prometheus' own `up{job="node-pi"}` and the Scrape Targets monitor.
+    #
+    # Published on the LAN IP rather than 0.0.0.0, the same shape web_ui_ports_block emits
+    # for this host. Not that macro, though: this is a metrics endpoint, and the macro's
+    # partner emits Traefik labels whenever expose_mode is not 'lan' — routing a scrape
+    # target through Authelia would break it the moment the host var changed.
+    ports:
+      - "{{ server_ip }}:9100:9100/tcp"
+    labels:
+      {{ kuma(container_item.name) }}
+    # ~20 MiB resident measured on the cluster's node-exporter DaemonSet, which runs a wider
+    # collector set than this. The cap is containment, not a target.
+    {{ resources('0.30', '64M', '0.02', '16M') }}
+
+{{ external_networks() }}

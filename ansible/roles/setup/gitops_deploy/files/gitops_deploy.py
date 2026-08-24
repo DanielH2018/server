@@ -383,6 +383,40 @@ def write_hold(sha: str | None) -> None:
     _write_marker(HOLD_FILE, sha)
 
 
+def emit_deploy_annotation(services: set[str], sha: str) -> None:
+    """Record a successful auto-deploy where Grafana can draw it as a dashboard annotation.
+
+    A LOG LINE, not a POST to Grafana's /api/annotations, and the peer of the identically-named
+    function in scripts/deploy.sh — the two deploy paths must annotate the same way or the
+    dashboards show only half the deploys. Grafana has no hostPort and no pinned ClusterIP, and
+    this runs on the HOST, so calling in would mean pinning a fourth address or routing through
+    Traefik with a standing write credential. Neither is needed: promtail already tails
+    /var/log/syslog into loki-homelab, and Grafana already reads that Loki by Service DNS.
+
+    Only the k8s auto-deploy path calls this. The Docker branch further down is unreachable on
+    both cluster nodes (neither has had Docker since 2026-08-14), so wiring it there would be
+    dead code rather than symmetry.
+
+    Fire-and-forget: any failure is logged and swallowed. An annotation is a convenience, and a
+    deploy that succeeded must not be reported as failed because recording it did not.
+    """
+    try:
+        subprocess.run(
+            [
+                "logger",
+                "-t",
+                "deploy-annotation",
+                f"event=deploy services={','.join(sorted(services))} "
+                f"sha={sha[:8]} result=ok source=gitops",
+            ],
+            check=True,
+            capture_output=True,
+            timeout=10,
+        )
+    except Exception as exc:  # noqa: BLE001 — never let annotating fail a good deploy
+        log(f"deploy annotation failed (deploy itself succeeded): {exc}")
+
+
 def discord(content: str) -> bool:
     """Post to the alert webhook via the shared host_lib.discord_post — see there for the
     Cloudflare-1010 User-Agent + 2xx-only-success contract the per-SHA dedupe markers gate on. A
@@ -1057,6 +1091,9 @@ def main() -> int:
         # without this the first rollback would leave GitOps Deploy — Status red forever and
         # need a manual rm (the trap this role's CLAUDE.md documents).
         write_hold(None)
+        # Only after the gate inside deploy_k8s has passed and the hold is cleared — annotating
+        # from inside the try would mark a deploy that the rollout gate went on to reject.
+        emit_deploy_annotation(cs.k8s_deploy, origin)
         # A promoted k8s service is image-bump-only, so it is never the consumer of a secret that
         # rode along in the same tick. Without this the rotated value is ff-merged and forgotten.
         alert_secrets_deferred(origin, cs)

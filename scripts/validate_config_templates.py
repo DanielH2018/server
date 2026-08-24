@@ -44,6 +44,12 @@ CONFIG_TEMPLATES = [
     # grafana/promtail-config.yml.j2 retired 2026-08-14 with the Docker promtail — the
     # successor's config renders inside the loki-homelab ConfigMap, covered by the k8s
     # manifest validator. The list may be empty between config-bearing eras.
+    #
+    # A new Docker promtail opened the next such era on daniel-pi. Same reasoning as the old
+    # entry: it is bind-mounted, Jinja-bearing (the Loki push URL interpolates `domain`),
+    # re-rendered every deploy, and a YAML error in it does not fail the deploy — promtail
+    # simply exits at startup and the Pi's logs stop, which is the quiet failure this catches.
+    "promtail/promtail.yml.j2",
 ]
 
 

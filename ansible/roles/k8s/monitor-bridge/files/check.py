@@ -37,6 +37,7 @@ from verdicts_cluster import (
     extended_resource_verdict,
     k8s_workloads_verdict,
     ksm_resource_label,
+    log_error_verdict,
     targets_verdict,
 )
 from verdicts_host import (
@@ -113,6 +114,10 @@ DISK_MOUNTPOINTS = [
 DISK_MAX_PCT = float(_env("DISK_MAX_PCT", "90"))
 CERT_MIN_DAYS = float(_env("CERT_MIN_DAYS", "14"))
 MEM_MAX_PCT = float(_env("MEM_MAX_PCT", "90"))
+# Origins that check_disk/check_mem must NOT scan, as a regex alternation. See host_metric_sel:
+# daniel-pi runs node-exporter like the other hosts, but check_pi_pressure owns its disk and
+# memory with thresholds sized for a 456 MB box.
+HOST_METRIC_ORIGIN_EXCLUDE = _env("HOST_METRIC_ORIGIN_EXCLUDE", "daniel-pi")
 OOM_WINDOW = _env("OOM_WINDOW", "1h")
 CPU_WINDOW = _env("CPU_WINDOW", "15m")
 CPU_THROTTLE_PCT = float(_env("CPU_THROTTLE_PCT", "25"))
@@ -434,6 +439,34 @@ def cadvisor_sel(*matchers):
     return "{%s}" % ", ".join(parts) if parts else ""
 
 
+def host_metric_sel(*matchers):
+    """A `{...}` block for the HOST-level node_* checks, minus origins owned by another check.
+
+    node_* is estate-wide the moment a host runs node-exporter, so check_disk and check_mem
+    scan whatever reports. daniel-pi joined that set when its exporter landed — and
+    check_pi_pressure already owns Pi disk and memory, with thresholds written for a 456 MB
+    box rather than the 90% that suits the two x86 hosts. Without this exclusion the Pi's
+    ordinary working state pages twice for one fact, which is exactly the duplication
+    check_mem avoids elsewhere by naming check_oom the single source of truth.
+
+    A regex matcher, so HOST_METRIC_ORIGIN_EXCLUDE can carry a `a|b` list. Series with no
+    `origin` label at all are KEPT: Prometheus reads a missing label as "", which `!~` on a
+    named host does not match.
+
+    DECIDED: an EXCLUDE, never origin_sel(). cadvisor_sel's note points at "the node-exporter
+    families behind check_disk and check_mem" as series that genuinely carry `origin`, which
+    reads like an invitation to pin them with origin_sel() — do not. PROM_ORIGIN resolves to
+    `origin="daniel-server"` whenever PROM_URL equals CLUSTER_PROM_URL, which the deployed
+    env-secret makes true. Pinning these two checks to one host would hide daniel-box's disk
+    and memory behind two green tiles, which is precisely the fault HOST_ORIGINS_MIN was added
+    for on 2026-08-23. Naming who is OUT keeps every other host in by default.
+    """
+    parts = [m for m in matchers if m]
+    if HOST_METRIC_ORIGIN_EXCLUDE:
+        parts.append('origin!~"%s"' % HOST_METRIC_ORIGIN_EXCLUDE)
+    return "{%s}" % ", ".join(parts) if parts else ""
+
+
 def _origin_name(labels):
     """The host a per-origin series belongs to, for naming an offender in an alert message.
 
@@ -590,6 +623,30 @@ LOKI_STREAM = _env("LOKI_STREAM", '{job=~"authlog|syslog|traefik"}')
 LOKI_DOCKER_STREAM = _env("LOKI_DOCKER_STREAM", '{container=~".+"}')
 LOKI_WINDOW = _env("LOKI_WINDOW", "30m")
 LOKI_FILETAIL_WINDOW = _env("LOKI_FILETAIL_WINDOW", "3h")
+
+# ── log-pattern arm: a workload that is Ready and still failing ───────────────────────────
+#
+# Every other check here reads a metric or an API. None of them can see a service that answers
+# its probes while logging stack traces — a readiness probe asks "is the port open", not "is
+# the work succeeding". That is the shape of the Grafana dead-panel incident: a 1/1 pod, clean
+# rollout, and 19 panels rendering nothing for 55 minutes.
+#
+# Both estates in one selector. `job="k8s"` is the cluster promtail's label and `job="pi"` is
+# daniel-pi's, so this arm covered the Pi from the day that shipped.
+LOG_ERROR_SELECTOR = _env("LOG_ERROR_SELECTOR", '{job=~"k8s|pi"}')
+# Deliberately narrow. `error` is not here and must not be added: it is the single most common
+# word in ordinary application logs (every 404, every retried connection), and an arm that
+# pages on it is an arm that gets muted. These four mean the process itself gave up.
+LOG_ERROR_PATTERN = _env(
+    "LOG_ERROR_PATTERN", "(?i)(panic:|fatal|traceback|out of memory)"
+)
+LOG_ERROR_WINDOW = _env("LOG_ERROR_WINDOW", "1h")
+# Per container, not estate-wide: one workload melting down must not be diluted by 50 quiet
+# ones, and the offender's name is the whole value of the alert.
+LOG_ERROR_MAX = float(_env("LOG_ERROR_MAX", "20"))
+# Containers whose normal output trips the pattern. Comma-separated, case-insensitive. Keep
+# this list short and say WHY in the inventory — a growing ignore list is the arm decaying.
+LOG_ERROR_IGNORE = _env("LOG_ERROR_IGNORE", "")
 
 # Promtail dropped-entries watchdog: Prometheus scrapes promtail:9080, which exposes the
 # promtail_dropped_entries_total{reason=...} counter. Loki Log Ingestion only catches TOTAL silence;
@@ -906,7 +963,7 @@ def check_disk():
     breaching = []
     shortfalls = []
     for mp in DISK_MOUNTPOINTS:
-        sel = '{mountpoint="%s"}' % mp
+        sel = host_metric_sel('mountpoint="%s"' % mp)
         vec = prom_vector(
             "max by (origin) (100 * (1 - node_filesystem_avail_bytes%s"
             " / node_filesystem_size_bytes%s))" % (sel, sel)
@@ -947,8 +1004,10 @@ def check_mem():
     # Per-origin for the same reason as check_disk: the bare prom_scalar form took result[0],
     # so which host it reported was an ordering artifact of Prometheus's response once both
     # estates emitted node_memory_*. The division pairs each host's avail with its own total.
+    sel = host_metric_sel()
     vec = prom_vector(
-        "100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)"
+        "100 * (1 - node_memory_MemAvailable_bytes%s / node_memory_MemTotal_bytes%s)"
+        % (sel, sel)
     )
     if not vec:
         return False, "memory metric unavailable"
@@ -1789,6 +1848,35 @@ def loki_count(selector, window):
     return float(result[0]["value"][1])
 
 
+def loki_vector(query):
+    """Instant LogQL query keeping each series' labels — the loki_count peer of prom_vector.
+
+    Not prom_vector(base=LOKI_URL): Loki's instant endpoint is /loki/api/v1/query, and
+    prom_vector hardcodes /api/v1/query. Same envelope, different path.
+    """
+    return [
+        (series.get("metric", {}), float(series["value"][1]))
+        for series in _instant_query(LOKI_URL, "/loki/api/v1/query", query, "loki")
+    ]
+
+
+def log_error_counts(selector, pattern, window, by_label="container"):
+    """(matches, total) — per-container counts of `pattern`, and the selector's total volume.
+
+    `total` is what keeps this arm honest. The whole arm fails OPEN (see with_log_errors), so a
+    selector that matches no stream returns no matches and reads exactly like a healthy estate
+    — the trap that shipped HA_BAN_SELECTOR with an `app` label promtail does not emit, and
+    pushed "no ip_ban events" through a window containing a real ban. Counting the selector's
+    own volume separates "nothing is wrong" from "I asked the wrong question".
+    """
+    matches = loki_vector(
+        "sum by (%s) (count_over_time(%s |~ `%s` [%s]))"
+        % (by_label, selector, pattern, window)
+    )
+    total = loki_count(selector, window)
+    return matches, total
+
+
 def check_loki_ingestion():
     # Two arms, down if EITHER pipeline is silent: the file-tail union (arm 1) catches a
     # file-tail break (all of authlog/syslog/traefik going silent — a total promtail death or
@@ -2329,8 +2417,38 @@ def check_k8s_workloads():
         # The resource fault wins the message: an unschedulable-by-design cluster is more urgent
         # than whatever the workload arm has to say, and the workload arm's own text is preserved
         # after it rather than dropped.
-        return False, "%s | %s" % (res_msg, msg)
-    return ok, "%s, %s" % (msg, res_msg)
+        return with_log_errors(False, "%s | %s" % (res_msg, msg))
+    return with_log_errors(ok, "%s, %s" % (msg, res_msg))
+
+
+def with_log_errors(ok, msg):
+    """Fold the log-pattern arm into the workload verdict, a burst winning the message.
+
+    Folded here rather than given its own monitor, for the reason the extended-resource and
+    ip_ban arms were: a new Kuma monitor needs a new push token in SOPS, and this arm answers
+    the question the other arms leave open. They read Kubernetes state — replicas, restarts,
+    allocatable — and every one of them reports a container that is Ready while failing at its
+    job as healthy, because by their measure it is.
+
+    FAILS OPEN on a Loki error, and is deliberately NOT in LOKI_DEPENDENT: membership there
+    suppresses the WHOLE check during a Loki outage, which would blind the three Kubernetes
+    arms that have nothing to do with Loki. Same reasoning as ha_heartbeat's ban arm.
+    """
+    if not LOG_ERROR_SELECTOR:
+        return ok, msg
+    ignore = {n.strip().lower() for n in LOG_ERROR_IGNORE.split(",") if n.strip()}
+    try:
+        matches, total = log_error_counts(
+            LOG_ERROR_SELECTOR, LOG_ERROR_PATTERN, LOG_ERROR_WINDOW
+        )
+    except Exception as e:
+        return ok, "%s, log-error arm unavailable (%s)" % (msg, e)
+    log_ok, log_msg = log_error_verdict(
+        matches, total, LOG_ERROR_MAX, LOG_ERROR_WINDOW, ignore
+    )
+    if log_ok:
+        return ok, "%s, %s" % (msg, log_msg)
+    return False, "%s | %s" % (log_msg, msg)
 
 
 def check_cluster_targets():

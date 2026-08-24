@@ -1,0 +1,74 @@
+{# exportarr sidecar for the *arr stack — sonarr, radarr, prowlarr.
+
+   One macro rather than three near-identical container blocks, for the reason the compose
+   templates share `traefik.yml.j2` and `resources.yml.j2`: three copies drift, and the drift
+   is invisible until one of them is the only app without a metric someone needs.
+
+   WHY A SIDECAR, not a Deployment of its own. exportarr reaches its *arr over
+   `http://localhost:<port>` inside the shared pod network namespace. As a separate workload it
+   would need a ClusterIP hop, an entry in that *arr's NetworkPolicy caller list, and a fourth
+   thing to keep in step. In-pod it needs none of those — and it is admitted to Prometheus for
+   free, because the netpol baseline grants prometheus every pod carrying
+   `netpol-baseline: enforced` on ANY port (no `ports:` key on that rule).
+
+   `image` is a PARAMETER, not a literal. `test_no_literal_image_lines_in_k8s_templates` fails a
+   hardcoded image in a k8s template, and `test_every_k8s_role_image_is_renovate_tracked` needs
+   the pin to sit in a role's own `defaults/main.yml` as an `_image:` key — a shared var in
+   group_vars is one directory short of the manager's file pattern and ages silently, which is
+   exactly how `crowdsec_k8s_image` escaped tracking.
+
+   Invoke at the container-list indent, e.g.:
+
+       {{ exportarr('sonarr', sonarr_exportarr_image, container_item.port) }}
+#}
+{% macro exportarr(app, image, app_port, metrics_port=9707) -%}
+- name: exportarr
+          image: {{ image }}
+          # The subcommand selects the API dialect — sonarr/radarr/prowlarr speak different
+          # versions (v3/v3/v1) and expose different collectors.
+          args: ["{{ app }}"]
+          ports:
+            - name: metrics
+              containerPort: {{ metrics_port }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: {{ puid }}
+            runAsGroup: {{ pgid }}
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: PORT
+              value: "{{ metrics_port }}"
+            # localhost, not the Service name: same pod, same network namespace. This is also
+            # what keeps the sidecar out of the *arr's NetworkPolicy caller list — traffic that
+            # never leaves the pod is not ingress.
+            - name: URL
+              value: "http://localhost:{{ app_port }}"
+            # secretKeyRef, not a literal: the pod spec then carries a reference, so
+            # `kubectl get pod -o yaml` and `describe pod` never show the key.
+            - name: APIKEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ app }}-exportarr
+                  key: api_key
+            - name: TZ
+              value: "{{ tz }}"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ metrics_port }}
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          # A readinessProbe would be actively harmful here. The *arr and this sidecar share one
+          # pod, so a not-ready sidecar takes the whole pod out of its Service — an exporter
+          # outage would become an application outage, which inverts the point of monitoring.
+          resources:
+            requests:
+              cpu: 5m
+              memory: 24Mi
+            limits:
+              memory: 64Mi
+{%- endmacro %}

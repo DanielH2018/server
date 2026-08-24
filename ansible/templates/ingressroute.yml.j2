@@ -112,7 +112,7 @@ spec:
 {% endif %}
 {%- endmacro %}
 
-{% macro monitoring_route(name, hostname, port, path_prefix, namespace=none, extra_client_cidrs=[]) -%}
+{% macro monitoring_route(name, hostname, port, path_prefix, namespace=none, extra_client_cidrs=[], service_name=none) -%}
 {#
   A query-only door for monitor-bridge, which runs in Docker on daniel-server and lost its
   route to these services when they left that host (slice 4, B4c). Modelled on
@@ -175,7 +175,13 @@ spec:
       middlewares:
         - name: rate-limit
       services:
-        - name: {{ name }}
+{# `service_name` defaults to `name`, which is what every existing caller wants — one route per
+    service, named after it. It is separable for the case where ONE service needs a SECOND
+    monitoring route with a different path and a different ClientIP set: the OBJECT names must
+    differ, while both still point at the same backend. Splitting the routes is what lets a
+    narrow grant stay narrow instead of being widened into an existing one — see
+    loki-homelab/templates/ingressroute-push.yaml.j2. #}
+        - name: {{ service_name | default(name, true) }}
           port: {{ port }}
   # Not optional, and not boilerplate — see the header. Without this the router is non-TLS and
   # never matches an HTTPS request. Identical to ingressroute()'s block above.

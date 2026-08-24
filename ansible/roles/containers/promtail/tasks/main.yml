@@ -1,0 +1,31 @@
+---
+- name: Create required directories
+  tags: [config]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    common_dirs_to_create:
+      - "{{ container_item.name }}"
+      - "{{ container_item.name }}/config"
+      - "{{ container_item.name }}/positions"
+
+- name: Template the promtail config
+  tags: [config]
+  ansible.builtin.template:
+    src: promtail.yml.j2
+    dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/config/promtail.yml"
+    mode: "0644"
+  register: promtail_config
+
+# Deploys are idempotent (recreate: auto), so an edit to the bind-mounted config above does
+# NOT restart the container on its own — promtail reads its config once, at startup, so the
+# change would sit inert on disk while the deploy reported green. common_config_changed is
+# what turns a config edit into a recreate.
+- name: Deploy Container
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_deploy.yml
+  vars:
+    common_config_changed: "{{ promtail_config is changed }}"

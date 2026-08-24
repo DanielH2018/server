@@ -46,6 +46,10 @@
       - ingressroute.yaml
       # The query-only door for monitor-bridge on daniel-server (slice 4, B4c).
       - ingressroute-monitoring.yaml
+    manifests_secret_files:
+      # The exportarr sidecar's API key. Listed as a SECRET file so it is rendered 0600 under
+      # no_log, like every other decrypted SOPS value.
+      - secret-exportarr.yaml
 
 - name: Prove the library survived the move
   tags: [deploy]

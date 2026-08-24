@@ -16,6 +16,9 @@
       - deployment.yaml
       - service.yaml
       - ingressroute.yaml
+      # daniel-pi's push-only door. A separate router rather than another CIDR on the one
+      # above — see the template for why that distinction is the whole point.
+      - ingressroute-push.yaml
       - promtail-daemonset.yaml
 
 - name: Restart the promtail DaemonSet after a config change

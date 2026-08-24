@@ -676,13 +676,107 @@ def _selector_labels(selector):
 
 
 def test_loki_selectors_use_real_stream_labels():
-    for name in ("LOKI_STREAM", "LOKI_DOCKER_STREAM", "HA_BAN_SELECTOR"):
+    for name in (
+        "LOKI_STREAM",
+        "LOKI_DOCKER_STREAM",
+        "HA_BAN_SELECTOR",
+        "LOG_ERROR_SELECTOR",
+    ):
         selector = getattr(check, name)
         unknown = _selector_labels(selector) - LOKI_STREAM_LABELS
         assert not unknown, (
             "%s selects on %s, which promtail does not emit — the query matches no stream and "
             "the check goes permanently green: %s" % (name, sorted(unknown), selector)
         )
+
+
+def test_log_error_inert_when_the_selector_matches_nothing():
+    """Zero total volume must report INERT, never OK.
+
+    The arm fails open, so a wrong selector produces no matches and reads exactly like a
+    healthy estate. This is the HA_BAN_SELECTOR trap generalised: a fail-open check goes green
+    on a typo. The total-volume count is the only thing separating "nothing is wrong" from
+    "I asked the wrong question", and this test is what keeps it load-bearing.
+    """
+    ok, msg = check.log_error_verdict([], 0, 20, "1h")
+    assert ok
+    assert "INERT" in msg, (
+        "a selector matching no lines must SAY so, not read as healthy"
+    )
+
+
+def test_log_error_quiet_estate_is_ok():
+    ok, msg = check.log_error_verdict([], 5000, 20, "1h")
+    assert ok
+    assert "no log-error bursts" in msg
+
+
+def test_log_error_names_the_offending_container():
+    ok, msg = check.log_error_verdict(
+        [({"container": "grafana"}, 91.0), ({"container": "sonarr"}, 3.0)],
+        5000,
+        20,
+        "1h",
+    )
+    assert not ok
+    assert "grafana (91)" in msg
+    assert "sonarr" not in msg, "a container under the threshold is not an offender"
+
+
+def test_log_error_orders_offenders_worst_first():
+    _, msg = check.log_error_verdict(
+        [({"container": "quiet"}, 21.0), ({"container": "loud"}, 900.0)], 5000, 20, "1h"
+    )
+    assert msg.index("loud") < msg.index("quiet")
+
+
+def test_log_error_ignore_list_is_case_insensitive():
+    ok, _ = check.log_error_verdict(
+        [({"container": "Chatty"}, 900.0)], 5000, 20, "1h", ignore={"chatty"}
+    )
+    assert ok
+
+
+def test_log_error_burst_wins_the_message_over_healthy_workloads(monkeypatch):
+    """A Ready-but-failing workload pages even though every Kubernetes arm reads healthy.
+
+    That combination IS the finding: readiness asks whether the port is open.
+    """
+    monkeypatch.setattr(check, "LOG_ERROR_SELECTOR", '{job=~"k8s|pi"}')
+    monkeypatch.setattr(check, "LOG_ERROR_IGNORE", "")
+    monkeypatch.setattr(
+        check,
+        "log_error_counts",
+        lambda *a, **k: ([({"container": "grafana"}, 91.0)], 5000),
+    )
+
+    ok, msg = check.with_log_errors(True, "42 k8s workloads healthy")
+
+    assert not ok
+    assert msg.startswith("fatal log lines"), "the actionable arm leads"
+    assert "42 k8s workloads healthy" in msg, (
+        "the workload arm's text is kept, not dropped"
+    )
+
+
+def test_log_error_arm_fails_open_on_a_loki_outage(monkeypatch):
+    """A Loki outage must not blind the three Kubernetes arms, which do not depend on it.
+
+    This is why the check is NOT in LOKI_DEPENDENT: membership there suppresses the whole
+    check, and Loki Reachable already owns that root cause.
+    """
+    monkeypatch.setattr(check, "LOG_ERROR_SELECTOR", '{job=~"k8s|pi"}')
+
+    def boom(*a, **k):
+        raise RuntimeError("loki query status=error")
+
+    monkeypatch.setattr(check, "log_error_counts", boom)
+
+    ok, msg = check.with_log_errors(False, "2 workloads unavailable")
+
+    assert not ok, "the workload verdict survives the arm being unavailable"
+    assert "2 workloads unavailable" in msg
+    assert "log-error arm unavailable" in msg, "the arm must say it could not evaluate"
 
 
 def test_ha_ban_no_events_is_ok():

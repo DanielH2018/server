@@ -1,3 +1,4 @@
+{% from 'exportarr.yml.j2' import exportarr with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -96,6 +97,7 @@ spec:
             requests:
               cpu: "{{ radarr_k8s_cpu_request }}"
               memory: {{ radarr_k8s_mem_request }}
+        {{ exportarr('radarr', radarr_exportarr_image, container_item.port) }}
       volumes:
         - name: radarr-config
           persistentVolumeClaim:

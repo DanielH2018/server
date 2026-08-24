@@ -34,6 +34,16 @@ _NO_READINESS = {
         "uptime-kuma",
         "autokuma",
     ): "sidecar; readiness would gate uptime-kuma's own Service",
+    # The exportarr metrics sidecars, same shape as the three above and one degree worse: a
+    # readinessProbe here would let an EXPORTER outage pull its *arr out of its own Service,
+    # so monitoring would take down the thing it monitors. They keep a livenessProbe, and a
+    # dead exporter surfaces as `up == 0` on the `exportarr` scrape job.
+    ("sonarr", "exportarr"): "metrics sidecar; readiness would gate sonarr's Service",
+    ("radarr", "exportarr"): "metrics sidecar; readiness would gate radarr's Service",
+    (
+        "prowlarr",
+        "exportarr",
+    ): "metrics sidecar; readiness would gate prowlarr's Service",
     # ── game servers: a startupProbe already gates Service publication, so a readinessProbe
     #    would add nothing except a second probe hitting the same signal.
     (

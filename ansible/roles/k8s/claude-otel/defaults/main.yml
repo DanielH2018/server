@@ -102,6 +102,20 @@ claude_otel_dashboard_folders:
   - Networking
   - Security
 
+# ── deploy annotations ────────────────────────────────────────────────────────────────────────
+# Deploys are recorded as syslog lines (scripts/deploy.sh + gitops_deploy.py both call `logger`),
+# promtail ships them to loki-homelab, and every dashboard gets an annotation query injected at
+# deploy time by scripts/inject_dashboard_annotations.py. No Grafana API call, so no pinned
+# ClusterIP and no standing write credential — see the emit_deploy_annotation comments.
+#
+# The uid MUST equal the `loki-homelab` datasource uid in templates/grafana.yaml.j2. A wrong one
+# does not error: Grafana renders the annotation query against nothing and the board shows no
+# deploy markers, silently. ansible/tests/test_deploy_annotations.py holds the two in lockstep.
+claude_otel_loki_homelab_uid: bf4q19tuivta8e
+# `|= "event=deploy"` before `| logfmt`, in that order: the line filter runs first and is far
+# cheaper than parsing every syslog line in the window.
+claude_otel_deploy_annotation_expr: '{job="syslog"} |= "event=deploy" | logfmt'
+
 claude_otel_prometheus_retention: 30d
 # Deliberately well under claude_otel_prometheus_storage (5Gi), not close to it. The cap bounds
 # persisted BLOCKS only — the WAL, the in-memory head as it flushes, and compaction (which needs

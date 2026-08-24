@@ -51,6 +51,7 @@ k3s_server_args: >-
   --node-ip {{ server_ip }} --advertise-address {{ server_ip }}
   --kubelet-arg=allowed-unsafe-sysctls=net.ipv4.conf.all.src_valid_mark,net.ipv4.ip_forward
   {% if k3s_secrets_encryption %}--secrets-encryption{% endif %}
+  {% if k3s_etcd_expose_metrics %}--etcd-expose-metrics{% endif %}
   {% if k3s_audit_log_enabled %}
   --kube-apiserver-arg=audit-policy-file={{ k3s_audit_policy_path }}
   --kube-apiserver-arg=audit-log-path={{ k3s_audit_log_path }}

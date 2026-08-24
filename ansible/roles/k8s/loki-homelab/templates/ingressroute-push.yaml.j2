@@ -1,0 +1,36 @@
+{% from 'ingressroute.yml.j2' import monitoring_route with context %}
+---
+{# daniel-pi's promtail push door, and deliberately NOT an entry on the route next door.
+
+   THE MARKER THIS ANSWERS: the `# DECIDED 2026-08-24` block in ingressroute.yaml.j2 narrowed
+   that route from PathPrefix(`/`) + the whole pod CIDR to `/loki/api/v1/` + the two node
+   gateways, after verifying live that the old pair gave every pod read, forged-write and delete
+   on an `auth_enabled: false` Loki. Its stated residual is that `/loki/api/v1/` still contains
+   push and delete, "now reachable only from the two nodes rather than from any pod".
+
+   The Pi needs push. Adding 10.0.0.139/32 to that route's extra_client_cidrs would have been the
+   one-line change — and it would have handed the Pi delete and full query as well, walking back
+   the residual that block was careful to bound. So this is a SEPARATE router with a longer
+   prefix and its own client list: the Pi gets `/loki/api/v1/push` and nothing else, and the two
+   nodes' query access is untouched. The marker is extended, not contradicted.
+
+   Ordering does not decide this. Both routers sit at priority 100, but the route next door
+   cannot match Pi traffic at all — its ClientIP clause does not list the Pi — so Traefik skips
+   it and this router is the only candidate. No priority juggling to get wrong.
+
+   `k8s_bridge_client_ip` (daniel-server) rides along because the macro always prepends it. That
+   grants nothing new: daniel-server already reaches `/loki/api/v1/` on the other route, and this
+   prefix is a subset of it.
+
+   Push is a WRITE on an unauthenticated store, so state what this trusts: one host we own, on
+   the LAN, identified by source address. If Loki ever gains real authentication, this whole
+   route should go and the Pi should carry a credential instead. #}
+{{ monitoring_route(
+    container_item.name ~ '-push',
+    container_item.hostname | default(container_item.name),
+    container_item.port,
+    '/loki/api/v1/push',
+    extra_client_cidrs=[k8s_pi_client_ip ~ '/32'],
+    service_name=container_item.name
+  )
+}}
