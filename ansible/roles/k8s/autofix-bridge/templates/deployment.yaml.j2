@@ -19,7 +19,10 @@ spec:
         app: autofix-bridge
         netpol-baseline: enforced
       annotations:
-        checksum/autofix-script: "{{ (autofix_bridge_script | default({})).checksum | default('unstaged') }}"
+        # Recreate the pod when any bridge module's source changes — same idiom as
+        # monitor-bridge's checksum/check-script. The fact is a hash over every module in
+        # autofix_bridge_modules, so an edit confined to bridge_common.py rolls the pod too.
+        checksum/autofix-script: "{{ autofix_bridge_script_checksum | default('unstaged') }}"
     spec:
       enableServiceLinks: false
       # Off daniel-server for the same reason as the monitor-bridge twin: the drain and

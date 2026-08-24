@@ -17,9 +17,14 @@ The rule that follows, and the only one that keeps this split honest:
   A function may live here only if it is never patched AND reads no patched
   module-level name. Everything it needs arrives as an argument.
 
-That is why these six are pure and take their inputs explicitly. Config constants and
+That is why these five are pure and take their inputs explicitly. Config constants and
 the I/O primitives (`_get_json`, `prom_scalar`, `push`, the `*_API_KEY` values) stay in
 check.py precisely because the suite patches them there.
+
+`sanitize` used to live here too; it moved to `bridge_common.py` because autofix-bridge's
+autofix.py carried a byte-identical copy — bridge_common.py is the module both check.py and
+autofix.py import it from now. Its header states the same rule this one does, checked against
+both files' test suites rather than just this one's.
 
 ENFORCED by ansible/tests/test_monitor_bridge_modules.py, which re-derives the patched
 set from the test sources on every run. Deriving it is the point: the first census here
@@ -113,19 +118,3 @@ def describe_fetch_failure(url, exc, body=""):
     if detail:
         return "%s: %s: %s" % (where, exc, detail[:FETCH_BODY_MAX])
     return "%s: %s" % (where, exc)
-
-
-def sanitize(s, maxlen=120):
-    """Neutralize adversary-controlled text before it enters a Discord-bound alert msg.
-
-    Release titles, indexer names and n8n workflow names are attacker-influenced — a poisoned
-    indexer/release is the very thing the arr-queue/prowlarr checks exist to catch. Kuma forwards
-    the msg to Discord, which renders @mentions and markdown, so collapse newlines/whitespace,
-    defuse '@' (which forms @everyone/@here/user pings) and backticks, and cap the length.
-    """
-    s = "?" if s is None else str(s)
-    s = " ".join(s.split())
-    s = s.replace("@", "(at)").replace("`", "'")
-    if len(s) > maxlen:
-        s = s[: maxlen - 3] + "..."
-    return s

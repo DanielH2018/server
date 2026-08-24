@@ -1,6 +1,4 @@
-{% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
-{% from 'healthcheck.yml.j2' import healthcheck %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
 ---
@@ -47,7 +45,12 @@ services:
       # before this container deploys.
       - "{{ server_ip }}:9100:9100"
     {{ service_networks() }}
-    {{ healthcheck('wget --no-verbose --tries=1 -O /dev/null http://localhost:9100/metrics || exit 1') }}
+    {% set hc_test = 'wget --no-verbose --tries=1 -O /dev/null http://localhost:9100/metrics || exit 1' %}{% set hc_start_period = '30s' %}{% set hc_interval = none %}{% set hc_timeout = '10s' %}{% set hc_retries = 3 %}{% set hc_name = '' %}{% if hc_interval is none %}{% set hc_interval = (30 + (((hc_name ~ hc_test) | hash('md5'))[:4] | int(0, 16) % 11)) ~ 's' %}{% endif %}healthcheck:
+      test: {{ hc_test }}
+      interval: {{ hc_interval }}
+      timeout: {{ hc_timeout }}
+      retries: {{ hc_retries }}
+      start_period: {{ hc_start_period }}
     labels:
       {{ kuma('node-exporter') }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.

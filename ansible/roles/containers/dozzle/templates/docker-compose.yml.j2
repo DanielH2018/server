@@ -1,7 +1,6 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
-{% from 'healthcheck.yml.j2' import healthcheck %}
 {% from 'expose.yml.j2' import web_ui_labels, web_ui_ports_block with context %}
 ---
 
@@ -32,7 +31,12 @@ services:
     # restarted it, adding load (observed 2026-06-11). The check is in-binary and cheap; the long
     # timeout only delays detection, it can't mask a real failure. The Pi host_vars pin
     # container_healthcheck_interval (60s), so the macro's hash de-stagger isn't used on the real host.
-    {{ healthcheck('["CMD", "/dozzle", "healthcheck"]', start_period='15s', interval=(container_healthcheck_interval | default(none)), timeout='30s') }}
+    {% set hc_test = '["CMD", "/dozzle", "healthcheck"]' %}{% set hc_start_period = '15s' %}{% set hc_interval = (container_healthcheck_interval | default(none)) %}{% set hc_timeout = '30s' %}{% set hc_retries = 3 %}{% set hc_name = '' %}{% if hc_interval is none %}{% set hc_interval = (30 + (((hc_name ~ hc_test) | hash('md5'))[:4] | int(0, 16) % 11)) ~ 's' %}{% endif %}healthcheck:
+      test: {{ hc_test }}
+      interval: {{ hc_interval }}
+      timeout: {{ hc_timeout }}
+      retries: {{ hc_retries }}
+      start_period: {{ hc_start_period }}
     labels:
 {{ web_ui_labels('8080') }}
       {{ kuma(container_item.name) }}

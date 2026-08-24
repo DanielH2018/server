@@ -4,6 +4,21 @@
 # daemon it prunes — see the containers role.
 autofix_bridge_k8s_image: python:3.14-alpine
 
+# The Python files that make up the running bridge, mirroring monitor-bridge's ship list
+# (defaults/main.yml there) and the same risk: a module missing here never reaches the
+# ConfigMap, and the pod dies at import with ModuleNotFoundError the next time it rolls, on a
+# workload that fixes *arr issues with no page of its own if it silently stops.
+#
+# autofix.py is this role's own file. bridge_common.py is monitor-bridge's canonical copy,
+# staged cross-role — the same pattern `host_lib.py` uses from `roles/setup/common` — never a
+# second edited copy under this role's files/.
+# ENFORCED by ansible/tests/test_autofix_bridge_modules.py.
+autofix_bridge_modules:
+  - name: autofix.py
+    src: "{{ playbook_dir }}/roles/k8s/autofix-bridge/files/autofix.py"
+  - name: bridge_common.py
+    src: "{{ playbook_dir }}/roles/k8s/monitor-bridge/files/bridge_common.py"
+
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Observability: the auto-remediation twin of monitor-bridge — a broken deploy silently stops
 # fixing *arr queue issues with no page of its own (the docker-liveness Kuma monitor is a slower

@@ -1,3 +1,4 @@
+{% from 'networkpolicy.yml.j2' import arr_networkpolicy with context %}
 ---
 # Slice 2 of the ingress default-deny. The baseline admits traefik, prometheus and the node bridges
 # to every pod carrying `netpol-baseline: enforced`. This file adds radarr's own callers, which are
@@ -32,27 +33,7 @@
 # (roles/k8s/homepage/templates/services.yaml.j2). It goes direct rather than through Traefik
 # because radarr's public route is Authelia-gated and its monitoring IngressRoute exposes only
 # that one path — so this entry is the whole grant, and fencing it out breaks the widget.
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: radarr
-  namespace: {{ k8s_namespace }}
-spec:
-  podSelector:
-    matchLabels:
-      app: radarr
-  policyTypes:
-    - Ingress
-  ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              app: traefik
-        - podSelector:
-            matchExpressions:
-              - key: app
-                operator: In
-                values:
+{% call arr_networkpolicy('radarr', container_item.port) %}
                   - janitorr
                   - configarr
                   - monitor-bridge
@@ -60,6 +41,4 @@ spec:
                   - bazarr
                   - prowlarr        # Application Sync writes indexers in — see header
                   - homepage        # dashboard widget, ClusterIP — see header
-      ports:
-        - protocol: TCP
-          port: {{ container_item.port }}
+{% endcall %}

@@ -12,11 +12,15 @@ metadata:
   name: pihole-dns-config
   namespace: {{ k8s_namespace }}
 data:
-  # Rendered from the same shared templates as the Docker copy's bind mounts
-  # (ansible/templates/pihole-*.j2) — one source, two deployment shapes.
+  # Rendered from the same templates as the Docker copy's bind mounts
+  # (this role's templates/config/pihole-*.j2 — moved out of the old shared
+  # ansible/templates/ during the macro-bridge inlining) — one source, two deployment shapes.
+  # A Jinja include (not lookup('template', ...)) is deliberate: it shares this template's
+  # local set-variable scope (pihole_wildcard_ip, pihole_unbound_port below) with the
+  # included file, which a separate lookup() render would not.
   02-wildcard.conf: |
 {% filter indent(4, true) %}
-{% include 'pihole-dnsmasq.conf.j2' %}
+{% include 'config/pihole-dnsmasq.conf.j2' %}
 {% endfilter %}
 
   # The blank line above is LOAD-BEARING: {% raw %}{% include %}{% endraw %} drops the
@@ -26,5 +30,5 @@ data:
   # subPath mount of the then-missing key).
   my_settings.conf: |
 {% filter indent(4, true) %}
-{% include 'pihole-unbound.conf.j2' %}
+{% include 'config/pihole-unbound.conf.j2' %}
 {% endfilter %}

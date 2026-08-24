@@ -35,6 +35,7 @@ LAN DNS sinkhole (Pi-hole) with a recursive Unbound upstream. See repo-root `CLA
   Pi-hole NTP is enabled.
 
 ## Editing
-- Compose: `templates/docker-compose.yml.j2` · Resolver: `ansible/templates/pihole-unbound.conf.j2`,
-  `pihole-dnsmasq.conf.j2` (shared with `roles/k8s/pihole` since slice-6 B3 — one source, both copies)
+- Compose: `templates/docker-compose.yml.j2` · Resolver: `ansible/roles/k8s/pihole/templates/config/pihole-unbound.conf.j2`,
+  `pihole-dnsmasq.conf.j2` (shared with `roles/k8s/pihole` since slice-6 B3 — one source, both copies;
+  moved out of the old shared `ansible/templates/` during the macro-bridge inlining)
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "pihole"`
