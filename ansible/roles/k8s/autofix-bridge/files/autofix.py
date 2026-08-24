@@ -16,17 +16,10 @@ role CLAUDE.md.
 Design: docs/superpowers/specs/2026-07-06-autofix-bridge-disk-autoprune-design.md (Part A)
 """
 
-import json
-import os
 import sys
-import time
-import urllib.parse
-import urllib.request
 
-
-def _env(name, default):
-    return os.environ.get(name, default)
-
+import bridge_common
+from bridge_common import _env, sanitize
 
 INTERVAL = int(_env("INTERVAL", "300"))
 HTTP_TIMEOUT = int(_env("HTTP_TIMEOUT", "10"))
@@ -69,17 +62,6 @@ CLIENT_ERROR_PATTERNS = [
 
 HARD_BAD_STATUS = frozenset({"error"})
 HARD_BAD_STATE = frozenset({"importBlocked", "importFailed"})
-
-
-def sanitize(s, maxlen=120):
-    """Neutralize adversary-controlled text (release titles, statusMessages) before it enters
-    a Discord-bound string: collapse whitespace, defuse @mentions/backticks, cap length."""
-    s = "?" if s is None else str(s)
-    s = " ".join(s.split())
-    s = s.replace("@", "(at)").replace("`", "'")
-    if len(s) > maxlen:
-        s = s[: maxlen - 3] + "..."
-    return s
 
 
 # pure decision core
@@ -218,23 +200,19 @@ def format_action(dry_run, app_name, title, reason, streak, grace):
 
 
 # I/O
-def log(*args):
-    print("[%s]" % time.strftime("%Y-%m-%dT%H:%M:%S"), *args, flush=True)
+log = bridge_common.log
 
 
 def _request(url, method="GET", headers=None, data=None):
     """One HTTP call. Always sends a User-Agent (Discord Cloudflare 1010-403s without one)."""
-    hdrs = {"User-Agent": "autofix-bridge"}
-    if headers:
-        hdrs.update(headers)
-    body = None
-    if data is not None:
-        body = json.dumps(data).encode()
-        hdrs["Content-Type"] = "application/json"
-    req = urllib.request.Request(url, headers=hdrs, data=body, method=method)
-    with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:  # noqa: S310 (internal URLs)
-        raw = resp.read()
-        return json.loads(raw) if raw else None
+    return bridge_common._request(
+        url,
+        method=method,
+        headers=headers,
+        data=data,
+        timeout=HTTP_TIMEOUT,
+        user_agent="autofix-bridge",
+    )
 
 
 def post_discord(msg):
@@ -248,22 +226,13 @@ def post_discord(msg):
 
 
 def push(ok, msg):
-    if not KUMA_PUSH:
-        log("WARN: no push token set; skipping push:", msg)
-        return
-    qs = urllib.parse.urlencode({"status": "up" if ok else "down", "msg": msg})
-    try:
-        _request("%s/api/push/%s?%s" % (KUMA_URL, KUMA_PUSH, qs))
-    except Exception as e:  # best-effort heartbeat; never crash the loop
-        log("push failed (%s):" % msg, e)
+    bridge_common.push(
+        KUMA_URL, KUMA_PUSH, ok, msg, timeout=HTTP_TIMEOUT, user_agent="autofix-bridge"
+    )
 
 
 def touch_heartbeat():
-    try:
-        with open(HEARTBEAT_FILE, "w") as fh:
-            fh.write("%s\n" % time.time())
-    except OSError as e:
-        log("WARN: heartbeat write failed:", e)
+    bridge_common.touch_heartbeat(HEARTBEAT_FILE)
 
 
 def run_once(streaks):
@@ -351,7 +320,8 @@ def main():
         "autofix-bridge starting (interval=%ss, dry_run=%s, once=%s)"
         % (INTERVAL, DRY_RUN, once)
     )
-    while True:
+
+    def cycle():
         try:
             ok, msg = run_once(streaks)
         except (
@@ -360,11 +330,8 @@ def main():
             ok, msg = False, "autofix-bridge error: %s" % e
         log("OK  " if ok else "DOWN", msg)
         push(ok, msg)
-        touch_heartbeat()
 
-        if once:
-            break
-        time.sleep(INTERVAL)
+    bridge_common.run_loop(once, INTERVAL, cycle, touch_heartbeat)
 
 
 if __name__ == "__main__":

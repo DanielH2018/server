@@ -25,8 +25,25 @@
   become: true
   register: monitor_bridge_script
 
+# bridge_common.py is the shared plumbing check.py and autofix-bridge's autofix.py both
+# import (env/sanitize/log/push/touch_heartbeat/the urllib wrapper/the sleep loop). This role
+# is its canonical source; autofix-bridge's tasks copy it in the same way, mirroring
+# roles/setup/common/files/host_lib.py's cross-role copy pattern.
+- name: Stage bridge_common.py on the node
+  tags: [config]
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/roles/k8s/monitor-bridge/files/bridge_common.py"
+    dest: /etc/rancher/k3s/monitor-bridge/bridge_common.py
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+  register: monitor_bridge_common_lib
+
 # check.py is Jinja-hostile (PromQL selectors carry {…} braces), so it becomes a
-# ConfigMap via kubectl --from-file — the terraria-stats/claude-otel pattern.
+# ConfigMap via kubectl --from-file — the terraria-stats/claude-otel pattern. The ConfigMap
+# is mounted as a whole directory (see templates/deployment.yaml.j2), so bridge_common.py
+# lands at /app/bridge_common.py alongside check.py with no volumeMount change.
 - name: Render the script ConfigMap manifest
   tags: [config]
   ansible.builtin.shell:
@@ -34,10 +51,11 @@
       set -o pipefail;
       k3s kubectl -n {{ k8s_namespace }} create configmap monitor-bridge-script
       --from-file=check.py=/etc/rancher/k3s/monitor-bridge/check.py
+      --from-file=bridge_common.py=/etc/rancher/k3s/monitor-bridge/bridge_common.py
       --dry-run=client -o yaml > /etc/rancher/k3s/monitor-bridge/configmap.yaml
     executable: /bin/bash
   become: true
-  changed_when: monitor_bridge_script is changed
+  changed_when: monitor_bridge_script is changed or monitor_bridge_common_lib is changed
 
 - name: Apply the script ConfigMap
   tags: [deploy]

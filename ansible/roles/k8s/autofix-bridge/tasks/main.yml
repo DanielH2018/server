@@ -26,6 +26,23 @@
   become: true
   register: autofix_bridge_script
 
+# bridge_common.py's canonical source is monitor-bridge/files/ (the read-only twin — see its
+# tasks/main.yml) — this mirrors roles/setup/common/files/host_lib.py's cross-role copy
+# pattern rather than forking a second copy of the shared module.
+- name: Stage bridge_common.py on the node
+  tags: [config]
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/roles/k8s/monitor-bridge/files/bridge_common.py"
+    dest: /etc/rancher/k3s/autofix-bridge/bridge_common.py
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+  register: autofix_bridge_common_lib
+
+# The ConfigMap is mounted as a whole directory (see templates/deployment.yaml.j2), so
+# bridge_common.py lands at /app/bridge_common.py alongside autofix.py with no
+# volumeMount change.
 - name: Render the script ConfigMap manifest
   tags: [config]
   ansible.builtin.shell:
@@ -33,10 +50,11 @@
       set -o pipefail;
       k3s kubectl -n {{ k8s_namespace }} create configmap autofix-bridge-script
       --from-file=autofix.py=/etc/rancher/k3s/autofix-bridge/autofix.py
+      --from-file=bridge_common.py=/etc/rancher/k3s/autofix-bridge/bridge_common.py
       --dry-run=client -o yaml > /etc/rancher/k3s/autofix-bridge/configmap.yaml
     executable: /bin/bash
   become: true
-  changed_when: autofix_bridge_script is changed
+  changed_when: autofix_bridge_script is changed or autofix_bridge_common_lib is changed
 
 - name: Apply the script ConfigMap
   tags: [deploy]

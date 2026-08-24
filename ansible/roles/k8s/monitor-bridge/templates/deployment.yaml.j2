@@ -20,9 +20,11 @@ spec:
         app: monitor-bridge
         netpol-baseline: enforced
       annotations:
-        # Recreate the pod when check.py's source changes — the script is not a manifest,
-        # so the manifests role's own change detection never sees it.
-        checksum/check-script: "{{ (monitor_bridge_script | default({})).checksum | default('unstaged') }}"
+        # Recreate the pod when check.py's OR bridge_common.py's source changes — neither is a
+        # manifest, so the manifests role's own change detection never sees either. Both
+        # checksums feed the same annotation (concatenated) so a bridge_common.py-only edit
+        # still rolls the pod instead of shipping stale shared code behind a green deploy.
+        checksum/check-script: "{{ (monitor_bridge_script | default({})).checksum | default('unstaged') }}-{{ (monitor_bridge_common_lib | default({})).checksum | default('unstaged') }}"
     spec:
       enableServiceLinks: false
       # Stays off daniel-server so the drain (and its eventual cold boot) never takes the

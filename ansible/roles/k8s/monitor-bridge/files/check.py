@@ -22,9 +22,8 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
-
-def _env(name, default):
-    return os.environ.get(name, default)
+import bridge_common
+from bridge_common import _env, log, sanitize
 
 
 def _env_file(name, default=""):
@@ -1469,22 +1468,6 @@ def gitops_status(
                 % (age_s / 3600, sha[:8], max_behind_s / 3600)
             )
     return True, "no held deploy"
-
-
-def sanitize(s, maxlen=120):
-    """Neutralize adversary-controlled text before it enters a Discord-bound alert msg.
-
-    Release titles, indexer names and n8n workflow names are attacker-influenced — a poisoned
-    indexer/release is the very thing the arr-queue/prowlarr checks exist to catch. Kuma forwards
-    the msg to Discord, which renders @mentions and markdown, so collapse newlines/whitespace,
-    defuse '@' (which forms @everyone/@here/user pings) and backticks, and cap the length.
-    """
-    s = "?" if s is None else str(s)
-    s = " ".join(s.split())
-    s = s.replace("@", "(at)").replace("`", "'")
-    if len(s) > maxlen:
-        s = s[: maxlen - 3] + "..."
-    return s
 
 
 def check_n8n():
@@ -3455,19 +3438,10 @@ def down_exporters(up_vector):
     return {job for job in EXPORTER_DEPENDENT if job in down_jobs}
 
 
-def log(*args):
-    print("[%s]" % datetime.now().isoformat(timespec="seconds"), *args, flush=True)
-
-
 def push(token, ok, msg):
-    if not token:
-        log("WARN: no push token set; skipping push:", msg)
-        return
-    qs = urllib.parse.urlencode({"status": "up" if ok else "down", "msg": msg})
-    try:
-        _get_json("%s/api/push/%s?%s" % (KUMA_URL, token, qs))
-    except Exception as e:  # best-effort heartbeat; never crash the loop
-        log("push failed (%s):" % msg, e)
+    bridge_common.push(
+        KUMA_URL, token, ok, msg, timeout=HTTP_TIMEOUT, user_agent="monitor-bridge"
+    )
 
 
 def _evaluate(name, fn):
@@ -3594,11 +3568,7 @@ def run_once():
 
 
 def touch_heartbeat():
-    try:
-        with open(HEARTBEAT_FILE, "w") as fh:
-            fh.write("%s\n" % time.time())
-    except OSError as e:  # best-effort like push(); never crash the loop
-        log("WARN: heartbeat write failed:", e)
+    bridge_common.touch_heartbeat(HEARTBEAT_FILE)
 
 
 def main():
@@ -3613,12 +3583,7 @@ def main():
         "monitor-bridge starting (interval=%ss, once=%s, checks=%d/%d)"
         % (INTERVAL, once, len(enabled), len(CHECKS))
     )
-    while True:
-        run_once()
-        touch_heartbeat()
-        if once:
-            break
-        time.sleep(INTERVAL)
+    bridge_common.run_loop(once, INTERVAL, run_once, touch_heartbeat)
 
 
 if __name__ == "__main__":

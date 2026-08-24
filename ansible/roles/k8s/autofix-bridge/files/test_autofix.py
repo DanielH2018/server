@@ -1,5 +1,14 @@
 import importlib.util
 import pathlib
+import sys
+
+# autofix.py does `import bridge_common` — the module isn't a package sibling here, it's
+# staged in from monitor-bridge/files at deploy time (ConfigMap --from-file, see each role's
+# tasks/main.yml), so put that directory on sys.path before loading autofix.py, the same way
+# the deployed pod finds it as a sibling in /app.
+sys.path.insert(
+    0, str(pathlib.Path(__file__).resolve().parents[2] / "monitor-bridge" / "files")
+)
 
 # Load the bind-mounted script directly (not a package), mirroring monitor-bridge/test_check.py.
 _SPEC = importlib.util.spec_from_file_location(
