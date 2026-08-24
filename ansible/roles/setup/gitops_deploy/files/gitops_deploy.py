@@ -449,6 +449,36 @@ def alert_once(marker_file: str, channel: str, origin: str, content: str) -> Non
     deliver(f"{channel}:{origin}", content)
 
 
+def alert_secrets_deferred(origin: str, cs: ChangeSet) -> None:
+    """Alert (once per SHA) that `secrets.yml` was ff-merged with no consumer redeployed.
+
+    Split out of the no-services branch on 2026-08-24 so the k8s auto-deploy path can fire it too.
+    That path ff-merges, deploys the promoted service and returns without ever reading cs.secrets,
+    so a rotation push and a Renovate image bump landing in the same 30-minute window arrive as ONE
+    ChangeSet and the rotated secret goes silently stale — and because the merge already happened,
+    no later tick re-evaluates it.
+
+    Why it is safe to fire on the k8s path but NOT on the Docker deploy path: a k8s service is
+    promoted to auto-deploy only when its sole changed path is defaults/main.yml — image-bump-only
+    by construction (see split_k8s_auto_deploy) — so a promoted service can never itself be the
+    secret's consumer. The Docker path is the opposite case: the /add-secret flow ships secrets.yml
+    WITH its consuming template, so the consumer IS in cs.services and alerting there would
+    false-fire on the happy path. That asymmetry is why this is a separate helper rather than a
+    line inside alert_deferred(), which runs on both.
+    """
+    if not cs.secrets:
+        return
+    alert_once(
+        SECRETS_ALERT_FILE,
+        "secrets",
+        origin,
+        f"⚠️ gitops-deploy: `secrets.yml` changed in `{origin[:8]}` with no "
+        f"service template — fast-forwarded but **nothing was redeployed**. The "
+        f"rotated secret won't reach its container(s) until you redeploy them "
+        f"(`ansible-playbook ansible/deploy.yml --tags <svc>`).",
+    )
+
+
 def alert_deferred(origin: str, deployed: set[str], cs: ChangeSet) -> None:
     """Fire the tasks/, meta/deps.yml, and k8s-role defer-and-alert for changes NOT redeployed
     this tick.
@@ -1013,6 +1043,9 @@ def main() -> int:
         # without this the first rollback would leave GitOps Deploy — Status red forever and
         # need a manual rm (the trap this role's CLAUDE.md documents).
         write_hold(None)
+        # A promoted k8s service is image-bump-only, so it is never the consumer of a secret that
+        # rode along in the same tick. Without this the rotated value is ff-merged and forgotten.
+        alert_secrets_deferred(origin, cs)
         alert_deferred(origin, cs.k8s_deploy, cs)
         return 0
     if not cs.services:
@@ -1021,16 +1054,7 @@ def main() -> int:
         # so the ff-merge above is all we can do automatically — but the new value only
         # reaches a container on its next deploy. Defer-and-alert (once per SHA) so the
         # operator redeploys the consumer(s); without this the rotated secret sits stale.
-        if cs.secrets:
-            alert_once(
-                SECRETS_ALERT_FILE,
-                "secrets",
-                origin,
-                f"⚠️ gitops-deploy: `secrets.yml` changed in `{origin[:8]}` with no "
-                f"service template — fast-forwarded but **nothing was redeployed**. The "
-                f"rotated secret won't reach its container(s) until you redeploy them "
-                f"(`ansible-playbook ansible/deploy.yml --tags <svc>`).",
-            )
+        alert_secrets_deferred(origin, cs)
         # tasks/ and meta/deps.yml changes aren't auto-deployed but DO change what a deploy does,
         # so they must not sit silently ff-merged. Nothing was deployed this tick (deployed=set()),
         # so the full sets are flagged. Same helper runs on the deploy path for a combined push.
