@@ -4,9 +4,14 @@ Gives other containers safe, scoped access to the Docker API instead of mounting
 raw socket. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** `lscr.io/linuxserver/socket-proxy:latest` (three instances on daniel-server)
-- **Hosts:** daniel-server AND daniel-pi (host-agnostic; listed in both `containers_list`s) · **No web UI**, no Authelia
+- **Image:** `lscr.io/linuxserver/socket-proxy:latest`
+- **Hosts:** daniel-pi ONLY · **No web UI**, no Authelia
 - **Networks:** proxy, monitoring (+ a `lifecycle` write proxy, + a `codeserver` read proxy)
+
+> **The daniel-server instances are gone.** Docker was uninstalled there on 2026-08-14 as the k3s
+> migration's end state, and `host_vars/daniel-server.yml` now sets `containers_list: []`. The
+> "three instances on daniel-server" this file used to describe no longer exist. The Traps section
+> below is already caveated about that retirement; this block was not, which is the drift.
 - **Depends on:** nothing (consumed by other roles)
 - **Config in:** each `ansible/inventory/host_vars/<host>.yml` → `containers_list`
 
