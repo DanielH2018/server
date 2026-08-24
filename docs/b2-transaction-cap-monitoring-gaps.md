@@ -22,7 +22,7 @@
 > This doc's own recurrence log stops at the fourth event (2026-08-11); events five through
 > seven are not written up here. The live incident record is now the comment above
 > `k3s_longhorn_backup_armed` in
-> [`ansible/roles/setup/k3s/defaults/main.yml`](../ansible/roles/setup/k3s/defaults/main.yml)
+> `ansible/roles/setup/k3s/defaults/main.yml`
 > (around lines 189-213), updated at every arm/disarm. Read this doc for the *monitoring*
 > lessons, which still apply; the remediation steps that say `docker stop kopia` /
 > `deploy.yml --tags kopia` on daniel-server can no longer be run — that host has no Docker and
@@ -386,7 +386,7 @@ and confirm the target goes `available: true` without a 403 before walking away.
 > `kopia` tag matches no service and `./scripts/deploy.sh --tags kopia` exits 2. Today's
 > re-arm is purely declarative: flip
 > `k3s_longhorn_backup_armed: true` in
-> [`ansible/roles/setup/k3s/defaults/main.yml`](../ansible/roles/setup/k3s/defaults/main.yml),
+> `ansible/roles/setup/k3s/defaults/main.yml`,
 > then `uv run ansible-playbook ansible/k3s-bringup.yml --tags longhorn_backup` on daniel-box —
 > that task patches `backuptargets.longhorn.io default` directly; nothing kopia- or
 > Docker-related is involved.

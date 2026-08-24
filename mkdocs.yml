@@ -1,0 +1,97 @@
+---
+# The docs site. `uv run mkdocs build --strict` renders docs/ into site/; in production
+# scripts/build_docs.py runs the reference generators first and builds into the hostPath the
+# `docs` k3s role serves.
+#
+# docs_dir points at the EXISTING docs/ tree and the nav names those files in place. Moving
+# them to fit a navigation shape would break every reference to docs/secret-rotation.md and
+# its siblings across CLAUDE.md, the role docs and the skills.
+site_name: Homelab Docs
+site_description: Reference and runbooks for the daniel-box / daniel-server / daniel-pi homelab
+docs_dir: docs
+site_dir: site
+use_directory_urls: true
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - search.highlight
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+
+plugins:
+  - search
+
+# Resolves the `<span class="fqdn">` placeholders the reference generators emit into links,
+# using the domain of the URL the page was served from. The generators cannot bake an FQDN in:
+# they parse the tree statically and `domain` is SOPS-sourced. See the file's own header.
+extra_javascript:
+  - assets/fqdn-links.js
+
+# ENFORCED by scripts/test_mkdocs_config.py, in both directions: every entry below must
+# resolve to a file, and every docs/*.md must appear here. A document absent from the nav is
+# still built and served, but nothing links to it — which is indistinguishable from it not
+# existing.
+nav:
+  - Home: index.md
+  - Reference:
+      - Services: reference/services.md
+      - Hosts: reference/hosts.md
+      - Secrets: reference/secrets.md
+      - Scheduled jobs: reference/crons.md
+      - Networking: reference/networking.md
+      - Topology: reference/topology.md
+  - Runbooks:
+      - Secret rotation: secret-rotation.md
+      - Longhorn disaster recovery: longhorn-disaster-recovery.md
+      - Longhorn upgrade: longhorn-upgrade.md
+      - k3s etcd restore: k3s-etcd-restore.md
+      - Kopia disaster recovery: kopia-disaster-recovery.md
+      - Ubuntu 24.04 upgrade: ubuntu-24.04-upgrade.md
+  - Design:
+      - Longhorn backup tiering: longhorn-backup-tiering.md
+      - NetworkPolicy default-deny: networkpolicy-default-deny.md
+      - Zero-downtime deploys: zero-downtime-deploys-design.md
+      - Zero-downtime baseline: zero-downtime-baseline.md
+      - Zero-downtime plan 2: zero-downtime-deploys-plan-2.md
+      - GitOps — Argo and Flux evaluation: gitops-argo-flux-evaluation.md
+      - Docs UI and ADRs: docs-ui-and-adrs-design.md
+      - Docs UI and ADRs — plan 1: docs-ui-and-adrs-plan-1.md
+      - Docs UI and ADRs — plan 2: docs-ui-and-adrs-plan-2.md
+      - Docs UI and ADRs — plan 3: docs-ui-and-adrs-plan-3.md
+  - Operations:
+      - Claude shell permissions: claude-shell-permissions.md
+      - Security tools: security-tools.md
+      - WireGuard private access: wireguard-private-homelab-access.md
+      - Healthchecks.io deadman: healthchecks-io-deadman.md
+      # Label omits the word this document's title carries before "drain". With it,
+      # gitleaks' generic-api-key rule reads the label plus the high-entropy filename
+      # after the colon as a credential and fails the commit.
+      - B2 drain scoping: b2-api-drain-scoping.md
+      - B2 transaction cap gaps: b2-transaction-cap-monitoring-gaps.md
+      - Email to RSS: email-to-rss.md

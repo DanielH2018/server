@@ -174,3 +174,56 @@ def test_containers_guard_fires_inside_a_worktree(tmp_path):
 
     repo_root = find_repo_root(str(edited), str(tmp_path / "server"))
     assert classify(str(edited), repo_root) is not None
+
+
+# ── generated documentation pages ──────────────────────────────────────────────────────
+
+
+def test_blocks_edits_under_docs_reference():
+    assert classify("docs/reference/services.md", REPO) is not None
+
+
+def test_blocks_edits_under_docs_assets_generated():
+    assert classify("docs/assets/generated/infra-map.svg", REPO) is not None
+
+
+def test_allows_edits_to_hand_written_docs():
+    """docs/reference/ is generated; docs/ generally is not.
+
+    A guard that blocked every runbook edit is a guard that gets switched off.
+    """
+    for path in (
+        "docs/secret-rotation.md",
+        "docs/index.md",
+        "docs/networkpolicy-default-deny.md",
+        "docs/archive/README.md",
+    ):
+        assert classify(path, REPO) is None, f"should ALLOW: {path}"
+
+
+def test_allows_edits_to_the_generators_themselves():
+    """The deny message tells people to edit the generator, so that path must work."""
+    for path in ("scripts/service_catalog.py", "scripts/gen_infra_map.py"):
+        assert classify(path, REPO) is None, f"should ALLOW: {path}"
+
+
+def test_blocks_an_absolute_path_into_the_generated_tree():
+    """Sessions run inside .claude/worktrees/<name>, so matching must not assume a
+    relative path rooted at the primary checkout."""
+    assert classify(os.path.join(REPO, "docs/reference/services.md"), REPO) is not None
+
+
+def test_generated_docs_guard_fires_inside_a_worktree(tmp_path):
+    """Same defect the containers/ guard hit: a worktree path must still match."""
+    worktree = _make_checkout(tmp_path / "server/.claude/worktrees/feature", True)
+    edited = worktree / "docs" / "reference" / "services.md"
+
+    repo_root = find_repo_root(str(edited), str(tmp_path / "server"))
+    assert classify(str(edited), repo_root) is not None
+
+
+def test_generated_docs_reason_names_the_generator():
+    """A message that only says 'denied' sends the reader looking for the rule instead
+    of the fix."""
+    reason = classify("docs/assets/generated/infra-map.svg", REPO)
+    assert "gen_infra_map.py" in reason

@@ -16,7 +16,7 @@ survives a total loss; this runbook is the procedure.
 
 > For the *routine* "restore one service dir" case, the monthly drill
 > (`/usr/local/bin/kopia-restore-drill.sh`) and the role
-> [`CLAUDE.md`](../ansible/roles/containers/kopia/CLAUDE.md) already cover it. This doc is
+> `CLAUDE.md` already cover it. This doc is
 > the full-rebuild case.
 
 ## What you need

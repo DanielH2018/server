@@ -657,6 +657,39 @@ def _table_view(model: dict) -> str:
     )
 
 
+def render_svg(model: dict) -> str:
+    """The architecture diagram as a standalone SVG document, for embedding in Markdown.
+
+    _diagram_view already draws the whole figure, but two things stop its <svg> element
+    standing alone:
+
+    * Its fills and strokes resolve against the page-level STYLE block. Embedded in a
+      Markdown page there is no such block, so the diagram renders as unstyled black
+      shapes -- which reads as a broken diagram rather than a missing stylesheet.
+      Inlining the CSS as a <style> child makes the element carry its own appearance.
+    * A bare <svg> works inside HTML, but a .svg file served on its own is parsed as
+      XML and needs xmlns declared.
+
+    The drawing code is untouched. The <figcaption> is dropped: the Markdown page around
+    the image carries that prose, and a caption baked into the image cannot be edited.
+    """
+    figure = _diagram_view(model)
+    start = figure.index("<svg")
+    end = figure.index("</svg>") + len("</svg>")
+    svg = figure[start:end]
+
+    open_tag_end = svg.index(">") + 1
+    open_tag = svg[:open_tag_end].replace(
+        "<svg ", '<svg xmlns="http://www.w3.org/2000/svg" ', 1
+    )
+    # CDATA because the stylesheet contains '>' in descendant selectors, which is not
+    # legal bare text in XML.
+    # Trailing newline: the end-of-file-fixer prek hook adds one otherwise, and a
+    # generated file a hook keeps rewriting fails the docs-refresh cron's commit on
+    # every run.
+    return f"{open_tag}<style><![CDATA[{STYLE}]]></style>{svg[open_tag_end:]}\n"
+
+
 def render_html(model: dict) -> str:
     """Render the model to a single self-contained HTML document."""
     totals = model["totals"]

@@ -114,6 +114,49 @@ def test_k8s_route_uses_hostname_default_name_when_ingressroute_exists(tmp_path)
     assert row.route.startswith("jellyfin.local.<domain>")
 
 
+def test_k8s_route_is_lan_only_when_public_route_is_off(tmp_path):
+    """The fixture's group_vars sets no k8s_public_route, so nothing is public."""
+    paths = _make_repo(tmp_path)
+    role = paths["k8s_roles"] / "jellyfin" / "templates"
+    _write(role / "ingressroute.yaml.j2", "{{ ingressroute(...) }}\n")
+    rows = service_catalog.build_rows(**paths)
+    row = next(r for r in rows if r.name == "jellyfin")
+    assert row.route == "jellyfin.local.<domain> (LAN only)"
+
+
+def test_k8s_route_names_both_tiers_when_public_route_is_on(tmp_path):
+    paths = _make_repo(tmp_path)
+    _write(paths["all_vars"], "k8s_namespace: homelab\nk8s_public_route: true\n")
+    role = paths["k8s_roles"] / "jellyfin" / "templates"
+    _write(role / "ingressroute.yaml.j2", "{{ ingressroute(...) }}\n")
+    rows = service_catalog.build_rows(**paths)
+    row = next(r for r in rows if r.name == "jellyfin")
+    assert row.route == "jellyfin.<domain> · jellyfin.local.<domain>"
+
+
+def test_k8s_route_stays_lan_only_when_the_role_opts_out(tmp_path):
+    """`public=false` in the role's own macro call beats the cluster-wide flag."""
+    paths = _make_repo(tmp_path)
+    _write(paths["all_vars"], "k8s_namespace: homelab\nk8s_public_route: true\n")
+    role = paths["k8s_roles"] / "jellyfin" / "templates"
+    _write(role / "ingressroute.yaml.j2", "{{ ingressroute(..., public=false) }}\n")
+    rows = service_catalog.build_rows(**paths)
+    row = next(r for r in rows if r.name == "jellyfin")
+    assert row.route == "jellyfin.local.<domain> (LAN only)"
+
+
+def test_markdown_route_cells_are_linkable_but_the_row_value_is_not(tmp_path):
+    """render_html escapes the route, so markup must not live in the stored value."""
+    paths = _make_repo(tmp_path)
+    role = paths["k8s_roles"] / "jellyfin" / "templates"
+    _write(role / "ingressroute.yaml.j2", "{{ ingressroute(...) }}\n")
+    rows = service_catalog.build_rows(**paths)
+    assert all("<span" not in r.route for r in rows)
+    assert 'class="fqdn" data-host="jellyfin.local"' in service_catalog.render_markdown(
+        rows
+    )
+
+
 def test_k8s_route_is_no_route_when_role_has_no_ingressroute_template(tmp_path):
     paths = _make_repo(tmp_path)
     # authelia gets no ingressroute.yaml.j2 in this fixture (e.g. an infra-only role).
@@ -373,3 +416,88 @@ def test_main_writes_output_file(tmp_path):
     assert exit_code == 0
     assert out_file.is_file()
     assert "Homelab Service Catalog" in out_file.read_text()
+
+
+# ── Markdown renderer (docs/reference/services.md) ─────────────────────────────────────
+
+_ROW = service_catalog.ServiceRow
+
+
+def test_markdown_has_one_row_per_service():
+    rows = [
+        _ROW("sonarr", "daniel-box", "k8s", "sonarr", "authelia", "weekly", "yes"),
+        _ROW("wg-easy", "daniel-pi", "docker", "LAN-direct", "none", "none", "no"),
+    ]
+    out = service_catalog.render_markdown(rows)
+    # Count ROWS, not substrings: a service whose route equals its name puts the same
+    # "| name |" text in two cells of one line.
+    lines = out.splitlines()
+    assert sum(1 for ln in lines if ln.startswith("| sonarr |")) == 1
+    assert sum(1 for ln in lines if ln.startswith("| wg-easy |")) == 1
+
+
+def test_markdown_groups_by_host():
+    """Grouped by host, matching render_html. A flat 59-row table is unreadable."""
+    rows = [
+        _ROW("sonarr", "daniel-box", "k8s", "sonarr", "authelia", "weekly", "yes"),
+        _ROW("wg-easy", "daniel-pi", "docker", "LAN-direct", "none", "none", "no"),
+    ]
+    out = service_catalog.render_markdown(rows)
+    assert "## daniel-box" in out
+    assert "## daniel-pi" in out
+    assert out.index("## daniel-box") < out.index("| sonarr |")
+
+
+def test_markdown_opens_with_the_provenance_banner():
+    out = service_catalog.render_markdown([])
+    assert out.startswith("---\n")
+    assert "generated_from: scripts/service_catalog.py" in out
+    assert "do not edit" in out.lower()
+
+
+def test_markdown_escapes_pipes_in_values():
+    """A literal | in a cell splits the row into extra columns silently.
+
+    No current value contains one, but route and backup_tier are derived from
+    template text and nothing stops one appearing.
+    """
+    rows = [_ROW("odd", "daniel-box", "k8s", "a|b", "authelia", "none", "no")]
+    out = service_catalog.render_markdown(rows)
+    row_line = next(ln for ln in out.splitlines() if ln.startswith("| odd |"))
+    assert row_line.count("|") == 8, f"pipe count wrong, row split: {row_line}"
+
+
+def test_markdown_counts_unknown_fields():
+    """The HTML renderer surfaces an unknown count; Markdown must too.
+
+    An underivable fact silently rendered as a blank cell is the failure the
+    'unknown' convention exists to prevent.
+    """
+    rows = [_ROW("x", "daniel-box", "k8s", "unknown", "authelia", "none", "no")]
+    out = service_catalog.render_markdown(rows)
+    assert "unknown" in out.lower()
+
+
+def test_markdown_is_stable_across_calls():
+    """Unstable ordering would make the docs-refresh cron commit on every run."""
+    rows = [
+        _ROW("b", "daniel-box", "k8s", "b", "authelia", "none", "no"),
+        _ROW("a", "daniel-pi", "docker", "LAN-direct", "none", "none", "no"),
+    ]
+    first = service_catalog.render_markdown(rows)
+    second = service_catalog.render_markdown(list(reversed(rows)))
+    assert first == second, "row or host ordering depends on input order"
+
+
+def test_markdown_ends_with_exactly_one_newline():
+    """A file ending "\\n\\n" is rewritten by the end-of-file-fixer prek hook.
+
+    The docs-refresh cron commits generated pages with hooks running, so a page a
+    hook keeps rewriting fails that commit on every run until someone fixes the
+    generator. Canonical output at the source is what stops that.
+    """
+    out = service_catalog.render_markdown(
+        [_ROW("a", "daniel-box", "k8s", "a", "authelia", "none", "no")]
+    )
+    assert out.endswith("\n")
+    assert not out.endswith("\n\n")

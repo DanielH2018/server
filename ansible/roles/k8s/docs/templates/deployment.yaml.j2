@@ -1,0 +1,95 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docs
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: docs
+  template:
+    metadata:
+      labels:
+        app: docs
+        netpol-baseline: enforced
+    spec:
+      enableServiceLinks: false
+      # hostPath is node-local, so the pod MUST land where the built site is. Unpinned, it
+      # schedules onto the other node and serves an empty tree — which reads as "the build
+      # is broken" rather than as a scheduling mistake.
+      nodeSelector:
+        kubernetes.io/hostname: {{ docs_k8s_node }}
+      securityContext:
+        runAsUser: {{ puid }}
+        runAsGroup: {{ pgid }}
+        fsGroup: {{ pgid }}
+        runAsNonRoot: true
+      automountServiceAccountToken: false
+      # best-effort: a read-only documentation viewer should lose an eviction race to every
+      # workload that serves state. Set explicitly — omitting it leaves the pod at Kubernetes'
+      # default priority of 0, which is BELOW homelab-best-effort (1000).
+      priorityClassName: homelab-best-effort
+      containers:
+        - name: docs
+          image: {{ docs_k8s_image }}
+          env:
+            - name: TZ
+              value: {{ tz }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - containerPort: {{ container_item.port }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ container_item.port }}
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ container_item.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          volumeMounts:
+            - name: docs-nginx-conf
+              mountPath: /etc/nginx/conf.d
+              readOnly: true
+            - name: docs-site
+              mountPath: /usr/share/nginx/html
+              readOnly: true
+            # readOnlyRootFilesystem blocks nginx's cache and temp paths, which it writes on
+            # any buffered request. emptyDir rather than a relaxed root filesystem.
+            - name: docs-nginx-cache
+              mountPath: /var/cache/nginx
+            - name: docs-nginx-tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: {{ docs_k8s_cpu_request }}
+              memory: {{ docs_k8s_mem_request }}
+            limits:
+              cpu: {{ docs_k8s_cpu_limit }}
+              memory: {{ docs_k8s_mem_limit }}
+      volumes:
+        - name: docs-nginx-conf
+          configMap:
+            name: docs-nginx
+        # type: Directory, not DirectoryOrCreate — kubelet creates a missing path as root,
+        # and the build script (running as {{ sys_user }}) could then never write into it.
+        # The role's own tasks create it with the right ownership first.
+        - name: docs-site
+          hostPath:
+            path: {{ docs_host_site_dir }}
+            type: Directory
+        - name: docs-nginx-cache
+          emptyDir: {}
+        - name: docs-nginx-tmp
+          emptyDir: {}

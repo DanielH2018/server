@@ -238,7 +238,9 @@ slice 1's shape: Traefik is its only caller and it dials nothing. Those carry th
 their first deploy rather than waiting for slice 5 to sweep them up, and
 `ansible/tests/test_netpol_baseline_labels.py` lists them in `BORN_FENCED_ROLES` so the set
 stays as explicit as the slices. So far: **artifacts** (2026-08-19), the read-only browser over
-each host's `~/.claude/artifacts`.
+each host's `~/.claude/artifacts`; **docs** (2026-08-24), nginx over a hostPath of built MkDocs
+output, whose site is generated on the host by the `docs-refresh` cron so the pod never fetches,
+clones or resolves anything.
 
 **Why observability moved from first to third.** It is small in pod count but dense in
 exactly the paths that are hardest — `loki:3100`, `tempo:3200`, `prometheus:9090` and

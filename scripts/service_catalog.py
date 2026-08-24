@@ -24,9 +24,12 @@ expressions that do not render outside a real deploy. Every value below is read 
 FIELD NOTES (what is genuinely undecidable from the repo alone, and why):
 
   - Route domain suffix. `ingressroute.yml.j2` builds the hostname as
-    "{{ hostname }}.local.{{ domain }}" (and, if k8s_public_route, also the bare
-    domain). `domain` is SOPS-sourced with no static default, so the catalog shows
-    only the per-service hostname LABEL, not the resolved FQDN.
+    "{{ hostname }}.local.{{ domain }}" (and, when k8s_public_route is on and the role
+    does not pass public=false, also the bare domain). `domain` is SOPS-sourced with no
+    static default, so the catalog writes the suffix as the literal "<domain>". On the
+    docs site those placeholders become links, resolved in the browser against the URL
+    the reader is on — see scripts/route_facts.py. WHICH names a service answers on is
+    derivable and is stated outright; only the suffix is not.
   - Docker (Pi) routes. daniel-pi sets `expose_mode: lan` — its services are bound to
     the LAN IP directly rather than routed through Traefik (see host_vars comment), so
     "route" for a docker service is a fixed LAN-direct marker, never a hostname. A
@@ -68,6 +71,7 @@ from _render_guard import (
     containers_entries,
     host_files,
 )
+from route_facts import linkify_fqdns, reachability, route_cell
 
 K8S_ROLES = REPO / "ansible" / "roles" / "k8s"
 K3S_DEFAULTS = REPO / "ansible" / "roles" / "setup" / "k3s" / "defaults" / "main.yml"
@@ -109,16 +113,25 @@ def host_expose_mode(host_data: dict[str, Any]) -> str | None:
 # Route
 
 
-def k8s_route(entry: dict[str, Any], k8s_roles: Path = K8S_ROLES) -> str:
+def k8s_route(
+    entry: dict[str, Any],
+    k8s_roles: Path = K8S_ROLES,
+    all_vars: Path = ALL_VARS,
+) -> str:
     name = entry["name"]
-    role_templates = k8s_roles / name / "templates"
-    if not (role_templates / "ingressroute.yaml.j2").is_file():
+    role_dir = k8s_roles / name
+    if not (role_dir / "templates" / "ingressroute.yaml.j2").is_file():
         return "no route (infra role)"
     # ingressroute.yml.j2's own macro call is uniformly
     # `container_item.hostname | default(container_item.name)` — see the shared macro
     # docstring at ansible/templates/ingressroute.yml.j2.
     label = entry.get("hostname") or name
-    return f"{label}.local.<domain> (+ public if k8s_public_route)"
+    # Reachability comes from route_facts so this page and networking.md cannot disagree
+    # about the same service. It reads the role's own `public=false` and the cluster-wide
+    # k8s_public_route together, rather than hedging with "if k8s_public_route" — that flag
+    # has a value in plaintext group_vars, so printing the condition instead of the answer
+    # made the reader do a lookup this generator can do for them.
+    return route_cell(label, reachability(role_dir, all_vars))
 
 
 def docker_route(entry: dict[str, Any], host_data: dict[str, Any]) -> str:
@@ -132,9 +145,10 @@ def route_for(
     platform: str,
     host_data: dict[str, Any],
     k8s_roles: Path = K8S_ROLES,
+    all_vars: Path = ALL_VARS,
 ) -> str:
     if platform == "k8s":
-        return k8s_route(entry, k8s_roles)
+        return k8s_route(entry, k8s_roles, all_vars)
     return docker_route(entry, host_data)
 
 
@@ -304,7 +318,7 @@ def build_rows(
                     name=name,
                     host=host,
                     platform=platform,
-                    route=route_for(entry, platform, host_data, k8s_roles),
+                    route=route_for(entry, platform, host_data, k8s_roles, all_vars),
                     auth_tier=auth_tier(entry),
                     backup_tier=backup_tier(
                         entry,
@@ -394,6 +408,70 @@ def _count_unknown(rows: list[ServiceRow], field: str) -> int:
     return sum(1 for r in rows if getattr(r, field).startswith(UNKNOWN))
 
 
+def _md_cell(value: str) -> str:
+    """A table cell that cannot split its own row.
+
+    A literal pipe in a value adds a column silently — the table still renders, just
+    wrong, which is worse than failing. route and backup_tier are derived from template
+    text, so nothing stops one appearing.
+    """
+    return value.replace("|", "\\|")
+
+
+def render_markdown(rows: list[ServiceRow]) -> str:
+    """The service catalogue as a MkDocs page, grouped by host.
+
+    A sibling of render_html over the same rows, not a second derivation: build_rows()
+    stays the only place that reads the tree.
+
+    Ordering is by host then name rather than by input order. An unstable page would
+    make the docs-refresh cron commit on every run.
+    """
+    from docs_provenance import generated_banner
+
+    hosts = sorted({r.host for r in rows})
+    parts = [generated_banner("scripts/service_catalog.py")]
+    parts.append("# Services\n")
+    parts.append(f"{len(rows)} service(s) declared across {len(hosts)} host(s).\n")
+
+    header = "| Service | Platform | Route | Auth | Backup tier | Auto-deploy |"
+    divider = "|---|---|---|---|---|---|"
+
+    for host in hosts:
+        host_rows = sorted((r for r in rows if r.host == host), key=lambda r: r.name)
+        parts.append(f"\n## {host}\n")
+        parts.append(f"{len(host_rows)} service(s).\n")
+        parts.append(header)
+        parts.append(divider)
+        for row in host_rows:
+            cells = (
+                row.name,
+                row.platform,
+                # Markdown only. The stored value stays plain text for render_html and
+                # every text consumer; only the docs site can resolve these into links.
+                linkify_fqdns(row.route),
+                row.auth_tier,
+                row.backup_tier,
+                row.autodeploy,
+            )
+            parts.append("| " + " | ".join(_md_cell(c) for c in cells) + " |")
+
+    unknowns = sum(
+        _count_unknown(rows, field)
+        for field in ("route", "auth_tier", "backup_tier", "autodeploy")
+    )
+    parts.append(
+        f"\n## Underivable facts\n\n{unknowns} field(s) read `{UNKNOWN}`. "
+        "A fact with no machine-readable source prints its reason rather than a guess — "
+        "see the FIELD NOTES section of `scripts/service_catalog.py` for which facts "
+        "those are and why.\n"
+    )
+    # rstrip before the final newline: the parts already end in one, and a file ending
+    # "\n\n" is rewritten by the end-of-file-fixer hook. A generated file a hook keeps
+    # rewriting would fail the docs-refresh cron's commit on every run.
+    return "\n".join(parts).rstrip("\n") + "\n"
+
+
 def render_html(rows: list[ServiceRow]) -> str:
     hosts = sorted({r.host for r in rows})
     total = len(rows)
@@ -451,7 +529,13 @@ repo alone; see scripts/service_catalog.py's FIELD NOTES for why.</p>
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--out", type=Path, required=True, help="output HTML file path")
+    parser.add_argument("--out", type=Path, required=True, help="output file path")
+    parser.add_argument(
+        "--format",
+        choices=("html", "markdown"),
+        default="html",
+        help="output format (default: html, for the standalone artifact page)",
+    )
     parser.add_argument(
         "--host-vars",
         type=Path,
@@ -476,6 +560,21 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     rows = build_rows(args.host_vars, args.k8s_roles, args.k3s_defaults, args.all_vars)
+
+    if args.format == "markdown":
+        from docs_provenance import write_if_body_changed
+
+        # Not write_text: the banner's timestamp moves on every run, so an
+        # unconditional write would make the docs-refresh cron commit on every run
+        # for no content change.
+        wrote = write_if_body_changed(args.out, render_markdown(rows))
+        state = "wrote" if wrote else "unchanged"
+        print(f"service_catalog: {len(rows)} service(s), {state} {args.out}")
+        return 0
+
+    # The HTML path targets ~/.claude/artifacts/, which is not committed and has no
+    # diff to protect, so it stays an unconditional write.
+    args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(render_html(rows))
     print(f"service_catalog: wrote {len(rows)} service(s) to {args.out}")
     return 0

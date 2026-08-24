@@ -244,6 +244,15 @@ containers_list:
     hostname: "artifacts"
     port: 8080
     use_authelia: true
+  # MkDocs Material site over docs/, built on this host by scripts/build_docs.py and served
+  # from a hostPath. Sits next to artifacts because they are the same shape: nginx-class
+  # static serving over a daniel-box tree, reachable on both the LAN and public names behind
+  # Authelia. The role's ingressroute template records why it stopped being LAN-only.
+  - name: docs
+    platform: k8s
+    hostname: "docs"
+    port: 8080
+    use_authelia: true
   # Read-only MCP server. No hostname/ingressroute — its bearer-token router lives in the
   # edge gate Secret (roles/k8s/traefik/templates/livesync-gate-secret.yaml.j2), matching
   # only mcp.local.<domain>, so no dnsmasq override or public router may exist for it.

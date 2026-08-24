@@ -6,8 +6,8 @@
 `daniel-server` on 2026-08-14, which is the migration's end state. Everything in this
 directory is a **historical record of work already done** — read it for *why* a thing is
 shaped the way it is, not as a description of pending work or of current architecture. For
-current state, start at the repo-root [`README.md`](../../README.md) and
-[`CLAUDE.md`](../../CLAUDE.md).
+current state, start at the repo-root `README.md` and
+`CLAUDE.md`.
 
 Phase-by-phase detail: `slice-7-phase-e-server-retirement.md` (server retirement),
 then Phase F (daniel-server rejoined as a k3s agent) and Phase G (books close-out).

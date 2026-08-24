@@ -287,3 +287,55 @@
     stamp_deployed_pairs:
       - live: /usr/local/lib/kuma-push-lib.sh
         src: ansible/roles/setup/initial_setup/files/kuma-push-lib.sh
+
+- name: Install the docs refresh script (box only)
+  tags: [crons, docs]
+  when: inventory_hostname == 'daniel-box'
+  ansible.builtin.template:
+    src: docs-refresh.sh.j2
+    dest: /usr/local/bin/docs-refresh.sh
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Schedule the generated-docs refresh (box only)
+  tags: [crons, docs]
+  # Regenerates docs/reference/, rebuilds the MkDocs site into the hostPath the docs pod
+  # serves, and commits any change (scripts/build_docs.py, under the git-tree lock).
+  # Runs on daniel-box because the primary checkout, uv and the served site directory are
+  # all there — and because gen_infra_map, one of the generators, needs a local kubectl.
+  #
+  # No Healthchecks ping, matching the infra-map cron above: every generated page carries
+  # the timestamp its content was last built from, and the served site carries
+  # build-info.json saying when this last ran, so a run that stops working shows up on the
+  # page rather than needing its own alert channel.
+  #
+  # Twice daily, not every 15 minutes like the infra map. That one writes an artifact
+  # nothing commits; this one commits and pushes, so each run that finds a change costs a
+  # master CI run. The inputs are repo files, which only move when a PR merges.
+  when: inventory_hostname == 'daniel-box'
+  ansible.builtin.cron:
+    name: "Refresh generated docs"
+    minute: "17"
+    hour: "6,18"
+    # Same PATH/KUBECONFIG reasoning as the infra-map cron above: cron inherits neither,
+    # and gen_infra_map runs inside build_docs.py. Without them the topology SVG silently
+    # renders declared-only while everything else looks healthy.
+    job: "PATH=/usr/local/bin:/usr/bin:/bin KUBECONFIG=/home/{{ sys_user }}/.kube/config /usr/local/bin/docs-refresh.sh"
+    user: "{{ sys_user }}"
+    cron_file: docs-refresh
+  become: true
+
+# Render provenance for manifest-prune-check.sh's stale-script arm. docs-refresh.sh belongs
+# here for secret-rotate.sh's reason: it is a STATE-CHANGING cron that commits and pushes,
+# so a stale render would keep committing generated pages from old generator wiring while
+# every repo-side check reads green.
+- name: Stamp the rendered docs-refresh wrapper (box only)
+  tags: [crons]
+  when: inventory_hostname == 'daniel-box'
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: docs-refresh
+    stamp_render_templates:
+      - ansible/roles/setup/initial_setup/templates/docs-refresh.sh.j2
