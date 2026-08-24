@@ -66,11 +66,22 @@ only.
 `OnFailure=claude-rc-alert.service` pages Discord when the host **crashes**, reusing the
 shared `gitops_deploy_discord_webhook` like `gitops-deploy-alert` and `renovate-notify-alert`.
 
-The alert task carries `no_log: true` because it renders the webhook. That also hides an
-undefined-variable failure, so if `gitops_deploy_discord_webhook` is ever out of scope — the
-secret is loaded by `initial_setup.yml`'s `pre_tasks`, tagged `always` — the task fails
-opaquely rather than naming the missing var. Check that first if this task fails for no
-apparent reason.
+The webhook is **not** in the unit. It reaches `claude-rc-alert.service` through
+`EnvironmentFile=/etc/claude-rc/alert-webhook.env`, rendered by its own 0600 task. The unit
+originally interpolated the value straight into `ExecStart` and relied on `mode: 0600` to
+protect it; the mode is real and irrelevant, because systemd serves unit content over the
+system bus. `systemctl show claude-rc-alert -p ExecStart` printed the whole webhook to any
+local user with no sudo, while `cat` on the same file was `Permission denied` — verified live
+in the 2026-08-24 review (M-1). The sibling roles were moved off that shape 79 minutes before
+this role landed, and this role's header comment cited them as justification for keeping it.
+`ansible/roles/setup/gitops_deploy/files/test_gitops_discord_contract.py` now walks every
+`*.service.j2` in the repo rather than naming units, so the next role cannot inherit it.
+
+The **webhook task** carries `no_log: true` because it renders the secret; the unit task no
+longer needs it. `no_log` also hides an undefined-variable failure, so if
+`gitops_deploy_discord_webhook` is ever out of scope — the secret is loaded by
+`initial_setup.yml`'s `pre_tasks`, tagged `always` — that task fails opaquely rather than
+naming the missing var. Check that first if it fails for no apparent reason.
 
 **It cannot catch an expired login.** The host keeps running and systemd keeps reporting
 `active` while every session fails, so no `OnFailure=` ever fires and `Restart=always` has

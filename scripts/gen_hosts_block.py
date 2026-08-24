@@ -14,7 +14,7 @@ what this script removes: the list is derived from the same inventory Pi-hole's 
 config is generated from, so it cannot drift as services migrate between hosts.
 
 Deliberately parses the inventory YAML directly instead of going through Ansible. Those files
-reference SOPS-encrypted values (`password_hash: "{{ wg_easy_password_hash }}"` and friends),
+reference SOPS-encrypted values (`{{ authelia_jwt_secret }}` and friends),
 and templating the whole structure would demand secrets this script has no business holding.
 Only `name`, `port`, `hostname` and `platform` are ever read.
 

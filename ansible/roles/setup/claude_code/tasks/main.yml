@@ -92,14 +92,40 @@
     - Reload systemd
     - Restart claude-rc
 
-- name: Install the Remote Control alert unit (0600 — embeds the SOPS Discord webhook)
+- name: Ensure the Remote Control config directory exists
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: /etc/claude-rc
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  become: true
+
+- name: Write the alert webhook where only systemd reads it
+  tags: [claude_code]
+  # 0600 and root-owned because this file is the only place the value lives now. Keeping it
+  # out of the unit is what stops `systemctl show` printing it over the system bus — the unit's
+  # own mode never did (2026-08-24 review M-1).
+  ansible.builtin.template:
+    src: alert-webhook.env.j2
+    dest: /etc/claude-rc/alert-webhook.env
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+  no_log: true
+  notify: Reload systemd
+
+- name: Install the Remote Control alert unit
   tags: [claude_code]
   ansible.builtin.template:
     src: claude-rc-alert.service.j2   # OnFailure target — pages Discord if the host dies
     dest: /etc/systemd/system/claude-rc-alert.service
-    mode: "0600"
+    owner: root
+    group: root
+    mode: "0644"   # holds no secret now; 0644 matches the sibling units
   become: true
-  no_log: true
   notify: Reload systemd
 
 # Both states are driven from the one var so the service has a way out as well as a way in:
@@ -136,3 +162,21 @@
       a workspace-trust dialog there cannot be answered remotely. Then set
       claude_code_rc_enabled=true.
   when: not claude_code_rc_enabled
+
+# Render provenance for manifest-prune-check.sh's stale-script arm. This role landed on
+# 2026-08-23 rendering five files and stamping none, so an edit to any of them could sit
+# undeployed on this host with every repo-side check green — the H1 gap the 2026-08-23b sweep
+# closed for the sibling roles, reopened by a role written the same morning (2026-08-24 review
+# M-4). Last in the role so a failed run leaves the previous checksums rather than claiming
+# these. `import_tasks`, not `include_tasks`: an include renders no fragment (commit 13c6285f).
+- name: Stamp the rendered Remote Control units
+  tags: [claude_code]
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: claude-code
+    stamp_render_templates:
+      - ansible/roles/setup/claude_code/templates/claude-rc.service.j2
+      - ansible/roles/setup/claude_code/templates/claude-rc-alert.service.j2
+      - ansible/roles/setup/claude_code/templates/claude-rc-restart.service.j2
+      - ansible/roles/setup/claude_code/templates/claude-rc-restart.timer.j2
+      - ansible/roles/setup/claude_code/templates/alert-webhook.env.j2

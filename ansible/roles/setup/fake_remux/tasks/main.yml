@@ -156,3 +156,21 @@
     stamp_render_name: fake-remux
     stamp_render_templates:
       - ansible/roles/setup/fake_remux/templates/fake-remux-health.sh.j2
+
+# The five scripts this role `copy:`-deploys were covered by nothing (2026-08-24 review M-5).
+- name: Record the deployed fake-remux code
+  tags: [fake_remux]
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
+  vars:
+    stamp_deployed_name: fake-remux
+    stamp_deployed_pairs:
+      - live: "{{ fake_remux_opt_dir }}/state_push.py"
+        src: ansible/roles/setup/fake_remux/files/state_push.py
+      - live: "{{ fake_remux_opt_dir }}/fake_remux_scan.py"
+        src: ansible/roles/setup/fake_remux/files/fake_remux_scan.py
+      - live: "{{ fake_remux_opt_dir }}/fake_remux_logic.py"
+        src: ansible/roles/setup/fake_remux/files/fake_remux_logic.py
+      - live: "{{ fake_remux_opt_dir }}/fake_remux_replace.py"
+        src: ansible/roles/setup/fake_remux/files/fake_remux_replace.py
+      - live: "{{ fake_remux_opt_dir }}/fake_remux_replace_logic.py"
+        src: ansible/roles/setup/fake_remux/files/fake_remux_replace_logic.py

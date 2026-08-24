@@ -104,3 +104,23 @@
       - ansible/roles/setup/renovate_notify/templates/renovate-notify.service.j2
       - ansible/roles/setup/renovate_notify/templates/renovate-notify-alert.service.j2
       - ansible/roles/setup/renovate_notify/templates/renovate-notify.timer.j2
+      # Same reasoning as the gitops_deploy list: the stamp and the check both hash the repo
+      # source, never the rendered file, so an .env.j2 carries no secret into either
+      # (2026-08-24 review M-9).
+      - ansible/roles/setup/renovate_notify/templates/config.env.j2
+      - ansible/roles/setup/renovate_notify/templates/alert-webhook.env.j2
+
+# The notifier's own code was watched by nothing until 2026-08-24 (review M-5): the deployed-code
+# arm hardcoded gitops-deploy's three paths, so this role's three could run any age against a
+# green drift check.
+- name: Record the deployed renovate-notify code
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
+  vars:
+    stamp_deployed_name: renovate-notify
+    stamp_deployed_pairs:
+      - live: /opt/renovate-notify/renovate_notify.py
+        src: ansible/roles/setup/renovate_notify/files/renovate_notify.py
+      - live: /opt/renovate-notify/notify_logic.py
+        src: ansible/roles/setup/renovate_notify/files/notify_logic.py
+      - live: /opt/renovate-notify/host_lib.py
+        src: ansible/roles/setup/common/files/host_lib.py

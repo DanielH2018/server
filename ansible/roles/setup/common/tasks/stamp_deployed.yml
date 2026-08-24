@@ -1,0 +1,40 @@
+---
+# Declares which `copy:`-deployed artifacts THIS host carries, for manifest-prune-check.sh's
+# second arm (is the code deployed here the code in the repo?).
+#
+# Sibling of stamp_render.yml and per-host by the same construction: a fragment exists only
+# where its role ran, so a host that does not deploy renovate-notify never claims to be
+# watching it. The arm it feeds used to hardcode three paths (gitops-deploy's), which meant
+# renovate-notify's notifier, fake-remux's five scripts, live-drift-check.py and the shared
+# kuma-push-lib.sh could all run stale on a host whose drift check reported "deployed scripts
+# match the repo" (2026-08-24 review M-5).
+#
+# Why a pair and not a hash, unlike stamp_render.yml: a `copy:`-deployed file is byte-identical
+# to its source, so the check can compare live against repo directly and catch drift in EITHER.
+# A stamped hash would only catch a repo-side change. The fragment therefore carries locations,
+# not checksums, and holds no secret.
+#
+# Callers pass:
+#   stamp_deployed_name   a filename-safe group id, unique across roles (e.g. renovate-notify)
+#   stamp_deployed_pairs  list of {live: <absolute path on host>, src: <repo-relative source>}
+
+- name: Create the setup-plane deployed manifest directory
+  ansible.builtin.file:
+    path: /var/lib/homelab/setup-deployed-manifest.d
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: "Record the deployed artifacts for {{ stamp_deployed_name }}"
+  ansible.builtin.copy:
+    dest: "/var/lib/homelab/setup-deployed-manifest.d/{{ stamp_deployed_name }}"
+    mode: "0644"
+    owner: root
+    group: root
+    content: |
+      {% for pair in stamp_deployed_pairs %}
+      {{ pair.live }} {{ pair.src }}
+      {% endfor %}
+  become: true

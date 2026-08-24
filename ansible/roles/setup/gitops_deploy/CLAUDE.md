@@ -583,5 +583,10 @@ elapse keeps recomputing every ~30min throughout the overrun) or whether the sch
 alone until the run finishes — either way, no second execution happens, so the distinction
 doesn't change the safety property, only how quickly the first tick after a long overrun lands.
 Belt and suspenders regardless: `ExecStart` sits behind `flock -w 180`, so even a hypothetical
-second invocation would block up to 180s on the lock and then fail cleanly (exit 1, alerting via
-`OnFailure`) rather than interleave with the git tree the first run is still using.
+second invocation would block up to 180s on the lock and then exit rather than interleave with
+the git tree the first run is still using. **It does not alert.** `-E 75` plus
+`SuccessExitStatus=75` make systemd report `Result=success` on lock contention, so no
+`OnFailure` fires and nothing pages — see the *Deploying this role under the shared tree lock*
+trap above, which documents the same mechanism as a silent no-op. This paragraph said "fail
+cleanly (exit 1, alerting via `OnFailure`)" until 2026-08-24 (review L-4), contradicting the
+corrected text at the head of this file: PR #392 fixed the head and left the tail.

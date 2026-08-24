@@ -122,3 +122,25 @@
       - ansible/roles/setup/gitops_deploy/templates/gitops-deploy-alert.service.j2
       - ansible/roles/setup/gitops_deploy/templates/gitops-deploy.timer.j2
       - ansible/roles/setup/gitops_deploy/templates/50-gitops-deploy.rules.j2
+      # The two .env.j2 sources were left out on the theory that stamping them would leak a
+      # secret. They would not: stamp_render.yml hashes the REPO SOURCE (:56), and the arm
+      # re-hashes that same source (manifest-prune-check.sh.j2:284) — the rendered file with
+      # the secret in it is never read by either side. Omitting them meant a change to the
+      # deployer's budget or CI lines rendered stale and nothing saw it (2026-08-24 review M-9).
+      - ansible/roles/setup/gitops_deploy/templates/config.env.j2
+      - ansible/roles/setup/gitops_deploy/templates/alert-webhook.env.j2
+
+# These three were the only pairs manifest-prune-check.sh's deployed-code arm knew about, and it
+# knew them by hardcoding. Declaring them here instead is what lets the sibling roles declare
+# theirs (2026-08-24 review M-5).
+- name: Record the deployed gitops-deploy code
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
+  vars:
+    stamp_deployed_name: gitops-deploy
+    stamp_deployed_pairs:
+      - live: /opt/gitops-deploy/gitops_deploy.py
+        src: ansible/roles/setup/gitops_deploy/files/gitops_deploy.py
+      - live: /opt/gitops-deploy/deploy_logic.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_logic.py
+      - live: /opt/gitops-deploy/host_lib.py
+        src: ansible/roles/setup/common/files/host_lib.py

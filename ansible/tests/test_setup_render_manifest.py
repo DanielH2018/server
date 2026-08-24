@@ -175,12 +175,95 @@ def test_other_setup_roles_stamp_their_own_artifacts():
         "ansible/roles/setup/renovate_notify/tasks/main.yml",
         "ansible/roles/setup/fake_remux/tasks/main.yml",
         "ansible/roles/setup/initial_setup/tasks/crons.yml",
+        # Added 2026-08-24 (review M-4). claude_code landed the morning after the sweep that
+        # wrote this list, rendering five files and stamping none — the gap this test exists
+        # for, reopened by a role too new to be in the enumeration. THIS LIST IS STILL AN
+        # ENUMERATION and inherits that failure mode: it cannot see the next new role either.
+        # Deriving it means asserting that every `src:`-referenced .j2 under roles/setup/ is
+        # stamped, which today would demand ~18 new stamp entries across roles whose artifacts
+        # nothing has decided to watch (staged k8s manifests, netplan, fail2ban, the two
+        # daniel-pi scripts that are deliberately exempt). That is a bigger change than the
+        # finding, so it is a named follow-up, not a silent omission.
+        "ansible/roles/setup/claude_code/tasks/main.yml",
     }
     for rel in sorted(expected):
         text = (_REPO / rel).read_text()
         assert "stamp_render.yml" in text and "stamp_render_name:" in text, (
             f"{rel} no longer stamps its rendered artifacts, so a stale render of them is "
             f"invisible to manifest-prune-check — the H1 gap, re-opened."
+        )
+
+
+_DEPLOYED_DIR = "/var/lib/homelab/setup-deployed-manifest.d"
+
+
+def test_the_deployed_code_arm_derives_its_pairs_from_fragments():
+    """M-5. The arm hardcoded three paths — all gitops-deploy's — so it could only ever prove
+    the code its own author had in mind. Nine other `copy:`-deployed files on this host were
+    watched by nothing while the same script reported "deployed code matches the repo".
+
+    A fragment directory makes it per-host by construction, the same shape the stale-script arm
+    already uses: a pair exists only where the role that deploys it ran.
+    """
+    script = (_TEMPLATES / "manifest-prune-check.sh.j2").read_text()
+    assert _DEPLOYED_DIR in script, (
+        "manifest-prune-check.sh.j2 no longer reads the deployed manifest directory."
+    )
+    assert "DEPLOYED_ENTRIES" in script, (
+        "the arm no longer counts declared pairs, so an empty or absent fragment directory "
+        "reads as 'everything matches' instead of 'nothing is armed' — the L2 shape, one arm "
+        "over."
+    )
+    assert not re.search(r"^check_deployed /", script, re.MULTILINE), (
+        "a hardcoded check_deployed pair is back. Declare it in the owning role via "
+        "stamp_deployed.yml instead, or this arm narrows to whatever the next author "
+        "remembered (2026-08-24 review M-5)."
+    )
+
+
+def test_a_deleted_source_is_drift_not_an_exemption():
+    """The `[[ -r "$src" ]] || return 0` guard changes meaning with the fragment form.
+
+    Hardcoded, it was merely misleading: the repo source exists on every host, so it never
+    gated anything. Fragment-derived, a pair exists ONLY because a role deployed it here — so
+    an unreadable source means the file was deleted from the repo while the artifact is still
+    live. That is drift, and arm 3 reports the same case as "template gone from the repo".
+    Returning 0 swallows it, and the entry still counts toward DEPLOYED_ENTRIES: armed, and
+    checking nothing. Introduced and caught in the same change.
+    """
+    script = (_TEMPLATES / "manifest-prune-check.sh.j2").read_text()
+    fn = re.search(r"^check_deployed\(\) \{.*?^\}", script, re.MULTILINE | re.DOTALL)
+    assert fn, "check_deployed() is gone or no longer a plain function."
+    body = fn.group(0)
+    assert "return 0" not in body.split('if [[ ! -r "$src" ]]')[0], (
+        "check_deployed still short-circuits on an unreadable source. A source missing from "
+        "the repo is drift under the fragment form, not 'a file this repo does not ship here'."
+    )
+    assert "source gone from the repo" in body, (
+        "check_deployed no longer distinguishes a deleted source from a byte mismatch, so the "
+        "operator cannot tell 'redeploy this' from 'this template was retired'."
+    )
+
+
+def test_every_role_that_deploys_code_declares_its_pairs():
+    """The companion enumeration: each role that `copy:`-deploys executable code records it.
+
+    Kept as a list rather than derived because `copy:` is also how this repo writes small config
+    files (/etc/issue, journald drop-ins, apt conf) — those are not code that can run stale, and
+    a derivation would demand pairs for all of them.
+    """
+    expected = {
+        "ansible/roles/setup/gitops_deploy/tasks/main.yml",
+        "ansible/roles/setup/renovate_notify/tasks/main.yml",
+        "ansible/roles/setup/fake_remux/tasks/main.yml",
+        "ansible/roles/setup/initial_setup/tasks/crons.yml",
+        "ansible/roles/setup/k3s/tasks/health-crons.yml",
+    }
+    for rel in sorted(expected):
+        text = (_REPO / rel).read_text()
+        assert "stamp_deployed.yml" in text and "stamp_deployed_name:" in text, (
+            f"{rel} no longer declares the code it deploys, so a stale copy of it is invisible "
+            f"to manifest-prune-check's deployed-code arm (2026-08-24 review M-5)."
         )
 
 

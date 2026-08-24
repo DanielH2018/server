@@ -54,7 +54,19 @@ invariant when adding tasks, or tag-scoped runs die on undefined variables.
   extras). Note `unattended-upgrade --dry-run` needs root, so the only unprivileged proof that
   a pattern matches is reading `archive`/`codename` off the package file via python-apt.
 - **SSH:** `.ssh` perms, an `ssh-users` group, sshd hardening, and a `Match` block re-enabling
-  local TCP forwarding for `sys_user` (the global config disables agent/X11/TCP forwarding).
+  forwarding for `sys_user` (the global config disables agent/X11/TCP forwarding). Since #397
+  that block sets `AllowTcpForwarding all`, not `local` — **both** directions, plus
+  `AllowStreamLocalForwarding remote` and `StreamLocalBindUnlink yes`, for the clipboard
+  bridge's reverse unix-socket forward. `local` alone does not work and the reason is not
+  guessable: sshd builds the channel layer from `AllowTcpForwarding` alone, so excluding
+  `FORWARD_REMOTE` refuses every remote forward — unix-domain included — before
+  `AllowStreamLocalForwarding` is ever read. The comment at `tasks/access.yml:172-196` carries
+  the full derivation and the log line that distinguishes the two refusals.
+
+  It is a real widening. It is acceptable because `sys_user` already has a full shell and can
+  run `ssh -R` itself, so this restricts nothing that account could not already do —
+  `AllowTcpForwarding` bounds a key used purely as a tunnel, not an interactive account.
+  `GatewayPorts` stays at its default `no`, so a reverse forward binds loopback only.
   → `notify: Restart SSH`.
 - **Firewall (UFW):** default-deny incoming / allow outgoing, **rate-limited** SSH (replaces a
   plain allow), then enable. No WireGuard allow: Docker-published ports (incl. wg-easy's UDP

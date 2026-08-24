@@ -321,8 +321,11 @@ containers_list:
     use_authelia: false
 
   # The tunnel answers on the node IP (the wg-easy-udp Service's externalIP) rather than a
-  # VIP: router UIs forward to devices, and VIPs have no lease. password_hash lives in the
-  # role's Secret template, not here.
+  # VIP: router UIs forward to devices, and VIPs have no lease. There is no password_hash on
+  # either side: v15 owns its admin credentials in its own SQLite DB, so the Secret template
+  # this comment used to point at was deleted with the v14 auth model (96eeeb49), and
+  # `wg_easy_password_hash` left secrets.yml on 2026-08-24. Rotation is `cli db:admin:reset`
+  # inside the pod — see roles/k8s/wg-easy/defaults/main.yml.
   - name: wg-easy
     platform: k8s
     hostname: "wg-easy"

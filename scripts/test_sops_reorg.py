@@ -157,7 +157,6 @@ LIVE_KEYS = [
     "freshrss_password",
     "wireguard_interface_private_key",
     "mullvad_account",
-    "wg_easy_password_hash",
     "speedtest_app_key",
     "terraria_password",
     "valheim_server_pass",

@@ -172,7 +172,7 @@
   become: true
 
 - name: Deploy the Longhorn restore drill
-  tags: [backup-health, restore-drill]
+  tags: [backup-health]
   ansible.builtin.template:
     src: longhorn-restore-drill.sh.j2
     dest: /usr/local/bin/longhorn-restore-drill.sh
@@ -182,7 +182,7 @@
   become: true
 
 - name: Schedule the Longhorn restore drill
-  tags: [backup-health, restore-drill]
+  tags: [backup-health]
   # Runs as ROOT, unlike the heartbeat beside it. The drill creates and deletes Volume/PV/PVC
   # objects and runs a pod; the read-only ServiceAccount the heartbeat uses is Forbidden on all
   # of it. Root's k3s kubectl reads /etc/rancher/k3s/k3s.yaml and has the cluster-admin cert.
@@ -338,12 +338,34 @@
 # Render provenance, stamped LAST so a run that fails partway through leaves the previous
 # checksums in place rather than declaring the scripts it never reached to be current. Each
 # group carries only its own tag family, so a tag-scoped run restamps only what it rendered.
+#
+# DECIDED: the fix for a sub-tag that renders without stamping is to DROP the sub-tag, never to
+# add it here. `--tags restore-drill` used to render 1 of this group's 5 templates and stamp
+# none, which reads as drift on 1 script — a false RED. Adding `restore-drill` to this task's
+# tags restamps all 5, declaring the 4 it never rendered to be current: a false GREEN, and the
+# exact defect the 2026-08-23b review's M6 was raised for. A false RED costs an investigation;
+# a false GREEN costs the guarantee. Two reviewers proposed the additive fix on 2026-08-24 and
+# both were wrong; the tag is gone from health-crons.yml:174,184 instead. Contradict this only
+# with a stamp mechanism that can record a PARTIAL group.
 - name: Stamp the backup-plane scripts this host has rendered
   tags: [backup-health]
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
   vars:
     stamp_render_name: k3s-backup-health
     stamp_render_templates: "{{ (k3s_render_stamp_groups | selectattr('name', 'eq', 'k3s-backup-health') | first).templates }}"
+
+# live-drift-check.py is `copy:`-deployed, not rendered, so the stale-script arm structurally
+# cannot see it — it belongs to the deployed-code arm, which hardcoded three gitops-deploy paths
+# and knew nothing of this one (2026-08-24 review M-5). Tagged with the family that deploys it,
+# so a `--tags live-drift` run records exactly what it just installed.
+- name: Record the deployed live-drift check
+  tags: [live-drift]
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
+  vars:
+    stamp_deployed_name: k3s-live-drift
+    stamp_deployed_pairs:
+      - live: /usr/local/bin/live-drift-check.py
+        src: ansible/roles/setup/k3s/files/live_drift_check.py
 
 - name: Stamp the disk-health script this host has rendered
   tags: [disk-health]
