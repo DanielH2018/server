@@ -188,6 +188,12 @@ stringData:
     {"type": "push", "name": "k3s Container OOM", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_oom_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   k3s-cpu-throttling.json: |
     {"type": "push", "name": "k3s CPU Throttling", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_cpu_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # 600s like its monitor-bridge siblings, NOT the app's 6-hour test cadence. The producer is
+  # the bridge's 5-minute loop re-reading the newest row, not the speedtest run itself, so the
+  # deadline tracks the bridge's period. A dead bridge is what push silence means here; a dead
+  # speedtest scheduler is caught by the check's own staleness arm instead.
+  k3s-speedtest.json: |
+    {"type": "push", "name": "k3s Speedtest", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_speedtest_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   crowdsec-home-allowlist.json: |
     {"type": "push", "name": "CrowdSec Home Allowlist", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_home_allowlist_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # DECIDED: 360s, not 300 — the deadline must exceed the producer's PERIOD, and the period

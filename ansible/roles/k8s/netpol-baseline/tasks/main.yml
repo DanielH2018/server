@@ -147,6 +147,7 @@
       - networkpolicy-scrutiny-web.yaml
       - networkpolicy-loki-homelab.yaml
       - networkpolicy-home-assistant.yaml
+      - networkpolicy-speedtest.yaml
       - networkpolicy-uptime-kuma.yaml
       - networkpolicy-terraria.yaml
       - networkpolicy-valheim.yaml

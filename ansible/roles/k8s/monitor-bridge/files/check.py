@@ -638,6 +638,30 @@ HA_BAN_WINDOW = _env("HA_BAN_WINDOW", "1h")
 # CLAUDE.md — a fail-open arm cannot tell "nothing to report" from "I asked the wrong question".
 HA_BAN_SELECTOR = '{namespace="homelab",container="home-assistant"} |~ "Banned IP"'
 
+# speedtest-tracker's own result rows. Empty URL/token = disabled (stays up), like HA above.
+#
+# WHY THIS CHECK EXISTS: a failed speedtest run wrote nothing anywhere an operator could see —
+# no stdout line (the container logs only its pre-run connectivity ping), no metric, no monitor.
+# The only record was a row in the app's sqlite, which nothing could read: the readonly SA holds
+# no pods/exec, and the unauthenticated API is two endpoints, one of which returns a single row.
+# Five of the 42 runs between 2026-08-14 and 2026-08-24 failed and none of them paged.
+SPEEDTEST_URL = _env("SPEEDTEST_URL", "").rstrip("/")
+# File-mounted (SPEEDTEST_TOKEN_FILE) for the same reason HA_TOKEN is: envFrom has no per-key
+# filter, so a token in monitor-bridge-env is a token in every process's environment.
+SPEEDTEST_TOKEN = _env_file("SPEEDTEST_TOKEN", "")
+# Download floor, Mbit/s. 100 is not a target — it is the empty band. Results are bimodal by
+# which Ookla server the run drew: over 2026-08-14..24 the 20 runs on server 41671 had a median
+# of 910 Mbps and a worst of 119, while the 17 runs on six other servers had a median of 12.8
+# and a best of 42.8. Nothing landed between 42.8 and 119, so any floor in that gap separates
+# the two populations with room on both sides.
+SPEEDTEST_DOWNLOAD_MIN_MBPS = float(_env("SPEEDTEST_DOWNLOAD_MIN_MBPS", "100"))
+# Staleness ceiling, hours. SPEEDTEST_SCHEDULE runs every 6h, so 8 allows one missed slot plus
+# slack. This arm is what notices the scheduler dying — the failure mode with no other symptom,
+# since a pod that runs no tests still serves its UI and passes both probes.
+SPEEDTEST_MAX_AGE_H = float(_env("SPEEDTEST_MAX_AGE_H", "8"))
+# Consecutive-cycle hysteresis for the FETCH only, never for the verdict — see check_speedtest.
+SPEEDTEST_CONSECUTIVE = int(_env("SPEEDTEST_CONSECUTIVE", "2"))
+
 # Discord delivery: Kuma fires every alert by POSTing to its Discord webhook
 # (monitor_discord_webhook_url). A rotated/revoked/deleted webhook leaves every monitor
 # green-in-UI while Discord goes silent — the one link in the alert chain no other monitor
@@ -2118,6 +2142,113 @@ def check_ha_heartbeat():
     return with_ha_ban(ok, msg)
 
 
+def speedtest_verdict(row, min_mbps, max_age_h, now=None):
+    """Pure: judge the newest speedtest-tracker result row. (ok, msg).
+
+    `row` is one element of /api/v1/results' `data`, or None when the app returned no rows at
+    all.
+
+    THE TIMESTAMP IS UTC DESPITE CARRYING NO OFFSET. /api/v1/results serializes `created_at` as
+    a bare "2026-08-24 11:00:00", while /api/speedtest/latest serializes the SAME row as
+    "2026-08-24T06:00:00.000000-05:00" — verified against row id 780 on 2026-08-24. The bare
+    form is therefore UTC, not the DISPLAY_TIMEZONE local time it resembles, and
+    datetime.fromisoformat returns it naive. Attaching UTC explicitly is what keeps the age
+    arm from reading five hours off; a naive value compared against an aware `now` raises
+    instead, which is the safer of the two failures but still not a verdict.
+
+    Arms run status, then age, then floor, in that order and for that reason: `download_bits`
+    is null on a failed row, so a floor comparison ahead of the status arm compares None.
+    """
+    now = now or datetime.now(timezone.utc)
+    if not row:
+        return (
+            False,
+            "speedtest has no results at all — the scheduler has never completed a run",
+        )
+
+    status = row.get("status")
+    created = row.get("created_at")
+
+    if status != "completed":
+        detail = ((row.get("data") or {}).get("message") or "").strip()
+        return False, "last run (%s) %s%s" % (
+            created or "unknown time",
+            status or "has no status",
+            " — " + detail if detail else "",
+        )
+
+    if not created:
+        return False, "last run has no created_at — cannot judge freshness"
+    stamp = datetime.fromisoformat(created.strip().replace(" ", "T"))
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    age_h = (now - stamp).total_seconds() / 3600
+    if age_h > max_age_h:
+        return (
+            False,
+            "last run was %.1fh ago (> %gh) — the 6-hourly schedule has stopped"
+            % (
+                age_h,
+                max_age_h,
+            ),
+        )
+
+    bits = row.get("download_bits")
+    if bits is None:
+        return False, "last run completed but recorded no download figure"
+    mbps = float(bits) / 1e6
+    server = ((row.get("data") or {}).get("server") or {}).get(
+        "name"
+    ) or "unknown server"
+    if mbps < min_mbps:
+        return False, "download %.1f Mbps (< %g) via %s — %.1fh ago" % (
+            mbps,
+            min_mbps,
+            server,
+            age_h,
+        )
+    return True, "download %.1f Mbps via %s, %.1fh ago" % (mbps, server, age_h)
+
+
+def check_speedtest():
+    """Judge speedtest-tracker's newest result row (see the SPEEDTEST_* env block above).
+
+    Empty URL/token -> disabled (stays up), like check_ha_heartbeat.
+
+    NO HYSTERESIS ON THE VERDICT, deliberately. The app runs every 6h and this loop every 5
+    min, so a consecutive-cycle streak would re-read the IDENTICAL row up to 72 times: it would
+    delay the page by N*INTERVAL and prove nothing new about the run. The FETCH failure does
+    ride the streak, because the app restarting under a deploy is a genuine transient — the
+    same split check_ha_heartbeat draws, for the same reason. `speedtest` is also in
+    STARTUP_GRACE, which covers the post-reboot cycle where the app has not finished booting.
+    """
+    if not SPEEDTEST_URL or not SPEEDTEST_TOKEN:
+        return True, "speedtest monitoring disabled (no URL/token)"
+    try:
+        # sort=-created_at, because the default order is ASCENDING and would hand back the
+        # OLDEST row in the 30-day window — a stale-forever reading that looks like a verdict.
+        payload = _get_json(
+            SPEEDTEST_URL + "/api/v1/results?sort=-created_at&page%5Bsize%5D=1",
+            headers={
+                "Authorization": "Bearer " + SPEEDTEST_TOKEN,
+                "Accept": "application/json",
+            },
+        )
+    except Exception as e:
+        _down_streaks["speedtest"], ok, msg = down_streak(
+            _down_streaks.get("speedtest", 0),
+            SPEEDTEST_CONSECUTIVE,
+            "speedtest API unreachable: %s" % e,
+            "deploy/restart grace",
+        )
+        return ok, msg
+    _down_streaks["speedtest"] = 0
+    rows = payload.get("data") or []
+    return speedtest_verdict(
+        rows[0] if rows else None, SPEEDTEST_DOWNLOAD_MIN_MBPS, SPEEDTEST_MAX_AGE_H
+    )
+
+
 def loki_count(selector, window):
     """Instant LogQL query: total log lines for `selector` over `window`. None if no series.
 
@@ -3107,6 +3238,7 @@ CHECKS = [
     ("ups", _env("KUMA_PUSH_UPS", ""), check_ups),
     ("pi_pressure", _env("KUMA_PUSH_PI", ""), check_pi_pressure),
     ("ha_heartbeat", _env("KUMA_PUSH_HA", ""), check_ha_heartbeat),
+    ("speedtest", _env("KUMA_PUSH_SPEEDTEST", ""), check_speedtest),
     ("loki_ingestion", _env("KUMA_PUSH_LOKI", ""), check_loki_ingestion),
     (
         "promtail_dropped",
@@ -3214,7 +3346,15 @@ CLUSTER_DEPENDENT = frozenset({"k8s_workloads", "cluster_targets"})
 # that every un-gated _get_json reach-out check is in here (prowlarr_indexers/scrutiny were added
 # 2026-07-14 after they were found missing — the weekly-reboot flap's original set omitted them).
 STARTUP_GRACE = frozenset(
-    {"n8n", "arr_queue", "pi_pressure", "prowlarr_indexers", "scrutiny", "r2_usage"}
+    {
+        "n8n",
+        "arr_queue",
+        "pi_pressure",
+        "prowlarr_indexers",
+        "scrutiny",
+        "r2_usage",
+        "speedtest",
+    }
 )
 
 _grace_streaks = {}
