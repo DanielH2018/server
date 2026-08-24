@@ -646,7 +646,12 @@ takes its inputs as arguments.
 | `bridge_parsing.py` | duration/timestamp parsing, `endpoint_label`, `describe_fetch_failure`, `sanitize` |
 | `verdicts_cluster.py` | `k8s_workloads_verdict`, `extended_resource_verdict`, `ksm_resource_label`, `targets_verdict` |
 | `verdicts_host.py` | `ups_health`, the `scrutiny_*` family, `pi_pressure` |
-| `verdicts_service.py` | n8n streaks, `queue_warnings`, `indexers_down`, the HA/Loki/GitOps/Discord verdicts |
+| `verdicts_service.py` | n8n streaks, `queue_warnings`, `indexers_down`, `gitops_alive`, the HA/Loki/Discord verdicts |
+
+`gitops_status` is the one verdict that stays in `check.py`, because it reads
+`GITOPS_BEHIND_MAX_S`; `gitops_alive` takes its threshold as an argument and moved. Its private
+helper `_parse_behind` sits beside `gitops_status` rather than with the other verdicts, so the
+only caller and the helper stay together.
 
 **A function may move out of `check.py` only if it is never monkeypatched AND reads no patched
 module-level name.** The test suite patches 208 times, always against the `check` module object.

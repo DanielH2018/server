@@ -6,11 +6,11 @@ check.py grew to ~3.5k lines. Splitting it is safe only for functions the test s
 never monkeypatches, and the reason is worth stating because it is invisible at the
 call site and silently defeats tests rather than failing them.
 
-The suite patches 208 times, always against the `check` module object
-(`monkeypatch.setattr(check, "_get_json", ...)`). A function reads its globals from
-the module it is DEFINED in, not the one it is imported into. So moving a function
-here while a test patches `check.<name>` leaves the test patching a name nothing
-reads: the test goes green against unpatched production code.
+The suite patches the `check` module object across dozens of distinct names
+(`monkeypatch.setattr(check, "_get_json", ...)`, and plain `check.X = ...`). A function
+reads its globals from the module it is DEFINED in, not the one it is imported into.
+So moving a function here while a test patches `check.<name>` leaves the test patching
+a name nothing reads: the test goes green against unpatched production code.
 
 The rule that follows, and the only one that keeps this split honest:
 
@@ -20,6 +20,11 @@ The rule that follows, and the only one that keeps this split honest:
 That is why these six are pure and take their inputs explicitly. Config constants and
 the I/O primitives (`_get_json`, `prom_scalar`, `push`, the `*_API_KEY` values) stay in
 check.py precisely because the suite patches them there.
+
+ENFORCED by ansible/tests/test_monitor_bridge_modules.py, which re-derives the patched
+set from the test sources on every run. Deriving it is the point: the first census here
+was a grep for one spelling of `setattr`, and it silently missed both the line-wrapped
+form and every `check.X = ...` assignment.
 
 `FETCH_BODY_MAX` lives here rather than in check.py because `describe_fetch_failure`
 reads it; check.py imports it back for its three other uses. It is not patched, so the

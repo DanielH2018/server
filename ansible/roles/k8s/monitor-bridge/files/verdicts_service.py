@@ -110,21 +110,6 @@ def gitops_alive(age_s, max_age_s):
     return False, "deployer last ran %.0fm ago (> %.0fm)" % (age_s / 60, max_age_s / 60)
 
 
-def _parse_behind(marker):
-    """Split the deployer's "<origin_sha> <unix_ts_first_seen>" marker. Returns (sha, since) with
-    since=None when absent or unparseable — an unreadable marker must read as "not behind" rather
-    than page forever on garbage."""
-    if not marker:
-        return "", None
-    parts = marker.split()
-    if len(parts) != 2:
-        return "", None
-    try:
-        return parts[0], float(parts[1])
-    except ValueError:
-        return "", None
-
-
 def queue_warnings(queue_json, app_name):
     """Pure: (app_name, title, reason) for each queue item needing an operator's eyes.
 

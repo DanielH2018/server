@@ -34,7 +34,8 @@
   tags: [config]
   ansible.builtin.set_fact:
     monitor_bridge_script_checksum: >-
-      {{ monitor_bridge_script.results | map(attribute='checksum') | join(',') | hash('sha1') }}
+      {{ monitor_bridge_script.results | default([]) | map(attribute='checksum', default='')
+         | join(',') | hash('sha1') }}
 
 # check.py is Jinja-hostile (PromQL selectors carry {…} braces), so it becomes a
 # ConfigMap via kubectl --from-file — the terraria-stats/claude-otel pattern.

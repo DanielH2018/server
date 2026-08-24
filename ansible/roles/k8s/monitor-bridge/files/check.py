@@ -48,7 +48,6 @@ from verdicts_host import (
     ups_health,
 )
 from verdicts_service import (
-    _parse_behind,
     discord_webhook_ok,
     gitops_alive,
     ha_ban_verdict,
@@ -1223,6 +1222,21 @@ def check_traefik_latency():
         worst,
         TRAEFIK_SLOW_BUCKET,
     )
+
+
+def _parse_behind(marker):
+    """Split the deployer's "<origin_sha> <unix_ts_first_seen>" marker. Returns (sha, since) with
+    since=None when absent or unparseable — an unreadable marker must read as "not behind" rather
+    than page forever on garbage."""
+    if not marker:
+        return "", None
+    parts = marker.split()
+    if len(parts) != 2:
+        return "", None
+    try:
+        return parts[0], float(parts[1])
+    except ValueError:
+        return "", None
 
 
 def gitops_status(
