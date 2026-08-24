@@ -1,3 +1,46 @@
+{#
+  Histogram-bucket trim for the two control-plane jobs, invoked at COLUMN 0 (it carries its own
+  8-space indent, matching `relabel_configs:` in the job blocks below).
+
+  MEASURED, not guessed. Adding the apiserver and kubelet jobs took this Prometheus from ~83k
+  head series to 183,150, and 69,022 of the ~100k added were `_bucket` series from twelve
+  families — apiserver_request_duration, etcd_request_duration, apiserver_request_sli_duration,
+  request_body_size, watch_list_duration, response_sizes, watch_cache_read_wait,
+  scheduler_plugin_execution, both workqueue duration families, watch_events_sizes and
+  storage_operation_duration.
+
+  That matters because the cap here is BYTES, not series: retention.size is 3GB against a 5Gi
+  PVC (deliberately under it — the WAL, the head and compaction share the volume). Doubling the
+  series roughly doubles the block growth rate, so the visible effect of keeping every bucket
+  would be retention quietly falling from 30 days to under three weeks. Nothing would report
+  that; the boards would simply stop going back as far.
+
+  `_count` and `_sum` SURVIVE, so rates and averages are intact for every family — what is lost
+  is quantiles, which on a homelab's apiserver nobody acts on. Error rates and request rates are
+  the signals that get read, and both come from `_count`.
+
+  etcd_request_duration_seconds_bucket is the one exception, kept deliberately: etcd write
+  latency is the early-warning signal the control-plane scrape was justified by, and a quantile
+  is the whole point of watching it. It is also, usefully, available from the apiserver's side
+  WITHOUT `--etcd-expose-metrics` — so this one family delivers a good part of what the gated
+  etcd job would add.
+#}
+{#
+  An EXPLICIT list, not `_bucket` minus an exception. Prometheus matches with RE2, which has no
+  lookaround at all — a `(?!etcd_...)` negative-lookahead spelling does not error, it simply
+  fails to compile the intent and the rule silently stops dropping anything. Naming the families
+  also keeps the list auditable against the measurement above, and makes a new high-cardinality
+  family someone's deliberate decision rather than something this rule swallows by accident.
+#}
+{# NOT `-%}` on the opening tag: it would strip the newline AND the 8-space indent off the first
+   body line, landing `metric_relabel_configs:` at column 0 and breaking the YAML. #}
+{% macro control_plane_bucket_drop() %}
+        metric_relabel_configs:
+          - source_labels: [__name__]
+            action: drop
+            regex: >-
+              (apiserver_request_duration_seconds|apiserver_request_sli_duration_seconds|apiserver_request_body_size_bytes|apiserver_response_sizes|apiserver_watch_list_duration_seconds|apiserver_watch_cache_read_wait_seconds|apiserver_watch_events_sizes|scheduler_plugin_execution_duration_seconds|workqueue_work_duration_seconds|workqueue_queue_duration_seconds|storage_operation_duration_seconds|kubelet_runtime_operations_duration_seconds|rest_client_request_duration_seconds)_bucket
+{%- endmacro %}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -382,6 +425,7 @@ data:
         relabel_configs:
           - action: labelmap
             regex: __meta_kubernetes_node_label_(.+)
+{{ control_plane_bucket_drop() }}
       # Per-pod CPU/memory straight from the kubelet's summary API rather than from cadvisor's
       # cgroup walk. Cheaper and lower-cardinality than the cadvisor series, and it is what
       # `kubectl top` reads — so a dashboard built on it agrees with the CLI, where one built
@@ -419,6 +463,7 @@ data:
         bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
         static_configs:
           - targets: ['kubernetes.default.svc:443']
+{{ control_plane_bucket_drop() }}
 {% if k3s_etcd_expose_metrics | default(false) %}
       # Embedded etcd, the single existential risk on a one-server control plane: db size
       # against its quota, fsync/commit latency, leader changes, and proposal failures. None of
