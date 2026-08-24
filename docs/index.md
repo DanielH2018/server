@@ -8,6 +8,10 @@ Reference and runbooks for a three-host homelab: `daniel-box` (k3s server), `dan
 - **Reference** pages are generated from the Ansible tree. They carry the timestamp and commit
   their content was last built from, and a cron regenerates them. Do not edit them by hand — a
   hook rejects it.
+- **Decisions** are the architecture-decision records: what was chosen, why, and what it cost.
+  A decision still in force lives there; the state it produced lives in the reference pages.
+- **Operations** are procedures for driving the system by hand — deploying, and reading the
+  GitOps pipeline. As against Runbooks, which recover a subsystem after something broke.
 - **Runbooks** are procedures for recovering or upgrading a subsystem. They are hand-written.
 - **Design** documents record how a subsystem was built and why.
 
@@ -17,6 +21,9 @@ The reference pages read `containers_list` in `ansible/inventory/host_vars/`, th
 IngressRoute macro calls, the Longhorn backup-tier volume lists, and each role's
 `k8s_autodeploy` declaration. A fact none of those sources carries prints its reason instead of
 a value.
+
+The scripts page reads each script's own module docstring, parsed rather than imported. So the
+way to change what it says about a script is to change that script's docstring.
 
 ## Reading a page's freshness
 

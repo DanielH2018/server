@@ -60,6 +60,7 @@ k3s
 Backblaze
 [Bb]ackfill
 [Bb]ackupstore
+[Cc]onfig
 [Cc]rashloop
 [Cc]ron
 [Cc]utover
@@ -67,6 +68,8 @@ Backblaze
 [Dd]enylist
 [Dd]enylisted
 [Dd]eployer
+[Dd]ocstring
+[Dd]ocstrings
 [Ee]mptyDir
 [Ff]rontmatter
 # Capitalisation matters here: Vale.Terms enforces the spelling this file declares, so a
@@ -81,6 +84,7 @@ GitOps
 [Ll]int
 [Ll]oopback
 [Pp]laintext
+[Pp]rovisionable
 [Rr]epo
 [Rr]ollout
 [Rr]ollouts
@@ -89,6 +93,7 @@ GitOps
 [Ss]ystemd
 [Tt]oposort
 [Uu]napplied
+[Uu]ndeployed
 [Uu]nprobeable
 [Uu]nexecuted
 [Ww]orktree

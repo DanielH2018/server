@@ -65,6 +65,7 @@ nav:
       - Secrets: reference/secrets.md
       - Scheduled jobs: reference/crons.md
       - Networking: reference/networking.md
+      - Scripts: reference/scripts.md
       - Topology: reference/topology.md
   # template.md is deliberately absent — it is a form, not a document. The nav test only
   # checks docs/*.md, not subdirectories, so leaving it out costs nothing.
@@ -103,6 +104,8 @@ nav:
       - Docs UI and ADRs — plan 2: docs-ui-and-adrs-plan-2.md
       - Docs UI and ADRs — plan 3: docs-ui-and-adrs-plan-3.md
   - Operations:
+      - Deploying by hand: deploying.md
+      - The GitOps pipeline: gitops-pipeline.md
       - Claude shell permissions: claude-shell-permissions.md
       - Security tools: security-tools.md
       - WireGuard private access: wireguard-private-homelab-access.md
