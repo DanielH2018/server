@@ -1,12 +1,3 @@
+{% from 'service.yml.j2' import service with context %}
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: artifacts
-  namespace: {{ k8s_namespace }}
-spec:
-  selector:
-    app: artifacts
-  ports:
-    - port: {{ container_item.port }}
-      targetPort: {{ container_item.port }}
+{{ service(container_item.name, container_item.port) -}}

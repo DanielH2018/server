@@ -1,0 +1,39 @@
+{#
+  PersistentVolumeClaim for a k8s-hosted service — the plain RWO/longhorn-family body 4 roles'
+  pvc.yaml.j2 share (authelia, crowdsec, karakeep, loki-homelab). Each carries its own WHY for
+  the storage class / backup posture it picked, which stays at the call site (via `{% call %}`)
+  rather than being swallowed here — the whole point of these comments is that they differ role
+  to role.
+
+  code-server's pvc-workspace.yaml.j2 has the identical body but is deliberately NOT converted:
+  ansible/tests/_autodeploy.py's `_rendered_pvc_claims` (consumed by
+  test_k8s_autodeploy_guard.py::test_snapshot_pvc_declarations_match_rendered_claims) greps a
+  role's own `templates/*.j2` text for a literal `kind: PersistentVolumeClaim` block — it does
+  not render Jinja, so a claim built via this macro is invisible to it. code-server is the only
+  one of the five whose `k8s_autodeploy_snapshot_pvcs` declares that specific claim name, so it
+  is the only one the guard actually checks; the other four have no such declaration and the gap
+  is inert for them. See "Textual guard checks break on an indirection" in project memory.
+
+  Arguments:
+    name           PVC name; matches whatever claimName a Deployment mounts.
+    storage_class  e.g. `longhorn`, `longhorn-nobackup`, or a role's own `*_k8s_storage_class`.
+    size           e.g. a role's own `*_k8s_storage` / `*_k8s_size` default.
+
+  Call with a body to insert a comment block between `spec:` and `accessModes:`; call plain
+  (no `{% call %}`) when there's nothing to say there.
+#}
+{% macro pvc(name, storage_class, size) -%}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ name }}
+  namespace: {{ k8s_namespace }}
+spec:
+{% if caller is defined %}{{ caller() }}{% endif %}
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ storage_class }}
+  resources:
+    requests:
+      storage: {{ size }}
+{% endmacro %}

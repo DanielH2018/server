@@ -1,3 +1,4 @@
+{% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -58,16 +59,7 @@ spec:
       priorityClassName: homelab-standard
       # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
       # Weighted so the pod still schedules if daniel-server is cordoned or full.
-      affinity:
-        nodeAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              preference:
-                matchExpressions:
-                  - key: kubernetes.io/hostname
-                    operator: In
-                    values:
-                      - daniel-server
+{{ node_affinity_preference('daniel-server') }}
       containers:
         - name: time-tagger
           image: {{ karakeep_k8s_tagger_image }}

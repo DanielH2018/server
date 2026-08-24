@@ -1,0 +1,25 @@
+{#
+  nodeAffinity preference block for a pod that prefers one node but must still schedule if it
+  is cordoned or full — the shape every "Preference, never a pin" deployment shares. 30
+  deployment templates carry this exact 10-line block (`affinity:` through the single
+  `values:` entry), varying only in which node they prefer; the WHY comment above the call
+  (daniel-box's storage/VIP pinning vs a role's own CPU-bound reasoning) stays at the call
+  site, not swallowed here, because that reasoning differs role to role.
+
+  Arguments:
+    hostname  the preferred node's `kubernetes.io/hostname` value (daniel-server or daniel-box)
+    weight    every current caller uses 100; kept as a parameter rather than hardcoded so a
+              future second-priority caller isn't blocked on editing this file
+#}
+{% macro node_affinity_preference(hostname, weight=100) %}
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: {{ weight }}
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - {{ hostname }}
+{%- endmacro %}

@@ -1,0 +1,32 @@
+{#
+  Service for a k8s-hosted service — the single-port ClusterIP Service every plain web-app role
+  ships. 19 roles' service.yaml.j2 were byte-identical but for the name; this macro is that body.
+
+  Arguments mirror ingressroute()'s style:
+    name       Service (and selector `app` label) name; matches the Deployment's own label and
+               the IngressRoute this Service backs.
+    port       Service and target port — this fleet has no services publishing on a different
+               container port than their Service port, so there is only the one number.
+    port_name  Set when a caller's Service needs a NAMED port (home-assistant, homelab-mcp,
+               zigbee2mqtt) rather than the bare port list every other role uses. Omit to get
+               the plain form.
+#}
+{% macro service(name, port, port_name=none) -%}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ name }}
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: {{ name }}
+  ports:
+{% if port_name %}
+    - name: {{ port_name }}
+      port: {{ port }}
+      targetPort: {{ port }}
+{% else %}
+    - port: {{ port }}
+      targetPort: {{ port }}
+{% endif %}
+{%- endmacro %}
