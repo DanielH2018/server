@@ -28,6 +28,9 @@ wrong is worth more than the record of one that did not.
 |---|---|---|---|
 | [0001](0001-mkdocs-site-with-generated-reference.md) | A MkDocs site whose reference pages are generated from the Ansible tree | Accepted | 2026-08-24 |
 | [0002](0002-k3s-over-docker-compose-for-the-cluster-nodes.md) | k3s replaces Docker Compose on the two cluster nodes | Accepted | 2026-08-01 |
+| [0003](0003-sops-with-age-for-secrets-at-rest.md) | Secrets are encrypted at rest with SOPS and age, in the repo | Accepted | 2026-08-01 |
+| [0004](0004-authelia-is-the-single-sign-on-layer.md) | Authelia is the single sign-on layer, enforced at the edge | Accepted | 2026-08-01 |
+| [0005](0005-traefik-is-the-edge-with-ingressroute-crds.md) | Traefik is the cluster edge, routed by IngressRoute CRDs | Accepted | 2026-08-01 |
 | [0006](0006-longhorn-for-cluster-storage.md) | Longhorn provides replicated block storage for the cluster | Accepted | 2026-08-01 |
 | [0007](0007-backup-tiering-r2-daily-b2-weekly.md) | Backups are tiered — R2 daily, B2 weekly and sharded across the week | Accepted | 2026-08-16 |
 | [0008](0008-16-mib-longhorn-blocks.md) | New Longhorn volumes use 16 MiB blocks | Accepted | 2026-08-16 |

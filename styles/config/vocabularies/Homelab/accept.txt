@@ -22,8 +22,10 @@ Renovate
 prek
 SOPS
 Scrutiny
+[Ss]crollback
 [Ss]harded
 Tempo
+TLSStore
 [Tt]raefik
 Vale
 WireGuard
@@ -31,6 +33,7 @@ WireGuard
 
 # Kubernetes and container vocabulary
 ConfigMap
+CRDs
 DaemonSet
 IngressRoute
 Kubernetes
@@ -40,8 +43,12 @@ PVC
 [Cc]laimName
 [Hh]ostPath
 [Kk]ubectl
+[Mm]iddleware
+[Mm]iddlewares
 [Nn]etpol
 [Nn]ginx
+[Oo]nboarded
+[Oo]nboarding
 [Rr]eplicaSet
 k3s
 
@@ -68,6 +75,7 @@ GitOps
 [Ii]node
 [Ll]int
 [Ll]oopback
+[Pp]laintext
 [Rr]epo
 [Rr]unbook
 [Rr]unbooks
