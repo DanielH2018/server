@@ -17,7 +17,8 @@ Every task carries a block tag (placed right under `name:`), so e.g.
 `pi-swap` (Pi swapfile + watchdog-stop preamble) · `apt-upgrade` (the full dist-upgrade)
 · `packages` · `tooling` (uv + CLI tools) · `unattended-upgrades` · `sudo-timestamp` · `fail2ban` · `ssh`
 · `crons` (restart / prune / log-truncate / autoremove / dpkg-purge / infra-map; the prune cron
-also answers to `prune`, and the daniel-box-only infrastructure-map refresh to `infra-map`)
+also answers to `prune`, the daniel-box-only infrastructure-map refresh to `infra-map`, and the
+fwupd-gated weekly firmware update to `firmware`)
 · `journald` · `tuning` (server CPU governor + swappiness) · `debloat`
 (server LXD-snap removal + both-hosts networkd-dispatcher mask) · `git-hooks` · `sysctl` · `firewall` (UFW) · `audit` ·
 `file-perms` · `kernel-modules` (blacklist + wireguard) · `igpu` (i915 GuC for QuickSync,
@@ -33,6 +34,15 @@ invariant when adding tasks, or tag-scoped runs die on undefined variables.
   heavy apt on the 512 MB Zero 2 W doesn't OOM. Also installs Pi-only packages.
 - **Packages & tooling:** apt upgrade; base packages; install **uv per-user** (PEP 668-safe on
   24.04+) and the Python CLI tooling as uv tools.
+- **Unattended upgrades:** `20auto-upgrades` turns the periodic timers on;
+  `52unattended-upgrades-local` sets no-automatic-reboot (the Sunday 07:30 restart cron owns
+  reboots) plus obsolete-kernel cleanup, and **appends** `unattended_upgrades_extra_origins`
+  (`group_vars/all.yml`) to the distro's Allowed-Origins. Since 2026-08-24 that list adds the
+  `-updates` pocket and `gh:stable`, so the "N updates can be applied immediately" MOTD line
+  no longer accrues a permanent backlog. Set the var to `[]` on a host for security-only.
+  Use the `::` append syntax only — a `{ ... }` block reads as a replacement, and a
+  replacement drops the `-security` and ESM pockets. Verify with
+  `apt-config dump Unattended-Upgrade::Allowed-Origins`.
 - **SSH:** `.ssh` perms, an `ssh-users` group, sshd hardening, and a `Match` block re-enabling
   local TCP forwarding for `sys_user` (the global config disables agent/X11/TCP forwarding).
   → `notify: Restart SSH`.

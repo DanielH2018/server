@@ -35,6 +35,24 @@ sys_user: ubuntu
 tz: America/Chicago
 puid: 1000
 pgid: 1000
+# Apt origins unattended-upgrades may install from, BEYOND the security pockets the distro's
+# 50unattended-upgrades already allows (`${distro_id}:${distro_codename}`, `-security`, and the
+# two ESM pockets). Rendered into 52unattended-upgrades-local with the `Allowed-Origins::`
+# append syntax, so the security pockets are never displaced.
+#
+# `-updates` is the non-security pocket the login MOTD counts as "N updates can be applied
+# immediately". Security-only was the policy until 2026-08-24; without `-updates` those sit
+# unapplied forever, which is what the MOTD was reporting. Kernel upgrades land here, and
+# Automatic-Reboot stays false — the Sunday 07:30 "Weekly system restart" cron takes them.
+#
+# `gh:stable` is the GitHub CLI's own apt repo (Origin/Label `gh`, Codename `stable` — read
+# from its Release file, not guessed; it shows as `unknown` in `apt list` because it is a
+# third-party suite). Third-party origins are opt-in one at a time, never wildcarded.
+#
+# Set to [] on a host to revert that host to security-only.
+unattended_upgrades_extra_origins:
+  - "${distro_id}:${distro_codename}-updates"
+  - "gh:stable"
 # Docker
 docker_network: proxy
 # Intel iGPU/QuickSync passthrough (jellyfin/tdarr hardware transcode via /dev/dri).
