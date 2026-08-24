@@ -22,3 +22,27 @@ nut_k8s_cpu_limit: "500m"
 nut_k8s_mem_limit: 128Mi
 nut_k8s_cpu_request: "50m"
 nut_k8s_mem_request: 16Mi
+
+# Seconds on battery before the primary raises FSD and every secondary shuts down. Made
+# explicit 2026-08-24: it was referenced ONLY as `{{ nut_onbatt_shutdown_delay | default(120) }}`
+# in templates/config-secret.yaml.j2 and defined nowhere in the live tree, so the real value was
+# invisible unless you read the Jinja default. The one remaining definition was in
+# roles/containers/archive/peanut, a retired role.
+#
+# WHY THIS MATTERS BEFORE YOU ARM A SECOND HOST. This fires 120s into ANY mains interruption —
+# not at battery end. Live UPS runtime is ~21 minutes, so daniel-server currently powers off two
+# minutes into an outage that the battery would have carried comfortably. That is fine for an
+# agent node and NOT fine for daniel-box, which holds etcd, LAN DNS, Traefik and the Longhorn
+# primary replicas.
+#
+# There is exactly ONE upssched (the pod, the primary), so FSD is a single global event every
+# secondary sees at the same moment. There is no per-host ONBATT delay to stagger with, and
+# FINALDELAY is hardcoded to 5 in roles/nut_host/templates/host-upsmon.conf.j2. So arming
+# daniel-box (nut_host_secondary_armed, group_vars/all.yml) CANNOT be sequenced after
+# daniel-server by adjusting this value alone — raising it delays both hosts equally.
+#
+# Order of operations if the control-plane node is ever armed: raise this (or parameterise
+# FINALDELAY) FIRST, run the console-attended `upsmon -c fsd` drill, and only then set
+# nut_host_secondary_armed per-host. Left at 120 here deliberately — changing it now would alter
+# a live shutdown path that no drill has exercised.
+nut_onbatt_shutdown_delay: 120
