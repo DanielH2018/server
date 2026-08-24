@@ -80,23 +80,24 @@ the per-volume map and each exclusion's rationale:
   old, each volume on its own weekday (~3/day — B2's 2,500/day transaction caps couldn't
   absorb a batch). Acceptable by design — configs, largely regenerable.
 
-  > **Transitional until roughly 2026-09-13, and worse than the line above reads.** "retain 4"
-  > is the steady state; depth builds one backup per volume per week from the volume's first
-  > shard run. As of 2026-08-16 it is **zero** — no backup in the weekly tier has ever completed
-  > (the tier was created 2026-08-12 and every attempt has failed), so each of these volumes
-  > has exactly one recovery point: the frozen `daily-backup` object it kept from before it
-  > moved tier. Restoring one of them today restores that date, not "up to a week old."
+  > **Still building depth — counted against the cluster 2026-08-24.** "retain 4" is the
+  > steady state; depth builds one backup per volume per week from the volume's first shard
+  > run. The tier is producing: 34 completed backups covering all 21 volumes, oldest
+  > 2026-08-19, newest the same morning this was checked. No volume has reached retain 4 yet —
+  > 9 sit at one recovery point, 11 at two, one at three — so restoring the least-covered
+  > volume still gets you its single shard date rather than "up to a week old."
   >
-  > Those frozen dailies are load-bearing until the weekly tier produces something —
-  > `/usr/local/bin/longhorn-reap-orphan-backups.sh` refuses to touch a volume whose current
-  > tier has produced nothing, for exactly this reason. Do not delete them by hand.
+  > This replaces a note written 2026-08-16 that read "zero — no backup in the weekly tier has
+  > ever completed", and a second one saying B2 was disarmed after the seventh transaction-cap
+  > event and would stay that way. Both were true when written and are not now: B2 re-armed
+  > 2026-08-17 (`k3s_longhorn_backup_armed` in
+  > `ansible/roles/setup/k3s/defaults/main.yml`) and the first shards landed 2026-08-19.
   >
-  > **Paused, not running, as of ~20:45 UTC the same day.** B2 was disarmed hours after this
-  > was written (seventh transaction-cap event) and stays that way on the terms in the
-  > current-state note at the top of
-  > [`longhorn-backup-tiering.md`](longhorn-backup-tiering.md). Depth-building here is stalled
-  > at zero until B2 re-arms; only the four R2-routed daily volumes above are
-  > accruing recovery points.
+  > The frozen `daily-backup` objects that the old note called load-bearing are gone — every
+  > backup on the B2 target postdates the re-arm. The reaper's refusal to touch a volume whose
+  > current tier has produced nothing
+  > (`/usr/local/bin/longhorn-reap-orphan-backups.sh`) no longer has anything to protect here,
+  > because every volume's current tier has now produced something.
 - **No-backup** (16 volumes): rebuilt, not restored. The notable rebuild paths:
   uptime-kuma (recreate the first-run admin by hand; AutoKuma backfills monitors from the
   static-monitors Secret; history is gone), `scrutiny` (TSDB refills from collector runs),

@@ -5,10 +5,12 @@
 > (first green Longhorn-only nightly: 2026-08-13, 10 volumes, 4.5 min) — that ruled out
 > Kopia/Longhorn contention as *the* driver, but not the cap itself: it blew twice more with
 > Longhorn as the only consumer left (sixth event 2026-08-15, a Class-B cap hit mid restore
-> drill; seventh event 2026-08-16 ~20:45 UTC, retry storm measured at 64-192 req/min). B2 is
-> **disarmed as of that seventh event** (`k3s_longhorn_backup_armed: false`) and, per the
-> variable's own comment, staying that way until spend is under the cap or the cap is raised —
-> explicitly not on a re-arm-on-a-timer.
+> drill; seventh event 2026-08-16 ~20:45 UTC, retry storm measured at 64-192 req/min). B2 was
+> disarmed at that seventh event and **re-armed 2026-08-17**
+> (`k3s_longhorn_backup_armed: true`), once the Class C spend had been measured rather than
+> estimated. It was never re-armed on a timer, which was the condition the variable's comment
+> set. Checked against the cluster 2026-08-24: no eighth event, and the weekly tier has
+> produced 34 completed backups across all 21 volumes since 2026-08-19.
 >
 > The retry-storm question left open below (§"Open at 2026-08-08 19:26 UTC" — cap-driven vs.
 > poll-interval-driven) is answered, adversely: commit `89508575` found `pollInterval` was
@@ -23,8 +25,8 @@
 > seven are not written up here. The live incident record is now the comment above
 > `k3s_longhorn_backup_armed` in
 > `ansible/roles/setup/k3s/defaults/main.yml`
-> (around lines 189-213), updated at every arm/disarm. Read this doc for the *monitoring*
-> lessons, which still apply; the remediation steps that say `docker stop kopia` /
+> (the comment block at lines 331-390), updated at every arm/disarm. Read this doc for the
+> *monitoring* lessons, which still apply; the remediation steps that say `docker stop kopia` /
 > `deploy.yml --tags kopia` on daniel-server can no longer be run — that host has no Docker and
 > no kopia (the kopia role is archived). Current backup docs:
 > [`longhorn-backup-tiering.md`](longhorn-backup-tiering.md) and
