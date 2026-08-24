@@ -1,34 +1,43 @@
 # wg-easy — WireGuard VPN server + UI
 
 WireGuard VPN with the wg-easy web admin, for remote access into the homelab.
-**One host-agnostic role serves both daniel-server and daniel-pi** (the old separate
-`wg-easy-pi` role was merged into this one). See repo-root `CLAUDE.md` for shared conventions.
+See repo-root `CLAUDE.md` for shared conventions.
+
+**This role is daniel-pi only.** It served daniel-server as well until the k3s migration
+completed on 2026-08-14, which uninstalled Docker there — a Compose role on that host now
+deploys nothing. The server instance lives in `ansible/roles/k8s/wg-easy/` and runs v15, which
+owns its admin credentials in its own SQLite DB rather than taking a `PASSWORD_HASH`. Every
+server-side claim below is history, kept because the two instances still share one public IP and
+the port split only makes sense read together.
 
 ## At a glance
 - **Image:** `ghcr.io/wg-easy/wg-easy:14@sha256:5f264…` — **pinned to the v14 tag + digest** (the
   bcrypt `PASSWORD_HASH` auth model). The `:14` keeps Renovate tracking the major (so it can offer a
-  v15 bump as a deliberate PR); the digest keeps it immutable within v14.x. NOT `:latest`: v15 drops
-  `PASSWORD_HASH` for an interactive setup wizard, which would silently reopen the server's
-  monitoring-net-exposed admin API.
-- **Hosts:** daniel-server AND daniel-pi
-- **UI port:** 51821 · **URL:** `wg-easy.<domain>` (server, behind Authelia) / `http://<pi-lan-ip>:51821` (Pi)
-- **WireGuard UDP port:** `udp_port` per host — **51820 on daniel-server, 51822 on daniel-pi**
+  v15 bump as a deliberate PR); the digest keeps it immutable within v14.x. The k8s instance has
+  since taken v15 through its setup wizard; this one stays on v14, and a v15 bump here is a manual
+  migration (the wizard is the only import path — see `roles/k8s/wg-easy/defaults/main.yml`), not a
+  redeploy.
+- **Host:** daniel-pi
+- **UI port:** 51821 · **URL:** `http://<pi-lan-ip>:51821`
+- **WireGuard UDP port:** `udp_port` — **51822 here, 51820 on the k8s instance**
   (both sit behind one public IP/router, so the listen ports must differ).
-- **Networks:** monitoring (server) / proxy (Pi)
+- **Networks:** proxy
 - **Depends on:** traefik, authelia (`meta/deps.yml`)
-- **Config in:** each `ansible/inventory/host_vars/<host>.yml` → `containers_list`
+- **Config in:** `ansible/inventory/host_vars/daniel-pi.yml` → `containers_list`
 
 ## Notable
-- **Exposure is host-driven** via `expose.yml.j2` + `expose_mode`: on the server
-  (`expose_mode: traefik`) the UI is routed through Traefik behind Authelia and no host
-  port is published; on the Pi (`expose_mode: lan`) the UI is published bound to the Pi's
-  LAN IP and emits no Traefik labels. The WireGuard UDP port is always published on the host.
-- **Server admin API is now authenticated (2026-07-04).** The server's `containers_list` entry
-  carries `password_hash: "{{ wg_easy_password_hash }}"` (bcrypt, SOPS) → the compose `PASSWORD_HASH`
-  env. This closes the admin UI/API that was otherwise **unauthenticated to every `monitoring`-net
-  neighbor** (Authelia gates only the Traefik ingress, not the in-network `wg-easy:51821` path — a
-  compromised monitoring-net app could mint a WireGuard peer, bypassing Authelia + CrowdSec). The
-  bcrypt `$` is doubled in the template (`| replace('$', '$$')`) so Compose doesn't interpolate it.
+- **Exposure is host-driven** via `expose.yml.j2` + `expose_mode`. The Pi runs `expose_mode: lan`:
+  the UI is published bound to the Pi's LAN IP and emits no Traefik labels. The `traefik` branch
+  (route through Traefik behind Authelia, publish no host port) is what the server used and is
+  unreachable now that this role deploys only to the Pi. The WireGuard UDP port is always published.
+- **HISTORY — the server's bcrypt admin auth (2026-07-04, retired 2026-08-14).** The server entry
+  carried `password_hash: "{{ wg_easy_password_hash }}"` → the compose `PASSWORD_HASH` env, closing
+  an admin UI/API that was otherwise unauthenticated to every `monitoring`-net neighbour. That whole
+  mechanism went with the k8s migration: v15 keeps credentials in its own SQLite DB, so the
+  `wg-easy-env` Secret has no consumer and **`wg_easy_password_hash` was removed from
+  `ansible/vars/secrets.yml` and the rotation registry on 2026-08-24** (review M-7). Do not
+  reintroduce that var name expecting it to exist. The bcrypt-`$`-doubling note below still applies
+  to any `password_hash` set on the **Pi's** entry, which is the live use.
 - **Pi UI is unauthenticated on the trusted LAN (accepted risk, 2026-06-23).** The Pi instance
   has no Authelia (LAN-only host) AND its entry omits `password_hash`, so anyone on the Pi's LAN can
   open `http://<pi-lan-ip>:51821` and mint WireGuard client configs (i.e. VPN access into the
@@ -36,7 +45,8 @@ WireGuard VPN with the wg-easy web admin, for remote access into the homelab.
   see the exposure bullet), so minting a peer needs LAN access. Note the WireGuard *data* port is a
   separate, intentional internet-facing exception (next bullet) — a peer minted here then works from
   anywhere — so gate this UI with a `password_hash` (SOPS) on the Pi's `containers_list` wg-easy entry
-  (exactly like the server's) if transient-LAN access is a concern.
+  if transient-LAN access is a concern. The server entry that once modelled this is gone, and so
+  is the SOPS var it used — add a new key rather than reaching for `wg_easy_password_hash`.
 - **The Pi's WireGuard UDP port is an intentional external backup-access entry point (2026-07-06).**
   It's the fallback way into the homelab when the server's wg-easy is unreachable: connect with a
   `.conf` generated by the Pi's wg-easy (its `WG_HOST=wireguard.<domain>` bakes in the DDNS endpoint,
@@ -78,7 +88,6 @@ WireGuard VPN with the wg-easy web admin, for remote access into the homelab.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`
-- Deploy (server): `uv run ansible-playbook ansible/deploy.yml --tags "wg-easy"`
-- Deploy (Pi, driven from the server): `uv run ansible-playbook ansible/deploy.yml --tags "wg-easy" -e target=daniel-pi`
+- Deploy (Pi, driven from daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "wg-easy" -e target=daniel-pi`
   (`-e target=`, not `--limit` — the play's `hosts:` defaults to the local hostname, so
   `--limit daniel-pi` from the server matches zero hosts)

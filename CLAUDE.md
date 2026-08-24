@@ -457,6 +457,13 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
   the "Secret Rotation" Kuma monitor; due-dates are staggered. After adding a secret, run
   `uv run python scripts/secret_rotation.py sync` and commit. Runbook + the DANGER `pinned`
   procedures (kopia repo password, authelia storage key): `docs/secret-rotation.md`.
+- **`git diff ansible/vars/secrets.yml` prints plaintext credentials.** `.gitattributes:1` sets
+  `diff=sops`, so git decrypts the file before diffing it. The committed blob stays properly
+  encrypted — this is a review-hygiene trap, not a repo defect, and the driver is worth keeping
+  because an encrypted diff is unreadable. But the plaintext lands in the terminal, the scrollback,
+  and any agent transcript that captured the command, so a value exposed that way needs rotating.
+  A reviewer did exactly this during the 2026-08-24 review (L-5). To see WHICH keys changed without
+  their values, diff the names: `git diff ansible/vars/secrets.yml | grep -E '^[-+][a-z_]+:'`.
 - **Never commit plaintext secrets** (private age keys never leave `~/.config/sops/age/keys.txt`;
   `.gitignore` blocks `keys.txt`/`*.agekey`/`*.key` and gitleaks scans every commit)
 - **Onboarding a host to SOPS** (it can't decrypt yet, so `initial_setup.yml`/`deploy.yml`
