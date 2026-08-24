@@ -314,3 +314,21 @@ name = "bash -n (shell syntax check)"
 entry = "bash -c 'for f in \"$@\"; do bash -n \"$f\" || exit 1; done' --"
 language = "system"
 types = ["shell"]
+
+# Prose style for the hand-written docs the ADR set introduced. Google's published style
+# package plus two homelab rules; see .vale.ini for what is in scope and why.
+#
+# `files:` repeats .vale.ini's scope rather than trusting it, and the duplication is
+# deliberate. Vale exits 0 on a file it has no section for, so a hook that passed every
+# Markdown file would read green while checking nothing outside the two configured paths —
+# and would ALSO hand it docs/reference/, whose commits come from the docs-refresh cron.
+#
+# NEVER widen this to docs/reference/. That cron stages those paths and commits with hooks
+# running, so a style error there aborts the commit and alerts on every run until someone
+# fixes the generator.
+[[repos.hooks]]
+id = "vale"
+name = "Prose style (Vale, scoped to ADRs + docs index)"
+entry = "vale"
+language = "system"
+files = "^(docs/adr/.*\\.md|docs/index\\.md)$"

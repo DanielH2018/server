@@ -1,0 +1,13 @@
+extends: existence
+message: "'%s' dates the prose — say what is true, or give an absolute date."
+level: error
+ignorecase: true
+# Deliberately omits `new`, `now`, `latest` and `existing`. All four have legitimate literal
+# uses here — "the new ReplicaSet", "now that the lock is held" — and a rule that fires on
+# those trains people to ignore it.
+tokens:
+  - currently
+  - as of this writing
+  - for now
+  - at present
+  - in the near future

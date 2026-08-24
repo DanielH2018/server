@@ -24,6 +24,14 @@
 # The docs site config. Its build output (site/) needs no rule — the `/*` deny above
 # already covers it, and scripts/build_docs.py builds to a host path outside the repo.
 !/mkdocs.yml
+# Vale's config and the two custom rules. The deny-all above means these are invisible to
+# git without an explicit allow — the same trap mkdocs.yml hit.
+!/.vale.ini
+!/styles
+# ...but not the Google package. `vale sync` downloads it, prek's hook re-syncs it, and it
+# is upstream content with its own release cadence. Pinning a vendored copy here would mean
+# reviewing someone else's style diffs in this repo's history.
+/styles/Google/
 !/.python-version
 !/PLANS.md
 # Track the SOPS-aware diff-driver attribute for secrets.yml. NB: rendering the

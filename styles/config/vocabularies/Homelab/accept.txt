@@ -1,0 +1,96 @@
+# Terms this homelab uses that Vale's dictionary does not carry. A vocabulary is the
+# supported way to teach Vale a domain; the alternative is per-file exceptions, which is how
+# a style gate becomes decorative.
+#
+# Entries are case-insensitive regex. Keep this sorted and add a term only when it is real
+# vocabulary — a genuine typo must still fail.
+
+# Tooling and platforms
+[Aa]nsible
+[Aa]uthelia
+[Cc]loudflare
+CrowdSec
+Grafana
+[Kk]opia
+[Kk]uma
+[Ll]onghorn
+Loki
+MkDocs
+Portainer
+Prometheus
+Renovate
+prek
+SOPS
+Scrutiny
+[Ss]crollback
+[Ss]harded
+Tempo
+TLSStore
+[Tt]raefik
+Vale
+WireGuard
+[Zz]igbee
+
+# Kubernetes and container vocabulary
+ConfigMap
+CRDs
+DaemonSet
+IngressRoute
+Kubernetes
+Kustomize
+NetworkPolicy
+PVC
+[Cc]laimName
+[Hh]ostPath
+[Kk]ubectl
+[Mm]iddleware
+[Mm]iddlewares
+[Nn]amespace
+[Nn]arrowings
+[Nn]etpol
+[Nn]ginx
+[Oo]nboarded
+[Oo]nboarding
+[Rr]eplicaSet
+k3s
+
+# Homelab and operations vocabulary
+[Aa]llowlist
+[Aa]utoheal
+Backblaze
+[Bb]ackfill
+[Bb]ackupstore
+[Cc]rashloop
+[Cc]ron
+[Cc]utover
+[Cc]rons
+[Dd]enylist
+[Dd]enylisted
+[Dd]eployer
+[Ee]mptyDir
+[Ff]rontmatter
+# Capitalisation matters here: Vale.Terms enforces the spelling this file declares, so a
+# lowercase '[Gg]itops' entry would demand every 'GitOps' be downcased. Verified by running
+# the config over docs/reference/, which reported exactly that.
+GitOps
+[Hh]ealthcheck
+[Hh]omelab
+[Ii]ncrementals
+[Ii]node
+[Ll]iveness
+[Ll]int
+[Ll]oopback
+[Pp]laintext
+[Rr]epo
+[Rr]ollout
+[Rr]ollouts
+[Rr]unbook
+[Rr]unbooks
+[Ss]ystemd
+[Tt]oposort
+[Uu]napplied
+[Uu]nprobeable
+[Uu]nexecuted
+[Ww]orktree
+[Ww]orktrees
+[Uu]nsnooze

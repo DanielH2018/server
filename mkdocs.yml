@@ -66,6 +66,24 @@ nav:
       - Scheduled jobs: reference/crons.md
       - Networking: reference/networking.md
       - Topology: reference/topology.md
+  # template.md is deliberately absent — it is a form, not a document. The nav test only
+  # checks docs/*.md, not subdirectories, so leaving it out costs nothing.
+  - Decisions:
+      - Index: adr/index.md
+      - "ADR-0001 MkDocs site with generated reference": adr/0001-mkdocs-site-with-generated-reference.md
+      - "ADR-0002 k3s over Docker Compose": adr/0002-k3s-over-docker-compose-for-the-cluster-nodes.md
+      - "ADR-0003 SOPS with age for secrets": adr/0003-sops-with-age-for-secrets-at-rest.md
+      - "ADR-0004 Authelia as the SSO layer": adr/0004-authelia-is-the-single-sign-on-layer.md
+      - "ADR-0005 Traefik as the edge": adr/0005-traefik-is-the-edge-with-ingressroute-crds.md
+      - "ADR-0006 Longhorn for cluster storage": adr/0006-longhorn-for-cluster-storage.md
+      - "ADR-0007 Backup tiering: R2 daily, B2 weekly": adr/0007-backup-tiering-r2-daily-b2-weekly.md
+      - "ADR-0008 16 MiB Longhorn blocks": adr/0008-16-mib-longhorn-blocks.md
+      - "ADR-0009 NetworkPolicy default-deny": adr/0009-networkpolicy-default-deny-ingress.md
+      - "ADR-0010 Pull-based GitOps over Argo and Flux": adr/0010-pull-based-gitops-over-argo-and-flux.md
+      - "ADR-0011 One lock serialises every deploy path": adr/0011-one-lock-serialises-every-deploy-path.md
+      - "ADR-0012 Zero-downtime rollout gates": adr/0012-zero-downtime-deploys-gate-on-rollout-and-restarts.md
+      - "ADR-0013 daniel-pi stays on Docker": adr/0013-daniel-pi-stays-on-docker.md
+      - "ADR-0014 Kopia retired, Longhorn owns B2": adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md
   - Runbooks:
       - Secret rotation: secret-rotation.md
       - Longhorn disaster recovery: longhorn-disaster-recovery.md

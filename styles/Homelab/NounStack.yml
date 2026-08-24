@@ -1,0 +1,9 @@
+extends: existence
+message: "Noun stack '%s' — rewrite as a phrase with a verb or a preposition."
+# warning, not error. This pattern has false positives, and MinAlertLevel = error means a
+# warning is shown without failing the run — which is the right weight for a rule that
+# points at prose worth rereading rather than prose that is wrong.
+level: warning
+nonword: true
+tokens:
+  - '\b([A-Z]?[a-z]+ ){3,}(state|check|status|target|policy|config|setting|mode)\b'
