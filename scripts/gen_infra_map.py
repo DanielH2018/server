@@ -84,7 +84,7 @@ from infra_map_model import (
     reconcile_k8s,
     services_on_host,
 )
-from infra_map_render import group_services, render_html
+from infra_map_render import group_services, render_html, render_svg
 
 # Re-exported so `gen_infra_map.<name>` keeps working for the cron entry point,
 # the tests, and anything else that treats this module as the public surface.
@@ -121,6 +121,7 @@ __all__ = [
     "reconcile_docker",
     "reconcile_k8s",
     "render_html",
+    "render_svg",
     "resolve_vars",
     "services_on_host",
 ]
@@ -174,6 +175,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--json", action="store_true", help="dump the model as JSON instead"
     )
+    parser.add_argument(
+        "--format",
+        choices=("html", "svg"),
+        default="html",
+        help="output format (default: html, for the standalone artifact page)",
+    )
     args = parser.parse_args(argv)
 
     global_vars, host_vars = load_inventory()
@@ -201,6 +208,17 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
+
+    if args.format == "svg":
+        from docs_provenance import write_if_body_changed
+
+        # The SVG carries no frontmatter, so write_if_body_changed compares the whole
+        # text. That is what is wanted: an unconditional write would make the
+        # docs-refresh cron commit on every run for an identical diagram.
+        wrote = write_if_body_changed(args.output, render_svg(model))
+        print(f"{'Wrote' if wrote else 'Unchanged'} {args.output}")
+        return 0
+
     # Write-then-rename so a reader never sees a half-written page.
     tmp = args.output.with_suffix(".html.tmp")
     tmp.write_text(render_html(model), encoding="utf-8")

@@ -55,6 +55,7 @@ nav:
   - Home: index.md
   - Reference:
       - Services: reference/services.md
+      - Topology: reference/topology.md
   - Runbooks:
       - Secret rotation: secret-rotation.md
       - Longhorn disaster recovery: longhorn-disaster-recovery.md

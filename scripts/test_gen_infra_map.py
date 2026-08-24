@@ -865,3 +865,76 @@ def test_a_services_node_placement_reaches_the_page():
         "nodes": ["daniel-server"],
     }
     assert "daniel-server" in render._service_row(service)
+
+
+# ── standalone SVG (docs/assets/generated/infra-map.svg) ───────────────────────────────
+
+
+def _svg():
+    return g.render_svg(
+        model_for(
+            {
+                "daniel-box": live_ok(
+                    {("homelab", "traefik"): {"ready": 1, "desired": 1, "image": "t:1"}}
+                ),
+                "daniel-pi": live_ok({"sonarr": container()}),
+            }
+        )
+    )
+
+
+def test_svg_is_a_standalone_document():
+    out = _svg()
+    assert out.lstrip().startswith("<svg")
+    assert out.rstrip().endswith("</svg>")
+    assert "<figure" not in out
+    assert "<html" not in out.lower()
+
+
+def test_svg_carries_its_own_styles():
+    """The whole point of the task.
+
+    _diagram_view's colours come from the page-level STYLE block. Embedded in
+    Markdown there is no page, so an SVG without an inline <style> renders as
+    unstyled black boxes -- which looks like a broken diagram, not a missing
+    stylesheet.
+    """
+    out = _svg()
+    assert "<style" in out
+    style_block = out.split("<style")[1].split("</style>")[0]
+    assert ".box" in style_block
+    assert ".edge" in style_block
+
+
+def test_svg_declares_the_xml_namespace():
+    """A bare <svg> works inside HTML; a .svg served on its own is parsed as XML."""
+    assert 'xmlns="http://www.w3.org/2000/svg"' in _svg()
+
+
+def test_svg_declares_a_viewbox():
+    """Without a viewBox an embedded SVG does not scale to its container."""
+    assert 'viewBox="' in _svg()
+
+
+def test_svg_keeps_the_status_tinting():
+    """Live status is the reason this diagram beats a static one."""
+    assert "s-" in _svg(), "no status classes on any node"
+
+
+def test_svg_parses_as_xml():
+    """An SVG that does not parse renders as nothing, with no error anywhere."""
+    import xml.etree.ElementTree as ET
+
+    ET.fromstring(_svg())
+
+
+def test_svg_ends_with_exactly_one_newline():
+    """A file the end-of-file-fixer prek hook rewrites breaks the docs-refresh cron.
+
+    That cron commits generated files with hooks running, so a hook that modifies
+    one aborts the commit on every run until the generator is fixed. Canonical
+    output at the source is what stops that.
+    """
+    out = _svg()
+    assert out.endswith("\n")
+    assert not out.endswith("\n\n")
