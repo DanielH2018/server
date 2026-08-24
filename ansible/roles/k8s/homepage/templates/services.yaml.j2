@@ -173,13 +173,13 @@
               timezone: {{ tz }}
               integrations:
                 - type: ical
-                  url: https://ical-proxy.local.{{ domain }}/calendar1.ics
+                  url: http://ical-proxy.{{ k8s_namespace }}.svc.cluster.local:5000/calendar1.ics
                   name: Daniel
                   color: indigo
                   params:
                       showName: true
                 - type: ical
-                  url: https://ical-proxy.local.{{ domain }}/calendar2.ics
+                  url: http://ical-proxy.{{ k8s_namespace }}.svc.cluster.local:5000/calendar2.ics
                   name: Work
                   color: slate
                   params:
@@ -191,7 +191,7 @@
                   params:
                       showName: true
                 - type: ical
-                  url: https://ical-proxy.local.{{ domain }}/calendar4.ics
+                  url: http://ical-proxy.{{ k8s_namespace }}.svc.cluster.local:5000/calendar4.ics
                   name: Tasks
                   color: emerald
                   params:

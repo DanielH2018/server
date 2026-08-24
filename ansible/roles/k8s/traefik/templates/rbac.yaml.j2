@@ -1,0 +1,161 @@
+{# Traefik's RBAC. DERIVED from the pinned upstream at
+     https://raw.githubusercontent.com/traefik/traefik/v3.7/docs/content/reference/dynamic-configuration/kubernetes-crd-rbac.yml
+   but NO LONGER a verbatim copy. This file was `files/rbac.yaml`, applied as-is, with a header
+   saying to re-sync it from that URL and "change nothing but the binding".
+
+   DECIDED 2026-08-24: split upstream's single ClusterRole into a cluster-scoped role holding
+   only what is genuinely cluster-scoped, plus one namespaced Role per watched namespace.
+   Upstream ships one ClusterRole because it must work for any deployment, including one
+   watching all namespaces. This deployment watches exactly three
+   (static-config.yaml.j2 `providers.kubernetesCRD.namespaces`, `allowCrossNamespace` off), so
+   the cluster-wide grant buys nothing here and costs a great deal.
+
+   WHAT IT COST. `secrets` cluster-wide, `get/list/watch`, bound with a ClusterRoleBinding, on
+   the only internet-facing workload in the fleet — and the pod does not set
+   `automountServiceAccountToken: false`, so the token is on disk in FIVE containers (traefik,
+   the crowdsec-agent and access-log-rotate sidecars, and two init containers). Code execution
+   in any of them read every Secret in the cluster in one call: the Authelia session secret and
+   storage key, the Cloudflare DNS token, CouchDB and Grafana admin, Longhorn's B2 credentials.
+   dynamic.yaml.j2 deliberately moved the CrowdSec LAPI key into a Secret because a Middleware
+   CRD is readable by the read-only kubeconfig — and this grant read that Secret directly.
+
+   WHAT MUST NOT BE "FIXED" HERE. Do NOT set `automountServiceAccountToken: false` on the pod.
+   The kubernetesCRD provider needs that token to reach the API server at all; Traefik is a
+   REQUIRED exception to the estate-wide convention, not a violation of it.
+
+   Do NOT simply delete the `secrets` rule either, which is the obvious-looking fix. Traefik
+   v3.7's CRD client builds a Secrets informer UNCONDITIONALLY, one per watched namespace, and
+   blocks on its cache sync before publishing any dynamic configuration — nothing in that path
+   is conditional on an IngressRoute or Middleware actually referencing a Secret. Remove the
+   grant and the LIST is Forbidden, the cache never syncs, and Traefik serves ZERO routes while
+   FAILING GREEN: the probes hit /ping from the static config, so the pod stays 1/1 Ready and
+   `probe.py health traefik` exits 0 while every hostname 404s. `resourceNames` is not an escape
+   hatch either — the authorizer applies it only to requests naming a single object, so it
+   cannot authorize an informer's LIST at all.
+
+   WHY THIS SPLIT IS THE SAFE SHAPE, checked against the v3.7 source rather than inferred:
+   `pkg/provider/kubernetes/crd/client.go` builds exactly ONE cluster-scoped informer —
+   `clusterScopeFactory ... Core().V1().Nodes()` — and everything else per-namespace:
+   the traefik.io CRDs, then Services + EndpointSlices + ConfigMaps, then Secrets in their own
+   factory. So Nodes is the only rule that genuinely needs cluster scope.
+
+   Blast-radius REDUCTION, not elimination: Traefik still reads every Secret in the three
+   watched namespaces, which includes `authelia-config` and Longhorn's B2 credentials. What it
+   loses is kube-system and every other namespace.
+
+   Re-syncing from upstream is no longer a copy-paste. Take upstream's rule list, then place
+   each rule by scope using the factory layout above. #}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: traefik-ingress-controller
+rules:
+  # The ONLY genuinely cluster-scoped read: clusterScopeFactory's Nodes informer, used to
+  # resolve node addresses for NodePort/ExternalName resolution.
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - get
+      - list
+      - watch
+  # IngressClasses are cluster-scoped objects. The kubernetesIngress provider is NOT enabled
+  # here (kubernetesCRD only), so nothing reads them today — kept so that enabling that
+  # provider later does not fail on a missing cluster-scoped grant, which would be hard to
+  # diagnose given the fail-green mode described above.
+  - apiGroups:
+      - extensions
+      - networking.k8s.io
+    resources:
+      - ingressclasses
+    verbs:
+      - get
+      - list
+      - watch
+{% for ns in [k8s_namespace, k8s_observability_namespace, k8s_longhorn_namespace] %}
+---
+# Namespaced half, one per watched namespace. This list MUST stay in step with
+# static-config.yaml.j2's `providers.kubernetesCRD.namespaces`: a namespace Traefik watches but
+# has no Role in cannot sync its informers, and the failure mode is the silent one above.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: traefik-ingress-controller
+  namespace: {{ ns }}
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - services
+      - secrets
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+  # Injects k8s.pod.uid / k8s.pod.name OTel attributes. A direct GET, not an informer.
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+  - apiGroups:
+      - discovery.k8s.io
+    resources:
+      - endpointslices
+    verbs:
+      - get
+      - list
+      - watch
+  # Unused while only kubernetesCRD is enabled; kept for the same reason as ingressclasses.
+  - apiGroups:
+      - extensions
+      - networking.k8s.io
+    resources:
+      - ingresses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - extensions
+      - networking.k8s.io
+    resources:
+      - ingresses/status
+    verbs:
+      - update
+  - apiGroups:
+      - traefik.io
+    resources:
+      - middlewares
+      - middlewaretcps
+      - ingressroutes
+      - traefikservices
+      - ingressroutetcps
+      - ingressrouteudps
+      - tlsoptions
+      - tlsstores
+      - serverstransports
+      - serverstransporttcps
+    verbs:
+      - get
+      - list
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: traefik-ingress-controller
+  namespace: {{ ns }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: traefik-ingress-controller
+subjects:
+  - kind: ServiceAccount
+    name: traefik-ingress-controller
+    namespace: {{ k8s_namespace }}
+{% endfor %}
