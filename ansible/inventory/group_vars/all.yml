@@ -208,6 +208,21 @@ k8s_default_limitrange:
 k3s_audit_log_enabled: true
 k3s_audit_log_dir: /var/lib/rancher/k3s/server/logs
 k3s_audit_log_path: "{{ k3s_audit_log_dir }}/audit.log"
+# Embedded etcd's metrics endpoint. Here, not in roles/setup/k3s/defaults, for the same reason
+# as the audit log above: TWO roles read it. setup/k3s puts --etcd-expose-metrics in the server
+# args, and claude-otel's prometheus.yaml.j2 gates its `etcd` scrape job on the same value, so
+# the port and its only consumer cannot drift apart.
+#
+# k3s serves etcd metrics on 2381 either way. The flag moves the bind from 127.0.0.1 to
+# 0.0.0.0, which is the whole point: Prometheus scrapes from the pod network and a
+# loopback-bound port is unreachable from there. Plain HTTP, no auth, by k3s's design — the
+# same posture as the kubelet's :10250, which also binds all interfaces and is protected by the
+# host's default-deny UFW policy rather than by transport auth. The endpoint exposes counters
+# and latencies, never key material or object data.
+#
+# Arming it needs a k3s-bringup.yml run: the installer rewrites the unit and RESTARTS k3s. The
+# API server is briefly unavailable; running workloads keep running.
+k3s_etcd_expose_metrics: false
 # How long the play holds after every `rollout status` returns before declaring the deploy
 # healthy (post_tasks/k8s_stabilise_gate.yml). `rollout status` returns on Available, which
 # READINESS alone satisfies, so a container killed by a failing LIVENESS probe reports a

@@ -303,6 +303,88 @@ data:
         relabel_configs:
           - action: labelmap
             regex: __meta_kubernetes_node_label_(.+)
+      # The kubelet's OWN metrics, distinct from the cadvisor job above. cadvisor answers "what
+      # is each container doing"; these answer "is the kubelet itself healthy" — pod start
+      # duration, PLEG relist latency, eviction counts, volume mount failures. A node that is
+      # slow to start pods or is quietly evicting them reads as a perfectly Ready node until
+      # one of these series is available to look at.
+      #
+      # Same host, same auth, same RBAC as cadvisor: the kubelet authorizer maps /metrics and
+      # /metrics/resource onto `nodes/metrics` exactly as it maps /metrics/cadvisor, so this
+      # needs no new grant. insecure_skip_verify is on for the reason stated above.
+      - job_name: kubernetes-kubelet
+        scheme: https
+        metrics_path: /metrics
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+      # Per-pod CPU/memory straight from the kubelet's summary API rather than from cadvisor's
+      # cgroup walk. Cheaper and lower-cardinality than the cadvisor series, and it is what
+      # `kubectl top` reads — so a dashboard built on it agrees with the CLI, where one built
+      # on cadvisor's container_memory_working_set_bytes does not always.
+      - job_name: kubernetes-kubelet-resource
+        scheme: https
+        metrics_path: /metrics/resource
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+      # The API server's own metrics — request latency by verb and resource, error rates,
+      # in-flight request saturation, and the etcd request duration the apiserver observes from
+      # its side. This is the layer between "a pod is unhealthy" and "the cluster is unhealthy",
+      # and nothing else in this config can see it.
+      #
+      # RBAC note, and the trap: /metrics on the API SERVER is a non-resource URL, so the
+      # `nodes/metrics` grant that covers the three kubelet jobs above does NOT cover this one.
+      # It needs the explicit `nonResourceURLs` rule added to the ClusterRole below. Without it
+      # the scrape 403s while every other job stays green — a partial failure that reads as a
+      # working config until you look at the target list.
+      #
+      # No insecure_skip_verify here: unlike the kubelet, the API server's serving cert carries
+      # a SAN for kubernetes.default.svc, so the in-cluster CA validates it properly.
+      - job_name: kubernetes-apiserver
+        scheme: https
+        metrics_path: /metrics
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        static_configs:
+          - targets: ['kubernetes.default.svc:443']
+{% if k3s_etcd_expose_metrics | default(false) %}
+      # Embedded etcd, the single existential risk on a one-server control plane: db size
+      # against its quota, fsync/commit latency, leader changes, and proposal failures. None of
+      # it is visible anywhere else, and the failure it warns about is the one the restore
+      # runbook exists for.
+      #
+      # GATED, because the target does not exist until k3s is restarted with
+      # --etcd-expose-metrics. k3s serves this on 2381 either way; the flag only moves the bind
+      # from 127.0.0.1 to 0.0.0.0, which is what puts it in reach of a pod-network scrape. Plain
+      # HTTP and no auth by k3s's design — the port is protected the same way :10250 is, by the
+      # host's default-deny UFW policy, and it carries no cluster data, only counters.
+      #
+      # ONE switch drives both halves — `k3s_etcd_expose_metrics` in group_vars/all.yml gates
+      # this job and the k3s flag alike, so they cannot drift into "port open, nobody scraping"
+      # or "job armed, port closed". They still land in two runs: flip the var, run
+      # k3s-bringup.yml to rewrite the unit and restart k3s, THEN deploy claude-otel. Deploying
+      # this first only means the target reads down until the bringup run catches up.
+      - job_name: etcd
+        scrape_interval: 30s
+        static_configs:
+          - targets: ['{{ server_ip }}:2381']
+            labels:
+              instance_role: control-plane
+{% endif %}
 ---
 # Prometheus authenticates to the API server as itself for the kubernetes_sd_configs discovery
 # above (enumerating nodes for scrape targets), and its bearer token is presented to each
@@ -323,6 +405,12 @@ rules:
   - apiGroups: [""]
     resources: [nodes, nodes/metrics, services, endpoints, pods]
     verbs: [get, list, watch]
+  # The API server's /metrics is a NON-RESOURCE URL — it is not a `resources:` entry and the
+  # `nodes/metrics` grant above does not reach it. Without this rule the kubernetes-apiserver
+  # job 403s on every scrape while the three kubelet jobs stay green, so the config reads as
+  # working. `get` on this one path only: it grants no read of any object.
+  - nonResourceURLs: ["/metrics"]
+    verbs: [get]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
