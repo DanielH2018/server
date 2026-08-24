@@ -65,6 +65,7 @@ nav:
       - Secrets: reference/secrets.md
       - Scheduled jobs: reference/crons.md
       - Networking: reference/networking.md
+      - Scripts: reference/scripts.md
       - Topology: reference/topology.md
   # template.md is deliberately absent — it is a form, not a document. The nav test only
   # checks docs/*.md, not subdirectories, so leaving it out costs nothing.
