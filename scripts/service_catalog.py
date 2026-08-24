@@ -394,6 +394,68 @@ def _count_unknown(rows: list[ServiceRow], field: str) -> int:
     return sum(1 for r in rows if getattr(r, field).startswith(UNKNOWN))
 
 
+def _md_cell(value: str) -> str:
+    """A table cell that cannot split its own row.
+
+    A literal pipe in a value adds a column silently — the table still renders, just
+    wrong, which is worse than failing. route and backup_tier are derived from template
+    text, so nothing stops one appearing.
+    """
+    return value.replace("|", "\\|")
+
+
+def render_markdown(rows: list[ServiceRow]) -> str:
+    """The service catalogue as a MkDocs page, grouped by host.
+
+    A sibling of render_html over the same rows, not a second derivation: build_rows()
+    stays the only place that reads the tree.
+
+    Ordering is by host then name rather than by input order. An unstable page would
+    make the docs-refresh cron commit on every run.
+    """
+    from docs_provenance import generated_banner
+
+    hosts = sorted({r.host for r in rows})
+    parts = [generated_banner("scripts/service_catalog.py")]
+    parts.append("# Services\n")
+    parts.append(f"{len(rows)} service(s) declared across {len(hosts)} host(s).\n")
+
+    header = "| Service | Platform | Route | Auth | Backup tier | Auto-deploy |"
+    divider = "|---|---|---|---|---|---|"
+
+    for host in hosts:
+        host_rows = sorted((r for r in rows if r.host == host), key=lambda r: r.name)
+        parts.append(f"\n## {host}\n")
+        parts.append(f"{len(host_rows)} service(s).\n")
+        parts.append(header)
+        parts.append(divider)
+        for row in host_rows:
+            cells = (
+                row.name,
+                row.platform,
+                row.route,
+                row.auth_tier,
+                row.backup_tier,
+                row.autodeploy,
+            )
+            parts.append("| " + " | ".join(_md_cell(c) for c in cells) + " |")
+
+    unknowns = sum(
+        _count_unknown(rows, field)
+        for field in ("route", "auth_tier", "backup_tier", "autodeploy")
+    )
+    parts.append(
+        f"\n## Underivable facts\n\n{unknowns} field(s) read `{UNKNOWN}`. "
+        "A fact with no machine-readable source prints its reason rather than a guess — "
+        "see the FIELD NOTES section of `scripts/service_catalog.py` for which facts "
+        "those are and why.\n"
+    )
+    # rstrip before the final newline: the parts already end in one, and a file ending
+    # "\n\n" is rewritten by the end-of-file-fixer hook. A generated file a hook keeps
+    # rewriting would fail the docs-refresh cron's commit on every run.
+    return "\n".join(parts).rstrip("\n") + "\n"
+
+
 def render_html(rows: list[ServiceRow]) -> str:
     hosts = sorted({r.host for r in rows})
     total = len(rows)
@@ -451,7 +513,13 @@ repo alone; see scripts/service_catalog.py's FIELD NOTES for why.</p>
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--out", type=Path, required=True, help="output HTML file path")
+    parser.add_argument("--out", type=Path, required=True, help="output file path")
+    parser.add_argument(
+        "--format",
+        choices=("html", "markdown"),
+        default="html",
+        help="output format (default: html, for the standalone artifact page)",
+    )
     parser.add_argument(
         "--host-vars",
         type=Path,
@@ -476,6 +544,21 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     rows = build_rows(args.host_vars, args.k8s_roles, args.k3s_defaults, args.all_vars)
+
+    if args.format == "markdown":
+        from docs_provenance import write_if_body_changed
+
+        # Not write_text: the banner's timestamp moves on every run, so an
+        # unconditional write would make the docs-refresh cron commit on every run
+        # for no content change.
+        wrote = write_if_body_changed(args.out, render_markdown(rows))
+        state = "wrote" if wrote else "unchanged"
+        print(f"service_catalog: {len(rows)} service(s), {state} {args.out}")
+        return 0
+
+    # The HTML path targets ~/.claude/artifacts/, which is not committed and has no
+    # diff to protect, so it stays an unconditional write.
+    args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(render_html(rows))
     print(f"service_catalog: wrote {len(rows)} service(s) to {args.out}")
     return 0

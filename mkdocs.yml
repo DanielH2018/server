@@ -53,6 +53,8 @@ plugins:
 # existing.
 nav:
   - Home: index.md
+  - Reference:
+      - Services: reference/services.md
   - Runbooks:
       - Secret rotation: secret-rotation.md
       - Longhorn disaster recovery: longhorn-disaster-recovery.md
