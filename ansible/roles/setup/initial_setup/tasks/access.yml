@@ -22,20 +22,30 @@
   # drop-in pins the bits we care about: no surprise reboots (the weekly "Weekly
   # system restart" cron owns reboots) and cleanup of obsolete kernels/deps.
   #
-  # Allowed-Origins uses the `::` APPEND syntax, never a `{ ... }` block. Both forms in fact
-  # append rather than replace (measured on daniel-box 2026-08-24 with `apt-config -c`), but
-  # the block form READS like a replacement — and a replacement here would silently drop the
-  # -security and ESM pockets, i.e. delete the whole protection while looking like it added
-  # to it. `apt-config dump Unattended-Upgrade::Allowed-Origins` must list -security after
-  # any change to this task.
+  # Extra origins go in Origins-Pattern, not Allowed-Origins, and use the `::` APPEND syntax
+  # rather than a `{ ... }` block. Two separate traps:
+  #
+  # 1. Allowed-Origins is the legacy `origin:archive` form, and unattended-upgrade rewrites
+  #    each entry to `o=X,a=Y` — so it can only match a repo publishing a `Suite:` field.
+  #    Origins-Pattern takes `key=value` pairs and can match on `codename`, `label` or `site`
+  #    instead. The GitHub CLI repo has no Suite (origin='gh', archive='', codename='stable',
+  #    measured via python-apt on daniel-box 2026-08-24), so `gh:stable` in Allowed-Origins
+  #    matched nothing while reading as configured.
+  # 2. A `{ ... }` block READS like a replacement. Both forms in fact append (measured with
+  #    `apt-config -c`), but a replacement here would silently drop the -security and ESM
+  #    pockets — deleting the whole protection while looking like it added to it.
+  #
+  # After any change to this task, verify with `apt-config dump` that BOTH
+  # `Unattended-Upgrade::Allowed-Origins` still lists -security and
+  # `Unattended-Upgrade::Origins-Pattern` lists the extras.
   ansible.builtin.copy:
     dest: /etc/apt/apt.conf.d/52unattended-upgrades-local
     content: |
       Unattended-Upgrade::Automatic-Reboot "false";
       Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
       Unattended-Upgrade::Remove-New-Unused-Dependencies "true";
-      {% for origin in unattended_upgrades_extra_origins %}
-      Unattended-Upgrade::Allowed-Origins:: "{{ origin }}";
+      {% for pattern in unattended_upgrades_origins_patterns %}
+      Unattended-Upgrade::Origins-Pattern:: "{{ pattern }}";
       {% endfor %}
     owner: root
     group: root
