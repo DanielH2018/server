@@ -35,10 +35,6 @@
 # which remains acceptable for the same reason as before: every byte it commits was
 # produced by a generator whose output is itself tested.
 #
-# NB secret-rotate.sh:75 still writes directly to master and therefore has the same bug.
-# It is not fixed here: it rotates live credentials, so its failure mode and its remedy
-# are different, and it deserves its own change.
-#
 # ONE OPEN PR AT A TIME. After opening one this script resets master back to origin, so
 # the next run regenerates the same diff and would open a duplicate. It checks for an
 # already-open PR first and exits instead.
