@@ -20,6 +20,7 @@ import sys
 
 import probe
 import probe_core as core
+import probe_arr
 import probe_ha as probe_ha
 
 TIMEOUT = 10
@@ -152,7 +153,9 @@ def check_arr_key(app):
     key, err = secret(f"{app}_api_key")
     if not key:
         return FAIL, err
-    status, _ = get(probe.arr_url(ip, app, "system/status"), probe.arr_curl_config(key))
+    status, _ = get(
+        probe_arr.arr_url(ip, app, "system/status"), probe_arr.arr_curl_config(key)
+    )
     if status == 200:
         return OK, f"{app}_api_key authenticates"
     return FAIL, f"HTTP {status} — {app}_api_key doesn't match the app's own key"

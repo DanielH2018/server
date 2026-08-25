@@ -7,6 +7,7 @@ Run: uv run pytest scripts/docs/test_gen_reference_scripts.py
 
 from __future__ import annotations
 
+import re
 import textwrap
 from pathlib import Path
 
@@ -361,10 +362,19 @@ def test_no_script_is_credited_to_another_scripts_own_test():
 
 
 def test_an_import_counts_even_from_another_scripts_test():
-    """The reject above is about path mentions; an import is real exercise."""
+    """The reject above is about path mentions; an import is real exercise.
+
+    Asserted on the MECHANISM and on the credited file really importing the module, not on
+    which filename wins. Several tests import `probe_core`, so pinning one name made this
+    fail the moment probe.py was split and a different importer sorted first -- a rename in
+    the suite is not a regression in the classifier.
+    """
     rows = {r["name"]: r for r in g.build_rows()}
-    assert rows["probe_core.py"]["indirect_tests"] == "test_probe.py"
+    credited = rows["probe_core.py"]["indirect_tests"]
     assert rows["probe_core.py"]["indirect_via"] == "import"
+    assert credited.startswith("test_")
+    hit = next(p for p in (g.SCRIPTS / "diagnostics").glob(credited))
+    assert re.search(r"^\s*import probe_core\b", hit.read_text(), re.MULTILINE)
 
 
 def test_deploy_sh_is_credited_to_the_test_that_reads_it():
