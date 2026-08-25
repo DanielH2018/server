@@ -8,6 +8,7 @@ Run: uv run pytest scripts/test_gen_reference_scripts.py
 from __future__ import annotations
 
 import textwrap
+from pathlib import Path
 
 import gen_reference_scripts as g
 
@@ -337,15 +338,36 @@ def test_a_test_that_merely_says_the_word_is_not_coverage(tmp_path):
     assert rows["deploy.sh"]["indirect_tests"] == ""
 
 
-def test_this_generators_own_test_does_not_launder_coverage():
-    """It names every script in the tree, so a substring match credits all of them."""
+def test_no_script_is_credited_to_another_scripts_own_test():
+    """A path inside `test_<other>.py` is that test talking about this script, not testing it.
+
+    Caught twice: this generator's own test names every script in the tree, and
+    `test_deploy_detach_notify.py`'s first line names `scripts/deploy.sh`, which credited
+    15 KB of shell that runs on every deploy to a test of the notifier. Asserted as a class
+    rather than by name, so the next instance fails here instead of being noticed.
+    """
+    rows = g.build_rows()
+    stems = {Path(r["name"]).stem for r in rows}
+    laundered = {
+        r["name"]: r["indirect_tests"]
+        for r in rows
+        if r["indirect_via"] == "path"
+        and Path(r["indirect_tests"][len("test_") :]).stem in stems
+    }
+    assert laundered == {}
+
+
+def test_an_import_counts_even_from_another_scripts_test():
+    """The reject above is about path mentions; an import is real exercise."""
     rows = {r["name"]: r for r in g.build_rows()}
-    credited = [
-        name
-        for name, row in rows.items()
-        if row["indirect_tests"] == "test_gen_reference_scripts.py"
-    ]
-    assert credited == []
+    assert rows["probe_core.py"]["indirect_tests"] == "test_probe.py"
+    assert rows["probe_core.py"]["indirect_via"] == "import"
+
+
+def test_deploy_sh_is_credited_to_the_test_that_reads_it():
+    """Not to `test_deploy_detach_notify.py`, whose first line merely names the path."""
+    rows = {r["name"]: r for r in g.build_rows()}
+    assert rows["deploy.sh"]["indirect_tests"] == "test_deploy_annotations.py"
 
 
 def test_markdown_splits_the_scripts_by_how_they_run(tmp_path):

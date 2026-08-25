@@ -389,7 +389,7 @@ def _test_files(repo: Path, scripts: Path) -> list[Path]:
     )
 
 
-def _indirect_test(name: str, test_files: list[Path]) -> str:
+def _indirect_test(name: str, test_files: list[Path], scripts: Path) -> tuple[str, str]:
     """The test that names this script but is not called `test_<name>.py`.
 
     `gitops_tick.sh` has five tests, in `ansible/tests/test_gitops_manual_trigger.py`, and
@@ -397,20 +397,39 @@ def _indirect_test(name: str, test_files: list[Path]) -> str:
     list. A module with no test file of its own is likewise often reached through the entry
     point that imports it.
 
-    It must import the module or name the path. Matching the bare stem credited `deploy.sh`
-    to a test that says the word "deploy", and credited three scripts to THIS generator's
-    own test, which names every script in the tree by construction — coverage laundered out
-    of a substring.
+    The two mechanisms are not equally trustworthy, so they are not treated alike.
+
+    An import is real exercise, and is credited wherever it appears. A path string is only a
+    mention, and a mention inside `test_<other script>.py` is that other script's test
+    talking about this one — `test_deploy_detach_notify.py` opens "the `scripts/deploy.sh`
+    --detach completion notifier", which credited 15 KB of shell that runs on every deploy to
+    a test of the notifier. Matching the bare stem credited `deploy.sh` to a test that merely
+    says "deploy", and credited three scripts to THIS generator's own test, which names every
+    script in the tree by construction.
     """
     stem = re.escape(Path(name).stem)
-    patterns = [re.compile(rf"scripts/{re.escape(name)}")]
-    if name.endswith(".py"):
-        patterns.append(re.compile(rf"^\s*(?:from|import)\s+{stem}\b", re.MULTILINE))
+    path_re = re.compile(rf"scripts/{re.escape(name)}")
+    import_re = (
+        re.compile(rf"^\s*(?:from|import)\s+{stem}\b", re.MULTILINE)
+        if name.endswith(".py")
+        else None
+    )
     for path in test_files:
         text = _read(path)
-        if any(pattern.search(text) for pattern in patterns):
-            return path.name
-    return ""
+        if import_re and import_re.search(text):
+            return path.name, "import"
+    for path in test_files:
+        if path_re.search(_read(path)) and not _is_another_scripts_test(path, scripts):
+            return path.name, "path"
+    return "", ""
+
+
+def _is_another_scripts_test(test: Path, scripts: Path) -> bool:
+    """Is this test named after some script in `scripts/`, rather than about the tree?"""
+    subject = test.name[len("test_") :]
+    return any(
+        _is_candidate(scripts / f"{Path(subject).stem}{suffix}") for suffix in _SUFFIXES
+    )
 
 
 def _is_candidate(path: Path) -> bool:
@@ -451,9 +470,10 @@ def build_rows(scripts: Path = SCRIPTS, repo: Path = REPO) -> list[dict[str, str
 
         direct = scripts / f"test_{path.stem}.py"
         if direct.is_file():
-            test, indirect = direct.name, ""
+            test, indirect, via = direct.name, "", ""
         else:
-            test, indirect = "", _indirect_test(path.name, test_files)
+            test = ""
+            indirect, via = _indirect_test(path.name, test_files, scripts)
         run, evidence = verdicts.get(
             path.name, ("adhoc", "no automated caller in the tree")
         )
@@ -464,6 +484,7 @@ def build_rows(scripts: Path = SCRIPTS, repo: Path = REPO) -> list[dict[str, str
                 "usage": usage,
                 "tests": test,
                 "indirect_tests": indirect,
+                "indirect_via": via,
                 "run": run,
                 "evidence": evidence,
             }

@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/gen_reference_scripts.py
-generated_at: 2026-08-25 14:02 UTC
-generated_sha: 445b3993
+generated_at: 2026-08-25 14:18 UTC
+generated_sha: a3e697ae
 ---
 
 !!! warning "Generated file — do not edit"
@@ -86,7 +86,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | Script | What it does | Reached by | Tests |
 |---|---|---|---|
 | `b2_drain.py` | Delete a stranded Longhorn backup prefix directly through the B2 API. | playbook: ansible/drain_backup_prefix.yml | `test_b2_drain.py` |
-| `deploy.sh` | Run an interactive Ansible deploy under the same lock the automated deployers take. | no automated caller in the tree | `test_deploy_detach_notify.py` *(indirect)* |
+| `deploy.sh` | Run an interactive Ansible deploy under the same lock the automated deployers take. | no automated caller in the tree | `test_deploy_annotations.py` *(indirect)* |
 | `dns_witness.py` | Continuously resolve a name against the Pi-hole DNS VIP and record every gap. | no automated caller in the tree | `test_dns_witness.py` |
 | `drain_stranded.sh` | Drain stranded Longhorn backup prefixes from B2. | no automated caller in the tree | — |
 | `etcd_restore_drill.sh` | prove an off-box etcd snapshot actually restores, without an outage. | no automated caller in the tree | — |
