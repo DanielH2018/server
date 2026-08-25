@@ -50,7 +50,9 @@ ROLES = ANSIBLE / "roles" / "containers"
 
 def build_env(role: str) -> Environment:
     env = make_env([ROLES / role / "templates", SHARED_TPL])
-    env.filters["hash"] = _ansible_hash  # used by healthcheck.yml.j2's interval jitter
+    # Used by the jittered healthcheck interval inlined in roles/containers/dozzle. It came
+    # from a shared healthcheck.yml.j2 macro that no longer exists; the filter is still needed.
+    env.filters["hash"] = _ansible_hash
     return env
 
 

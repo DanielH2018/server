@@ -79,10 +79,14 @@ Docker at all, so a Compose role there deploys nothing.
 1. Create `ansible/roles/containers/<name>/tasks/main.yml`
 2. Add a `docker-compose.yml.j2` template in `ansible/roles/containers/<name>/templates/`.
    Use the shared macros in `ansible/templates/` rather than hand-rolling boilerplate:
-   `traefik.yml.j2` (`labels`), `autokuma.yml.j2` (`kuma`), `healthcheck.yml.j2`
-   (`healthcheck`), `networks.yml.j2` (`service_networks()` / `external_networks()` —
-   the per-service and top-level `networks:` blocks), and `resources.yml.j2`
+   `traefik.yml.j2` (`labels`), `autokuma.yml.j2` (`kuma`), `networks.yml.j2`
+   (`service_networks()` / `external_networks()` — the per-service and top-level
+   `networks:` blocks), and `resources.yml.j2`
    (`resources(cpu_limit, mem_limit, cpu_res, mem_res)` — the `deploy.resources` caps).
+   There is **no shared healthcheck macro** — it was deleted and its jittered-interval body
+   inlined into the one compose file that still uses it (`roles/containers/dozzle/`). Write
+   the `healthcheck:` block directly. (`ansible/tests/test_documented_macros_exist.py`
+   ENFORCES that every macro named here still exists.)
    The `/new-container` skill has the canonical skeleton.
 3. Add the service to `containers_list` in `ansible/inventory/host_vars/daniel-pi.yml`
    (`name`, `port` if web-facing, `use_authelia`, `networks`). Deploy tags derive from
@@ -217,7 +221,7 @@ refuses outright — and then say which command and why.
 
    This is a gate, not politeness. PR CI is scoped to changed files, so whole-tree tests can
    only fail after merge. A **pending** master CI also blocks the fast-forward itself —
-   `next_action` returns `ci_pending` *before* the `--ff-only` merge (`deploy_logic.py:301`), so
+   `next_action` returns `ci_pending` *before* the `--ff-only` merge (`deploy_logic.py:345`, in `next_action`), so
    a tick fired seconds after the merge pulls nothing and every later step reads as stale.
 3. **Pull with `./scripts/gitops_tick.sh`, never a hand `git pull`.** The tick fetches,
    CI-gates, `--ff-only` merges, deploys what is eligible, health-gates it and rolls back on
@@ -232,7 +236,7 @@ refuses outright — and then say which command and why.
    `_BROAD_SETUP_PREFIXES` or `_BROAD_DEPLOY_PREFIXES` path — `ansible/roles/setup/`,
    `ansible/inventory/`, `ansible/templates/`, `ansible.cfg`, the bring-up playbooks) makes the
    deployer defer-and-alert and **return without fast-forwarding at all**
-   (`gitops_deploy.py:933`). Your docs-only commit then never lands locally either, and the
+   (`gitops_deploy.py:1017`, the `cs.broad` arm of `main`). Your docs-only commit then never lands locally either, and the
    symptom is a tick that exits 0, logs nothing, and writes `behind_since`. Diagnose it by
    diffing the range — `git diff --name-only <local-HEAD>..origin/master` — and read the
    Discord alert, which names the playbook to run. Clearing it means running that playbook and

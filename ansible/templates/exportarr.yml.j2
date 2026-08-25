@@ -70,5 +70,14 @@
               cpu: 5m
               memory: 24Mi
             limits:
+              # Without an explicit cpu limit the namespace LimitRange default applies, and
+              # that default is `cpu: "2"` (group_vars/all.yml) -- 400x this container's own
+              # request, on the fleet's only container that was inheriting it.
+              #
+              # 100m is sized against observed usage, not against the request: measured
+              # 2026-08-25 over 30m, all three sidecars sat at ~0.0002 cores (0.2 millicores),
+              # so this is ~500x steady state. A cap set nearer the 5m request would throttle
+              # a scrape and turn a resource fix into a metrics gap.
+              cpu: 100m
               memory: 64Mi
 {%- endmacro %}

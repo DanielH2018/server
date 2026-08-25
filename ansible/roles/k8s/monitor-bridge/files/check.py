@@ -386,7 +386,7 @@ PROM_ORIGIN = _env(
 # targets_verdict.
 # CORRECTED 2026-08-24: this said "exactly two origin="daniel-server" jobs: node, cadvisor". It
 # is ONE — `node`. Only the node job is relabelled with `origin`
-# (claude-otel/templates/prometheus.yaml.j2:159); the cadvisor job never was, which is the whole
+# (claude-otel/templates/prometheus.yaml.j2:202, the `node` job); the cadvisor job never was, which is the whole
 # mechanism behind the blind restarts/oom/cpu checks fixed the same day. A reviewer checking that
 # finding against this comment would have cleared it, so the stale half is corrected here rather
 # than left to be re-derived.
@@ -420,7 +420,7 @@ def cadvisor_sel(*matchers):
     """A `{...}` block for cAdvisor series, which carry NO origin label — so no origin pin.
 
     DECIDED: cAdvisor metrics must NOT go through origin_sel(). `origin` is applied by exactly
-    one relabel rule, on the `node` job (claude-otel/templates/prometheus.yaml.j2:159); the
+    one relabel rule, on the `node` job (claude-otel/templates/prometheus.yaml.j2:202); the
     kubernetes-cadvisor job has none. PromQL does not match an absent label, so an origin-pinned
     cAdvisor query selects the empty vector and every check built on it reports green forever.
 
@@ -619,8 +619,15 @@ UPS_CONSECUTIVE = int(_env("UPS_CONSECUTIVE", "2"))
 #   break (docker-proxy down, the docker relabel block regressing) silences every container
 #   log while the file-tail streams keep flowing; a tight window catches a total promtail
 #   death fast. Reached at loki:3100 over `monitoring`.
+#   arm 3 (the Pi): both arms above are CLUSTER streams. daniel-pi runs its own promtail,
+#   stamping `job="pi"` — the label LOG_ERROR_SELECTOR already knows about. Nothing counted
+#   it, so the Pi's promtail could die with every cluster stream still flowing and both arms
+#   green: the Pi's logs simply stop arriving and no monitor says so (2026-08-25 review M-11).
+#   The window is the tolerant one, and for a stronger reason than arm 1's: the Pi is a
+#   Zero 2 W running five LAN-only containers, so its log volume is genuinely low and bursty.
 LOKI_STREAM = _env("LOKI_STREAM", '{job=~"authlog|syslog|traefik"}')
 LOKI_DOCKER_STREAM = _env("LOKI_DOCKER_STREAM", '{container=~".+"}')
+LOKI_PI_STREAM = _env("LOKI_PI_STREAM", '{job="pi"}')
 LOKI_WINDOW = _env("LOKI_WINDOW", "30m")
 LOKI_FILETAIL_WINDOW = _env("LOKI_FILETAIL_WINDOW", "3h")
 
@@ -1895,7 +1902,14 @@ def check_loki_ingestion():
     )
     if not ok_docker:
         return False, "container log stream silent — " + msg_docker
-    return True, "%s (+ container stream)" % msg_all
+    # Arm 3: the Pi ships its own logs and neither arm above counts them, so its promtail
+    # dying is invisible while the cluster keeps talking.
+    ok_pi, msg_pi = loki_ingestion_fresh(
+        loki_count(LOKI_PI_STREAM, LOKI_FILETAIL_WINDOW), LOKI_FILETAIL_WINDOW
+    )
+    if not ok_pi:
+        return False, "daniel-pi log stream silent — " + msg_pi
+    return True, "%s (+ container stream, + pi)" % msg_all
 
 
 def check_promtail_dropped():

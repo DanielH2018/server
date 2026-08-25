@@ -115,20 +115,27 @@ def run_generators() -> list[str]:
     return failed
 
 
-def _write_build_stamp(site: Path) -> None:
+def _write_build_stamp(site: Path, generators: str = "ok") -> None:
     """When the cron last ran, written into the SERVED site and never committed.
 
     This is the half of the freshness signal that proves the cron is alive. Keeping it
     out of the repo is what stops every run producing a commit; docs/index.md fetches it
     and degrades silently when it is missing.
+
+    `generators` is what makes the stamp honest. There is NO DEADMAN here by design -- this
+    file IS the liveness signal -- but two of docs-refresh.sh's three paths (dirty tree, open
+    PR) rebuild the site with --skip-generators and still refreshed the timestamp, so the only
+    freshness signal read fresh while the pages behind it were not regenerated at all. A
+    stuck-open PR made that self-perpetuating (2026-08-25 review M-4). `skipped` and `failed`
+    are what a reader needs to distinguish "current" from "merely rebuilt".
     """
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     (site / "build-info.json").write_text(
-        json.dumps({"built_at": stamp}, indent=2) + "\n"
+        json.dumps({"built_at": stamp, "generators": generators}, indent=2) + "\n"
     )
 
 
-def build_site(site_dir: str) -> bool:
+def build_site(site_dir: str, generators: str = "ok") -> bool:
     """`mkdocs build --strict`, swapped into place atomically. True on success.
 
     --strict turns a broken internal link into a build failure. A docs site that silently
@@ -174,7 +181,7 @@ def build_site(site_dir: str) -> bool:
         shutil.rmtree(staging, ignore_errors=True)
         return False
 
-    _write_build_stamp(staging)
+    _write_build_stamp(staging, generators)
     final.mkdir(parents=True, exist_ok=True)
 
     # Trailing slash on the source: copy the CONTENTS of staging into final, not staging
@@ -218,14 +225,27 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     failed = [] if args.skip_generators else run_generators()
-    built = build_site(args.site_dir)
+    if args.skip_generators:
+        generators = "skipped"
+    elif failed:
+        generators = "failed: " + ",".join(Path(s).name for s in failed)
+    else:
+        generators = "ok"
+    built = build_site(args.site_dir, generators)
 
     if failed:
         print(
             f"build_docs: {len(failed)} generator(s) failed: {', '.join(failed)}",
             file=sys.stderr,
         )
-    return 0 if built and not failed else 1
+    # Distinct codes, because the two failures need opposite responses and the caller cannot
+    # tell them apart from rc 1. A generator failure means the PAGES are stale while the site
+    # still builds and serves -- wrong content, quietly. A site-build failure means the live
+    # tree keeps its previous contents (build_site swaps in only on success) -- right content,
+    # visibly old. Collapsing both into 1 left docs-refresh.sh unable to say which it hit.
+    if failed:
+        return 2
+    return 0 if built else 3
 
 
 if __name__ == "__main__":

@@ -675,13 +675,48 @@ def _selector_labels(selector):
     return set(re.findall(r"(\w+)\s*(?:=~|!~|!=|=)", head))
 
 
-def test_loki_selectors_use_real_stream_labels():
-    for name in (
+def _logql_selector_names():
+    """Every module constant that holds a LogQL stream selector, found by shape.
+
+    Derived rather than listed. The hardcoded four were the selectors that existed when this
+    was written, so LOKI_PI_STREAM -- added for the Pi's own promtail -- would have joined
+    them unchecked (2026-08-25 review M-11). A selector this cannot see is a selector that can
+    name a label promtail does not emit and go permanently green, which is the exact failure
+    the test exists for.
+
+    Matched on the LEADING `{...}` only, deliberately: a selector may carry line filters
+    after the closing brace (`{...} |~ "Banned IP"`), and requiring the string to END in `}`
+    silently dropped HA_BAN_SELECTOR -- narrowing the roster while looking like it widened it.
+    """
+    return sorted(
+        name
+        for name in dir(check)
+        if name.isupper()
+        and isinstance(getattr(check, name), str)
+        and getattr(check, name).startswith("{")
+        and "}" in getattr(check, name)
+    )
+
+
+def test_the_selector_roster_covers_the_known_selectors():
+    """A shape-derived roster that matches nothing passes every assertion vacuously, and one
+    that matches less than the hardcoded list it replaced is a silent narrowing."""
+    names = set(_logql_selector_names())
+    known = {
         "LOKI_STREAM",
         "LOKI_DOCKER_STREAM",
+        "LOKI_PI_STREAM",
         "HA_BAN_SELECTOR",
         "LOG_ERROR_SELECTOR",
-    ):
+    }
+    assert known <= names, (
+        "the derived roster no longer covers known selectors, so they are unchecked: %s"
+        % sorted(known - names)
+    )
+
+
+def test_loki_selectors_use_real_stream_labels():
+    for name in _logql_selector_names():
         selector = getattr(check, name)
         unknown = _selector_labels(selector) - LOKI_STREAM_LABELS
         assert not unknown, (

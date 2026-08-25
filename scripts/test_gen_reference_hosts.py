@@ -84,9 +84,27 @@ def test_an_undeclared_flag_is_unknown_not_false(tmp_path):
     Rendering the second as "no" is the guess the unknown convention exists to stop.
     """
     ini, host_vars = _make_inventory(tmp_path)
-    rows = {r["name"]: r for r in g.build_rows(ini, host_vars)}
+    missing = tmp_path / "no-group-vars.yml"
+    rows = {r["name"]: r for r in g.build_rows(ini, host_vars, missing)}
     assert rows["daniel-server"]["docker"] == "no"
     assert rows["daniel-pi"]["docker"].startswith("unknown")
+
+
+def test_a_group_default_is_neither_unknown_nor_an_unattributed_yes(tmp_path):
+    """A host that declares nothing still inherits group_vars/all.yml, so "absent from
+    host_vars" is not "nobody said" -- daniel-pi rendered `unknown (has_docker not
+    declared)` while inheriting `has_docker: true`, on the page whose own text calls it the
+    only remaining Docker host (2026-08-25 review M-14).
+
+    The provenance survives the fix: a group default must not read as a host assertion.
+    """
+    ini, host_vars = _make_inventory(tmp_path)
+    all_vars = tmp_path / "all.yml"
+    all_vars.write_text("has_docker: true\n")
+    rows = {r["name"]: r for r in g.build_rows(ini, host_vars, all_vars)}
+    assert rows["daniel-pi"]["docker"] == "yes (group default)"
+    # An explicit host override still wins, and is still reported bare.
+    assert rows["daniel-server"]["docker"] == "no"
 
 
 def test_a_host_with_no_host_vars_still_renders(tmp_path):

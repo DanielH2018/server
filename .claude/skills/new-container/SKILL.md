@@ -99,7 +99,6 @@ Then create the following files:
   they cover:
   - `traefik.yml.j2` → `labels(...)` — reverse-proxy routing labels
   - `autokuma.yml.j2` → `labels as kuma` — Uptime Kuma monitor labels
-  - `healthcheck.yml.j2` → `healthcheck(...)` — healthcheck block with `start_period`
   - `networks.yml.j2` → `service_networks()` / `external_networks()` — the per-service
     `networks:` list and the top-level external declaration. **Always use these instead
     of inlining the `{% raw %}{% for net in container_item.networks %}{% endraw %}` loops.**
@@ -113,7 +112,6 @@ Then create the following files:
   ```jinja
   {% raw %}{% from 'traefik.yml.j2' import labels with context %}
   {% from 'autokuma.yml.j2' import labels as kuma with context %}
-  {% from 'healthcheck.yml.j2' import healthcheck %}
   {% from 'networks.yml.j2' import service_networks, external_networks with context %}
   {% from 'resources.yml.j2' import resources %}
   ---
@@ -134,7 +132,12 @@ Then create the following files:
       cap_drop:
         - ALL
       {{ service_networks() }}
-      {{ healthcheck('curl --fail -s http://localhost:<port>/ || exit 1') }}
+      healthcheck:
+        test: ["CMD-SHELL", "curl --fail -s http://localhost:<port>/ || exit 1"]
+        interval: 30s
+        timeout: 10s
+        retries: 3
+        start_period: 30s
       labels:
         {{ labels(
             container_item.hostname | default(container_item.name),

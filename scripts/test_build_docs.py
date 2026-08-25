@@ -11,6 +11,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import json
+
 import build_docs
 
 
@@ -46,8 +48,10 @@ def test_main_exits_nonzero_when_a_generator_failed(monkeypatch):
     monkeypatch.setattr(
         build_docs, "run_generators", lambda: ["scripts/service_catalog.py"]
     )
-    monkeypatch.setattr(build_docs, "build_site", lambda site_dir: True)
-    assert build_docs.main(["--site-dir", "/tmp/x"]) == 1
+    monkeypatch.setattr(
+        build_docs, "build_site", lambda site_dir, generators="ok": True
+    )
+    assert build_docs.main(["--site-dir", "/tmp/x"]) == 2
 
 
 def test_main_builds_the_site_even_when_a_generator_failed(monkeypatch):
@@ -57,7 +61,9 @@ def test_main_builds_the_site_even_when_a_generator_failed(monkeypatch):
         build_docs, "run_generators", lambda: ["scripts/service_catalog.py"]
     )
     monkeypatch.setattr(
-        build_docs, "build_site", lambda site_dir: built.append(site_dir) or True
+        build_docs,
+        "build_site",
+        lambda site_dir, generators="ok": built.append(site_dir) or True,
     )
     build_docs.main(["--site-dir", "/tmp/x"])
     assert built == ["/tmp/x"]
@@ -65,8 +71,10 @@ def test_main_builds_the_site_even_when_a_generator_failed(monkeypatch):
 
 def test_main_exits_nonzero_when_the_site_build_failed(monkeypatch):
     monkeypatch.setattr(build_docs, "run_generators", lambda: [])
-    monkeypatch.setattr(build_docs, "build_site", lambda site_dir: False)
-    assert build_docs.main(["--site-dir", "/tmp/x"]) == 1
+    monkeypatch.setattr(
+        build_docs, "build_site", lambda site_dir, generators="ok": False
+    )
+    assert build_docs.main(["--site-dir", "/tmp/x"]) == 3
 
 
 def test_skip_generators_runs_none(monkeypatch):
@@ -77,7 +85,9 @@ def test_skip_generators_runs_none(monkeypatch):
     """
     ran: list[str] = []
     monkeypatch.setattr(build_docs, "run_generators", lambda: ran.append("x") or [])
-    monkeypatch.setattr(build_docs, "build_site", lambda site_dir: True)
+    monkeypatch.setattr(
+        build_docs, "build_site", lambda site_dir, generators="ok": True
+    )
     build_docs.main(["--site-dir", "/tmp/x", "--skip-generators"])
     assert ran == []
 
@@ -146,3 +156,34 @@ def test_the_build_stamp_is_written_into_the_site_not_the_repo(tmp_path):
     build_docs._write_build_stamp(site)
     assert (site / "build-info.json").is_file()
     assert not (build_docs.REPO / "build-info.json").exists()
+
+
+def test_the_stamp_says_when_the_generators_did_not_run(tmp_path):
+    """build-info.json IS the freshness signal -- docs-refresh.sh runs no deadman because
+    this file is the deadman. But its dirty-tree and open-PR paths rebuild the site with
+    --skip-generators, and the stamp refreshed anyway: it read fresh while the pages behind
+    it had not been regenerated at all, and a stuck-open PR made that self-perpetuating
+    (2026-08-25 review M-4).
+    """
+    site = tmp_path / "site"
+    site.mkdir()
+    build_docs._write_build_stamp(site, "skipped")
+    info = json.loads((site / "build-info.json").read_text())
+    assert info["generators"] == "skipped", (
+        "a site rebuilt without regeneration claims the same freshness as a full run"
+    )
+
+
+def test_both_skipping_call_sites_are_reported_as_skipped(monkeypatch):
+    """--skip-generators is the flag BOTH deferring paths in docs-refresh.sh pass, so the
+    status has to come off the flag rather than off the failure list -- which is empty in
+    exactly the case that needs reporting."""
+    seen = {}
+
+    def fake_build(site_dir, generators="ok"):
+        seen["generators"] = generators
+        return True
+
+    monkeypatch.setattr(build_docs, "build_site", fake_build)
+    build_docs.main(["--site-dir", "/tmp/x", "--skip-generators"])
+    assert seen["generators"] == "skipped"

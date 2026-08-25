@@ -246,8 +246,11 @@ data:
             regex: "9707"
           - source_labels: [__meta_kubernetes_pod_label_app]
             target_label: arr
-          - source_labels: [__meta_kubernetes_pod_node_name]
-            target_label: origin
+          # DECIDED: no `origin` label here. `origin="daniel-server"` is the sentinel
+          # check_targets counts against TARGETS_MIN=1, and that floor assumes exactly one
+          # series: the node job. Labelling the exportarr pods too put three more series
+          # behind the same floor, so node-exporter could die and the check would still see
+          # >= 1 and read clean. See check.py:385-397, which spells the assumption out.
       # daniel-pi, the one host outside the cluster. STATIC targets, not discovery: the two
       # jobs above use `role: pod`, which by construction only ever finds pods — so the Pi,
       # which runs no kubelet, could never appear in them however many exporters it grew.

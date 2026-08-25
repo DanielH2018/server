@@ -10,7 +10,11 @@ runbooks, design documents and generated reference pages are readable in a brows
   site.
 - **Serves:** `docs_host_site_dir` (`/home/<user>/docs-site`), read-only.
 - **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`,
-  `platform: k8s`. LAN-only route (`public=false`), `use_authelia: true`.
+  `platform: k8s`. **Public as well as LAN**, `use_authelia: true` — the ingressroute call
+  passes no `public`, and the macro's default is `public=true`. This said LAN-only
+  (`public=false`), which was true until 2026-08-24; `templates/ingressroute.yaml.j2` carries
+  the reasoning for the flip. Everything under `docs/` is served, so what is excluded from
+  the build is a publishing decision — see `mkdocs.yml`'s `exclude_docs`.
 - **Built by:** `scripts/build_docs.py`, run by the `docs-refresh` cron. **Not by this role** —
   a deploy renders manifests, it does not rebuild the site.
 

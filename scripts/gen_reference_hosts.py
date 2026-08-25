@@ -24,6 +24,7 @@ import yaml
 REPO = Path(__file__).resolve().parent.parent
 HOSTS_INI = REPO / "ansible" / "inventory" / "hosts.ini"
 HOST_VARS = REPO / "ansible" / "inventory" / "host_vars"
+ALL_VARS = REPO / "ansible" / "inventory" / "group_vars" / "all.yml"
 
 UNKNOWN = "unknown"
 
@@ -62,23 +63,44 @@ def parse_hosts_ini(path: Path = HOSTS_INI) -> list[dict[str, str]]:
     return hosts
 
 
-def load_host_vars(name: str, host_vars: Path = HOST_VARS) -> dict:
-    path = host_vars / f"{name}.yml"
+def _load_yaml_mapping(path: Path) -> dict:
     if not path.is_file():
         return {}
     loaded = yaml.safe_load(path.read_text())
     return loaded if isinstance(loaded, dict) else {}
 
 
-def _flag(data: dict, key: str) -> str:
-    if key not in data:
-        return f"{UNKNOWN} ({key} not declared)"
-    return "yes" if data[key] else "no"
+def load_host_vars(name: str, host_vars: Path = HOST_VARS) -> dict:
+    return _load_yaml_mapping(host_vars / f"{name}.yml")
+
+
+def _flag(data: dict, key: str, defaults: dict | None = None) -> str:
+    """Host value, else the group default, else unknown.
+
+    A host that declares nothing still inherits group_vars/all.yml, so "not in host_vars"
+    is not the same as "nobody said". Reading host_vars alone reported `unknown (has_docker
+    not declared)` for daniel-pi — which inherits `has_docker: true` — on the same page
+    whose own text calls the Pi the only remaining Docker host (2026-08-25 review M-14).
+
+    The provenance stays visible rather than collapsing into a bare "yes": the convention
+    here is to never let a default read as something the host asserted.
+    """
+    if key in data:
+        return "yes" if data[key] else "no"
+    if defaults and key in defaults:
+        return "%s (group default)" % ("yes" if defaults[key] else "no")
+    return f"{UNKNOWN} ({key} not declared)"
 
 
 def build_rows(
-    hosts_ini: Path = HOSTS_INI, host_vars: Path = HOST_VARS
+    hosts_ini: Path = HOSTS_INI,
+    host_vars: Path = HOST_VARS,
+    all_vars: Path = ALL_VARS,
 ) -> list[dict[str, str]]:
+    # A parameter, not the module constant read directly: a test builds a synthetic
+    # inventory in a tmp dir, and reaching past it to the real group_vars would make that
+    # fixture depend on the repo it is meant to stand in for.
+    defaults = _load_yaml_mapping(all_vars)
     rows = []
     for entry in parse_hosts_ini(hosts_ini):
         name = entry["name"]
@@ -92,8 +114,8 @@ def build_rows(
                 "connection": entry.get("ansible_connection", "ssh"),
                 "expose_mode": str(data.get("expose_mode", "traefik (default)")),
                 "services": str(len(services)) if isinstance(services, list) else "0",
-                "gitops": _flag(data, "has_gitops"),
-                "docker": _flag(data, "has_docker"),
+                "gitops": _flag(data, "has_gitops", defaults),
+                "docker": _flag(data, "has_docker", defaults),
             }
         )
     return rows

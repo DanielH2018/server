@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/gen_reference_hosts.py
-generated_at: 2026-08-24 20:13 UTC
-generated_sha: 1e5789a8
+generated_at: 2026-08-25 13:16 UTC
+generated_sha: c85475c6
 ---
 
 !!! warning "Generated file — do not edit"
@@ -39,7 +39,7 @@ Raspberry Pi, and the only remaining Docker host. LAN-only utilities.
 | Service exposure | lan |
 | Services declared | 7 |
 | Runs the GitOps timer | no |
-| Has Docker | unknown (has_docker not declared) |
+| Has Docker | yes (group default) |
 
 ## daniel-server
 

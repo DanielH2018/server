@@ -20,19 +20,43 @@ import ast
 
 from _helpers import REPO
 
-MONITOR_FILES = REPO / "ansible" / "roles" / "k8s" / "monitor-bridge" / "files"
-AUTOFIX_FILES = REPO / "ansible" / "roles" / "k8s" / "autofix-bridge" / "files"
+K8S = REPO / "ansible" / "roles" / "k8s"
+MONITOR_FILES = K8S / "monitor-bridge" / "files"
+
+
+def _consumer_roots():
+    """Every k8s role's files/ dir that imports bridge_common, monitor-bridge included.
+
+    Derived, not the hardcoded (monitor-bridge, autofix-bridge) pair this was written for.
+    That pair is the scope of the fix it shipped with, so a third role importing
+    bridge_common would join the rule silently unchecked -- the guard-scope shape the same
+    review found in four other places (2026-08-25 review M-2). The deployer derives its own
+    consumer set the same way, in deploy_logic.shared_module_consumers.
+    """
+    roots = []
+    for role in sorted(K8S.iterdir()):
+        files = role / "files"
+        if not files.is_dir():
+            continue
+        if any(
+            "bridge_common" in p.read_text(errors="ignore")
+            for p in files.glob("*.py")
+            if p.name != "bridge_common.py"
+        ):
+            roots.append(files)
+    return roots
 
 
 def _test_and_conftest_files():
-    """Every test module + conftest.py in either bridge's files/ — the two suites this rule
-    binds. Both roles' non-test modules that import bridge_common are checked against the
-    union of what either suite patches, since bridge_common is shared between them."""
-    files = sorted(MONITOR_FILES.glob("test_*.py"))
-    conftest = MONITOR_FILES / "conftest.py"
-    if conftest.exists():
-        files.append(conftest)
-    files += sorted(AUTOFIX_FILES.glob("test_*.py"))
+    """Every test module + conftest.py under a role that imports bridge_common — the suites
+    this rule binds. Every consumer's non-test modules are checked against the union of what
+    any of those suites patches, since bridge_common is shared between them."""
+    files = []
+    for root in _consumer_roots():
+        files += sorted(root.glob("test_*.py"))
+        conftest = root / "conftest.py"
+        if conftest.exists():
+            files.append(conftest)
     return files
 
 
@@ -45,7 +69,7 @@ def _consumer_modules():
     note.
     """
     found = []
-    for base in (MONITOR_FILES, AUTOFIX_FILES):
+    for base in _consumer_roots():
         for path in sorted(base.glob("*.py")):
             if path.name in ("bridge_common.py",) or path.name.startswith("test_"):
                 continue
@@ -126,7 +150,7 @@ def test_there_are_patched_names_to_check():
 
 def test_there_are_consumer_modules():
     assert _consumer_modules(), (
-        f"no bridge_common consumers found under {MONITOR_FILES} or {AUTOFIX_FILES}"
+        f"no bridge_common consumers found under {[str(r) for r in _consumer_roots()]}"
     )
 
 

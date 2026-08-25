@@ -44,8 +44,15 @@ fetch("/build-info.json")
   .then((r) => (r.ok ? r.json() : null))
   .then((d) => {
     if (d && d.built_at) {
-      document.getElementById("build-stamp").textContent =
-        "Site last built: " + d.built_at;
+      // The generators status matters as much as the timestamp. Two of docs-refresh.sh's
+      // paths (dirty tree, open PR) rebuild the site without regenerating the pages, and a
+      // bare timestamp reads identically to a full run — so a stuck-open PR served pages
+      // that got staler every twelve hours under a stamp that said "just built".
+      var note = "Site last built: " + d.built_at;
+      if (d.generators && d.generators !== "ok") {
+        note += " — pages NOT regenerated this run (" + d.generators + ")";
+      }
+      document.getElementById("build-stamp").textContent = note;
     }
   })
   .catch(() => {});

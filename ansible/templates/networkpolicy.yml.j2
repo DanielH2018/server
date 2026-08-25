@@ -1,5 +1,5 @@
 {#
-  NetworkPolicy for an *arr slice-2 ingress rule — sonarr and radarr's networkpolicy.yaml.j2
+  NetworkPolicy for an *arr slice-2 ingress rule — sonarr and radarr's networkpolicy.yml.j2
   share this exact structure (podSelector on `app: <name>`, traefik admitted unconditionally,
   a caller matchExpressions list, one TCP port) and differ only in the caller list and its
   per-item comments. Those stay at the call site via `{% call %}` rather than being swallowed
@@ -8,7 +8,7 @@
   them look more alike; the macro exists to hold the structure both already share, not to grow
   the shared surface.
 
-  prowlarr's own networkpolicy.yaml.j2 is NOT this shape and is NOT converted: it's
+  prowlarr's own networkpolicy.yml.j2 is NOT this shape and is NOT converted: it's
   flaresolverr's policy (podSelector `app: flaresolverr`, one caller `app: prowlarr`, no
   traefik entry, no matchExpressions list, port from `prowlarr_k8s_flaresolverr_port`) — a
   different subject with a different shape, not this policy under a different name.

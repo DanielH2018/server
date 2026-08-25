@@ -51,6 +51,7 @@ from deploy_logic import (  # noqa: E402
     reroute_k8s_services,
     rollback_volume_revert_note,
     services_from_changed_paths,
+    shared_module_consumers,
     should_alert_dirty,
     split_k8s_auto_deploy,
     stale_rendered_services,
@@ -569,7 +570,7 @@ def alert_deferred(
             f"⚠️ gitops-deploy: k8s role(s) `{', '.join(sorted(cs.k8s))}` changed in "
             f"`{origin[:8]}` — fast-forwarded but **not applied** (this deployer only "
             f"auto-deploys Docker-platform services; k8s roles are defer-and-alert). "
-            + k8s_remediation(cs.k8s, declared_k8s),
+            + k8s_remediation(cs.k8s, declared_k8s, cs.k8s_consumers),
         )
 
 
@@ -921,6 +922,7 @@ def main() -> int:
 
     paths = run(["git", "diff", "--name-only", f"{local}..{origin}"]).splitlines()
     cs = services_from_changed_paths(paths)
+    cs.k8s_consumers = shared_module_consumers(paths, REPO)
     # A path under ansible/roles/containers/<svc>/ maps to <svc> by NAME ALONE — it doesn't know
     # this host might run that same-named service under k8s (wg-easy: a Docker role, but
     # platform: k8s on daniel-box). Route those into the k8s defer-and-alert set instead of
