@@ -59,6 +59,15 @@ extra_css:
 extra_javascript:
   - assets/fqdn-links.js
 
+# Turns a repo path written as a code span -- `scripts/service_catalog.py`,
+# `docs/secret-rotation.md` -- into a link to where this site documents it. Unlike the FQDN
+# links above this resolves at build time, because a path -> URL map is fully known then; the
+# file's own header carries what it links, what it deliberately does not, and why it injects
+# the Scripts page's row anchors itself rather than asking the generator for them.
+# The leading underscore keeps it out of the Scripts reference, which enumerates scripts/*.py.
+hooks:
+  - scripts/_mkdocs_repo_links.py
+
 # Pages that are BUILT unless named here. mkdocs serves everything under docs_dir whether or
 # not the nav links it, and it logs an unlinked page at INFO — so `--strict` does not catch
 # one, and neither does reading the nav.
