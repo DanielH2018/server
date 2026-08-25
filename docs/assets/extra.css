@@ -1,43 +1,36 @@
 /* Site-wide overrides on top of the Material theme.
  *
- * WHY THIS FILE EXISTS. The generated reference tables are wide -- services.md alone is six
- * columns, one of which carries paragraph-length auto-deploy rationale. Material's stock
- * table rules clip that content rather than wrapping it, and the clipping is silent: the
- * theme wraps every table in `.md-typeset__scrollwrap` (overflow-x: auto), so the overflow
- * IS reachable, but only by a horizontal scrollbar parked at the bottom of a table that runs
- * several screens tall. A reader at the top of the page sees sentences cut off mid-word with
- * no affordance in sight.
- *
- * Two stock rules force the table wider than its column:
- *
- *   .md-typeset table:not([class]) th { min-width: 5rem }
- *       5rem is 100px at Material's 125% root, so a six-column table cannot lay out below
- *       ~600px however short its content is.
- *   overflow-wrap: normal (the initial value)
- *       Min-content width is then the longest unbreakable token. The Route column's FQDNs
- *       (`bento-pdf.local.<domain>`) run 30-plus characters and never break.
+ * WHY THIS FILE EXISTS. The wide generated reference tables cut long cells off mid-word --
+ * services.md worst, where the Auto-deploy column carries paragraph-length rationale. The
+ * theme wraps every table in `.md-typeset__scrollwrap` (overflow-x: auto), so the clipped
+ * text is reachable, but only by a horizontal scrollbar parked at the bottom of a table that
+ * runs several screens tall. A reader at the top of the page sees severed sentences and no
+ * affordance.
  *
  * Auto table layout may not lay a table out narrower than the sum of its columns' min-content
- * widths, so once that sum exceeds the content column the table overflows and gets clipped.
- * Both rules below attack the min-content width itself, which is the quantity that decides
- * whether the overflow happens at all.
+ * widths, so the fix has to shrink that sum rather than chase the clipping. Two stock rules
+ * inflate it, and both are addressed below.
  */
 
-/* `anywhere` rather than `break-word`: only `anywhere` participates in intrinsic size
- * calculation, which is the whole point here. `break-word` would let the text break at
- * render time while leaving the min-content width -- and therefore the overflow -- unchanged.
- *
- * This costs nothing when a table already fits. Auto layout still sizes columns by their
- * max-content widths where the space exists, so mid-word breaks appear only under the
- * pressure that used to clip. */
+/* Min-content width is otherwise the longest unbreakable token, and the Route column's FQDNs
+ * run past 30 characters. `anywhere` rather than `break-word`: only `anywhere` participates in
+ * intrinsic size calculation, which is the quantity that decides whether the table overflows
+ * at all. `break-word` would break the text at render time and leave the overflow in place. */
 .md-typeset table:not([class]) th,
 .md-typeset table:not([class]) td {
   overflow-wrap: anywhere;
 }
 
-/* The 5rem floor keeps a header from being squeezed to a vertical ribbon. With the rule
- * above a squeezed header wraps instead of clipping, so the floor buys nothing and costs a
- * hard lower bound on the table's width. */
+/* Material sets this floor unconditionally, at a 125-150% root -- 100-120px per header, so a
+ * six-column table cannot lay out below ~600-720px however short its content is. The floor
+ * exists to stop a header being squeezed to a vertical ribbon; the rule above makes a squeezed
+ * header wrap instead, so it now buys nothing and costs a hard lower bound on table width. */
 .md-typeset table:not([class]) th {
   min-width: 0;
 }
+
+/* UNVERIFIED: which of the two rules binds at any given viewport. The session that wrote this
+ * had no browser, so the mechanism above is read off Material's stylesheet, not measured
+ * against a render. Both rules are inert on a table that already fits -- auto layout still
+ * sizes columns by max-content where the space exists -- so the fix is safe either way, but
+ * the attribution is inference. */
