@@ -172,6 +172,27 @@ def test_the_audit_watches_for_an_unlanded_rotation_branch():
     )
 
 
+def test_the_audit_grace_is_shorter_than_the_gap_to_the_first_audit():
+    """The grace period must not swallow the first audit after a failed publish.
+
+    rotate is Sunday 09:00 and the audit is daily 08:00 (crons.yml), so that first audit is
+    23h later. A 24h grace let it push UP -- green on the operator's Monday morning, with the
+    sticky DOWN not appearing until Tuesday. That is M-1 narrowed to a day, not closed.
+    """
+    crons = (TEMPLATES.parent / "tasks/crons.yml").read_text()
+    assert 'hour: "8"' in crons and 'hour: "9"' in crons, (
+        "the cron schedule moved; re-derive the grace period against the new times"
+    )
+    text = ROTATION_AUDIT.read_text()
+    seconds = [int(m) for m in re.findall(r"-gt (\d{4,})", text)]
+    assert seconds, "no age threshold found in the stray-branch arm"
+    assert max(seconds) < 23 * 3600, (
+        "the grace period is at least as long as the 23h gap between a Sunday 09:00 rotate "
+        "and the next 08:00 audit, so the first audit after a failed publish reports UP: %s"
+        % seconds
+    )
+
+
 def test_the_audit_branch_arm_is_additive_not_a_short_circuit():
     """The two arms above it exit 0 before the auditor runs, which is right for a registry
     that cannot be trusted. A stray branch says nothing about the OTHER secrets, so
