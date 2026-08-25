@@ -17,10 +17,31 @@
 # alternative -- rendering at serve time -- is always current and completely invisible: a
 # generator bug would reach the page with nothing to catch it.
 #
-# IT PUSHES DIRECTLY TO MASTER. Inherited rather than decided: secret-rotate.sh already
-# does this, so the path and its permissions are proven. It bypasses PR review, which is
-# acceptable only because every byte it commits was produced by a generator whose output
-# is itself tested.
+# IT OPENS A PR. It used to write straight to master, on the stated grounds that
+# secret-rotate.sh already did and "the path and its permissions are proven". They were
+# not. A repository ruleset rejects every direct write to master:
+#
+#   remote: - Required status check "prek (lint + validate + tests + secrets)" is expected.
+#   ! [remote rejected]   (declined due to repository rule violations)
+#
+# So this cron could never publish. It committed locally, failed to push, and left the
+# commit sitting on master -- which made the tree dirty-by-being-ahead and, worse, meant
+# the generated pages silently stopped being updated. Confirmed 2026-08-25 by running the
+# rejected command by hand; the error had been invisible because both the commit and the
+# push discarded their output to /dev/null.
+#
+# A PR satisfies the ruleset (the check runs on the PR) and auto-merge lands it without a
+# human in the loop, so the cron stays unattended. Review is still bypassed in substance,
+# which remains acceptable for the same reason as before: every byte it commits was
+# produced by a generator whose output is itself tested.
+#
+# NB secret-rotate.sh:75 still writes directly to master and therefore has the same bug.
+# It is not fixed here: it rotates live credentials, so its failure mode and its remedy
+# are different, and it deserves its own change.
+#
+# ONE OPEN PR AT A TIME. After opening one this script resets master back to origin, so
+# the next run regenerates the same diff and would open a duplicate. It checks for an
+# already-open PR first and exits instead.
 #
 # NO DEADMAN. Deliberate, and the same call the infra-map cron makes. Every generated page
 # carries the timestamp its content was last built from, and the served site carries
@@ -31,8 +52,15 @@ set -uo pipefail
 REPO="/home/{{ sys_user }}/server"
 UV="/home/{{ sys_user }}/.local/bin/uv"
 SITE_DIR="{{ docs_host_site_dir | default('/home/' + sys_user + '/docs-site') }}"
+PR_BRANCH_PREFIX="docs-refresh/"
 
 alert() { logger -t docs-refresh "$1"; }
+
+# Errors used to go to /dev/null, which is why a ruleset rejection went undiagnosed for a
+# day: the alert said the push failed and nothing said why. logger takes one line, so
+# flatten and cap -- the first few hundred characters of a git or gh failure carry the
+# reason, and the full text stays in the file until the run ends.
+say_failure() { alert "$1: $(tr '\n' ' ' < "$2" | tail -c 400)"; }
 
 cd "$REPO" || { alert "docs-refresh: $REPO missing"; exit 1; }
 
@@ -48,6 +76,22 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
   alert "docs-refresh: working tree dirty; rebuilt site only, no regeneration"
   "$UV" run --frozen python scripts/build_docs.py --skip-generators --site-dir "$SITE_DIR" \
     || alert "docs-refresh: site build failed on dirty tree"
+  exit 0
+fi
+
+# An unmerged PR from a previous run means its diff is still pending. Regenerating now
+# would produce the same diff again and open a duplicate, so build the site (the useful
+# half, and it does not need the PR) and stop. If CI is stuck the PRs would otherwise
+# accumulate one per run, twice a day, with nobody looking.
+# `gh pr list --head` matches one exact branch, and each run's branch is timestamped, so
+# the filter has to be a prefix match over the open list rather than a --head lookup.
+OPEN_PR="$(gh pr list --state open --json number,headRefName \
+  --jq "[.[] | select(.headRefName | startswith(\"$PR_BRANCH_PREFIX\"))][0].number" \
+  2>/dev/null || true)"
+if [ -n "$OPEN_PR" ]; then
+  alert "docs-refresh: PR #$OPEN_PR still open; rebuilt site only, no regeneration"
+  "$UV" run --frozen python scripts/build_docs.py --skip-generators --site-dir "$SITE_DIR" \
+    || alert "docs-refresh: site build failed while a PR was open"
   exit 0
 fi
 
@@ -78,15 +122,54 @@ fi
 # exactly one trailing newline. Vale is scoped to exclude docs/reference/ for the same
 # reason. Before adding any hook that matches a path staged above, check it cannot fail on
 # generator output.
-if ! git commit -m "docs: refresh generated reference pages" >/dev/null 2>&1; then
+LOG="$(mktemp)"
+trap 'rm -f "$LOG"' EXIT
+
+if ! git commit -m "docs: refresh generated reference pages" >"$LOG" 2>&1; then
   git reset >/dev/null 2>&1
-  alert "docs-refresh: commit failed (hook rejection?); unstaged, no change pushed"
+  say_failure "docs-refresh: commit failed (hook rejection?); unstaged, nothing published" "$LOG"
   exit 1
 fi
 
-if git push >/dev/null 2>&1; then
-  logger -t docs-refresh "regenerated, committed and pushed"
-else
-  alert "docs-refresh: committed but git push FAILED (commit is local)"
+# Branch, PR, auto-merge -- see the header. The ORDER matters: the branch reaches the
+# remote before master is reset, so the commit is never only on a branch this script is
+# about to throw away.
+BRANCH="${PR_BRANCH_PREFIX}$(date -u +%Y-%m-%d-%H%M)"
+if ! git branch "$BRANCH" HEAD >"$LOG" 2>&1; then
+  say_failure "docs-refresh: could not create $BRANCH; commit is local on master" "$LOG"
   exit 1
 fi
+
+if ! git push -u origin "$BRANCH" >"$LOG" 2>&1; then
+  say_failure "docs-refresh: publishing $BRANCH failed; commit is local on master" "$LOG"
+  exit 1
+fi
+
+# From here the commit is safe on the remote, so master gives it up. Leaving master ahead
+# would break gitops-deploy's --ff-only once the squash lands under a new SHA, which parks
+# the deployer behind origin until someone resets it by hand.
+#
+# HEAD~1, not origin/master: this undoes exactly the commit made above. `origin/master` is
+# only as fresh as the last fetch, and this script deliberately never fetches, so resetting
+# to it could discard something else or move master backwards.
+git reset --hard HEAD~1 >/dev/null 2>&1
+
+# The commit lives on the remote branch now. Keeping the local ref would leave one dead
+# branch per run, and -d refuses it because master no longer contains the commit.
+git branch -D "$BRANCH" >/dev/null 2>&1
+
+if ! gh pr create --head "$BRANCH" --title "docs: refresh generated reference pages" \
+  --body "Generated output only, from the twice-daily docs-refresh cron: the pages under docs/reference/ and the infra map. Both are reproducible by scripts/build_docs.py. Opened as a PR because a repository ruleset rejects direct writes to master." \
+  >"$LOG" 2>&1; then
+  say_failure "docs-refresh: $BRANCH published but PR creation failed" "$LOG"
+  exit 1
+fi
+
+# --auto lands it when the required check passes, so the cron stays unattended. Without
+# this the PR waits for a human and the next run skips on the open-PR guard above.
+if ! gh pr merge --auto --squash --delete-branch "$BRANCH" >"$LOG" 2>&1; then
+  say_failure "docs-refresh: PR opened for $BRANCH but auto-merge could not be enabled" "$LOG"
+  exit 1
+fi
+
+logger -t docs-refresh "regenerated, committed, PR opened for $BRANCH with auto-merge"
