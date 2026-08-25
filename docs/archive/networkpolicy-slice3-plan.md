@@ -32,7 +32,7 @@ Four findings changed this plan's contents before it was written. Each is a fact
 
 **3. Neither web route is unauthenticated.** `claude-otel`'s `containers_list` entry sets `use_authelia: true` for grafana, and the prometheus IngressRoute carries its own middleware chain. So slice 3 has **no route that can serve an HTTP liveness leg** — a 302 from Authelia would print success without reaching the app, which is the trap that bit slice 1. Use slice 2's EndpointSlice readiness gate instead.
 
-**4. The only host → ClusterIP caller is the telemetry heartbeat.** `roles/k8s/claude-otel/templates/telemetry-health.sh.j2` runs from a cron on **daniel-box alone** — `claude-otel` appears in `containers_list` only in `host_vars/daniel-box.yml:259`, nowhere in `daniel-server.yml`, and the cron task has no `delegate_to` — resolves prometheus's ClusterIP at runtime and curls `:9090`. `scripts/probe/probe.py` is *not* a second one — `k8s_endpoint()` builds `https://<host>.local.<domain>` pinned to the MetalLB VIP, so it arrives through Traefik and the Traefik peer covers it.
+**4. The only host → ClusterIP caller is the telemetry heartbeat.** `roles/k8s/claude-otel/templates/telemetry-health.sh.j2` runs from a cron on **daniel-box alone** — `claude-otel` appears in `containers_list` only in `host_vars/daniel-box.yml:259`, nowhere in `daniel-server.yml`, and the cron task has no `delegate_to` — resolves prometheus's ClusterIP at runtime and curls `:9090`. `scripts/diagnostics/probe.py` is *not* a second one — `k8s_endpoint()` builds `https://<host>.local.<domain>` pinned to the MetalLB VIP, so it arrives through Traefik and the Traefik peer covers it.
 
 ### Why prometheus needs all four node addresses
 
@@ -380,12 +380,12 @@ Label it `app: netpol-probe-slice3` — it must be neither `monitor-bridge` nor 
 - [ ] **Step 1: Capture witnesses BEFORE anything deploys**
 
 ```bash
-uv run python scripts/probe/probe.py targets | tail -5
-uv run python scripts/probe/probe.py metric 'count(up == 1)'
-uv run python scripts/probe/probe.py metric 'sum(increase(otelcol_exporter_send_failed_spans[15m])) or vector(0)'
+uv run python scripts/diagnostics/probe.py targets | tail -5
+uv run python scripts/diagnostics/probe.py metric 'count(up == 1)'
+uv run python scripts/diagnostics/probe.py metric 'sum(increase(otelcol_exporter_send_failed_spans[15m])) or vector(0)'
 ```
 
-Record the scrape-target count and the send-failed total as the **Step 1 baseline** — every later comparison in this task chains off these numbers, not off each other. Kuma is the out-of-band witness here, and not because `probe.py alerts` is compromised by this fence — it isn't: `run_alerts` (`scripts/probe/probe.py`) calls `loki_endpoint()` (moved to `scripts/probe/probe_core.py` in the 2026-08-23 module split — grep the symbol, not a line), which returns `k8s_endpoint("loki-homelab")`, the **homelab** Loki, unaffected by a fence that only covers `observability`. Kuma is still the better pick because its state is independent of anything this deploy touches at all.
+Record the scrape-target count and the send-failed total as the **Step 1 baseline** — every later comparison in this task chains off these numbers, not off each other. Kuma is the out-of-band witness here, and not because `probe.py alerts` is compromised by this fence — it isn't: `run_alerts` (`scripts/diagnostics/probe.py`) calls `loki_endpoint()` (moved to `scripts/diagnostics/probe_core.py` in the 2026-08-23 module split — grep the symbol, not a line), which returns `k8s_endpoint("loki-homelab")`, the **homelab** Loki, unaffected by a fence that only covers `observability`. Kuma is still the better pick because its state is independent of anything this deploy touches at all.
 
 - [ ] **Step 2: Stage A — labels only, unfenced**
 
@@ -409,7 +409,7 @@ and the slice-3 gate/probe does not start until ~line 370. So if sonarr, radarr,
 qbittorrent is mid-rollout when this deploy runs, the play aborts at the slice-2 assert naming
 that workload — and `observability` is *already live-fenced and completely unverified* at that
 point, because the apply that fences it ran before the assert that aborted. **Confirm all four
-have ready endpoints immediately before running this step** — `uv run python scripts/probe/probe.py
+have ready endpoints immediately before running this step** — `uv run python scripts/diagnostics/probe.py
 health sonarr`, `radarr`, `prowlarr`, `qbittorrent` (each exits 0 only when the Deployment is
 fully rolled out and no container restarted in the last 180s). If Step 4 or the deploy it
 triggers fails for any reason, treat it as **"the fence may already be live and unverified,"**
@@ -440,7 +440,7 @@ only durable form; that is what this step means by "Set … in defaults, commit.
 
 - Probe Job green.
 - Witnesses unchanged from the **Step 1 baseline**.
-- `uv run python scripts/probe/probe.py health monitor-bridge` — proves the cross-namespace prometheus caller still works via the real consumer, not a probe.
+- `uv run python scripts/diagnostics/probe.py health monitor-bridge` — proves the cross-namespace prometheus caller still works via the real consumer, not a probe.
 - **The heartbeat:** confirm `telemetry-health.sh` succeeded. There is one pusher — daniel-box only — so check that cron's own exit there rather than trusting the monitor tile in isolation.
 - Grafana loads through Traefik and its panels render (that exercises grafana → prometheus, loki and tempo in one action).
 

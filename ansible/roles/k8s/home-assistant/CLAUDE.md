@@ -167,7 +167,7 @@ every task in this directory whether or not it is needed.
   math-in-a-tested-macro, validate→deploy→verify), `ha-deploy` (deploy + confirm-loaded),
   `ha-verify-state` (live state via the API; the recorder + alias-slug traps), `z2m-device-setting`
   (persist a Zigbee device setting via `mosquitto_pub`).
-- **`scripts/probe/probe.py ha`** — read-only live HA state (allow-listed, no prompt), authed with the
+- **`scripts/diagnostics/probe.py ha`** — read-only live HA state (allow-listed, no prompt), authed with the
   SOPS `claude_ha_token`: `probe.py ha state <entity>` · `ha automation <id-or-alias>` (resolves
   the alias-slug≠id trap) · `ha get <api-path>` (e.g. `error_log`). Prefer it over recorder-DB reads.
  · `ha why <id-or-alias>` (alias `ha trace`) pulls the live per-condition automation trace over the
@@ -184,7 +184,7 @@ every task in this directory whether or not it is needed.
   automation/script writes `bedroom_manual_off`/`bedroom_fan_manual`/`bedroom_sleep_mode` without
   being listed). The resolution check (config refs ∪ `state/external_entities.yml`, snapshotted by
   `ha_state_model.py refresh`) catches a mistyped/renamed entity before it becomes a silent no-op.
-  Live view: `scripts/probe/probe.py ha-state` (current cell values + anomalies; `--inventory` for the
+  Live view: `scripts/diagnostics/probe.py ha-state` (current cell values + anomalies; `--inventory` for the
   full catalog). This file (CLAUDE.md) remains the home of the runtime/physical *why* the model
   can't derive. Design + Phase-2 plan: `docs/superpowers/specs/2026-06-21-ha-state-model-phase*`.
 
@@ -213,7 +213,7 @@ The failure is silent by construction. `states()` on a missing entity renders `u
 which sat inside `bedroom_notify`'s own `not in ['off','unknown','unavailable']` exclusion
 list, and `| float(0)` latched a zero the curve treats as a normal night.
 
-Run `uv run python scripts/probe/probe.py ha verify-entities` (added in PR #218) — it diffs the
+Run `uv run python scripts/diagnostics/probe.py ha verify-entities` (added in PR #218) — it diffs the
 snapshot against live HA and exits non-zero on anything that vanished. Treat it as a
 post-deploy gate alongside `ha verify-automations`. When a reference does turn out dead, fix
 the config first and refresh second: `refresh` alone drops the ids from the snapshot and

@@ -14,6 +14,6 @@ render degrades to declared-only rather than failing, so a partial map is expect
 cluster restart and is not itself a fault.
 
 This page is prose around a generated image: only the SVG regenerates. The image is written by
-`scripts/gen_infra_map.py --format svg`; the same script's default HTML output is the standalone
+`scripts/infra_map/gen_infra_map.py --format svg`; the same script's default HTML output is the standalone
 artifact page at `~/.claude/artifacts/homelab-infra-map.html`, which carries the live-state
 tables this page does not.

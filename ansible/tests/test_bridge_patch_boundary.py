@@ -1,6 +1,6 @@
 """bridge_common's patched helpers must be reached qualified, not from-imported.
 
-Precedent: `scripts/probe/test_probe_boundaries.py` solves the identical problem for the probe
+Precedent: `scripts/diagnostics/test_probe_boundaries.py` solves the identical problem for the probe
 family, and this guard is a close port of it onto monitor-bridge + autofix-bridge.
 `monkeypatch.setattr(bridge_common, "log", ...)` rebinds the attribute on the bridge_common
 module object. A caller that did `from bridge_common import log` holds its own reference in

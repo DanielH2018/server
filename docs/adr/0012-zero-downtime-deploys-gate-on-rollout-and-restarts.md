@@ -64,5 +64,5 @@ most of the deploy.
 
 ## Governs
 
-No single line. `governs:` is empty; the gate lives in `scripts/probe/probe.py health` and in the
+No single line. `governs:` is empty; the gate lives in `scripts/diagnostics/probe.py health` and in the
 shared rollout tasks.

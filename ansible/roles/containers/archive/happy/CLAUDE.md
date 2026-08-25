@@ -112,4 +112,4 @@ API/WebSocket only, so this is its own container. Not needed for the phone app o
   Route: `roles/containers/traefik/templates/config.yml.j2`
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "traefik,happy"`
   (traefik tag re-renders the file-provider route)
-- Health: `uv run python scripts/probe/probe.py health happy`
+- Health: `uv run python scripts/diagnostics/probe.py health happy`

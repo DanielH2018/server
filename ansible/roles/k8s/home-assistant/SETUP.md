@@ -343,8 +343,8 @@ left, and it's a one-time UI step:
 
 ### 11e. Verify
 - `uv run python scripts/home_assistant/validate_ha_config.py` passes; deploy with `ha-deploy` (gates on health).
-- `scripts/probe/probe.py ha get error_log` shows no `google_assistant` setup errors (it loads with no
+- `scripts/diagnostics/probe.py ha get error_log` shows no `google_assistant` setup errors (it loads with no
   entities — it's cloud-fulfillment). After adding Cast in the UI,
-  `scripts/probe/probe.py ha get states | grep media_player` shows the Hub.
+  `scripts/diagnostics/probe.py ha get states | grep media_player` shows the Hub.
 - Voice: "Hey Google, turn on the bedroom lights" toggles `light.bedroom_lights`.
 - Cast: `cast.show_lovelace_view` puts the Bedroom dashboard on the Hub Max screen.

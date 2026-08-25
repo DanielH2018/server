@@ -22,7 +22,7 @@ PG1–PG5.
   scrape loki-homelab (slice-7-phase-d-loki.md:75 says it does), and the k8s Traefik
   exposes prometheus metrics that nothing scrapes.
 - `monitor_status` has exactly one producer path (the Docker `uptime-kuma` job) and its
-  consumers are the uptime-kuma board and `scripts/probe/postflight.py`; monitor-bridge's
+  consumers are the uptime-kuma board and `scripts/diagnostics/postflight.py`; monitor-bridge's
   hass/UPS checks query `hass_*` WITHOUT an origin pin, so a native port keeps them fed.
 
 ## Decisions
