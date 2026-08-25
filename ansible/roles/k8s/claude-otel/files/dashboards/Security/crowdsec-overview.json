@@ -17,6 +17,23 @@
           "type": "dashboard"
         },
         "type": "dashboard"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "bf4q19tuivta8e"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "purple",
+        "name": "Deploys",
+        "target": {
+          "expr": "{job=\"syslog\"} |= \"event=deploy\" | logfmt",
+          "queryType": "range",
+          "refId": "DeployAnno"
+        },
+        "textFormat": "{{services}}",
+        "titleFormat": "deploy"
       }
     ]
   },
@@ -823,18 +840,18 @@
           "fieldConfig": {
             "defaults": {
               "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
                 "drawStyle": "line",
+                "fillOpacity": 10,
                 "lineInterpolation": "linear",
                 "lineWidth": 1,
-                "fillOpacity": 10,
-                "showPoints": "never",
                 "pointSize": 5,
+                "showPoints": "never",
                 "spanNulls": false,
-                "axisPlacement": "auto",
-                "axisLabel": "",
                 "stacking": {
-                  "mode": "none",
-                  "group": "A"
+                  "group": "A",
+                  "mode": "none"
                 }
               },
               "unit": "short"
@@ -849,6 +866,20 @@
           },
           "id": 4,
           "interval": "",
+          "options": {
+            "legend": {
+              "calcs": [
+                "total"
+              ],
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
           "targets": [
             {
               "datasource": {
@@ -866,21 +897,7 @@
           ],
           "title": "Parsers ok",
           "transparent": true,
-          "type": "timeseries",
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "right",
-              "showLegend": true,
-              "calcs": [
-                "total"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "none"
-            }
-          }
+          "type": "timeseries"
         },
         {
           "datasource": {
@@ -891,18 +908,18 @@
           "fieldConfig": {
             "defaults": {
               "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
                 "drawStyle": "line",
+                "fillOpacity": 10,
                 "lineInterpolation": "linear",
                 "lineWidth": 1,
-                "fillOpacity": 10,
-                "showPoints": "never",
                 "pointSize": 5,
+                "showPoints": "never",
                 "spanNulls": false,
-                "axisPlacement": "auto",
-                "axisLabel": "",
                 "stacking": {
-                  "mode": "none",
-                  "group": "A"
+                  "group": "A",
+                  "mode": "none"
                 }
               },
               "unit": "short"
@@ -916,6 +933,20 @@
             "y": 3
           },
           "id": 6,
+          "options": {
+            "legend": {
+              "calcs": [
+                "total"
+              ],
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
           "targets": [
             {
               "datasource": {
@@ -931,21 +962,7 @@
           ],
           "title": "Parsers nok",
           "transparent": true,
-          "type": "timeseries",
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "right",
-              "showLegend": true,
-              "calcs": [
-                "total"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "none"
-            }
-          }
+          "type": "timeseries"
         }
       ],
       "targets": [
@@ -983,18 +1000,18 @@
           "fieldConfig": {
             "defaults": {
               "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
                 "drawStyle": "line",
+                "fillOpacity": 10,
                 "lineInterpolation": "linear",
                 "lineWidth": 1,
-                "fillOpacity": 10,
-                "showPoints": "never",
                 "pointSize": 5,
+                "showPoints": "never",
                 "spanNulls": false,
-                "axisPlacement": "auto",
-                "axisLabel": "",
                 "stacking": {
-                  "mode": "none",
-                  "group": "A"
+                  "group": "A",
+                  "mode": "none"
                 }
               },
               "unit": "short"
@@ -1008,6 +1025,20 @@
             "y": 3
           },
           "id": 18,
+          "options": {
+            "legend": {
+              "calcs": [
+                "total"
+              ],
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
           "targets": [
             {
               "datasource": {
@@ -1023,21 +1054,7 @@
           ],
           "title": "Buckets created",
           "transparent": true,
-          "type": "timeseries",
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "right",
-              "showLegend": true,
-              "calcs": [
-                "total"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "none"
-            }
-          }
+          "type": "timeseries"
         },
         {
           "datasource": {
@@ -1048,18 +1065,18 @@
           "fieldConfig": {
             "defaults": {
               "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
                 "drawStyle": "line",
+                "fillOpacity": 10,
                 "lineInterpolation": "linear",
                 "lineWidth": 1,
-                "fillOpacity": 10,
-                "showPoints": "never",
                 "pointSize": 5,
+                "showPoints": "never",
                 "spanNulls": false,
-                "axisPlacement": "auto",
-                "axisLabel": "",
                 "stacking": {
-                  "mode": "none",
-                  "group": "A"
+                  "group": "A",
+                  "mode": "none"
                 }
               },
               "unit": "short"
@@ -1073,6 +1090,20 @@
             "y": 3
           },
           "id": 20,
+          "options": {
+            "legend": {
+              "calcs": [
+                "total"
+              ],
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
           "targets": [
             {
               "datasource": {
@@ -1088,21 +1119,7 @@
           ],
           "title": "Buckets overflow",
           "transparent": true,
-          "type": "timeseries",
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "right",
-              "showLegend": true,
-              "calcs": [
-                "total"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "none"
-            }
-          }
+          "type": "timeseries"
         },
         {
           "datasource": {
@@ -1113,18 +1130,18 @@
           "fieldConfig": {
             "defaults": {
               "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
                 "drawStyle": "line",
+                "fillOpacity": 10,
                 "lineInterpolation": "linear",
                 "lineWidth": 1,
-                "fillOpacity": 10,
-                "showPoints": "never",
                 "pointSize": 5,
+                "showPoints": "never",
                 "spanNulls": false,
-                "axisPlacement": "auto",
-                "axisLabel": "",
                 "stacking": {
-                  "mode": "none",
-                  "group": "A"
+                  "group": "A",
+                  "mode": "none"
                 }
               },
               "unit": "short"
@@ -1138,6 +1155,20 @@
             "y": 12
           },
           "id": 22,
+          "options": {
+            "legend": {
+              "calcs": [
+                "total"
+              ],
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
           "targets": [
             {
               "datasource": {
@@ -1153,21 +1184,7 @@
           ],
           "title": "Buckets Timeline",
           "transparent": true,
-          "type": "timeseries",
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "right",
-              "showLegend": true,
-              "calcs": [
-                "total"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "none"
-            }
-          }
+          "type": "timeseries"
         }
       ],
       "targets": [

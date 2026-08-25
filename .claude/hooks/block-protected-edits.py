@@ -31,12 +31,12 @@ from _hook_common import emit_pretooluse_decision
 _SOPS_MAC_RE = re.compile(r'(?m)^\s*"?mac"?:\s*"?ENC\[AES256_GCM,')
 
 # (tree, the generator that owns it). Rendered from the Ansible tree by
-# scripts/build_docs.py and rewritten by the docs-refresh cron, so a hand edit is lost at
+# scripts/docs/build_docs.py and rewritten by the docs-refresh cron, so a hand edit is lost at
 # the next run — the same shape as the containers/ guard above. Listed rather than matched
 # by a docs/ prefix: docs/ is mostly hand-written runbooks that must stay editable.
 _GENERATED_DOC_TREES = (
-    ("docs/reference", "the reference generators (scripts/build_docs.py)"),
-    ("docs/assets/generated", "scripts/gen_infra_map.py"),
+    ("docs/reference", "the reference generators (scripts/docs/build_docs.py)"),
+    ("docs/assets/generated", "scripts/infra_map/gen_infra_map.py"),
 )
 
 

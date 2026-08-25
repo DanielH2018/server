@@ -3,7 +3,7 @@
 #
 # This repo is 3.14-only (`requires-python = ">=3.14"`) and uses PEP 758 syntax —
 # unparenthesized `except OSError, yaml.YAMLError:` — in 8 files, among them
-# scripts/probe.py, ansible/filter_plugins/toposort.py and
+# scripts/diagnostics/probe.py, ansible/filter_plugins/toposort.py and
 # ansible/roles/k8s/monitor-bridge/files/check.py. Ubuntu's /usr/bin/python3 is 3.12,
 # which cannot *parse* those files, so a bare `pytest` reports a SyntaxError that reads
 # like a repo bug and is really an interpreter bug. CLAUDE.md already says to run
@@ -32,7 +32,7 @@ cmd=$(printf '%s' "$input" | jq -r '
 [[ -z "$cmd" ]] && exit 0
 
 # The programs that must not run on the system interpreter. `*.py` covers a script
-# invoked by its shebang (`./scripts/probe.py`), which names no interpreter at all and so
+# invoked by its shebang (`./scripts/diagnostics/probe.py`), which names no interpreter at all and so
 # would otherwise slip past every python-named pattern here.
 PROGS='(python3?|pytest|py\.test|ansible-playbook|[^[:space:]]*\.py)'
 

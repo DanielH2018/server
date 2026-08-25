@@ -9,20 +9,20 @@ applied when it isn't. **Prefer the live REST API over the recorder DB.** Run fr
 
 ## The live API (use this first)
 
-`scripts/probe.py ha …` is read-only and allow-listed (no prompt); it queries HA's REST API
+`scripts/diagnostics/probe.py ha …` is read-only and allow-listed (no prompt); it queries HA's REST API
 with the `claude_ha_token`:
 
-- **Entity state:** `uv run python scripts/probe.py ha state <entity_id>`
+- **Entity state:** `uv run python scripts/diagnostics/probe.py ha state <entity_id>`
   → current `state` + attributes + `last_changed`/`last_updated`. `--json` for raw.
-- **Did an automation load / fire?** `uv run python scripts/probe.py ha automation <id-or-alias>`
+- **Did an automation load / fire?** `uv run python scripts/diagnostics/probe.py ha automation <id-or-alias>`
   → on/off + `last_triggered`. **Pass the automation's `id` OR its alias-slug OR full
   `automation.<slug>` — the matcher resolves all three.** A non-zero exit + "not found" means it
   did NOT load (wrong file, validation skipped it, or it never deployed).
-- **Why did it run but no-op?** `uv run python scripts/probe.py ha why <id-or-alias>` (alias `ha
+- **Why did it run but no-op?** `uv run python scripts/diagnostics/probe.py ha why <id-or-alias>` (alias `ha
   trace`) pulls the live per-condition trace — which condition blocked the last run. Caveat: traces
   are in-memory and wiped on every HA restart/deploy, and an automation whose trigger NEVER matched
   leaves no trace — for the "nothing happened" case use `ha get logbook/<entity>` + `last_triggered`.
-- **Live error log:** `uv run python scripts/probe.py ha get error_log` — catches a template that
+- **Live error log:** `uv run python scripts/diagnostics/probe.py ha get error_log` — catches a template that
   parsed structurally but throws at render time, or an integration that failed to set up.
 
 To confirm an automation *fired*: note `last_triggered`, cause the trigger, re-query, and check
@@ -56,7 +56,7 @@ it advanced. A loaded-but-never-fired automation has an old/`None` `last_trigger
 `probe.py ha` needs a host age key to decrypt the token, so run it on daniel-server or
 daniel-box — it reaches HA at the stable bridge URL `https://home-assistant.local.<domain>`,
 which is the same endpoint before and after the cluster move. If HA is down, check first with
-`uv run python scripts/probe.py health home-assistant` (k8s-native: gates on rollout completion
+`uv run python scripts/diagnostics/probe.py health home-assistant` (k8s-native: gates on rollout completion
 AND no container restart in the last 180s — catches a crashlooping pod that a bare rollout
 check would miss). On failure, drill down with `kubectl -n homelab get pods -l
 app=home-assistant` and `kubectl -n homelab logs deploy/home-assistant --tail=50`. The

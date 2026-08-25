@@ -37,8 +37,8 @@ merge, so this block is the source of truth for what actually ran instead of the
 The acceptance test for every conversion in this program is "requests kept succeeding across a rollout". That needs a tool before it needs a conversion, and the same tool grades slices 2, 4, 5, 6, 7 and 9. It only reads, so it works under the read-only service account.
 
 **Files:**
-- Create: `scripts/measure_rollout_gap.py`
-- Test: `scripts/test_measure_rollout_gap.py`
+- Create: `scripts/dev/measure_rollout_gap.py`
+- Test: `scripts/dev/test_measure_rollout_gap.py`
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks.
@@ -46,7 +46,7 @@ The acceptance test for every conversion in this program is "requests kept succe
 
 - [ ] **Step 1: Write the failing test**
 
-Create `scripts/test_measure_rollout_gap.py`:
+Create `scripts/dev/test_measure_rollout_gap.py`:
 
 ```python
 """Gap summarisation: the arithmetic that turns poll samples into a downtime verdict.
@@ -106,12 +106,12 @@ def test_empty_samples_is_not_a_pass():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run pytest scripts/test_measure_rollout_gap.py -v -n0`
+Run: `uv run pytest scripts/dev/test_measure_rollout_gap.py -v -n0`
 Expected: FAIL — `ModuleNotFoundError: No module named 'measure_rollout_gap'`
 
 - [ ] **Step 3: Write the implementation**
 
-Create `scripts/measure_rollout_gap.py`:
+Create `scripts/dev/measure_rollout_gap.py`:
 
 ```python
 #!/usr/bin/env python3
@@ -129,8 +129,8 @@ under the homelab-readonly service account. Trigger the rollout separately — t
 is running.
 
 Usage:
-    uv run python scripts/measure_rollout_gap.py --url https://grafana.local.example --seconds 180
-    uv run python scripts/measure_rollout_gap.py --dns homepage.local.example --server 10.0.0.243 --seconds 180
+    uv run python scripts/dev/measure_rollout_gap.py --url https://grafana.local.example --seconds 180
+    uv run python scripts/dev/measure_rollout_gap.py --dns homepage.local.example --server 10.0.0.243 --seconds 180
 
 Exit code is 0 only when zero requests failed, so it is usable as a gate.
 """
@@ -281,29 +281,29 @@ if __name__ == "__main__":
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest scripts/test_measure_rollout_gap.py -v -n0`
+Run: `uv run pytest scripts/dev/test_measure_rollout_gap.py -v -n0`
 Expected: PASS, 6 tests.
 
 - [ ] **Step 5: Verify the CLI parses and rejects a bad invocation**
 
-Run: `uv run python scripts/measure_rollout_gap.py --help`
+Run: `uv run python scripts/dev/measure_rollout_gap.py --help`
 Expected: usage text, exit 0.
 
-Run: `uv run python scripts/measure_rollout_gap.py --seconds 1`
+Run: `uv run python scripts/dev/measure_rollout_gap.py --seconds 1`
 Expected: exit 2 with `one of the arguments --url --dns is required`.
 
 - [ ] **Step 6: Lint**
 
-Run: `uv run ruff check scripts/measure_rollout_gap.py scripts/test_measure_rollout_gap.py`
+Run: `uv run ruff check scripts/dev/measure_rollout_gap.py scripts/dev/test_measure_rollout_gap.py`
 Expected: `All checks passed!`
 
-Run: `uv run ruff format --check scripts/measure_rollout_gap.py scripts/test_measure_rollout_gap.py`
+Run: `uv run ruff format --check scripts/dev/measure_rollout_gap.py scripts/dev/test_measure_rollout_gap.py`
 Expected: no reformatting needed. If it reports files, run without `--check` and re-run the tests.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add scripts/measure_rollout_gap.py scripts/test_measure_rollout_gap.py
+git add scripts/dev/measure_rollout_gap.py scripts/dev/test_measure_rollout_gap.py
 git commit -m "Add a rollout-gap probe to measure downtime instead of asserting it
 
 Every zero-downtime claim in the design is graded by a request loop across a
@@ -565,7 +565,7 @@ it mid-rollout and requests drop."
 - Modify: `ansible/tests/test_deploy_strategy.py`
 
 **Interfaces:**
-- Consumes: `_RECREATE` from Task 2; `scripts/measure_rollout_gap.py` from Task 1.
+- Consumes: `_RECREATE` from Task 2; `scripts/dev/measure_rollout_gap.py` from Task 1.
 - Produces: nothing later tasks import.
 
 - [ ] **Step 1: Remove the allowlist entry so the guard fails first**
@@ -630,7 +630,7 @@ with:
 
 - [ ] **Step 5: Verify the manifest still renders**
 
-Run: `uv run python scripts/validate_k8s_manifests.py`
+Run: `uv run python scripts/validate/validate_k8s_manifests.py`
 Expected: exit 0, no render or YAML errors.
 
 - [ ] **Step 6: Run the guard to verify it passes**
@@ -734,7 +734,7 @@ kubectl -n homelab port-forward svc/flaresolverr 8191:8191
 In a second terminal:
 
 ```bash
-uv run python scripts/measure_rollout_gap.py --url http://127.0.0.1:8191/ --seconds 180
+uv run python scripts/dev/measure_rollout_gap.py --url http://127.0.0.1:8191/ --seconds 180
 ```
 
 In a third terminal, once the probe says it is polling:
@@ -779,7 +779,7 @@ Approach B in the spec proposes tuning `terminationGracePeriodSeconds`, `minRead
 - Modify: `docs/archive/zero-downtime-deploys-design.md`
 
 **Interfaces:**
-- Consumes: `scripts/measure_rollout_gap.py` from Task 1.
+- Consumes: `scripts/dev/measure_rollout_gap.py` from Task 1.
 - Produces: a baseline table later tuning work is measured against.
 
 - [ ] **Step 1: Pick the sample**
@@ -805,7 +805,7 @@ Use the actual domain from that output. Note that `-k8s` names do not resolve fr
 For each service in the table, in one terminal:
 
 ```bash
-uv run python scripts/measure_rollout_gap.py --url <url> --seconds 240 --interval 0.5
+uv run python scripts/dev/measure_rollout_gap.py --url <url> --seconds 240 --interval 0.5
 ```
 
 and in another, once polling starts:
@@ -823,7 +823,7 @@ Create `docs/archive/zero-downtime-baseline.md`:
 ```markdown
 # Recreate gap baseline
 
-Measured with `scripts/measure_rollout_gap.py` across a real
+Measured with `scripts/dev/measure_rollout_gap.py` across a real
 `./scripts/deploy.sh --tags <service>` rollout. These are `Recreate` workloads, so a
 gap is expected — this records how large it actually is, so that approach B's tuning
 can be aimed at what the data implicates rather than applied blind across ~35 roles.

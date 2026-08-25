@@ -875,12 +875,14 @@ def test_k8s_remediation_never_prescribes_a_tag_that_deploys_nothing():
     they are the shared plane (manifests is the apply+rollout path for every workload;
     volume-revert is the auto-deploy rollback path).
 
-    Cross-checked against scripts/deploy_tags.known_tags(), the same source ./scripts/deploy.sh
+    Cross-checked against scripts/deploy_tools/deploy_tags.known_tags(), the same source ./scripts/deploy.sh
     validates against, so the alert and the wrapper cannot drift apart.
     """
     import sys
 
-    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[5] / "scripts"))
+    sys.path.insert(
+        0, str(pathlib.Path(__file__).resolve().parents[5] / "scripts" / "deploy_tools")
+    )
     import deploy_tags
 
     declared = deploy_tags.known_tags()

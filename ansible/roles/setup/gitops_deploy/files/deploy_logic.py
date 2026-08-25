@@ -254,7 +254,7 @@ def k8s_remediation(
     `containers_list` entry has a deploy tag. deploy.yml includes k8s roles per entry with
     `tags: [<entry name>]`, so `--tags <role>` for a role with no entry matches nothing and
     ANSIBLE EXITS 0 — the operator runs the prescribed command, sees green, and the change is
-    never applied. `scripts/deploy_tags.py` catches it downstream with exit 2, but the alert
+    never applied. `scripts/deploy_tools/deploy_tags.py` catches it downstream with exit 2, but the alert
     itself was pointing at a command that cannot work.
 
     Eight roles are in that position today (manifests, rollout-drain, seed-volume,

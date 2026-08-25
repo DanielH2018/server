@@ -141,7 +141,7 @@ metadata) — it survives an in-place upgrade, but that is what a backup must pr
     - bumps `ansible/requirements.yml` to the latest collections (community.general
       **13.x** unlocks once core ≥2.18, etc.),
     - aligns the `prek.toml` ansible-core constraint,
-    - re-runs `scripts/validate_compose_templates.py` + `ansible-lint`,
+    - re-runs `scripts/validate/validate_compose_templates.py` + `ansible-lint`,
     - commits.
 
 > **Gotcha hit during this upgrade (apply to the Pi too):** bumping community.general

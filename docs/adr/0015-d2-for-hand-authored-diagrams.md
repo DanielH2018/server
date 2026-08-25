@@ -19,7 +19,7 @@ The docs site carries three classes of diagram, and they differ in who authors t
 
 | Class | Source | Rendered by |
 |---|---|---|
-| Content comes from the tree | the tree itself | a generator emits SVG (`scripts/build_docs.py`) |
+| Content comes from the tree | the tree itself | a generator emits SVG (`scripts/docs/build_docs.py`) |
 | Someone draws it | a checked-in source file | the subject of this record |
 | Neither | a committed SVG | an escape hatch |
 

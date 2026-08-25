@@ -97,7 +97,7 @@ the Configarr Sync monitor doesn't false-DOWN before the first daily cron tick.
 
 ## Refreshing the Anime baseline snapshot
 ```bash
-uv run python scripts/probe.py arr sonarr "/api/v3/qualityprofile" --json \
+uv run python scripts/probe/probe.py arr sonarr "/api/v3/qualityprofile" --json \
   | jq '.[]|select(.name=="Anime")' > ansible/roles/k8s/configarr/files/baseline/anime-profile.json
 ```
 

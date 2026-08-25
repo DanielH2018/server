@@ -95,7 +95,7 @@ invariant when adding tasks, or tag-scoped runs die on undefined variables.
 - **Cron/maintenance:** weekly reboot, Docker image cleanup, ansible.log rotation, weekly
   autoremove + config-remnant purge, install of the repo Git hooks, and (daniel-box only) the
   15-minute infrastructure-map refresh that regenerates the HTML artifact from
-  `scripts/gen_infra_map.py`.
+  `scripts/infra_map/gen_infra_map.py`.
 - **Unattended upgrades:** enable periodic security upgrades + local policy.
 
 ## Notable

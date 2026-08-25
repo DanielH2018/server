@@ -5,7 +5,7 @@ the plan for that one.
 
 | Class | Source | Built by |
 |---|---|---|
-| Content comes from the tree | the tree itself | a generator emits SVG (`scripts/build_docs.py`) |
+| Content comes from the tree | the tree itself | a generator emits SVG (`scripts/docs/build_docs.py`) |
 | Someone draws it | `docs/diagrams/*.d2` | **this plan** — not yet built |
 | Neither | a committed SVG | an escape hatch, checked in by hand |
 
@@ -90,4 +90,4 @@ Run: `uv run prek run --all-files`
 Run: `uv run pytest`
 Run: `uv run mkdocs build --strict`
 
-Then follow the repo's *After a PR Merges* procedure: record the pre-merge SHA, wait for master CI on the merge commit specifically, `./scripts/gitops_tick.sh`, then deploy from the primary checkout.
+Then follow the repo's *After a PR Merges* procedure: record the pre-merge SHA, wait for master CI on the merge commit specifically, `./scripts/deploy_tools/gitops_tick.sh`, then deploy from the primary checkout.

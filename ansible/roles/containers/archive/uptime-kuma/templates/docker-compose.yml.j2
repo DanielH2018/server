@@ -350,7 +350,7 @@ services:
       # LAN-bypassed push API; interval 600 = 2x the cron, so a dead cron/host also trips it.
       {{ kuma('daniel-pi-recovery', name='Daniel Pi Recovery', monitor_type='push', interval=600, max_retries=0, push_token=pi_recovery_push_token) }}
       # Secret rotation: a daily server cron (secret-rotation-audit.sh, initial_setup) runs
-      # scripts/secret_rotation.py audit --push — down when any secret is past its
+      # scripts/secrets_mgmt/secret_rotation.py audit --push — down when any secret is past its
       # per-tier rotation window OR an unregistered secret exists (run `sync`). interval
       # 90000s (25h) = 1 day + slack, so a dead audit cron also trips the push watchdog.
       {{ kuma('secret-rotation', name='Secret Rotation', monitor_type='push', interval=90000, max_retries=0, push_token=secret_rotation_push_token) }}

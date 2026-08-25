@@ -4,7 +4,7 @@
 
 **Goal:** Stand up an MkDocs Material site behind Authelia whose `docs/reference/` pages regenerate from the Ansible tree by cron.
 
-**Architecture:** A new `ansible/roles/k8s/docs` role runs nginx over a hostPath on `daniel-box`, copying the shape of `roles/k8s/artifacts`. The static site is built on the host by `scripts/build_docs.py`, which runs the reference generators and then `mkdocs build`. A cron regenerates, commits, and pushes under `/var/lock/server-git-tree.lock`.
+**Architecture:** A new `ansible/roles/k8s/docs` role runs nginx over a hostPath on `daniel-box`, copying the shape of `roles/k8s/artifacts`. The static site is built on the host by `scripts/docs/build_docs.py`, which runs the reference generators and then `mkdocs build`. A cron regenerates, commits, and pushes under `/var/lock/server-git-tree.lock`.
 
 **Tech Stack:** MkDocs Material, nginx-unprivileged, Ansible, k3s, Python 3.14 + uv, pytest.
 
@@ -16,7 +16,7 @@
 
 - **Python is 3.14 via uv.** Never invoke bare `python3`/`pytest`. Every command is `uv run …`. A PreToolUse hook rewrites bare invocations, but write the commands correctly anyway.
 - **Generators parse statically.** They must never shell out to `ansible` or `kubectl` to read *repo* facts. A fresh worktree has no Ansible collections, and `ansible/inventory/*.yml` holds SOPS lookups that do not render outside a deploy. Read YAML with `yaml.safe_load` and template text with regex. Live *cluster* state is the sole exception, and it degrades to declared-only when unreachable.
-- **An underivable fact prints its reason, never a guess.** Follow the `"unknown"` precedent in `scripts/service_catalog.py`.
+- **An underivable fact prints its reason, never a guess.** Follow the `"unknown"` precedent in `scripts/docs/service_catalog.py`.
 - **`ansible/roles/k8s/<name>/templates/` holds manifests only.** `validate_k8s_manifests.py` renders every `*.j2` there and parses it as YAML. Non-manifest config goes in `templates/config/`, static assets in `files/`.
 - **Volume names are descriptive.** `docs-site`, never `site`. ENFORCED by `ansible/tests/test_volume_names_descriptive.py`.
 - **Image tags are pinned to a real version** — a version tag or `latest@sha256:…`. Never a bare `:latest`.
@@ -300,7 +300,7 @@ k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessPro
 # an empty directory and serve a 404 index rather than fail visibly.
 docs_k8s_node: daniel-box
 
-# Where scripts/build_docs.py writes `mkdocs build` output, and what the pod serves.
+# Where scripts/docs/build_docs.py writes `mkdocs build` output, and what the pod serves.
 # NOT inside the repo checkout: a GitOps tick rewrites that tree with `git pull`, and
 # replacing a served directory mid-request is a failure mode with no upside.
 docs_host_site_dir: /home/ubuntu/docs-site
@@ -501,7 +501,7 @@ is; nothing here does. The `authelia` middleware gates it either way.
 In `ansible/inventory/host_vars/daniel-box.yml`, add this to `containers_list`. **Position it after the `traefik` and `authelia` entries** — the play runs in list order with no toposort, and the IngressRoute needs Traefik's CRDs and Authelia's middleware to exist already.
 
 ```yaml
-  # MkDocs Material site over docs/, built on this host by scripts/build_docs.py and served
+  # MkDocs Material site over docs/, built on this host by scripts/docs/build_docs.py and served
   # from a hostPath. LAN-only: the reference pages map every service, route and auth tier.
   - name: docs
     platform: k8s
@@ -533,14 +533,14 @@ Exit 75 means the git-tree lock was busy and nothing deployed — retry. Exit 4 
 
 - [ ] **Step 9: Verify the rollout, then verify the page**
 
-Run: `uv run python scripts/probe.py health docs`
+Run: `uv run python scripts/probe/probe.py health docs`
 Expected: exit 0. This gates on the Deployment being fully rolled out *and* on no container restart in the last 180s.
 
 Then load `https://docs.local.<domain>` in a browser. **The health probe cannot see whether the site rendered.** An Authelia 302 fires in the middleware before nginx is reached, so a green probe plus a working redirect proves nothing about content. Confirm the page body is the MkDocs index, and that the search box returns a hit for a word taken from an existing runbook.
 
 - [ ] **Step 10: Write `ansible/roles/k8s/docs/CLAUDE.md`**
 
-Cover, in this order: what the role serves and from where; why the pod is pinned to `daniel-box` and what breaks if that pin is removed; that the site is built on the host and never in the pod, and why — no repo checkout and no git credential belongs in a pod; why `docs_host_site_dir` sits outside the repo checkout, since a GitOps tick rewrites that tree; and that the reference pages are generated, pointing at `scripts/build_docs.py` once Task 6 lands.
+Cover, in this order: what the role serves and from where; why the pod is pinned to `daniel-box` and what breaks if that pin is removed; that the site is built on the host and never in the pod, and why — no repo checkout and no git credential belongs in a pod; why `docs_host_site_dir` sits outside the repo checkout, since a GitOps tick rewrites that tree; and that the reference pages are generated, pointing at `scripts/docs/build_docs.py` once Task 6 lands.
 
 - [ ] **Step 11: Commit**
 
@@ -570,13 +570,13 @@ A generated page must say when it was built and from which commit. This is the w
 One module, because four generators will need it and a copy in each drifts.
 
 **Files:**
-- Create: `scripts/docs_provenance.py`
-- Test: `scripts/test_docs_provenance.py`
+- Create: `scripts/lib/docs_provenance.py`
+- Test: `scripts/lib/test_docs_provenance.py`
 
 **Interfaces:**
 - Consumes: nothing.
 - Produces:
-  - `generated_banner(source: str, *, when: datetime | None = None, sha: str | None = None) -> str` — the full Markdown preamble: YAML frontmatter plus a "do not edit" admonition. `source` is the generator's own path, e.g. `scripts/service_catalog.py`.
+  - `generated_banner(source: str, *, when: datetime | None = None, sha: str | None = None) -> str` — the full Markdown preamble: YAML frontmatter plus a "do not edit" admonition. `source` is the generator's own path, e.g. `scripts/docs/service_catalog.py`.
   - `head_sha(repo: Path | None = None) -> str` — the short commit SHA, or `"unknown"` when git is unavailable.
   - `write_if_body_changed(path: Path, content: str) -> bool` — writes only when the body below the frontmatter differs. Returns whether it wrote. Tasks 4, 5 and 9 call this instead of `Path.write_text`.
 
@@ -595,7 +595,7 @@ The split:
 
 - [ ] **Step 1: Write the failing test**
 
-Create `scripts/test_docs_provenance.py`:
+Create `scripts/lib/test_docs_provenance.py`:
 
 ```python
 """The provenance banner is the only staleness signal generated docs carry.
@@ -618,14 +618,14 @@ FIXED = dt.datetime(2026, 8, 24, 14, 30, tzinfo=dt.timezone.utc)
 
 
 def test_banner_carries_the_timestamp():
-    banner = generated_banner("scripts/service_catalog.py", when=FIXED, sha="abc1234")
+    banner = generated_banner("scripts/docs/service_catalog.py", when=FIXED, sha="abc1234")
     assert "2026-08-24" in banner
     assert "14:30" in banner
 
 
 def test_banner_carries_the_source_and_sha():
-    banner = generated_banner("scripts/service_catalog.py", when=FIXED, sha="abc1234")
-    assert "scripts/service_catalog.py" in banner
+    banner = generated_banner("scripts/docs/service_catalog.py", when=FIXED, sha="abc1234")
+    assert "scripts/docs/service_catalog.py" in banner
     assert "abc1234" in banner
 
 
@@ -634,12 +634,12 @@ def test_banner_warns_against_hand_editing():
 
     Someone reading the rendered page has no view of the prek config.
     """
-    banner = generated_banner("scripts/service_catalog.py", when=FIXED, sha="abc1234")
+    banner = generated_banner("scripts/docs/service_catalog.py", when=FIXED, sha="abc1234")
     assert "do not edit" in banner.lower()
 
 
 def test_banner_opens_with_yaml_frontmatter():
-    banner = generated_banner("scripts/service_catalog.py", when=FIXED, sha="abc1234")
+    banner = generated_banner("scripts/docs/service_catalog.py", when=FIXED, sha="abc1234")
     lines = banner.splitlines()
     assert lines[0] == "---"
     assert "---" in lines[1:], "frontmatter block is never closed"
@@ -648,10 +648,10 @@ def test_banner_opens_with_yaml_frontmatter():
 def test_banner_frontmatter_parses_as_yaml():
     import yaml
 
-    banner = generated_banner("scripts/service_catalog.py", when=FIXED, sha="abc1234")
+    banner = generated_banner("scripts/docs/service_catalog.py", when=FIXED, sha="abc1234")
     body = banner.split("---")[1]
     meta = yaml.safe_load(body)
-    assert meta["generated_from"] == "scripts/service_catalog.py"
+    assert meta["generated_from"] == "scripts/docs/service_catalog.py"
     assert meta["generated_sha"] == "abc1234"
 
 
@@ -672,10 +672,10 @@ def test_head_sha_reads_the_real_repo():
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `uv run pytest scripts/test_docs_provenance.py -v`
+Run: `uv run pytest scripts/lib/test_docs_provenance.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'docs_provenance'`.
 
-- [ ] **Step 3: Write `scripts/docs_provenance.py`**
+- [ ] **Step 3: Write `scripts/lib/docs_provenance.py`**
 
 ```python
 #!/usr/bin/env python3
@@ -759,14 +759,14 @@ def generated_banner(
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `uv run pytest scripts/test_docs_provenance.py -v`
+Run: `uv run pytest scripts/lib/test_docs_provenance.py -v`
 Expected: PASS, all seven.
 
 If `test_banner_frontmatter_parses_as_yaml` fails on a `:` inside the source path, the frontmatter needs quoting. Quote the value rather than dropping the assertion.
 
 - [ ] **Step 5: Write the failing tests for `write_if_body_changed`**
 
-Append to `scripts/test_docs_provenance.py`:
+Append to `scripts/lib/test_docs_provenance.py`:
 
 ```python
 from docs_provenance import write_if_body_changed
@@ -847,12 +847,12 @@ def write_if_body_changed(path: Path, content: str) -> bool:
 
 - [ ] **Step 7: Run the tests to verify they pass**
 
-Run: `uv run pytest scripts/test_docs_provenance.py -v`
+Run: `uv run pytest scripts/lib/test_docs_provenance.py -v`
 Expected: PASS, all eleven.
 
 - [ ] **Step 8: Commit**
 
-Stage `scripts/docs_provenance.py` and `scripts/test_docs_provenance.py`. Commit with:
+Stage `scripts/lib/docs_provenance.py` and `scripts/lib/test_docs_provenance.py`. Commit with:
 
 ```
 Add the provenance banner for generated docs pages
@@ -874,8 +874,8 @@ because git moved is worse than a page reading "unknown".
 `build_rows()` already returns `list[ServiceRow]` and `render_html()` is a pure function of that list. The Markdown emitter is a sibling of `render_html()`, not a rewrite.
 
 **Files:**
-- Modify: `scripts/service_catalog.py` (add `render_markdown()`, add `--format`)
-- Modify: `scripts/test_service_catalog.py` (add the Markdown cases)
+- Modify: `scripts/docs/service_catalog.py` (add `render_markdown()`, add `--format`)
+- Modify: `scripts/docs/test_service_catalog.py` (add the Markdown cases)
 - Modify: `mkdocs.yml` (add the `Reference` nav section)
 - Create: `docs/reference/services.md` (generated, committed)
 
@@ -885,11 +885,11 @@ because git moved is worse than a page reading "unknown".
 
 - [ ] **Step 1: Read the existing renderer and row type**
 
-Read `scripts/service_catalog.py` around `class ServiceRow` (line 79) and `render_html` (line 397). `ServiceRow` has seven fields: `name`, `host`, `platform`, `route`, `auth_tier`, `backup_tier`, `autodeploy`. The Markdown table carries the same seven — do not invent columns, and do not drop any.
+Read `scripts/docs/service_catalog.py` around `class ServiceRow` (line 79) and `render_html` (line 397). `ServiceRow` has seven fields: `name`, `host`, `platform`, `route`, `auth_tier`, `backup_tier`, `autodeploy`. The Markdown table carries the same seven — do not invent columns, and do not drop any.
 
 - [ ] **Step 2: Write the failing tests**
 
-Append to `scripts/test_service_catalog.py`:
+Append to `scripts/docs/test_service_catalog.py`:
 
 ```python
 def test_markdown_has_one_row_per_service():
@@ -917,7 +917,7 @@ def test_markdown_groups_by_host():
 def test_markdown_opens_with_the_provenance_banner():
     out = render_markdown([])
     assert out.startswith("---\n")
-    assert "generated_from: scripts/service_catalog.py" in out
+    assert "generated_from: scripts/docs/service_catalog.py" in out
     assert "do not edit" in out.lower()
 
 
@@ -948,12 +948,12 @@ Add `render_markdown` to the module's import line at the top of the test file.
 
 - [ ] **Step 3: Run the tests to verify they fail**
 
-Run: `uv run pytest scripts/test_service_catalog.py -v -k markdown`
+Run: `uv run pytest scripts/docs/test_service_catalog.py -v -k markdown`
 Expected: FAIL — `ImportError: cannot import name 'render_markdown'`.
 
 - [ ] **Step 4: Implement `render_markdown()`**
 
-Add to `scripts/service_catalog.py`, next to `render_html()`:
+Add to `scripts/docs/service_catalog.py`, next to `render_html()`:
 
 ```python
 def _md_cell(value: str) -> str:
@@ -973,7 +973,7 @@ def render_markdown(rows: list[ServiceRow]) -> str:
     """
     from docs_provenance import generated_banner
 
-    parts = [generated_banner("scripts/service_catalog.py")]
+    parts = [generated_banner("scripts/docs/service_catalog.py")]
     parts.append("# Services\n")
     parts.append(
         f"{len(rows)} service(s) declared across "
@@ -1015,7 +1015,7 @@ def render_markdown(rows: list[ServiceRow]) -> str:
     parts.append(
         f"\n## Underivable facts\n\n{unknowns} field(s) read `unknown`. "
         "A fact with no machine-readable source prints its reason rather than a guess — "
-        "see the FIELD NOTES section of `scripts/service_catalog.py` for which facts those "
+        "see the FIELD NOTES section of `scripts/docs/service_catalog.py` for which facts those "
         "are and why.\n"
     )
     return "\n".join(parts) + "\n"
@@ -1055,13 +1055,13 @@ The default stays `html` so the existing standalone artifact behaviour is unchan
 
 - [ ] **Step 6: Run the full suite for this script**
 
-Run: `uv run pytest scripts/test_service_catalog.py -v`
+Run: `uv run pytest scripts/docs/test_service_catalog.py -v`
 Expected: PASS, including the pre-existing HTML tests. If an HTML test broke, the `--format` change altered a shared path — fix it rather than adjusting the test.
 
 - [ ] **Step 7: Generate the page and wire the nav**
 
 ```bash
-uv run python scripts/service_catalog.py --format markdown --out docs/reference/services.md
+uv run python scripts/docs/service_catalog.py --format markdown --out docs/reference/services.md
 ```
 
 Add a `Reference` section to `mkdocs.yml`'s nav, immediately after `Home`:
@@ -1078,7 +1078,7 @@ Open `docs/reference/services.md` and confirm the row count matches `grep -c '^ 
 
 - [ ] **Step 8: Commit**
 
-Stage `scripts/service_catalog.py`, `scripts/test_service_catalog.py`, `docs/reference/services.md`, and `mkdocs.yml`. Commit with:
+Stage `scripts/docs/service_catalog.py`, `scripts/docs/test_service_catalog.py`, `docs/reference/services.md`, and `mkdocs.yml`. Commit with:
 
 ```
 service_catalog: emit Markdown for the docs site
@@ -1098,14 +1098,14 @@ one appearing.
 
 ### Task 5: `gen_infra_map.py` emits a standalone SVG
 
-`_diagram_view()` at `scripts/infra_map_render.py:361` already returns a complete `<svg class="dg" viewBox="0 0 1140 900">…</svg>`. Its colours do not travel with it: every fill and stroke comes from the module-level `STYLE` string, injected into the page's `<style>` element at line 687. Embedded in Markdown, that SVG renders as unstyled black shapes.
+`_diagram_view()` at `scripts/infra_map/infra_map_render.py:361` already returns a complete `<svg class="dg" viewBox="0 0 1140 900">…</svg>`. Its colours do not travel with it: every fill and stroke comes from the module-level `STYLE` string, injected into the page's `<style>` element at line 687. Embedded in Markdown, that SVG renders as unstyled black shapes.
 
 The fix is to inline the stylesheet as a `<style>` child of the `<svg>` element. This is the whole task — the drawing code does not change.
 
 **Files:**
-- Modify: `scripts/infra_map_render.py` (add `render_svg()`)
-- Modify: `scripts/gen_infra_map.py` (add `--format`, re-export `render_svg`)
-- Modify: `scripts/test_gen_infra_map.py` (add the SVG cases)
+- Modify: `scripts/infra_map/infra_map_render.py` (add `render_svg()`)
+- Modify: `scripts/infra_map/gen_infra_map.py` (add `--format`, re-export `render_svg`)
+- Modify: `scripts/infra_map/test_gen_infra_map.py` (add the SVG cases)
 - Create: `docs/reference/topology.md` (generated, committed)
 - Create: `docs/assets/generated/infra-map.svg` (generated, committed)
 
@@ -1115,11 +1115,11 @@ The fix is to inline the stylesheet as a `<style>` child of the `<svg>` element.
 
 - [ ] **Step 1: Read the two pieces you are joining**
 
-Read `scripts/infra_map_render.py:361` (`_diagram_view`), its return at lines 595-596, and the `STYLE` constant used at line 687. Confirm for yourself that the CSS selectors `_diagram_view` relies on (`.box`, `.edge`, `.t-title`, `.t-sub`, `.t-edge`, and the `s-<status>` classes) are all defined in `STYLE`. If some live in a different constant, inline that one too.
+Read `scripts/infra_map/infra_map_render.py:361` (`_diagram_view`), its return at lines 595-596, and the `STYLE` constant used at line 687. Confirm for yourself that the CSS selectors `_diagram_view` relies on (`.box`, `.edge`, `.t-title`, `.t-sub`, `.t-edge`, and the `s-<status>` classes) are all defined in `STYLE`. If some live in a different constant, inline that one too.
 
 - [ ] **Step 2: Write the failing tests**
 
-Append to `scripts/test_gen_infra_map.py`, reusing whatever model fixture the existing tests build:
+Append to `scripts/infra_map/test_gen_infra_map.py`, reusing whatever model fixture the existing tests build:
 
 ```python
 def test_svg_is_a_standalone_document(sample_model):
@@ -1165,12 +1165,12 @@ def test_svg_parses_as_xml(sample_model):
 
 - [ ] **Step 3: Run the tests to verify they fail**
 
-Run: `uv run pytest scripts/test_gen_infra_map.py -v -k svg`
+Run: `uv run pytest scripts/infra_map/test_gen_infra_map.py -v -k svg`
 Expected: FAIL — `render_svg` is not defined.
 
 - [ ] **Step 4: Implement `render_svg()`**
 
-Add to `scripts/infra_map_render.py`, next to `render_html()`:
+Add to `scripts/infra_map/infra_map_render.py`, next to `render_html()`:
 
 ```python
 def render_svg(model: dict) -> str:
@@ -1198,7 +1198,7 @@ def render_svg(model: dict) -> str:
 
 - [ ] **Step 5: Add the `--format` flag to the CLI**
 
-In `scripts/gen_infra_map.py`, re-export `render_svg` alongside the other public names it already re-exports, then add to its argument parser:
+In `scripts/infra_map/gen_infra_map.py`, re-export `render_svg` alongside the other public names it already re-exports, then add to its argument parser:
 
 ```python
     parser.add_argument(
@@ -1217,13 +1217,13 @@ Default stays `html`, so the cron that writes `~/.claude/artifacts/homelab-infra
 
 - [ ] **Step 6: Run the tests to verify they pass**
 
-Run: `uv run pytest scripts/test_gen_infra_map.py -v`
+Run: `uv run pytest scripts/infra_map/test_gen_infra_map.py -v`
 Expected: PASS, including the pre-existing HTML tests.
 
 - [ ] **Step 7: Generate the page and check it renders**
 
 ```bash
-uv run python scripts/gen_infra_map.py --format svg --out docs/assets/generated/infra-map.svg
+uv run python scripts/infra_map/gen_infra_map.py --format svg --out docs/assets/generated/infra-map.svg
 ```
 
 Write `docs/reference/topology.md` by hand — this page is prose around a generated image, so only the SVG is generated:
@@ -1280,8 +1280,8 @@ is untouched. --format defaults to html, so the artifact cron is unchanged.
 Everything so far runs by hand. This task collapses it into one script, which Task 7 then schedules. Writing the script before the cron means the cron has nothing to get wrong.
 
 **Files:**
-- Create: `scripts/build_docs.py`
-- Test: `scripts/test_build_docs.py`
+- Create: `scripts/docs/build_docs.py`
+- Test: `scripts/docs/test_build_docs.py`
 
 **Interfaces:**
 - Consumes: `service_catalog.py --format markdown`, `gen_infra_map.py --format svg`.
@@ -1291,7 +1291,7 @@ Everything so far runs by hand. This task collapses it into one script, which Ta
 
 The behaviour worth testing is failure handling, not the happy path. A generator that dies must not take the site build down with it — a stale page is better than no page, which is the same reasoning the infra-map cron already records.
 
-Create `scripts/test_build_docs.py`:
+Create `scripts/docs/test_build_docs.py`:
 
 ```python
 """build_docs must degrade rather than abort.
@@ -1337,7 +1337,7 @@ def test_run_generators_reports_which_failed(monkeypatch):
 
 
 def test_main_exits_nonzero_when_a_generator_failed(monkeypatch):
-    monkeypatch.setattr(build_docs, "run_generators", lambda: ["scripts/service_catalog.py"])
+    monkeypatch.setattr(build_docs, "run_generators", lambda: ["scripts/docs/service_catalog.py"])
     monkeypatch.setattr(build_docs, "build_site", lambda site_dir: True)
     assert build_docs.main(["--site-dir", "/tmp/x"]) == 1
 
@@ -1345,7 +1345,7 @@ def test_main_exits_nonzero_when_a_generator_failed(monkeypatch):
 def test_main_builds_the_site_even_when_a_generator_failed(monkeypatch):
     """The stale-page-beats-no-page rule, asserted."""
     built: list[str] = []
-    monkeypatch.setattr(build_docs, "run_generators", lambda: ["scripts/service_catalog.py"])
+    monkeypatch.setattr(build_docs, "run_generators", lambda: ["scripts/docs/service_catalog.py"])
     monkeypatch.setattr(build_docs, "build_site", lambda site_dir: built.append(site_dir) or True)
     build_docs.main(["--site-dir", "/tmp/x"])
     assert built == ["/tmp/x"]
@@ -1397,10 +1397,10 @@ def test_the_build_stamp_is_written_into_the_site_not_the_repo(tmp_path):
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `uv run pytest scripts/test_build_docs.py -v`
+Run: `uv run pytest scripts/docs/test_build_docs.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'build_docs'`.
 
-- [ ] **Step 3: Write `scripts/build_docs.py`**
+- [ ] **Step 3: Write `scripts/docs/build_docs.py`**
 
 ```python
 #!/usr/bin/env python3
@@ -1440,12 +1440,12 @@ REPO = Path(__file__).resolve().parent.parent
 # hook protects; test_build_docs.py asserts that.
 GENERATORS: list[tuple[list[str], str]] = [
     (
-        ["scripts/service_catalog.py", "--format", "markdown", "--out",
+        ["scripts/docs/service_catalog.py", "--format", "markdown", "--out",
          "docs/reference/services.md"],
         "docs/reference/services.md",
     ),
     (
-        ["scripts/gen_infra_map.py", "--format", "svg", "--out",
+        ["scripts/infra_map/gen_infra_map.py", "--format", "svg", "--out",
          "docs/assets/generated/infra-map.svg"],
         "docs/assets/generated/infra-map.svg",
     ),
@@ -1565,13 +1565,13 @@ if __name__ == "__main__":
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `uv run pytest scripts/test_build_docs.py -v`
+Run: `uv run pytest scripts/docs/test_build_docs.py -v`
 Expected: PASS, all six.
 
 - [ ] **Step 5: Run it for real**
 
 ```bash
-uv run python scripts/build_docs.py --site-dir /home/ubuntu/docs-site
+uv run python scripts/docs/build_docs.py --site-dir /home/ubuntu/docs-site
 ```
 
 Expected: exits 0, prints one `ok ->` line per generator and one `site built ->` line.
@@ -1592,7 +1592,7 @@ This is the reader-facing half of the staleness signal. A page's own frontmatter
 
 - [ ] **Step 7: Commit**
 
-Stage `scripts/build_docs.py`, `scripts/test_build_docs.py` and `docs/index.md`. Commit with:
+Stage `scripts/docs/build_docs.py`, `scripts/docs/test_build_docs.py` and `docs/index.md`. Commit with:
 
 ```
 Add build_docs.py: regenerate the reference pages, then build the site
@@ -1621,7 +1621,7 @@ This is the task that makes the site self-maintaining. It is also the one that t
 - Modify: `ansible/roles/setup/initial_setup/tasks/crons.yml` (schedule it)
 
 **Interfaces:**
-- Consumes: `scripts/build_docs.py` from Task 6.
+- Consumes: `scripts/docs/build_docs.py` from Task 6.
 - Produces: nothing another task reads.
 
 - [ ] **Step 1: Write the script**
@@ -1670,7 +1670,7 @@ flock -w 2700 9 || { alert "docs-refresh: git-tree lock held >45m; skipped"; exi
 # nothing and is the useful half -- but change no files.
 if ! git diff --quiet || ! git diff --cached --quiet; then
   alert "docs-refresh: working tree dirty; rebuilt site only, no regeneration"
-  $UV run --frozen python scripts/build_docs.py --skip-generators --site-dir "$SITE_DIR" \
+  $UV run --frozen python scripts/docs/build_docs.py --skip-generators --site-dir "$SITE_DIR" \
     || alert "docs-refresh: site build failed on dirty tree"
   exit 0
 fi
@@ -1688,7 +1688,7 @@ fi
 
 # --frozen: install from the committed uv.lock, never rewrite it on the host. A lock
 # rewrite here would show up as an unrelated dirty file on the next run.
-if ! $UV run --frozen python scripts/build_docs.py --site-dir "$SITE_DIR"; then
+if ! $UV run --frozen python scripts/docs/build_docs.py --site-dir "$SITE_DIR"; then
   alert "docs-refresh: one or more generators failed (site was still built)"
   # Deliberately NOT an exit. build_docs already skipped the failing generator and built
   # the site from what succeeded, so the pages that did regenerate are worth committing.
@@ -1856,7 +1856,7 @@ def test_allows_edit_to_a_hand_written_doc():
 
 def test_allows_edit_to_the_generator_itself():
     """The message tells people to edit the generator. That path must not be blocked."""
-    assert not _hook_denies("scripts/service_catalog.py")
+    assert not _hook_denies("scripts/docs/service_catalog.py")
 
 
 def test_denies_an_absolute_path_into_the_generated_tree():
@@ -1874,7 +1874,7 @@ Expected: FAIL — the hook script does not exist.
 Match `block-protected-edits`'s structure. The denial message must name the generator and the source, because a message that only says "denied" sends the reader looking for the rule instead of the fix:
 
 ```
-docs/reference/services.md is generated by scripts/service_catalog.py and is
+docs/reference/services.md is generated by scripts/docs/service_catalog.py and is
 overwritten by the docs-refresh cron. To change what appears here, change the
 generator or the inventory it reads.
 ```
@@ -1920,7 +1920,7 @@ Four more generated pages. Each is the same shape as Task 4: a builder that pars
 - Create: `scripts/gen_reference_<topic>.py`
 - Test: `scripts/test_gen_reference_<topic>.py`
 - Create: `docs/reference/<topic>.md` (generated, committed)
-- Modify: `scripts/build_docs.py` (append to `GENERATORS`)
+- Modify: `scripts/docs/build_docs.py` (append to `GENERATORS`)
 - Modify: `mkdocs.yml` (append to the `Reference` nav section)
 
 **Interfaces:**
@@ -1946,7 +1946,7 @@ Add this assertion to the test file, because the failure it prevents is unrecove
 ```python
 def test_generator_never_reads_the_encrypted_secrets_file():
     """A generated page is committed and browsable. It must not be able to contain a secret."""
-    source = Path("scripts/gen_reference_secrets.py").read_text()
+    source = Path("scripts/docs/gen_reference_secrets.py").read_text()
     assert "vars/secrets.yml" not in source
     assert "sops" not in source.lower()
 ```
@@ -1963,12 +1963,12 @@ Parse with `yaml.safe_load` over the tasks file and pick out `ansible.builtin.cr
 
 Source: the per-role `ingressroute.yml.j2` macro calls, and `containers_list`.
 
-Per route: hostname label, whether it is LAN-only or also public, and which middleware chain fronts it. The domain suffix is SOPS-sourced with no static default, so print the hostname **label** and say so — do not construct an FQDN you cannot verify. `scripts/service_catalog.py`'s FIELD NOTES section already documents this constraint; follow it.
+Per route: hostname label, whether it is LAN-only or also public, and which middleware chain fronts it. The domain suffix is SOPS-sourced with no static default, so print the hostname **label** and say so — do not construct an FQDN you cannot verify. `scripts/docs/service_catalog.py`'s FIELD NOTES section already documents this constraint; follow it.
 
 - [ ] **Step 5: Verify the whole set**
 
 Run: `uv run pytest scripts/ -v`
-Run: `uv run python scripts/build_docs.py --site-dir /home/ubuntu/docs-site`
+Run: `uv run python scripts/docs/build_docs.py --site-dir /home/ubuntu/docs-site`
 Run: `uv run mkdocs build --strict`
 
 Then open each of the six reference pages in a browser and read them. A generated page that is syntactically valid and factually wrong passes every check above.
@@ -1983,6 +1983,6 @@ This is the payoff for the whole plan — it is also the step most easily skippe
 
 Run: `uv run prek run --all-files`
 Run: `uv run pytest`
-Run: `uv run python scripts/probe.py health docs`
+Run: `uv run python scripts/probe/probe.py health docs`
 
-Then open the PR. After merge, follow the repo's *After a PR Merges* procedure: record the pre-merge SHA, wait for master CI on the merge commit specifically, `./scripts/gitops_tick.sh`, then deploy from the primary checkout — not from this worktree, which is behind master after a squash merge.
+Then open the PR. After merge, follow the repo's *After a PR Merges* procedure: record the pre-merge SHA, wait for master CI on the merge commit specifically, `./scripts/deploy_tools/gitops_tick.sh`, then deploy from the primary checkout — not from this worktree, which is behind master after a squash merge.

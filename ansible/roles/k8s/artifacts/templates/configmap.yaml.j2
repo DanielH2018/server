@@ -23,7 +23,7 @@
 
   Why the local validator passed it: an absorbed key still parses as VALID YAML. It is one
   key whose value carries some extra lines, so a guard that only checks "does this parse"
-  cannot see it — the flags match Ansible's (scripts/_render_guard.py), the check simply is
+  cannot see it — the flags match Ansible's (scripts/lib/_render_guard.py), the check simply is
   not looking for this. test_artifacts_configmap.py now asserts both keys survive and that
   the embedded script is parseable Python, which is what actually pins it.
 

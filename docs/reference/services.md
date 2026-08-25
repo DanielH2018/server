@@ -1,11 +1,11 @@
 ---
-generated_from: scripts/service_catalog.py
-generated_at: 2026-08-24 20:56 UTC
-generated_sha: 747290ae
+generated_from: scripts/docs/service_catalog.py
+generated_at: 2026-08-25 16:03 UTC
+generated_sha: 548248f0
 ---
 
 !!! warning "Generated file — do not edit"
-    This page is rendered from the Ansible tree by `scripts/service_catalog.py`. Hand edits are
+    This page is rendered from the Ansible tree by `scripts/docs/service_catalog.py`. Hand edits are
     overwritten by the next run, and a prek hook rejects them at commit time.
     To change what appears here, change the generator or the source it reads.
 
@@ -91,4 +91,4 @@ generated_sha: 747290ae
 
 ## Underivable facts
 
-20 field(s) read `unknown`. A fact with no machine-readable source prints its reason rather than a guess — see the FIELD NOTES section of `scripts/service_catalog.py` for which facts those are and why.
+20 field(s) read `unknown`. A fact with no machine-readable source prints its reason rather than a guess — see the FIELD NOTES section of `scripts/docs/service_catalog.py` for which facts those are and why.

@@ -4,8 +4,8 @@
     "allow": [
       "Bash(ansible-lint *)",
       "Bash(git check-ignore *)",
-      "Bash(uv run python scripts/probe.py:*)",
-      "Bash(./scripts/gitops_tick.sh:*)",
+      "Bash(uv run python scripts/diagnostics/probe.py:*)",
+      "Bash(./scripts/deploy_tools/gitops_tick.sh:*)",
       "Bash(kubectl get *)",
       "Bash(kubectl logs *)",
       "Bash(kubectl describe *)",

@@ -15,12 +15,12 @@ runbooks, design documents and generated reference pages are readable in a brows
   (`public=false`), which was true until 2026-08-24; `templates/ingressroute.yaml.j2` carries
   the reasoning for the flip. Everything under `docs/` is served, so what is excluded from
   the build is a publishing decision — see `mkdocs.yml`'s `exclude_docs`.
-- **Built by:** `scripts/build_docs.py`, run by the `docs-refresh` cron. **Not by this role** —
+- **Built by:** `scripts/docs/build_docs.py`, run by the `docs-refresh` cron. **Not by this role** —
   a deploy renders manifests, it does not rebuild the site.
 
 ## The build runs on the host, never in the pod
 
-The pod holds no repo checkout, no `uv`, and no git credential. `scripts/build_docs.py` runs the
+The pod holds no repo checkout, no `uv`, and no git credential. `scripts/docs/build_docs.py` runs the
 reference generators and `mkdocs build` on `daniel-box`, which already has all three.
 
 Getting the repo into a pod would mean either baking it into an image on every commit or giving
@@ -38,7 +38,7 @@ The GitOps tick rewrites the repo tree with `git pull` every 30 minutes. Serving
 inside that tree would mean a pull can replace files mid-request. The built site is derived
 output with no reason to live under version control, so it lives beside it instead.
 
-`scripts/build_docs.py` also builds to a sibling directory and renames into place, because
+`scripts/docs/build_docs.py` also builds to a sibling directory and renames into place, because
 `mkdocs build` cleans its `--site-dir` first — building straight into the served path would blank
 the site for several seconds on every run and leave it blank after any failure.
 
@@ -62,7 +62,7 @@ crashlooping pod — "the site is not built" is an operator problem, not a rollo
 
 ## Verifying a change actually landed
 
-`uv run python scripts/probe.py health docs` gates the rollout and the 180s restart window. It
+`uv run python scripts/probe/probe.py health docs` gates the rollout and the 180s restart window. It
 cannot see whether the site rendered: the Authelia middleware answers with a 302 before Traefik
 reaches nginx, so a green probe plus a working redirect proves nothing about content.
 

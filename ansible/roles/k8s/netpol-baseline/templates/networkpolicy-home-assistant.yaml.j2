@@ -6,7 +6,7 @@
 #   monitor-bridge — HA_URL (monitor-bridge/templates/env-secret.yaml.j2), the scheduler-stuck
 #                    check that the container healthcheck cannot see
 #
-# scripts/probe.py's `ha` subcommands run on a NODE, not in a pod, so they arrive with a node
+# scripts/probe/probe.py's `ha` subcommands run on a NODE, not in a pod, so they arrive with a node
 # address and are covered by the baseline's cni0 /32s rather than by anything here.
 #
 # 8123 is the containerPort AND the Service port — verified 2026-08-20, they match.

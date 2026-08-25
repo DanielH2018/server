@@ -8,7 +8,7 @@
 #
 # WHAT THIS PLAY ADDS over running the script by hand: the SOPS credentials, and the live
 # Longhorn volume list the script refuses to act without. The safety logic lives in the script
-# (scripts/b2_drain.py) where it is unit-tested.
+# (scripts/backup/b2_drain.py) where it is unit-tested.
 #
 # Usage — dry run first, always:
 #   uv run ansible-playbook ansible/drain_backup_prefix.yml -i ansible/inventory/hosts.ini \
@@ -71,7 +71,7 @@
 
     - name: Drain the prefixes
       ansible.builtin.command:
-        argv: "{{ ['uv', 'run', 'python', 'scripts/b2_drain.py',
+        argv: "{{ ['uv', 'run', 'python', 'scripts/backup/b2_drain.py',
                    '--live-volumes-file', drain_live_file]
                   + (['--volumes-file', drain_volumes_file]
                      if (drain_volumes_file | default('')) | length > 0

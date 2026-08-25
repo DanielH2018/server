@@ -36,7 +36,7 @@ Two preconditions verified before writing this:
 ## Global Constraints
 
 - Ansible is the only write path to the cluster. Plain `kubectl` authenticates as `system:serviceaccount:kube-system:homelab-readonly` (`get list watch` only); `sudo` is denied.
-- Manifest templates under `roles/k8s/<role>/templates/` must parse as YAML after rendering — `scripts/validate_k8s_manifests.py` renders every `*.j2` there and asserts it. Multi-document templates are fine; the validator uses `safe_load_all`.
+- Manifest templates under `roles/k8s/<role>/templates/` must parse as YAML after rendering — `scripts/validate/validate_k8s_manifests.py` renders every `*.j2` there and asserts it. Multi-document templates are fine; the validator uses `safe_load_all`.
 - Tests live in a directory already in `pyproject.toml` `testpaths`; `ansible/tests` is one.
 - `pytest` runs with `-n auto`. Tests must be filesystem-read-only and order-independent.
 - **A Deployment that is not `manifests_rollout` or in `manifests_extra_rollouts` is never waited on.** This bit slice 1: the rollout completes unwatched and a failure reports green.
@@ -125,7 +125,7 @@ Then inside the body make exactly three substitutions, and no others:
 
 - [ ] **Step 4: Verify both render**
 
-Run: `uv run python scripts/validate_k8s_manifests.py`
+Run: `uv run python scripts/validate/validate_k8s_manifests.py`
 Expected: exit 0.
 
 Run: `uv run python -c "import sys; sys.path.insert(0,'ansible/tests'); sys.path.insert(0,'ansible/filter_plugins'); sys.path.insert(0,'scripts'); from _k8s_render import rendered_docs; print(sorted(d['metadata']['name'] for r,t,d in rendered_docs() if r=='pihole' and d['kind']=='Deployment'))"`
@@ -476,13 +476,13 @@ Expected: completes. `--check` runs unlocked. Read the diff for anything touchin
 DNS is reachable from the host, so the endpoints workaround slice 1 needed is unnecessary here — measure real queries:
 
 ```bash
-uv run python scripts/measure_rollout_gap.py --dns homepage.local.<domain> --server 10.0.0.243 --seconds 400 --interval 0.25
+uv run python scripts/dev/measure_rollout_gap.py --dns homepage.local.<domain> --server 10.0.0.243 --seconds 400 --interval 0.25
 ```
 
 Resolve `<domain>` from `ansible/inventory/group_vars/all.yml` first. Also start an endpoints poller in a second terminal, so a gap can be attributed to the Service losing all backends versus a query failing for another reason:
 
 ```bash
-uv run python scripts/measure_rollout_gap.py --endpoints pihole --seconds 400 --interval 0.25
+uv run python scripts/dev/measure_rollout_gap.py --endpoints pihole --seconds 400 --interval 0.25
 ```
 
 - [ ] **Step 3: Deploy**

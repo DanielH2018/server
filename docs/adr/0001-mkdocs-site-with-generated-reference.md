@@ -19,8 +19,8 @@ Three facts about the repo set the scope.
 **Nothing assembled the repo's facts into one readable place.** Around 60 services are
 declared across two inventory files and implemented across 87 roles. Answering "what runs
 here, on which host, behind which auth, backed up how" meant reading the tree. Two
-generators already solved parts of it — `scripts/gen_infra_map.py` rendered a
-declared-versus-live topology page and `scripts/service_catalog.py` rendered a service
+generators already solved parts of it — `scripts/infra_map/gen_infra_map.py` rendered a
+declared-versus-live topology page and `scripts/docs/service_catalog.py` rendered a service
 table — but each emitted a standalone HTML file with no navigation between them, and
 `service_catalog.py` had no cron, no CI wiring and no consumer at all.
 

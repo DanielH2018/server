@@ -12,7 +12,7 @@ rollout restart). A restart is ~60-120s.
 
 ## Steps
 
-1. **Validate first.** `uv run python scripts/validate_ha_config.py` (or rely on the
+1. **Validate first.** `uv run python scripts/home_assistant/validate_ha_config.py` (or rely on the
    `validate-ha-config` prek hook). If you touched a `custom_templates/*.jinja` macro, also
    `uv run pytest ansible/roles/k8s/home-assistant/tests`. Don't deploy a config that
    fails structural validation.
@@ -44,17 +44,17 @@ rollout restart). A restart is ~60-120s.
 
 5. **Prove it loaded** (this is the step the generic `deploy` skill can't do). Use
    `ha-verify-state`:
-   - **Assert ALL automations loaded** (not just one): `uv run python scripts/probe.py ha
+   - **Assert ALL automations loaded** (not just one): `uv run python scripts/diagnostics/probe.py ha
      verify-automations` — exit 0 = every automation in `files/automations.yaml` is present in
      the live instance and not `unavailable`. A non-zero exit lists the dropped/errored ids
      (a schema error HA silently skipped at load). File-driven, so live `.storage`/UI cruft is
      ignored.
-   - Edited an automation → `uv run python scripts/probe.py ha automation <id-or-alias>` —
+   - Edited an automation → `uv run python scripts/diagnostics/probe.py ha automation <id-or-alias>` —
      it must exist (resolves the alias-slug-vs-id trap) and, after you trigger it, `last_triggered`
      must advance.
-   - Edited an entity/template → `uv run python scripts/probe.py ha state <entity_id>` —
+   - Edited an entity/template → `uv run python scripts/diagnostics/probe.py ha state <entity_id>` —
      value present and `last_updated` newer than the container's `StartedAt`.
-   - Suspect a render error → `uv run python scripts/probe.py ha get error_log`.
+   - Suspect a render error → `uv run python scripts/diagnostics/probe.py ha get error_log`.
 
 6. **Report** the deploy result, the health line, and the live load/fire evidence. If health
    fails or the automation didn't load, pull logs

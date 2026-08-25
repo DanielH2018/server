@@ -642,7 +642,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
    file-mounted (`CF_ANALYTICS_TOKEN_FILE=/etc/bridge-credentials/cf_analytics_token`) for the same
    H2 reason as `ha_token`. tier `assisted` (rotate = revoke + reissue in the dashboard). The
    check also reads the existing `r2_account_id` and `r2_bucket`. Run
-   `uv run python scripts/secret_rotation.py sync` after adding both, or the prek registry hook
+   `uv run python scripts/secrets_mgmt/secret_rotation.py sync` after adding both, or the prek registry hook
    fails. Then smoke-test the query for real —
    `sudo k3s kubectl -n homelab exec deploy/monitor-bridge -- python /app/check.py --once` — the
    unit tests mock the payload, so this is the first thing that proves Cloudflare accepts the

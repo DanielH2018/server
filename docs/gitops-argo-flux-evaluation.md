@@ -1,7 +1,7 @@
 # Argo CD / Flux evaluation for this homelab
 
 > **Status, 2026-08-21.** §8's recommendation is done: PR #303 taught
-> `scripts/validate_k8s_manifests.py` to schema-check the docs it already renders, and wired it
+> `scripts/validate/validate_k8s_manifests.py` to schema-check the docs it already renders, and wired it
 > into the prek hook. That was the one *new capability* the Kustomize port would have bought, so
 > the port is now purely optional — which is what §8 concluded it should become. Everything else
 > here is an evaluation, not a plan of record: no Flux controller is installed and none is
@@ -101,7 +101,7 @@ output is plaintext, so it can never reach git.
 
 Flux decrypts SOPS/age natively in `kustomize`-controller — but only if the *encrypted Secret
 manifests* live in git, one per service. That inverts the single-file model and breaks
-`scripts/secret_rotation.py`, `ansible/secret_rotation.yml`, and the `sops updatekeys`
+`scripts/secrets_mgmt/secret_rotation.py`, `ansible/secret_rotation.yml`, and the `sops updatekeys`
 onboarding flow. There is a tempting middle path — CI renders the secret templates and
 re-encrypts them for the cluster's age key — but it requires GitHub Actions to hold a key that
 decrypts every secret you own. Today no secret material leaves the two hosts. Don't trade that
@@ -235,7 +235,7 @@ eleven generator roles while Flux reads the other forty-odd from the repo direct
 
 ### The strongest win is separable — and that decides it
 
-`scripts/validate_k8s_manifests.py` already renders every template with daniel-box's real
+`scripts/validate/validate_k8s_manifests.py` already renders every template with daniel-box's real
 `containers_list` and parses the result (`docs = list(yaml.load_all(rendered, ...))`, line 230).
 The rendered YAML is in hand, inside an existing loop. Adding schema validation there — a
 kubeconform binary or an offline schema library — buys win #1 on all 52 roles now, with no

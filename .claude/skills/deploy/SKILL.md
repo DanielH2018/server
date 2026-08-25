@@ -43,7 +43,7 @@ Steps:
 5. **Verify it actually came up healthy** — Ansible reporting `ok`/`changed` only means the
    playbook ran, not that the workload is up (it can apply cleanly then crash-loop or fail
    its probes).
-   - **k3s:** `uv run python scripts/probe.py health <service>` is the primary check —
+   - **k3s:** `uv run python scripts/diagnostics/probe.py health <service>` is the primary check —
      allow-listed, k8s-native. Exit 0 only when the rollout is fully complete (observed
      generation caught up, every replica updated/ready/available) **and** no container
      restarted in the last 180s; an unreadable restart timestamp counts as recent (fails
@@ -61,7 +61,7 @@ Steps:
        Deployment carries a `checksum/config` pod annotation; without it the pod isn't
        rolled. Also note `kubectl apply` leaves **stale Secret keys** behind — a key removed
        from the manifest persists live until patched out.
-   - **Docker (Pi only):** `uv run python scripts/probe.py health <service> --docker` —
+   - **Docker (Pi only):** `uv run python scripts/diagnostics/probe.py health <service> --docker` —
      exit 0 = running + healthy; allow-listed. `--docker` inspects the **local** Docker
      daemon, and the Pi's is remote, so run it over ssh (`ssh daniel-pi ...`) or verify via
      the Pi's Uptime Kuma monitor instead.
@@ -69,7 +69,7 @@ Steps:
      just a liveness check, not a deploy verification.
 6. Report the result, including the verification line. If the gate fails, surface the failing
    probe/event and pull recent logs (`kubectl logs`, or
-   `uv run python scripts/probe.py loki-query '{container="<service>"}'`) before declaring
+   `uv run python scripts/diagnostics/probe.py loki-query '{container="<service>"}'`) before declaring
    success.
 
 Run all commands from `/home/ubuntu/server`. Always go through `uv run` — bare

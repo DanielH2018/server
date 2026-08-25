@@ -244,7 +244,7 @@ containers_list:
     hostname: "artifacts"
     port: 8080
     use_authelia: true
-  # MkDocs Material site over docs/, built on this host by scripts/build_docs.py and served
+  # MkDocs Material site over docs/, built on this host by scripts/docs/build_docs.py and served
   # from a hostPath. Sits next to artifacts because they are the same shape: nginx-class
   # static serving over a daniel-box tree, reachable on both the LAN and public names behind
   # Authelia. The role's ingressroute template records why it stopped being LAN-only.
@@ -443,7 +443,7 @@ has_gitops: true
 # entry carries its reason. The cleared pilot list means the denylist alone governs.
 #
 # DO NOT hand-maintain the eligible list here. Run
-# `uv run python scripts/k8s_autodeploy_counts.py` — it derives eligible/denied from the
+# `uv run python scripts/dev/k8s_autodeploy_counts.py` — it derives eligible/denied from the
 # role sources, and the partition is CI-enforced by
 # test_k8s_autodeploy_guard.py::test_every_role_is_either_denied_or_declares_itself_deployable.
 # A list written here goes stale silently and reads as current; see the memory

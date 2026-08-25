@@ -14,8 +14,8 @@ Three facts about the current state set the scope.
 **Nothing assembles the repo's facts into one readable place.** 59 services are declared across
 two inventory files and implemented across 87 roles. Answering "what runs here, on which host,
 behind which auth, backed up how" means reading the tree. Two generators already solve parts of
-this — `scripts/gen_infra_map.py` renders a declared-vs-live topology page, and
-`scripts/service_catalog.py` renders a service table — but each emits a standalone HTML file
+this — `scripts/infra_map/gen_infra_map.py` renders a declared-vs-live topology page, and
+`scripts/docs/service_catalog.py` renders a service table — but each emits a standalone HTML file
 with no navigation between them, and `service_catalog.py` has no cron, no CI wiring, and no
 consumer at all.
 
@@ -121,7 +121,7 @@ Three classes of diagram, three mechanisms. Mermaid serves none of them well eno
 
 **Data-driven diagrams** — the topology map, service relationships. The generators emit
 standalone `.svg` into `docs/assets/generated/`, and Markdown embeds them.
-`scripts/infra_map_render.py:335` already hand-positions `<rect>` and `<polyline>` with
+`scripts/infra_map/infra_map_render.py:335` already hand-positions `<rect>` and `<polyline>` with
 live-status tinting through CSS classes. The refactor changes the envelope from a wrapped HTML
 page to a standalone SVG; it does not change the drawing. Styles inline into the `<svg>` element
 so the status colours survive embedding.
@@ -250,10 +250,10 @@ checks them reliably, and a bad approximation of them produces noise.
 ## Testing
 
 - **Generator emitters** — pytest per generator, following the pattern in
-  `scripts/test_service_catalog.py` and `scripts/test_gen_infra_map.py`. Assert the Markdown and
+  `scripts/docs/test_service_catalog.py` and `scripts/infra_map/test_gen_infra_map.py`. Assert the Markdown and
   SVG output against fixtures.
 - **`ansible/tests/test_adr_links.py`** — the bidirectional ADR ↔ marker check.
-- **Manifest validation** — `scripts/validate_k8s_manifests.py` covers the new role's templates
+- **Manifest validation** — `scripts/validate/validate_k8s_manifests.py` covers the new role's templates
   automatically, since it renders every `*.j2` under `roles/k8s/*/templates/`.
 - **Vale** — prek hook plus CI.
 - **`--dry-run`** — the docs role mutates nothing outside `roles/k8s/manifests`, so it must not
