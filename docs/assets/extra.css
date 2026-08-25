@@ -1,6 +1,8 @@
-/* Site-wide overrides on top of the Material theme.
+/* Site-wide overrides on top of the Material theme. Two independent changes, both driven by
+ * the width of the generated reference tables: the first stops long cells being clipped, the
+ * second gives the content column more room in the first place.
  *
- * WHY THIS FILE EXISTS. The wide generated reference tables cut long cells off mid-word --
+ * TABLE CLIPPING. The wide generated reference tables cut long cells off mid-word --
  * services.md worst, where the Auto-deploy column carries paragraph-length rationale. The
  * theme wraps every table in `.md-typeset__scrollwrap` (overflow-x: auto), so the clipped
  * text is reachable, but only by a horizontal scrollbar parked at the bottom of a table that
@@ -29,11 +31,31 @@
   min-width: 0;
 }
 
-/* UNVERIFIED: which of the two rules binds at any given viewport. The session that wrote this
- * had no browser, so the mechanism above is read off Material's stylesheet, not measured
- * against a render. Both rules are inert on a table that already fits -- auto layout still
- * sizes columns by max-content where the space exists -- so the fix is safe either way, but
- * the attribution is inference. */
+/* The pair above is confirmed working on the Services page (operator, 2026-08-25). What stays
+ * unknown is WHICH of the two binds at a given viewport: the session that wrote them had no
+ * browser, so the mechanism is read off Material's stylesheet rather than measured. Both are
+ * inert on a table that already fits -- auto layout still sizes columns by max-content where
+ * the space exists -- so the attribution is inference even though the outcome is not. */
+
+/* WIDER LAYOUT. Material caps the whole grid at 61rem and centres it, so on a 2000px screen
+ * roughly 650px of the window is margin. The cap is there to hold prose to a readable line
+ * length, which is a real constraint on the runbooks and ADRs -- so this raises the cap
+ * rather than removing it.
+ *
+ * `.md-grid` is worn by the header, the tabs and the main container alike, so widening it
+ * keeps those aligned with each other; a rule scoped to the content alone would not.
+ *
+ * The unit matters. Material scales the root font-size by breakpoint (125% base, 137.5% at
+ * >=100em, 150% at >=125em), so a rem cap widens as the viewport does: 80rem is 1600px on a
+ * small laptop, 1760px at 1600px wide, 1920px at 2000px wide. A px value would not track
+ * that, and would fight the theme's own scaling on the two larger breakpoints.
+ *
+ * The nav and table-of-contents sidebars are fixed at 12.1rem each, so every pixel this
+ * returns lands in the content column -- which also relieves the width pressure the two
+ * table rules above exist to handle. */
+.md-grid {
+  max-width: 80rem;
+}
 
 /* A link into the Scripts reference lands on one row of a 47-row table, and a fragment that
  * scrolls to a table cell moves the page without saying which row it moved to. The id sits on

@@ -70,6 +70,29 @@ jellyfin_k8s_dri_resource: devic.es/dri
 # under Compose; the LAN VIP above is the same idea on the new host.
 jellyfin_k8s_published_url: "http://{{ jellyfin_k8s_lan_ip }}:8096"
 
+# ── jellyfin-ani-sync (AniList watch-status sync) ───────────────────────────────────────────
+# The plugin pushes watch status and episode progress to AniList. It sends no score — its
+# AniList client calls SaveMediaListEntry(mediaId, status, progress, ...) and the word `score`
+# appears nowhere in it — so it cannot overwrite a rating set by hand on AniList. That is what
+# makes "rate on AniList, sync from Jellyfin" safe to run together, and it is the reason this
+# role installs the plugin at all rather than a rating bridge. docs/anilist-integration.md.
+#
+# PINNED one release behind on purpose. The current release 4.4.0.0 declares targetAbi
+# 10.11.11.0, and Jellyfin's loader rejects a plugin whose targetAbi is NEWER than the server;
+# jellyfin_k8s_image above is 10.11.10. 4.1.0.0 declares 10.11.6.0 and loads. Raise this and
+# the image together, never the plugin alone.
+jellyfin_k8s_anisync_version: "4.1.0.0"
+# URL and checksum both come from the plugin's published manifest.json. The MD5 was verified
+# against the actual download, not copied on trust.
+jellyfin_k8s_anisync_url: "https://github.com/vosmiic/jellyfin-ani-sync/releases/download/v4.1/10.11.6.-.ani-sync_4.1.0.0.zip"
+jellyfin_k8s_anisync_md5: "4d95c608192395b72efe57551a6f2ae0"
+# The installer runs on python, not the alpine:3.24 the sibling init container uses. See the
+# deployment template for why: the release is a .zip and /config is owned by uid {{ puid }}, so
+# an alpine container would need `apk add unzip` as root — and root there holds no
+# DAC_OVERRIDE and so could not write what it had unpacked. Named here rather than written
+# into the template because Renovate's k8s-defaults manager only scans defaults/main.yml.
+jellyfin_k8s_anisync_init_image: python:3.14-alpine
+
 jellyfin_k8s_cpu_limit: "4"
 jellyfin_k8s_mem_limit: 4096Mi
 jellyfin_k8s_cpu_request: "250m"
