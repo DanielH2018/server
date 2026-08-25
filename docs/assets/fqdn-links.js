@@ -1,5 +1,6 @@
 // Turn the generators' <span class="fqdn" data-host="sonarr.local"> placeholders into real
-// links, using the domain of the URL this page was served from.
+// links, using the domain of the URL this page was served from. The same derivation resolves
+// the nav's off-site links, which carry a sentinel host for the same reason.
 //
 // WHY NOT BAKE THE DOMAIN INTO THE PAGES. The generators parse the Ansible tree statically
 // and `domain` is SOPS-sourced, so they cannot know it. Deriving it here is also strictly
@@ -55,10 +56,35 @@
     }
   }
 
+  // Is the reader on the LAN tier (docs.local.<domain>) or the public one (docs.<domain>)?
+  // Sentinel links are rewritten onto whichever tier they are already browsing, for the same
+  // reason the spans above are: a LAN reader sent to the public name leaves the LAN for
+  // nothing, and a public reader sent to a .local name gets nothing at all.
+  function isLocalTier(hostname) {
+    return hostname.split(".")[1] === "local";
+  }
+
+  // mkdocs.yml can name an off-site service in the nav, but not its domain -- `domain` is
+  // SOPS-sourced and the nav is a static file. Such an entry carries the sentinel host
+  // `<service>.local.invalid`, which this resolves. `.invalid` is reserved by RFC 2606 and
+  // resolves nowhere, so an unrewritten link fails visibly instead of reaching a stranger.
+  function resolveSentinelLinks(domain, local) {
+    var links = document.querySelectorAll('a[href*=".local.invalid"]');
+    for (var i = 0; i < links.length; i++) {
+      var link = links[i];
+      var labels = link.hostname.split(".");
+      if (labels.length !== 3 || labels[1] !== "local" || labels[2] !== "invalid") {
+        continue;
+      }
+      link.hostname = labels[0] + (local ? ".local." : ".") + domain;
+    }
+  }
+
   function run() {
     var domain = domainFromLocation(window.location.hostname);
     if (domain) {
       linkify(domain);
+      resolveSentinelLinks(domain, isLocalTier(window.location.hostname));
     }
   }
 

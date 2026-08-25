@@ -10,10 +10,10 @@ Reference and runbooks for a three-host homelab: `daniel-box` (k3s server), `dan
   hook rejects it.
 - **Decisions** are the architecture-decision records: what was chosen, why, and what it cost.
   A decision still in force lives there; the state it produced lives in the reference pages.
-- **Operations** are procedures for driving the system by hand — deploying, and reading the
-  GitOps pipeline. As against Runbooks, which recover a subsystem after something broke.
-- **Runbooks** are procedures for recovering or upgrading a subsystem. They are hand-written.
-- **Design** documents record how a subsystem was built and why.
+  Its *Background* pages are the long-form working-out behind three of those records.
+- **Operations** are the hand-written procedures, ordered day-to-day first and recovery last:
+  deploying, rotating a secret, then upgrading or restoring a subsystem after something broke.
+- **Artifacts** is not a page. It is a link off this site to the artifact browser.
 
 ## What generates what
 

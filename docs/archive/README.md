@@ -20,11 +20,13 @@ recording rather than that nobody looked.
 | `zero-downtime-baseline.md` | the measurement it records is taken; it dated itself to the pre-gate cluster | `scripts/measure_rollout_gap.py` re-measures on demand | [ADR-0012](../adr/0012-zero-downtime-deploys-gate-on-rollout-and-restarts.md) |
 | `docs-ui-and-adrs-design.md` | the site is built, served and cron-refreshed | `docs/index.md` — the site itself | [ADR-0001](../adr/0001-mkdocs-site-with-generated-reference.md) |
 | `docs-ui-and-adrs-plan-1.md` | complete — MkDocs site and generated reference pages, PR #416 | `docs/index.md` | [ADR-0001](../adr/0001-mkdocs-site-with-generated-reference.md) |
-| `docs-ui-and-adrs-plan-2.md` | Tasks 1–4 complete — ADR format, link test, 14 backfilled records, scoped Vale gate, PR #417. **Task 5 was not done**, and is extracted live to `docs/diagrams-plan.md` | `docs/adr/index.md`, `docs/diagrams-plan.md` | [ADR-0001](../adr/0001-mkdocs-site-with-generated-reference.md) |
+| `docs-ui-and-adrs-plan-2.md` | Tasks 1–4 complete — ADR format, link test, 14 backfilled records, scoped Vale gate, PR #417. **Task 5 was not done**, and is extracted to `diagrams-plan.md` in this archive | `docs/adr/index.md` | [ADR-0001](../adr/0001-mkdocs-site-with-generated-reference.md) |
 | `docs-ui-and-adrs-plan-3.md` | complete — generated scripts reference, GitOps and deploy operator pages, PR #418 | `docs/deploying.md`, `docs/gitops-pipeline.md` | [ADR-0001](../adr/0001-mkdocs-site-with-generated-reference.md) |
 | `host-python-314-plan.md` | complete — all 7 tasks executed and verified 2026-08-16, PR #239 (the plan's own status line) | `CLAUDE.md` → *Python & Tests* | — |
 | `daniel-box-handoff.md` | historical — superseded 2026-08-14 by the k3s migration (marked in the file itself) | repo-root `README.md` | [ADR-0002](../adr/0002-k3s-over-docker-compose-for-the-cluster-nodes.md) |
 | `happy-selfhost-spec.md` | mothballed 2026-07-19, no longer executable as written as of 2026-08-14 (marked in the file itself) | none — abandoned, not shipped | — |
+| `diagrams-plan.md` | never started — Task 5 of the docs-UI programme, extracted live and left there. The tool choice it rested on is now a record; the six implementation steps are not | none — the pipeline does not exist | [ADR-0015](../adr/0015-d2-for-hand-authored-diagrams.md) |
+| `ubuntu-24.04-upgrade.md` | both hosts upgraded 2026-06-05; the file's own header says not to follow it as instructions | — | — |
 | `parallel-session-git-ci-design.md` | design approved for planning; the practice it describes is now documented directly | `CLAUDE.md` → *Parallel Claude Sessions* | — |
 
 `docs/superpowers/plans/` and `docs/superpowers/ledgers/` are **not** in this archive: that
