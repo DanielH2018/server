@@ -254,7 +254,7 @@ In each of the four roles' `tasks/main.yml`, add the new manifest to `manifests_
 
 - [ ] **Step 6: Verify all four render**
 
-Run: `uv run python scripts/validate_k8s_manifests.py`
+Run: `uv run python scripts/validate/validate_k8s_manifests.py`
 Expected: PASS, template count up by 4.
 
 Run: `uv run ansible-lint ansible/roles/k8s/sonarr/ ansible/roles/k8s/radarr/ ansible/roles/k8s/prowlarr/ ansible/roles/k8s/qbittorrent/`
@@ -317,7 +317,7 @@ Read the existing file first; keep its structure and naming. If it hardcodes a `
 
 - [ ] **Step 3: Verify**
 
-Run: `uv run python scripts/validate_k8s_manifests.py`
+Run: `uv run python scripts/validate/validate_k8s_manifests.py`
 Expected: PASS.
 
 Run: `uv run pytest ansible/tests/test_netpol_baseline_labels.py -v`
@@ -423,7 +423,7 @@ Leave the render task ungated, as slice 1's is.
 
 - [ ] **Step 3: Verify**
 
-Run: `uv run python scripts/validate_k8s_manifests.py && uv run ansible-lint ansible/roles/k8s/netpol-baseline/`
+Run: `uv run python scripts/validate/validate_k8s_manifests.py && uv run ansible-lint ansible/roles/k8s/netpol-baseline/`
 Expected: both PASS.
 
 - [ ] **Step 4: Commit**
@@ -494,8 +494,8 @@ Expected: `baseline-ingress`, `flaresolverr`, `headlamp`, `n8n-broker`, `registr
 - Load sonarr, radarr, prowlarr, bazarr, tdarr and qbittorrent through Traefik.
 - In sonarr, confirm the indexers still test green (proves sonarr → prowlarr).
 - In sonarr, confirm the download client tests green (proves sonarr → qbittorrent via the `wireguard` Service).
-- Run `uv run python scripts/probe.py targets` and confirm no new DOWN targets.
-- Check monitor-bridge is still reporting: `uv run python scripts/probe.py alerts --days 1`.
+- Run `uv run python scripts/probe/probe.py targets` and confirm no new DOWN targets.
+- Check monitor-bridge is still reporting: `uv run python scripts/probe/probe.py alerts --days 1`.
 
 - [ ] **Step 7: Commit any policy corrections the deploy forced**
 

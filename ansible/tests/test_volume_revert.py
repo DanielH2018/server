@@ -54,7 +54,7 @@ _ROLE = _REPO / "ansible/roles/k8s/volume-revert"
 _CLAIM = _ROLE / "tasks/claim.yml"
 _MAIN = _ROLE / "tasks/main.yml"
 _DEFAULTS = _ROLE / "defaults/main.yml"
-_VALIDATOR = _REPO / "scripts/validate_k8s_manifests.py"
+_VALIDATOR = _REPO / "scripts/validate/validate_k8s_manifests.py"
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
 
 _GUARD = "not (k8s_no_mutate | bool)"

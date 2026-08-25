@@ -29,9 +29,9 @@
 **Why generated.** There are ~40 first-party scripts and every one carries a module docstring — several of them long, with a `Usage::` block. A hand-written index of them is stale the day someone adds the forty-first. The docstrings are already the documentation; this page assembles them.
 
 **Files:**
-- Create: `scripts/gen_reference_scripts.py`
-- Create: `scripts/test_gen_reference_scripts.py`
-- Modify: `scripts/build_docs.py` — add to `GENERATORS`
+- Create: `scripts/docs/gen_reference_scripts.py`
+- Create: `scripts/docs/test_gen_reference_scripts.py`
+- Modify: `scripts/docs/build_docs.py` — add to `GENERATORS`
 - Modify: `mkdocs.yml` — add to the Reference nav section
 
 **Interfaces:**
@@ -47,7 +47,7 @@ Extract three fields:
 
 **Steps:**
 
-- [ ] **Step 1: Write the failing test** — `scripts/test_gen_reference_scripts.py`, over a synthetic `scripts/` under `tmp_path`:
+- [ ] **Step 1: Write the failing test** — `scripts/docs/test_gen_reference_scripts.py`, over a synthetic `scripts/` under `tmp_path`:
 
 ```python
 def test_the_summary_is_the_docstrings_first_line(tmp_path):
@@ -80,11 +80,11 @@ def test_markdown_ends_with_exactly_one_newline(tmp_path):
     assert out.endswith("\n") and not out.endswith("\n\n")
 ```
 
-- [ ] **Step 2: Run it and watch it fail** — `uv run pytest scripts/test_gen_reference_scripts.py -v`. Expected: `ModuleNotFoundError: gen_reference_scripts`.
-- [ ] **Step 3: Write the generator.** Model the shape on `scripts/gen_reference_crons.py`: an argparse `--out`, a `build_rows`, a `render_markdown`, and a `main` that routes through `write_if_body_changed`.
+- [ ] **Step 2: Run it and watch it fail** — `uv run pytest scripts/docs/test_gen_reference_scripts.py -v`. Expected: `ModuleNotFoundError: gen_reference_scripts`.
+- [ ] **Step 3: Write the generator.** Model the shape on `scripts/docs/gen_reference_crons.py`: an argparse `--out`, a `build_rows`, a `render_markdown`, and a `main` that routes through `write_if_body_changed`.
 - [ ] **Step 4: Run the tests** — expected PASS.
-- [ ] **Step 5: Register it** — add the `(argv, output)` pair to `GENERATORS` in `scripts/build_docs.py` and a `Scripts: reference/scripts.md` entry to the `mkdocs.yml` Reference section.
-- [ ] **Step 6: Build twice** — `uv run python scripts/build_docs.py --site-dir /tmp/site`, then again. `git status --short` must be clean after the second run, or the refresh cron commits on every tick.
+- [ ] **Step 5: Register it** — add the `(argv, output)` pair to `GENERATORS` in `scripts/docs/build_docs.py` and a `Scripts: reference/scripts.md` entry to the `mkdocs.yml` Reference section.
+- [ ] **Step 6: Build twice** — `uv run python scripts/docs/build_docs.py --site-dir /tmp/site`, then again. `git status --short` must be clean after the second run, or the refresh cron commits on every tick.
 - [ ] **Step 7: Commit.**
 
 ---
@@ -103,7 +103,7 @@ def test_markdown_ends_with_exactly_one_newline(tmp_path):
 2. **What is eligible for auto-deploy, and what is not.** An image-pin bump to a non-denylisted service auto-deploys; an ordinary manifest or template change is fast-forwarded and left undeployed. Say plainly that a merge is not a deploy here.
 3. **What a broad change does.** A `_BROAD_SETUP_PREFIXES` / `_BROAD_DEPLOY_PREFIXES` path anywhere in the `local..origin` range makes the deployer defer-and-alert and return **without fast-forwarding at all** — so an unrelated docs commit in the same range never lands either. Name the symptom: a tick that exits 0, logs nothing, and writes `behind_since`.
 4. **How to read `last_run`, `hold_sha`, and `behind_since`.** A non-empty `hold_sha` means a previous SHA failed its health gate and is held; diagnose before deploying anything.
-5. **How to trigger a tick by hand** — `./scripts/gitops_tick.sh`, and that there is no dry-run mode because it is the real code path.
+5. **How to trigger a tick by hand** — `./scripts/deploy_tools/gitops_tick.sh`, and that there is no dry-run mode because it is the real code path.
 6. **Why the CI gate reads `check-runs` for the merge commit** rather than `gh run list --branch master --limit 1`, which returns the previous run and reports green instantly.
 
 Link to `ansible/roles/setup/gitops_deploy/CLAUDE.md` for internals rather than restating them.
@@ -113,7 +113,7 @@ Link to `ansible/roles/setup/gitops_deploy/CLAUDE.md` for internals rather than 
 - [ ] **Step 1: Read the sources** — `ansible/roles/setup/gitops_deploy/CLAUDE.md`, `files/deploy_logic.py`, `files/gitops_deploy.py`, and the repo-root `CLAUDE.md` section *After a PR Merges*. Every claim on the page comes from one of these, with a `file:line` where it is a specific behaviour.
 - [ ] **Step 2: Write the page.** Follow the sentence-level rules in the user `CLAUDE.md`: one idea per sentence, claim before qualification, name the actor, present tense.
 - [ ] **Step 3: Add it to the nav** and run `uv run pytest scripts/test_mkdocs_config.py`.
-- [ ] **Step 4: Build with `--strict`** — `uv run python scripts/build_docs.py --site-dir /tmp/site`. A broken internal link fails the build.
+- [ ] **Step 4: Build with `--strict`** — `uv run python scripts/docs/build_docs.py --site-dir /tmp/site`. A broken internal link fails the build.
 - [ ] **Step 5: Commit.**
 
 ---
@@ -136,7 +136,7 @@ Link to `ansible/roles/setup/gitops_deploy/CLAUDE.md` for internals rather than 
 
 **Steps:**
 
-- [ ] **Step 1: Read the sources** — `scripts/deploy.sh`, `scripts/deploy_staleness.py`, `scripts/deploy_tags.py`, and the repo-root `CLAUDE.md` *Common Commands*.
+- [ ] **Step 1: Read the sources** — `scripts/deploy.sh`, `scripts/deploy_tools/deploy_staleness.py`, `scripts/deploy_tools/deploy_tags.py`, and the repo-root `CLAUDE.md` *Common Commands*.
 - [ ] **Step 2: Write the page.**
 - [ ] **Step 3: Add it to the nav** and run `uv run pytest scripts/test_mkdocs_config.py`.
 - [ ] **Step 4: Build with `--strict`.**

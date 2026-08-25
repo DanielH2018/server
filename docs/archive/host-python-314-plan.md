@@ -290,7 +290,7 @@ There is exactly one occurrence per file, at the line noted. `--no-project` is n
 
 - [ ] **Step 2: Verify the templates still render and lint**
 
-Run: `uv run python scripts/validate_shell_templates.py`
+Run: `uv run python scripts/validate/validate_shell_templates.py`
 Expected: exit 0. This is the `bash -n` + shellcheck gate; a failure here means a typo in the substitution.
 
 - [ ] **Step 3: Deploy**

@@ -46,7 +46,7 @@ def _all_vars() -> dict:
 
 
 def _env() -> jinja2.Environment:
-    """Ansible's Templar whitespace flags, matching scripts/_render_guard.py:make_env.
+    """Ansible's Templar whitespace flags, matching scripts/lib/_render_guard.py:make_env.
 
     Not cosmetic. With trim_blocks=True a `{%- if %}` also eats the newline BEFORE the tag,
     collapsing the next line into the previous one — which is how a Namespace template that

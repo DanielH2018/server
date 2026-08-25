@@ -99,6 +99,6 @@ ExecStart=/usr/bin/flock -w 180 -E 75 /var/lock/server-git-tree.lock /usr/local/
 # `Result=success ExecMainStatus=0` after completing. (A *failed* unit keeps its code, because
 # it stays in `failed` until reset-failed.) So after a contention tick the 75 is genuinely
 # unreadable from `systemctl show`, and this line is the only durable record of it.
-# scripts/gitops_tick.sh greps for the parenthesised phrase; ansible/tests/
+# scripts/deploy_tools/gitops_tick.sh greps for the parenthesised phrase; ansible/tests/
 # test_gitops_manual_trigger.py pins the two together. Do not reword it in isolation.
 ExecStopPost=/bin/sh -c 'test "$EXIT_STATUS" = 75 && echo "gitops-deploy: tick skipped (lock contention) — /var/lock/server-git-tree.lock was held for the full flock wait; nothing deployed, last_run untouched" || true'

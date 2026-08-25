@@ -66,7 +66,7 @@ Adding/moving a service call that writes an entity makes `state/derived_state.ym
 stale, and `validate_ha_config.py` fails on it:
 
 ```
-uv run python scripts/ha_state_model.py generate
+uv run python scripts/home_assistant/ha_state_model.py generate
 ```
 
 Review the diff. If the single-writer invariant (`state/sanctioned_writers.yml`) or the
@@ -76,7 +76,7 @@ there deliberately — those two are hand-maintained on purpose; don't widen the
 ## 4. Validate
 
 ```
-uv run python scripts/validate_ha_config.py          # YAML, dup keys, !include, template syntax, state-model guardrails
+uv run python scripts/home_assistant/validate_ha_config.py          # YAML, dup keys, !include, template syntax, state-model guardrails
 uv run pytest ansible/roles/k8s/home-assistant/tests   # if you touched a macro
 ```
 (The `validate-ha-config` + `pytest` prek hooks run these on commit too.) Fix before deploying —

@@ -12,8 +12,8 @@ those manually).
 
 ## Triggering a tick by hand
 ```bash
-./scripts/gitops_tick.sh            # trigger, wait up to 540s, print that run's journal
-./scripts/gitops_tick.sh --no-wait  # trigger and return immediately
+./scripts/deploy_tools/gitops_tick.sh            # trigger, wait up to 540s, print that run's journal
+./scripts/deploy_tools/gitops_tick.sh --no-wait  # trigger and return immediately
 ```
 The timer does nothing but activate `gitops-deploy.service`, so this runs the identical code
 path — there is **no dry-run mode**. A manual tick fetches, CI-gates, ff-merges, deploys,
@@ -338,7 +338,7 @@ recaps green. Nothing deployed, `last_run` untouched, no Discord message (the we
 the deployer, which never started), no `OnFailure`. The first alert of any kind is GitOps-Alive,
 once `last_run` ages past `GITOPS_MAX_AGE_S` — up to 90 minutes later (`check.py:148`). The one
 immediate signal is the unit's `ExecStopPost` marker in the journal, `tick skipped (lock
-contention)`, which `scripts/gitops_tick.sh` also reads to exit 3.
+contention)`, which `scripts/deploy_tools/gitops_tick.sh` also reads to exit 3.
 
 Observed 2026-08-20, *before* that change, when contention still failed the play:
 `PLAY RECAP … changed=2 failed=1`, with `gitops_deploy : Run gitops-deploy once` timing at

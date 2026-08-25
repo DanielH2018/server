@@ -39,7 +39,7 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
 - **`templates/config/` — the HA config files, shipped VERBATIM.** `configuration.yaml.j2`,
   `customize.yaml.j2`, `ui-lovelace.yaml.j2`. Despite the `.j2` suffix (vestigial), these are
   carried by `lookup('file')`, not `lookup('template')` — and `validate_ha_config.py` **rejects**
-  any `{{` or `{% %}` in them (`scripts/validate_ha_config.py:133`). So: no Ansible vars *and*
+  any `{{` or `{% %}` in them (`scripts/home_assistant/validate_ha_config.py:133`). So: no Ansible vars *and*
   no HA Jinja inline here. `secrets.yaml.j2` is the one genuinely Ansible-templated file — it
   goes through `lookup('template')` in `secret.yaml.j2` and carries the SOPS values.
 - **`files/` — HA's own `{{ }}` Jinja lives here, also shipped verbatim.** `automations.yaml`,
@@ -58,7 +58,7 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
   applied manifests changed. Since the config is embedded *in* the ConfigMap, a config edit
   changes a manifest and does roll the pod.
 - **`state/` — the derived state model.** `derived_state.yml` + `STATE.md` are **generated**
-  (`scripts/ha_state_model.py generate`, offline); `external_entities.yml` is a snapshot of the
+  (`scripts/home_assistant/ha_state_model.py generate`, offline); `external_entities.yml` is a snapshot of the
   *live* instance and only `refresh` rewrites it (needs HA reachable + the SOPS key). Never
   hand-edit any of the three. `sanctioned_writers.yml` (per-actuator single-writer invariant) and
   `expected_override_writers.yml` (override-boolean tripwire) are hand-maintained: adding a
@@ -74,7 +74,7 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
 
 ## Your tools
 
-- **`scripts/probe.py ha …`** — live HA state, read-only, allow-listed (no prompt):
+- **`scripts/diagnostics/probe.py ha …`** — live HA state, read-only, allow-listed (no prompt):
   - `probe.py ha state <entity_id>` — current state + attributes + `last_changed`/`last_updated`.
   - `probe.py ha automation <id-or-alias>` — an automation's on/off + `last_triggered`. **It
     resolves the alias-slug-vs-id trap for you** (an automation's `entity_id` derives from its
@@ -86,13 +86,13 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
     loaded; exit 0 = all loaded. **This is the post-deploy load gate.**
   - `probe.py ha-state [--inventory]` — live view of the derived state model (cells, actuators,
     writers), i.e. `state/STATE.md` checked against reality.
-- **`scripts/validate_ha_config.py`** (and the `validate-ha-config` prek hook) — structural
+- **`scripts/home_assistant/validate_ha_config.py`** (and the `validate-ha-config` prek hook) — structural
   pre-deploy validation: YAML syntax, duplicate keys, broken `!include`s, the *syntax* of
   every inline `{{ }}`/`{% %}` + each `custom_templates/*.jinja`, the no-Ansible-markers contract
   on `templates/config/`, **and the state-model guardrails** (it calls
   `ha_state_model.check_errors()` — freshness, entity resolution, single-writer, override
   tripwire). Run it before deploying.
-- **`scripts/ha_state_model.py`** — `generate` (regenerate `derived_state.yml` + `STATE.md` after
+- **`scripts/home_assistant/ha_state_model.py`** — `generate` (regenerate `derived_state.yml` + `STATE.md` after
   any change to writes), `check` (the guardrails alone), `refresh` (snapshot live external
   entities — needs HA + the SOPS key). A stale model fails validation, so `generate` is part of
   the edit, not an afterthought.
@@ -112,7 +112,7 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
 3. **Make the change** following the conventions. Keep the lux gate single-sourced in
    `binary_sensor.bedroom_auto_light_allowed`; route alerts through `script.bedroom_notify`.
 4. **Regenerate the state model** if you added or moved any service call that writes an entity:
-   `uv run python scripts/ha_state_model.py generate`, then review the diff. If the single-writer
+   `uv run python scripts/home_assistant/ha_state_model.py generate`, then review the diff. If the single-writer
    or override tripwire fires, declare the writer in `sanctioned_writers.yml` /
    `expected_override_writers.yml` deliberately — don't silence it by widening the list on reflex.
 5. **Validate** (`validate_ha_config.py` + `pytest` if you touched a macro).

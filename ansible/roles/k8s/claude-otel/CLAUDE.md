@@ -20,9 +20,9 @@ the tree; `AI` has been role-owned since D7. `tasks/dashboards.yml` stages them 
 ConfigMap per folder.
 
 To change a board: edit the JSON here (or edit in the Grafana UI and round-trip with
-`scripts/export_grafana_dashboards.py`, which execs into the observability/grafana pod via
+`scripts/grafana/export_grafana_dashboards.py`, which execs into the observability/grafana pod via
 `sudo k3s kubectl`, so expect a sudo prompt), then deploy **claude-otel**.
-`scripts/fetch_grafana_dashboards.py` refreshes the two community boards (1860, 14282).
+`scripts/grafana/fetch_grafana_dashboards.py` refreshes the two community boards (1860, 14282).
 
 Every dashboard's datasource ref must resolve to a uid declared in this role's
 `templates/grafana.yaml.j2` — the `validate-grafana-dashboards` prek hook parses that file

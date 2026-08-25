@@ -39,7 +39,7 @@
        homelab-mcp, terraria/valheim-stats, Grafana, Prometheus — already used ClusterIP and is
        untouched.
      - probe.py runs on a HOST, not in a pod, so it genuinely needs the edge. It reaches only
-       /loki/api/v1/labels and /loki/api/v1/query_range (scripts/probe_core.py:107,118), hence
+       /loki/api/v1/labels and /loki/api/v1/query_range (scripts/probe/probe_core.py:107,118), hence
        the prefix.
 
    The two /32s are the nodes' cni0 gateway addresses: host traffic to the VIP SNATs to them, so

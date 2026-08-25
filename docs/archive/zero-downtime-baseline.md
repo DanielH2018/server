@@ -1,6 +1,6 @@
 # Recreate gap baseline
 
-Measured 2026-08-16 with `uv run python scripts/startup_baseline.py` against the live cluster.
+Measured 2026-08-16 with `uv run python scripts/dev/startup_baseline.py` against the live cluster.
 
 The spec estimated a 15–45s `Recreate` gap from probe configuration, and proposed tuning
 `terminationGracePeriodSeconds`, `minReadySeconds` and image pre-pull across ~35 roles on the

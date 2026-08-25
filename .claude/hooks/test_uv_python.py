@@ -96,8 +96,14 @@ def test_hook_bails_on_an_unterminated_quote():
         ),
         # A shebang-invoked script names no interpreter, so nothing python-shaped
         # appears in the command at all — it would otherwise reach 3.12 unnoticed.
-        ("./scripts/probe.py targets", "uv run ./scripts/probe.py targets"),
-        ("scripts/deploy_tags.py --list", "uv run scripts/deploy_tags.py --list"),
+        (
+            "./scripts/diagnostics/probe.py targets",
+            "uv run ./scripts/diagnostics/probe.py targets",
+        ),
+        (
+            "scripts/deploy_tools/deploy_tags.py --list",
+            "uv run scripts/deploy_tools/deploy_tags.py --list",
+        ),
     ],
 )
 def test_bare_invocations_are_routed_through_uv(command, expected):
@@ -123,12 +129,12 @@ def test_rewrite_applies_to_a_pipeline_consumer():
     [
         # Idempotence: the property the pattern must never lose.
         "uv run pytest",
-        "uv run python scripts/probe.py targets",
+        "uv run python scripts/diagnostics/probe.py targets",
         "uv run --no-sync python foo.py",
         # Not a segment start — these are arguments, not programs.
         "which python3",
         "command -v pytest",
-        "cat scripts/probe.py",
+        "cat scripts/diagnostics/probe.py",
         "grep -n pytest prek.toml",
         # Nothing python-shaped at all.
         "ls -la",

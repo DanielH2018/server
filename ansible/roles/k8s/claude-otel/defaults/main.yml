@@ -46,7 +46,7 @@ claude_otel_prometheus_storage: 5Gi
 # dashboards are provisioned from ConfigMaps, so this volume is small and losing it costs
 # nothing but UI state — it is on the no-backup class for that reason, not just size.
 # allowUiUpdates is true, so a UI-edited board DOES live only here until
-# scripts/export_grafana_dashboards.py round-trips it into the git tree — git is the
+# scripts/grafana/export_grafana_dashboards.py round-trips it into the git tree — git is the
 # backup, the export is the save step. Reaffirmed nobackup 2026-08-13 (operator decision).
 claude_otel_grafana_storage: 1Gi
 
@@ -105,7 +105,7 @@ claude_otel_dashboard_folders:
 # ── deploy annotations ────────────────────────────────────────────────────────────────────────
 # Deploys are recorded as syslog lines (scripts/deploy.sh + gitops_deploy.py both call `logger`),
 # promtail ships them to loki-homelab, and every dashboard gets an annotation query injected at
-# deploy time by scripts/inject_dashboard_annotations.py. No Grafana API call, so no pinned
+# deploy time by scripts/grafana/inject_dashboard_annotations.py. No Grafana API call, so no pinned
 # ClusterIP and no standing write credential — see the emit_deploy_annotation comments.
 #
 # The uid MUST equal the `loki-homelab` datasource uid in templates/grafana.yaml.j2. A wrong one

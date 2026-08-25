@@ -607,4 +607,4 @@ Run: `uv run prek run --all-files`
 Run: `uv run pytest`
 Run: `uv run mkdocs build --strict`
 
-Then follow the repo's *After a PR Merges* procedure: record the pre-merge SHA, wait for master CI on the merge commit specifically, `./scripts/gitops_tick.sh`, then deploy from the primary checkout.
+Then follow the repo's *After a PR Merges* procedure: record the pre-merge SHA, wait for master CI on the merge commit specifically, `./scripts/deploy_tools/gitops_tick.sh`, then deploy from the primary checkout.

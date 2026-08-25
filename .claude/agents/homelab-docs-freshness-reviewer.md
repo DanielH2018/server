@@ -40,7 +40,7 @@ current — check the code.
 
 ## Tools (read-only)
 `Read`/`Grep`/`Glob` the docs + their sources; `git log`/`git blame` a cited line to see whether the
-doc or the code moved last; `scripts/probe.py` for live state when a claim is about runtime. Never
+doc or the code moved last; `scripts/diagnostics/probe.py` for live state when a claim is about runtime. Never
 write, deploy, commit, or edit a doc.
 
 ## Output format

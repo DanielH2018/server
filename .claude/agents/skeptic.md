@@ -49,7 +49,7 @@ Work down this list until you can rule. Cite what you find.
 - **Open branches.** Several sessions work this repo at once, so a fix can be real and not yet on
   master: check `gh pr list`, and `gh pr diff <n>` when a title looks related. A finding fixed on an
   open branch is REFUTED-as-live — report it as "fixed in PR #n, unmerged", not as a live defect.
-- **Live state**, where it decides the question. `scripts/probe.py health <svc>` is **k8s-native by
+- **Live state**, where it decides the question. `scripts/diagnostics/probe.py health <svc>` is **k8s-native by
   default**: it gates on rollout completion (observed generation, updated/ready/available replicas)
   *and* on no container restart in the last 180s, which `kubectl rollout status` alone cannot see.
   Use it as the primary liveness check for a cluster workload, falling back to `kubectl get` /

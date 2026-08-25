@@ -176,7 +176,7 @@ leave the ~35 typical holdouts alone, treat radarr and sonarr as an application 
 fix, and a prerequisite for ever converting them.
 
 > **That "14 with none" figure is wrong, and so is the audit method behind it.** Executing the
-> probe work found the cause: both `scripts/startup_baseline.py` and the audit that produced
+> probe work found the cause: both `scripts/dev/startup_baseline.py` and the audit that produced
 > plan 3 counted containers with no `readinessProbe` key, and **a `startupProbe` gates readiness
 > too** — a container is not Ready until its startup probe succeeds, so a Service does not
 > publish it. Of the three workloads the audit flagged as behind a Service with no gate, two
@@ -338,7 +338,7 @@ Still open:
 | 2 | pihole (DNS) | 2026-08-16 | 881 | 0 | 0.00s | real UDP DNS queries from daniel-server |
 
 **Slice 2 is the stronger of the two results**, and for the reason slice 1 lacked: the signal is
-an actual request loop. `scripts/dns_witness.py` sent a real UDP A query for
+an actual request loop. `scripts/dev/dns_witness.py` sent a real UDP A query for
 `pi.hole` at the `pihole-dns` VIP (10.0.0.243) every 0.25s **from daniel-server**, counting a
 sample as OK only on a well-formed response with rcode 0 and at least one answer. So this
 measures what a LAN client experiences, from a host that is not the one being deployed — not
@@ -407,7 +407,7 @@ could otherwise take the 0-gap row as proof of a sequencing behaviour that has n
 **Read this before quoting the result.** It is weaker than the acceptance test this spec
 prescribes, in two specific ways, and neither is a formality:
 
-1. **It is not a request loop.** `scripts/measure_rollout_gap.py` polls HTTP, and flaresolverr
+1. **It is not a request loop.** `scripts/dev/measure_rollout_gap.py` polls HTTP, and flaresolverr
    cannot be polled that way: its NetworkPolicy refuses node-originated traffic (verified —
    `curl` to the ClusterIP from daniel-box fails), and a `kubectl port-forward` dies with the
    pod it attached to, which would fabricate a gap at exactly the moment being measured. So the
@@ -429,7 +429,7 @@ pod came back on a new ReplicaSet hash.
 is now closed — the mode is committed, and the same measurement is:
 
 ```bash
-uv run python scripts/measure_rollout_gap.py --endpoints flaresolverr --seconds 280 --interval 0.25
+uv run python scripts/dev/measure_rollout_gap.py --endpoints flaresolverr --seconds 280 --interval 0.25
 # then, in another terminal, a deploy that actually changes a rendered manifest:
 ./scripts/deploy.sh --tags prowlarr
 ```

@@ -5,7 +5,7 @@ when the off-box snapshot cron landed (2026-08-16). Unlike `kopia-disaster-recov
 restore has been performed from these snapshots — treat every step below as needing
 verification the first time it is used, and update this file with what actually happened.
 
-What was verified on 2026-08-22, with `scripts/etcd_restore_drill.sh --list-only` and the runs
+What was verified on 2026-08-22, with `scripts/backup/etcd_restore_drill.sh --list-only` and the runs
 that followed it:
 
 - The credentials, bucket and folder work, and `k3s etcd-snapshot list --s3` returns real
@@ -85,7 +85,7 @@ you ever rotate it, this line is stale the moment you do** — re-copy first, th
 - **Restoring onto daniel-box with its disk intact**: nothing changes, everything is already there.
 - **Restoring onto a rebuilt or replacement host**: supply the token. `--cluster-reset` reads it
   from `<data-dir>/server/token` and checks for that FILE — `--token-file` does not satisfy it
-  (measured twice, 2026-08-22; see `scripts/etcd_restore_drill.sh`).
+  (measured twice, 2026-08-22; see `scripts/backup/etcd_restore_drill.sh`).
 
 This is the trade the encryption buys: the daily snapshot in R2 no longer carries every homelab
 credential in plaintext, and in exchange the token becomes a second thing that has to survive

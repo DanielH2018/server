@@ -134,7 +134,7 @@ data:
       #
       # Kuma's API key rides HTTP Basic with a blank username; per-monitor up/down,
       # response times and cert-days-remaining. Sole source of monitor_status — the
-      # uptime-kuma board and scripts/postflight.py's gates read it.
+      # uptime-kuma board and scripts/probe/postflight.py's gates read it.
       - job_name: uptime-kuma
         scrape_interval: 1m
         basic_auth:

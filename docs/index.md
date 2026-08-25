@@ -37,7 +37,7 @@ Two separate signals, because they answer different questions:
 <p id="build-stamp" class="build-stamp"></p>
 
 <script>
-// build-info.json is written into the built site by scripts/build_docs.py and is never
+// build-info.json is written into the built site by scripts/docs/build_docs.py and is never
 // committed — keeping it out of the repo is what stops every cron run producing a commit.
 // Degrades silently: a missing file leaves the line empty rather than showing an error.
 fetch("/build-info.json")

@@ -35,14 +35,14 @@ def _load_by_path(name, filename):
 # `import probe_ha as ha` / `import probe_storage as storage`) is what reuses that
 # same cached module rather than importing a second copy. Loading probe.py after
 # would still work, but this is the order the test suites were written against.
-probe = _load_by_path("probe", "probe.py")
+probe = _load_by_path("probe", "diagnostics/probe.py")
 
-postflight = _load_by_path("postflight", "postflight.py")
+postflight = _load_by_path("postflight", "diagnostics/postflight.py")
 validate_compose_templates = _load_by_path(
-    "validate_compose_templates", "validate_compose_templates.py"
+    "validate_compose_templates", "validate/validate_compose_templates.py"
 )
 validate_k8s_manifests = _load_by_path(
-    "validate_k8s_manifests", "validate_k8s_manifests.py"
+    "validate_k8s_manifests", "validate/validate_k8s_manifests.py"
 )
 
 

@@ -101,7 +101,7 @@
   tags: [config]
   ansible.builtin.command:
     cmd: >-
-      {{ ansible_playbook_python }} {{ playbook_dir }}/../scripts/inject_dashboard_annotations.py
+      {{ ansible_playbook_python }} {{ playbook_dir }}/../scripts/grafana/inject_dashboard_annotations.py
       --src /etc/rancher/k3s/dashboards
       --dest /etc/rancher/k3s/dashboards-annotated
       --uid {{ claude_otel_loki_homelab_uid }}

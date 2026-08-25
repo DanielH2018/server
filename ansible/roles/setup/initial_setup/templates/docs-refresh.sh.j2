@@ -75,7 +75,7 @@ flock -w 2700 9 || { alert "docs-refresh: git-tree lock held >45m; skipped"; exi
 # nothing and is the useful half -- but change no files.
 if ! git diff --quiet || ! git diff --cached --quiet; then
   alert "docs-refresh: working tree dirty; rebuilt site only, no regeneration"
-  "$UV" run --frozen python scripts/build_docs.py --skip-generators --site-dir "$SITE_DIR" \
+  "$UV" run --frozen python scripts/docs/build_docs.py --skip-generators --site-dir "$SITE_DIR" \
     || alert "docs-refresh: site build failed on dirty tree"
   exit 0
 fi
@@ -91,14 +91,14 @@ OPEN_PR="$(gh pr list --state open --json number,headRefName \
   2>/dev/null || true)"
 if [ -n "$OPEN_PR" ]; then
   alert "docs-refresh: PR #$OPEN_PR still open; rebuilt site only, no regeneration"
-  "$UV" run --frozen python scripts/build_docs.py --skip-generators --site-dir "$SITE_DIR" \
+  "$UV" run --frozen python scripts/docs/build_docs.py --skip-generators --site-dir "$SITE_DIR" \
     || alert "docs-refresh: site build failed while a PR was open"
   exit 0
 fi
 
 # --frozen: install from the committed uv.lock, never rewrite it on the host. A lock
 # rewrite here would show up as an unrelated dirty file on the next run.
-if ! "$UV" run --frozen python scripts/build_docs.py --site-dir "$SITE_DIR"; then
+if ! "$UV" run --frozen python scripts/docs/build_docs.py --site-dir "$SITE_DIR"; then
   alert "docs-refresh: one or more generators failed (site was still built)"
   # Deliberately NOT an exit. build_docs already skipped the failing generator and built
   # the site from what succeeded, so the pages that did regenerate are worth committing.
@@ -160,7 +160,7 @@ git reset --hard HEAD~1 >/dev/null 2>&1
 git branch -D "$BRANCH" >/dev/null 2>&1
 
 if ! gh pr create --head "$BRANCH" --title "docs: refresh generated reference pages" \
-  --body "Generated output only, from the twice-daily docs-refresh cron: the pages under docs/reference/ and the infra map. Both are reproducible by scripts/build_docs.py. Opened as a PR because a repository ruleset rejects direct writes to master." \
+  --body "Generated output only, from the twice-daily docs-refresh cron: the pages under docs/reference/ and the infra map. Both are reproducible by scripts/docs/build_docs.py. Opened as a PR because a repository ruleset rejects direct writes to master." \
   >"$LOG" 2>&1; then
   say_failure "docs-refresh: $BRANCH published but PR creation failed" "$LOG"
   exit 1

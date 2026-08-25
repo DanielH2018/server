@@ -1,0 +1,535 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "bf4q19tuivta8e"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "purple",
+        "name": "Deploys",
+        "target": {
+          "expr": "{job=\"syslog\"} |= \"event=deploy\" | logfmt",
+          "queryType": "range",
+          "refId": "DeployAnno"
+        },
+        "textFormat": "{{services}}",
+        "titleFormat": "deploy"
+      }
+    ]
+  },
+  "id": null,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "title": "Capacity & Headroom",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "longhorn_disk_usage_bytes / longhorn_disk_capacity_bytes per node's Longhorn disk. Each node currently carries exactly one disk, so this is also the node's headroom.",
+      "fieldConfig": {
+        "defaults": {
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 1
+      },
+      "id": 2,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "100 * longhorn_disk_usage_bytes / longhorn_disk_capacity_bytes",
+          "legendFormat": "{{node}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Disk used %, per node",
+      "type": "gauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "longhorn_disk_usage_bytes (solid) against longhorn_disk_capacity_bytes (the ceiling) \u2014 the trend line for headroom running out.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          },
+          "unit": "bytes"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/capacity/"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    10
+                  ],
+                  "fill": "dash"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 8,
+        "y": 1
+      },
+      "id": 3,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "longhorn_disk_usage_bytes",
+          "legendFormat": "{{node}} used",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "longhorn_disk_capacity_bytes",
+          "legendFormat": "{{node}} capacity",
+          "refId": "B"
+        }
+      ],
+      "title": "Disk used vs capacity, per node",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "id": 4,
+      "title": "Volumes",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "longhorn_volume_actual_size_bytes, top 10 of 43 tracked volumes. Legend is the PVC name (the volume label is the PV's UUID and not legible on its own).",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 10
+      },
+      "id": 5,
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "topk(10, longhorn_volume_actual_size_bytes)",
+          "instant": true,
+          "legendFormat": "{{pvc}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Top volumes by actual size",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "longhorn_volume_robustness is one-hot over a state label (healthy/degraded/faulted/unknown), 4 series per volume \u2014 this sums only the healthy series, which equals a count. A steady 0 on the degraded/faulted panels is the all-clear reading, not a no-data gap.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "green",
+            "mode": "fixed"
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 19
+      },
+      "id": 6,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "sum(longhorn_volume_robustness{state=\"healthy\"})",
+          "legendFormat": "healthy",
+          "refId": "A"
+        }
+      ],
+      "title": "Healthy",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "0 here means no volume is running short a replica right now \u2014 read it as healthy, not as missing data.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 6,
+        "y": 19
+      },
+      "id": 7,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "sum(longhorn_volume_robustness{state=\"degraded\"})",
+          "legendFormat": "degraded",
+          "refId": "A"
+        }
+      ],
+      "title": "Degraded",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "0 here means no volume has lost all its replicas \u2014 read it as healthy, not as missing data.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 12,
+        "y": 19
+      },
+      "id": 8,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "sum(longhorn_volume_robustness{state=\"faulted\"})",
+          "legendFormat": "faulted",
+          "refId": "A"
+        }
+      ],
+      "title": "Faulted",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "Robustness reads unknown while a volume is detached (no engine running to report health) \u2014 this is normal for volumes attached only intermittently, not a fault.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 18,
+        "y": 19
+      },
+      "id": 9,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "sum(longhorn_volume_robustness{state=\"unknown\"})",
+          "legendFormat": "unknown",
+          "refId": "A"
+        }
+      ],
+      "title": "Unknown",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      },
+      "id": 10,
+      "title": "Snapshots & Backups",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "sum by (volume) (longhorn_snapshot_actual_size_bytes) \u2014 retained snapshots are what makes the nightly trim reclaim nothing even though old data is logically gone. This metric carries no pvc label, so the legend is the volume's PV UUID.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 26
+      },
+      "id": 11,
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "topk(8, sum by (volume) (longhorn_snapshot_actual_size_bytes))",
+          "instant": true,
+          "legendFormat": "{{volume}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Top volumes by retained snapshot size",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "sum(longhorn_backup_uploaded_data_size_bytes) \u2014 the delta each retained backup object transferred to the target, summed across every backup Longhorn still has a record of. Steps as daily-backup runs and retention rotates old backups out; it is not a running cumulative total.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 26
+      },
+      "id": 12,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "sum(longhorn_backup_uploaded_data_size_bytes)",
+          "legendFormat": "uploaded (retained backups)",
+          "refId": "A"
+        }
+      ],
+      "title": "Backup uploaded bytes (retained set)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "count(longhorn_volume_last_backup_at > 0) of 43 tracked volumes. The B2 backup target is currently disarmed, so the other volumes reading 0 is a deliberate condition, not a failure \u2014 this panel is scoped to volumes that have ever completed a backup rather than showing a raw 29-zero 'stale backup' alarm.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      },
+      "id": 13,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "count(longhorn_volume_last_backup_at > 0)",
+          "legendFormat": "volumes ever backed up",
+          "refId": "A"
+        }
+      ],
+      "title": "Volumes with a backup on record",
+      "type": "stat"
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 39,
+  "tags": [
+    "homelab",
+    "storage",
+    "longhorn"
+  ],
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "Longhorn \u2014 Storage",
+  "uid": "longhorn-storage",
+  "version": 1
+}

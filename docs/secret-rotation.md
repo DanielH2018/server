@@ -1,7 +1,7 @@
 # Secret rotation — audit, tiers, and runbooks
 
 Secrets in `ansible/vars/secrets.yml` are tracked for rotation by a plaintext registry
-(`ansible/secret_rotation.yml`) and the tool `scripts/secret_rotation.py`. A daily server
+(`ansible/secret_rotation.yml`) and the tool `scripts/secrets_mgmt/secret_rotation.py`. A daily server
 cron (`secret-rotation-audit.sh`, initial_setup) pushes the **"Secret Rotation"** Uptime
 Kuma monitor — it goes **down** when any secret is past its per-tier window, or when a
 secret exists in `secrets.yml` but not the registry.
@@ -12,10 +12,10 @@ Rotation dates are **staggered** at registration (a deterministic per-name offse
 ## Daily use
 
 ```bash
-uv run python scripts/secret_rotation.py sync     # after adding/removing a secret — registers it
-uv run python scripts/secret_rotation.py audit    # what's due / overdue, by tier
-uv run python scripts/secret_rotation.py rotate            # dry-run: due auto-tier secrets
-uv run python scripts/secret_rotation.py rotate --commit   # actually rotate due auto secrets
+uv run python scripts/secrets_mgmt/secret_rotation.py sync     # after adding/removing a secret — registers it
+uv run python scripts/secrets_mgmt/secret_rotation.py audit    # what's due / overdue, by tier
+uv run python scripts/secrets_mgmt/secret_rotation.py rotate            # dry-run: due auto-tier secrets
+uv run python scripts/secrets_mgmt/secret_rotation.py rotate --commit   # actually rotate due auto secrets
 ```
 
 `sync` edits the (git-tracked) registry — **commit it**. The audit cron never writes the
@@ -31,7 +31,7 @@ registry, so git stays the source of truth.
 | `pinned` | 730 d | **must not be naively swapped** | special procedure (below) |
 | `ignore` | — | not a secret (domain, usernames, static addresses) | n/a |
 
-Classification is by name in `scripts/secret_rotation.py`; override per-secret by editing
+Classification is by name in `scripts/secrets_mgmt/secret_rotation.py`; override per-secret by editing
 its `tier` in the registry (`sync` preserves overrides).
 
 ## `auto` — automated

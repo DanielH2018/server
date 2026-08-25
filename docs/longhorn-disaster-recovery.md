@@ -144,7 +144,7 @@ the per-volume map and each exclusion's rationale:
    (`homelab/<pvc-name>` — the names in `longhorn-backup-tiering.md`'s table).
 5. **Deploy**: `uv run ansible-playbook ansible/deploy.yml`. Workloads bind the existing
    PVCs; no-backup volumes provision empty and rebuild per the list above.
-6. **Verify**: `uv run python scripts/probe.py targets` and `health <svc>` for the
+6. **Verify**: `uv run python scripts/probe/probe.py targets` and `health <svc>` for the
    restored tier; `probe.py ha verify-automations` for HA; monitor-bridge's board goes
    green as services come up. Restore the Kuma admin + check tiles last (its DB was
    deliberately not restored).

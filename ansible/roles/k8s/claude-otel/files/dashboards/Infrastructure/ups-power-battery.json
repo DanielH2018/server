@@ -1,0 +1,358 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "bf4q19tuivta8e"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "purple",
+        "name": "Deploys",
+        "target": {
+          "expr": "{job=\"syslog\"} |= \"event=deploy\" | logfmt",
+          "queryType": "range",
+          "refId": "DeployAnno"
+        },
+        "textFormat": "{{services}}",
+        "titleFormat": "deploy"
+      }
+    ]
+  },
+  "id": null,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "title": "Battery & Runway",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "monitor-bridge check_ups pages below 50% (a deep discharge on battery).",
+      "fieldConfig": {
+        "defaults": {
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "green",
+                "value": 90
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "id": 2,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "hass_sensor_battery_percent{entity=\"sensor.apc_ups_battery_charge\"}",
+          "legendFormat": "charge",
+          "refId": "A"
+        }
+      ],
+      "title": "Battery charge",
+      "type": "gauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "Runway at the current load. monitor-bridge check_ups pages below 5 min (aged battery or a discharge nearing shutdown).",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 300
+              },
+              {
+                "color": "green",
+                "value": 600
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "id": 3,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "hass_sensor_duration_s{entity=\"sensor.apc_ups_battery_runtime\"}",
+          "legendFormat": "runtime",
+          "refId": "A"
+        }
+      ],
+      "title": "Estimated runtime",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "NUT's RB (Replace Battery) verdict via HA binary_sensor.apc_ups_replace_battery. monitor-bridge check_ups pages on this \u2014 the earliest UPS signal, it can trip while charge/runtime still read fine.",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "green",
+                  "text": "OK"
+                },
+                "1": {
+                  "color": "red",
+                  "text": "REPLACE"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "id": 8,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "hass_binary_sensor_state{entity=\"binary_sensor.apc_ups_replace_battery\"}",
+          "legendFormat": "replace-battery",
+          "refId": "A"
+        }
+      ],
+      "title": "Replace-battery self-test",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "Full-charge runway decaying over weeks/months is the aging-battery signal check_ups' floor eventually trips \u2014 widen the range to spot slow decay.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 300
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "id": 4,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "hass_sensor_duration_s{entity=\"sensor.apc_ups_battery_runtime\"}",
+          "legendFormat": "runtime",
+          "refId": "A"
+        }
+      ],
+      "title": "Battery runtime (trend)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      },
+      "id": 5,
+      "title": "Mains & Load",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "Mains voltage into the UPS \u2014 a drop toward 0 means it's on battery (an outage/brownout).",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          },
+          "unit": "volt"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 18
+      },
+      "id": 6,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "hass_sensor_voltage_v{entity=\"sensor.apc_ups_input_voltage\"}",
+          "legendFormat": "input voltage",
+          "refId": "A"
+        }
+      ],
+      "title": "Input voltage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "UPS output load \u2014 higher load shortens the estimated runtime above.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          },
+          "max": 100,
+          "min": 0,
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 18
+      },
+      "id": 7,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "hass_sensor_unit_percent{entity=\"sensor.apc_ups_load\"}",
+          "legendFormat": "load",
+          "refId": "A"
+        }
+      ],
+      "title": "Load",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 39,
+  "tags": [
+    "homelab",
+    "power",
+    "ups"
+  ],
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "UPS \u2014 Power & Battery",
+  "uid": "ups-power-battery",
+  "version": 1
+}

@@ -270,7 +270,7 @@ spec:
 - [ ] **Step 2: Render and validate against the live API server**
 
 ```bash
-uv run python scripts/validate_k8s_manifests.py
+uv run python scripts/validate/validate_k8s_manifests.py
 ./scripts/deploy.sh --tags netpol-baseline --dry-run
 ```
 Expected: both pass. The dry run applies with `--dry-run=server`, catching bad apiVersions and
@@ -758,8 +758,8 @@ changes, so the automated pipeline cannot reach it on its own.
 - [ ] **Step 1: Capture witnesses before anything deploys**
 
 ```bash
-uv run python scripts/probe.py metric 'count(up == 1)'
-uv run python scripts/probe.py health monitor-bridge
+uv run python scripts/probe/probe.py metric 'count(up == 1)'
+uv run python scripts/probe/probe.py health monitor-bridge
 ```
 Record the scrape-target count as the baseline. Kuma is the out-of-band witness.
 
@@ -806,14 +806,14 @@ out every route in the cluster at once, including the routes you would use to di
 After `pihole`, before continuing, confirm DNS still resolves — that is the cluster-wide one:
 
 ```bash
-uv run python scripts/probe.py metric 'count(up == 1)'
+uv run python scripts/probe/probe.py metric 'count(up == 1)'
 ```
 
 - [ ] **Step 4: Verify**
 
 - Probe Job green, including its DNS leg.
 - Scrape-target count back at the Step 1 baseline.
-- `uv run python scripts/probe.py health monitor-bridge` and its log showing `cluster_targets`.
+- `uv run python scripts/probe/probe.py health monitor-bridge` and its log showing `cluster_targets`.
 - Grafana reachable through Traefik — and remember a 302 proves nothing, since Authelia's redirect
   fires in the middleware before Traefik proxies. Use a route without Authelia to prove the backend.
 - uptime-kuma's monitors still green — the ~20 `*.local.` checks are the broadest live evidence

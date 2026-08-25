@@ -31,7 +31,7 @@ all evidenced below:
 ```
 
 and the script's first action is `cd /home/ubuntu/server` (`validate-compose.sh:17`).
-It then runs `scripts/validate_compose_templates.py` — **which takes no file argument**;
+It then runs `scripts/validate/validate_compose_templates.py` — **which takes no file argument**;
 it renders every service's compose template found in the current working directory.
 
 So when a session working in `.claude/worktrees/workload-tiering` edits a
@@ -61,7 +61,7 @@ HOOK EXIT: 0
 The same validator, pointed at the worktree's own copy, reports
 `54 template(s) checked, 1 failure(s).` The break was real; the hook did not see it.
 
-**The root cause is deeper than the `cd`.** `scripts/_render_guard.py:22` resolves the
+**The root cause is deeper than the `cd`.** `scripts/lib/_render_guard.py:22` resolves the
 repo from the script's own location:
 
 ```python
@@ -69,7 +69,7 @@ REPO = Path(__file__).resolve().parent.parent
 ANSIBLE = REPO / "ansible"
 ```
 
-Because the hook `cd`s to the primary checkout and invokes `scripts/validate_compose_templates.py`
+Because the hook `cd`s to the primary checkout and invokes `scripts/validate/validate_compose_templates.py`
 *relatively*, `__file__` is always the primary checkout's script, so `REPO` is always
 `/home/ubuntu/server` — regardless of cwd. Changing the `cd` alone would therefore fix
 nothing: the fix must invoke the *worktree's own copy* of the validator by absolute path.
@@ -232,7 +232,7 @@ mergeable without a rebase.
 
 - Flip `deleteBranchOnMerge` to `true`. Remote branches then disappear on merge; this
   alone removes most of the accumulation.
-- Add `scripts/prune_worktrees.py`: for each `.claude/worktrees/*`, report branch,
+- Add `scripts/dev/prune_worktrees.py`: for each `.claude/worktrees/*`, report branch,
   merged-into-`origin/master` status, dirty/clean, lock state, and last-commit age.
   `--dry-run` by default; `--prune` removes worktrees that are merged **and** clean
   **and** unlocked. Never touches a dirty or locked tree — a lock is how a live session
@@ -242,7 +242,7 @@ mergeable without a rebase.
 - One-time: run `--prune` against the current backlog and delete the merged local
   branches by hand.
 
-**Exercisable:** `uv run python scripts/prune_worktrees.py` correctly classifies the
+**Exercisable:** `uv run python scripts/dev/prune_worktrees.py` correctly classifies the
 three worktrees currently on disk — `containers-role-cleanup` merged-but-locked,
 `workload-tiering` merged, `slice-polish` stale.
 

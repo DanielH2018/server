@@ -294,7 +294,7 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
         is False
     ]
     assert len(denied) == len(actually_false)
-    # Measured 36 on 2026-08-22 (uv run python scripts/k8s_autodeploy_counts.py): slice 7b task
+    # Measured 36 on 2026-08-22 (uv run python scripts/dev/k8s_autodeploy_counts.py): slice 7b task
     # 7's twelve promotions dropped this from 44 to 32, the same-day scope decision re-denied
     # three of the twelve for state coupling (35), then the two post-7b audits re-denied a
     # fourth, tdarr, for a compounding reason of its own (36). The floor sits two below the

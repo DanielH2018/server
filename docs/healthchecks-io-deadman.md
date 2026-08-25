@@ -114,7 +114,7 @@ call site skips its block, leaving the hosts exactly as they were. To turn it on
 
    ```bash
    sops ansible/vars/secrets.yml          # add: healthchecks_ping_key: <key>
-   uv run python scripts/secret_rotation.py sync
+   uv run python scripts/secrets_mgmt/secret_rotation.py sync
    ```
 
    One key covers every check — the slug in the URL selects which one. Adding a fifth check

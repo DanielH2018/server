@@ -112,7 +112,7 @@ def test_hook_wrappers_reference_existing_python():
 
 
 def _probe_subcommands():
-    body = _read(os.path.join(REPO, "scripts", "probe.py"))
+    body = _read(os.path.join(REPO, "scripts", "diagnostics", "probe.py"))
     return set(re.findall(r'\.add_parser\(\s*"([\w-]+)"', body))
 
 
