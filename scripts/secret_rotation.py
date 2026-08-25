@@ -124,8 +124,38 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         "etcd_snapshot_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
         "remember_logs_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
         "secret_rotation_push_token",  # self-referential
+        # Pushed by a setup role with no deploy tag, so there is nothing for --deploy to run.
+        # Named `monitor_bridge_*` only for Kuma monitor-history continuity after the check
+        # moved out of monitor-bridge (2026-08-25 review M-8b).
+        "monitor_bridge_fake_remux_push_token",  # setup/fake_remux cron
+        "monitor_bridge_fake_remux_replace_push_token",  # setup/fake_remux cron
+        "monitor_bridge_renovate_alive_push_token",  # setup/renovate_notify
     }
 )
+
+
+# Push tokens whose name carries the `monitor_bridge_` prefix but whose PUSHER lives in another
+# role entirely. The prefix is a Kuma-history artefact: the monitor was created by monitor-bridge
+# and renaming it would break its history, so the token kept the name after the check moved out
+# into the owning service's own health script. Routing these by prefix names a role that renders
+# them NOWHERE — `rotate --deploy` would write a new value, deploy monitor-bridge, leave the real
+# pusher on the old token and stamp `last_rotated` green (2026-08-25 review M-8b).
+#
+# Derived by measurement, not by reading the names: `grep -rl <token> ansible/roles/`. Nine of
+# the 41 `monitor_bridge_*` tokens mis-routed; the review reported two.
+PREFIX_EXCEPTION_CONSUMERS = {
+    "monitor_bridge_appsec_push_token": "crowdsec",
+    "monitor_bridge_home_allowlist_push_token": "crowdsec",
+    "monitor_bridge_cloudflare_drift_push_token": "traefik",
+    "monitor_bridge_configarr_push_token": "configarr",
+    "monitor_bridge_janitorr_push_token": "janitorr",
+    "monitor_bridge_pi_peers_push_token": "pi-peer-backup",
+}
+# The other three mis-routed tokens are pushed by SETUP roles (setup/fake_remux,
+# setup/renovate_notify), which have no entry in `containers_list` and therefore no deploy tag.
+# Naming the role here would be the same defect one step along: `ansible-playbook deploy.yml
+# --tags fake_remux` matches nothing and Ansible exits 0, so the rotation would still stamp
+# green having deployed nothing. They decline instead, below.
 
 
 def consumer_tag(name: str) -> str | None:
@@ -133,6 +163,12 @@ def consumer_tag(name: str) -> str | None:
     consumer spans hosts / is self-referential (those stay MANUAL: the unattended cron skips
     them, the audit still reminds). A push token lives in two places on one compose file: the
     pusher's env AND the AutoKuma `push_token` label, so one redeploy updates both atomically."""
+    # Both of these precede the prefix rule below: every token they name also carries the
+    # `monitor_bridge_` prefix, so the prefix rule would otherwise claim them first.
+    if name in CROSS_HOST_PUSH_TOKENS:
+        return None
+    if name in PREFIX_EXCEPTION_CONSUMERS:
+        return PREFIX_EXCEPTION_CONSUMERS[name]
     if name.startswith("monitor_bridge_") or name == "kopia_restore_drill_push_token":
         return "monitor-bridge"
     if name.startswith("cloudflare_ddns_"):
@@ -410,7 +446,16 @@ def cmd_audit(args) -> int:
         flag = "OVERDUE" if days_left < 0 else ("soon" if days_left <= 14 else "ok")
         print("  %-7s %-40s %-9s due %s (%+d d)" % (flag, name, tier, d, days_left))
     summary = audit_summary(res, missing, stale)
-    print("audit:", summary)
+    # An externally-detected fault the caller wants folded in. ADDITIVE, deliberately: the
+    # caller could short-circuit to its own sticky DOWN instead (the two arms above it in
+    # secret-rotation-audit.sh.j2 do exactly that), but those describe a registry that cannot
+    # be trusted, whereas an unlanded rotation branch says nothing about the other secrets.
+    # Short-circuiting there would silence overdue reporting for all of them until a human
+    # cleared the branch. Forcing DOWN while still enumerating the audit keeps both signals.
+    extra_down = getattr(args, "extra_down", None)
+    if extra_down:
+        summary = f"{extra_down}; {summary}"
+        print("audit: forced DOWN by --extra-down")
     if args.push:
         url = os.environ.get("SECRET_ROTATION_KUMA")
         if not url:
@@ -419,7 +464,8 @@ def cmd_audit(args) -> int:
         # `stale` too (a registry row for a since-removed secret), so the daily Kuma push and
         # the CI `--check` gate below agree on registry drift — otherwise a `stale`-only drift
         # fails CI while the monitor stays green.
-        _push(url, ok=(n_over == 0 and not missing and not stale), msg=summary)
+        ok = n_over == 0 and not missing and not stale and not extra_down
+        _push(url, ok=ok, msg=summary)
     # --check: a CI/PR gate that the registry is in sync with secrets.yml. Fails ONLY on drift,
     # NOT on overdue (a time-based runtime state the daily Kuma push owns — blocking an unrelated
     # commit on a due-for-rotation secret would be wrong). Read-only (no decrypt), CI-safe.
@@ -534,6 +580,12 @@ def main(argv=None) -> int:
     sub.add_parser("sync").set_defaults(func=cmd_sync)
     pa = sub.add_parser("audit")
     pa.add_argument("--push", action="store_true", help="post status to Uptime Kuma")
+    pa.add_argument(
+        "--extra-down",
+        metavar="REASON",
+        help="force DOWN and prefix REASON to the pushed message, while still reporting "
+        "every overdue secret (for a fault the caller detected, not the registry)",
+    )
     pa.add_argument(
         "--check",
         action="store_true",

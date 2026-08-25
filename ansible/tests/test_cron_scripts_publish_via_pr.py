@@ -26,6 +26,7 @@ TEMPLATES = REPO / "ansible/roles/setup/initial_setup/templates"
 
 DOCS_REFRESH = TEMPLATES / "docs-refresh.sh.j2"
 SECRET_ROTATE = TEMPLATES / "secret-rotate.sh.j2"
+ROTATION_AUDIT = TEMPLATES / "secret-rotation-audit.sh.j2"
 
 # (path, the commit invocation as it appears in that script). secret-rotate splits its commit
 # across lines and passes --no-verify, so a single shared marker would silently match neither.
@@ -100,15 +101,43 @@ def test_the_checkout_is_not_left_ahead_of_origin(path, commit_marker):
 
 def test_secret_rotate_refuses_to_stack_an_unlanded_rotation():
     """Rotating again while a previous rotation is unpublished moves the live credential a
-    second time while the first is still unrecorded. It must refuse, not skip quietly."""
+    second time while the first is still unrecorded. It must refuse, not skip quietly.
+
+    The gate is the REMOTE BRANCH, not an open PR. `gh pr create` runs after `git push`, so a
+    create failure leaves the branch on origin with no PR at all — and the publish block's
+    `git reset --hard HEAD~1` then erases every local trace. An open-PR check passes cleanly
+    in exactly the state that most needs to refuse (2026-08-25 review H-1).
+    """
     text = read(SECRET_ROTATE)
-    assert "OPEN_PR" in text, (
-        "no in-flight check; a second rotation could stack on the first"
+    assert "git ls-remote --heads origin" in text, (
+        "no remote-branch check; a rotation whose `gh pr create` failed leaves no local "
+        "evidence, so a local-only guard cannot see it and the next run stacks on it"
     )
-    guard = text.split("OPEN_PR", 1)[1]
-    assert "exit 1" in guard.split("fi", 1)[0], (
+    guard = text.split("git ls-remote --heads origin", 1)[1]
+    assert "exit 1" in guard, (
         "the in-flight branch must exit non-zero — a silent skip hides that the live value "
         "and origin disagree"
+    )
+
+
+def test_secret_rotate_fails_closed_when_origin_is_unreachable():
+    """`git ls-remote ... || true` would read an unreachable origin as "no stale branch" and
+    rotate straight into the state the guard exists to refuse. The exit status must be tested.
+    """
+    text = read(SECRET_ROTATE)
+    line = next(
+        line for line in code_lines(SECRET_ROTATE) if "git ls-remote --heads" in line
+    )
+    assert "|| true" not in line, (
+        f"the remote-branch check swallows its exit status, so an unreachable origin fails "
+        f"OPEN rather than closed: {line!r}"
+    )
+    assert line.lstrip().startswith("if !"), (
+        f"the remote-branch check must branch on its exit status: {line!r}"
+    )
+    assert "cannot reach origin" in text, (
+        "no distinct alert for an unreachable origin; it would be indistinguishable from a "
+        "clean run"
     )
 
 
@@ -128,4 +157,34 @@ def test_secret_rotate_never_reverts_a_live_rotation():
     assert not after, (
         f"the publish path calls revert after the rotation is live, which strands the "
         f"running value: {after!r}"
+    )
+
+
+def test_the_audit_watches_for_an_unlanded_rotation_branch():
+    """The weekly gate refuses to stack, but nothing would REPORT the stuck state between
+    Sundays. The daily audit is the sticky signal, and its two existing arms read only local
+    state -- a clean tree and an unrotated registry are exactly what the failure looks like.
+    """
+    text = ROTATION_AUDIT.read_text()
+    assert "git ls-remote --heads origin" in text, (
+        "the daily audit cannot see an unlanded rotation branch, so a failed `gh pr create` "
+        "goes unreported until the next Sunday's gate happens to trip"
+    )
+
+
+def test_the_audit_branch_arm_is_additive_not_a_short_circuit():
+    """The two arms above it exit 0 before the auditor runs, which is right for a registry
+    that cannot be trusted. A stray branch says nothing about the OTHER secrets, so
+    short-circuiting there would silence every overdue secret until a human cleared it.
+    """
+    text = ROTATION_AUDIT.read_text()
+    arm = text.split("git ls-remote --heads origin", 1)[1]
+    # Up to the auditor invocation: the arm must reach it, not exit ahead of it.
+    before_audit = arm.split("secret_rotation.py audit", 1)[0]
+    assert "exit 0" not in before_audit, (
+        "the stray-branch arm short-circuits past the auditor, suppressing overdue "
+        "reporting for every other secret while the branch sits there"
+    )
+    assert "--extra-down" in arm, (
+        "the arm does not force the monitor DOWN; the auditor would push UP and mask it"
     )

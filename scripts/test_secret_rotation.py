@@ -2,6 +2,7 @@
 
 import datetime as dt
 import subprocess
+from pathlib import Path
 
 import yaml
 
@@ -395,3 +396,65 @@ def test_derivation_failure_degrades_to_recorded_dates(monkeypatch):
 
     monkeypatch.setattr(sr, "_git", boom)
     assert sr.derived_rotation_dates() == {}
+
+
+# ── consumer_tag correctness ────────────────────────────────────────────────
+# The guard above proves a token RESOLVES a tag. Nothing proved the tag was right, which is
+# this estate's recurring guard-scope shape: a check written alongside a fix inherits the
+# fix's scope. `consumer_tag` routed every `monitor_bridge_*` name to monitor-bridge by
+# prefix, but nine of those tokens are pushed from another role's health script entirely —
+# the prefix is a Kuma monitor-history artefact, kept so renaming the monitor would not lose
+# its history. For those, `rotate --deploy` wrote a new value, deployed a role that renders
+# the token nowhere, left the real pusher on the old one, and stamped `last_rotated` green
+# (2026-08-25 review M-8b).
+_SKIP_TAGS = ("ignore", "pinned", "external")
+
+
+def _consumer_tags():
+    reg = sr.load_registry()
+    for name in reg["secrets"]:
+        tag = sr.consumer_tag(name)
+        if tag and tag not in _SKIP_TAGS:
+            yield name, tag
+
+
+def test_every_consumer_tag_names_a_role_that_renders_the_token():
+    roles = Path(sr.__file__).resolve().parent.parent / "ansible/roles"
+    mismatched = []
+    for name, tag in _consumer_tags():
+        candidates = [p for p in roles.glob("*/" + tag) if p.is_dir()]
+        if not candidates:
+            mismatched.append("%s -> %s (no such role directory)" % (name, tag))
+            continue
+        renders = any(
+            name in f.read_text(errors="ignore")
+            for role in candidates
+            for f in role.rglob("*")
+            if f.is_file() and f.suffix in (".j2", ".yml", ".yaml", ".sh", ".py")
+        )
+        if not renders:
+            mismatched.append("%s -> %s (role renders it nowhere)" % (name, tag))
+    assert not mismatched, (
+        "consumer_tag names a role that does not render the token, so `rotate --deploy` "
+        "deploys the wrong thing and stamps the rotation green anyway: %s" % mismatched
+    )
+
+
+def test_every_consumer_tag_is_a_real_deploy_tag():
+    """The same failure one step along: `ansible-playbook deploy.yml --tags <unmatched>` runs
+    nothing and exits 0, so the rotation still reads as deployed. Three mis-routed tokens are
+    pushed by SETUP roles with no `containers_list` entry, which is why they decline in
+    CROSS_HOST_PUSH_TOKENS instead of naming their role.
+    """
+    import deploy_tags
+
+    valid = deploy_tags.known_tags()
+    assert valid, "could not read the deploy tag list"
+    unmatched = sorted(
+        "%s -> %s" % (n, t) for n, t in _consumer_tags() if t not in valid
+    )
+    assert not unmatched, (
+        "consumer_tag returns a value that is not a deploy tag; Ansible exits 0 on an "
+        "unmatched tag, so the rotation stamps green having deployed nothing: %s"
+        % unmatched
+    )
