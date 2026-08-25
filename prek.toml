@@ -57,7 +57,22 @@ additional_dependencies = ["ansible-core>=2.18,<3.0", "jmespath"]
 # NB the `--` sentinel and `"$@"`, same as bash-syntax-check below: prek appends the filenames
 # to the entry, and after `bash -c '<script>'` those become the SCRIPT's positional params. A
 # bare `... && ansible-lint -c .ansible-lint` would silently lint nothing at all.
-entry = "bash -c 'ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections && ansible-lint -c .ansible-lint \"$@\"' --"
+#
+# The `$# -eq 0` guard is load-bearing, and the opposite of what the line above implies.
+# prek runs this hook even when NO staged file matches `files:` above, and `ansible-lint`
+# with no paths does not lint nothing — it WALKS THE FILESYSTEM. So a commit touching only
+# docs got a full-tree lint of ~1,600 files, including untracked and gitignored ones that
+# CI never sees, and any violation among them rejected the commit. That is what stopped
+# `docs-refresh.sh` committing: it stages only `docs/reference` and `docs/assets/generated`,
+# so this hook received zero filenames, walked, failed, and the script reset -- leaving the
+# tree permanently dirty, which in turn parked gitops-deploy behind origin.
+#
+# The exclude_paths in `.ansible-lint` are the older, partial answer to the same walk (see
+# their comments, which name the worktree and styles/ trees). Excluding paths is a chase:
+# every new untracked directory is another entry. Not walking is the fix.
+#
+# ENFORCED by scripts/test_ansible_lint_hook.py.
+entry = "bash -c 'if [ \"$#\" -eq 0 ]; then exit 0; fi; ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections && ansible-lint -c .ansible-lint \"$@\"' --"
 pass_filenames = true
 # REQUIRED, not a tuning knob. Without it prek shards the filenames across parallel
 # invocations — measured at 16 batches of ~21-39 files for a full run, each one re-running the
