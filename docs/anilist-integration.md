@@ -1,7 +1,7 @@
 # AniList integration for the media stack
 
 **Date:** 2026-08-25
-**Status:** design approved, not yet implemented
+**Status:** Phase 1 deployed and loaded on 2026-08-25. Phase 2 not started.
 
 Two independent pieces connect the homelab's media stack to AniList. Phase 1 pushes watch
 status from Jellyfin to AniList. Phase 2 mirrors AniList scores back into Sonarr and Radarr as
@@ -124,12 +124,22 @@ nothing the init container does touches that directory.
 
 A green rollout does not prove the plugin loaded. Verification has three steps:
 
-1. `uv run python scripts/probe.py health jellyfin` gates the rollout and the restart window.
+1. `uv run python scripts/diagnostics/probe.py health jellyfin` gates the rollout and the
+   restart window.
 2. `GET /Plugins` on the Jellyfin API lists `Ani-Sync` with version 4.1.0.0.
 3. Playing an episode to completion produces a matching progress change on the AniList entry.
 
 Step 3 is the only one that exercises the actual integration. Steps 1 and 2 both pass on a
 plugin that has loaded and cannot reach AniList.
+
+Steps 1 and 2 passed on 2026-08-25. `GET /Plugins` reports `Ani-Sync 4.1.0.0 status=Active`,
+and the Jellyfin log names where it loaded from:
+
+    Loaded plugin: Ani-Sync 4.1.0.0
+    Loaded assembly jellyfin-ani-sync, Version=4.1.0.0 ... from
+    /config/data/plugins/Ani-Sync_4.1.0.0/jellyfin-ani-sync.dll
+
+Step 3 waits on the AniList OAuth handshake, which is a person's to do.
 
 **Step 2 is not optional, and the first deploy proved why.** On 2026-08-25 the init container
 installed to `/config/plugins`, logged `installed ani-sync 4.1.0.0`, and left the files on
