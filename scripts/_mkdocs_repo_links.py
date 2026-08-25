@@ -17,6 +17,13 @@ auto-deploy status. It documents nothing about that file, and `tasks/main.yml` a
 `defaults/main.yml` would both land on the same row, telling the reader nothing about either.
 A link that answers a question the reader did not ask is worse than the plain code span.
 
+THE BARE FORM IS NOT A PURE FUNCTION OF THE TRACKED TREE. `shared_basenames` reads what is on
+disk at build time, so an untracked file named after a script -- dropped anywhere outside
+`scripts/` -- silently withdraws the bare-form link from every page that used it. All 47
+scripts hold a bare key as things stand. The failure is benign in both directions: a link
+disappears, nothing breaks and nothing points anywhere wrong. Recorded because the link set
+reads deterministic and is not.
+
 WHY A BUILD HOOK AND NOT A SCRIPT IN THE PAGE. `assets/fqdn-links.js` runs in the browser
 because the domain it resolves is SOPS-sourced and nothing static can know it. A path -> URL
 map has no such problem: both halves are known at build time. Resolving here produces real
