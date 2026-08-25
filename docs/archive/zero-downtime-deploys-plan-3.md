@@ -32,7 +32,7 @@ So the real work is three probes. The fourth sidecar — `uptime-kuma`'s `autoku
 ## Global Constraints
 
 - Ansible is the only write path to the cluster. Plain `kubectl` is a read-only service account; `sudo` is denied.
-- Manifest templates under `roles/k8s/<role>/templates/` must parse as YAML after rendering — `scripts/validate_k8s_manifests.py` enforces it.
+- Manifest templates under `roles/k8s/<role>/templates/` must parse as YAML after rendering — `scripts/validate/validate_k8s_manifests.py` enforces it.
 - Tests live in a directory already in `pyproject.toml` `testpaths`; `ansible/tests` is one. `pytest` runs `-n auto`, so tests must be filesystem-read-only and order-independent.
 - A container with **no** `readinessProbe` is Ready the instant it starts. A container **with** one is not Ready until it passes — so a probe that is wrong takes the workload out of service. Wrong probes are worse than absent ones.
 - **Pod Ready is the AND of all containers.** Adding a probe to any container gates the whole pod's Service membership.
@@ -93,7 +93,7 @@ In `ansible/roles/k8s/terraria/templates/deployment.yaml.j2`, on the `terraria` 
 
 - [ ] **Step 4: Verify both render and the probes land on the right containers**
 
-Run: `uv run python scripts/validate_k8s_manifests.py`
+Run: `uv run python scripts/validate/validate_k8s_manifests.py`
 Expected: exit 0.
 
 Run: `uv run python -c "import sys; [sys.path.insert(0,p) for p in ('ansible/tests','ansible/filter_plugins','scripts')]; from _k8s_render import rendered_docs; print([(r,c['name'],'readinessProbe' in c) for r,t,d in rendered_docs() if r in ('nut','terraria') and d['kind']=='Deployment' for c in d['spec']['template']['spec']['containers']])"`
@@ -145,7 +145,7 @@ If none of the three options is available in this image, **do not add a guessed 
 
 - [ ] **Step 4: Verify and commit**
 
-Run: `uv run python scripts/validate_k8s_manifests.py`
+Run: `uv run python scripts/validate/validate_k8s_manifests.py`
 Expected: exit 0.
 
 ```bash

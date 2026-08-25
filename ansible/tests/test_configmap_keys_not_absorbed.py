@@ -5,7 +5,7 @@ A key can be swallowed by the value above it. Indent a Jinja comment (or the key
 level too far and the key line lands *inside* the preceding `|` block scalar, so the rendered
 manifest holds one key whose value is the previous value with `known_services.json: |` tacked
 onto the end. Nothing about that is malformed YAML, which is why the existing validator cannot
-see it: `scripts/validate_k8s_manifests.py` parses the manifest and then parses the embedded
+see it: `scripts/validate/validate_k8s_manifests.py` parses the manifest and then parses the embedded
 blob (lines 234-258), and both parses stay green either way. The failure only shows up at
 runtime — on 2026-08-16 the artifacts pod crash-looped on `SyntaxError: invalid syntax`,
 because the ConfigMap key had been appended to the Python program it sits next to.

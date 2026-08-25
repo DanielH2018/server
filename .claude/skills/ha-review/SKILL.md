@@ -28,7 +28,7 @@ override with a bigger `model` (e.g. the session model).
 **The agent is read+write — explicitly instruct it to make NO changes, only review.** Its prompt must
 include:
 - its **scope**: the home-assistant role (`ansible/roles/k8s/home-assistant/`) — automations,
-  scenes, scripts, template sensors/macros, configuration — plus live state via `scripts/probe.py ha …`;
+  scenes, scripts, template sensors/macros, configuration — plus live state via `scripts/diagnostics/probe.py ha …`;
 - the **repo conventions** — `containers/` is generated/read-only, so cite the ansible role source,
   never `containers/`;
 - its **don't-re-flag list** (from step 1) + the verify-first discipline;
@@ -47,7 +47,7 @@ carries the refutation contract — where to look, the rule that a comment or a 
 evidence, and the three verdicts — so don't restate it; give it the finding, its `file:line`, and
 the HA-specific evidence it would not otherwise know to consult: the home-assistant role's CLAUDE.md
 (accepted trade-offs + verification traps), the role's tasks/templates and `sanctioned_writers.yml`,
-and live state via `scripts/probe.py ha …` (mind the recorder-stale and alias-slug traps — the
+and live state via `scripts/diagnostics/probe.py ha …` (mind the recorder-stale and alias-slug traps — the
 `ha-verify-state` skill encodes them).
 
 `skeptic` pins no `model`, so set it per dispatch, at least the tier of the reviewer that raised the

@@ -45,7 +45,7 @@ ALLOW_NONCONTAINERS = [
         "ansible/roles/containers/jellyfin/templates/docker-compose.yml.j2",
         "the template",
     ),
-    ("scripts/probe.py", "a script"),
+    ("scripts/diagnostics/probe.py", "a script"),
     ("CLAUDE.md", "repo root file"),
     ("containers-notes/readme.md", "sibling that only shares a prefix"),
 ]
@@ -203,7 +203,10 @@ def test_allows_edits_to_hand_written_docs():
 
 def test_allows_edits_to_the_generators_themselves():
     """The deny message tells people to edit the generator, so that path must work."""
-    for path in ("scripts/service_catalog.py", "scripts/gen_infra_map.py"):
+    for path in (
+        "scripts/docs/service_catalog.py",
+        "scripts/infra_map/gen_infra_map.py",
+    ):
         assert classify(path, REPO) is None, f"should ALLOW: {path}"
 
 

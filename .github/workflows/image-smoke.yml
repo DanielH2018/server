@@ -47,7 +47,7 @@ jobs:
           # measures 0s because ubuntu-latest preinstalls this version.
           python-version: "3.14"
 
-      # No setup-uv step: scripts/smoke_extract.py imports `re` and `sys` and nothing else, so it
+      # No setup-uv step: scripts/dev/smoke_extract.py imports `re` and `sys` and nothing else, so it
       # needs no project env — `uv run` here was resolving the whole `dev` group (uncached, since
       # this workflow never set enable-cache) to run a stdlib script, ~3s of a ~10s job. If that
       # script ever grows a third-party import, add `astral-sh/setup-uv` back WITH enable-cache
@@ -102,7 +102,7 @@ jobs:
           diff="$(git diff "origin/$BASE_REF"...HEAD -- \
             'ansible/roles/k8s/*/defaults/main.yml' \
             'ansible/inventory/group_vars/all.yml')"
-          images="$(printf '%s' "$diff" | python scripts/smoke_extract.py)"
+          images="$(printf '%s' "$diff" | python scripts/dev/smoke_extract.py)"
           {
             echo "list<<EOF"
             echo "$images"

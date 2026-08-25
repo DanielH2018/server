@@ -1,6 +1,6 @@
 ---
 # The docs site. `uv run mkdocs build --strict` renders docs/ into site/; in production
-# scripts/build_docs.py runs the reference generators first and builds into the hostPath the
+# scripts/docs/build_docs.py runs the reference generators first and builds into the hostPath the
 # `docs` k3s role serves.
 #
 # docs_dir points at the EXISTING docs/ tree and the nav names those files in place. Moving

@@ -46,10 +46,10 @@ themselves (via the `! ` prefix) rather than putting the value in a command you 
    `ansible/roles/containers/<svc>/templates/*.j2` to use `{{ name }}`. Add `no_log: true` to
    any task that handles it. (Per `.claude/rules/secrets.md`.)
 
-6. **Register for rotation tracking:** `uv run python scripts/secret_rotation.py sync` — this
+6. **Register for rotation tracking:** `uv run python scripts/secrets_mgmt/secret_rotation.py sync` — this
    reconciles `ansible/secret_rotation.yml` (plaintext registry: names/tiers/dates, no values)
    with the live secret names and assigns a tier + staggered due-date. Then
-   `uv run python scripts/secret_rotation.py audit` to confirm it registered cleanly.
+   `uv run python scripts/secrets_mgmt/secret_rotation.py audit` to confirm it registered cleanly.
 
 7. **Commit** — stage the plaintext registry change, the (still-encrypted) secrets file, and
    any template edit, then commit. Suggested message body ends with the repo's Co-Authored-By

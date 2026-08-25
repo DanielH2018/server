@@ -31,7 +31,7 @@
 #     config, and every repo-side check reads green while it does. Being *ahead* of master
 #     is normal branch work and is never refused.
 #   --changed [<ref>] deploys every service touched vs <ref> (default origin/master) instead of
-#     a hand-picked --tags. Resolves to --tags under the hood (scripts/deploy_tags.py changed),
+#     a hand-picked --tags. Resolves to --tags under the hood (scripts/deploy_tools/deploy_tags.py changed),
 #     so the derived list still goes through the same lock and tag validation below, and prints
 #     what it derived before doing anything else. Refuses (exit 3, nothing touched) on a broad
 #     change — shared templates/inventory/setup-plane paths that don't map to one service.
@@ -124,7 +124,7 @@ done
 set -- "${filtered_args[@]}"
 
 if [[ "$changed_requested" == 1 ]]; then
-    derived_tags=$(uv run python scripts/deploy_tags.py changed "$changed_ref")
+    derived_tags=$(uv run python scripts/deploy_tools/deploy_tags.py changed "$changed_ref")
     status=$?
     if [[ "$status" != 0 ]]; then
         exit "$status"
@@ -136,7 +136,7 @@ if [[ "$changed_requested" == 1 ]]; then
 fi
 
 # Ansible exits 0 on a tag that matches nothing, so a typo'd service name deploys
-# nothing and reports success -- see scripts/deploy_tags.py for why the play behaves
+# nothing and reports success -- see scripts/deploy_tools/deploy_tags.py for why the play behaves
 # that way. Catch it here, before the lock is taken and before --check, since a dry run
 # against a nonexistent tag is just as misleading. --skip-tag-check bypasses, and is
 # stripped so it never reaches ansible-playbook.
@@ -172,7 +172,7 @@ for arg in "$@"; do
             args+=(-e k8s_dry_run=true)
             ;;
         --list-services)
-            exec uv run python scripts/deploy_tags.py list
+            exec uv run python scripts/deploy_tools/deploy_tags.py list
             ;;
         --tags | -t)
             next_is_tags=1
@@ -203,7 +203,7 @@ if [[ "$skip_tag_check" == 0 && ${#tags[@]} -gt 0 ]]; then
         done
         IFS=$old_ifs
     done
-    if ! uv run python scripts/deploy_tags.py validate "${split_tags[@]}"; then
+    if ! uv run python scripts/deploy_tools/deploy_tags.py validate "${split_tags[@]}"; then
         exit 2
     fi
 fi
@@ -229,10 +229,10 @@ fi
 
 # A tree behind origin/master renders stale templates and reverts live config for the roles
 # it targets, while every repo-side check still reads green -- the stale tree is consistent
-# with itself. Measured 2026-08-19; see scripts/deploy_staleness.py. This runs before --check
+# with itself. Measured 2026-08-19; see scripts/deploy_tools/deploy_staleness.py. This runs before --check
 # and --dry-run too: a green dry run against a stale tree is the misleading signal itself.
 if [[ "$skip_staleness_check" == 0 ]]; then
-    if ! uv run python scripts/deploy_staleness.py; then
+    if ! uv run python scripts/deploy_tools/deploy_staleness.py; then
         exit 4
     fi
 fi
@@ -281,7 +281,7 @@ if [[ "$detach" == 1 ]]; then
         echo "deploy --detach: could not take $LOCK right now -- nothing was deployed." >&2
         echo "  A deploy is already running. Likely holders: gitops-deploy.service" >&2
         echo "  (systemctl status gitops-deploy.service), the weekly secret-rotate cron," >&2
-        echo "  or another Claude session (uv run python scripts/prune_worktrees.py)." >&2
+        echo "  or another Claude session (uv run python scripts/dev/prune_worktrees.py)." >&2
         echo "  --detach fails fast on contention rather than queuing for ${LOCK_WAIT}s --" >&2
         echo "  retry shortly, or drop --detach to queue normally." >&2
         exit "$LOCK_BUSY"
@@ -299,7 +299,7 @@ if [[ "$detach" == 1 ]]; then
         # shellcheck disable=SC2094  # false positive: the notifier only receives $log as a
         # path string (to mention in its Discord post) and never opens it itself -- the only
         # actual writer of the file is this append redirect.
-        uv run python scripts/deploy_detach_notify.py \
+        uv run python scripts/deploy_tools/deploy_detach_notify.py \
             --status "$run_status" \
             --log "$log" \
             --tags "$(
@@ -331,7 +331,7 @@ if [[ "$status" == "$LOCK_BUSY" ]]; then
     echo "deploy: could not take $LOCK after ${LOCK_WAIT}s -- nothing was deployed." >&2
     echo "  A deploy is already running. Likely holders: gitops-deploy.service" >&2
     echo "  (systemctl status gitops-deploy.service), the weekly secret-rotate cron," >&2
-    echo "  or another Claude session (uv run python scripts/prune_worktrees.py)." >&2
+    echo "  or another Claude session (uv run python scripts/dev/prune_worktrees.py)." >&2
 fi
 
 exit "$status"

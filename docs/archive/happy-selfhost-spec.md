@@ -102,7 +102,7 @@ repo on the host and build from it (§5 decides the exact mechanism — the one 
 | `ansible/roles/containers/happy/CLAUDE.md` | create | Role doc: standalone shape, LAN-only, `/data` Kopia-backed, how to bump `happy_git_version`, no Authelia/bearer + why. |
 | `ansible/inventory/host_vars/daniel-server.yml` | modify | Add to `containers_list`: `{name: happy, port: 3005, use_authelia: false, networks: [proxy]}`. Add vars: `happy_git_version` (pinned ref), resource caps if parameterized. |
 | `ansible/roles/containers/traefik/templates/config.yml.j2` | modify | Add a `happy` router: `Host(\`happy.local.{{ domain }}\`)` → `happy@docker`, `entryPoints: [https]`, `middlewares: [rate-limit]`, `tls` wildcard. **No public `happy.{{ domain }}` router, no bearer header match** (unlike homelab-mcp — clients use native auth). Model on the `homelab-mcp` block at `config.yml.j2:43`. |
-| `ansible/vars/secrets.yml` | modify (via `/add-secret`) | `handy_master_secret` = `openssl rand -hex 32`. Then `uv run python scripts/secret_rotation.py sync` + commit. |
+| `ansible/vars/secrets.yml` | modify (via `/add-secret`) | `handy_master_secret` = `openssl rand -hex 32`. Then `uv run python scripts/secrets_mgmt/secret_rotation.py sync` + commit. |
 | `.gitignore` | modify | Ignore the happy source checkout dir under `containers/happy/`. |
 
 ---
@@ -199,8 +199,8 @@ handy_master_secret`.
 **Phase 1 — server up.** Create the role + host_vars entry + traefik route. Deploy:
 `uv run ansible-playbook ansible/deploy.yml --tags "traefik,happy"` (traefik tag re-renders the
 file-provider route). *Verify (gating):*
-`uv run python scripts/probe.py health happy` → running+healthy; and
-`uv run python scripts/probe.py cert happy.local.{{ domain }}` / a curl of `/health` over the route
+`uv run python scripts/probe/probe.py health happy` → running+healthy; and
+`uv run python scripts/probe/probe.py cert happy.local.{{ domain }}` / a curl of `/health` over the route
 returns 200. Confirm no public `happy.{{ domain }}` router resolves.
 
 **Phase 2 — merged session list (the real acceptance test).** Client wiring is Daniel's to run

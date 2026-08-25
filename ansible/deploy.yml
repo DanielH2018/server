@@ -161,7 +161,7 @@
           'a full deploy always includes them' if 'all' in ansible_run_tags
           else 'these roles mutate the cluster outside roles/k8s/manifests' }}.
           Deploy them for real, or name only covered services with --tags.
-          Covered services: `uv run python scripts/deploy_tags.py list` minus
+          Covered services: `uv run python scripts/deploy_tools/deploy_tags.py list` minus
           k8s_dry_run_unsupported in group_vars/all.yml.
         quiet: true
       vars:

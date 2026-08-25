@@ -1,0 +1,475 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "bf4q19tuivta8e"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "purple",
+        "name": "Deploys",
+        "target": {
+          "expr": "{job=\"syslog\"} |= \"event=deploy\" | logfmt",
+          "queryType": "range",
+          "refId": "DeployAnno"
+        },
+        "textFormat": "{{services}}",
+        "titleFormat": "deploy"
+      }
+    ]
+  },
+  "id": null,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "panels": [],
+      "title": "Pipeline health",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "Prometheus self-scrape of the collector DaemonSet. up=1 means that node's loopback OTLP listener is reachable to be scraped \u2014 it says nothing about whether Claude Code on that host is actually sending anything (see the two panels below).",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 1
+      },
+      "id": 2,
+      "targets": [
+        {
+          "expr": "up{job=\"otel-collector\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "otel-collector up, by node",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "bf4q19tuivta8e"
+      },
+      "description": "os_version is the host proxy: 6.8.0-137-generic is daniel-box, 7.0.0-28-generic is daniel-server (this cluster's Loki has no other kernel). A host with a flat zero line here while its collector shows up=1 above means Claude Code itself is not exporting on that host, not that the pipeline is broken. Two causes, cheapest check first: the host cannot authenticate (daniel-server hit this on 2026-08-22 \u2014 `claude -p` exited 'OAuth session expired and could not be refreshed', so no session started and nothing was exported; re-auth restored both signals within minutes), or a session started before the telemetry config landed and is reading the old one (config is read once, at process start \u2014 restart it).",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 40,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 16,
+        "x": 8,
+        "y": 1
+      },
+      "id": 3,
+      "targets": [
+        {
+          "expr": "sum by (os_version) (count_over_time({service_name=\"claude-code\"} [$__auto]))",
+          "legendFormat": "{{os_version}}",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Claude Code log volume by host",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "The metrics pipeline's own per-node coverage \u2014 both nodes should appear once each has run a session. daniel-server was absent from this series entirely until 2026-08-22, and from the logs too, while its collector was up and its settings.json was correct. The cause was never the pipeline: Claude Code on that host could not start a session at all, exiting 'Failed to authenticate: OAuth session expired and could not be refreshed'. Re-auth fixed it the same day and both signals arrived within minutes. Keep the lesson, not the incident: a node flat at zero here is unauthenticated or idle before it is broken \u2014 run `claude -p` on it before investigating its collector. Confirm with: otelq metric 'sum by (node) (claude_code_session_count_total)' --rows",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 7
+      },
+      "id": 4,
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (node) ({__name__=~\"claude_code_session_count.*\"})",
+          "legendFormat": "{{node}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "claude_code_session_count_total by node",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
+      "id": 5,
+      "panels": [],
+      "title": "Tokens & cost by host",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "Same claude_code_token_usage series as the main Claude Code board, broken down by node instead of model/type \u2014 the dimension that board doesn't carry. A node missing here has run no session in the window, not necessarily nothing at all \u2014 see the coverage panel above.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 15
+      },
+      "id": 6,
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (node) (rate({__name__=~\"claude_code_token_usage.*\"}[$__rate_interval]))",
+          "legendFormat": "{{node}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Token usage rate by node",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "Estimated only \u2014 on a subscription plan this is not real spend, same caveat as the main board.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          },
+          "decimals": 3,
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 15
+      },
+      "id": 7,
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (node) ({__name__=~\"claude_code_cost_usage.*\"})",
+          "legendFormat": "{{node}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Cumulative cost by node (USD, estimated)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "Per-session_id breakdown \u2014 the main board never groups by session. Estimated only, same subscription caveat.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 3,
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "id": 8,
+      "targets": [
+        {
+          "expr": "topk(10, sum by (session_id, node) ({__name__=~\"claude_code_cost_usage.*\"}))",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Top sessions by cost (USD, estimated)",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 31
+      },
+      "id": 9,
+      "panels": [],
+      "title": "Errors & hook failures",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "bf4q19tuivta8e"
+      },
+      "description": "claude_code.api_error events \u2014 verified present (e.g. status_code=400 tool_use errors, and OAuth refresh failures with no status_code). Not on the main board.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "id": 10,
+      "targets": [
+        {
+          "expr": "sum by (status_code) (count_over_time({service_name=\"claude-code\"} | event_name=`api_error` [$__auto]))",
+          "legendFormat": "{{status_code}}",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "api_error rate by status_code",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "bf4q19tuivta8e"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "id": 11,
+      "targets": [
+        {
+          "expr": "sum by (model) (count_over_time({service_name=\"claude-code\"} | event_name=`api_error` [$__auto]))",
+          "legendFormat": "{{model}}",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "api_error rate by model",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "bf4q19tuivta8e"
+      },
+      "description": "error, status_code, model, session_id fields \u2014 verbatim from the hook_execution_complete/api_error event.",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 40
+      },
+      "id": 12,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "expr": "{service_name=\"claude-code\"} | event_name=`api_error`",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Recent api_error detail",
+      "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "bf4q19tuivta8e"
+      },
+      "description": "num_non_blocking_error summed from hook_execution_complete \u2014 a genuine hook failure. Distinct from num_blocking below, which is a deny rule doing its job, not an error.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 48
+      },
+      "id": 13,
+      "targets": [
+        {
+          "expr": "sum by (hook_event) (sum_over_time({service_name=\"claude-code\"} | event_name=`hook_execution_complete` | unwrap num_non_blocking_error [$__auto]))",
+          "legendFormat": "{{hook_event}}",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Hook non-blocking errors by event",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "bf4q19tuivta8e"
+      },
+      "description": "num_blocking summed from hook_execution_complete. A rising count here is a deny rule (e.g. block-protected-edits) working as intended \u2014 read alongside the panel above, not as an error rate on its own.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 48
+      },
+      "id": 14,
+      "targets": [
+        {
+          "expr": "sum by (hook_event) (sum_over_time({service_name=\"claude-code\"} | event_name=`hook_execution_complete` | unwrap num_blocking [$__auto]))",
+          "legendFormat": "{{hook_event}}",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Hook blocking count by event",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "claude-code",
+    "otel"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "Claude Code \u2014 Pipeline Health & Cost by Host",
+  "uid": "claude-code-otel-pipeline",
+  "version": 1
+}

@@ -29,7 +29,7 @@ from _helpers import REPO as _REPO
 _ROLE = _REPO / "ansible/roles/setup/gitops_deploy"
 _RULE = _ROLE / "templates/50-gitops-deploy.rules.j2"
 _TASKS = _ROLE / "tasks/main.yml"
-_WRAPPER = _REPO / "scripts/gitops_tick.sh"
+_WRAPPER = _REPO / "scripts/deploy_tools/gitops_tick.sh"
 
 _UNIT = "gitops-deploy.service"
 

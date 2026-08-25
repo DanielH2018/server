@@ -2,7 +2,7 @@
 """SessionStart health banner — when a Claude Code session opens in this repo,
 surface anything that's already broken so you don't start work blind:
   * containers that are unhealthy or stuck restarting (fast, local `docker ps`)
-  * Prometheus scrape targets that are down (fleet-wide, via scripts/probe.py)
+  * Prometheus scrape targets that are down (fleet-wide, via scripts/diagnostics/probe.py)
   * this branch sitting behind origin/master's last-fetched ref (local-only, no `git fetch`)
 
 Design contract (mirrors the other hooks here):
@@ -94,7 +94,7 @@ def docker_problems():
 
 
 def _k8s_namespace():
-    """k8s_namespace, read from the same plaintext inventory file scripts/probe.py reads it
+    """k8s_namespace, read from the same plaintext inventory file scripts/diagnostics/probe.py reads it
     from. Duplicated rather than imported — target_problems() shells out to probe.py rather
     than importing it (see its own docstring), and this stays consistent with that."""
     path = os.path.join(REPO, "ansible", "inventory", "group_vars", "all.yml")
@@ -146,7 +146,9 @@ def target_problems():
     deliberately scaled to 0 replicas. [] on any failure (monitoring being unreachable must
     not block or spam session start)."""
     try:
-        res = _run(["uv", "run", "python", "scripts/probe.py", "targets"], 6)
+        res = _run(
+            ["uv", "run", "python", "scripts/diagnostics/probe.py", "targets"], 6
+        )
         active = json.loads(res.stdout)["data"]["activeTargets"]
     except Exception:
         return []
@@ -176,7 +178,7 @@ def master_moved_problems():
     earlier `deploy.sh` run). That is the honest answer for a read-only, always-runs
     SessionStart hook: a live check would mean a network call on every session open. The
     line says "last fetched" rather than claiming to be current, and deploy.sh's own
-    staleness gate (scripts/deploy_staleness.py, exit 4) is what actually refuses a stale
+    staleness gate (scripts/deploy_tools/deploy_staleness.py, exit 4) is what actually refuses a stale
     deploy -- this is only the earlier, cheaper warning. [] on any failure, including a
     checkout with no origin/master ref at all -- diagnosing that is not this hook's job.
     """
@@ -193,7 +195,7 @@ def master_moved_problems():
     return [
         f"  ⚠ this branch is {count} commit{plural} behind origin/master (as of the last "
         "fetch -- `git fetch` to refresh; a deploy from here would be refused, see "
-        "scripts/deploy_staleness.py)"
+        "scripts/deploy_tools/deploy_staleness.py)"
     ]
 
 
@@ -239,7 +241,7 @@ def format_banner(problems):
     out = ["\U0001f3e0 Homelab health check — issues detected:"]
     out.extend(problems)
     out.append(
-        "  → triage: uv run python scripts/probe.py targets | "
+        "  → triage: uv run python scripts/diagnostics/probe.py targets | "
         "probe.py health <svc> | docker ps --filter health=unhealthy"
     )
     return "\n".join(out)

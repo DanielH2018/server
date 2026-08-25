@@ -4,7 +4,7 @@
 #
 # ansible-lint does NOT catch the failure mode this guards: Jinja whitespace /
 # indentation corruption that renders to malformed YAML and silently fails to
-# recreate the container. scripts/validate_compose_templates.py renders every
+# recreate the container. scripts/validate/validate_compose_templates.py renders every
 # service's compose template (mirroring Ansible's trim/lstrip_blocks) and parses
 # the YAML — it is the only thing that catches those bugs before CI. This wires
 # it into the edit loop so the failure surfaces in-session, not on push.
@@ -54,7 +54,7 @@ case "$file_path" in
 esac
 
 # Validate the checkout that owns the edited file, not always the primary one. The
-# validators resolve the repo they render from their own __file__ (scripts/_render_guard.py),
+# validators resolve the repo they render from their own __file__ (scripts/lib/_render_guard.py),
 # so passing an absolute path into a .claude/worktrees/<name>/ checkout is what redirects
 # them — the working directory does not. Running them relatively rendered the primary
 # checkout's templates and reported a pass for a file it never read.

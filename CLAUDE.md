@@ -18,10 +18,26 @@ ansible/          # Ansible playbooks, roles, inventory, templates  ← EDIT HER
   roles/k8s/        # One role per k3s workload (rendered manifests) — where most services live
   roles/containers/ # One role per Docker service (the Pi's) + the shared `common` role
     archive/        # Roles retired by the k3s migration, kept for reference
-scripts/          # Python helper scripts
+scripts/          # Helper scripts, grouped by what they act on
+  lib/              # The two helpers everything else imports: _render_guard, docs_provenance
+  backup/ deploy_tools/ diagnostics/ docs/ grafana/
+  home_assistant/ infra_map/ secrets_mgmt/ validate/ dev/
 docs/             # Runbooks, design specs, security notes
   archive/          # Superseded planning docs, incl. the completed Docker → k3s migration
 ```
+
+> **A script imports across `scripts/` subdirectories with `from <dir> import <mod>`, and only
+> after a `sys.path` bootstrap.** A directly-invoked script gets its OWN directory on
+> `sys.path` and nothing else — `pythonpath` in `pyproject.toml` is a pytest setting, so a
+> cross-directory import that pytest resolves still raises `ModuleNotFoundError` under the cron
+> or prek hook that actually runs it. Every module reaching outside its own directory therefore
+> carries its own aliased insert (`_sys.path.insert(0, _Path(__file__).resolve().parents[1])`);
+> copy that from a sibling. It goes on the module that needs it, never on a shared one — a
+> single bootstrap in an imported module only works for whoever imports it first.
+> The subdirectories have **no `__init__.py`** on purpose: they resolve as PEP 420 namespace
+> packages, and adding one would change how pytest names the test modules under them.
+> Verify a moved or new entry point by RUNNING it (`uv run python scripts/<dir>/<name>.py
+> --help`), not by running the suite — the suite is exactly the thing that cannot see this.
 
 > **`containers/` is not a directory in this repo** — it is untracked and rendered by Ansible onto the *target host* at `/home/<user>/server/containers/<svc>/docker-compose.yml`. Post-migration it exists only on `daniel-pi`; neither cluster node has one. It is still read-only: edits are overwritten on the next deploy, so always modify `ansible/roles/containers/*/templates/` instead. (The `block-protected-edits` hook enforces this.)
 
@@ -39,12 +55,12 @@ Route to the source of truth by what you're doing, before reading linearly:
 | Deploying or redeploying a service | `/deploy` skill · `## Common Commands` |
 | A PR just merged — what now | `## After a PR Merges — Pull, Deploy, Verify` below. Default is pull → deploy → verify in the same session, no ask. |
 | Checking a k8s manifest change without deploying it | `## Common Commands` → *Checking a k8s change without deploying it* (`--dry-run` vs `--check` — they check different things) |
-| Running or testing a GitOps tick without waiting 30 min | `./scripts/gitops_tick.sh` · `ansible/roles/setup/gitops_deploy/CLAUDE.md` → *Triggering a tick by hand*. A real tick, not a rehearsal — there is no dry-run mode. |
+| Running or testing a GitOps tick without waiting 30 min | `./scripts/deploy_tools/gitops_tick.sh` · `ansible/roles/setup/gitops_deploy/CLAUDE.md` → *Triggering a tick by hand*. A real tick, not a rehearsal — there is no dry-run mode. |
 | Adding / rotating a secret | `/add-secret` skill · `docs/secret-rotation.md` · `## Secrets Management` |
 | A Bash or `kubectl` command keeps prompting, or you need the full permission tables | `## Shell Commands — Shape Them to Auto-Approve` below (summary) · `docs/claude-shell-permissions.md` (full detail) |
 | Editing HA automations / lighting / fans | `ansible/roles/k8s/home-assistant/CLAUDE.md` (config and workload both live there; it routes to `docs/` for per-topic behaviour) · `/ha-edit-automation` |
 | Reviewing the homelab for gaps | `/homelab-review` skill (per-domain reviewer agents) |
-| Answering "what runs here / where / behind what" | `docs/reference/` — generated from the tree by the `docs-refresh` cron, browsable at `docs.local.<domain>`. Services, hosts, secret rotation, scheduled jobs, networking, topology. **Never hand-edit these**; a hook rejects it. Change the generator (`scripts/build_docs.py` lists them). |
+| Answering "what runs here / where / behind what" | `docs/reference/` — generated from the tree by the `docs-refresh` cron, browsable at `docs.local.<domain>`. Services, hosts, secret rotation, scheduled jobs, networking, topology. **Never hand-edit these**; a hook rejects it. Change the generator (`scripts/docs/build_docs.py` lists them). |
 | Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` + monitor-bridge `check.py` **first** — mature setup, most are handled |
 | A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment. The general mechanism is the central rollout-restart at `roles/k8s/manifests/tasks/main.yml:112`, which fires when a role's rendered manifests change. A role whose pod depends on a file the manifests *don't* carry adds its own `checksum/<thing>` pod annotation instead — e.g. `checksum/check-script` in `roles/k8s/monitor-bridge/templates/deployment.yaml.j2`. |
 | A config edit won't recreate the container (Docker) | `ansible/roles/containers/common/CLAUDE.md` (config-change wiring) |
@@ -111,10 +127,10 @@ rewrites it with a `git pull` mid-run), so a `-e target=daniel-pi` deploy takes 
 **75** means the lock stayed busy and *nothing was deployed*; it is not a playbook failure.
 `--check` runs unlocked. Exit **2** means a `--tags` value matched no service and *nothing
 was deployed* — Ansible itself exits 0 on an unmatched tag, so the wrapper checks the tags
-against `containers_list` first (`scripts/deploy_tags.py`); `--list-services` prints every
+against `containers_list` first (`scripts/deploy_tools/deploy_tags.py`); `--list-services` prints every
 valid value and `--skip-tag-check` bypasses. Exit **4** means the tree is behind
 `origin/master` and *nothing was deployed* — a stale tree renders stale templates and reverts
-live config while every repo-side check still reads green (`scripts/deploy_staleness.py`);
+live config while every repo-side check still reads green (`scripts/deploy_tools/deploy_staleness.py`);
 `--skip-staleness-check` bypasses it. That check runs ahead of `--check` and `--dry-run` too,
 because a green dry run against a stale tree is itself the misleading signal; being *ahead* of
 master is normal branch work and is never refused. `--dry-run` validates the k8s manifests against
@@ -154,7 +170,7 @@ grep -A20 "^k8s_dry_run_unsupported:" ansible/inventory/group_vars/all.yml
 
 # Trigger a GitOps tick now instead of waiting for the 30-min timer (daniel-box only).
 # Runs the identical code path the timer runs — there is no dry-run mode.
-./scripts/gitops_tick.sh
+./scripts/deploy_tools/gitops_tick.sh
 
 # Initial server setup — first-host bring-up ORDER (uv → SOPS onboarding → this) is in ansible/README.md
 uv run ansible-playbook ansible/initial_setup.yml
@@ -223,7 +239,7 @@ refuses outright — and then say which command and why.
    only fail after merge. A **pending** master CI also blocks the fast-forward itself —
    `next_action` returns `ci_pending` *before* the `--ff-only` merge (`deploy_logic.py:345`, in `next_action`), so
    a tick fired seconds after the merge pulls nothing and every later step reads as stale.
-3. **Pull with `./scripts/gitops_tick.sh`, never a hand `git pull`.** The tick fetches,
+3. **Pull with `./scripts/deploy_tools/gitops_tick.sh`, never a hand `git pull`.** The tick fetches,
    CI-gates, `--ff-only` merges, deploys what is eligible, health-gates it and rolls back on
    failure — all under `/var/lock/server-git-tree.lock`, which is what keeps it from racing the
    30-minute timer or another session. A bare `git pull` in the primary checkout takes no lock
@@ -258,7 +274,7 @@ refuses outright — and then say which command and why.
    Use explicit `--tags` instead when another session's PR merged in the same window — the SHA
    range then covers their services too, and deploying someone else's half-finished landing is
    not yours to do.
-5. **Verify twice — the workload, then the change.** `uv run python scripts/probe.py health
+5. **Verify twice — the workload, then the change.** `uv run python scripts/diagnostics/probe.py health
    <svc>` per deployed tag gates the rollout and the 180s restart window. It cannot see whether
    *your change* took effect: an Authelia 302 fires in the middleware before the backend is
    reached, and 19 dead Grafana panels sat behind a 1/1 pod. Exercise the thing you actually
@@ -302,7 +318,7 @@ Write exploratory commands so they auto-approve; expect a prompt for the rest.
   (`> file`, `tee`, `sed -i`, subshells `(…)`, backgrounding `&`).
 - Restructure rather than loop: one `grep`/`find`/`awk` usually replaces the control flow.
 
-- **`./scripts/gitops_tick.sh` is allow-listed but not guaranteed.** It is a write (it triggers
+- **`./scripts/deploy_tools/gitops_tick.sh` is allow-listed but not guaranteed.** It is a write (it triggers
   a real deploy), so the auto-mode classifier judges it on its own and denied it once in seven
   runs on identical text. Measured 2026-08-22. A denial here is the classifier, not a broken
   script or a missing polkit rule — re-run it, and check `last_run` before assuming nothing
@@ -324,9 +340,9 @@ Full tables, hook wiring and measurement history: `docs/claude-shell-permissions
 Per-verb tiers, the RBAC evidence and the rule-matching measurements: `docs/claude-shell-permissions.md`.
 
 ## Claude Tooling in This Repo (`.claude/`)
-- **`scripts/probe.py`** — read-only homelab diagnostics, allow-listed (no prompt). Resolves the
+- **`scripts/diagnostics/probe.py`** — read-only homelab diagnostics, allow-listed (no prompt). Resolves the
   live container IP via `docker inspect`, so prefer it over curling bridge IPs (which change on
-  recreate): `uv run python scripts/probe.py <targets | metric '<promql>' | loki-query '<logql>' |
+  recreate): `uv run python scripts/diagnostics/probe.py <targets | metric '<promql>' | loki-query '<logql>' |
   alerts | monitors | kuma-drift | scrutiny | pi <path> | cert <host> | health <svc> |
   ha <state|automation|get> …>`.
   `alerts [--days N --check X]` reconstructs DOWN alert history from Loki (Kuma keeps only
@@ -444,7 +460,7 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
   `git merge-tree --write-tree origin/master <branch>` equals `git rev-parse
   origin/master^{tree}` when the branch has nothing left to give — then leave the tree for
   the pruner.
-- **`uv run python scripts/prune_worktrees.py`** reports which worktrees are finished with;
+- **`uv run python scripts/dev/prune_worktrees.py`** reports which worktrees are finished with;
   `--prune` removes the merged, clean, unlocked ones. It applies the same content check, so
   it collects what `ExitWorktree` refused. A lock held by a *running* session is never
   overridden; a lock whose process is gone is ignored, because Claude Code doesn't release
@@ -458,9 +474,9 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
   directories (SOPS searches upward from the file, so this lives at `ansible/`, not root)
 - At runtime, `community.sops.sops_decrypt` lookup decrypts values
 - **Rotation tracking:** `ansible/secret_rotation.yml` (plaintext registry — names/dates/tiers,
-  no values) + `scripts/secret_rotation.py` (`sync`/`audit`/`rotate`). A daily server cron pushes
+  no values) + `scripts/secrets_mgmt/secret_rotation.py` (`sync`/`audit`/`rotate`). A daily server cron pushes
   the "Secret Rotation" Kuma monitor; due-dates are staggered. After adding a secret, run
-  `uv run python scripts/secret_rotation.py sync` and commit. Runbook + the DANGER `pinned`
+  `uv run python scripts/secrets_mgmt/secret_rotation.py sync` and commit. Runbook + the DANGER `pinned`
   procedures (kopia repo password, authelia storage key): `docs/secret-rotation.md`.
 - **`git diff ansible/vars/secrets.yml` prints plaintext credentials.** `.gitattributes:1` sets
   `diff=sops`, so git decrypts the file before diffing it. The committed blob stays properly
@@ -511,7 +527,7 @@ uv run pytest scripts         # just one suite
 
 - **Bare `python3` cannot parse this repo.** `requires-python = ">=3.14"`, and eight files use
   PEP 758 syntax — unparenthesized `except OSError, yaml.YAMLError:` — including
-  `scripts/probe.py`, `ansible/filter_plugins/toposort.py` and
+  `scripts/diagnostics/probe.py`, `ansible/filter_plugins/toposort.py` and
   `ansible/roles/k8s/monitor-bridge/files/check.py`. Ubuntu's `/usr/bin/python3` is 3.12, so a
   bare `pytest` reports a `SyntaxError` naming a repo file, which reads as a repo bug. ENFORCED
   by `.claude/hooks/uv-python.sh`, a PreToolUse hook that rewrites a bare

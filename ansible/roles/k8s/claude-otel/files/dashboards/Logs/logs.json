@@ -11,10 +11,27 @@
         "iconColor": "rgba(0, 211, 255, 1)",
         "name": "Annotations & Alerts",
         "type": "dashboard"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "bf4q19tuivta8e"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "purple",
+        "name": "Deploys",
+        "target": {
+          "expr": "{job=\"syslog\"} |= \"event=deploy\" | logfmt",
+          "queryType": "range",
+          "refId": "DeployAnno"
+        },
+        "textFormat": "{{services}}",
+        "titleFormat": "deploy"
       }
     ]
   },
-  "description": "Loki log viewer — filter by container or by job/system, with a free-text match.",
+  "description": "Loki log viewer \u2014 filter by container or by job/system, with a free-text match.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -182,8 +199,8 @@
           "refId": "A"
         }
       ],
-      "transparent": true,
       "title": "Log stream",
+      "transparent": true,
       "type": "logs"
     },
     {
@@ -338,8 +355,8 @@
           "refId": "A"
         }
       ],
-      "transparent": true,
       "title": "Log stream",
+      "transparent": true,
       "type": "logs"
     }
   ],

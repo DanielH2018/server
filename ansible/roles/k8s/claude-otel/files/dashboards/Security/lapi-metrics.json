@@ -17,6 +17,23 @@
           "type": "dashboard"
         },
         "type": "dashboard"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "bf4q19tuivta8e"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "purple",
+        "name": "Deploys",
+        "target": {
+          "expr": "{job=\"syslog\"} |= \"event=deploy\" | logfmt",
+          "queryType": "range",
+          "refId": "DeployAnno"
+        },
+        "textFormat": "{{services}}",
+        "titleFormat": "deploy"
       }
     ]
   },
@@ -554,7 +571,11 @@
   ],
   "refresh": "",
   "schemaVersion": 42,
-  "tags": ["homelab", "security", "crowdsec"],
+  "tags": [
+    "homelab",
+    "security",
+    "crowdsec"
+  ],
   "templating": {
     "list": [
       {

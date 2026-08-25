@@ -259,7 +259,7 @@ asserts up front and fails the deploy). Work top-down; the first two gate the wh
 fleet.
 
 ```bash
-uv run python scripts/postflight.py   # exercises every item below against the live host
+uv run python scripts/probe/postflight.py   # exercises every item below against the live host
 ```
 
 It authenticates with each SOPS credential exactly as the real consumers do, prints one line

@@ -17,7 +17,7 @@ k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessPro
 # an empty directory and serve a 404 index rather than fail visibly.
 docs_k8s_node: daniel-box
 
-# Where scripts/build_docs.py writes `mkdocs build` output, and what the pod serves.
+# Where scripts/docs/build_docs.py writes `mkdocs build` output, and what the pod serves.
 # NOT inside the repo checkout: a GitOps tick rewrites that tree with `git pull`, and
 # replacing a served directory mid-request is a failure mode with no upside.
 docs_host_site_dir: "/home/{{ sys_user }}/docs-site"

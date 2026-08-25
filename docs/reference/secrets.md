@@ -1,11 +1,11 @@
 ---
-generated_from: scripts/gen_reference_secrets.py
-generated_at: 2026-08-25 00:36 UTC
-generated_sha: 44c8edcd
+generated_from: scripts/docs/gen_reference_secrets.py
+generated_at: 2026-08-25 16:03 UTC
+generated_sha: 548248f0
 ---
 
 !!! warning "Generated file — do not edit"
-    This page is rendered from the Ansible tree by `scripts/gen_reference_secrets.py`. Hand edits are
+    This page is rendered from the Ansible tree by `scripts/docs/gen_reference_secrets.py`. Hand edits are
     overwritten by the next run, and a prek hook rejects them at commit time.
     To change what appears here, change the generator or the source it reads.
 
@@ -198,4 +198,4 @@ not rotated, and deliberately so.
 
 ## Rotating one
 
-`uv run python scripts/secret_rotation.py audit` reports what is due. Adding a secret means `sops ansible/vars/secrets.yml`, then `secret_rotation.py sync`, then a commit — the `/add-secret` skill walks it. The `pinned` procedures are in [secret rotation](../secret-rotation.md) and are the ones to read before touching anything in that tier.
+`uv run python scripts/secrets_mgmt/secret_rotation.py audit` reports what is due. Adding a secret means `sops ansible/vars/secrets.yml`, then `secret_rotation.py sync`, then a commit — the `/add-secret` skill walks it. The `pinned` procedures are in [secret rotation](../secret-rotation.md) and are the ones to read before touching anything in that tier.

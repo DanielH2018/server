@@ -49,8 +49,8 @@ highest-signal findings.
 ## Tools (read-only)
 - `Grep` across `ansible/roles/containers/*/templates/*.j2` to audit coverage at a glance — e.g.
   templates missing a `resources(` call, a `healthcheck`, or hand-rolling a `networks:` loop.
-- `uv run python scripts/validate_compose_templates.py` (renders all → catches malformed YAML),
-  `uv run python scripts/probe.py health <svc>` (running + healthy). Never run a command that writes.
+- `uv run python scripts/validate/validate_compose_templates.py` (renders all → catches malformed YAML),
+  `uv run python scripts/diagnostics/probe.py health <svc>` (running + healthy). Never run a command that writes.
 - Read the role's CLAUDE.md before flagging — most deviations are documented decisions.
 
 ## Method

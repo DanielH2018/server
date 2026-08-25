@@ -31,7 +31,7 @@ racing an operator's deploy or the secret-rotation cron. See
 
 ## Reading the deployer's state
 
-`./scripts/gitops_tick.sh` prints three values after it runs. Read them before concluding
+`./scripts/deploy_tools/gitops_tick.sh` prints three values after it runs. Read them before concluding
 anything.
 
 | Field | Means |
@@ -95,7 +95,7 @@ than applying a setup-plane change you did not write.
 To run a tick without waiting for the timer, on `daniel-box`:
 
 ```bash
-./scripts/gitops_tick.sh
+./scripts/deploy_tools/gitops_tick.sh
 ```
 
 It runs the identical code path the timer runs. **There is no dry-run mode** — this deploys.

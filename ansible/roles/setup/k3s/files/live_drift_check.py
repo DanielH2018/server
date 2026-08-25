@@ -30,7 +30,7 @@ WHAT IT CANNOT SEE, and this is the honest limit: a hand-run `kubectl apply` UPD
 annotation, so it masks itself. `patch`, `edit`, `scale` and a controller writing to a
 declared field do not, and those are the realistic drift sources. It also cannot see a
 manifest that changed in git but was never deployed — that is the deploy-staleness guard's
-job (scripts/deploy_staleness.py), not this one.
+job (scripts/deploy_tools/deploy_staleness.py), not this one.
 
 The read-only SA is Forbidden on Secrets — `get list watch` reads as covering them and does
 not. The kinds below are what it can actually read, and the run prints the uncovered kind

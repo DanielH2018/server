@@ -5,7 +5,7 @@ Each of these encodes a decision from docs/archive/k3s-migration/slice-1-ingress
 failure mode is quiet rather than loud: nothing errors, the deploy goes green, and the
 consequence shows up later as a moved VIP, a corrupted session, an ungated service, or an
 unprotected edge. A rendered-YAML check cannot catch any of them (the manifests stay valid
-either way) — hence a separate suite from scripts/validate_k8s_manifests.py.
+either way) — hence a separate suite from scripts/validate/validate_k8s_manifests.py.
 
 Run: uv run pytest ansible/tests/test_k8s_manifests.py
 """

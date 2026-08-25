@@ -158,7 +158,7 @@ In `ansible/inventory/host_vars/daniel-box.yml`, immediately after the `traefik`
 
 - [ ] **Step 5: Verify it renders**
 
-Run: `cd /home/ubuntu/server/.claude/worktrees/netpol-default-deny && uv run python scripts/validate_k8s_manifests.py`
+Run: `cd /home/ubuntu/server/.claude/worktrees/netpol-default-deny && uv run python scripts/validate/validate_k8s_manifests.py`
 
 Expected: PASS. The validator loads `defaults/main.yml` via `role_defaults()`, so with `netpol_baseline_enforced: false` it renders and YAML-parses the **off** branch.
 
@@ -166,7 +166,7 @@ Expected: PASS. The validator loads `defaults/main.yml` via `role_defaults()`, s
 
 Temporarily set `netpol_baseline_enforced: true` in defaults, re-run the validator, confirm PASS, then set it back to `false`.
 
-Run: `uv run python scripts/validate_k8s_manifests.py`
+Run: `uv run python scripts/validate/validate_k8s_manifests.py`
 Expected: PASS both times. This exists because a `{% if %}` means the validator only ever structurally checks whichever branch the defaults select — the other half is unverified until something renders it.
 
 - [ ] **Step 7: Commit**
@@ -231,7 +231,7 @@ spec:
 
 - [ ] **Step 2: Verify all six render**
 
-Run: `uv run python scripts/validate_k8s_manifests.py`
+Run: `uv run python scripts/validate/validate_k8s_manifests.py`
 Expected: PASS.
 
 - [ ] **Step 3: Confirm the label lands on exactly six pod templates and nowhere else**
@@ -464,7 +464,7 @@ Append to `ansible/roles/k8s/netpol-baseline/tasks/main.yml`:
 
 - [ ] **Step 4: Verify it renders and lints**
 
-Run: `uv run python scripts/validate_k8s_manifests.py && uv run ansible-lint ansible/roles/k8s/netpol-baseline/`
+Run: `uv run python scripts/validate/validate_k8s_manifests.py && uv run ansible-lint ansible/roles/k8s/netpol-baseline/`
 Expected: both PASS.
 
 - [ ] **Step 5: Commit**
@@ -561,7 +561,7 @@ Run: `kubectl -n homelab get ingressroute littlelink -o jsonpath='{.spec.routes[
 
 Then check all six services are still green end-to-end:
 
-Run: `uv run python scripts/probe.py targets`
+Run: `uv run python scripts/probe/probe.py targets`
 Expected: no new DOWN targets among the six.
 
 Note that a `302` to Authelia does **not** prove the backend was reached — the redirect fires in
