@@ -533,7 +533,7 @@ Exit 75 means the git-tree lock was busy and nothing deployed — retry. Exit 4 
 
 - [ ] **Step 9: Verify the rollout, then verify the page**
 
-Run: `uv run python scripts/probe/probe.py health docs`
+Run: `uv run python scripts/diagnostics/probe.py health docs`
 Expected: exit 0. This gates on the Deployment being fully rolled out *and* on no container restart in the last 180s.
 
 Then load `https://docs.local.<domain>` in a browser. **The health probe cannot see whether the site rendered.** An Authelia 302 fires in the middleware before nginx is reached, so a green probe plus a working redirect proves nothing about content. Confirm the page body is the MkDocs index, and that the search box returns a hit for a word taken from an existing runbook.
@@ -1983,6 +1983,6 @@ This is the payoff for the whole plan — it is also the step most easily skippe
 
 Run: `uv run prek run --all-files`
 Run: `uv run pytest`
-Run: `uv run python scripts/probe/probe.py health docs`
+Run: `uv run python scripts/diagnostics/probe.py health docs`
 
 Then open the PR. After merge, follow the repo's *After a PR Merges* procedure: record the pre-merge SHA, wait for master CI on the merge commit specifically, `./scripts/deploy_tools/gitops_tick.sh`, then deploy from the primary checkout — not from this worktree, which is behind master after a squash merge.

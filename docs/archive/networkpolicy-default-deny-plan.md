@@ -561,7 +561,7 @@ Run: `kubectl -n homelab get ingressroute littlelink -o jsonpath='{.spec.routes[
 
 Then check all six services are still green end-to-end:
 
-Run: `uv run python scripts/probe/probe.py targets`
+Run: `uv run python scripts/diagnostics/probe.py targets`
 Expected: no new DOWN targets among the six.
 
 Note that a `302` to Authelia does **not** prove the backend was reached — the redirect fires in

@@ -67,7 +67,7 @@ behaviour all need a real deploy.
 A deploy has two questions and one command only answers the first.
 
 ```bash
-uv run python scripts/probe/probe.py health <service>
+uv run python scripts/diagnostics/probe.py health <service>
 ```
 
 That gates the rollout and a 180-second restart window — see

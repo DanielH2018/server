@@ -494,8 +494,8 @@ Expected: `baseline-ingress`, `flaresolverr`, `headlamp`, `n8n-broker`, `registr
 - Load sonarr, radarr, prowlarr, bazarr, tdarr and qbittorrent through Traefik.
 - In sonarr, confirm the indexers still test green (proves sonarr → prowlarr).
 - In sonarr, confirm the download client tests green (proves sonarr → qbittorrent via the `wireguard` Service).
-- Run `uv run python scripts/probe/probe.py targets` and confirm no new DOWN targets.
-- Check monitor-bridge is still reporting: `uv run python scripts/probe/probe.py alerts --days 1`.
+- Run `uv run python scripts/diagnostics/probe.py targets` and confirm no new DOWN targets.
+- Check monitor-bridge is still reporting: `uv run python scripts/diagnostics/probe.py alerts --days 1`.
 
 - [ ] **Step 7: Commit any policy corrections the deploy forced**
 

@@ -173,7 +173,7 @@ rework is **slice 3**. So slice 1 adds **one HTTP monitor by hand** in Uptime-Ku
 hostname. Note it as a known-temporary mechanism rather than building a bridge that slice 3
 replaces.
 
-Related, not slice-1 work: `scripts/probe/probe.py health <svc>` shells to `docker inspect` and will not
+Related, not slice-1 work: `scripts/diagnostics/probe.py health <svc>` shells to `docker inspect` and will not
 work for k8s services. It needs a k8s branch eventually — file it, don't fix it here.
 
 ### 7. Manifest rendering — follow the slice-0 convention
@@ -437,7 +437,7 @@ Trigger one backup immediately, then verify from **outside the cluster**; asking
 its own backup exists is not independent evidence, which is the whole point of this gate:
 
 ```bash
-uv run python scripts/probe/probe.py b2-longhorn   # run on daniel-server
+uv run python scripts/diagnostics/probe.py b2-longhorn   # run on daniel-server
 ```
 
 **Prove it:** `.blk` data blocks exist alongside `backup_*.cfg` for the **Authelia** volume. Metadata
@@ -514,7 +514,7 @@ Slice 1 is done when every one of these has been run and its output read. No `--
 - [x] `b2-list-longhorn.sh` shows `.blk` blocks for the Authelia volume
       → **Passed 2026-08-03.** The original script lived only in an agent scratch directory and
       was deleted with it, so this was unverifiable for a while; rebuilt as
-      `uv run python scripts/probe/probe.py b2-longhorn` (run on daniel-server), which reports data
+      `uv run python scripts/diagnostics/probe.py b2-longhorn` (run on daniel-server), which reports data
       blocks vs metadata per volume and exits non-zero if any volume has metadata but no blocks.
       `pvc-4ee9f2af…` = `authelia-config`: **11 `.blk` blocks**, 2 cfg. `pvc-1f29a849…` =
       `traefik-acme`: 7 blocks. Both volumes' Aug-3 backups are real data, not just metadata.

@@ -1,4 +1,4 @@
-"""Tests for scripts/validate_shell_templates.py — the render-then-lint guard for Jinja-templated
+"""Tests for scripts/validate/validate_shell_templates.py — the render-then-lint guard for Jinja-templated
 shell scripts (*.sh.j2) that the prek bash-syntax-check / shellcheck hooks can't see (identify
 tags a `.sh.j2` as {jinja, text}, never `shell`).
 """

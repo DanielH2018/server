@@ -199,8 +199,8 @@ handy_master_secret`.
 **Phase 1 — server up.** Create the role + host_vars entry + traefik route. Deploy:
 `uv run ansible-playbook ansible/deploy.yml --tags "traefik,happy"` (traefik tag re-renders the
 file-provider route). *Verify (gating):*
-`uv run python scripts/probe/probe.py health happy` → running+healthy; and
-`uv run python scripts/probe/probe.py cert happy.local.{{ domain }}` / a curl of `/health` over the route
+`uv run python scripts/diagnostics/probe.py health happy` → running+healthy; and
+`uv run python scripts/diagnostics/probe.py cert happy.local.{{ domain }}` / a curl of `/health` over the route
 returns 200. Confirm no public `happy.{{ domain }}` router resolves.
 
 **Phase 2 — merged session list (the real acceptance test).** Client wiring is Daniel's to run

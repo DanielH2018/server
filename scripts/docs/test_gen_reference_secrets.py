@@ -1,4 +1,4 @@
-"""Tests for scripts/gen_reference_secrets.py.
+"""Tests for scripts/docs/gen_reference_secrets.py.
 
 The page this generates is committed and served behind SSO, so the assertion that
 matters is about what the generator READS, not what it prints.
