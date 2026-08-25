@@ -386,7 +386,7 @@ PROM_ORIGIN = _env(
 # targets_verdict.
 # CORRECTED 2026-08-24: this said "exactly two origin="daniel-server" jobs: node, cadvisor". It
 # is ONE — `node`. Only the node job is relabelled with `origin`
-# (claude-otel/templates/prometheus.yaml.j2:159); the cadvisor job never was, which is the whole
+# (claude-otel/templates/prometheus.yaml.j2:202, the `node` job); the cadvisor job never was, which is the whole
 # mechanism behind the blind restarts/oom/cpu checks fixed the same day. A reviewer checking that
 # finding against this comment would have cleared it, so the stale half is corrected here rather
 # than left to be re-derived.
@@ -420,7 +420,7 @@ def cadvisor_sel(*matchers):
     """A `{...}` block for cAdvisor series, which carry NO origin label — so no origin pin.
 
     DECIDED: cAdvisor metrics must NOT go through origin_sel(). `origin` is applied by exactly
-    one relabel rule, on the `node` job (claude-otel/templates/prometheus.yaml.j2:159); the
+    one relabel rule, on the `node` job (claude-otel/templates/prometheus.yaml.j2:202); the
     kubernetes-cadvisor job has none. PromQL does not match an absent label, so an origin-pinned
     cAdvisor query selects the empty vector and every check built on it reports green forever.
 
