@@ -15,10 +15,17 @@ def _pct(level):
     return int(render_macro(FAN, "level_to_pct", level))
 
 
-def _target(temp_f, cur_level, is_night, sleep, outdoor_temp_f=-999):
+def _target(temp_f, cur_level, is_night, sleep, outdoor_temp_f=-999, window_open=False):
     return int(
         render_macro(
-            FAN, "fan_target_level", temp_f, cur_level, is_night, sleep, outdoor_temp_f
+            FAN,
+            "fan_target_level",
+            temp_f,
+            cur_level,
+            is_night,
+            sleep,
+            outdoor_temp_f,
+            window_open,
         )
     )
 
@@ -169,3 +176,30 @@ def test_fan_nudge_stays_bounded_over_full_range():
     for cur in range(0, 10):
         for delta in (-1, 1):
             assert 0 <= _nudge(cur, delta) <= 9
+
+
+def test_window_open_forces_the_fan_off():
+    # Hot enough to run hard (L7 without the window), but the window is open.
+    assert _target(80, 0, False, False) == 7
+    assert _target(80, 0, False, False, window_open=True) == 0
+
+
+def test_window_open_overrides_the_night_cap_too():
+    # The night cap is L4; window open takes it all the way to 0, not to the cap.
+    assert _target(80, 0, True, False) == 4
+    assert _target(80, 0, True, False, window_open=True) == 0
+
+
+def test_window_open_does_not_silence_the_sleep_floor():
+    # DECIDED 2026-08-25: sleep mode's seasonal floor is white noise, and losing it at 3am because a
+    # window is open is worse than a fan running with the window open. The floor wins in sleep mode.
+    assert _target(70, 0, True, True, 70, window_open=True) == 4  # summer floor
+    assert _target(70, 0, True, True, 50, window_open=True) == 3  # shoulder floor
+    assert _target(70, 0, True, True, 30, window_open=True) == 2  # winter floor
+
+
+def test_window_open_defaults_false_for_existing_callers():
+    # The arg is trailing + defaulted, so a 5-arg call behaves exactly as it did before it existed.
+    assert int(
+        render_macro(FAN, "fan_target_level", 80, 0, False, False, -999)
+    ) == _target(80, 0, False, False)

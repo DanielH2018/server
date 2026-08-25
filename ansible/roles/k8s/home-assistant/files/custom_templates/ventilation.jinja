@@ -29,3 +29,37 @@
 {%- else -%}none
 {%- endif -%}
 {%- endmacro -%}
+
+{# The CLOSE direction — the mirror of ventilation_advice, added when the SNZB-04 contact sensor
+   made "is the window actually open?" knowable (2026-08-25). Same split: pure decision math here,
+   entity reads stay in the caller (bedroom_window_close_advisor, files/automations.yaml). Returns
+   'smoke' (outdoor air went over the caps), 'rain' (weather turned wet), 'cold' (the room is being
+   chilled) or 'none'.
+   The caller MUST gate on the window actually being open. This macro takes no contact-state
+   argument by design — the same split as every other macro here — so on its own it would happily
+   advise closing a window that is already shut.
+   Precedence is smoke > rain > cold: all three are reasons to close, so the most urgent one wins
+   the message. The PM caps default to ventilation_advice's, so a window opened on advice is told
+   to close on the same thresholds it was opened under — keep the two in step when tuning.
+   Unit-tested in tests/test_ventilation_macros.py. #}
+{%- macro close_window_advice(indoor_temp, outdoor_temp, outdoor_pm, raining,
+                              outdoor_pm10=0, comfort_lo=55, indoor_floor=68,
+                              pm_safe=25, pm10_safe=50) -%}
+{# Unavailable readings default SAFE — toward 'none' — so a dead sensor cannot nag. That is the
+   OPPOSITE default from ventilation_advice above (which defaults outdoor temp and PM to 999),
+   and deliberately so: there the unsafe direction is telling you to open up, here it is telling
+   you to close. Each macro defaults toward silence, not toward its own verdict. #}
+{%- set it = indoor_temp | float(999) -%}
+{%- set ot = outdoor_temp | float(999) -%}
+{%- set op = outdoor_pm | float(0) -%}
+{%- set op10 = outdoor_pm10 | float(0) -%}
+{%- set wet = raining | bool -%}
+{%- if op > pm_safe or op10 > pm10_safe -%}smoke
+{%- elif wet -%}rain
+{# Cold needs BOTH terms. Outdoor below the comfort floor alone is not enough — an open window on a
+   45°F night with the room still at 72°F is doing exactly what it was opened for. The room has to
+   have actually dropped below indoor_floor before this nags. #}
+{%- elif ot < comfort_lo and it < indoor_floor -%}cold
+{%- else -%}none
+{%- endif -%}
+{%- endmacro -%}

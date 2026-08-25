@@ -993,6 +993,17 @@
       at: "22:00:00"
     - platform: time
       at: "06:00:00"
+    # Window open/close re-applies the curve immediately instead of waiting for the next temperature
+    # report (the AirGradient can be minutes away). bedroom_apply_fan reads the contact state and
+    # passes it to fan_target_level, which forces level 0 while open — so opening pauses the fan and
+    # closing restores whatever the curve asks for, with no saved state to get out of step.
+    # Explicit on/off only: the unknown/unavailable transitions are the ones the from_state guard
+    # below drops anyway.
+    - platform: state
+      entity_id: binary_sensor.window_sensor_contact
+      to:
+        - "on"
+        - "off"
   condition:
     - condition: state
       entity_id: input_boolean.bedroom_fan_manual
@@ -1813,6 +1824,12 @@
     - condition: state
       entity_id: input_boolean.bedroom_sleep_mode
       state: "off"
+    # Don't tell me to open a window that is already open. Written as "not confirmed open" rather
+    # than `state: "off"` so a dead battery or a Z2M outage (unknown/unavailable) leaves the advisor
+    # working as it did before the sensor existed, instead of silently switching it off. Same
+    # unknown-reads-as-closed convention as bedroom_apply_fan's window_open.
+    - condition: template
+      value_template: "{{ not is_state('binary_sensor.window_sensor_contact', 'on') }}"
   action:
     # The macro is evaluated ONCE here (DRY — no duplicate call in a condition gate). When the
     # verdict is 'none' (e.g. an outdoor-PM poll fired but nothing's actionable) the choose below
@@ -1842,6 +1859,128 @@
                 title: "🪟 Free cooling"
                 message: "It's {{ out_temp }}°F outside ({{ temp_delta }}° cooler) & clean — open up instead of the fan."
                 tag: window_advice
+
+# Close-the-window advisor — the mirror of bedroom_window_advisor above, possible only since the
+# SNZB-04 contact sensor made "is it actually open?" knowable (2026-08-25). Every branch is gated on
+# the window being CONFIRMED open, so it can never tell you to close a window that is already shut.
+# The verdict math (which reason wins, and the PM caps) lives in close_window_advice
+# (custom_templates/ventilation.jinja) — TUNE IT THERE, not here.
+- id: bedroom_window_close_advisor
+  alias: Bedroom window close advisor
+  description: Suggest closing an open window when the weather turns, the air goes bad, or the room is being chilled.
+  mode: single
+  trigger:
+    # Outdoor air went over the caps (the PM sensors update ~every 30 min).
+    - platform: state
+      entity_id:
+        - sensor.outdoor_pm2_5
+        - sensor.outdoor_pm10
+    # The weather turned (rain/snow/hail — the macro takes the boolean, not the condition string).
+    - platform: state
+      entity_id: weather.forecast_home
+    # The room has actually been chilled, not just "it's cold out" — 5 min stable, same edge-not-noise
+    # shape as the free-cooling trigger in bedroom_window_advisor.
+    - platform: numeric_state
+      entity_id: sensor.bedroom_airgradient_one_temperature
+      below: 68
+      for: "00:05:00"
+    # Opening the window into already-bad conditions should say so now, not at the next PM poll.
+    - platform: state
+      entity_id: binary_sensor.window_sensor_contact
+      to: "on"
+  condition:
+    # The whole point of the sensor: only ever advise closing something that is open. Unlike the
+    # open-direction advisor this demands a CONFIRMED 'on' — an unknown/unavailable contact means we
+    # don't know the window is open, and nagging about a window that might be shut is the exact
+    # annoyance this pair of automations exists to remove.
+    - condition: state
+      entity_id: binary_sensor.window_sensor_contact
+      state: "on"
+  action:
+    # Evaluated ONCE (DRY), same shape as the open advisor: single-line {% from %}{{ }} with no
+    # surrounding whitespace so verdict is exactly 'smoke'/'rain'/'cold'/'none'. A 'none' verdict
+    # matches no branch below and the automation no-ops.
+    - variables:
+        verdict: "{% from 'ventilation.jinja' import close_window_advice %}{{ close_window_advice(states('sensor.bedroom_airgradient_one_temperature'), state_attr('weather.forecast_home', 'temperature'), states('sensor.outdoor_pm2_5'), states('weather.forecast_home') in ['rainy', 'pouring', 'lightning-rainy', 'snowy', 'snowy-rainy', 'hail'], states('sensor.outdoor_pm10')) }}"
+        out_temp: "{{ state_attr('weather.forecast_home', 'temperature') | float(0) | round }}"
+        in_temp: "{{ states('sensor.bedroom_airgradient_one_temperature') | round }}"
+        outdoor_pm: "{{ states('sensor.outdoor_pm2_5') }}"
+    - choose:
+        - conditions: "{{ verdict == 'smoke' }}"
+          sequence:
+            - service: script.bedroom_notify
+              data:
+                title: "🪟 Close the window"
+                message: "Outdoor air went bad (PM2.5 {{ outdoor_pm }}) — shut the window, the purifier can't keep up with it open."
+                tag: window_close_advice
+                # The only branch that pierces: bringing smoke indoors is the damage-class one, and
+                # it stays actionable at 3am. Rain and cold wait for you to look at your phone.
+                pierce: true
+        - conditions: "{{ verdict == 'rain' }}"
+          sequence:
+            - service: script.bedroom_notify
+              data:
+                title: "🪟 Rain — window's open"
+                message: "It's {{ states('weather.forecast_home') }} outside and the window is open."
+                tag: window_close_advice
+        - conditions: "{{ verdict == 'cold' }}"
+          sequence:
+            - service: script.bedroom_notify
+              data:
+                title: "🪟 Getting cold"
+                message: "Room's down to {{ in_temp }}°F ({{ out_temp }}°F outside) — close the window."
+                tag: window_close_advice
+
+# Left-open reminder. Deliberately separate from the close advisor above: that one fires on a
+# CHANGE in conditions and can stay silent all day, this one fires on duration alone and would
+# otherwise never mention a window left open in perfectly nice weather.
+- id: bedroom_window_left_open
+  alias: Bedroom window left open reminder
+  description: Remind me 15 minutes after the window is opened, and dismiss the reminder when it's closed.
+  # queued, not single: two triggers feed one choose, and the close branch is the way OUT of the
+  # state the open branch creates. Under `single` a close arriving while the reminder's notify is
+  # still running is DROPPED with a warning, and the dismissal never happens. Same shape and same
+  # reason as bedroom_fan_manual_detect above.
+  mode: queued
+  max: 5
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.window_sensor_contact
+      to: "on"
+      for: "00:15:00"
+      id: still_open
+    - platform: state
+      entity_id: binary_sensor.window_sensor_contact
+      to: "off"
+      id: closed
+  action:
+    - choose:
+        - conditions:
+            - condition: trigger
+              id: still_open
+          sequence:
+            - service: script.bedroom_notify
+              data:
+                title: "🪟 Window still open"
+                message: "The window has been open 15 minutes."
+                tag: window_left_open
+        - conditions:
+            # Only dismiss if the reminder could actually have fired — i.e. the window was open for
+            # at least the 15 min above. Without this, every brief open/close would send a recovery
+            # for a notification that was never sent. from_state.last_changed is when it opened.
+            - condition: trigger
+              id: closed
+            - condition: template
+              value_template: >-
+                {{ trigger.from_state is not none
+                   and (now() - trigger.from_state.last_changed).total_seconds() >= 900 }}
+          sequence:
+            - service: script.bedroom_notify
+              data:
+                title: "🪟 Window closed"
+                message: "Window's shut again."
+                tag: window_left_open
+                recovery: true
 
 # ── Nest Hub Max dashboard (cast to media_player.bedroom_display) ─────────────────────────────────
 # Keep the Bedroom Lovelace view up on the Hub while the room is lit + awake; let it fall back to the

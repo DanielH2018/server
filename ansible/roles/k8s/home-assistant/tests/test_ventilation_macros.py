@@ -102,3 +102,69 @@ def test_pm_safe_boundary():
     # ip high so the "dirtier than indoor" guard doesn't mask the cap test.
     assert _advice(75, 65, 30, 25, True) == "stale"  # 25 is not > 25 (cap is strict >)
     assert _advice(75, 65, 30, 26, True) == "none"  # 26 > 25 cap
+
+
+def _close(indoor_temp, outdoor_temp, outdoor_pm, raining, outdoor_pm10=0):
+    return render_macro(
+        VENT,
+        "close_window_advice",
+        indoor_temp,
+        outdoor_temp,
+        outdoor_pm,
+        raining,
+        outdoor_pm10,
+    )
+
+
+def test_close_says_nothing_in_good_conditions():
+    # Cool-but-pleasant outside, room comfortable, air clean, dry -> no reason to close.
+    assert _close(72, 62, 8, False) == "none"
+
+
+def test_close_on_rain():
+    assert _close(72, 62, 8, True) == "rain"
+
+
+def test_close_on_smoke_over_pm25_cap():
+    assert _close(72, 62, 26, False) == "smoke"
+
+
+def test_close_on_smoke_over_pm10_cap():
+    # PM2.5 fine, coarse PM10 over its own (higher) cap -> still smoke.
+    assert _close(72, 62, 8, False, 51) == "smoke"
+
+
+def test_close_pm_caps_are_strict_greater_than():
+    # Exactly at the cap is not over it — same strict-> convention as ventilation_advice.
+    assert _close(72, 62, 25, False) == "none"
+    assert _close(72, 62, 8, False, 50) == "none"
+
+
+def test_smoke_outranks_rain():
+    # Both apply; the damage-class reason wins the message.
+    assert _close(72, 62, 30, True) == "smoke"
+
+
+def test_cold_needs_both_terms():
+    # Cold outside but the room is still warm -> the window is doing its job, say nothing.
+    assert _close(72, 40, 8, False) == "none"
+    # Room has actually dropped below the indoor floor -> now it's cold.
+    assert _close(67, 40, 8, False) == "cold"
+    # Room is chilly but it's mild outside -> not the window's fault, say nothing.
+    assert _close(67, 60, 8, False) == "none"
+
+
+def test_cold_boundaries():
+    assert _close(67, 54, 8, False) == "cold"  # 54 < 55 and 67 < 68
+    assert _close(68, 54, 8, False) == "none"  # 68 is not < 68
+    assert _close(67, 55, 8, False) == "none"  # 55 is not < 55
+
+
+def test_rain_outranks_cold():
+    assert _close(60, 40, 8, True) == "rain"
+
+
+def test_unavailable_readings_stay_silent():
+    # The OPPOSITE default from ventilation_advice: a dead sensor must not nag. Unparseable temps
+    # coerce to 999 (never below the floors) and unparseable PM to 0 (never over the caps).
+    assert _close("unavailable", "unknown", "unavailable", False, "unknown") == "none"

@@ -24,8 +24,14 @@
    (t-71)/1.3 ideal curve, the ±0.7-level hysteresis deadband, the 22:00-06:00 night cap, and the
    sleep-mode seasonal floor + L5 ceiling. Entity reads (indoor temp, current %, clock, sleep flag,
    outdoor temp) stay in the caller. TUNE the curve here: the 71 offset sets the start temp; the
-   /1.3 divisor sets the slope (bigger = gentler). Tested in tests/test_fan_macros.py. #}
-{%- macro fan_target_level(temp_f, cur_level, is_night, sleep, outdoor_temp_f=-999) -%}
+   /1.3 divisor sets the slope (bigger = gentler). Tested in tests/test_fan_macros.py.
+   `window_open` (since 2026-08-25, the SNZB-04 contact sensor) forces the fan off while the window
+   is open — cooling the room with the fan and the window at once is the thing it is there to stop.
+   It deliberately does NOT apply in sleep mode: the seasonal floor below exists to guarantee white
+   noise, and silencing it at 3am because a window is open is the more surprising failure. Defaults
+   false so every existing caller and the old-inline-vs-macro equivalence grid are unaffected. #}
+{%- macro fan_target_level(temp_f, cur_level, is_night, sleep, outdoor_temp_f=-999,
+                           window_open=false) -%}
 {%- set t = temp_f | float(-1) -%}
 {%- set cl = cur_level | int(0) -%}
 {%- set ideal = ((t - 71) / 1.3) if t >= 0 else 0 -%}
@@ -41,6 +47,7 @@
 {%- set floor = 4 if ot >= 68 else (3 if ot >= 45 else 2) -%}
 {%- set ceiling = 5 -%}
 {{- [[want, floor] | max, ceiling] | min | int -}}
+{%- elif window_open | bool -%}0
 {%- else -%}
 {%- set cap = (4 if (is_night | bool) else 9) | int -%}
 {{- [want, cap] | min | int -}}
