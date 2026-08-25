@@ -1,6 +1,9 @@
 """Tests for the secret rotation registry tool (classification, staggering, audit, sync)."""
 
 import datetime as dt
+import subprocess
+
+import yaml
 
 import secret_rotation as sr
 
@@ -308,3 +311,87 @@ def test_saved_registry_keeps_managed_header_and_sorts_keys(tmp_path):
 
 def test_load_registry_missing_file_returns_empty_skeleton(tmp_path):
     assert sr.load_registry(str(tmp_path / "does-not-exist.yml")) == {"secrets": {}}
+
+
+# ── rotation dates derived from git ─────────────────────────────────────────
+def _fake_history(monkeypatch, revs):
+    """revs: newest-first [(sha, "YYYY-MM-DD", {name: ciphertext})]."""
+    log = "\n".join("%s %s" % (sha, day) for sha, day, _ in revs)
+    blobs = {sha: values for sha, _, values in revs}
+
+    def fake_git(*args):
+        if args[0] == "log":
+            return log + "\n"
+        return yaml.safe_dump(blobs[args[1].split(":", 1)[0]])
+
+    monkeypatch.setattr(sr, "_git", fake_git)
+
+
+def test_derived_date_is_the_commit_that_changed_the_value(monkeypatch):
+    _fake_history(
+        monkeypatch,
+        [
+            ("c", "2026-08-01", {"tok": "ENC[new]"}),
+            ("b", "2026-05-01", {"tok": "ENC[old]"}),
+            ("a", "2026-01-01", {"tok": "ENC[old]"}),
+        ],
+    )
+    assert sr.ciphertext_rotation_dates()["tok"] == dt.date(2026, 8, 1)
+
+
+def test_unchanged_value_dates_to_the_oldest_revision(monkeypatch):
+    _fake_history(
+        monkeypatch,
+        [
+            ("b", "2026-08-01", {"tok": "ENC[same]"}),
+            ("a", "2026-01-01", {"tok": "ENC[same]"}),
+        ],
+    )
+    assert sr.ciphertext_rotation_dates()["tok"] == dt.date(2026, 1, 1)
+
+
+def test_reordering_does_not_count_as_a_rotation(monkeypatch):
+    """A regroup rewrites most of the file's lines while changing no value. Comparing the
+    parsed value per key is what stops that marking every secret freshly rotated."""
+    _fake_history(
+        monkeypatch,
+        [
+            ("b", "2026-08-01", {"b_tok": "ENC[b]", "a_tok": "ENC[a]"}),
+            ("a", "2026-01-01", {"a_tok": "ENC[a]", "b_tok": "ENC[b]"}),
+        ],
+    )
+    dates = sr.ciphertext_rotation_dates()
+    assert dates["a_tok"] == dt.date(2026, 1, 1)
+    assert dates["b_tok"] == dt.date(2026, 1, 1)
+
+
+def test_advance_moves_a_stale_date_forward():
+    reg = {"secrets": {"tok": {"tier": "assisted", "last_rotated": "2025-08-24"}}}
+    advanced = sr.advance_last_rotated(reg, {"tok": dt.date(2026, 3, 13)})
+    assert advanced == [("tok", "2025-08-24", "2026-03-13")]
+    assert reg["secrets"]["tok"]["last_rotated"] == "2026-03-13"
+
+
+def test_advance_never_moves_a_date_backward():
+    """Advance-only is what stops this creating an overdue secret: a registry date newer
+    than git's — a rotation recorded before its commit landed — must survive."""
+    reg = {"secrets": {"tok": {"tier": "assisted", "last_rotated": "2026-08-25"}}}
+    assert sr.advance_last_rotated(reg, {"tok": dt.date(2026, 3, 13)}) == []
+    assert reg["secrets"]["tok"]["last_rotated"] == "2026-08-25"
+
+
+def test_advance_ignores_secrets_git_has_no_date_for():
+    reg = {"secrets": {"tok": {"tier": "assisted", "last_rotated": "2025-08-24"}}}
+    assert sr.advance_last_rotated(reg, {}) == []
+    assert reg["secrets"]["tok"]["last_rotated"] == "2025-08-24"
+
+
+def test_derivation_failure_degrades_to_recorded_dates(monkeypatch):
+    """A cron that cannot read git must fall back, not fail — a broken derivation taking
+    the monitor down would be a worse outage than the drift it corrects."""
+
+    def boom(*args):
+        raise subprocess.CalledProcessError(128, "git")
+
+    monkeypatch.setattr(sr, "_git", boom)
+    assert sr.derived_rotation_dates() == {}
