@@ -257,3 +257,39 @@ def test_the_audit_branch_arm_is_additive_not_a_short_circuit():
     assert "--extra-down" in arm, (
         "the arm does not force the monitor DOWN; the auditor would push UP and mask it"
     )
+
+
+def test_the_two_audit_arms_accumulate_rather_than_suppress_each_other():
+    """A revoked `gh` token is what makes `gh pr create` fail and strand the branch, so the
+    two faults are causally linked and the compound case is the one H-1 exists for. Gating the
+    branch arm on the token arm reports the cause and hides the consequence -- a live rotated
+    credential, unpublished on origin.
+
+    `git ls-remote` authenticates over git's own credential path, not through `gh`, so the
+    branch arm still works with a dead token and has no reason to be skipped.
+    """
+    text = ROTATION_AUDIT.read_text()
+    lines = [line for line in code_lines(ROTATION_AUDIT) if "EXTRA_DOWN" in line]
+
+    # The branch arm's condition must not read EXTRA_DOWN -- that is the short-circuit.
+    branch_arm = text.split("# Runs even when the arm above fired", 1)
+    assert len(branch_arm) == 2, "the stray-branch arm lost its ordering comment"
+    # "; then", not "then": the prose above the arm contains "au-then-ticates", and splitting
+    # on the bare word truncated ahead of the condition -- the guard passed on the mutation it
+    # exists to catch.
+    condition = branch_arm[1].split("; then", 1)[0]
+    assert "EXTRA_DOWN" not in condition, (
+        "the stray-branch arm is gated on the gh-token arm, so a revoked token silences the "
+        f"unpublished-credential report it causes: {condition!r}"
+    )
+
+    # Both arms must go through the accumulator, and the accumulator must concatenate.
+    assert text.count("add_down ") >= 2, (
+        "an arm assigns EXTRA_DOWN directly instead of accumulating, so a second fault "
+        "overwrites the first"
+    )
+    concat = [line for line in lines if 'EXTRA_DOWN="$EXTRA_DOWN' in line]
+    assert concat, (
+        "add_down replaces rather than appends; the compound fault reports one reason: "
+        f"{lines!r}"
+    )
