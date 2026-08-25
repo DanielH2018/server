@@ -132,11 +132,16 @@ def test_every_rendered_container_sets_requests_and_limits() -> None:
         f"only {len(containers)} containers seen; the walk is broken"
     )
 
+    # Per KEY, not per dict. Asserting the `limits` dict is merely truthy passes a container
+    # that sets `memory` and omits `cpu` — which is how the exportarr sidecar sat on the
+    # LimitRange's `cpu: "2"` default, 400x its own 5m request, as the fleet's only container
+    # inheriting it (2026-08-25 review M-12).
     missing = [
-        f"{role}/{name} {which}"
+        f"{role}/{name} {which} ({section}.{key})"
         for role, name, which, container in containers
-        if not (container.get("resources") or {}).get("requests")
-        or not (container.get("resources") or {}).get("limits")
+        for section in ("requests", "limits")
+        for key in ("cpu", "memory")
+        if not ((container.get("resources") or {}).get(section) or {}).get(key)
     ]
     assert not missing, (
         "these containers set no resource requests or limits: "
