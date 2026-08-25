@@ -172,6 +172,54 @@ def test_the_audit_watches_for_an_unlanded_rotation_branch():
     )
 
 
+def test_the_rotation_crons_push_through_the_shared_library():
+    """crons.yml:15-19 says every health cron sources kuma-push-lib.sh "including
+    secret-rotate.sh.j2 further down". That was false -- `grep -c kuma-push-lib` returned 0
+    for it, and both rotation scripts passed the token-bearing URL to curl as an argv
+    element, readable through /proc/<pid>/cmdline (2026-08-25 review M-9).
+
+    The comment is documentation of an invariant, so the invariant gets a test rather than
+    the comment getting a correction.
+    """
+    for path in (SECRET_ROTATE, ROTATION_AUDIT):
+        text = path.read_text()
+        assert "kuma-push-lib.sh" in text, (
+            f"{path.name} does not source the shared push library, contradicting "
+            f"crons.yml:15-19"
+        )
+        pushes = [
+            line
+            for line in text.splitlines()
+            if "curl" in line
+            and "api/push" in line
+            and not line.strip().startswith("#")
+        ]
+        assert not pushes, (
+            f"{path.name} still passes a token-bearing push URL to curl directly, which "
+            f"exposes it in /proc/<pid>/cmdline: {pushes}"
+        )
+
+
+def test_the_audit_watches_the_gh_token_both_crons_depend_on():
+    """Both publishing crons authenticate with one `gh` OAuth token that is not in
+    secrets.yml and not in the rotation registry, so nothing watched it. Revoked, they both
+    keep running, both fail at `gh pr create`, and both stop publishing silently
+    (2026-08-25 review M-6).
+    """
+    text = ROTATION_AUDIT.read_text()
+    assert "gh auth status" in text, (
+        "nothing checks the credential secret-rotate and docs-refresh publish with"
+    )
+    line = next(
+        line
+        for line in text.splitlines()
+        if "gh auth status" in line and not line.strip().startswith("#")
+    )
+    assert "if !" in line, (
+        f"the gh check must branch on its exit status, not on its output: {line!r}"
+    )
+
+
 def test_the_audit_grace_is_shorter_than_the_gap_to_the_first_audit():
     """The grace period must not swallow the first audit after a failed publish.
 
