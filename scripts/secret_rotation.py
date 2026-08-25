@@ -7,7 +7,11 @@ Three subcommands:
            date so their rotations never all fall due on the same day. Removed secrets
            are reported. Existing entries (tier overrides + real rotation dates) are
            preserved.
-  audit  — compute which secrets are due / overdue per tier and print a report. With
+  audit  — compute which secrets are due / overdue per tier and print a report. Dates
+           come from the registry, advanced to the date git shows the secret's ciphertext
+           last changed — an app-side rotation that `sync` cannot date is otherwise
+           invisible and ages into a false OVERDUE. Nothing is written: the registry is
+           adjusted in memory only, so git stays the source of truth. With
            --push, post up/down to an Uptime Kuma push monitor (the SECRET_ROTATION_KUMA
            env var holds the full push URL incl. token).
   rotate — rotate `auto`-tier secrets coming due (locally-generated push tokens — no
@@ -48,6 +52,8 @@ import yaml
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SECRETS_FILE = os.path.join(REPO, "ansible", "vars", "secrets.yml")
+# Repo-relative, for git revspecs — `git show <rev>:<path>` needs the tracked path.
+SECRETS_GIT_PATH = "ansible/vars/secrets.yml"
 REGISTRY_FILE = os.path.join(REPO, "ansible", "secret_rotation.yml")
 
 TIER_DAYS = {
@@ -183,7 +189,9 @@ _HEADER = """\
 # Plaintext on purpose (names + dates + tiers only, never values); lives outside vars/ so
 # SOPS does not encrypt it. Run `secret_rotation.py sync` after adding/removing a secret.
 # You MAY edit a `tier` to override classification (sync preserves it); don't hand-edit
-# `last_rotated` — `rotate` updates it. Tiers: auto|assisted|external|pinned|ignore.
+# `last_rotated` — `rotate` updates it, and `audit` reads the real date out of the git
+# history of secrets.yml when a value changed later than this file records.
+# Tiers: auto|assisted|external|pinned|ignore.
 """
 
 
@@ -218,6 +226,97 @@ def due_date(entry: dict) -> dt.date | None:
     if not days or not lr:
         return None
     return dt.date.fromisoformat(lr) + dt.timedelta(days=days)
+
+
+def _git(*args: str) -> str:
+    return subprocess.run(
+        ("git", *args), cwd=REPO, check=True, capture_output=True, text=True
+    ).stdout
+
+
+def ciphertext_at(rev: str) -> dict[str, str]:
+    """name -> stored ciphertext at `rev`. Never decrypts: the `diff=sops` textconv
+    driver rewrites diff output only, so `git show <rev>:<path>` streams the raw blob."""
+    data = yaml.safe_load(_git("show", f"{rev}:{SECRETS_GIT_PATH}")) or {}
+    return {k: str(v) for k, v in data.items() if k != "sops"}
+
+
+def ciphertext_rotation_dates() -> dict[str, dt.date]:
+    """name -> date of the newest commit that changed that secret's ciphertext.
+
+    Compares the parsed value per key rather than the diff text. A commit that only
+    reorders or regroups secrets.yml rewrites lines without changing any value, and a
+    line-level reader would call every secret freshly rotated — marking genuinely
+    overdue ones green. ca5ae25b rewrote 149 of 156 lines doing exactly that.
+    """
+    revs = [
+        line.split(" ", 1)
+        for line in _git(
+            "log", "--format=%H %ad", "--date=short", "--", SECRETS_GIT_PATH
+        ).splitlines()
+        if line
+    ]
+    dates: dict[str, dt.date] = {}
+    if not revs:
+        return dates
+    tracked = set(ciphertext_at(revs[0][0]))
+    newer: dict[str, str] = {}
+    newer_day = ""
+    for rev, day in revs:
+        current = ciphertext_at(rev)
+        for name, value in newer.items():
+            if name not in dates and current.get(name) != value:
+                dates[name] = dt.date.fromisoformat(newer_day)
+        if tracked <= set(dates):
+            break
+        newer, newer_day = current, day
+    # Whatever never changed existed unaltered back to the oldest revision, so that
+    # revision is the best evidence of when its value was set.
+    for name in newer:
+        dates.setdefault(name, dt.date.fromisoformat(newer_day))
+    return dates
+
+
+def derived_rotation_dates() -> dict[str, dt.date]:
+    """Git-derived dates, or {} when git cannot answer (no checkout, shallow clone, git
+    missing). The daily cron degrades to the recorded dates instead of failing — a broken
+    derivation must not take the monitor down on its own."""
+    try:
+        return ciphertext_rotation_dates()
+    except subprocess.CalledProcessError, OSError, yaml.YAMLError, ValueError:
+        return {}
+
+
+def advance_last_rotated(
+    reg: dict, dates: dict[str, dt.date]
+) -> list[tuple[str, str, str]]:
+    """Move `last_rotated` forward where git shows a later change. Returns (name, old,
+    new) for each row advanced. Mutates `reg` in memory only — the caller never saves it,
+    which is what keeps the audit read-only and git the source of truth.
+
+    Advance-only, for two reasons. Seed dates are deliberately staggered and backdated
+    (`seed_last_rotated`) and most secrets predate this file's git history, so taking the
+    derived date unconditionally would collapse them onto the same introduction commit
+    and un-stagger every due-date. It also means this can only ever clear an overdue
+    secret that a real rotation already fixed, never create one.
+    """
+    # DECIDED: git evidence beats the seed even though it can overstate freshness for a
+    # credential minted before this file's first commit (2026-01-17) — such a secret dates
+    # to when it was committed, not when it was created. The seed it replaces is not a
+    # better reading: `seed_last_rotated` backdates by a hash of the NAME, so it is
+    # fiction for every secret nobody has rotated since registration. That fiction is what
+    # aged calendar_1 into a false OVERDUE and took the monitor down on 2026-08-25.
+    advanced = []
+    for name, entry in reg.get("secrets", {}).items():
+        derived = dates.get(name)
+        recorded = entry.get("last_rotated")
+        if derived is None or not recorded:
+            continue
+        if dt.date.fromisoformat(recorded) >= derived:
+            continue
+        entry["last_rotated"] = derived.isoformat()
+        advanced.append((name, recorded, derived.isoformat()))
+    return advanced
 
 
 def audit(reg: dict, today: dt.date) -> dict:
@@ -297,6 +396,14 @@ def cmd_audit(args) -> int:
     reg = load_registry()
     # Registry drift: warn by default (so a forgotten `sync` is visible); --check fails on it.
     missing, stale = registry_drift(set(reg.get("secrets", {})), set(secret_names()))
+    # A real rotation changes the ciphertext in git but leaves `last_rotated` behind,
+    # because `sync` deliberately won't touch an existing value's date. Reading the date
+    # back out of git closes that gap without writing the registry.
+    advanced = (
+        [] if args.no_derive else advance_last_rotated(reg, derived_rotation_dates())
+    )
+    for name, old, new in advanced:
+        print("  rotated in git, date advanced: %-30s %s -> %s" % (name, old, new))
     res = audit(reg, dt.date.today())
     n_over = len(res["overdue"])
     for name, tier, d, days_left in res["all"]:
@@ -431,6 +538,11 @@ def main(argv=None) -> int:
         "--check",
         action="store_true",
         help="exit non-zero if the registry is out of sync with secrets.yml (CI gate)",
+    )
+    pa.add_argument(
+        "--no-derive",
+        action="store_true",
+        help="trust last_rotated as recorded; skip reading rotation dates out of git",
     )
     pa.set_defaults(func=cmd_audit)
     pr = sub.add_parser("rotate")
