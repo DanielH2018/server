@@ -94,6 +94,103 @@ spec:
             requests:
               cpu: "10m"
               memory: 32Mi
+        # ── jellyfin-ani-sync (D: AniList watch-status sync) ─────────────────────────────────
+        # Installs the plugin from its published release instead of leaving it to a click in the
+        # admin dashboard, so a config PVC restored from nothing comes back with it. The
+        # plugin's SETTINGS are deliberately not managed here: the AniList OAuth token is
+        # account-specific, is written to /config/plugins/configurations/, and nothing below
+        # touches that directory.
+        #
+        # python:3.14-alpine rather than the alpine:3.24 the container above uses, and not
+        # because Python reads better. The release is a .zip and /config is owned by uid
+        # {{ puid }} — a plain alpine container would have to `apk add unzip` as root, and root
+        # here holds no DAC_OVERRIDE (see the comment above), so it could not then write the
+        # files it had just unpacked. urllib, hashlib and zipfile are stdlib, so the whole
+        # install runs as the owning uid and installs nothing at runtime.
+        - name: install-ani-sync
+          image: {{ jellyfin_k8s_anisync_init_image }}
+          command:
+            - python3
+            - -c
+            - |
+              import hashlib
+              import shutil
+              import tempfile
+              import urllib.request
+              import zipfile
+              from pathlib import Path
+
+              VERSION = "{{ jellyfin_k8s_anisync_version }}"
+              URL = "{{ jellyfin_k8s_anisync_url }}"
+              WANT_MD5 = "{{ jellyfin_k8s_anisync_md5 }}"
+              DLL = "jellyfin-ani-sync.dll"
+              PLUGINS = Path("/config/plugins")
+              PLUGIN_DIR = PLUGINS / "ani-sync"
+              MARKER = PLUGIN_DIR / (".installed-" + VERSION)
+
+              # The guard, and the reason a routine pod restart costs nothing: with the marker
+              # present this container opens no socket at all. Only a version bump reaches the
+              # download below, because the marker name carries the version.
+              if MARKER.exists():
+                  print("ani-sync " + VERSION + " already installed")
+                  raise SystemExit(0)
+
+              print("installing ani-sync " + VERSION + " from " + URL)
+              PLUGINS.mkdir(parents=True, exist_ok=True)
+
+              # Staged INSIDE /config/plugins, not /tmp: same filesystem, so the swap below is a
+              # rename rather than a cross-device copy, and a half-written plugin dir is never
+              # visible to Jellyfin.
+              with tempfile.TemporaryDirectory(dir=PLUGINS) as tmp:
+                  archive = Path(tmp) / "plugin.zip"
+                  with urllib.request.urlopen(URL, timeout=60) as response:
+                      with archive.open("wb") as handle:
+                          shutil.copyfileobj(response, handle)
+
+                  got = hashlib.md5(archive.read_bytes()).hexdigest()
+                  if got != WANT_MD5:
+                      raise SystemExit("md5 mismatch: got " + got + ", want " + WANT_MD5)
+
+                  staged = Path(tmp) / "staged"
+                  with zipfile.ZipFile(archive) as bundle:
+                      bundle.extractall(staged)
+
+                  # Checked rather than assumed. An archive that extracts without raising but
+                  # carries no DLL leaves a plugin directory Jellyfin silently ignores, which
+                  # presents as "the plugin does nothing" rather than as a failed deploy.
+                  if not (staged / DLL).exists():
+                      found = sorted(path.name for path in staged.iterdir())
+                      raise SystemExit("archive has no " + DLL + ": " + repr(found))
+
+                  # Replaced wholesale. The directory name carries no version, so leaving an
+                  # older build's files beside a new one is how two copies of one plugin end up
+                  # on disk together.
+                  if PLUGIN_DIR.is_dir():
+                      shutil.rmtree(PLUGIN_DIR)
+                  shutil.move(staged, PLUGIN_DIR)
+
+              # Written LAST, and only once the DLL is proven present. A marker written any
+              # earlier would latch a failed install: the next start would find it and skip the
+              # retry that would have fixed things.
+              MARKER.touch()
+              print("installed ani-sync " + VERSION)
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsUser: {{ puid }}
+            runAsGroup: {{ pgid }}
+          volumeMounts:
+            - name: jellyfin-config
+              mountPath: /config
+          resources:
+            limits:
+              cpu: "500m"
+              memory: 128Mi
+            requests:
+              cpu: "10m"
+              memory: 32Mi
       automountServiceAccountToken: false
       priorityClassName: homelab-standard
       containers:
