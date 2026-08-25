@@ -132,6 +132,60 @@ class ChangeSet:
     # so every existing consumer of that field is unchanged and this stays inert until a service
     # actually qualifies.
     k8s_deploy: set[str] = field(default_factory=set)
+    # k8s roles that import a changed `files/*.py` owned by another role — see
+    # shared_module_consumers. Kept separate from `k8s` so it stays inert for every consumer
+    # that reads `k8s` directly; only k8s_remediation folds it in, and only after
+    # intersecting with what this host declares.
+    k8s_consumers: set[str] = field(default_factory=set)
+
+
+def shared_module_consumers(paths, repo_root) -> set[str]:
+    """k8s roles that import a changed `files/*.py` module owned by a DIFFERENT role.
+
+    `_ACTIVE_K8S` maps a path to the role whose directory it sits in, which is right for a
+    manifest and wrong for a shared library. `bridge_common.py` lives under monitor-bridge and
+    is imported by autofix-bridge too, so the #407 five-module split made an edit there emit
+    `--tags monitor-bridge` alone -- autofix-bridge's ConfigMap kept the old copy, and nothing
+    reported it (2026-08-25 review M-2).
+
+    Derived by reading the imports rather than listing the pair, because a hardcoded pair is
+    the same guard-scope mistake one level up: it would go stale the first time a third role
+    imported the module. Returns only the EXTRA roles; the owning role is already in `cs.k8s`.
+    """
+    from pathlib import Path
+
+    k8s = Path(repo_root) / "ansible" / "roles" / "k8s"
+    changed_modules = {
+        Path(p).stem
+        for p in paths
+        if re.match(r"^ansible/roles/k8s/[^/]+/files/[^/]+\.py$", p)
+    }
+    if not changed_modules or not k8s.is_dir():
+        return set()
+
+    owners = {
+        m.group(1)
+        for p in paths
+        if (m := re.match(r"^ansible/roles/k8s/([^/]+)/files/[^/]+\.py$", p))
+    }
+    consumers: set[str] = set()
+    for role in k8s.iterdir():
+        if not (role / "files").is_dir() or role.name in owners:
+            continue
+        for src in (role / "files").glob("*.py"):
+            if src.name.startswith("test_"):
+                continue
+            try:
+                text = src.read_text(errors="ignore")
+            except OSError:
+                continue
+            if any(
+                re.search(r"^\s*(?:import|from)\s+%s\b" % re.escape(mod), text, re.M)
+                for mod in changed_modules
+            ):
+                consumers.add(role.name)
+                break
+    return consumers
 
 
 def services_from_changed_paths(paths: list[str]) -> ChangeSet:
@@ -191,7 +245,9 @@ def broad_remediation(broad_deploy: bool, broad_setup: bool) -> str:
     return " and ".join(cmds)
 
 
-def k8s_remediation(roles: set[str], declared: set[str]) -> str:
+def k8s_remediation(
+    roles: set[str], declared: set[str], extra_consumers: set[str] | None = None
+) -> str:
     """The redeploy instruction for a set of changed k8s roles, given this host's declared set.
 
     `_ACTIVE_K8S` matches every `ansible/roles/k8s/<role>/` path, but only a role with a
@@ -214,6 +270,12 @@ def k8s_remediation(roles: set[str], declared: set[str]) -> str:
     range until an operator ran a full deploy by hand. This keeps the ff-merge and corrects only
     the instruction, which is where the defect actually was.
     """
+    # Intersect with `declared` BEFORE the union. A consumer that is not in this host's
+    # containers_list has no deploy tag here, so folding it in raw would land it in `shared`
+    # and escalate the instruction from a scoped `--tags` to "run a full deploy" -- for a role
+    # this host does not deploy at all. Inert today; live the first time a cross-role consumer
+    # is Pi-only.
+    roles = roles | ((extra_consumers or set()) & declared)
     shared = sorted(roles - declared)
     deployable = sorted(roles & declared)
     if not shared:

@@ -22,6 +22,7 @@ from deploy_logic import (
     next_action,
     is_image_only_diff,
     k8s_remediation,
+    shared_module_consumers,
     split_k8s_auto_deploy,
     ci_verdict,
     declared_denylist,
@@ -914,3 +915,40 @@ def test_k8s_remediation_never_prescribes_a_tag_that_deploys_nothing():
         % sorted(_prescribed_tags(mixed) - declared)
     )
     assert "`ansible-playbook ansible/deploy.yml`" in mixed
+
+
+def test_a_shared_module_edit_names_every_consumer_role():
+    """`_ACTIVE_K8S` maps a path to the role whose directory holds it, which is right for a
+    manifest and wrong for a shared library. bridge_common.py lives under monitor-bridge and
+    autofix-bridge imports it, so after the #407 split an edit there emitted
+    `--tags monitor-bridge` alone and autofix-bridge's ConfigMap kept the old copy with
+    nothing reporting it (2026-08-25 review M-2).
+    """
+    repo = pathlib.Path(__file__).resolve().parents[5]
+    paths = ["ansible/roles/k8s/monitor-bridge/files/bridge_common.py"]
+    consumers = shared_module_consumers(paths, repo)
+    assert "autofix-bridge" in consumers, (
+        "the deployer cannot see that autofix-bridge imports bridge_common, so a shared "
+        "edit ff-merges leaving its ConfigMap stale: %s" % sorted(consumers)
+    )
+    assert "monitor-bridge" not in consumers, "the owning role is already in cs.k8s"
+
+    declared = {"monitor-bridge", "autofix-bridge"}
+    assert (
+        _prescribed_tags(k8s_remediation({"monitor-bridge"}, declared, consumers))
+        == declared
+    )
+
+
+def test_a_consumer_this_host_does_not_declare_is_not_escalated():
+    """Intersect with `declared` BEFORE the union. A consumer absent from this host's
+    containers_list has no deploy tag here, so folding it in raw would land it in `shared`
+    and escalate a scoped `--tags` into "run a full deploy" -- for a role this host does not
+    deploy at all.
+    """
+    declared = {"monitor-bridge"}
+    msg = k8s_remediation({"monitor-bridge"}, declared, {"autofix-bridge"})
+    assert _prescribed_tags(msg) == {"monitor-bridge"}
+    assert "`ansible-playbook ansible/deploy.yml`" not in msg, (
+        "an undeclared consumer escalated the instruction to a full deploy: %s" % msg
+    )
