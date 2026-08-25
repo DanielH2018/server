@@ -106,7 +106,7 @@ jobs:
           key: galaxy-${{ runner.os }}-${{ hashFiles('ansible/requirements.yml') }}
 
       - name: Install prek
-        run: pip install prek==0.4.13  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
+        run: pip install prek==0.4.14  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
 
       # The `vale` prek hook is `language = "system"`, so it runs whatever binary is on PATH
       # and there is none on a fresh runner. Version-pinned to match the workstation, because
