@@ -150,6 +150,7 @@ nav:
       - B2 drain scoping: b2-api-drain-scoping.md
       - B2 transaction cap gaps: b2-transaction-cap-monitoring-gaps.md
       - Email to RSS: email-to-rss.md
+      - AniList integration: anilist-integration.md
       - Longhorn upgrade: longhorn-upgrade.md
       - Longhorn disaster recovery: longhorn-disaster-recovery.md
       - k3s etcd restore: k3s-etcd-restore.md

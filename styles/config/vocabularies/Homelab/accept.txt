@@ -270,3 +270,10 @@ one_factor
 # possessive form and 'Docker's' fails while 'Docker' passes.
 Docker's
 HA's
+
+# AniList integration (docs/anilist-integration.md)
+APIs
+OAuth
+uid
+gamepad
+cours
