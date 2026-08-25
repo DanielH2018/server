@@ -17,6 +17,13 @@ docstring, both get a row saying so. Dropping them would make the page quietly i
 which is worse than a visible gap. The same goes for the test column: a script with no
 `test_<name>.py` shows an empty cell, because an untested script is a fact worth surfacing.
 
+HOW EACH SCRIPT IS RUN IS DERIVED, NOT DECLARED. A hand-kept list of "these ones are
+automated" is stale the first time someone adds a cron. The tree already says how every
+script is reached: `prek.toml` names the commit gates, `ansible.builtin.cron` names the
+scheduled ones, the workflows name the CI ones, and the import graph names the modules that
+are libraries rather than entry points. `classify()` reads those, so the page cannot drift
+from the tree.
+
 WHAT IT CANNOT DECIDE. Whether a script is safe to run. The summary is whatever its author
 wrote, and nothing here judges blast radius — `docs/reference/crons.md` does that for the
 scheduled ones.
@@ -33,6 +40,8 @@ import ast
 import re
 from pathlib import Path
 
+import yaml
+
 REPO = Path(__file__).resolve().parent.parent
 SCRIPTS = REPO / "scripts"
 
@@ -46,6 +55,290 @@ _SUFFIXES = (".py", ".sh")
 # The reStructuredText usage marker the repo's scripts already use, and the indented block
 # that follows it.
 _USAGE_RE = re.compile(r"^Usage::\s*$", re.MULTILINE)
+
+
+# --- How a script is run --------------------------------------------------------------
+#
+# Four kinds, most-demanding first. A script reached more than one way takes the highest,
+# because that is the one that decides how much a break costs: a scheduled script fails
+# unattended at 3am, an adhoc one fails in front of the person who ran it.
+RUNS = {
+    "scheduled": "a cron runs it unattended",
+    "gate": "every commit, CI run, deploy or Claude session runs it",
+    "library": "imported by another script — not an entry point",
+    "adhoc": "a person runs it",
+}
+_PRECEDENCE = ("adhoc", "library", "gate", "scheduled")
+
+# A reference to a script, in any of the spellings the tree uses.
+_SCRIPT_REF_RE = re.compile(r"(?:\./|/)?scripts/([A-Za-z0-9_]+\.(?:py|sh))")
+
+# A whole string literal that is a script path and nothing else — one element of an argv
+# list, as opposed to a sentence that happens to name a script.
+_ARGV_RE = re.compile(r"(?:\./)?scripts/([A-Za-z0-9_]+\.(?:py|sh))")
+
+# A line that RUNS something, as opposed to one that mentions it. Every generated doc page,
+# every role CLAUDE.md and a good many comments name these scripts; without this the census
+# would classify by how often a script is talked about.
+_RUN_CONTEXT_RE = re.compile(
+    r"uv run|python|bash|/bin/sh|\bexec\b|entry\s*=|\./scripts/"
+)
+
+# A wrapper installed on the host, as a cron `job:` names it. Resolving one back to its
+# template is what makes `build_docs.py` (run by docs-refresh.sh, run by a cron) scheduled
+# rather than invisible.
+_WRAPPER_RE = re.compile(r"([A-Za-z0-9_.-]+\.sh)\b")
+
+
+def _invoked_in(text: str) -> set[str]:
+    """Script filenames this text actually invokes.
+
+    Three exclusions carry the precision. A comment line is a mention. A line carrying a
+    backtick is prose citing a command, which is how every CLAUDE.md and half the role
+    defaults name these scripts. A line starting with `echo` is a message about a command —
+    `deploy.sh` prints "or another Claude session (uv run python scripts/prune_worktrees.py)"
+    on lock contention, and reading that as an invocation would make an interactive tool
+    look like part of the deploy path.
+    """
+    found: set[str] = set()
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith(("#", "//", "*")):
+            continue
+        if "`" in line or stripped.startswith("echo"):
+            continue
+        if not _RUN_CONTEXT_RE.search(line):
+            continue
+        found.update(_SCRIPT_REF_RE.findall(line))
+    return found
+
+
+def _read(path: Path) -> str:
+    try:
+        return path.read_text()
+    except OSError, UnicodeDecodeError:
+        return ""
+
+
+def _argv_references(text: str) -> set[str]:
+    """Script filenames named by a string literal in Python source.
+
+    `build_docs.py` runs the reference generators through `subprocess`, so the path is one
+    element of an argv list and the word `python` is several lines away — the line scan
+    cannot see it. Docstrings are skipped: every generator's own `Usage::` block names
+    itself, and a `See scripts/probe.py` in a docstring is a mention.
+
+    The string must be a bare path and nothing else. `session-health.py` carries the
+    sentence "…the staleness gate (scripts/deploy_staleness.py, exit 4)…" in a string it
+    prints, and reading that as an invocation would put a deploy gate behind a session hook.
+    """
+    try:
+        tree = ast.parse(text)
+    except SyntaxError, ValueError:
+        return set()
+    docstrings = {
+        node.body[0].value
+        for node in ast.walk(tree)
+        if isinstance(
+            node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+        )
+        and node.body
+        and isinstance(node.body[0], ast.Expr)
+        and isinstance(node.body[0].value, ast.Constant)
+        and isinstance(node.body[0].value.value, str)
+    }
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and node not in docstrings
+        ):
+            match = _ARGV_RE.fullmatch(node.value.strip())
+            if match:
+                found.add(match.group(1))
+    return found
+
+
+def _invoked_by(path: Path, scripts: Path) -> set[str]:
+    """Everything one file invokes, by whichever reading its language allows."""
+    text = _read(path)
+    found = _invoked_in(text)
+    if path.suffix == ".py":
+        found |= _argv_references(text)
+    found.discard(path.name)
+    return {n for n in found if _is_candidate(scripts / n)}
+
+
+def _cron_jobs(repo: Path) -> list[tuple[str, str]]:
+    """(cron name, command) for every present `ansible.builtin.cron` task in the tree."""
+    jobs = []
+    for path in sorted((repo / "ansible").rglob("tasks/*.yml")):
+        if "/archive/" in path.as_posix():
+            continue
+        try:
+            loaded = yaml.safe_load(path.read_text())
+        except OSError, yaml.YAMLError:
+            continue
+        if not isinstance(loaded, list):
+            continue
+        for task in loaded:
+            if not isinstance(task, dict) or "ansible.builtin.cron" not in task:
+                continue
+            spec = task["ansible.builtin.cron"] or {}
+            if str(spec.get("state", "present")) == "absent":
+                continue
+            jobs.append((str(spec.get("name", "unnamed")), str(spec.get("job", ""))))
+    return jobs
+
+
+def _wrapper_templates(repo: Path) -> dict[str, Path]:
+    """Shell-wrapper basename -> the template that renders it."""
+    found = {}
+    for path in sorted((repo / "ansible").rglob("templates/*.sh.j2")):
+        if "/archive/" in path.as_posix():
+            continue
+        found[path.name[: -len(".j2")]] = path
+    return found
+
+
+def _scheduled(repo: Path) -> dict[str, str]:
+    """Script filename -> the cron that reaches it, directly or through a wrapper."""
+    wrappers = _wrapper_templates(repo)
+    reached: dict[str, str] = {}
+    for name, command in _cron_jobs(repo):
+        for script in _invoked_in(command):
+            reached.setdefault(script, name)
+        for wrapper in _WRAPPER_RE.findall(command):
+            template = wrappers.get(wrapper)
+            if template is None:
+                continue
+            for script in _invoked_in(_read(template)):
+                reached.setdefault(script, f"{name} (via {wrapper})")
+    return reached
+
+
+def _invocation_sites(repo: Path) -> list[tuple[Path, str, str]]:
+    """(file, kind, evidence) for every file in the tree that can invoke a script.
+
+    Nothing in `scripts/` is reached from a systemd unit — every `ExecStart` in the tree
+    runs a host binary or a role's own `files/` module — so units are not scanned.
+    """
+    sites: list[tuple[Path, str, str]] = []
+
+    prek = repo / "prek.toml"
+    if prek.is_file():
+        sites.append((prek, "gate", "prek hook (every commit)"))
+
+    for path in sorted((repo / ".github" / "workflows").glob("*.yml")):
+        sites.append((path, "gate", f"CI: {path.name}"))
+
+    for path in sorted((repo / ".claude" / "hooks").glob("*")):
+        if path.is_file() and not path.name.startswith("test_"):
+            sites.append((path, "gate", f"Claude hook: {path.name}"))
+
+    # deploy.sh is the interactive deploy path: what it runs, every deploy runs.
+    deploy = repo / "scripts" / "deploy.sh"
+    if deploy.is_file():
+        sites.append((deploy, "gate", "every deploy (deploy.sh)"))
+
+    ansible = repo / "ansible"
+    for pattern in ("roles/**/tasks/*.yml", "roles/**/templates/*", "roles/**/files/*"):
+        for path in sorted(ansible.glob(pattern)):
+            if not path.is_file() or "/archive/" in path.as_posix():
+                continue
+            if path.name.startswith("test_"):
+                continue
+            rel = path.relative_to(repo).as_posix()
+            sites.append((path, "gate", f"deploy: {rel}"))
+
+    # A top-level playbook or bring-up script is something a person runs on purpose.
+    for path in sorted(ansible.glob("*.yml")) + sorted(ansible.glob("*.sh")):
+        sites.append((path, "adhoc", f"playbook: {path.relative_to(repo).as_posix()}"))
+
+    return sites
+
+
+def _importers(scripts: Path) -> dict[str, set[str]]:
+    """Module stem -> the non-test scripts that import it.
+
+    A test importing its subject does not make the subject a library, so `test_*` and
+    `conftest` are not importers here.
+    """
+    stems = {p.stem for p in scripts.glob("*.py")}
+    importers: dict[str, set[str]] = {}
+    for path in sorted(scripts.glob("*.py")):
+        if path.name.startswith("test_") or path.name in _EXCLUDED_NAMES:
+            continue
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError, ValueError, UnicodeDecodeError:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                names = [alias.name.split(".")[0] for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                names = (
+                    [node.module.split(".")[0]]
+                    if node.module and not node.level
+                    else []
+                )
+            else:
+                continue
+            for name in names:
+                if name in stems and name != path.stem:
+                    importers.setdefault(name, set()).add(path.name)
+    return importers
+
+
+def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str, str]]:
+    """Script filename -> (how it runs, the evidence for saying so)."""
+    verdicts: dict[str, tuple[str, str]] = {}
+
+    def record(script: str, kind: str, evidence: str) -> bool:
+        current = verdicts.get(script)
+        if current and _PRECEDENCE.index(current[0]) >= _PRECEDENCE.index(kind):
+            return False
+        verdicts[script] = (kind, evidence)
+        return True
+
+    for script, cron in _scheduled(repo).items():
+        record(script, "scheduled", f"cron: {cron}")
+
+    for path, kind, evidence in _invocation_sites(repo):
+        for script in _invoked_by(path, scripts):
+            record(script, kind, evidence)
+
+    for stem, callers in _importers(scripts).items():
+        record(f"{stem}.py", "library", f"imported by {', '.join(sorted(callers))}")
+
+    # One script running another inherits the caller's kind, so the six reference
+    # generators are scheduled by way of `build_docs.py` and its cron rather than reading
+    # as things nobody runs. Iterated to a fixpoint: the chain is cron → build_docs.py →
+    # generator, and a longer one would otherwise resolve only as far as it was walked.
+    callers = {
+        path: _invoked_by(path, scripts)
+        for path in sorted(scripts.glob("*"))
+        if _is_candidate(path)
+    }
+    while True:
+        settled = True
+        for path, targets in callers.items():
+            kind = verdicts.get(path.name, ("adhoc", ""))[0]
+            if kind == "library":
+                # A library is reached through whoever imports it; propagating "library"
+                # onto something it shells out to would say the wrong thing.
+                kind = "adhoc"
+            for target in targets:
+                if record(target, kind, f"{path.name} ({RUNS[kind]})"):
+                    settled = False
+        if settled:
+            break
+
+    for path in scripts.glob("*"):
+        if _is_candidate(path):
+            verdicts.setdefault(path.name, ("adhoc", "no automated caller in the tree"))
+    return verdicts
 
 
 def _python_docstring(path: Path) -> str | None:
@@ -89,6 +382,37 @@ def _usage(doc: str) -> str:
     return "\n".join(block)
 
 
+def _test_files(repo: Path, scripts: Path) -> list[Path]:
+    """Every pytest file that could be about a script, in either of the two test roots."""
+    return sorted(scripts.glob("test_*.py")) + sorted(
+        (repo / "ansible" / "tests").glob("test_*.py")
+    )
+
+
+def _indirect_test(name: str, test_files: list[Path]) -> str:
+    """The test that names this script but is not called `test_<name>.py`.
+
+    `gitops_tick.sh` has five tests, in `ansible/tests/test_gitops_manual_trigger.py`, and
+    reporting it as untested on the naming convention alone put a covered script on the gap
+    list. A module with no test file of its own is likewise often reached through the entry
+    point that imports it.
+
+    It must import the module or name the path. Matching the bare stem credited `deploy.sh`
+    to a test that says the word "deploy", and credited three scripts to THIS generator's
+    own test, which names every script in the tree by construction — coverage laundered out
+    of a substring.
+    """
+    stem = re.escape(Path(name).stem)
+    patterns = [re.compile(rf"scripts/{re.escape(name)}")]
+    if name.endswith(".py"):
+        patterns.append(re.compile(rf"^\s*(?:from|import)\s+{stem}\b", re.MULTILINE))
+    for path in test_files:
+        text = _read(path)
+        if any(pattern.search(text) for pattern in patterns):
+            return path.name
+    return ""
+
+
 def _is_candidate(path: Path) -> bool:
     return (
         path.is_file()
@@ -98,8 +422,10 @@ def _is_candidate(path: Path) -> bool:
     )
 
 
-def build_rows(scripts: Path = SCRIPTS) -> list[dict[str, str]]:
+def build_rows(scripts: Path = SCRIPTS, repo: Path = REPO) -> list[dict[str, str]]:
     """One row per first-party script, sorted by name."""
+    verdicts = classify(repo, scripts)
+    test_files = _test_files(repo, scripts)
     rows = []
     for path in sorted(scripts.glob("*")):
         if not _is_candidate(path):
@@ -115,18 +441,31 @@ def build_rows(scripts: Path = SCRIPTS) -> list[dict[str, str]]:
                 summary, usage = doc.strip().splitlines()[0].strip(), _usage(doc)
         else:
             doc = _shell_docstring(path)
-            summary = (
-                doc.splitlines()[0].strip() if doc.strip() else "(no leading comment)"
-            )
+            # The first NON-EMPTY line: two of these scripts open `#!`, then a bare `#`,
+            # then the sentence. Taking line one left them with a blank summary cell.
+            lines = [line for line in doc.splitlines() if line.strip()]
+            summary = lines[0].strip() if lines else "(no leading comment)"
+            # Two of them open "name.sh — what it does"; the name is already the row label.
+            summary = re.sub(rf"^{re.escape(path.name)}\s+[—-]\s*", "", summary)
             usage = _usage(doc)
 
-        test = scripts / f"test_{path.stem}.py"
+        direct = scripts / f"test_{path.stem}.py"
+        if direct.is_file():
+            test, indirect = direct.name, ""
+        else:
+            test, indirect = "", _indirect_test(path.name, test_files)
+        run, evidence = verdicts.get(
+            path.name, ("adhoc", "no automated caller in the tree")
+        )
         rows.append(
             {
                 "name": path.name,
                 "summary": summary,
                 "usage": usage,
-                "tests": test.name if test.is_file() else "",
+                "tests": test,
+                "indirect_tests": indirect,
+                "run": run,
+                "evidence": evidence,
             }
         )
     return rows
@@ -140,7 +479,13 @@ def _md_cell(value: str) -> str:
 def render_markdown(rows: list[dict[str, str]]) -> str:
     from docs_provenance import generated_banner
 
-    untested = [r for r in rows if not r["tests"]]
+    by_run = {kind: [r for r in rows if r["run"] == kind] for kind in RUNS}
+    unattended = by_run["scheduled"] + by_run["gate"]
+
+    def uncovered(row: dict[str, str]) -> bool:
+        return not row["tests"] and not row["indirect_tests"]
+
+    gaps = [r for r in unattended if uncovered(r)]
 
     parts = [generated_banner("scripts/gen_reference_scripts.py")]
     parts.append("# Scripts\n")
@@ -149,23 +494,62 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
         "module docstring — change the docstring to change this page.\n"
     )
     parts.append(
+        "The sections below split them by **how each one is run**, which is derived from the "
+        "tree rather than declared: a cron `job:`, a `prek.toml` entry, a workflow step, a "
+        "Claude hook, an Ansible task, or an import edge. The *Reached by* column is the "
+        "evidence, so a wrong answer is a wrong answer about a real file.\n"
+    )
+    parts.append(
         '!!! note "What this page does not tell you"\n'
         "    Whether a script is safe to run. The summary is whatever its author wrote, and "
         "nothing here judges blast radius. For the ones that run unattended, and which of "
         "those change state, see [Scheduled jobs](crons.md).\n"
     )
+    untested = [r for r in rows if uncovered(r)]
     parts.append(
-        f"\n**{len(untested)} of {len(rows)} have no test file.** That is not automatically "
-        "wrong — a thin wrapper round another tool may not need one — but it is the list to "
-        "read before trusting a script you have not run.\n"
+        f"\n**{len(gaps)} of the {len(unattended)} scripts that run unattended have no test; "
+        f"{len(untested)} of all {len(rows)} do not.** The first number is the one that "
+        "matters. An untested script a person runs fails in front of that person; an untested "
+        "one a cron or a commit gate runs fails unattended, or blocks everybody.\n"
     )
+    parts.append(
+        '!!! note "Where the Tests column looks"\n'
+        "    First for a `scripts/test_<name>.py`. Failing that, for any test in `scripts/` or "
+        "`ansible/tests/` that names the script — `gitops_tick.sh` has five, in "
+        "`test_gitops_manual_trigger.py`, and the naming convention alone called it untested. "
+        "Those show as *(indirect)*, which means a test exercises it, not that the test is "
+        "about it.\n"
+    )
+    if gaps:
+        parts.append(
+            "".join(f"\n- `{row['name']}` — {row['evidence']}" for row in gaps) + "\n"
+        )
 
-    parts.append("\n## The scripts\n")
-    parts.append("| Script | What it does | Tests |")
-    parts.append("|---|---|---|")
-    for row in rows:
-        test = f"`{row['tests']}`" if row["tests"] else "—"
-        parts.append(f"| `{row['name']}` | {_md_cell(row['summary'])} | {test} |")
+    for kind, heading in (
+        ("scheduled", "Run automatically, on a schedule"),
+        ("gate", "Run automatically, on a commit, CI run, deploy or session"),
+        ("library", "Imported, never run on their own"),
+        ("adhoc", "Run by hand"),
+    ):
+        section = by_run[kind]
+        parts.append(f"\n## {heading}\n")
+        parts.append(f"{len(section)} script(s) — {RUNS[kind]}.\n")
+        if not section:
+            parts.append("None.\n")
+            continue
+        parts.append("| Script | What it does | Reached by | Tests |")
+        parts.append("|---|---|---|---|")
+        for row in section:
+            if row["tests"]:
+                test = f"`{row['tests']}`"
+            elif row["indirect_tests"]:
+                test = f"`{row['indirect_tests']}` *(indirect)*"
+            else:
+                test = "—"
+            parts.append(
+                f"| `{row['name']}` | {_md_cell(row['summary'])} | "
+                f"{_md_cell(row['evidence'])} | {test} |"
+            )
 
     documented = [r for r in rows if r["usage"]]
     parts.append(

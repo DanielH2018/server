@@ -114,7 +114,7 @@ def test_markdown_counts_the_untested_scripts(tmp_path):
     _write(tmp_path / "tested.py", '"""Summary."""\n')
     _write(tmp_path / "test_tested.py", '"""x"""\n')
     out = g.render_markdown(g.build_rows(tmp_path))
-    assert "1 of 2" in out
+    assert "1 of all 2" in out
 
 
 def test_markdown_escapes_a_pipe_in_a_summary(tmp_path):
@@ -141,3 +141,215 @@ def test_the_real_scripts_directory_yields_the_known_shape():
     assert not any(n.startswith(("test_", "_")) for n in names)
     assert "conftest.py" not in names
     assert len(rows) >= 30
+
+
+# --- classify(): how each script is run ------------------------------------------------
+
+
+def _repo(tmp_path):
+    """A synthetic tree with one of every place a script can be invoked from."""
+    scripts = tmp_path / "scripts"
+    for name in ("cronned", "wrapped", "gated", "shipped", "lib", "lonely"):
+        _write(scripts / f"{name}.py", '"""Summary."""\n')
+    _write(scripts / "user.py", '"""Summary."""\nimport lib\n')
+
+    _write(tmp_path / "prek.toml", 'entry = "uv run python scripts/gated.py"\n')
+    _write(
+        tmp_path / ".github" / "workflows" / "ci.yml",
+        "jobs:\n  x:\n    steps:\n      - run: python scripts/shipped.py\n",
+    )
+    _write(
+        tmp_path / "ansible" / "roles" / "r" / "tasks" / "main.yml",
+        """
+        - name: A cron
+          ansible.builtin.cron:
+            name: Nightly thing
+            job: "uv run python scripts/cronned.py"
+        - name: A wrapper cron
+          ansible.builtin.cron:
+            name: Wrapped thing
+            job: "/usr/local/bin/wrap.sh"
+        """,
+    )
+    _write(
+        tmp_path / "ansible" / "roles" / "r" / "templates" / "wrap.sh.j2",
+        "#!/bin/sh\nuv run python scripts/wrapped.py\n",
+    )
+    return tmp_path, scripts
+
+
+def test_a_cron_job_makes_a_script_scheduled(tmp_path):
+    repo, scripts = _repo(tmp_path)
+    verdicts = g.classify(repo, scripts)
+    assert verdicts["cronned.py"][0] == "scheduled"
+    assert "Nightly thing" in verdicts["cronned.py"][1]
+
+
+def test_a_cron_reaches_through_its_wrapper_template(tmp_path):
+    """build_docs.py is named only by docs-refresh.sh, which is what its cron runs."""
+    repo, scripts = _repo(tmp_path)
+    verdicts = g.classify(repo, scripts)
+    assert verdicts["wrapped.py"][0] == "scheduled"
+    assert "wrap.sh" in verdicts["wrapped.py"][1]
+
+
+def test_a_prek_entry_and_a_workflow_step_are_gates(tmp_path):
+    repo, scripts = _repo(tmp_path)
+    verdicts = g.classify(repo, scripts)
+    assert verdicts["gated.py"][0] == "gate"
+    assert verdicts["shipped.py"][0] == "gate"
+
+
+def test_an_imported_module_is_a_library(tmp_path):
+    repo, scripts = _repo(tmp_path)
+    verdicts = g.classify(repo, scripts)
+    assert verdicts["lib.py"][0] == "library"
+    assert "user.py" in verdicts["lib.py"][1]
+
+
+def test_a_script_nothing_reaches_is_adhoc(tmp_path):
+    repo, scripts = _repo(tmp_path)
+    assert g.classify(repo, scripts)["lonely.py"] == (
+        "adhoc",
+        "no automated caller in the tree",
+    )
+
+
+def test_a_test_importing_its_subject_does_not_make_it_a_library(tmp_path):
+    """Otherwise every tested entry point would read as a module nobody runs."""
+    repo, scripts = _repo(tmp_path)
+    _write(scripts / "test_lonely.py", '"""x"""\nimport lonely\n')
+    assert g.classify(repo, scripts)["lonely.py"][0] == "adhoc"
+
+
+def test_the_highest_kind_wins_when_a_script_is_reached_twice(tmp_path):
+    """The costliest way it runs is the one that decides what a break costs."""
+    repo, scripts = _repo(tmp_path)
+    _write(tmp_path / "prek.toml", 'entry = "uv run python scripts/cronned.py"\n')
+    assert g.classify(repo, scripts)["cronned.py"][0] == "scheduled"
+
+
+def test_a_prose_mention_is_not_an_invocation(tmp_path):
+    """Every CLAUDE.md and half the role defaults cite these scripts in backticks."""
+    repo, scripts = _repo(tmp_path)
+    _write(
+        tmp_path / "ansible" / "roles" / "r" / "tasks" / "notes.yml",
+        "- name: See `uv run python scripts/lonely.py` for detail\n",
+    )
+    assert g.classify(repo, scripts)["lonely.py"][0] == "adhoc"
+
+
+def test_a_printed_message_naming_a_script_is_not_an_invocation(tmp_path):
+    """deploy.sh prints the prune_worktrees command when the lock is busy."""
+    repo, scripts = _repo(tmp_path)
+    _write(
+        tmp_path / "ansible" / "hand.sh",
+        'echo "try uv run python scripts/lonely.py" >&2\n',
+    )
+    assert g.classify(repo, scripts)["lonely.py"][0] == "adhoc"
+
+
+def test_a_sentence_in_a_python_string_is_not_an_invocation(tmp_path):
+    """session-health.py prints "(scripts/deploy_staleness.py, exit 4)" as prose."""
+    repo, scripts = _repo(tmp_path)
+    _write(
+        tmp_path / ".claude" / "hooks" / "h.py",
+        'print("the gate (scripts/lonely.py, exit 4) refuses")\n',
+    )
+    assert g.classify(repo, scripts)["lonely.py"][0] == "adhoc"
+
+
+def test_an_argv_element_in_python_source_is_an_invocation(tmp_path):
+    """build_docs.py runs the generators through subprocess, one path per list element."""
+    repo, scripts = _repo(tmp_path)
+    _write(
+        scripts / "runner.py",
+        '"""Summary."""\nimport subprocess\n'
+        'subprocess.run(["python", "scripts/lonely.py", "--out", "x"])\n',
+    )
+    _write(
+        tmp_path / "prek.toml",
+        'entry = "uv run python scripts/gated.py"\n'
+        'other = "uv run python scripts/runner.py"\n',
+    )
+    verdicts = g.classify(repo, scripts)
+    assert verdicts["runner.py"][0] == "gate"
+    assert verdicts["lonely.py"][0] == "gate"
+    assert "runner.py" in verdicts["lonely.py"][1]
+
+
+def test_the_live_tree_classifies_the_names_we_already_know():
+    """A derivation that quietly narrows reads exactly like one that works.
+
+    Every name here has an invocation site someone can open. If one moves to `adhoc`,
+    either the tree changed or the census stopped seeing a whole class of caller.
+    """
+    verdicts = g.classify()
+    expected = {
+        "build_docs.py": "scheduled",
+        "gen_infra_map.py": "scheduled",
+        "secret_rotation.py": "scheduled",
+        "validate_k8s_manifests.py": "gate",
+        "validate_compose_templates.py": "gate",
+        "validate_shell_templates.py": "gate",
+        "validate_ha_config.py": "gate",
+        "validate_config_templates.py": "gate",
+        "validate_grafana_dashboards.py": "gate",
+        "deploy_tags.py": "gate",
+        "deploy_staleness.py": "gate",
+        "smoke_extract.py": "gate",
+        "probe.py": "gate",
+        "docs_provenance.py": "library",
+        "probe_core.py": "library",
+        "deploy.sh": "adhoc",
+        "etcd_restore_drill.sh": "adhoc",
+    }
+    assert {name: verdicts[name][0] for name in expected} == expected
+
+
+def test_every_reference_generator_is_reached_from_the_docs_cron():
+    """build_docs.py runs them, docs-refresh.sh runs build_docs.py, a cron runs that."""
+    verdicts = g.classify()
+    generators = [n for n in verdicts if n.startswith("gen_reference_")]
+    assert len(generators) >= 5
+    assert all(verdicts[name][0] == "scheduled" for name in generators)
+
+
+def test_a_test_that_names_the_path_counts_as_indirect_coverage(tmp_path):
+    """gitops_tick.sh's five tests live in ansible/tests/test_gitops_manual_trigger.py."""
+    repo, scripts = _repo(tmp_path)
+    _write(scripts / "run.sh", "#!/bin/sh\n# Summary.\n")
+    _write(
+        repo / "ansible" / "tests" / "test_elsewhere.py",
+        'WRAPPER = "scripts/run.sh"\n',
+    )
+    rows = {r["name"]: r for r in g.build_rows(scripts, repo)}
+    assert rows["run.sh"]["tests"] == ""
+    assert rows["run.sh"]["indirect_tests"] == "test_elsewhere.py"
+
+
+def test_a_test_that_merely_says_the_word_is_not_coverage(tmp_path):
+    """Matching the bare stem credited `deploy.sh` to a test that says "deploy"."""
+    repo, scripts = _repo(tmp_path)
+    _write(scripts / "deploy.sh", "#!/bin/sh\n# Summary.\n")
+    _write(scripts / "test_other.py", 'MSG = "deploy the thing"\n')
+    rows = {r["name"]: r for r in g.build_rows(scripts, repo)}
+    assert rows["deploy.sh"]["indirect_tests"] == ""
+
+
+def test_this_generators_own_test_does_not_launder_coverage():
+    """It names every script in the tree, so a substring match credits all of them."""
+    rows = {r["name"]: r for r in g.build_rows()}
+    credited = [
+        name
+        for name, row in rows.items()
+        if row["indirect_tests"] == "test_gen_reference_scripts.py"
+    ]
+    assert credited == []
+
+
+def test_markdown_splits_the_scripts_by_how_they_run(tmp_path):
+    repo, scripts = _repo(tmp_path)
+    out = g.render_markdown(g.build_rows(scripts, repo))
+    for heading in ("on a schedule", "Imported, never run", "Run by hand"):
+        assert heading in out
