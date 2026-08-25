@@ -50,6 +50,12 @@ plugins:
 # using the domain of the URL the page was served from, and resolves the nav's sentinel hosts
 # the same way. The generators cannot bake an FQDN in: they parse the tree statically and
 # `domain` is SOPS-sourced. See the file's own header.
+# Table overflow on the wide generated reference tables. The file's own header carries the
+# mechanism; the short version is that Material's stock table rules clip long cells instead of
+# wrapping them, and the scrollbar that would reach the clipped text sits several screens down.
+extra_css:
+  - assets/extra.css
+
 extra_javascript:
   - assets/fqdn-links.js
 
