@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/gen_reference_scripts.py
-generated_at: 2026-08-25 16:03 UTC
-generated_sha: 548248f0
+generated_at: 2026-08-25 17:07 UTC
+generated_sha: 1a987189
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 548248f0
 
 # Scripts
 
-50 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
+55 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
 
 The sections below split them by **how each one is run**, which is derived from the tree rather than declared: a cron `job:`, a `prek.toml` entry, a workflow step, a Claude hook, an Ansible task, or an import edge. The *Reached by* column is the evidence, so a wrong answer is a wrong answer about a real file.
 
@@ -20,7 +20,7 @@ The sections below split them by **how each one is run**, which is derived from 
     Whether a script is safe to run. The summary is whatever its author wrote, and nothing here judges blast radius. For the ones that run unattended, and which of those change state, see [Scheduled jobs](crons.md).
 
 
-**0 of the 21 scripts that run unattended have no test; 8 of all 50 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
+**0 of the 21 scripts that run unattended have no test; 8 of all 55 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
 
 !!! note "Where the Tests column looks"
     First for a `scripts/test_<name>.py`. Failing that, for any test in `scripts/` or `ansible/tests/` that names the script — `gitops_tick.sh` has five, in `test_gitops_manual_trigger.py`, and the naming convention alone called it untested. Those show as *(indirect)*, which means a test exercises it, not that the test is about it.
@@ -63,7 +63,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Imported, never run on their own
 
-12 script(s) — imported by another script — not an entry point.
+17 script(s) — imported by another script — not an entry point.
 
 | Script | What it does | Reached by | Tests |
 |---|---|---|---|
@@ -75,8 +75,13 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/infra_map/infra_map_live.py` | Live state: what the cluster and the Pi report is actually running. | imported by gen_infra_map.py | `test_gen_infra_map.py` *(indirect)* |
 | `scripts/infra_map/infra_map_model.py` | Reconciliation: overlay live state onto the declared skeleton. | imported by gen_infra_map.py | — |
 | `scripts/infra_map/infra_map_render.py` | Rendering: turn the reconciled model into one self-contained HTML page. | imported by gen_infra_map.py | `test_gen_infra_map.py` *(indirect)* |
-| `scripts/diagnostics/probe_core.py` | Shared plumbing for probe's subcommands: endpoints, secrets, HTTP, durations. | imported by postflight.py, probe.py, probe_ha.py, probe_storage.py | `test_probe.py` *(indirect)* |
+| `scripts/diagnostics/probe_alerts.py` | `probe.py alerts` -- DOWN history reconstructed from Loki, since Kuma keeps only current state. | imported by probe.py | `test_probe_alerts.py` |
+| `scripts/diagnostics/probe_arr.py` | `probe.py arr <app> <api-path>` — read-only *arr API GETs against sonarr/radarr/prowlarr. | imported by postflight.py, probe.py | `test_probe.py` *(indirect)* |
+| `scripts/diagnostics/probe_core.py` | Shared plumbing for probe's subcommands: endpoints, secrets, HTTP, durations. | imported by postflight.py, probe.py, probe_alerts.py, probe_arr.py, probe_ha.py, probe_health.py, probe_metrics.py, probe_monitors.py, probe_storage.py | `test_probe.py` *(indirect)* |
 | `scripts/diagnostics/probe_ha.py` | Home Assistant: live state, automations, and the read-only WebSocket trace client. | imported by postflight.py, probe.py | `test_probe_ha.py` |
+| `scripts/diagnostics/probe_health.py` | `probe.py health <svc>` — the post-deploy gate, plus the argv builders it shares. | imported by probe.py, probe_arr.py, probe_monitors.py | `test_probe_health.py` |
+| `scripts/diagnostics/probe_metrics.py` | `probe.py metric` and `probe.py loki-query` -- Prometheus and Loki queries. | imported by probe.py | `test_probe.py` *(indirect)* |
+| `scripts/diagnostics/probe_monitors.py` | `probe.py monitors` and `probe.py kuma-drift` -- what is down, and what is missing. | imported by probe.py | `test_probe.py` *(indirect)* |
 | `scripts/diagnostics/probe_storage.py` | B2 and Longhorn: the transaction ledger, backup spend, and the object listings. | imported by probe.py | `test_probe_storage.py` |
 | `scripts/docs/route_facts.py` | Shared route facts for the reference generators. | imported by gen_reference_networking.py, service_catalog.py | `test_route_facts.py` |
 

@@ -7,6 +7,7 @@ down leaves the ratio at N/N up.
 
 import pytest
 
+import probe_monitors
 import probe
 import probe_core as core
 import probe_storage as storage
@@ -437,7 +438,7 @@ stringData:
 
 
 def test_parse_declared_monitors_reads_names_types_and_gating():
-    declared = probe.parse_declared_monitors(TEMPLATE_SAMPLE)
+    declared = probe_monitors.parse_declared_monitors(TEMPLATE_SAMPLE)
     # Notifications are not monitors and never appear in monitor_status — counting them would
     # make every run report two phantom missing entries.
     assert "Homelab Alerts" not in declared
@@ -457,9 +458,9 @@ def test_parse_declared_monitors_reads_names_types_and_gating():
 def test_kuma_drift_reports_a_declared_monitor_that_is_not_live():
     # The 2026-08-20 case: the tile is absent from the exporter, not down, so `monitors`
     # reported 81/81 up for a day. Long-uptime Kuma, so PENDING cannot be the explanation.
-    declared = probe.parse_declared_monitors(TEMPLATE_SAMPLE)
+    declared = probe_monitors.parse_declared_monitors(TEMPLATE_SAMPLE)
     live = {"Root Disk", "k3s Grafana"}
-    text, code = probe.format_kuma_drift(declared, live, 86400 * 3)
+    text, code = probe_monitors.format_kuma_drift(declared, live, 86400 * 3)
     assert code == 1
     assert "WG Pi Peer Backup: declared, not live" in text
 
@@ -468,9 +469,9 @@ def test_kuma_drift_calls_a_push_monitor_pending_inside_its_own_interval():
     # Kuma exports a monitor only after it beats, so a restart empties every push series. A
     # monitor whose interval has not elapsed since the restart is not yet due — flagging it
     # would make this check fail after every deploy.
-    declared = probe.parse_declared_monitors(TEMPLATE_SAMPLE)
+    declared = probe_monitors.parse_declared_monitors(TEMPLATE_SAMPLE)
     live = {"k3s Grafana"}
-    text, code = probe.format_kuma_drift(declared, live, 30)
+    text, code = probe_monitors.format_kuma_drift(declared, live, 30)
     assert code == 0
     assert "no beat due yet" in text
     assert "declared, not live" not in text
@@ -481,8 +482,8 @@ def test_kuma_drift_treats_every_type_as_pending_after_a_restart():
     # Kuma's exporter emits a monitor only after it beats, and that applies to http/port/dns
     # tiles too — restricting the pending rule to push monitors made a routine deploy look like
     # mass drift. The slack covers the exporter's and Prometheus's scrape lag on top.
-    declared = probe.parse_declared_monitors(TEMPLATE_SAMPLE)
-    text, code = probe.format_kuma_drift(declared, set(), 88)
+    declared = probe_monitors.parse_declared_monitors(TEMPLATE_SAMPLE)
+    text, code = probe_monitors.format_kuma_drift(declared, set(), 88)
     assert code == 0
     assert "k3s Grafana: no beat due yet" in text
 
@@ -490,8 +491,8 @@ def test_kuma_drift_treats_every_type_as_pending_after_a_restart():
 def test_kuma_drift_fails_loud_when_the_pod_age_is_unreadable():
     # Same rule as `health`'s unreadable restart time: an unknown age must not silently excuse
     # a missing monitor, or the check reports green exactly when it cannot tell.
-    declared = probe.parse_declared_monitors(TEMPLATE_SAMPLE)
-    text, code = probe.format_kuma_drift(declared, {"k3s Grafana"}, None)
+    declared = probe_monitors.parse_declared_monitors(TEMPLATE_SAMPLE)
+    text, code = probe_monitors.format_kuma_drift(declared, {"k3s Grafana"}, None)
     assert code == 1
     assert "Root Disk: declared, not live" in text
 
@@ -499,17 +500,17 @@ def test_kuma_drift_fails_loud_when_the_pod_age_is_unreadable():
 def test_kuma_drift_reports_a_live_monitor_nobody_declared():
     # `kubectl apply` leaves orphaned objects behind, and AutoKuma's on_delete=delete only
     # removes what it still tracks — a monitor whose declaration was dropped can outlive it.
-    declared = probe.parse_declared_monitors(TEMPLATE_SAMPLE)
+    declared = probe_monitors.parse_declared_monitors(TEMPLATE_SAMPLE)
     live = {"Root Disk", "WG Pi Peer Backup", "k3s Grafana", "Retired Tile"}
-    text, code = probe.format_kuma_drift(declared, live, 86400)
+    text, code = probe_monitors.format_kuma_drift(declared, live, 86400)
     assert code == 1
     assert "Retired Tile: live, not declared" in text
 
 
 def test_kuma_drift_skips_a_monitor_whose_gate_is_genuinely_unset():
-    declared = probe.parse_declared_monitors(TEMPLATE_SAMPLE)
+    declared = probe_monitors.parse_declared_monitors(TEMPLATE_SAMPLE)
     live = {"Root Disk", "WG Pi Peer Backup", "k3s Grafana"}
-    text, code = probe.format_kuma_drift(
+    text, code = probe_monitors.format_kuma_drift(
         declared, live, 86400, gate_states={"etcd_snapshot_push_token": False}
     )
     assert code == 0
@@ -525,11 +526,11 @@ def test_kuma_drift_reports_drift_when_the_gate_is_set_but_the_monitor_is_absent
     gated monitor that vanishes was invisible twice: absent from the exporter, and excused by
     the drift check written to catch exactly that.
     """
-    declared = probe.parse_declared_monitors(TEMPLATE_SAMPLE)
+    declared = probe_monitors.parse_declared_monitors(TEMPLATE_SAMPLE)
     live = {"Root Disk", "WG Pi Peer Backup", "k3s Grafana"}
     # Past the monitor's own 90000s interval, so `pending` cannot absorb it — a gate-set
     # monitor inside its interval is still legitimately pending, not drift.
-    text, code = probe.format_kuma_drift(
+    text, code = probe_monitors.format_kuma_drift(
         declared, live, 86400 * 3, gate_states={"etcd_snapshot_push_token": True}
     )
     assert code == 1
@@ -541,9 +542,9 @@ def test_kuma_drift_says_so_when_a_gate_cannot_be_read():
     """An unreadable gate and an unset one must not look alike — that equivalence is what let
     the case above stay silent. Unreadable does not fail the exit code (no age key on this
     host is a normal state), but it is named rather than swallowed."""
-    declared = probe.parse_declared_monitors(TEMPLATE_SAMPLE)
+    declared = probe_monitors.parse_declared_monitors(TEMPLATE_SAMPLE)
     live = {"Root Disk", "WG Pi Peer Backup", "k3s Grafana"}
-    text, code = probe.format_kuma_drift(
+    text, code = probe_monitors.format_kuma_drift(
         declared, live, 86400, gate_states={"etcd_snapshot_push_token": None}
     )
     assert code == 0
