@@ -1,0 +1,36 @@
+/* Site-wide overrides on top of the Material theme.
+ *
+ * WHY THIS FILE EXISTS. The wide generated reference tables cut long cells off mid-word --
+ * services.md worst, where the Auto-deploy column carries paragraph-length rationale. The
+ * theme wraps every table in `.md-typeset__scrollwrap` (overflow-x: auto), so the clipped
+ * text is reachable, but only by a horizontal scrollbar parked at the bottom of a table that
+ * runs several screens tall. A reader at the top of the page sees severed sentences and no
+ * affordance.
+ *
+ * Auto table layout may not lay a table out narrower than the sum of its columns' min-content
+ * widths, so the fix has to shrink that sum rather than chase the clipping. Two stock rules
+ * inflate it, and both are addressed below.
+ */
+
+/* Min-content width is otherwise the longest unbreakable token, and the Route column's FQDNs
+ * run past 30 characters. `anywhere` rather than `break-word`: only `anywhere` participates in
+ * intrinsic size calculation, which is the quantity that decides whether the table overflows
+ * at all. `break-word` would break the text at render time and leave the overflow in place. */
+.md-typeset table:not([class]) th,
+.md-typeset table:not([class]) td {
+  overflow-wrap: anywhere;
+}
+
+/* Material sets this floor unconditionally, at a 125-150% root -- 100-120px per header, so a
+ * six-column table cannot lay out below ~600-720px however short its content is. The floor
+ * exists to stop a header being squeezed to a vertical ribbon; the rule above makes a squeezed
+ * header wrap instead, so it now buys nothing and costs a hard lower bound on table width. */
+.md-typeset table:not([class]) th {
+  min-width: 0;
+}
+
+/* UNVERIFIED: which of the two rules binds at any given viewport. The session that wrote this
+ * had no browser, so the mechanism above is read off Material's stylesheet, not measured
+ * against a render. Both rules are inert on a table that already fits -- auto layout still
+ * sizes columns by max-content where the space exists -- so the fix is safe either way, but
+ * the attribution is inference. */
