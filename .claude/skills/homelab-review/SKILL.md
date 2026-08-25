@@ -65,6 +65,14 @@ discovery. A third appearance is an escalation signal (it belongs in a durable o
 lint, a CLAUDE.md rule), and re-presenting it as new is how it stays unowned. Verify each is still
 live before reporting: the register is only as fresh as the last ledger.
 
+**Run `uv run python scripts/dev/register_audit.py` before you read the register.** It reports
+which rows look CLOSED against the repo as it stands today, so a row whose fix has already
+shipped is caught before a reviewer re-derives it cold. That failure has happened four times;
+two rows were still listed open on 2026-08-22 with the fixes shipped days earlier. It is
+read-only, best-effort and always exits 0 — a row it cannot resolve is reported UNRESOLVED for
+you to read rather than dropped, so treat its output as a **prior on where to look**, not a
+verdict. You still confirm each row yourself at a cited `file:line`.
+
 **When the standing list and a dated ledger disagree, the ledger wins** and the standing list is
 stale — say so in the report so the next distillation fixes it.
 

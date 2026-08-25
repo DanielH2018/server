@@ -225,7 +225,28 @@ def format_k8s_health(deploy, pods, service, now):
     return (line, 0 if rolled_out and not recent else 1)
 
 
+def resolve_service_ip(name):
+    """A workload's k8s Service ClusterIP — the k8s replacement for `docker inspect`ing a
+    container's bridge IP.
+
+    A ClusterIP is stable across pod restarts and redeploys, so this does not reintroduce
+    the hand-copied-IP staleness the docker lookup existed to avoid. Callers reach the
+    Service directly rather than through k8s_endpoint, which would put Traefik and Authelia
+    in front of an API path that has no bypass rule.
+    """
+    ns = core.k8s_namespace()
+    out = subprocess.run(k8s_service_ip_argv(name, ns), capture_output=True, text=True)
+    if out.returncode != 0:
+        raise SystemExit(f"kubectl get service {name} failed: {out.stderr.strip()}")
+    ip = out.stdout.strip()
+    if not ip:
+        raise SystemExit(f"{name} has no ClusterIP (does the Service exist?)")
+    return ip
+
+
 def resolve_ip(container):
+    """A Docker container's bridge IP. daniel-pi is the only host that still has Docker —
+    on either cluster node this raises FileNotFoundError, so use resolve_service_ip."""
     out = subprocess.run(inspect_ip_argv(container), capture_output=True, text=True)
     if out.returncode != 0:
         raise SystemExit(f"docker inspect {container} failed: {out.stderr.strip()}")

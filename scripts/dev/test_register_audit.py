@@ -91,6 +91,25 @@ def test_parse_table_rows_stops_at_next_section(tmp_path):
     assert all("decoy" not in r.item and "never appear" not in r.item for r in rows)
 
 
+def test_an_escaped_pipe_in_the_prose_does_not_shift_the_columns(tmp_path):
+    """A Markdown cell boundary is an UNESCAPED pipe.
+
+    The live push-token row carries a backticked `grep -E 'a\\|b\\|c'` alternation. Splitting
+    on every `|` walked the cell boundaries into the middle of the sentence and reported
+    `runs=longhorn_backup\\` — a row parsed into the wrong columns, which is worse than one
+    that fails to parse, because it still prints a plausible-looking answer.
+    """
+    path = make_register(
+        tmp_path,
+        r"| token row citing `grep -E '(a\|b\|c)_push_token'` here | 2026-02-02 | 3 |",
+    )
+    rows = parse_table_rows(find_section(path.read_text(), "Open and recurring"))
+    assert len(rows) == 1
+    assert rows[0].first_seen == "2026-02-02"
+    assert rows[0].runs_carried == "3"
+    assert "push_token" in rows[0].item
+
+
 def test_unresolved_when_no_reference_extractable(tmp_path):
     register = make_register(
         tmp_path,

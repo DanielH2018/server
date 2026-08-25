@@ -17,8 +17,8 @@ import postflight
 
 @pytest.fixture(autouse=True)
 def stub_host(monkeypatch):
-    """Every container resolves, and every secret decrypts to a placeholder."""
-    monkeypatch.setattr(postflight, "container_ip", lambda name: "10.0.0.1")
+    """Every workload resolves, and every secret decrypts to a placeholder."""
+    monkeypatch.setattr(postflight, "service_ip", lambda name: "10.0.0.1")
     monkeypatch.setattr(postflight, "secret", lambda name: (f"<{name}>", ""))
     # check_ha_token reaches HA via probe_core.ha_base(), which decrypts the domain from
     # SOPS — stub it so no test needs the age key (CI has none). Same for the cluster
@@ -88,6 +88,50 @@ def test_arr_key_ok(monkeypatch):
     assert postflight.check_arr_key("radarr")[0] == postflight.OK
 
 
+def test_an_unreachable_arr_skips_rather_than_blaming_the_key(monkeypatch):
+    """`get()` returns status 0 when curl itself failed, which is a placement fact.
+
+    Reporting it as FAIL read "prowlarr_api_key doesn't match the app's own key" while the
+    key was fine — the pod was on the other node, whose NetworkPolicy admits no ipBlock for
+    this host. That message sends someone to rotate a working credential.
+    """
+    respond(monkeypatch, 0, "curl: (7) Failed to connect")
+    status, detail = postflight.check_arr_key("prowlarr")
+    assert status == postflight.SKIP
+    assert "unreachable" in detail
+    assert "api_key" not in detail
+
+
+def test_an_unreachable_jellyfin_skips_too(monkeypatch):
+    """The same branch, because fixing only the *arr path would leave the sibling wrong."""
+    respond(monkeypatch, 0, "curl: (7) Failed to connect")
+    assert postflight.check_jellyfin_key()[0] == postflight.SKIP
+
+
+def test_the_resolver_reads_a_clusterip_not_a_docker_bridge_ip(monkeypatch):
+    """Docker is gone from both cluster nodes, so a bridge-IP lookup raises FileNotFoundError.
+
+    Every check reaching a workload directly was dead that way from the 2026-08-14 retirement
+    until 2026-08-25, and reported the FileNotFoundError as the check's own result.
+    """
+    seen = []
+    monkeypatch.setattr(
+        postflight.probe_health.core, "k8s_namespace", lambda: "homelab"
+    )
+
+    class Result:
+        returncode, stdout, stderr = 0, "10.43.0.9\n", ""
+
+    monkeypatch.setattr(
+        postflight.probe_health.subprocess,
+        "run",
+        lambda argv, **kw: (seen.append(argv), Result())[1],
+    )
+    assert postflight.probe_health.resolve_service_ip("sonarr") == "10.43.0.9"
+    assert "docker" not in seen[0]
+    assert "service" in seen[0]
+
+
 def test_jellyfin_key_mismatch_fails(monkeypatch):
     respond(monkeypatch, 401)
     assert postflight.check_jellyfin_key()[0] == postflight.FAIL
@@ -119,11 +163,11 @@ def test_authelia_missing_oidc_material_fails(monkeypatch):
     assert "authelia_oidc_hmac_secret" in detail
 
 
-def test_missing_container_skips_not_fails(monkeypatch):
+def test_a_workload_with_no_service_skips_not_fails(monkeypatch):
     def absent(name):
-        raise postflight.Skip(f"{name} has no container IP (is it running?)")
+        raise postflight.Skip(f"{name} has no ClusterIP (does the Service exist?)")
 
-    monkeypatch.setattr(postflight, "container_ip", absent)
+    monkeypatch.setattr(postflight, "service_ip", absent)
     monkeypatch.setattr(
         postflight,
         "CHECKS",
