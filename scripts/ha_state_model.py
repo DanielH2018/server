@@ -467,20 +467,26 @@ def cmd_refresh(get_states=None, get_services=None) -> int:
     Talks to HA the same way probe.py's own `ha` subcommands do — base URL + --resolve pin. It
     used to call probe.resolve_ip(probe.HA_CONTAINER), a Docker-era container lookup that stopped
     existing when HA moved to k3s, so `refresh` died with AttributeError from that cutover until
-    2026-08-16. It is the ONLY live path in this script, which is why a stale external_entities.yml
-    silently outlived two removed sensors."""
+    2026-08-16. It broke the same way a second time when probe.py was split up: the helpers now
+    live in probe_core (ha_base/ha_resolve) and probe_ha (ha_token/ha_get/ha_get_url), and a bare
+    `probe.` prefix raised AttributeError again. It is the ONLY live path in this script, which is
+    why a stale external_entities.yml silently outlived two removed sensors."""
     if get_states is None or get_services is None:
         import json
-        import probe
 
-        base = probe.ha_base()
-        resolve = probe.ha_resolve()
-        token = probe.ha_token()
+        import probe_core
+        import probe_ha
+
+        base = probe_core.ha_base()
+        resolve = probe_core.ha_resolve()
+        token = probe_ha.ha_token()
     if get_states is None:
         live = [
             s["entity_id"]
             for s in json.loads(
-                probe.ha_get(probe.ha_get_url(base, "states"), token, resolve=resolve)
+                probe_ha.ha_get(
+                    probe_ha.ha_get_url(base, "states"), token, resolve=resolve
+                )
             )
         ]
     else:
@@ -488,7 +494,9 @@ def cmd_refresh(get_states=None, get_services=None) -> int:
     if get_services is None:
         services = parse_services(
             json.loads(
-                probe.ha_get(probe.ha_get_url(base, "services"), token, resolve=resolve)
+                probe_ha.ha_get(
+                    probe_ha.ha_get_url(base, "services"), token, resolve=resolve
+                )
             )
         )
     else:

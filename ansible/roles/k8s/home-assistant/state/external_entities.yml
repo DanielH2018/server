@@ -37,6 +37,9 @@ entities:
   - binary_sensor.aqara_fp300_presence
   - binary_sensor.pixel_watch_3_bedtime_mode
   - binary_sensor.pixel_watch_3_on_body_sensor
+  - binary_sensor.window_sensor_battery_low
+  - binary_sensor.window_sensor_contact
+  - binary_sensor.window_sensor_tamper
   - binary_sensor.zigbee2mqtt_bridge_connection_state
   - button.air_purifier_reset_total_energy
   - button.airgradient_lamp_reset_total_energy
@@ -205,6 +208,8 @@ entities:
   - sensor.sun_next_setting
   - sensor.tower_fan_temperature
   - sensor.ups_energy
+  - sensor.window_sensor_battery
+  - sensor.window_sensor_voltage
   - sensor.zigbee2mqtt_bridge_version
   - sun.sun
   - switch.adaptive_lighting_bedroom_adaptive_lighting_adapt_brightness_bedroom
@@ -243,5 +248,6 @@ entities:
   - update.desk_surge_protector_strip
   - update.dreo_smart_device_integration_update
   - update.hacs_update
+  - update.window_sensor
   - weather.forecast_home
   - zone.home
