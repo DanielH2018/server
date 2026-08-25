@@ -79,6 +79,74 @@ def test_nav_covers_every_toplevel_doc():
     )
 
 
+def _patterns(config, key):
+    raw = config.get(key) or ""
+    return [line.strip() for line in raw.splitlines() if line.strip()]
+
+
+def _exclude_patterns(config):
+    """Both ways a page can be accounted for without a nav entry.
+
+    `exclude_docs` means "do not build it"; `not_in_nav` means "build and serve it, but do
+    not link it". They are different decisions and mkdocs treats them differently — what
+    matters to this test is only that SOMEONE made one of them.
+    """
+    return _patterns(config, "exclude_docs") + _patterns(config, "not_in_nav")
+
+
+def _excluded(rel: str, patterns) -> bool:
+    return any(
+        rel == pat or rel.startswith(pat) if pat.endswith("/") else rel == pat
+        for pat in patterns
+    )
+
+
+def test_every_doc_is_either_in_the_nav_or_explicitly_excluded():
+    """The whole tree, not just the top level.
+
+    `test_nav_covers_every_toplevel_doc` globs `*.md` — one directory deep — which is the
+    scope of the change it shipped with. Everything in a SUBDIRECTORY was outside it, and
+    mkdocs builds and serves those pages regardless of the nav, logging an unlinked page at
+    INFO so `--strict` does not fail either (2026-08-25 review M-7).
+
+    A page must therefore be one of two things on purpose: linked, or named in
+    `exclude_docs`. Silence is no longer an option.
+
+    Note what this can and cannot bind. It walks the CHECKOUT, so the 11 gitignored
+    `superpowers/` pages are absent in CI and this passes over them vacuously -- their
+    protection is the `exclude_docs` entry itself, which applies wherever the site is built
+    from, including the host working tree the cron uses. This test keeps that entry honest
+    for everything tracked.
+    """
+    config = _load_config()
+    docs_dir = REPO / config.get("docs_dir", "docs")
+    listed = set(_nav_paths(config["nav"]))
+    patterns = _exclude_patterns(config)
+
+    unreachable = sorted(
+        rel
+        for p in docs_dir.rglob("*.md")
+        if (rel := p.relative_to(docs_dir).as_posix()) not in listed
+        and not _excluded(rel, patterns)
+    )
+    assert not unreachable, (
+        "these pages are built and served but neither linked from the nav nor named in "
+        "exclude_docs, so nothing points at them and nothing decided they should exist: "
+        f"{unreachable}"
+    )
+
+
+def test_the_untracked_plans_directory_is_excluded():
+    """Untracked is not unpublished. The docs cron builds from the host's working tree, so
+    the gitignored `docs/superpowers/` plans were served from an internet-facing site.
+    Pinned by name because the directory does not exist in a fresh checkout, which is
+    exactly why the test above cannot see it.
+    """
+    assert "superpowers/" in _patterns(_load_config(), "exclude_docs"), (
+        "docs/superpowers/ is gitignored but still built from the host's working tree"
+    )
+
+
 def test_an_external_nav_entry_uses_the_sentinel_host():
     """A real domain typed into the nav would work on one tier and break on the other.
 

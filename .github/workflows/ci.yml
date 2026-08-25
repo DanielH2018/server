@@ -218,6 +218,17 @@ jobs:
         if: github.event_name != 'pull_request' || steps.changed.outputs.mode == 'full'
         run: prek run --all-files --color always
 
+      # `mkdocs build --strict` ran nowhere except the twice-daily docs-refresh cron, so a
+      # broken internal link reached master and the cron discovered it — build_site() bails
+      # out and leaves the PREVIOUS site serving, which means the docs silently stop updating
+      # and nothing says why until someone reads the journal (2026-08-25 review M-3).
+      #
+      # Deliberately a CI step and NOT a prek hook. A hook scoped `^(docs/|mkdocs\.yml)`
+      # would match the paths docs-refresh.sh itself stages and commits with hooks running,
+      # which is the widening prek.toml:347 forbids in writing — it would wedge the cron.
+      - name: Build the docs site (mkdocs --strict)
+        run: uv run mkdocs build --strict --site-dir "$RUNNER_TEMP/docs-site"
+
   renovate-config:
     name: renovate config validator
     runs-on: ubuntu-latest

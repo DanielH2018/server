@@ -53,10 +53,31 @@ plugins:
 extra_javascript:
   - assets/fqdn-links.js
 
+# Pages that are BUILT unless named here. mkdocs serves everything under docs_dir whether or
+# not the nav links it, and it logs an unlinked page at INFO — so `--strict` does not catch
+# one, and neither does reading the nav.
+#
+# `superpowers/` is 11 design plans kept on disk and deliberately gitignored (.gitignore:5-6).
+# Untracked is not unpublished: the cron builds from the host's working tree, so they were
+# being served from an internet-facing site. They are the only pages here with a real exposure
+# delta — this repo is PUBLIC, so everything tracked is world-readable already and excluding it
+# protects nothing. `adr/template.md` is a fill-in-the-blanks stub, not a decision.
+exclude_docs: |
+  superpowers/
+  adr/template.md
+
+# Built and served on purpose, but deliberately absent from the nav. `archive/` is the
+# historical record of executed work — other docs and CLAUDE.md link INTO it, so excluding it
+# would 404 those links, while listing 38 superseded planning docs in the nav would bury the
+# live pages. Declaring it here is what separates "decided to leave unlinked" from "nobody
+# noticed", which is the distinction the nav coverage test now enforces.
+not_in_nav: |
+  archive/
+
 # ENFORCED by scripts/test_mkdocs_config.py, in both directions: every entry below must
-# resolve to a file, and every docs/*.md must appear here. A document absent from the nav is
-# still built and served, but nothing links to it — which is indistinguishable from it not
-# existing.
+# resolve to a file, and every docs/**.md must appear here OR be matched by exclude_docs above.
+# A document absent from the nav is still built and served, but nothing links to it — which is
+# indistinguishable from it not existing.
 nav:
   - Home: index.md
   # A nav heading that is only a link, off the site to the artifacts browser. The host is a
