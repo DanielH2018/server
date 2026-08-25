@@ -56,3 +56,15 @@
 .md-grid {
   max-width: 80rem;
 }
+
+/* A link into the Scripts reference lands on one row of a 47-row table, and a fragment that
+ * scrolls to a table cell moves the page without saying which row it moved to. The id sits on
+ * the Script cell (scripts/_mkdocs_repo_links.py injects it at build time), so `:target` marks
+ * that cell and `:has()` carries the mark across the rest of the row. */
+.md-typeset table:not([class]) td code:target {
+  font-weight: 700;
+}
+
+.md-typeset table:not([class]) tr:has(code:target) {
+  background-color: var(--md-typeset-mark-color);
+}
