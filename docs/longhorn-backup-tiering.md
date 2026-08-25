@@ -103,7 +103,7 @@ is luck, not design — the split is by list position and the cost is by block c
 > here is per block. The worst projected shard is now **~220 Class C against a 2,100 budget** (the
 > 2,500 cap less a 400 reserve), where d2 alone used to be 1,359. The live numbers are
 > `k3s_longhorn_daily_backup_budget` in `ansible/roles/setup/k3s/defaults/main.yml` and
-> `uv run python scripts/probe/probe.py b2-budget`, which prices every shard against the current store.
+> `uv run python scripts/diagnostics/probe.py b2-budget`, which prices every shard against the current store.
 > The reasoning below is still correct; only the magnitudes moved.
 
 ### Retention is per job, and only while that job still selects the volume
@@ -134,7 +134,7 @@ its blocks are gone — the first drain pass reported 1,676/1,676 deleted and st
 volumes over retention, caught only by re-listing afterwards. The operation reporting success is
 not evidence of the end state.
 
-**Run `uv run python scripts/probe/probe.py b2-budget` after adding a volume or changing a shard.** It
+**Run `uv run python scripts/diagnostics/probe.py b2-budget` after adding a volume or changing a shard.** It
 re-derives the projection from one listing of the live bucket (~10 Class C) and exits non-zero if
 a shard is over budget. Nothing else will announce the drift, because the cost grows quietly with
 stored blocks rather than with anything a deploy touches.

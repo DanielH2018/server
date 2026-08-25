@@ -246,7 +246,7 @@ def test_no_cross_host_token_is_badly_overdue():
         f"cross-host push tokens more than {grace_days} days overdue: {badly_overdue}. These "
         f"are skipped by the unattended weekly cron BY DESIGN, so nothing rotates them but a "
         f"person. Rotate them (docs/secret-rotation.md), then `uv run python "
-        f"scripts/secret_rotation.py sync` and commit."
+        f"scripts/secrets_mgmt/secret_rotation.py sync` and commit."
     )
 
 

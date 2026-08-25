@@ -52,7 +52,7 @@ def log(*args) -> None:
 
 def resolve_ip(container: str) -> str:
     """First bridge IP of a container via docker inspect (resolved at run time — it changes on
-    recreate). Mirrors scripts/probe/probe.py's resolve_ip; the host can reach any of a container's IPs."""
+    recreate). Mirrors scripts/diagnostics/probe.py's resolve_ip; the host can reach any of a container's IPs."""
     out = subprocess.run(
         [
             "docker",

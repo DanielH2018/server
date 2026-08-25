@@ -62,7 +62,7 @@ crashlooping pod — "the site is not built" is an operator problem, not a rollo
 
 ## Verifying a change actually landed
 
-`uv run python scripts/probe/probe.py health docs` gates the rollout and the 180s restart window. It
+`uv run python scripts/diagnostics/probe.py health docs` gates the rollout and the 180s restart window. It
 cannot see whether the site rendered: the Authelia middleware answers with a 302 before Traefik
 reaches nginx, so a green probe plus a working redirect proves nothing about content.
 
