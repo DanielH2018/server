@@ -1937,7 +1937,12 @@
 - id: bedroom_window_left_open
   alias: Bedroom window left open reminder
   description: Remind me 15 minutes after the window is opened, and dismiss the reminder when it's closed.
-  mode: single
+  # queued, not single: two triggers feed one choose, and the close branch is the way OUT of the
+  # state the open branch creates. Under `single` a close arriving while the reminder's notify is
+  # still running is DROPPED with a warning, and the dismissal never happens. Same shape and same
+  # reason as bedroom_fan_manual_detect above.
+  mode: queued
+  max: 5
   trigger:
     - platform: state
       entity_id: binary_sensor.window_sensor_contact
