@@ -32,3 +32,8 @@ sensor.aqara_fp300_temperature:
   friendly_name: Temperature
 sensor.aqara_fp300_humidity:
   friendly_name: Humidity
+# Sonoff SNZB-04 contact sensor. Z2M maps the contact cluster to device_class: door for every
+# SNZB-04, and it is mounted on a window here, so override it. `window` renders the same
+# Open/Closed states with a window icon and the right voice-assistant phrasing.
+binary_sensor.window_sensor_contact:
+  device_class: window
