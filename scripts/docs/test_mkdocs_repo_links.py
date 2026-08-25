@@ -16,7 +16,7 @@ import yaml
 
 import _mkdocs_repo_links as hook
 
-REPO = Path(__file__).resolve().parent.parent
+REPO = Path(__file__).resolve().parent.parent.parent
 DOCS = REPO / "docs"
 SCRIPTS_MD = DOCS / "reference/scripts.md"
 
@@ -47,48 +47,54 @@ def _render(text: str) -> str:
 
 
 @pytest.fixture(scope="module")
-def names() -> set[str]:
-    return hook.script_names(SCRIPTS_MD.read_text())
+def paths() -> set[str]:
+    return hook.script_paths(SCRIPTS_MD.read_text())
 
 
 @pytest.fixture(scope="module")
-def index(names: set[str]) -> dict[str, tuple[str, str]]:
+def index(paths: set[str]) -> dict[str, tuple[str, str]]:
     doc_uris = {
         path.relative_to(DOCS).as_posix()
         for path in DOCS.rglob("*.md")
         if not path.relative_to(DOCS).as_posix().startswith(_EXCLUDED)
     }
-    return hook.build_index(doc_uris, names, hook.shared_basenames(REPO, names))
+    return hook.build_index(doc_uris, paths, hook.ambiguous_basenames(REPO, paths))
 
 
-def test_every_script_on_the_page_is_read_off_it(names: set[str]) -> None:
-    assert "service_catalog.py" in names
-    assert "probe.py" in names
+def test_every_script_on_the_page_is_read_off_it(paths: set[str]) -> None:
+    assert "scripts/docs/service_catalog.py" in paths
+    assert "scripts/diagnostics/probe.py" in paths
     # The Tests column is code spans too; only the first cell of a row is a script.
-    assert not any(name.startswith("test_") for name in names)
+    assert all(path.startswith("scripts/") for path in paths)
 
 
-def test_every_documented_script_gets_an_anchor(names: set[str]) -> None:
+def test_every_documented_script_gets_an_anchor(paths: set[str]) -> None:
     """The regex must match Python-Markdown's real table HTML, not a guess at it.
 
-    A silent miss here drops all 47 anchors and leaves every link pointing at a fragment
-    that does not exist -- which still renders as a working link to the top of the page.
+    A silent miss here drops every anchor and leaves each link pointing at a fragment that
+    does not exist -- which still renders as a working link to the top of the page.
     """
-    anchored = hook.add_script_anchors(_render(SCRIPTS_MD.read_text()), names)
+    anchored = hook.add_script_anchors(_render(SCRIPTS_MD.read_text()), paths)
     missing = {
-        name for name in names if f'id="{hook.anchor_for(name)}"' not in anchored
+        path for path in paths if f'id="{hook.anchor_for(path)}"' not in anchored
     }
     assert not missing
 
 
-def test_an_anchor_is_injected_once_per_script(names: set[str]) -> None:
-    anchored = hook.add_script_anchors(_render(SCRIPTS_MD.read_text()), names)
-    assert anchored.count('<code id="script-') == len(names)
+def test_an_anchor_is_injected_once_per_script(paths: set[str]) -> None:
+    anchored = hook.add_script_anchors(_render(SCRIPTS_MD.read_text()), paths)
+    assert anchored.count('<code id="script-') == len(paths)
+
+
+def test_the_anchor_keeps_the_subdirectory(paths: set[str]) -> None:
+    """Two scripts can share a basename, so the directory has to be in the id."""
+    assert hook.anchor_for("scripts/docs/build_docs.py") == "script-docs-build_docs-py"
+    assert len({hook.anchor_for(path) for path in paths}) == len(paths)
 
 
 def test_a_script_resolves_by_both_forms(index: dict[str, tuple[str, str]]) -> None:
-    target = (hook.SCRIPTS_PAGE, "script-service_catalog-py")
-    assert hook.lookup(index, "scripts/service_catalog.py") == target
+    target = (hook.SCRIPTS_PAGE, "script-docs-service_catalog-py")
+    assert hook.lookup(index, "scripts/docs/service_catalog.py") == target
     assert hook.lookup(index, "service_catalog.py") == target
 
 
@@ -96,10 +102,9 @@ def test_a_line_reference_resolves_to_the_page(
     index: dict[str, tuple[str, str]],
 ) -> None:
     """The repo writes `file:line`; the line is not addressable, the file is."""
-    assert hook.lookup(index, "scripts/probe.py:75") == hook.lookup(
-        index, "scripts/probe.py"
-    )
-    assert hook.lookup(index, "scripts/probe.py:75-80") is not None
+    full = "scripts/diagnostics/probe.py"
+    assert hook.lookup(index, f"{full}:75") == hook.lookup(index, full)
+    assert hook.lookup(index, f"{full}:75-80") is not None
 
 
 def test_a_docs_page_resolves_to_itself(index: dict[str, tuple[str, str]]) -> None:
@@ -128,6 +133,8 @@ def test_a_docs_page_resolves_to_itself(index: dict[str, tuple[str, str]]) -> No
         # A test, and a module that is not a first-party script.
         "test_service_catalog.py",
         "deploy_logic.py",
+        # The pre-reorganisation path. Linking it would hide the staleness.
+        "scripts/service_catalog.py",
     ],
 )
 def test_a_path_the_site_does_not_document_stays_plain(
@@ -136,15 +143,20 @@ def test_a_path_the_site_does_not_document_stays_plain(
     assert hook.lookup(index, path) is None
 
 
-def test_the_bare_form_is_suppressed_when_the_tree_holds_two() -> None:
-    """`check.py` and `main.yml` name files outside scripts/; a bare mention is ambiguous."""
-    shared = hook.shared_basenames(REPO, {"check.py", "main.yml", "service_catalog.py"})
-    assert shared == {"check.py", "main.yml"}
+def test_a_basename_a_tree_file_shares_is_ambiguous() -> None:
+    """A script named `check.py` could not claim the bare form: monitor-bridge has one."""
+    assert hook.ambiguous_basenames(REPO, {"scripts/dev/check.py"}) == {"check.py"}
+
+
+def test_two_scripts_sharing_a_basename_are_both_ambiguous() -> None:
+    """The collision need not involve a file outside the Scripts page at all."""
+    twins = {"scripts/dev/report.py", "scripts/backup/report.py"}
+    assert hook.ambiguous_basenames(REPO, twins) == {"report.py"}
 
 
 def test_the_basename_scan_ignores_the_virtualenv() -> None:
     """`.venv` vendors a urllib3 `probe.py`; letting it count would unlink every bare one."""
-    assert hook.shared_basenames(REPO, {"probe.py"}) == set()
+    assert hook.ambiguous_basenames(REPO, {"scripts/diagnostics/probe.py"}) == set()
 
 
 def test_every_target_is_a_page_that_exists(index: dict[str, tuple[str, str]]) -> None:
@@ -153,27 +165,25 @@ def test_every_target_is_a_page_that_exists(index: dict[str, tuple[str, str]]) -
 
 
 def test_every_anchor_is_one_the_hook_injects(
-    index: dict[str, tuple[str, str]], names: set[str]
+    index: dict[str, tuple[str, str]], paths: set[str]
 ) -> None:
-    """The two halves cannot drift: both are derived from the same set of script names."""
+    """The two halves cannot drift: both are derived from the same set of script paths."""
     anchors = {anchor for _, anchor in index.values() if anchor}
-    assert anchors == {hook.anchor_for(name) for name in names}
+    assert anchors == {hook.anchor_for(path) for path in paths}
+
+
+_SAMPLE = "scripts/dev/sample_tool.py"
+_HREF = "../scripts/#script-dev-sample_tool-py"
 
 
 def _resolve(text: str) -> str | None:
-    return (
-        "../scripts/#script-sample_tool-py"
-        if text == "scripts/sample_tool.py"
-        else None
-    )
+    return _HREF if text == _SAMPLE else None
 
 
 def test_a_resolvable_span_is_wrapped_in_a_link() -> None:
-    linked = hook.link_paths(
-        "<p>run <code>scripts/sample_tool.py</code> now</p>", _resolve
-    )
-    assert '<a class="repo-path" href="../scripts/#script-sample_tool-py">' in linked
-    assert "<code>scripts/sample_tool.py</code></a>" in linked
+    linked = hook.link_paths(f"<p>run <code>{_SAMPLE}</code> now</p>", _resolve)
+    assert f'<a class="repo-path" href="{_HREF}">' in linked
+    assert f"<code>{_SAMPLE}</code></a>" in linked
 
 
 def test_an_unresolvable_span_is_untouched() -> None:
@@ -182,28 +192,29 @@ def test_an_unresolvable_span_is_untouched() -> None:
 
 
 @pytest.mark.parametrize(
-    "html",
+    "template",
     [
         # A fenced block shows a command to run, not a file to go and read.
-        "<pre><code>uv run scripts/sample_tool.py --tags docs</code></pre>",
+        "<pre><code>uv run {path} --tags docs</code></pre>",
         # Already a link: nesting an anchor inside one produces invalid HTML.
-        '<p><a href="../deploying/"><code>scripts/sample_tool.py</code></a></p>',
+        '<p><a href="../deploying/"><code>{path}</code></a></p>',
         # A heading carries its own permalink, and the Usage headings on the Scripts page
         # would otherwise link two screens up the page they are already on.
-        '<h3 id="sample-tool"><code>scripts/sample_tool.py</code></h3>',
+        '<h3 id="sample-tool"><code>{path}</code></h3>',
         # The id says this cell IS the target; linking it would point it at itself.
-        '<td><code id="script-sample_tool-py">scripts/sample_tool.py</code></td>',
+        '<td><code id="script-dev-sample_tool-py">{path}</code></td>',
     ],
 )
-def test_a_protected_region_is_left_alone(html: str) -> None:
+def test_a_protected_region_is_left_alone(template: str) -> None:
+    html = template.format(path=_SAMPLE)
     assert hook.link_paths(html, _resolve) == html
 
 
 def test_text_around_a_protected_region_is_still_linked() -> None:
     linked = hook.link_paths(
-        "<p><code>scripts/sample_tool.py</code></p>"
-        "<pre><code>scripts/sample_tool.py</code></pre>"
-        "<p><code>scripts/sample_tool.py</code></p>",
+        f"<p><code>{_SAMPLE}</code></p>"
+        f"<pre><code>{_SAMPLE}</code></pre>"
+        f"<p><code>{_SAMPLE}</code></p>",
         _resolve,
     )
     assert linked.count('class="repo-path"') == 2
