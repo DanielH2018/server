@@ -124,23 +124,31 @@ spec:
               URL = "{{ jellyfin_k8s_anisync_url }}"
               WANT_MD5 = "{{ jellyfin_k8s_anisync_md5 }}"
               DLL = "jellyfin-ani-sync.dll"
-              PLUGINS = Path("/config/plugins")
-              PLUGIN_DIR = PLUGINS / "ani-sync"
-              MARKER = PLUGIN_DIR / (".installed-" + VERSION)
+              # /config/DATA/plugins, not /config/plugins. Jellyfin scans only the former, and
+              # the first cut of this container wrote to the latter: the install reported
+              # success, the files were on disk, and GET /Plugins never listed Ani-Sync. The
+              # jellyfin log is what settles it — every loaded plugin names a path under
+              # /config/data/plugins/.
+              PLUGINS = Path("/config/data/plugins")
+              # `<Name>_<Version>`, the layout Jellyfin's own installer writes and the one the
+              # sibling plugins on this volume use (`SSO Authentication_4.0.0.4`). Name and
+              # version are meta.json's, not ours to choose.
+              PLUGIN_DIR = PLUGINS / ("Ani-Sync_" + VERSION)
 
-              # The guard, and the reason a routine pod restart costs nothing: with the marker
-              # present this container opens no socket at all. Only a version bump reaches the
-              # download below, because the marker name carries the version.
-              if MARKER.exists():
+              # The guard, and the reason a routine pod restart costs nothing: with the plugin
+              # in place this container opens no socket at all. The DIRECTORY is the marker —
+              # its name carries the version and it is renamed into place complete, so there is
+              # no separate marker file to disagree with what is on disk.
+              if (PLUGIN_DIR / DLL).exists():
                   print("ani-sync " + VERSION + " already installed")
                   raise SystemExit(0)
 
               print("installing ani-sync " + VERSION + " from " + URL)
               PLUGINS.mkdir(parents=True, exist_ok=True)
 
-              # Staged INSIDE /config/plugins, not /tmp: same filesystem, so the swap below is a
-              # rename rather than a cross-device copy, and a half-written plugin dir is never
-              # visible to Jellyfin.
+              # Staged INSIDE the plugins directory, not /tmp: same filesystem, so the swap
+              # below is a rename rather than a cross-device copy, and a half-written plugin
+              # directory is never visible to Jellyfin.
               with tempfile.TemporaryDirectory(dir=PLUGINS) as tmp:
                   archive = Path(tmp) / "plugin.zip"
                   with urllib.request.urlopen(URL, timeout=60) as response:
@@ -162,17 +170,31 @@ spec:
                       found = sorted(path.name for path in staged.iterdir())
                       raise SystemExit("archive has no " + DLL + ": " + repr(found))
 
-                  # Replaced wholesale. The directory name carries no version, so leaving an
-                  # older build's files beside a new one is how two copies of one plugin end up
-                  # on disk together.
+                  # Renamed into place COMPLETE, only once the DLL is proven present. That is
+                  # what makes a failed install retry on the next start rather than latch: a
+                  # partial extraction never becomes a directory Jellyfin can find.
                   if PLUGIN_DIR.is_dir():
                       shutil.rmtree(PLUGIN_DIR)
                   shutil.move(staged, PLUGIN_DIR)
 
-              # Written LAST, and only once the DLL is proven present. A marker written any
-              # earlier would latch a failed install: the next start would find it and skip the
-              # retry that would have fixed things.
-              MARKER.touch()
+              # Older builds are their OWN directories, because the name carries the version —
+              # so a bump leaves the previous one in place and Jellyfin loads two copies of one
+              # plugin. Swept AFTER the rename above, so a failure there leaves the working
+              # version untouched.
+              for stale in sorted(PLUGINS.glob("Ani-Sync_*")):
+                  if stale != PLUGIN_DIR:
+                      print("removing superseded " + stale.name)
+                      shutil.rmtree(stale)
+
+              # DECIDED: keep this, do not "tidy it away" as dead code. The 2026-08-25 first cut
+              # of this container installed to /config/plugins, which Jellyfin never scans, and
+              # left ~122 KB there on every config volume it ran against. Nothing else reaches
+              # that path — the read-only ServiceAccount cannot exec into the pod — so this
+              # container is the only thing that can clear what it created. Inert after one run.
+              legacy = Path("/config/plugins/ani-sync")
+              if legacy.is_dir():
+                  print("removing " + str(legacy) + " (never scanned; installed there in error)")
+                  shutil.rmtree(legacy)
               print("installed ani-sync " + VERSION)
           securityContext:
             allowPrivilegeEscalation: false
