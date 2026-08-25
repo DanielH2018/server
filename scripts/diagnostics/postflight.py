@@ -21,6 +21,7 @@ import sys
 import probe
 import probe_core as core
 import probe_arr
+import probe_health
 import probe_ha as probe_ha
 
 TIMEOUT = 10
@@ -60,10 +61,17 @@ def get(url, header=None, timeout=TIMEOUT, resolve=None):
     return int(code or 0), body
 
 
-def container_ip(name):
-    """The container's bridge IP, or Skip if it isn't running on this host."""
+def service_ip(name):
+    """The workload's k8s Service ClusterIP, or Skip if there is no Service to read.
+
+    This resolved a Docker bridge IP until 2026-08-25, which meant every check reaching a
+    workload directly — the three *arr keys, the jellyfin key, Authelia — had been dead on
+    both cluster nodes since the 2026-08-14 Docker retirement, failing with
+    `FileNotFoundError: 'docker'` rather than checking anything. probe.py's `arr` subcommand
+    was fixed for exactly this on 2026-08-07; postflight kept the old resolver.
+    """
     try:
-        return probe.resolve_ip(name)
+        return probe_health.resolve_service_ip(name)
     except SystemExit as exc:
         raise Skip(str(exc)) from exc
 
@@ -148,29 +156,45 @@ def check_kuma_scrape():
 # is wrong until it's pasted in. Every consumer then 401s against a healthy service.
 
 
+def _unreachable(app, detail):
+    """A ClusterIP that does not answer the host is a placement fact, not a bad credential.
+
+    `get()` returns status 0 when curl itself failed. Reporting that as "the key doesn't
+    match" sends someone to rotate a key that is fine. Each *arr's NetworkPolicy admits
+    specific pod selectors and no ipBlock for the node, so a host-originated GET only
+    reaches an app scheduled on THIS node — confirmed 2026-08-17 and again 2026-08-25,
+    both times with prowlarr on daniel-server while sonarr and radarr answered.
+    """
+    return SKIP, f"{app} unreachable from this host (pod on another node?) — {detail}"
+
+
 def check_arr_key(app):
-    ip = container_ip(app)
+    ip = service_ip(app)
     key, err = secret(f"{app}_api_key")
     if not key:
         return FAIL, err
-    status, _ = get(
+    status, body = get(
         probe_arr.arr_url(ip, app, "system/status"), probe_arr.arr_curl_config(key)
     )
     if status == 200:
         return OK, f"{app}_api_key authenticates"
+    if status == 0:
+        return _unreachable(app, body or "curl failed")
     return FAIL, f"HTTP {status} — {app}_api_key doesn't match the app's own key"
 
 
 def check_jellyfin_key():
-    ip = container_ip("jellyfin")
+    ip = service_ip("jellyfin")
     key, err = secret("jellyfin_api_key")
     if not key:
         return FAIL, err
-    status, _ = get(
+    status, body = get(
         f"http://{ip}:8096/System/Info", f'header = "X-Emby-Token: {key}"\n'
     )
     if status == 200:
         return OK, "jellyfin_api_key authenticates"
+    if status == 0:
+        return _unreachable("jellyfin", body or "curl failed")
     return FAIL, f"HTTP {status} — mint the key in Jellyfin and sops set it"
 
 
@@ -207,7 +231,7 @@ def check_ha_token(name):
 
 
 def check_authelia():
-    ip = container_ip("authelia")
+    ip = service_ip("authelia")
     status, body = get(f"http://{ip}:9091/api/health")
     if status != 200:
         return FAIL, f"HTTP {status} — Authelia is not serving"

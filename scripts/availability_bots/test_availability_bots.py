@@ -23,12 +23,70 @@ _spec = importlib.util.spec_from_file_location("osteria_bot", _BOT_PATH)
 osteria = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(osteria)
 
+# Both bots are loaded by path rather than imported: their filenames carry a hyphen, so no
+# `import` statement can name them. That is also why the scripts reference page reports them
+# untested — it credits a test by import or by a `scripts/...` path mention, and this file
+# does neither.
+_GLENSTONE_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "glenstone-bot.py"
+)
+_gspec = importlib.util.spec_from_file_location("glenstone_bot", _GLENSTONE_PATH)
+glenstone = importlib.util.module_from_spec(_gspec)
+_gspec.loader.exec_module(glenstone)
+
 _LOG = logging.getLogger("test")
 
 
 class _Resp:
     def raise_for_status(self):
         pass
+
+
+# The glenstone bot's own parser. Its failure mode is the opposite of a crash: it decides
+# whether to alert AT ALL, so a wrong answer here is a bot that runs green and stays silent
+# through the opening it exists to catch.
+
+
+class _Session:
+    """Enough of requests.Session for find_available_dates — .get() returning a payload."""
+
+    def __init__(self, entries):
+        self._entries = entries
+
+    def get(self, url, timeout=None):
+        class Resp:
+            @staticmethod
+            def raise_for_status():
+                pass
+
+            @staticmethod
+            def json():
+                return {"calendar": {"_data": self._entries}}
+
+        return Resp()
+
+
+def test_glenstone_reports_a_watched_date_that_is_not_sold_out():
+    session = _Session([{"date": glenstone.TARGET_DATES[0], "status": "available"}])
+    assert glenstone.find_available_dates(session) == glenstone.TARGET_DATES[:1]
+
+
+def test_glenstone_stays_silent_on_a_sold_out_date():
+    session = _Session([{"date": glenstone.TARGET_DATES[0], "status": "sold_out"}])
+    assert glenstone.find_available_dates(session) == []
+
+
+def test_glenstone_ignores_an_available_date_nobody_is_watching():
+    """The calendar carries every date; alerting on one not in TARGET_DATES is a false alarm."""
+    session = _Session([{"date": "1999-01-01", "status": "available"}])
+    assert glenstone.find_available_dates(session) == []
+
+
+def test_glenstone_treats_a_missing_status_as_unavailable():
+    """`status` absent means the API changed shape. Failing closed keeps a shape change from
+    reading as an opening — the bot alerts on a real offer, not on a parse it did not make."""
+    session = _Session([{"date": glenstone.TARGET_DATES[0]}])
+    assert glenstone.find_available_dates(session) == []
 
 
 def test_parse_availability_returns_party_sizes_when_time_offered():

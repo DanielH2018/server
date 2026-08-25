@@ -104,6 +104,12 @@ STOPWORDS = {
     "runs",
 }
 
+# A Markdown table cell boundary is an UNESCAPED pipe. Splitting on every `|` shifted every
+# cell of the push-token row, whose prose carries a backticked `grep -E 'a\|b\|c'` alternation —
+# it reported `runs=longhorn_backup\` and `first_seen=etcd_snapshot\` off the middle of a
+# sentence. A row that parses into the wrong columns is worse than one that fails to parse.
+_CELL_SPLIT_RE = re.compile(r"(?<!\\)\|")
+
 BACKTICK_RE = re.compile(r"`([^`]+)`")
 BOLD_RE = re.compile(r"\*\*([^*]+)\*\*")
 PATHLINE_RE = re.compile(r"^([\w./*-]+):(\d+)$")
@@ -179,7 +185,7 @@ def parse_table_rows(section_text: str) -> list[Row]:
             if header_seen:
                 break
             continue
-        cells = [c.strip() for c in stripped.strip("|").split("|")]
+        cells = [c.strip() for c in _CELL_SPLIT_RE.split(stripped.strip("|"))]
         if not header_seen:
             header_seen = True
             continue

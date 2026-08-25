@@ -425,11 +425,17 @@ def _indirect_test(name: str, test_files: list[Path], scripts: Path) -> tuple[st
     """
     stem = re.escape(Path(name).stem)
     path_re = re.compile(rf"scripts/(?:[A-Za-z0-9_]+/)?{re.escape(name)}")
-    import_re = (
-        re.compile(rf"^\s*(?:from|import)\s+{stem}\b", re.MULTILINE)
-        if name.endswith(".py")
-        else None
-    )
+    if not name.endswith(".py"):
+        import_re = None
+    elif Path(name).stem.isidentifier():
+        import_re = re.compile(rf"^\s*(?:from|import)\s+{stem}\b", re.MULTILINE)
+    else:
+        # A hyphenated filename is not a valid module name, so NO import statement can
+        # name it — `glenstone-bot.py` is loadable only via spec_from_file_location. Its
+        # test quotes the filename, which is a load and not a mention, so it counts as an
+        # import. Requiring a bare `import` here reported two genuinely tested bots as
+        # untested, which is the page telling a story about coverage that isn't true.
+        import_re = re.compile(rf"""['"]{re.escape(name)}['"]""")
     for path in test_files:
         text = _read(path)
         if import_re and import_re.search(text):

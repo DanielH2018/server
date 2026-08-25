@@ -4,13 +4,12 @@ Split out of probe.py, which had grown to 1349 lines across thirteen subcommands
 """
 
 import json
-import subprocess
 
 # `core.<name>` for anything the tests monkeypatch — binding those into this module's
 # globals with a `from probe_core import ...` would take a snapshot the patch never reaches.
 import probe_core as core
 from probe_core import config_get, ha_curl_argv
-from probe_health import k8s_service_ip_argv
+from probe_health import resolve_service_ip
 
 # Sonarr/Radarr speak /api/v3, Prowlarr /api/v1. The X-Api-Key comes from SOPS
 # and is fed to curl via stdin (arr_curl_config), never argv — same guard as ha.
@@ -62,14 +61,7 @@ def resolve_arr_ip(app):
     the same way same-node traffic does. This will flip on the next reschedule; a real fix
     needs a NetworkPolicy ipBlock for the node (ansible/roles/k8s/*/templates/), out of scope
     here."""
-    ns = core.k8s_namespace()
-    out = subprocess.run(k8s_service_ip_argv(app, ns), capture_output=True, text=True)
-    if out.returncode != 0:
-        raise SystemExit(f"kubectl get service {app} failed: {out.stderr.strip()}")
-    ip = out.stdout.strip()
-    if not ip:
-        raise SystemExit(f"{app} has no ClusterIP (does the Service exist?)")
-    return ip
+    return resolve_service_ip(app)
 
 
 def run_arr(ns):

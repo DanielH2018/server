@@ -187,6 +187,45 @@ def test_blocks_edits_under_docs_assets_generated():
     assert classify("docs/assets/generated/infra-map.svg", REPO) is not None
 
 
+def test_allows_the_one_hand_written_page_under_docs_reference():
+    """`topology.md` is prose that happens to live in the generated tree.
+
+    Protection follows the provenance banner a generator stamps, not the path, so the only
+    page there that nobody generates stays editable. A path-only guard made it uneditable
+    and editing it meant reaching for a bypass — which is how a guard stops being trusted.
+    """
+    assert classify("docs/reference/topology.md", REPO) is None
+
+
+def test_a_page_that_does_not_exist_yet_stays_guarded(tmp_path):
+    """The banner check fails CLOSED.
+
+    A path the hook cannot read cannot prove it is hand-written — a new file under
+    docs/reference/, or a worktree page absent from disk. Exempting it would turn the guard
+    off for exactly the case where a generated page is being created or replaced wholesale.
+    """
+    worktree = _make_checkout(tmp_path / "server/.claude/worktrees/feature", True)
+    absent = worktree / "docs" / "reference" / "services.md"
+    repo_root = find_repo_root(str(absent), str(tmp_path / "server"))
+    assert classify(str(absent), repo_root) is not None
+
+
+def test_the_banner_is_what_decides_not_a_hand_kept_exemption():
+    """Every other page in docs/reference/ carries the banner and stays protected.
+
+    Asserted as a CLASS over the live tree: an exemption list would have to be edited every
+    time a generator is added, and the page it forgot would be silently editable.
+    """
+    ref = os.path.join(REPO, "docs", "reference")
+    for name in sorted(os.listdir(ref)):
+        if not name.endswith(".md"):
+            continue
+        with open(os.path.join(ref, name)) as fh:
+            generated = "generated_from:" in fh.read(4096)
+        verdict = classify(os.path.join(ref, name), REPO)
+        assert (verdict is not None) == generated, name
+
+
 def test_allows_edits_to_hand_written_docs():
     """docs/reference/ is generated; docs/ generally is not.
 
