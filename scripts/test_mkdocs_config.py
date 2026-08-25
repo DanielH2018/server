@@ -8,6 +8,7 @@ asserts the same property directly against the tree.
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import urlparse
 
 import yaml
 
@@ -42,10 +43,24 @@ def _load_config() -> dict:
     return yaml.load(MKDOCS.read_text(), Loader=_Loader)
 
 
+def _is_external(value: str) -> bool:
+    """A nav entry that is a link off the site rather than a document in the tree.
+
+    MkDocs passes an absolute URL through as a nav heading that is only a link. The
+    artifacts browser is one, and its host is a sentinel resolved in the browser --
+    see mkdocs.yml and docs/assets/fqdn-links.js.
+    """
+    return value.startswith(("http://", "https://"))
+
+
 def test_every_nav_entry_resolves_to_a_file():
     config = _load_config()
     docs_dir = REPO / config.get("docs_dir", "docs")
-    missing = [p for p in _nav_paths(config["nav"]) if not (docs_dir / p).is_file()]
+    missing = [
+        p
+        for p in _nav_paths(config["nav"])
+        if not _is_external(p) and not (docs_dir / p).is_file()
+    ]
     assert not missing, f"nav entries with no file: {missing}"
 
 
@@ -62,3 +77,18 @@ def test_nav_covers_every_toplevel_doc():
     assert not (on_disk - listed), (
         f"docs/*.md missing from nav: {sorted(on_disk - listed)}"
     )
+
+
+def test_an_external_nav_entry_uses_the_sentinel_host():
+    """A real domain typed into the nav would work on one tier and break on the other.
+
+    `domain` is SOPS-sourced, so a static nav cannot name it. Every off-site entry
+    carries `<service>.local.invalid` and is resolved in the browser instead.
+    """
+    external = [p for p in _nav_paths(_load_config()["nav"]) if _is_external(p)]
+    baked = [
+        u
+        for u in external
+        if urlparse(u).hostname.split(".")[-2:] != ["local", "invalid"]
+    ]
+    assert not baked, f"external nav entries with a baked-in domain: {baked}"

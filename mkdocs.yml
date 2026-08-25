@@ -47,8 +47,9 @@ plugins:
   - search
 
 # Resolves the `<span class="fqdn">` placeholders the reference generators emit into links,
-# using the domain of the URL the page was served from. The generators cannot bake an FQDN in:
-# they parse the tree statically and `domain` is SOPS-sourced. See the file's own header.
+# using the domain of the URL the page was served from, and resolves the nav's sentinel hosts
+# the same way. The generators cannot bake an FQDN in: they parse the tree statically and
+# `domain` is SOPS-sourced. See the file's own header.
 extra_javascript:
   - assets/fqdn-links.js
 
@@ -58,6 +59,16 @@ extra_javascript:
 # existing.
 nav:
   - Home: index.md
+  # A nav heading that is only a link, off the site to the artifacts browser. The host is a
+  # sentinel: `domain` is SOPS-sourced, so nothing static can name the real one, and
+  # assets/fqdn-links.js rewrites this href to the domain and tier the reader is already on
+  # — the same derivation it does for the reference pages' `<span class="fqdn">` spans.
+  #
+  # The degradation differs from those spans and is worse. A span that is never rewritten
+  # still reads as its placeholder text; a nav anchor is a live link or a dead one, so a
+  # JavaScript failure leaves this entry pointing at an unresolvable host. Accepted: the
+  # same failure already costs every service link on the reference pages.
+  - Artifacts: https://artifacts.local.invalid/
   - Reference:
       - Services: reference/services.md
       - Hosts: reference/hosts.md
@@ -84,21 +95,24 @@ nav:
       - "ADR-0012 Zero-downtime rollout gates": adr/0012-zero-downtime-deploys-gate-on-rollout-and-restarts.md
       - "ADR-0013 daniel-pi stays on Docker": adr/0013-daniel-pi-stays-on-docker.md
       - "ADR-0014 Kopia retired, Longhorn owns B2": adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md
-  - Runbooks:
-      - Secret rotation: secret-rotation.md
-      - Longhorn disaster recovery: longhorn-disaster-recovery.md
-      - Longhorn upgrade: longhorn-upgrade.md
-      - k3s etcd restore: k3s-etcd-restore.md
-      - Kopia disaster recovery: kopia-disaster-recovery.md
-      - Ubuntu 24.04 upgrade: ubuntu-24.04-upgrade.md
-  - Design:
-      - Longhorn backup tiering: longhorn-backup-tiering.md
-      - NetworkPolicy default-deny: networkpolicy-default-deny.md
-      - GitOps — Argo and Flux evaluation: gitops-argo-flux-evaluation.md
-      - Hand-authored diagrams with D2: diagrams-plan.md
+      - "ADR-0015 D2 for hand-authored diagrams": adr/0015-d2-for-hand-authored-diagrams.md
+      # The long-form documents three of the records above compress. They sit under Decisions
+      # rather than in a section of their own: each one is the working-out behind a single
+      # ADR, and a reader who wants that depth arrives from the record, not from a
+      # top-level heading. The former "Design" section held exactly these three plus the D2
+      # plan, and ADR-0007, ADR-0009, ADR-0010 and ADR-0015 now carry all four decisions.
+      - Background:
+          - "Longhorn backup tiering (ADR-0007)": longhorn-backup-tiering.md
+          - "NetworkPolicy default-deny (ADR-0009)": networkpolicy-default-deny.md
+          - "Argo and Flux evaluation (ADR-0010)": gitops-argo-flux-evaluation.md
+  # Runbooks and Operations were separate sections split on whether a procedure drives the
+  # system or recovers it. The split leaked in both directions — an upgrade is both, and a
+  # reader looking for "how do I do X" had to guess which heading X was filed under. One
+  # section, ordered day-to-day first and recovery last.
   - Operations:
       - Deploying by hand: deploying.md
       - The GitOps pipeline: gitops-pipeline.md
+      - Secret rotation: secret-rotation.md
       - Claude shell permissions: claude-shell-permissions.md
       - Security tools: security-tools.md
       - WireGuard private access: wireguard-private-homelab-access.md
@@ -109,3 +123,7 @@ nav:
       - B2 drain scoping: b2-api-drain-scoping.md
       - B2 transaction cap gaps: b2-transaction-cap-monitoring-gaps.md
       - Email to RSS: email-to-rss.md
+      - Longhorn upgrade: longhorn-upgrade.md
+      - Longhorn disaster recovery: longhorn-disaster-recovery.md
+      - k3s etcd restore: k3s-etcd-restore.md
+      - Kopia disaster recovery: kopia-disaster-recovery.md
