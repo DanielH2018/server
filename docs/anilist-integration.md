@@ -52,17 +52,24 @@ declares `targetAbi` 10.11.11.0, which the loader rejects on an older server. Ve
 declares 10.11.6.0 and installs. The pin is therefore 4.1.0.0 until Jellyfin moves to 10.11.11
 or later.
 
+`ansible/tests/test_anisync_pin_matches_server.py` enforces this rather than leaving it to
+memory. The release asset's filename leads with the `targetAbi` it was built for and the image
+tag leads with the server version, so the comparison needs no network call. The test also
+refuses a version bump that misses the URL, which would otherwise install the old build under
+the new marker and never reconcile.
+
 ### Where the change lands
 
 The change extends `ansible/roles/k8s/jellyfin/`. The plugin is Jellyfin configuration and the
 role already owns `/config`, so a separate role would split one concern across two places.
 
-`defaults/main.yml` gains three variables:
+`defaults/main.yml` gains four variables:
 
 ```yaml
-jellyfin_anisync_version: "4.1.0.0"
-jellyfin_anisync_url: "https://github.com/vosmiic/jellyfin-ani-sync/releases/download/v4.1/10.11.6.-.ani-sync_4.1.0.0.zip"
-jellyfin_anisync_md5: "4d95c608192395b72efe57551a6f2ae0"
+jellyfin_k8s_anisync_version: "4.1.0.0"
+jellyfin_k8s_anisync_url: "https://github.com/vosmiic/jellyfin-ani-sync/releases/download/v4.1/10.11.6.-.ani-sync_4.1.0.0.zip"
+jellyfin_k8s_anisync_md5: "4d95c608192395b72efe57551a6f2ae0"
+jellyfin_k8s_anisync_init_image: python:3.14-alpine
 ```
 
 The URL and the checksum both come from the plugin's published `manifest.json`. The asset
@@ -73,22 +80,26 @@ returns HTTP 200.
 A second init container named `install-ani-sync` runs before Jellyfin starts. It copies the
 shape of the existing `convert-encoding-settings` container:
 
-- Image `alpine:3.24`, the helper image the rest of `roles/k8s/` uses.
+- Image `python:3.14-alpine`, not the `alpine:3.24` its sibling uses. The release is a `.zip`
+  and `/config` is owned by uid `{{ puid }}`, so an Alpine container would have to
+  `apk add unzip` as root — and root here holds no `DAC_OVERRIDE`, so it could not then write
+  the files it had just unpacked. `urllib`, `hashlib` and `zipfile` are standard library, so
+  the install runs as the owning uid and installs nothing at run time.
 - Mounts `jellyfin-config` at `/config`.
 - Runs as `{{ puid }}`/`{{ pgid }}`, not root. A root process with every capability dropped
   holds no `DAC_OVERRIDE` and cannot write into a directory owned by another uid. The existing
   container documents this failure at length; the installer inherits the same fix.
-- Runs under `set -eu`, and asserts that `jellyfin-ani-sync.dll` exists after extraction rather
-  than trusting the exit code of the unzip.
+- Checks that `jellyfin-ani-sync.dll` exists after extraction rather than trusting that the
+  archive held what its name implies.
 
 The script guards on a version marker at `/config/plugins/ani-sync/.installed-4.1.0.0`. When
 the marker exists the container exits 0 immediately and opens no network connection, so an
-ordinary pod restart pays nothing. When the marker is absent the container installs `unzip`,
-downloads the release, verifies the MD5, extracts into `/config/plugins/ani-sync`, asserts the
-DLL is present, and writes the marker last. Writing the marker last is what makes a failed
+ordinary pod restart pays nothing. When the marker is absent the container downloads the
+release, verifies the MD5, extracts to a staging directory inside `/config/plugins`, checks the
+DLL is present, renames that directory into place, and writes the marker last. Writing the marker last is what makes a failed
 install retry on the next start instead of latching a broken state.
 
-Raising `jellyfin_anisync_version` changes the rendered deployment, which the central
+Raising `jellyfin_k8s_anisync_version` changes the rendered deployment, which the central
 rollout-restart at `ansible/roles/k8s/manifests/tasks/main.yml:112` turns into a pod roll.
 
 ### The one manual step
