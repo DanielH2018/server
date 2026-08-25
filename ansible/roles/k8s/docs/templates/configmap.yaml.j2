@@ -12,6 +12,24 @@ data:
         root /usr/share/nginx/html;
         index index.html;
 
+        # Every response revalidates. Without this nginx sends only Last-Modified and ETag,
+        # and a browser with no explicit freshness falls back to a heuristic — a fraction of
+        # the age since Last-Modified — so a file that had not changed in days was cached for
+        # hours and not even revalidated.
+        #
+        # That is a real failure here, not a theoretical one. The docs site's own files carry
+        # no content hash: mkdocs copies docs/assets/ through under its authored name, and the
+        # pages are plain index.html. On 2026-08-25 a reader on the public name followed the
+        # new Artifacts nav link straight to the unresolved sentinel host, because their
+        # browser was still running the previous assets/fqdn-links.js — the copy with no
+        # sentinel rewrite in it. Material's own bundles are content-hashed and would have
+        # been safe; nothing this repo writes is.
+        #
+        # `no-cache` is revalidate-before-use, not no-store: an unchanged file still answers
+        # 304 with no body. For a LAN docs site that is the right trade against serving a
+        # reader a page or a script that no longer matches the tree.
+        add_header Cache-Control "no-cache";
+
         # Answered from nginx itself, never from the mounted tree. A build that has not run
         # yet leaves the tree empty; the pod must still pass its probes and serve a 404,
         # because "the site is not built" is an operator problem, not a rollout failure.
@@ -21,9 +39,15 @@ data:
             return 200 'ok';
         }
 
-        # The build stamp is the signal that the docs-refresh cron is alive, so a cached
-        # copy would report a dead cron as healthy — the one file here that must never be
-        # served from cache.
+        # The build stamp is the signal that the docs-refresh cron is alive, so a cached copy
+        # would report a dead cron as healthy. `no-store` rather than the server-level
+        # `no-cache`: this file must not be written to disk at all, where the rest may be
+        # stored and revalidated.
+        #
+        # nginx's add_header does not merge across levels — a location declaring any
+        # add_header of its own replaces every inherited one. That is why this block restates
+        # Cache-Control rather than adding to it, and why /healthz above serves no
+        # Cache-Control at all.
         location = /build-info.json {
             add_header Cache-Control "no-store";
         }
