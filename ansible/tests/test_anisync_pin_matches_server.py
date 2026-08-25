@@ -105,3 +105,31 @@ def test_the_init_container_reads_the_version_from_the_variable():
         f"jellyfin_k8s_anisync_version instead, so a bump in defaults/main.yml reaches every "
         f"place that names it."
     )
+
+
+def test_the_plugin_lands_where_jellyfin_actually_scans():
+    """Installing to /config/plugins succeeds and does nothing. Found the hard way.
+
+    The 2026-08-25 first deploy installed cleanly — the init container logged
+    "installed ani-sync 4.1.0.0", the files were on disk, the rollout was green and
+    `probe.py health jellyfin` passed — and `GET /Plugins` never listed Ani-Sync. Jellyfin
+    scans `/config/data/plugins`, and every plugin it loads names a path under there:
+
+        Loaded assembly SSO-Auth ... from /config/data/plugins/SSO Authentication_4.0.0.4/SSO-Auth.dll
+
+    Nothing about that failure is visible from the deploy side, which is why it is pinned here
+    rather than left to a comment. The directory layout is the second half: Jellyfin's own
+    installer writes `<Name>_<Version>`, and `Ani-Sync` is meta.json's name, not ours.
+    """
+    template = DEPLOYMENT.read_text()
+
+    assert 'PLUGINS = Path("/config/data/plugins")' in template, (
+        "the install-ani-sync init container no longer targets /config/data/plugins. "
+        "Jellyfin scans only that directory — installing anywhere else reports success and "
+        "leaves the plugin unloaded, with a green rollout and nothing in GET /Plugins."
+    )
+    assert 'PLUGIN_DIR = PLUGINS / ("Ani-Sync_" + VERSION)' in template, (
+        "the plugin directory no longer follows Jellyfin's <Name>_<Version> layout. "
+        "'Ani-Sync' is the name meta.json declares; the sibling plugins on this volume use "
+        "the same shape."
+    )

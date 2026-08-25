@@ -55,8 +55,9 @@ or later.
 `ansible/tests/test_anisync_pin_matches_server.py` enforces this rather than leaving it to
 memory. The release asset's filename leads with the `targetAbi` it was built for and the image
 tag leads with the server version, so the comparison needs no network call. The test also
-refuses a version bump that misses the URL, which would otherwise install the old build under
-the new marker and never reconcile.
+refuses a version bump that misses the URL, which would otherwise install the old build into
+the new version's directory and never reconcile. A third case pins the install path, for the
+reason the *Verification* section records.
 
 ### Where the change lands
 
@@ -92,12 +93,22 @@ shape of the existing `convert-encoding-settings` container:
 - Checks that `jellyfin-ani-sync.dll` exists after extraction rather than trusting that the
   archive held what its name implies.
 
-The script guards on a version marker at `/config/plugins/ani-sync/.installed-4.1.0.0`. When
-the marker exists the container exits 0 immediately and opens no network connection, so an
-ordinary pod restart pays nothing. When the marker is absent the container downloads the
-release, verifies the MD5, extracts to a staging directory inside `/config/plugins`, checks the
-DLL is present, renames that directory into place, and writes the marker last. Writing the marker last is what makes a failed
-install retry on the next start instead of latching a broken state.
+The plugin goes to `/config/data/plugins/Ani-Sync_<version>/`. **Jellyfin scans
+`/config/data/plugins`, not `/config/plugins`**, and the layout is `<Name>_<Version>` — the
+shape Jellyfin's own installer writes and the one the sibling plugins on this volume already
+use. The first deploy on 2026-08-25 got this wrong and the *Verification* section below
+records what that looked like.
+
+The directory is its own marker. When it holds the DLL the container exits 0 immediately and
+opens no network connection, so an ordinary pod restart pays nothing. Otherwise the container
+downloads the release, verifies the MD5, extracts to a staging directory beside the target,
+checks the DLL is present, and renames the staging directory into place. Renaming a complete
+directory is what makes a failed install retry on the next start instead of latching: a partial
+extraction never becomes a directory Jellyfin can find.
+
+Because the directory name carries the version, a bump leaves the previous one in place and
+Jellyfin would load two copies of one plugin. The container sweeps superseded `Ani-Sync_*`
+directories after the rename, so a failure in the rename leaves the working version untouched.
 
 Raising `jellyfin_k8s_anisync_version` changes the rendered deployment, which the central
 rollout-restart at `ansible/roles/k8s/manifests/tasks/main.yml:112` turns into a pod roll.
@@ -106,7 +117,8 @@ rollout-restart at `ansible/roles/k8s/manifests/tasks/main.yml:112` turns into a
 
 The AniList OAuth handshake happens once, in the plugin's settings page. The resulting token is
 specific to the AniList account and cannot be templated. It is written to
-`/config/plugins/configurations/`, on the config PVC that Longhorn already backs up.
+`/config/data/plugins/configurations/`, on the config PVC that Longhorn already backs up, and
+nothing the init container does touches that directory.
 
 ### Verifying Phase 1
 
@@ -118,6 +130,18 @@ A green rollout does not prove the plugin loaded. Verification has three steps:
 
 Step 3 is the only one that exercises the actual integration. Steps 1 and 2 both pass on a
 plugin that has loaded and cannot reach AniList.
+
+**Step 2 is not optional, and the first deploy proved why.** On 2026-08-25 the init container
+installed to `/config/plugins`, logged `installed ani-sync 4.1.0.0`, and left the files on
+disk. The rollout was green, `probe.py health jellyfin` reported `1/1 ready, restarts=0`, and
+`GET /Plugins` did not list Ani-Sync. Jellyfin had never looked at that directory. Nothing on
+the deploy side could see the difference, which is what `test_anisync_pin_matches_server.py`
+now pins.
+
+The Jellyfin container log is the diagnostic that settles it. Every plugin it loads names its
+path:
+
+    Loaded assembly SSO-Auth ... from /config/data/plugins/SSO Authentication_4.0.0.4/SSO-Auth.dll
 
 ## Phase 2 — AniList scores into *arr tags
 
