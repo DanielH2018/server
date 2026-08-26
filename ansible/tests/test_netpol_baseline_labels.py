@@ -56,6 +56,10 @@ BORN_FENCED_ROLES = {
     # reason: Traefik is its only caller, and the pod dials nothing — the site is built on the
     # host by the docs-refresh cron, so the container never fetches, clones or resolves.
     "docs",
+    # nginx over a static LaTeX editor baked into the image. Traefik is its only caller. The
+    # app does reach jsDelivr for on-demand TeX packages and a CORS proxy for git — but those
+    # are the BROWSER's fetches, not the pod's, so the container itself dials nothing.
+    "texbrain",
 }
 
 LABEL = ("netpol-baseline", "enforced")

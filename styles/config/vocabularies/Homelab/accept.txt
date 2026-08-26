@@ -135,6 +135,7 @@ Alertmanager
 [Hh]ealthchecks
 [Jj]anitorr
 [Jj]ellyfin
+jsDelivr
 [Kk]arakeep
 [Kk]opiaignore
 [Ll]ittlelink
@@ -152,6 +153,8 @@ Mullvad
 [Ss]peedtest
 [Tt]darr
 [Tt]erraria
+# Upstream styles it TeXbrain; the k8s workload and the image are texbrain.
+[Tt]e[Xx]brain
 [Vv]alheim
 otelq
 

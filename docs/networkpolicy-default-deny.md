@@ -240,7 +240,11 @@ their first deploy rather than waiting for slice 5 to sweep them up, and
 stays as explicit as the slices. So far: **artifacts** (2026-08-19), the read-only browser over
 each host's `~/.claude/artifacts`; **docs** (2026-08-24), nginx over a hostPath of built MkDocs
 output, whose site is generated on the host by the `docs-refresh` cron so the pod never fetches,
-clones or resolves anything.
+clones or resolves anything; **texbrain** (2026-08-26), nginx over a static LaTeX editor baked
+into the image. texbrain is worth a second look because it appears to contradict the shape: the
+app reaches jsDelivr for on-demand TeX packages and a CORS proxy for git. Those are the
+browser's fetches, made from the reader's machine, not the pod's — the container serves files
+and opens no connection of its own.
 
 **Why observability moved from first to third.** It is small in pod count but dense in
 exactly the paths that are hardest — `loki:3100`, `tempo:3200`, `prometheus:9090` and
