@@ -12,7 +12,7 @@
 # Pinned, Renovate-tracked. Same collector build the Docker side runs so config stays portable.
 claude_otel_collector_image: otel/opentelemetry-collector-contrib:0.159.0
 claude_otel_loki_image: grafana/loki:3.7.6
-claude_otel_prometheus_image: prom/prometheus:v3.13.2
+claude_otel_prometheus_image: prom/prometheus:v3.14.0
 # 11.6.16 -> 13.2.0 (2026-08-22), crossing the Grafana 12 removal of Angular. Safe only
 # because the 19 `graph` panels this repo shipped were converted to `timeseries` first and
 # deployed against 11.6.16 — do that before any future major, not alongside it.
