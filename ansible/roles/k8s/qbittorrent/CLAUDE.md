@@ -36,3 +36,45 @@ The standing design risk is not fixed. Fetching a mod over the network on every 
 any lscr.io blip can strand the service indefinitely, and the failure is invisible — the init
 container exits **0** ("Completed"), so it reads as a restart loop rather than an error. A
 populated modcache would make the mod survive an outage.
+
+## Throughput settings live on the PVC, not in this role
+
+The role templates two of qBittorrent's settings and no others: `WEBUI_PORT` and
+`TORRENTING_PORT`, which the LinuxServer image applies from the environment at every
+start. Everything else — connection limits, hashing threads, the libtorrent working-set
+bound — lives in `qBittorrent.conf` on the `qbittorrent-config` Longhorn PVC. A WebUI
+change to any of it is live state that no Ansible run reproduces and a volume restore
+silently reverts.
+
+`files/apply_prefs.py` is the repo-side source of truth for the eight settings that were
+tuned for throughput on 2026-08-26. Run it after a PVC restore, or after changing a value
+in its `DESIRED` dict:
+
+```bash
+QBT_USERNAME=$(sops -d --extract '["qbittorrent_username"]' ansible/vars/secrets.yml) \
+QBT_PASSWORD=$(sops -d --extract '["qbittorrent_password"]' ansible/vars/secrets.yml) \
+QBT_URL=http://<pod-ip>:8080 \
+uv run python ansible/roles/k8s/qbittorrent/files/apply_prefs.py --dry-run
+```
+
+It diffs before writing, sends only the keys that differ, and reads back to prove the
+write — so a second run reports "nothing to do" rather than rewriting.
+
+**It is deliberately NOT wired into `deploy.yml`.** A deploy renders manifests, which
+fires the central rollout-restart, and the replacement pod waits on the wireguard
+sidecar's startupProbe (`failureThreshold: 60 × 5s`). A prefs task in the deploy path
+would block on that window every time, and an lscr.io blip during it — the failure above —
+would surface as a *failed deploy* instead of as the mod-fetch problem it is. Keep the
+apply manual.
+
+### The login trap
+qBittorrent 5.2.3 answers a successful `POST /api/v2/auth/login` with **HTTP 204 and an
+empty body**. Older builds answered `200 "Ok."`, and a client that checks for that string
+rejects a login that in fact succeeded. Check for the `QBT_SID` cookie instead — a bad
+password returns 200 `"Fails."` and sets no cookie, so the cookie means the same thing on
+both versions. `web_ui_max_auth_fail_count` is 5, so don't debug a login by retrying it.
+
+### Why these values, in one line
+The pod egresses through Mullvad, which forwards no ports, so qBittorrent can only pair
+with peers it dials itself. Every raised limit is about dialing faster and wider; none of
+it substitutes for an inbound port. See `files/apply_prefs.py` for the per-setting reasons.
