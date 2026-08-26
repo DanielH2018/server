@@ -993,17 +993,6 @@
       at: "22:00:00"
     - platform: time
       at: "06:00:00"
-    # Window open/close re-applies the curve immediately instead of waiting for the next temperature
-    # report (the AirGradient can be minutes away). bedroom_apply_fan reads the contact state and
-    # passes it to fan_target_level, which forces level 0 while open — so opening pauses the fan and
-    # closing restores whatever the curve asks for, with no saved state to get out of step.
-    # Explicit on/off only: the unknown/unavailable transitions are the ones the from_state guard
-    # below drops anyway.
-    - platform: state
-      entity_id: binary_sensor.window_sensor_contact
-      to:
-        - "on"
-        - "off"
   condition:
     - condition: state
       entity_id: input_boolean.bedroom_fan_manual
@@ -1826,8 +1815,7 @@
       state: "off"
     # Don't tell me to open a window that is already open. Written as "not confirmed open" rather
     # than `state: "off"` so a dead battery or a Z2M outage (unknown/unavailable) leaves the advisor
-    # working as it did before the sensor existed, instead of silently switching it off. Same
-    # unknown-reads-as-closed convention as bedroom_apply_fan's window_open.
+    # working as it did before the sensor existed, instead of silently switching it off.
     - condition: template
       value_template: "{{ not is_state('binary_sensor.window_sensor_contact', 'on') }}"
   action:
