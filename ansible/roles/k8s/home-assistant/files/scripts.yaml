@@ -368,12 +368,7 @@ bedroom_apply_fan:
         # Outdoor temp (°F) picks the sleep-mode seasonal floor/ceiling band; -999 when weather is
         # unavailable -> winter band (quiet L2 floor).
         outdoor_t: "{{ state_attr('weather.forecast_home', 'temperature') | float(-999) }}"
-        # Window open -> the fan is pointless (and fights the free cooling the window was opened
-        # for), so fan_target_level forces level 0 — EXCEPT in sleep mode, where its seasonal floor
-        # still wins so the white noise survives an open window. Only a confirmed 'on' counts:
-        # unknown/unavailable (dead battery, Z2M down) reads as closed and leaves the curve alone.
-        window_open: "{{ is_state('binary_sensor.window_sensor_contact', 'on') }}"
-        target_level: "{% from 'fan.jinja' import fan_target_level %}{{ fan_target_level(t, cur_level, is_night, sleep, outdoor_t, window_open) | int }}"
+        target_level: "{% from 'fan.jinja' import fan_target_level %}{{ fan_target_level(t, cur_level, is_night, sleep, outdoor_t) | int }}"
         # % to SEND to hit target_level despite the integration's ceil (level -> midpoint %, via the
         # shared fan.jinja macro): the midpoint of the level's range ceils to exactly L. 0 = off.
         send_pct: "{% from 'fan.jinja' import level_to_pct %}{{ level_to_pct(target_level) | int }}"
