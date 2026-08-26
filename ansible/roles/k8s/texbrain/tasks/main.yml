@@ -1,0 +1,14 @@
+---
+# Static SvelteKit build served by nginx. No Secret, no PVC, no backup job —
+# every file the app writes goes to the user's own disk through the browser's
+# File System Access API, so the pod holds nothing worth persisting.
+
+- name: Deploy texbrain to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: texbrain
+    manifests_files:
+      - deployment.yaml
+      - service.yaml
+      - ingressroute.yaml

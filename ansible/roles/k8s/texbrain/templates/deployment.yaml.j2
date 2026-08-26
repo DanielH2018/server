@@ -1,0 +1,73 @@
+{% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: texbrain
+  namespace: {{ k8s_namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: texbrain
+  template:
+    metadata:
+      labels:
+        app: texbrain
+        netpol-baseline: enforced
+    spec:
+      # No legacy Docker-link env vars for every Service in the namespace. Harmless clutter
+      # here, fatal for Authelia — see that role's deployment for the failure it causes.
+      enableServiceLinks: false
+      securityContext:
+        runAsUser: {{ texbrain_k8s_uid }}
+        runAsGroup: {{ texbrain_k8s_uid }}
+        fsGroup: {{ texbrain_k8s_uid }}
+      automountServiceAccountToken: false
+      priorityClassName: homelab-best-effort
+      # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
+      # Weighted so the pod still schedules if daniel-server is cordoned or full.
+{{ node_affinity_preference('daniel-server') }}
+      containers:
+        - name: texbrain
+          image: {{ texbrain_k8s_image }}
+          ports:
+            - containerPort: {{ container_item.port }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            # The only two paths nginx-unprivileged writes. Everything served is baked
+            # into the image and read-only; the app's own state lives in the browser
+            # (cache storage, localStorage, the user's own folder), never here.
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-tmp
+              mountPath: /etc/nginx/tmp
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ container_item.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{ container_item.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "{{ texbrain_k8s_cpu_limit }}"
+              memory: {{ texbrain_k8s_mem_limit }}
+            requests:
+              cpu: "{{ texbrain_k8s_cpu_request }}"
+              memory: {{ texbrain_k8s_mem_request }}
+      volumes:
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-tmp
+          emptyDir: {}

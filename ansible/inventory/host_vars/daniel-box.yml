@@ -68,6 +68,12 @@ containers_list:
     hostname: "bento-pdf"
     port: 8080
     use_authelia: true
+  - name: texbrain
+    platform: k8s
+    # Single label, for the same wildcard-cert reason as bento-pdf above.
+    hostname: "texbrain"
+    port: 8080
+    use_authelia: true
   # Read-only cluster UI. use_authelia is load-bearing rather than decorative: the pod runs
   # with -unsafe-use-service-account-token, so this Middleware is the only thing between a
   # browser and the dashboard's (read-only) cluster identity.

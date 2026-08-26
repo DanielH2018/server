@@ -1,0 +1,30 @@
+---
+# Built from DanielH2018/texbrain, a fork of swimmingbrain/texbrain that adds only a
+# Dockerfile, an nginx config and a GHCR workflow — nothing under src/ — so merging
+# upstream stays conflict-free. Upstream publishes no image, no tags and no releases
+# while committing daily, so pinning it directly would mean a bare commit SHA with no
+# update signal at all.
+#
+# Tag KEPT alongside the digest (repo:latest@sha256), the same shape and for the same
+# reason as bento_pdf_k8s_image: a bare repo@sha256 is invisible to Renovate's k8s
+# image manager and would freeze with zero update signal. The fork's CI pushes :latest
+# on every merge to main, and Renovate opens the digest bump.
+texbrain_k8s_image: ghcr.io/danielh2018/texbrain:latest@sha256:0bd2763d769af5742a76fee8dda8fd2dccae8d50b06be8daeeee2625f7291ac9
+
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Stateless: RollingUpdate Deployment, no PVC, readinessProbe on the only Deployment, and
+# the image is digest-pinned rather than a mutable tag.
+k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe, digest-pinned image"  # noqa var-naming[no-role-prefix]
+
+# nginx-unprivileged runs as this UID. It is also the fsGroup: emptyDir mounts 0755
+# root-owned, so without one the container EPERMs on its cache and tmp directories.
+texbrain_k8s_uid: 101
+
+# Serving static files, with one CPU cost that bento-pdf does not have: nginx gzips the
+# 1.8 MB WebAssembly engine on a cold request. The limit covers that comfortably; the
+# request stays small because it is idle the rest of the time.
+texbrain_k8s_cpu_limit: "500m"
+texbrain_k8s_mem_limit: 256Mi
+texbrain_k8s_cpu_request: "50m"
+texbrain_k8s_mem_request: 32Mi
