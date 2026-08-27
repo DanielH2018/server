@@ -160,6 +160,19 @@ k3s_server_hosts:
   - daniel-box
   - daniel-stage
 
+# Which SOPS file `pre_tasks/load_secrets.yml` decrypts, chosen per host. Production is the
+# default so a host nobody thought about gets the production file and fails closed on a
+# missing key, rather than silently running with no secrets at all.
+#
+# daniel-stage overrides it. The point is scope, not templating: staging renders none of
+# these values onto the guest today, but loading secrets.yml at all puts every production
+# credential in the play's variable scope, and "no role happens to reference it" is a much
+# weaker promise than the one docs/staging-cluster.md Decision 5 makes.
+#
+# Resolved relative to ansible/vars/. ENFORCED by ansible/tests/test_load_secrets_by_host.py,
+# which also checks every file named by any host actually exists.
+secrets_file: secrets.yml
+
 # Pod Security Admission labels, applied to homelab and observability.
 #
 # WARN AND AUDIT ONLY — deliberately no `enforce`. PSA is a namespace-level control and this
