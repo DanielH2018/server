@@ -58,6 +58,10 @@ def test_the_gate_is_a_bare_flag(target, expr):
 
     A compound condition (`and`, a comparison, a lookup) can default to false through a term
     this file cannot see, which is exactly the direction the module docstring is about.
+
+    DECIDED: strict, and deliberately constraining. A later gate that genuinely needs a
+    second term fails here rather than being half-checked, and the fix is to widen this to
+    check every term of the expression — not to exempt the gate.
     """
     assert BARE_FLAG.fullmatch(expr), (
         f"the gate on {target} in {MAIN} is {expr!r}. Keep it a bare flag optionally piped "
