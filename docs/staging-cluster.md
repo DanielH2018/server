@@ -79,6 +79,35 @@ announces only inside the VM's own network.
 The cost is honest and bounded: staging does not exercise L2 announcement or externalTrafficPolicy
 behaviour. Neither is what a manifest-correctness gate is for.
 
+**NAT is not isolation, and treating it as isolation left a hole open from 2026-08-27 until it was
+measured the same day.** `<forward mode='nat'/>` constrains nothing about the destination, so the
+guest reached the whole production LAN — and reached it *masqueraded as daniel-server*, a trusted
+node. Probed from inside the guest: the MetalLB VIP answered 301, the k3s API answered 401, and
+daniel-pi's wg-easy admin UI answered 200. The SNAT is what makes this worse than ordinary
+reachability. Production's source-IP controls see daniel-server, not staging, so authelia's
+`policy: bypass` rules scoped to `lan_subnet` admit the guest and wg-easy's unauthenticated admin
+UI rests on a LAN-only premise the guest sits inside.
+
+The fence is a ufw `route deny` from `staging_net_cidr` to `lan_subnet`, in
+`roles/setup/initial_setup/tasks/network.yml`, gated on `has_hypervisor`. It is deliberately
+**not** a libvirt network hook: libvirt appends its own blanket accept for the bridge to FORWARD,
+so a hook's rule works only if inserted ahead of that — a position no repo check can verify. ufw
+owns its own chain and re-asserts it across reload and reboot.
+
+Guest-to-daniel-server traffic is unaffected, because that is INPUT rather than FORWARD, so
+Ansible still reaches the guest. Nothing else is: the rule is scoped to a source prefix no
+production traffic carries.
+
+The acceptance gate runs **inside the guest**, not on the host — a rule that is present and inert
+reads identically to a working one in `ufw status`:
+
+```bash
+uv run python scripts/diagnostics/staging_egress_probe.py   # on daniel-server
+```
+
+The internet control target must stay reachable. A fence that severed all egress would make every
+production target fail too, and that would read as a pass.
+
 ### 3. Cluster stack — k3s, Longhorn, Traefik, in that order
 
 Single-node, so Longhorn runs at 1 replica. The existing `roles/setup/k3s` is the source for the

@@ -450,6 +450,14 @@ has_hypervisor: false
 staging_vm_hostname: daniel-stage
 staging_vm_mac: "52:54:00:5a:11:e0"
 staging_vm_ip: 192.168.140.10
+# The staging network itself, as a CIDR. Here rather than in the hypervisor role's defaults
+# for the same reason as the guest above: two roles need one source of truth. The hypervisor
+# role builds the libvirt network from a gateway plus a netmask; `initial_setup` fences that
+# network off the production LAN and needs the prefix form. A fence keyed to the wrong
+# network is not a weaker fence, it is no fence at all — so
+# ansible/tests/test_staging_net_cidr_agrees.py asserts this prefix contains the role's
+# gateway and matches its netmask.
+staging_net_cidr: "192.168.140.0/24"
 # Per-user developer environment: the chezmoi-managed dotfiles (DanielH2018/dotfiles) and
 # Claude Code. Both default OFF and are opted into per host — daniel-server already has both
 # installed by hand and shouldn't have them re-provisioned underneath it, and the Pi

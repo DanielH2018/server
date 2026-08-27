@@ -58,10 +58,16 @@
 # `deny incoming` is the host's baseline — only the explicit allow/limit rules
 # below (SSH, WireGuard) open ports. Default-deny is safe to set over an active
 # SSH session because the explicit `limit ssh` rule that follows takes precedence
-# over the default policy. The FORWARD/routed policy is deliberately NOT managed
-# here: Docker owns the FORWARD chain via its own iptables rules (DOCKER-USER),
-# and the WireGuard containers depend on host forwarding — letting UFW set a
-# routed default would fight Docker and risk breaking container/VPN routing.
+# over the default policy.
+#
+# The routed DEFAULT policy is still not managed here, but the reason written here
+# until 2026-08-27 had expired on both halves. It said Docker owns FORWARD via
+# DOCKER-USER and the WireGuard containers depend on host forwarding — Docker was
+# uninstalled from daniel-server on 2026-08-14, and wg-easy runs on daniel-pi. The
+# surviving reason is narrower: daniel-pi genuinely still runs Docker and wg-easy,
+# so a routed default set for every host would fight the one host where the old
+# rationale is still true. Specific `route` rules below are unaffected by the
+# default and are the right shape for a targeted fence.
 - name: Set UFW default policy - deny incoming
   tags: [firewall]
   community.general.ufw:
@@ -82,6 +88,55 @@
     rule: limit
     port: ssh
     proto: tcp
+  become: true
+
+# Fence the staging guest off the production LAN.
+#
+# The libvirt network is `<forward mode='nat'/>` with no destination constraint, so until
+# 2026-08-27 the guest reached the whole production LAN — and reached it MASQUERADED as
+# daniel-server, a trusted node. Measured from inside the guest before this rule existed:
+# the production MetalLB VIP answered 301, the k3s API answered 401, and daniel-pi's
+# wg-easy admin UI answered 200. That last one is the sharp end: that UI is unauthenticated
+# and its only protection is being LAN-only, a premise the guest sat inside. The same SNAT
+# also defeats authelia's `policy: bypass` rules, which are scoped to this very
+# `lan_subnet` — so the fence and the thing it protects read one variable, deliberately.
+#
+# DECIDED: a ufw `route` rule, not an /etc/libvirt/hooks/network script inserting into
+# FORWARD. libvirt appends its own blanket `-s <staging> -i <bridge> -j ACCEPT` to FORWARD,
+# so a hook's rule only works if it is inserted AHEAD of that — a position no repo check can
+# verify and no operator can read back without root. ufw owns its own forward chain and
+# re-asserts it across reload and reboot, where a network hook fires on network start alone.
+# It also keeps every ufw write in this one file, which is what the marker at
+# roles/setup/hypervisor/tasks/install.yml:59 asks for: the hazard there is an UNDECLARED
+# third writer of firewall state, and routing through the host's declared firewall manager
+# is the opposite of that.
+#
+# DECIDED: blanket, with no exception for the in-cluster registry. An exception looks
+# necessary because `ical-proxy` is in the staging subset to exercise the image-builder path
+# end to end — but docs/staging-cluster.md Decision 8 already rules that traffic out:
+# staging runs its OWN registry on daniel-stage, because a staging build pushing to the
+# production registry could overwrite a tag production pulls. So the hole an exception would
+# open carries nothing staging is allowed to send.
+#
+# Guest -> daniel-server itself is unaffected: that is INPUT, not FORWARD, so Ansible still
+# reaches the guest over this host — and because the acceptance probe runs over exactly that
+# path, a fence that broke it would report UNREACHABLE rather than a clean pass.
+#
+# The shape of this rule is ENFORCED by ansible/tests/test_staging_egress_fence.py, but a
+# rule that is present and INERT reads identical to a working one from the host. So the
+# acceptance gate runs at the far side, from inside the guest, on daniel-server:
+#
+#   uv run python scripts/diagnostics/staging_egress_probe.py
+#
+# It must report the internet still reachable and every production target refused.
+- name: Fence the staging network off the production LAN
+  tags: [firewall]
+  when: has_hypervisor | bool
+  community.general.ufw:
+    rule: deny
+    route: true
+    src: "{{ staging_net_cidr }}"
+    dest: "{{ lan_subnet }}"
   become: true
 
 - name: Remove the stale WireGuard 51820/udp allow on the Pi
