@@ -60,6 +60,20 @@ A `subPath` of the existing claim rather than a PVC of its own: the tarball is a
 1Gi, and a second claim would add a storage-class decision and a backup surface for a cache any
 successful start can rebuild.
 
+### verify.yml waits for the rollout, and has to
+`roles/k8s/manifests` does not wait for a rollout — it **queues** it, and `roles/k8s/rollout-drain`
+runs `rollout status` for the whole batch afterwards. So a role's own `verify.yml` runs *before*
+its rollout finishes and `get pod -l app=qbittorrent` returns the **outgoing** pod. That went
+unnoticed here for as long as every proof held for the old pod too: a tunnel and a return path
+look identical either side of a roll. Proof 3 is the first assertion whose answer differs, and it
+failed the 2026-08-27 deploy against a pod that was already `Terminating` while the correctly
+mounted new pod came up seconds later.
+
+`verify.yml` now gates on `rollout status` before finding the pod. It is one inline wait for one
+role, not a reversal of the batch drain, and it is a no-op when nothing rolled. **This is likely
+not unique to this role** — any role whose verify makes pod-identity-sensitive assertions has the
+same exposure.
+
 ### The new failure mode — a stale lock
 Lines 413-421 hold `/modcache/<name>.lock` for the duration of a download. A pod killed
 mid-download leaves it behind, and later starts **wait on it and then skip the mod** — which

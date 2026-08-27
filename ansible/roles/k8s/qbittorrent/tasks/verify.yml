@@ -9,11 +9,46 @@
 # — which is the single most valuable thing --check can tell you about this service. Proof 2
 # CREATES a pod, and a dry run must not.
 
+# WAIT FOR THE NEW POD BEFORE ASSERTING ANYTHING ABOUT "THE" POD.
+#
+# roles/k8s/manifests does NOT wait for the rollout — it QUEUES it, and roles/k8s/rollout-drain
+# runs `rollout status` for the whole batch afterwards (a deliberate 2026-08-09 change, so N
+# waits overlap instead of serialising). A role's own verify.yml therefore runs BEFORE its
+# rollout completes, and `get pod -l app=qbittorrent` returns the OUTGOING pod.
+#
+# That went unnoticed while every proof here happened to hold for the old pod too — a tunnel and
+# a return path look the same either side of a roll. Proof 3 is the first assertion whose answer
+# genuinely differs between the two, and it failed the 2026-08-27 deploy against a pod that was
+# already Terminating while the new pod, correctly mounted, came up seconds later.
+#
+# `rollout status` and not `wait --for=condition=Available`: Available flips on the OLD
+# ReplicaSet and returns instantly, so it would reintroduce exactly this bug. See
+# ansible/tests/test_inline_rollout_gates.py.
+#
+# This is one inline wait for one role, not a reversal of the batch drain. It is warranted here
+# because this file's assertions are pod-identity-sensitive; the drain still owns the batch. The
+# wait is a no-op when nothing rolled.
+- name: Wait for the qbittorrent rollout to finish before verifying it
+  tags: [deploy]
+  # Recreate strategy: the old pod must terminate fully before the new one is created, and the
+  # wireguard sidecar's startupProbe then allows up to 5 min for the tunnel. 8 min covers both
+  # with margin. A timeout here is a real failure — the rollout genuinely did not complete.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} rollout status deployment/qbittorrent --timeout=480s
+  become: true
+  changed_when: false
+  when: not ansible_check_mode
+
 - name: Find the qbittorrent pod
   tags: [deploy]
+  # field-selector excludes a pod that is still Terminating, which the rollout wait above should
+  # already have ruled out — belt and braces, because picking the wrong pod here silently
+  # invalidates every assertion below rather than erroring.
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} get pod -l app=qbittorrent
+      --field-selector=status.phase=Running
       -o jsonpath={.items[0].metadata.name}
   become: true
   changed_when: false
