@@ -392,3 +392,183 @@ def test_home_allowlist_fail_logs_the_status_down_prefix():
         ln for ln in HOME_ALLOWLIST.read_text().splitlines() if ln.startswith("fail()")
     )
     assert 'logger -t crowdsec-home-allowlist "status=down $1"' in fail_line, fail_line
+
+
+# ── cron_kubeconfig_error (cron inherits no KUBECONFIG, and k3s.yaml is root-only) ──
+
+
+def _cron_role(root, *, script="w.sh.j2", user="ubuntu", job_env="", loop=False):
+    """Build a minimal roles tree with one template task and one cron scheduling it.
+
+    Returns the template path cron_kubeconfig_error expects to be handed.
+    """
+    tasks_dir = root / "g" / "r" / "tasks"
+    tasks_dir.mkdir(parents=True, exist_ok=True)
+    (root / "g" / "r" / "templates").mkdir(parents=True, exist_ok=True)
+    dest = "/usr/local/bin/" + script.replace(".j2", "")
+    if loop:
+        tpl_task = (
+            "- name: install\n"
+            "  ansible.builtin.template:\n"
+            '    src: "{{ item.src }}"\n'
+            '    dest: "{{ item.dest }}"\n'
+            "  loop:\n"
+            f"    - src: {script}\n"
+            f"      dest: {dest}\n"
+        )
+    else:
+        tpl_task = (
+            "- name: install\n"
+            "  ansible.builtin.template:\n"
+            f"    src: {script}\n"
+            f"    dest: {dest}\n"
+        )
+    cron_task = (
+        "- name: schedule\n"
+        "  ansible.builtin.cron:\n"
+        '    name: "job"\n'
+        + (f"    user: {user}\n" if user else "")
+        + f'    job: "{job_env}{dest}"\n'
+    )
+    (tasks_dir / "main.yml").write_text(tpl_task + cron_task)
+    return root / "g" / "r" / "templates" / script
+
+
+K3S_BARE = '#!/bin/bash\nKUBECTL="k3s kubectl -n foo"\n$KUBECTL get pods\n'
+K3S_ABS = "#!/bin/bash\n/usr/local/bin/k3s kubectl -n foo get pods\n"
+
+
+def test_kubeconfig_flags_a_nonroot_cron_touching_the_cluster(tmp_path):
+    tpl = _cron_role(tmp_path, user="ubuntu")
+    err = v.cron_kubeconfig_error(tpl, K3S_BARE, roles=tmp_path)
+    assert err is not None
+    assert "EMPTY cluster" in err
+
+
+def test_kubeconfig_passes_a_root_cron(tmp_path):
+    # k3s.yaml is 0640 root:root, so root needs no KUBECONFIG. Measured on daniel-box 2026-08-27.
+    tpl = _cron_role(tmp_path, user="root")
+    assert v.cron_kubeconfig_error(tpl, K3S_BARE, roles=tmp_path) is None
+
+
+def test_kubeconfig_treats_a_missing_user_as_nonroot(tmp_path):
+    # ansible.builtin.cron defaults `user` to the connection user, which is not root here.
+    # Failing closed on the omission is the whole point.
+    tpl = _cron_role(tmp_path, user="")
+    assert v.cron_kubeconfig_error(tpl, K3S_BARE, roles=tmp_path) is not None
+
+
+def test_kubeconfig_passes_an_export_in_the_script(tmp_path):
+    tpl = _cron_role(tmp_path, user="ubuntu")
+    rendered = "#!/bin/bash\nexport KUBECONFIG=/home/ubuntu/.kube/config\n" + K3S_BARE
+    assert v.cron_kubeconfig_error(tpl, rendered, roles=tmp_path) is None
+
+
+def test_kubeconfig_passes_when_the_job_line_sets_it(tmp_path):
+    tpl = _cron_role(
+        tmp_path, user="ubuntu", job_env="KUBECONFIG=/home/u/.kube/config "
+    )
+    assert v.cron_kubeconfig_error(tpl, K3S_BARE, roles=tmp_path) is None
+
+
+def test_kubeconfig_flags_an_absolute_invocation_too(tmp_path):
+    # THE difference from cron_path_error: an absolute path excuses a PATH problem and does
+    # nothing at all for a missing kubeconfig. Two of the three KUBECONFIG-less wrappers in the
+    # real tree call /usr/local/bin/k3s, so reusing the PATH rule's selector would have made
+    # this rule blind to the shape it is most likely to meet.
+    tpl = _cron_role(tmp_path, user="ubuntu")
+    assert v.cron_kubeconfig_error(tpl, K3S_ABS, roles=tmp_path) is not None
+
+
+def test_kubeconfig_ignores_a_template_that_is_not_a_cron_target(tmp_path):
+    (tmp_path / "g" / "r" / "templates").mkdir(parents=True)
+    orphan = tmp_path / "g" / "r" / "templates" / "orphan.sh.j2"
+    assert v.cron_kubeconfig_error(orphan, K3S_BARE, roles=tmp_path) is None
+
+
+def test_kubeconfig_ignores_a_script_that_never_touches_the_cluster(tmp_path):
+    tpl = _cron_role(tmp_path, user="ubuntu")
+    assert v.cron_kubeconfig_error(tpl, "#!/bin/bash\ndf -h\n", roles=tmp_path) is None
+
+
+def test_kubeconfig_reads_the_user_of_the_matching_task_not_the_file(tmp_path):
+    # The failure mode this rule is most likely to have: health-crons.yml schedules eight crons
+    # with different users, so a file-wide search for `user: root` would let one task excuse a
+    # sibling. Both templates live in one task file; only the non-root one may be flagged.
+    tasks_dir = tmp_path / "g" / "r" / "tasks"
+    tasks_dir.mkdir(parents=True)
+    (tmp_path / "g" / "r" / "templates").mkdir(parents=True)
+    tasks_dir.joinpath("main.yml").write_text(
+        "- name: install both\n"
+        "  ansible.builtin.template:\n"
+        '    src: "{{ item.src }}"\n'
+        '    dest: "{{ item.dest }}"\n'
+        "  loop:\n"
+        "    - src: rooted.sh.j2\n"
+        "      dest: /usr/local/bin/rooted.sh\n"
+        "    - src: user.sh.j2\n"
+        "      dest: /usr/local/bin/user.sh\n"
+        "- name: schedule rooted\n"
+        "  ansible.builtin.cron:\n"
+        '    name: "rooted"\n'
+        "    user: root\n"
+        '    job: "/usr/local/bin/rooted.sh"\n'
+        "- name: schedule user\n"
+        "  ansible.builtin.cron:\n"
+        '    name: "user"\n'
+        "    user: ubuntu\n"
+        '    job: "/usr/local/bin/user.sh"\n'
+    )
+    templates = tmp_path / "g" / "r" / "templates"
+    assert (
+        v.cron_kubeconfig_error(templates / "rooted.sh.j2", K3S_BARE, roles=tmp_path)
+        is None
+    )
+    assert (
+        v.cron_kubeconfig_error(templates / "user.sh.j2", K3S_BARE, roles=tmp_path)
+        is not None
+    )
+
+
+def test_cron_targets_resolve_a_looped_template_task(tmp_path):
+    # The looped src/dest form was invisible until 2026-08-27, which hid every longhorn wrapper.
+    tpl = _cron_role(tmp_path, user="ubuntu", loop=True)
+    assert tpl in v.cron_job_scripts(tmp_path)
+
+
+def test_cron_targets_resolve_a_job_line_carrying_jinja_with_spaces(tmp_path):
+    # `KUBECONFIG=/home/{{ sys_user }}/.kube/config` has spaces inside the expression, which
+    # stopped the job line matching at all — the hole docs-refresh.sh sat in.
+    tpl = _cron_role(
+        tmp_path,
+        user="ubuntu",
+        job_env="PATH=/usr/local/bin:/usr/bin:/bin KUBECONFIG=/home/{{ sys_user }}/.kube/config ",
+    )
+    assert tpl in v.cron_job_scripts(tmp_path)
+    assert v.cron_kubeconfig_error(tpl, K3S_BARE, roles=tmp_path) is None
+
+
+def test_the_widened_resolver_covers_the_scripts_it_was_written_for(cron_map):
+    # Pin the four the parser fixes brought in, so a later narrowing of either fix shows up
+    # here rather than as a guard quietly covering less than it claims.
+    names = {t.name for t in cron_map}
+    for expected in (
+        "longhorn-backup-health.sh.j2",
+        "longhorn-restore-drill.sh.j2",
+        "longhorn-trim-volumes.sh.j2",
+        "docs-refresh.sh.j2",
+    ):
+        assert expected in names, expected
+
+
+def test_the_real_tree_has_no_kubeconfig_violation():
+    # Zero today, and this is the assertion that says so out loud: the rule ships preventive,
+    # not as a fix. A future non-root cron wrapper that reads the cluster fails here first.
+    offenders = []
+    for tpl, _task_file, _cron, _env in v._cron_targets():
+        if not tpl.exists():
+            continue
+        err = v.cron_kubeconfig_error(tpl, tpl.read_text())
+        if err:
+            offenders.append(tpl.name)
+    assert offenders == [], offenders
