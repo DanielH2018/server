@@ -8,9 +8,15 @@
 # the server side.
 #
 # Deliberately NOT here:
-#   - the no-Docker assert from main.yml — coexistence with the remaining Docker
-#     residuals is exactly what §F plans; the two iptables hazards slice 0 named
-#     (DOCKER-USER custom rules, wg-easy hairpin NAT) retired at E7 / live on the Pi.
+#   - the A1 node-DNS drop-in (see below).
+#
+# The no-Docker assert USED to be listed here as deliberately omitted, on the reasoning
+# that "coexistence with the remaining Docker residuals is exactly what §F plans". That
+# was true during the drain and expired when it finished: daniel-server's Docker was
+# purged on 2026-08-14 and has_docker went false the same day. The omission then cost
+# what it was always going to — Docker was reinstalled on 2026-08-19 and ran unnoticed
+# for eight days, because the only guard lives in server.yml under tags: [k3s_server] and
+# this host is the agent. Contradicting that marker deliberately; the assert is below.
 #   - the A1 node-DNS drop-in (checked 2026-08-13): daniel-server does not run
 #     systemd-resolved — its static /etc/resolv.conf is `10.0.0.243` (the in-cluster
 #     Pi-hole VIP) with a `1.1.1.1` fallback and `timeout:2 attempts:1`, so a cold
@@ -18,6 +24,27 @@
 #     drop-in exists to guarantee. Pinning upstream-ONLY would break the Docker
 #     containers' `.local` resolution (they forward to the host's resolv.conf:
 #     promtail's loki push URL, monitor-bridge's check targets). Revisit at the drain.
+
+- name: Refuse to run on an agent host that already runs Docker
+  tags: [k3s_agent]
+  # Same assert as server.yml, same reason: k3s brings its own containerd and its iptables
+  # rules would land on top of Docker's chains. Both node roles need it — a guard on one
+  # path is a guard the other host can walk around, which is exactly what happened on
+  # 2026-08-19. ENFORCED as a pair by ansible/tests/test_k3s_docker_guard.py.
+  ansible.builtin.stat:
+    path: /usr/bin/docker
+  register: k3s_agent_docker_binary
+  become: true
+
+- name: Fail if Docker is installed on the agent
+  tags: [k3s_agent]
+  ansible.builtin.assert:
+    that: not k3s_agent_docker_binary.stat.exists
+    fail_msg: >-
+      Docker is installed on {{ inventory_hostname }}. This role targets a host with no
+      other container runtime; k3s brings its own containerd and its iptables rules would
+      land on top of Docker's chains. Run initial_setup.yml --tags docker_install to let
+      the teardown purge it, then re-run this.
 
 - name: Allow cluster traffic from the server node
   tags: [k3s_agent]
