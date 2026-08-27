@@ -235,6 +235,16 @@ refuses outright — and then say which command and why.
    runs yet holds the verdict at pending. Reading the same endpoint as the deployer is what
    makes your verdict and the tick's agree by construction.
 
+   **A `cancelled` conclusion never becomes green — wait on the tip instead.** Two merges in
+   quick succession cancel the first run, so a commit whose merge was immediately followed by
+   another reads `completed cancelled` permanently, and polling it waits forever. Read it as
+   pending, which is what `_CI_NO_VERDICT_CONCLUSIONS` (`deploy_logic.py`) does — `cancelled`,
+   `stale` and `skipped_by_concurrency` all mean *no verdict for this SHA*, not *this SHA is
+   bad*. The verdict then comes from the tip: `git fetch && git log --oneline -3 origin/master`,
+   and gate on the tip's check-runs once your commit is an ancestor of it. Measured 2026-08-27:
+   `449c46d2` (#497) reads cancelled to this day because #498 merged seconds later, and green
+   arrived on `17d71879`, which contains it.
+
    This is a gate, not politeness. PR CI is scoped to changed files, so whole-tree tests can
    only fail after merge. A **pending** master CI also blocks the fast-forward itself —
    `next_action()` returns `ci_pending` *before* the `--ff-only` merge (`deploy_logic.py`), so
