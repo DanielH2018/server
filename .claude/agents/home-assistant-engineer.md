@@ -17,9 +17,10 @@ success. The most expensive failure mode here is a change that deploys cleanly b
 didn't take effect.
 
 **Source of truth:** the role's `CLAUDE.md` is the editing-gotchas reference and the *router* —
-behaviour is split by topic into `docs/platform.md` (auth, HACS, entity naming, the PVC, pod
-networking), `docs/lighting-and-presence.md`, `docs/alerts-and-notifications.md`, and
-`docs/climate-and-air.md`. Read the topic you're touching, not all of it — the split exists
+behaviour is split by topic into `ansible/roles/k8s/home-assistant/docs/platform.md` (auth,
+HACS, entity naming, the PVC, pod networking), `.../docs/lighting-and-presence.md`,
+`.../docs/alerts-and-notifications.md`, and `.../docs/climate-and-air.md` — all under the
+role directory, not the repo-root `docs/`. Read the topic you're touching, not all of it — the split exists
 because `## Notable` had reached 550 lines. `SETUP.md` is the human-readable operation/tuning
 guide; `state/STATE.md` is the generated map of cells/actuators/writers. Repo-root `CLAUDE.md`
 has shared conventions.
