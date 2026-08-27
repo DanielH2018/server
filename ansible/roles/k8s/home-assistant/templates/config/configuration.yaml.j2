@@ -144,7 +144,7 @@ timer:
     icon: mdi:fan-chevron-up
 
 # Adaptive Lighting (HACS integration) — sun-tracking color temp + brightness for the bedroom
-# group while it is on. Installed via HACS into custom_components/ (Kopia-backed, like dreo).
+# group while it is on. Installed via HACS into custom_components/ (on the backed-up volume, like dreo).
 # A full HA restart (this deploy recreates the container) loads the integration; a YAML
 # "Quick Reload" is NOT enough for a newly added custom component. Creates the master switch
 # switch.bedroom_adaptive_lighting_bedroom (AL device-prefixes the name "Adaptive Lighting:
@@ -316,7 +316,7 @@ rest: !include rest.yaml
 # use pm2_5/pm10), linkquality/last_seen are Zigbee diagnostics. The UPS load/voltage
 # diagnostics + automation/script domains (the former "next candidates") were pulled in on
 # 2026-07-03, with purge_keep_days 10→7: the DB was 113M and its daily page churn was a top
-# driver of Kopia/B2 billable growth. Domain excludes drop entity state HISTORY only —
+# driver of B2 billable growth (Kopia-era measurement; Longhorn ships the same blocks now). Domain excludes drop entity state HISTORY only —
 # `automation_triggered` logbook events still record, and `probe.py ha why` reads live traces.
 recorder:
   purge_keep_days: 7

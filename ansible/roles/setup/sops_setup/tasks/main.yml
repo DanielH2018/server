@@ -64,8 +64,8 @@
     state: directory
     mode: "0700"
 
-# DR NOTE: host keys at ~/.config/sops/age/keys.txt are in NO automated backup (Kopia
-# backs up only `containers/`). Since 2026-06-11 .sops.yaml has a third, OFF-BOX recovery
+# DR NOTE: host keys at ~/.config/sops/age/keys.txt are in NO automated backup — nothing outside
+# a Longhorn volume is, since Kopia retired 2026-08-13 (and it only covered `containers/` before). Since 2026-06-11 .sops.yaml has a third, OFF-BOX recovery
 # recipient (private half only in the operator's password manager), so losing both hosts'
 # keys no longer strands the secrets. Host keys also backed up out-of-band (2026-06-06).
 - name: Generate Age key (only if it doesn't exist)

@@ -607,14 +607,15 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   `_env_file`) — an unscoped full-access token must NOT sit inline in the container Env the
   docker-proxy exposes to monitoring-net neighbors (2026-07-15 review H2). An empty token file
   disables the check (falls back to the `HA_TOKEN` env, also empty = disabled).
-- The **B2 Reachable** check reuses that same file-mount pattern for its B2 credential — Kopia's
-  existing application key, rendered 0600 to `./b2_probe_application_key` and read via
+- The **B2 Reachable** check reuses that same file-mount pattern for its B2 credential — the
+  existing `kopia_b2_application_key`, which is LONGHORN's B2 key despite the name (ADR-0014),
+  rendered 0600 to `./b2_probe_application_key` and read via
   `B2_PROBE_APPLICATION_KEY_FILE`. No new secret is minted for it; the probe-specific env name
   means pointing it at a scoped read-only key later is an inventory edit rather than a code change.
   The paired `B2_PROBE_KEY_ID` stays inline, since an id can't authenticate on its own.
 - The two GitOps monitors read host state via a **read-only bind-mount**
   `/var/lib/gitops-deploy:/gitops-state:ro` (written by the `gitops_deploy` host role) — no
-  Prometheus/Kopia/n8n source. That dir must exist owned by the deploy user before deploy; the
+  Prometheus/n8n source. That dir must exist owned by the deploy user before deploy; the
   `gitops_deploy` role creates it, so deploy `gitops_deploy` before `monitor-bridge` (else Docker
   auto-creates the mount source root-owned and the non-root container can't read it).
   (The **Renovate Notifier — Alive** and **WG Pi Peer Backup** monitors had the same

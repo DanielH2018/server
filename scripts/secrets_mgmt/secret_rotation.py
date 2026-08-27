@@ -31,8 +31,8 @@ Tiers (and default rotation cadence):
                  app-side step; the audit reminds, rotation is a documented runbook
   external 365d  provider-managed (Cloudflare/Discord/Mullvad/SMTP/LLM keys) — mint in
                  the provider console; audit-only
-  pinned   730d  MUST NOT be naively swapped (kopia repo password, authelia storage
-                 encryption key) — needs a dedicated migration command or backups/DB break
+  pinned   730d  MUST NOT be naively swapped (authelia storage encryption key) — needs a
+                 dedicated migration command or backups/DB break
   ignore   —     not a rotatable secret (domain, usernames, static interface addresses)
 """
 
@@ -174,7 +174,7 @@ def consumer_tag(name: str) -> str | None:
         return None
     if name in PREFIX_EXCEPTION_CONSUMERS:
         return PREFIX_EXCEPTION_CONSUMERS[name]
-    if name.startswith("monitor_bridge_") or name == "kopia_restore_drill_push_token":
+    if name.startswith("monitor_bridge_"):
         return "monitor-bridge"
     if name.startswith("cloudflare_ddns_"):
         return "cloudflare-ddns"

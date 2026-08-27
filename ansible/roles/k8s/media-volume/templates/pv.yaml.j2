@@ -14,7 +14,7 @@ spec:
     # pod) but would misdescribe the intent to the next reader.
     - ReadWriteMany
   # Retain, not Delete: deleting the claim must not delete a library that nothing backs up
-  # (kopia excludes containers/data/).
+  # (nothing backs up containers/data/ — kopia excluded it and retired 2026-08-13).
   #
   # THE RECOVERY TRAP that buys: the binding controller stamps the PVC's UID into claimRef at
   # bind time. Delete the PVC and this PV goes Released holding a UID that no longer exists, so

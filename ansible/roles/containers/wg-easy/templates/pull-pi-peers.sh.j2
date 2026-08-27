@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # Pull daniel-pi's wg-easy peer configs (wg0.conf/wg0.json — WireGuard private keys) into the
-# server's Kopia-scoped containers/ tree, so an SD-card death on the Pi doesn't mean re-enrolling
-# every VPN client. The Pi is otherwise out of Kopia scope (see the kopia role's CLAUDE.md); this
-# one directory is the deliberate exception. Managed by the wg-easy role, daniel-server ONLY.
+# server's backed-up containers/ tree, so an SD-card death on the Pi doesn't mean re-enrolling
+# every VPN client. The Pi is otherwise out of backup scope; this one directory is the deliberate
+# exception. Managed by the wg-easy role, daniel-server ONLY.
+#
+# The tree was Kopia's snapshot source when this was written. Kopia retired 2026-08-13 and the
+# pull itself is now the `roles/k8s/pi-peer-backup` CronJob onto a Longhorn PVC -- see that role
+# and wg-easy's own CLAUDE.md. The retired role is kept at `roles/containers/archive/kopia/`.
 #
 # sudo rsync on the Pi (it has NOPASSWD sudo) is REQUIRED: the files are root:root 0600/0640,
 # unreadable to the ubuntu SSH user. BatchMode=yes so a broken key/host-key fails fast rather than
