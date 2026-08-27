@@ -13,6 +13,7 @@ way.
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from typing import Iterator
 
@@ -128,3 +129,47 @@ def jinja_env() -> NativeEnvironment:
 def render_expr(expression: str, **context):
     """Render a Jinja expression through `jinja_env()`."""
     return jinja_env().from_string(expression).render(**context)
+
+
+_DOC_EXCLUDED_DIRS = (
+    REPO / "docs" / "archive",
+    REPO / "ansible" / "roles" / "containers" / "archive",
+)
+
+
+def discover_docs() -> list[Path]:
+    """Every operator doc in THIS checkout: repo CLAUDE.md files, `.claude/`, and `docs/`.
+
+    DECIDED: `git ls-files`, not `rglob`. An rglob walks whatever is on disk, and this repo
+    grows other checkouts during ordinary work — `.claude/worktrees/<name>/` is a full working
+    tree per live session. Those hold OLDER copies of these same docs, so a guard that walks
+    them judges this commit against other sessions' history and fails on paths that moved
+    perfectly legitimately.
+
+    That is not hypothetical: it broke the `docs-refresh` cron. Its commit runs the prek hooks,
+    both doc guards failed on citations inside sibling worktrees, and the script took its
+    designed failure path — "commit failed (hook rejection?); unstaged, nothing published" —
+    so the generated reference pages silently stopped publishing. Master CI stayed green
+    throughout, because a CI runner has no worktrees on disk. Found 2026-08-27.
+
+    `git ls-files` answers with what this commit actually contains, which is the only thing
+    these guards have any business asserting about.
+    """
+    listed = subprocess.run(
+        ["git", "ls-files", "-z", "--", "*.md"],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    docs = []
+    for rel in listed.split("\0"):
+        if not rel:
+            continue
+        path = REPO / rel
+        if path.name != "CLAUDE.md" and rel.split("/")[0] not in (".claude", "docs"):
+            continue
+        if any(excluded in path.parents for excluded in _DOC_EXCLUDED_DIRS):
+            continue
+        docs.append(path)
+    return sorted(set(docs))
