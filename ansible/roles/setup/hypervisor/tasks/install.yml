@@ -3,16 +3,31 @@
 # to the slices that own them, so this role stays re-runnable on a host that already has a
 # staging VM without touching it.
 
+- name: Read the CPU virtualisation flags
+  tags: [hypervisor]
+  # /proc/cpuinfo rather than a fact: ansible.builtin.setup exposes no CPU flag list, so
+  # `ansible_processor_flags` -- the obvious-looking name -- is simply undefined. That was
+  # shipped once and reached a real host, because no lint or test evaluates a conditional.
+  # Reading the file is also independent of whether the kvm module has loaded yet, which a
+  # /dev/kvm stat would not be at this point in the role.
+  ansible.builtin.command:
+    cmd: grep -cE '^flags\s*:.*\s(vmx|svm)(\s|$)' /proc/cpuinfo
+  register: hypervisor_virt_flags
+  changed_when: false
+  failed_when: false
+  become: true
+
 - name: Assert the CPU supports hardware virtualisation
   tags: [hypervisor]
   # Fail here with the reason rather than several tasks later with a qemu error. Software
   # emulation would "work" and be slow enough to make the staging cluster useless, which is
   # a worse outcome than refusing.
   ansible.builtin.assert:
-    that: "'vmx' in ansible_processor_flags or 'svm' in ansible_processor_flags"
+    that: hypervisor_virt_flags.stdout | int > 0
     fail_msg: >-
-      {{ inventory_hostname }}'s CPU reports neither vmx nor svm, so KVM cannot accelerate a
-      guest. Check that virtualisation is enabled in firmware before installing libvirt.
+      {{ inventory_hostname }}'s /proc/cpuinfo lists neither vmx nor svm on any core, so KVM
+      cannot accelerate a guest. Check that virtualisation is enabled in firmware before
+      installing libvirt.
 
 - name: Install the KVM/libvirt packages
   tags: [hypervisor]
