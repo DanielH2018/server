@@ -20,3 +20,25 @@ hypervisor_packages:
 hypervisor_user_groups:
   - libvirt
   - kvm
+
+# Where the rendered network XML lives. Our own path, not /etc/libvirt/qemu/networks —
+# that is libvirt's internal store, written by net-define and not meant to be edited
+# underneath it.
+hypervisor_net_source_dir: /etc/libvirt/declared-networks
+
+# The staging NAT network.
+#
+# DECIDED: 192.168.140.0/24, chosen against a census of what daniel-server actually routes
+# rather than by picking an unused-looking number (2026-08-27). In use there: 10.0.0.0/24
+# (LAN), 10.42.0.0/16 and 10.43.0.0/16 (k3s pods and services), 10.200.0.0/16 and
+# 172.17.0.0/16 (bridges left by the retired Docker install), and 192.168.122.0/24
+# (libvirt's own `default`, defined-but-stopped). Sitting outside 10/8 entirely means a
+# future k3s or Docker range cannot grow into it.
+# ENFORCED by ansible/tests/test_staging_network.py, which re-checks the overlap.
+hypervisor_staging_net_name: staging
+hypervisor_staging_net_bridge: virbr-stage
+hypervisor_staging_net_gateway: 192.168.140.1
+hypervisor_staging_net_netmask: 255.255.255.0
+# The dynamic range deliberately excludes staging_vm_ip, which is a reservation.
+hypervisor_staging_net_dhcp_start: 192.168.140.50
+hypervisor_staging_net_dhcp_end: 192.168.140.99

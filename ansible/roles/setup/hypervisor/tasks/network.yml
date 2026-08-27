@@ -1,0 +1,90 @@
+---
+# Declares the staging NAT network. Separate from install.yml because the two answer
+# different questions: install.yml is "this host can run VMs", this is "this is the network
+# the staging guest attaches to". Kept in the same role because both are libvirt state on
+# one host, and a second role for one network would be ceremony.
+
+- name: Create the directory for declared libvirt networks
+  tags: [hypervisor]
+  # Our own path, not /etc/libvirt/qemu/networks — that is libvirt's internal store, written
+  # by net-define and not meant to be edited underneath it. This holds the SOURCE we define
+  # from, so the rendered XML is diffable and the define is driven by it changing.
+  ansible.builtin.file:
+    path: "{{ hypervisor_net_source_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Render the staging network definition
+  tags: [hypervisor]
+  ansible.builtin.template:
+    src: staging-network.xml.j2
+    dest: "{{ hypervisor_net_source_dir }}/{{ hypervisor_staging_net_name }}.xml"
+    owner: root
+    group: root
+    mode: "0644"
+  register: hypervisor_staging_net_xml
+  become: true
+
+- name: Check whether the staging network is already defined
+  tags: [hypervisor]
+  ansible.builtin.command:
+    cmd: virsh --connect qemu:///system net-info {{ hypervisor_staging_net_name }}
+  register: hypervisor_staging_net_info
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: Define the staging network
+  tags: [hypervisor]
+  # Runs when the rendered XML changed OR when the network is not defined at all. net-define
+  # replaces an existing definition, so this is safe to repeat; gating it on those two
+  # conditions is what keeps the task from reporting changed on every run.
+  when: hypervisor_staging_net_xml is changed or hypervisor_staging_net_info.rc != 0
+  ansible.builtin.command:
+    cmd: virsh --connect qemu:///system net-define {{ hypervisor_net_source_dir }}/{{ hypervisor_staging_net_name }}.xml
+  changed_when: true
+  become: true
+
+- name: Re-read the staging network's state
+  tags: [hypervisor]
+  # The define above can have changed Active/Autostart, so the two tasks below must not read
+  # the stale registration from before it.
+  ansible.builtin.command:
+    cmd: virsh --connect qemu:///system net-info {{ hypervisor_staging_net_name }}
+  register: hypervisor_staging_net_state
+  changed_when: false
+  become: true
+
+- name: Start the staging network
+  tags: [hypervisor]
+  when: hypervisor_staging_net_state.stdout is search('Active:\s+no')
+  ansible.builtin.command:
+    cmd: virsh --connect qemu:///system net-start {{ hypervisor_staging_net_name }}
+  changed_when: true
+  become: true
+
+- name: Autostart the staging network
+  tags: [hypervisor]
+  # The guest should come back after a host reboot without an operator. This is the one
+  # bridge and NAT ruleset this host gains deliberately — unlike libvirt's `default`, which
+  # install.yml stops precisely because nothing declared it.
+  when: hypervisor_staging_net_state.stdout is search('Autostart:\s+no')
+  ansible.builtin.command:
+    cmd: virsh --connect qemu:///system net-autostart {{ hypervisor_staging_net_name }}
+  changed_when: true
+  become: true
+
+- name: Verify the staging bridge is up and carries its gateway address
+  tags: [hypervisor]
+  # The exit criterion. net-info reporting Active is libvirt's view; this checks the kernel
+  # agrees, because a network can be "active" while its bridge failed to take the address —
+  # which is the state that would make the guest unreachable in the next slice.
+  ansible.builtin.command:
+    cmd: ip -4 -brief addr show {{ hypervisor_staging_net_bridge }}
+  register: hypervisor_staging_bridge_addr
+  changed_when: false
+  failed_when: hypervisor_staging_net_gateway not in hypervisor_staging_bridge_addr.stdout
+  become: true

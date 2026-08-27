@@ -1,0 +1,21 @@
+<!-- Managed by ansible (roles/setup/hypervisor). Edits here are overwritten. -->
+<network>
+  <name>{{ hypervisor_staging_net_name }}</name>
+  <forward mode='nat'>
+    <!-- Bounded explicitly rather than left to libvirt's default, so the masquerade port
+         range is a declared property of this network and not a version-dependent one. -->
+    <nat>
+      <port start='1024' end='65535'/>
+    </nat>
+  </forward>
+  <bridge name='{{ hypervisor_staging_net_bridge }}' stp='on' delay='0'/>
+  <ip address='{{ hypervisor_staging_net_gateway }}' netmask='{{ hypervisor_staging_net_netmask }}'>
+    <dhcp>
+      <range start='{{ hypervisor_staging_net_dhcp_start }}' end='{{ hypervisor_staging_net_dhcp_end }}'/>
+      <!-- The guest's address is reserved here rather than left to a lease, so the
+           inventory entry that reaches it in a later slice names a fixed address. The
+           reservation deliberately sits OUTSIDE the dynamic range above. -->
+      <host mac='{{ staging_vm_mac }}' name='{{ staging_vm_hostname }}' ip='{{ staging_vm_ip }}'/>
+    </dhcp>
+  </ip>
+</network>

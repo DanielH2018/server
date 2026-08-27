@@ -35,6 +35,48 @@
       is not being removed. Undefine them deliberately first — `virsh undefine <name>
       --remove-all-storage` destroys their disks — then re-run.
 
+- name: Check whether the staging network is defined
+  tags: [hypervisor]
+  when: hypervisor_libvirtd_binary.stat.exists
+  ansible.builtin.command:
+    cmd: virsh --connect qemu:///system net-info {{ hypervisor_staging_net_name }}
+  register: hypervisor_teardown_net_info
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: Stop the staging network
+  tags: [hypervisor]
+  # Destroy before undefine so the bridge and its NAT rules go now rather than at the next
+  # reboot. Purging Docker taught this directly: #479 removed the packages and left 13
+  # bridges and their routes on daniel-server until someone reboots it. Removing a thing
+  # should remove what it put on the host.
+  when:
+    - hypervisor_libvirtd_binary.stat.exists
+    - hypervisor_teardown_net_info.rc == 0
+    - hypervisor_teardown_net_info.stdout is search('Active:\s+yes')
+  ansible.builtin.command:
+    cmd: virsh --connect qemu:///system net-destroy {{ hypervisor_staging_net_name }}
+  changed_when: true
+  become: true
+
+- name: Undefine the staging network
+  tags: [hypervisor]
+  when:
+    - hypervisor_libvirtd_binary.stat.exists
+    - hypervisor_teardown_net_info.rc == 0
+  ansible.builtin.command:
+    cmd: virsh --connect qemu:///system net-undefine {{ hypervisor_staging_net_name }}
+  changed_when: true
+  become: true
+
+- name: Remove the declared network source directory
+  tags: [hypervisor]
+  ansible.builtin.file:
+    path: "{{ hypervisor_net_source_dir }}"
+    state: absent
+  become: true
+
 - name: Stop and disable libvirtd
   tags: [hypervisor]
   when: hypervisor_libvirtd_binary.stat.exists

@@ -13,8 +13,31 @@ Makes a host able to run VMs. Deploys the staging cluster's substrate; see
 
 ## What it does not do
 
-No guest and no network are defined here. Both belong to later slices, so re-running this
-role on a host that already has a staging VM leaves it alone.
+No guest is defined here — that belongs to a later slice, so re-running this role on a host
+that already has a staging VM leaves it alone.
+
+## The staging network
+
+`network.yml` declares one NAT network, `staging`, on `virbr-stage`. It renders the XML to
+`/etc/libvirt/declared-networks/` and defines from there — libvirt's own
+`/etc/libvirt/qemu/networks` is its internal store, written by `net-define` and not meant to
+be edited underneath it. The define runs only when that rendered file changes or the network
+is undefined, which is what keeps a re-run at `changed=0`.
+
+**The subnet is `192.168.140.0/24`, and the number is not arbitrary.** It was chosen against
+a census of what daniel-server actually routes: `10.0.0.0/24` (LAN), `10.42.0.0/16` and
+`10.43.0.0/16` (k3s), `10.200.0.0/16` and `172.17.0.0/16` (bridges the retired Docker
+install left behind), `192.168.122.0/24` (libvirt's `default`). Being outside `10/8` means a
+future k3s or Docker range cannot grow into it.
+
+The guest's address is a **DHCP reservation** on a fixed QEMU-OUI MAC, declared in
+`group_vars/all.yml` so the role and the inventory entry that reaches the guest share one
+source. It sits outside the dynamic range, or the lease could be handed out first.
+
+ENFORCED by `ansible/tests/test_staging_network.py`, which renders the template and parses
+it. That matters more here than elsewhere: nothing else in the repo validates libvirt XML,
+and two bugs in this role reached a real host in one afternoon because every check only
+parsed the file they lived in.
 
 ## The default network is stopped on purpose
 
