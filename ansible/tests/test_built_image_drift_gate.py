@@ -172,3 +172,85 @@ def test_the_gate_compares_against_the_running_pods_image_id():
         "reports phase: Running, so a slow terminationGracePeriodSeconds would fail the deploy on "
         "the outgoing pod."
     )
+
+
+def _evaluate_gate(pods, built_image):
+    """Evaluate the gate's REAL assert expression against fake pod JSON.
+
+    Everything above is a shape check. This is not: it lifts the condition straight out of the task
+    file and runs it, so a Jinja bug fails here instead of on a live deploy.
+
+    It exists because the first version of this gate shipped with one and reached master. The
+    expression reached the pod list with `.items`, and Jinja resolves a dotted name to the ATTRIBUTE
+    before the key — `items` is a Python dict method, so `rejectattr` was handed a bound method and
+    every image-building deploy died with "'method' object is not iterable". Seven structural tests
+    and a full `prek run` passed over it, because none of them evaluated the template.
+    """
+    import json
+
+    from ansible.plugins.filter.core import FilterModule
+    from ansible.plugins.test.core import TestModule
+    from jinja2 import Environment
+
+    task = next(
+        t for t in _tasks(_GATE) if "ansible.builtin.assert" in t and "loop" in t
+    )
+    expression = task["ansible.builtin.assert"]["that"][0]
+
+    env = Environment()
+    env.filters.update(FilterModule().filters())
+    # `search` is an ansible TEST, not a filter — selectattr('imageID', 'search', ...) needs it.
+    env.tests.update(TestModule().tests())
+    rendered = env.from_string("{{ " + expression + " }}").render(
+        item=built_image,
+        k8s_image_drift_pods={"stdout": json.dumps(pods)},
+        k8s_registry_pull_host="localhost:5000",
+    )
+    return rendered == "True"
+
+
+_NUT = {"name": "nut", "digest": "sha256:aaa"}
+
+
+def _pod(image_id, phase="Running", deleting=False):
+    meta = {"name": "nut-1"}
+    if deleting:
+        meta["deletionTimestamp"] = "2026-08-27T15:00:00Z"
+    return {
+        "metadata": meta,
+        "status": {"phase": phase, "containerStatuses": [{"imageID": image_id}]},
+    }
+
+
+def test_the_gate_passes_when_the_pod_matches_the_registry():
+    assert _evaluate_gate({"items": [_pod("localhost:5000/nut@sha256:aaa")]}, _NUT)
+
+
+def test_the_gate_fails_when_the_pod_is_stale():
+    """The whole point: registry moved, pod did not."""
+    assert not _evaluate_gate({"items": [_pod("localhost:5000/nut@sha256:bbb")]}, _NUT)
+
+
+def test_the_gate_ignores_a_terminating_pod():
+    """A pod being replaced still reports phase: Running, and its digest is legitimately old."""
+    assert _evaluate_gate(
+        {"items": [_pod("localhost:5000/nut@sha256:bbb", deleting=True)]}, _NUT
+    )
+
+
+def test_the_gate_ignores_another_images_pod():
+    """Image name is matched, not workload name — n8n-images builds what the n8n role deploys."""
+    assert _evaluate_gate({"items": [_pod("localhost:5000/other@sha256:bbb")]}, _NUT)
+
+
+def test_the_gate_passes_when_no_pod_runs_the_image():
+    """Build-only images and scaled-to-zero workloads pass, deliberately."""
+    assert _evaluate_gate({"items": []}, _NUT)
+
+
+def test_the_gate_skips_an_unreadable_registry_digest():
+    """An empty digest is not compared — upstream already treats it as 'changed'."""
+    assert _evaluate_gate(
+        {"items": [_pod("localhost:5000/nut@sha256:bbb")]},
+        {"name": "nut", "digest": ""},
+    )
