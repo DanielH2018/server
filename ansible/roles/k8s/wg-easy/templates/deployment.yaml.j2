@@ -30,7 +30,7 @@ spec:
       # because this IS the remote-access path, it would also remove the way back in to
       # diagnose it.
       nodeSelector:
-        kubernetes.io/hostname: daniel-box
+        kubernetes.io/hostname: {{ k8s_primary_node }}
       enableServiceLinks: false
       securityContext:
         # Both namespaced; kubelet only admits them because setup/k3s allow-lists them.

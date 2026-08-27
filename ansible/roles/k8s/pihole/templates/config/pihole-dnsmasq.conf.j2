@@ -41,7 +41,7 @@ address=/local.{{ domain }}/::
 # in the cluster but its name falls through to the local.<domain> wildcard above, resolves to
 # daniel-server, and the Docker Traefik answers its own 404 — which reads like a broken route
 # rather than a missing DNS record.
-{% for svc in hostvars['daniel-box'].containers_list | default([]) | filter_by_platform('k8s') %}
+{% for svc in hostvars[k8s_primary_node].containers_list | default([]) | filter_by_platform('k8s') %}
 {% if svc.hostname is defined %}
 address=/{{ svc.hostname }}.local.{{ domain }}/{{ k3s_metallb_ingress_vip }}
 {% endif %}

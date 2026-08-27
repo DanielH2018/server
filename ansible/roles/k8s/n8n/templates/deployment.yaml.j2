@@ -34,7 +34,7 @@ spec:
       priorityClassName: homelab-best-effort
       # Preference, never a pin: CPU-bound workflow execution — daniel-box has 16 threads to daniel-server's 8.
       # Weighted so the pod still schedules if daniel-box is cordoned or full.
-{{ node_affinity_preference('daniel-box') }}
+{{ node_affinity_preference(k8s_primary_node) }}
       containers:
         - name: n8n
           image: {{ n8n_k8s_image }}

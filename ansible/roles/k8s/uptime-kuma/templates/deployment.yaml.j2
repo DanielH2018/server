@@ -29,7 +29,7 @@ spec:
       hostAliases:
         - ip: "{{ k3s_metallb_ingress_vip }}"
           hostnames:
-{% for entry in hostvars['daniel-box'].containers_list | selectattr('hostname', 'defined') %}
+{% for entry in hostvars[k8s_primary_node].containers_list | selectattr('hostname', 'defined') %}
             - "{{ entry.hostname }}.local.{{ domain }}"
 {% for extra in entry.extra_hostnames | default([]) %}
             - "{{ extra }}.local.{{ domain }}"
