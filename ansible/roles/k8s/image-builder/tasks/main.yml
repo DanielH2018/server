@@ -237,6 +237,11 @@
   # useful thing for a dry run to say.
   check_mode: false
 
+# DECIDED: no `when: image_builder_building` here, unlike the four tasks above. Reading the digest
+# on a SKIPPED build is what lets post_tasks/k8s_image_drift_gate.yml see a stale pod sitting in
+# front of an unchanged registry tag — the case that hid nut's week-old image for 90 minutes on
+# 2026-08-27. Gating this for consistency with its siblings is the obvious tidy-up and it blinds
+# the gate. ENFORCED by ansible/tests/test_built_image_drift_gate.py.
 - name: Read the post-build digest of {{ image_builder_name }}
   tags: [deploy]
   ansible.builtin.uri:
@@ -264,3 +269,34 @@
   when: >-
     image_builder_digest_before.docker_content_digest | default('') !=
     image_builder_digest_after.docker_content_digest | default('')
+
+# Every image this play touched, with the digest the registry serves for it RIGHT NOW — read by
+# post_tasks/k8s_image_drift_gate.yml once the rollouts have drained.
+#
+# Recorded unconditionally, where k8s_rebuilt_images above is recorded only on a digest change.
+# That difference is the whole point. The gate catches a pod running something other than what the
+# registry serves, and the two ways that happens are opposites:
+#
+#   1. The digest MOVED and nothing rolled — an earlier run died between the push and the rollout
+#      queue, so k8s_rebuilt_images never named the image.
+#   2. The digest did NOT move on this run, because the build short-circuited on a byte-identical
+#      context with the tag already served — while the pod in front of it is still stale from (1).
+#
+# Keying this on a digest change would see (1) and be blind to (2), which is the half that hides.
+# nut sat on a week-old image for 90 minutes across two deploys on 2026-08-27, behind a green 1/1
+# and a passing `probe.py health`, because run 2 short-circuited and reported nothing.
+#
+# DECIDED: hangs off "Read the post-build digest", which is deliberately NOT gated on
+# image_builder_building — unlike the build, the result read and the failure paths above. That is
+# what lets a skipped build still contribute a digest here. Folding that read under
+# image_builder_building as an optimisation would blind the gate on exactly case (2);
+# ansible/tests/test_built_image_drift_gate.py fails if that guard reappears.
+- name: Record the registry digest for the drift gate of {{ image_builder_name }}
+  tags: [deploy]
+  when: not k8s_no_mutate
+  ansible.builtin.set_fact:
+    # noqa var-naming[no-role-prefix] — deliberately play-scoped, read by post_tasks/.
+    k8s_built_images: >-
+      {{ (k8s_built_images | default([]))
+         + [{'name': image_builder_name,
+             'digest': image_builder_digest_after.docker_content_digest | default('')}] }}
