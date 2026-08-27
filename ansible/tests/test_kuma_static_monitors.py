@@ -35,6 +35,9 @@ STUBS = {
     "email": "user@example.com",
     "monitor_discord_webhook_url": "https://discord.example/hook",
     "smtp_notify_app_password": "stub",
+    # The cluster's primary node. The template indexes `hostvars` by this rather than by a
+    # literal hostname, so without it every hostvars lookup here resolves against Undefined.
+    "k8s_primary_node": "daniel-box",
     "hostvars": {
         "daniel-pi": {"server_ip": "10.0.0.2"},
         "daniel-box": {

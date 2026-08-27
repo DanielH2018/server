@@ -30,7 +30,7 @@ spec:
       # Stays off daniel-server so the drain (and its eventual cold boot) never takes the
       # alerting brain down with the thing it is alerting on.
       nodeSelector:
-        kubernetes.io/hostname: daniel-box
+        kubernetes.io/hostname: {{ k8s_primary_node }}
       securityContext:
         runAsUser: {{ puid }}
         runAsGroup: {{ pgid }}

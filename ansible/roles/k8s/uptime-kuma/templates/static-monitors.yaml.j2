@@ -95,7 +95,7 @@ stringData:
   jellyfin-lan-vip.json: |
     {"type": "port", "name": "k3s Jellyfin (VIP)", "hostname": "{{ jellyfin_k8s_lan_ip }}", "port": 8096, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   terraria-vip.json: |
-    {"type": "port", "name": "k3s Terraria (game port)", "hostname": "{{ hostvars['daniel-box'].server_ip }}", "port": 7777, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "port", "name": "k3s Terraria (game port)", "hostname": "{{ hostvars[k8s_primary_node].server_ip }}", "port": 7777, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   # wg-easy's VIP is WireGuard-over-UDP — Kuma port monitors are TCP-only, so it cannot get
   # a port-check tile here.
   zigbee2mqtt-k8s.json: |

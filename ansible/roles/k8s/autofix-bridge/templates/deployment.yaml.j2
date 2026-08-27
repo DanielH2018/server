@@ -28,7 +28,7 @@ spec:
       # Off daniel-server for the same reason as the monitor-bridge twin: the drain and
       # its cold boot must not take the remediation loop down alongside the Docker estate.
       nodeSelector:
-        kubernetes.io/hostname: daniel-box
+        kubernetes.io/hostname: {{ k8s_primary_node }}
       securityContext:
         runAsUser: {{ puid }}
         runAsGroup: {{ pgid }}

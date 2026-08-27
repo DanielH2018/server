@@ -138,6 +138,17 @@ zigbee_ext_pan_id: [221, 187, 17, 34, 51, 68, 85, 102]
 # qualified name on every route that follows, for no isolation this homelab needs.
 k8s_namespace: homelab
 
+# The cluster's k3s server / control-plane node. Every nodeSelector pin, node-affinity
+# preference and `hostvars[...]` lookup that means "this cluster's primary node" reads this
+# rather than the literal hostname, so a second cluster can be deployed to from the same
+# source. Prod resolves it to daniel-box; a single-node staging cluster resolves it to its
+# own node. See docs/staging-cluster.md, Decision 7.
+#
+# NOT a statement about WHY any given workload is pinned — the reasons differ (VIP
+# announcement, hostPath locality, registry loopback) and are recorded at each pin. This
+# variable only answers "which node is the primary one here".
+k8s_primary_node: daniel-box
+
 # Pod Security Admission labels, applied to homelab and observability.
 #
 # WARN AND AUDIT ONLY — deliberately no `enforce`. PSA is a namespace-level control and this
@@ -350,8 +361,10 @@ k8s_registry_pull_host: "localhost:{{ k8s_registry_port }}"
 # hosts on our own switch; the alternative is a CA + cert rotation for one hop).
 k8s_registry_cluster_ip: 10.43.51.14
 # The node that runs the registry Deployment (nodeSelector) and therefore resolves the
-# mirror to its own loopback hostPort.
-k8s_registry_node: daniel-box
+# mirror to its own loopback hostPort. Follows the cluster: a staging deploy must push and
+# pull its own images, never the prod registry, where a staging build could overwrite a tag
+# prod pulls and cause a prod rollout. See docs/staging-cluster.md, Decision 8.
+k8s_registry_node: "{{ k8s_primary_node }}"
 # The PUSH half of the pair described above. Fully qualified rather than bare `registry`,
 # because a builder Job's pod may not carry a search domain that resolves the short name,
 # and a wrong namespace here surfaces inside the pod as a DNS failure that reads like a

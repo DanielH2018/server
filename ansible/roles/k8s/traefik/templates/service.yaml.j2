@@ -36,7 +36,7 @@ spec:
   # addresses stay real. Revisit at slice-7 join: the forward follows whichever node this
   # IP belongs to.
   externalIPs:
-    - {{ hostvars['daniel-box'].server_ip }}
+    - {{ hostvars[k8s_primary_node].server_ip }}
   selector:
     app: traefik
   ports:

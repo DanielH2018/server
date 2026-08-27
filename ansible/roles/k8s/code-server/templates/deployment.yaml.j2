@@ -26,7 +26,7 @@ spec:
       priorityClassName: homelab-best-effort
       # Preference, never a pin: CPU-bound builds and language servers.
       # Weighted so the pod still schedules if daniel-box is cordoned or full.
-{{ node_affinity_preference('daniel-box') }}
+{{ node_affinity_preference(k8s_primary_node) }}
       # ── first boot only: copy the four keepers onto the backed-up claim ──────────────────
       # It has to run here, before the workload's subPath mounts land, because those mounts
       # shadow the originals: once /config/workspace, /config/.ssh and /config/.config point at

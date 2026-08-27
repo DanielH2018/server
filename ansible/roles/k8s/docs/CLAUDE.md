@@ -44,7 +44,8 @@ the site for several seconds on every run and leave it blank after any failure.
 
 ## The node pin is load-bearing
 
-`nodeSelector: kubernetes.io/hostname: daniel-box`.
+`nodeSelector: kubernetes.io/hostname: {{ k8s_primary_node }}`, which resolves to
+`daniel-box` on prod.
 
 hostPath is node-local. Unpinned, the pod can schedule onto `daniel-server`, mount a path that
 does not exist there, and serve an empty tree. That failure reads as "the build is broken" rather

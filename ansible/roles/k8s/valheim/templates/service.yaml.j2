@@ -22,7 +22,7 @@ spec:
   type: LoadBalancer
   externalTrafficPolicy: Local
   externalIPs:
-    - {{ hostvars['daniel-box'].server_ip }}
+    - {{ hostvars[k8s_primary_node].server_ip }}
   selector:
     app: valheim
   ports:

@@ -20,7 +20,7 @@ spec:
       # Same node as the registry: registry-data is RWO, so the Job can only attach where the
       # volume already lives.
       nodeSelector:
-        kubernetes.io/hostname: daniel-box
+        kubernetes.io/hostname: {{ k8s_registry_node }}
       securityContext:
         # Matches the registry Deployment. The blob tree on the PVC is owned by 1000:1000, and
         # a root process without DAC_OVERRIDE cannot delete another uid's files — running as

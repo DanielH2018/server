@@ -29,15 +29,15 @@ spec:
       # to daniel-box: with externalTrafficPolicy Local, a VIP-backed pod on the other
       # node makes the announcer DROP all forwarded LAN traffic (2026-08-14 post-boot
       # DNS blackout). Permanent posture (operator decision 2026-08-14): with ETP Local
-      # load-bearing for client IPs, announcement and placement stay on daniel-box as one
-      # unit — this pin only ever moves together with the L2Advertisement nodeSelector.
+      # load-bearing for client IPs, announcement and placement stay on one node as a
+      # unit; this pin only ever moves together with the L2Advertisement nodeSelector.
       #
       # Added 2026-08-14 with the branch's merge: the Service has carried ETP Local and a
       # homelab-pool VIP since it went live, but the Deployment had no pin, so the pod sat
       # on daniel-box only by scheduler accident. A reschedule onto daniel-server would
       # have black-holed the game port with the pod itself reporting healthy.
       nodeSelector:
-        kubernetes.io/hostname: daniel-box
+        kubernetes.io/hostname: {{ k8s_primary_node }}
       enableServiceLinks: false
       priorityClassName: homelab-standard
       containers:

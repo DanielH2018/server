@@ -15,7 +15,7 @@ k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessPro
 # hostPath pins the pod to ONE node. daniel-box holds the repo checkout, uv, and the cron that
 # builds the site, so the built tree only ever exists there. Scheduling elsewhere would mount
 # an empty directory and serve a 404 index rather than fail visibly.
-docs_k8s_node: daniel-box
+docs_k8s_node: "{{ k8s_primary_node }}"
 
 # Where scripts/docs/build_docs.py writes `mkdocs build` output, and what the pod serves.
 # NOT inside the repo checkout: a GitOps tick rewrites that tree with `git pull`, and

@@ -15,7 +15,7 @@ k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessPro
 # hostPath pins the pod to ONE node. daniel-box is the control-plane node, where Ansible
 # runs and where most sessions work, so its tree is the local mount and every other host's
 # is synced in below.
-artifacts_k8s_node: daniel-box
+artifacts_k8s_node: "{{ k8s_primary_node }}"
 
 # The tree Claude Code's artifact-design skill writes to on each host.
 artifacts_host_dir: /home/ubuntu/.claude/artifacts

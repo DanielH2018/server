@@ -23,10 +23,55 @@ Run: uv run pytest ansible/tests/test_vip_pins.py
 import re
 
 import pytest
-from _helpers import K8S_ROLES
+from _helpers import ANSIBLE, K8S_ROLES
 
 
-ANNOUNCING_NODE = "daniel-box"
+METALLB_POOL = (
+    ANSIBLE / "roles" / "setup" / "k3s" / "templates" / "metallb-pool.yaml.j2"
+)
+ALL_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
+
+# The variable the workload pins read since the staging-cluster work made them
+# cluster-relative. A pin may name the announcing node literally OR through this.
+PRIMARY_NODE_VAR = "k8s_primary_node"
+
+
+def _announcing_node():
+    """The node the MetalLB L2Advertisement announces from, read from the manifest itself.
+
+    Derived rather than hardcoded so this guard checks the real invariant — that
+    announcement and placement name the SAME node — instead of comparing two independent
+    literals that were only ever equal by hand.
+    """
+    m = re.search(r"kubernetes\.io/hostname:\s*(\S+)", METALLB_POOL.read_text())
+    assert m, f"no nodeSelector hostname found in {METALLB_POOL} — check the matcher"
+    return m.group(1)
+
+
+def _primary_node():
+    """What `k8s_primary_node` resolves to in group_vars."""
+    m = re.search(rf"^{PRIMARY_NODE_VAR}:\s*(\S+)", ALL_VARS.read_text(), re.M)
+    assert m, f"{PRIMARY_NODE_VAR} not defined in {ALL_VARS}"
+    return m.group(1)
+
+
+ANNOUNCING_NODE = _announcing_node()
+
+
+def test_announcement_and_the_primary_node_variable_agree():
+    """The two halves of the pin must name one node.
+
+    Workload pins read `k8s_primary_node`; the L2Advertisement is still a literal. If they
+    ever disagree, every VIP-backed pod is pinned away from the announcer and each one
+    black-holes its own traffic while reporting healthy — the exact failure the per-workload
+    assertions below exist to prevent, arriving through the back door.
+    """
+    assert _primary_node() == ANNOUNCING_NODE, (
+        f"{PRIMARY_NODE_VAR} is {_primary_node()!r} but the MetalLB L2Advertisement "
+        f"announces from {ANNOUNCING_NODE!r} ({METALLB_POOL}). Announcement and placement "
+        f"move as one unit; change both or neither."
+    )
+
 
 # jellyfin is pinned by storage, not by its own nodeSelector: the media-volume `local` PV
 # declares a required nodeAffinity on the node it lives on, which the scheduler enforces
@@ -83,8 +128,12 @@ def test_vip_backed_workload_is_pinned_to_the_announcing_node(role, svc_template
             f"{ANNOUNCING_NODE}, so if this pod lands on the other node its VIP drops every "
             f"packet while the pod still reports healthy."
         )
+        # Either spelling is the announcing node: the literal, or the variable that
+        # test_announcement_and_the_primary_node_variable_agree pins to it.
         assert re.search(
-            rf"kubernetes\.io/hostname:\s*{re.escape(ANNOUNCING_NODE)}", text
+            rf"kubernetes\.io/hostname:\s*(?:{re.escape(ANNOUNCING_NODE)}"
+            rf"|\{{\{{\s*{PRIMARY_NODE_VAR}\s*\}}\}})",
+            text,
         ), (
             f"{role}/{tpl.name} is pinned, but not to {ANNOUNCING_NODE} — the node the "
             f"MetalLB L2Advertisement announces from. Announcement and placement move as "
