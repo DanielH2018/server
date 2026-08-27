@@ -29,6 +29,29 @@ Every dashboard's datasource ref must resolve to a uid declared in this role's
 as the uid registry and fails on an unresolved reference, which is how a hand-imported
 board's stale uid gets caught before it renders "No data".
 
+**A live datasource with a dead metric is the gap that hook cannot see, and it has already
+cost a board.** `Apps/backups-b2-usage.json` queried `kopia_b2_billable_bytes`, a gauge the
+kopia role's `b2-usage.sh` wrote into node-exporter's textfile directory. Kopia retired
+2026-08-13 and nothing took the writer over, so all three panels returned no data behind a
+healthy Grafana pod for two weeks — the datasource resolved perfectly the whole time. Removed
+2026-08-27 rather than left rendering nothing; `probe.py metric kopia_b2_billable_bytes`
+returns `no data`, and `/var/lib/node-exporter-textfile` has been empty since 2026-08-14.
+
+Alerting did not go with it: monitor-bridge's `check_b2_storage` still sizes the bucket every
+cycle and pushes the **B2 Storage Usage** Kuma monitor. What was lost is the human-facing
+runway curve, because that check yields a pass/fail verdict rather than a series.
+
+**Restoring the curve needs a writer, and two things decide whether it is honest.** The
+textfile collector is still live (`node-exporter` DaemonSet, `--collector.textfile.directory`),
+so the socket exists — but monitor-bridge cannot fill it: it runs `runAsNonRoot` with every
+capability dropped, and the directory is `root:root 0755`. That leaves a root host cron, and
+`scripts/diagnostics/probe_storage.py` already holds tested B2 listing (`b2_longhorn_lines`)
+plus a spend ledger, so the wrapper would be thin. The trap is the number: `b2_list_files`
+sums CURRENT objects, while B2 bills stored bytes including hidden versions until lifecycle
+clears them after 7 days. `check_b2_storage` uses `b2_list_versions` for exactly that reason.
+A gauge built on the cheaper call and labelled "billable" would under-report the thing the
+10 GB cap is measured against — a false-GREEN worse than the missing board.
+
 ## The trap: an idle stack is indistinguishable from a broken one
 
 Verified 2026-08-05. The stack ran 47h with every pod Ready, zero export failures, and the
