@@ -4,6 +4,21 @@
 #
 # Entries are case-insensitive regex. Keep this sorted and add a term only when it is real
 # vocabulary — a genuine typo must still fail.
+#
+# AN ENTRY HERE ALSO PINS ITS CASING, ACROSS THE WHOLE CORPUS. Vale builds `Vale.Terms` from
+# this file, so adding `[Uu]fw` does not merely permit `ufw` — it makes every existing `UFW`
+# an error ("Use '[Uu]fw' instead of 'UFW'"), in files the author never opened. That broke
+# master on 2026-08-27: adding `[Uu]fw` for one new sentence failed docs/security-tools.md:213,
+# untouched and green for months.
+#
+# Two consequences worth knowing before you add a term:
+#   - An ALL-CAPS acronym usually needs no entry at all. Vale.Spelling already skips those,
+#     which is why `UFW` never needed one — the fix was to delete the entry and write the
+#     acronym, not to add its lowercase twin.
+#   - `prek run --all-files` can pass locally against a STALE compiled vocabulary and still
+#     fail in CI, which does a fresh `vale sync`. After editing this file, run `vale sync`
+#     and then `vale docs` — the whole-corpus run is what catches a casing conflict, because
+#     the file it breaks is one your change never mentions.
 
 # Tooling and platforms
 [Aa]nsible
@@ -300,5 +315,3 @@ cours
 [Qq]emu
 [Cc]iphertext
 [Pp]asswordless
-[Uu]fw
-UFW

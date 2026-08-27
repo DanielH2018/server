@@ -88,10 +88,10 @@ reachability. Production's source-IP controls see daniel-server, not staging, so
 `policy: bypass` rules scoped to `lan_subnet` admit the guest and wg-easy's unauthenticated admin
 UI rests on a LAN-only premise the guest sits inside.
 
-The fence is a ufw `route deny` from `staging_net_cidr` to `lan_subnet`, in
+The fence is a UFW `route deny` from `staging_net_cidr` to `lan_subnet`, in
 `roles/setup/initial_setup/tasks/network.yml`, gated on `has_hypervisor`. It is deliberately
 **not** a libvirt network hook: libvirt appends its own blanket accept for the bridge to FORWARD,
-so a hook's rule works only if inserted ahead of that — a position no repo check can verify. ufw
+so a hook's rule works only if inserted ahead of that — a position no repo check can verify. UFW
 owns its own chain and re-asserts it across reload and reboot.
 
 Guest-to-daniel-server traffic is unaffected, because that is INPUT rather than FORWARD, so
