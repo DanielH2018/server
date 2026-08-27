@@ -152,10 +152,65 @@ _BARE_K8S_INVOCATION = re.compile(r"(?<![\w/])k3s(?![\w/])")
 _CRONTAB_PATH_ENV = re.compile(
     r"env:\s*(?:yes|true)\b[\s\S]{0,200}?/usr/local/bin|/usr/local/bin[\s\S]{0,200}?env:\s*(?:yes|true)\b"
 )
+# A cron `job:` naming a wrapper, with any leading `VAR=value` assignments captured rather than
+# rejected. The regex used to demand the job be EXACTLY the script path, which silently put
+# docs-refresh.sh — whose job line sets PATH and KUBECONFIG inline — outside every rule below.
+# A guard that skips the one job doing something interesting with its environment is the guard
+# scope drifting from the hazard, so the assignments are parsed and consulted instead.
+_CRON_JOB_TARGET = re.compile(
+    r"^(?P<env>(?:\w+=\S+\s+)*)/usr/local/bin/(?P<script>[\w.-]+\.sh)$"
+)
+# Root reads /etc/rancher/k3s/k3s.yaml automatically; nobody else can. Measured 2026-08-27 on
+# daniel-box: the file is 0640 root:root, so `ubuntu` cannot read it. `ansible.builtin.cron`
+# defaults `user` to the connection user (ubuntu here), so a MISSING user: is non-root and must
+# provide KUBECONFIG — this fails closed on the omission rather than assuming root.
+_CRON_ROOT_USER = "root"
+# Unlike the PATH rule, an absolute path does NOT excuse this one: /usr/local/bin/k3s still
+# needs a kubeconfig it can read. Two of the three KUBECONFIG-less wrappers invoke it that way.
+_K8S_INVOCATION_ANY = re.compile(r"(?<![\w.-])(?:/usr/local/bin/)?k3s(?![\w/])")
+_KUBECONFIG_ASSIGNED = re.compile(r"^\s*(?:export\s+)?KUBECONFIG=", re.MULTILINE)
+_CRONTAB_KUBECONFIG_ENV = re.compile(
+    r"env:\s*(?:yes|true)\b[\s\S]{0,200}?KUBECONFIG|KUBECONFIG[\s\S]{0,200}?env:\s*(?:yes|true)\b"
+)
 
 
-def cron_job_scripts(roles: Path = ROLES) -> dict[Path, Path]:
-    """Map template path -> the tasks/*.yml file that schedules it as a cron `job:`.
+_JINJA_EXPR = re.compile(r"\{\{.*?\}\}")
+
+
+def _collapse_jinja(text: str) -> str:
+    """Replace `{{ ... }}` with a space-free token so word-splitting regexes still work.
+
+    `KUBECONFIG=/home/{{ sys_user }}/.kube/config` contains spaces INSIDE the expression, so a
+    `\\S+` value pattern stops at `{{` and the whole job line fails to match. That is how
+    docs-refresh.sh — the one cron job setting both PATH and KUBECONFIG inline — sat outside
+    every cron rule here.
+    """
+    return _JINJA_EXPR.sub("JINJA", text)
+
+
+def _template_pairs(task: dict, mod: dict):
+    """Yield (src, dest) for a template task, whether it names them directly or loops.
+
+    The looped form — `src: "{{ item.src }}"` over a `loop:` of src/dest dicts — was invisible
+    to this resolver until 2026-08-27, and it is the form k3s uses for EVERY longhorn wrapper.
+    So the cron rules silently skipped exactly the scripts that talk to the cluster: they read
+    `[ok]` because no rule applied, not because they satisfied one. Widening the parser is what
+    makes the rules reach the hazard they were written for.
+    """
+    src, dest = str(mod.get("src", "")), str(mod.get("dest", ""))
+    if "{{" not in src and "{{" not in dest:
+        yield src, dest
+        return
+    items = task.get("loop") or task.get("with_items") or []
+    if not isinstance(items, list):
+        return
+    for item in items:
+        if isinstance(item, dict) and "src" in item and "dest" in item:
+            yield str(item["src"]), str(item["dest"])
+
+
+def _cron_targets(roles: Path = ROLES):
+    """Yield (template_path, task_file, cron_task) for every cron-scheduled shell template.
 
     Two hops, not one: the deployed script's basename does not always match the template's own
     filename — claude-otel deploys templates/telemetry-health.sh.j2 to
@@ -165,8 +220,12 @@ def cron_job_scripts(roles: Path = ROLES) -> dict[Path, Path]:
 
     archive/ is excluded — nothing there is included by any play, so its cron tasks never
     actually run.
+
+    The single walk exists so `cron_job_scripts` and `cron_kubeconfig_error` cannot disagree
+    about which templates are cron targets. They ask different questions of the same task, and
+    a guard whose selector drifts from its sibling's is how a rule ends up covering less than
+    the hazard it names.
     """
-    mapping: dict[Path, Path] = {}
     # Roles are nested two levels under ROLES (roles/{containers,k8s,setup}/<role>/tasks/...),
     # so this needs rglob, not a fixed-depth glob.
     for task_file in sorted(roles.rglob("tasks/*.yml")):
@@ -186,10 +245,9 @@ def cron_job_scripts(roles: Path = ROLES) -> dict[Path, Path]:
             mod = task.get("ansible.builtin.template")
             if not isinstance(mod, dict):
                 continue
-            src = str(mod.get("src", ""))
-            dest = str(mod.get("dest", ""))
-            if src.endswith(".sh.j2") and dest.startswith("/usr/local/bin/"):
-                dest_to_src[Path(dest).name] = src
+            for src, dest in _template_pairs(task, mod):
+                if src.endswith(".sh.j2") and dest.startswith("/usr/local/bin/"):
+                    dest_to_src[Path(dest).name] = src
 
         for task in tasks:
             if not isinstance(task, dict):
@@ -197,16 +255,22 @@ def cron_job_scripts(roles: Path = ROLES) -> dict[Path, Path]:
             mod = task.get("ansible.builtin.cron")
             if not isinstance(mod, dict):
                 continue
-            job = str(mod.get("job", "")).strip()
-            m = re.match(r"^/usr/local/bin/([\w.-]+\.sh)$", job)
+            job = _collapse_jinja(str(mod.get("job", "")).strip())
+            m = _CRON_JOB_TARGET.match(job)
             if not m:
                 continue
-            src = dest_to_src.get(m.group(1))
+            src = dest_to_src.get(m.group("script"))
             if not src:
                 continue
             template_path = task_file.parent.parent / "templates" / src
-            mapping[template_path] = task_file
-    return mapping
+            # The leading `VAR=value` assignments are parsed HERE, once, so a consumer cannot
+            # re-derive them from the raw job and disagree about what the line sets.
+            yield template_path, task_file, mod, m.group("env")
+
+
+def cron_job_scripts(roles: Path = ROLES) -> dict[Path, Path]:
+    """Map template path -> the tasks/*.yml file that schedules it as a cron `job:`."""
+    return {template: task_file for template, task_file, _, _ in _cron_targets(roles)}
 
 
 def _strip_comments(text: str) -> str:
@@ -244,6 +308,64 @@ def cron_path_error(
         '`export PATH="/usr/local/bin:${PATH}"` (see longhorn-trim-volumes.sh.j2), call k3s/'
         "kubectl by absolute path, or set a crontab-level PATH via env: yes on the cron task."
     )
+
+
+def cron_kubeconfig_error(
+    template: Path, rendered: str, roles: Path = ROLES
+) -> str | None:
+    """None if this template is fine; an error string if a NON-ROOT cron job target touches the
+    cluster without a KUBECONFIG it can read.
+
+    The sibling of `cron_path_error`, and the trap its own memory entry predicted would still be
+    live once the PATH half was fixed: "cron inherits neither PATH nor KUBECONFIG". The two fail
+    differently, which is why one check cannot cover both. A missing PATH makes k3s not resolve,
+    so the script dies loudly. A missing KUBECONFIG resolves the binary fine and then reports an
+    EMPTY CLUSTER — zero pods, zero volumes, nothing wrong — so a health check built on it goes
+    green while seeing nothing at all.
+
+    Root is exempt because k3s writes /etc/rancher/k3s/k3s.yaml as 0640 root:root and reads it
+    by default; `ubuntu` cannot open it. `ansible.builtin.cron` defaults `user` to the connection
+    user, so a task with no `user:` is treated as non-root and must set KUBECONFIG.
+
+    The user is read from the SPECIFIC cron task scheduling this template, never by searching the
+    task file. health-crons.yml schedules eight crons with different users, so a file-wide search
+    would let one task's `user: root` excuse a sibling non-root task — the guard reading green on
+    exactly the case it exists to catch.
+
+    Verify a suspected instance by running the wrapper the way cron does:
+    `scripts/dev/run_as_cron.sh --expect-output /usr/local/bin/<wrapper>.sh`, which exits 66 on
+    the clean-exit-no-output signature this fault produces.
+    """
+    code = _strip_comments(rendered)
+    if not _K8S_INVOCATION_ANY.search(code):
+        return None
+
+    for tpl, task_file, cron_task, job_env in _cron_targets(roles):
+        if tpl != template:
+            continue
+        if str(cron_task.get("user", "")).strip() == _CRON_ROOT_USER:
+            return None
+        if "KUBECONFIG=" in job_env:
+            return None
+        if _KUBECONFIG_ASSIGNED.search(code):
+            return None
+        if _CRONTAB_KUBECONFIG_ENV.search(task_file.read_text()):
+            return None
+        try:
+            rel_task_file = task_file.relative_to(REPO)
+        except ValueError:
+            rel_task_file = task_file
+        user = (
+            str(cron_task.get("user", "")).strip() or "the connection user (non-root)"
+        )
+        return (
+            f"touches the cluster but is scheduled as {user} ({rel_task_file}) with no "
+            "KUBECONFIG — cron does not inherit one, and k3s.yaml is root-only, so this "
+            "reports an EMPTY cluster rather than failing. Set KUBECONFIG in the script, in "
+            "the cron job: line, or via env: yes on the cron task — or schedule it as root "
+            "(see crowdsec-appsec-verify.sh.j2)."
+        )
+    return None
 
 
 def build_env(template_dir: Path) -> Environment:
@@ -314,6 +436,10 @@ def check_template(
         return f"shellcheck: {err}"
 
     err = cron_path_error(path, rendered, cron_map)
+    if err:
+        return err
+
+    err = cron_kubeconfig_error(path, rendered)
     if err:
         return err
 
