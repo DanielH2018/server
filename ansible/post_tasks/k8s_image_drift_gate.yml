@@ -77,8 +77,11 @@
       # registry would not give us (empty) is not compared — an unreadable header is already a
       # "changed" for the rollout decision upstream, and failing here on it would report drift
       # that has not been shown to exist.
+      # `['items']`, never `.items` — Jinja resolves a dotted name to the ATTRIBUTE first, and
+      # `items` is a Python dict method, so `.items` hands rejectattr a bound method and the play
+      # dies with "'method' object is not iterable". Subscript form reaches the key.
       - item.digest | length == 0
-        or (k8s_image_drift_pods.stdout | from_json).items
+        or (k8s_image_drift_pods.stdout | from_json)['items']
            | rejectattr('metadata.deletionTimestamp', 'defined')
            | selectattr('status.phase', 'equalto', 'Running')
            | map(attribute='status.containerStatuses', default=[])
