@@ -21,7 +21,7 @@ later edit that removes it fails the suite rather than going quiet.
 import pytest
 import yaml
 
-from _helpers import ROLES
+from _helpers import ANSIBLE, ROLES
 
 SMOKE = ROLES / "setup" / "k3s" / "tasks" / "storage_smoke.yml"
 WAIT_TASK = "Wait for the PVC to reach Bound"
@@ -98,6 +98,31 @@ def test_the_check_is_not_wired_into_the_bringup_role():
     main = (ROLES / "setup" / "k3s" / "tasks" / "main.yml").read_text()
     assert "storage_smoke" not in main, (
         "storage_smoke.yml is imported from tasks/main.yml, so it now runs on every k3s-role "
-        "run including prod's. It is reached through the opt-in play in k3s-bringup.yml "
-        "(-e storage_smoke=<host>), which is what keeps prod free of the churn."
+        "run including prod's. It is reached through its own playbook "
+        "(ansible/k3s-storage-smoke.yml -e storage_smoke=<host>), which keeps prod free of "
+        "the churn."
+    )
+
+
+def test_the_check_has_its_own_playbook_and_is_not_folded_into_the_bringup():
+    """k3s-bringup.yml cannot host this play, and the reason is not stylistic.
+
+    Its first play takes `hosts: {{ target | default(lookup('pipe','hostname')) }}` and
+    asserts the resulting host is in `k3s_server_hosts` under `tags: always`. Any play
+    appended there therefore inherits "the host you invoke from must itself be a k3s server"
+    — and the only host that can reach daniel-stage is daniel-server, which deliberately is
+    not one. Folding it back reads as tidying and breaks the single caller.
+    """
+    own = ANSIBLE / "k3s-storage-smoke.yml"
+    assert own.exists(), (
+        f"{own} is missing. The smoke play needs its own playbook; k3s-bringup.yml's "
+        f"always-tagged server-host assert fires before any play appended there is reached."
+    )
+    bringup = (ANSIBLE / "k3s-bringup.yml").read_text()
+    assert "storage_smoke" not in bringup, (
+        "the storage smoke play is back in k3s-bringup.yml. Its first play asserts the "
+        "invoking host is in k3s_server_hosts under `tags: always`, so this play is "
+        "unreachable from daniel-server — the only host that can route to daniel-stage. "
+        "Measured 2026-08-27: ok=3 failed=1, dying at the assert. Keep it in "
+        "ansible/k3s-storage-smoke.yml."
     )

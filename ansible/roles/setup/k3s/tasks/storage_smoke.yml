@@ -1,6 +1,9 @@
 ---
 # Prove Longhorn can actually provision a volume, by binding one and then removing it.
 #
+# Reached only from ansible/k3s-storage-smoke.yml, which is where the invocation and the
+# reason it is not a play in k3s-bringup.yml are written down.
+#
 # Opt-in, and never part of a bringup: prod's provisioning is proven continuously by ~25 live
 # volumes, so creating and destroying one on every k3s-role run would be churn with no signal.
 # A NEW cluster has no such evidence — `kubectl get nodes` Ready and a longhorn-system pod
