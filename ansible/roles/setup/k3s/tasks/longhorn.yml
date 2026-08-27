@@ -235,6 +235,18 @@
 
 - name: Apply the Longhorn StorageClass
   tags: [longhorn]
+  # OPEN: this reports `changed` on every run of a settled cluster, and the cause is NOT
+  # established. Measured on daniel-stage 2026-08-27 across two back-to-back full runs — this
+  # task, "Install Longhorn", "Install MetalLB" and the ConfigMap patch below all report
+  # changed both times. But applying THIS file twice by hand, outside the play, prints
+  # "unchanged" both times, and `kubectl diff -f` against it is empty. So something inside the
+  # run mutates the class or its last-applied annotation between the render and the apply;
+  # Longhorn reconciling the class from its own longhorn-storageclass ConfigMap is the obvious
+  # suspect and is UNVERIFIED. Do not "fix" the changed_when — it faithfully reports what
+  # kubectl printed, and muting it would hide a real reconcile loop rather than close it.
+  #
+  # The PriorityClass churn that used to sit alongside these WAS root-caused and fixed; see
+  # templates/priorityclass.yaml.j2. It is a different mechanism, so do not assume this is it.
   ansible.builtin.command:
     cmd: k3s kubectl apply -f /etc/rancher/k3s/longhorn-storageclass.yaml
   register: k3s_longhorn_sc_apply

@@ -1,3 +1,15 @@
+# DECIDED: no `globalDefault: false` on any of these, though it read that way until
+# 2026-08-27. It is the default, so stating it changes nothing about scheduling — and stating
+# it made every `kubectl apply` of this file report "configured" forever. The API server drops
+# globalDefault when it is false (an omitempty zero value), so the field is present in the
+# manifest and in kubectl's last-applied annotation but absent from the live object. The
+# three-way merge therefore finds a patch to make on every single run, and never converges.
+#
+# Measured on daniel-stage: two consecutive applies of the old file both printed "configured"
+# for all four classes; with the field removed, the first converges and the second prints
+# "unchanged". That was 4 of the 5 tasks reporting a spurious change on a settled cluster.
+# ENFORCED by ansible/tests/test_priorityclass_omits_defaulted_fields.py.
+#
 # The homelab's workload tiers, as PriorityClasses. Four bands, all below
 # system-node-critical (2000001000) and system-cluster-critical (2000000000) on purpose:
 # the scheduler, CNI and kubelet plumbing still win every contest against a workload.
@@ -34,7 +46,6 @@ kind: PriorityClass
 metadata:
   name: homelab-critical
 value: 100000
-globalDefault: false
 description: "Tier 1 — edge, auth, DNS, WAF, registry, alerting. Evicted last."
 ---
 # TIER 2 — home automation. Below the edge (a house with no lights is worse than a house
@@ -46,7 +57,6 @@ kind: PriorityClass
 metadata:
   name: homelab-automation
 value: 50000
-globalDefault: false
 description: "Tier 2 — Home Assistant and the Zigbee chain."
 ---
 # TIER 3 — the services with users and state worth protecting: game servers (a killed
@@ -57,7 +67,6 @@ kind: PriorityClass
 metadata:
   name: homelab-standard
 value: 10000
-globalDefault: false
 description: "Tier 3 — game servers, media stack, feeds and bookmarks."
 ---
 # TIER 4 — everything discretionary: dashboards, utilities, batch work. tdarr belongs here
@@ -68,5 +77,4 @@ kind: PriorityClass
 metadata:
   name: homelab-best-effort
 value: 1000
-globalDefault: false
 description: "Tier 4 — dashboards, utilities and batch work. Evicted first."
