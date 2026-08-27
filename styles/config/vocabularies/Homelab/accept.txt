@@ -273,6 +273,7 @@ one_factor
 # possessive form and 'Docker's' fails while 'Docker' passes.
 Docker's
 HA's
+VM's
 
 # AniList integration (docs/anilist-integration.md)
 APIs
@@ -280,3 +281,20 @@ OAuth
 uid
 gamepad
 cours
+
+# Staging cluster (docs/staging-cluster.md). Virtualisation and kernel-networking terms —
+# the spec argues substrate choice, so the hypervisors and the netfilter machinery a system
+# container would share with the host are named in prose rather than in backticks.
+[Aa]piVersions
+[Bb]lackholed
+[Cc]group
+[Hh]ostPaths
+[Ii]ptables
+[Ll]ibvirt
+[Mm]isconfiguration
+[Mm]ultipass
+[Nn]etfilter
+[Nn]odeSelector
+[Oo]verread
+[Pp]arameterisable
+[Qq]emu
