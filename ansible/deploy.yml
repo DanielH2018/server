@@ -239,6 +239,10 @@
       ansible.builtin.set_fact:
         k8s_pending_rollouts: []
         k8s_stabilise_watch: []
+        # Same reason, and it bites harder here: a leftover entry names an image this play never
+        # built, so post_tasks/k8s_image_drift_gate.yml would assert a stale digest against pods a
+        # `--tags` run has no business inspecting.
+        k8s_built_images: []
       tags: always
 
   tasks:
@@ -259,4 +263,12 @@
     # the last batch has drained, so every workload it watches has completed its rollout.
     - name: Confirm every rollout stayed healthy
       ansible.builtin.include_tasks: post_tasks/k8s_stabilise_gate.yml
+      tags: always
+
+    # AFTER the stabilisation gate, not before: it compares running pods against the registry, and
+    # a pod that is still being replaced has not finished resolving its image. The two gates ask
+    # different questions — that one asks whether the rollout stayed up, this one asks whether a
+    # rollout happened at all.
+    - name: Confirm every built image actually reached a pod
+      ansible.builtin.include_tasks: post_tasks/k8s_image_drift_gate.yml
       tags: always

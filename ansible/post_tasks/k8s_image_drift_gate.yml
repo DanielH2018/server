@@ -1,0 +1,106 @@
+---
+# Does every pod actually run the image the registry serves?
+#
+# WHAT THIS CATCHES, and why nothing else here can. Built images are pushed to a MUTABLE tag, so a
+# rebuild changes what `:latest` resolves to while leaving the Deployment spec byte-identical. The
+# rollout that closes that gap is queued by k8s/manifests off `k8s_rebuilt_images`, which
+# k8s/image-builder fills only when the pre- and post-build digests differ. Every step in that
+# chain reports success independently of whether a pod ever picked the image up.
+#
+# Hit for real 2026-08-27, on nut. Run 1 built the new debian-bookworm-slim base, pushed it, and
+# then died at "Read the build result" — before the digest comparison that queues the rollout. Run 2
+# short-circuited the build, because the rendered context was byte-identical AND the registry
+# already served the tag, so it recorded no change and queued nothing. The pod ran a week-old image
+# for 90 minutes behind a 1/1 Deployment, a clean rollout, and a passing `probe.py health`. The only
+# signal that disagreed was comparing the pod's imageID against the registry by hand.
+#
+# WHY IT IS A POST_TASK. The comparison is only meaningful after the rollouts have drained: at the
+# point k8s/image-builder finishes, the workload legitimately still runs the OLD pod, because
+# k8s/manifests and k8s/rollout-drain have not run yet. Putting this in the builder's own role would
+# false-positive on every deploy that changes an image.
+#
+# WHY IT READS PODS RATHER THAN DEPLOYMENTS. The image a Deployment NAMES is `:latest` either way —
+# that is the whole failure. Only a running container reports the digest it actually resolved, as
+# `.status.containerStatuses[].imageID`.
+#
+# IMAGE NAME IS NOT WORKLOAD NAME. n8n-images builds `n8n-runners`; the n8n role deploys it. So
+# candidates are found by matching the imageID against the registry pull host and image name, never
+# by assuming a workload called after the image. That is the same trap
+# ansible/tests/test_inline_rollout_gates.py records for rollout gates.
+#
+# WHAT THIS GATE DELIBERATELY DOES NOT CATCH. All three are the lenient direction on purpose: a gate
+# that fails on a state nobody can act on gets bypassed, and then it protects nothing.
+#
+#   * An image with no running pod. Build-only images (pi-peer-backup, cronjob-gate) have no
+#     long-running workload, and a scaled-to-zero Deployment has no pod either. Both iterate to an
+#     empty candidate list and pass.
+#   * A run with `--skip-tags deploy`. The accumulator task is tagged `deploy`, so it never fills,
+#     and the gate loops over nothing. That is correct — no build ran, so no image can be stale.
+#   * An empty accumulator generally. If the fact stops being recorded the gate passes vacuously,
+#     which is this estate's most recurrent failure shape. Nothing at RUNTIME can distinguish "no
+#     images built" from "the accumulator broke", because the only witness to a build is the
+#     accumulator itself. That is why the producer is pinned STRUCTURALLY instead, by
+#     ansible/tests/test_built_image_drift_gate.py.
+#
+# ASSUMPTION: single-architecture images, so the registry's manifest digest and the pod's imageID
+# digest are the same object. Verified 2026-08-27 — nut's pod reported the registry digest exactly.
+# If anything here is ever built as a multi-arch manifest LIST, the builder reads the index digest
+# while the pod reports the platform manifest digest, and the two never match: the gate would then
+# report drift forever and get muted, which is worse than not having it. An imageID that carries no
+# `<host>/<name>@` prefix — a bare config digest, which happens for an image with no repo digest —
+# does not match the selectattr below and is skipped rather than compared.
+
+- name: Read the images every running pod resolved
+  tags: [always]
+  when:
+    - k8s_built_images | default([]) | length > 0
+    - not ansible_check_mode
+    - not k8s_dry_run | bool
+  become: true
+  changed_when: false
+  # One call for the whole play rather than one per image. jsonpath cannot express "skip pods being
+  # deleted", so the filtering is done below against the full object.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} get pods -o json
+  register: k8s_image_drift_pods
+
+- name: Fail if a pod is running something other than the image the registry serves
+  tags: [always]
+  when:
+    - k8s_built_images | default([]) | length > 0
+    - not ansible_check_mode
+    - not k8s_dry_run | bool
+  ansible.builtin.assert:
+    that:
+      # Every live container resolved from this image agrees with the registry. A digest the
+      # registry would not give us (empty) is not compared — an unreadable header is already a
+      # "changed" for the rollout decision upstream, and failing here on it would report drift
+      # that has not been shown to exist.
+      - item.digest | length == 0
+        or (k8s_image_drift_pods.stdout | from_json).items
+           | rejectattr('metadata.deletionTimestamp', 'defined')
+           | selectattr('status.phase', 'equalto', 'Running')
+           | map(attribute='status.containerStatuses', default=[])
+           | flatten
+           | selectattr('imageID', 'search',
+                        '^' ~ (k8s_registry_pull_host | regex_escape) ~ '/'
+                        ~ (item.name | regex_escape) ~ '@')
+           | map(attribute='imageID')
+           | map('regex_replace', '^.*@', '')
+           | reject('equalto', item.digest)
+           | list | length == 0
+    fail_msg: >-
+      {{ item.name }} is stale: the registry serves {{ item.digest }} but at least one running pod
+      resolved something else. A built image is pushed to a mutable tag, so the Deployment spec does
+      not change and nothing rolls — the new image sits in the registry unused while every other
+      check reads green. This is what a rollout that was never queued looks like from the outside.
+      Roll it with:
+      ./scripts/deploy.sh --tags <role> -e image_builder_force=true
+      Inspect what is actually running with:
+      k3s kubectl -n {{ k8s_namespace }} get pods -o jsonpath='{range .items[*]}{.metadata.name}{"
+      "}{.status.containerStatuses[*].imageID}{"\n"}{end}' | grep {{ item.name }}
+    quiet: true
+  loop: "{{ k8s_built_images | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
