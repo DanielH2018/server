@@ -158,14 +158,25 @@ a build failure would dominate the staging window (`n8n` + `n8n-runners`, `code-
 Growing the subset later is a config change, not a redesign — but each addition needs the same
 question asked: does this role mutate anything outside the VM?
 
-### 7. Node pinning — the ~17 sites that name daniel-box
+### 7. Node pinning — the 25 sites that name daniel-box
 
-92 occurrences of `daniel-box` appear across the k8s templates, but most are comments. The
-load-bearing ones are roughly 17:
+92 occurrences of `daniel-box` appear across the k8s templates, but most are comments. An
+earlier draft of this spec put the load-bearing ones at roughly 17. Measured on 2026-08-27
+while executing this step, the real count is **25**:
 
-- 9 × `kubernetes.io/hostname: daniel-box` nodeSelector pins
-- 4 × affinity list entries
-- 4 × `hostvars['daniel-box'].server_ip` lookups
+| Kind | Count |
+|---|---|
+| `kubernetes.io/hostname` nodeSelector pins, as rendered | 14 |
+| affinity list entries | 4 |
+| `hostvars[...].server_ip` lookups | 5 |
+| `hostvars[...].containers_list` lookups | 2 |
+
+Two things make the count harder to take than it looks, and both were why the earlier draft
+was low. **A literal grep finds 9 pins, not 14**, because four roles already read a variable
+(`docs_k8s_node`, `artifacts_k8s_node` and their kin) rather than the hostname; and **pihole
+renders one template twice** through a Jinja `for` loop, so a rendered census
+counts it twice where a source census counts it once. Neither census alone is right — reconcile
+the two. The `containers_list` lookups were missed entirely.
 
 Each becomes a variable resolving to the deploying cluster's node. This is mechanical but wide,
 and it is the change most likely to break prod while building staging — a mis-edited pin moves a
@@ -181,8 +192,10 @@ host into a PVC. A staging deploy inheriting this default reads **prod's bind-mo
 ssh. Staging must set this to a staging-local path, or skip seeding entirely. Skipping is
 preferred: seeding is a one-shot migration mechanism, and staging has nothing to migrate.
 
-**`k8s_registry_node: daniel-box`** — the in-cluster registry is pinned to the prod node, so
-staging's 7 built images have nowhere to push. Staging runs its own registry on `daniel-stage`.
+**`k8s_registry_node`** — the in-cluster registry is pinned to one node, so staging's 7 built
+images have nowhere to push unless that pin follows the cluster. Step 1 made it a variable
+(`k8s_registry_node: "{{ k8s_primary_node }}"`), which resolves to `daniel-box` on prod;
+staging must override it rather than inherit it. Staging runs its own registry on `daniel-stage`.
 The alternative — pushing staging builds to the prod registry — would let a staging build
 overwrite a tag prod pulls, which is a staging change causing a prod rollout.
 
