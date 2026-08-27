@@ -1,8 +1,19 @@
 ---
 # Reaps what an imperative Docker uninstall leaves behind. Runs on any host with
 # has_docker: false; everything here is state=absent, so it is a no-op on a host that
-# never had Docker. The packages and /var/lib/docker are deliberately NOT touched —
-# purging those is the operator's call, and on daniel-server it is already done.
+# never had Docker.
+#
+# /var/lib/docker is still deliberately NOT touched: it holds image and volume data, and
+# deleting it is irreversible in a way removing a package is not. It is inert once the
+# daemon is gone.
+#
+# The PACKAGES used to be left alone too, on the reasoning that purging them was the
+# operator's call and "on daniel-server it is already done". Both halves of that failed.
+# docker-ce was purged on 2026-08-14 and reinstalled on 2026-08-19 at 22:37 by an Ansible
+# run that saw has_docker: true — so `has_docker: false` described an end state nothing
+# enforced, and the host ran a second container runtime for eight days while every repo
+# check read green. A declared state that the role will not converge to is not a declared
+# state. Purging here is what makes has_docker: false mean something.
 
 - name: Find leftover docker-compose systemd units
   tags: [docker-teardown]
@@ -55,4 +66,48 @@
     user: "{{ sys_user }}"
     state: absent
   loop: "{{ docker_install_stale_crons }}"
+  become: true
+
+- name: Check whether the Docker daemon is still installed
+  tags: [docker-teardown]
+  ansible.builtin.stat:
+    path: /usr/bin/dockerd
+  register: docker_install_dockerd_binary
+  become: true
+
+- name: Stop and disable Docker before purging it
+  tags: [docker-teardown]
+  # Stopping first so the daemon tears down its own iptables chains and bridges rather
+  # than leaving them orphaned by a package removal. Guarded on the binary: the unit does
+  # not exist on a host that never had Docker, and systemd_service errors on an unknown
+  # unit rather than no-opping.
+  when: docker_install_dockerd_binary.stat.exists
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    state: stopped
+    enabled: false
+  loop:
+    - docker.socket
+    - docker.service
+  become: true
+
+- name: Purge the Docker packages
+  tags: [docker-teardown]
+  # containerd.io is safe to purge alongside the engine: it provides /usr/bin/containerd,
+  # which only dockerd uses. k3s runs its OWN embedded containerd out of
+  # /var/lib/rancher/k3s/data/current/bin/ and never reads the packaged one — verified on
+  # daniel-server 2026-08-27, where the running shim resolved under /var/lib/rancher.
+  # Purge rather than remove so /etc/docker (daemon.json, live-restore) goes too;
+  # autoremove drops the pulled-in extras (pigz, rootless-extras, slirp4netns).
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - docker-ce-rootless-extras
+      - containerd.io
+      - docker-compose-plugin
+      - docker-buildx-plugin
+    state: absent
+    purge: true
+    autoremove: true
   become: true
