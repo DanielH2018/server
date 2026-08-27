@@ -60,3 +60,56 @@ def test_memory_working_set_fits_the_container_memory_limit() -> None:
     # qbittorrent_k8s_mem_limit is 2048Mi. libtorrent 2.0's mmap I/O holds dirty pages up
     # to this bound, so it has to leave headroom for the rest of the process.
     assert apply_prefs.DESIRED["memory_working_set_limit"] <= 1536
+
+
+class _StubClient:
+    """Stands in for QbtClient so main()'s --dry-run exit code is tested without a socket."""
+
+    def __init__(self, preferences: dict[str, object]) -> None:
+        self._preferences = preferences
+        self.login_calls: list[tuple[str, str]] = []
+
+    def login(self, username: str, password: str) -> None:
+        self.login_calls.append((username, password))
+
+    def preferences(self) -> dict[str, object]:
+        return self._preferences
+
+
+def _run_dry_run(monkeypatch, current_preferences: dict[str, object]) -> int:
+    monkeypatch.setenv("QBT_USERNAME", "admin")
+    monkeypatch.setenv("QBT_PASSWORD", "hunter2")
+    monkeypatch.setattr(
+        apply_prefs, "QbtClient", lambda base_url: _StubClient(current_preferences)
+    )
+    return apply_prefs.main(["--dry-run", "--url", "http://qbittorrent.test:8080"])
+
+
+# THE MUTATION: apply_prefs.py:190-191 used to `return 0` unconditionally on --dry-run, so a
+# cron branching on exit code could never tell "found drift" from "nothing to do". These two
+# tests are the pair that catches a regression back to that shape — flip EXIT_DRIFT back to
+# EXIT_OK in main() and test_dry_run_exits_drift_when_a_preference_has_changed fails while its
+# sibling keeps passing, which is exactly the signature of the bug this closes.
+def test_dry_run_exits_ok_when_nothing_has_changed(monkeypatch) -> None:
+    exit_code = _run_dry_run(monkeypatch, dict(apply_prefs.DESIRED))
+    assert exit_code == apply_prefs.EXIT_OK
+
+
+def test_dry_run_exits_drift_when_a_preference_has_changed(monkeypatch) -> None:
+    current = dict(apply_prefs.DESIRED) | {"connection_speed": 30}
+    exit_code = _run_dry_run(monkeypatch, current)
+    assert exit_code == apply_prefs.EXIT_DRIFT
+
+
+def test_dry_run_never_writes(monkeypatch) -> None:
+    # set_preferences is not on _StubClient at all, so main() would raise AttributeError if
+    # --dry-run's early return stopped gating the write.
+    current = dict(apply_prefs.DESIRED) | {"connection_speed": 30}
+    exit_code = _run_dry_run(monkeypatch, current)
+    assert exit_code == apply_prefs.EXIT_DRIFT
+
+
+def test_missing_credentials_exits_bad_args(monkeypatch) -> None:
+    monkeypatch.delenv("QBT_USERNAME", raising=False)
+    monkeypatch.delenv("QBT_PASSWORD", raising=False)
+    assert apply_prefs.main(["--dry-run"]) == apply_prefs.EXIT_BAD_ARGS

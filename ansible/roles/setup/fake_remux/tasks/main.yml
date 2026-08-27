@@ -126,8 +126,32 @@
     cron_file: fake-remux-reconcile
   become: true
 
+# DECIDED: rendered here rather than reusing the k3s role's /etc/rancher/k3s/kuma-push.env. This
+# role is host-conditional and tag-scoped, so `initial_setup.yml --tags fake_remux` would render
+# the script without ever writing that file — and the script then exits 0 without pushing, which
+# is silence rather than an error. Same file, same tag, same run.
+- name: Deploy the fake-remux Kuma push credentials
+  tags: [fake_remux]
+  # 0640 root:{{ sys_user }}, for the same reason as the k3s role's kuma-push.env: the script that
+  # consumes these lands 0755 (it must stay world-executable — it is root:root and its cron runs
+  # as {{ sys_user }}, so the world-execute bit is the only thing that lets the cron run it), and a
+  # Kuma push token is enough to forge or suppress a heartbeat, which hides a real outage. The
+  # group bit is what lets the {{ sys_user }} cron read this.
+  ansible.builtin.template:
+    src: fake-remux-push.env.j2
+    dest: "{{ fake_remux_config_dir }}/kuma-push.env"
+    mode: "0640"
+    owner: root
+    group: "{{ sys_user }}"
+  become: true
+  no_log: true  # renders both Kuma push tokens
+
 - name: Deploy the fake-remux heartbeats
   tags: [fake_remux]
+  # No no_log: this renders no secret. Both Kuma push tokens moved to the env file above, and the
+  # script sources them at runtime. Leaving the old `no_log: true # renders both Kuma push tokens`
+  # here would outlive the thing it described and tell the next reader the opposite of what that
+  # extraction achieved (2026-08-23b review L4).
   ansible.builtin.template:
     src: fake-remux-health.sh.j2
     dest: /usr/local/bin/fake-remux-health.sh
@@ -135,7 +159,6 @@
     owner: root
     group: root
   become: true
-  no_log: true  # renders both Kuma push tokens
 
 - name: Schedule the fake-remux heartbeats
   tags: [fake_remux]
@@ -156,6 +179,10 @@
     stamp_render_name: fake-remux
     stamp_render_templates:
       - ansible/roles/setup/fake_remux/templates/fake-remux-health.sh.j2
+      # Same reasoning as the renovate_notify list: the stamp and the check both hash the repo
+      # source, never the rendered file, so an .env.j2 carries no secret into either
+      # (2026-08-24 review M-9).
+      - ansible/roles/setup/fake_remux/templates/fake-remux-push.env.j2
 
 # The five scripts this role `copy:`-deploys were covered by nothing (2026-08-24 review M-5).
 - name: Record the deployed fake-remux code

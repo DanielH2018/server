@@ -8,6 +8,12 @@ Copying the skeleton produced a template that could not render (2026-08-25 revie
 
 Nothing caught it because the skeleton is prose: it lives inside a fenced block in a Markdown
 file, so no renderer, linter or template validator ever reads it.
+
+The original guard checked only two files (the repo CLAUDE.md and the `/new-container` skill),
+which is why it stayed green while `.claude/agents/homelab-container-reviewer.md` went on
+naming the same deleted macro in a live agent brief (2026-08-27 review). DOCS is now every
+`CLAUDE.md` in the tree plus every `*.md` under `.claude/`, excluding retired trees whose docs
+describe code that no longer runs.
 """
 
 import re
@@ -15,13 +21,47 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent.parent
 MACROS = REPO / "ansible" / "templates"
-DOCS = [
-    REPO / "CLAUDE.md",
-    REPO / ".claude" / "skills" / "new-container" / "SKILL.md",
-]
 
-# Bare `<name>.yml.j2`, whether in a `{% from %}` line or an inline mention in a bullet.
-NAMED = re.compile(r"\b([a-z0-9_-]+\.yml\.j2)\b")
+# Retired trees: their docs describe code that no longer runs, so a macro name in one of
+# them is history, not a live instruction that could be copied into a new template.
+_EXCLUDED_DIRS = (
+    REPO / "docs" / "archive",
+    REPO / "ansible" / "roles" / "containers" / "archive",
+)
+
+
+def _is_excluded(path: Path) -> bool:
+    return any(excluded in path.parents for excluded in _EXCLUDED_DIRS)
+
+
+def _discover_docs() -> list[Path]:
+    docs = {p for p in REPO.rglob("CLAUDE.md") if not _is_excluded(p)}
+    docs |= {p for p in (REPO / ".claude").rglob("*.md") if not _is_excluded(p)}
+    return sorted(docs)
+
+
+DOCS = _discover_docs()
+
+# A floor, not the real count -- catches the walk silently shrinking (a renamed root, a
+# tightened exclude) without hardcoding a number that drifts every time a doc is added.
+_MIN_DOCS = 50
+
+# A `<name>.yml.j2`, whether bare (a `{% from %}` line or an inline bullet mention) or with
+# one directory level in front of it -- widening DOCS to every CLAUDE.md pulled in role-local
+# app config the roles happen to name with the same extension (`templates/config/config.yml.j2`
+# in configarr, `templates/config/application.yml.j2` in janitorr). Capturing the directory
+# lets the loop below tell those apart from a shared-macro reference, which this repo's docs
+# always give bare or as `templates/<macro>.yml.j2` -- never `templates/config/...`.
+NAMED = re.compile(r"\b((?:[a-z0-9_-]+/)?[a-z0-9_-]+\.yml\.j2)\b")
+
+
+def test_the_corpus_covers_the_whole_doc_tree():
+    """Coverage is asserted, not assumed -- a two-file DOCS list already let one leak."""
+    assert len(DOCS) >= _MIN_DOCS, (
+        f"only found {len(DOCS)} docs, expected at least {_MIN_DOCS} -- the walk shrank. "
+        "A floor far below the real count cannot tell 'the walk broke' from 'docs were "
+        "deleted'."
+    )
 
 
 def test_every_macro_named_in_the_docs_exists():
@@ -32,14 +72,30 @@ def test_every_macro_named_in_the_docs_exists():
     for doc in DOCS:
         if not doc.is_file():
             continue
-        for line_no, line in enumerate(doc.read_text().splitlines(), 1):
-            for name in NAMED.findall(line):
-                # Compose/manifest templates a role owns, not shared macros.
-                if name in ("docker-compose.yml.j2",):
+        lines = doc.read_text().splitlines()
+
+        # First pass: names a `config/`-qualified mention already ties to a role's own
+        # rendered app config (configarr's, janitorr's) -- a later bare mention of the
+        # same name in the same doc is that same file, not a fresh shared-macro claim.
+        local_names = {
+            bare
+            for line in lines
+            for raw in NAMED.findall(line)
+            for prefix, _, bare in [raw.rpartition("/")]
+            if prefix == "config"
+        }
+
+        for line_no, line in enumerate(lines, 1):
+            for raw in NAMED.findall(line):
+                _, _, bare = raw.rpartition("/")
+                if bare in local_names:
                     continue
-                if name not in available:
+                # Compose/manifest templates a role owns, not shared macros.
+                if bare in ("docker-compose.yml.j2",):
+                    continue
+                if bare not in available:
                     rel = doc.relative_to(REPO)
-                    missing.append(f"{rel}:{line_no} names {name}")
+                    missing.append(f"{rel}:{line_no} names {bare}")
 
     assert not missing, (
         "the docs name a shared macro that no longer exists in ansible/templates/; a "

@@ -528,8 +528,13 @@ def cmd_rotate(args) -> int:
         new = pysecrets.token_hex(
             16
         )  # 32 hex chars — the format Kuma push tokens require
+        # --value-stdin keeps the new token out of argv (world-readable via /proc/<pid>/cmdline
+        # here — no hidepid). It still requires a JSON-encoded value, same as the old argv
+        # form, so the quoting stays; only the transport moves to stdin.
         subprocess.run(
-            ["sops", "set", SECRETS_FILE, '["%s"]' % name, '"%s"' % new],
+            ["sops", "set", "--value-stdin", SECRETS_FILE, '["%s"]' % name],
+            input='"%s"' % new,
+            text=True,
             check=True,
             cwd=REPO,
         )

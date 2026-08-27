@@ -12,11 +12,16 @@
   # next time a cron picks up a new tag; `always` cannot drift. Cost is one idempotent copy per
   # tag-scoped run of initial_setup.yml.
   tags: [always]
-  # FIRST in this file, and initial_setup runs before deploy.yml (ansible/README.md §4): every
-  # health cron on every host sources this, including secret-rotate.sh.j2 further down, so it
-  # has to be on disk before any of them are rendered. Consumers source it with a `|| exit 1`
+  # FIRST in this file, and initial_setup runs before deploy.yml (ansible/README.md §4): nearly
+  # every health cron on every host sources this, including secret-rotate.sh.j2 further down, so
+  # it has to be on disk before any of them are rendered. Consumers source it with a `|| exit 1`
   # guard, so a host that somehow misses it fails its cron loudly and drops the heartbeat
   # rather than skipping the push and reporting green.
+  # Two push scripts deliberately do NOT source it, each for a stated reason, and
+  # ansible/tests/test_cron_scripts_publish_via_pr.py carries that exemption set with the reasons.
+  # The invariant that binds ALL of them — no push token ever reaches curl's argv — is asserted
+  # separately there with no exemptions at all, so opting out of the library cannot opt a script
+  # out of the security property.
   ansible.builtin.copy:
     src: kuma-push-lib.sh
     dest: /usr/local/lib/kuma-push-lib.sh

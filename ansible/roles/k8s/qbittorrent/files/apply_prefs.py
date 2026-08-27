@@ -41,6 +41,16 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+# Exit codes. 0/1/2 predate this constant and are read by nothing but a human's shell prompt
+# today (verified 2026-08-27: no caller in the repo shells out to this script), so widening the
+# contract here is additive, not a break. EXIT_DRIFT is what a scheduled --dry-run caller
+# branches on — see templates/prefs-check.sh.j2 — because a bare `--dry-run` cannot otherwise
+# tell "nothing to do" from "found changes but wrote none" without parsing stdout.
+EXIT_OK = 0
+EXIT_UNREACHABLE = 1
+EXIT_BAD_ARGS = 2
+EXIT_DRIFT = 3
+
 # The desired values, keyed by the qBittorrent WebUI API v2 preference names.
 #
 # Every one is chosen for a client that CANNOT ACCEPT INBOUND CONNECTIONS. Mullvad
@@ -153,7 +163,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Report what would change without writing anything.",
+        help="Report what would change without writing anything. Exits "
+        f"{EXIT_DRIFT} if a preference has drifted, {EXIT_OK} if none has.",
     )
     return parser.parse_args(argv)
 
@@ -168,7 +179,7 @@ def main(argv: list[str] | None = None) -> int:
             "QBT_USERNAME and QBT_PASSWORD must be set — see this file's docstring.",
             file=sys.stderr,
         )
-        return 2
+        return EXIT_BAD_ARGS
 
     client = QbtClient(args.url)
     try:
@@ -176,19 +187,19 @@ def main(argv: list[str] | None = None) -> int:
         current = client.preferences()
     except urllib.error.URLError as exc:
         print(f"cannot reach qBittorrent at {args.url}: {exc}", file=sys.stderr)
-        return 1
+        return EXIT_UNREACHABLE
 
     changes = diff_prefs(current, DESIRED)
     if not changes:
         print(f"{len(DESIRED)} preferences already match; nothing to do.")
-        return 0
+        return EXIT_OK
 
     for key, (have, want) in sorted(changes.items()):
         verb = "would set" if args.dry_run else "set"
         print(f"{verb} {key}: {have} -> {want}")
 
     if args.dry_run:
-        return 0
+        return EXIT_DRIFT
 
     client.set_preferences({key: DESIRED[key] for key in changes})
 
@@ -198,10 +209,10 @@ def main(argv: list[str] | None = None) -> int:
     if remaining:
         for key, (have, want) in sorted(remaining.items()):
             print(f"NOT APPLIED {key}: still {have}, wanted {want}", file=sys.stderr)
-        return 1
+        return EXIT_UNREACHABLE
 
     print(f"applied {len(changes)} preference(s); all {len(DESIRED)} now match.")
-    return 0
+    return EXIT_OK
 
 
 if __name__ == "__main__":

@@ -14,6 +14,10 @@ These are text assertions over the templates, which is the weaker kind of guard 
 indirection through a variable or a helper would slip past. They are still worth having,
 because the regression they cover is someone reinstating a direct write, and that is a
 literal line of shell.
+
+The second half of this file is a different invariant on the same crons: no Kuma push token
+reaches curl's argv. It carries its own header above `ROLES`, including why its corpus is
+derived rather than listed.
 """
 
 import re
@@ -172,32 +176,204 @@ def test_the_audit_watches_for_an_unlanded_rotation_branch():
     )
 
 
-def test_the_rotation_crons_push_through_the_shared_library():
-    """crons.yml:15-19 says every health cron sources kuma-push-lib.sh "including
-    secret-rotate.sh.j2 further down". That was false -- `grep -c kuma-push-lib` returned 0
-    for it, and both rotation scripts passed the token-bearing URL to curl as an argv
-    element, readable through /proc/<pid>/cmdline (2026-08-25 review M-9).
+# --- No Kuma push token reaches curl's argv -------------------------------------------------
+#
+# /proc is mounted without hidepid on all three hosts, so any local user can read another user's
+# /proc/<pid>/cmdline. A Kuma push token in there is enough to forge or suppress a heartbeat,
+# which hides a real outage. kuma-push-lib.sh:26-30 states the threat model; the fix is to feed
+# the token-bearing URL to curl on stdin as a config file (`-K -`) instead of as an argument.
+#
+# WHY THE CORPUS IS DERIVED, NOT LISTED. The predecessor of these tests iterated
+# `(SECRET_ROTATE, ROTATION_AUDIT)` -- exactly the two files its own PR fixed -- so it read green
+# while six other templates leaked. That is the estate's most durable failure mode (a guard
+# written alongside its fix inherits the fix's scope) at run 5. Two consequences:
+#
+#   * the corpus is every non-archive `*.j2` under ansible/ that mentions a push URL, in ANY
+#     extension. Keying it on `*.sh.j2` would have missed renovate-notify.service.j2, which is a
+#     systemd unit AND holds no `api/push` literal -- its URL arrives from config.env at runtime.
+#   * `test_the_push_corpus_never_shrinks` fails if the derivation stops seeing what it sees
+#     today, so a guard cannot quietly become inert.
+#
+# The two assertions are deliberately separate and have DIFFERENT exemption policies. A file may
+# be excused from using the shared library; nothing is ever excused from keeping the token out of
+# argv. Folding them together would let an exemption launder the security property away.
+#
+# KNOWN GAP, because a text guard has one. A variable is treated as tainted either when THIS file
+# assigns it an `api/push` value or when its name contains PUSH_URL. So a URL assigned in one file
+# under a name like KUMA_URL and consumed by curl in another slips through both arms -- the same
+# cross-file shape as renovate-notify.service.j2, minus the naming convention that catches it.
+# Keep new push URLs named *PUSH_URL and the guard keeps binding them.
 
-    The comment is documentation of an invariant, so the invariant gets a test rather than
-    the comment getting a correction.
+ROLES = REPO / "ansible/roles"
+
+PUSH_LITERAL = "api/push"
+# `$NAME` or `${NAME}`.
+_SHELL_VAR = re.compile(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?")
+# An assignment, optionally exported: `PUSH_URL=`, `export KUMA_PUSH_URL=`.
+_ASSIGNMENT = re.compile(r"\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=")
+# curl's config-file flag. Bounded so `--keepalive` and `-Ku` do not count as a match.
+_CURL_CONFIG_FLAG = re.compile(r"(?<![\w-])-K(?![\w-])")
+
+# Sources /usr/local/lib/kuma-push-lib.sh, with the reason each exemption is honest.
+_LIBRARY_EXEMPT = {
+    "crowdsec-update-home-allowlist.sh.j2": (
+        "keeps its own curl for the `--retry 3 --retry-all-errors` its # DECIDED: marker "
+        "records. Those retries are measured against this monitor specifically (push-type, "
+        "max_retries 0); kuma_push has ten other callers and none of them measured it. It "
+        "reproduces the -K stdin form inline, so the argv assertion still binds it."
+    ),
+    "renovate-notify.service.j2": (
+        "a systemd ExecStartPost running /bin/sh, which is dash on Ubuntu. kuma-push-lib.sh is "
+        "bash-shaped, so sourcing it would trade an argv leak for a shell-dialect dependency "
+        "inside a unit file. It uses the -K stdin form inline instead."
+    ),
+}
+
+# Files whose disappearance from the corpus means the derivation broke, not that the estate
+# changed. Every one is a template that can invoke curl against a push URL.
+_EXPECTED_IN_CORPUS = {
+    "ansible/roles/k8s/claude-otel/templates/telemetry-health.sh.j2",
+    "ansible/roles/k8s/configarr/templates/configarr-health.sh.j2",
+    "ansible/roles/k8s/crowdsec/templates/crowdsec-appsec-verify.sh.j2",
+    "ansible/roles/k8s/crowdsec/templates/crowdsec-update-home-allowlist.sh.j2",
+    "ansible/roles/k8s/janitorr/templates/janitorr-health.sh.j2",
+    "ansible/roles/k8s/registry/templates/registry-gc.sh.j2",
+    "ansible/roles/k8s/traefik/templates/cloudflare-ip-drift.sh.j2",
+    "ansible/roles/setup/fake_remux/templates/fake-remux-health.sh.j2",
+    "ansible/roles/setup/initial_setup/templates/secret-rotate.sh.j2",
+    "ansible/roles/setup/initial_setup/templates/secret-rotation-audit.sh.j2",
+    "ansible/roles/setup/k3s/templates/disk-health.sh.j2",
+    "ansible/roles/setup/k3s/templates/etcd-snapshot-offbox.sh.j2",
+    "ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2",
+    "ansible/roles/setup/k3s/templates/manifest-prune-check.sh.j2",
+    "ansible/roles/setup/k3s/templates/remember-logs-health.sh.j2",
+    "ansible/roles/setup/optimize_pi/templates/pi-recovery-health.sh.j2",
+    "ansible/roles/setup/optimize_pi/templates/pi-sd-health.sh.j2",
+    "ansible/roles/setup/renovate_notify/templates/renovate-notify.service.j2",
+}
+
+# The corpus also holds six templates that carry a push URL but invoke no curl of their own: the
+# authelia bypass regex, both cloudflare-ddns Deployments, both pi-peer-backup manifests, and
+# renovate-notify's config.env. They are counted rather than named, so the floor is what watches
+# them. 23 against a measured 24 leaves headroom for exactly one retirement — a slacker floor
+# would let a third of that unnamed tail vanish before anything went red.
+_MIN_CORPUS = 23
+
+
+def push_corpus() -> list[Path]:
+    """Every non-archive template that mentions a push URL, whatever its extension.
+
+    `ansible/roles/containers/archive/` is excluded: those roles deploy nothing, and
+    docker-fleet-health.sh.j2 there still carries the pre-library form.
     """
-    for path in (SECRET_ROTATE, ROTATION_AUDIT):
-        text = path.read_text()
-        assert "kuma-push-lib.sh" in text, (
-            f"{path.name} does not source the shared push library, contradicting "
-            f"crons.yml:15-19"
+    return sorted(
+        path
+        for path in ROLES.rglob("*.j2")
+        if "/archive/" not in str(path)
+        and (PUSH_LITERAL in path.read_text() or "PUSH_URL" in path.read_text())
+    )
+
+
+def _logical_lines(text: str) -> list[str]:
+    r"""Shell lines with backslash continuations joined, comments dropped.
+
+    The join is the whole point. In fake-remux-health.sh.j2 the `curl` sat on one physical line
+    and the token-bearing URL five lines below it, so a line-local predicate matched neither --
+    the naive widening of this guard would have landed green and inert (2026-08-27 review H-2).
+    """
+    joined = re.sub(r"\\\n\s*", " ", text)
+    return [
+        line
+        for line in joined.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+
+
+def curl_lines_leaking_a_push_url(text: str) -> list[str]:
+    """Logical lines that hand curl a push URL without routing it through a config file.
+
+    A URL is tainted when the line holds the `api/push` literal, references a variable this file
+    assigned such a literal to, or references a `*PUSH_URL*` name -- the last arm is what catches
+    renovate-notify.service.j2, whose URL is assigned in a different file entirely.
+    """
+    lines = _logical_lines(text)
+    tainted_names = {
+        match.group(1)
+        for line in lines
+        if PUSH_LITERAL in line and (match := _ASSIGNMENT.match(line))
+    }
+    leaks = []
+    for line in lines:
+        if "curl" not in line:
+            continue
+        refs = set(_SHELL_VAR.findall(line))
+        tainted = (
+            PUSH_LITERAL in line
+            or bool(refs & tainted_names)
+            or any("PUSH_URL" in ref.upper() for ref in refs)
         )
-        pushes = [
-            line
-            for line in text.splitlines()
-            if "curl" in line
-            and "api/push" in line
-            and not line.strip().startswith("#")
-        ]
-        assert not pushes, (
-            f"{path.name} still passes a token-bearing push URL to curl directly, which "
-            f"exposes it in /proc/<pid>/cmdline: {pushes}"
-        )
+        if tainted and not _CURL_CONFIG_FLAG.search(line):
+            leaks.append(line.strip())
+    return leaks
+
+
+def test_no_push_token_reaches_curls_argv():
+    """The security property. No exemptions -- an exempt file is one that may write its own
+    curl, not one that may leak the token."""
+    offenders = {}
+    for path in push_corpus():
+        leaks = curl_lines_leaking_a_push_url(path.read_text())
+        if leaks:
+            offenders[str(path.relative_to(REPO))] = leaks
+    assert not offenders, (
+        "these templates pass a token-bearing push URL to curl as an argv element, which "
+        "exposes it in /proc/<pid>/cmdline for the life of the call. Feed it in on stdin "
+        'instead -- `printf \'url = "%s"\\n\' "$URL" | curl -G -K - ...`, as '
+        f"kuma-push-lib.sh:41-46 does: {offenders}"
+    )
+
+
+def test_every_shell_push_script_sources_the_shared_library():
+    """crons.yml:15-19 asserts this in prose. Two files are honestly exempt; both are named
+    with their reason, and both remain bound by the argv assertion above."""
+    offenders = []
+    for path in push_corpus():
+        if path.name in _LIBRARY_EXEMPT or not path.name.endswith(".sh.j2"):
+            continue
+        if "kuma-push-lib.sh" not in path.read_text():
+            offenders.append(str(path.relative_to(REPO)))
+    assert not offenders, (
+        "these push scripts do not source the shared library, contradicting crons.yml:15-19. "
+        "Either source it or add a named exemption to _LIBRARY_EXEMPT with the reason: "
+        + ", ".join(offenders)
+    )
+
+
+def test_the_library_exemptions_still_name_live_files():
+    """An exemption for a file that no longer exists silently widens the next one."""
+    names = {path.name for path in push_corpus()}
+    stale = set(_LIBRARY_EXEMPT) - names
+    assert not stale, (
+        "_LIBRARY_EXEMPT names templates that are no longer in the push corpus: "
+        + ", ".join(sorted(stale))
+    )
+
+
+def test_the_push_corpus_never_shrinks():
+    """The point of the whole rewrite. A guard whose corpus quietly narrows is worse than no
+    guard, because it reads green while the class it covers spreads."""
+    found = {str(path.relative_to(REPO)) for path in push_corpus()}
+    missing = _EXPECTED_IN_CORPUS - found
+    assert not missing, (
+        "these templates left the push corpus. Either the derivation stopped matching them or "
+        "they were retired -- confirm which before editing this list: "
+        + ", ".join(sorted(missing))
+    )
+    assert len(found) >= _MIN_CORPUS, (
+        f"the push corpus is down to {len(found)} templates, below the {_MIN_CORPUS} floor. A "
+        "floor well under the real count cannot tell 'the glob broke' from 'one role was "
+        "retired'."
+    )
 
 
 def test_the_audit_watches_the_gh_token_both_crons_depend_on():

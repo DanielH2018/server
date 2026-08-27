@@ -134,6 +134,37 @@ would block on that window every time, and an lscr.io blip during it — the fai
 would surface as a *failed deploy* instead of as the mod-fetch problem it is. Keep the
 apply manual.
 
+### The daily drift check is log-only, and does not apply anything
+
+Nothing used to re-run `apply_prefs.py` or notice when the PVC's live preferences drifted from
+`DESIRED` (2026-08-27 review, Medium). `tasks/main.yml` now installs a daily host cron on
+daniel-box (`qbittorrent_k8s_prefs_check_cron_hour`/`_minute`, `cron_file:
+qbittorrent-prefs-check`) that copies `files/apply_prefs.py` to
+`/opt/qbittorrent-prefs-check/` and runs it with `--dry-run` from
+`templates/prefs-check.sh.j2`, then `logger -t qbittorrent-prefs-check`s the result. It never
+writes to qBittorrent — applying a changed value stays the manual step documented above.
+
+**Deliberately NOT a Kuma monitor.** The 2026-08-27 review that found this gap also found six
+live Kuma push tokens leaking into `curl` argv across the estate, one world-readable — adding a
+seventh for a low-urgency drift check would grow the exact class being remediated in the same
+review. `logger` writes to the `{job="syslog"}` Loki stream instead, which
+`scripts/diagnostics/probe.py alerts` already reads. This is why `prefs-check.sh.j2` is absent
+from `ansible/tests/test_cron_scripts_publish_via_pr.py`'s push-script corpus (it holds neither
+`api/push` nor `PUSH_URL`) — it isn't a push script and doesn't need to sit in the shared
+`kuma-push-lib.sh` contract that file enforces.
+
+**Credentials are the existing `qbittorrent_username`/`qbittorrent_password` SOPS keys** —
+the same ones `homepage`'s widget already renders — projected into
+`/usr/local/bin/qbittorrent-prefs-check.sh` at 0700 owner `{{ sys_user }}` (the same shape as
+`janitorr-health.sh.j2`'s Kuma token: interpolated directly rather than split into a separate
+env file, since only one user ever needs to read this one). No new SOPS surface.
+
+**apply_prefs.py's exit codes are a contract now, not an accident**: `EXIT_OK` (0),
+`EXIT_UNREACHABLE` (1), `EXIT_BAD_ARGS` (2), `EXIT_DRIFT` (3, `--dry-run` only). Before
+2026-08-27, `--dry-run` returned 0 whether or not anything had drifted, which is why the cron
+above could not previously have branched on it. No caller shelled out to this script before
+that date (grep confirmed), so this widened the contract rather than breaking one.
+
 ### The login trap
 qBittorrent 5.2.3 answers a successful `POST /api/v2/auth/login` with **HTTP 204 and an
 empty body**. Older builds answered `200 "Ok."`, and a client that checks for that string

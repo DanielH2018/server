@@ -10,8 +10,14 @@ gitops_deploy_require_ci: true
 
 # Check-run names that must be green. These are GitHub's check-run NAMES, which are also the
 # strings branch protection calls contexts — they must match ci.yml's `name:` EXACTLY, and that
-# file carries a comment saying as much. `renovate config validator` is deliberately not required:
-# it self-skips its real work off a per-PR condition, so on a master push it proves nothing.
+# file carries a comment saying as much. `renovate config validator` is deliberately not required,
+# but NOT because it skips: `ci.yml`'s guard is
+# `if: github.event_name != 'pull_request' || steps.scope.outputs.changed == 'true'`, whose left
+# operand is true on a push, so it runs unconditionally on master — which is exactly the tip
+# `fetch_ci_verdict` reads, and ci.yml says so itself. It is excluded because a red
+# renovate.json does not change what a deploy renders or applies: the config is consumed by the
+# hosted Mend app when it opens PRs, a plane this deployer never touches. Blocking the deploy
+# gate on it would park every later image bump behind a dependency-management fault.
 gitops_deploy_ci_contexts:
   - prek (lint + validate + tests + secrets)
 

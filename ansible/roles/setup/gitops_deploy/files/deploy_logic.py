@@ -69,6 +69,22 @@ _BROAD_DEPLOY_PREFIXES = (
     "ansible/inventory/",  # host_vars / group_vars
     "ansible/roles/containers/common/",  # shared deploy path
     "ansible/deploy.yml",
+    # The task files deploy.yml imports. deploy.yml itself was already broad, but its three
+    # sibling task dirs matched nothing: every _ACTIVE_* regex is anchored to ansible/roles/, so a
+    # change to `pre_tasks/load_secrets.yml`, `tasks/k8s_batch.yml` (the k8s rollout-batch path) or
+    # `post_tasks/k8s_stabilise_gate.yml` (the post-deploy stabilisation gate) returned a fully
+    # EMPTY ChangeSet. main() has no catch-all branch — `if not cs.services:` ff-merges
+    # unconditionally and both alert_deferred/alert_secrets_deferred no-op on empty fields — so
+    # empty-because-unclassified was bit-for-bit indistinguishable from empty-because-docs: a
+    # silent ff-merge, no alert, no deploy, on files that change what EVERY deploy does.
+    # Deploy-plane rather than setup-plane because deploy.yml is the playbook this deployer runs;
+    # `pre_tasks/load_secrets.yml` is also imported by initial_setup.yml, k3s-bringup.yml and
+    # preflight.yml, but those only ever run by hand, so `ansible/deploy.yml` is the remediation
+    # that actually applies the change on this host. Proportionate: these three dirs changed in 7
+    # commits in the repo's whole history, so defer-and-alert here will rarely fire.
+    "ansible/pre_tasks/",
+    "ansible/tasks/",
+    "ansible/post_tasks/",
     "ansible/filter_plugins/",  # toposort
     # ansible.cfg is a repo-root file read fresh by every ansible-playbook the deployer runs
     # (WorkingDirectory is the repo root, so ./ansible.cfg applies) but maps to no service — it sets

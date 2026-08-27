@@ -34,4 +34,16 @@ ExecStart=/usr/local/bin/uv run --no-project --no-python-downloads --python {{ h
 # monitor-bridge renovate_alive check (host flip 2, 2026-08-14). Failure still pages
 # twice: OnFailure hits Discord immediately, and the missed beat reds the Kuma monitor
 # at its 36h window.
-ExecStartPost=/bin/sh -c '. /etc/renovate-notify/config.env && curl -fsS -m 15 --get "$KUMA_PUSH_URL" --data-urlencode "msg=notifier ran" >/dev/null'
+# The URL embeds the Kuma push token, so it reaches curl on stdin as a config file (`-K -`) rather
+# than as an argv element. /proc is mounted without hidepid here, so any local user can read
+# another user's /proc/<pid>/cmdline; `systemctl show -p ExecStartPost` already publishes this line
+# over the system bus, and before this it published a line that expanded the token into argv on
+# every run. The 0600 config.env was never the leak — the shell expansion was.
+#
+# `%%s`, not `%s`: systemd expands `%s` in a unit line to the service user's shell, so the bare
+# form would hand printf a format of `url = /bin/bash` and push nothing.
+#
+# `/bin/sh` is dash here, so this stays inline rather than sourcing the bash-shaped
+# /usr/local/lib/kuma-push-lib.sh — see the exemption note in
+# ansible/tests/test_cron_scripts_publish_via_pr.py.
+ExecStartPost=/bin/sh -c '. /etc/renovate-notify/config.env && printf "url = \"%%s\"\n" "$KUMA_PUSH_URL" | curl -fsS -m 15 -K - --get --data-urlencode "msg=notifier ran" >/dev/null'

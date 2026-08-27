@@ -230,14 +230,14 @@ refuses outright — and then say which command and why.
    Do **not** gate on `gh run list --branch master --limit 1`. GitHub creates the run for a
    freshly-pushed merge commit a moment after the push, so that query returns the *previous*
    master run — green — and the wait returns instantly having watched the wrong commit.
-   **An empty or incomplete list is pending, never green**, which is how `ci_verdict` reads it
-   too (`ansible/roles/setup/gitops_deploy/files/deploy_logic.py:262`): a required name with no
+   **An empty or incomplete list is pending, never green**, which is how `ci_verdict()`
+   (`ansible/roles/setup/gitops_deploy/files/deploy_logic.py`) reads it too: a required name with no
    runs yet holds the verdict at pending. Reading the same endpoint as the deployer is what
    makes your verdict and the tick's agree by construction.
 
    This is a gate, not politeness. PR CI is scoped to changed files, so whole-tree tests can
    only fail after merge. A **pending** master CI also blocks the fast-forward itself —
-   `next_action` returns `ci_pending` *before* the `--ff-only` merge (`deploy_logic.py:345`, in `next_action`), so
+   `next_action()` returns `ci_pending` *before* the `--ff-only` merge (`deploy_logic.py`), so
    a tick fired seconds after the merge pulls nothing and every later step reads as stale.
 3. **Pull with `./scripts/deploy_tools/gitops_tick.sh`, never a hand `git pull`.** The tick fetches,
    CI-gates, `--ff-only` merges, deploys what is eligible, health-gates it and rolls back on

@@ -3,6 +3,7 @@
 import datetime as dt
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import yaml
 
@@ -457,4 +458,43 @@ def test_every_consumer_tag_is_a_real_deploy_tag():
         "consumer_tag returns a value that is not a deploy tag; Ansible exits 0 on an "
         "unmatched tag, so the rotation stamps green having deployed nothing: %s"
         % unmatched
+    )
+
+
+# ── cmd_rotate: the new token must not reach sops via argv ──────────────────
+
+
+def test_rotate_commit_sends_new_token_on_stdin_not_argv(monkeypatch):
+    """Regression guard for the 2026-08-27 fix: `sops set` used to take the freshly minted
+    token as a CLI argument, which sits in /proc/<pid>/cmdline for the call's lifetime (no
+    hidepid here — see secret-rotate.sh.j2's own argv-avoidance comment for curl). The value
+    must travel on stdin, and --value-stdin still requires the JSON-quoted form."""
+    name = "monitor_bridge_test_token"
+    reg = {"secrets": {name: {}}}
+    monkeypatch.setattr(sr, "load_registry", lambda: reg)
+    monkeypatch.setattr(
+        sr, "audit", lambda reg, today: {"all": [(name, "auto", "2026-01-01", -5)]}
+    )
+    monkeypatch.setattr(sr, "save_registry", lambda reg: None)
+
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(sr.subprocess, "run", fake_run)
+
+    args = SimpleNamespace(name=name, all=False, commit=True, deploy=False)
+    assert sr.cmd_rotate(args) == 0
+
+    assert len(calls) == 1
+    cmd, kwargs = calls[0]
+    assert cmd == ["sops", "set", "--value-stdin", sr.SECRETS_FILE, '["%s"]' % name], (
+        "sops set must take only the file and index positionally — no value argument, "
+        "which is where the token used to leak into argv: %s" % cmd
+    )
+    assert kwargs.get("input", "").startswith('"') and kwargs["input"].endswith('"'), (
+        "the value sent on stdin must stay JSON-quoted — sops set --value-stdin rejects a "
+        "raw (unquoted) string with 'Value for --set is not valid JSON'"
     )
