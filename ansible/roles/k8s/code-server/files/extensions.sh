@@ -11,6 +11,26 @@
 # fetches the current version of each extension, and nothing ever removed the previous ones.
 EXTENSIONS_DIR=/config/extensions
 
+# Extensions retired from the image. Dropping one from /opt/vsix does NOT remove it: this
+# script only ever installed, so a retired extension stays on the config volume and keeps
+# running against a toolchain the image no longer ships. The two below went with the TeX Live
+# removal on 2026-08-27 (43 M between them); LaTeX Workshop in particular would sit there
+# shelling out to a latexmk that is gone.
+#
+# An explicit list, NOT "remove anything not in /opt/vsix": extensions installed by hand
+# through the code-server UI live in the same directory and are not this script's to delete.
+# Removing an id from here once it is gone from every volume is safe — uninstalling an absent
+# extension is a no-op.
+RETIRED_EXTS="
+    james-yu.latex-workshop
+    tomoki1207.pdf
+"
+
+for ext in $RETIRED_EXTS; do
+    echo "Removing retired extension: ${ext}"
+    /app/code-server/bin/code-server --extensions-dir "${EXTENSIONS_DIR}" --uninstall-extension "${ext}" || true
+done
+
 for vsix in /opt/vsix/*.vsix; do
     echo "Installing extension: ${vsix}"
     /app/code-server/bin/code-server --extensions-dir "${EXTENSIONS_DIR}" --install-extension "${vsix}"

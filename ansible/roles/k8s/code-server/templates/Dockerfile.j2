@@ -7,27 +7,20 @@
 FROM lscr.io/linuxserver/code-server:4.134.0-ls360
 
 # 1. Install system dependencies
-#    texlive-fonts-extra is deliberately NOT here: it is a 1.7 G leaf package, on its own
-#    ~60% of the unpacked image, and texlive-fonts-recommended already carries the Computer
-#    Modern / Latin Modern / URW families ordinary documents use.
+#    No TeX Live here. LaTeX moved to the texbrain workload on 2026-08-27, which compiles in
+#    the browser via a WebAssembly pdfTeX — see roles/k8s/texbrain. The four packages that
+#    used to be in this list (texlive-latex-extra, texlive-fonts-recommended, tex-gyre,
+#    latexmk) pulled in 56 packages and ~309 MiB of the ~858 MiB installed here, and nothing
+#    outside that set depended on them.
 #
-#    When a document fails on a missing font family, DO NOT reach straight for -extra. Debian
-#    splits the popular families into small standalone packages that ship the .sty support
-#    files as well as the fonts — tex-gyre below is 20 M and provides the 14 tg*.sty families
-#    (tgheros, tgtermes, tgpagella, …), which -extra would have cost 1.7 G to supply. Find the
-#    package for the missing .sty and add it here; -extra is the last resort, not the first.
-#
-#    tex-gyre: added 2026-08-15 after resume.cls failed on `tgheros.sty' — TeX Gyre Heros,
-#    the URW Helvetica clone that \sfdefault resolves to in that class.
+#    Consequence worth knowing before you debug a document here: this image can no longer
+#    compile one at all, and there is no local fallback. texbrain needs the pod, a browser,
+#    and a jsDelivr mirror for any package outside its bundled TeX Live subset.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     python3 \
     python3-pip \
     python3-venv \
-    texlive-latex-extra \
-    texlive-fonts-recommended \
-    tex-gyre \
-    latexmk \
     curl \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
@@ -68,8 +61,6 @@ RUN mkdir -p /opt/vsix && \
         ms-python.python \
         charliermarsh.ruff \
         astral-sh.ty \
-        james-yu.latex-workshop \
-        tomoki1207.pdf \
     " && \
     for ext in $OPENVSX_EXTS; do \
         publisher=$(echo "$ext" | cut -d. -f1) && \
