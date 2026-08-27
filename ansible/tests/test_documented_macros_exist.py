@@ -19,28 +19,12 @@ describe code that no longer runs.
 import re
 from pathlib import Path
 
+from _helpers import discover_docs
+
 REPO = Path(__file__).resolve().parent.parent.parent
 MACROS = REPO / "ansible" / "templates"
 
-# Retired trees: their docs describe code that no longer runs, so a macro name in one of
-# them is history, not a live instruction that could be copied into a new template.
-_EXCLUDED_DIRS = (
-    REPO / "docs" / "archive",
-    REPO / "ansible" / "roles" / "containers" / "archive",
-)
-
-
-def _is_excluded(path: Path) -> bool:
-    return any(excluded in path.parents for excluded in _EXCLUDED_DIRS)
-
-
-def _discover_docs() -> list[Path]:
-    docs = {p for p in REPO.rglob("CLAUDE.md") if not _is_excluded(p)}
-    docs |= {p for p in (REPO / ".claude").rglob("*.md") if not _is_excluded(p)}
-    return sorted(docs)
-
-
-DOCS = _discover_docs()
+DOCS = discover_docs()
 
 # A floor, not the real count -- catches the walk silently shrinking (a renamed root, a
 # tightened exclude) without hardcoding a number that drifts every time a doc is added.

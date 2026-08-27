@@ -159,7 +159,9 @@ Scrape-Targets monitor flags this if you miss it.
     longer evaluate its own monitors. The SPOF is real but narrow (a Kuma-only crash while everything
     else stays healthy) and consciously accepted; it is NOT a fresh review finding — don't re-flag.
   - **To close it later:** `uptime-kuma.daniel-hunter.com` is already publicly routed (Cloudflare), so
-    add an Authelia `bypass` rule for `^/status/.*$` on `uptime-kuma.{{ domain }}` (configuration.yml.j2),
+    add an Authelia `bypass` rule for `^/status/.*$` on `uptime-kuma.{{ domain }}`
+    (`ansible/roles/k8s/authelia/templates/config-secret.yaml.j2`, where `access_control` lives;
+    this line named the retired Docker role's template until 2026-08-27),
     create a public Kuma status page (`/status/<slug>` — served by the Kuma container, so a Kuma death →
     Traefik 502 → the probe fires), and repoint the UptimeRobot monitor at
     `https://uptime-kuma.daniel-hunter.com/status/<slug>`. Trade-off: that status page becomes publicly

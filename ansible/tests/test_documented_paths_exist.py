@@ -33,15 +33,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from _helpers import discover_docs
 
 REPO = Path(__file__).resolve().parent.parent.parent
-
-# Retired trees describe code that no longer runs, so a path in one is history, not an
-# instruction. Same exclusion list as the macro guard, for the same reason.
-_EXCLUDED_DIRS = (
-    REPO / "docs" / "archive",
-    REPO / "ansible" / "roles" / "containers" / "archive",
-)
 
 # A floor, not the real count -- catches the walk silently shrinking (a renamed root, a
 # tightened exclude) without hardcoding a number that drifts every time a doc is added.
@@ -62,18 +56,7 @@ _MIN_DOCS = 100
 _CITED = re.compile(r"`([\w.][\w./-]*\.[a-z][a-z0-9]*):(\d+)(?:-\d+)?`")
 
 
-def _is_excluded(path: Path) -> bool:
-    return any(excluded in path.parents for excluded in _EXCLUDED_DIRS)
-
-
-def _discover_docs() -> list[Path]:
-    docs = {p for p in REPO.rglob("CLAUDE.md") if not _is_excluded(p)}
-    docs |= {p for p in (REPO / ".claude").rglob("*.md") if not _is_excluded(p)}
-    docs |= {p for p in (REPO / "docs").rglob("*.md") if not _is_excluded(p)}
-    return sorted(docs)
-
-
-DOCS = _discover_docs()
+DOCS = discover_docs()
 
 
 def _repo_files() -> set[str]:
@@ -253,3 +236,32 @@ def test_every_line_numbered_path_cited_in_the_docs_exists():
         "the docs cite a repo path that does not exist; an agent following one of these "
         "opens nothing and then guesses:\n  " + "\n  ".join(missing)
     )
+
+
+def test_the_walk_ignores_other_worktrees_on_disk():
+    """The regression: `.claude/worktrees/<name>/` is a full checkout per live session.
+
+    An rglob walked into those and judged this commit against other sessions' older docs, so
+    the guard failed on paths that had moved perfectly legitimately. It broke the docs-refresh
+    cron — its commit runs the prek hooks, this guard rejected it, and the script took its
+    "commit failed; unstaged, nothing published" path while master CI stayed green, because a
+    CI runner has no worktrees on disk. Found 2026-08-27.
+    """
+    # Anchored to REPO, not matched as a substring: this suite often RUNS from inside
+    # `.claude/worktrees/<name>/`, so every legitimate doc path contains that text. The
+    # question is whether the walk left THIS checkout, which only the parent test answers.
+    nested = REPO / ".claude" / "worktrees"
+    strays = [d for d in DOCS if nested in d.parents]
+    assert not strays, "the doc walk reached into another checkout: " + ", ".join(
+        d.as_posix() for d in strays[:3]
+    )
+
+
+def test_the_walk_still_finds_this_repos_own_docs():
+    """The other half: an exclusion tight enough to skip worktrees must not skip the tree.
+
+    Without this, "ignore other checkouts" is satisfied by finding nothing at all.
+    """
+    names = {d.name for d in DOCS}
+    assert "CLAUDE.md" in names
+    assert any(d.as_posix().endswith("docs/secret-rotation.md") for d in DOCS)
