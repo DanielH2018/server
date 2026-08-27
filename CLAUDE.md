@@ -567,6 +567,17 @@ uv run pytest scripts         # just one suite
   a `..._is_clean` / `..._is_flagged` pair, so a rule that silently stopped matching fails its own
   test. Name the pair that way — a guard that fires on everything and one that fires on nothing are
   indistinguishable from the passing side alone.
+- **If the check reaches out over a network, measure the transport before you ship it.** The
+  paired test above proves the *verdict* can go red; it says nothing about whether the fetch that
+  feeds the verdict returns in time. A check whose source is slow or flaky fails open on every
+  slow cycle and is inert behind a green monitor — which the red-proof pair cannot see, because
+  it never runs the transport. Time each endpoint against the live source, more than once. The
+  Pi-detached arm (PR #482) shipped polling glances' `/api/4/containers`; measured afterwards that
+  endpoint took 4.43s on an idle Pi and then timed out at the 10s `HTTP_TIMEOUT` on the very next
+  call, where the sibling endpoints answer in 0.03-0.06s. PR #484 reshaped it so the cheap signal
+  decides and the expensive one only explains. **A slow source is a design input, not a detail:**
+  when one exists, make it conditional on the cheap signal having already fired, and make its
+  failure downgrade the diagnosis rather than the verdict.
 - **Test-placement gotcha:** pytest tests must NOT live under `ansible/filter_plugins/` —
   Ansible's plugin loader imports every `.py` there at deploy time and would choke on the
   `pytest` import. `test_toposort.py` lives in `ansible/tests/` and imports its target via the
