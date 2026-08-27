@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/gen_reference_networking.py
-generated_at: 2026-08-25 16:03 UTC
-generated_sha: 548248f0
+generated_at: 2026-08-27 06:17 UTC
+generated_sha: 13875626
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 548248f0
 
 # Networking
 
-33 routed k8s service(s).
+34 routed k8s service(s).
 
 !!! note "The domain is filled in by your browser"
     `domain` is SOPS-sourced with no static default, and these pages are rendered by static parsing, so the generator writes `<domain>` rather than guessing. On the docs site the routes below become links, built from the domain of the URL you are reading this on — so you get LAN links on the LAN name and public links on the public one.
@@ -54,6 +54,7 @@ generated_sha: 548248f0
 | sonarr | daniel-box | <span class="fqdn" data-host="sonarr">sonarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="sonarr.local">sonarr.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | speedtest | daniel-box | <span class="fqdn" data-host="speedtest">speedtest.&lt;domain&gt;</span> · <span class="fqdn" data-host="speedtest.local">speedtest.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | tdarr | daniel-box | <span class="fqdn" data-host="tdarr">tdarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="tdarr.local">tdarr.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
+| texbrain | daniel-box | <span class="fqdn" data-host="texbrain">texbrain.&lt;domain&gt;</span> · <span class="fqdn" data-host="texbrain.local">texbrain.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | traefik | daniel-box | <span class="fqdn" data-host="traefik.local">traefik.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit` |
 | uptime-kuma | daniel-box | <span class="fqdn" data-host="uptime-kuma">uptime-kuma.&lt;domain&gt;</span> · <span class="fqdn" data-host="uptime-kuma.local">uptime-kuma.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | wg-easy | daniel-box | <span class="fqdn" data-host="wg-easy">wg-easy.&lt;domain&gt;</span> · <span class="fqdn" data-host="wg-easy.local">wg-easy.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |

@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-08-25 16:03 UTC
-generated_sha: 548248f0
+generated_at: 2026-08-27 06:17 UTC
+generated_sha: 13875626
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,12 +12,12 @@ generated_sha: 548248f0
 
 # Services
 
-60 service(s) declared across 2 host(s).
+61 service(s) declared across 2 host(s).
 
 
 ## daniel-box
 
-53 service(s).
+54 service(s).
 
 | Service | Platform | Route | Auth | Backup tier | Auto-deploy |
 |---|---|---|---|---|---|
@@ -68,6 +68,7 @@ generated_sha: 548248f0
 | tdarr | k8s | <span class="fqdn" data-host="tdarr">tdarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="tdarr.local">tdarr.local.&lt;domain&gt;</span> | Authelia | weekly -> B2 (default target); daily -> B2 (default group) | denylisted (state coupled outside the volume — rewrites media-data (shared RWX, not reverted) in place, an irreversible transcode the snapshot/revert can't undo; ALSO non-atomic two-claim revert (tdarr-configs, tdarr-server); ALSO the digest pin's 'stays manual' intent is unenforced — renovate.json automerges a digest re-push after a 3-day soak with no tdarr exclusion) |
 | terraria | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | weekly -> B2 (default target) | denylisted (two reasons: (1) probe-less — no readinessProbe; (2) migrating state — Recreate + RWO seed-volume PVC holding irreplaceable worlds) |
 | terraria-stats | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | weekly -> B2 (default target) | denylisted (games — companion to the hand-operated terraria server. ALSO Recreate + RWO seed-volume PVC holding irreplaceable stats — two independent reasons) |
+| texbrain | k8s | <span class="fqdn" data-host="texbrain">texbrain.&lt;domain&gt;</span> · <span class="fqdn" data-host="texbrain.local">texbrain.local.&lt;domain&gt;</span> | Authelia | no PVC (stateless) | eligible |
 | traefik | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | daily -> R2 | denylisted (platform — ingress edge; a failed deploy removes the ability to reach or fix anything else, and host probes stay green through that kind of outage. COUPLING NOTE for a future promotion: the traefik-acme PVC holds the ACME account key and issued certs; reverting past a real rotation reinstates stale cert state) |
 | uptime-kuma | k8s | <span class="fqdn" data-host="uptime-kuma">uptime-kuma.&lt;domain&gt;</span> · <span class="fqdn" data-host="uptime-kuma.local">uptime-kuma.local.&lt;domain&gt;</span> | Authelia | daily -> B2 (default group) | denylisted (observability — the alerting spine; a broken deploy cannot page about being broken. ALSO Recreate + RWO seed-volume PVC (migrating-state shape) — two independent reasons. COUPLING NOTE for a future promotion: two PVCs (uptime-kuma-data, autokuma-data) that must revert together; a partial revert desyncs AutoKuma's entity-ID map from Kuma's DB, the same shape as the recorded KD5 migration finding) |
 | valheim | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | weekly -> B2 (default target); daily -> B2 (default group) | denylisted (two reasons: (1) probe-less — no readinessProbe at all; (2) migrating state — Recreate + RWO seed-volume PVC holding worlds) |
