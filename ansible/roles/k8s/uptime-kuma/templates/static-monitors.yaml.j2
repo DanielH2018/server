@@ -240,6 +240,16 @@ stringData:
     {"type": "push", "name": "Daniel Pi Recovery", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ pi_recovery_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   secret-rotation.json: |
     {"type": "push", "name": "Secret Rotation", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ secret_rotation_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+{# Gated on the token like its siblings, so this lands before the secret does and neither half
+   sits red waiting for the other.
+   INTERVAL IS DERIVED FROM THE CRONTAB, not chosen: docs-refresh runs at minute 17 of hours 6
+   and 18 (crons.yml), a 12h gap, so 43200 + 3600s of grace = 46800. Move this and those hours
+   together or neither — at 90000 a whole missed run would go unreported, and at 43200 a run
+   that merely takes a minute fires DOWN with nothing wrong. #}
+{% if docs_refresh_push_token | default('') %}
+  docs-refresh.json: |
+    {"type": "push", "name": "Docs Refresh", "interval": 46800, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ docs_refresh_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+{% endif %}
 {% if manifest_prune_push_token | default('') %}
   manifest-prune-check.json: |
     {"type": "push", "name": "Manifest Prune Drift", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ manifest_prune_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}

@@ -123,6 +123,11 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         "live_drift_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
         "etcd_snapshot_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
         "remember_logs_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
+        # daniel-box cron (setup/initial_setup) + k8s/uptime-kuma static tile. Both halves embed
+        # the token and must move together; initial_setup has no deploy tag, so a `--deploy
+        # --tags uptime-kuma` would rotate the tile and leave the cron pushing the old value —
+        # which reads as the monitor going silent, the exact fault it was added to report.
+        "docs_refresh_push_token",
         "secret_rotation_push_token",  # self-referential
         # Pushed by a setup role with no deploy tag, so there is nothing for --deploy to run.
         # Named `monitor_bridge_*` only for Kuma monitor-history continuity after the check
