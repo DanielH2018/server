@@ -149,6 +149,17 @@ k8s_namespace: homelab
 # variable only answers "which node is the primary one here".
 k8s_primary_node: daniel-box
 
+# Hosts k3s-bringup.yml will install a k3s SERVER on. Two entries, two clusters: daniel-box
+# is prod's control plane, daniel-stage is the staging cluster's single node. daniel-server
+# is deliberately absent — it is an agent in prod's cluster, and installing a server there
+# would give one node two control planes.
+#
+# An allowlist rather than a denylist, so a host nobody thought about is refused rather than
+# admitted. ENFORCED by ansible/tests/test_k3s_server_hosts.py.
+k3s_server_hosts:
+  - daniel-box
+  - daniel-stage
+
 # Pod Security Admission labels, applied to homelab and observability.
 #
 # WARN AND AUDIT ONLY — deliberately no `enforce`. PSA is a namespace-level control and this
