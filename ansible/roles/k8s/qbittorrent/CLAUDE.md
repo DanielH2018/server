@@ -81,10 +81,16 @@ Two primitives that look like they solve this and do not, both because they are 
 | `wait --for=condition=ready pod -l app=<x>` | the old pod is still Ready until it stops |
 | `--field-selector status.phase=Running` | `.status.phase` stays `Running` while Terminating — that word is kubectl's rendering of `deletionTimestamp`, not a phase |
 
-**This exposure is not unique to this role.** Confirmed 2026-08-27 in `roles/k8s/jellyfin`,
-`roles/k8s/tdarr` (pod lookup with no wait at all) and `roles/k8s/janitorr` (a
-`wait --for=condition=ready pod` that the old pod satisfies). None had been caught because, as
-here, their assertions happened to hold on both sides of a roll.
+**This exposure was not unique to this role.** The same gap was found on 2026-08-27 in
+`roles/k8s/jellyfin` and `roles/k8s/tdarr` (pod lookup with no wait at all) and in
+`roles/k8s/janitorr` (a `wait --for=condition=ready pod` the old pod satisfies). All three are
+fixed. None had been caught because, as here, their assertions happened to hold on both sides
+of a roll.
+
+**Don't re-derive this by hand.** `ansible/tests/test_inline_rollout_gates.py` now decides it:
+any role that looks up a pod by its own app label must gate on `rollout status` first, and the
+check flattens included *and* imported task files so it can see a `verify.yml`. A new role with
+this shape fails the suite rather than waiting for a deploy to fail.
 
 ### The new failure mode — a stale lock
 Lines 413-421 hold `/modcache/<name>.lock` for the duration of a download. A pod killed
