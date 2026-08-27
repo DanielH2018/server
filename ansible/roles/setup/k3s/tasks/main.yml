@@ -17,8 +17,10 @@
   ansible.builtin.import_tasks: longhorn.yml
 - name: Configure the Longhorn backup targets and job
   ansible.builtin.import_tasks: longhorn-backup.yml
+  when: k3s_manage_backup_targets | bool
 - name: Install the host heartbeat crons
   ansible.builtin.import_tasks: health-crons.yml
+  when: k3s_manage_health_crons | bool
 - name: Create the read-only cluster identity and kubeconfig
   ansible.builtin.import_tasks: kubeconfig.yml
 - name: Apply node-level host configuration

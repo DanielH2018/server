@@ -899,3 +899,27 @@ k3s_join_agent_ports:  # allowed FROM the server, ON the agent
 # Agent node IPs the server-side firewall admits. Set in daniel-box host_vars once an
 # agent exists; empty means the allow tasks are no-ops.
 k3s_agent_node_ips: []
+
+# Which of the role's topic files run. Every flag here defaults TRUE, so prod's behaviour is
+# the behaviour of the role with nothing overridden — a staging cluster turns pieces OFF in
+# its own host_vars rather than prod turning them on. ENFORCED by
+# ansible/tests/test_k3s_stage_gates.py, because a gate that defaults false silently stops
+# doing prod's work and every repo-side check still reads green.
+#
+# DECIDED: `when:` on the existing `import_tasks`, not a switch to `include_tasks`. An import
+# is static, so each task keeps its own tags and `--tags longhorn-backup` still selects; a
+# dynamic include would hide those tags from selection and break the tag-based deploys.
+
+# Longhorn's B2/R2 backup targets and RecurringJobs. Off on a cluster that holds no real
+# credentials — staging has none by design (docs/staging-cluster.md, Decision 5).
+k3s_manage_backup_targets: true
+
+# The host heartbeat crons: Kuma push URLs, Healthchecks.io ping keys, the backup-plane and
+# restore-drill checks. Off anywhere that must not push into prod's monitoring, which would
+# make a staging failure page a real operator.
+k3s_manage_health_crons: true
+
+# The name the post-patch CoreDNS probe resolves to prove the forward works by behaviour.
+# It must be a name only the configured upstream answers, and NXDOMAIN everywhere else —
+# `pi.hole` is answered by FTL itself. Set empty to skip the probe where no such name exists.
+k3s_coredns_probe_name: pi.hole

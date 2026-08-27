@@ -36,16 +36,31 @@ ALL_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
 PRIMARY_NODE_VAR = "k8s_primary_node"
 
 
+JINJA_VAR = re.compile(r"\{\{\s*(\w+)\s*\}\}")
+
+
+def _announcing_node_expr():
+    """The raw nodeSelector value in the L2Advertisement — a literal or a Jinja variable.
+
+    Matches to end of line rather than `(\\S+)`: the value became `{{ k8s_primary_node }}`
+    on 2026-08-27, and a non-greedy `\\S+` captures `{{` and silently compares that.
+    """
+    m = re.search(
+        r"kubernetes\.io/hostname:[ \t]*(\S.*?)[ \t]*$", METALLB_POOL.read_text(), re.M
+    )
+    assert m, f"no nodeSelector hostname found in {METALLB_POOL} — check the matcher"
+    return m.group(1)
+
+
 def _announcing_node():
-    """The node the MetalLB L2Advertisement announces from, read from the manifest itself.
+    """The node the MetalLB L2Advertisement announces from, resolved as Ansible resolves it.
 
     Derived rather than hardcoded so this guard checks the real invariant — that
     announcement and placement name the SAME node — instead of comparing two independent
     literals that were only ever equal by hand.
     """
-    m = re.search(r"kubernetes\.io/hostname:\s*(\S+)", METALLB_POOL.read_text())
-    assert m, f"no nodeSelector hostname found in {METALLB_POOL} — check the matcher"
-    return m.group(1)
+    var = JINJA_VAR.fullmatch(_announcing_node_expr())
+    return _primary_node() if var else _announcing_node_expr()
 
 
 def _primary_node():
@@ -61,16 +76,30 @@ ANNOUNCING_NODE = _announcing_node()
 def test_announcement_and_the_primary_node_variable_agree():
     """The two halves of the pin must name one node.
 
-    Workload pins read `k8s_primary_node`; the L2Advertisement is still a literal. If they
-    ever disagree, every VIP-backed pod is pinned away from the announcer and each one
-    black-holes its own traffic while reporting healthy — the exact failure the per-workload
-    assertions below exist to prevent, arriving through the back door.
+    Workload pins read `k8s_primary_node`. If they ever disagree with the announcement,
+    every VIP-backed pod is pinned away from the announcer and each one black-holes its own
+    traffic while reporting healthy — the exact failure the per-workload assertions below
+    exist to prevent, arriving through the back door.
+
+    Both shapes are checked, because the manifest has held each. As a Jinja reference the
+    invariant is that it names THAT variable and not another one that merely resolves to
+    the same node today; as a literal it is the original two-literal comparison. Resolving
+    first and comparing after would pass unconditionally on the Jinja shape.
     """
-    assert _primary_node() == ANNOUNCING_NODE, (
-        f"{PRIMARY_NODE_VAR} is {_primary_node()!r} but the MetalLB L2Advertisement "
-        f"announces from {ANNOUNCING_NODE!r} ({METALLB_POOL}). Announcement and placement "
-        f"move as one unit; change both or neither."
-    )
+    expr = _announcing_node_expr()
+    var = JINJA_VAR.fullmatch(expr)
+    if var:
+        assert var.group(1) == PRIMARY_NODE_VAR, (
+            f"the MetalLB L2Advertisement announces from {{{{ {var.group(1)} }}}} but the "
+            f"VIP-backed workload pins read {PRIMARY_NODE_VAR} ({METALLB_POOL}). Two "
+            f"variables that agree today are two ways to drift tomorrow."
+        )
+    else:
+        assert expr == _primary_node(), (
+            f"{PRIMARY_NODE_VAR} is {_primary_node()!r} but the MetalLB L2Advertisement "
+            f"announces from {expr!r} ({METALLB_POOL}). Announcement and placement "
+            f"move as one unit; change both or neither."
+        )
 
 
 # jellyfin is pinned by storage, not by its own nodeSelector: the media-volume `local` PV
