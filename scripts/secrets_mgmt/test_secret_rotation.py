@@ -174,7 +174,10 @@ def test_registry_drift_clean_when_in_sync():
 # ── consumer mapping (which redeploy applies a rotated token) ────────────────
 def test_consumer_tag_monitor_bridge_tokens():
     assert sr.consumer_tag("monitor_bridge_cpu_push_token") == "monitor-bridge"
-    assert sr.consumer_tag("kopia_restore_drill_push_token") == "monitor-bridge"
+    # `kopia_restore_drill_push_token` had its own arm in the same branch until 2026-08-27. It is
+    # absent from both secrets.yml and secret_rotation.yml, so the arm mapped a name that could
+    # never be passed and the assertion here was the only thing keeping it alive.
+    assert sr.consumer_tag("kopia_restore_drill_push_token") is None
 
 
 def test_consumer_tag_cloudflare_ddns_tokens():

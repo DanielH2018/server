@@ -241,8 +241,10 @@ B2_PROBE_URL = _env(
 # Read through _env_file for the same reason as HA_TOKEN: inlined in the compose environment a
 # secret lands in the container's Config.Env, which the read-only docker-proxy exposes to any
 # monitoring-net neighbor (2026-07-15 review H2). Named B2_PROBE_* rather than KOPIA_B2_* even
-# though the compose currently feeds it Kopia's credentials — this probe only needs to
-# authenticate, so swapping in a scoped read-only key later is an inventory edit, not a code one.
+# though the k8s Secret feeds it the `kopia_b2_*` values — those are LONGHORN's B2 credentials,
+# not Kopia's (ADR-0014; Kopia retired 2026-08-13, the key name outlived it because renaming means
+# a rotation). This probe only needs to authenticate, so swapping in a scoped read-only key later
+# is an inventory edit, not a code one.
 B2_PROBE_KEY_ID = _env_file("B2_PROBE_KEY_ID")
 B2_PROBE_APPLICATION_KEY = _env_file("B2_PROBE_APPLICATION_KEY")
 # Probe at most this often, and cache BOTH outcomes until it expires. Every other gate re-probes

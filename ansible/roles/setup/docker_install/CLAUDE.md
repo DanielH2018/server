@@ -51,10 +51,10 @@ services. Install without uninstall is a one-way door; this is the way back out.
 5. **Networks:** creates `proxy` (`{{ docker_network }}`), `monitoring`, `media`, `apps`,
    `homepage_private`, `lifecycle` (Watchtower/Autoheal ↔ docker-proxy-lifecycle only),
    `codeserver` (code-server ↔ docker-proxy-codeserver only — lets the shared docker-proxy stay
-   off `apps`, Security M1), `kopia` (Kopia ↔ Traefik only — keeps the unauthenticated repo off
-   other apps), `terraria` (Terraria ↔ Traefik only — the raw-TCP game route bypasses CrowdSec,
-   so the container stays off `apps`), `ups` (NUT ↔ Home Assistant only), and `mqtt` (Mosquitto ↔
-   Zigbee2MQTT ↔ Home Assistant only).
+   off `apps`, Security M1), `terraria` (Terraria ↔ Traefik only — the raw-TCP game route bypasses
+   CrowdSec, so the container stays off `apps`), and `portainer-agent` (daniel-pi, single-member).
+   `ups` and `mqtt` retired 2026-08-09 with slice-5 B3, `homepage_private` 2026-08-14, and `kopia`
+   2026-08-27 — see the comments in `tasks/install.yml`, which is the list that decides.
 
 ## Notable
 - **`become: false` user resolution (task 3) is deliberate** — under the play's `become: true`,

@@ -167,4 +167,4 @@ nav:
       - Longhorn upgrade: longhorn-upgrade.md
       - Longhorn disaster recovery: longhorn-disaster-recovery.md
       - k3s etcd restore: k3s-etcd-restore.md
-      - Kopia disaster recovery: kopia-disaster-recovery.md
+      - "Kopia disaster recovery (RETIRED — history only)": kopia-disaster-recovery.md

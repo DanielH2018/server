@@ -4,7 +4,7 @@
 # SCOPE IS DELIBERATELY MINIMAL. The Sonarr "Anime" profile is the operator's own bespoke
 # scheme (52 scored "Anime Profile N_N_N" custom formats). We do NOT reproduce or manage
 # that scheme here — a read-only snapshot lives in files/baseline/ for reference, and the
-# live definitions stay in Sonarr's DB (Kopia-backed). Because `delete_unmanaged_custom_formats`
+# live definitions stay in Sonarr's DB (on the backed-up volume). Because `delete_unmanaged_custom_formats`
 # is left OFF (the default), Configarr only ADDS/updates the CFs defined below and never
 # touches the bespoke scheme or its scores.
 #

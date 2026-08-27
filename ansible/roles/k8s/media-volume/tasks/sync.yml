@@ -79,7 +79,8 @@
   tags: [deploy]
   # -c reads and checksums both sides in full. Without it rsync compares size+mtime, which
   # would call a truncated or bit-rotted file identical. Worth the full read here for one
-  # reason: kopia excludes containers/data/, so once daniel-server's copy goes there is no
+  # reason: nothing backs up containers/data/ (kopia excluded it, and kopia retired 2026-08-13
+  # without the exclusion changing), so once daniel-server's copy goes there is no
   # other copy of this library.
   #
   # Same flags as the copy, from the same variable. Verifying with `-a` instead would add

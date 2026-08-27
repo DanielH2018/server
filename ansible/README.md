@@ -302,11 +302,11 @@ External prerequisites, none of them IaC-managed: the Cloudflare DNS records (in
 hand-created grey-cloud `*.local.<domain>` wildcard that all internal routing depends on — see
 [`roles/containers/cloudflare-ddns/CLAUDE.md`](roles/containers/cloudflare-ddns/CLAUDE.md)),
 router port-forwards for Traefik and WireGuard, a Backblaze B2 bucket for the Longhorn
-backup plane (kopia retired 2026-08-10), and the off-box UptimeRobot dead-man's-switch.
-Rebuilding rather than bringing up a new host? Workload state restores from Longhorn's B2
-backups (per-PVC restore via the Longhorn UI); `docs/kopia-disaster-recovery.md` describes
-the RETIRED plane and survives only as history — a Longhorn-native DR runbook is Phase E
-backlog.
+backup plane (kopia retired 2026-08-13), and the off-box UptimeRobot dead-man's-switch.
+Rebuilding rather than bringing up a new host? Follow
+[`docs/longhorn-disaster-recovery.md`](../docs/longhorn-disaster-recovery.md), the current
+runbook. `docs/kopia-disaster-recovery.md` describes the RETIRED plane and survives only as
+history — do not follow it.
 
 ## Not bring-up, moved out of this file
 

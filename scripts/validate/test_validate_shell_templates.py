@@ -163,7 +163,7 @@ def test_ansible_search_test_mirrors_the_real_jinja_test():
 
 
 def test_bash_syntax_check_catches_unmatched_quote(tmp_path):
-    # The 2026-07-01 kopia bug class (ansible/roles/containers/kopia/files/maintenance-check.sh):
+    # The 2026-07-01 kopia bug class (ansible/roles/containers/archive/kopia/files/maintenance-check.sh):
     # an apostrophe broke bash's own quote parsing inside a single-quoted block. Reproduce the
     # shape here — a stray unmatched single quote — and confirm bash -n rejects it.
     broken = tmp_path / "broken.sh"

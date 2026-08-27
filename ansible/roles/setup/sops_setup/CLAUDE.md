@@ -28,8 +28,9 @@ role** — a host-setup role under `ansible/roles/setup/`, run by `initial_setup
 5. **Export `SOPS_AGE_KEY_FILE`** in `~/.bashrc` so `sops`/the lookup find the key.
 
 ## Notable
-- **DR:** host keys at `~/.config/sops/age/keys.txt` are in **no automated backup** (Kopia
-  backs up only `containers/`); they're backed up out-of-band (2026-06-06). Since
+- **DR:** host keys at `~/.config/sops/age/keys.txt` are in **no automated backup** (nothing
+  outside a Longhorn volume is backed up at all since Kopia retired 2026-08-13, and Kopia only
+  covered `containers/` before that); they're backed up out-of-band (2026-06-06). Since
   **2026-06-11** `.sops.yaml` also lists an **off-box recovery recipient** (private half
   only in the operator's password manager), so the secrets survive losing both hosts.
   Gotcha: `sops updatekeys` resolves `.sops.yaml` from the CWD — run it from `ansible/`.

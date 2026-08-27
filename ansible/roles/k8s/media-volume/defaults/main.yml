@@ -12,7 +12,8 @@ media_volume_claim: media-data
 #   1. local-path names its directory pvc-<uuid>_<ns>_<claim>. The seeding rsync needs a path
 #      that a human, a doc and an Ansible task can all name before the volume exists.
 #   2. local-path's class reclaims Delete. A mistyped `kubectl delete pvc` would take the
-#      library with it, and kopia excludes containers/data/ — there is no second copy.
+#      library with it, and nothing backs up containers/data/ (kopia excluded it, then retired
+#      2026-08-13) — there is no second copy.
 #   3. WaitForFirstConsumer means a dynamic PVC does not bind, and its directory does not
 #      exist, until a pod mounts it. That is a chicken-and-egg for a volume whose whole
 #      purpose in B2 is to be filled BEFORE any workload exists.

@@ -31,7 +31,7 @@ Utility role (not a container). Every container role calls into it via
 > but it *does* handle image changes (`build: always` rebuilds; identical rebuild = no-op)
 > and `docker-compose.yml` edits. Wired roles (current set:
 > `grep -rl common_config_changed roles/containers/*/tasks/`): authelia, traefik, homepage,
-> grafana, prometheus, janitorr, livesync, peanut, kopia (entrypoint.sh), pihole
+> grafana, prometheus, janitorr, livesync, peanut, pihole (kopia's entrypoint.sh was a consumer until the role retired 2026-08-13)
 > (resolver configs; its former `absent`→`present` exemption was removed 2026-06-09),
 > freshrss (nginx feed-cache conf), home-assistant, monitor-bridge, mosquitto, terraria,
 > terraria-stats, zigbee2mqtt, autofix-bridge (files/autofix.py bind-mount), and

@@ -9,13 +9,15 @@
 # every 300s with no retry, so a mid-truncate read would page a false "state unparseable" DOWN.
 #
 # Consumers: wg-easy (pull-pi-peers.sh) and autofix-bridge (autofix-disk-prune.sh) source this
-# directly. The traefik (traefik-lib.sh) and kopia (kopia-lib.sh) role libs keep their own role-local
-# copies of this idiom for now — folding them in would only reduce duplication cosmetically at the
-# cost of redeploying the edge router + backup plane, so it's a deliberate deferral (BYTES is carried
-# here as a superset so they CAN delegate later without a signature change).
+# directly. The traefik role lib (traefik-lib.sh) keeps its own role-local copy of this idiom for
+# now — folding it in would only reduce duplication cosmetically at the cost of redeploying the edge
+# router, so it's a deliberate deferral. (kopia-lib.sh was the other such copy; the role retired
+# 2026-08-13 and now sits at roles/containers/archive/kopia/. BYTES is carried here as a superset,
+# originally so those libs COULD delegate without a signature change.)
 
 # state_write STATE TAG OK MSG [BYTES]
-# Write {ts, ok, msg} (plus a `bytes` field when BYTES is passed — kopia's b2-usage gauge), then log
+# Write {ts, ok, msg} (plus a `bytes` field when BYTES is passed — added for kopia's b2-usage
+# gauge, which retired with the role; no current consumer passes it), then log
 # to syslog under TAG.
 state_write() {
   local state="$1" tag="$2" ok="$3" msg="$4" bytes="${5:-}"

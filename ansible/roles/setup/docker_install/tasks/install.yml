@@ -210,7 +210,8 @@
     # here only masked the dangling reference in docker-proxy's compose.
     - lifecycle  # private net: Watchtower + Autoheal <-> docker-proxy-lifecycle only
     - codeserver # isolation net: code-server <-> docker-proxy-codeserver only (keeps the shared docker-proxy off apps — Security M1)
-    - kopia      # isolation net: Kopia <-> Traefik only (unauthenticated repo not reachable by other apps)
+    # `kopia` removed 2026-08-27 — the role retired 2026-08-13, and daniel-pi (the only Docker
+    # host left) never ran Kopia, so this created an empty isolation net on the wrong machine.
     - terraria   # isolation net: Terraria <-> Traefik only (raw-TCP game port bypasses the CrowdSec chain; keeps a game-protocol exploit off the shared apps net)
     # `ups` and `mqtt` retired 2026-08-09 with slice-5 B3: their memberships (NUT<->HA,
     # Mosquitto<->z2m<->HA) all crossed to the cluster or the DOCKER-USER-locked LAN publish.
