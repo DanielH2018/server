@@ -67,8 +67,12 @@ def _targets() -> tuple[str, list[tuple[str, str]]]:
     all_vars = _load(INVENTORY / "group_vars" / "all.yml")
     box = _load(INVENTORY / "host_vars" / "daniel-box.yml")
     pi = _load(INVENTORY / "host_vars" / "daniel-pi.yml")
+    hypervisor = _load(
+        REPO / "ansible" / "roles" / "setup" / "hypervisor" / "defaults" / "main.yml"
+    )
 
     guest = all_vars["staging_vm_ip"]
+    gateway = hypervisor["hypervisor_staging_net_gateway"]
     return guest, [
         # The control. Not a production address — it proves the guest still has egress at all.
         ("INTERNET", "https://1.1.1.1"),
@@ -77,6 +81,19 @@ def _targets() -> tuple[str, list[tuple[str, str]]]:
         # wg-easy's admin UI. Unauthenticated, and its only protection is being LAN-only —
         # the premise the guest sat inside before the fence.
         ("WGEASY", f"http://{pi['server_ip']}:51821"),
+        # The two below reach daniel-server ITSELF rather than through it, so they are INPUT
+        # and the routed fence does not cover them. They are here because that is exactly why
+        # they are easy to forget: the guest can dial the hypervisor's own kubelet, on the
+        # staging bridge address as readily as on the LAN one, and land inside the production
+        # cluster without a single packet being forwarded. Measured blocked on 2026-08-27
+        # BEFORE the fence existed — ufw's pre-existing `deny incoming` default already
+        # covers them. So these are a regression guard on that default, not a second fence,
+        # and if they ever flip the fix is an INPUT rule, not a wider `route deny`.
+        ("HOSTKUBELET", f"https://{gateway}:10250/healthz"),
+        (
+            "LANKUBELET",
+            f"https://{_load(INVENTORY / 'host_vars' / 'daniel-server.yml')['server_ip']}:10250/healthz",
+        ),
     ]
 
 
