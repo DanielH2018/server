@@ -47,18 +47,23 @@ survives a total loss; this runbook is the procedure.
 ## The five repository credentials (all in `ansible/vars/secrets.yml`)
 | Secret | Purpose |
 |--------|---------|
-| `kopia_password` | repository **encryption** password (`KOPIA_PASSWORD`) — without it the data is unrecoverable |
+| `kopia_password` | **no longer in SOPS** — retired with the repo on 2026-08-14. It was the repository encryption password (`KOPIA_PASSWORD`), so its removal is what makes this procedure impossible to execute rather than merely obsolete |
 | `kopia_b2_key_id` | B2 application key id (`KOPIA_B2_KEY_ID`) |
 | `kopia_b2_application_key` | B2 application key (`KOPIA_B2_APPLICATION_KEY`) |
 | `kopia_b2_bucket` | bucket name (`KOPIA_B2_BUCKET`) |
 | `kopia_b2_endpoint` | S3-compatible endpoint (`KOPIA_B2_ENDPOINT`) |
 
+Read them **one at a time**, naming the key you want. `sops -d` on the whole file pipes every
+credential in it through the process and into your scrollback — a grep narrows what you *see*,
+never what was decrypted, and the values land in any agent transcript that captured the command.
+
 ```bash
-sops -d ansible/vars/secrets.yml | grep -E 'kopia_(password|b2_)'
+sops -d --extract '["kopia_b2_key_id"]' ansible/vars/secrets.yml
 ```
 
 ## Step 1 — connect to the repository from a fresh host
-Mirrors `ansible/roles/containers/kopia/templates/entrypoint.sh.j2`. Export the five values
+Mirrors `ansible/roles/containers/archive/kopia/templates/entrypoint.sh.j2` (the role moved under
+`archive/` when it was retired). Export the five values
 first, then (the repo speaks B2's **S3** endpoint):
 
 > **The image tag below is pinned to match production** (`docker-compose.yml.j2`), not `latest`.

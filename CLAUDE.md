@@ -499,7 +499,11 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
   no values) + `scripts/secrets_mgmt/secret_rotation.py` (`sync`/`audit`/`rotate`). A daily server cron pushes
   the "Secret Rotation" Kuma monitor; due-dates are staggered. After adding a secret, run
   `uv run python scripts/secrets_mgmt/secret_rotation.py sync` and commit. Runbook + the DANGER `pinned`
-  procedures (kopia repo password, authelia storage key): `docs/secret-rotation.md`.
+  procedure (authelia storage key): `docs/secret-rotation.md`. The kopia repo password was the
+  other one and is **gone** — removed from SOPS with the repo on 2026-08-13, so there is nothing
+  left to rotate. The `kopia_b2_*` names that remain are **Longhorn's** live B2 credentials, not
+  Kopia's; see `docs/adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md` before acting on
+  the name.
 - **`git diff ansible/vars/secrets.yml` prints plaintext credentials.** `.gitattributes:1` sets
   `diff=sops`, so git decrypts the file before diffing it. The committed blob stays properly
   encrypted — this is a review-hygiene trap, not a repo defect, and the driver is worth keeping
