@@ -57,7 +57,11 @@ def cadvisor_coverage_shortfall(pod_count, min_pods, what):
 
     # DECIDED: floor 20 pods, from measurement rather than intuition. Over the 7d to 2026-08-27
     # the pre-filter counts never fell below 98 (restarts), 98 (oom) and 70 (cpu, which sees only
-    # pods carrying a cpu limit); live values were 99/99/71. 20 sits 3.5x under the smallest
+    # pods carrying a cpu limit); live values were 99/99/71. Count the DIVISION for the cpu arm,
+    # not its denominator: check_cpu_throttle floors `ratio_vec`, and a PromQL binary op drops
+    # series present on only one side, so the two can differ. They happened to agree here — both
+    # 71 live, 70 at the trough — which is exactly why the easier query is the wrong one to
+    # re-measure from. 20 sits 3.5x under the smallest
     # observed trough, so a deploy draining pods cannot reach it, while a broken selector or a
     # vanished kubernetes-cadvisor job lands at 0. One floor for all three, not one each: a floor
     # applied to two of three would reproduce the selector-drift class inside its own fix.
