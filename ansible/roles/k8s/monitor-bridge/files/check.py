@@ -39,6 +39,7 @@ from bridge_parsing import (
     parse_duration,
 )
 from verdicts_cluster import (
+    cadvisor_coverage_shortfall,
     extended_resource_verdict,
     k8s_workloads_verdict,
     ksm_resource_label,
@@ -404,6 +405,19 @@ TARGETS_MIN = int(_env("TARGETS_MIN", "2"))
 # 2x otel-collector-internal, kube-state-metrics, kubernetes-cadvisor. 3 still tolerates a
 # deliberate removal without ever mistaking an empty vector for a clean one.
 CLUSTER_TARGETS_MIN = int(_env("CLUSTER_TARGETS_MIN", "3"))
+# Coverage floor for the three cAdvisor checks (restarts/oom/cpu), which filter a per-pod vector
+# down to offenders and so cannot tell "quiet" from "gone". Reasoning and the measurements behind
+# the value: cadvisor_coverage_shortfall in verdicts_cluster.py.
+CADVISOR_PODS_MIN = int(_env("CADVISOR_PODS_MIN", "20"))
+# Hysteresis for the same reason HOST_ORIGINS_CONSECUTIVE exists: a kubelet restart takes a node's
+# cAdvisor away briefly, and three monitors going down together on one transient is the alert storm
+# the gates elsewhere in this file exist to prevent.
+CADVISOR_CONSECUTIVE = int(_env("CADVISOR_CONSECUTIVE", "2"))
+
+# Keyed per check, exactly like _host_origin_streaks. NOT one shared counter: all three checks run
+# in the same cycle, so a single counter would take three increments per cycle and blow through
+# CADVISOR_CONSECUTIVE inside the first one — hysteresis that silently does nothing.
+_cadvisor_streaks: dict[str, int] = {}
 
 
 def origin_sel(*matchers):
@@ -1059,6 +1073,27 @@ def _top_offenders(vector, label, predicate):
     return hits
 
 
+def _cadvisor_blind(key, vec, what):
+    """(ok, msg) when `vec` covers too few pods for an offender filter to mean anything, else None.
+
+    Called on the PRE-FILTER vector, which is why each check hands in the one it already fetched.
+    Holds `up` (saying so) while the shortfall is younger than CADVISOR_CONSECUTIVE cycles, then
+    fails. Any covered cycle resets that check's streak.
+    """
+    msg = cadvisor_coverage_shortfall(len(vec), CADVISOR_PODS_MIN, what)
+    if msg is None:
+        _cadvisor_streaks[key] = 0
+        return None
+    _cadvisor_streaks[key], ok, out = down_streak(
+        _cadvisor_streaks.get(key, 0),
+        CADVISOR_CONSECUTIVE,
+        msg,
+        "kubelet restart grace",
+        held_label="cAdvisor coverage shortfall",
+    )
+    return ok, out
+
+
 def check_restarts():
     """Containers restarting more than RESTART_MAX times within RESTART_WINDOW.
 
@@ -1068,6 +1103,9 @@ def check_restarts():
         "sum by (pod) (changes(container_start_time_seconds%s[%s]))"
         % (cadvisor_sel('container!=""', 'container!="POD"'), RESTART_WINDOW)
     )
+    blind = _cadvisor_blind("restarts", vec, "restart loops")
+    if blind is not None:
+        return blind
     offenders = _top_offenders(vec, "pod", lambda v: v > RESTART_MAX)
     if offenders:
         desc = ", ".join("%s (%.0f)" % (n, v) for n, v in offenders[:5])
@@ -1083,13 +1121,17 @@ def check_restarts():
 def check_oom():
     """Containers OOM-killed within OOM_WINDOW, naming each one.
 
-    Closes the loop on the per-container memory limits (deploy.resources). If cAdvisor
-    doesn't expose container_oom_events_total the query is empty and this stays green.
+    Closes the loop on the per-container memory limits (deploy.resources). An empty vector used to
+    read as green here, which is how OOM kills went unmonitored for the whole Phase G window;
+    _cadvisor_blind now reports that as UNKNOWN.
     """
     vec = prom_vector(
         "sum(increase(container_oom_events_total%s[%s])) by (pod)"
         % (cadvisor_sel('container!=""', 'container!="POD"'), OOM_WINDOW)
     )
+    blind = _cadvisor_blind("oom", vec, "OOM kills")
+    if blind is not None:
+        return blind
     offenders = _top_offenders(vec, "pod", lambda v: v > 0)
     if offenders:
         desc = ", ".join("%s (%.0f)" % (n, v) for n, v in offenders[:5])
@@ -1125,7 +1167,9 @@ def check_cpu_throttle():
     cores floor — the same volume-floor idea as check_traefik_5xx's TRAEFIK_MIN_RPS — gates
     those out, so the monitor pushes `up` and only goes `down` on genuine starvation.
     Containers with no cpu limit give 0/0 -> NaN for condition 1 (NaN comparisons are False)
-    and are ignored; if cAdvisor doesn't expose the cfs metrics both queries are empty -> green.
+    and are ignored. Absent cfs metrics used to empty both queries and read green; the floor in
+    _cadvisor_blind reports that as UNKNOWN instead. Its vector is the smallest of the three —
+    only pods carrying a cpu limit — which is what set the shared floor.
 
     On top of the two gates, CPU_CONSECUTIVE adds hysteresis: only the Nth consecutive
     breaching cycle goes `down` (~(N×INTERVAL)s of continuous throttling at the loop
@@ -1140,6 +1184,10 @@ def check_cpu_throttle():
         "/ sum(rate(container_cpu_cfs_periods_total%s[%s])) by (pod)"
         % (sel, CPU_WINDOW, sel, CPU_WINDOW)
     )
+    blind = _cadvisor_blind("cpu", ratio_vec, "CPU throttling")
+    if blind is not None:
+        _cpu_breach_streak = 0
+        return blind
     lost_cores = dict(
         (m.get("pod", "?"), v)
         for m, v in prom_vector(

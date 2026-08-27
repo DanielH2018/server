@@ -804,7 +804,15 @@ def test_run_once_suppresses_node_dependents_when_node_exporter_down(monkeypatch
 
 
 def _fake_vectors(monkeypatch, by_query):
-    """prom_vector stub keyed by substring of the query."""
+    """prom_vector stub keyed by substring of the query.
+
+    Drops CADVISOR_PODS_MIN to 0 for its callers, which are all offender-logic tests built on
+    one- or two-pod fixtures — far below the real floor. Scoped here rather than as an autouse
+    fixture on purpose: an estate-wide default of 0 would make the coverage floor invisible to
+    every other test in the suite, which is the failure the floor itself exists to prevent. The
+    floor's own tests stub prom_vector directly and never come through here.
+    """
+    monkeypatch.setattr(check, "CADVISOR_PODS_MIN", 0)
 
     def fake(promql):
         for key, vec in by_query.items():
@@ -1156,4 +1164,119 @@ def test_check_promtail_dropped_uses_increase(monkeypatch):
     assert any(
         "increase(" in q and "promtail_dropped_entries_total" in q and "reason" not in q
         for q in queries
+    )
+
+
+# --- cAdvisor coverage floor -------------------------------------------------------------
+# restarts/oom/cpu filter a per-pod vector down to offenders, so empty-after-filtering is the
+# HEALTHY answer and an empty query is indistinguishable from it. That split ran live from the
+# Phase G retarget to 2026-08-24 with all three logging OK, found by reading the code rather than
+# by an alert. Each pair below is one input the floor must accept and one it must reject.
+
+
+def _reset_cadvisor(monkeypatch, min_pods=20, consecutive=2):
+    monkeypatch.setattr(check, "CADVISOR_PODS_MIN", min_pods)
+    monkeypatch.setattr(check, "CADVISOR_CONSECUTIVE", consecutive)
+    monkeypatch.setattr(check, "_cadvisor_streaks", {})
+
+
+def test_cadvisor_coverage_above_the_floor_is_clean():
+    assert check.cadvisor_coverage_shortfall(20, 20, "OOM kills") is None
+
+
+def test_cadvisor_coverage_below_the_floor_is_flagged():
+    msg = check.cadvisor_coverage_shortfall(19, 20, "OOM kills")
+    assert msg is not None
+    assert "UNKNOWN" in msg
+    assert "below the floor of 20" in msg
+
+
+def test_cadvisor_empty_vector_is_flagged():
+    # The 2026-08-24 shape exactly: an origin-pinned selector matched nothing.
+    msg = check.cadvisor_coverage_shortfall(0, 20, "CPU throttling")
+    assert msg is not None
+    assert "matching nothing" in msg
+
+
+def test_a_covered_vector_with_zero_offenders_still_reads_clean(monkeypatch):
+    # The inversion this floor could most easily introduce: "no OOM kills" is the common case and
+    # must stay green. Without this the floor would page on every healthy cycle.
+    _reset_cadvisor(monkeypatch)
+    monkeypatch.setattr(
+        check,
+        "prom_vector",
+        lambda *a, **k: [({"pod": "p%d" % i}, 0.0) for i in range(40)],
+    )
+    ok, msg = check.check_oom()
+    assert ok is True
+    assert "no OOM kills" in msg
+
+
+def test_check_oom_reads_unknown_not_green_when_blind(monkeypatch):
+    _reset_cadvisor(monkeypatch, consecutive=1)
+    monkeypatch.setattr(check, "prom_vector", lambda *a, **k: [])
+    ok, msg = check.check_oom()
+    assert ok is False
+    assert "UNKNOWN" in msg
+
+
+def test_check_restarts_reads_unknown_not_green_when_blind(monkeypatch):
+    _reset_cadvisor(monkeypatch, consecutive=1)
+    monkeypatch.setattr(check, "prom_vector", lambda *a, **k: [])
+    ok, msg = check.check_restarts()
+    assert ok is False
+    assert "UNKNOWN" in msg
+
+
+def test_check_cpu_throttle_reads_unknown_not_green_when_blind(monkeypatch):
+    _reset_cadvisor(monkeypatch, consecutive=1)
+    monkeypatch.setattr(check, "prom_vector", lambda *a, **k: [])
+    ok, msg = check.check_cpu_throttle()
+    assert ok is False
+    assert "UNKNOWN" in msg
+
+
+def test_the_floor_holds_up_for_one_cycle_before_paging(monkeypatch):
+    # A kubelet restart briefly empties cAdvisor; three monitors going red together on one
+    # transient is the storm the gates exist to prevent.
+    _reset_cadvisor(monkeypatch, consecutive=2)
+    monkeypatch.setattr(check, "prom_vector", lambda *a, **k: [])
+    ok, msg = check.check_oom()
+    assert ok is True
+    assert "cAdvisor coverage shortfall 1/2" in msg
+    ok, _ = check.check_oom()
+    assert ok is False
+
+
+def test_each_check_ages_its_shortfall_independently(monkeypatch):
+    # A single shared counter would take three increments per cycle — all three checks run in the
+    # same run_once pass — and blow through CADVISOR_CONSECUTIVE inside the first one.
+    _reset_cadvisor(monkeypatch, consecutive=2)
+    monkeypatch.setattr(check, "prom_vector", lambda *a, **k: [])
+    assert check.check_oom()[0] is True
+    assert check.check_restarts()[0] is True
+    assert check.check_cpu_throttle()[0] is True
+    assert check._cadvisor_streaks == {"oom": 1, "restarts": 1, "cpu": 1}
+
+
+def test_a_covered_cycle_resets_the_streak(monkeypatch):
+    _reset_cadvisor(monkeypatch, consecutive=2)
+    monkeypatch.setattr(check, "prom_vector", lambda *a, **k: [])
+    check.check_oom()
+    monkeypatch.setattr(
+        check,
+        "prom_vector",
+        lambda *a, **k: [({"pod": "p%d" % i}, 0.0) for i in range(40)],
+    )
+    assert check.check_oom()[0] is True
+    assert check._cadvisor_streaks["oom"] == 0
+
+
+def test_cadvisor_floor_is_overridable_from_the_env_secret():
+    env_secret = (
+        Path(__file__).resolve().parents[1] / "templates" / "env-secret.yaml.j2"
+    )
+    assert 'CADVISOR_PODS_MIN: "20"' in env_secret.read_text(), (
+        "CADVISOR_PODS_MIN must be rendered in env-secret.yaml.j2 so an operator can tune it "
+        "without a code change, like HOST_ORIGINS_MIN"
     )
