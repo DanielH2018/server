@@ -14,6 +14,7 @@ import base64
 import json
 import os
 import smtplib
+import socket
 import ssl
 import sys
 import time
@@ -45,7 +46,7 @@ from verdicts_cluster import (
     targets_verdict,
 )
 from verdicts_host import (
-    pi_detached_containers,
+    pi_ports_verdict,
     pi_pressure,
     scrutiny_device_wear,
     scrutiny_freshness,
@@ -684,12 +685,19 @@ PI_GLANCES_URL = _env("PI_GLANCES_URL", "").rstrip("/")
 PI_LOAD_MAX = float(_env("PI_LOAD_MAX", "1.5"))  # load5 per core
 PI_MEM_MIN_MB = float(_env("PI_MEM_MIN_MB", "50"))
 PI_DISK_MAX_PCT = float(_env("PI_DISK_MAX_PCT", "90"))
-# Names of the Pi containers that publish a port, rendered from daniel-pi's containers_list
-# (every entry with a `port`) so the set cannot drift from the inventory. Empty = the detached
-# arm is disabled, like PI_GLANCES_URL disables the whole check.
-PI_PUBLISHING_CONTAINERS = tuple(
-    n.strip() for n in _env("PI_PUBLISHING_CONTAINERS", "").split(",") if n.strip()
+# `name:port` pairs for the Pi containers that publish a port, rendered from daniel-pi's
+# containers_list (every entry with a `port`) so the set cannot drift from the inventory.
+# Empty = the port arm is disabled, like PI_GLANCES_URL disables the whole check.
+PI_PUBLISHED_PORTS = tuple(
+    (pair.split(":", 1)[0].strip(), int(pair.split(":", 1)[1]))
+    for pair in _env("PI_PUBLISHED_PORTS", "").split(",")
+    if ":" in pair
 )
+PI_PORT_TIMEOUT = float(_env("PI_PORT_TIMEOUT", "3"))
+# A Pi deploy recreates containers, so their ports are genuinely closed for a few seconds.
+# Two cycles of grace, same idiom as HA_CONSECUTIVE; a detached container persists until
+# someone recreates it and still pages.
+PI_PORTS_CONSECUTIVE = int(_env("PI_PORTS_CONSECUTIVE", "2"))
 
 # HA automation-engine heartbeat: an HA time_pattern automation stamps
 # input_datetime.ha_heartbeat with now() every minute, so its last_changed is fresh ONLY
@@ -1678,35 +1686,65 @@ def check_pi_pressure():
     mem = _get_json(PI_GLANCES_URL + "/api/4/mem")
     fs = _get_json(PI_GLANCES_URL + "/api/4/fs")
     ok, msg = pi_pressure(load, mem, fs, PI_LOAD_MAX, PI_MEM_MIN_MB, PI_DISK_MAX_PCT)
-    return with_pi_detached(ok, msg)
+    return with_pi_ports(ok, msg)
 
 
-def with_pi_detached(ok, msg):
-    """Fold the detached-container arm into the Pi verdict, detachment winning the message.
+def _tcp_open(host, port, timeout):
+    """True when something accepts a TCP connection on host:port."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def with_pi_ports(ok, msg):
+    """Fold the published-port arm into the Pi verdict, a dead port winning the message.
 
     Folded into this monitor rather than given its own for the reason recorded at with_ha_ban:
     a new Kuma monitor costs a new push token in SOPS. This monitor already owns "the Pi is
-    unhealthy", and a container that came back with no network is that.
+    unhealthy", and a service that stopped listening is that.
 
+    # DECIDED: TCP connect is the primary signal, glances only the attribution. Measured
+    # 2026-08-27 against the live Pi: /api/4/load, /mem and /fs answer in 0.03-0.06s each,
+    # while /api/4/containers took 4.43s and then TIMED OUT at the 10s HTTP_TIMEOUT on the
+    # very next call. Polling it every cycle would have left the arm failing open most of the
+    # time — inert behind a green monitor, which is the failure mode this arm exists to
+    # catch in the first place. It is also a heavy query to run every cycle against a 456 MB
+    # Zero 2 W whose pressure this same check reports.
     # DECIDED: the message leads with the container names when the arm fires, because
     # "pi_pressure DOWN" otherwise pages someone to look at load and memory when the fault is
     # neither. Same shape as with_ha_ban putting the ban first.
-    # DECIDED: no down_streak. A streak exists to ride out a transient, and a detached
-    # container is a persistent state that only a recreate clears — a second cycle's
-    # confirmation would add a poll interval of silence and nothing else. Containers that are
-    # mid-recreate during a deploy report a status outside PI_UP_STATUSES and are skipped by
-    # the verdict rather than needing a grace here.
-    # DECIDED: fails OPEN on a fetch error. An unreachable containers endpoint alongside a
-    # readable load/mem/fs means the docker plugin specifically, which is not evidence about
-    # the containers either way.
+    # DECIDED: a down_streak, unlike with_ha_ban's arm. A Pi deploy recreates containers, so
+    # their ports are legitimately closed for a few seconds and a single cycle can read dead.
+    # A detached container persists until someone recreates it, so it survives the grace.
+    # DECIDED: an attribution fetch that fails downgrades the DIAGNOSIS, never the verdict —
+    # pi_ports_verdict renders "cause unknown" and the port is still reported dead. Failing
+    # open there would reintroduce exactly the inertness the first DECIDED avoids.
     """
-    if not PI_PUBLISHING_CONTAINERS:
+    if not PI_PUBLISHED_PORTS:
         return ok, msg
-    try:
-        containers = _get_json(PI_GLANCES_URL + "/api/4/containers")
-    except Exception as e:
-        return ok, "%s, detached-container arm unavailable (%s)" % (msg, e)
-    arm_ok, arm_msg = pi_detached_containers(containers, PI_PUBLISHING_CONTAINERS)
+    host = urllib.parse.urlsplit(PI_GLANCES_URL).hostname
+    if not host:
+        return ok, msg
+    dead = [
+        (name, port)
+        for name, port in PI_PUBLISHED_PORTS
+        if not _tcp_open(host, port, PI_PORT_TIMEOUT)
+    ]
+    containers = None
+    if dead:
+        try:
+            containers = _get_json(PI_GLANCES_URL + "/api/4/containers")
+        except Exception:
+            containers = None
+    arm_ok, arm_msg = pi_ports_verdict(dead, len(PI_PUBLISHED_PORTS), containers)
+    if arm_ok:
+        _down_streaks["pi_ports"] = 0
+        return ok, "%s, %s" % (msg, arm_msg)
+    _down_streaks["pi_ports"], arm_ok, arm_msg = down_streak(
+        _down_streaks.get("pi_ports", 0), PI_PORTS_CONSECUTIVE, arm_msg, "deploy grace"
+    )
     if arm_ok:
         return ok, "%s, %s" % (msg, arm_msg)
     return False, "%s | %s" % (arm_msg, msg)
