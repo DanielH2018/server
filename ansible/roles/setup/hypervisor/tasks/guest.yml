@@ -159,3 +159,29 @@
     host: "{{ staging_vm_ip }}"
     port: 22
     timeout: "{{ hypervisor_staging_vm_boot_timeout }}"
+
+- name: Read the guest's ssh host key
+  tags: [hypervisor]
+  # Retried: the port accepts a connection before sshd has finished generating its host
+  # keys, so a keyscan immediately after wait_for can come back empty.
+  ansible.builtin.command:
+    cmd: ssh-keyscan -t ed25519 -T 10 {{ staging_vm_ip }}
+  register: hypervisor_staging_vm_hostkey
+  changed_when: false
+  retries: 6
+  delay: 5
+  until: hypervisor_staging_vm_hostkey.stdout | trim | length > 0
+
+- name: Trust the guest's ssh host key
+  tags: [hypervisor]
+  # Without this, `ansible -m ping daniel-stage` fails host-key verification on a host that
+  # has never connected — so the inventory entry would only work for whoever had ssh'd in by
+  # hand first. The guest regenerates its host key when rebuilt; known_hosts replaces the
+  # entry for this address rather than appending a second one.
+  ansible.builtin.known_hosts:
+    name: "{{ staging_vm_ip }}"
+    key: "{{ hypervisor_staging_vm_hostkey.stdout_lines | select('search', 'ssh-ed25519') | first }}"
+    path: "/home/{{ sys_user }}/.ssh/known_hosts"
+    state: present
+  become: true
+  become_user: "{{ sys_user }}"

@@ -1,0 +1,37 @@
+---
+# The staging cluster's single node — a KVM guest on daniel-server, not physical hardware.
+# Built by roles/setup/hypervisor; see docs/staging-cluster.md.
+#
+# REACHABLE ONLY FROM daniel-server. The guest sits on a libvirt NAT network
+# (192.168.140.0/24) that exists inside that host, so daniel-box — the controller for
+# deploy.yml — cannot route to it at all. Anything targeting this host runs on
+# daniel-server: `uv run ansible-playbook <play> -e target=daniel-stage`, from there.
+# That is Decision 2 of the spec working as intended, not a gap: a staging cluster that
+# could announce on the prod L2 is the one design where staging can hurt prod.
+
+# Its address on the staging NAT network. This is a DHCP reservation keyed on
+# staging_vm_mac, declared in group_vars/all.yml — not a lease — so it is stable across a
+# rebuild of the guest. Both this and the reservation read the same variable, and
+# ansible/tests/test_staging_vm.py asserts the domain and the network agree on the MAC.
+server_ip: "{{ staging_vm_ip }}"
+
+# Stock Ubuntu cloud image. NOT the Pi's sshd_config.d/50-cloud-init.conf path: the noble
+# cloud image ships an /etc/ssh/sshd_config.d/ directory but the hardening tasks have no
+# `create:` fallback, so this names the file that exists.
+ssh_config_path: /etc/ssh/sshd_config
+
+# No Compose services. deploy.yml dies in its first pre_task if this is undefined, and the
+# staging subset is k8s-only by design (docs/staging-cluster.md, Decision 6).
+containers_list: []
+
+# One container runtime, and it is k3s's. Same reasoning that keeps Docker off the two
+# cluster nodes: k3s ships its own containerd, and a second runtime's iptables chains land
+# on top of its. roles/setup/k3s asserts this on both node paths.
+has_docker: false
+
+# Staging does not deploy itself. The GitOps pipeline is what staging is meant to GATE, in
+# Phase C; a staging host that pulls and deploys its own commits would be gating itself.
+has_gitops: false
+
+# It is a guest, not a VM host.
+has_hypervisor: false
