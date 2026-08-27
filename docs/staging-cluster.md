@@ -3,7 +3,7 @@
 Stands up a **single-node k3s VM on daniel-server** and teaches the repo to deploy to it, so a
 bad merge fails on staging before prod ever renders it.
 
-This is **Tier 2** of the staging spike. [Tier 1](../CLAUDE.md#checking-a-k8s-change-without-deploying-it)
+This is **Tier 2** of the staging spike. [Tier 1](deploying.md#checking-a-change-without-deploying-it)
 landed on 2026-08-16 as `k8s_dry_run` (PR #237): it validates manifests against the live API
 server without applying them. Tier 1 catches bad apiVersions, schema drift and CRD ordering. It
 cannot catch scheduling, PVC binding, probe or rollout behaviour, because nothing is ever
