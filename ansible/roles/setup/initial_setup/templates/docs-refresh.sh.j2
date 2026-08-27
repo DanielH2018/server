@@ -178,8 +178,19 @@ if git diff --cached --quiet; then
   # The common outcome: the inputs are repo files and they only move when a PR merges, so most
   # runs have nothing to publish. Up, with the reason named -- "nothing to do" must never read
   # the same as "everything is fine", which is what the sibling host crons say too.
-  PUSH_STATUS=up
-  PUSH_MSG="no change"
+  #
+  # GATED ON GENERATORS_OK, and this is the branch that matters: a failing generator typically
+  # writes nothing, so the staged diff is quiet and control arrives HERE rather than at the
+  # terminal gate below. Reporting up unconditionally laundered both the status and the reason,
+  # because `exit 0` skips that gate entirely (2026-08-27b review H-2). Leave PUSH_MSG alone on
+  # the down arm -- it still holds the failure `alert()` set, and overwriting it with "no change"
+  # would fix the status while re-laundering the reason.
+  if [ "$GENERATORS_OK" -eq 1 ]; then
+    PUSH_STATUS=up
+    PUSH_MSG="no change"
+  else
+    PUSH_STATUS=down
+  fi
   exit 0
 fi
 
