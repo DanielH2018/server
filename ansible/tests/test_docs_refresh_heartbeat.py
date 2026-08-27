@@ -157,3 +157,71 @@ def test_the_token_is_registered_for_rotation():
         "run scripts/secrets_mgmt/secret_rotation.py sync — an unregistered secret is never "
         "due and never rotated"
     )
+
+
+def _ups_after_a_generator_failure(script: str) -> list[tuple[int, list[str]]]:
+    """Every `PUSH_STATUS=up` reachable after `GENERATORS_OK=0`, with its enclosing conditions.
+
+    Structural rather than a match on one branch, because the original guard covered only the
+    branch PR #497 happened to touch and the defect was in a different one (2026-08-27b H-2).
+    A `PUSH_STATUS=up` set before the generator run cannot launder a generator failure, so the
+    scan starts at the assignment that records one.
+
+    Tracks `if ...; then` / `fi` as a stack. `elif` and `else` do not appear in this script; if
+    one is ever added, this reads the whole chain as its opening condition, which fails closed --
+    an ungated `up` in an `else` arm still reports as ungated.
+    """
+    lines = script.splitlines()
+    start = next(
+        i for i, line in enumerate(lines) if line.strip().startswith("GENERATORS_OK=0")
+    )
+    found: list[tuple[int, list[str]]] = []
+    stack: list[str] = []
+    for offset, line in enumerate(lines[start:], start=start):
+        stripped = line.strip()
+        if stripped.startswith("if ") and stripped.endswith("then"):
+            stack.append(stripped)
+        elif stripped == "fi" and stack:
+            stack.pop()
+        elif "PUSH_STATUS=up" in stripped:
+            found.append((offset + 1, list(stack)))
+    return found
+
+
+def test_every_up_after_a_generator_failure_is_gated_on_generators_ok():
+    """The accepting half, and the one that generalises past the branch H-2 was found in."""
+    ups = _ups_after_a_generator_failure(SCRIPT)
+    assert ups, (
+        "no PUSH_STATUS=up found after GENERATORS_OK=0 — the scan is looking at nothing"
+    )
+    for lineno, conditions in ups:
+        assert any("GENERATORS_OK" in c for c in conditions), (
+            f"docs-refresh.sh.j2:{lineno} reports up after a generator failure without "
+            f"consulting GENERATORS_OK, so a failing generator rides out as a clean beat. "
+            f"Enclosing conditions: {conditions}"
+        )
+
+
+def test_the_gate_scan_rejects_an_ungated_up():
+    """The rejecting half: without it the test above passes on a script with no `up` at all."""
+    ungated = (
+        "GENERATORS_OK=0\nif git diff --cached --quiet; then\n  PUSH_STATUS=up\nfi\n"
+    )
+    ups = _ups_after_a_generator_failure(ungated)
+    assert ups, "the scan must find the up it is meant to reject"
+    assert not any("GENERATORS_OK" in c for _, conditions in ups for c in conditions)
+
+
+def test_the_no_change_down_arm_keeps_the_failure_message():
+    """Reporting DOWN with the reason "no change" fixes the status and re-launders the reason.
+
+    `alert()` has already set PUSH_MSG to the generator failure by the time control reaches the
+    no-change branch, so the down arm must leave it alone.
+    """
+    block = SCRIPT[SCRIPT.index("if git diff --cached --quiet; then") :]
+    block = block[: block.index("\nfi\n")]
+    else_arm = block[block.index("else") :]
+    assert "PUSH_MSG=" not in else_arm, (
+        "the no-change down arm must not overwrite PUSH_MSG — it still holds the failure "
+        "message alert() set, and 'no change' is not why the run went down"
+    )
