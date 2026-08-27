@@ -27,15 +27,23 @@
       ansible.builtin.setup:
       tags: always
 
-    - name: Refuse to run anywhere but daniel-box
-      # daniel-box is the single control-plane node. daniel-server is an AGENT — running the
+    - name: Refuse to run on a host that is not a k3s server node
+      # daniel-box is the prod control-plane node. daniel-server is an AGENT — running the
       # server role against it would stand up a second control plane on a node that already
-      # belongs to this cluster.
+      # belongs to this cluster. daniel-stage is the staging cluster's own single node
+      # (docs/staging-cluster.md); it is a server for a DIFFERENT cluster, not a second one
+      # for this.
+      #
+      # DECIDED: an allowlist, not `inventory_hostname not in k3s_agent_hosts`. Inverting it
+      # would admit every host nobody remembered to deny, which is the same shape as the
+      # accident this assert exists to prevent. A new server node is a deliberate edit to
+      # k3s_server_hosts; ansible/tests/test_k3s_server_hosts.py keeps it that way.
       ansible.builtin.assert:
-        that: inventory_hostname == 'daniel-box'
+        that: inventory_hostname in k3s_server_hosts
         fail_msg: >-
-          This playbook's server role targets daniel-box only. To (re)join daniel-server as an
-          agent, use the opt-in join plays below with -e join_agent=daniel-server.
+          This playbook's server role targets {{ k3s_server_hosts | join(', ') }} only, and
+          this host is {{ inventory_hostname }}. To (re)join daniel-server as an agent, use
+          the opt-in join plays below with -e join_agent=daniel-server.
       tags: always
   roles:
     - { role: k3s, tags: ["k3s"] }

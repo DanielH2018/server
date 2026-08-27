@@ -113,8 +113,23 @@ edit, and the most dangerous to rehearse against a shared rate limit.
 
 ### 5. Secrets — a separate SOPS file, no real credentials
 
-Staging gets `ansible/vars/secrets-staging.yml`, encrypted to the **staging VM's own age key**
-plus daniel-box's, with generated values throughout.
+Staging gets `ansible/vars/secrets-staging.yml`, encrypted to **daniel-server's age key**, with
+generated values throughout.
+
+An earlier draft named the staging VM's own key plus daniel-box's. Both halves were wrong, and
+the mechanism is why: `pre_tasks/load_secrets.yml` decrypts with `delegate_to: localhost`, so
+the **controller** decrypts and the values reach the target as play variables. The VM's key is
+never consulted, and the controller for a staging play is daniel-server — the only host that
+can route to the guest (*Decision 2*) — not daniel-box.
+
+Two consequences to carry into the work:
+
+- `.sops.yaml`'s single creation rule already matches `vars/secrets-staging.yml` by path, so a
+  naive `sops` create encrypts it to all four prod recipients — the opposite of this decision.
+  It needs a second, narrower rule placed **first**.
+- Loading `secrets.yml` at all puts every prod credential in the staging play's variable
+  *scope*, even when no role templates one onto the guest. "No role happens to reference it" is
+  weaker than this decision promises, so the file the preamble loads has to be chosen by host.
 
 **Staging never holds a real credential.** A host whose stated purpose is being broken, and which
 Claude sessions are expected to experiment on, is the worst possible second copy of every

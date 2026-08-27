@@ -35,3 +35,45 @@ has_gitops: false
 
 # It is a guest, not a VM host.
 has_hypervisor: false
+
+# ---------------------------------------------------------------------------
+# k3s server overrides. Prod runs roles/setup/k3s with nothing overridden; every
+# entry below is staging declining work that only makes sense against prod, or
+# naming its own network instead of the LAN. See docs/staging-cluster.md.
+# ---------------------------------------------------------------------------
+
+# This cluster's only node, so it is also its primary: the MetalLB announcement
+# and every workload pin resolve here instead of naming prod's daniel-box.
+k8s_primary_node: daniel-stage
+
+# No B2 or R2. Staging holds no real credential by design (Decision 5), and a
+# backup target configured with a fake one fails for a reason that is not a bug.
+k3s_manage_backup_targets: false
+
+# No heartbeats. These push into prod's Kuma and Healthchecks.io, so a staging
+# failure would page a real operator about a cluster that is meant to break.
+k3s_manage_health_crons: false
+
+# MetalLB announces inside the libvirt NAT network, never on the prod L2 — the
+# one design where staging can hurt prod (Decision 2). Both ranges sit above the
+# network's DHCP pool (.50-.99) and below its broadcast address.
+k3s_metallb_pool: 192.168.140.241-192.168.140.250
+k3s_metallb_ingress_vip: 192.168.140.240
+
+# Straight to Cloudflare. Prod forwards to Pi-hole's cluster IP first, and
+# Pi-hole is not in the staging subset (Decision 6), so that upstream would name
+# a Service that does not exist.
+k3s_coredns_upstreams:
+  - 1.1.1.1
+  - 1.0.0.1
+
+# No behaviour probe. It needs a name only the configured upstream answers and
+# NXDOMAIN everywhere else — `pi.hole` is that against Pi-hole, but nothing is
+# against a public resolver, so the probe could not tell a working forward from
+# a broken one. Empty skips it rather than running a check that cannot fail.
+k3s_coredns_probe_name: ""
+
+# One node, so one replica. Prod runs 2 across daniel-box and daniel-server; asking for 2
+# here would leave every volume permanently Degraded, since there is no second node to
+# schedule the other replica on (docs/staging-cluster.md, Decision 3).
+k3s_longhorn_replica_count: 1
