@@ -48,6 +48,18 @@
 # carries the timestamp its content was last built from, and the served site carries
 # build-info.json saying when this script last ran -- so a cron that stops working shows up
 # on the page rather than needing its own alert channel.
+#
+# THAT ARGUMENT STILL HOLDS, AND IT COVERS ONLY A CRON THAT STOPS. A deadman detects silence.
+# Neither failure this script has had was silence. On 2026-08-27 it ran, build_docs.py
+# succeeded, the site was rebuilt from the working tree, and build-info.json stamped
+# `"built_at": "2026-08-27 18:17 UTC", "generators": "ok"` -- written by the very run whose
+# commit a prek hook rejected, which left the published pages frozen. Every signal named above
+# read healthy through it, and nothing noticed for hours. The earlier ruleset rejection
+# (see IT OPENS A PR) went undiagnosed for a day the same way.
+#
+# So this pushes a FAILURE REPORT, which is a different mechanism from the deadman that block
+# declines: the trap below reports the outcome of every exit path, and `down` is the load-bearing
+# half. The up-beat is a side effect of having a push monitor at all, not the reason for it.
 set -uo pipefail
 
 REPO="/home/{{ sys_user }}/server"
@@ -55,7 +67,54 @@ UV="/home/{{ sys_user }}/.local/bin/uv"
 SITE_DIR="{{ docs_host_site_dir | default('/home/' + sys_user + '/docs-site') }}"
 PR_BRANCH_PREFIX="docs-refresh/"
 
-alert() { logger -t docs-refresh "$1"; }
+# The token is interpolated here rather than sourced from /etc/rancher/k3s/kuma-push.env,
+# matching secret-rotate.sh -- the sibling pusher in this same role. `| default('')` gates it:
+# the push is skipped until the secret exists, and the monitor in static-monitors.yaml.j2 is
+# gated on the same variable, so neither half sits red waiting for the other.
+DOCS_REFRESH_PUSH_TOKEN="{{ docs_refresh_push_token | default('') }}"
+PUSH_URL="https://uptime-kuma.local.{{ domain }}/api/push/${DOCS_REFRESH_PUSH_TOKEN}"
+KUMA_HOST="uptime-kuma.local.{{ domain }}"
+KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
+
+# kuma_push, not an inline curl: the URL embeds the push token, and passing it as an argv
+# element exposes it through /proc/<pid>/cmdline, which is world-readable here (no hidepid).
+#
+# A missing library does NOT abort, unlike secret-rotate.sh. Publishing the docs is worth doing
+# on a host whose monitoring wiring is broken, and the trap below re-checks that kuma_push
+# actually exists before calling it.
+# shellcheck source=/dev/null
+source /usr/local/lib/kuma-push-lib.sh 2>/dev/null \
+  || logger -t docs-refresh "kuma-push-lib.sh missing — run initial_setup on this host"
+
+# DEFAULTS TO down. Every exit path that is genuinely fine says so explicitly; anything else --
+# a crash, a `set -u` abort, or a path added later that forgets to -- reports down. Failing
+# closed is the whole point: this exists because a real failure read green for hours.
+PUSH_STATUS=down
+PUSH_MSG="docs-refresh exited without setting a status"
+# Separate from PUSH_STATUS because a generator failure does not stop the run: the site is still
+# built and the surviving pages are still worth committing (see below). Without this flag the
+# successful publish at the end would overwrite the degradation and report a clean up.
+GENERATORS_OK=1
+
+# ONE trap doing both jobs. The temp-file cleanup used to be its own `trap ... EXIT` further
+# down, and a second trap on the same signal REPLACES the first -- so adding this one later in
+# the file would have silently disabled whichever lost. LOG is unset on the early exits, hence
+# "${LOG:-}".
+on_exit() {
+  rm -f "${LOG:-}"
+  # `status=` prefix, matching secret-rotate.sh: probe.py alerts reconstructs DOWN episodes for
+  # host-cron pushers by matching that token in syslog, and a push straight to Kuma leaves no
+  # other durable trace.
+  logger -t docs-refresh "status=${PUSH_STATUS} ${PUSH_MSG}"
+  [ -n "$DOCS_REFRESH_PUSH_TOKEN" ] || return 0
+  command -v kuma_push >/dev/null 2>&1 || return 0
+  kuma_push "$PUSH_STATUS" "$PUSH_MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" docs-refresh
+}
+trap on_exit EXIT
+
+# Records the message as well as logging it, so every existing call site feeds the push without
+# needing its own push call -- there are eleven exit paths and one of them is a bare crash.
+alert() { logger -t docs-refresh "$1"; PUSH_MSG="$1"; }
 
 # Errors used to go to /dev/null, which is why a ruleset rejection went undiagnosed for a
 # day: the alert said the push failed and nothing said why. logger takes one line, so
@@ -75,8 +134,11 @@ flock -w 2700 9 || { alert "docs-refresh: git-tree lock held >45m; skipped"; exi
 # nothing and is the useful half -- but change no files.
 if ! git diff --quiet || ! git diff --cached --quiet; then
   alert "docs-refresh: working tree dirty; rebuilt site only, no regeneration"
+  # up BEFORE the build, down inside the `||`. The other order reports up on a failed build,
+  # because the failure branch runs first and the blanket assignment then overwrites it.
+  PUSH_STATUS=up
   "$UV" run --frozen python scripts/docs/build_docs.py --skip-generators --site-dir "$SITE_DIR" \
-    || alert "docs-refresh: site build failed on dirty tree"
+    || { alert "docs-refresh: site build failed on dirty tree"; PUSH_STATUS=down; }
   exit 0
 fi
 
@@ -91,8 +153,9 @@ OPEN_PR="$(gh pr list --state open --json number,headRefName \
   2>/dev/null || true)"
 if [ -n "$OPEN_PR" ]; then
   alert "docs-refresh: PR #$OPEN_PR still open; rebuilt site only, no regeneration"
+  PUSH_STATUS=up
   "$UV" run --frozen python scripts/docs/build_docs.py --skip-generators --site-dir "$SITE_DIR" \
-    || alert "docs-refresh: site build failed while a PR was open"
+    || { alert "docs-refresh: site build failed while a PR was open"; PUSH_STATUS=down; }
   exit 0
 fi
 
@@ -102,6 +165,9 @@ if ! "$UV" run --frozen python scripts/docs/build_docs.py --site-dir "$SITE_DIR"
   alert "docs-refresh: one or more generators failed (site was still built)"
   # Deliberately NOT an exit. build_docs already skipped the failing generator and built
   # the site from what succeeded, so the pages that did regenerate are worth committing.
+  # It IS a down, though: a page silently generated from a failing generator is the class of
+  # fault this whole script exists to keep out of the published docs.
+  GENERATORS_OK=0
 fi
 
 # Only the generated trees. A generator that wrote elsewhere would otherwise be committed
@@ -109,7 +175,11 @@ fi
 git add docs/reference docs/assets/generated
 
 if git diff --cached --quiet; then
-  logger -t docs-refresh "no change"
+  # The common outcome: the inputs are repo files and they only move when a PR merges, so most
+  # runs have nothing to publish. Up, with the reason named -- "nothing to do" must never read
+  # the same as "everything is fine", which is what the sibling host crons say too.
+  PUSH_STATUS=up
+  PUSH_MSG="no change"
   exit 0
 fi
 
@@ -123,8 +193,9 @@ fi
 # exactly one trailing newline. Vale is scoped to exclude docs/reference/ for the same
 # reason. Before adding any hook that matches a path staged above, check it cannot fail on
 # generator output.
+# No `trap ... EXIT` here any more: on_exit above already removes this file, and a second trap
+# on the same signal would REPLACE that one and take the push with it.
 LOG="$(mktemp)"
-trap 'rm -f "$LOG"' EXIT
 
 if ! git commit -m "docs: refresh generated reference pages" >"$LOG" 2>&1; then
   git reset >/dev/null 2>&1
@@ -174,3 +245,13 @@ if ! gh pr merge --auto --squash --delete-branch "$BRANCH" >"$LOG" 2>&1; then
 fi
 
 logger -t docs-refresh "regenerated, committed, PR opened for $BRANCH with auto-merge"
+# The publish succeeded either way; GENERATORS_OK decides whether it published a COMPLETE set.
+# Reporting up here regardless would let a failing generator ride out on a successful PR, which
+# is the same "the run worked, the content did not" split that made 2026-08-27 invisible.
+if [ "$GENERATORS_OK" -eq 1 ]; then
+  PUSH_STATUS=up
+  PUSH_MSG="regenerated, committed, PR opened for $BRANCH with auto-merge"
+else
+  PUSH_STATUS=down
+  PUSH_MSG="PR opened for $BRANCH, but one or more generators had failed — the published set is incomplete"
+fi

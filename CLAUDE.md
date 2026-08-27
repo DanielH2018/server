@@ -496,7 +496,11 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
   because an encrypted diff is unreadable. But the plaintext lands in the terminal, the scrollback,
   and any agent transcript that captured the command, so a value exposed that way needs rotating.
   A reviewer did exactly this during the 2026-08-24 review (L-5). To see WHICH keys changed without
-  their values, diff the names: `git diff ansible/vars/secrets.yml | grep -E '^[-+][a-z_]+:'`.
+  their values, diff the names: `git diff ansible/vars/secrets.yml | grep -oE '^[-+][a-z_]+:'`.
+  **`-o` is load-bearing, and this line said `-E` until 2026-08-27.** Without it grep prints the
+  whole matching line — key *and* plaintext value — so the command offered here as the safe
+  alternative did exactly what the paragraph above warns about. It leaked a freshly minted push
+  token into a session transcript on 2026-08-27; the token was rotated before it was committed.
 - **Never commit plaintext secrets** (private age keys never leave `~/.config/sops/age/keys.txt`;
   `.gitignore` blocks `keys.txt`/`*.agekey`/`*.key` and gitleaks scans every commit)
 - **Onboarding a host to SOPS** (it can't decrypt yet, so `initial_setup.yml`/`deploy.yml`
