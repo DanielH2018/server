@@ -118,3 +118,9 @@
   # After the verification above, so a broken libvirt fails on "can virsh reach the
   # hypervisor" rather than several tasks later on a net-define that could not have worked.
   ansible.builtin.include_tasks: network.yml
+
+- name: Define and start the staging guest
+  tags: [hypervisor]
+  # After network.yml: the domain's interface names that network, and libvirt refuses to
+  # start a domain whose network is not defined.
+  ansible.builtin.include_tasks: guest.yml

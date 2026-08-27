@@ -42,3 +42,35 @@ hypervisor_staging_net_netmask: 255.255.255.0
 # The dynamic range deliberately excludes staging_vm_ip, which is a reservation.
 hypervisor_staging_net_dhcp_start: 192.168.140.50
 hypervisor_staging_net_dhcp_end: 192.168.140.99
+
+# The staging guest. Sizing from docs/staging-cluster.md, Decision 1, re-checked against the
+# host on 2026-08-27: 24.7 GB of 31.7 GB RAM available and 312 GB free on /.
+hypervisor_staging_vm_memory_mib: 8192
+hypervisor_staging_vm_vcpus: 4
+hypervisor_staging_vm_disk_size: 100G
+
+# The base image and the guest's own copy. The base is kept so a rebuild does not re-download.
+# The path deliberately does NOT end in `_image`: in a setup role's defaults that suffix means
+# a container image pin, and scripts/test_renovate_managers.py reads every such key as one
+# Renovate must be able to bump. This is a file on disk, so naming it `_image` made it fail a
+# guard that was reading it correctly.
+hypervisor_staging_vm_image_url: https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
+# DECIDED: pin the checksum even though `current` rotates (2026-08-27). Upstream moves this
+# roughly monthly, so a host that has not downloaded the image yet WILL eventually fail here
+# — which is the intended failure. A staging substrate silently built from a different image
+# than the one reviewed defeats the point of having a reviewed substrate. Re-pin from
+# https://cloud-images.ubuntu.com/noble/current/SHA256SUMS when it fails.
+hypervisor_staging_vm_image_sha256: d0fe84bb5f80853425fa6be28e2c106f30104c3cfe8611933f2e65c9b63f0e30
+hypervisor_staging_vm_base_image_path: /var/lib/libvirt/images/noble-server-cloudimg-amd64.img
+hypervisor_staging_vm_disk: /var/lib/libvirt/images/{{ staging_vm_hostname }}.qcow2
+
+# The cloud-init NoCloud seed.
+hypervisor_staging_vm_seed_dir: /var/lib/libvirt/seed/{{ staging_vm_hostname }}
+hypervisor_staging_vm_seed: /var/lib/libvirt/images/{{ staging_vm_hostname }}-seed.iso
+# Bump to make cloud-init re-run its per-instance modules on the next start, without
+# rebuilding the guest's disk.
+hypervisor_staging_vm_instance_id: "01"
+
+# First boot runs cloud-init, grows the root filesystem and generates host keys, so ssh
+# answers well after the guest is up. Generous because that work happens once.
+hypervisor_staging_vm_boot_timeout: 300
