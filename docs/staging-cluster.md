@@ -1,16 +1,16 @@
-# Staging Cluster — a second k3s the gitops pipeline must pass through
+# Staging Cluster — a second k3s the GitOps pipeline must pass through
 
 Stands up a **single-node k3s VM on daniel-server** and teaches the repo to deploy to it, so a
 bad merge fails on staging before prod ever renders it.
 
-This is **Tier 2** of the staging spike. [Tier 1](../CLAUDE.md#checking-a-k8s-change-without-deploying-it)
+This is **Tier 2** of the staging spike. [Tier 1](deploying.md#checking-a-change-without-deploying-it)
 landed on 2026-08-16 as `k8s_dry_run` (PR #237): it validates manifests against the live API
 server without applying them. Tier 1 catches bad apiVersions, schema drift and CRD ordering. It
 cannot catch scheduling, PVC binding, probe or rollout behaviour, because nothing is ever
 actually run. Tier 2 is what runs it.
 
 Covers **Phase A** (the cluster exists) and **Phase B** (Ansible can deploy to it). Phase C —
-gating the gitops pipeline on a staging deploy — gets its own spec once staging has run long
+gating the GitOps pipeline on a staging deploy — gets its own spec once staging has run long
 enough to show what a realistic health gate looks like.
 
 ---
@@ -206,11 +206,14 @@ false-failure rate.
 
 Not decisions for this spec — recorded so Phase C does not rediscover them.
 
-- What counts as "staging passed"? `probe.py health` per service is the obvious gate and now
+- What counts as a staging pass. `probe.py health` per service is the obvious gate and now
   covers Deployments and DaemonSets, but the pass criteria for a whole-cluster deploy is a
   different question.
 - How does a staging failure alert, and who overrides it when staging is wrong rather than the
   merge? A gate with no override becomes a gate that gets removed.
-- The 30-minute gitops window roughly doubles. A full prod deploy already measured 59 minutes
-  (`deploy-time-is-83-percent-waiting`), so the staging pass needs a much tighter service count
-  or a much longer window.
+- How much of the 30-minute GitOps window a staging pass costs. A full prod deploy of all 54
+  services measures **20m12s** (re-measured 2026-08-22 after the batching work landed;
+  `deploy-time-is-83-percent-waiting`), so a five-service subset is a small fraction of the
+  window rather than a doubling of it. An earlier draft of this line read 59 minutes and
+  concluded the window "roughly doubles" — that figure predates batching, and the conclusion
+  drawn from it was wrong. Measure the staging pass before sizing the window against it.
