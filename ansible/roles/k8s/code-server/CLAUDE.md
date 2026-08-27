@@ -15,6 +15,14 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
 ## Notable
 - Extensions are downloaded at build time (Open VSX + MS Marketplace) into `/opt/vsix`;
   `extensions.sh` installs them into /config on container start.
+- **This image cannot compile LaTeX.** TeX Live, `latexmk`, LaTeX Workshop and the PDF viewer
+  extension were removed on 2026-08-27 — 56 packages and ~309 MiB of the ~858 MiB installed
+  here, with no caller outside the TeX set. `roles/k8s/texbrain` owns compiling now, in the
+  browser via a WebAssembly pdfTeX. There is no local fallback: texbrain needs the pod, a
+  browser, and a jsDelivr mirror for any package outside its bundled TeX Live subset.
+- **`extensions.sh` installs but does not prune**, so removing an extension from the image
+  leaves it live on the config volume. Retiring one means adding its id to `RETIRED_EXTS` in
+  that script, not just deleting it from the Dockerfile.
 - **Two claims, and only the small one is backed up** (2026-08-16). `code-server-config`
   (10 Gi) holds derived state and is in `k3s_longhorn_nobackup_volumes`;
   `code-server-workspace` (5 Gi) holds `workspace`, `.ssh`, `.config` and the git identity,
