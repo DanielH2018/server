@@ -30,6 +30,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import subprocess
 import sys
@@ -173,7 +174,7 @@ def merge_tree_says_contained(merge_tree_stdout: str, master_tree: str) -> bool:
     return lines[0] == master
 
 
-def is_merged(repo: str, head: str) -> bool:
+def is_merged(repo: str, head: str, branch: str = "") -> bool:
     """True when `head`'s work is already on origin/master, by ancestry or by patch.
 
     Ancestry alone misses how PRs actually land here. `gh pr merge --rebase` replays the
@@ -188,7 +189,13 @@ def is_merged(repo: str, head: str) -> bool:
     different question — not "are these commits upstream" but "does this branch still have
     anything to give master". See merge_tree_says_contained.
 
-    All three failures are closed: an unknown reads as NOT merged, because this decides what
+    `git merge-tree` in turn fails on a squash-merged branch once master has DRIFTED into a
+    conflict on a file the branch also touched: it exits non-zero, which is the right local
+    answer (no verdict) and the wrong final one, so the tree sits there forever. The fourth
+    layer asks the forge which head SHA it actually merged. It runs last because it is the only
+    one needing a network round-trip and credentials.
+
+    All four failures are closed: an unknown reads as NOT merged, because this decides what
     to DELETE.
     """
     ancestor = subprocess.run(
@@ -230,9 +237,59 @@ def is_merged(repo: str, head: str) -> bool:
         text=True,
         check=False,
     )
-    if merged_tree.returncode != 0:
+    if merged_tree.returncode == 0 and merge_tree_says_contained(
+        merged_tree.stdout, master_tree.stdout
+    ):
+        return True
+    # Fourth and last: squash-merged AND master has since drifted into a conflict on a file the
+    # branch also touched. `git merge-tree` then exits non-zero, which is the right local answer
+    # ("no verdict") and the wrong final one — the branch landed days ago and the tree sits there
+    # forever. Observed 2026-08-27: worktree-review-2026-08-24-remediation, landed as PR #400 on
+    # 2026-08-24, held by a later master change to wg-easy/tasks/main.yml.
+    #
+    # Ask the forge, which knows what it merged. This runs LAST because it is the only check
+    # needing a network round-trip and credentials; every branch the local checks settle never
+    # reaches it. No `gh`, no auth, or no answer all mean no verdict, which reads as not merged.
+    if not branch:
         return False
-    return merge_tree_says_contained(merged_tree.stdout, master_tree.stdout)
+    pr_list = subprocess.run(
+        [
+            "gh",
+            "pr",
+            "list",
+            "--state",
+            "merged",
+            "--head",
+            branch,
+            "--json",
+            "headRefOid",
+        ],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if pr_list.returncode != 0:
+        return False
+    return pr_head_says_merged(pr_list.stdout, head)
+
+
+def pr_head_says_merged(stdout: str, head: str) -> bool:
+    """Read `gh pr list --state merged --head <branch> --json headRefOid`: True when one of
+    those merged PRs was merged from exactly this commit.
+
+    Matching on the head SHA, never on "a merged PR exists for this branch name". Branch names
+    are reused here — one session landed three PRs from `worktree-pi-detached-container-arm` on
+    2026-08-27, each with a different tip — so a name match would delete a branch carrying work
+    that never landed. SHA equality is the whole guarantee.
+    """
+    try:
+        prs = json.loads(stdout or "[]")
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(prs, list):
+        return False
+    return any(isinstance(p, dict) and p.get("headRefOid") == head for p in prs)
 
 
 def is_dirty(path: str) -> bool:
@@ -301,7 +358,9 @@ def main() -> int:
     removable = []
     for tree in sessions:
         verdict, reason = classify(
-            tree, merged=is_merged(repo, tree.head), dirty=is_dirty(tree.path)
+            tree,
+            merged=is_merged(repo, tree.head, tree.branch),
+            dirty=is_dirty(tree.path),
         )
         print(f"[{verdict:9}] {tree.path}\n            {reason}")
         if verdict == REMOVABLE:

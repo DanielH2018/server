@@ -23,6 +23,7 @@ from prune_worktrees import (
     find_orphan_dirs,
     merge_tree_says_contained,
     parse_worktree_list,
+    pr_head_says_merged,
     remove,
     session_is_alive,
 )
@@ -355,3 +356,37 @@ def test_removable_reason_for_a_never_locked_tree_says_unlocked():
     verdict, reason = classify(_tree(locked=False), merged=True, dirty=False)
     assert verdict == REMOVABLE
     assert reason.endswith("unlocked")
+
+
+# ── pr_head_says_merged (the forge settles what a drifted squash merge cannot) ──
+
+
+def test_pr_head_matching_the_tip_reads_as_merged():
+    tip = "d956d0c07d571d65cef7e8c763775b22061837fd"
+    assert pr_head_says_merged('[{"headRefOid": "%s"}]' % tip, tip)
+
+
+def test_pr_head_from_a_different_tip_does_not_read_as_merged():
+    # The case that makes SHA equality load-bearing: one branch name, several merged PRs, and
+    # a tip that is none of them. Three PRs landed from worktree-pi-detached-container-arm on
+    # 2026-08-27, so matching on the NAME would delete work that never landed.
+    stdout = '[{"headRefOid": "aaaa111"}, {"headRefOid": "bbbb222"}]'
+    assert not pr_head_says_merged(stdout, "cccc333")
+
+
+def test_pr_head_with_no_merged_prs_does_not_read_as_merged():
+    assert not pr_head_says_merged("[]", "aaaa111")
+
+
+def test_pr_head_survives_gh_returning_nothing():
+    # No `gh`, no auth, or a silent failure — all must read as not merged, since this decides
+    # what to delete.
+    assert not pr_head_says_merged("", "aaaa111")
+
+
+def test_pr_head_survives_malformed_json():
+    assert not pr_head_says_merged("not json at all", "aaaa111")
+
+
+def test_pr_head_survives_json_that_is_not_a_list():
+    assert not pr_head_says_merged('{"headRefOid": "aaaa111"}', "aaaa111")
