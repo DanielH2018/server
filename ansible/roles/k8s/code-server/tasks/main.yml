@@ -14,10 +14,14 @@
     # The one file the Dockerfile COPYs (flat — ConfigMap keys cannot contain '/').
     image_builder_context:
       "{{ playbook_dir }}/roles/k8s/code-server/files/extensions.sh": extensions.sh
-    # texlive-latex-extra still pulls several hundred MB of apt, and the extension step
-    # fetches seven VSIXs from upstream APIs; the default 900 s is not enough for a build
-    # that misses the registry layer cache (first build after any Dockerfile edit, or after
-    # the linuxserver base moves). A cache hit finishes in a fraction of this.
+    # The extension step fetches five VSIXs from upstream APIs and npm installs the Claude
+    # Code CLI; the default 900 s is not enough for a build that misses the registry layer
+    # cache (first build after any Dockerfile edit, or after the linuxserver base moves). A
+    # cache hit finishes in a fraction of this.
+    #
+    # Kept at 1800 after the TeX Live removal on 2026-08-27 took several hundred MB of apt
+    # out of this build. That should make a cold build materially faster, but the number to
+    # lower this to is a measured one — leave it until a few cold builds have been timed.
     image_builder_timeout: 1800
 
 # Seeded BEFORE the workload so first boot never runs against an empty /config. The cutover
