@@ -8,7 +8,7 @@
 # when the tag re-points, and the merged commit lands under ansible/roles/k8s/**, which
 # gitops_deploy Discord-alerts for an operator to rebuild. Keep the tag alongside the digest — it
 # is what carries the 3.14 line, and dropping it would let a digest bump silently cross a minor.
-FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4
+FROM python:3.14-slim@sha256:83ff1d245a3d57d04152252d3ef9cb361494d0b3395abd65a5ebe91c401c8e83
 WORKDIR /app
 # Pin to the versions uv.lock resolves for the `dev` group, so the runtime image matches what
 # test_app.py validates against (a bare `pip install flask requests` re-resolves to newest PyPI on
