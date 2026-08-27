@@ -29,6 +29,7 @@ to hide. The pattern earns the zero-entry list.
 """
 
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -74,28 +75,27 @@ def _discover_docs() -> list[Path]:
 
 DOCS = _discover_docs()
 
-# Vendored and generated trees are not what the docs cite, and walking them is slow.
-_SKIP_TREES = {
-    ".git",
-    ".venv",
-    "node_modules",
-    "collections",
-    "__pycache__",
-    "worktrees",
-}
-
 
 def _repo_files() -> set[str]:
-    """Every tracked-ish file path in the repo, repo-relative, as forward-slash strings."""
-    out = set()
-    for path in REPO.rglob("*"):
-        if not path.is_file():
-            continue
-        rel = path.relative_to(REPO)
-        if _SKIP_TREES & set(rel.parts):
-            continue
-        out.add(rel.as_posix())
-    return out
+    """Every TRACKED file path in the repo, repo-relative, as forward-slash strings.
+
+    DECIDED: `git ls-files`, not an `rglob` plus a skip list. An rglob sees whatever happens
+    to be on disk, and this repo grows untracked trees during ordinary work: `.venv`,
+    `ansible/collections/` (vendored per worktree), `__pycache__`, and `styles/`, which
+    `vale sync` creates and which carries `.txt` and `.json` files the repo itself does not
+    have. That last one moves `_REPO_EXTENSIONS` below, so the same citation would be checked
+    on a synced checkout and skipped on a fresh one. A guard whose verdict depends on whether
+    someone has run `vale sync` has the defect this module rejected `.claude/worktrees/` for.
+    """
+    listed = subprocess.run(
+        ["git", "ls-files", "-z"],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=60,
+    )
+    return {p for p in listed.stdout.split("\0") if p}
 
 
 REPO_FILES = _repo_files()
