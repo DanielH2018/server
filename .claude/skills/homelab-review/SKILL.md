@@ -182,8 +182,33 @@ executable code.
 ## 7. Synthesize and close the loop (your job once the verdicts are in)
 - **Surface cross-cutting THEMES** no single agent can see (e.g. a "co-located failure domain" spanning
   security + backups + network) — this is the main value of synthesizing over relaying.
+- **Vet every remediation before you recommend it — the fix-skeptic pass.** Findings get step 6 and
+  recommendations get nothing, which is the one review-loop gap still producing new memory entries.
+  The ledgers measure it: 6 of 14 proposed fixes refuted and 5 more corrected (2026-08-25), 5 of 13
+  unsafe (2026-08-24). Over those same runs priming drove findings to 15 confirmed / 0 refuted and
+  left fix quality flat — priming feeds the pass that exists. So dispatch one **`skeptic`** per
+  recommended remediation, all in one parallel message, sized to the finder exactly as step 6 sizes
+  its own. Each answers one question:
+
+  > Does this remediation change the state the finding is about, or only the signal that reported it?
+
+  Three verdicts, and they judge the **fix**, never the finding: **SAFE**; **LAUNDERS** (the symptom
+  stops being reported while the underlying state is untouched); **UNSAFE** (it introduces a new
+  failure, or is worse than what it replaces). A LAUNDERS or UNSAFE verdict does not retract the
+  finding. The finding ships marked **no vetted remediation**, which is a more useful report line
+  than a fix the operator has to revert.
+
+  Two shapes have already reached the operator, and they are what this pass exists to catch:
+  - **Laundering.** A 2026-08-25 proposal closed its finding by changing what got measured.
+  - **A false-GREEN worse than the false-RED it fixes.** Two independent reviewers in one run
+    proposed adding `restore-drill` to the stamp task's tags, which would have declared five
+    templates current that the run never rendered (2026-08-24). The safe direction was to *drop* a
+    tag, not add one.
+
+  An unvetted remediation is not a recommendation. Report the finding without one.
 - Present **one consolidated report** grouped by severity, with a top-priorities shortlist and a clear
-  recommendation. Cite each finding's ansible `file:line`.
+  recommendation. Cite each finding's ansible `file:line`. Mark each remediation with its fix-skeptic
+  verdict, and mark a finding whose only remediation was refuted as **no vetted remediation**.
 - **STOP.** Recommend next steps; do not implement, deploy, or commit.
 - Offer to record a new `review-<date>-state` memory — the established pattern that keeps the next
   review high-signal, and the thing step 2 reads. It is what step 2 needs or it is noise, so give it:
@@ -199,6 +224,15 @@ executable code.
   writes only its dated ledger quietly re-grows the priming cost this skill was rebuilt to avoid.
   Per the repo's corroborate-before-promote rule, promote an item only on a **second** independent
   occurrence or against real evidence; a single run's say-so stays in the dated ledger.
+- **On its third run, a recurring class stops being a ledger row.** The standing list already counts
+  runs per recurring-open class — the guard-scope class reached run 4 and the push-token one run 3,
+  each time by incrementing a counter and writing the finding again. Incrementing is what let them
+  recur. So when a fold takes a class to **run 3**, the fold is not a counter: it is an executable
+  check landed that run, or a written statement in the standing entry of why no check can express it
+  and what the operator must decide instead. This is the repo's own escalation ladder
+  (run-local note → memory → CLAUDE.md rule → executable check) with a trigger attached, since the
+  ladder without one is what produced the counters. A class whose remedy stayed prose is the class
+  that comes back.
 
 ## Notes
 - All six reviewer agents are read-only investigators. `security-review` is the one without `Bash`

@@ -557,6 +557,16 @@ uv run pytest scripts         # just one suite
   `ansible/roles/k8s/monitor-bridge/files/` + `ansible/roles/k8s/autofix-bridge/files/`
   (B2/Prometheus/Loki check logic),
   `.claude/hooks/` (read-only Bash classifier), `scripts/` (image-diff parser).
+- **A new check ships with a proof it can go RED.** Any validator, guard, health check or probe
+  lands with a paired test: one input it must accept, and one input it must reject. A check is only
+  ever observed passing, so without the rejecting half there is no evidence it can fail — and this
+  repo has paid for that twice. `seed-volume`'s short-circuit shipped behind 16 passing tests and a
+  mutation test, then fired for 0 of 25 claims across two full deploys. `image-smoke`'s bare-boot
+  rule never caught a real image problem across 11 failures. Both read green throughout.
+  `scripts/validate/test_validate_compose_templates.py` is the worked example: every rule there is
+  a `..._is_clean` / `..._is_flagged` pair, so a rule that silently stopped matching fails its own
+  test. Name the pair that way — a guard that fires on everything and one that fires on nothing are
+  indistinguishable from the passing side alone.
 - **Test-placement gotcha:** pytest tests must NOT live under `ansible/filter_plugins/` —
   Ansible's plugin loader imports every `.py` there at deploy time and would choke on the
   `pytest` import. `test_toposort.py` lives in `ansible/tests/` and imports its target via the

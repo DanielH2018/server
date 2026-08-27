@@ -153,7 +153,7 @@ other label and so would pass that check while still breaking:
   its own NEGATIVE CONTROL leg (dialing homepage): "by construction there is no unfenced pod left"
   once slice 5 lands. Slice 5 must apply the same fix to every probe's control leg: admit the probe
   pod as an explicit peer **on its control target's policy** — the shape
-  `prowlarr/networkpolicy-prowlarr.yaml.j2:24-27` already uses, where prowlarr's own policy admits
+  `prowlarr/templates/networkpolicy-prowlarr.yaml.j2:24-27` already uses, where prowlarr's own policy admits
   `flaresolverr-netpol-probe` as a caller because that probe's control leg dials `prowlarr` before
   asserting flaresolverr is unreachable.
 
