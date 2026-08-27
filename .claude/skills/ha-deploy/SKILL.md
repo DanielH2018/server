@@ -49,6 +49,16 @@ rollout restart). A restart is ~60-120s.
      the live instance and not `unavailable`. A non-zero exit lists the dropped/errored ids
      (a schema error HA silently skipped at load). File-driven, so live `.storage`/UI cruft is
      ignored.
+   - **Assert every referenced entity still EXISTS**: `uv run python scripts/diagnostics/probe.py ha
+     verify-entities` — it diffs `state/external_entities.yml` against live HA and exits non-zero
+     on anything that vanished. Run it every deploy, not only when you touched entities. Nothing
+     else in this repo can see a disappearance: `validate_ha_config.py` resolves references against
+     that snapshot, so a name that *stopped* existing reads exactly like one that resolves, and the
+     prek hook goes green. On 2026-08-16 two Pixel sensors disappeared and three bedroom features
+     sat inert behind a clean validation — `states()` on a missing entity renders `unknown`, which
+     the automation's own exclusion list swallowed. When something does turn up dead, **fix the
+     config first and refresh the snapshot second**: `refresh` alone drops the ids and makes the
+     validator start failing on the still-present config refs, which is the desired signal, not a fix.
    - Edited an automation → `uv run python scripts/diagnostics/probe.py ha automation <id-or-alias>` —
      it must exist (resolves the alias-slug-vs-id trap) and, after you trigger it, `last_triggered`
      must advance.

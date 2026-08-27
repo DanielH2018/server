@@ -12,6 +12,21 @@ then validates:
 It does NOT do HA schema validation (unknown keys, integration options) — that needs the real
 `hass --script check_config` in a Docker HA image (out of scope; the deploy catches it live).
 
+It also does NOT prove an entity still exists. The state-model guardrails below resolve every
+reference against `state/external_entities.yml`, which is a **snapshot** refreshed only by an
+explicit `ha_state_model.py refresh`. So this catches a **typo** (a name that never existed) and
+is structurally blind to a **disappearance** (a name that stopped existing) — both read as
+"reference resolves". On 2026-08-16 two Pixel sensors vanished from every device, stayed listed
+in the snapshot, and three bedroom features went inert behind a green run here: `states()` on a
+missing entity renders `unknown`, which sat inside the automation's own exclusion list, and
+`| float(0)` latched a zero the curve treats as a normal night.
+
+Only live HA can see a disappearance: `uv run python scripts/diagnostics/probe.py ha
+verify-entities` diffs the snapshot against live state and exits non-zero on anything that went
+away. It is a post-deploy gate in the `ha-deploy` skill, deliberately not a step here — this
+script has no HA dependency by design, and acquiring one to close the gap would cost more than
+the gate does. A green run of this file is not evidence an entity is alive.
+
 Run directly (`python3 scripts/home_assistant/validate_ha_config.py`) or via the `validate-ha-config` prek hook.
 Exits non-zero if any error is found.
 """
