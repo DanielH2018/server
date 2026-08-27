@@ -11,10 +11,33 @@ Makes a host able to run VMs. Deploys the staging cluster's substrate; see
 - **Exit criterion:** `virsh --connect qemu:///system version` succeeds as `ubuntu`. The
   role asserts it rather than leaving it to the operator.
 
-## What it does not do
+## The staging guest
 
-No guest is defined here — that belongs to a later slice, so re-running this role on a host
-that already has a staging VM leaves it alone.
+`guest.yml` builds and starts `daniel-stage`: 8 GiB, 4 vCPU, a 100 GB qcow2 converted from
+the Ubuntu noble cloud image, seeded with cloud-init and attached to the `staging` network.
+
+- **The cloud image checksum is pinned**, and upstream rotates `current` roughly monthly, so
+  this *will* eventually fail on a host that has not downloaded it yet. That is the intended
+  failure — re-pin from `cloud-images.ubuntu.com/noble/current/SHA256SUMS`. A staging
+  substrate silently built from a different image than the one reviewed defeats the point.
+- **The disk is a full `qemu-img convert`, not a backing file.** A backing chain would tie
+  the guest to the base image forever, so re-pinning would break an existing guest. qcow2 is
+  sparse, so the copy costs what the image holds rather than its virtual size.
+- **The seed ISO is built with `xorriso`**, because `cloud-image-utils` is not in this
+  host's package set and `xorriso` already is. Its volume id must be `cidata` — that string
+  is how cloud-init's NoCloud datasource finds the disk.
+- **cloud-init reads the seed on first boot only.** Editing `user-data` afterwards rebuilds
+  the ISO and changes nothing. Bump `hypervisor_staging_vm_instance_id` to make cloud-init
+  re-run its per-instance modules without rebuilding the disk.
+- **The guest's only credential is daniel-server's own ssh key**, slurped at run time. The
+  thing that needs to reach the guest is Ansible running on that host; a separate keypair
+  would be a second secret to rotate for no additional isolation.
+- **No graphics device.** `virsh console` is the recovery path when ssh is what is broken.
+
+ENFORCED by `ansible/tests/test_staging_vm.py`. The load-bearing assertion is that the
+domain's interface MAC equals the network's DHCP reservation: if they drift, the guest still
+boots and still gets an address, just a dynamic one, and every later slice that names
+`staging_vm_ip` points at nothing.
 
 ## The staging network
 

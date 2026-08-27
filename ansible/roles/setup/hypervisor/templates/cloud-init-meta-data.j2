@@ -1,0 +1,6 @@
+# Managed by ansible (roles/setup/hypervisor).
+# instance-id is what cloud-init uses to decide whether this is a first boot. Changing it
+# makes cloud-init re-run its per-instance modules on the next start, which is the lever for
+# re-seeding a guest without rebuilding its disk.
+instance-id: {{ staging_vm_hostname }}-{{ hypervisor_staging_vm_instance_id }}
+local-hostname: {{ staging_vm_hostname }}

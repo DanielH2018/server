@@ -1,0 +1,161 @@
+---
+# Defines and starts the staging guest. Runs after network.yml, because the domain's
+# interface names that network and libvirt refuses to start a domain whose network is not
+# defined.
+
+- name: Read the deploy user's public key
+  tags: [hypervisor]
+  # The guest's only credential, and it is this host's own key rather than a new one: the
+  # thing that needs to reach the guest is ansible running here. A separate keypair would be
+  # a second secret to rotate for no additional isolation.
+  ansible.builtin.slurp:
+    src: "/home/{{ sys_user }}/.ssh/id_ed25519.pub"
+  register: hypervisor_staging_vm_pubkey
+  become: true
+
+- name: Set the guest's authorised key
+  tags: [hypervisor]
+  ansible.builtin.set_fact:
+    hypervisor_staging_vm_ssh_key: "{{ hypervisor_staging_vm_pubkey.content | b64decode | trim }}"
+
+- name: Download the Ubuntu cloud image
+  tags: [hypervisor]
+  # Checksum-pinned. cloud-images.ubuntu.com rotates `current` roughly monthly, so this
+  # WILL eventually fail on a host that has not downloaded it yet — that is deliberate. A
+  # staging substrate silently built from a different image than the one reviewed is worse
+  # than a download that stops and asks to be re-pinned.
+  ansible.builtin.get_url:
+    url: "{{ hypervisor_staging_vm_image_url }}"
+    dest: "{{ hypervisor_staging_vm_base_image_path }}"
+    checksum: "sha256:{{ hypervisor_staging_vm_image_sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: Create the guest disk from the cloud image
+  tags: [hypervisor]
+  # convert rather than a backing file: a backing chain ties the guest's disk to the base
+  # image forever, so re-pinning the image later would break an existing guest. qcow2 is
+  # sparse, so the full copy costs what the image actually holds, not the virtual size.
+  ansible.builtin.command:
+    cmd: qemu-img convert -O qcow2 {{ hypervisor_staging_vm_base_image_path }} {{ hypervisor_staging_vm_disk }}
+    creates: "{{ hypervisor_staging_vm_disk }}"
+  register: hypervisor_staging_vm_disk_created
+  become: true
+
+- name: Resize the guest disk  # noqa: no-handler
+  tags: [hypervisor]
+  # Not a handler despite the `is changed` guard: handlers run at the END of the play, and
+  # this must happen before the domain is defined and started a few tasks below.
+  # Only on creation. qemu-img resize is not idempotent in a useful way -- it succeeds on an
+  # already-large image and reports nothing -- and growing a disk under a running guest is
+  # not something this role should do as a side effect of a re-run.
+  when: hypervisor_staging_vm_disk_created is changed
+  ansible.builtin.command:
+    cmd: qemu-img resize {{ hypervisor_staging_vm_disk }} {{ hypervisor_staging_vm_disk_size }}
+  changed_when: true
+  become: true
+
+- name: Create the cloud-init seed directory
+  tags: [hypervisor]
+  ansible.builtin.file:
+    path: "{{ hypervisor_staging_vm_seed_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+
+- name: Render the cloud-init seed files
+  tags: [hypervisor]
+  ansible.builtin.template:
+    src: "cloud-init-{{ item }}.j2"
+    dest: "{{ hypervisor_staging_vm_seed_dir }}/{{ item }}"
+    owner: root
+    group: root
+    mode: "0600"
+  loop:
+    - user-data
+    - meta-data
+  register: hypervisor_staging_vm_seed_files
+  become: true
+
+- name: Build the cloud-init seed ISO  # noqa: no-handler
+  tags: [hypervisor]
+  # Not a handler, for the same reason as the resize above: the ISO has to exist before the
+  # domain that attaches it is defined, and handlers run after every task.
+  # xorriso rather than cloud-localds: cloud-image-utils is not in this host's package set,
+  # and xorriso already is. The volume id MUST be `cidata` -- that string is how cloud-init's
+  # NoCloud datasource finds the disk.
+  when: hypervisor_staging_vm_seed_files is changed
+  ansible.builtin.command:
+    cmd: >-
+      xorriso -as mkisofs -output {{ hypervisor_staging_vm_seed }}
+      -volid cidata -joliet -rock
+      {{ hypervisor_staging_vm_seed_dir }}/user-data
+      {{ hypervisor_staging_vm_seed_dir }}/meta-data
+  changed_when: true
+  become: true
+
+- name: Render the guest definition
+  tags: [hypervisor]
+  ansible.builtin.template:
+    src: staging-vm.xml.j2
+    dest: "{{ hypervisor_net_source_dir }}/{{ staging_vm_hostname }}.xml"
+    owner: root
+    group: root
+    mode: "0644"
+  register: hypervisor_staging_vm_xml
+  become: true
+
+- name: Check whether the guest is already defined
+  tags: [hypervisor]
+  ansible.builtin.command:
+    cmd: virsh --connect qemu:///system dominfo {{ staging_vm_hostname }}
+  register: hypervisor_staging_vm_info
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: Define the guest
+  tags: [hypervisor]
+  when: hypervisor_staging_vm_xml is changed or hypervisor_staging_vm_info.rc != 0
+  ansible.builtin.command:
+    cmd: virsh --connect qemu:///system define {{ hypervisor_net_source_dir }}/{{ staging_vm_hostname }}.xml
+  changed_when: true
+  become: true
+
+- name: Re-read the guest's state
+  tags: [hypervisor]
+  ansible.builtin.command:
+    cmd: virsh --connect qemu:///system dominfo {{ staging_vm_hostname }}
+  register: hypervisor_staging_vm_state
+  changed_when: false
+  become: true
+
+- name: Start the guest
+  tags: [hypervisor]
+  when: hypervisor_staging_vm_state.stdout is search('State:\s+shut off')
+  ansible.builtin.command:
+    cmd: virsh --connect qemu:///system start {{ staging_vm_hostname }}
+  changed_when: true
+  become: true
+
+- name: Autostart the guest
+  tags: [hypervisor]
+  when: hypervisor_staging_vm_state.stdout is search('Autostart:\s+disable')
+  ansible.builtin.command:
+    cmd: virsh --connect qemu:///system autostart {{ staging_vm_hostname }}
+  changed_when: true
+  become: true
+
+- name: Wait for the guest to answer on ssh
+  tags: [hypervisor]
+  # The slice's exit criterion, and the reason it is a wait rather than a check: first boot
+  # runs cloud-init, grows the root filesystem and generates host keys, so the guest answers
+  # a ping long before it answers ssh. Timed generously because that work happens once.
+  ansible.builtin.wait_for:
+    host: "{{ staging_vm_ip }}"
+    port: 22
+    timeout: "{{ hypervisor_staging_vm_boot_timeout }}"
