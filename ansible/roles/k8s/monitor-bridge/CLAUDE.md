@@ -334,8 +334,14 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     publish nothing forever — fall out by construction rather than by an exclusion list.
     `udp_port` is excluded: there is no TCP-connect equivalent for UDP. `PI_PORTS_CONSECUTIVE`
     (2) rides out the seconds of closed ports a Pi deploy's container recreate causes.
-    Kuma already HTTP-monitors glances, dozzle and wg-easy externally; what this adds is
-    coverage for `promtail` and `node-exporter`, and the attribution for all five.)
+    **This arm adds no reachability coverage — it adds attribution, and that is the whole
+    case for it.** Measured 2026-08-27: Kuma HTTP-monitors glances, dozzle and wg-easy, and
+    `promtail`/`node-exporter` are Prometheus scrape targets (`job=promtail-pi`, `job=node-pi`)
+    that `check_targets_down` already covers. So every publisher was already watched. What
+    nothing said was *why* a port went quiet, and on 2026-08-08 that cost a manual sweep
+    across four monitors which then missed dozzle entirely. Turning "service X is down" into
+    "these containers are up with no published ports — recreate, a restart cannot fix it" is
+    the value. Do not re-justify this arm as filling a monitoring gap; it does not.)
   - **Home Assistant Automations** (HA's REST API `/api/states/input_datetime.ha_heartbeat` over
     `apps`, Bearer `HA_TOKEN`: an HA `time_pattern:/1min` automation stamps that helper with `now()`,
     so its `last_changed` is fresh ONLY while HA's automation *scheduler* is executing. `down` once
