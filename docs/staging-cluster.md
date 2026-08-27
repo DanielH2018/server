@@ -130,6 +130,20 @@ Two consequences to carry into the work:
 - Loading `secrets.yml` at all puts every prod credential in the staging play's variable
   *scope*, even when no role templates one onto the guest. "No role happens to reference it" is
   weaker than this decision promises, so the file the preamble loads has to be chosen by host.
+- **No `diff=sops` entry in `.gitattributes` for the staging file.** That attribute makes git
+  decrypt before diffing, and only `ansible/vars/secrets.yml` carries it. Adding one for
+  `secrets-staging.yml` would break `git diff` on daniel-box, which is not a recipient and
+  cannot decrypt it — and buys nothing, because the values are generated and fake. The staging
+  file diffs as ciphertext on purpose.
+
+Measured on 2026-08-27, and it makes the first staging slice much smaller than expected: **with
+`k3s_manage_backup_targets` and `k3s_manage_health_crons` both false, `roles/setup/k3s` consumes
+no secrets at all.** Every secret-bearing template in that role belongs to one of those two
+gated task files, and the only other consumer is `k3s-bringup.yml`'s agent-join play, which a
+single-node cluster never runs. The guest also has passwordless sudo, so `become_password` is not
+needed either — the preamble's `when: become_password is defined` skips cleanly without it. So
+`secrets-staging.yml` starts with `domain` alone, which is what the 93 service templates need,
+and grows when *Decision 6*'s subset lands.
 
 **Staging never holds a real credential.** A host whose stated purpose is being broken, and which
 Claude sessions are expected to experiment on, is the worst possible second copy of every

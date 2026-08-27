@@ -20,6 +20,22 @@
 #      then commit the re-encrypted secrets.yml + this file, and `git pull` on the host.
 # Remove a host's access the same way: delete its key here, re-run `sops updatekeys`.
 creation_rules:
+  # STAGING FIRST, and the order is the entire mechanism. SOPS applies the FIRST matching rule,
+  # and the production rule below matches `vars/secrets-staging.yml` by path just as well. With
+  # these two swapped, a `sops` create encrypts the staging file to all four production
+  # recipients — the exact opposite of what this rule exists to do, and silently.
+  # ENFORCED by ansible/tests/test_sops_staging_rule.py.
+  #
+  # DECIDED: daniel-server's key ALONE — not daniel-box's, and not the off-box recovery key.
+  # `pre_tasks/load_secrets.yml` decrypts with `delegate_to: localhost`, so the CONTROLLER
+  # decrypts, and daniel-server is the only host that can route to the staging guest
+  # (docs/staging-cluster.md, Decision 2). No recovery key because there is nothing to recover:
+  # staging holds generated values and no real credential, so a lost key means regenerate.
+  #
+  # Not tracked by scripts/secrets_mgmt/secret_rotation.py, which hardcodes secrets.yml. Also
+  # deliberate — a rotation schedule over disposable fake values is noise, not coverage.
+  - path_regex: vars/secrets-staging\.ya?ml$
+    age: "age1shgt54wq7y9pk4nksxcfr5s539rh2g5uqkh9t2jlx6wj4a8aq34q4cyg7k"
   - path_regex: .*(vars|secrets)\/.*\.ya?ml$
     # Recipients (multi-recipient = OR; ANY one key decrypts the whole file).
     # First key = daniel-server, second = daniel-pi, third = OFF-BOX RECOVERY key

@@ -298,3 +298,5 @@ cours
 [Oo]verread
 [Pp]arameterisable
 [Qq]emu
+[Cc]iphertext
+[Pp]asswordless
