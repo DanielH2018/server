@@ -148,6 +148,10 @@ nav:
   - Operations:
       - Deploying by hand: deploying.md
       - The GitOps pipeline: gitops-pipeline.md
+      # Labelled "planned" because nothing here is built yet — the page is a spec for Tier 2
+      # of the staging spike, and a reader arriving from Operations would otherwise expect a
+      # cluster that exists. Drop the suffix once Phase B lands.
+      - Staging cluster (planned): staging-cluster.md
       - Secret rotation: secret-rotation.md
       - Claude shell permissions: claude-shell-permissions.md
       - Security tools: security-tools.md
