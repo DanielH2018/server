@@ -923,3 +923,15 @@ k3s_manage_health_crons: true
 # It must be a name only the configured upstream answers, and NXDOMAIN everywhere else —
 # `pi.hole` is answered by FTL itself. Set empty to skip the probe where no such name exists.
 k3s_coredns_probe_name: pi.hole
+
+# Storage smoke check (tasks/storage_smoke.yml) — opt-in, never part of a bringup. See that
+# file for why prod does not run it.
+k3s_storage_smoke_name: storage-smoke
+k3s_storage_smoke_class: longhorn
+# 64Mi is a multiple of both Longhorn block sizes in use here (2 MiB and 16 MiB). Longhorn
+# refuses a size that is not a block-size multiple, and the refusal names neither the block
+# size nor the rounding — see the longhorn-volume-size-must-be-block-size-multiple note.
+k3s_storage_smoke_size: 64Mi
+# Provisioning is fast when it works; this covers a cold csi-provisioner rather than a slow
+# volume. 24 tries at 5s is two minutes.
+k3s_storage_smoke_retries: 24

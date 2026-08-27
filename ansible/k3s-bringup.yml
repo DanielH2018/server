@@ -124,3 +124,26 @@
         k3s_join_node: "{{ join_agent }}"
         k3s_join_node_ip: "{{ hostvars[join_agent]['server_ip'] }}"
       tags: [k3s_agent]
+
+# Prove Longhorn can provision, on a cluster too new to have proven it by running workloads.
+# Opt-in like the join plays above — matches no hosts unless invoked with the host name:
+#   uv run ansible-playbook ansible/k3s-bringup.yml -e storage_smoke=daniel-stage
+# Runs on the target itself (its own `k3s kubectl`), so unlike the join plays it needs no
+# daniel-box companion play and no connection override.
+- name: Verify Longhorn can bind a volume
+  hosts: "{{ storage_smoke | default([]) }}"
+  gather_facts: false
+  pre_tasks:
+    - name: Load encrypted secrets and set the become password (shared preamble)
+      ansible.builtin.import_tasks: pre_tasks/load_secrets.yml
+      tags: always
+
+    - name: Gather facts (escalated — the become password is now available)
+      ansible.builtin.setup:
+      tags: always
+  tasks:
+    - name: Bind a Longhorn volume and remove it again
+      ansible.builtin.include_role:
+        name: k3s
+        tasks_from: storage_smoke
+      tags: [storage_smoke]

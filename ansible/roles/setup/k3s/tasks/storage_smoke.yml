@@ -1,0 +1,93 @@
+---
+# Prove Longhorn can actually provision a volume, by binding one and then removing it.
+#
+# Opt-in, and never part of a bringup: prod's provisioning is proven continuously by ~25 live
+# volumes, so creating and destroying one on every k3s-role run would be churn with no signal.
+# A NEW cluster has no such evidence — `kubectl get nodes` Ready and a longhorn-system pod
+# count say the control plane is up and the driver is running, neither of which is the same as
+# a PVC reaching Bound. docs/staging-cluster.md makes "a PVC binds" half of step 3's exit
+# criterion for exactly that reason.
+#
+# Runs against `default`, not k8s_namespace: a cluster that has never had a workload deployed
+# has no homelab namespace, and creating one here would leave state behind on the only path
+# where this is meant to run.
+
+- name: Render the storage smoke PVC
+  tags: [storage_smoke]
+  ansible.builtin.copy:
+    dest: /etc/rancher/k3s/storage-smoke-pvc.yaml
+    content: |
+      ---
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: {{ k3s_storage_smoke_name }}
+        namespace: default
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: {{ k3s_storage_smoke_class }}
+        resources:
+          requests:
+            storage: {{ k3s_storage_smoke_size }}
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: Bind a Longhorn volume and remove it again
+  tags: [storage_smoke]
+  become: true
+  block:
+    - name: Create the storage smoke PVC
+      ansible.builtin.command:
+        cmd: k3s kubectl apply -f /etc/rancher/k3s/storage-smoke-pvc.yaml
+      register: k3s_storage_smoke_apply
+      changed_when: >-
+        'created' in k3s_storage_smoke_apply.stdout
+        or 'configured' in k3s_storage_smoke_apply.stdout
+
+    - name: Wait for the PVC to reach Bound
+      # `until` owns the verdict, so a read that exits non-zero is retried rather than failing
+      # the task on its first attempt — the same shape as the CoreDNS probe in coredns.yml.
+      # The task still fails if Bound is never reached, which is the outcome worth reporting:
+      # Pending here means the driver is running and cannot provision, the one state a pod
+      # count cannot distinguish from healthy.
+      ansible.builtin.command:
+        cmd: >-
+          k3s kubectl -n default get pvc {{ k3s_storage_smoke_name }}
+          -o jsonpath={.status.phase}
+      register: k3s_storage_smoke_phase
+      changed_when: false
+      failed_when: false
+      retries: "{{ k3s_storage_smoke_retries | int }}"
+      delay: 5
+      until: k3s_storage_smoke_phase.stdout | trim == 'Bound'
+
+    - name: Report the phase the PVC actually reached
+      # A second, non-retrying assert on the same register. `until` exhausting its retries
+      # leaves the task failed but says only "conditions not met"; this names the phase, which
+      # is the difference between "Longhorn cannot provision" and "the PVC never appeared".
+      ansible.builtin.assert:
+        that: k3s_storage_smoke_phase.stdout | trim == 'Bound'
+        fail_msg: >-
+          PVC {{ k3s_storage_smoke_name }} reached
+          {{ k3s_storage_smoke_phase.stdout | trim | default('no phase at all', true) }}
+          rather than Bound. Longhorn is installed and running but cannot provision a volume
+          on this cluster — check that the node allows scheduling and that a disk is attached
+          (kubectl -n longhorn-system get nodes.longhorn.io).
+  always:
+    - name: Remove the storage smoke PVC
+      # In `always`, so a failed bind does not leave a Pending PVC behind holding the name the
+      # next run needs. Deleting a Pending PVC is immediate; a Bound one releases its Longhorn
+      # volume, which the Delete reclaim policy on every longhorn StorageClass then reaps.
+      ansible.builtin.command:
+        cmd: >-
+          k3s kubectl -n default delete pvc {{ k3s_storage_smoke_name }}
+          --ignore-not-found --wait=false
+      register: k3s_storage_smoke_delete
+      changed_when: "'deleted' in k3s_storage_smoke_delete.stdout"
+
+    - name: Remove the rendered smoke PVC manifest
+      ansible.builtin.file:
+        path: /etc/rancher/k3s/storage-smoke-pvc.yaml
+        state: absent
