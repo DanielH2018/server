@@ -66,6 +66,24 @@
 # Compose allow-list already covered, so a request from here would pass even with the pod-CIDR
 # entry missing — and pod CIDR is exactly what Traefik and the kubelet's probes arrive from.
 # This is the D11 trap, tested at the only source address that can detect it.
+#
+# IT RETRIES FOR ~40s, AND THE RETRY IS THE WHOLE POINT OF THE LOOP — not defensive padding.
+# kube-router's source-pod lookup lags pod creation, so a pod that dials immediately is not yet
+# matched by this policy's `from:` selector and its connection is REJECTED. That surfaces as
+#
+#   wget: can't connect to remote host (10.43.115.232): Connection refused
+#
+# which reads exactly like the kill-switch having eaten the return path — the failure this task
+# exists to detect — while the service is entirely healthy. Measured 2026-08-27: the probe failed
+# on four consecutive runs while sonarr and radarr both returned valid=true on a LIVE
+# downloadclient test, and all three addresses answered 200 from the host.
+#
+# A single dial therefore made this gate fail closed on a race, which blocks every deploy of this
+# role. Distinguishing the two causes is what the loop buys: a genuine kill-switch fault stays
+# refused for the full 40s, where the race clears in seconds.
+#
+# `Connection refused` rather than a timeout is also the tell that this is a REJECT and not a
+# DROP, so do not read it as a NetworkPolicy that merely omits the caller.
 - name: Reach the WebUI from a pod, as Traefik does
   tags: [deploy]
   # Skipped under --check, unlike proof 1 above: this is the one task in the file that creates a
@@ -79,7 +97,11 @@
       --labels app=qbittorrent-reach-probe
       --rm -i --restart=Never --image={{ qbittorrent_k8s_probe_image }}
       --command -- sh -c
-      "wget -q -T 10 -O /dev/null http://qbittorrent:{{ container_item.port }}/ && echo REACHED"
+      "for i in $(seq 1 20); do
+         wget -q -T 5 -O /dev/null http://qbittorrent:{{ container_item.port }}/ &&
+         { echo REACHED; exit 0; };
+         sleep 2;
+       done; echo UNREACHABLE; exit 1"
   become: true
   changed_when: false
   register: qbittorrent_k8s_reach
@@ -109,7 +131,7 @@
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} exec {{ qbittorrent_k8s_pod.stdout }} -c wireguard --
-      sh -c "ls -1 /modcache"
+      sh -c "grep -q ' /modcache ' /proc/mounts && echo MOUNTED; ls -1 /modcache"
   become: true
   changed_when: false
   check_mode: false
@@ -119,14 +141,21 @@
   tags: [deploy]
   ansible.builtin.assert:
     that:
+      # BOTH halves, and the first one is the one with teeth. mod-init creates /modcache inside
+      # the container and caches there whether or not a volume is mounted, so a tarball on its
+      # own proves NOTHING about surviving a restart — it is thrown away with the pod. Asserting
+      # only the file passed happily against a pod with no mount at all (measured 2026-08-27,
+      # which is how this was caught). /proc/mounts is what distinguishes the volume from the
+      # container's own filesystem.
+      - "'MOUNTED' in qbittorrent_k8s_modcache.stdout_lines"
       - qbittorrent_k8s_modcache.stdout_lines | select('search', '[.]tar[.]xz$') | list | length > 0
     fail_msg: >-
-      /modcache holds no mod tarball, so a failed lscr.io fetch would strand this pod exactly as
-      it did for 9 hours on 2026-08-16. It holds:
+      /modcache is not a persistent mount, or holds no mod tarball, so a failed lscr.io fetch
+      would strand this pod exactly as it did for 9 hours on 2026-08-16. The sidecar reports:
       {{ qbittorrent_k8s_modcache.stdout_lines | join(', ') | default('nothing', true) }}.
-      Check the /modcache mount in deployment.yaml.j2 and the sidecar's mod-init log.
+      Check the /modcache volumeMount in deployment.yaml.j2 and the sidecar's mod-init log.
     success_msg: >-
-      The mod is cached on the volume
+      /modcache is a persistent mount and holds the mod
       ({{ qbittorrent_k8s_modcache.stdout_lines | select('search', '[.]tar[.]xz$') | join(', ') }}),
       so a start that cannot reach lscr.io applies the cached copy instead of stranding.
 
