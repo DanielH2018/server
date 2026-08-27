@@ -1,0 +1,36 @@
+---
+# Prove Longhorn can bind a volume, on a cluster too new to have proven it by running
+# workloads. See roles/setup/k3s/tasks/storage_smoke.yml for why a Ready node and a
+# longhorn-system pod count are not the same claim.
+#
+#   uv run ansible-playbook ansible/k3s-storage-smoke.yml -e storage_smoke=daniel-stage
+#
+# For daniel-stage, run this ON daniel-server: the guest sits on a libvirt NAT network
+# internal to that host, so daniel-box cannot route to it (docs/staging-cluster.md,
+# Decision 2).
+#
+# ITS OWN PLAYBOOK, not a fourth play in k3s-bringup.yml, which is where it first lived.
+# That playbook's first play takes `hosts: {{ target | default(lookup('pipe','hostname')) }}`
+# and asserts the resulting host is in k3s_server_hosts, under `tags: always`. So ANY play
+# appended there inherits the precondition "the host you are invoking from is itself a k3s
+# server" — and the one host that can reach daniel-stage is daniel-server, which is
+# deliberately not one. Measured 2026-08-27: the run died at that assert with ok=3 failed=1,
+# never reaching the smoke play. Neither `--tags` nor a narrower `hosts:` avoids it, because
+# the assert is always-tagged by design. Do not fold this back in.
+- name: Verify Longhorn can bind a volume
+  hosts: "{{ storage_smoke | default([]) }}"
+  gather_facts: false
+  pre_tasks:
+    - name: Load encrypted secrets and set the become password (shared preamble)
+      ansible.builtin.import_tasks: pre_tasks/load_secrets.yml
+      tags: always
+
+    - name: Gather facts (escalated — the become password is now available)
+      ansible.builtin.setup:
+      tags: always
+  tasks:
+    - name: Bind a Longhorn volume and remove it again
+      ansible.builtin.include_role:
+        name: k3s
+        tasks_from: storage_smoke
+      tags: [storage_smoke]
