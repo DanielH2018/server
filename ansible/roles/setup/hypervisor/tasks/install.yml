@@ -94,11 +94,21 @@
 
 - name: Verify virsh reaches the system hypervisor
   tags: [hypervisor]
-  # The role's exit criterion, asserted rather than left to the operator. Run as sys_user,
-  # not root: "root can talk to libvirtd" is not the property that matters, since every
-  # later slice drives virsh as sys_user.
+  # The role's exit criterion, asserted rather than left to the operator. It proves the
+  # property that matters -- a member of the libvirt group can reach
+  # /var/run/libvirt/libvirt-sock (root:libvirt 0770) -- rather than that root can, which
+  # every later slice does not rely on.
+  #
+  # `sg libvirt -c` rather than become_user: sys_user. Supplementary groups are read at
+  # session start, and the task that adds sys_user to libvirt runs in THIS play. Worse,
+  # ansible optimises become away entirely when the target user equals the connection user,
+  # which sys_user is on this host -- so the check inherits the controller's own group set
+  # from before the add and fails with "Permission denied" on every first run. That is a
+  # verification that can only pass on a re-run, which is no verification at all. Observed
+  # 2026-08-27. `sg` starts a new session with the group applied, so the result reflects the
+  # host rather than the age of the ansible process.
   ansible.builtin.command:
-    cmd: virsh --connect qemu:///system version
+    cmd: sg libvirt -c "virsh --connect qemu:///system version"
   become: true
   become_user: "{{ sys_user }}"
   changed_when: false
