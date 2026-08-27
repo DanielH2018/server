@@ -27,6 +27,18 @@ MACROS = REPO / "ansible" / "templates"
 _EXCLUDED_DIRS = (
     REPO / "docs" / "archive",
     REPO / "ansible" / "roles" / "containers" / "archive",
+    # Other sessions' checkouts. The walk starts at the repo root, and on daniel-box that
+    # root contains .claude/worktrees/<session>/ -- a full copy of the tree per live
+    # session, each on its own branch. A stale citation in someone else's in-progress work
+    # then fails this guard in a checkout that did not write it, and the failure appears and
+    # disappears as worktrees come and go. CI never sees it (no worktrees there), so it only
+    # breaks the box where the parallel sessions actually run.
+    #
+    # It broke the docs-refresh cron on 2026-08-27: prek runs pytest, pytest walked into ten
+    # other worktrees, the commit was rejected, and the regenerated docs were left unstaged
+    # -- which then made the tree dirty, which makes the NEXT docs-refresh refuse to
+    # regenerate at all. Twice a day, silently, for as long as anyone had a worktree open.
+    REPO / ".claude" / "worktrees",
 )
 
 
