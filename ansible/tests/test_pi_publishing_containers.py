@@ -66,11 +66,15 @@ def test_derivation_has_not_widened_unreviewed():
 def test_env_secret_renders_the_derivation_and_not_a_list():
     # The red-proof half: replacing the Jinja with a hand-typed list would pass every
     # assertion above while reintroducing exactly the drift they exist to prevent.
+    text = ENV_SECRET.read_text()
+    assert (
+        "hostvars['daniel-pi'].containers_list | selectattr('port', 'defined')" in text
+    )
     line = next(
         line
-        for line in ENV_SECRET.read_text().splitlines()
-        if line.strip().startswith("PI_PUBLISHING_CONTAINERS:")
+        for line in text.splitlines()
+        if line.strip().startswith("PI_PUBLISHED_PORTS:")
     )
-    assert "containers_list" in line and "selectattr('port', 'defined')" in line
+    assert "pi_publishers" in line, "the value must come from the derived list"
     for name in EXPECTED_PUBLISHERS:
         assert name not in line, "the set is hardcoded, not derived"

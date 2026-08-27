@@ -206,72 +206,65 @@ def pi_pressure(load_json, mem_json, fs_json, load_max, mem_min_mb, disk_max_pct
 
 
 # glances reports Docker's own status string. Only these two mean the container is up and
-# therefore expected to be publishing; `restarting`, `created`, `paused` and `exited` are
-# another monitor's fault and are named in the message rather than judged here.
+# therefore expected to be serving; `restarting`, `created`, `paused` and `exited` are another
+# monitor's fault and are named in the message rather than diagnosed here.
 PI_UP_STATUSES = ("running", "healthy")
 
 
-def pi_detached_containers(containers_json, expected_publishers):
-    """Pure: Pi containers that are up but have lost their published ports.
+def pi_ports_verdict(dead, checked, containers_json=None):
+    """Pure: judge the Pi's published ports, attributing a dead one to its container.
 
-    After a daniel-pi reboot, containers can come back attached to NO Docker network while
-    still reporting `Up (healthy)` — the healthcheck passes on loopback, so every existing
-    signal reads green. The observable harm is that the published port mappings vanish, and
-    only a recreate restores them; autoheal's restart loop structurally cannot.
+    After a daniel-pi reboot a container can come back attached to NO Docker network while
+    still reporting `Up (healthy)` — its healthcheck curls loopback inside its own netns, so
+    Docker, autoheal and every healthcheck-based signal read green. The observable harm is
+    that the published port stops listening, and only a recreate restores it; autoheal's
+    restart loop re-enters the same empty sandbox and can never recover it.
 
-    `containers_json` is glances' /api/4/containers list. `ports` there is Docker's own
-    summary string: a comma-separated mix of published mappings (`61208->61208/tcp`) and
-    merely-exposed ports (`61209/tcp`). Presence of `->` in any segment is what distinguishes
-    the two, which is why this matches on that arrow and not on a port number or a count —
-    a container may publish one mapping or several, and wg-easy publishes both TCP and UDP.
+    `dead` is the list of (name, port) pairs that failed a TCP connect, `checked` how many
+    were probed. The TCP probe is the primary signal deliberately: glances' /api/4/containers
+    endpoint costs 4.4s on an idle Pi and has been measured timing out at 10s, so polling it
+    every cycle would leave the arm failing open most of the time — inert behind a green
+    monitor. A connect to a port that is either listening or not is cheap, unambiguous, and
+    is the thing the operator actually cares about.
 
-    `expected_publishers` is derived from daniel-pi's `containers_list` (every entry with a
-    `port`), so it cannot drift from the inventory. Three Pi containers legitimately publish
-    nothing — docker-proxy, autoheal and docker-proxy-lifecycle — and are absent from it by
-    construction rather than by an exclusion list someone has to maintain.
+    `containers_json` is fetched ONLY when something is already dead, and is used to say WHY:
 
-    An expected container missing from the payload is reported, not skipped: a rename in
-    `containers_list`, or glances' docker plugin failing and returning [], would otherwise
-    make this arm silently vacuous while reading green.
+    - up, and Docker reports no `->` mapping  -> detached, and a restart will not fix it
+    - up, and Docker does report a mapping    -> publishing but unreachable (bind or firewall)
+    - present but not up                      -> ordinary down, named with its status
+    - absent from the payload                 -> the container is gone
+    - None (the fetch failed, or was slow)    -> cause unknown, and the port is still dead
 
-    Scope: this arm does NOT judge a stopped container, and it cannot see the full-blackout
-    case where the Pi comes back with glances itself detached — glances is one of the
-    publishers, so the fetch fails and check_pi_pressure renders down with the error, by a
-    different mechanism. What this catches is the partial case: some containers reattached
-    and others did not.
+    That last row is why the attribution fetch cannot make this arm vacuous: a failed fetch
+    downgrades the diagnosis, never the verdict.
     """
+    if not dead:
+        return True, "%d pi port(s) listening" % checked
     by_name = {}
     for c in containers_json or []:
         name = c.get("name")
         if name:
             by_name[name] = c
-    detached, missing, not_up = [], [], []
-    for name in expected_publishers:
+    detached, other = [], []
+    for name, port in dead:
+        where = "%s:%d" % (name, port)
         c = by_name.get(name)
-        if c is None:
-            missing.append(name)
-            continue
-        status = (c.get("status") or "").lower()
-        if status not in PI_UP_STATUSES:
-            not_up.append("%s=%s" % (name, status or "unknown"))
-            continue
-        segments = (c.get("ports") or "").split(",")
-        if not any("->" in s for s in segments):
-            detached.append(name)
-    problems = []
+        if containers_json is None:
+            other.append("%s (cause unknown)" % where)
+        elif c is None:
+            other.append("%s (container absent)" % where)
+        elif (c.get("status") or "").lower() not in PI_UP_STATUSES:
+            other.append("%s (%s)" % (where, c.get("status") or "unknown status"))
+        elif not any("->" in s for s in (c.get("ports") or "").split(",")):
+            detached.append(where)
+        else:
+            other.append("%s (publishing but unreachable)" % where)
+    parts = []
     if detached:
-        problems.append(
-            "%d pi container(s) up with no published ports, recreate needed: %s"
-            % (len(detached), ", ".join(sorted(detached)))
+        parts.append(
+            "%d pi container(s) up with no published ports, RECREATE (a restart cannot "
+            "fix it): %s" % (len(detached), ", ".join(detached))
         )
-    if missing:
-        problems.append(
-            "%d expected pi container(s) not reported by glances: %s"
-            % (len(missing), ", ".join(sorted(missing)))
-        )
-    if problems:
-        return False, "; ".join(problems)
-    ok_msg = "%d pi container(s) publishing" % (len(expected_publishers) - len(not_up))
-    if not_up:
-        ok_msg += " (not up, skipped: %s)" % ", ".join(sorted(not_up))
-    return True, ok_msg
+    if other:
+        parts.append("%d pi port(s) not listening: %s" % (len(other), ", ".join(other)))
+    return False, "; ".join(parts)

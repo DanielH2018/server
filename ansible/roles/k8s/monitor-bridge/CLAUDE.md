@@ -314,19 +314,28 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     bullet exists to force. Empty
     `PI_GLANCES_URL` = disabled (stays up); the static Kuma HTTP monitor
     `daniel-pi-glances` covers glances itself being down.
-    **Detached-container arm** (`with_pi_detached`, folded here rather than given its own
-    monitor for the push-token reason recorded at `with_ha_ban`): after a Pi reboot a container
-    can come back attached to no Docker network while still reporting `Up (healthy)`, because
-    its healthcheck passes on loopback. The observable harm is that its published port mappings
-    vanish, and only a recreate restores them — autoheal's restart loop structurally cannot.
-    The arm reads glances' `/api/4/containers` and flags any expected publisher whose `ports`
-    string carries no `->` mapping. `PI_PUBLISHING_CONTAINERS` is rendered from daniel-pi's
-    `containers_list` (every entry with a `port`), so `docker-proxy`, `autoheal` and
-    `docker-proxy-lifecycle` — which publish nothing forever — fall out by construction rather
-    than by an exclusion list. An expected container missing from the payload is flagged too,
-    which is what stops a rename or a dead docker plugin from making the arm vacuously green.
-    It cannot see the full-blackout case: glances is itself a publisher, so if everything came
-    back detached the fetch fails and this check renders down by the ordinary error path.)
+    **Published-port arm** (`with_pi_ports`, folded here rather than given its own monitor for
+    the push-token reason recorded at `with_ha_ban`): after a Pi reboot a container can come
+    back attached to no Docker network while still reporting `Up (healthy)`, because its
+    healthcheck curls loopback inside its own netns. The observable harm is that its published
+    port stops listening, and only a recreate restores it — autoheal's restart loop re-enters
+    the same empty sandbox and structurally cannot.
+    The arm TCP-connects to each expected port and fetches glances' `/api/4/containers` **only
+    when something is already dead**, to say why: up with no `->` mapping is detached and needs
+    a recreate; up *with* a mapping is a bind or firewall fault; not up is an ordinary down.
+    **Do not invert that order.** Measured 2026-08-27 against the live Pi, `/api/4/load`,
+    `/mem` and `/fs` answer in 0.03-0.06s each while `/api/4/containers` took 4.43s and then
+    timed out at the 10s `HTTP_TIMEOUT` on the very next call — polling it every cycle would
+    leave the arm failing open most of the time, inert behind a green monitor, which is the
+    exact failure mode it exists to catch. A failed attribution fetch downgrades the diagnosis
+    to "cause unknown" and never the verdict; the port is still reported dead.
+    `PI_PUBLISHED_PORTS` renders `name:port` pairs from daniel-pi's `containers_list` (every
+    entry with a `port`), so `docker-proxy`, `autoheal` and `docker-proxy-lifecycle` — which
+    publish nothing forever — fall out by construction rather than by an exclusion list.
+    `udp_port` is excluded: there is no TCP-connect equivalent for UDP. `PI_PORTS_CONSECUTIVE`
+    (2) rides out the seconds of closed ports a Pi deploy's container recreate causes.
+    Kuma already HTTP-monitors glances, dozzle and wg-easy externally; what this adds is
+    coverage for `promtail` and `node-exporter`, and the attribution for all five.)
   - **Home Assistant Automations** (HA's REST API `/api/states/input_datetime.ha_heartbeat` over
     `apps`, Bearer `HA_TOKEN`: an HA `time_pattern:/1min` automation stamps that helper with `now()`,
     so its `last_changed` is fresh ONLY while HA's automation *scheduler* is executing. `down` once
@@ -628,7 +637,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   config: `N8N_URL`/`N8N_API_KEY`; arr queue
   connection config: `SONARR_URL`/`SONARR_API_KEY`/`RADARR_URL`/`RADARR_API_KEY`; GitOps
   liveness: `GITOPS_MAX_AGE_MIN`/`GITOPS_STATE_DIR`; Pi pressure:
-  `PI_GLANCES_URL`/`PI_LOAD_MAX`/`PI_MEM_MIN_MB`/`PI_DISK_MAX_PCT`/`PI_PUBLISHING_CONTAINERS`; HA heartbeat:
+  `PI_GLANCES_URL`/`PI_LOAD_MAX`/`PI_MEM_MIN_MB`/`PI_DISK_MAX_PCT`/`PI_PUBLISHED_PORTS`/`PI_PORT_TIMEOUT`/`PI_PORTS_CONSECUTIVE`; HA heartbeat:
   `HA_URL`/`HA_TOKEN`/`HA_HEARTBEAT_MAX_AGE`/`HA_CONSECUTIVE`; speedtest:
   `SPEEDTEST_URL`/`SPEEDTEST_TOKEN`/`SPEEDTEST_DOWNLOAD_MIN_MBPS`/`SPEEDTEST_MAX_AGE_H`/`SPEEDTEST_CONSECUTIVE`;
   host-coverage floor:
