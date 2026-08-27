@@ -94,3 +94,54 @@
       {{ qbittorrent_k8s_tunnel_ip.stdout | trim }}, not
       {{ qbittorrent_k8s_host_ip.content | trim }} — so the kill-switch allows the cluster in
       while still forcing traffic out through Mullvad.
+
+# ── proof 3: the modcache is populated, so an lscr.io outage is survivable ──────────────────
+# The gate for the one-mount fix in deployment.yaml.j2. LSIO's docker-mods script applies a
+# cached mod when the registry lookup fails, and that path RAN during the 9h/107-restart
+# incident and found an empty cache — because /modcache was container-local and died with the
+# pod. Asserting the tarball is on the volume is what turns "the mount is declared" into "the
+# fallback has something to fall back to".
+#
+# READ-ONLY, so it runs under --check alongside proof 1. If the mod could not be fetched at all
+# the pod never passes its startupProbe and the rollout fails long before this task.
+- name: List the wireguard sidecar's modcache
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} exec {{ qbittorrent_k8s_pod.stdout }} -c wireguard --
+      sh -c "ls -1 /modcache"
+  become: true
+  changed_when: false
+  check_mode: false
+  register: qbittorrent_k8s_modcache
+
+- name: Fail if the mod is not cached on the volume
+  tags: [deploy]
+  ansible.builtin.assert:
+    that:
+      - qbittorrent_k8s_modcache.stdout_lines | select('search', '[.]tar[.]xz$') | list | length > 0
+    fail_msg: >-
+      /modcache holds no mod tarball, so a failed lscr.io fetch would strand this pod exactly as
+      it did for 9 hours on 2026-08-16. It holds:
+      {{ qbittorrent_k8s_modcache.stdout_lines | join(', ') | default('nothing', true) }}.
+      Check the /modcache mount in deployment.yaml.j2 and the sidecar's mod-init log.
+    success_msg: >-
+      The mod is cached on the volume
+      ({{ qbittorrent_k8s_modcache.stdout_lines | select('search', '[.]tar[.]xz$') | join(', ') }}),
+      so a start that cannot reach lscr.io applies the cached copy instead of stranding.
+
+# A LEFTOVER LOCK IS THE NEW FAILURE MODE THIS MOUNT INTRODUCES, so name it here rather than
+# leaving the next person to rediscover it during an outage. docker-mods holds
+# /modcache/<name>.lock for the duration of a download; a pod killed mid-download leaves it
+# behind, and later starts WAIT on it and then skip the mod — which presents as no tunnel and a
+# restarting pod, the same symptom as the outage this cache exists to prevent. Warns rather than
+# fails, because a lock is legitimate while a download is genuinely in flight.
+- name: Warn if a modcache lock is present
+  tags: [deploy]
+  ansible.builtin.debug:
+    msg: >-
+      A modcache lock file is present
+      ({{ qbittorrent_k8s_modcache.stdout_lines | select('search', '[.]lock$') | join(', ') }}).
+      If no download is in flight it is stale, and later starts will skip the mod — delete it
+      from the volume. See this role's CLAUDE.md.
+  when: qbittorrent_k8s_modcache.stdout_lines | select('search', '[.]lock$') | list | length > 0
