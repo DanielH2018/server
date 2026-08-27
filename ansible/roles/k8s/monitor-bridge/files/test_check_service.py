@@ -698,6 +698,39 @@ def _logql_selector_names():
     )
 
 
+def _deployed_selector_values():
+    """LogQL selector values that actually deploy, read from `templates/env-secret.yaml.j2`.
+
+    `_logql_selector_names()` only sees check.py's IN-CODE DEFAULTS. `LOKI_STREAM` and
+    `LOG_ERROR_SELECTOR` are both overridden at deploy time in this template (the comment on
+    `test_loki_selectors_use_real_stream_labels` says so: "a deployed override is NOT what is
+    being checked here"). Neither in-code default is what runs against live Loki, so this reads
+    the rendered `KEY: "value"` pairs straight out of the template.
+
+    Only a QUOTED literal is a candidate: a LogQL selector is always written as a quoted string
+    here, and quoting is also what tells a selector apart from a Jinja substitution. A bare
+    shape test ("starts with `{`, contains `}`") is not enough on its own -- stripped of quotes,
+    `KUMA_PUSH_GITOPS_ALIVE: "{{ monitor_bridge_gitops_alive_push_token }}"` has the same shape
+    and this file has two dozen lines like it. Drop anything containing `{{` before applying the
+    shape test, so a future Jinja `default(...)` filter or dict literal can't get misclassified
+    as a selector.
+    """
+    tmpl = (
+        _REPO / "ansible/roles/k8s/monitor-bridge/templates/env-secret.yaml.j2"
+    ).read_text()
+    found = {}
+    for line in tmpl.splitlines():
+        match = re.match(r"\s*([A-Z][A-Z0-9_]*):\s*(['\"])(.*)\2\s*$", line)
+        if not match:
+            continue
+        key, _quote, value = match.groups()
+        if "{{" in value:
+            continue  # a Jinja substitution, not a literal
+        if value.startswith("{") and "}" in value:
+            found[key] = value
+    return found
+
+
 def test_the_selector_roster_covers_the_known_selectors():
     """A shape-derived roster that matches nothing passes every assertion vacuously, and one
     that matches less than the hardcoded list it replaced is a silent narrowing."""
@@ -722,6 +755,39 @@ def test_loki_selectors_use_real_stream_labels():
         assert not unknown, (
             "%s selects on %s, which promtail does not emit — the query matches no stream and "
             "the check goes permanently green: %s" % (name, sorted(unknown), selector)
+        )
+
+
+def test_the_deployed_selector_roster_covers_known_overrides():
+    """A path typo or a template rewrite that drops the quoting would make
+    `_deployed_selector_values()` return an empty dict, silently reducing this guard to the
+    in-code-default arm above -- the exact gap it exists to close."""
+    known = {"LOKI_STREAM", "LOG_ERROR_SELECTOR"}
+    deployed = set(_deployed_selector_values())
+    assert known <= deployed, (
+        "the deployed-selector roster no longer covers the known overrides, so they are "
+        "unchecked: %s" % sorted(known - deployed)
+    )
+
+
+def test_deployed_loki_selectors_use_real_stream_labels():
+    """The in-code-default arm above cannot see a deploy-time override. This is the other
+    half: `LOKI_STREAM` and `LOG_ERROR_SELECTOR` both ship a different selector than their
+    check.py default (env-secret.yaml.j2), and neither ever ran through `_selector_labels`
+    until now.
+
+    Right now this is a regression guard, not an active finding: both deployed selectors
+    select on `job`, which is a real promtail label, so this passes today. It exists for the
+    NEXT edit to either constant -- the precedent is HA_BAN_SELECTOR (see this role's
+    CLAUDE.md), which shipped an `app=` label that matched no stream and read "no ip_ban
+    events" permanently green.
+    """
+    for name, selector in _deployed_selector_values().items():
+        unknown = _selector_labels(selector) - LOKI_STREAM_LABELS
+        assert not unknown, (
+            "%s deploys as %s, which selects on %s -- promtail does not emit that label, so "
+            "the query matches no stream and the check goes permanently green"
+            % (name, selector, sorted(unknown))
         )
 
 

@@ -18,6 +18,7 @@ import pytest
 import yaml
 
 from deploy_logic import (
+    ChangeSet,
     services_from_changed_paths,
     next_action,
     is_image_only_diff,
@@ -236,9 +237,149 @@ def test_split_k8s_combined_push_deploys_eligible_defers_denylisted():
     assert cs.k8s == {"traefik"}
 
 
+# ── deploy.yml's imported task files must reach the classifier ────────────────────────────────
+
+_REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
+
+
+def _task_imports(playbook) -> set[str]:
+    """Every repo-relative task file a parsed playbook imports or includes.
+
+    Fails closed on an argument shape it does not understand, the same bias
+    `declared_denylist` takes: silently skipping one would let a converted call site drop out of
+    the set while `assert imports` still passed on the remaining entries — the vacuous pass this
+    guard exists to prevent, moved one level up into the parser.
+    """
+    found: set[str] = set()
+
+    def walk(node):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if isinstance(key, str) and key.split(".")[-1] in (
+                    "import_tasks",
+                    "include_tasks",
+                ):
+                    found.add("ansible/" + _import_path(key, value))
+                walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(playbook)
+    return found
+
+
+def _import_path(key: str, value) -> str:
+    """The task file one import_tasks/include_tasks argument names, in either accepted form."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        # `file:` is the documented key; `_raw_params` is what the free-form string becomes when
+        # it is written alongside other options.
+        for option in ("file", "_raw_params"):
+            if isinstance(value.get(option), str):
+                return value[option]
+    raise AssertionError(
+        "cannot read the task file out of `%s: %r` — teach _import_path this shape rather than "
+        "letting the import drop silently out of the guard" % (key, value)
+    )
+
+
+def _deploy_yml_task_imports() -> set[str]:
+    return _task_imports(
+        yaml.safe_load((_REPO_ROOT / "ansible" / "deploy.yml").read_text())
+    )
+
+
+def test_task_import_parsing_reads_the_dict_form_too():
+    """The dict form is equally valid Ansible, and deploy.yml uses only the string form today.
+
+    Without this, converting a call site to `include_tasks: {file: ...}` would drop it from the
+    guard while the guard stayed green on the remaining imports.
+    """
+    string_form = yaml.safe_load(
+        "- ansible.builtin.include_tasks: tasks/k8s_batch.yml\n"
+    )
+    dict_form = yaml.safe_load(
+        "- ansible.builtin.include_tasks:\n    file: tasks/k8s_batch.yml\n"
+    )
+    assert _task_imports(string_form) == {"ansible/tasks/k8s_batch.yml"}
+    assert _task_imports(dict_form) == {"ansible/tasks/k8s_batch.yml"}
+
+    with pytest.raises(AssertionError, match="cannot read the task file"):
+        _task_imports(
+            yaml.safe_load("- ansible.builtin.include_tasks:\n    apply: {}\n")
+        )
+
+
+def test_every_task_file_deploy_yml_imports_is_visible_to_the_classifier():
+    """A file deploy.yml imports must not classify as an EMPTY ChangeSet.
+
+    `ansible/deploy.yml` was broad, but its sibling task dirs matched nothing: every _ACTIVE_*
+    regex is anchored to `ansible/roles/`. main() has no catch-all — `if not cs.services:`
+    ff-merges unconditionally and the alert helpers no-op on empty fields — so an
+    empty-because-unclassified ChangeSet was indistinguishable from an empty-because-docs one:
+    silent ff-merge, no alert, no deploy, on files that change what EVERY deploy does.
+
+    Derived from the playbook rather than pinned to today's three paths, so a newly-imported task
+    file cannot fall through the classifier the same way.
+    """
+    imports = _deploy_yml_task_imports()
+    assert imports, "parsed no import_tasks/include_tasks out of ansible/deploy.yml"
+
+    invisible = sorted(
+        p for p in imports if services_from_changed_paths([p]) == ChangeSet()
+    )
+    assert not invisible, (
+        "deploy.yml imports these task files but the classifier returns an empty ChangeSet for "
+        "them, so a push touching one silently ff-merges with no alert and no deploy: %s"
+        % invisible
+    )
+
+
 # ── CI gate ───────────────────────────────────────────────────────────────────────────────────
 
-_PREK = "prek (lint + validate + tests + secrets)"
+_CI_YML = _REPO_ROOT / ".github" / "workflows" / "ci.yml"
+_GITOPS_DEFAULTS = pathlib.Path(__file__).parents[1] / "defaults" / "main.yml"
+
+
+def _ci_job_names() -> set[str]:
+    jobs = yaml.safe_load(_CI_YML.read_text())["jobs"]
+    return {job["name"] for job in jobs.values() if job.get("name")}
+
+
+def _required_contexts() -> list[str]:
+    defaults = yaml.safe_load(_GITOPS_DEFAULTS.read_text())
+    return defaults["gitops_deploy_ci_contexts"]
+
+
+def test_required_ci_contexts_are_real_ci_yml_job_names():
+    """`gitops_deploy_ci_contexts` holds GitHub check-run names, which are ci.yml's job `name:`.
+
+    The string was hand-copied into ci.yml, defaults/main.yml and this file, and the test
+    asserted against its own copy — so it could not see drift in the other two. A rename in
+    ci.yml holds `ci_verdict` at `pending` forever: `fetch_ci_verdict` finds no run of the
+    required name, `next_action` returns `ci_pending`, and the host parks until the 6h
+    behind-origin watchdog pages.
+    """
+    names = _ci_job_names()
+    contexts = _required_contexts()
+    assert names, "parsed no job names out of %s" % _CI_YML
+    assert contexts, "parsed no gitops_deploy_ci_contexts out of %s" % _GITOPS_DEFAULTS
+    assert all(isinstance(c, str) and c.strip() for c in contexts), contexts
+
+    missing = sorted(set(contexts) - names)
+    assert not missing, (
+        "gitops_deploy_ci_contexts names check-runs that no ci.yml job produces, so the CI "
+        "gate can never go green: %s (ci.yml jobs: %s)" % (missing, sorted(names))
+    )
+
+
+_PREK = _required_contexts()[0]
+# Deliberately NOT frozenset(_required_contexts()): the tests below feed a single check-run, so
+# adding a second required context would fail them for the wrong reason (the second name reports
+# nothing, so the verdict is `pending`). The multi-context case has its own test with its own
+# names; test_required_ci_contexts_are_real_ci_yml_job_names is the one reader of the whole list.
 _REQUIRED = frozenset({_PREK})
 
 

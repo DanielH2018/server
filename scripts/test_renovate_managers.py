@@ -354,8 +354,16 @@ def test_every_k8s_role_image_is_renovate_tracked() -> None:
     # role defaults into group_vars, and this glob's role-defaults-only form could not see it —
     # so the test written to catch an untracked cluster image was structurally blind to the one
     # image (the WAF core) whose staleness is a security problem.
+    #
+    # roles/setup/*/defaults/main.yml is included for the same reason: k3s_longhorn_restore_drill_image
+    # (busybox:stable, roles/setup/k3s/defaults/main.yml) is one directory over from the k8s
+    # role defaults this glob covered, matched by no manager and by no test, until 2026-08-27
+    # (this is the *_image: sibling of the *_version: pins in the same file that
+    # test_control_plane_version_pins_are_tracked already covers — separate guard, same file,
+    # different key, so neither doubles up on the other).
     defaults = sorted((_REPO / "ansible/roles/k8s").glob("*/defaults/main.yml"))
     assert defaults, "no k8s role defaults found"
+    defaults += sorted((_REPO / "ansible/roles/setup").glob("*/defaults/main.yml"))
     defaults.append(_REPO / "ansible/inventory/group_vars/all.yml")
     untracked = []
     for f in defaults:

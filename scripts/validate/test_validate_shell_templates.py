@@ -7,7 +7,7 @@ import shutil
 
 import pytest
 import validate_shell_templates as v
-from _render_guard import ALL_VARS, BASE_CONTEXT, load_yaml
+from lib._render_guard import ALL_VARS, BASE_CONTEXT, load_yaml
 
 BACKUP_HEALTH = v.ROLES / "setup" / "k3s" / "templates" / "longhorn-backup-health.sh.j2"
 
@@ -112,6 +112,7 @@ def test_discover_templates_finds_the_known_set():
     names = {p.name for p in v.discover_templates()}
     assert names == {
         "entrypoint.sh.j2",
+        "prefs-check.sh.j2",
         "crowdsec-update-home-allowlist.sh.j2",
         "crowdsec-appsec-verify.sh.j2",
         "cloudflare-ip-drift.sh.j2",

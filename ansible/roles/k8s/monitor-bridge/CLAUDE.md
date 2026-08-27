@@ -443,9 +443,9 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     `k8s_workloads_verdict()` and `extended_resource_verdict()` are unit-tested;
     `CLUSTER_DEPENDENT` is guarded against the live
     `CHECKS` and asserted disjoint from the other three skip sets.)
-  - **Loki Log Ingestion** (two-arm LogQL freshness against the cluster `loki-homelab` via
+  - **Loki Log Ingestion** (three-arm LogQL freshness against the cluster `loki-homelab` via
     its in-cluster Service, `down`
-    if EITHER arm is silent — a silently-dead promtail→Loki pipeline (docker-proxy break,
+    if ANY arm is silent — a silently-dead promtail→Loki pipeline (docker-proxy break,
     positions-file corruption, relabel regression) that Loki's `/ready` Kuma probe stays green
     through. **Arm 1 — file-tail union** `sum(count_over_time({job=~"authlog|syslog"}[3h]))`:
     (`check.py`'s in-code default also lists `traefik`, but `LOKI_STREAM` in
@@ -464,8 +464,14 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     docker_sd stream carries a `container` label, no `job`, so it's exactly the one arm 1 excludes;
     a docker_sd-specific break (docker-proxy down, the docker relabel regressing) silences every
     container log while the file-tail streams keep flowing, and a tight window catches a total
-    promtail death fast. Selectors/windows tunable via
-    `LOKI_STREAM`/`LOKI_FILETAIL_WINDOW`/`LOKI_DOCKER_STREAM`/`LOKI_WINDOW`. Pure
+    promtail death fast. **Arm 3 — daniel-pi** `sum(count_over_time({job="pi"}[3h]))`
+    (`LOKI_PI_STREAM`, added 2026-08-25 review M-11): arms 1 and 2 only count CLUSTER streams, so
+    the Pi's own promtail could die with every cluster stream still flowing and both arms green —
+    the Pi's logs simply stop arriving and nothing said so. Runs on the TOLERANT window
+    (`LOKI_FILETAIL_WINDOW`, same as arm 1), for a stronger reason than arm 1's: the Pi is a
+    Zero 2 W running five LAN-only containers, so its log volume is genuinely low and bursty, not
+    just quiet overnight. Selectors/windows tunable via
+    `LOKI_STREAM`/`LOKI_FILETAIL_WINDOW`/`LOKI_DOCKER_STREAM`/`LOKI_WINDOW`/`LOKI_PI_STREAM`. Pure
     `loki_ingestion_fresh()` + `loki_count()` are unit-tested. A freshness watchdog in the same
     idiom as the SMART/restore-drill checks.)
   - **Promtail Dropped Entries** (`sum(increase(promtail_dropped_entries_total[1h]))`

@@ -85,3 +85,10 @@ qbittorrent_k8s_cpu_limit: "2"
 qbittorrent_k8s_mem_limit: 2048Mi
 qbittorrent_k8s_cpu_request: "100m"
 qbittorrent_k8s_mem_request: 256Mi
+
+# Daily, not */10 like the cluster-side health crons: a WebUI edit or a Longhorn restore that
+# reverts files/apply_prefs.py's eight throughput settings is rare, and there is no Kuma
+# watchdog interval this needs to stay under (see prefs-check.sh.j2 — it logs, it does not
+# push).
+qbittorrent_k8s_prefs_check_cron_hour: "6"
+qbittorrent_k8s_prefs_check_cron_minute: "37"

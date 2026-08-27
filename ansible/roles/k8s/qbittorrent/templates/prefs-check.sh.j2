@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# qBittorrent throughput-preference drift check — managed by Ansible (k8s/qbittorrent role);
+# edits overwritten.
+#
+# LOG-ONLY, DELIBERATELY. This reports drift between qBittorrent.conf's live throughput
+# settings (a WebUI edit, or a Longhorn restore reverting to an older snapshot) and
+# files/apply_prefs.py's DESIRED dict — see this role's CLAUDE.md, "Throughput settings live
+# on the PVC, not in this role". It does NOT push a Kuma monitor: the 2026-08-27 review found
+# six live Kuma push tokens already leaking into curl argv across this estate, one of them
+# world-readable, and a low-urgency drift check does not earn a seventh. `logger` writes to
+# the `{job="syslog"}` Loki stream instead, which `scripts/diagnostics/probe.py alerts` reads.
+#
+# Never writes to qBittorrent. apply_prefs.py --dry-run only reports; running it with no flag
+# to actually apply a changed DESIRED value is a human decision, made by hand.
+set -uo pipefail
+
+# Credentials interpolated directly, not sourced from a separate env file: this file is
+# rendered 0700 owned by {{ sys_user }} (the same user the cron below runs as), so there is no
+# second account that needs read access the way kuma-push.env's root+{{ sys_user }} split
+# does. Same shape as janitorr-health.sh.j2's Kuma token.
+export QBT_USERNAME="{{ qbittorrent_username }}"
+export QBT_PASSWORD="{{ qbittorrent_password }}"
+export QBT_URL="http://qbittorrent.{{ k8s_namespace }}.svc.cluster.local:{{ qbittorrent_k8s_webui_port }}"
+
+OUTPUT=$(/usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
+  /opt/qbittorrent-prefs-check/apply_prefs.py --dry-run 2>&1)
+STATUS=$?
+
+# Exit codes are apply_prefs.py's own contract (EXIT_OK/EXIT_UNREACHABLE/EXIT_BAD_ARGS/
+# EXIT_DRIFT) — see that file's header comment. A bare --dry-run used to return 0 whether or
+# not anything had drifted, which is why this case statement exists at all: STATUS is what
+# lets this script tell the two apart without parsing OUTPUT.
+case "$STATUS" in
+  0)
+    logger -t qbittorrent-prefs-check "ok: preferences match"
+    ;;
+  3)
+    logger -t qbittorrent-prefs-check "DRIFT: ${OUTPUT}"
+    ;;
+  1)
+    logger -t qbittorrent-prefs-check "cannot reach qbittorrent: ${OUTPUT}"
+    ;;
+  2)
+    logger -t qbittorrent-prefs-check "credentials rejected by argparse (should not happen — QBT_USERNAME/QBT_PASSWORD are set above): ${OUTPUT}"
+    ;;
+  *)
+    logger -t qbittorrent-prefs-check "unexpected exit ${STATUS}: ${OUTPUT}"
+    ;;
+esac

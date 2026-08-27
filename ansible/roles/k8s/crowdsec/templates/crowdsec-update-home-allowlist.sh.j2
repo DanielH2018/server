@@ -49,9 +49,19 @@ PUSH_URL="https://uptime-kuma.local.{{ domain }}/api/push/{{ monitor_bridge_home
 # failing in the same window, so the endpoint was down, not the call — and no 7s backoff spans
 # a 15-minute gap. The retry closes the ISOLATED misses; a Kuma restart still flaps this
 # monitor, and the fix for that belongs to uptime-kuma's own availability.
+#
+# DECIDED: this stays off /usr/local/lib/kuma-push-lib.sh, alone among the health crons. kuma_push
+# hardcodes a bare `--retry`-free curl, and the retry semantics above are measured against THIS
+# monitor (push-type, max_retries 0, 18 transitions in 3 days). Hoisting them into a library with
+# ten other callers would hand every one of them a retry nobody measured, and would move the
+# reasoning away from the line that makes the trade-off. The library's actual security property —
+# the token-bearing URL reaching curl on stdin as a config file rather than as an argv element,
+# because /proc is mounted without hidepid and this runs every 5 minutes — is reproduced inline
+# below, and ansible/tests/test_cron_scripts_publish_via_pr.py enforces it here with no exemption.
 push() { # up|down msg
-  curl -fsS --max-time 10 --retry 3 --retry-all-errors -G "$PUSH_URL" \
-    --data-urlencode "status=$1" --data-urlencode "msg=$2" -o /dev/null \
+  printf 'url = "%s"\n' "$PUSH_URL" |
+    curl -fsS --max-time 10 --retry 3 --retry-all-errors -G -K - \
+      --data-urlencode "status=$1" --data-urlencode "msg=$2" -o /dev/null \
     || logger -t crowdsec-home-allowlist "kuma push failed ($1: $2)"
 }
 # The `status=down` prefix is load-bearing: `probe.py alerts` reconstructs host-cron episodes

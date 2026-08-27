@@ -16,8 +16,8 @@ the path-specific detail not spelled out there:
   the backup plane is Longhorn-on-k8s, so Docker-tier state is deliberately unbacked-up —
   the services still on Docker hold regenerable or migrating state only.)
   - **Documented exception — named volumes** are the deliberate pattern for bulky, regenerable state:
-    `feed_cache` (freshrss nginx), `promtail_positions` (promtail's log-read cursor, regenerable).
-    Don't flag these; justify any new named volume with a comment.
+    `promtail_positions` (promtail's log-read cursor, regenerable). Don't flag it; justify any new
+    named volume with a comment.
 - Pin image tags or use a stable channel. `latest` is acceptable for the homelab tier, but note when
   a specific version is preferred.
 - **`read_only: true` + `tmpfs:` — the `noexec` residual is an ACCEPTED trade-off, do not re-flag.**

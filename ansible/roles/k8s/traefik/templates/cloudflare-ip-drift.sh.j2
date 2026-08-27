@@ -22,12 +22,25 @@ set -uo pipefail
 
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin # cron ships a bare PATH
 
-PUSH_URL="https://uptime-kuma.local.{{ domain }}/api/push/{{ monitor_bridge_cloudflare_drift_push_token }}"
+# shellcheck source=/dev/null
+source /usr/local/lib/kuma-push-lib.sh || {
+  logger -t cloudflare-ip-drift "kuma-push-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
 
+KUMA_HOST="uptime-kuma.local.{{ domain }}"
+# Pinned to the cluster ingress VIP, matching every other daniel-box health cron. Not a routing
+# change: Pi-hole maps every k8s service name to this VIP (pihole-dnsmasq.conf.j2) and
+# `getent hosts uptime-kuma.local.{{ domain }}` on this host returns it, so --resolve only removes
+# the DNS hop the push used to depend on.
+KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
+PUSH_URL="https://${KUMA_HOST}/api/push/{{ monitor_bridge_cloudflare_drift_push_token }}"
+
+# Via the shared library, which feeds the token-bearing URL to curl on stdin (`-K -`) instead of
+# as an argv element: /proc is mounted without hidepid here, so any local user can read another
+# user's /proc/<pid>/cmdline for the life of the call.
 push() { # up|down msg
-  curl -fsS --max-time 10 -G "$PUSH_URL" \
-    --data-urlencode "status=$1" --data-urlencode "msg=$2" -o /dev/null \
-    || logger -t cloudflare-ip-drift "kuma push failed ($1: $2)"
+  kuma_push "$1" "$2" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" cloudflare-ip-drift
 }
 
 # The expected set: the cloudflare_ips baked in at template time (group_vars/all.yml), one CIDR

@@ -8,15 +8,33 @@
 # uninstall; that changed nothing for this script.)
 #
 # Thin on purpose — the verdict logic is in state_push.py, a plain file with unit tests and a 3.12
-# floor check. This exists only because the push tokens have to be templated in, and a secret-
-# carrying file should hold as little logic as possible. Same shape as configarr-health.sh and
-# janitorr-health.sh.
+# floor check. Same shape as configarr-health.sh and janitorr-health.sh.
+#
+# This file carries NO secret. It lands 0755 root:root (the cron runs as {{ sys_user }} and reaches
+# it only through the world-execute bit), so an inlined token was readable by every local account
+# and was enough to forge or suppress either heartbeat. Both tokens moved to the 0640
+# root:{{ sys_user }} env file sourced below, the same split disk-health.sh.j2:29-38 makes.
 set -uo pipefail
+
+# shellcheck source=/dev/null
+source /usr/local/lib/kuma-push-lib.sh || {
+  logger -t fake-remux-health "kuma-push-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
 
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 # Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
 # edge's bridge route for this name was removed in the slice-7 bridge teardown.
 KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
+
+FAKE_REMUX_SCAN_PUSH_TOKEN=""
+FAKE_REMUX_REPLACE_PUSH_TOKEN=""
+# shellcheck source=/dev/null
+[[ -r {{ fake_remux_config_dir }}/kuma-push.env ]] && . {{ fake_remux_config_dir }}/kuma-push.env
+if [[ -z "$FAKE_REMUX_SCAN_PUSH_TOKEN" || -z "$FAKE_REMUX_REPLACE_PUSH_TOKEN" ]]; then
+  logger -t fake-remux-health "kuma push tokens unreadable — skipping push (run initial_setup.yml --tags fake_remux)"
+  exit 0
+fi
 
 # Order is load-bearing: state_push.py prints one line per triple, in argument order, and the two
 # tokens below are consumed in that same order.
@@ -24,8 +42,9 @@ mapfile -t LINES < <(/usr/local/bin/uv run --no-project --no-python-downloads --
   "fake-remux scan" "{{ fake_remux_state_dir }}/state.json" "{{ fake_remux_scan_max_age_hours }}" \
   "fake-remux replace" "{{ fake_remux_state_dir }}/replace_state.json" "{{ fake_remux_replace_max_age_hours }}")
 
-TOKENS=("{{ monitor_bridge_fake_remux_push_token }}" "{{ monitor_bridge_fake_remux_replace_push_token }}")
+TOKENS=("$FAKE_REMUX_SCAN_PUSH_TOKEN" "$FAKE_REMUX_REPLACE_PUSH_TOKEN")
 LABELS=("fake-remux scan" "fake-remux replace")
+TAGS=(fake-remux-health fake-remux-health)
 
 for i in 0 1; do
   LINE="${LINES[$i]:-}"
@@ -38,10 +57,10 @@ for i in 0 1; do
     STATUS="${LINE%%$'\t'*}"
     MSG="${LINE#*$'\t'}"
   fi
-  curl -fsS --max-time 10 -G \
-    --resolve "${KUMA_HOST}:443:${KUMA_RESOLVE_IP}" \
-    --data-urlencode "status=${STATUS}" \
-    --data-urlencode "msg=${MSG}" \
-    "https://${KUMA_HOST}/api/push/${TOKENS[$i]}" >/dev/null \
-    || logger -t fake-remux-health "push failed (${LABELS[$i]} ${STATUS}: ${MSG})"
+  # kuma_push feeds the token-bearing URL to curl on stdin (`-K -`), never as an argv element:
+  # /proc is mounted without hidepid here, so any local user can read another user's
+  # /proc/<pid>/cmdline and this cron runs every 10 minutes.
+  kuma_push "$STATUS" "${LABELS[$i]}: ${MSG}" \
+    "https://${KUMA_HOST}/api/push/${TOKENS[$i]}" \
+    "$KUMA_HOST" "$KUMA_RESOLVE_IP" "${TAGS[$i]}"
 done
