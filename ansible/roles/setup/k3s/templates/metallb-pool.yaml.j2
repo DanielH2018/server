@@ -60,6 +60,11 @@ spec:
   # ANY NEW `type: LoadBalancer` SERVICE WITH externalTrafficPolicy: Local NEEDS A PIN HERE.
   # The failure is silent: the pod reports healthy on the wrong node while its VIP drops
   # every packet. `kubectl get svc -A | grep LoadBalancer` is the census.
+  #
+  # DECIDED: `k8s_primary_node`, not the literal `daniel-box` it read until 2026-08-27. The
+  # workload pins this must stay in step with are all that variable already, and a literal
+  # here was the last way the two halves could drift apart. It also lets a single-node
+  # staging cluster announce from its own node instead of naming prod's.
   nodeSelectors:
     - matchLabels:
-        kubernetes.io/hostname: daniel-box
+        kubernetes.io/hostname: {{ k8s_primary_node }}

@@ -85,16 +85,18 @@
   register: k3s_coredns_dig
 
 # Proves the forward by BEHAVIOUR rather than by reading back the ConfigMap this play just
-# wrote. `pi.hole` is answered by FTL itself and is NXDOMAIN at every public resolver, so an
-# answer proves the query reached Pi-hole. It is a better probe than a blocked ad domain,
+# wrote. The probe name must be one only the configured upstream answers, and NXDOMAIN
+# everywhere else, or an answer proves nothing about which resolver produced it;
+# `k3s_coredns_probe_name` defaults to `pi.hole`, which FTL answers itself. It is a better
+# probe than a blocked ad domain,
 # which would stop discriminating the day a blocklist drops it. The retries cover CoreDNS's
 # `reload` (up to ~30s) — no restart is issued, because bouncing the only DNS replica costs
 # more than waiting for it. The query is host-sourced against the cluster DNS Service
 # address, so it exercises the same CoreDNS a pod reaches without needing a throwaway pod.
-- name: Verify cluster DNS resolves through Pi-hole
+- name: Verify cluster DNS resolves through the configured upstream
   tags: [coredns]
   ansible.builtin.command:
-    cmd: dig +short +time=2 +tries=1 @{{ k3s_cluster_dns_ip }} pi.hole
+    cmd: dig +short +time=2 +tries=1 @{{ k3s_cluster_dns_ip }} {{ k3s_coredns_probe_name }}
   register: k3s_coredns_probe
   changed_when: false
   # `until` owns the verdict. Without this, a dig that exits non-zero (no route, timeout)
@@ -104,4 +106,6 @@
   retries: "{{ k3s_coredns_probe_retries | int }}"
   delay: 5
   until: k3s_coredns_probe.stdout | trim | length > 0
-  when: k3s_coredns_dig.stat.exists
+  when:
+    - k3s_coredns_dig.stat.exists
+    - k3s_coredns_probe_name | length > 0
