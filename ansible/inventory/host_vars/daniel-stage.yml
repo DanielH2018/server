@@ -77,3 +77,15 @@ k3s_coredns_probe_name: ""
 # here would leave every volume permanently Degraded, since there is no second node to
 # schedule the other replica on (docs/staging-cluster.md, Decision 3).
 k3s_longhorn_replica_count: 1
+
+# ---------------------------------------------------------------------------
+# Secrets. Staging holds no real credential, so it does not load the file that
+# holds them (docs/staging-cluster.md, Decision 5).
+# ---------------------------------------------------------------------------
+
+# Encrypted to daniel-server's age key alone — the CONTROLLER decrypts, because
+# load_secrets.yml runs `delegate_to: localhost`, and daniel-server is the only
+# host that can route here. This is about SCOPE: no role templates a production
+# value onto the guest today, but loading secrets.yml would put every one of
+# them in the play's variable scope on a host meant to be broken.
+secrets_file: secrets-staging.yml
