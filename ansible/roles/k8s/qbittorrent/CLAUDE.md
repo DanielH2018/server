@@ -70,9 +70,21 @@ failed the 2026-08-27 deploy against a pod that was already `Terminating` while 
 mounted new pod came up seconds later.
 
 `verify.yml` now gates on `rollout status` before finding the pod. It is one inline wait for one
-role, not a reversal of the batch drain, and it is a no-op when nothing rolled. **This is likely
-not unique to this role** — any role whose verify makes pod-identity-sensitive assertions has the
-same exposure.
+role, not a reversal of the batch drain, and it is a no-op when nothing rolled.
+
+Two primitives that look like they solve this and do not, both because they are satisfied by the
+**outgoing** pod:
+
+| primitive | why it returns instantly mid-roll |
+|---|---|
+| `wait --for=condition=Available deploy/<x>` | Available is true of the old ReplicaSet |
+| `wait --for=condition=ready pod -l app=<x>` | the old pod is still Ready until it stops |
+| `--field-selector status.phase=Running` | `.status.phase` stays `Running` while Terminating — that word is kubectl's rendering of `deletionTimestamp`, not a phase |
+
+**This exposure is not unique to this role.** Confirmed 2026-08-27 in `roles/k8s/jellyfin`,
+`roles/k8s/tdarr` (pod lookup with no wait at all) and `roles/k8s/janitorr` (a
+`wait --for=condition=ready pod` that the old pod satisfies). None had been caught because, as
+here, their assertions happened to hold on both sides of a roll.
 
 ### The new failure mode — a stale lock
 Lines 413-421 hold `/modcache/<name>.lock` for the duration of a download. A pod killed

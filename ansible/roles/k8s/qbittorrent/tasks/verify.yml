@@ -42,9 +42,12 @@
 
 - name: Find the qbittorrent pod
   tags: [deploy]
-  # field-selector excludes a pod that is still Terminating, which the rollout wait above should
-  # already have ruled out — belt and braces, because picking the wrong pod here silently
-  # invalidates every assertion below rather than erroring.
+  # THE FIELD-SELECTOR DOES NOT EXCLUDE A TERMINATING POD, so do not read it as a second gate.
+  # `.status.phase` stays `Running` until the containers actually stop — "Terminating" is a
+  # display state kubectl derives from `metadata.deletionTimestamp`, not a phase. It only rules
+  # out a Pending or Failed pod, which matters when the new pod is still pulling. The
+  # `rollout status` wait above is the load-bearing part; this is a narrower guard, not a backup
+  # for it.
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} get pod -l app=qbittorrent
