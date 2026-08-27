@@ -75,6 +75,19 @@ spec:
           volumeMounts:
             - name: qbittorrent-config
               mountPath: /config
+            # THE FIX FOR THE 9-HOUR OUTAGE, and it is one mount. LSIO's docker-mods script
+            # creates /modcache in the container and caches every downloaded mod there as
+            # `<name>.tar.xz`; on a registry failure it sets MOD_OFFLINE itself and applies the
+            # cached copy instead. That fallback already ran during the incident and found
+            # nothing, because /modcache was container-local and died with each pod. Persisting
+            # it means one successful start makes every later start survive an lscr.io outage.
+            #
+            # A subPath of the config claim rather than a PVC of its own: the tarball is a few MB
+            # against 1Gi, and a second claim would add a storage-class decision and a backup
+            # surface for a cache that any successful start can rebuild.
+            - name: qbittorrent-config
+              mountPath: /modcache
+              subPath: modcache
             - name: qbittorrent-mullvad
               mountPath: {{ qbittorrent_k8s_secret_mount }}
               readOnly: true

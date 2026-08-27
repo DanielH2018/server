@@ -32,10 +32,45 @@ gives no response to one pod while serving another at the same instant is not th
 party. Generalise: when a network failure is scoped to one pod, suspect the pod's own netns
 before the remote host.
 
-The standing design risk is not fixed. Fetching a mod over the network on every start means
-any lscr.io blip can strand the service indefinitely, and the failure is invisible — the init
-container exits **0** ("Completed"), so it reads as a restart loop rather than an error. A
-populated modcache would make the mod survive an outage.
+The failure is also invisible while it happens: the init container exits **0** ("Completed"),
+so it reads as a restart loop rather than an error.
+
+**The standing design risk is now addressed — see the next section.** The sidecar mounts a
+persistent `/modcache`, so a start that cannot reach lscr.io applies the cached mod instead of
+stranding. What has *not* changed is that a mod is still fetched over the network on a cold
+cache; the cache makes the failure survivable, not impossible.
+
+## The modcache, and the lock file it can leave behind
+
+`deployment.yaml.j2` mounts the config claim a second time at `/modcache`, `subPath: modcache`.
+That one mount is the whole fix, and the reason it works is in LinuxServer's `docker-mods.v3`:
+
+| line | behaviour |
+|---|---|
+| 385, 394 | `MOD_OFFLINE="true"` is set **automatically** when the registry lookup fails — there is no env var to add |
+| 403 | cached tarball present and its sha256 matches the registry's layer → apply from cache |
+| 405 | cached tarball present and offline → `OFFLINE: … found in modcache`, apply it |
+| 408 | tarball absent and offline → `OFFLINE: … not found in modcache, skipping` — **the line from the 2026-08-16 incident** |
+| 431-438 | a successful download writes the tarball into `/modcache` itself — the cache is self-populating |
+
+So the fallback already existed and already fired during the outage. It had nothing to fall back
+to only because line 257 creates `/modcache` inside the container, where it died with each pod.
+
+A `subPath` of the existing claim rather than a PVC of its own: the tarball is a few MB against
+1Gi, and a second claim would add a storage-class decision and a backup surface for a cache any
+successful start can rebuild.
+
+### The new failure mode — a stale lock
+Lines 413-421 hold `/modcache/<name>.lock` for the duration of a download. A pod killed
+mid-download leaves it behind, and later starts **wait on it and then skip the mod** — which
+presents as no tunnel and a restarting pod, *the same symptom as the outage this cache exists to
+prevent*. The script says so itself: "If no other containers are using this mod you may need to
+delete /modcache/<name>.lock". `verify.yml` warns when a lock is present rather than failing,
+because a lock is legitimate while a download is genuinely in flight.
+
+Diagnosing it: if the sidecar logs a skip or a lock timeout rather than `Downloading` or
+`found in modcache`, delete the lock file from the volume and delete the POD (not the
+container — the kill-switch lives in the netns, per the trap above).
 
 ## Throughput settings live on the PVC, not in this role
 
