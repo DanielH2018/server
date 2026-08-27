@@ -1,0 +1,22 @@
+---
+# The KVM/libvirt toolchain. qemu-system-x86 is the emulator, libvirt-daemon-system brings
+# libvirtd and its systemd units, libvirt-clients brings virsh, and virtinst brings
+# virt-install — the guest is defined with it in a later slice, and pulling it in here keeps
+# the package set to one task rather than two.
+#
+# Deliberately NOT here: ovmf (the guest is a BIOS-boot cloud image, not UEFI) and
+# cloud-image-utils (the cloud-init seed belongs with the guest definition, not with the
+# hypervisor). Add them in the slice that needs them, so this role stays "a host that can
+# run VMs" rather than "a host with one particular VM's dependencies".
+hypervisor_packages:
+  - qemu-system-x86
+  - qemu-utils
+  - libvirt-daemon-system
+  - libvirt-clients
+  - virtinst
+
+# Groups that let sys_user reach qemu:///system without sudo. Both are needed: libvirt for
+# the daemon socket, kvm for /dev/kvm itself.
+hypervisor_user_groups:
+  - libvirt
+  - kvm

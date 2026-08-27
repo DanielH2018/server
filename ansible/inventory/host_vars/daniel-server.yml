@@ -26,3 +26,8 @@ containers_list: []
 # watches daniel-box's deployer instead.
 has_docker: false
 has_gitops: false
+
+# The staging-cluster VM host. This is the only host with VT-x, spare RAM and no
+# control-plane role, so the second k3s runs here as a KVM guest rather than beside prod.
+# See docs/staging-cluster.md, Decision 1.
+has_hypervisor: true

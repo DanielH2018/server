@@ -412,6 +412,11 @@ has_gitops: true
 # "already runs Docker" guard; this gate is what stops that recurring, since relying on the
 # operator to remember --tags is what let it happen.
 has_docker: true
+# Whether this host runs VMs under KVM/libvirt. Default OFF and opted into per host, like
+# has_github_cli: exactly one host needs it (daniel-server, for the staging cluster), and a
+# hypervisor appearing on a node by default is a third writer of firewall state next to k3s
+# and any container runtime. daniel-server overrides this true.
+has_hypervisor: false
 # Per-user developer environment: the chezmoi-managed dotfiles (DanielH2018/dotfiles) and
 # Claude Code. Both default OFF and are opted into per host — daniel-server already has both
 # installed by hand and shouldn't have them re-provisioned underneath it, and the Pi

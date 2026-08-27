@@ -23,6 +23,12 @@
     # teardown.yml). Gating it here is what let daniel-server's retired Compose units and
     # crons survive the 2026-08-14 uninstall — a skipped role reaps nothing.
     - { role: docker_install, tags: ["docker_install"] }
+    # Unconditional for the same reason as docker_install: the role dispatches on
+    # has_hypervisor internally, so a host that turns it off still gets the teardown half.
+    # After docker_install, so a host retiring one runtime has done that before gaining the
+    # other — both write firewall state, and doing them in one run in this order means they
+    # never overlap.
+    - { role: hypervisor, tags: ["hypervisor"] }
     - { role: gitops_deploy, tags: ["gitops_deploy"], when: has_gitops }
     # Per-user, become: false throughout — they manage the connecting user's home, not
     # root's. Placed after docker_install so the OS is fully set up before the dotfiles

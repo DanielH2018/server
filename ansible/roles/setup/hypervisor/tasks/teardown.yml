@@ -1,0 +1,60 @@
+---
+# Reverses install.yml on a host whose has_hypervisor went false. Everything is state=absent
+# or guarded, so this is a no-op on a host that never had libvirt — which is every host but
+# daniel-server.
+
+- name: Check whether libvirt is installed
+  tags: [hypervisor]
+  ansible.builtin.stat:
+    path: /usr/sbin/libvirtd
+  register: hypervisor_libvirtd_binary
+  become: true
+
+- name: List any guests still defined
+  tags: [hypervisor]
+  when: hypervisor_libvirtd_binary.stat.exists
+  ansible.builtin.command:
+    cmd: virsh --connect qemu:///system list --all --name
+  register: hypervisor_defined_guests
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: Refuse to remove a hypervisor that still has guests
+  tags: [hypervisor]
+  # Purging libvirt out from under a defined domain leaves its disk image orphaned in
+  # /var/lib/libvirt/images with nothing that knows how to start it again — a one-way door
+  # that reads as a successful teardown. Undefining a guest is a decision, not a side effect
+  # of flipping a flag, so this stops and says which guests are in the way.
+  when: hypervisor_libvirtd_binary.stat.exists
+  ansible.builtin.assert:
+    that: hypervisor_defined_guests.stdout | trim | length == 0
+    fail_msg: >-
+      {{ inventory_hostname }} still has libvirt guests defined
+      ({{ hypervisor_defined_guests.stdout_lines | select | join(', ') }}), so the hypervisor
+      is not being removed. Undefine them deliberately first — `virsh undefine <name>
+      --remove-all-storage` destroys their disks — then re-run.
+
+- name: Stop and disable libvirtd
+  tags: [hypervisor]
+  when: hypervisor_libvirtd_binary.stat.exists
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    state: stopped
+    enabled: false
+  loop:
+    - libvirtd.service
+    - libvirtd.socket
+  become: true
+
+- name: Purge the KVM/libvirt packages
+  tags: [hypervisor]
+  # /var/lib/libvirt is deliberately left alone, on the same reasoning as /var/lib/docker:
+  # it holds disk images, deleting them is irreversible in a way removing a package is not,
+  # and the assert above has already established no guest is using them.
+  ansible.builtin.apt:
+    name: "{{ hypervisor_packages }}"
+    state: absent
+    purge: true
+    autoremove: true
+  become: true
