@@ -1,7 +1,7 @@
 ---
 # Same tag the Docker instance runs, so a behavioural difference between the two is never
 # the version. The CRD manifests below are pinned to the matching minor.
-traefik_k8s_image: traefik:v3.7.10
+traefik_k8s_image: traefik:v3.7.11
 traefik_k8s_crd_version: v3.7
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
