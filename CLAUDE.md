@@ -384,6 +384,18 @@ Per-verb tiers, the RBAC evidence and the rule-matching measurements: `docs/clau
   populations differ in which file types they touch, not in which hooks run. So editing a
   tasks file is the slow case by an order of magnitude, and that is the price of the coverage
   rather than overhead to trim. Recorded so a slow-feeling edit isn't mistaken for a stuck hook.
+- **auto-mode-bridge** (PermissionDenied + PostToolUseFailure, both Bash) — the two places auto
+  mode and this repo have to talk. On a **denial**, it retries `gitops_tick.sh` and nothing else:
+  the tick is allow-listed and still denied about 1 run in 7 on identical text, which is
+  classifier variance rather than a rule, so `retry: true` reissues the call and the classifier
+  judges it again. Two retries per session, and a compound command that merely contains the tick
+  gets none — the classifier judged the whole line. On a **failure**, it decodes `deploy.sh`
+  exits 75/4/3/2 into what each one means, because all four mean *nothing was deployed* and they
+  reach Claude as a bare `Exit code N` that reads like a playbook failure. It does **not** use
+  `classifierContext`: that field is PostToolUse-only, so a failed deploy can't carry one, and
+  the standing facts (public repo, read-only kubectl SA) already live in `autoMode.environment`
+  and `autoMode.allow`, where the classifier reads them as configuration rather than as
+  unverified application context.
 - **permission auditing** — no longer lives here. A `log-permission` hook used to count tool calls
   and prompts into `.claude/logs/permissions.json` for `audit-permissions.py` to read; Claude Code's
   own OTEL `tool_decision` events carry that now, and name the deciding authority (`config` rule,
