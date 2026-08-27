@@ -203,3 +203,75 @@ def pi_pressure(load_json, mem_json, fs_json, load_max, mem_min_mb, disk_max_pct
         avail_mb,
         max(devices.values()),
     )
+
+
+# glances reports Docker's own status string. Only these two mean the container is up and
+# therefore expected to be publishing; `restarting`, `created`, `paused` and `exited` are
+# another monitor's fault and are named in the message rather than judged here.
+PI_UP_STATUSES = ("running", "healthy")
+
+
+def pi_detached_containers(containers_json, expected_publishers):
+    """Pure: Pi containers that are up but have lost their published ports.
+
+    After a daniel-pi reboot, containers can come back attached to NO Docker network while
+    still reporting `Up (healthy)` — the healthcheck passes on loopback, so every existing
+    signal reads green. The observable harm is that the published port mappings vanish, and
+    only a recreate restores them; autoheal's restart loop structurally cannot.
+
+    `containers_json` is glances' /api/4/containers list. `ports` there is Docker's own
+    summary string: a comma-separated mix of published mappings (`61208->61208/tcp`) and
+    merely-exposed ports (`61209/tcp`). Presence of `->` in any segment is what distinguishes
+    the two, which is why this matches on that arrow and not on a port number or a count —
+    a container may publish one mapping or several, and wg-easy publishes both TCP and UDP.
+
+    `expected_publishers` is derived from daniel-pi's `containers_list` (every entry with a
+    `port`), so it cannot drift from the inventory. Three Pi containers legitimately publish
+    nothing — docker-proxy, autoheal and docker-proxy-lifecycle — and are absent from it by
+    construction rather than by an exclusion list someone has to maintain.
+
+    An expected container missing from the payload is reported, not skipped: a rename in
+    `containers_list`, or glances' docker plugin failing and returning [], would otherwise
+    make this arm silently vacuous while reading green.
+
+    Scope: this arm does NOT judge a stopped container, and it cannot see the full-blackout
+    case where the Pi comes back with glances itself detached — glances is one of the
+    publishers, so the fetch fails and check_pi_pressure renders down with the error, by a
+    different mechanism. What this catches is the partial case: some containers reattached
+    and others did not.
+    """
+    by_name = {}
+    for c in containers_json or []:
+        name = c.get("name")
+        if name:
+            by_name[name] = c
+    detached, missing, not_up = [], [], []
+    for name in expected_publishers:
+        c = by_name.get(name)
+        if c is None:
+            missing.append(name)
+            continue
+        status = (c.get("status") or "").lower()
+        if status not in PI_UP_STATUSES:
+            not_up.append("%s=%s" % (name, status or "unknown"))
+            continue
+        segments = (c.get("ports") or "").split(",")
+        if not any("->" in s for s in segments):
+            detached.append(name)
+    problems = []
+    if detached:
+        problems.append(
+            "%d pi container(s) up with no published ports, recreate needed: %s"
+            % (len(detached), ", ".join(sorted(detached)))
+        )
+    if missing:
+        problems.append(
+            "%d expected pi container(s) not reported by glances: %s"
+            % (len(missing), ", ".join(sorted(missing)))
+        )
+    if problems:
+        return False, "; ".join(problems)
+    ok_msg = "%d pi container(s) publishing" % (len(expected_publishers) - len(not_up))
+    if not_up:
+        ok_msg += " (not up, skipped: %s)" % ", ".join(sorted(not_up))
+    return True, ok_msg

@@ -655,6 +655,138 @@ def test_pi_check_up_when_quiet(monkeypatch):
     assert ok
 
 
+# ── pi_detached_containers (a Pi reboot leaves containers up with no network) ──
+
+PUBLISHERS = ("glances", "promtail", "dozzle", "node-exporter", "wg-easy")
+
+
+def _container(name, ports, status="healthy"):
+    return {"name": name, "status": status, "ports": ports}
+
+
+# The live payload, 2026-08-27. wg-easy publishes both TCP and UDP; glances publishes one
+# mapping alongside a merely-exposed 61209/tcp, which is why the match is on "->".
+CONTAINERS_OK = [
+    _container("glances", "61208->61208/tcp,61209/tcp"),
+    _container("promtail", "9080->9080/tcp"),
+    _container("dozzle", "8080->8080/tcp"),
+    _container("node-exporter", "9100->9100/tcp"),
+    _container("wg-easy", "51821->51821/tcp,51822->51822/udp"),
+    # The three that legitimately publish nothing, present so a rule that flagged them
+    # would fail here rather than page for a day.
+    _container("docker-proxy", ""),
+    _container("autoheal", ""),
+    _container("docker-proxy-lifecycle", ""),
+]
+
+
+def test_publishing_containers_is_clean():
+    ok, msg = check.pi_detached_containers(CONTAINERS_OK, PUBLISHERS)
+    assert ok
+    assert "5 pi container(s) publishing" in msg
+
+
+def test_detached_container_is_flagged():
+    # The reboot signature: up, healthy, healthcheck passing on loopback, no mappings.
+    payload = [
+        _container("dozzle", "") if c["name"] == "dozzle" else c for c in CONTAINERS_OK
+    ]
+    ok, msg = check.pi_detached_containers(payload, PUBLISHERS)
+    assert not ok
+    assert "dozzle" in msg and "recreate needed" in msg
+
+
+def test_exposed_but_unpublished_port_is_flagged():
+    # An exposed port carries no "->" and is not a published mapping — the whole basis of
+    # the check, so a payload with only exposed ports must not read as clean.
+    payload = [
+        _container("promtail", "9080/tcp") if c["name"] == "promtail" else c
+        for c in CONTAINERS_OK
+    ]
+    ok, msg = check.pi_detached_containers(payload, PUBLISHERS)
+    assert not ok
+    assert "promtail" in msg
+
+
+def test_non_publishing_containers_are_never_flagged():
+    # docker-proxy, autoheal and docker-proxy-lifecycle publish nothing forever.
+    ok, msg = check.pi_detached_containers(CONTAINERS_OK, PUBLISHERS)
+    assert ok
+    for name in ("docker-proxy", "autoheal", "docker-proxy-lifecycle"):
+        assert name not in msg
+
+
+def test_empty_payload_is_flagged_not_clean():
+    # Class 3: glances' docker plugin returning [] must not read as "nothing wrong".
+    ok, msg = check.pi_detached_containers([], PUBLISHERS)
+    assert not ok
+    assert "not reported by glances" in msg
+
+
+def test_renamed_container_is_flagged():
+    # A rename in containers_list that no longer matches the live name would otherwise make
+    # the arm vacuous while staying green.
+    payload = [c for c in CONTAINERS_OK if c["name"] != "wg-easy"]
+    ok, msg = check.pi_detached_containers(payload, PUBLISHERS)
+    assert not ok
+    assert "wg-easy" in msg
+
+
+def test_stopped_container_is_named_but_not_flagged():
+    payload = [
+        _container("dozzle", "", status="exited") if c["name"] == "dozzle" else c
+        for c in CONTAINERS_OK
+    ]
+    ok, msg = check.pi_detached_containers(payload, PUBLISHERS)
+    assert ok
+    assert "dozzle=exited" in msg and "4 pi container(s) publishing" in msg
+
+
+def test_pi_check_arm_disabled_when_no_publishers(monkeypatch):
+    monkeypatch.setattr(check, "PI_GLANCES_URL", "http://pi:61208")
+    monkeypatch.setattr(check, "PI_PUBLISHING_CONTAINERS", ())
+    monkeypatch.setattr(
+        check, "_get_json", _seq({"min5": 0.4, "cpucore": 4}, MEM_OK, FS_OK)
+    )
+    ok, msg = check.check_pi_pressure()
+    assert ok
+    assert "publishing" not in msg
+
+
+def test_pi_check_detached_leads_the_message(monkeypatch):
+    monkeypatch.setattr(check, "PI_GLANCES_URL", "http://pi:61208")
+    monkeypatch.setattr(check, "PI_PUBLISHING_CONTAINERS", PUBLISHERS)
+    detached = [
+        _container("dozzle", "") if c["name"] == "dozzle" else c for c in CONTAINERS_OK
+    ]
+    monkeypatch.setattr(
+        check, "_get_json", _seq({"min5": 0.4, "cpucore": 4}, MEM_OK, FS_OK, detached)
+    )
+    ok, msg = check.check_pi_pressure()
+    assert not ok
+    # The pager must see the fault, not the load figure it is not about.
+    assert msg.startswith("1 pi container(s) up with no published ports")
+
+
+def test_pi_check_detached_arm_fails_open_on_fetch_error(monkeypatch):
+    monkeypatch.setattr(check, "PI_GLANCES_URL", "http://pi:61208")
+    monkeypatch.setattr(check, "PI_PUBLISHING_CONTAINERS", PUBLISHERS)
+
+    def _get(url, **kwargs):
+        if url.endswith("/containers"):
+            raise OSError("docker plugin unavailable")
+        return {
+            "/api/4/load": {"min5": 0.4, "cpucore": 4},
+            "/api/4/mem": MEM_OK,
+            "/api/4/fs": FS_OK,
+        }[url[len("http://pi:61208") :]]
+
+    monkeypatch.setattr(check, "_get_json", _get)
+    ok, msg = check.check_pi_pressure()
+    assert ok
+    assert "detached-container arm unavailable" in msg
+
+
 # check_longhorn_volumes — replica redundancy on the storage layer
 
 

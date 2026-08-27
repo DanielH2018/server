@@ -45,6 +45,7 @@ from verdicts_cluster import (
     targets_verdict,
 )
 from verdicts_host import (
+    pi_detached_containers,
     pi_pressure,
     scrutiny_device_wear,
     scrutiny_freshness,
@@ -683,6 +684,12 @@ PI_GLANCES_URL = _env("PI_GLANCES_URL", "").rstrip("/")
 PI_LOAD_MAX = float(_env("PI_LOAD_MAX", "1.5"))  # load5 per core
 PI_MEM_MIN_MB = float(_env("PI_MEM_MIN_MB", "50"))
 PI_DISK_MAX_PCT = float(_env("PI_DISK_MAX_PCT", "90"))
+# Names of the Pi containers that publish a port, rendered from daniel-pi's containers_list
+# (every entry with a `port`) so the set cannot drift from the inventory. Empty = the detached
+# arm is disabled, like PI_GLANCES_URL disables the whole check.
+PI_PUBLISHING_CONTAINERS = tuple(
+    n.strip() for n in _env("PI_PUBLISHING_CONTAINERS", "").split(",") if n.strip()
+)
 
 # HA automation-engine heartbeat: an HA time_pattern automation stamps
 # input_datetime.ha_heartbeat with now() every minute, so its last_changed is fresh ONLY
@@ -1670,7 +1677,39 @@ def check_pi_pressure():
     load = _get_json(PI_GLANCES_URL + "/api/4/load")
     mem = _get_json(PI_GLANCES_URL + "/api/4/mem")
     fs = _get_json(PI_GLANCES_URL + "/api/4/fs")
-    return pi_pressure(load, mem, fs, PI_LOAD_MAX, PI_MEM_MIN_MB, PI_DISK_MAX_PCT)
+    ok, msg = pi_pressure(load, mem, fs, PI_LOAD_MAX, PI_MEM_MIN_MB, PI_DISK_MAX_PCT)
+    return with_pi_detached(ok, msg)
+
+
+def with_pi_detached(ok, msg):
+    """Fold the detached-container arm into the Pi verdict, detachment winning the message.
+
+    Folded into this monitor rather than given its own for the reason recorded at with_ha_ban:
+    a new Kuma monitor costs a new push token in SOPS. This monitor already owns "the Pi is
+    unhealthy", and a container that came back with no network is that.
+
+    # DECIDED: the message leads with the container names when the arm fires, because
+    # "pi_pressure DOWN" otherwise pages someone to look at load and memory when the fault is
+    # neither. Same shape as with_ha_ban putting the ban first.
+    # DECIDED: no down_streak. A streak exists to ride out a transient, and a detached
+    # container is a persistent state that only a recreate clears — a second cycle's
+    # confirmation would add a poll interval of silence and nothing else. Containers that are
+    # mid-recreate during a deploy report a status outside PI_UP_STATUSES and are skipped by
+    # the verdict rather than needing a grace here.
+    # DECIDED: fails OPEN on a fetch error. An unreachable containers endpoint alongside a
+    # readable load/mem/fs means the docker plugin specifically, which is not evidence about
+    # the containers either way.
+    """
+    if not PI_PUBLISHING_CONTAINERS:
+        return ok, msg
+    try:
+        containers = _get_json(PI_GLANCES_URL + "/api/4/containers")
+    except Exception as e:
+        return ok, "%s, detached-container arm unavailable (%s)" % (msg, e)
+    arm_ok, arm_msg = pi_detached_containers(containers, PI_PUBLISHING_CONTAINERS)
+    if arm_ok:
+        return ok, "%s, %s" % (msg, arm_msg)
+    return False, "%s | %s" % (arm_msg, msg)
 
 
 def with_ha_ban(ok, msg):
