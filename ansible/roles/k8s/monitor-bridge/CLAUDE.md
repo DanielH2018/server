@@ -313,7 +313,20 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     estate-wide Memory/Root Disk checks or in a check of its own** — that choice is what this
     bullet exists to force. Empty
     `PI_GLANCES_URL` = disabled (stays up); the static Kuma HTTP monitor
-    `daniel-pi-glances` covers glances itself being down.)
+    `daniel-pi-glances` covers glances itself being down.
+    **Detached-container arm** (`with_pi_detached`, folded here rather than given its own
+    monitor for the push-token reason recorded at `with_ha_ban`): after a Pi reboot a container
+    can come back attached to no Docker network while still reporting `Up (healthy)`, because
+    its healthcheck passes on loopback. The observable harm is that its published port mappings
+    vanish, and only a recreate restores them — autoheal's restart loop structurally cannot.
+    The arm reads glances' `/api/4/containers` and flags any expected publisher whose `ports`
+    string carries no `->` mapping. `PI_PUBLISHING_CONTAINERS` is rendered from daniel-pi's
+    `containers_list` (every entry with a `port`), so `docker-proxy`, `autoheal` and
+    `docker-proxy-lifecycle` — which publish nothing forever — fall out by construction rather
+    than by an exclusion list. An expected container missing from the payload is flagged too,
+    which is what stops a rename or a dead docker plugin from making the arm vacuously green.
+    It cannot see the full-blackout case: glances is itself a publisher, so if everything came
+    back detached the fetch fails and this check renders down by the ordinary error path.)
   - **Home Assistant Automations** (HA's REST API `/api/states/input_datetime.ha_heartbeat` over
     `apps`, Bearer `HA_TOKEN`: an HA `time_pattern:/1min` automation stamps that helper with `now()`,
     so its `last_changed` is fresh ONLY while HA's automation *scheduler* is executing. `down` once
@@ -615,7 +628,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   config: `N8N_URL`/`N8N_API_KEY`; arr queue
   connection config: `SONARR_URL`/`SONARR_API_KEY`/`RADARR_URL`/`RADARR_API_KEY`; GitOps
   liveness: `GITOPS_MAX_AGE_MIN`/`GITOPS_STATE_DIR`; Pi pressure:
-  `PI_GLANCES_URL`/`PI_LOAD_MAX`/`PI_MEM_MIN_MB`/`PI_DISK_MAX_PCT`; HA heartbeat:
+  `PI_GLANCES_URL`/`PI_LOAD_MAX`/`PI_MEM_MIN_MB`/`PI_DISK_MAX_PCT`/`PI_PUBLISHING_CONTAINERS`; HA heartbeat:
   `HA_URL`/`HA_TOKEN`/`HA_HEARTBEAT_MAX_AGE`/`HA_CONSECUTIVE`; speedtest:
   `SPEEDTEST_URL`/`SPEEDTEST_TOKEN`/`SPEEDTEST_DOWNLOAD_MIN_MBPS`/`SPEEDTEST_MAX_AGE_H`/`SPEEDTEST_CONSECUTIVE`;
   host-coverage floor:
