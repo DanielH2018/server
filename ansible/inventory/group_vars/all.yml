@@ -417,6 +417,15 @@ has_docker: true
 # hypervisor appearing on a node by default is a third writer of firewall state next to k3s
 # and any container runtime. daniel-server overrides this true.
 has_hypervisor: false
+
+# The staging-cluster guest. Declared here rather than in the hypervisor role's defaults
+# because two places need one source of truth: the role reserves this MAC->IP pair in the
+# staging network's DHCP, and the inventory entry that reaches the guest names the same
+# address. The MAC uses QEMU's 52:54:00 OUI and is fixed so the reservation is stable across
+# a rebuild of the guest. See docs/staging-cluster.md.
+staging_vm_hostname: daniel-stage
+staging_vm_mac: "52:54:00:5a:11:e0"
+staging_vm_ip: 192.168.140.10
 # Per-user developer environment: the chezmoi-managed dotfiles (DanielH2018/dotfiles) and
 # Claude Code. Both default OFF and are opted into per host — daniel-server already has both
 # installed by hand and shouldn't have them re-provisioned underneath it, and the Pi

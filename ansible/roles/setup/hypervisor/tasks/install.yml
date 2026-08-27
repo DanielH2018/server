@@ -112,3 +112,9 @@
   become: true
   become_user: "{{ sys_user }}"
   changed_when: false
+
+- name: Declare the staging network
+  tags: [hypervisor]
+  # After the verification above, so a broken libvirt fails on "can virsh reach the
+  # hypervisor" rather than several tasks later on a net-define that could not have worked.
+  ansible.builtin.include_tasks: network.yml
