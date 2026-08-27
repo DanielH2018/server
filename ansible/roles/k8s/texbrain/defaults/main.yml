@@ -9,7 +9,7 @@
 # reason as bento_pdf_k8s_image: a bare repo@sha256 is invisible to Renovate's k8s
 # image manager and would freeze with zero update signal. The fork's CI pushes :latest
 # on every merge to main, and Renovate opens the digest bump.
-texbrain_k8s_image: ghcr.io/danielh2018/texbrain:latest@sha256:0bd2763d769af5742a76fee8dda8fd2dccae8d50b06be8daeeee2625f7291ac9
+texbrain_k8s_image: ghcr.io/danielh2018/texbrain:latest@sha256:c97188d8b271fab5ab611c91bcfa18ba7b4e91f4fac5a484b1821d3f21f75f76
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Stateless: RollingUpdate Deployment, no PVC, readinessProbe on the only Deployment, and
