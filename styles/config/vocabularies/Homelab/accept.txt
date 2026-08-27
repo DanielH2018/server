@@ -300,3 +300,5 @@ cours
 [Qq]emu
 [Cc]iphertext
 [Pp]asswordless
+[Uu]fw
+UFW
