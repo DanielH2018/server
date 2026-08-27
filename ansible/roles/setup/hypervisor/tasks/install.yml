@@ -1,0 +1,89 @@
+---
+# Makes the host able to run VMs. Does NOT define any guest or any network — those belong
+# to the slices that own them, so this role stays re-runnable on a host that already has a
+# staging VM without touching it.
+
+- name: Assert the CPU supports hardware virtualisation
+  tags: [hypervisor]
+  # Fail here with the reason rather than several tasks later with a qemu error. Software
+  # emulation would "work" and be slow enough to make the staging cluster useless, which is
+  # a worse outcome than refusing.
+  ansible.builtin.assert:
+    that: "'vmx' in ansible_processor_flags or 'svm' in ansible_processor_flags"
+    fail_msg: >-
+      {{ inventory_hostname }}'s CPU reports neither vmx nor svm, so KVM cannot accelerate a
+      guest. Check that virtualisation is enabled in firmware before installing libvirt.
+
+- name: Install the KVM/libvirt packages
+  tags: [hypervisor]
+  ansible.builtin.apt:
+    name: "{{ hypervisor_packages }}"
+    state: present
+  become: true
+
+- name: Add the deploy user to the libvirt and kvm groups
+  tags: [hypervisor]
+  # Group membership is read at login, so an existing session keeps the old set until it
+  # reconnects. virsh over a fresh ssh connection picks it up; a long-lived shell will not.
+  ansible.builtin.user:
+    name: "{{ sys_user }}"
+    groups: "{{ hypervisor_user_groups }}"
+    append: true
+  become: true
+
+- name: Enable and start libvirtd
+  tags: [hypervisor]
+  ansible.builtin.systemd_service:
+    name: libvirtd
+    state: started
+    enabled: true
+  become: true
+
+- name: Read the state of libvirt's built-in default network
+  tags: [hypervisor]
+  # DECIDED: the packaged `default` NAT network is stopped and un-autostarted rather than
+  # left alone. Installing libvirt otherwise brings up virbr0 and a set of NAT/forward rules
+  # on a host that already runs k3s's flannel and kube-router chains — an undeclared third
+  # writer of firewall state, appearing as a side effect of a package install. The staging
+  # network is declared explicitly in its own slice; this makes sure nothing else is.
+  #
+  # command rather than a module: community.libvirt is not in ansible/requirements.yml, and
+  # adding a pinned collection is a lockstep change with ansible-core that is not worth
+  # making for three calls. Revisit if the guest definition needs it.
+  ansible.builtin.command:
+    cmd: virsh --connect qemu:///system net-info default
+  register: hypervisor_default_net
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: Stop libvirt's built-in default network
+  tags: [hypervisor]
+  when:
+    - hypervisor_default_net.rc == 0
+    - hypervisor_default_net.stdout is search('Active:\s+yes')
+  ansible.builtin.command:
+    cmd: virsh --connect qemu:///system net-destroy default
+  changed_when: true
+  become: true
+
+- name: Stop libvirt's built-in default network from autostarting
+  tags: [hypervisor]
+  when:
+    - hypervisor_default_net.rc == 0
+    - hypervisor_default_net.stdout is search('Autostart:\s+yes')
+  ansible.builtin.command:
+    cmd: virsh --connect qemu:///system net-autostart --disable default
+  changed_when: true
+  become: true
+
+- name: Verify virsh reaches the system hypervisor
+  tags: [hypervisor]
+  # The role's exit criterion, asserted rather than left to the operator. Run as sys_user,
+  # not root: "root can talk to libvirtd" is not the property that matters, since every
+  # later slice drives virsh as sys_user.
+  ansible.builtin.command:
+    cmd: virsh --connect qemu:///system version
+  become: true
+  become_user: "{{ sys_user }}"
+  changed_when: false

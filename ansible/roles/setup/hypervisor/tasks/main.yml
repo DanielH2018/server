@@ -1,0 +1,16 @@
+---
+# Dispatcher. Included unconditionally; has_hypervisor chooses which half runs.
+#
+# Both directions exist from the start, deliberately. docker_install was install-only and
+# gated in the playbook, so flipping a host's flag to false skipped the role entirely and
+# nothing declarative ever reaped what was left behind — which is how daniel-server ran a
+# second container runtime for eight days in 2026-08 while has_docker: false read green.
+# A flag that only one direction honours describes an intention, not a state.
+
+- name: Install and configure the KVM/libvirt hypervisor
+  ansible.builtin.include_tasks: install.yml
+  when: has_hypervisor
+
+- name: Remove the hypervisor from a host that should not run VMs
+  ansible.builtin.include_tasks: teardown.yml
+  when: not has_hypervisor
