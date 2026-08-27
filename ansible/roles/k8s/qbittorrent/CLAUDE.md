@@ -60,6 +60,32 @@ A `subPath` of the existing claim rather than a PVC of its own: the tarball is a
 1Gi, and a second claim would add a storage-class decision and a backup surface for a cache any
 successful start can rebuild.
 
+### verify.yml waits for the rollout, and has to
+`roles/k8s/manifests` does not wait for a rollout — it **queues** it, and `roles/k8s/rollout-drain`
+runs `rollout status` for the whole batch afterwards. So a role's own `verify.yml` runs *before*
+its rollout finishes and `get pod -l app=qbittorrent` returns the **outgoing** pod. That went
+unnoticed here for as long as every proof held for the old pod too: a tunnel and a return path
+look identical either side of a roll. Proof 3 is the first assertion whose answer differs, and it
+failed the 2026-08-27 deploy against a pod that was already `Terminating` while the correctly
+mounted new pod came up seconds later.
+
+`verify.yml` now gates on `rollout status` before finding the pod. It is one inline wait for one
+role, not a reversal of the batch drain, and it is a no-op when nothing rolled.
+
+Two primitives that look like they solve this and do not, both because they are satisfied by the
+**outgoing** pod:
+
+| primitive | why it returns instantly mid-roll |
+|---|---|
+| `wait --for=condition=Available deploy/<x>` | Available is true of the old ReplicaSet |
+| `wait --for=condition=ready pod -l app=<x>` | the old pod is still Ready until it stops |
+| `--field-selector status.phase=Running` | `.status.phase` stays `Running` while Terminating — that word is kubectl's rendering of `deletionTimestamp`, not a phase |
+
+**This exposure is not unique to this role.** Confirmed 2026-08-27 in `roles/k8s/jellyfin`,
+`roles/k8s/tdarr` (pod lookup with no wait at all) and `roles/k8s/janitorr` (a
+`wait --for=condition=ready pod` that the old pod satisfies). None had been caught because, as
+here, their assertions happened to hold on both sides of a roll.
+
 ### The new failure mode — a stale lock
 Lines 413-421 hold `/modcache/<name>.lock` for the duration of a download. A pod killed
 mid-download leaves it behind, and later starts **wait on it and then skip the mod** — which
