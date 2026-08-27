@@ -78,6 +78,30 @@
         ]
       }
     ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/server/.claude/hooks/auto-mode-bridge.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PermissionDenied": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/server/.claude/hooks/auto-mode-bridge.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "InstructionsLoaded": [
       {
         "hooks": [
