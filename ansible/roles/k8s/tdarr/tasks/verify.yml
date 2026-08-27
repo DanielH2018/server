@@ -4,6 +4,24 @@
 # proof is a real library file transcoding to completion and the output playing, which needs a
 # job run and a human.
 
+# WITHOUT THIS, EVERY PROOF BELOW RUNS AGAINST THE OUTGOING POD. k8s/manifests does not wait
+# for a rollout — it QUEUES it for k8s/rollout-drain, which drains the whole batch at the end.
+# So a role's own verify tasks run before its rollout completes, and the pod lookup returns the
+# pod that is being replaced. Found on qbittorrent 2026-08-27, where a proof that genuinely
+# differs between old and new pod failed a deploy that had in fact succeeded.
+#
+# `rollout status` and NOT a readiness wait — the old pod satisfies every readiness-shaped
+# check, including the `--field-selector status.phase=Running` below, because phase stays
+# Running while Terminating. See ansible/tests/test_inline_rollout_gates.py.
+- name: Wait for the tdarr rollout to finish before verifying it
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} rollout status deployment/tdarr --timeout=300s
+  become: true
+  changed_when: false
+  when: not ansible_check_mode
+
 - name: Find the running tdarr pod
   tags: [deploy]
   ansible.builtin.command:

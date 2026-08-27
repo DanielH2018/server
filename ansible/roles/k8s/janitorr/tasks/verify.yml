@@ -3,14 +3,24 @@
 # so "the pod is Running" proves nothing worth having. Three claims, in the order that matters:
 # it is dry, it can reach the *arrs, and the symlinks it writes resolve where Jellyfin reads them.
 
-- name: Wait for the janitorr pod to be ready
+# THIS WAS A READINESS WAIT AND THAT DID NOT GATE ANYTHING. `wait --for=condition=ready pod
+# -l app=janitorr` is satisfied by the OLD pod, which stays Ready until it stops — the pod-level
+# twin of the `condition=Available` trap this file's siblings already record. k8s/manifests
+# QUEUES the rollout for k8s/rollout-drain rather than waiting, so the verify below was running
+# against the outgoing pod and the wait returned instantly.
+#
+# For a service that deletes real media, "I proved the old pod was dry" is precisely the wrong
+# claim: the assertion has to hold for the pod the deploy just created. Only `rollout status`
+# gates on the new ReplicaSet. Found on qbittorrent 2026-08-27; see
+# ansible/tests/test_inline_rollout_gates.py.
+- name: Wait for the janitorr rollout to finish before verifying it
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} wait --for=condition=ready pod
-      -l app=janitorr --timeout=180s
+      k3s kubectl -n {{ k8s_namespace }} rollout status deployment/janitorr --timeout=300s
   become: true
   changed_when: false
+  when: not ansible_check_mode
 
 - name: Find the running janitorr pod
   tags: [deploy]

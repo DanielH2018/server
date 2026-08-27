@@ -39,8 +39,49 @@ _MUST_GATE = {
 }
 
 
+def _load(path: Path) -> list[dict]:
+    return yaml.safe_load(path.read_text()) or []
+
+
 def _tasks(role: str) -> list[dict]:
-    return yaml.safe_load((_K8S_ROLES / role / "tasks" / "main.yml").read_text()) or []
+    """main.yml with included and imported task files inlined, so ordering survives the split.
+
+    THE ORIGINAL VERSION READ main.yml AND NOTHING ELSE, which is why the four roles found on
+    2026-08-27 were missed: crowdsec and registry do their work in main.yml, where the guard
+    could see it, while jellyfin, tdarr, janitorr and qbittorrent do theirs in verify.yml behind
+    an include. The gap was in the guard, not only in the roles.
+
+    BOTH `include_tasks` AND `import_tasks` are followed. Reading only the first missed janitorr,
+    which imports — the same narrowing this guard had already fallen for once, in larger form.
+    The two forms differ in WHEN Ansible resolves the file, not in whether those tasks run, so a
+    guard reading for shape has to treat them alike.
+
+    Only a literal filename is followed. A templated include is not resolvable here and is left
+    as the opaque task it is, rather than guessed at.
+    """
+    tasks_dir = _K8S_ROLES / role / "tasks"
+    flat: list[dict] = []
+    for task in _load(tasks_dir / "main.yml"):
+        include = next(
+            (
+                task[key]
+                for key in (
+                    "ansible.builtin.include_tasks",
+                    "ansible.builtin.import_tasks",
+                )
+                if key in task
+            ),
+            None,
+        )
+        name = include.get("file") if isinstance(include, dict) else include
+        target = (
+            tasks_dir / name if isinstance(name, str) and "{{" not in name else None
+        )
+        if target is not None and target.is_file():
+            flat.extend(_load(target))
+        else:
+            flat.append(task)
+    return flat
 
 
 def _cmd(task: dict) -> str:
@@ -113,3 +154,84 @@ def test_the_gate_is_tagged_with_what_it_protects() -> None:
             f"{role}: the gate is tagged {gate.get('tags')!r}; it protects deploy-tagged tasks "
             "and must carry exactly that tag."
         )
+
+
+# ── the derived half ────────────────────────────────────────────────────────────────────────
+#
+# _MUST_GATE above is a hand-maintained list, and a hand-maintained list is why four roles sat
+# ungated until a deploy failed. The checks below derive the roles that need a gate FROM THEIR
+# OWN SHAPE, so the next role written this way fails the suite instead of waiting for an
+# incident.
+#
+# The shape is narrow on purpose: a role that looks up a pod by its OWN app label is about to
+# assert something about that pod, and k8s/manifests has queued rather than run its rollout.
+# Roles that read OTHER workloads' pods are not candidates — claude-otel samples restart counts
+# across a configured list, netpol-baseline reads an exemption label across the namespace, and
+# neither is asserting about a pod it just rolled.
+
+_SELF_POD_LOOKUP = "get pod"
+
+# Derived on 2026-08-27. Named here so a derivation that silently stops matching fails loudly
+# rather than passing an empty set — the failure mode recorded in
+# memory/a-derivation-can-narrow-the-list-it-replaces.md, where replacing a hardcoded list by
+# shape dropped an entry while reading as a widening.
+_KNOWN_SELF_POD_ROLES = {"janitorr", "jellyfin", "qbittorrent", "tdarr"}
+
+
+def _looks_up_own_pod(role: str, task: dict) -> bool:
+    cmd = _cmd(task)
+    return _SELF_POD_LOOKUP in cmd and f"app={role}" in cmd
+
+
+def _self_pod_roles() -> dict[str, list[dict]]:
+    found = {}
+    for role_dir in sorted(_K8S_ROLES.iterdir()):
+        if not (role_dir / "tasks" / "main.yml").is_file():
+            continue
+        tasks = _tasks(role_dir.name)
+        if any(_looks_up_own_pod(role_dir.name, task) for task in tasks):
+            found[role_dir.name] = tasks
+    return found
+
+
+def test_the_derivation_still_matches_the_roles_it_was_written_for() -> None:
+    derived = set(_self_pod_roles())
+    missing = _KNOWN_SELF_POD_ROLES - derived
+    assert not missing, (
+        f"the self-pod-lookup derivation no longer matches {sorted(missing)}. Either those "
+        "roles changed shape, or the matcher broke and is now guarding less than it claims — "
+        "check which before editing this list."
+    )
+
+
+def test_every_role_that_inspects_its_own_pod_gates_on_its_rollout() -> None:
+    for role, tasks in _self_pod_roles().items():
+        gate = _gate_index(tasks, role)
+        first_lookup = next(
+            index for index, task in enumerate(tasks) if _looks_up_own_pod(role, task)
+        )
+        assert gate >= 0, (
+            f"{role} looks up its own pod at task {first_lookup} without ever waiting for its "
+            "rollout. k8s/manifests QUEUES the rollout for k8s/rollout-drain, so this reads the "
+            "pod being replaced, and every assertion after it describes the outgoing pod."
+        )
+        assert gate < first_lookup, (
+            f"{role}: the rollout gate is at task {gate}, after the pod lookup at "
+            f"{first_lookup}. A gate that runs second is not a gate."
+        )
+
+
+def test_no_role_gates_with_a_readiness_wait_on_its_own_pods() -> None:
+    # The three primitives that LOOK like gates and are all satisfied by the outgoing pod.
+    # janitorr shipped the middle one and read as gated for as long as nobody checked which pod
+    # its proofs were describing.
+    for role, tasks in _self_pod_roles().items():
+        for task in tasks:
+            cmd = _cmd(task)
+            if "wait --for=" not in cmd or f"app={role}" not in cmd:
+                continue
+            assert False, (
+                f"{role}: `{cmd.strip()}` is satisfied by the OLD pod — Ready and Available are "
+                "both true of it until it stops, and status.phase stays Running while it is "
+                "Terminating. Use `rollout status` instead."
+            )
