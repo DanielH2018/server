@@ -5,6 +5,27 @@
 # playback with a bitrate that forces a transcode, and it is checked by hand. Keep the two
 # claims apart; a green run here is a starting line.
 
+# WITHOUT THIS, EVERY PROOF BELOW RUNS AGAINST THE OUTGOING POD. k8s/manifests does not wait
+# for a rollout — it QUEUES it for k8s/rollout-drain, which drains the whole batch at the end.
+# So a role's own verify tasks run before its rollout completes, and the pod lookup returns the
+# pod that is being replaced. Found on qbittorrent 2026-08-27, where a proof that genuinely
+# differs between old and new pod failed a deploy that had in fact succeeded.
+#
+# `rollout status` and NOT a readiness wait. Three primitives look like gates and are all
+# satisfied by the OLD pod: `wait --for=condition=Available deploy/x` (Available is true of the
+# old ReplicaSet), `wait --for=condition=ready pod -l app=x` (the old pod is Ready until it
+# stops), and `--field-selector status.phase=Running` (phase stays Running while Terminating —
+# that word is kubectl rendering deletionTimestamp, not a phase). Only `rollout status` gates on
+# the new ReplicaSet. See ansible/tests/test_inline_rollout_gates.py.
+- name: Wait for the jellyfin rollout to finish before verifying it
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} rollout status deployment/jellyfin --timeout=300s
+  become: true
+  changed_when: false
+  when: not ansible_check_mode
+
 - name: Find the running jellyfin pod
   tags: [deploy]
   ansible.builtin.command:
