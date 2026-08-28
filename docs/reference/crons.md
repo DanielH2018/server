@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/gen_reference_crons.py
-generated_at: 2026-08-25 16:03 UTC
-generated_sha: 548248f0
+generated_at: 2026-08-28 06:17 UTC
+generated_sha: eb6d0cd2
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 548248f0
 
 # Scheduled jobs
 
-34 cron entrie(s) installed across the roles.
+35 cron entrie(s) installed across the roles.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a cron task declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
@@ -22,7 +22,7 @@ generated_sha: 548248f0
 | Claude Code telemetry health | `{{ claude_otel_health_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/k8s/claude-otel/tasks/main.yml` |
 | Clean unused Docker images | `30 6 * * *` | conditional (has_docker) | `{{ ansible_facts.user_id }}` | yes (prune) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Clear ansible log file | `0 6 * * 0` | every host in the play | `root` | yes (truncate) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
-| Cloudflare IP drift | `25 5 * * *` | every host in the play | `root` | read the script | `ansible/roles/k8s/traefik/tasks/main.yml` |
+| Cloudflare IP drift | `25 5 * * *` | conditional (traefik_k8s_manage_cloudflare_drift_check | bool) | `root` | read the script | `ansible/roles/k8s/traefik/tasks/main.yml` |
 | CrowdSec AppSec verify | `*/15 * * * *` | every host in the play | `root` | read the script | `ansible/roles/k8s/crowdsec/tasks/main.yml` |
 | CrowdSec home allowlist | `*/5 * * * *` | every host in the play | `root` | read the script | `ansible/roles/k8s/crowdsec/tasks/main.yml` |
 | Daily secret rotation audit | `0 8 * * *` | the gitops host | `{{ sys_user }}` | read the script | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
@@ -52,6 +52,7 @@ generated_sha: 548248f0
 | fake-remux reconcile | `{{ fake_remux_replace_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | no (read-only by its command) | `ansible/roles/setup/fake_remux/tasks/main.yml` |
 | fake-remux scan | `{{ fake_remux_scan_cron_minute }} {{ fake_remux_scan_cron_hour }} * * *` | every host in the play | `{{ sys_user }}` | no (read-only by its command) | `ansible/roles/setup/fake_remux/tasks/main.yml` |
 | janitorr error health | `{{ janitorr_k8s_health_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/k8s/janitorr/tasks/main.yml` |
+| qbittorrent prefs drift check | `{{ qbittorrent_k8s_prefs_check_cron_minute }} {{ qbittorrent_k8s_prefs_check_cron_hour }} * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/k8s/qbittorrent/tasks/main.yml` |
 | remember log rotation health | `{{ k3s_remember_logs_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 
 ## Schedule format

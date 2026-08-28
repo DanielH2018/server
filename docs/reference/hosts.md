@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/gen_reference_hosts.py
-generated_at: 2026-08-27 06:17 UTC
-generated_sha: 13875626
+generated_at: 2026-08-28 06:17 UTC
+generated_sha: eb6d0cd2
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 13875626
 
 # Hosts
 
-3 host(s) in `ansible/inventory/hosts.ini`.
+4 host(s) in `ansible/inventory/hosts.ini`.
 
 
 ## daniel-box
@@ -49,6 +49,19 @@ k3s agent node. Intel iGPU for transcoding, LVM storage, and the UPS hardware be
 |---|---|
 | LAN address | `10.0.0.161` |
 | Ansible connection | `local` |
+| Service exposure | traefik (default) |
+| Services declared | 0 |
+| Runs the GitOps timer | no |
+| Has Docker | no |
+
+## daniel-stage
+
+unknown (no description recorded)
+
+| Fact | Value |
+|---|---|
+| LAN address | `{{ staging_vm_ip }}` |
+| Ansible connection | `ssh` |
 | Service exposure | traefik (default) |
 | Services declared | 0 |
 | Runs the GitOps timer | no |
