@@ -38,6 +38,7 @@ spec:
         runAsGroup: {{ traefik_k8s_uid }}
         fsGroup: {{ traefik_k8s_uid }}
       initContainers:
+{% if traefik_k8s_manage_acme %}
         # Traefik creates acme.json 0600 itself, but kubelet's fsGroup handling ORs group bits
         # into every file on the volume at mount time, so it comes back 0660 on every start.
         # Traefik then refuses to load the ACME account and drops the entire resolver:
@@ -73,6 +74,7 @@ spec:
             requests:
               cpu: 10m
               memory: 16Mi
+{% endif %}
         # Seeds the agent sidecar's /etc/crowdsec before its entrypoint fills in defaults —
         # acquis pointing at the shared access log, and the same whitelist parsers as the
         # Docker edge (from the traefik-crowdsec Secret). Root like the sidecar itself.
@@ -128,12 +130,17 @@ spec:
               containerPort: {{ traefik_k8s_https_port }}
             - name: ping
               containerPort: {{ traefik_k8s_ping_port }}
+{% if traefik_k8s_manage_acme %}
+{# The whole env: key is gated, not just its entries — an env: with no list under it parses as
+   null, which the API server rejects on a container spec. This comment sits at column 0 on
+   purpose: lstrip_blocks is off, so an indented tag leaves its leading spaces in the output. #}
           env:
             # Not sensitive — the token itself is file-mounted below.
             - name: CF_API_EMAIL
               value: "{{ email }}"
             - name: CF_DNS_API_TOKEN_FILE
               value: /secrets/cf_dns_token
+{% endif %}
           securityContext:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
@@ -152,16 +159,20 @@ spec:
             # the ServiceAccount token — mounting a read-only Secret over it leaves runc unable
             # to create /run/secrets/kubernetes.io and the container never starts:
             #   mkdirat .../rootfs/run/secrets/kubernetes.io: read-only file system
+{% if traefik_k8s_manage_acme %}
             - name: traefik-cloudflare
               mountPath: /secrets
               readOnly: true
+{% endif %}
             # The bouncer plugin reads its LAPI key from here (crowdsecLapiKeyFile in the
             # crowdsec Middleware) — a file, so the key never appears in the CRD.
             - name: crowdsec-key
               mountPath: /secrets/crowdsec
               readOnly: true
+{% if traefik_k8s_manage_acme %}
             - name: traefik-acme
               mountPath: /data
+{% endif %}
             # Shared with the crowdsec-agent sidecar, which tails access.log (slice-6 D2).
             - name: traefik-logs
               mountPath: /var/log/traefik
@@ -382,6 +393,7 @@ spec:
         - name: traefik-livesync-gate
           secret:
             secretName: traefik-livesync-gate
+{% if traefik_k8s_manage_acme %}
         - name: traefik-cloudflare
           secret:
             secretName: traefik-cloudflare
@@ -392,6 +404,7 @@ spec:
         - name: traefik-acme
           persistentVolumeClaim:
             claimName: traefik-acme
+{% endif %}
         - name: traefik-tmp
           emptyDir: {}
         - name: crowdsec-secret

@@ -100,6 +100,13 @@ def volume_blocks(path: Path) -> list[tuple[str, int, list[str]]]:
         j = i + 1
         while j < len(lines):
             line = lines[j]
+            # A Jinja block tag sits at column 0, because lstrip_blocks is off and an indented
+            # tag would leave its leading spaces in the rendered YAML. Taken as YAML that reads
+            # as dedenting out of the block, so a conditional volume would end the scan and
+            # every entry after it would look undeclared. Skip the tag, keep scanning.
+            if line.lstrip().startswith(("{%", "{#")):
+                j += 1
+                continue
             if line.strip() and (len(line) - len(line.lstrip())) <= indent:
                 break
             name = NAME_RE.match(line)
@@ -178,3 +185,36 @@ def test_volume_names_name_their_workload(path: Path) -> None:
         "Name the volume for the workload or component that owns it — "
         "`sonarr-config`, not `config`."
     )
+
+
+_CONDITIONAL_VOLUMES = """\
+      volumes:
+{% if manage_acme %}
+        - name: traefik-acme
+          emptyDir: {}
+{% endif %}
+        - name: traefik-tmp
+          emptyDir: {}
+"""
+
+
+def test_the_scanner_reads_past_a_jinja_tag(tmp_path: Path) -> None:
+    """A conditional volume must not end the block, or every entry after it reads undeclared."""
+    path = tmp_path / "deployment.yaml.j2"
+    path.write_text(_CONDITIONAL_VOLUMES)
+    assert volume_names(path)["volumes"] == {"traefik-acme", "traefik-tmp"}
+
+
+def test_the_scanner_still_sees_an_orphan_across_a_jinja_tag(tmp_path: Path) -> None:
+    """The rejecting half: skipping tags must not also skip the defect the guard exists for."""
+    path = tmp_path / "deployment.yaml.j2"
+    path.write_text(
+        _CONDITIONAL_VOLUMES
+        + "      volumeMounts:\n"
+        + "{% if manage_acme %}\n"
+        + "        - name: traefik-nonexistent\n"
+        + "          mountPath: /data\n"
+        + "{% endif %}\n"
+    )
+    found = volume_names(path)
+    assert found["volumeMounts"] - found["volumes"] == {"traefik-nonexistent"}
