@@ -49,6 +49,18 @@ traefik_k8s_manage_cloudflare_drift_check: true
 # and produces the failed-login lines the scenarios read.
 traefik_k8s_manage_crowdsec: true
 
+# The file-provider token gate (livesync-gate-secret.yaml.j2) and the file provider that
+# reads it. False for a cluster that runs neither CouchDB nor homelab-mcp, which is what
+# every router in that file routes to.
+#
+# DECIDED: a flag, not generated staging tokens. Slice 2a recorded the opposite — that
+# generated values would render harmlessly — and that was wrong twice. The routers name
+# backends a staging cluster does not run, so it is the same class as CrowdSec rather than
+# an inert Secret. And staging's secrets file is encrypted to daniel-server's key alone and
+# holds exactly one key by design (Decision 5), so minting tokens into it is operator work
+# on that host, not something a deploy can arrange.
+traefik_k8s_manage_livesync_gate: true
+
 # Let's Encrypt directory. Empty means production. Set to
 #   https://acme-staging-v02.api.letsencrypt.org/directory
 # while iterating: both Traefik instances request the SAME SAN set, so they share one

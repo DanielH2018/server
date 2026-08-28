@@ -66,7 +66,7 @@
     manifests_secret_files: >-
       {{ (['cf-token-secret.yaml'] if traefik_k8s_manage_acme | bool else [])
          + (['crowdsec-secret.yaml'] if traefik_k8s_manage_crowdsec | bool else [])
-         + ['livesync-gate-secret.yaml'] }}
+         + (['livesync-gate-secret.yaml'] if traefik_k8s_manage_livesync_gate | bool else []) }}
 
 - name: Read the address MetalLB assigned to the Traefik Service
   tags: [deploy]

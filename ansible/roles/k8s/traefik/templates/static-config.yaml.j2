@@ -112,6 +112,7 @@ data:
       insecureSkipVerify: false
 
     providers:
+{% if traefik_k8s_manage_livesync_gate %}
       # LiveSync's token gate (livesync-gate-secret.yaml.j2) — a Secret-mounted dynamic
       # config, because the token must stay out of CRDs the readonly kubeconfig can read.
       # watch:true makes token rotation a Secret update + kubelet propagation, no restart.
@@ -121,6 +122,7 @@ data:
         # configured, skipping" — seen live at first deploy, 2026-08-12).
         filename: /etc/traefik-file/livesync-gate.yml
         watch: true
+{% endif %}
       kubernetesCRD:
         # Scoped to named namespaces: Traefik should not pick up an IngressRoute someone
         # drops in an arbitrary one (kube-system in particular).
