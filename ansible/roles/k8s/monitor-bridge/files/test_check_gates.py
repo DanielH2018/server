@@ -1280,3 +1280,61 @@ def test_cadvisor_floor_is_overridable_from_the_env_secret():
         "CADVISOR_PODS_MIN must be rendered in env-secret.yaml.j2 so an operator can tune it "
         "without a code change, like HOST_ORIGINS_MIN"
     )
+
+
+def _functions_calling(name):
+    """Every top-level function in check.py whose body calls `name`, by AST rather than by text.
+
+    Derived, not enumerated. `_CADVISOR_METRICS` above is a literal tuple and the assertion it
+    drives is about origin-pinning, not about the empty-vector floor — so before this, a FOURTH
+    cAdvisor-derived check added later would inherit the pre-#495 "empty vector reads green"
+    defect with every test still passing. That is the guard-scope class the estate has now carried
+    five runs: a guard written alongside its fix inherits the fix's scope.
+    """
+    import ast
+
+    tree = ast.parse(Path(check.__file__).read_text())
+    out = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for call in ast.walk(node):
+            if isinstance(call, ast.Call) and getattr(call.func, "id", None) == name:
+                out.add(node.name)
+    return out
+
+
+def test_every_cadvisor_query_is_floored():
+    """A cAdvisor check that skips the floor reads GREEN on an empty vector.
+
+    cAdvisor series carry no `origin` label, so an outage or a relabel change empties the vector
+    rather than erroring — and `all(...)` over nothing is True. #495 applied `_cadvisor_blind` to
+    the three checks that existed; this derives the set instead, so a fourth fails here rather
+    than shipping the old defect.
+    """
+    builders = _functions_calling("cadvisor_sel")
+    floored = _functions_calling("_cadvisor_blind")
+    assert builders, (
+        "no function calls cadvisor_sel() — either the helper was renamed or this guard has "
+        "stopped matching; a guard that matches nothing passes for the wrong reason"
+    )
+    missing = sorted(builders - floored)
+    assert not missing, (
+        "%s build a cAdvisor query without calling _cadvisor_blind(); an empty vector there "
+        "reports green instead of UNKNOWN" % ", ".join(missing)
+    )
+
+
+def test_the_floor_helper_is_reached_by_every_check_that_needs_it():
+    """The reject direction of the pair above: prove the derivation can actually find a gap.
+
+    Asserting only `builders <= floored` would also pass if `_functions_calling` silently
+    returned the empty set for both — the failure mode this repo calls a widening that lands
+    green and inert. So pin the known membership too.
+    """
+    floored = _functions_calling("_cadvisor_blind")
+    for expected in ("check_restarts", "check_oom", "check_cpu_throttle"):
+        assert expected in floored, (
+            "%s no longer calls _cadvisor_blind — #495's floor was removed from a check that "
+            "had it" % expected
+        )
