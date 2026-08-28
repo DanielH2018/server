@@ -12,7 +12,7 @@ metadata:
     # MetalLB's supported way to pin an address. `spec.loadBalancerIP` is deprecated upstream and
     # MetalLB honours this annotation instead. Pinned rather than pool-assigned because clients
     # have this address typed in by hand — see the role defaults.
-    metallb.universe.tf/loadBalancerIPs: {{ jellyfin_k8s_lan_ip }}
+    metallb.io/loadBalancerIPs: {{ jellyfin_k8s_lan_ip }}
 spec:
   type: LoadBalancer
   # Preserves the real client address, matching the Traefik Service. Safe here because the pod

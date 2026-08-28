@@ -9,14 +9,18 @@ metadata:
     # reads this. This is the only way to claim an address out of the autoAssign: false
     # ingress-pool (roles/setup/k3s/templates/metallb-pool.yaml.j2).
     #
-    # metallb.universe.tf/, NOT metallb.io/. metallb.io is the API group of the CRDs
-    # (IPAddressPool, L2Advertisement); Service annotations keep the older universe.tf
-    # namespace. Kubernetes accepts any annotation key, and MetalLB ignores ones it does not
-    # recognise, so the wrong prefix is silent: the Service is created, an address is
-    # assigned from the auto-assign pool instead of the reserved VIP, and nothing anywhere
-    # reports a problem. MetalLB's own metallb.universe.tf/ip-allocated-from-pool annotation
-    # on the resulting Service is what gives it away.
-    metallb.universe.tf/loadBalancerIPs: {{ k3s_metallb_ingress_vip }}
+    # metallb.io/, NOT metallb.universe.tf/. The prefix flipped: MetalLB v0.15 introduced
+    # metallb.io/ for Service annotations and deprecated metallb.universe.tf/, and this
+    # cluster runs v0.16.0 (k3s_metallb_version). Both prefixes are still read
+    # (controller/service.go valueForAnnotation, metallb.io wins), but the deprecated one
+    # emits a `deprecatedAnnotation` Warning Event per Service on every reconcile.
+    #
+    # Kubernetes accepts any annotation key, and MetalLB ignores ones it does not recognise,
+    # so a wrong prefix is silent: the Service is created, an address is assigned from the
+    # auto-assign pool instead of the reserved VIP, and nothing anywhere reports a problem.
+    # That is why the assert in tasks/main.yml checks the landed address rather than
+    # trusting the annotation. Every pinned-address Service here has that assert.
+    metallb.io/loadBalancerIPs: {{ k3s_metallb_ingress_vip }}
 spec:
   type: LoadBalancer
   # Local, NOT the Cluster default, and this is a security control rather than a tuning knob.

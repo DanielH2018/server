@@ -31,7 +31,7 @@ metadata:
   name: pihole-dns
   namespace: {{ k8s_namespace }}
   annotations:
-    metallb.universe.tf/loadBalancerIPs: {{ pihole_k8s_lan_ip }}
+    metallb.io/loadBalancerIPs: {{ pihole_k8s_lan_ip }}
 spec:
   type: LoadBalancer
   # Pinned because CoreDNS forwards here by address — see k3s_coredns_upstreams.
