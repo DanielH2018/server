@@ -171,31 +171,53 @@ def test_registry_drift_clean_when_in_sync():
     assert sr.registry_drift({"a", "b"}, {"a", "b"}) == ([], [])
 
 
-# ── consumer mapping (which redeploy applies a rotated token) ────────────────
-def test_consumer_tag_monitor_bridge_tokens():
-    assert sr.consumer_tag("monitor_bridge_cpu_push_token") == "monitor-bridge"
+# ── consumer mapping (which redeploys apply a rotated token) ─────────────────
+def test_consumer_tags_monitor_bridge_tokens():
+    # The pusher AND the tile. Asserting only the pusher is what let the tile go stale.
+    assert sr.consumer_tags("monitor_bridge_cpu_push_token") == (
+        "monitor-bridge",
+        "uptime-kuma",
+    )
     # `kopia_restore_drill_push_token` had its own arm in the same branch until 2026-08-27. It is
     # absent from both secrets.yml and secret_rotation.yml, so the arm mapped a name that could
     # never be passed and the assertion here was the only thing keeping it alive.
-    assert sr.consumer_tag("kopia_restore_drill_push_token") is None
+    assert sr.consumer_tags("kopia_restore_drill_push_token") == ()
 
 
-def test_consumer_tag_cloudflare_ddns_tokens():
-    assert sr.consumer_tag("cloudflare_ddns_proxied_push_token") == "cloudflare-ddns"
+def test_consumer_tags_non_push_prefixed_token_gets_no_tile():
+    """`monitor_bridge_ha_token` carries the prefix for Kuma history but is an HA API token.
+
+    It is the ONE token that resolves a consumer and has no tile, so it is the reject half of
+    the `_push_token` discriminator: adding uptime-kuma here would deploy a role that renders
+    this name nowhere, which `test_every_consumer_tag_names_a_role_that_renders_the_token`
+    would then fail on.
+    """
+    assert sr.consumer_tags("monitor_bridge_ha_token") == ("monitor-bridge",)
 
 
-def test_consumer_tag_cross_host_tokens_are_manual():
-    # Cross-host / self-referential — the unattended cron must NOT auto-rotate these.
-    assert sr.consumer_tag("pi_sd_health_push_token") is None
-    assert (
-        sr.consumer_tag("pi_recovery_push_token") is None
-    )  # Pi cron, manual Pi deploy
-    assert sr.consumer_tag("secret_rotation_push_token") is None
+def test_consumer_tags_cloudflare_ddns_tokens():
+    assert sr.consumer_tags("cloudflare_ddns_proxied_push_token") == (
+        "cloudflare-ddns",
+        "uptime-kuma",
+    )
 
 
-def test_consumer_tag_autofix_bridge_token():
+def test_consumer_tags_cross_host_tokens_are_manual():
+    # Cross-host / self-referential — the unattended cron must NOT auto-rotate these, and they
+    # must NOT pick up the uptime-kuma tag either: their pusher half sits on another HOST, so a
+    # tag list would assert a repair one playbook run cannot perform. This is the reject half of
+    # the multi-tag change.
+    assert sr.consumer_tags("pi_sd_health_push_token") == ()
+    assert sr.consumer_tags("pi_recovery_push_token") == ()  # Pi cron, manual Pi deploy
+    assert sr.consumer_tags("secret_rotation_push_token") == ()
+
+
+def test_consumer_tags_autofix_bridge_token():
     # Single-host, single-redeploy auto token — must auto-rotate, not false-skip as cross-host.
-    assert sr.consumer_tag("arr_autoblock_push_token") == "autofix-bridge"
+    assert sr.consumer_tags("arr_autoblock_push_token") == (
+        "autofix-bridge",
+        "uptime-kuma",
+    )
 
 
 def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
@@ -211,11 +233,9 @@ def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
     reg = sr.load_registry()
     auto = [n for n, m in reg["secrets"].items() if m.get("tier") == "auto"]
     assert auto  # sanity: the registry has auto-tier tokens
-    unrotatable = [
-        n for n in auto if sr.consumer_tag(n) is None and n not in known_manual
-    ]
+    unrotatable = [n for n in auto if not sr.consumer_tags(n) and n not in known_manual]
     assert not unrotatable, (
-        "auto-tier tokens with no consumer_tag and not known-manual — they silently drop "
+        "auto-tier tokens with no consumer_tags and not known-manual — they silently drop "
         "out of unattended rotation: %s" % unrotatable
     )
 
@@ -234,9 +254,13 @@ def test_no_cross_host_token_is_badly_overdue():
     # due. Rotating one is a manual, two-host procedure — see docs/secret-rotation.md.
     #
     # NOT the fix the reviewer proposed. That was to give CROSS_HOST_PUSH_TOKENS a two-tag
-    # consumer list, which is not representable: consumer_tag is typed `str | None` and returns
-    # a SINGLE tag across four call sites, and a multi-tag return contradicts the rationale
-    # above rather than implementing it.
+    # consumer list, and it stays rejected — but the REASON is the hosts, not the arity.
+    # `consumer_tags` became genuinely multi-valued on 2026-08-28, because a push token's tile
+    # lives in k8s/uptime-kuma while its pusher lives elsewhere, and BOTH deploy from daniel-box
+    # in one playbook run. CROSS_HOST tokens are the case that remains unrepresentable: their
+    # two halves sit on different HOSTS, so any tag list would assert a repair that no single
+    # `rotate --deploy` can perform. They still return `()`, and
+    # test_consumer_tags_cross_host_tokens_are_manual is the guard that keeps them there.
     grace_days = 30
     reg = sr.load_registry()
     today = dt.date.today()
@@ -417,9 +441,9 @@ _SKIP_TAGS = ("ignore", "pinned", "external")
 def _consumer_tags():
     reg = sr.load_registry()
     for name in reg["secrets"]:
-        tag = sr.consumer_tag(name)
-        if tag and tag not in _SKIP_TAGS:
-            yield name, tag
+        for tag in sr.consumer_tags(name):
+            if tag not in _SKIP_TAGS:
+                yield name, tag
 
 
 def test_every_consumer_tag_names_a_role_that_renders_the_token():
@@ -501,3 +525,56 @@ def test_rotate_commit_sends_new_token_on_stdin_not_argv(monkeypatch):
         "the value sent on stdin must stay JSON-quoted — sops set --value-stdin rejects a "
         "raw (unquoted) string with 'Value for --set is not valid JSON'"
     )
+
+
+def test_uptime_kuma_is_a_consumer_iff_a_tile_exists():
+    """Derive the tile half of the consumer list from the template, never from a hand-list.
+
+    `consumer_tags` decides by name (`_push_token`), which is a proxy. The ground truth is
+    whether k8s/uptime-kuma's static-monitors template actually renders the token, and the two
+    must agree in BOTH directions:
+
+      - a token WITH a tile that omits `uptime-kuma` rotates the pusher only, so AutoKuma keeps
+        reconciling the old push_token and the monitor stops beating — the bug this change fixes;
+      - a token WITHOUT a tile that claims `uptime-kuma` deploys a role rendering it nowhere,
+        which is the mis-routing the 2026-08-25 M-8b finding was about, one role along.
+
+    Measured 2026-08-28: 56 tokens have a tile, 43 resolve a consumer, 42 are in both, and the
+    lone `monitor_bridge_ha_token` sits outside. The 14 tile-bearing tokens that resolve NOTHING
+    are the cross-host ones — deliberately manual, and this test must not drag them back in.
+    """
+    tile = (
+        Path(sr.__file__).resolve().parents[2]
+        / "ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2"
+    ).read_text()
+    reg = sr.load_registry()
+    wrong = []
+    for name in reg["secrets"]:
+        tags = sr.consumer_tags(name)
+        if not tags:
+            continue  # manual: this test says nothing about tokens with no consumer at all
+        has_tile = ("{{ %s }}" % name) in tile
+        claims_kuma = sr.UPTIME_KUMA_TAG in tags
+        if has_tile != claims_kuma:
+            wrong.append("%s: tile=%s but consumer_tags=%s" % (name, has_tile, tags))
+    assert not wrong, (
+        "consumer_tags disagrees with the rendered tile — each of these either rotates into a "
+        "stale Kuma monitor or deploys a role that renders the token nowhere: %s"
+        % wrong
+    )
+
+
+def test_the_tile_and_pusher_tags_are_both_real_deploy_targets():
+    """Both halves must be deployable in ONE run, which is what separates this from cross-host.
+
+    If `uptime-kuma` were not a valid deploy tag, `rotate --deploy` would exit 2 (the wrapper's
+    unmatched-tag guard) and rotate nothing — a fix that breaks the thing it fixes.
+    """
+    host_vars = (
+        Path(sr.__file__).resolve().parents[2]
+        / "ansible/inventory/host_vars/daniel-box.yml"
+    ).read_text()
+    assert "name: uptime-kuma" in host_vars, (
+        "uptime-kuma must be in daniel-box's containers_list for the tag to match anything"
+    )
+    assert "name: monitor-bridge" in host_vars

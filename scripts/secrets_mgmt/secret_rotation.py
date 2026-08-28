@@ -163,34 +163,61 @@ PREFIX_EXCEPTION_CONSUMERS = {
 # green having deployed nothing. They decline instead, below.
 
 
-def consumer_tag(name: str) -> str | None:
-    """Deploy tag whose redeploy makes a rotated push token take effect — or None when the
+# Every push token has TWO consumers in the cluster, and until 2026-08-28 this function named
+# only one of them. The pusher reads it from its own role's env Secret; the Kuma monitor that
+# receives the push is a static AutoKuma entity rendered by k8s/uptime-kuma
+# (`static-monitors.yaml.j2`, a manifests_secret_file). AutoKuma reconciles the live monitor's
+# `push_token` FROM that Secret, so a rotation that redeploys only the pusher leaves Kuma
+# expecting the old token: the bridge then pushes a token nothing matches, the monitor stops
+# beating, and it goes DOWN. That is loud rather than silent, but it is a self-inflicted outage
+# on every rotated push monitor, and `rotate --deploy` stamped `last_rotated` green through it.
+#
+# Measured 2026-08-28 against the live registry and template: 43 tokens resolve a consumer,
+# 42 of them have a tile, and the single exception is `monitor_bridge_ha_token` — an HA API
+# token that carries the prefix for Kuma history reasons but is not a push token at all. So
+# `_push_token` is the exact discriminator, and `test_uptime_kuma_is_a_consumer_iff_a_tile_
+# exists` derives the split from the template rather than trusting this comment.
+UPTIME_KUMA_TAG = "uptime-kuma"
+
+
+def consumer_tags(name: str) -> tuple[str, ...]:
+    """Deploy tags whose redeploy makes a rotated push token take effect — EMPTY when the
     consumer spans hosts / is self-referential (those stay MANUAL: the unattended cron skips
-    them, the audit still reminds). A push token lives in two places on one compose file: the
-    pusher's env AND the AutoKuma `push_token` label, so one redeploy updates both atomically."""
+    them, the audit still reminds).
+
+    Plural, and a tuple, since 2026-08-28. The pre-migration docstring here said a push token
+    "lives in two places on one compose file", which was true under Docker+AutoKuma labels and
+    false after the k3s migration split the pusher and the tile into two roles. Both roles
+    deploy from daniel-box in ONE playbook run, so both tags are reachable by a single
+    `rotate --deploy` — which is exactly what distinguishes this from CROSS_HOST_PUSH_TOKENS,
+    where the two halves sit on different HOSTS and no redeploy can cover them. Those still
+    return empty; a multi-tag return there would assert a repair that cannot happen.
+    """
     # Both of these precede the prefix rule below: every token they name also carries the
     # `monitor_bridge_` prefix, so the prefix rule would otherwise claim them first.
     if name in CROSS_HOST_PUSH_TOKENS:
-        return None
-    if name in PREFIX_EXCEPTION_CONSUMERS:
-        return PREFIX_EXCEPTION_CONSUMERS[name]
-    if name.startswith("monitor_bridge_"):
-        return "monitor-bridge"
-    if name.startswith("cloudflare_ddns_"):
-        return "cloudflare-ddns"
-    if name == "docker_fleet_push_token":
+        return ()
+    elif name in PREFIX_EXCEPTION_CONSUMERS:
+        pusher: str | None = PREFIX_EXCEPTION_CONSUMERS[name]
+    elif name.startswith("monitor_bridge_"):
+        pusher = "monitor-bridge"
+    elif name.startswith("cloudflare_ddns_"):
+        pusher = "cloudflare-ddns"
+    elif name == "docker_fleet_push_token":
         # The monitor-bridge role renders the host cron script; the monitor itself is a
-        # static-file entity in the cluster Kuma (slice-7 Phase D KD2). Redeploying
-        # monitor-bridge re-renders the pusher; the k8s side follows on its own deploy.
-        return "monitor-bridge"
-    if name == "arr_autoblock_push_token":
-        # autofix-bridge (daniel-server only) consumes it in env + the AutoKuma label on one
-        # compose file — the single-host single-redeploy pattern, not cross-host. (Token name
-        # kept as arr_autoblock_* through the arr-autoblock -> autofix-bridge rename for Kuma
-        # history continuity; the consumer is the autofix-bridge deploy tag.)
-        return "autofix-bridge"
-    # CROSS_HOST_PUSH_TOKENS (and anything else unrecognised) -> manual
-    return None
+        # static-file entity in the cluster Kuma (slice-7 Phase D KD2).
+        pusher = "monitor-bridge"
+    elif name == "arr_autoblock_push_token":
+        # autofix-bridge (daniel-server only) renders the pusher's env. (Token name kept as
+        # arr_autoblock_* through the arr-autoblock -> autofix-bridge rename for Kuma history
+        # continuity; the consumer is the autofix-bridge deploy tag.)
+        pusher = "autofix-bridge"
+    else:
+        # anything else unrecognised -> manual
+        return ()
+    if name.endswith("_push_token"):
+        return (pusher, UPTIME_KUMA_TAG)
+    return (pusher,)
 
 
 def _stable_offset(name: str, span: int) -> int:
@@ -511,9 +538,9 @@ def cmd_rotate(args) -> int:
         # consumer. Tokens with no consumer_tag (cross-host / self-referential) are reported
         # but skipped.
         due_auto = unattended_due(res["all"], args.all)
-        targets = [r for r in due_auto if consumer_tag(r[0])]
+        targets = [r for r in due_auto if consumer_tags(r[0])]
         for name, _t, _d, _dl in due_auto:
-            if not consumer_tag(name):
+            if not consumer_tags(name):
                 print("  skip (manual: cross-host consumer) %s" % name)
     if not targets:
         print(
@@ -527,7 +554,7 @@ def cmd_rotate(args) -> int:
         if not args.commit:
             print(
                 "  DRY-RUN would rotate %-40s -> %s (due %+d d)"
-                % (name, consumer_tag(name) or "?", days_left)
+                % (name, ",".join(consumer_tags(name)) or "?", days_left)
             )
             continue
         new = pysecrets.token_hex(
@@ -544,8 +571,7 @@ def cmd_rotate(args) -> int:
             cwd=REPO,
         )
         reg["secrets"][name]["last_rotated"] = today.isoformat()
-        if consumer_tag(name):
-            tags.add(consumer_tag(name))
+        tags.update(consumer_tags(name))
         print("  rotated %s" % name)
     if not args.commit:
         return 0
