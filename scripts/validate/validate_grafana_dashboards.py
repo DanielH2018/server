@@ -100,30 +100,67 @@ def _display(path: Path) -> str:
         return path.name
 
 
+def duplicate_dashboard_uids(boards: dict[str, str]) -> list[str]:
+    """Error strings for every dashboard uid claimed by more than one file.
+
+    Grafana does NOT resolve a duplicate uid by picking one. Its file provisioner detects the
+    collision and then disables database writes for the WHOLE provider:
+
+        msg="the same UID is used more than once" uid=longhorn-storage times=2
+        msg="dashboards provisioning provider has no database write permissions because of
+             duplicates" provider=homelab
+        msg="Not saving new dashboard due to restricted database access" ...
+
+    So one duplicated pair silently freezes every board in the estate at whatever version was
+    last written — new panels never appear, and the pod stays 1/1 Running with a green health
+    probe throughout. That is exactly the failure this repo already recorded as "Grafana pod
+    health cannot see dead panels", one layer further up: here nothing renders wrong, the
+    updates simply never land.
+
+    It bit on 2026-08-28. `export_grafana_dashboards.py` names files `slug(title).json`, so
+    running it against boards that had hand-written filenames wrote a second copy of eight
+    dashboards beside the originals rather than replacing them.
+    """
+    errors = []
+    for uid, paths in sorted(boards.items()):
+        if len(paths) > 1:
+            errors.append(
+                f"dashboard uid {uid!r} is claimed by {len(paths)} files ({', '.join(paths)}) "
+                f"— Grafana disables provisioning writes for EVERY board when it sees a "
+                f"duplicate uid, so this freezes the whole estate. Delete all but one."
+            )
+    return errors
+
+
 def validate(
     dashboards_dir: Path = DASHBOARDS_DIR,
     datasources_template: Path = DATASOURCES_TEMPLATE,
 ) -> list[str]:
     """Return a list of error strings ([] = clean): every dashboard JSON whose datasource
-    refs all resolve to a provisioned datasource (or a built-in) passes."""
+    refs all resolve to a provisioned datasource (or a built-in), and whose uid no other
+    dashboard claims, passes."""
     valid = provisioned_datasource_ids(datasources_template) | BUILTIN_DATASOURCE_UIDS
     errors: list[str] = []
+    boards: dict[str, list[str]] = {}
     for path in sorted(dashboards_dir.rglob("*.json")):
         try:
             data = json.loads(path.read_text())
         except json.JSONDecodeError as exc:
             errors.append(f"{_display(path)}: invalid JSON: {exc}")
             continue
+        uid = data.get("uid")
+        if isinstance(uid, str) and uid:
+            boards.setdefault(uid, []).append(_display(path))
         seen: set[tuple[str, str | None]] = set()
-        for uid, title in datasource_refs_in(data):
-            if uid in valid or (uid, title) in seen:
+        for uid_ref, title in datasource_refs_in(data):
+            if uid_ref in valid or (uid_ref, title) in seen:
                 continue
-            seen.add((uid, title))
+            seen.add((uid_ref, title))
             where = f" (panel {title!r})" if title else ""
             errors.append(
-                f"{_display(path)}: datasource uid {uid!r} is not provisioned{where}"
+                f"{_display(path)}: datasource uid {uid_ref!r} is not provisioned{where}"
             )
-    return errors
+    return errors + duplicate_dashboard_uids(boards)
 
 
 def main() -> int:
