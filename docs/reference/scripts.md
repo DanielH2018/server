@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/gen_reference_scripts.py
-generated_at: 2026-08-25 17:29 UTC
-generated_sha: 06233561
+generated_at: 2026-08-28 06:17 UTC
+generated_sha: eb6d0cd2
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 06233561
 
 # Scripts
 
-53 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
+55 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
 
 The sections below split them by **how each one is run**, which is derived from the tree rather than declared: a cron `job:`, a `prek.toml` entry, a workflow step, a Claude hook, an Ansible task, or an import edge. The *Reached by* column is the evidence, so a wrong answer is a wrong answer about a real file.
 
@@ -20,7 +20,7 @@ The sections below split them by **how each one is run**, which is derived from 
     Whether a script is safe to run. The summary is whatever its author wrote, and nothing here judges blast radius. For the ones that run unattended, and which of those change state, see [Scheduled jobs](crons.md).
 
 
-**0 of the 21 scripts that run unattended have no test; 6 of all 53 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
+**0 of the 22 scripts that run unattended have no test; 6 of all 55 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
 
 !!! note "Where the Tests column looks"
     First for a `scripts/test_<name>.py`. Failing that, for any test in `scripts/` or `ansible/tests/` that names the script — `gitops_tick.sh` has five, in `test_gitops_manual_trigger.py`, and the naming convention alone called it untested. Those show as *(indirect)*, which means a test exercises it, not that the test is about it.
@@ -44,7 +44,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Run automatically, on a commit, CI run, deploy or session
 
-12 script(s) — every commit, CI run, deploy or Claude session runs it.
+13 script(s) — every commit, CI run, deploy or Claude session runs it.
 
 | Script | What it does | Reached by | Tests |
 |---|---|---|---|
@@ -54,6 +54,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/grafana/inject_dashboard_annotations.py` | Add the deploy-annotation query to every provisioned Grafana dashboard, from one place. | deploy: ansible/roles/k8s/claude-otel/tasks/dashboards.yml | `test_inject_dashboard_annotations.py` |
 | `scripts/diagnostics/probe.py` | Read-only homelab diagnostics — one allow-listed surface for the queries that | Claude hook: session-health.py | `test_probe.py` |
 | `scripts/dev/smoke_extract.py` | Extract newly-added container image references from a unified git diff. | CI: image-smoke.yml | `test_smoke_extract.py` |
+| `scripts/diagnostics/staging_egress_probe.py` | Acceptance gate for the staging guest's egress fence. | deploy: ansible/roles/setup/hypervisor/templates/staging-nwfilter.xml.j2 | `test_staging_egress_fence.py` *(indirect)* |
 | `scripts/validate/validate_compose_templates.py` | Render every configured container's docker-compose.yml.j2 and assert the | prek hook (every commit) | `test_validate_compose_templates.py` |
 | `scripts/validate/validate_config_templates.py` | Render the high-value NON-compose YAML config templates (monitoring) with stubbed vars and | prek hook (every commit) | `test_validate_config_templates.py` |
 | `scripts/validate/validate_grafana_dashboards.py` | Validate that every provisioned Grafana dashboard's datasource references resolve to a | prek hook (every commit) | `test_validate_grafana_dashboards.py` |
@@ -87,7 +88,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Run by hand
 
-15 script(s) — a person runs it.
+16 script(s) — a person runs it.
 
 | Script | What it does | Reached by | Tests |
 |---|---|---|---|
@@ -100,12 +101,13 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/dev/gen_hosts_block.py` | Emit an /etc/hosts block for every homelab `.local` name, with the right IP per service. | no automated caller in the tree | `test_gen_hosts_block.py` |
 | `scripts/deploy_tools/gitops_tick.sh` | trigger a GitOps deploy tick by hand and report what it did. | no automated caller in the tree | `test_gitops_manual_trigger.py` *(indirect)* |
 | `scripts/availability_bots/glenstone-bot.py` | Watch Glenstone's timed-entry calendar and alert when a target date opens up. | no automated caller in the tree | `test_availability_bots.py` *(indirect)* |
-| `scripts/dev/k8s_autodeploy_counts.py` | Print the k8s auto-deploy eligible and denylist counts, measured off the tree. | no automated caller in the tree | `test_k8s_autodeploy_denylist.py` *(indirect)* |
+| `scripts/dev/k8s_autodeploy_counts.py` | Print the k8s auto-deploy eligible and denylist counts, measured off the tree. | no automated caller in the tree | `test_script_bootstraps_present.py` *(indirect)* |
 | `scripts/dev/measure_rollout_gap.py` | Measure real downtime across a rollout by polling a service while it restarts. | no automated caller in the tree | `test_measure_rollout_gap.py` |
 | `scripts/availability_bots/osteria-francescana-bot.py` | Watch Osteria Francescana (via CoverManager) for a table on the target dates. | no automated caller in the tree | `test_availability_bots.py` *(indirect)* |
 | `scripts/diagnostics/postflight.py` | Verify the post-deploy setup that Ansible can't do (ansible/README.md §9). | playbook: ansible/bring-up.sh | `test_postflight.py` |
 | `scripts/dev/prune_worktrees.py` | Report and remove Claude session worktrees under .claude/worktrees/ that are done with. | no automated caller in the tree | `test_prune_worktrees.py` |
 | `scripts/dev/register_audit.py` | Report which rows of the homelab-review recurring-open register look closed. | no automated caller in the tree | `test_register_audit.py` |
+| `scripts/dev/run_as_cron.sh` | run a command in the environment cron actually gives it. | no automated caller in the tree | `test_run_as_cron.py` |
 
 ## Usage
 
