@@ -33,6 +33,36 @@
       - service-lan.yaml
       - ingressroute.yaml
 
+- name: Read the jellyfin-lan LoadBalancer address
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} get svc jellyfin-lan
+      -o jsonpath={.status.loadBalancer.ingress[0].ip}
+  register: jellyfin_k8s_lb_ip
+  become: true
+  changed_when: false
+  # Only reads, so let it run under --check too — otherwise stdout is empty, `until` can
+  # never match, and the run dies after 12 retries taking the assertion below with it.
+  check_mode: false
+  retries: 12
+  delay: 5
+  until: jellyfin_k8s_lb_ip.stdout | length > 0
+
+# MetalLB reads a request annotation rather than a spec field, and it ignores annotation keys
+# it does not recognise — so a wrong prefix is silent: the Service comes up on an
+# auto-assigned address with every pod healthy and the deploy green. Clients have this
+# address typed in by hand, so assert what landed, not the spelling.
+- name: Fail if jellyfin-lan did not get its pinned LAN address
+  tags: [deploy]
+  ansible.builtin.assert:
+    that: jellyfin_k8s_lb_ip.stdout == jellyfin_k8s_lan_ip
+    fail_msg: >-
+      jellyfin-lan holds {{ jellyfin_k8s_lb_ip.stdout }}, not the pinned
+      {{ jellyfin_k8s_lan_ip }}. MetalLB does not re-evaluate an existing allocation when
+      pools or annotations change — delete the Service and redeploy to force reallocation.
+    success_msg: "jellyfin-lan holds its pinned address {{ jellyfin_k8s_lan_ip }}"
+
 - name: Prove the GPU is reachable from inside the pod
   tags: [deploy]
   ansible.builtin.include_tasks: verify.yml

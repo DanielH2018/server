@@ -159,3 +159,33 @@
   changed_when: false
   when: manifests_render is changed or manifests_secret_render is changed or manifests_image_changed
   failed_when: (pihole_dns_ready_endpoints.stdout.split() | length) < 2
+
+- name: Read the pihole-dns LoadBalancer address
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} get svc pihole-dns
+      -o jsonpath={.status.loadBalancer.ingress[0].ip}
+  register: pihole_k8s_lb_ip
+  become: true
+  changed_when: false
+  # Only reads, so let it run under --check too — otherwise stdout is empty, `until` can
+  # never match, and the run dies after 12 retries taking the assertion below with it.
+  check_mode: false
+  retries: 12
+  delay: 5
+  until: pihole_k8s_lb_ip.stdout | length > 0
+
+# MetalLB reads a request annotation rather than a spec field, and it ignores annotation keys
+# it does not recognise — so a wrong prefix is silent: the Service comes up on an
+# auto-assigned address with every pod healthy and the deploy green. CoreDNS forwards here by
+# address (k3s_coredns_upstreams) and LAN clients get it by DHCP, so assert what landed.
+- name: Fail if pihole-dns did not get its pinned LAN address
+  tags: [deploy]
+  ansible.builtin.assert:
+    that: pihole_k8s_lb_ip.stdout == pihole_k8s_lan_ip
+    fail_msg: >-
+      pihole-dns holds {{ pihole_k8s_lb_ip.stdout }}, not the pinned
+      {{ pihole_k8s_lan_ip }}. MetalLB does not re-evaluate an existing allocation when
+      pools or annotations change — delete the Service and redeploy to force reallocation.
+    success_msg: "pihole-dns holds its pinned address {{ pihole_k8s_lan_ip }}"

@@ -688,22 +688,66 @@ def test_no_task_reads_a_dotted_secret_key_by_jsonpath():
                 )
 
 
-def test_metallb_service_annotations_use_the_universe_tf_namespace():
-    """metallb.io is the API GROUP of the CRDs; Service annotations keep metallb.universe.tf.
+def _metallb_annotation_lines():
+    """(template, lineno, line) for every metallb Service annotation in the k8s roles.
 
-    Kubernetes accepts any annotation key and MetalLB ignores unrecognised ones, so the wrong
-    prefix is completely silent — the Service is created, an address is assigned from the
-    auto-assign pool instead of the reserved VIP, and the deploy is green. Traefik ran on
-    10.0.0.241 instead of 10.0.0.240 through an entire slice-1 bring-up because of this.
+    Globs service*.yaml.j2, not service.yaml.j2 — jellyfin pins its LAN address in
+    service-lan.yaml.j2, which the narrower glob never saw.
     """
-    for tpl in sorted((K8S).glob("*/templates/service.yaml.j2")):
+    for tpl in sorted(K8S.glob("*/templates/service*.yaml.j2")):
         for i, line in enumerate(tpl.read_text().splitlines(), 1):
             body = line.split("#", 1)[0]
-            if "metallb.io/" in body:
-                raise AssertionError(
-                    f"{tpl.relative_to(ANSIBLE)}:{i} uses a metallb.io/ Service annotation, "
-                    f"which MetalLB silently ignores — use metallb.universe.tf/. Line: {line.strip()}"
-                )
+            if "metallb" in body:
+                yield tpl, i, line
+
+
+def test_metallb_service_annotations_use_the_metallb_io_namespace():
+    """Service annotations moved to metallb.io/ in MetalLB v0.15; universe.tf/ is deprecated.
+
+    This assertion is inverted from what it said until 2026-08-28, when the cluster still ran
+    v0.14.8 and metallb.io/ genuinely was ignored. v0.16.0 reads both prefixes
+    (controller/service.go valueForAnnotation, metallb.io winning) but emits a
+    `deprecatedAnnotation` Warning Event per Service on every reconcile for the old one.
+
+    The original hazard is unchanged and is why this guard exists at all: Kubernetes accepts
+    any annotation key and MetalLB ignores unrecognised ones, so a wrong prefix is completely
+    silent — the Service is created, an address is assigned from the auto-assign pool instead
+    of the pinned one, and the deploy is green. Traefik ran on 10.0.0.241 instead of
+    10.0.0.240 through an entire slice-1 bring-up because of this.
+    """
+    for tpl, i, line in _metallb_annotation_lines():
+        if "metallb.universe.tf/" in line.split("#", 1)[0]:
+            raise AssertionError(
+                f"{tpl.relative_to(ANSIBLE)}:{i} uses a deprecated metallb.universe.tf/ "
+                f"Service annotation — use metallb.io/. Line: {line.strip()}"
+            )
+
+
+def test_the_metallb_annotation_guard_can_go_red():
+    """The rejecting half. A guard that matches nothing is indistinguishable from a passing
+    one, and this file has already held this assertion pointing the wrong way for six days.
+    """
+    accepted = "    metallb.io/loadBalancerIPs: 10.0.0.240"
+    rejected = "    metallb.universe.tf/loadBalancerIPs: 10.0.0.240"
+    assert "metallb.universe.tf/" not in accepted.split("#", 1)[0]
+    assert "metallb.universe.tf/" in rejected.split("#", 1)[0]
+    # And the glob still finds the real templates, so the loop above is not scanning nothing.
+    assert list(_metallb_annotation_lines()), (
+        "no metallb Service annotations found — the glob or the templates moved"
+    )
+
+
+def test_metallb_version_still_supports_the_metallb_io_annotations():
+    """metallb.io/ Service annotations are only read from v0.15 onward. A downgrade past that
+    would make every pinned address silently fall back to the auto-assign pool, so tie the
+    assertion above to the version pin rather than leaving the two to drift apart.
+    """
+    pin = K3S_DEFAULTS["k3s_metallb_version"].lstrip("v")
+    major, minor = (int(p) for p in pin.split(".")[:2])
+    assert (major, minor) >= (0, 15), (
+        f"k3s_metallb_version is {pin}, which predates the metallb.io/ Service annotations "
+        "the templates now use. Either raise the pin or revert them to metallb.universe.tf/."
+    )
 
 
 def _tlsoption_names() -> set:

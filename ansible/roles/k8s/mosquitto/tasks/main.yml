@@ -10,3 +10,33 @@
       - service.yaml
     manifests_secret_files:
       - config-secret.yaml
+
+- name: Read the mosquitto-lan LoadBalancer address
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} get svc mosquitto-lan
+      -o jsonpath={.status.loadBalancer.ingress[0].ip}
+  register: mosquitto_k8s_lb_ip
+  become: true
+  changed_when: false
+  # Only reads, so let it run under --check too — otherwise stdout is empty, `until` can
+  # never match, and the run dies after 12 retries taking the assertion below with it.
+  check_mode: false
+  retries: 12
+  delay: 5
+  until: mosquitto_k8s_lb_ip.stdout | length > 0
+
+# MetalLB reads a request annotation rather than a spec field, and it ignores annotation keys
+# it does not recognise — so a wrong prefix is silent: the Service comes up on an
+# auto-assigned address with every pod healthy and the deploy green. Home Assistant and every
+# LAN publisher reach the broker by this address, so assert what landed, not the spelling.
+- name: Fail if mosquitto-lan did not get its pinned LAN address
+  tags: [deploy]
+  ansible.builtin.assert:
+    that: mosquitto_k8s_lb_ip.stdout == mosquitto_k8s_lan_ip
+    fail_msg: >-
+      mosquitto-lan holds {{ mosquitto_k8s_lb_ip.stdout }}, not the pinned
+      {{ mosquitto_k8s_lan_ip }}. MetalLB does not re-evaluate an existing allocation when
+      pools or annotations change — delete the Service and redeploy to force reallocation.
+    success_msg: "mosquitto-lan holds its pinned address {{ mosquitto_k8s_lan_ip }}"

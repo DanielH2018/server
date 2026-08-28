@@ -90,9 +90,11 @@
   # Kubernetes accepts any annotation key and MetalLB ignores the ones it does not recognise,
   # so a wrong or misspelled request annotation costs nothing at apply time: the Service comes
   # up, an address is assigned out of the auto-assign pool, every pod is healthy and the
-  # deploy is green — on the wrong address. That is exactly what metallb.io/loadBalancerIPs
-  # (instead of metallb.universe.tf/) did here, and it survived a full slice-1 bring-up
-  # unnoticed. The address is the one thing DNS and the router port-forward both hardcode, so
+  # deploy is green — on the wrong address. That is exactly what the wrong annotation prefix
+  # did here during slice 1, and it survived a full bring-up unnoticed. (The prefixes have
+  # since swapped roles: metallb.io/ is correct as of MetalLB v0.15, universe.tf/ deprecated.
+  # The lesson survives the swap — assert the address, not the spelling.)
+  # The address is the one thing DNS and the router port-forward both hardcode, so
   # assert it rather than trusting the annotation was honoured.
   ansible.builtin.assert:
     that: traefik_k8s_lb_ip.stdout == k3s_metallb_ingress_vip

@@ -22,7 +22,7 @@ metadata:
   name: mosquitto-lan
   namespace: {{ k8s_namespace }}
   annotations:
-    metallb.universe.tf/loadBalancerIPs: {{ mosquitto_k8s_lan_ip }}
+    metallb.io/loadBalancerIPs: {{ mosquitto_k8s_lan_ip }}
 spec:
   type: LoadBalancer
   # Preserves the real client address in broker logs — the B1 exit gate reads the connection
