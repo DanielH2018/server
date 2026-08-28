@@ -147,13 +147,47 @@ not create or update a Cloudflare record. Two independent hazards:
   the **real** domain and consume the same rate limit.
 - `cloudflare-ddns` mutates real DNS unconditionally. It is permanently excluded (*Decision 6*).
 
-Staging serves `*.stage.local.<domain>` from its own Traefik with a **self-signed internal CA**,
-generated at bring-up and trusted only inside the VM. No ACME, no rate limit, no external
-dependency, and nothing a staging misconfiguration can leak into the real zone.
+**Revised 2026-08-28, before building it: no CA, and no separate hostname space.** Staging drops
+the certificate resolver and lets Traefik serve its own default self-signed certificate. Nothing
+on staging needs to *trust* a certificate — the gate asks whether manifests render, apply,
+schedule, bind volumes, pass probes and complete a rollout, and a probe answers all of that with
+`curl -k`. An internal CA buys trust nothing reads, at the cost of a keypair, a Secret, a TLSStore
+exception the `ingressroute()` macro deliberately avoids, and a rotation story.
 
-A self-signed CA means staging does not prove certificate issuance works. That is a deliberate
-trade: certificate issuance is the part of the ingress chain least likely to break from a manifest
-edit, and the most dangerous to rehearse against a shared rate limit.
+Staging also keeps prod's exact hostnames (`<svc>.local.<domain>`) rather than a `stage.local`
+space. Identical names make the gate measure the real manifests instead of a staging variant, and
+reachability comes from `curl --resolve <name>:443:<staging VIP>` against staging's own Traefik —
+so no DNS record exists anywhere, and reaching staging by accident takes an explicit `--resolve`.
+
+The mechanism is one variable, `k8s_tls_cert_resolver` in `group_vars/all.yml`: `cloudflare` by
+default, empty on `daniel-stage`. Every service route flows through the `ingressroute()` macro, so
+one variable covers them all; four hand-rolled routes name it directly.
+
+**The `tls:` key is never conditional, and that is the whole trap.** An IngressRoute on the `https`
+entrypoint with no `spec.tls` is not a route that loses — it is a NON-TLS router, never a candidate
+for an HTTPS request. It applies cleanly, `kubectl get` shows it, Traefik logs nothing, and it cost
+most of 2026-08-07. Wrapping the whole block in the conditional is the obvious implementation and
+reintroduces that failure on staging only, where nobody is looking. So an empty resolver drops
+`certResolver` and `domains` and keeps the key. ENFORCED by
+`ansible/tests/test_tls_cert_resolver_optional.py`, which renders both branches — the existing
+manifest guard renders prod's variables only, and never reaches the branch where the mistake lives.
+
+`domains:` goes with the resolver rather than with TLS: it is the SAN set ACME is instructed to
+request, so with no resolver it instructs nothing.
+
+Staging therefore does not prove certificate issuance works. That is a deliberate trade:
+certificate issuance is the part of the ingress chain least likely to break from a manifest edit,
+and the most dangerous to rehearse against a shared rate limit. Every staging probe also runs with
+`-k`, so a probe cannot assert anything about the certificate itself.
+
+**TLS is not the whole of this decision.** Measured 2026-08-28: `roles/k8s/traefik`'s templates
+reference **eight** SOPS keys, and `secrets-staging.yml` carries one (`domain`). Beyond ACME's
+`cloudflare_dns_token` and `email`, the role also needs `crowdsec_k8s_agent_password` and
+`crowdsec_k8s_bouncer_api_key` for the bouncer on the edge, `homelab_mcp_token` and
+`livesync_sync_token` for routers inside the LiveSync gate Secret, and
+`monitor_bridge_cloudflare_drift_push_token` for the Cloudflare-IP drift cron. Solving TLS alone
+still leaves five undefined variables, so those subsystems get `traefik_k8s_manage_*` flags in the
+shape of `k3s_manage_backup_targets` — staging declines work that only makes sense against prod.
 
 ### 5. Secrets — a separate SOPS file, no real credentials
 

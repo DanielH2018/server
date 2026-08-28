@@ -41,11 +41,15 @@ spec:
         - name: {{ container_item.name }}
           port: {{ container_item.port }}
   tls:
-    certResolver: cloudflare
+{% if k8s_tls_cert_resolver %}
+    certResolver: {{ k8s_tls_cert_resolver }}
+{% endif %}
     options:
       name: modern
+{% if k8s_tls_cert_resolver %}
     domains:
       - main: "{{ domain }}"
         sans:
           - "*.{{ domain }}"
           - "*.local.{{ domain }}"
+{% endif %}

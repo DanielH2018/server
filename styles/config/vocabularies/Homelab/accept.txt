@@ -226,6 +226,7 @@ uv
 [Hh]ardcodes
 [Hh]ardcoding
 [Hh]ostname
+[Hh]ostnames
 [Ii]nlined
 [Kk]eypair
 [Ll]ockdown

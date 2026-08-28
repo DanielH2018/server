@@ -78,11 +78,15 @@ spec:
     # rate-limit, because a sender replaying a backlog would take 429s and drop samples,
     # turning a brief outage into permanent gaps.
   tls:
-    certResolver: cloudflare
+{% if k8s_tls_cert_resolver %}
+    certResolver: {{ k8s_tls_cert_resolver }}
+{% endif %}
     options:
       name: modern
+{% if k8s_tls_cert_resolver %}
     domains:
       - main: "{{ domain }}"
         sans:
           - "*.{{ domain }}"
           - "*.local.{{ domain }}"
+{% endif %}
