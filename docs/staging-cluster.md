@@ -451,9 +451,42 @@ and since it carries no `ignore_errors` the play stops. That is the same class a
 every target was `connection=local` or happened to have a checkout), but it is **not** the same
 fix: `delegate_to` is wrong here, because installing hooks is meaningful only on a host somebody
 commits from, and the honest question is whether the whole role supports a remote target at all.
-Answering that means auditing the role, not patching the task. Recorded rather than fixed, and
-worth settling before Phase C wants a staging host built by the same playbook that builds the
-others.
+Answering that means auditing the role, not patching the task.
+
+**Audited 2026-08-28. The answer is: the role is remote-safe apart from two tasks, and the
+git-hooks gate alone is not sufficient.** All nine task files under
+`roles/setup/initial_setup/tasks/` were read, plus the two `setup/common` fragments `crons.yml`
+imports. Two hits, and only the first stops the play:
+
+| task | file:line | what breaks on a remote target |
+|---|---|---|
+| Install Git hooks | `system-tuning.yml:117-129` | `chdir: "{{ playbook_dir }}"` with no `when:` and no `delegate_to` — **fails the run**, as described above |
+| Clear ansible log file | `crons.yml:226-237` | installs a weekly cron running `truncate -s 0 /home/{{ sys_user }}/server/ansible.log`, a path that never exists without a checkout |
+
+The second is the one the paragraph above missed, and it is the more instructive of the two: the
+**Ansible task succeeds** — `ansible.builtin.cron` only writes a `crontab` line — so a deploy reads
+green, and the failure is deferred to 06:00 every Sunday on a host where nothing watches cron
+stderr. A task that installs a broken thing successfully is invisible to every check that watches
+the deploy.
+
+Everything else is genuinely gated or genuinely portable. `access.yml`, `network.yml`,
+`audit-and-kernel.yml`, `accounting.yml`, `integrity.yml` and `host-basics.yml` are clean; the
+host-specific branches (`daniel-server`, `daniel-pi`, `daniel-box`) and the `has_gitops` /
+`has_docker` / `has_hypervisor` gates all resolve false on `daniel-stage` and skip correctly.
+`host-basics.yml:165-198` installs `uv`/`prek`/`ansible-core` **onto** the target rather than
+assuming them, so it is not a hit despite naming them. `stamp_render.yml`'s
+`lookup('file', playbook_dir ~ …)` is not a hit either — a `lookup()` runs on the controller
+whatever the target's connection type, which is the distinction that separates it from the
+`chdir` bug.
+
+**Still not fixed, deliberately**, because the repo's own rule is that a denial reason is a lower
+bound on blockers: the play has never completed against `daniel-stage`, so a third blocker may sit
+downstream of the first two. What has changed is that the audit the paragraph asked for is done,
+so a gate on the git-hooks task is now justified by evidence rather than convenience — and it
+needs the cron fixed with it.
+
+**Not verified:** whether `ansible.builtin.cron`'s `crontab` write succeeds under `become` on the
+staging VM's image specifically. That is an environment question a static audit cannot settle.
 
 **One blind spot is known and left open.** `test_staging_manifests_have_their_variables.py`
 scans the templates of roles named in `containers_list`, so a role reached only by
