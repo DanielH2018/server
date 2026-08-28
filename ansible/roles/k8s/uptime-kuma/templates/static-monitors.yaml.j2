@@ -304,6 +304,11 @@ stringData:
   # cron); this interval is only the heartbeat that says the bridge is still evaluating it.
   etcd-restore-drill.json: |
     {"type": "push", "name": "etcd Restore Drill", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_etcd_drill_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # Board and CPU temperature across all three hosts, pushed every bridge cycle. The hysteresis
+  # that keeps a transcode spike off this tile is HWMON_TEMP_CONSECUTIVE in check.py, not
+  # max_retries here — a held cycle still pushes `up`, so the tile stays green through the grace.
+  host-temperature.json: |
+    {"type": "push", "name": "Host Temperature", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_host_temp_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Host flip 1 (2026-08-14): pushed once nightly by the k8s/pi-peer-backup CronJob
   # (23:30), not every bridge cycle — the window is 2.5 days (two missed runs + slack,
   # the same tolerance the retired pi_peers check applied). Same token.

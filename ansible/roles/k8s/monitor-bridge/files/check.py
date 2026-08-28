@@ -47,6 +47,8 @@ from verdicts_cluster import (
     targets_verdict,
 )
 from verdicts_host import (
+    hwmon_temp_limits,
+    hwmon_temp_verdict,
     pi_ports_verdict,
     pi_pressure,
     scrutiny_device_wear,
@@ -581,6 +583,35 @@ SCRUTINY_TEMP_MAX = float(_env("SCRUTINY_TEMP_MAX", "0"))
 # curve offers months. Verified against the live API 2026-08-22: daniel-server's SHPP41-500GM
 # reads 7 at 30,959 power-on hours, daniel-box's CT1000E100SSD8 reads 0 at 576. 0 = disabled.
 SCRUTINY_WEAR_MAX = float(_env("SCRUTINY_WEAR_MAX", "80"))
+
+# Board and CPU temperature from node-exporter's hwmon collector. Drives are NOT read here —
+# check_scrutiny owns them (its device_status folds the SMART temperature attribute), so
+# HWMON_TEMP_EXCLUDE_CHIP drops the nvme chips and the two checks never page for one condition.
+#
+# Each sensor gets a limit from ONE of two arms, and the arms are exhaustive over the scraped
+# vector — every non-excluded series is covered, which is what test_host_temp_covers_every_sensor
+# pins. Measured live 2026-08-28: 21 temp series (daniel-server 12, daniel-box 7, daniel-pi 2).
+#
+#   1. The sensor's own declared max, when it declares a PLAUSIBLE one: page at
+#      HWMON_TEMP_RATIO of it. Preferred — coretemp declares 100, the daniel-server NVMe 85.85.
+#   2. HWMON_TEMP_FALLBACK_C, a flat ceiling, for every sensor that does not.
+#
+# DECIDED: the declared max is sanity-bounded rather than trusted, because three of the ten
+# max-declaring sensors declare 65261.85 (0xFFFF sentinel, an undeclared max encoded as a
+# number): daniel-server nvme temp2/temp3 and daniel-box nvme temp3. Ratio-of-max against that
+# is unreachable, so those sensors would read green through a fire — the inert-check class in
+# [[an-optimisation-can-land-green-and-be-inert]]. A max outside
+# (HWMON_TEMP_MIN_PLAUSIBLE_C, HWMON_TEMP_MAX_PLAUSIBLE_C] is therefore treated as UNDECLARED and
+# falls to arm 2. This is also why the fallback arm is not optional: without it, 14 of 21 sensors
+# — including BOTH daniel-pi sensors, on the host with no fan — carry no limit at all.
+HWMON_TEMP_RATIO = float(_env("HWMON_TEMP_RATIO", "0.90"))
+HWMON_TEMP_FALLBACK_C = float(_env("HWMON_TEMP_FALLBACK_C", "85"))
+HWMON_TEMP_MIN_PLAUSIBLE_C = float(_env("HWMON_TEMP_MIN_PLAUSIBLE_C", "20"))
+HWMON_TEMP_MAX_PLAUSIBLE_C = float(_env("HWMON_TEMP_MAX_PLAUSIBLE_C", "150"))
+HWMON_TEMP_EXCLUDE_CHIP = _env("HWMON_TEMP_EXCLUDE_CHIP", "nvme_")
+# Hysteresis: a transcode or a compile spikes coretemp for one scrape. 3 cycles at the loop
+# cadence is sustained heat, not a burst.
+HWMON_TEMP_CONSECUTIVE = int(_env("HWMON_TEMP_CONSECUTIVE", "3"))
 
 # UPS battery health via Home Assistant's Prometheus scrape (the APC UPS is on NUT/peanut; HA's
 # prometheus integration exposes its sensors as hass_sensor_*). The only pre-existing UPS alert is
@@ -1686,6 +1717,46 @@ def check_scrutiny():
     if not wear_ok:
         return False, wear_msg
     return True, "%s; %s; %s" % (fresh_msg, health_msg, wear_msg)
+
+
+def check_host_temp():
+    """Board and CPU temperature across the three hosts, from node-exporter's hwmon collector.
+
+    Answers the one thermal question nothing else here asks: is a host cooking? A hot box
+    throttles, then corrupts, then dies, and every existing monitor reads green throughout —
+    check_cpu_throttle sees CFS throttling (a cgroup limit, not heat), and the Grafana
+    "Hardware Temperature Monitor" panel plots these series but nobody watches a panel.
+
+    Drives are NOT read here; see HWMON_TEMP_EXCLUDE_CHIP. Two arms assign every remaining
+    sensor a limit — its own declared max where that max is plausible, a flat ceiling where it
+    is not — so coverage is exhaustive rather than whatever the metric join happens to yield.
+    The limit selection is pure and lives in verdicts_host, which is what lets the red-proof
+    tests drive it without a Prometheus.
+
+    Empty vector pages rather than passing: no sensors means the collector went blind, and a
+    "nothing is too hot" verdict from zero readings is the inert-check failure this repo has
+    paid for twice.
+    """
+    limits = hwmon_temp_limits(
+        prom_vector("node_hwmon_temp_celsius"),
+        prom_vector("node_hwmon_temp_max_celsius"),
+        HWMON_TEMP_RATIO,
+        HWMON_TEMP_FALLBACK_C,
+        HWMON_TEMP_MIN_PLAUSIBLE_C,
+        HWMON_TEMP_MAX_PLAUSIBLE_C,
+        HWMON_TEMP_EXCLUDE_CHIP,
+    )
+    ok, msg = hwmon_temp_verdict(limits)
+    if ok:
+        _down_streaks["host_temp"] = 0
+        return True, msg
+    _down_streaks["host_temp"], ok, msg = down_streak(
+        _down_streaks.get("host_temp", 0),
+        HWMON_TEMP_CONSECUTIVE,
+        msg,
+        "thermal spike grace",
+    )
+    return ok, msg
 
 
 # Per-check consecutive-down count (check_ups/check_ha_heartbeat/check_discord/
@@ -2927,6 +2998,7 @@ CHECKS = [
         check_etcd_restore_drill,
     ),
     ("scrutiny", _env("KUMA_PUSH_SCRUTINY", ""), check_scrutiny),
+    ("host_temp", _env("KUMA_PUSH_HOST_TEMP", ""), check_host_temp),
     ("ups", _env("KUMA_PUSH_UPS", ""), check_ups),
     ("pi_pressure", _env("KUMA_PUSH_PI", ""), check_pi_pressure),
     ("ha_heartbeat", _env("KUMA_PUSH_HA", ""), check_ha_heartbeat),
@@ -2965,6 +3037,9 @@ PROM_DEPENDENT = frozenset(
         "targets",
         "traefik5xx",
         "ups",  # queries HA's Prometheus-scraped UPS battery sensors
+        # Reads node_hwmon_temp_celsius. Its empty-vector branch pages on a blind hwmon
+        # collector, so a Prometheus outage must suppress it — same reason as longhorn_volumes.
+        "host_temp",
         "promtail_dropped",  # increase(promtail_dropped_entries_total) instant query
         # Reads longhorn_volume_robustness. Its own absent-metric branch pages when the
         # longhorn scrape job dies, so it must be suppressed when PROMETHEUS itself is the

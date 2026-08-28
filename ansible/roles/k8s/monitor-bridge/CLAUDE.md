@@ -267,6 +267,26 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     legitimately has none. Pure `scrutiny_freshness()`, `scrutiny_health()`,
     `scrutiny_device_wear()` and `scrutiny_wear_verdict()` are unit-tested; those tests mock the
     payload, so they prove the verdict logic and nothing about the endpoint path.)
+  - **Host Temperature** (board and CPU sensors from node-exporter's hwmon collector, added
+    2026-08-28: `node_hwmon_temp_celsius`, with drives EXCLUDED — `HWMON_TEMP_EXCLUDE_CHIP`
+    drops the `nvme_` chips because SMART Data / Health above already owns them, and reading
+    them here would double-page one condition. Nothing alerted on host temperature before this:
+    `check_cpu_throttle` sees CFS throttling, which is a cgroup limit rather than heat, and the
+    Grafana **Hardware Temperature Monitor** panel plots these series but a panel pages nobody.
+    Every sensor gets a limit from one of **two exhaustive arms** — `HWMON_TEMP_RATIO` (0.90) of
+    its own declared max where that max is plausible, else the flat `HWMON_TEMP_FALLBACK_C`
+    (85 °C). **The fallback is not a nicety.** Measured live 2026-08-28, only 7 of 21 scraped
+    sensors declare a usable max, and both daniel-pi sensors declare none — so a
+    declared-max-only check would be silent on two thirds of the estate, daniel-pi included.
+    **The declared max is sanity-bounded, not trusted:** three NVMe sensors declare 65261.85
+    (a 0xFFFF sentinel for "no max"), and a ratio of that is unreachable, so those sensors
+    would read green through a fire. A max outside
+    (`HWMON_TEMP_MIN_PLAUSIBLE_C`, `HWMON_TEMP_MAX_PLAUSIBLE_C`] is treated as UNDECLARED.
+    An EMPTY sensor vector is `down`, not `up` — zero readings means the collector went blind,
+    and "nothing is too hot" from no data is a lie. `HWMON_TEMP_CONSECUTIVE` (3) rides out a
+    transcode spike. Pure `hwmon_temp_limits()` / `hwmon_temp_verdict()` are unit-tested in
+    `test_host_temp.py`, each rule as an accept/reject pair; the coverage test is the load-bearing
+    one, since this check's failure mode is silence rather than a wrong threshold.)
   - **UPS Battery Health** (the APC UPS's charge % + estimated runtime + the replace-battery
     self-test verdict, via HA's Prometheus-scraped sensors over `monitoring` — the UPS is on
     NUT/peanut and HA's prometheus integration exports it). `down` on a low battery RUNWAY: charge <
