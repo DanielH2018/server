@@ -1,0 +1,21 @@
+---
+# Only rendered when `freshrss_k8s_manage_seed` is false. On a cluster that seeds, the PVC is
+# created by k8s/seed-volume from its own pvc.yaml.j2 — the shape below deliberately matches
+# it, because the two are the SAME claim under the same name and a mismatch in storage class
+# or size would be a silent difference between clusters rather than an error.
+#
+# Exactly one of the two paths creates this claim on any given host. ENFORCED by
+# ansible/tests/test_freshrss_seed_optional.py: two creators for one name is not something
+# `kubectl apply` reports.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ freshrss_k8s_claim }}
+  namespace: {{ k8s_namespace }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ freshrss_k8s_storage_class }}
+  resources:
+    requests:
+      storage: {{ freshrss_k8s_size }}
