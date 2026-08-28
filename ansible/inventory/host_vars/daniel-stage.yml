@@ -67,6 +67,31 @@ containers_list:
   - name: node-exporter
     platform: k8s
 
+  # The in-cluster registry, entered only because ical-proxy below is BUILT rather than
+  # pulled: k8s/image-builder pushes to it and containerd pulls back from it. It is not part
+  # of the subset's mechanism coverage in its own right. Placed before ical-proxy — the play
+  # has no toposort and runs in list order.
+  #
+  # Its agent-half pull self-test needs no per-cluster switch: selftest-pull-job.yaml.j2
+  # renders that half only when `k3s_agent_node_ips` is non-empty, and this cluster has no
+  # agent node.
+  - name: registry
+    platform: k8s
+
+  # The `image-builder` path end to end — build, push, pull, deploy (docs/staging-cluster.md,
+  # Decision 6). The smallest of the seven built images, and the only one that needs no
+  # external credential.
+  #
+  # Its three calendar URLs are generated and point at a .invalid name, so the refresh loop
+  # fails every cycle and says so in the pod log. That noise is EXPECTED here and is not a
+  # symptom: the probes are tcpSocket, so the pod still reaches Ready. Anything that ever
+  # reads staging pod logs looking for errors has to know this one is permanent.
+  - name: ical-proxy
+    platform: k8s
+    hostname: "ical-proxy"
+    port: 5000
+    use_authelia: false
+
 # One container runtime, and it is k3s's. Same reasoning that keeps Docker off the two
 # cluster nodes: k3s ships its own containerd, and a second runtime's iptables chains land
 # on top of its. roles/setup/k3s asserts this on both node paths.
@@ -190,6 +215,11 @@ authelia_k8s_manage_crowdsec: false
 # RSA keypair — for a client that cannot connect. Forward-auth is unaffected, and forward-auth
 # is the mechanism freshrss exercises here.
 authelia_k8s_manage_oidc: false
+
+# No registry garbage collection. Its script pushes the GC result into prod's Kuma, same
+# reason as k3s_manage_health_crons above. Nothing here needs collecting either: this
+# registry holds one small image and the cluster is rebuilt rather than kept.
+registry_k8s_manage_gc: false
 
 # No token gate. Every router in it routes to CouchDB or homelab-mcp, neither of which runs
 # here, and its two tokens are the only traefik variables staging's secrets file lacks.

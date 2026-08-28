@@ -29,6 +29,18 @@ registry_k8s_size: 10Gi
 # and the registry never collects on its own. Every rebuild pushes the same `latest` tag, which
 # orphans the previous manifest, so the store grew until it filled and every cluster image build
 # failed. Weekly is sized to that observed fill rate with room to spare.
+# The weekly garbage collection: the gc-job manifest, the script, its state directory and the
+# cron that runs it. False for a cluster Kuma does not watch — registry-gc.sh pushes its result
+# to `uptime-kuma.local.<domain>`, so leaving it on elsewhere reports a foreign registry's
+# health to a real operator, which is what k3s_manage_health_crons and
+# traefik_k8s_manage_cloudflare_drift_check exist to prevent.
+#
+# Skip-only, matching every sibling flag in this repo: turning it off on a host that already
+# has the cron installs nothing and removes nothing. A removal arm would be the one shape the
+# `oneshot-plays-run-local` hazard makes dangerous — a host-gated `state: absent` run against
+# the wrong host deletes quietly. Uninstall by hand if a cluster ever needs it.
+registry_k8s_manage_gc: true
+
 #
 # Sunday 04:20 — after the 03:30 Longhorn backup group and the weekly 07:30 host reboot's blast
 # radius, and off the 30-min gitops-deploy tick's busiest hours. GC takes the registry offline

@@ -309,7 +309,7 @@ The initial subset is chosen for coverage of **mechanisms**, not importance:
 | `traefik` | CRD installation and ordering — the failure that breaks every route behind it |
 | `authelia` | Middleware wiring and the forward-auth chain — `freshrss` carries `use_authelia: true` here for exactly that reason. Its OIDC provider is gated out by `authelia_k8s_manage_oidc: false`: the only relying party is `jellyfin`, which is hardware-blocked from this subset, so the block would be dead configuration demanding three more fake credentials. Forward-auth is unaffected by that flag |
 | `freshrss` | A plain web app: Deployment, Service, IngressRoute, PVC, seeding |
-| `ical-proxy` | The `image-builder` path end to end — build, push, pull, deploy (*Decision 8*) |
+| `ical-proxy` | The `image-builder` path end to end — build, push, pull, deploy (*Decision 8*). It pulls `registry` into the subset with it, since the builder pushes there and containerd pulls back. Its three calendar URLs are unreachable by design: the probes are `tcpSocket`, so the pod reaches Ready and the refresh loop simply logs failures — what this gates is the build path, not a feed |
 | `node-exporter` | A DaemonSet: per-node scheduling and hostPath mounts, which no Deployment exercises |
 
 `ical-proxy` is the smallest of the seven built images and needs no external credential; the
@@ -440,7 +440,15 @@ Vertical slices; each leaves something exercisable. Status as of 2026-08-28.
 3. **k3s + Longhorn + Traefik on the VM** (*Decision 3*) — DONE. `kubectl get nodes` is Ready; a PVC binds.
 4. **Inventory + staging secrets** (*Decision 5*) — DONE. `ansible -m ping` reaches `daniel-stage`; secrets decrypt.
 5. **First service deployed** (*Decisions 4, 6, 8*) — DONE. `freshrss` answers 200 through the staging VIP, serving `CN = TRAEFIK DEFAULT CERT`.
-6. **The rest of the subset** — `node-exporter` and `authelia` are DONE; `ical-proxy` remains. `traefik` landed in slice 5, which it had to precede.
+6. **The rest of the subset** — DONE. `node-exporter`, `authelia`, then `registry` + `ical-proxy`. `traefik` landed in slice 5, which it had to precede.
+
+**One blind spot is known and left open.** `test_staging_manifests_have_their_variables.py`
+scans the templates of roles named in `containers_list`, so a role reached only by
+`include_role` is outside its corpus — `k8s/image-builder` renders and applies two manifests
+that nothing checks. Audited on 2026-08-28 and there is no live exposure: every name those
+templates read comes from `group_vars/all.yml` or the builder's own defaults. Left as a note
+rather than a widening, on the same reasoning as the cron-PATH guard — don't extend a check
+on principle when the uncovered forms have been audited.
 
 Phase C (pipeline gating) starts after 6 has run against real merges for long enough to know its
 false-failure rate.

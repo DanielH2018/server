@@ -67,6 +67,11 @@ _SUPPLIED_BY_THE_RENDER = {
 }
 
 _REFERENCE = re.compile(r"[a-z_][a-z0-9_]*")
+# A single- or double-quoted Jinja string literal. Stripped before names are read, so an
+# object name built inside an expression is not mistaken for a variable reference.
+_STRING_LITERAL = re.compile(r"'[^']*'|\"[^\"]*\"")
+# `{{ item }}` with any internal spacing, so a loop-templated path can be expanded per item.
+_ITEM = re.compile(r"\{\{\s*item\s*\}\}")
 
 
 def _staging_secret_keys() -> set[str]:
@@ -199,13 +204,32 @@ def _shell_text(task: dict) -> str:
 
 def _templated_dests(tasks) -> dict[str, str]:
     """dest -> src for every `template:` task in the role, so an apply of a rendered file can be
-    traced back to the .j2 it came from."""
+    traced back to the .j2 it came from.
+
+    A `loop:` over plain strings is expanded, because the recorded dest is then the literal
+    `.../{{ item }}` and never equals the concrete path a later apply names. The registry role
+    renders both its self-test Jobs that way, so its two `kubectl apply` tasks read as applying
+    manifests from outside the counted path — which is how a role whose templates ARE ours and
+    ARE checkable got reported as uncoverable.
+    """
     dests = {}
     for task in _flatten_tasks(tasks):
         for key in ("ansible.builtin.template", "template"):
             spec = task.get(key)
-            if isinstance(spec, dict) and spec.get("dest") and spec.get("src"):
-                dests[str(spec["dest"])] = str(spec["src"])
+            if not (isinstance(spec, dict) and spec.get("dest") and spec.get("src")):
+                continue
+            loop = task.get("loop") or task.get("with_items")
+            items = (
+                [i for i in loop if isinstance(i, str)]
+                if isinstance(loop, list)
+                else [None]
+            )
+            for item in items or [None]:
+                dest, src = str(spec["dest"]), str(spec["src"])
+                if item is not None:
+                    dest = _ITEM.sub(item, dest)
+                    src = _ITEM.sub(item, src)
+                dests[dest] = src
     return dests
 
 
@@ -312,11 +336,16 @@ def _names_read_by_the_tasks(role: str) -> set[str]:
     invisible to it. `authelia_password` is the live case: the role pipes it into a one-shot
     pod to mint the argon2 hash, and no template mentions it — the check would have reported
     clean while the deploy failed on an undefined variable.
+
+    String literals inside the expression are stripped before names are read. A tasks file
+    routinely builds object names in Jinja — registry's
+    `{{ 'job/registry-selftest-pull-agent' if … }}` is the live case — and reading identifiers
+    out of the quoted half reports the role's own name as a variable it cannot supply.
     """
     text = (K8S_ROLES / role / "tasks" / "main.yml").read_text()
     names: set[str] = set()
     for expr in re.findall(r"\{\{(.*?)\}\}|\{%(.*?)%\}", text, re.S):
-        names |= set(_REFERENCE.findall("".join(expr)))
+        names |= set(_REFERENCE.findall(_STRING_LITERAL.sub(" ", "".join(expr))))
     tasks = yaml.safe_load(text)
     produced = _facts_set_by_the_role(role) | {
         str(task["register"]) for task in _flatten_tasks(tasks) if task.get("register")
@@ -360,6 +389,36 @@ def test_a_base_context_stand_in_is_not_read_as_supplied(monkeypatch) -> None:
         f"{probe} counts as supplied on {_HOST} because BASE_CONTEXT stands in for it, not "
         f"because anything supplies it. That is the shape that let `email` through."
     )
+
+
+def test_the_tasks_scan_ignores_names_inside_string_literals() -> None:
+    """The rejecting half for the literal-stripping fix.
+
+    registry's tasks file builds a Job name in Jinja — `'job/registry-selftest-pull-agent'` —
+    and reading identifiers out of the quoted half reported `registry` as a variable staging
+    cannot supply. Nothing reads a bare `{{ registry }}`, so its presence means the scan is
+    treating string content as code again.
+    """
+    assert "registry" not in _names_read_by_the_tasks("registry"), (
+        "`registry` is being read out of a Jinja string literal, not a variable reference — "
+        "the check that consumes this would report a gap no secrets file can close."
+    )
+
+
+def test_a_loop_templated_manifest_is_traced_back_to_its_source() -> None:
+    """The rejecting half for the loop expansion, and for the widening it produces.
+
+    registry renders both self-test Jobs from one looped `template:` task and applies each by
+    shell-out. Without expanding the loop the recorded dest is the literal `.../{{ item }}`,
+    which matches neither apply, so both read as manifests from outside the counted path and
+    two templates of ours went unchecked.
+    """
+    counted = _deployed_templates("registry")
+    for name in ("selftest-push-job.yaml.j2", "selftest-pull-job.yaml.j2"):
+        assert name in counted, (
+            f"{name} is missing from registry's counted corpus, so the loop-templated dest is "
+            f"not being traced back to its source and the manifest is unchecked."
+        )
 
 
 def test_the_tasks_scan_rejects_a_name_no_cluster_supplies() -> None:
