@@ -77,6 +77,9 @@ spec:
             - name: monitor-bridge-gitops-state
               mountPath: /gitops-state
               readOnly: true
+            - name: monitor-bridge-etcd-drill-state
+              mountPath: /etcd-drill-state
+              readOnly: true
           resources:
             requests:
               cpu: 20m
@@ -113,4 +116,13 @@ spec:
           hostPath:
             path: /var/lib/gitops-deploy
             type: Directory
+        # The etcd restore drill's stamp dir, same node and same reasoning as the gitops state
+        # above. `DirectoryOrCreate`, NOT `Directory`: the drill creates this on its first pass,
+        # so a plain Directory makes the pod unschedulable on a host where the drill has not run
+        # yet — the check would then be absent rather than reporting the absence, which is the
+        # state most worth reporting.
+        - name: monitor-bridge-etcd-drill-state
+          hostPath:
+            path: /var/lib/etcd-restore-drill
+            type: DirectoryOrCreate
       priorityClassName: homelab-critical
