@@ -34,6 +34,10 @@
 /styles/Google/
 !/.python-version
 !/PLANS.md
+# The two community files GitHub looks for at the root. The deny-all above hid them once:
+# they committed clean and simply were not in the tree afterwards (PR #561).
+!/LICENSE
+!/SECURITY.md
 # Track the SOPS-aware diff-driver attribute for secrets.yml. NB: rendering the
 # decrypted diff also requires a per-machine `git config diff.sops.textconv`,
 # which isn't set here yet — so this attribute is currently a no-op.
