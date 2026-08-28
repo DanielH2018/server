@@ -148,10 +148,11 @@ nav:
   - Operations:
       - Deploying by hand: deploying.md
       - The GitOps pipeline: gitops-pipeline.md
-      # Labelled "planned" because nothing here is built yet — the page is a spec for Tier 2
-      # of the staging spike, and a reader arriving from Operations would otherwise expect a
-      # cluster that exists. Drop the suffix once Phase B lands.
-      - Staging cluster (planned): staging-cluster.md
+      # The "(planned)" suffix was dropped on 2026-08-28 when Phase B landed: the cluster
+      # exists on daniel-server and serves freshrss, so a reader arriving from Operations now
+      # finds what the label promises. The page is still a spec as well as a description —
+      # Phase C (gating the pipeline on a staging deploy) is unbuilt and says so.
+      - Staging cluster: staging-cluster.md
       - Secret rotation: secret-rotation.md
       - Claude shell permissions: claude-shell-permissions.md
       - Security tools: security-tools.md
