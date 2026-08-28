@@ -179,6 +179,18 @@ a candidate with no row was *skipped*, not cleared (a verification miss, not an 
 that rests on a comment, a name, or a "by design" claim is not done until it is re-checked against the
 executable code.
 
+**Ask whether a fix's evidence is on the same side as the defect.** A verdict has to be discriminating,
+not merely available. The staging egress fence (2026-08-27) was a UFW `route deny`, and the evidence
+offered for it was that `ufw status` listed the rule — host-side evidence for a claim about what the
+*guest* could reach, with the disputed chain sitting between the two. It was inert, and the probe from
+inside the guest found the production VIP, the k3s API and an unauthenticated admin UI still answering.
+Evidence gathered on the wrong side of the thing in dispute cannot come back negative, so it is not a
+check. Name the side the defect lives on, then ask whether the proof was taken there.
+
+Its companion: **the shape tests all passed while the hole was open.** They asserted the rule's TEXT,
+which was correct throughout; nothing asserted its EFFECT. A whole file of green guards over an inert
+control is the "fires on nothing" case the repo warns about, and it reads exactly like coverage.
+
 ## 7. Synthesize and close the loop (your job once the verdicts are in)
 - **Surface cross-cutting THEMES** no single agent can see (e.g. a "co-located failure domain" spanning
   security + backups + network) — this is the main value of synthesizing over relaying.

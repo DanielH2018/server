@@ -45,6 +45,17 @@
   so the probe is the thing that decides.
 -->
 <filter name='{{ hypervisor_staging_nwfilter_name }}' chain='root'>
+  <!-- DECIDED: the UUID is pinned, derived from the filter's own name.
+       `virsh nwfilter-define` does NOT replace an existing filter the way `net-define`
+       replaces an existing network. Handed XML with no <uuid> it mints a fresh one, then
+       refuses on the name collision: "filter 'x' already exists with uuid ...". Measured on
+       daniel-server 2026-08-28 with a throwaway filter — the first define succeeds and every
+       define after it fails, so a role that omitted this worked once and broke on re-run.
+       `to_uuid` is a deterministic UUIDv5 over the name, so the rendered file is stable and
+       the define is a genuine replace. A host carrying a filter of this name under some
+       OTHER uuid (only reachable by defining one by hand) fails loudly here; clear it with
+       `virsh -c qemu:///system nwfilter-undefine {{ hypervisor_staging_nwfilter_name }}`. -->
+  <uuid>{{ hypervisor_staging_nwfilter_name | to_uuid }}</uuid>
   <rule action='drop' direction='out' priority='100'>
     <ip dstipaddr='{{ lan_subnet.split('/')[0] }}' dstipmask='{{ lan_subnet.split('/')[1] }}'/>
   </rule>
