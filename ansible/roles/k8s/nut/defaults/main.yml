@@ -23,26 +23,33 @@ nut_k8s_mem_limit: 128Mi
 nut_k8s_cpu_request: "50m"
 nut_k8s_mem_request: 16Mi
 
-# Seconds on battery before the primary raises FSD and every secondary shuts down. Made
+# Seconds on battery before the primary raises FSD and every ARMED secondary shuts down. Made
 # explicit 2026-08-24: it was referenced ONLY as `{{ nut_onbatt_shutdown_delay | default(120) }}`
 # in templates/config-secret.yaml.j2 and defined nowhere in the live tree, so the real value was
 # invisible unless you read the Jinja default. The one remaining definition was in
 # roles/containers/archive/peanut, a retired role.
 #
-# WHY THIS MATTERS BEFORE YOU ARM A SECOND HOST. This fires 120s into ANY mains interruption —
-# not at battery end. Live UPS runtime is ~21 minutes, so daniel-server currently powers off two
-# minutes into an outage that the battery would have carried comfortably. That is fine for an
-# agent node and NOT fine for daniel-box, which holds etcd, LAN DNS, Traefik and the Longhorn
-# primary replicas.
+# RAISED 120 -> 300 on 2026-08-28, as the prerequisite for arming daniel-box. This timer fires
+# that many seconds into ANY mains interruption, not at battery end, so at 120 a three-minute
+# blip cost a full cluster restart. Measured the same day on daniel-server
+# (`upsc apc-ups@127.0.0.1`): battery.runtime 987 at battery.charge 100 and ups.load 43, against
+# ups.realpower.nominal 900. Arming the control-plane node at 120 would have turned "daniel-box
+# rides out a short outage" into "daniel-box stops two minutes in" — a regression dressed as a
+# fix, which is why the arming and this raise land together.
+#
+# WHY 300 AND NOT THE WHOLE BATTERY. This timer is the ride-out knob, not the safety net.
+# `AT LOWBATT * EXECUTE lowbatt` in templates/config-secret.yaml.j2 raises FSD as soon as the UPS
+# asserts LB, which this unit does at battery.charge.low 10 or battery.runtime.low 120, so the
+# end of the battery is already covered by a different trigger. 300 rides out the blips that
+# dominate residential outages while leaving ~11 minutes of measured runtime for two poweroffs,
+# and that margin absorbs battery ageing and a load above today's 43%. Going higher is a
+# follow-up to take after a drill has shown how long the two hosts actually need, not a free win.
 #
 # There is exactly ONE upssched (the pod, the primary), so FSD is a single global event every
-# secondary sees at the same moment. There is no per-host ONBATT delay to stagger with, and
-# FINALDELAY is hardcoded to 5 in roles/nut_host/templates/host-upsmon.conf.j2. So arming
-# daniel-box (nut_host_secondary_armed, group_vars/all.yml) CANNOT be sequenced after
-# daniel-server by adjusting this value alone — raising it delays both hosts equally.
+# secondary sees at the same moment, and this value delays every armed host equally. That is the
+# intent rather than a limitation: see the DECIDED marker at FINALDELAY in
+# roles/nut_host/templates/host-upsmon.conf.j2 for why the two hosts need no staggering.
 #
-# Order of operations if the control-plane node is ever armed: raise this (or parameterise
-# FINALDELAY) FIRST, run the console-attended `upsmon -c fsd` drill, and only then set
-# nut_host_secondary_armed per-host. Left at 120 here deliberately — changing it now would alter
-# a live shutdown path that no drill has exercised.
-nut_onbatt_shutdown_delay: 120
+# Order of operations when arming a further host: raise this FIRST, run the console-attended
+# `upsmon -c fsd` drill there, and only then set nut_host_secondary_armed for it.
+nut_onbatt_shutdown_delay: 300

@@ -27,4 +27,12 @@ NOTIFYFLAG SHUTDOWN SYSLOG+WALL
 
 RBWARNTIME 43200
 NOCOMMWARNTIME 300
+# DECIDED: FINALDELAY stays 5 on every host, and is deliberately NOT parameterised to stagger
+# the two poweroffs. The tempting design is to let daniel-box shut down before daniel-server,
+# whose pod hosts upsd, so it cannot be stranded when upsd disappears. It is unnecessary: a
+# secondary needs upsd only to OBSERVE FSD, not to complete SHUTDOWNCMD, and both hosts observe
+# it within one POLLFREQALERT (5 s) of the pod's `upsmon -c fsd` — long before daniel-server's
+# poweroff reaches containerd. Staggering would also rest on FINALDELAY applying in secondary
+# mode, which upsmon.conf(5) documents for primary mode only. Full reasoning in
+# roles/k8s/nut/CLAUDE.md.
 FINALDELAY 5

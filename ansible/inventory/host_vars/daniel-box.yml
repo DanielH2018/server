@@ -487,3 +487,20 @@ has_claude_code: true
 # the symptom of a wrong value is EACCES on open — distinct from the EPERM that means the
 # cgroup filter refused.
 render_gid: 993
+# Run the host-side secondary upsmon here, so a UPS shutdown powers this node off cleanly
+# instead of letting it run to battery end and lose power mid-write. This node holds etcd,
+# Longhorn's primary replicas, Traefik, Kuma, Prometheus and LAN DNS, so the unclean cut was the
+# most expensive one in the fleet. It draws from the same UPS as daniel-server (measured
+# 2026-08-20, see group_vars/all.yml).
+#
+# NOT A LONE EDIT. Arming at the old 120 s ONBATT delay would have stopped the control plane two
+# minutes into any blip — worse availability than the hard cut it replaces, since most outages
+# never reach two minutes. The delay was raised to 300 in roles/k8s/nut/defaults/main.yml in the
+# same change, and that ordering is what the role's own comment prescribes.
+#
+# DEPLOY ORDER, and it is not optional: run the console-attended `upsmon -c fsd` drill from
+# roles/k8s/nut/CLAUDE.md before this reaches the host. Setting it true installs a chain whose
+# only job is to power this machine off, and a broken chain is indistinguishable from a working
+# one while mains power is up. The role asserts upsd is reachable at deploy time, which catches
+# a stale ClusterIP snapshot then — but nothing re-checks it afterwards.
+nut_host_secondary_armed: true
