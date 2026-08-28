@@ -33,6 +33,31 @@ traefik_k8s_uid: 65532
 # prod therefore needs a hand `kubectl delete`, which the manifest-prune-check cron flags.
 # Nothing does that today; the flags exist so a new cluster can come up without the subsystem,
 # not so prod can shed it.
+# Namespaces this cluster's Traefik watches. rbac.yaml.j2 renders one namespaced Role per
+# entry, and static-config.yaml.j2 lists the same set as `providers.kubernetesCRD.namespaces`.
+# ONE variable, so the two cannot drift — they were two hand-maintained lists with a comment
+# on each asking the next editor to keep them in step.
+# ENFORCED by ansible/tests/test_traefik_watched_namespaces.py, which compares the RENDERED
+# manifests (Role namespaces vs the provider list), not the templates' text.
+#
+# Scoped to named namespaces: Traefik should not pick up an IngressRoute someone drops in an
+# arbitrary one (kube-system in particular). `allowCrossNamespace` stays OFF, so every watched
+# namespace carries its own copies of the rate-limit and authelia Middlewares rather than
+# reaching into another's.
+#
+# DECIDED 2026-08-28: per-cluster, because an entry must name a namespace that EXISTS at
+# deploy time. The two failure modes are asymmetric and both are per-cluster facts:
+# a namespace Traefik watches with no Role fails SILENTLY (informers never sync, the host
+# 404s); a Role for an absent namespace fails LOUDLY, which is how staging surfaced it —
+# `namespaces "observability" not found` aborted the first staging Traefik deploy, because
+# claude-otel is not in that cluster's subset and nothing else creates the namespace.
+traefik_k8s_watched_namespaces:
+  - "{{ k8s_namespace }}"
+  # Telemetry stack (claude-otel).
+  - "{{ k8s_observability_namespace }}"
+  # Longhorn's namespace, for the single route roles/k8s/longhorn-ui adds to its UI.
+  - "{{ k8s_longhorn_namespace }}"
+
 traefik_k8s_manage_acme: true
 traefik_k8s_manage_cloudflare_drift_check: true
 

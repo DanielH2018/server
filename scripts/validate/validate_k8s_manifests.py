@@ -150,15 +150,28 @@ def resolve_vars(values: dict, context: dict, passes: int = 5) -> dict:
     # perfectly valid under Ansible. Shimmed for the same reason the compose guard shims
     # `hash` and the shell guard shims `search`; see make_env's docstring.
     env.filters["bool"] = ansible_bool
+
+    def expand(node, ctx):
+        """Ansible templates a variable's value wherever a string sits inside it, not only
+        when the whole value IS a string. A list- or dict-valued variable holding `{{ ... }}`
+        therefore reaches a template already expanded; scanning only top-level strings left
+        the literal braces in place, which is the exact defect this function's docstring
+        describes -- one level further down."""
+        if isinstance(node, str):
+            return env.from_string(node).render(ctx) if "{{" in node else node
+        if isinstance(node, list):
+            return [expand(n, ctx) for n in node]
+        if isinstance(node, dict):
+            return {k: expand(v, ctx) for k, v in node.items()}
+        return node
+
     resolved = dict(values)
     for _ in range(passes):
-        pending = {
-            k: v for k, v in resolved.items() if isinstance(v, str) and "{{" in v
-        }
+        pending = {k: v for k, v in resolved.items() if "{{" in str(v)}
         if not pending:
             break
         for key, value in pending.items():
-            resolved[key] = env.from_string(value).render({**context, **resolved})
+            resolved[key] = expand(value, {**context, **resolved})
     return resolved
 
 

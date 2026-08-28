@@ -102,6 +102,12 @@ k8s_tls_cert_resolver: ""
 
 # No ACME. There is no Cloudflare token here, and issuing would spend the real domain's
 # account and its duplicate-certificate rate limit on a cluster meant to be broken.
+# Watched namespaces. Prod's default adds `observability`, which this cluster has no
+# claude-otel to create — the first staging Traefik deploy aborted on
+# `namespaces "observability" not found` applying the per-namespace Roles.
+traefik_k8s_watched_namespaces:
+  - "{{ k8s_namespace }}"
+  - "{{ k8s_longhorn_namespace }}"
 traefik_k8s_manage_acme: false
 
 # The drift check pushes to prod's Kuma, same reason as k3s_manage_health_crons above.

@@ -318,3 +318,43 @@ def test_real_tree_passes_the_schema(real_tree_run):
     rc, err = real_tree_run
     assert rc == 0
     assert "fails the v" not in err
+
+
+# --- resolve_vars: values nested inside lists and dicts ---
+#
+# Ansible expands `{{ ... }}` wherever a string sits inside a variable's value, not only when
+# the whole value IS a string. Scanning top-level strings alone left the braces in place one
+# level down, so a list-valued variable reached a template unexpanded and rendered literal
+# `{{ ... }}` into YAML — the same defect resolve_vars exists to prevent, one level deeper.
+#
+# `traefik_k8s_watched_namespaces` is the live case: a YAML list of namespace references,
+# looped over by both rbac.yaml.j2 and static-config.yaml.j2.
+
+
+def test_resolve_vars_expands_a_string_inside_a_list():
+    resolved = vkm.resolve_vars(
+        {"watched": ["{{ ns_a }}", "{{ ns_b }}"]},
+        {"ns_a": "homelab", "ns_b": "longhorn"},
+    )
+    assert resolved["watched"] == ["homelab", "longhorn"]
+
+
+def test_resolve_vars_expands_a_string_inside_a_dict():
+    resolved = vkm.resolve_vars({"m": {"src": "{{ root }}/x.py"}}, {"root": "/srv"})
+    assert resolved["m"] == {"src": "/srv/x.py"}
+
+
+def test_resolve_vars_expands_through_a_list_of_dicts():
+    """The shape autofix_bridge_modules uses — the nesting is two levels, not one."""
+    resolved = vkm.resolve_vars(
+        {"mods": [{"name": "a.py", "src": "{{ root }}/a.py"}]}, {"root": "/srv"}
+    )
+    assert resolved["mods"] == [{"name": "a.py", "src": "/srv/a.py"}]
+
+
+def test_resolve_vars_leaves_a_brace_free_value_alone():
+    """The accepting half: expansion must not rewrite values that held no template, and must
+    not coerce non-strings. A recursive walk that stringified as it went would pass the three
+    tests above and quietly turn every int and bool in the inventory into text."""
+    values = {"ports": [80, 443], "on": True, "names": ["homelab"], "nested": {"n": 1}}
+    assert vkm.resolve_vars(dict(values), {}) == values
