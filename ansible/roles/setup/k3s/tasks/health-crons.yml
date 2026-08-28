@@ -339,6 +339,33 @@
     cron_file: etcd-snapshot-offbox
   become: true
 
+- name: Schedule the etcd restore drill
+  tags: [etcd-snapshot]
+  # Run IN PLACE from the primary checkout, not copied to /usr/local/bin — the same shape the
+  # gen_infra_map and docs-refresh crons use for scripts under scripts/. Copying it would add a
+  # deployed artifact that the drift arm then has to track, to gain nothing: the checkout is what
+  # gitops keeps fast-forwarded, so in-place is the copy that is actually current.
+  #
+  # PATH is load-bearing. Cron inherits neither PATH nor KUBECONFIG, and the drill's preflight is
+  # `command -v k3s`, with k3s at /usr/local/bin/k3s — without this the drill dies on a host that
+  # has k3s, reporting it as missing.
+  #
+  # --list-only ONLY. See the k3s_etcd_restore_drill_cron block in defaults/main.yml for why the
+  # full restore must not be scheduled; the short version is that it cannot pass on this host and
+  # every failure would hold a restored etcd database in /var/tmp for 30 days.
+  ansible.builtin.cron:
+    name: "etcd restore drill"
+    minute: "{{ k3s_etcd_restore_drill_cron.split()[0] }}"
+    hour: "{{ k3s_etcd_restore_drill_cron.split()[1] }}"
+    weekday: "{{ k3s_etcd_restore_drill_cron.split()[4] }}"
+    user: root
+    job: >-
+      PATH=/usr/local/bin:/usr/bin:/bin
+      /home/{{ sys_user }}/server/scripts/backup/etcd_restore_drill.sh --list-only
+    cron_file: etcd-restore-drill
+    state: "{{ 'present' if k3s_etcd_restore_drill_armed else 'absent' }}"
+  become: true
+
 # Render provenance, stamped LAST so a run that fails partway through leaves the previous
 # checksums in place rather than declaring the scripts it never reached to be current. Each
 # group carries only its own tag family, so a tag-scoped run restamps only what it rendered.

@@ -19,6 +19,7 @@ from typing import Iterator
 
 import yaml
 from ansible.plugins.filter.core import FilterModule
+from ansible.plugins.filter.mathstuff import FilterModule as _MathFilters
 from ansible.plugins.test.core import TestModule as _AnsibleTests
 from jinja2.nativetypes import NativeEnvironment
 
@@ -122,6 +123,12 @@ def jinja_env() -> NativeEnvironment:
     """
     env = NativeEnvironment()
     env.filters.update(FilterModule().filters())
+    # `difference`, `union`, `intersect` and the rest of the set filters live in mathstuff, NOT
+    # core — an expression using one renders as `TemplateAssertionError: No filter named
+    # 'difference'` without this, which reads as a broken test rather than a missing plugin
+    # module. Found while writing the claude-otel dashboard-prune guard, whose three prunes are
+    # all `difference()`.
+    env.filters.update(_MathFilters().filters())
     env.tests.update(_AnsibleTests().tests())
     return env
 
