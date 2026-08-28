@@ -132,3 +132,14 @@ gitops_deploy_k8s_timeout_s: 900
 # k8s timeouts are spent in full — see CLAUDE.md for what that does to a concurrent
 # ./scripts/deploy.sh (exit 75, nothing deployed) or the secret-rotate cron (waits on the lock).
 gitops_deploy_k8s_rollback_timeout_s: 1320
+
+# The staging gate (Phase C slice 3, docs/staging-phase-c.md). ADVISORY: the deployer asks
+# daniel-stage about the commit, logs and alerts the verdict, and deploys prod either way.
+# Blocking is slice 4 and is a separate change.
+#
+# False everywhere by default. Enabling it costs every k8s-deploying tick the staging deploy's
+# wall-clock, and it only works on a host that can reach daniel-server over ssh — which today
+# means daniel-box, the only host running this deployer. It is a switch rather than a given
+# because the point of the slice is to measure a false-failure rate against real merges before
+# anything depends on the answer.
+gitops_deploy_staging_gate: false

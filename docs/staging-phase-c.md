@@ -4,8 +4,11 @@ Makes `gitops-deploy` deploy a merged change to `daniel-stage` first, and touch 
 that succeeded. Phases A and B (`staging-cluster.md`) built a cluster and taught the repo to
 deploy to it. This is the phase where the cluster starts refusing things.
 
-**Status: drafted, not started.** Its entry condition is evidence rather than effort — see
-*Entry condition* at the end. Nothing here is implemented.
+**Status as of 2026-08-28: slices 1-3 built, the gate is OFF.** Slice 4 (blocking) is not
+started, and its entry condition is evidence rather than effort — see *Entry condition* at the
+end. Turning the gate on is a one-line inventory change (`gitops_deploy_staging_gate: true`)
+followed by `initial_setup.yml --tags gitops_deploy`; while it is off, the deployer behaves
+exactly as it did before any of this existed.
 
 ---
 
@@ -155,16 +158,22 @@ own — which it should be, because a staging timeout and a prod timeout mean di
 
 Vertical slices; each leaves something exercisable, and the gate arrives last on purpose.
 
-1. **Reachability, decided and built.** Implement Decision 1 without wiring it to anything:
+1. **Reachability, decided and built.** — DONE (#559, `scripts/deploy_tools/staging_gate.py`).
+   Implement Decision 1 without wiring it to anything:
    daniel-box can cause a staging deploy of a named SHA and read its exit code. Exercisable by
    running it by hand.
-2. **Per-service expectations, declared and checked.** Add the expectation to each subset
+2. **Per-service expectations, declared and checked.** — DONE (#564,
+   `scripts/deploy_tools/staging_expectations.py`). Add the expectation to each subset
    service's inventory entry and a checker that reads them. Exercisable against staging as it
    stands today — and it should immediately reproduce the `ical-proxy` 404 if pointed at the
    pre-#548 config.
-3. **Advisory mode.** The deployer runs the staging deploy and the expectation check, logs and
-   alerts the verdict, and deploys prod regardless. **This is the slice that collects the
-   false-failure rate**, and it should run for a meaningful number of real merges.
+3. **Advisory mode.** — BUILT, OFF. `consult_staging()` runs both checks, logs and alerts the
+   verdict, and deploys prod regardless. It is advisory *by construction*, not by intent:
+   the function returns nothing, every child process it starts sits inside a broad `except`, and
+   `test_staging_gate_is_advisory.py` fails if either changes or if `main()` starts branching
+   on it. **This is the slice that collects the false-failure rate**, so it has to be switched
+   on (`gitops_deploy_staging_gate: true`) and left to run against real merges — building it
+   collects nothing.
 4. **Enforcing mode, with the override.** Flip advisory to blocking. Ship the override in the
    same slice, never later.
 
