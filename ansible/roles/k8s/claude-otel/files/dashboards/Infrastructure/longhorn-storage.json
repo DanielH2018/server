@@ -91,7 +91,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "longhorn_disk_usage_bytes (solid) against longhorn_disk_capacity_bytes (the ceiling) \u2014 the trend line for headroom running out.",
+      "description": "longhorn_disk_usage_bytes (solid) against longhorn_disk_capacity_bytes (the ceiling) — the trend line for headroom running out.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -206,7 +206,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "longhorn_volume_robustness is one-hot over a state label (healthy/degraded/faulted/unknown), 4 series per volume \u2014 this sums only the healthy series, which equals a count. A steady 0 on the degraded/faulted panels is the all-clear reading, not a no-data gap.",
+      "description": "longhorn_volume_robustness is one-hot over a state label (healthy/degraded/faulted/unknown), 4 series per volume — this sums only the healthy series, which equals a count. A steady 0 on the degraded/faulted panels is the all-clear reading, not a no-data gap.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -248,7 +248,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "0 here means no volume is running short a replica right now \u2014 read it as healthy, not as missing data.",
+      "description": "0 here means no volume is running short a replica right now — read it as healthy, not as missing data.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -299,7 +299,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "0 here means no volume has lost all its replicas \u2014 read it as healthy, not as missing data.",
+      "description": "0 here means no volume has lost all its replicas — read it as healthy, not as missing data.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -350,7 +350,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "Robustness reads unknown while a volume is detached (no engine running to report health) \u2014 this is normal for volumes attached only intermittently, not a fault.",
+      "description": "Robustness reads unknown while a volume is detached (no engine running to report health) — this is normal for volumes attached only intermittently, not a fault.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -404,7 +404,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "sum by (volume) (longhorn_snapshot_actual_size_bytes) \u2014 retained snapshots are what makes the nightly trim reclaim nothing even though old data is logically gone. This metric carries no pvc label, so the legend is the volume's PV UUID.",
+      "description": "sum by (volume) (longhorn_snapshot_actual_size_bytes) — retained snapshots are what makes the nightly trim reclaim nothing even though old data is logically gone. This metric carries no pvc label, so the legend is the volume's PV UUID.",
       "fieldConfig": {
         "defaults": {
           "unit": "bytes"
@@ -442,7 +442,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "sum(longhorn_backup_uploaded_data_size_bytes) \u2014 the delta each retained backup object transferred to the target, summed across every backup Longhorn still has a record of. Steps as daily-backup runs and retention rotates old backups out; it is not a running cumulative total.",
+      "description": "sum(longhorn_backup_uploaded_data_size_bytes) — the delta each retained backup object transferred to the target, summed across every backup Longhorn still has a record of. Steps as daily-backup runs and retention rotates old backups out; it is not a running cumulative total.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -479,7 +479,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "count(longhorn_volume_last_backup_at > 0) of 43 tracked volumes. The B2 backup target is currently disarmed, so the other volumes reading 0 is a deliberate condition, not a failure \u2014 this panel is scoped to volumes that have ever completed a backup rather than showing a raw 29-zero 'stale backup' alarm.",
+      "description": "count(longhorn_volume_last_backup_at > 0) of 43 tracked volumes. The B2 backup target is currently disarmed, so the other volumes reading 0 is a deliberate condition, not a failure — this panel is scoped to volumes that have ever completed a backup rather than showing a raw 29-zero 'stale backup' alarm.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -515,6 +515,177 @@
       ],
       "title": "Volumes with a backup on record",
       "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 40
+      },
+      "id": 14,
+      "panels": [],
+      "title": "B2 (off-site) — storage runway",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "bf4q19tuivta8e"
+      },
+      "description": "B2 stored bytes against the free-tier cap, parsed from monitor-bridge's own b2_storage line. B2 exposes no usage API, so this log line is the only record — there is no metric to fall back on. The check pages at the cap; this panel is the runway ahead of it.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          },
+          "unit": "decgbytes"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/cap/"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    10
+                  ],
+                  "fill": "dash"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 0,
+        "y": 41
+      },
+      "id": 15,
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "avg(avg_over_time({container=\"monitor-bridge\"} |= \"B2 storage\" | regexp `B2 storage (?P<used_gb>[0-9.]+) GB of (?P<cap_gb>[0-9.]+) GB \\((?P<pct>[0-9]+)%\\), (?P<versions>[0-9]+) versions` | unwrap used_gb [$__auto]))",
+          "legendFormat": "stored",
+          "queryType": "range",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "avg(avg_over_time({container=\"monitor-bridge\"} |= \"B2 storage\" | regexp `B2 storage (?P<used_gb>[0-9.]+) GB of (?P<cap_gb>[0-9.]+) GB \\((?P<pct>[0-9]+)%\\), (?P<versions>[0-9]+) versions` | unwrap cap_gb [$__auto]))",
+          "legendFormat": "cap",
+          "queryType": "range",
+          "refId": "B"
+        }
+      ],
+      "title": "B2 stored vs free-tier cap",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "bf4q19tuivta8e"
+      },
+      "description": "Percent of the B2 free-tier storage cap in use. b2_storage pages above its own ceiling; this is the headroom read at a glance.",
+      "fieldConfig": {
+        "defaults": {
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 41
+      },
+      "id": 16,
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "avg(avg_over_time({container=\"monitor-bridge\"} |= \"B2 storage\" | regexp `B2 storage (?P<used_gb>[0-9.]+) GB of (?P<cap_gb>[0-9.]+) GB \\((?P<pct>[0-9]+)%\\), (?P<versions>[0-9]+) versions` | unwrap pct [$__auto]))",
+          "legendFormat": "used",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "B2 cap used %",
+      "type": "gauge"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "bf4q19tuivta8e"
+      },
+      "description": "Object versions in the bucket. A prune's cost is per DELETED backup, and lifecycle clears hidden versions after 7 days — so a rising count with flat bytes is retention accumulating, which is the shape that precedes a cap breach.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 49
+      },
+      "id": 17,
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "avg(avg_over_time({container=\"monitor-bridge\"} |= \"B2 storage\" | regexp `B2 storage (?P<used_gb>[0-9.]+) GB of (?P<cap_gb>[0-9.]+) GB \\((?P<pct>[0-9]+)%\\), (?P<versions>[0-9]+) versions` | unwrap versions [$__auto]))",
+          "legendFormat": "versions",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "B2 object versions",
+      "type": "timeseries"
     }
   ],
   "refresh": "1m",
@@ -529,7 +700,7 @@
     "to": "now"
   },
   "timezone": "browser",
-  "title": "Longhorn \u2014 Storage",
+  "title": "Longhorn — Storage",
   "uid": "longhorn-storage",
-  "version": 1
+  "version": 2
 }
