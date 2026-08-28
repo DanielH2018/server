@@ -38,6 +38,9 @@ spec:
         runAsUser: {{ puid }}
         runAsGroup: {{ pgid }}
         fsGroup: {{ pgid }}
+{# The sole init container below is CrowdSec's, so the key would be left with no list under
+   it. Gate the key so it is absent rather than empty. #}
+{% if authelia_k8s_manage_crowdsec %}
       initContainers:
         # Seeds the agent sidecar's /etc/crowdsec before its entrypoint fills in defaults:
         # acquisition pointing at this pod's auth log, plus the same whitelist parsers both
@@ -81,6 +84,7 @@ spec:
             requests:
               cpu: 10m
               memory: 16Mi
+{% endif %}
       automountServiceAccountToken: false
       containers:
         - name: authelia
@@ -147,6 +151,7 @@ spec:
             requests:
               cpu: "{{ authelia_k8s_cpu_request }}"
               memory: {{ authelia_k8s_mem_request }}
+{% if authelia_k8s_manage_crowdsec %}
         # Parses THIS pod's auth log into the in-cluster LAPI, so failed-login scenarios
         # (LePresidente/authelia) cover the cluster portal the way daniel-server's agent
         # covers the Docker one. Same shape as the traefik pod's sidecar: no readinessProbe
@@ -204,6 +209,7 @@ spec:
             requests:
               cpu: "{{ authelia_k8s_agent_cpu_request }}"
               memory: {{ authelia_k8s_agent_mem_request }}
+{% endif %}
       volumes:
         - name: authelia-secrets
           secret:
@@ -219,6 +225,7 @@ spec:
         - name: authelia-logs
           emptyDir:
             sizeLimit: {{ authelia_k8s_log_size }}
+{% if authelia_k8s_manage_crowdsec %}
         - name: crowdsec-secret
           secret:
             secretName: authelia-crowdsec
@@ -229,3 +236,4 @@ spec:
           emptyDir: {}
         - name: crowdsec-tmp
           emptyDir: {}
+{% endif %}

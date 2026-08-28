@@ -11,6 +11,23 @@ authelia_k8s_image: authelia/authelia:4.39.20
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "platform — SSO/OIDC gate; a failed deploy locks out access to everything behind it, including the tools to fix it"  # noqa var-naming[no-role-prefix]
 
+# The CrowdSec agent sidecar that parses this pod's auth log into the in-cluster LAPI, and
+# the init container that seeds its config. False for a cluster that does not run the
+# `crowdsec` role: `crowdsec:8080` does not resolve there, the sidecar crashloops, and the
+# pod never reaches Ready — a false failure rather than a real one.
+#
+# DECIDED: separate from traefik_k8s_manage_crowdsec rather than one shared variable. A
+# shared one would live in group_vars/all.yml, an `ansible/inventory/` path the GitOps
+# deployer treats as broad — it defers and returns WITHOUT fast-forwarding, so the change
+# would need clearing by hand. The surfaces are asymmetric too: this pod carries only an
+# agent and PRODUCES signals, where Traefik carries a bouncer plugin and enforces bans.
+#
+# Gating this out does NOT stop Authelia writing /var/log/authelia/authelia.log. Its config
+# names that path (config-secret.yaml.j2) and the emptyDir stays mounted; the init container
+# pre-creates the file to win the start race against the agent, not to grant permission —
+# an emptyDir under the pod's fsGroup is group-writable and Authelia runs in that group.
+authelia_k8s_manage_crowdsec: true
+
 # Session cookie name. MUST differ from the Docker instance's `authelia_session_local`.
 # Both portals serve the cookie domain local.<domain>, and a browser holds one cookie per
 # (domain, name) pair — with a shared name, logging in at one portal overwrites the other's

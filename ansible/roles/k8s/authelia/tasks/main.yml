@@ -107,6 +107,9 @@
       - service.yaml
       - ingressroute.yaml
       - forwardauth-middleware.yaml
-    manifests_secret_files:
-      - config-secret.yaml
-      - crowdsec-secret.yaml
+    # crowdsec-secret.yaml is concatenated rather than listed: it reads
+    # crowdsec_k8s_agent_password, which a cluster not running the crowdsec role never
+    # defines, and the Secret has no template branch to gate.
+    manifests_secret_files: >-
+      {{ ['config-secret.yaml']
+         + (['crowdsec-secret.yaml'] if authelia_k8s_manage_crowdsec | bool else []) }}

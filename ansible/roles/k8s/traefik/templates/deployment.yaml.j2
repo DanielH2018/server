@@ -37,7 +37,11 @@ spec:
         runAsUser: {{ traefik_k8s_uid }}
         runAsGroup: {{ traefik_k8s_uid }}
         fsGroup: {{ traefik_k8s_uid }}
+{# Both init containers below are conditional, and a cluster with neither ACME nor CrowdSec
+   leaves the key with no list under it. Gate the key so it is absent rather than empty. #}
+{% if traefik_k8s_manage_acme or traefik_k8s_manage_crowdsec %}
       initContainers:
+{% endif %}
 {% if traefik_k8s_manage_acme %}
         # Traefik creates acme.json 0600 itself, but kubelet's fsGroup handling ORs group bits
         # into every file on the volume at mount time, so it comes back 0660 on every start.
@@ -75,6 +79,7 @@ spec:
               cpu: 10m
               memory: 16Mi
 {% endif %}
+{% if traefik_k8s_manage_crowdsec %}
         # Seeds the agent sidecar's /etc/crowdsec before its entrypoint fills in defaults —
         # acquis pointing at the shared access log, and the same whitelist parsers as the
         # Docker edge (from the traefik-crowdsec Secret). Root like the sidecar itself.
@@ -118,6 +123,7 @@ spec:
             requests:
               cpu: 10m
               memory: 16Mi
+{% endif %}
       containers:
         - name: traefik
           image: {{ traefik_k8s_image }}
@@ -164,11 +170,13 @@ spec:
               mountPath: /secrets
               readOnly: true
 {% endif %}
+{% if traefik_k8s_manage_crowdsec %}
             # The bouncer plugin reads its LAPI key from here (crowdsecLapiKeyFile in the
             # crowdsec Middleware) — a file, so the key never appears in the CRD.
             - name: crowdsec-key
               mountPath: /secrets/crowdsec
               readOnly: true
+{% endif %}
 {% if traefik_k8s_manage_acme %}
             - name: traefik-acme
               mountPath: /data
@@ -204,6 +212,7 @@ spec:
             requests:
               cpu: "{{ traefik_k8s_cpu_request }}"
               memory: {{ traefik_k8s_mem_request }}
+{% if traefik_k8s_manage_crowdsec %}
         # Slice-6 B1 (D1/D2): log-parsing agent, LAPI-less — it tails this pod's access log
         # and ships signals to the in-cluster engine. Runs as the pod's uid (65532), NOT
         # root: root with ALL caps dropped has no DAC_OVERRIDE, so it cannot write the
@@ -266,6 +275,7 @@ spec:
             requests:
               cpu: "{{ traefik_k8s_agent_cpu_request }}"
               memory: {{ traefik_k8s_agent_mem_request }}
+{% endif %}
         # Ships the access log to Loki (tails it to stdout, which promtail's k8s-pods job
         # auto-discovers by container name — no scrape-config change needed) and keeps the
         # traefik-logs emptyDir off the eviction path (copytruncate before traefik_k8s_access_log_size
@@ -407,6 +417,7 @@ spec:
 {% endif %}
         - name: traefik-tmp
           emptyDir: {}
+{% if traefik_k8s_manage_crowdsec %}
         - name: crowdsec-secret
           secret:
             secretName: traefik-crowdsec
@@ -426,10 +437,13 @@ spec:
           emptyDir: {}
         - name: crowdsec-data
           emptyDir: {}
+{% endif %}
         - name: traefik-plugins-storage
           emptyDir: {}
+{% if traefik_k8s_manage_crowdsec %}
         - name: crowdsec-agent-tmp
           emptyDir: {}
+{% endif %}
         # sizeLimit is a BACKSTOP against pod eviction, not the rotation mechanism — the
         # access-log-rotate sidecar copytruncates the log well before this is reached (see
         # traefik_k8s_access_log_rotate_mb / _keep in defaults/main.yml). Hitting this cap would

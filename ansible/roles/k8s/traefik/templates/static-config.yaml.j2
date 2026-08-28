@@ -44,10 +44,12 @@ data:
               # ":443" pins the redirect to the port clients actually reach.
               to: ":443"
               scheme: https
+{% if traefik_k8s_manage_crowdsec %}
           middlewares:
             # Entrypoint-wide, matching the Docker edge (slice-6 B1). Everything entering
             # this entrypoint passes the CrowdSec ban-list + AppSec check before routing.
             - {{ k8s_namespace }}-crowdsec@kubernetescrd
+{% endif %}
       https:
         address: ":{{ traefik_k8s_https_port }}"
         forwardedHeaders:
@@ -63,7 +65,9 @@ data:
             # ingressroute() macro attaches it) so a future chatty service can opt into a
             # higher ceiling, which an entrypoint-level limiter cannot express.
             # crowdsec first: a banned IP is rejected before any headers work is done.
+{% if traefik_k8s_manage_crowdsec %}
             - {{ k8s_namespace }}-crowdsec@kubernetescrd
+{% endif %}
             - {{ k8s_namespace }}-default-headers@kubernetescrd
             # compress LAST, and the order is load-bearing. An entrypoint chain wraps in
             # list order on the way in, so the last entry is the INNERMOST — it sees the
@@ -96,11 +100,13 @@ data:
         names:
           StartUTC: drop
 
+{% if traefik_k8s_manage_crowdsec %}
     experimental:
       plugins:
         bouncer:
           moduleName: github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin
           version: {{ traefik_k8s_bouncer_plugin_version }}
+{% endif %}
 
     serversTransport:
       insecureSkipVerify: false
