@@ -299,6 +299,15 @@ STAGING_EXPECT_TIMEOUT_S = int(C.get("STAGING_EXPECT_TIMEOUT_S", "180"))
 
 STAGING_ALERT_FILE = "/var/lib/gitops-deploy/staging_alerted_sha"
 
+# Both staging scripts import yaml and jinja2, so they need the repo's pinned env — the same one
+# deploy_k8s already runs ansible-playbook in. NOT sys.executable: this unit's ExecStart is
+# `uv run --no-project`, which never creates or syncs a venv, so sys.executable is whatever
+# venv happens to sit in WorkingDirectory. It resolves to the repo's today, and a missing or
+# unsynced one would make the expectation script die at import with exit 1 — which
+# staging_verdict_summary reads as REJECTED. An infrastructure fault would then report as a
+# rejection on every gated tick, poisoning the one number this slice exists to collect.
+_UV_PYTHON = ("uv", "run", "--frozen", "python")
+
 # ── CI gate ───────────────────────────────────────────────────────────────────────────────────
 # Refuse to deploy a master tip whose CI is red or unfinished. Without this the deployer applies
 # whatever landed on master, green or red: nothing in the pull path ever consulted a workflow
@@ -783,7 +792,7 @@ def consult_staging(services: set[str], origin: str) -> None:
     try:
         tags = ",".join(sorted(gated))
         deploy_rc = subprocess.run(
-            [sys.executable, STAGING_GATE_SCRIPT, origin, "--tags", tags],
+            [*_UV_PYTHON, STAGING_GATE_SCRIPT, origin, "--tags", tags],
             timeout=STAGING_GATE_TIMEOUT_S,
             check=False,
         ).returncode
@@ -791,7 +800,7 @@ def consult_staging(services: set[str], origin: str) -> None:
         # skipped when the deploy itself produced no verdict.
         if deploy_rc == 0:
             expect_rc = subprocess.run(
-                [sys.executable, STAGING_EXPECT_SCRIPT],
+                [*_UV_PYTHON, STAGING_EXPECT_SCRIPT],
                 timeout=STAGING_EXPECT_TIMEOUT_S,
                 check=False,
             ).returncode

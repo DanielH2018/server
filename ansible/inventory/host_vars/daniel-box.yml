@@ -464,6 +464,16 @@ has_gitops: true
 # → deploy → catch → hold → reset → redeploy → Discord) has never run.
 gitops_deploy_k8s_autodeploy_enabled: true
 gitops_deploy_k8s_autodeploy_pilot: []
+# The staging gate (Phase C slice 3, docs/staging-phase-c.md). ADVISORY: each tick that would
+# auto-deploy a k8s service first asks daniel-stage about the same commit, logs and alerts the
+# verdict, and deploys prod either way. Blocking is slice 4 and is a separate change.
+#
+# True HERE and nowhere else: the gate shells to daniel-server over ssh, because daniel-stage
+# sits on a libvirt NAT network that host alone can reach, and daniel-box is the only host
+# running this deployer. Turning it on costs every k8s-deploying tick the staging deploy's
+# wall-clock. That cost buys the false-failure rate slice 4's entry condition asks for, which
+# accrues only while the gate runs against real merges — building it collects nothing.
+gitops_deploy_staging_gate: true
 # This is the k3s node — it must NOT have Docker. k3s brings its own containerd and its
 # flannel/kube-proxy iptables rules. A bare `initial_setup.yml` (no --tags) once installed
 # Docker here, which tripped the k3s role's fail-closed guard and blocked k3s-bringup.yml.
