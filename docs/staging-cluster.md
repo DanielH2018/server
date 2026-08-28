@@ -442,6 +442,19 @@ Vertical slices; each leaves something exercisable. Status as of 2026-08-28.
 5. **First service deployed** (*Decisions 4, 6, 8*) — DONE. `freshrss` answers 200 through the staging VIP, serving `CN = TRAEFIK DEFAULT CERT`.
 6. **The rest of the subset** — DONE. `node-exporter`, `authelia`, then `registry` + `ical-proxy`. `traefik` landed in slice 5, which it had to precede.
 
+**`initial_setup.yml` does not work against `daniel-stage`, and fixing it is not a one-task
+change.** Its "Install Git hooks" task runs `prek install` with `chdir: "{{ playbook_dir }}"` on
+the target, unconditionally. Measured 2026-08-28: the guest has neither a checkout nor `prek`,
+where daniel-box, daniel-server and daniel-pi all have both — so the task cannot succeed there,
+and since it carries no `ignore_errors` the play stops. That is the same class as the
+`volume-snapshot` deploy-tag bug (a task assuming the target holds the repo, invisible while
+every target was `connection=local` or happened to have a checkout), but it is **not** the same
+fix: `delegate_to` is wrong here, because installing hooks is meaningful only on a host somebody
+commits from, and the honest question is whether the whole role supports a remote target at all.
+Answering that means auditing the role, not patching the task. Recorded rather than fixed, and
+worth settling before Phase C wants a staging host built by the same playbook that builds the
+others.
+
 **One blind spot is known and left open.** `test_staging_manifests_have_their_variables.py`
 scans the templates of roles named in `containers_list`, so a role reached only by
 `include_role` is outside its corpus — `k8s/image-builder` renders and applies two manifests

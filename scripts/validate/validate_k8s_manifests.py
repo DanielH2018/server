@@ -566,6 +566,12 @@ def main() -> int:
             failures += 1
             continue
 
+        # DECIDED: role defaults are merged LAST here, so they outrank the inventory — the
+        # reverse of Ansible's own precedence, where role defaults are the weakest layer. The
+        # inversion is held harmless by `colliding_default_keys` above rather than corrected,
+        # because swapping the merge order changes the render context of every role at once to
+        # fix a collision that does not exist. Full reasoning in that function's docstring.
+        # Contradict it with a case where the guard passes and the render is still wrong.
         ctx = {**base, **role_vars, "container_item": entries[role]}
         pvc_names.update(seed_volume_pvc_names(role, ctx))
         for tpl in templates:
