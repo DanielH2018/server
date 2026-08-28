@@ -94,6 +94,15 @@ claude_otel_loki_retention: 744h
 # Grafana lost its Tempo datasource and its claude metrics stream when the otel-collector became
 # a forwarder into this stack, so this cluster's Grafana is the board's only consumer — the AI
 # folder now stages from this role's files/dashboards/AI, the rest still from the shared tree.
+# DECIDED: this list has no folder-level prune, and that is deliberate (operator 2026-08-28).
+# Dropping a name here removes the folder's volume and volumeMount from grafana.yaml.j2 (both
+# rendered by `{% for folder in claude_otel_dashboard_folders %}`, at the volumeMounts and volumes
+# blocks) but leaves the staged dir, the annotated dir and the live grafana-dashboards-<folder>
+# ConfigMap behind. That orphan is INERT: the mount is by explicit per-folder volume name, so an
+# unlisted ConfigMap is never mounted and never reaches Grafana. Adding a prune would trade an
+# inert orphan for deletion behaviour that can remove a live ConfigMap — a worse failure than the
+# one it closes, and the reason the 2026-08-28 review's fix-skeptic pass rejected it. Reopen only
+# with a case where the orphan is reachable, not merely present.
 claude_otel_dashboard_folders:
   - AI
   - Apps

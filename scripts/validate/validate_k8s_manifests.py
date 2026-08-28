@@ -179,6 +179,23 @@ def role_defaults(role: str, base: dict) -> dict:
     return resolve_vars(load_yaml(K8S_ROLES / role / "defaults" / "main.yml"), base)
 
 
+def colliding_default_keys(role_vars: dict, base: dict) -> set:
+    """The keys a role's defaults and the inventory both define — which must be none.
+
+    The render context below is built `{**base, **role_defaults(...)}`, so a role default
+    outranks the group_vars and host_vars merged into `base`. Ansible's own precedence is the
+    reverse: role defaults are the WEAKEST layer and host_vars beat them. A shared key therefore
+    makes this validator render a value a deploy would never produce, and it passes — the
+    manifest is still valid YAML and still schema-checks, just against the wrong number.
+
+    Asserted rather than fixed by swapping the merge order: swapping changes the context of all
+    54 roles at once to correct a collision that does not exist today, where failing loudly
+    costs nothing until one appears. `crowdsec_k8s_image` was hoisted into all.yml exactly this
+    way once, so the hoist that creates one is a real move, not a hypothetical.
+    """
+    return set(role_vars) & set(base)
+
+
 def parse_docs(rendered: str) -> list:
     """Parse a rendered manifest into its YAML documents, the same way yaml_error does. Only
     called after yaml_error has already confirmed the render is valid YAML — a raise here would
@@ -536,7 +553,20 @@ def main() -> int:
             failures += 1
             continue
 
-        ctx = {**base, **role_defaults(role, base), "container_item": entries[role]}
+        role_vars = role_defaults(role, base)
+        collisions = colliding_default_keys(role_vars, base)
+        if collisions:
+            print(
+                f"  [FAIL] {role}: defaults/main.yml redefines inventory key(s) "
+                f"{sorted(collisions)} — role defaults are Ansible's weakest layer but outrank "
+                f"`base` here, so this renders a value a deploy would not. Rename, or drop the "
+                f"role default and keep the inventory one.",
+                file=sys.stderr,
+            )
+            failures += 1
+            continue
+
+        ctx = {**base, **role_vars, "container_item": entries[role]}
         pvc_names.update(seed_volume_pvc_names(role, ctx))
         for tpl in templates:
             checked += 1

@@ -358,3 +358,31 @@ def test_resolve_vars_leaves_a_brace_free_value_alone():
     tests above and quietly turn every int and bool in the inventory into text."""
     values = {"ports": [80, 443], "on": True, "names": ["homelab"], "nested": {"n": 1}}
     assert vkm.resolve_vars(dict(values), {}) == values
+
+
+# ── role defaults must not shadow the inventory ───────────────────────────────────────────────
+
+
+def test_a_role_default_that_shadows_an_inventory_key_is_flagged():
+    """The rejecting half. `{**base, **role_defaults(...)}` ranks role defaults ABOVE the
+    group_vars and host_vars in `base`, which is the reverse of Ansible's own precedence — so a
+    shared key renders a value no deploy would produce, while staying valid YAML and passing the
+    schema check."""
+    assert vkm.colliding_default_keys(
+        {"crowdsec_k8s_image": "role-value", "own_key": 1},
+        {"crowdsec_k8s_image": "inventory-value", "other": 2},
+    ) == {"crowdsec_k8s_image"}
+
+
+def test_a_role_default_with_its_own_key_space_is_clean():
+    """The accepting half — a rule that flagged everything would pass the test above too."""
+    assert (
+        vkm.colliding_default_keys({"sonarr_port": 8989}, {"domain": "example.com"})
+        == set()
+    )
+
+
+def test_no_real_role_shadows_an_inventory_key(real_tree_run):
+    """The regression guard, over the real tree: 54 roles, zero collisions when this landed."""
+    _rc, err = real_tree_run
+    assert "redefines inventory key" not in err
