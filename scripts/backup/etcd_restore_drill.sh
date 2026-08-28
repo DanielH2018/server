@@ -158,6 +158,13 @@ stamp_success() {
     "$mode" "${SNAPSHOT:-unknown}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(date -u +%s)" \
     > "${STAMP_DIR}/last-success-${mode}" \
     || echo "warning: could not write the ${mode} stamp" >&2
+  # 0644 EXPLICITLY, because the reader is not root. This runs as a root cron under
+  # /etc/login.defs UMASK 027, so the redirect above creates 0640 root:root — and the first real
+  # run on 2026-08-28 did exactly that. monitor-bridge reads this stamp as uid 1000
+  # (runAsNonRoot), where an unreadable file and an absent one are indistinguishable: both would
+  # report "the drill has never passed" while it passes weekly. The Longhorn drill beside this
+  # one already chmods its stamps for the same reason.
+  chmod 0644 "${STAMP_DIR}/last-success-${mode}" 2>/dev/null || true
   return 0
 }
 

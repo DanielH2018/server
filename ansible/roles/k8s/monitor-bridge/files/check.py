@@ -192,6 +192,15 @@ PROWLARR_INDEXER_IGNORE = _env("PROWLARR_INDEXER_IGNORE", "")
 # deployer remains in the fleet (the Pi runs has_gitops: false), so one watcher.
 GITOPS_STATE_DIR = _env("GITOPS_STATE_DIR", "/gitops-state")
 GITOPS_MAX_AGE_S = float(_env("GITOPS_MAX_AGE_MIN", "90")) * 60
+ETCD_DRILL_STATE_DIR = _env("ETCD_DRILL_STATE_DIR", "/etcd-drill-state")
+# DECIDED: 8 days, DERIVED from the drill's cadence rather than picked round. The cron is
+# k3s_etcd_restore_drill_cron = "20 10 * * 1" — weekly, Monday 10:20 — so anything over 7 days
+# means a scheduled run did not happen or did not pass. 8 gives one day of slack for the run
+# itself and for a check that evaluates just before the window, and no more: a wider grace and
+# the monitor clears the very miss it exists to catch, which is how a 24h grace against a 23h
+# gap read green on 2026-08-25. Move this ONLY together with the cron; the two are pinned to
+# each other by test_etcd_drill_grace_is_derived_from_the_cron.
+ETCD_DRILL_MAX_AGE_S = float(_env("ETCD_DRILL_MAX_AGE_DAYS", "8")) * 86400
 # How long the host may sit behind origin before GitOps Status pages. Generous on purpose: the
 # deployer ticks every 30 min, and the dirty-tree path (operator mid-edit) is behind by design for
 # as long as the edit lasts. 6 h pages a genuinely-stuck host well inside a day while never firing
@@ -1574,6 +1583,67 @@ def check_gitops_status():
     )
 
 
+def check_etcd_restore_drill():
+    """Is the off-box etcd snapshot still PROVABLY restorable?
+
+    The snapshot half has been taken, uploaded and alarmed since 2026-08-16. Until 2026-08-28
+    nothing watched the restore half: the drill wrote a stamp no code read, so a silently
+    failing drill was indistinguishable from a passing one. etcd carries the Longhorn `Backup`
+    CRs needed to FIND the volume backups, so this is the tier whose failure voids the rest of
+    the recovery chain.
+
+    Reads `last-success-list-only` SPECIFICALLY, never `last-success-full`. Only the list-only
+    leg is scheduled — the full drill cannot pass on this host (five structural
+    `k3s server --cluster-reset` failures documented in the drill's header) — so accepting either
+    file would report the object-graph restore as proven when nothing here has ever proven it.
+    That is the "one tier hiding behind another tier's evidence" shape, and the drill writes the
+    mode into the stamp precisely so a reader cannot make that mistake.
+
+    Fails closed on all three ways the input can be missing, and they are reported distinctly
+    because they need different fixes:
+      absent      the drill has never passed here — the state most worth reporting, and the one
+                  `[[ -f $STAMP ]] && check_age` would have reported green
+      unreadable  the stamp exists but this uid cannot read it. Real, not hypothetical: the
+                  first run wrote 0640 root:root under UMASK 027 while this pod runs as uid
+                  1000, and an unreadable file is otherwise indistinguishable from an absent one
+      unparseable a stamp written by a future version whose format this cannot read
+    """
+    path = os.path.join(ETCD_DRILL_STATE_DIR, "last-success-list-only")
+    try:
+        with open(path) as fh:
+            body = fh.read()
+    except FileNotFoundError:
+        return False, "no etcd restore drill has ever passed (no list-only stamp)"
+    except PermissionError:
+        return (
+            False,
+            "etcd drill stamp exists but is unreadable by this uid (needs 0644)",
+        )
+    except OSError as exc:
+        return False, "cannot read the etcd drill stamp: %s" % exc
+
+    epoch = None
+    for line in body.splitlines():
+        key, _, value = line.partition("=")
+        if key.strip() == "epoch":
+            try:
+                epoch = float(value.strip())
+            except ValueError:
+                epoch = None
+            break
+    if epoch is None:
+        return False, "etcd drill stamp has no readable epoch"
+
+    age_s = time.time() - epoch
+    if age_s > ETCD_DRILL_MAX_AGE_S:
+        return (
+            False,
+            "etcd restore drill last passed %.1f days ago (weekly cadence)"
+            % (age_s / 86400),
+        )
+    return True, "etcd restore drill passed %.1f days ago" % (age_s / 86400)
+
+
 def scrutiny_wear_devices(summary):
     """One /api/device/<wwn>/details fetch per non-archived device.
 
@@ -2846,6 +2916,16 @@ CHECKS = [
     ),
     ("gitops_alive", _env("KUMA_PUSH_GITOPS_ALIVE", ""), check_gitops_alive),
     ("gitops_status", _env("KUMA_PUSH_GITOPS_STATUS", ""), check_gitops_status),
+    # Reads a stamp the drill writes weekly rather than a live source, so it is the same shape
+    # as the gitops pair above: a hostPath the pod is pinned to, read fail-closed. Its token was
+    # minted 2026-08-28, which is what let it be registered — test_checks_and_env_secret_push
+    # _tokens_agree blocks a check whose KUMA_PUSH_* name has no env-secret entry, correctly:
+    # such a check pushes to nowhere forever, present in the code and absent from the world.
+    (
+        "etcd_restore_drill",
+        _env("KUMA_PUSH_ETCD_DRILL", ""),
+        check_etcd_restore_drill,
+    ),
     ("scrutiny", _env("KUMA_PUSH_SCRUTINY", ""), check_scrutiny),
     ("ups", _env("KUMA_PUSH_UPS", ""), check_ups),
     ("pi_pressure", _env("KUMA_PUSH_PI", ""), check_pi_pressure),
