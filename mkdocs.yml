@@ -153,6 +153,9 @@ nav:
       # finds what the label promises. The page is still a spec as well as a description —
       # Phase C (gating the pipeline on a staging deploy) is unbuilt and says so.
       - Staging cluster: staging-cluster.md
+      # Drafted, not started — the gate itself is unimplemented. Listed anyway because the
+      # reachability decision it turns on is one an unrelated change could foreclose.
+      - Staging Phase C (drafted): staging-phase-c.md
       - Secret rotation: secret-rotation.md
       - Claude shell permissions: claude-shell-permissions.md
       - Security tools: security-tools.md
