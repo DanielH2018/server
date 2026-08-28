@@ -43,10 +43,11 @@
     # poweroff); the primary is the k8s/nut pod pinned to ups_host.
     #
     # ups_host runs it unconditionally — it owns the USB UPS. Any OTHER host runs only the
-    # client half, and only once nut_host_secondary_armed is set for it: daniel-box draws from
-    # the same UPS (measured 2026-08-20) and today takes a hard cut, but a secondary upsmon's
-    # job is to power the machine off, so arming one on the control-plane node without the
-    # console-attended `upsmon -c fsd` drill risks an unplanned cluster shutdown.
+    # client half, and only once nut_host_secondary_armed is set for it. daniel-box is armed
+    # as of 2026-08-28 (host_vars/daniel-box.yml); before that it drew from the same UPS
+    # (measured 2026-08-20) and took a hard cut at battery end. A secondary upsmon's job is to
+    # power the machine off, so arming a further host without the console-attended
+    # `upsmon -c fsd` drill risks an unplanned shutdown of it.
     - role: nut_host
       tags: ["nut_host"]
       when: inventory_hostname == ups_host or nut_host_secondary_armed | bool
