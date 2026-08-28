@@ -221,6 +221,18 @@ authelia_k8s_manage_oidc: false
 # registry holds one small image and the cluster is rebuilt rather than kept.
 registry_k8s_manage_gc: false
 
+# The single caller a `monitoring_route` admits, named as this cluster's network sees it. The
+# global value is daniel-server's LAN address, which no source inside the libvirt NAT can ever
+# present — so ical-proxy's route rendered correctly here and answered 404 to everything,
+# because the ClientIP guard could not be satisfied by construction rather than because
+# anything was broken.
+#
+# 192.168.140.1 is daniel-server's own address on virbr-stage, which is what it presents when
+# it dials the staging VIP. The other three consumers of this variable (claude-otel's
+# prometheus, its ingressroute, loki-homelab's push route) are not in this subset, so the
+# override reaches ical-proxy alone.
+k8s_bridge_client_ip: 192.168.140.1
+
 # No token gate. Every router in it routes to CouchDB or homelab-mcp, neither of which runs
 # here, and its two tokens are the only traefik variables staging's secrets file lacks.
 traefik_k8s_manage_livesync_gate: false
