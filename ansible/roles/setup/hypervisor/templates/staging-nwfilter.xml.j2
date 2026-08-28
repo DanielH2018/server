@@ -1,7 +1,7 @@
 <!-- Managed by ansible (roles/setup/hypervisor). Edits here are overwritten. -->
 <!--
-  The staging guest's egress fence. One rule: anything the guest sends to the production
-  LAN is dropped at its own tap device.
+  The staging guest's egress fence. One drop rule per production range — the LAN, the
+  cluster's pod CIDR and its Service CIDR — applied at the guest's own tap device.
 
   DECIDED: a libvirt nwfilter, not a ufw `route deny` and not a FORWARD hook script.
   The first attempt (#508) was a ufw route rule on daniel-server. It deployed, `ufw status`
@@ -63,7 +63,23 @@
        then re-run the role, which redefines the filter and starts the guest. That refusal is a
        feature: a referenced fence cannot be removed out from under a running guest. -->
   <uuid>{{ hypervisor_staging_nwfilter_name | to_uuid }}</uuid>
+  <!-- DECIDED: the cluster's pod and Service ranges are fenced alongside the LAN, and the
+       Service range is fenced even though it also contains the guest's OWN Services.
+       lan_subnet alone left the whole cluster network open: measured from inside the guest on
+       2026-08-28, prod's Longhorn API answered unauthenticated on its ClusterIP 10.43.152.244
+       and on a longhorn-ui pod IP 10.42.1.216, exposing a mutating `diskUpdate` action, while
+       the LAN rule correctly refused the MetalLB VIP. A ClusterIP is not on the LAN.
+
+       Fencing the guest's own ranges is safe only while staging is a single node, and that is
+       the assumption to check before adding a second one. Traffic to staging's own pods and
+       Services is delivered on the guest's internal cni0 and by its own kube-proxy rules; it
+       never crosses the tap device this filter attaches to, so these rules cannot see it.
+       Add a staging agent node and pod-to-pod traffic starts crossing the wire, where a /16
+       drop would break it. ansible/tests/test_staging_egress_fence.py ties that assumption to
+       k3s_agent_node_ips and fails when it stops holding. -->
+{% for cidr in [lan_subnet, k3s_pod_cidr, k3s_service_cidr] %}
   <rule action='drop' direction='out' priority='100'>
-    <ip dstipaddr='{{ lan_subnet.split('/')[0] }}' dstipmask='{{ lan_subnet.split('/')[1] }}'/>
+    <ip dstipaddr='{{ cidr.split('/')[0] }}' dstipmask='{{ cidr.split('/')[1] }}'/>
   </rule>
+{% endfor %}
 </filter>

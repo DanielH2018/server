@@ -87,6 +87,17 @@ kuma_docker_monitors: false
 # comment for why that distinction matters). Same for every host so far; override per-host
 # if a new host sits on a different LAN.
 lan_subnet: "10.0.0.0/24"
+# The production cluster's pod and Service ranges — k3s's defaults, which this cluster has
+# never overridden. Global rather than k3s role defaults because the consumer is the
+# hypervisor role on daniel-server: the staging guest's egress fence has to name them, and a
+# role's defaults are not visible to a different role in a different playbook.
+#
+# Anything reachable in these two ranges is reachable from the staging guest unless the fence
+# names them, and that is not theoretical: on 2026-08-28 the guest read prod's Longhorn API
+# unauthenticated at 10.43.152.244, including its mutating `diskUpdate` action. lan_subnet
+# alone does not cover it — a ClusterIP is not on the LAN.
+k3s_pod_cidr: "10.42.0.0/16"
+k3s_service_cidr: "10.43.0.0/16"
 # code-server's read-only docker-proxy is gated on this host_var, not containers_list (a
 # tagged `deploy.yml --tags docker-proxy` set_facts containers_list to the filtered
 # dependency closure, which would drop code-server and render False). Override per-host.

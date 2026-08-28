@@ -28,12 +28,15 @@ from __future__ import annotations
 import ipaddress
 import re
 import xml.etree.ElementTree as ET
+from urllib.parse import urlparse
 
+import staging_egress_probe
 import yaml
 
-from _helpers import ALL_VARS, ROLES, jinja_env
+from _helpers import ALL_VARS, HOST_VARS, ROLES, jinja_env
 
 HYPERVISOR = ROLES / "setup" / "hypervisor"
+K3S_DEFAULTS = ROLES / "setup" / "k3s" / "defaults" / "main.yml"
 NWFILTER_TEMPLATE = HYPERVISOR / "templates" / "staging-nwfilter.xml.j2"
 DOMAIN_TEMPLATE = HYPERVISOR / "templates" / "staging-vm.xml.j2"
 HYPERVISOR_DEFAULTS = HYPERVISOR / "defaults" / "main.yml"
@@ -43,7 +46,13 @@ FIREWALL_TASKS = ROLES / "setup" / "initial_setup" / "tasks" / "network.yml"
 
 CIDR_VAR = "staging_net_cidr"
 LAN_VAR = "lan_subnet"
+POD_CIDR_VAR = "k3s_pod_cidr"
+SERVICE_CIDR_VAR = "k3s_service_cidr"
 FILTER_NAME_VAR = "hypervisor_staging_nwfilter_name"
+
+
+def _load_host_vars(host: str):
+    return yaml.safe_load((HOST_VARS / f"{host}.yml").read_text()) or {}
 
 
 def _all_vars():
@@ -115,10 +124,10 @@ def test_the_fence_filters_traffic_leaving_the_guest():
     )
 
 
-def test_the_fence_targets_the_production_lan():
-    lan = ipaddress.ip_network(_all_vars()[LAN_VAR])
+def _fenced_networks(rules=None):
+    """Every destination the filter drops, as networks. Defaults to the rendered template."""
     targeted = set()
-    for rule in _rules():
+    for rule in _rules() if rules is None else rules:
         for ip in rule.findall("ip"):
             addr, mask = ip.get("dstipaddr"), ip.get("dstipmask")
             assert addr and mask, (
@@ -128,10 +137,112 @@ def test_the_fence_targets_the_production_lan():
                 f"which the probe reports as a broken fence, correctly."
             )
             targeted.add(ipaddress.ip_network(f"{addr}/{mask}"))
-    assert targeted == {lan}, (
-        f"{NWFILTER_TEMPLATE} fences {sorted(str(n) for n in targeted)}, not the production "
-        f"LAN {lan} from {LAN_VAR}. `dest` must be the SAME variable authelia's bypass rules "
-        f"use — the fence and the control it protects have to agree by construction."
+    return targeted
+
+
+def _expected_networks():
+    all_vars = _all_vars()
+    return {
+        ipaddress.ip_network(all_vars[v])
+        for v in (LAN_VAR, POD_CIDR_VAR, SERVICE_CIDR_VAR)
+    }
+
+
+def fence_disagreement(targeted, expected):
+    """The verdict, as (unfenced, over-fenced). Both halves are defects, in both directions.
+
+    Kept as a function rather than an inline `==` so the rejecting half below can drive the
+    same comparison the real test drives, instead of asserting set arithmetic of its own.
+    """
+    return (
+        sorted(str(n) for n in expected - targeted),
+        sorted(str(n) for n in targeted - expected),
+    )
+
+
+def test_the_fence_targets_every_production_range():
+    """Set EQUALITY, deliberately, and widened from the variables rather than relaxed.
+
+    Too narrow was the live defect: until 2026-08-28 this fenced only lan_subnet, and the
+    guest read prod's unauthenticated Longhorn API on a ClusterIP the LAN rule cannot cover.
+    Too broad is the other failure and is why this stays an equality — a rule that grew to
+    cover 0.0.0.0/0 or 10.0.0.0/8 would swallow the guest's default route, and the probe
+    would report that as a broken fence only because its internet control leg goes red.
+    """
+    unfenced, over_fenced = fence_disagreement(_fenced_networks(), _expected_networks())
+    assert not unfenced and not over_fenced, (
+        f"{NWFILTER_TEMPLATE} leaves {unfenced} unfenced and additionally fences "
+        f"{over_fenced}, against {LAN_VAR}/{POD_CIDR_VAR}/{SERVICE_CIDR_VAR}. Each `dest` "
+        f"must be the SAME variable the control it protects uses — the LAN one is authelia's "
+        f"bypass scope, and the two cluster ones are what make a ClusterIP or a pod IP "
+        f"unreachable from the guest."
+    )
+
+
+def test_the_range_check_rejects_the_shape_that_was_live():
+    """The rejecting half, driving the real verdict function on the real pre-fix filter.
+
+    This is the exact XML the role shipped until 2026-08-28 — one rule, lan_subnet only.
+    A check that could not tell it apart from the current filter is the check that let the
+    guest read prod's Longhorn API for a day.
+    """
+    lan = _all_vars()[LAN_VAR]
+    was_live = ET.fromstring(
+        f"<filter name='x' chain='root'><rule action='drop' direction='out' priority='100'>"
+        f"<ip dstipaddr='{lan.split('/')[0]}' dstipmask='{lan.split('/')[1]}'/>"
+        f"</rule></filter>"
+    ).findall("rule")
+    unfenced, over_fenced = fence_disagreement(
+        _fenced_networks(was_live), _expected_networks()
+    )
+    assert sorted(unfenced) == sorted(
+        str(ipaddress.ip_network(_all_vars()[v]))
+        for v in (POD_CIDR_VAR, SERVICE_CIDR_VAR)
+    ), (
+        f"the pre-fix filter reported {unfenced} unfenced. It must report exactly the pod "
+        f"and Service CIDRs — anything else means the verdict function stopped seeing the "
+        f"defect it was written for."
+    )
+    assert not over_fenced
+
+
+def test_the_cluster_dns_ip_falls_inside_the_fenced_service_cidr():
+    """Pins the premise that the Service CIDR is really the cluster's, not a guessed range.
+
+    k3s_service_cidr is declared in group_vars while the address k3s actually hands CoreDNS
+    lives in the k3s role's defaults. If the two drift, the fence names a range no Service is
+    in — which fences nothing and reads green in every check above.
+    """
+    service_cidr = ipaddress.ip_network(_all_vars()[SERVICE_CIDR_VAR])
+    k3s_defaults = yaml.safe_load(K3S_DEFAULTS.read_text())
+    dns_ip = ipaddress.ip_address(k3s_defaults["k3s_cluster_dns_ip"])
+    assert dns_ip in service_cidr, (
+        f"{SERVICE_CIDR_VAR} is {service_cidr}, which does not contain k3s_cluster_dns_ip "
+        f"{dns_ip} from {K3S_DEFAULTS}. One of the two was changed without the other, and "
+        f"the fence is around a range the cluster does not use."
+    )
+
+
+def test_fencing_the_clusters_own_ranges_still_assumes_a_single_staging_node():
+    """The trade-off the CIDR rules make, tied to the fact that would end it.
+
+    The pod and Service CIDRs are k3s defaults, so STAGING's ranges are the same two. Dropping
+    them is safe only because staging's own pod and Service traffic is delivered on the guest's
+    internal cni0 and by its own kube-proxy rules, never crossing the tap device this filter
+    attaches to. A second staging node would put pod-to-pod traffic on the wire, where the /16
+    drop would break it — so the fence would then need a source- or interface-scoped exception.
+
+    daniel-stage carrying no k3s_agent_node_ips override is what says that has not happened.
+    """
+    staging_agents = _load_host_vars("daniel-stage").get(
+        "k3s_agent_node_ips",
+        yaml.safe_load(K3S_DEFAULTS.read_text())["k3s_agent_node_ips"],
+    )
+    assert not staging_agents, (
+        f"daniel-stage now declares agent nodes {staging_agents}, so staging is no longer a "
+        f"single node. Pod-to-pod traffic crosses the tap device the fence attaches to, and "
+        f"the {POD_CIDR_VAR}/{SERVICE_CIDR_VAR} drop rules in {NWFILTER_TEMPLATE} will break "
+        f"it. Scope those rules before adding the node."
     )
 
 
@@ -237,4 +348,66 @@ def test_the_staging_cidr_agrees_with_the_network_the_hypervisor_builds():
         f"{CIDR_VAR} has netmask {net.netmask} but {HYPERVISOR_DEFAULTS} builds the network "
         f"with {netmask}. A wider CIDR here fences addresses libvirt never hands out; a "
         f"narrower one leaves part of the guest network unfenced."
+    )
+
+
+def _probe_url_host(url: str):
+    return ipaddress.ip_address(urlparse(url).hostname)
+
+
+def test_the_probe_dials_the_service_cidr_it_now_fences():
+    """A rule with no probe leg is a rule nothing has ever seen fire.
+
+    The checks above read the template; only the probe reads the running host, and the Service
+    CIDR is the range the LAN-only fence missed.
+    """
+    service_cidr = ipaddress.ip_network(_all_vars()[SERVICE_CIDR_VAR])
+    probed = _probe_url_host(staging_egress_probe.LONGHORN_PROBE_URL)
+    assert probed in service_cidr, (
+        f"the probe's cluster target {probed} is not inside {SERVICE_CIDR_VAR} "
+        f"({service_cidr}), so a run of it says nothing about the Service-CIDR drop rule."
+    )
+
+
+def test_the_probe_does_not_dial_an_address_that_already_answers_nothing():
+    """The rejecting half, and the mistake it rejects was the obvious first draft.
+
+    k8s_registry_cluster_ip and dns_k8s_cluster_ip are the two ClusterIPs pinned in inventory,
+    so they are what a probe author reaches for. Both were measured from inside the guest on
+    2026-08-28 returning 000 BEFORE any cluster rule existed — the registry behind an ingress
+    NetworkPolicy, the DNS Service on a port nothing forwards. Either would read as a held
+    fence on the day it shipped and could never go red afterwards.
+    """
+    all_vars = _all_vars()
+    launderers = {all_vars["k8s_registry_cluster_ip"], all_vars["dns_k8s_cluster_ip"]}
+    probed = str(_probe_url_host(staging_egress_probe.LONGHORN_PROBE_URL))
+    assert probed not in launderers, (
+        f"the probe dials {probed}, which answers nothing from the guest with or without the "
+        f"fence. Pick a target measured reachable from inside the guest while unfenced."
+    )
+
+
+def test_every_unpinned_probe_target_carries_a_control_leg():
+    """An allocated address that moved answers nothing, which reads exactly like a fence.
+
+    The cluster targets are not read from inventory, so nothing stops them going stale in
+    place. Their second dial from daniel-server is what turns that into exit 2.
+    """
+    _, targets = staging_egress_probe._targets()
+    inventory_backed = {
+        "INTERNET",
+        "PRODVIP",
+        "K3SAPI",
+        "WGEASY",
+        "HOSTKUBELET",
+        "LANKUBELET",
+    }
+    uncontrolled = sorted(
+        label
+        for label, _command, control in targets
+        if label not in inventory_backed and not control
+    )
+    assert not uncontrolled, (
+        f"probe targets {uncontrolled} are neither read from inventory nor given a host-side "
+        f"control command, so a stale address among them would report a passing fence."
     )
