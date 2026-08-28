@@ -43,6 +43,17 @@ containers_list:
     port: 80
     use_authelia: false
 
+  # The subset's only DaemonSet, and the mechanism no Deployment exercises: per-node
+  # scheduling and hostPath mounts (docs/staging-cluster.md, Decision 6). It needs no
+  # per-cluster switch — the manifest reads two variables, both of which staging supplies,
+  # and it pins no node. Its /proc and /sys mounts exist in a VM unchanged.
+  #
+  # Nothing scrapes it here. Prod's scraper is claude-otel's prometheus, which is not in the
+  # staging subset, so what this proves is that the DaemonSet schedules, mounts and passes its
+  # readiness probe — which is what a manifest-correctness gate is for.
+  - name: node-exporter
+    platform: k8s
+
 # One container runtime, and it is k3s's. Same reasoning that keeps Docker off the two
 # cluster nodes: k3s ships its own containerd, and a second runtime's iptables chains land
 # on top of its. roles/setup/k3s asserts this on both node paths.
