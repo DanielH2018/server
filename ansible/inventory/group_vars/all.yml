@@ -343,6 +343,30 @@ k8s_longhorn_namespace: longhorn-system
 # Infrastructure APIs opt out per-route with the macro's public=false (the CrowdSec LAPI is
 # the standing example).
 k8s_public_route: true
+# The Traefik certificate resolver every IngressRoute names, or "" for a cluster that has
+# none. Prod resolves certificates through the `cloudflare` ACME DNS-01 resolver defined in
+# the traefik role's static config.
+#
+# Empty means Traefik serves its own default self-signed certificate for the route. That is
+# the staging cluster's whole TLS story (docs/staging-cluster.md, Decision 4): staging holds
+# no Cloudflare token and must never issue against the real domain's ACME account and rate
+# limit, and nothing on staging needs to TRUST a certificate — the gate asks whether
+# manifests render, apply, schedule, bind and roll out, which a probe answers with `curl -k`.
+# A generated internal CA would buy trust nothing reads, and cost a keypair, a Secret and a
+# rotation story.
+#
+# The `tls:` block stays present either way, and that is load-bearing rather than tidy: an
+# IngressRoute on the `https` entrypoint with NO `spec.tls` becomes a non-TLS router and is
+# never a candidate for an HTTPS request at all. That failure is invisible from the object —
+# it applies cleanly, `kubectl get` shows it, Traefik logs nothing — and it cost most of
+# 2026-08-07. See the header of monitoring_route in ansible/templates/ingressroute.yml.j2.
+# ENFORCED by ansible/tests/test_k8s_manifests.py, which fails any rendered IngressRoute
+# serving the https entrypoint without a tls block.
+#
+# `domains:` goes with the resolver, not with TLS. It is the SAN set ACME is instructed to
+# request; with no resolver it instructs nothing, so it is omitted rather than left as
+# decoration a reader would mistake for a constraint.
+k8s_tls_cert_resolver: cloudflare
 # daniel-server's address as the cluster sees it on the wire. Monitoring routes are
 # ClientIP-gated to it so an un-Authelia'd route is reachable from that host and from
 # nowhere else on the LAN — see ingressroute.yml.j2 for why ClientIP is sound here.

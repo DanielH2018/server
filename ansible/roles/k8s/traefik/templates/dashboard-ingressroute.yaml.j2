@@ -56,11 +56,15 @@ spec:
   # ansible/tests/test_k8s_manifests.py. Do not shorten to the file provider's `tls: {}`;
   # that shorthand is not IngressRoute syntax.
   tls:
-    certResolver: cloudflare
+{% if k8s_tls_cert_resolver %}
+    certResolver: {{ k8s_tls_cert_resolver }}
+{% endif %}
     options:
       name: modern
+{% if k8s_tls_cert_resolver %}
     domains:
       - main: "{{ domain }}"
         sans:
           - "*.{{ domain }}"
           - "*.local.{{ domain }}"
+{% endif %}

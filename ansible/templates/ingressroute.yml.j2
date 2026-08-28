@@ -59,18 +59,29 @@ spec:
       services:
         - name: {{ name }}
           port: {{ port }}
+{#
+  `k8s_tls_cert_resolver` is empty on a cluster with no ACME resolver, and then Traefik serves
+  its own default self-signed certificate. The `tls:` key itself is NEVER conditional: without
+  it this becomes a non-TLS router that an HTTPS request is never matched against — see the
+  header of monitoring_route below, which is where that cost a week. `domains:` is the SAN set
+  ACME is told to request, so it goes with the resolver rather than with TLS.
+#}
   tls:
-    certResolver: cloudflare
+{% if k8s_tls_cert_resolver %}
+    certResolver: {{ k8s_tls_cert_resolver }}
+{% endif %}
     # Explicit, and deliberately not named `default` — Traefik reserves that name for the
     # global default options and never registers it under a namespaced key, so referencing
     # `default` here fails with "unknown TLS options". See the traefik role's dynamic.yaml.j2.
     options:
       name: modern
+{% if k8s_tls_cert_resolver %}
     domains:
       - main: "{{ domain }}"
         sans:
           - "*.{{ domain }}"
           - "*.local.{{ domain }}"
+{% endif %}
 {% if k8s_public_route and public %}
 {% for prefix in bypass_prefixes %}
 {% set slug = prefix | trim('/') | replace('/', '-') %}
@@ -100,14 +111,18 @@ spec:
         - name: {{ name }}
           port: {{ port }}
   tls:
-    certResolver: cloudflare
+{% if k8s_tls_cert_resolver %}
+    certResolver: {{ k8s_tls_cert_resolver }}
+{% endif %}
     options:
       name: modern
+{% if k8s_tls_cert_resolver %}
     domains:
       - main: "{{ domain }}"
         sans:
           - "*.{{ domain }}"
           - "*.local.{{ domain }}"
+{% endif %}
 {% endfor %}
 {% endif %}
 {%- endmacro %}
@@ -185,13 +200,26 @@ spec:
           port: {{ port }}
   # Not optional, and not boilerplate — see the header. Without this the router is non-TLS and
   # never matches an HTTPS request. Identical to ingressroute()'s block above.
+{#
+  A Jinja comment, not a YAML one: this text must not reach the rendered manifest. The `tls:`
+  KEY stays unconditional while its contents follow k8s_tls_cert_resolver — an empty resolver
+  drops certResolver and domains, never the key itself.
+#}
   tls:
-    certResolver: cloudflare
+{% if k8s_tls_cert_resolver %}
+    certResolver: {{ k8s_tls_cert_resolver }}
+{% endif %}
     options:
       name: modern
+{% if k8s_tls_cert_resolver %}
     domains:
       - main: "{{ domain }}"
         sans:
           - "*.{{ domain }}"
           - "*.local.{{ domain }}"
+{#- The dash matters. `{% endif %}` on its own line leaves the newline that ended the SAN
+    above, where `{%- endmacro %}` used to strip it — a trailing blank line in every rendered
+    monitoring route. Harmless YAML, but a changed manifest rolls the workload, so ten pods
+    would restart for a whitespace edit. Caught by diffing the prod render, not by review. -#}
+{%- endif %}
 {%- endmacro %}
