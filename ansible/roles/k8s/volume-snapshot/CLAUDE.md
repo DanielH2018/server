@@ -206,10 +206,11 @@ name is deterministic" above.
 
 **`git rev-parse` is a hard prerequisite, and it is not reachable from the automated pipeline.**
 It runs without `become` (a repo checkout read as root is "dubious ownership" and git refuses
-it), which means it depends on the deploying user owning the checkout. `gitops-deploy.service`
-runs `User=ubuntu` with `WorkingDirectory=/home/ubuntu/server`, so the refusal is not reachable
-there — but a hand-run deploy as a different user, or from a checkout owned by someone else,
-would fail every one of these 13 roles at this task before it fails anywhere more specific.
+it), which means it depends on the deploying user owning the checkout — the **controller's**,
+since the task is delegated to localhost. `gitops-deploy.service` runs `User=ubuntu` with
+`WorkingDirectory=/home/ubuntu/server`, so the refusal is not reachable there — but a hand-run
+deploy as a different user, or from a checkout owned by someone else, would fail every one of
+these 13 roles at this task before it fails anywhere more specific.
 
 The last table row is a deliberate choice rather than an oversight. A prune failure is not itself
 dangerous, but swallowing it means unbounded snapshot growth, and a retained snapshot pins every
@@ -411,6 +412,14 @@ one, never by assuming the match is unique.
   stray `GIT_DIR` has already made a check in this repo operate on the wrong repository. It also
   runs without `become`, because git refuses a repository it considers to have dubious ownership
   when a different user reads it.
+- It carries `delegate_to: localhost`, added 2026-08-28. The SHA is a property of the
+  **controller's** checkout — it names the commit whose templates the run is rendering — and
+  reading it on the target only ever coincided with that, because `hosts.ini` pins both cluster
+  nodes to `ansible_connection=local`. `daniel-stage` is the first genuinely remote target in
+  this repo; it has no checkout, and the task failed there with "Unable to change directory
+  before execution" for all thirteen callers. ENFORCED by
+  `ansible/tests/test_volume_snapshot_reads_the_controller_checkout.py`, whose rejecting half is
+  the pre-fix task verbatim.
 - Ansible role-defaults precedence for a same-named variable across an `include_role` chain: the
   innermost (most recently loaded) role's own default wins over an ancestor's, confirmed
   2026-08-21 with a throwaway three-level play matching this repo's real call structure. See "How

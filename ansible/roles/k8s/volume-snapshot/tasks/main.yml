@@ -38,6 +38,15 @@
 # The deploy tag. `chdir`, NOT `git -C`: `git -C` does not override GIT_DIR, and a stray GIT_DIR
 # in the environment has already made a check in this repo operate on the wrong repository.
 #
+# `delegate_to: localhost` because the SHA is a property of the CONTROLLER's checkout — it names
+# the commit whose templates this run is rendering, which is what makes a snapshot findable by
+# the deploy that created it. Reading it on the target only ever coincided with that: both
+# cluster nodes are `ansible_connection=local` in hosts.ini, so "the target" and "the
+# controller" were the same machine and the same checkout. daniel-stage is the first genuinely
+# remote target, it has no checkout at all, and the task fails there with "Unable to change
+# directory before execution" — a latent bug in a role with 13 callers rather than a staging
+# quirk. ENFORCED by ansible/tests/test_volume_snapshot_reads_the_controller_checkout.py.
+#
 # No `become`. The repo checkout belongs to the deploying user, and git refuses a repository it
 # considers to have dubious ownership when read as root.
 #
@@ -47,6 +56,7 @@
 # roles a fix already.
 - name: Resolve the deploy tag for {{ volume_snapshot_service }}
   tags: [deploy]
+  delegate_to: localhost
   ansible.builtin.command:
     argv:
       - git
