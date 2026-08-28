@@ -718,3 +718,59 @@ def test_the_k8s_autodeploy_branch_alerts_on_a_bundled_secrets_change():
         )
         return
     raise AssertionError("main() no longer branches on cs.k8s_deploy")
+
+
+# ── contract 3: deliver() actually bounds the pending queue ────────────────────────────────────
+#
+# cap_pending() has its own behavioural tests in test_deploy_logic_health.py, but a pure function
+# nobody calls is inert — the failure mode this repo has already paid for twice (seed-volume's
+# short-circuit fired for 0 of 25 claims behind 16 passing tests). These assert the CALL SITE,
+# which is the half those tests structurally cannot see.
+
+
+def _fn(name: str) -> ast.FunctionDef:
+    tree = ast.parse(_SRC.read_text())
+    fn = next(
+        (
+            n
+            for n in ast.walk(tree)
+            if isinstance(n, ast.FunctionDef) and n.name == name
+        ),
+        None,
+    )
+    assert fn is not None, f"{name}() not found in gitops_deploy.py"
+    return fn
+
+
+def test_deliver_caps_the_pending_queue():
+    """Without this the queue is unbounded: nothing reads the file back except drain_pending(),
+    so a permanently broken webhook grows it every 30 minutes forever."""
+    called = {
+        n.func.id
+        for n in ast.walk(_fn("deliver"))
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+    }
+    assert "cap_pending" in called, "deliver() no longer bounds the pending-alert queue"
+
+
+def test_deliver_logs_every_dropped_alert():
+    """An undelivered alert discarded without a trace is the failure the queue exists to prevent.
+    The drop must reach the journal, which is what Loki indexes."""
+    body = ast.dump(_fn("deliver"))
+    assert "log" in body, "deliver() no longer logs"
+    src = ast.get_source_segment(_SRC.read_text(), _fn("deliver")) or ""
+    assert "dropping oldest undelivered" in src, (
+        "deliver() drops queue entries without logging which ones"
+    )
+
+
+def test_cap_pending_is_imported_from_the_pure_module():
+    """It must be the tested implementation, not a second copy that can drift from it."""
+    tree = ast.parse(_SRC.read_text())
+    imported = {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module == "deploy_logic"
+        for alias in node.names
+    }
+    assert {"cap_pending", "PENDING_ALERTS_MAX"} <= imported
