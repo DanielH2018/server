@@ -134,6 +134,7 @@ data:
           # into this namespace, and everything Traefik will find there is Ansible-rendered.
           - {{ k8s_longhorn_namespace }}
 
+{% if traefik_k8s_manage_acme %}
     certificatesResolvers:
       cloudflare:
         acme:
@@ -147,6 +148,7 @@ data:
             resolvers:
               - "9.9.9.9:53"
               - "149.112.112.112:53"
+{% endif %}
 
     # Process log stays on stdout for kubectl logs. The ACCESS log moved to a file at
     # slice-6 B1 (see the accessLog block above) — the sidecar agent tails it from the

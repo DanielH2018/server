@@ -55,19 +55,17 @@
     name: k8s/manifests
   vars:
     manifests_service: traefik
-    manifests_files:
-      - rbac-binding.yaml
-      - acme-pvc.yaml
-      - static-config.yaml
-      - dynamic.yaml
-      - deployment.yaml
-      - service.yaml
-      - metrics-service.yaml
-      - dashboard-ingressroute.yaml
-    manifests_secret_files:
-      - cf-token-secret.yaml
-      - crowdsec-secret.yaml
-      - livesync-gate-secret.yaml
+    # The ACME names are concatenated rather than listed, because dropping a name from the list
+    # is the only way traefik_k8s_manage_acme reaches the PVC and the token Secret — neither
+    # manifest has a template branch to gate.
+    manifests_files: >-
+      {{ ['rbac-binding.yaml']
+         + (['acme-pvc.yaml'] if traefik_k8s_manage_acme | bool else [])
+         + ['static-config.yaml', 'dynamic.yaml', 'deployment.yaml', 'service.yaml',
+            'metrics-service.yaml', 'dashboard-ingressroute.yaml'] }}
+    manifests_secret_files: >-
+      {{ (['cf-token-secret.yaml'] if traefik_k8s_manage_acme | bool else [])
+         + ['crowdsec-secret.yaml', 'livesync-gate-secret.yaml'] }}
 
 - name: Read the address MetalLB assigned to the Traefik Service
   tags: [deploy]
@@ -105,6 +103,7 @@
 
 - name: Deploy the Cloudflare IP drift check
   tags: [cron]
+  when: traefik_k8s_manage_cloudflare_drift_check | bool
   # The cloudflare_ips allowlist gates forwardedHeaders.trustedIPs on both entrypoints
   # (static-config.yaml.j2). Its Docker-era watchdog retired in 84733119 with the
   # DOCKER-USER origin lock it also guarded, leaving this half unmonitored until 2026-08-15.
@@ -118,6 +117,7 @@
 
 - name: Schedule the Cloudflare IP drift check
   tags: [cron]
+  when: traefik_k8s_manage_cloudflare_drift_check | bool
   # Daily, not weekly like its predecessor: the check is two curls, and the Kuma monitor's
   # 90000s (25h) interval needs a push more often than that to stay green. Cloudflare
   # changes these ranges on a multi-year cadence — the cadence is about the heartbeat,

@@ -22,6 +22,20 @@ traefik_k8s_ping_port: 8082
 # Traefik's image has no passwd entry requirement; this UID owns the acme PVC via fsGroup.
 traefik_k8s_uid: 65532
 
+# Per-cluster subsystem switches. Both are true for prod and false for a staging cluster that
+# has neither a Cloudflare account nor the SOPS keys behind one — see docs/staging-cluster.md
+# Decision 4. They gate ANSIBLE-side inclusion, not just template branches, because the ACME
+# half spans a PVC, a Secret, an init container and two volumes as well as the resolver block.
+#
+# DECIDED: these are one-way for a cluster that has already deployed with them on. Dropping a
+# name from manifests_files deletes the STAGED file (manifests/tasks/main.yml:148) but never
+# the live object — see kubectl-apply-leaves-orphaned-objects. Flipping either to false on
+# prod therefore needs a hand `kubectl delete`, which the manifest-prune-check cron flags.
+# Nothing does that today; the flags exist so a new cluster can come up without the subsystem,
+# not so prod can shed it.
+traefik_k8s_manage_acme: true
+traefik_k8s_manage_cloudflare_drift_check: true
+
 # Let's Encrypt directory. Empty means production. Set to
 #   https://acme-staging-v02.api.letsencrypt.org/directory
 # while iterating: both Traefik instances request the SAME SAN set, so they share one
