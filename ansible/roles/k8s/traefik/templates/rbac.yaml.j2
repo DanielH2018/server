@@ -74,11 +74,13 @@ rules:
       - get
       - list
       - watch
-{% for ns in [k8s_namespace, k8s_observability_namespace, k8s_longhorn_namespace] %}
+{% for ns in traefik_k8s_watched_namespaces %}
 ---
-# Namespaced half, one per watched namespace. This list MUST stay in step with
-# static-config.yaml.j2's `providers.kubernetesCRD.namespaces`: a namespace Traefik watches but
-# has no Role in cannot sync its informers, and the failure mode is the silent one above.
+# Namespaced half, one per watched namespace. Driven by the SAME variable as
+# static-config.yaml.j2's `providers.kubernetesCRD.namespaces`, so the two cannot drift: a
+# namespace Traefik watches but has no Role in cannot sync its informers, and the failure mode
+# is the silent one above. That agreement used to rest on this comment; it now rests on
+# ansible/tests/test_traefik_watched_namespaces.py.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:

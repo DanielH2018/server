@@ -124,23 +124,15 @@ data:
         watch: true
 {% endif %}
       kubernetesCRD:
-        # Scoped to named namespaces: Traefik should not pick up an IngressRoute someone
-        # drops in an arbitrary one (kube-system in particular).
+        # One list, `traefik_k8s_watched_namespaces` (role defaults), shared with the Roles
+        # rbac.yaml.j2 renders. A namespace absent here is not merely unrouted — Traefik
+        # never sees its IngressRoutes at all, so a route applies cleanly, reports nothing
+        # wrong, and the host simply 404s. Adding one is additive: existing routes are
+        # unaffected. `allowCrossNamespace` stays OFF; see the variable's comment.
         namespaces:
-          - {{ k8s_namespace }}
-          # Telemetry stack (claude-otel). A namespace absent from this list is not merely
-          # unrouted — Traefik never sees its IngressRoutes at all, so the route applies
-          # cleanly, reports nothing wrong, and the host simply 404s. Adding it is additive:
-          # existing routes are unaffected.
-          #
-          # `allowCrossNamespace` stays OFF. That namespace carries its own copies of the
-          # rate-limit and authelia Middlewares rather than reaching into this one, which
-          # keeps a route in any watched namespace from referencing another's middlewares.
-          - {{ k8s_observability_namespace }}
-          # Longhorn's namespace, for the single route roles/k8s/longhorn-ui adds to its UI.
-          # Same deal as the line above: its middlewares are local copies, not references
-          # into this namespace, and everything Traefik will find there is Ansible-rendered.
-          - {{ k8s_longhorn_namespace }}
+{% for ns in traefik_k8s_watched_namespaces %}
+          - {{ ns }}
+{% endfor %}
 
 {% if traefik_k8s_manage_acme %}
     certificatesResolvers:
