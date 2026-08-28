@@ -1042,6 +1042,56 @@ def split_k8s_auto_deploy(
     return replace(cs, k8s=cs.k8s - promoted, k8s_deploy=cs.k8s_deploy | promoted)
 
 
+def staging_scope(services: set[str], subset: set[str]) -> tuple[set[str], set[str]]:
+    """Split a deploy into the half staging can speak for and the half it cannot.
+
+    Decision 3 of docs/staging-phase-c.md. Staging runs six services of roughly fifty-four, and
+    **a gate over a subset gates only that subset** — the design's single most important
+    limitation and the one most likely to be forgotten once the tile is green.
+
+    Returns (gated, ungated). Both halves are returned rather than just the first because the
+    caller has to SAY which services staging never saw: a silent skip and a silent pass look
+    identical in a log afterwards, and that ambiguity is how a subset gate gets over-read as
+    coverage of the whole fleet.
+
+    An empty `gated` is the ordinary case, not an error — most deploys touch nothing staging
+    runs.
+    """
+    return services & subset, services - subset
+
+
+def staging_verdict_summary(
+    gated: set[str], ungated: set[str], deploy_rc: int, expect_rc: int
+) -> str:
+    """One line an operator can act on, naming what was and was not covered.
+
+    `deploy_rc` and `expect_rc` are staging_gate.py's and staging_expectations.py's verdicts:
+    0 pass, 1 rejected/failed, 2 no verdict. They are kept apart because Decision 4 needs
+    "staging rejected this change" told apart from "staging could not be asked" — a guest that
+    will not boot and a genuinely bad manifest are the same message otherwise, and an operator
+    who cannot tell them apart learns to override on reflex.
+    """
+    if not gated:
+        return (
+            f"staging: nothing to gate; {len(ungated)} service(s) unchecked by staging"
+        )
+    if deploy_rc == 2 or expect_rc == 2:
+        return (
+            f"staging: NO VERDICT on {sorted(gated)} "
+            f"(deploy={deploy_rc}, expect={expect_rc}) — staging could not be asked, "
+            f"which is not a rejection"
+        )
+    if deploy_rc != 0:
+        return f"staging: REJECTED {sorted(gated)} — the deploy failed on staging"
+    if expect_rc != 0:
+        return (
+            f"staging: REJECTED {sorted(gated)} — deployed, but a service did not answer "
+            f"as declared"
+        )
+    unchecked = f"; {len(ungated)} unchecked" if ungated else ""
+    return f"staging: PASS on {sorted(gated)}{unchecked}"
+
+
 def stale_rendered_services(rendered: list[str], declared: set[str]) -> list[str]:
     """Rendered compose dirs with no containers_list entry — the stale-compose trap.
 

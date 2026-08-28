@@ -57,6 +57,8 @@ from deploy_logic import (  # noqa: E402
     should_alert_dirty,
     split_k8s_auto_deploy,
     stale_rendered_services,
+    staging_scope,
+    staging_verdict_summary,
 )
 from host_lib import atomic_write, discord_post, parse_env_file  # noqa: E402
 
@@ -267,6 +269,35 @@ K8S_DEPLOY_TIMEOUT_S = int(C.get("K8S_DEPLOY_TIMEOUT_S", "900"))
 # defaults/main.yml's gitops_deploy_k8s_rollback_timeout_s comment — this fallback is only what a
 # host runs on before its config.env is re-templated with the new value.
 K8S_ROLLBACK_TIMEOUT_S = int(C.get("K8S_ROLLBACK_TIMEOUT_S", "1320"))
+
+# ── the staging gate (Phase C slice 3) ──────────────────────────────────────────────────────
+# OFF by default. Turning it on costs every k8s-deploying tick the staging deploy's wall-clock,
+# so it is a switch rather than a given — and while it is off, this file behaves exactly as it
+# did before the gate existed.
+STAGING_GATE = C.get("STAGING_GATE", "false").lower() == "true"
+
+# The services staging actually runs (docs/staging-cluster.md, Decision 6). A deploy is split
+# against this: the intersection is what staging can speak for, and the remainder is reported as
+# unchecked rather than passed. Configurable because the subset grows by config, not by code.
+STAGING_SUBSET = _csv_set(
+    C.get(
+        "STAGING_SUBSET", "traefik,authelia,freshrss,node-exporter,registry,ical-proxy"
+    )
+)
+
+# Both halves live in the repo the deployer already renders from, so they are always the version
+# under test rather than a deployed copy that could lag it.
+STAGING_GATE_SCRIPT = os.path.join(REPO, "scripts", "deploy_tools", "staging_gate.py")
+STAGING_EXPECT_SCRIPT = os.path.join(
+    REPO, "scripts", "deploy_tools", "staging_expectations.py"
+)
+
+# Generous against K8S_DEPLOY_TIMEOUT_S: the staging deploy runs the same play, on a smaller
+# subset, over an ssh hop. A timeout here is NO VERDICT, never a rejection.
+STAGING_GATE_TIMEOUT_S = int(C.get("STAGING_GATE_TIMEOUT_S", "1200"))
+STAGING_EXPECT_TIMEOUT_S = int(C.get("STAGING_EXPECT_TIMEOUT_S", "180"))
+
+STAGING_ALERT_FILE = "/var/lib/gitops-deploy/staging_alerted_sha"
 
 # ── CI gate ───────────────────────────────────────────────────────────────────────────────────
 # Refuse to deploy a master tip whose CI is red or unfinished. Without this the deployer applies
@@ -725,6 +756,64 @@ def k8s_image_diff(local: str, origin: str, svc: str) -> str:
     )
 
 
+def consult_staging(services: set[str], origin: str) -> None:
+    """Ask the staging cluster about this commit, then deploy prod anyway.
+
+    SLICE 3 OF PHASE C, and ADVISORY BY CONSTRUCTION — this function returns None, so there is
+    no verdict for the caller to branch on even by accident. Blocking is slice 4, and it is a
+    separate change on purpose: the point of this slice is to collect a false-failure rate
+    against real merges before anything depends on the answer. A gate whose false-failure rate
+    is unknown gets overridden once and then by habit.
+
+    NOTHING HERE MAY BREAK A PROD DEPLOY. Every failure path — a missing script, an ssh outage,
+    a wedged guest, a bug in this function — is caught and logged. The prod deploy that follows
+    is exactly the one that ran before this existed.
+
+    Off by default (`STAGING_GATE` in the unit's env). Turning it on costs every k8s tick the
+    staging deploy's wall-clock, which is why it is a switch rather than a given.
+    """
+    if not STAGING_GATE:
+        return
+    gated, ungated = staging_scope(services, STAGING_SUBSET)
+    if not gated:
+        log(staging_verdict_summary(gated, ungated, 0, 0))
+        return
+
+    deploy_rc = expect_rc = 2  # no verdict until proven otherwise
+    try:
+        tags = ",".join(sorted(gated))
+        deploy_rc = subprocess.run(
+            [sys.executable, STAGING_GATE_SCRIPT, origin, "--tags", tags],
+            timeout=STAGING_GATE_TIMEOUT_S,
+            check=False,
+        ).returncode
+        # The expectation check only means anything against what was just deployed, so it is
+        # skipped when the deploy itself produced no verdict.
+        if deploy_rc == 0:
+            expect_rc = subprocess.run(
+                [sys.executable, STAGING_EXPECT_SCRIPT],
+                timeout=STAGING_EXPECT_TIMEOUT_S,
+                check=False,
+            ).returncode
+    except Exception as exc:  # noqa: BLE001 — advisory: never fail the prod deploy
+        log(f"staging gate errored ({exc}); continuing to prod unchecked")
+        return
+
+    summary = staging_verdict_summary(gated, ungated, deploy_rc, expect_rc)
+    log(summary)
+    # Alerted, not silent: a slice that only writes to the journal collects no operator
+    # judgement about whether a failure was staging's fault or the change's, which is the one
+    # thing this slice exists to learn.
+    if deploy_rc != 0 or expect_rc != 0:
+        alert_once(
+            STAGING_ALERT_FILE,
+            "staging",
+            origin,
+            f"🧪 gitops-deploy (advisory): {summary} for `{origin[:8]}`. "
+            f"Prod deployed regardless — this gate does not block yet.",
+        )
+
+
 def deploy_k8s(
     services: set[str], timeout: float, restore_sha: str | None = None
 ) -> None:
@@ -1043,6 +1132,7 @@ def main() -> int:
         return 0
     if cs.k8s_deploy:
         run(["git", "merge", "--ff-only", origin])
+        consult_staging(cs.k8s_deploy, origin)
         try:
             deploy_k8s(cs.k8s_deploy, K8S_DEPLOY_TIMEOUT_S)
         except Exception as exc:  # noqa: BLE001 — any playbook failure, or the timeout above
