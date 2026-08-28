@@ -695,6 +695,28 @@ k3s_etcd_s3_retention: 14
 k3s_etcd_s3_cron_hour: "2"
 k3s_etcd_s3_cron_minute: "45"
 
+# The restore side of the same tier. The snapshot above is taken, uploaded and alarmed; until
+# 2026-08-28 nothing proved it comes BACK on a schedule, so the off-box copy was verified once by
+# hand (2026-08-22) and drifted from there. The Longhorn plane already learned this — its drill is
+# scheduled and its stamp is read fail-closed — and etcd is the tier that carries the Backup CRs
+# needed to FIND the Longhorn backups, so it is the worse one to leave unproven.
+#
+# DECIDED: `--list-only`, weekly, and NOT the full restore. --list-only proves the off-box leg
+# end to end: credentials, bucket, folder, download, decompression. The FULL drill does not pass
+# on daniel-box at all — five structural failures documented at scripts/backup/etcd_restore_drill.sh:43-64
+# — and scheduling it would be strictly harmful: cleanup() sets KEEP=1 on ANY non-zero exit and
+# scratch dirs are swept only at +30 days, so a monthly failing full drill holds one to two
+# restored etcd databases plus cluster-token copies in /var/tmp as a steady state. That script's
+# own :213-221 records the accumulation is bounded ONLY because the drill has no cron. A cadence
+# that inverts its own stated bound is not a fix.
+#
+# Monday 10:20: clear of every backup window (02:45 snapshot, 03:30/04:30 Longhorn, 04:10 drill),
+# clear of the 05:15 manifest-prune and the 06:10 trim, and in an hour nothing else uses. Daytime
+# is deliberate for a read-only drill — --list-only downloads ~8 MB and decompresses it, so there
+# is no restore stage to wedge, and a failure is visible on a day someone is around.
+k3s_etcd_restore_drill_armed: true
+k3s_etcd_restore_drill_cron: "20 10 * * 1"
+
 # Bound volumes forced OUT of the backup set, as `namespace/pvcName` — an override for volumes
 # whose StorageClass says `longhorn` (back me up) but which should not be. Needed as a separate
 # lever because storageClassName is immutable: a volume that must leave the backup set after it is

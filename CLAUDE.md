@@ -62,7 +62,7 @@ Route to the source of truth by what you're doing, before reading linearly:
 | Reviewing the homelab for gaps | `/homelab-review` skill (per-domain reviewer agents) |
 | Answering "what runs here / where / behind what" | `docs/reference/` — generated from the tree by the `docs-refresh` cron, browsable at `docs.local.<domain>`. Services, hosts, secret rotation, scheduled jobs, networking. **Never hand-edit a generated page**; a hook rejects it. Change the generator (`scripts/docs/build_docs.py` lists them). The hook decides by the `generated_from:` provenance banner rather than the path, so `reference/topology.md` — hand-written prose, the one page there nobody generates — stays editable. |
 | Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` + monitor-bridge `check.py` **first** — mature setup, most are handled |
-| A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment. The general mechanism is the central rollout-restart at `roles/k8s/manifests/tasks/main.yml:112`, which fires when a role's rendered manifests change. A role whose pod depends on a file the manifests *don't* carry adds its own `checksum/<thing>` pod annotation instead — e.g. `checksum/check-script` in `roles/k8s/monitor-bridge/templates/deployment.yaml.j2`. |
+| A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment. The general mechanism is the central rollout-restart at `roles/k8s/manifests/tasks/main.yml:298`, which fires when a role's rendered manifests change. A role whose pod depends on a file the manifests *don't* carry adds its own `checksum/<thing>` pod annotation instead — e.g. `checksum/check-script` in `roles/k8s/monitor-bridge/templates/deployment.yaml.j2`. |
 | A config edit won't recreate the container (Docker) | `ansible/roles/containers/common/CLAUDE.md` (config-change wiring) |
 | A host can't decrypt secrets | `## Secrets Management` → *Onboarding a host to SOPS* |
 | Starting Claude Code sessions from a phone | `ansible/roles/setup/claude_code/CLAUDE.md` — `claude-rc.service` hosts them. `/remote-control` inside a session and `claude rc` from a shell are different features; only the second creates sessions on demand. |
@@ -426,7 +426,7 @@ Per-verb tiers, the RBAC evidence and the rule-matching measurements: `docs/clau
   `LOKI_URL=http://10.43.99.158:3100`. Durable fix: apply the ClusterIP-fallback pattern in the
   `daniel-tools` marketplace repo, which is where the plugin lives — an operator searching under
   `ansible/` will not find it (2026-08-23b review M11). Do **not** pin the workloads to a node;
-  `roles/setup/k3s/defaults/main.yml:804-805` pre-rejects that — fix the firewall, not the
+  `roles/setup/k3s/defaults/main.yml:893-896` pre-rejects that — fix the firewall, not the
   placement. In-cluster consumers (Grafana datasources, monitor-bridge, autofix-bridge) use
   Service DNS and are unaffected.
 - **session-health** (SessionStart) — on opening a session here, prints a banner of any unhealthy/
@@ -455,8 +455,10 @@ feedback + MLD discipline):
 - **Mark a settled trade-off `# DECIDED:` at the line it governs.** A decision recorded only in a
   memory file or a commit message is a decision every future reviewer re-derives; one written as a
   comment where the code makes the trade-off is one they trip over before they spend an hour on it.
-  Write the marker, then the reasoning — `# DECIDED: 8 chars, not 12 — minimum-not-width, and the
-  assert fires before the scale-down. See gitops_deploy/CLAUDE.md:364.` Reviewer briefs grep for it
+  Write the marker, then the reasoning, and point at the long form rather than at a line number
+  that will drift — the live example is `gitops_deploy.py:1053`: `# DECIDED: origin[:8] is a fixed
+  slice while volume-snapshot names with --short=8, a MINIMUM width … Full analysis in this role's
+  CLAUDE.md.` Reviewer briefs grep for it
   (`.claude/skills/homelab-review/SKILL.md`, step 3), so the marker is what carries the decision to
   the agent that would otherwise re-open it. It is a prior, not a verdict: contradict one with new
   evidence at a cited `file:line` and name the marker you are contradicting.

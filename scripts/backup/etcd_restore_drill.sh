@@ -125,19 +125,23 @@ RESTORE_TIMEOUT=600
 die() { echo "etcd-restore-drill: $*" >&2; exit 1; }
 log() { echo "[$(date -u +%H:%M:%S)] $*"; }
 
-# DECIDED: the stamp is deliberately write-only until this drill has a cron. Nothing reads
-# /var/lib/etcd-restore-drill/last-success-{full,list-only}; the only consumer of any
-# last-success file is longhorn-backup-health.sh.j2:457, which reads the LONGHORN drill's stamp
-# (2026-08-23b review M7). That asymmetry is the point rather than an oversight: this script is
-# never deployed to a cron target and is never referenced from ansible/ at all — it is invoked
-# by hand, and health-crons.yml:184-196 schedules the Longhorn drill and the etcd *snapshot*,
-# never this. A fail-closed staleness reader against a stamp nothing keeps fresh would sit red
-# essentially always, which is a pager that trains the operator to ignore it.
+# DECIDED: the stamp was write-only until this drill had a cron, and as of 2026-08-28 it has one.
+# health-crons.yml now schedules `--list-only` weekly under the `etcd-snapshot` tag
+# (k3s_etcd_restore_drill_cron, Monday 10:20), run in place from the primary checkout. That was
+# the stated precondition below, so THE READER IS NOW UNBLOCKED and is the remaining half of this
+# finding — it is not yet written.
 #
-# So the order is fixed: add a cron running `--list-only` on a schedule FIRST, and only then
-# wire a reader. When that happens, monitor-bridge/check.py is the right owner — it already
-# aggregates unrelated stamps — not longhorn-backup-health.sh, which would be reading a second
-# drill's evidence out of the first drill's watchdog.
+# The ordering this block fixed still governs how it gets written, so it is kept rather than
+# deleted. A fail-closed staleness reader wired BEFORE the cron existed would have sat red
+# essentially always, which is a pager that trains the operator to ignore it; the cron is what
+# makes a red mean something. When the reader lands, monitor-bridge/check.py is the right owner —
+# it already aggregates unrelated stamps — not longhorn-backup-health.sh, which would be reading
+# a second drill's evidence out of the first drill's watchdog (2026-08-23b review M7).
+#
+# The reader must also key on the MODE. `last-success-list-only` and `last-success-full` are
+# written separately and must not be conflated: only the weekly list-only leg is scheduled, so a
+# reader that accepted either file as coverage would report the object-graph restore as proven
+# when nothing has ever proven it on this host. Read `last-success-list-only`, and say so.
 #
 # The stamp still earns its place unread: it is what makes "when did this last pass" answerable
 # at all, where before 2026-08-23 the only record was a hand-edited line in
