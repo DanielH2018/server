@@ -268,3 +268,67 @@ def pi_ports_verdict(dead, checked, containers_json=None):
     if other:
         parts.append("%d pi port(s) not listening: %s" % (len(other), ", ".join(other)))
     return False, "; ".join(parts)
+
+
+def _hwmon_sensor_key(labels):
+    """Identity of one hwmon sensor: the same triple in the temp and the max vector."""
+    return (
+        labels.get("instance", "?"),
+        labels.get("chip", "?"),
+        labels.get("sensor", "?"),
+    )
+
+
+def hwmon_temp_limits(
+    temps, maxes, ratio, fallback_c, min_plausible, max_plausible, exclude_chip
+):
+    """Pure: assign every scraped sensor a temperature limit. Returns a list of
+    (label, temp, limit, basis) with basis "declared" or "fallback".
+
+    Exhaustive by construction — a sensor either has a plausible declared max or takes the
+    fallback, so no scraped sensor is ever left without a limit. That is the property worth
+    holding: a check that silently covers a subset reads green for the rest forever.
+
+    A declared max outside (min_plausible, max_plausible] is treated as ABSENT, not as a limit.
+    Some NVMe controllers report 65261.85 for "no max declared" and a ratio of that never fires.
+    """
+    declared = {}
+    for labels, value in maxes or []:
+        if min_plausible < value <= max_plausible:
+            declared[_hwmon_sensor_key(labels)] = value
+    out = []
+    for labels, temp in temps or []:
+        chip = labels.get("chip", "?")
+        if exclude_chip and exclude_chip in chip:
+            continue
+        key = _hwmon_sensor_key(labels)
+        label = "%s/%s/%s" % key
+        cap = declared.get(key)
+        if cap is None:
+            out.append((label, temp, fallback_c, "fallback"))
+        else:
+            out.append((label, temp, cap * ratio, "declared"))
+    return out
+
+
+def hwmon_temp_verdict(limits):
+    """Pure: (ok, msg) over the output of hwmon_temp_limits.
+
+    An EMPTY list is not ok. Zero sensors means the hwmon collector stopped scraping, which is
+    exactly the state in which a "nothing is too hot" verdict would be a lie.
+    """
+    if not limits:
+        return False, "no hwmon temperature sensors scraped (collector blind?)"
+    hot = [(la, t, li) for la, t, li, _b in limits if t >= li]
+    n_declared = sum(1 for _la, _t, _li, b in limits if b == "declared")
+    n_fallback = len(limits) - n_declared
+    coverage = "%d sensor(s): %d by declared max, %d by fallback" % (
+        len(limits),
+        n_declared,
+        n_fallback,
+    )
+    if not hot:
+        return True, "%s, all below limit" % coverage
+    hot.sort(key=lambda x: x[1] - x[2], reverse=True)
+    desc = ", ".join("%s %.1fC (limit %.1fC)" % (la, t, li) for la, t, li in hot[:5])
+    return False, "%d of %s OVER limit: %s" % (len(hot), coverage, desc)
