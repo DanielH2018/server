@@ -237,6 +237,23 @@ def uncounted_manifest_applications(tasks) -> list[str]:
     return found
 
 
+def _facts_set_by_the_role(role: str) -> set[str]:
+    """Names the role's own tasks compute before rendering, so no cluster has to supply them.
+
+    `authelia_password_hash` is the live case: the role reads it back from the cluster or mints
+    it in a one-shot pod, then `set_fact`s it. Sentinelling it would report a gap that no
+    secrets file can close — the value is deliberately not stored on either cluster.
+    """
+    tasks = yaml.safe_load((K8S_ROLES / role / "tasks" / "main.yml").read_text())
+    names: set[str] = set()
+    for task in _flatten_tasks(tasks):
+        for key in ("ansible.builtin.set_fact", "set_fact"):
+            spec = task.get(key)
+            if isinstance(spec, dict):
+                names |= set(spec) - {"cacheable"}
+    return names
+
+
 def _unsupplied_names(role: str) -> dict[str, str]:
     """Sentinel values for every name the role's templates read that staging cannot supply."""
     base = _base_context()
@@ -245,6 +262,7 @@ def _unsupplied_names(role: str) -> dict[str, str]:
         | set(role_defaults(role, base))
         | _staging_secret_keys()
         | _SUPPLIED_BY_THE_RENDER
+        | _facts_set_by_the_role(role)
     )
     names: set[str] = set()
     # rglob, NOT glob: this repo's convention puts app config a manifest embeds via `lookup()`
@@ -266,6 +284,65 @@ def test_staging_renders_no_variable_it_cannot_supply(role: str) -> None:
             f"{role}/{template} reads a variable {_HOST} cannot supply. Either gate the "
             f"branch that reads it, or add the key to {_STAGING_SECRETS.name}."
         )
+
+
+def _names_read_by_the_tasks(role: str) -> set[str]:
+    """Every Jinja name the role's tasks file reads, minus the ones it produces itself.
+
+    The corpus above scans `templates/`, so a credential read only from `tasks/main.yml` is
+    invisible to it. `authelia_password` is the live case: the role pipes it into a one-shot
+    pod to mint the argon2 hash, and no template mentions it — the check would have reported
+    clean while the deploy failed on an undefined variable.
+    """
+    text = (K8S_ROLES / role / "tasks" / "main.yml").read_text()
+    names: set[str] = set()
+    for expr in re.findall(r"\{\{(.*?)\}\}|\{%(.*?)%\}", text, re.S):
+        names |= set(_REFERENCE.findall("".join(expr)))
+    tasks = yaml.safe_load(text)
+    produced = _facts_set_by_the_role(role) | {
+        str(task["register"]) for task in _flatten_tasks(tasks) if task.get("register")
+    }
+    # `vars:` blocks are the task's own scratch names, and `when:`/`failed_when:` read them.
+    for task in _flatten_tasks(tasks):
+        if isinstance(task.get("vars"), dict):
+            produced |= set(task["vars"])
+    return names - produced
+
+
+@pytest.mark.parametrize("role", _staging_roles())
+def test_staging_supplies_every_variable_the_tasks_file_reads(role: str) -> None:
+    base = _base_context()
+    supplied = (
+        set(base)
+        | set(role_defaults(role, base))
+        | _staging_secret_keys()
+        | _SUPPLIED_BY_THE_RENDER
+    )
+    # Filter to the role's own namespace plus bare credential names: a tasks file also reads
+    # Ansible builtins, filter names and dotted attributes, none of which are variables staging
+    # supplies, and none of which this check can tell apart by shape alone.
+    missing = sorted(
+        n
+        for n in _names_read_by_the_tasks(role) - supplied
+        if n.startswith(role.replace("-", "_"))
+    )
+    assert not missing, (
+        f"{role}/tasks/main.yml reads {missing}, which {_HOST} cannot supply. Add the key to "
+        f"{_STAGING_SECRETS.name}, or gate the task that reads it."
+    )
+
+
+def test_the_tasks_scan_rejects_a_name_no_cluster_supplies() -> None:
+    """The rejecting half. A name the tasks file reads and nothing defines must be reported.
+
+    Drives `_names_read_by_the_tasks` — the same function the check above drives — rather than
+    asserting set arithmetic of its own, so a scan that stopped collecting fails here too.
+    """
+    assert "authelia_password" in _names_read_by_the_tasks("authelia"), (
+        "authelia_password is no longer collected from the tasks file — the scan the check "
+        "above depends on is not reaching it, and a credential read only from tasks/ is "
+        "unchecked again."
+    )
 
 
 @pytest.mark.parametrize("role", _staging_roles())
