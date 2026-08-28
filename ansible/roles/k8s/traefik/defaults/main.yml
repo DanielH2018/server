@@ -36,6 +36,19 @@ traefik_k8s_uid: 65532
 traefik_k8s_manage_acme: true
 traefik_k8s_manage_cloudflare_drift_check: true
 
+# The CrowdSec bouncer plugin, the entrypoint Middleware that invokes it, and the agent
+# sidecar that feeds the LAPI. False for a cluster that does not run the `crowdsec` role:
+# `crowdsec:8080` does not resolve there, the sidecar crashloops, and the pod never reaches
+# Ready — a false failure rather than a real one.
+#
+# DECIDED: role-local, and paired with authelia_k8s_manage_crowdsec rather than shared. One
+# variable in group_vars/all.yml would be an `ansible/inventory/` path, which the GitOps
+# deployer treats as broad — it defers and returns WITHOUT fast-forwarding, so the change
+# would need clearing by hand. The two surfaces are also asymmetric: Traefik carries a
+# bouncer plugin and a Middleware and ENFORCES bans, where Authelia carries only an agent
+# and produces the failed-login lines the scenarios read.
+traefik_k8s_manage_crowdsec: true
+
 # Let's Encrypt directory. Empty means production. Set to
 #   https://acme-staging-v02.api.letsencrypt.org/directory
 # while iterating: both Traefik instances request the SAME SAN set, so they share one

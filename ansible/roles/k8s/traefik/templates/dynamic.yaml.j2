@@ -120,6 +120,7 @@ spec:
     - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
     - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
     - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
+{% if traefik_k8s_manage_crowdsec %}
 ---
 # Slice-6 B1 — the CrowdSec bouncer, carried from the Docker edge's config.yml.j2 with two
 # deliberate differences: the LAPI is the in-cluster engine (Service `crowdsec`), and the
@@ -167,3 +168,4 @@ spec:
       crowdsecAppsecEnabled: true
       crowdsecAppsecHost: "crowdsec:{{ crowdsec_k8s_appsec_port }}"
       crowdsecAppsecUnreachableBlock: false
+{% endif %}
