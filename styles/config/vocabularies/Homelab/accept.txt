@@ -109,6 +109,7 @@ GitOps
 [Ss]ystemd
 [Tt]oposort
 [Uu]napplied
+[Uu]nschedulable
 [Uu]ndeployed
 [Uu]nprobeable
 [Uu]nexecuted

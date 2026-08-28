@@ -51,11 +51,24 @@ spec:
             requests:
               cpu: "10m"
               memory: 16Mi
+{% if k3s_agent_node_ips | default([]) | length > 0 %}
 ---
 # The AGENT pull path (2026-08-14 re-plumb): same proof, scheduled on daniel-server, so
 # a Completed pod means ITS containerd resolved the mirror to the pinned ClusterIP, was
 # admitted by the NetworkPolicy's flannel.1 ipBlock, and got the layers over the vxlan.
 # This is the job that fails loudly if that ipBlock's SNAT assumption is wrong.
+#
+# Rendered only on a cluster that HAS an agent node. This half proves a second node's
+# containerd reaches the registry; on a single-node cluster there is no such node, so the
+# Job is unschedulable and the wait below times out after 180s. That is a check which can
+# never pass and never usefully fail — the shape this repo warns about, arriving as a
+# stalled deploy rather than a green tile. `k3s_agent_node_ips` is the cluster's own
+# statement of whether it has agents; the staging cluster leaves it at the role default of
+# [] (docs/staging-cluster.md, Decision 3).
+#
+# The `daniel-server` pin below stays a literal on purpose: this block renders only for a
+# multi-node cluster, and prod is the only one this repo defines. Deriving the hostname
+# would mean reverse-mapping an agent IP through hostvars for no reader's benefit.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -92,3 +105,4 @@ spec:
             requests:
               cpu: "10m"
               memory: 16Mi
+{% endif %}
