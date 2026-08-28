@@ -25,10 +25,30 @@ ssh_config_path: /etc/ssh/sshd_config
 #
 # Order matters: the play has no toposort and runs this list in order, so traefik stays
 # first — it installs the CRDs every later IngressRoute needs.
+# `staging_expect` on an entry below is Phase C slice 2 (docs/staging-phase-c.md, Decision 2):
+# what this service must ANSWER, not merely that its pod came up. Every value was measured
+# against the live cluster on 2026-08-28, never inferred — an expectation nobody checked is a
+# second thing that can be wrong.
+#
+# It exists because "the play exited zero" cannot see a route. ical-proxy deployed with
+# `68 ok, 0 failed` and the stabilisation gate passing while every one of its routes returned
+# 404, its ClientIP guard naming an address no NAT guest can present. And 200 is the WRONG
+# expectation for a forward-authed route: freshrss must answer 302, and a 200 there would mean
+# the Authelia middleware silently stopped applying.
+#
+# Only routable services carry it. node-exporter has no IngressRoute and registry deliberately
+# has none — an ingress would put push access on the LAN. `staging_expectations.py` derives that
+# from each role's own manifest list and fails if a routable service is missing an expectation,
+# so growing the subset cannot quietly grow the gate's blind spot.
 containers_list:
   - name: traefik
     platform: k8s
     port: 8080
+    # The dashboard route, behind the authelia middleware — hence 302 rather than 200.
+    staging_expect:
+      - hostname: traefik
+        path: /
+        status: 302
 
   # The forward-auth gate, and the mechanism no other manifest exercises: a Middleware that
   # other roles' IngressRoutes reference by name (docs/staging-cluster.md, Decision 6). Placed
@@ -42,6 +62,12 @@ containers_list:
     hostname: "auth"
     port: 9091
     use_authelia: false
+    # The portal itself, which is what separates "Authelia is up" from "the middleware is
+    # wired" when freshrss below redirects to it.
+    staging_expect:
+      - hostname: auth
+        path: /
+        status: 200
 
   # The first real app: Deployment through PVC through IngressRoute. Placed AFTER traefik,
   # which installs the CRDs its IngressRoute needs — the play has no toposort and runs in
@@ -55,6 +81,12 @@ containers_list:
     hostname: "freshrss"
     port: 80
     use_authelia: true
+    # 302, and the direction matters: a 200 here would mean the forward-auth middleware stopped
+    # applying, which is the failure this whole expectation mechanism exists to catch.
+    staging_expect:
+      - hostname: freshrss
+        path: /
+        status: 302
 
   # The subset's only DaemonSet, and the mechanism no Deployment exercises: per-node
   # scheduling and hostPath mounts (docs/staging-cluster.md, Decision 6). It needs no
@@ -91,6 +123,17 @@ containers_list:
     hostname: "ical-proxy"
     port: 5000
     use_authelia: false
+    # Both directions, because this is the service that proved the mechanism necessary. Its
+    # route is a monitoring_route: Host + PathPrefix(/calendar) + a ClientIP guard. So
+    # /calendar1.ics must answer 200 and / must answer 404 — the 404 is the PathPrefix working,
+    # not a fault. Before #548 BOTH returned 404 and every other check read green.
+    staging_expect:
+      - hostname: ical-proxy
+        path: /calendar1.ics
+        status: 200
+      - hostname: ical-proxy
+        path: /
+        status: 404
 
 # One container runtime, and it is k3s's. Same reasoning that keeps Docker off the two
 # cluster nodes: k3s ships its own containerd, and a second runtime's iptables chains land
