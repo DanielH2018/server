@@ -107,10 +107,18 @@
 
 - name: Wait for the pull self-tests
   tags: [deploy]
+  # The list shrinks with the manifest. selftest-pull-job.yaml.j2 renders the agent half only
+  # on a cluster that has an agent node, and `kubectl wait` on a Job that was never applied
+  # fails NotFound — so naming it unconditionally turns a correct single-node deploy into a
+  # failure. Same condition, stated in both places because neither can see the other.
+  vars:
+    registry_selftest_pull_jobs: >-
+      job/registry-selftest-pull
+      {{ 'job/registry-selftest-pull-agent' if k3s_agent_node_ips | default([]) | length > 0 else '' }}
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
-      job/registry-selftest-pull job/registry-selftest-pull-agent --timeout=180s
+      {{ registry_selftest_pull_jobs }} --timeout=180s
   become: true
   changed_when: false
   register: registry_pull_probe

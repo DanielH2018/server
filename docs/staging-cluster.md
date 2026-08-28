@@ -256,6 +256,35 @@ and it is the change most likely to break prod while building staging — a mis-
 prod workload to the wrong node. It is therefore done **first**, on its own, verified against prod
 with `--dry-run` and a real deploy before staging is ever pointed at.
 
+**DONE — this decision describes work that has already landed, and the census above is history
+rather than a plan.** `k8s_primary_node` is declared in `group_vars/all.yml` and overridden to
+`daniel-stage` in that host's vars; `k8s_registry_node`, `docs_k8s_node` and `artifacts_k8s_node`
+all derive from it, and `seed_volume_node` is resolved live from the volume's own attachment, so
+it was never cluster-specific. Re-censused 2026-08-28: no `kubernetes.io/hostname` pin outside an
+excluded role still names a cluster node literally.
+
+Three literals survive and are correct where they are, so don't "finish" them:
+
+- `nut` and `media-volume` pin `daniel-server` and are permanently excluded (*Decision 6*).
+- Every `hostvars['daniel-pi']` lookup — `monitor-bridge`, `uptime-kuma`, `artifacts`,
+  `pi-peer-backup`, `pihole` — names the Pi rather than a cluster node, and none of those roles
+  is in the subset.
+- `registry`'s agent-half pull self-test pins `daniel-server`. That one was a real single-node
+  blocker, and it was not a pin problem: the Job proves a SECOND node's containerd reaches the
+  registry, so on one node it is unschedulable and the role's `kubectl wait` stalls for its full
+  180s timeout. It now renders only when `k3s_agent_node_ips` is non-empty, and the wait task
+  gates on the same variable. ENFORCED by `ansible/tests/test_registry_selftest_single_node.py`.
+
+**The remaining gate on the first staging service is Decision 4, not this one.** It is
+unimplemented: `roles/k8s/traefik` templates a `cloudflare_dns_token` Secret, which
+`secrets-staging.yml` does not carry, and `dashboard-ingressroute.yaml.j2` names
+`certResolver: cloudflare` unconditionally. Deploying `traefik` to staging today fails on the
+undefined variable — and, if it did not, would request certificates for the **real** domain
+against the same ACME account and rate limit prod uses. Nothing named `stage.local` or a
+self-signed CA exists anywhere in the repo yet. `traefik` also has to precede `freshrss`
+regardless, because its CRDs back the IngressRoute; the subset table in *Decision 6* is ordered
+by mechanism coverage, not by deploy order.
+
 ### 8. Two hazards that would otherwise reach prod data
 
 Both are live today and would fire on the first staging deploy if inherited unchanged.
