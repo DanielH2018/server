@@ -20,9 +20,15 @@ server_ip: "{{ staging_vm_ip }}"
 # `create:` fallback, so this names the file that exists.
 ssh_config_path: /etc/ssh/sshd_config
 
-# No Compose services. deploy.yml dies in its first pre_task if this is undefined, and the
-# staging subset is k8s-only by design (docs/staging-cluster.md, Decision 6).
-containers_list: []
+# No Compose services — the staging subset is k8s-only by design (docs/staging-cluster.md,
+# Decision 6). deploy.yml dies in its first pre_task if this is undefined at all.
+#
+# Order matters: the play has no toposort and runs this list in order, so traefik stays
+# first — it installs the CRDs every later IngressRoute needs.
+containers_list:
+  - name: traefik
+    platform: k8s
+    port: 8080
 
 # One container runtime, and it is k3s's. Same reasoning that keeps Docker off the two
 # cluster nodes: k3s ships its own containerd, and a second runtime's iptables chains land
@@ -77,6 +83,37 @@ k3s_coredns_probe_name: ""
 # here would leave every volume permanently Degraded, since there is no second node to
 # schedule the other replica on (docs/staging-cluster.md, Decision 3).
 k3s_longhorn_replica_count: 1
+
+# ---------------------------------------------------------------------------
+# Traefik overrides. Everything here is staging declining a subsystem that needs a
+# credential it does not hold or a backend it does not run — see docs/staging-cluster.md,
+# Decision 4. With all four set, a census of the traefik role's templates leaves no
+# variable unaccounted for outside all.yml, the role defaults and `domain`.
+# ---------------------------------------------------------------------------
+
+# LAN names only. Prod routes match `<svc>.<domain>` alongside `<svc>.local.<domain>`; a
+# staging route on the public name would collide with prod's in any resolver that saw both.
+k8s_public_route: false
+
+# No certificate resolver, so Traefik serves its own default self-signed certificate. The
+# `tls:` block itself stays — an IngressRoute on the https entrypoint WITHOUT one is a
+# non-TLS router and is never matched against an HTTPS request at all.
+k8s_tls_cert_resolver: ""
+
+# No ACME. There is no Cloudflare token here, and issuing would spend the real domain's
+# account and its duplicate-certificate rate limit on a cluster meant to be broken.
+traefik_k8s_manage_acme: false
+
+# The drift check pushes to prod's Kuma, same reason as k3s_manage_health_crons above.
+traefik_k8s_manage_cloudflare_drift_check: false
+
+# No WAF. The `crowdsec` role is not in the subset, so `crowdsec:8080` does not resolve —
+# the agent sidecar would crashloop and the pod would never reach Ready.
+traefik_k8s_manage_crowdsec: false
+
+# No token gate. Every router in it routes to CouchDB or homelab-mcp, neither of which runs
+# here, and its two tokens are the only traefik variables staging's secrets file lacks.
+traefik_k8s_manage_livesync_gate: false
 
 # ---------------------------------------------------------------------------
 # Secrets. Staging holds no real credential, so it does not load the file that
