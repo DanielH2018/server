@@ -4,11 +4,14 @@ Makes `gitops-deploy` deploy a merged change to `daniel-stage` first, and touch 
 that succeeded. Phases A and B (`staging-cluster.md`) built a cluster and taught the repo to
 deploy to it. This is the phase where the cluster starts refusing things.
 
-**Status as of 2026-08-28: slices 1-3 built, the gate is OFF.** Slice 4 (blocking) is not
-started, and its entry condition is evidence rather than effort — see *Entry condition* at the
-end. Turning the gate on is a one-line inventory change (`gitops_deploy_staging_gate: true`)
-followed by `initial_setup.yml --tags gitops_deploy`; while it is off, the deployer behaves
-exactly as it did before any of this existed.
+**Status as of 2026-08-28: slices 1-3 built, and the gate is ON in advisory mode on
+daniel-box.** It asks daniel-stage about every commit that would auto-deploy a k8s service,
+logs and alerts the verdict, and deploys prod either way. Slice 4 (blocking) is not started,
+and its entry condition is evidence rather than effort — see *Entry condition* at the end.
+The clock on that evidence starts here: the rate accrues only while the gate runs against real
+merges. Set `gitops_deploy_staging_gate: false` and re-run `initial_setup.yml --tags
+gitops_deploy` to switch it back off, at which point the deployer behaves exactly as it did
+before any of this existed.
 
 ---
 
@@ -167,13 +170,13 @@ Vertical slices; each leaves something exercisable, and the gate arrives last on
    service's inventory entry and a checker that reads them. Exercisable against staging as it
    stands today — and it should immediately reproduce the `ical-proxy` 404 if pointed at the
    pre-#548 config.
-3. **Advisory mode.** — BUILT, OFF. `consult_staging()` runs both checks, logs and alerts the
-   verdict, and deploys prod regardless. It is advisory *by construction*, not by intent:
-   the function returns nothing, every child process it starts sits inside a broad `except`, and
-   `test_staging_gate_is_advisory.py` fails if either changes or if `main()` starts branching
-   on it. **This is the slice that collects the false-failure rate**, so it has to be switched
-   on (`gitops_deploy_staging_gate: true`) and left to run against real merges — building it
-   collects nothing.
+3. **Advisory mode.** — BUILT (#566) and ON. `consult_staging()` runs both checks, logs and
+   alerts the verdict, and deploys prod regardless. It is advisory *by construction*, not by
+   intent: the function returns nothing, every child process it starts sits inside a broad
+   `except`, and `test_staging_gate_is_advisory.py` fails if either changes or if `main()`
+   starts branching on it. **This is the slice that collects the false-failure rate**, which is
+   why it is switched on (`gitops_deploy_staging_gate: true`) rather than merely built —
+   building it collects nothing.
 4. **Enforcing mode, with the override.** Flip advisory to blocking. Ship the override in the
    same slice, never later.
 
