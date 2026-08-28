@@ -81,6 +81,11 @@ containers_list:
   # The `image-builder` path end to end — build, push, pull, deploy (docs/staging-cluster.md,
   # Decision 6). The smallest of the seven built images, and the only one that needs no
   # external credential.
+  #
+  # Its three calendar URLs are generated and point at a .invalid name, so the refresh loop
+  # fails every cycle and says so in the pod log. That noise is EXPECTED here and is not a
+  # symptom: the probes are tcpSocket, so the pod still reaches Ready. Anything that ever
+  # reads staging pod logs looking for errors has to know this one is permanent.
   - name: ical-proxy
     platform: k8s
     hostname: "ical-proxy"
