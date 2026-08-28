@@ -5,6 +5,7 @@ metadata:
   name: crowdsec
   namespace: {{ k8s_namespace }}
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   # RWO DB volume — the old engine must release it before a new one opens the SQLite file.
   strategy:

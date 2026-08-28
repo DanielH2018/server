@@ -6,6 +6,7 @@ metadata:
   name: n8n
   namespace: {{ k8s_namespace }}
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   # Both PVCs are ReadWriteOnce and Longhorn runs one replica, so a rolling update would
   # deadlock: the new pod waits for a volume the old pod still holds.

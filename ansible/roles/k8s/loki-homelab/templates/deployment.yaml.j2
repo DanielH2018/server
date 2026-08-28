@@ -6,6 +6,7 @@ metadata:
   name: loki-homelab
   namespace: {{ k8s_namespace }}
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   # RWO PVC on single-replica Longhorn — a rolling update deadlocks on the volume.
   strategy:

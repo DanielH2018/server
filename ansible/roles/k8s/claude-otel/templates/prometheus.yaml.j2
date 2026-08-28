@@ -550,6 +550,7 @@ metadata:
   name: prometheus
   namespace: {{ k8s_observability_namespace }}
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   strategy:
     type: Recreate  # ReadWriteOnce PVC — see the note on the loki Deployment

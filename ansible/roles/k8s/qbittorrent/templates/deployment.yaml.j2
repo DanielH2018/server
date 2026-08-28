@@ -5,6 +5,7 @@ metadata:
   name: qbittorrent
   namespace: {{ k8s_namespace }}
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   # The config PVC is ReadWriteOnce on single-replica Longhorn, so a rolling update deadlocks on
   # a volume the outgoing pod still holds.

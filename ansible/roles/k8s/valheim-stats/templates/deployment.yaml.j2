@@ -6,6 +6,7 @@ metadata:
   name: valheim-stats
   namespace: {{ k8s_namespace }}
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   strategy:
     # ReadWriteOnce PVC — two pods can't both mount /data during a rolling update.

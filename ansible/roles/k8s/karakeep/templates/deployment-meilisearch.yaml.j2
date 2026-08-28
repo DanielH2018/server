@@ -6,6 +6,7 @@ metadata:
   name: karakeep-meilisearch
   namespace: {{ k8s_namespace }}
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   # ReadWriteOnce PVC, single Longhorn replica: a rolling update would deadlock on the volume.
   strategy:

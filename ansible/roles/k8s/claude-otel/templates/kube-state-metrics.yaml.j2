@@ -69,6 +69,7 @@ metadata:
   name: kube-state-metrics
   namespace: {{ k8s_observability_namespace }}
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   selector:
     matchLabels:

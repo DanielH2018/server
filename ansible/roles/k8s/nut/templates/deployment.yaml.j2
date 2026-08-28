@@ -5,6 +5,7 @@ metadata:
   name: nut
   namespace: {{ k8s_namespace }}
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   # Recreate: the USB device and the loopback hostPort are both node-exclusive — a
   # rolling update would leave the new pod fighting the old one for both.

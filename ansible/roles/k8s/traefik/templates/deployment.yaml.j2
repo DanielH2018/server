@@ -5,6 +5,7 @@ metadata:
   name: traefik
   namespace: {{ k8s_namespace }}
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   # acme.json is a ReadWriteOnce volume and two Traefiks racing to write it corrupt the
   # account registration, so the rollout must stop the old pod before starting the new one.
