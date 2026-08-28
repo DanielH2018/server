@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/gen_reference_hosts.py
-generated_at: 2026-08-28 06:17 UTC
-generated_sha: eb6d0cd2
+generated_at: 2026-08-28 18:17 UTC
+generated_sha: 52332157
 ---
 
 !!! warning "Generated file — do not edit"
@@ -63,7 +63,7 @@ unknown (no description recorded)
 | LAN address | `{{ staging_vm_ip }}` |
 | Ansible connection | `ssh` |
 | Service exposure | traefik (default) |
-| Services declared | 0 |
+| Services declared | 4 |
 | Runs the GitOps timer | no |
 | Has Docker | no |
 
