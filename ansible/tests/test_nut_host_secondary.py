@@ -32,6 +32,20 @@ TASKS = (ROLE / "tasks" / "main.yml").read_text()
 UPSMON = (ROLE / "templates" / "host-upsmon.conf.j2").read_text()
 GROUP_VARS = (ANSIBLE / "inventory" / "group_vars" / "all.yml").read_text()
 SETUP = (ANSIBLE / "initial_setup.yml").read_text()
+HOST_VARS = ANSIBLE / "inventory" / "host_vars"
+NUT_DEFAULTS = ANSIBLE / "roles" / "k8s" / "nut" / "defaults" / "main.yml"
+
+# Measured on daniel-server 2026-08-28, `upsc apc-ups@127.0.0.1`: battery.runtime 987 at
+# battery.charge 100 and ups.load 43. A floor, not a guarantee — it falls with battery age and
+# with load, which is why the ceiling below reserves a large slice of it.
+MEASURED_RUNTIME_S = 987
+# Seconds the ONBATT timer must leave for every armed host to finish powering off. Deliberately
+# generous: it also covers the runtime this UPS will not have in two years.
+SHUTDOWN_RESERVE_S = 300
+# Seconds an armed control-plane node must ride out before stopping. Residential outages are
+# mostly shorter than this, and stopping inside that window trades a clean shutdown for a full
+# cluster restart on every flicker — a worse deal than the hard cut arming was meant to fix.
+BLIP_RIDE_OUT_S = 300
 
 
 def test_secondary_is_disarmed_by_default():
@@ -107,3 +121,74 @@ def test_no_task_is_tagged_so_the_lookup_cannot_be_split_from_its_consumer():
         "tasks %r carry tags; the endpoint lookup, the set_fact that stores it and the "
         "upsmon.conf template must be selected or skipped as one unit" % tagged
     )
+
+
+# ── The ONBATT timer, once any host beyond ups_host is armed ────────────────────────────────
+#
+# Arming a host makes nut_onbatt_shutdown_delay a load-bearing availability number rather than
+# an agent node's private business, and it can now fail in BOTH directions. Too short stops the
+# control plane during a blip the battery would have carried; too long spends the runtime the
+# poweroffs themselves need. Neither shows up anywhere until a real outage, and a green deploy
+# looks identical either way — so the band is asserted here instead.
+
+
+def onbatt_delay_verdict(delay: int, armed_beyond_ups_host: bool) -> str | None:
+    """Return why `delay` is wrong for this arming, or None if it is inside the band.
+
+    Pure so both arms can be exercised: the repo's real values are checked below, and the
+    rejecting inputs prove the check can still go red.
+    """
+    if not armed_beyond_ups_host:
+        return None
+    if delay < BLIP_RIDE_OUT_S:
+        return (
+            "delay %ds stops an armed control-plane node inside the %ds blip window; most "
+            "outages end sooner, so this trades a clean stop for a full cluster restart"
+            % (delay, BLIP_RIDE_OUT_S)
+        )
+    ceiling = MEASURED_RUNTIME_S - SHUTDOWN_RESERVE_S
+    if delay > ceiling:
+        return (
+            "delay %ds leaves under the %ds reserve against %ds of measured runtime; the "
+            "poweroffs would race the battery, and LOWBATT would become the real trigger"
+            % (delay, SHUTDOWN_RESERVE_S, MEASURED_RUNTIME_S)
+        )
+    return None
+
+
+def _armed_hosts_beyond_ups_host() -> list[str]:
+    ups_host = yaml.safe_load(GROUP_VARS)["ups_host"]
+    armed = []
+    for path in sorted(HOST_VARS.glob("*.yml")):
+        host = path.stem
+        if host == ups_host:
+            continue
+        if (yaml.safe_load(path.read_text()) or {}).get("nut_host_secondary_armed"):
+            armed.append(host)
+    return armed
+
+
+def test_the_repos_onbatt_delay_suits_its_arming():
+    """The live pairing of arm flags and timer must sit inside the band."""
+    delay = yaml.safe_load(NUT_DEFAULTS.read_text())["nut_onbatt_shutdown_delay"]
+    reason = onbatt_delay_verdict(delay, bool(_armed_hosts_beyond_ups_host()))
+    assert reason is None, reason
+
+
+def test_a_delay_inside_the_band_is_clean():
+    assert onbatt_delay_verdict(300, True) is None
+    assert onbatt_delay_verdict(687, True) is None
+
+
+def test_a_delay_below_the_blip_window_is_flagged():
+    """The pre-2026-08-28 value, which is what made arming a regression rather than a fix."""
+    assert onbatt_delay_verdict(120, True) is not None
+
+
+def test_a_delay_that_outlasts_the_battery_is_flagged():
+    assert onbatt_delay_verdict(900, True) is not None
+
+
+def test_the_band_binds_only_once_a_second_host_is_armed():
+    """With ups_host alone armed, an agent node stopping early is its own business."""
+    assert onbatt_delay_verdict(120, False) is None

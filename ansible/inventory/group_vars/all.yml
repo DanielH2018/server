@@ -440,14 +440,16 @@ ups_host: daniel-server
 # daniel-box DOES draw from the same UPS, measured 2026-08-20: sampling `upsc
 # apc-ups@127.0.0.1` every 3s while modulating a 16-core burn on daniel-box (daniel-server
 # idle) moved ups.load by ~5 points ≈ 45 W, three transitions phase-locked to the burn across
-# two cycles. So today, on mains failure, daniel-server powers off cleanly while daniel-box —
-# etcd, Longhorn's primary replicas, Kuma, Prometheus, Traefik, LAN DNS — is hard-cut at
-# battery end.
+# two cycles. Before 2026-08-28 that meant daniel-server powered off cleanly while daniel-box —
+# etcd, Longhorn's primary replicas, Kuma, Prometheus, Traefik, LAN DNS — was hard-cut at
+# battery end. daniel-box is now armed in host_vars/daniel-box.yml, where the reasoning sits.
 #
-# DEFAULT FALSE ON PURPOSE. A secondary upsmon's entire job is to power the machine off, so a
-# mistake here is an unplanned shutdown of the control-plane node, and a wrong SHUTDOWNCMD or
-# an unreachable upsd is indistinguishable from a working one while mains power is up. Set
-# this per host only after the console-attended `upsmon -c fsd` drill has passed there.
+# DEFAULT FALSE ON PURPOSE, and it stays false here. A secondary upsmon's entire job is to power
+# the machine off, so a mistake is an unplanned shutdown, and a wrong SHUTDOWNCMD or an
+# unreachable upsd is indistinguishable from a working one while mains power is up. Arm a host
+# in its own host_vars, and only after the console-attended `upsmon -c fsd` drill has passed
+# there. Arming is also not a lone edit: it presupposes an ONBATT delay that does not stop the
+# machine two minutes into a blip — see nut_onbatt_shutdown_delay in roles/k8s/nut/defaults.
 nut_host_secondary_armed: false
 # The one host that checks for open Renovate PRs and posts the Discord digest (see
 # renovate_notify CLAUDE.md) — fleet-wide by nature (it queries the GitHub repo, not anything
