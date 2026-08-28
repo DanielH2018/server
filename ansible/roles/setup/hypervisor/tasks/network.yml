@@ -42,9 +42,10 @@
 
 - name: Define the staging egress fence
   tags: [hypervisor]
-  # nwfilter-define replaces an existing filter, and libvirt re-applies a changed filter to
-  # every interface already referencing it — so editing a RULE reaches a running guest with
-  # no restart. Adding the reference itself does not; guest.yml handles that half.
+  # A define is a replace only because the template pins the filter's UUID — see the comment
+  # in staging-nwfilter.xml.j2, which is the non-obvious half. libvirt re-applies a redefined
+  # filter to every interface already referencing it, so editing a RULE reaches a running
+  # guest with no restart. Adding the reference itself does not; guest.yml handles that half.
   when: hypervisor_staging_nwfilter_xml is changed or hypervisor_staging_nwfilter_info.rc != 0
   ansible.builtin.command:
     cmd: virsh --connect qemu:///system nwfilter-define {{ hypervisor_net_source_dir }}/{{ hypervisor_staging_nwfilter_name }}.xml

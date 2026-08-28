@@ -30,9 +30,8 @@ import re
 import xml.etree.ElementTree as ET
 
 import yaml
-from jinja2 import Environment
 
-from _helpers import ALL_VARS, ROLES
+from _helpers import ALL_VARS, ROLES, jinja_env
 
 HYPERVISOR = ROLES / "setup" / "hypervisor"
 NWFILTER_TEMPLATE = HYPERVISOR / "templates" / "staging-nwfilter.xml.j2"
@@ -62,13 +61,8 @@ def _filter_name():
 def _rendered_filter():
     """Render the nwfilter template and parse it as the XML libvirt will be handed."""
     context = {**_all_vars(), **_hypervisor_defaults()}
-    rendered = (
-        Environment(autoescape=False)
-        .from_string(  # noqa: S701 - not HTML
-            NWFILTER_TEMPLATE.read_text()
-        )
-        .render(context)
-    )
+    # The shared env, not a bare jinja2 one: the template calls `to_uuid`, an Ansible filter.
+    rendered = jinja_env().from_string(NWFILTER_TEMPLATE.read_text()).render(context)
     try:
         return ET.fromstring(rendered)
     except ET.ParseError as exc:  # pragma: no cover - only on a broken template
@@ -86,6 +80,21 @@ def _rules():
         f"the host while fencing nothing."
     )
     return rules
+
+
+def test_the_filter_pins_its_uuid():
+    """Without this the role deploys once and fails on every re-run.
+
+    `virsh nwfilter-define` is not `net-define`. Handed XML with no <uuid> it mints a fresh
+    one and then refuses the name collision — "filter 'x' already exists with uuid ...".
+    Measured on daniel-server 2026-08-28; it is what broke the first deploy of this role.
+    """
+    uuid = _rendered_filter().findtext("uuid")
+    assert uuid and uuid.strip(), (
+        f"{NWFILTER_TEMPLATE} renders no <uuid>. libvirt generates one on the first define "
+        f"and then rejects every define after it, so the role would be green once and red "
+        f"forever after — including on any host that already carries the filter."
+    )
 
 
 def test_the_fence_drops_rather_than_accepts():
