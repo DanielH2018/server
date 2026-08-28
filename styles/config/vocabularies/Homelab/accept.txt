@@ -309,6 +309,7 @@ cours
 [Mm]isconfiguration
 [Mm]ultipass
 [Nn]etfilter
+[Nn]wfilter
 [Nn]odeSelector
 [Oo]verread
 [Pp]arameterisable

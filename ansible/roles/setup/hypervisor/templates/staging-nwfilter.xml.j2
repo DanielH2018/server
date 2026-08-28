@@ -1,0 +1,51 @@
+<!-- Managed by ansible (roles/setup/hypervisor). Edits here are overwritten. -->
+<!--
+  The staging guest's egress fence. One rule: anything the guest sends to the production
+  LAN is dropped at its own tap device.
+
+  DECIDED: a libvirt nwfilter, not a ufw `route deny` and not a FORWARD hook script.
+  The first attempt (#508) was a ufw route rule on daniel-server. It deployed, `ufw status`
+  listed it, and it was inert — the probe still reached the production VIP, the k3s API and
+  daniel-pi's unauthenticated wg-easy UI from inside the guest. The proof it could never
+  have worked: /etc/default/ufw already sets DEFAULT_FORWARD_POLICY="DROP", so if ufw's
+  forward chain governed this traffic the guest would have been fenced before that rule was
+  written. libvirt's own FORWARD accept is reached first.
+
+  nwfilter removes the ordering question rather than arguing it: libvirt attaches these
+  rules to the guest's tap device and manages their position itself, so there is no chain
+  whose order a later reader has to verify. It is also the mechanism libvirt's own stock
+  filters use for exactly this class of restriction — `no-ip-spoofing` filters a NAT
+  network's guest traffic on this same path, which is the evidence this direction works
+  here at all.
+
+  DECIDED: drop one destination, do not allowlist. An allowlist filter would also have to
+  name DHCP, DNS and the whole internet, and the first thing it would break is the internet
+  egress staging legitimately needs — which the probe reports as a broken fence, correctly.
+  A single drop rule with everything else falling through keeps the blast radius to the one
+  thing being forbidden.
+
+  DECIDED: blanket, with no exception for the in-cluster registry. An exception looks
+  necessary because `ical-proxy` is in the staging subset to exercise the image-builder path
+  end to end — but docs/staging-cluster.md Decision 8 already rules that traffic out:
+  staging runs its OWN registry on daniel-stage, because a staging build pushing to the
+  production registry could overwrite a tag production pulls.
+
+  Guest -> daniel-server itself is unaffected: the guest reaches this host on the staging
+  gateway address, which is not in the LAN CIDR. Ansible therefore still reaches the guest,
+  and because the acceptance probe runs over exactly that path a fence that broke it would
+  report UNREACHABLE rather than a clean pass.
+
+  The acceptance gate, run on daniel-server (the only host that routes to the guest):
+
+    uv run python scripts/diagnostics/staging_egress_probe.py
+
+  It must report the internet still reachable and every production target refused. The shape
+  of this filter and its attachment are ENFORCED by ansible/tests/test_staging_egress_fence.py,
+  but a filter that is defined and unattached reads identical to a working one from the host,
+  so the probe is the thing that decides.
+-->
+<filter name='{{ hypervisor_staging_nwfilter_name }}' chain='root'>
+  <rule action='drop' direction='out' priority='100'>
+    <ip dstipaddr='{{ lan_subnet.split('/')[0] }}' dstipmask='{{ lan_subnet.split('/')[1] }}'/>
+  </rule>
+</filter>

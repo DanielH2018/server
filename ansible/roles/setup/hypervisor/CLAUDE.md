@@ -62,6 +62,40 @@ it. That matters more here than elsewhere: nothing else in the repo validates li
 and two bugs in this role reached a real host in one afternoon because every check only
 parsed the file they lived in.
 
+## The egress fence is an nwfilter, and the first attempt was not
+
+`network.yml` defines a libvirt nwfilter, `staging-egress-fence`, that drops anything the guest
+sends to `lan_subnet`. The domain's `<interface>` references it by name. Without it the guest
+reaches the whole production LAN *masqueraded as daniel-server* — measured 2026-08-27: MetalLB
+VIP 301, k3s API 401, daniel-pi's unauthenticated wg-easy admin UI 200.
+
+**The first fix was a UFW `route deny` on this host, and it was inert.** It deployed, `ufw status`
+listed it, and the probe still reached all three. `/etc/default/ufw` already carried
+`DEFAULT_FORWARD_POLICY="DROP"`, so if UFW's forward chain governed this traffic the guest would
+have been fenced before that rule existed — libvirt's own FORWARD accept is reached first. Don't
+re-derive this; the rule is now a delete-task in `roles/setup/initial_setup/tasks/network.yml` with
+the history at the line.
+
+Two mechanics that decide whether a change lands:
+
+- **A filter applies when the interface is CREATED.** Adding the `<filterref>` to the domain
+  template updates the persistent config; a running guest keeps its unfenced interface. `guest.yml`
+  reads the live XML and `virsh destroy`s a running guest that lacks it, so the existing start task
+  brings it back fenced. That task fires only while the live interface is unfenced.
+- **Editing a rule inside the filter needs no restart.** libvirt re-applies a redefined filter to
+  every interface already referencing it.
+
+ENFORCED by `ansible/tests/test_staging_egress_fence.py`, which renders the filter and parses it.
+That check sees shape and attachment only. Whether the fence *fires* is a property of the host, and
+the gate for that half is the probe, run on daniel-server:
+
+```bash
+uv run python scripts/diagnostics/staging_egress_probe.py
+```
+
+The internet control target must stay reachable. A fence that severed all egress would make every
+production target fail too, and that reads as a pass to anyone skimming.
+
 ## The default network is stopped on purpose
 
 Installing `libvirt-daemon-system` brings up a `default` NAT network and `virbr0`, with its

@@ -79,8 +79,9 @@ announces only inside the VM's own network.
 The cost is honest and bounded: staging does not exercise L2 announcement or externalTrafficPolicy
 behaviour. Neither is what a manifest-correctness gate is for.
 
-**NAT is not isolation, and treating it as isolation left a hole open from 2026-08-27 until it was
-measured the same day.** `<forward mode='nat'/>` constrains nothing about the destination, so the
+**NAT is not isolation, and treating it as isolation left a hole open from 2026-08-27 until
+2026-08-28** — measured the day it opened, and open for a further day because the first fix was
+inert. `<forward mode='nat'/>` constrains nothing about the destination, so the
 guest reached the whole production LAN — and reached it *masqueraded as daniel-server*, a trusted
 node. Probed from inside the guest: the MetalLB VIP answered 301, the k3s API answered 401, and
 daniel-pi's wg-easy admin UI answered 200. The SNAT is what makes this worse than ordinary
@@ -88,18 +89,32 @@ reachability. Production's source-IP controls see daniel-server, not staging, so
 `policy: bypass` rules scoped to `lan_subnet` admit the guest and wg-easy's unauthenticated admin
 UI rests on a LAN-only premise the guest sits inside.
 
-The fence is a UFW `route deny` from `staging_net_cidr` to `lan_subnet`, in
-`roles/setup/initial_setup/tasks/network.yml`, gated on `has_hypervisor`. It is deliberately
-**not** a libvirt network hook: libvirt appends its own blanket accept for the bridge to FORWARD,
-so a hook's rule works only if inserted ahead of that — a position no repo check can verify. UFW
-owns its own chain and re-asserts it across reload and reboot.
+The fence is a **libvirt nwfilter**, `staging-egress-fence`, rendered by
+`roles/setup/hypervisor/templates/staging-nwfilter.xml.j2` and referenced from the guest's
+`<interface>`. One rule: drop anything leaving the guest addressed to `lan_subnet`.
 
-Guest-to-daniel-server traffic is unaffected, because that is INPUT rather than FORWARD, so
-Ansible still reaches the guest. Nothing else is: the rule is scoped to a source prefix no
-production traffic carries.
+**The first attempt was a UFW `route deny`, and it was inert.** It deployed cleanly and
+`ufw status` listed it; the probe still reached the VIP, the k3s API and wg-easy from inside the
+guest. The proof it could never have worked is one line of `/etc/default/ufw`:
+`DEFAULT_FORWARD_POLICY="DROP"` was already set, so had the UFW forward chain governed this traffic
+the guest would have been fenced before the rule was written. libvirt's own FORWARD accept is
+reached first. nwfilter removes the ordering question instead of arguing it — libvirt attaches the
+rules to the guest's tap device and manages their position itself, which is the same path its stock
+`no-ip-spoofing` filter uses on a NAT network.
 
-The acceptance gate runs **inside the guest**, not on the host — a rule that is present and inert
-reads identically to a working one in `ufw status`:
+Two mechanical consequences worth knowing. libvirt applies a filter when the **interface is
+created**, so adding the `<filterref>` reaches a running guest only after the domain is stopped and
+started — `guest.yml` detects a live interface without the fence and does exactly that. Editing a
+**rule** inside an already-referenced filter needs no restart; libvirt re-applies it live.
+
+Guest-to-daniel-server traffic is unaffected: the guest reaches this host on the staging gateway
+address, which is not in `lan_subnet`. Ansible still reaches the guest, and the internet egress
+staging legitimately needs is untouched, because the filter drops one destination rather than
+naming an allowlist.
+
+The acceptance gate runs **inside the guest**, not on the host — a fence that is present and inert
+reads identically to a working one from the host side, which is the whole reason the first attempt
+survived a deploy:
 
 ```bash
 uv run python scripts/diagnostics/staging_egress_probe.py   # on daniel-server

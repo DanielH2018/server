@@ -90,46 +90,27 @@
     proto: tcp
   become: true
 
-# Fence the staging guest off the production LAN.
+# The staging guest's egress fence is NOT here. It is a libvirt nwfilter, defined and
+# attached by roles/setup/hypervisor.
 #
-# The libvirt network is `<forward mode='nat'/>` with no destination constraint, so until
-# 2026-08-27 the guest reached the whole production LAN — and reached it MASQUERADED as
-# daniel-server, a trusted node. Measured from inside the guest before this rule existed:
-# the production MetalLB VIP answered 301, the k3s API answered 401, and daniel-pi's
-# wg-easy admin UI answered 200. That last one is the sharp end: that UI is unauthenticated
-# and its only protection is being LAN-only, a premise the guest sat inside. The same SNAT
-# also defeats authelia's `policy: bypass` rules, which are scoped to this very
-# `lan_subnet` — so the fence and the thing it protects read one variable, deliberately.
+# Recorded because the wrong answer is the plausible one, and it was mine. #508 fenced the
+# guest with a ufw `route deny` on this host. It deployed cleanly, `ufw status` listed it,
+# and it was INERT — the acceptance probe still reached the production MetalLB VIP, the k3s
+# API and daniel-pi's unauthenticated wg-easy admin UI from inside the guest. The proof it
+# could never have worked is one line of /etc/default/ufw: DEFAULT_FORWARD_POLICY="DROP" was
+# already set, so if ufw's forward chain governed this traffic the guest would have been
+# fenced before #508 was written. libvirt's own FORWARD accept is reached first, and no rule
+# ufw can place changes that.
 #
-# DECIDED: a ufw `route` rule, not an /etc/libvirt/hooks/network script inserting into
-# FORWARD. libvirt appends its own blanket `-s <staging> -i <bridge> -j ACCEPT` to FORWARD,
-# so a hook's rule only works if it is inserted AHEAD of that — a position no repo check can
-# verify and no operator can read back without root. ufw owns its own forward chain and
-# re-asserts it across reload and reboot, where a network hook fires on network start alone.
-# It also keeps every ufw write in this one file, which is what the marker at
-# roles/setup/hypervisor/tasks/install.yml:59 asks for: the hazard there is an UNDECLARED
-# third writer of firewall state, and routing through the host's declared firewall manager
-# is the opposite of that.
+# The lesson is not about ufw. A firewall rule that is present and inert reads identical to
+# a working one from the host, so "the rule is in `ufw status`" was never evidence. The
+# probe at the far side is, which is why it exists and why it caught this.
 #
-# DECIDED: blanket, with no exception for the in-cluster registry. An exception looks
-# necessary because `ical-proxy` is in the staging subset to exercise the image-builder path
-# end to end — but docs/staging-cluster.md Decision 8 already rules that traffic out:
-# staging runs its OWN registry on daniel-stage, because a staging build pushing to the
-# production registry could overwrite a tag production pulls. So the hole an exception would
-# open carries nothing staging is allowed to send.
-#
-# Guest -> daniel-server itself is unaffected: that is INPUT, not FORWARD, so Ansible still
-# reaches the guest over this host — and because the acceptance probe runs over exactly that
-# path, a fence that broke it would report UNREACHABLE rather than a clean pass.
-#
-# The shape of this rule is ENFORCED by ansible/tests/test_staging_egress_fence.py, but a
-# rule that is present and INERT reads identical to a working one from the host. So the
-# acceptance gate runs at the far side, from inside the guest, on daniel-server:
-#
-#   uv run python scripts/diagnostics/staging_egress_probe.py
-#
-# It must report the internet still reachable and every production target refused.
-- name: Fence the staging network off the production LAN
+# The task below deletes the inert rule rather than leaving it as belt-and-braces. A rule
+# that reads as protection and provides none is worse than no rule at all — the next
+# operator to run `ufw status` stops looking. Drop this task after 2026-10-01, by which time
+# no host still carries the rule.
+- name: Remove the inert staging route-deny rule that PR 508 left behind
   tags: [firewall]
   when: has_hypervisor | bool
   community.general.ufw:
@@ -137,6 +118,7 @@
     route: true
     src: "{{ staging_net_cidr }}"
     dest: "{{ lan_subnet }}"
+    delete: true
   become: true
 
 - name: Remove the stale WireGuard 51820/udp allow on the Pi

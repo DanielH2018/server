@@ -17,6 +17,40 @@
     mode: "0755"
   become: true
 
+- name: Render the staging egress fence
+  tags: [hypervisor]
+  # Defined here rather than in guest.yml because it is host-wide libvirt state like the
+  # network is, and it must exist before any domain references it — libvirt refuses to start
+  # a domain whose <filterref> names a filter it does not know.
+  ansible.builtin.template:
+    src: staging-nwfilter.xml.j2
+    dest: "{{ hypervisor_net_source_dir }}/{{ hypervisor_staging_nwfilter_name }}.xml"
+    owner: root
+    group: root
+    mode: "0644"
+  register: hypervisor_staging_nwfilter_xml
+  become: true
+
+- name: Check whether the staging egress fence is already defined
+  tags: [hypervisor]
+  ansible.builtin.command:
+    cmd: virsh --connect qemu:///system nwfilter-dumpxml {{ hypervisor_staging_nwfilter_name }}
+  register: hypervisor_staging_nwfilter_info
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: Define the staging egress fence
+  tags: [hypervisor]
+  # nwfilter-define replaces an existing filter, and libvirt re-applies a changed filter to
+  # every interface already referencing it — so editing a RULE reaches a running guest with
+  # no restart. Adding the reference itself does not; guest.yml handles that half.
+  when: hypervisor_staging_nwfilter_xml is changed or hypervisor_staging_nwfilter_info.rc != 0
+  ansible.builtin.command:
+    cmd: virsh --connect qemu:///system nwfilter-define {{ hypervisor_net_source_dir }}/{{ hypervisor_staging_nwfilter_name }}.xml
+  changed_when: true
+  become: true
+
 - name: Render the staging network definition
   tags: [hypervisor]
   ansible.builtin.template:
