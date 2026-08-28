@@ -83,7 +83,13 @@ Two mechanics that decide whether a change lands:
   reads the live XML and `virsh destroy`s a running guest that lacks it, so the existing start task
   brings it back fenced. That task fires only while the live interface is unfenced.
 - **Editing a rule inside the filter needs no restart.** libvirt re-applies a redefined filter to
-  every interface already referencing it.
+  every interface already referencing it. That works only because the template pins the filter's
+  UUID: `nwfilter-define` is not `net-define`, and with no `<uuid>` it mints one and then refuses
+  the name collision, so the role would deploy once and fail on every re-run.
+- **A referenced filter cannot be undefined.** `nwfilter-undefine` reports "Requested operation is
+  not valid: nwfilter is in use" while the guest holds it, so clearing a stray one means
+  `virsh destroy daniel-stage` first, then undefine, then re-run the role. The refusal is a
+  feature — the fence cannot be removed out from under a running guest.
 
 ENFORCED by `ansible/tests/test_staging_egress_fence.py`, which renders the filter and parses it.
 That check sees shape and attachment only. Whether the fence *fires* is a property of the host, and
