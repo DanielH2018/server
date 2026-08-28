@@ -30,6 +30,19 @@ containers_list:
     platform: k8s
     port: 8080
 
+  # The first real app: Deployment through PVC through IngressRoute. Placed AFTER traefik,
+  # which installs the CRDs its IngressRoute needs — the play has no toposort and runs in
+  # list order.
+  #
+  # `use_authelia: false`, where prod has true. Authelia is not in this cluster yet, and an
+  # IngressRoute referencing a Middleware that does not exist is not a route that merely
+  # skips auth.
+  - name: freshrss
+    platform: k8s
+    hostname: "freshrss"
+    port: 80
+    use_authelia: false
+
 # One container runtime, and it is k3s's. Same reasoning that keeps Docker off the two
 # cluster nodes: k3s ships its own containerd, and a second runtime's iptables chains land
 # on top of its. roles/setup/k3s asserts this on both node paths.
@@ -108,6 +121,12 @@ k8s_tls_cert_resolver: ""
 traefik_k8s_watched_namespaces:
   - "{{ k8s_namespace }}"
   - "{{ k8s_longhorn_namespace }}"
+# No seeding: `freshrss_k8s_source_path` is a path on daniel-server that Docker's removal
+# took with it, so a fresh PVC here would fail the copy. FreshRSS runs its own first-boot
+# setup against the empty volume instead, and freshrss/templates/pvc.yaml.j2 creates the
+# claim that seed-volume would otherwise have created.
+freshrss_k8s_manage_seed: false
+
 traefik_k8s_manage_acme: false
 
 # The drift check pushes to prod's Kuma, same reason as k3s_manage_health_crons above.

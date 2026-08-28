@@ -3,6 +3,7 @@
 # empty /config that is about to be overwritten.
 - name: Seed the freshrss config volume
   tags: [deploy]
+  when: freshrss_k8s_manage_seed | bool
   ansible.builtin.include_role:
     name: k8s/seed-volume
   vars:
@@ -22,9 +23,9 @@
     # tells nginx: an edited cache config applies, reports changed, and never takes effect.
     manifests_extra_rollouts:
       - name: freshrss-feed-cache
-    manifests_files:
-      - configmap.yaml
-      - deployment.yaml
-      - deployment-feed-cache.yaml
-      - service.yaml
-      - ingressroute.yaml
+    # pvc.yaml only when nothing seeds this cluster — seed-volume creates the claim itself,
+    # so rendering both would give one claim two creators.
+    manifests_files: >-
+      {{ ([] if freshrss_k8s_manage_seed | bool else ['pvc.yaml'])
+         + ['configmap.yaml', 'deployment.yaml', 'deployment-feed-cache.yaml',
+            'service.yaml', 'ingressroute.yaml'] }}

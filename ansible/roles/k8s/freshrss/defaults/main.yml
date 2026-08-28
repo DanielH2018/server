@@ -41,3 +41,24 @@ freshrss_k8s_claim: freshrss-config
 freshrss_k8s_storage_class: longhorn
 freshrss_k8s_size: 2Gi
 freshrss_k8s_source_path: /home/ubuntu/server/containers/freshrss/config
+
+# Whether this cluster seeds the config volume from the pre-migration Docker tree.
+#
+# DECIDED 2026-08-28: per-cluster. `seed_volume_source_path` above is a path on
+# `seed_volume_source_host` (daniel-server), and it no longer exists — Docker was uninstalled
+# there on 2026-08-14 and the tree went with it. Prod never notices: its PV already carries the
+# seed label, so seed-volume short-circuits and never reads the source. A cluster with a FRESH
+# PVC has no such label, so the copy decision resolves to true and the deploy fails trying to
+# tar a directory that is gone.
+#
+# With this false, k8s/seed-volume is skipped entirely and `pvc.yaml` is rendered instead, so
+# the claim still exists and FreshRSS runs its own first-boot setup against an empty volume —
+# which is what a staging cluster wants anyway.
+#
+# Gating the include rather than adding an input to seed-volume is deliberate. The seed pod,
+# the readiness wait and the marker check are gated on `seed_volume_short_circuit`, while only
+# the quiesce is gated on `seed_volume_copying`, so a "do not copy" input would have to feed
+# both — and the copy-decision expression carries a comment recording that mutating it renders
+# True and would tar a long-gone source over all 25 live volumes. Not a line to reshape for
+# staging's benefit.
+freshrss_k8s_manage_seed: true
