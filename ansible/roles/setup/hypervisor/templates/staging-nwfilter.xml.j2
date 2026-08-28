@@ -53,8 +53,15 @@
        define after it fails, so a role that omitted this worked once and broke on re-run.
        `to_uuid` is a deterministic UUIDv5 over the name, so the rendered file is stable and
        the define is a genuine replace. A host carrying a filter of this name under some
-       OTHER uuid (only reachable by defining one by hand) fails loudly here; clear it with
-       `virsh -c qemu:///system nwfilter-undefine {{ hypervisor_staging_nwfilter_name }}`. -->
+       OTHER uuid (only reachable by defining one by hand) fails loudly here. Clearing it takes
+       BOTH commands, in this order — libvirt refuses to undefine a filter a domain references,
+       with "Requested operation is not valid: nwfilter is in use":
+
+         virsh -c qemu:///system destroy {{ staging_vm_hostname }}
+         virsh -c qemu:///system nwfilter-undefine {{ hypervisor_staging_nwfilter_name }}
+
+       then re-run the role, which redefines the filter and starts the guest. That refusal is a
+       feature: a referenced fence cannot be removed out from under a running guest. -->
   <uuid>{{ hypervisor_staging_nwfilter_name | to_uuid }}</uuid>
   <rule action='drop' direction='out' priority='100'>
     <ip dstipaddr='{{ lan_subnet.split('/')[0] }}' dstipmask='{{ lan_subnet.split('/')[1] }}'/>
