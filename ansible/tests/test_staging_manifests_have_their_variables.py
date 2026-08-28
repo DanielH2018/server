@@ -152,7 +152,12 @@ def _unsupplied_names(role: str) -> dict[str, str]:
         | _SUPPLIED_BY_THE_RENDER
     )
     names: set[str] = set()
-    for tpl in (K8S_ROLES / role / "templates").glob("*.j2"):
+    # rglob, NOT glob: this repo's convention puts app config a manifest embeds via `lookup()`
+    # one level down, in templates/config/ (the root CLAUDE.md says so, and eight roles have
+    # one). A non-recursive glob never saw those files, so a name used only there got no
+    # sentinel — and make_env defaults to StubUndefined rather than StrictUndefined, so it
+    # rendered as the literal STUB and raised nothing. A missing credential passed silently.
+    for tpl in (K8S_ROLES / role / "templates").rglob("*.j2"):
         for expr in re.findall(r"\{\{(.*?)\}\}|\{%(.*?)%\}", tpl.read_text(), re.S):
             names |= set(_REFERENCE.findall("".join(expr)))
     return {n: _SENTINEL for n in names - supplied}
@@ -182,6 +187,43 @@ def test_the_sentinel_reaches_the_role_at_all(role: str) -> None:
     )
     assert hit, (
         f"{role} never rendered a poisoned k8s_namespace — the check is not wired up"
+    )
+
+
+# Named directly rather than parametrised over _staging_roles(). That list is [traefik] today
+# and traefik has no templates/config/, so "add a role with a config template" would bind to
+# nothing and the obvious red-proof would be vacuous. configarr's radarr_api_key is read ONLY
+# from templates/config/config.yml.j2 — exactly the shape the non-recursive glob missed.
+_CONFIG_DIR_ROLE = "configarr"
+_CONFIG_DIR_NAME = "radarr_api_key"
+
+
+def test_the_corpus_reaches_a_name_used_only_under_templates_config() -> None:
+    """The rejecting half for the WIDENING, not for the check as a whole.
+
+    Under the non-recursive glob this name was absent from the corpus, got no sentinel, and
+    rendered as the literal STUB with no error — so the check reported clean on a template
+    reading a credential staging does not have. Asserting the name is collected is what
+    demonstrates the widening bites.
+    """
+    assert _CONFIG_DIR_NAME in _unsupplied_names(_CONFIG_DIR_ROLE), (
+        f"{_CONFIG_DIR_NAME} is missing from {_CONFIG_DIR_ROLE}'s sentinel corpus — the "
+        f"template scan is not reaching templates/config/, so any credential read only from "
+        f"there is unchecked."
+    )
+
+
+def test_the_name_really_is_only_under_templates_config() -> None:
+    """Pins the premise of the test above. If configarr moves that reference up into
+    templates/, the widening test keeps passing while proving nothing."""
+    top = sorted(
+        t.name
+        for t in (K8S_ROLES / _CONFIG_DIR_ROLE / "templates").glob("*.j2")
+        if _CONFIG_DIR_NAME in t.read_text()
+    )
+    assert not top, (
+        f"{_CONFIG_DIR_NAME} now also appears in {top}, so it no longer demonstrates the "
+        f"templates/config/ gap — pick another name or another role."
     )
 
 

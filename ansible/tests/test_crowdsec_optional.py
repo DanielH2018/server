@@ -246,3 +246,134 @@ def test_the_shared_log_volume_survives_without_crowdsec(
 def test_prod_manages_crowdsec(role: str) -> None:
     """Both flags default on, so no cluster loses the WAF or its signals by omission."""
     assert load_yaml(K8S_ROLES / role / "defaults" / "main.yml")[_FLAGS[role]] is True
+
+
+# --- k8s_public_route and the bouncer must move together, per host ---
+#
+# This replaces test_routes_stay_lan_only_while_the_k8s_edge_has_no_crowdsec in
+# test_k8s_manifests.py, which two changes had made inert:
+#
+# 1. It detected the bouncer by SUBSTRING over raw template text. Since the CrowdSec gating
+#    landed, every occurrence sits inside `{% if traefik_k8s_manage_crowdsec %}`, so the text
+#    is present whatever the flag says and the comparison read True unconditionally.
+# 2. It read `k8s_public_route` from group_vars/all.yml only, so a host that overrides it was
+#    never evaluated. daniel-stage sets `k8s_public_route: false` AND
+#    `traefik_k8s_manage_crowdsec: false` — a consistent pair the old guard never looked at.
+#
+# Detection here is on RENDERED output, under each host's own variables.
+
+
+def _host_context(host: str) -> dict:
+    host_vars = ANSIBLE / "inventory" / "host_vars" / f"{host}.yml"
+    base = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **load_yaml(host_vars)}
+    base["playbook_dir"] = str(ANSIBLE)
+    base = resolve_vars(base, base)
+    # Role defaults FIRST: Ansible ranks host_vars above them, which is the whole point —
+    # a host's flag must beat the role's default.
+    return {
+        **role_defaults("traefik", base),
+        **base,
+        "container_item": {"name": "traefik"},
+    }
+
+
+def _host_render(host: str, template: str) -> str:
+    ctx = _host_context(host)
+    env = make_env([K8S_ROLES / "traefik" / "templates", SHARED_TPL])
+    env.globals["lookup"] = make_lookup(ctx)
+    register_ansible_filters(env)
+    rendered, err = render_or_error(env, template, ctx)
+    assert err is None, f"traefik/{template} failed to render for {host}: {err}"
+    return rendered
+
+
+def _hosts_running_traefik() -> list[str]:
+    out = []
+    for host_vars in sorted((ANSIBLE / "inventory" / "host_vars").glob("*.yml")):
+        entries = load_yaml(host_vars).get("containers_list") or []
+        if any(c.get("name") == "traefik" for c in entries):
+            out.append(host_vars.stem)
+    return out
+
+
+def has_bouncer(host: str) -> bool:
+    """Whether this host's rendered Traefik both DECLARES the bouncer and ATTACHES it.
+
+    Both halves, because a declared-but-unattached middleware protects nothing, and an
+    attachment naming a middleware that is gone is worse than either — Traefik disables
+    plugins silently, so every request through that entrypoint fails while the pod reads
+    healthy.
+    """
+    dynamic = _host_render(host, "dynamic.yaml.j2")
+    declared = any(
+        "crowdsecLapiKeyFile" in str(doc)
+        for doc in yaml.safe_load_all(dynamic)
+        if doc is not None
+    )
+    config = yaml.safe_load(
+        yaml.safe_load(_host_render(host, "static-config.yaml.j2"))["data"][
+            "traefik.yml"
+        ]
+    )
+    attached = any(
+        "crowdsec" in mw
+        for entry in (config.get("entryPoints") or {}).values()
+        for mw in ((entry.get("http") or {}).get("middlewares") or [])
+    )
+    return declared and attached
+
+
+def public_edge_problem(public: bool, bouncer: bool) -> str:
+    """The verdict, taking both readings as arguments so the rejecting test drives the same
+    code. Empty string means the pair is consistent."""
+    if public and not bouncer:
+        return (
+            "k8s_public_route is on with no CrowdSec bouncer on the edge — an unprotected "
+            "public edge one DNS record away."
+        )
+    if bouncer and not public:
+        return (
+            "the CrowdSec bouncer is on the edge with k8s_public_route off — not dangerous, "
+            "but the two are meant to move together and one has drifted."
+        )
+    return ""
+
+
+@pytest.mark.parametrize("host", _hosts_running_traefik())
+def test_the_public_route_and_the_bouncer_move_together(host: str) -> None:
+    ctx = _host_context(host)
+    problem = public_edge_problem(bool(ctx["k8s_public_route"]), has_bouncer(host))
+    assert not problem, f"{host}: {problem}"
+
+
+def test_the_bouncer_reading_follows_the_flag() -> None:
+    """The rejecting half for the DETECTION. Every host today is a consistent pair, so the
+    assertion above is only ever observed passing and cannot show that `has_bouncer` reads
+    anything at all — a detector stuck on False would agree with every LAN-only host.
+
+    daniel-box runs the bouncer and daniel-stage does not, so one real True and one real
+    False is what proves the reading tracks the flag rather than the template text.
+    """
+    assert has_bouncer("daniel-box") is True
+    assert has_bouncer("daniel-stage") is False
+
+
+@pytest.mark.parametrize(
+    ("public", "bouncer", "expect"),
+    [
+        (True, False, "unprotected public edge"),
+        (False, True, "one has drifted"),
+    ],
+)
+def test_the_verdict_rejects_a_mismatched_pair(
+    public: bool, bouncer: bool, expect: str
+) -> None:
+    """Each direction separately: a guard catching only the harmless drift would still miss
+    the unprotected edge, which is the one that matters."""
+    assert expect in public_edge_problem(public, bouncer)
+
+
+@pytest.mark.parametrize(("public", "bouncer"), [(True, True), (False, False)])
+def test_the_verdict_accepts_a_consistent_pair(public: bool, bouncer: bool) -> None:
+    """The accepting half, so a verdict that flagged everything would fail here."""
+    assert public_edge_problem(public, bouncer) == ""
