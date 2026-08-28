@@ -5,6 +5,7 @@ metadata:
   name: valheim
   namespace: {{ k8s_namespace }}
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   # 30 min, because the Deployment's own default (600s) is the deadline that actually binds
   # on a first boot — NOT manifests_rollout_timeout. Measured 2026-08-13: the first rollout

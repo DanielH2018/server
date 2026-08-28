@@ -5,6 +5,7 @@ metadata:
   name: autofix-bridge
   namespace: {{ k8s_namespace }}
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   # One remediation actor at a time: the candidate-grace streaks are in-process, and two
   # pods could each independently act on the same queue item.

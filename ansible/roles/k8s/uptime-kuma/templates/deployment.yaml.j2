@@ -6,6 +6,7 @@ metadata:
   name: uptime-kuma
   namespace: {{ k8s_namespace }}
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   # Two RWO PVCs on single-replica Longhorn — a rolling update deadlocks on the volumes.
   strategy:

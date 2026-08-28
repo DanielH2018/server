@@ -6,6 +6,7 @@ metadata:
   name: zigbee2mqtt
   namespace: {{ k8s_namespace }}
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   # Recreate is load-bearing twice over: the PVC is ReadWriteOnce on single-replica Longhorn,
   # and the SLZB coordinator accepts ONE client — a rolling update would have two z2m fighting

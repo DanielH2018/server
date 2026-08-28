@@ -6,6 +6,7 @@ metadata:
   name: bento-pdf
   namespace: {{ k8s_namespace }}
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   selector:
     matchLabels:

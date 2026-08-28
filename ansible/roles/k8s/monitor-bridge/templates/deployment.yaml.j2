@@ -5,6 +5,7 @@ metadata:
   name: monitor-bridge
   namespace: {{ k8s_namespace }}
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   # One evaluator at a time: the streak/hysteresis state (grace cycles, n8n failure
   # streaks) is in-process, and two pods pushing the same tokens would interleave

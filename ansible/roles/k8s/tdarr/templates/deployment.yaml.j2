@@ -5,6 +5,7 @@ metadata:
   name: tdarr
   namespace: {{ k8s_namespace }}
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   # Both config PVCs are ReadWriteOnce on single-replica Longhorn, so a rolling update deadlocks:
   # the new pod waits for volumes the old pod has not released.

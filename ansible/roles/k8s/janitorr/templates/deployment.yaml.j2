@@ -5,6 +5,7 @@ metadata:
   name: janitorr
   namespace: {{ k8s_namespace }}
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   # Recreate, not RollingUpdate: two janitorrs running at once would both walk the library and
   # both act on it. Harmless while dry-run is on and not worth relying on afterwards.

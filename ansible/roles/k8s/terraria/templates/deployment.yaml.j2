@@ -5,6 +5,7 @@ metadata:
   name: terraria
   namespace: {{ k8s_namespace }}
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   # RWO config PVC on single-replica Longhorn — a rolling update deadlocks on the volume,
   # and two servers writing one world would be worse than the deadlock.

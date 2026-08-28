@@ -5,6 +5,7 @@ metadata:
   name: home-assistant
   namespace: {{ k8s_namespace }}
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   # Recreate is load-bearing (slice-5 D5): the PVC is RWO, and two HAs against one MQTT
   # broker and one recorder lineage must never coexist.

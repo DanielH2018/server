@@ -5,6 +5,7 @@ metadata:
   name: authelia
   namespace: {{ k8s_namespace }}
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   # The SQLite database is a ReadWriteOnce volume and two Authelias writing it is the exact
   # corruption this instance exists to avoid — the old pod must stop before the new one starts.

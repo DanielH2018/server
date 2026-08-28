@@ -5,6 +5,7 @@ metadata:
   name: registry
   namespace: {{ k8s_namespace }}
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   # Recreate, for two independent reasons that both bite here: the PVC is ReadWriteOnce, and
   # the hostPort below is node-exclusive. A rolling update would leave the new pod Pending on

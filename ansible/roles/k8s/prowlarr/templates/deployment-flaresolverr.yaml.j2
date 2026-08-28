@@ -10,6 +10,7 @@ metadata:
   name: flaresolverr
   namespace: {{ k8s_namespace }}
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   # No authoritative state: /config is a browser profile cache the app rebuilds on first use
   # (see the note in tasks/main.yml), so it moved to an emptyDir and the RWO constraint that
