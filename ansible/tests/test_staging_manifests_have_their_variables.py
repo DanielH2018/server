@@ -98,8 +98,9 @@ def _render(role: str, template: str, extra: dict) -> str:
     base = _base_context()
     entry = next(c for c in base["containers_list"] if c["name"] == role)
     # Role defaults FIRST: Ansible ranks host_vars above them, and a staging host exists to
-    # override them. validate_k8s_manifests' own order is the other way round, which is
-    # harmless only because prod overrides none of them.
+    # override them. validate_k8s_manifests' own order is the other way round; that is now held
+    # harmless by `colliding_default_keys`, which fails the validator if any role default ever
+    # shares a key with the inventory, rather than by nobody having done it yet.
     ctx = {**role_defaults(role, base), **base, **extra, "container_item": entry}
     env = make_env([K8S_ROLES / role / "templates", SHARED_TPL])
     env.globals["lookup"] = make_lookup(ctx)
@@ -139,7 +140,101 @@ def _deployed_templates(role: str) -> list[str]:
                 value = ast.literal_eval(env.from_string(value).render(ctx))
             names += value or []
     assert names, f"{role} deploys no manifests — the parse of its tasks file is wrong"
-    return [f"{n}.j2" for n in dict.fromkeys(names)]
+    # Manifests the role renders to disk and applies by shell-out are just as much ours as the
+    # ones k8s/manifests applies, and were covered by nothing until this was added.
+    tasks = yaml.safe_load((K8S_ROLES / role / "tasks" / "main.yml").read_text())
+    extra = locally_templated_applies(tasks)
+    return list(dict.fromkeys([f"{n}.j2" for n in names] + extra))
+
+
+# A task that puts an object into the cluster by some route other than `k8s/manifests`. The
+# `assert names` above only catches a role that applies NOTHING through the counted path; a role
+# that applies some manifests through it and the rest another way passes with partial coverage
+# and no signal, which is the case these rules exist to make loud.
+#
+# Two such applies are not gaps, and the rule discriminates rather than allowlisting by name:
+#   - a remote URL (traefik's pinned upstream CRDs) has no local template to check;
+#   - a local path written by an earlier `template:` task in the same role IS ours, so its `src`
+#     is folded into the corpus instead of being excused. That is how rbac.yaml.j2 — rendered to
+#     /etc/rancher/k3s/traefik-clusterrole.yaml, then applied by shell-out — became covered.
+_UNCOUNTED_APPLY_MODULES = ("kubernetes.core.k8s", "k8s")
+_APPLY_SHELL = re.compile(r"kubectl\s+(?:apply|create|replace)\b[^|;]*?-f\s+(\S+)")
+
+
+def _shell_text(task: dict) -> str:
+    for key in ("ansible.builtin.command", "ansible.builtin.shell", "command", "shell"):
+        value = task.get(key)
+        if isinstance(value, str):
+            return value
+        if isinstance(value, dict) and isinstance(value.get("cmd"), str):
+            return value["cmd"]
+    return ""
+
+
+def _templated_dests(tasks) -> dict[str, str]:
+    """dest -> src for every `template:` task in the role, so an apply of a rendered file can be
+    traced back to the .j2 it came from."""
+    dests = {}
+    for task in _flatten_tasks(tasks):
+        for key in ("ansible.builtin.template", "template"):
+            spec = task.get(key)
+            if isinstance(spec, dict) and spec.get("dest") and spec.get("src"):
+                dests[str(spec["dest"])] = str(spec["src"])
+    return dests
+
+
+def _flatten_tasks(tasks) -> list:
+    """Every task in a tasks file, including those nested in block/rescue/always."""
+    out = []
+    for task in tasks or []:
+        if not isinstance(task, dict):
+            continue
+        out.append(task)
+        for key in ("block", "rescue", "always"):
+            out.extend(_flatten_tasks(task.get(key)))
+    return out
+
+
+def locally_templated_applies(tasks) -> list[str]:
+    """The `.j2` sources of manifests this role applies by rendering to disk and shelling out.
+
+    These are ours and are checkable, so they belong in the corpus rather than in an exemption
+    list — an exemption would leave them exactly as uncovered as before, just quietly.
+    """
+    dests = _templated_dests(tasks)
+    found = []
+    for task in _flatten_tasks(tasks):
+        match = _APPLY_SHELL.search(_shell_text(task))
+        if match and match.group(1) in dests:
+            found.append(dests[match.group(1)])
+    return list(dict.fromkeys(found))
+
+
+def uncounted_manifest_applications(tasks) -> list[str]:
+    """Task names that apply cluster objects by a route no check in this file can see.
+
+    `_deployed_templates` derives its corpus from the `manifests_files` of one
+    `include_role: k8s/manifests`, so anything applied another way is invisible to every check
+    built on it. An apply of a REMOTE url is not such a case (there is no local template to
+    check) and neither is an apply of a file an earlier `template:` task rendered — that one is
+    folded into the corpus by `locally_templated_applies`. Returns task names rather than a bool
+    so the failure says which task to look at.
+    """
+    dests = _templated_dests(tasks)
+    found = []
+    for task in _flatten_tasks(tasks):
+        name = task.get("name") or "<unnamed task>"
+        if any(m in task for m in _UNCOUNTED_APPLY_MODULES):
+            found.append(name)
+            continue
+        match = _APPLY_SHELL.search(_shell_text(task))
+        if not match:
+            continue
+        target = match.group(1)
+        if target.startswith(("http://", "https://")) or target in dests:
+            continue
+        found.append(name)
+    return found
 
 
 def _unsupplied_names(role: str) -> dict[str, str]:
@@ -239,3 +334,90 @@ def test_traefik_comes_first() -> None:
     assert roles[0] == "traefik", (
         f"traefik must lead {_HOST}'s containers_list, got {roles}"
     )
+
+
+# ── every manifest must reach the cluster through the path this file can see ───────────────────
+
+
+@pytest.mark.parametrize("role", _staging_roles())
+def test_the_role_applies_nothing_outside_the_counted_path(role: str) -> None:
+    """The regression guard. Every check in this file is built on `_deployed_templates`, which
+    reads only the `manifests_files` of `include_role: k8s/manifests` — so a manifest applied by
+    `kubernetes.core.k8s` or a `kubectl apply` shell-out is covered by nothing and says so
+    nowhere. Zero staging roles do this when the guard landed; the day one does, it fails here
+    instead of quietly shrinking the corpus."""
+    tasks = yaml.safe_load((K8S_ROLES / role / "tasks" / "main.yml").read_text())
+    uncounted = uncounted_manifest_applications(tasks)
+    assert not uncounted, (
+        f"{role} applies cluster objects outside `include_role: k8s/manifests` in "
+        f"{uncounted} — those manifests are invisible to _deployed_templates and to every "
+        f"check in this file. Route them through k8s/manifests, or teach the helper about them."
+    )
+
+
+def test_an_uncounted_apply_is_flagged():
+    """The rejecting half — the module form and the shell form, plus a task nested in a block."""
+    tasks = [
+        {"name": "counted", "include_role": {"name": "k8s/manifests"}},
+        {"name": "module apply", "kubernetes.core.k8s": {"state": "present"}},
+        {
+            "name": "wrapper",
+            "block": [
+                {
+                    "name": "shell apply",
+                    "ansible.builtin.command": "kubectl apply -f /tmp/x.yaml",
+                }
+            ],
+        },
+    ]
+    assert uncounted_manifest_applications(tasks) == ["module apply", "shell apply"]
+
+
+def test_a_role_that_only_uses_the_counted_path_is_clean():
+    """The accepting half. A guard that fired on everything would pass the test above too — and
+    `kubectl rollout status`/`get` must NOT trip it, since read-only calls apply nothing."""
+    tasks = [
+        {"name": "apply", "include_role": {"name": "k8s/manifests"}},
+        {"name": "wait", "ansible.builtin.command": "kubectl rollout status deploy/x"},
+        {"name": "read", "ansible.builtin.shell": {"cmd": "kubectl get pods -o name"}},
+    ]
+    assert uncounted_manifest_applications(tasks) == []
+
+
+def test_a_remote_url_apply_is_not_a_gap():
+    """Traefik's pinned upstream CRDs. There is no local template behind a URL, so flagging it
+    would be a finding no edit could ever clear."""
+    tasks = [
+        {
+            "name": "crds",
+            "ansible.builtin.command": {"cmd": "k3s kubectl apply -f https://x/y.yml"},
+        }
+    ]
+    assert uncounted_manifest_applications(tasks) == []
+
+
+def test_a_rendered_then_applied_template_is_covered_not_excused():
+    """The real traefik shape: `template:` writes rbac.yaml.j2 to disk, a shell-out applies it.
+    It must drop OUT of the uncounted list and INTO the corpus — an exemption alone would leave
+    it as uncovered as before."""
+    tasks = [
+        {
+            "name": "render",
+            "ansible.builtin.template": {
+                "src": "rbac.yaml.j2",
+                "dest": "/etc/x/rbac.yaml",
+            },
+        },
+        {
+            "name": "apply",
+            "ansible.builtin.command": {"cmd": "k3s kubectl apply -f /etc/x/rbac.yaml"},
+        },
+    ]
+    assert uncounted_manifest_applications(tasks) == []
+    assert locally_templated_applies(tasks) == ["rbac.yaml.j2"]
+
+
+def test_traefik_rbac_is_in_the_real_corpus():
+    """The regression guard for the instance that motivated this: rbac.yaml.j2 reaches the
+    corpus, so the staging variable checks above now cover it."""
+    assert "rbac.yaml.j2" in _deployed_templates("traefik")
