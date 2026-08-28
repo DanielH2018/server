@@ -417,23 +417,20 @@ def test_every_https_route_carries_tls():
                 )
 
 
-def test_routes_stay_lan_only_while_the_k8s_edge_has_no_crowdsec():
-    """k8s_public_route and the CrowdSec bouncer have to move together. A public Host rule
-    while the k8s Traefik carries no bouncer is an unprotected edge one DNS record away.
-
-    The bouncer is detected where it actually lives since B1: the Middleware CRD in
-    dynamic.yaml.j2 (crowdsecLapiKeyFile — the key moved out of the static config so the
-    read-only kubeconfig can't read it) AND its entrypoint-wide attachment in the static
-    config. Both, because a declared-but-unattached middleware protects nothing."""
-    static = (K8S / "traefik" / "templates" / "static-config.yaml.j2").read_text()
-    dynamic = (K8S / "traefik" / "templates" / "dynamic.yaml.j2").read_text()
-    has_bouncer = (
-        "crowdsecLapiKeyFile" in dynamic and "-crowdsec@kubernetescrd" in static
-    )
-    assert ALL_VARS["k8s_public_route"] == has_bouncer, (
-        "k8s_public_route is only safe once the k8s Traefik runs the CrowdSec bouncer "
-        "(slice 6) — flip both or neither"
-    )
+# test_routes_stay_lan_only_while_the_k8s_edge_has_no_crowdsec lived here and was REMOVED
+# rather than repaired, because it had become inert in two independent ways and its green said
+# nothing:
+#
+# 1. It detected the bouncer by SUBSTRING over raw template text. Once the CrowdSec gating
+#    landed, every occurrence sat inside `{% if traefik_k8s_manage_crowdsec %}`, so both
+#    strings were present whatever the flag said and the comparison read True unconditionally.
+# 2. It read `k8s_public_route` from group_vars/all.yml only, so a host overriding it was never
+#    evaluated — daniel-stage sets both it and the CrowdSec flag false, a consistent pair the
+#    guard never looked at.
+#
+# The replacement is test_the_public_route_and_the_bouncer_move_together in
+# test_crowdsec_optional.py: per host, on RENDERED output, with a reading proven to track the
+# flag (True on daniel-box, False on daniel-stage) rather than the template text.
 
 
 def test_the_lapi_route_never_gains_a_public_host_rule():
