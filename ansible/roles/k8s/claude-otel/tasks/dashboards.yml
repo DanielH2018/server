@@ -161,3 +161,58 @@
   # The apply itself still runs unconditionally, so drift is corrected either way — this only
   # governs what gets REPORTED as changed.
   changed_when: claude_otel_dashboard_manifests is changed
+
+# ── prune keys the apply above cannot remove ──────────────────────────────────────────────────
+# Server-side apply removes a field only when the SAME field manager previously owned it. These
+# ConfigMaps predate the switch to SSA, so a key written by the old client-side apply is owned by
+# `kubectl-client-side-apply` and survives every run of the task above, whatever the source tree
+# says. Deleting a dashboard JSON therefore removes it from the repo and from the generated
+# manifest while Grafana goes on serving it from the live object.
+#
+# Not hypothetical. `backups.json` was renamed to `backups-b2-usage.json` and BOTH keys stayed
+# live until 2026-08-28. Retiring the renamed file left the original provisioning the identical
+# dead board — three panels querying `kopia_b2_billable_bytes`, a gauge with no writer since kopia
+# retired 2026-08-13. Every repo-side check read green throughout, because from the repo's point
+# of view the board was already gone.
+- name: Read the live dashboard ConfigMap keys
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl get configmap grafana-dashboards-{{ item | lower }}
+      --namespace {{ k8s_observability_namespace }}
+      --ignore-not-found -o jsonpath={.data}
+  loop: "{{ claude_otel_dashboard_folders }}"
+  become: true
+  changed_when: false
+  register: claude_otel_dashboard_live_keys
+
+- name: Find the dashboard files each ConfigMap should carry
+  tags: [deploy]
+  ansible.builtin.find:
+    paths: "/etc/rancher/k3s/dashboards-annotated/{{ item }}"
+    patterns: "*.json"
+  loop: "{{ claude_otel_dashboard_folders }}"
+  become: true
+  register: claude_otel_dashboard_source_files
+
+# A merge patch setting each stale key to null, which is how a strategic/merge patch deletes a map
+# entry. Skipped entirely when the difference is empty, so a clean cluster issues no write and
+# reports unchanged — the normal case, and the reason this is safe to run on every deploy.
+- name: Remove dashboard keys with no file behind them
+  tags: [deploy]
+  vars:
+    live_keys: "{{ (claude_otel_dashboard_live_keys.results[idx].stdout | default('{}', true) | from_json).keys() | list }}"
+    want_keys: "{{ claude_otel_dashboard_source_files.results[idx].files | map(attribute='path') | map('basename') | list }}"
+    stale_keys: "{{ live_keys | difference(want_keys) }}"
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl patch configmap grafana-dashboards-{{ item | lower }}
+      --namespace {{ k8s_observability_namespace }} --type=merge
+      -p {{ {'data': dict(stale_keys | zip([None] * (stale_keys | length)))} | to_json | quote }}
+  loop: "{{ claude_otel_dashboard_folders }}"
+  loop_control:
+    index_var: idx
+    label: "{{ item }}: {{ stale_keys | join(', ') | default('nothing stale', true) }}"
+  become: true
+  when: stale_keys | length > 0
+  changed_when: true
