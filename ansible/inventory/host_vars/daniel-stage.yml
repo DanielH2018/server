@@ -127,6 +127,28 @@ traefik_k8s_watched_namespaces:
 # claim that seed-volume would otherwise have created.
 freshrss_k8s_manage_seed: false
 
+# No pre-apply Longhorn snapshots on this cluster. HOST-WIDE, not per role: k8s/manifests
+# gates the k8s/volume-snapshot include on this list being non-empty, and an empty list here
+# outranks every role's own declaration. That breadth is intended — every reason below is a
+# property of the cluster, not of freshrss.
+#
+# DECIDED 2026-08-28. Three reasons, and the first is the one that forces it:
+#
+# 1. k8s/volume-snapshot resolves the deploy tag with `git rev-parse` and `chdir` into
+#    `{{ playbook_dir }}/..` — ON THE TARGET. daniel-box is `connection=local` in hosts.ini so
+#    the checkout is right there; daniel-stage is a genuinely remote host with no checkout, and
+#    the task fails with "Unable to change directory before execution". That is a latent bug in
+#    a shared role with 13 callers, not a staging quirk, and it is not fixed here: the SHA is a
+#    property of the CONTROLLER's checkout, so the fix is `delegate_to: localhost`, in its own
+#    change with its own red-proof.
+# 2. The snapshot is taken BEFORE the apply, and on this cluster `pvc.yaml` is what creates
+#    the claim — so at snapshot time the volume does not exist yet.
+# 3. It would protect nothing anyway. The role exists to make a bad image bump reversible on a
+#    volume carrying migrating state from the Docker era. Staging has none: the volume is
+#    created empty seconds later, and the data is disposable by design.
+k8s_autodeploy_snapshot_pvcs: []
+
+
 traefik_k8s_manage_acme: false
 
 # The drift check pushes to prod's Kuma, same reason as k3s_manage_health_crons above.
