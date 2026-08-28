@@ -28,6 +28,8 @@ from zoneinfo import ZoneInfo
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from deploy_logic import (  # noqa: E402
+    PENDING_ALERTS_MAX,
+    cap_pending,
     ChangeSet,
     apply_drain_result,
     apply_send_result,
@@ -455,6 +457,14 @@ def deliver(key: str, content: str) -> bool:
     pending = _read_pending()
     delivered = discord(content)
     updated = apply_send_result(pending, key, content, delivered)
+    updated, dropped = cap_pending(updated)
+    for stale in dropped:
+        # Logged, never silent: this is an alert being discarded undelivered, which is the exact
+        # outcome the queue exists to prevent. A backlog this deep means the webhook itself has
+        # been broken for over a day, and DISCORD_CONSECUTIVE has been paging about that.
+        log(
+            f"pending-alert queue over {PENDING_ALERTS_MAX}; dropping oldest undelivered {stale}"
+        )
     if updated != pending:
         _write_pending(updated)
     return delivered
