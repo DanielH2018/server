@@ -76,7 +76,12 @@ MetalLB L2 election on this segment has already produced two recorded outages
 while traffic blackholed. A second MetalLB speaker on the same L2, announcing from a VM that
 exists to be broken, puts a prod-wide outage downstream of a staging experiment.
 
-So: staging runs on a **libvirt NAT network**, reachable from daniel-server only. Its Traefik is
+So: staging runs on a **libvirt NAT network**, reachable from daniel-server only. **Every deploy
+to `daniel-stage` therefore runs from daniel-server, not only the fence probe below** — the guest
+is a genuinely remote host, and Ansible run from daniel-box fails at the connection with
+`ssh: connect to host 192.168.140.10 port 22: Connection timed out`. That recap exits 4 for
+hosts unreachable, which is a different exit 4 from `deploy.sh`'s stale-tree refusal. Its
+Traefik is
 reached on the VM's NAT address. MetalLB still runs — the manifests reference it, and removing it
 would make staging less like prod in the manifests, which is what the gate reads — but it
 announces only inside the VM's own network.
@@ -257,6 +262,26 @@ needed either — the preamble's `when: become_password is defined` skips cleanl
 `secrets-staging.yml` starts with `domain` alone, which is what the 93 service templates need,
 and grows when *Decision 6*'s subset lands.
 
+It has grown once, and the shape of that growth is the pattern to repeat. Authelia added five
+keys — `authelia_user`, `authelia_password`, `authelia_jwt`, `authelia_secret`,
+`authelia_storage` — and no more, because the three the OIDC provider block would need are
+gated out instead (*Decision 6*). **Prefer a per-cluster flag over a generated credential**: a
+flag removes the configuration as well as the secret, where a fake value leaves dead config
+that can still fail at startup for a reason that is not a bug.
+
+Two mechanics of editing this file, both of which cost a session time to rediscover:
+
+- **Only daniel-server can write it.** It is encrypted to that host's key alone, so `sops` on
+  daniel-box fails, reporting that no identity matched any of the recipients. Generate and re-encrypt
+  over ssh there, then commit the ciphertext from wherever you are working. Encrypting is not
+  the constrained half — any host can encrypt to a public key — but `sops set` and `sops` both
+  decrypt first, so both need the private half.
+- **`authelia_password_hash` is deliberately absent.** The role reads the argon2 hash back from
+  the cluster or mints it in a one-shot pod, then `set_fact`s it, so no cluster stores it. What
+  the file holds is the plaintext the hash is minted from, which is read by `tasks/main.yml`
+  and by no template — a shape `test_staging_manifests_have_their_variables.py` was blind to
+  until it grew a tasks-file scan.
+
 **Staging never holds a real credential.** A host whose stated purpose is being broken, and which
 Claude sessions are expected to experiment on, is the worst possible second copy of every
 production secret. Roles whose function depends on a real external credential (B2, Cloudflare,
@@ -276,7 +301,7 @@ The initial subset is chosen for coverage of **mechanisms**, not importance:
 | Service | Mechanism it exercises |
 |---|---|
 | `traefik` | CRD installation and ordering — the failure that breaks every route behind it |
-| `authelia` | Middleware wiring and the forward-auth chain |
+| `authelia` | Middleware wiring and the forward-auth chain — `freshrss` carries `use_authelia: true` here for exactly that reason. Its OIDC provider is gated out by `authelia_k8s_manage_oidc: false`: the only relying party is `jellyfin`, which is hardware-blocked from this subset, so the block would be dead configuration demanding three more fake credentials. Forward-auth is unaffected by that flag |
 | `freshrss` | A plain web app: Deployment, Service, IngressRoute, PVC, seeding |
 | `ical-proxy` | The `image-builder` path end to end — build, push, pull, deploy (*Decision 8*) |
 | `node-exporter` | A DaemonSet: per-node scheduling and hostPath mounts, which no Deployment exercises |
@@ -409,7 +434,7 @@ Vertical slices; each leaves something exercisable. Status as of 2026-08-28.
 3. **k3s + Longhorn + Traefik on the VM** (*Decision 3*) — DONE. `kubectl get nodes` is Ready; a PVC binds.
 4. **Inventory + staging secrets** (*Decision 5*) — DONE. `ansible -m ping` reaches `daniel-stage`; secrets decrypt.
 5. **First service deployed** (*Decisions 4, 6, 8*) — DONE. `freshrss` answers 200 through the staging VIP, serving `CN = TRAEFIK DEFAULT CERT`.
-6. **The rest of the subset** — `authelia`, `ical-proxy`, `node-exporter`. `traefik` landed in slice 5, which it had to precede.
+6. **The rest of the subset** — `node-exporter` and `authelia` are DONE; `ical-proxy` remains. `traefik` landed in slice 5, which it had to precede.
 
 Phase C (pipeline gating) starts after 6 has run against real merges for long enough to know its
 false-failure rate.
