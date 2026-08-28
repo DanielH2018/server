@@ -39,8 +39,13 @@ prod is deployed from.
 
 ### 1. Substrate — a KVM VM under libvirt, not a container
 
-daniel-server has VT-x and `/dev/kvm`, 25 GB free RAM, 8 cores and 295 GB free disk. It has **no
-hypervisor installed today** — no qemu, libvirt, multipass or incus — so Phase A installs one.
+daniel-server has VT-x and `/dev/kvm`, 25 GB free RAM, 8 cores and 295 GB free disk. It carried
+**no hypervisor** when this was written — no qemu, libvirt, multipass or incus — so Phase A
+installs one. `roles/setup/hypervisor` owns it, and it is the only host with `has_hypervisor:
+true`. The role is reached from `initial_setup.yml` alone, and because `hosts.ini` pins
+daniel-server to `ansible_connection=local`, applying it means running Ansible **on that host**
+— `-e target=daniel-server` from daniel-box runs the whole play locally and builds a second guest
+there.
 
 A VM rather than the lighter container options, because of what else lives on that box:
 
@@ -91,7 +96,26 @@ UI rests on a LAN-only premise the guest sits inside.
 
 The fence is a **libvirt nwfilter**, `staging-egress-fence`, rendered by
 `roles/setup/hypervisor/templates/staging-nwfilter.xml.j2` and referenced from the guest's
-`<interface>`. One rule: drop anything leaving the guest addressed to `lan_subnet`.
+`<interface>`. One drop rule per production range: `lan_subnet`, `k3s_pod_cidr` and
+`k3s_service_cidr`.
+
+**The LAN rule alone left the cluster network open, and no LAN rule can close it.** That was the
+remaining shape of the hole, closed later the same day. kube-proxy's DNAT runs in the `nat`
+PREROUTING chain on daniel-server, which sees forwarded packets, so a guest whose default route
+crosses that host reaches a production ClusterIP without any of the traffic being addressed to the
+LAN. Measured from inside the guest: Longhorn's API answered 200 unauthenticated on its ClusterIP,
+carrying a mutating
+`diskUpdate` action, and a `longhorn-ui` pod IP answered 200 directly — while the LAN rule
+correctly refused the MetalLB VIP. `k3s_pod_cidr` and `k3s_service_cidr` are declared in
+`group_vars/all.yml` rather than the k3s role's defaults, because the consumer is the hypervisor
+role and a role's defaults are not visible to another role in another playbook.
+
+Those two ranges are also **staging's own**, since both clusters run k3s's defaults. Dropping them
+is safe only while staging is a single node: its pod and Service traffic is delivered on the
+guest's internal `cni0` and by its own kube-proxy rules, and never crosses the tap device the
+filter attaches to. A second staging node would put pod-to-pod traffic on the wire, where the `/16`
+drop would break it. `ansible/tests/test_staging_egress_fence.py` ties that assumption to
+`k3s_agent_node_ips` so it fails when it stops holding.
 
 **The first attempt was a UFW `route deny`, and it was inert.** It deployed cleanly and
 `ufw status` listed it; the probe still reached the VIP, the k3s API and wg-easy from inside the
@@ -105,7 +129,9 @@ rules to the guest's tap device and manages their position itself, which is the 
 Two mechanical consequences worth knowing. libvirt applies a filter when the **interface is
 created**, so adding the `<filterref>` reaches a running guest only after the domain is stopped and
 started — `guest.yml` detects a live interface without the fence and does exactly that. Editing a
-**rule** inside an already-referenced filter needs no restart; libvirt re-applies it live.
+**rule** inside an already-referenced filter needs no restart; libvirt re-applies it live. Measured
+2026-08-28 when the two cluster CIDRs were added: the play reported two changed tasks and no
+`virsh destroy`, guest uptime was unbroken, and both cluster targets went from 200 to refused.
 
 Guest-to-daniel-server traffic is unaffected: the guest reaches this host on the staging gateway
 address, which is not in `lan_subnet`. Ansible still reaches the guest, and the internet egress
@@ -122,6 +148,14 @@ uv run python scripts/diagnostics/staging_egress_probe.py   # on daniel-server
 
 The internet control target must stay reachable. A fence that severed all egress would make every
 production target fail too, and that would read as a pass.
+
+The two cluster targets carry a **second control leg**, dialled from daniel-server. Their
+addresses are allocated rather than pinned — a pod IP is ephemeral and Longhorn's ClusterIP is
+whatever the API server handed it — so a target that has simply moved answers nothing from
+anywhere, which is indistinguishable from a fence that works. Silent from both sides exits 2, not
+0. The two ClusterIPs that *are* pinned in inventory were rejected as targets for the same reason
+in reverse: both already answer nothing from the guest, so either would have read as a held fence
+from the day it shipped and could never have gone red.
 
 ### 3. Cluster stack — k3s, Longhorn, Traefik, in that order
 
@@ -309,44 +343,73 @@ Three literals survive and are correct where they are, so don't "finish" them:
   180s timeout. It now renders only when `k3s_agent_node_ips` is non-empty, and the wait task
   gates on the same variable. ENFORCED by `ansible/tests/test_registry_selftest_single_node.py`.
 
-**The remaining gate on the first staging service is Decision 4, not this one.** It is
-unimplemented: `roles/k8s/traefik` templates a `cloudflare_dns_token` Secret, which
-`secrets-staging.yml` does not carry, and `dashboard-ingressroute.yaml.j2` names
-`certResolver: cloudflare` unconditionally. Deploying `traefik` to staging today fails on the
-undefined variable — and, if it did not, would request certificates for the **real** domain
-against the same ACME account and rate limit prod uses. Nothing named `stage.local` or a
-self-signed CA exists anywhere in the repo yet. `traefik` also has to precede `freshrss`
-regardless, because its CRDs back the IngressRoute; the subset table in *Decision 6* is ordered
-by mechanism coverage, not by deploy order.
+**Decision 4 was the remaining gate on the first staging service, and it landed on 2026-08-28.**
+It was unimplemented as this spec was first written: `roles/k8s/traefik` templated a
+`cloudflare_dns_token` Secret that `secrets-staging.yml` does not carry, and
+`dashboard-ingressroute.yaml.j2` named `certResolver: cloudflare` unconditionally, so a staging
+deploy either failed on the undefined variable or requested certificates for the **real** domain
+against the ACME account and rate limit prod uses.
 
-### 8. Two hazards that would otherwise reach prod data
+What closed it is a set of per-cluster switches, each defaulting to prod's behaviour so that a
+staging cluster turns pieces **off** in its own `host_vars` rather than prod turning them on:
+`k8s_tls_cert_resolver` (#522, empty on staging), `traefik_k8s_manage_acme` and
+`traefik_k8s_manage_cloudflare_drift_check` (#523), `traefik_k8s_manage_crowdsec` and
+`authelia_k8s_manage_crowdsec` (#525), `traefik_k8s_manage_livesync_gate` (#526), and
+`traefik_k8s_watched_namespaces` (#528). Traefik itself reached staging in #527, `freshrss` in
+#529 behind `freshrss_k8s_manage_seed`, and #530 turned off the pre-apply Longhorn snapshots.
 
-Both are live today and would fire on the first staging deploy if inherited unchanged.
+**Staging serves Traefik's built-in default certificate**, which is also the discriminator for
+which cluster answered: `secrets-staging.yml` carries the same `domain` as prod, so staging's
+routes match the names DNS points at prod and only the resolver separates them. A probe written
+against a hostname silently measures the wrong cluster; `CN = TRAEFIK DEFAULT CERT` is what says
+staging answered. Nothing named `stage.local` or a self-signed CA exists in the repo, and none is
+needed for this.
+
+`traefik` still has to precede `freshrss`, because its CRDs back the IngressRoute; the subset table
+in *Decision 6* is ordered by mechanism coverage, not by deploy order.
+
+### 8. Three hazards that would otherwise reach prod data
+
+Each would fire on a staging deploy if inherited unchanged. The first is closed, the third is
+closed, and the second is closed by construction but not yet exercised — `ical-proxy` is still
+slice 6.
 
 **`seed_volume_source_host: daniel-server`** — `seed-volume` copies a source directory from that
 host into a PVC. A staging deploy inheriting this default reads **prod's bind-mount data** over
-ssh. Staging must set this to a staging-local path, or skip seeding entirely. Skipping is
-preferred: seeding is a one-shot migration mechanism, and staging has nothing to migrate.
+ssh. Closed by skipping seeding rather than pointing it elsewhere:
+`freshrss_k8s_manage_seed: false` on staging (#529), with the role rendering its own PVC in place
+of the one `seed-volume` creates.
+Skipping is the right shape because seeding is a one-shot migration mechanism and staging has
+nothing to migrate.
 
 **`k8s_registry_node`** — the in-cluster registry is pinned to one node, so staging's 7 built
 images have nowhere to push unless that pin follows the cluster. Step 1 made it a variable
-(`k8s_registry_node: "{{ k8s_primary_node }}"`), which resolves to `daniel-box` on prod;
-staging must override it rather than inherit it. Staging runs its own registry on `daniel-stage`.
-The alternative — pushing staging builds to the prod registry — would let a staging build
-overwrite a tag prod pulls, which is a staging change causing a prod rollout.
+(`k8s_registry_node: "{{ k8s_primary_node }}"`), and staging sets `k8s_primary_node: daniel-stage`,
+so the pin follows the cluster without a second override. Staging runs its own registry. The
+alternative — pushing staging builds to the prod registry — would let a staging build overwrite a
+tag prod pulls, which is a staging change causing a prod rollout.
+
+**Pre-apply Longhorn snapshots** — `k8s/manifests` snapshots a role's PVCs before applying, so a
+rollback has something to return to. On staging that is wrong twice over: the volumes hold nothing
+worth keeping, and the snapshot task resolves its deploy tag with `git rev-parse` under
+`chdir: "{{ playbook_dir }}/.."`, which runs **on the target**. daniel-box is `connection=local`
+and has its checkout there; `daniel-stage` is genuinely remote and has none, so the task failed
+with `Unable to change directory before execution`. Closed by
+`k8s_autodeploy_snapshot_pvcs: []` on staging (#530). The underlying `chdir` is still wrong for
+any genuinely remote target and has 13 callers; the fix is `delegate_to: localhost`.
 
 ---
 
 ## Sequencing
 
-Vertical slices; each leaves something exercisable.
+Vertical slices; each leaves something exercisable. Status as of 2026-08-28.
 
-1. **Node-pin variables** (*Decision 7*) — repo-only, verified against prod. Nothing staging-specific yet.
-2. **Hypervisor + VM** (*Decisions 1, 2*) — `virsh list` shows a running guest; ssh reaches it.
-3. **k3s + Longhorn + Traefik on the VM** (*Decision 3*) — `kubectl get nodes` is Ready; a PVC binds.
-4. **Inventory + staging secrets** (*Decision 5*) — `ansible -m ping` reaches `daniel-stage`; secrets decrypt.
-5. **First service deployed** (*Decisions 4, 6, 8*) — `deploy.sh --tags freshrss --target staging` completes and the route answers inside the VM.
-6. **The rest of the subset** — `traefik`, `authelia`, `ical-proxy`, `node-exporter`.
+1. **Node-pin variables** (*Decision 7*) — DONE. Repo-only, verified against prod.
+2. **Hypervisor + VM** (*Decisions 1, 2*) — DONE. `virsh list` shows a running guest; ssh reaches it. The egress fence landed here and was corrected twice; *Decision 2* carries both.
+3. **k3s + Longhorn + Traefik on the VM** (*Decision 3*) — DONE. `kubectl get nodes` is Ready; a PVC binds.
+4. **Inventory + staging secrets** (*Decision 5*) — DONE. `ansible -m ping` reaches `daniel-stage`; secrets decrypt.
+5. **First service deployed** (*Decisions 4, 6, 8*) — DONE. `freshrss` answers 200 through the staging VIP, serving `CN = TRAEFIK DEFAULT CERT`.
+6. **The rest of the subset** — `authelia`, `ical-proxy`, `node-exporter`. `traefik` landed in slice 5, which it had to precede.
 
 Phase C (pipeline gating) starts after 6 has run against real merges for long enough to know its
 false-failure rate.
