@@ -1,8 +1,8 @@
 """Every manifest the staging cluster deploys must have all its variables.
 
-Staging's secrets file holds one key by design (docs/staging-cluster.md, Decision 5), so a
-role added to `daniel-stage`'s `containers_list` can easily reference a credential that is
-simply not there. Ansible does not fail on that — an undefined variable inside a `stringData`
+Staging's secrets file is kept as small as the subset allows (docs/staging-cluster.md,
+Decision 5), so a role added to `daniel-stage`'s `containers_list` can easily reference a
+credential that is simply not there. Ansible does not fail on that — an undefined variable inside a `stringData`
 value templates as an empty string or the literal `AnsibleUndefined`, and the Secret applies.
 The workload then fails later, for a reason several steps removed from the missing variable.
 
@@ -87,6 +87,32 @@ def _base_context() -> dict:
         "playbook_dir": str(ANSIBLE),
     }
     return resolve_vars(base, base)
+
+
+def _supplied_by_the_inventory(role: str) -> set[str]:
+    """The names a staging deploy really resolves, which is NOT every key in the render context.
+
+    BASE_CONTEXT is deliberately excluded. It carries non-secret stand-ins so the STRUCTURAL
+    validator never aborts on a missing value, and two of its keys — `email` and `domain` —
+    stand in for entries that live in the SOPS file rather than the plaintext inventory. Reading
+    it as "supplied" made this guard report clean on `email`, which prod holds in secrets.yml and
+    staging did not hold at all: the deploy failed at `Render secret manifests for authelia` with
+    `'email' is undefined`, one task after the guard's whole corpus had passed.
+
+    `domain` does not need the same rescue only because staging's own secrets file carries it.
+
+    Built from the real sources rather than by subtracting BASE_CONTEXT from the render context:
+    four of its keys (`puid`, `pgid`, `tz`, `sys_user`) are ALSO in group_vars/all.yml, so
+    subtraction would drop names the inventory genuinely supplies and report them as gaps.
+    """
+    base = _base_context()
+    return (
+        set(load_yaml(ALL_VARS))
+        | set(load_yaml(_HOST_VARS))
+        | set(role_defaults(role, base))
+        | _staging_secret_keys()
+        | _SUPPLIED_BY_THE_RENDER
+    )
 
 
 def _staging_roles() -> list[str]:
@@ -256,14 +282,7 @@ def _facts_set_by_the_role(role: str) -> set[str]:
 
 def _unsupplied_names(role: str) -> dict[str, str]:
     """Sentinel values for every name the role's templates read that staging cannot supply."""
-    base = _base_context()
-    supplied = (
-        set(base)
-        | set(role_defaults(role, base))
-        | _staging_secret_keys()
-        | _SUPPLIED_BY_THE_RENDER
-        | _facts_set_by_the_role(role)
-    )
+    supplied = _supplied_by_the_inventory(role) | _facts_set_by_the_role(role)
     names: set[str] = set()
     # rglob, NOT glob: this repo's convention puts app config a manifest embeds via `lookup()`
     # one level down, in templates/config/ (the root CLAUDE.md says so, and eight roles have
@@ -311,13 +330,7 @@ def _names_read_by_the_tasks(role: str) -> set[str]:
 
 @pytest.mark.parametrize("role", _staging_roles())
 def test_staging_supplies_every_variable_the_tasks_file_reads(role: str) -> None:
-    base = _base_context()
-    supplied = (
-        set(base)
-        | set(role_defaults(role, base))
-        | _staging_secret_keys()
-        | _SUPPLIED_BY_THE_RENDER
-    )
+    supplied = _supplied_by_the_inventory(role)
     # Filter to the role's own namespace plus bare credential names: a tasks file also reads
     # Ansible builtins, filter names and dotted attributes, none of which are variables staging
     # supplies, and none of which this check can tell apart by shape alone.
@@ -329,6 +342,23 @@ def test_staging_supplies_every_variable_the_tasks_file_reads(role: str) -> None
     assert not missing, (
         f"{role}/tasks/main.yml reads {missing}, which {_HOST} cannot supply. Add the key to "
         f"{_STAGING_SECRETS.name}, or gate the task that reads it."
+    )
+
+
+def test_a_base_context_stand_in_is_not_read_as_supplied(monkeypatch) -> None:
+    """The rejecting half for the BASE_CONTEXT fix, driven through the real supplied set.
+
+    `email` is the name that proved it: BASE_CONTEXT carries a stand-in for it so the structural
+    validator does not abort, this guard read that as staging supplying it, and the deploy failed
+    at `Render secret manifests for authelia` with `'email' is undefined`. Staging's own secrets
+    file now carries it — so the assertion is on the MECHANISM, not on the name being absent:
+    a stand-in must not be what makes it supplied.
+    """
+    probe = "a_name_only_base_context_carries"
+    monkeypatch.setitem(BASE_CONTEXT, probe, "stand-in")
+    assert probe not in _supplied_by_the_inventory("authelia"), (
+        f"{probe} counts as supplied on {_HOST} because BASE_CONTEXT stands in for it, not "
+        f"because anything supplies it. That is the shape that let `email` through."
     )
 
 

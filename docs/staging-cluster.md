@@ -262,10 +262,10 @@ needed either — the preamble's `when: become_password is defined` skips cleanl
 `secrets-staging.yml` starts with `domain` alone, which is what the 93 service templates need,
 and grows when *Decision 6*'s subset lands.
 
-It has grown once, and the shape of that growth is the pattern to repeat. Authelia added five
+It has grown once, and the shape of that growth is the pattern to repeat. Authelia added six
 keys — `authelia_user`, `authelia_password`, `authelia_jwt`, `authelia_secret`,
-`authelia_storage` — and no more, because the three the OIDC provider block would need are
-gated out instead (*Decision 6*). **Prefer a per-cluster flag over a generated credential**: a
+`authelia_storage` and `email` — and no more, because the three the OIDC provider block would
+need are gated out instead (*Decision 6*). **Prefer a per-cluster flag over a generated credential**: a
 flag removes the configuration as well as the secret, where a fake value leaves dead config
 that can still fail at startup for a reason that is not a bug.
 
@@ -281,6 +281,12 @@ Two mechanics of editing this file, both of which cost a session time to redisco
   the file holds is the plaintext the hash is minted from, which is read by `tasks/main.yml`
   and by no template — a shape `test_staging_manifests_have_their_variables.py` was blind to
   until it grew a tasks-file scan.
+- **`email` is in the file because the guard cannot see that it is missing any other way.** It
+  is not a credential and prod keeps it in `secrets.yml`, which is why staging had no source
+  for it at all. `BASE_CONTEXT` in `scripts/lib/_render_guard.py` carries a stand-in so the
+  structural validator never aborts, and the guard read that stand-in as staging supplying the
+  name — so the check passed and the deploy failed one task later with `'email' is undefined`.
+  The guard now builds its supplied set from the real sources and never from `BASE_CONTEXT`.
 
 **Staging never holds a real credential.** A host whose stated purpose is being broken, and which
 Claude sessions are expected to experiment on, is the worst possible second copy of every
