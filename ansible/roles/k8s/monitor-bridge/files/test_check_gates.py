@@ -1447,17 +1447,13 @@ def test_etcd_drill_grace_is_derived_from_the_cron():
     )
 
 
-def test_etcd_drill_registration_waits_for_its_push_token():
-    """The reader is written and tested but NOT in CHECKS, and that is the correct order.
+def test_etcd_drill_is_registered_and_can_actually_push():
+    """Registration and the token must land together, and both now have.
 
-    `test_checks_and_env_secret_push_tokens_agree` requires every registered check's
-    KUMA_PUSH_* name to exist in env-secret.yaml.j2, which requires the SOPS token to exist.
-    Registering first would satisfy nothing useful: the check would push to an empty token
-    forever — present in the code, absent from the world.
-
-    This test is the reminder, not a prohibition. When the token lands, register the check and
-    replace this with the membership assertion; the pairing below is what keeps the two from
-    drifting apart in the meantime.
+    Asserting membership alone would pass for a check registered against a token nothing can
+    set — which pushes to nowhere forever, present in the code and absent from the world. So
+    this asserts the pair, in both directions: a later edit that drops either half fails here
+    rather than quietly producing a monitor that cannot page.
     """
     names = {name for name, _, _ in check.CHECKS}
     env_secret = (
@@ -1465,8 +1461,9 @@ def test_etcd_drill_registration_waits_for_its_push_token():
     ).read_text()
     registered = "etcd_restore_drill" in names
     tokened = "KUMA_PUSH_ETCD_DRILL" in env_secret
+    assert registered, "an unregistered check never runs; the reader would be dead code"
     assert registered == tokened, (
-        "register etcd_restore_drill in CHECKS and add KUMA_PUSH_ETCD_DRILL to "
-        "env-secret.yaml.j2 together — one without the other is either a check that cannot "
-        "page or a token nothing reads"
+        "etcd_restore_drill's CHECKS entry and its KUMA_PUSH_ETCD_DRILL env-secret key move "
+        "together — one without the other is either a check that cannot page or a token "
+        "nothing reads"
     )

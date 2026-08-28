@@ -2916,21 +2916,16 @@ CHECKS = [
     ),
     ("gitops_alive", _env("KUMA_PUSH_GITOPS_ALIVE", ""), check_gitops_alive),
     ("gitops_status", _env("KUMA_PUSH_GITOPS_STATUS", ""), check_gitops_status),
-    # DELIBERATELY NOT REGISTERED YET: check_etcd_restore_drill above is complete and tested,
-    # but registering it needs monitor_bridge_etcd_drill_push_token in secrets.yml, its
-    # KUMA_PUSH_ETCD_DRILL key (written unquoted here on purpose — see below) in
-    # env-secret.yaml.j2, and a tile in uptime-kuma/static-monitors.yaml.j2. That is a
-    # credential mint, which is operator-gated.
-    #
-    # test_checks_and_env_secret_push_tokens_agree forces that order and is RIGHT to: a check
-    # registered against a token nothing can set pushes to nowhere forever — a monitor that
-    # exists in the code and not in the world. Registering it early would have gone green while
-    # being unpageable.
-    #
-    # That test scans this file for QUOTED KUMA_PUSH_* literals, so the name above is left
-    # unquoted; quoting it in a comment is enough to fail the suite, which is the guard
-    # working rather than being pedantic. Register by adding an entry beside the gitops pair
-    # above, reading the same token name through _env with an empty default.
+    # Reads a stamp the drill writes weekly rather than a live source, so it is the same shape
+    # as the gitops pair above: a hostPath the pod is pinned to, read fail-closed. Its token was
+    # minted 2026-08-28, which is what let it be registered — test_checks_and_env_secret_push
+    # _tokens_agree blocks a check whose KUMA_PUSH_* name has no env-secret entry, correctly:
+    # such a check pushes to nowhere forever, present in the code and absent from the world.
+    (
+        "etcd_restore_drill",
+        _env("KUMA_PUSH_ETCD_DRILL", ""),
+        check_etcd_restore_drill,
+    ),
     ("scrutiny", _env("KUMA_PUSH_SCRUTINY", ""), check_scrutiny),
     ("ups", _env("KUMA_PUSH_UPS", ""), check_ups),
     ("pi_pressure", _env("KUMA_PUSH_PI", ""), check_pi_pressure),

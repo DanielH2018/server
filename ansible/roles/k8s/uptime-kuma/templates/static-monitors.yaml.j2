@@ -298,6 +298,12 @@ stringData:
     {"type": "push", "name": "GitOps Deploy — Alive", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_gitops_alive_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   gitops-deploy-status.json: |
     {"type": "push", "name": "GitOps Deploy — Status", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_gitops_status_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # Pushed every bridge cycle like its neighbours, so the standard 600s interval applies — the
+  # DRILL is weekly, but the CHECK reading its stamp runs every cycle, and it is the check that
+  # beats. The staleness window lives in check.py (ETCD_DRILL_MAX_AGE_S, 8 days derived from the
+  # cron); this interval is only the heartbeat that says the bridge is still evaluating it.
+  etcd-restore-drill.json: |
+    {"type": "push", "name": "etcd Restore Drill", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_etcd_drill_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Host flip 1 (2026-08-14): pushed once nightly by the k8s/pi-peer-backup CronJob
   # (23:30), not every bridge cycle — the window is 2.5 days (two missed runs + slack,
   # the same tolerance the retired pi_peers check applied). Same token.
