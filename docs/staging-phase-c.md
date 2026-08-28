@@ -141,6 +141,20 @@ deletes at 2 AM, and the deletion will not be reviewed. An extra-var or a marker
 the staging step for one tick, alerting loudly that it was used, is sufficient — the requirement
 is that using it is easy and *visible*, not that it is hard.
 
+**Staging can only be asked about the tip, and slice 4 has to answer for that.** The remote
+script fetches, then fast-forwards daniel-server to the SHA under test, and `deploy.sh` then
+refuses any tree behind `origin/master` (exit 4). So a merge landing anywhere in the window
+between the tick reading `origin` and the staging deploy finishing turns a perfectly good
+change into NO VERDICT. Observed 2026-08-28 on the first hand-run of the gate: `720cb6b0` was
+master's tip when the run started, `#567` merged while it deployed, and the gate returned exit
+2 — correctly, since `deploy.sh` had exit 4 and slice 1's `classify()` maps that to NO VERDICT
+rather than a rejection.
+
+Advisory mode absorbs this: the alert says NO VERDICT and prod deploys anyway. Blocking mode
+cannot, and neither obvious answer is acceptable — treating it as a block parks prod behind an
+unrelated merge, and treating it as a pass makes any concurrent merge a way through the gate.
+Slice 4 therefore needs a third path: re-ask at the new tip, once, and only then decide.
+
 ---
 
 ## Decision 5 — the window

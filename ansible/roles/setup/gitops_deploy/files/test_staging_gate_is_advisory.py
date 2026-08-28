@@ -27,11 +27,40 @@ _SRC = pathlib.Path(__file__).with_name("gitops_deploy.py")
 _TREE = ast.parse(_SRC.read_text())
 
 
-def _fn(name: str) -> ast.FunctionDef:
-    for node in ast.walk(_TREE):
+def _fn(name: str, tree: ast.AST = _TREE) -> ast.FunctionDef:
+    for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef) and node.name == name:
             return node
     raise AssertionError(f"{name}() is gone from gitops_deploy.py")
+
+
+def sys_executable_launches(fn: ast.FunctionDef) -> list[str]:
+    """The staging scripts this function starts with `sys.executable`.
+
+    The verdict both halves of the red-proof below share. Under this unit's
+    `uv run --no-project` ExecStart, `sys.executable` is whatever venv sits in
+    WorkingDirectory rather than the repo's pinned env — see _UV_PYTHON in gitops_deploy.py.
+    """
+    launched = []
+    for node in ast.walk(fn):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "run"
+            and node.args
+            and isinstance(node.args[0], ast.List)
+            and node.args[0].elts
+        ):
+            continue
+        head = node.args[0].elts[0]
+        if (
+            isinstance(head, ast.Attribute)
+            and head.attr == "executable"
+            and isinstance(head.value, ast.Name)
+            and head.value.id == "sys"
+        ):
+            launched.append(ast.unparse(node.args[0]))
+    return launched
 
 
 def test_consult_staging_returns_no_verdict() -> None:
@@ -123,6 +152,36 @@ def test_main_calls_the_gate_as_a_bare_statement_before_deploying_prod() -> None
     assert gate_line < deploy_line, (
         f"consult_staging is called at line {gate_line}, after deploy_k8s at {deploy_line} — "
         f"a gate consulted after the deploy gates nothing."
+    )
+
+
+def test_the_staging_scripts_run_under_the_repos_pinned_env() -> None:
+    """Both scripts import yaml and jinja2, so the interpreter has to carry the repo's deps.
+
+    `sys.executable` does not, reliably: this unit's ExecStart is `uv run --no-project`, which
+    never creates or syncs a venv, so `sys.executable` is whichever venv happens to sit in
+    WorkingDirectory. A missing or unsynced one makes staging_expectations.py die at import
+    with exit 1 — indistinguishable from a genuine expectation mismatch, so
+    staging_verdict_summary reports REJECTED. Staging would then reject every gated tick for a
+    reason that has nothing to do with the change, which is precisely the false-failure this
+    slice is supposed to be measuring rather than manufacturing.
+    """
+    offenders = sys_executable_launches(_fn("consult_staging"))
+    assert not offenders, (
+        f"consult_staging starts {offenders} with sys.executable — use _UV_PYTHON, the same "
+        f"pinned env deploy_k8s runs ansible-playbook in."
+    )
+
+
+def test_the_pinned_env_check_rejects_a_sys_executable_launch() -> None:
+    """The rejecting half: the pre-fix call shape, verbatim, must fail the check above."""
+    before_the_fix = ast.parse(
+        "def consult_staging(services, origin):\n"
+        "    subprocess.run([sys.executable, STAGING_EXPECT_SCRIPT], check=False)\n"
+    )
+    assert sys_executable_launches(_fn("consult_staging", before_the_fix)), (
+        "the check no longer sees a sys.executable launch, so it would pass whatever "
+        "consult_staging does — it has stopped being a check."
     )
 
 
