@@ -468,7 +468,11 @@ false-failure rate.
 
 ## Open questions for Phase C, recorded now
 
-Not decisions for this spec — recorded so Phase C does not rediscover them.
+Answered, or at least given a recommendation, in [staging-phase-c.md](staging-phase-c.md) —
+drafted 2026-08-28, not started. The three below are kept here because they are what that
+document had to resolve, and because it added a fourth the spike had not surfaced: **the
+deployer runs on daniel-box and staging is reachable only from daniel-server**, so gating cannot
+be a step added to `main()`.
 
 - What counts as a staging pass. `probe.py health` per service is the obvious gate and now
   covers Deployments and DaemonSets, but the pass criteria for a whole-cluster deploy is a
