@@ -25,9 +25,10 @@ from pathlib import PurePosixPath
 
 from _helpers import REPO
 
-# pytest's default `python_files`. This repo sets no override, and every tracked test uses the
-# `test_*.py` form — the `*_test.py` form matches nothing today. Widen this the day one appears.
-_TEST_FILE_GLOB = "test_*.py"
+# pytest's default `python_files`, both forms. Deriving the notion of "a test file" from a
+# hand-kept single glob would reproduce, inside this guard, the enumeration failure it exists
+# to catch: a `foo_test.py` outside testpaths would be invisible to pytest AND to this check.
+_TEST_FILE_GLOBS = ("test_*.py", "*_test.py")
 
 
 def _testpaths() -> list[str]:
@@ -55,7 +56,7 @@ def _tracked_test_files() -> list[str]:
     return sorted(
         rel
         for rel in listed.split("\0")
-        if rel and PurePosixPath(rel).match(_TEST_FILE_GLOB)
+        if rel and any(PurePosixPath(rel).match(g) for g in _TEST_FILE_GLOBS)
     )
 
 
