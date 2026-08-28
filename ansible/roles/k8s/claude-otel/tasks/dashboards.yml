@@ -89,6 +89,46 @@
   become: true
   register: claude_otel_dashboards_staged
 
+# `copy` with a directory source never deletes anything at the destination, so a dashboard removed
+# or RENAMED in the repo leaves its old file here forever — and the ConfigMap below is built
+# `--from-file` this tree, so the retired board keeps being provisioned. Exactly the failure the
+# vendored-manifest task above already describes: dropping a file from the source "only stops it
+# being RE-RENDERED".
+#
+# `backups.json` was renamed to `backups-b2-usage.json` and the original survived here, so BOTH
+# were live. Retiring the renamed file on 2026-08-28 left the original still provisioning the
+# identical dead board, with every repo-side check green.
+- name: Find the staged dashboards that no longer exist in the role
+  tags: [config]
+  ansible.builtin.find:
+    paths: "/etc/rancher/k3s/dashboards/{{ item }}"
+    patterns: "*.json"
+  loop: "{{ claude_otel_dashboard_folders }}"
+  become: true
+  changed_when: false
+  register: claude_otel_staged_found
+
+- name: Build the staged paths the role's own files justify
+  tags: [config]
+  ansible.builtin.set_fact:
+    claude_otel_valid_staged: >-
+      {{ claude_otel_valid_staged | default([]) + (
+         lookup('ansible.builtin.fileglob', role_path ~ '/files/dashboards/' ~ item ~ '/*.json', wantlist=True)
+         | map('basename')
+         | map('regex_replace', '^', '/etc/rancher/k3s/dashboards/' ~ item ~ '/')
+         | list) }}
+  loop: "{{ claude_otel_dashboard_folders }}"
+
+- name: Remove staged dashboards with no file behind them
+  tags: [config]
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: >-
+    {{ claude_otel_staged_found.results | map(attribute='files') | flatten
+       | map(attribute='path') | difference(claude_otel_valid_staged) }}
+  become: true
+
 # Grafana has no global annotation setting — the query lives in each dashboard's own JSON, and
 # all of these ship an empty annotations list. Injecting here covers every board, present and
 # future, from one place instead of sixteen hand-edits that would drift.
@@ -113,6 +153,31 @@
   # tree and the manifest write after it carries the real changed verdict, exactly as it did
   # before this task existed.
   changed_when: false
+
+# The injector writes a file per input and never removes one, so the annotated tree needs the same
+# prune as the staged tree it derives from — otherwise pruning only the staged copy moves the stale
+# file one hop down the chain and the ConfigMap, built from THIS directory, is unchanged.
+- name: Find the annotated dashboards that no longer have a staged source
+  tags: [config]
+  ansible.builtin.find:
+    paths: "/etc/rancher/k3s/dashboards-annotated/{{ item }}"
+    patterns: "*.json"
+  loop: "{{ claude_otel_dashboard_folders }}"
+  become: true
+  changed_when: false
+  register: claude_otel_annotated_found
+
+- name: Remove annotated dashboards with no staged source
+  tags: [config]
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: >-
+    {{ claude_otel_annotated_found.results | map(attribute='files') | flatten
+       | map(attribute='path')
+       | difference(claude_otel_valid_staged
+                    | map('regex_replace', '/dashboards/', '/dashboards-annotated/') | list) }}
+  become: true
 
 - name: Build a ConfigMap manifest per dashboard folder
   tags: [config]
@@ -163,17 +228,17 @@
   changed_when: claude_otel_dashboard_manifests is changed
 
 # ── prune keys the apply above cannot remove ──────────────────────────────────────────────────
-# Server-side apply removes a field only when the SAME field manager previously owned it. These
-# ConfigMaps predate the switch to SSA, so a key written by the old client-side apply is owned by
-# `kubectl-client-side-apply` and survives every run of the task above, whatever the source tree
-# says. Deleting a dashboard JSON therefore removes it from the repo and from the generated
-# manifest while Grafana goes on serving it from the live object.
+# A BACKSTOP, not the fix. The stale `backups.json` key was caused by the two derived trees never
+# being pruned (see the two prune pairs above) — the ConfigMap was rebuilt `--from-file` a directory
+# that still held the file, so the key was regenerated legitimately every run. This task was written
+# first on the theory that server-side apply could not drop a key owned by the old
+# `kubectl-client-side-apply` manager; that theory was wrong, and this task was inert on its own,
+# skipping because the live keys and the annotated tree agreed with each other.
 #
-# Not hypothetical. `backups.json` was renamed to `backups-b2-usage.json` and BOTH keys stayed
-# live until 2026-08-28. Retiring the renamed file left the original provisioning the identical
-# dead board — three panels querying `kopia_b2_billable_bytes`, a gauge with no writer since kopia
-# retired 2026-08-13. Every repo-side check read green throughout, because from the repo's point
-# of view the board was already gone.
+# It earns its place anyway: SSA prunes a field only when the same manager owns it, so if a key ever
+# IS orphaned — a hand-applied board, a manager change — the tree prunes above cannot see it, since
+# they only compare files to files. Keeping it means the two failure modes have one owner each
+# rather than a shared assumption. It writes nothing when the sets agree, which is the normal case.
 - name: Read the live dashboard ConfigMap keys
   tags: [deploy]
   ansible.builtin.command:
