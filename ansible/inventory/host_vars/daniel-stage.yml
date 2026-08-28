@@ -181,15 +181,16 @@ freshrss_k8s_manage_seed: false
 # outranks every role's own declaration. That breadth is intended — every reason below is a
 # property of the cluster, not of freshrss.
 #
-# DECIDED 2026-08-28. Three reasons, and the first is the one that forces it:
+# DECIDED 2026-08-28. Reasons 2 and 3 are what hold it now — reason 1 forced the original
+# decision and has since been fixed, so the list stays empty by choice rather than by blocker:
 #
-# 1. k8s/volume-snapshot resolves the deploy tag with `git rev-parse` and `chdir` into
-#    `{{ playbook_dir }}/..` — ON THE TARGET. daniel-box is `connection=local` in hosts.ini so
-#    the checkout is right there; daniel-stage is a genuinely remote host with no checkout, and
-#    the task fails with "Unable to change directory before execution". That is a latent bug in
-#    a shared role with 13 callers, not a staging quirk, and it is not fixed here: the SHA is a
-#    property of the CONTROLLER's checkout, so the fix is `delegate_to: localhost`, in its own
-#    change with its own red-proof.
+# 1. FIXED 2026-08-28, and no longer a reason to keep this empty — recorded because it was the
+#    reason that forced the decision. k8s/volume-snapshot resolved the deploy tag with `git
+#    rev-parse` and `chdir` into `{{ playbook_dir }}/..` ON THE TARGET, which worked only
+#    because hosts.ini pins both cluster nodes to `connection=local`. daniel-stage is a
+#    genuinely remote host with no checkout, so the task failed with "Unable to change
+#    directory before execution" — a latent bug in a shared role with 13 callers rather than a
+#    staging quirk. The task now carries `delegate_to: localhost`.
 # 2. The snapshot is taken BEFORE the apply, and on this cluster `pvc.yaml` is what creates
 #    the claim — so at snapshot time the volume does not exist yet.
 # 3. It would protect nothing anyway. The role exists to make a bad image bump reversible on a
