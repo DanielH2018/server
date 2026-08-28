@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/gen_reference_secrets.py
-generated_at: 2026-08-28 06:17 UTC
-generated_sha: eb6d0cd2
+generated_at: 2026-08-28 18:17 UTC
+generated_sha: 52332157
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: eb6d0cd2
 
 # Secrets
 
-144 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
+145 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
 
 !!! note "Names and dates only"
     This page is generated from the plaintext rotation registry. No secret VALUE is read here, and the generator never opens the encrypted store or invokes the decryption tool — a test enforces that.
@@ -146,6 +146,7 @@ rotated unattended by the weekly secret-rotate cron.
 | `monitor_bridge_cpu_push_token` | 2026-08-10 | 2027-02-06 | 162 |
 | `monitor_bridge_discord_push_token` | 2026-08-10 | 2027-02-06 | 162 |
 | `monitor_bridge_disk_push_token` | 2026-08-10 | 2027-02-06 | 162 |
+| `monitor_bridge_etcd_drill_push_token` | 2026-04-28 | 2026-10-25 | 58 |
 | `monitor_bridge_fake_remux_push_token` | 2026-08-10 | 2027-02-06 | 162 |
 | `monitor_bridge_fake_remux_replace_push_token` | 2026-08-10 | 2027-02-06 | 162 |
 | `monitor_bridge_gitops_alive_push_token` | 2026-08-10 | 2027-02-06 | 162 |

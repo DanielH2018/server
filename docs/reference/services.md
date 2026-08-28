@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-08-27 06:17 UTC
-generated_sha: 13875626
+generated_at: 2026-08-28 18:17 UTC
+generated_sha: 52332157
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 13875626
 
 # Services
 
-61 service(s) declared across 2 host(s).
+65 service(s) declared across 3 host(s).
 
 
 ## daniel-box
@@ -90,6 +90,17 @@ generated_sha: 13875626
 | promtail | docker | LAN-direct (no Traefik route) | none (public/no-auth) | n/a (Docker/Pi, not Longhorn-backed) | n/a (host has no GitOps auto-deploy path) |
 | wg-easy | docker | LAN-direct (no Traefik route) | none (public/no-auth) | n/a (Docker/Pi, not Longhorn-backed) | n/a (host has no GitOps auto-deploy path) |
 
+## daniel-stage
+
+4 service(s).
+
+| Service | Platform | Route | Auth | Backup tier | Auto-deploy |
+|---|---|---|---|---|---|
+| authelia | k8s | <span class="fqdn" data-host="auth">auth.&lt;domain&gt;</span> · <span class="fqdn" data-host="auth.local">auth.local.&lt;domain&gt;</span> | none (public/no-auth) | daily -> R2 | denylisted (platform — SSO/OIDC gate; a failed deploy locks out access to everything behind it, including the tools to fix it) |
+| freshrss | k8s | <span class="fqdn" data-host="freshrss">freshrss.&lt;domain&gt;</span> · <span class="fqdn" data-host="freshrss.local">freshrss.local.&lt;domain&gt;</span> | Authelia | weekly -> B2 (default target) | eligible |
+| node-exporter | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
+| traefik | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | daily -> R2 | denylisted (platform — ingress edge; a failed deploy removes the ability to reach or fix anything else, and host probes stay green through that kind of outage. COUPLING NOTE for a future promotion: the traefik-acme PVC holds the ACME account key and issued certs; reverting past a real rotation reinstates stale cert state) |
+
 ## Underivable facts
 
-20 field(s) read `unknown`. A fact with no machine-readable source prints its reason rather than a guess — see the FIELD NOTES section of `scripts/docs/service_catalog.py` for which facts those are and why.
+22 field(s) read `unknown`. A fact with no machine-readable source prints its reason rather than a guess — see the FIELD NOTES section of `scripts/docs/service_catalog.py` for which facts those are and why.

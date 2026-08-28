@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/gen_reference_networking.py
-generated_at: 2026-08-27 06:17 UTC
-generated_sha: 13875626
+generated_at: 2026-08-28 18:17 UTC
+generated_sha: 52332157
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,13 +12,13 @@ generated_sha: 13875626
 
 # Networking
 
-34 routed k8s service(s).
+37 routed k8s service(s).
 
 !!! note "The domain is filled in by your browser"
     `domain` is SOPS-sourced with no static default, and these pages are rendered by static parsing, so the generator writes `<domain>` rather than guessing. On the docs site the routes below become links, built from the domain of the URL you are reading this on — so you get LAN links on the LAN name and public links on the public one.
 
 
-4 route(s) are LAN-only, and the rest answer on both names. The absent Host rule is what keeps a LAN-only route off the internet, not DNS — the Cloudflare wildcard resolves any name.
+5 route(s) are LAN-only, and the rest answer on both names. The absent Host rule is what keeps a LAN-only route off the internet, not DNS — the Cloudflare wildcard resolves any name.
 
 
 ## Routes
@@ -27,6 +27,7 @@ generated_sha: 13875626
 |---|---|---|---|---|
 | artifacts | daniel-box | <span class="fqdn" data-host="artifacts">artifacts.&lt;domain&gt;</span> · <span class="fqdn" data-host="artifacts.local">artifacts.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | authelia | daniel-box | <span class="fqdn" data-host="auth">auth.&lt;domain&gt;</span> · <span class="fqdn" data-host="auth.local">auth.local.&lt;domain&gt;</span> | LAN + public | `rate-limit` |
+| authelia | daniel-stage | <span class="fqdn" data-host="auth">auth.&lt;domain&gt;</span> · <span class="fqdn" data-host="auth.local">auth.local.&lt;domain&gt;</span> | LAN + public | `rate-limit` |
 | bazarr | daniel-box | <span class="fqdn" data-host="bazarr">bazarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="bazarr.local">bazarr.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | bento-pdf | daniel-box | <span class="fqdn" data-host="bento-pdf">bento-pdf.&lt;domain&gt;</span> · <span class="fqdn" data-host="bento-pdf.local">bento-pdf.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | claude-otel | daniel-box | <span class="fqdn" data-host="grafana">grafana.&lt;domain&gt;</span> · <span class="fqdn" data-host="grafana.local">grafana.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
@@ -34,6 +35,7 @@ generated_sha: 13875626
 | crowdsec | daniel-box | <span class="fqdn" data-host="crowdsec-lapi.local">crowdsec-lapi.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit` |
 | docs | daniel-box | <span class="fqdn" data-host="docs.local">docs.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit`, `authelia` |
 | freshrss | daniel-box | <span class="fqdn" data-host="freshrss">freshrss.&lt;domain&gt;</span> · <span class="fqdn" data-host="freshrss.local">freshrss.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
+| freshrss | daniel-stage | <span class="fqdn" data-host="freshrss">freshrss.&lt;domain&gt;</span> · <span class="fqdn" data-host="freshrss.local">freshrss.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | headlamp | daniel-box | <span class="fqdn" data-host="headlamp">headlamp.&lt;domain&gt;</span> · <span class="fqdn" data-host="headlamp.local">headlamp.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | healthchecks | daniel-box | <span class="fqdn" data-host="healthchecks">healthchecks.&lt;domain&gt;</span> · <span class="fqdn" data-host="healthchecks.local">healthchecks.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | home-assistant | daniel-box | <span class="fqdn" data-host="home-assistant">home-assistant.&lt;domain&gt;</span> · <span class="fqdn" data-host="home-assistant.local">home-assistant.local.&lt;domain&gt;</span> | LAN + public | `rate-limit` |
@@ -56,6 +58,7 @@ generated_sha: 13875626
 | tdarr | daniel-box | <span class="fqdn" data-host="tdarr">tdarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="tdarr.local">tdarr.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | texbrain | daniel-box | <span class="fqdn" data-host="texbrain">texbrain.&lt;domain&gt;</span> · <span class="fqdn" data-host="texbrain.local">texbrain.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | traefik | daniel-box | <span class="fqdn" data-host="traefik.local">traefik.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit` |
+| traefik | daniel-stage | <span class="fqdn" data-host="traefik.local">traefik.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit` |
 | uptime-kuma | daniel-box | <span class="fqdn" data-host="uptime-kuma">uptime-kuma.&lt;domain&gt;</span> · <span class="fqdn" data-host="uptime-kuma.local">uptime-kuma.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | wg-easy | daniel-box | <span class="fqdn" data-host="wg-easy">wg-easy.&lt;domain&gt;</span> · <span class="fqdn" data-host="wg-easy.local">wg-easy.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | zigbee2mqtt | daniel-box | <span class="fqdn" data-host="zigbee2mqtt">zigbee2mqtt.&lt;domain&gt;</span> · <span class="fqdn" data-host="zigbee2mqtt.local">zigbee2mqtt.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |

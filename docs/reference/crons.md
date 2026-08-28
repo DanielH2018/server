@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/gen_reference_crons.py
-generated_at: 2026-08-28 06:17 UTC
-generated_sha: eb6d0cd2
+generated_at: 2026-08-28 18:17 UTC
+generated_sha: 52332157
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: eb6d0cd2
 
 # Scheduled jobs
 
-35 cron entrie(s) installed across the roles.
+36 cron entrie(s) installed across the roles.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a cron task declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
@@ -48,6 +48,7 @@ generated_sha: eb6d0cd2
 | Weekly system restart | `30 7 * * 0` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | configarr sync health | `{{ configarr_k8s_health_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/k8s/configarr/tasks/main.yml` |
 | daniel-box disk health | `{{ k3s_disk_health_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
+| etcd restore drill | `{{ k3s_etcd_restore_drill_cron.split()[0] }} {{ k3s_etcd_restore_drill_cron.split()[1] }} * * {{ k3s_etcd_restore_drill_cron.split()[4] }}` | every host in the play | `root` | yes (backup) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | fake-remux health | `{{ fake_remux_health_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/setup/fake_remux/tasks/main.yml` |
 | fake-remux reconcile | `{{ fake_remux_replace_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | no (read-only by its command) | `ansible/roles/setup/fake_remux/tasks/main.yml` |
 | fake-remux scan | `{{ fake_remux_scan_cron_minute }} {{ fake_remux_scan_cron_hour }} * * *` | every host in the play | `{{ sys_user }}` | no (read-only by its command) | `ansible/roles/setup/fake_remux/tasks/main.yml` |
