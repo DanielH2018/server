@@ -45,6 +45,10 @@
            address is therefore a property of the repo rather than of lease order. -->
       <mac address='{{ staging_vm_mac }}'/>
       <model type='virtio'/>
+      <!-- The egress fence. libvirt applies a filter when the interface is CREATED, so
+           adding this line reaches a running guest only after the domain is stopped and
+           started — which guest.yml does when it finds a live interface without it. -->
+      <filterref filter='{{ hypervisor_staging_nwfilter_name }}'/>
     </interface>
     <!-- Serial console only. There is no graphics device on purpose: nothing should need a
          framebuffer to reach this guest, and `virsh console` is the recovery path when ssh

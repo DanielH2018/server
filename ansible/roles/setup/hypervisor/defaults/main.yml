@@ -37,6 +37,9 @@ hypervisor_net_source_dir: /etc/libvirt/declared-networks
 # ENFORCED by ansible/tests/test_staging_network.py, which re-checks the overlap.
 hypervisor_staging_net_name: staging
 hypervisor_staging_net_bridge: virbr-stage
+# The egress fence attached to the guest's interface. Named rather than inlined because two
+# places must agree on the string: the filter definition and the domain's <filterref>.
+hypervisor_staging_nwfilter_name: staging-egress-fence
 hypervisor_staging_net_gateway: 192.168.140.1
 hypervisor_staging_net_netmask: 255.255.255.0
 # The dynamic range deliberately excludes staging_vm_ip, which is a reservation.
