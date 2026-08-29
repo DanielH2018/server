@@ -37,7 +37,11 @@ sys.path.insert(
     ),
 )
 
-from deploy_logic import expand_build_couplings  # noqa: E402 — needs the path insert above
+from deploy_logic import (  # noqa: E402 — needs the path insert above
+    broad_remediation,
+    expand_build_couplings,
+    services_from_changed_paths,
+)
 
 _K8S = re.compile(r"^ansible/roles/k8s/([^/]+)/")
 _DOCKER = re.compile(r"^ansible/roles/containers/([^/]+)/")
@@ -56,6 +60,25 @@ def tag_for(path: str) -> str | None:
         if m and m.group(1) not in _NOT_SERVICES:
             return m.group(1)
     return None
+
+
+def plane_note(files) -> str:
+    """What this PR still needs a HUMAN to apply, or "" if nothing.
+
+    A deploy tag covers roles/k8s and roles/containers. It does not cover the setup plane,
+    which `deploy.yml` cannot apply at all -- so a PR touching only roles/setup derives zero
+    tags and land.sh used to call that `nothing-to-deploy`. True about service tags, silent
+    about the operator: PR #587 needed `initial_setup.yml --tags gitops_deploy` and was
+    reported as needing nothing (2026-08-29).
+
+    Returned for the tag-carrying case too. A PR can touch a k8s role AND the setup plane,
+    where the deploy genuinely succeeds and half the change is still unapplied -- the harder
+    version of the same silence, because the verdict reads `settled`.
+    """
+    cs = services_from_changed_paths(list(files))
+    if not (cs.broad_setup or cs.broad_deploy):
+        return ""
+    return broad_remediation(cs.broad_deploy, cs.broad_setup)
 
 
 def derive(files, changed_files: int) -> tuple[list[str], str]:
@@ -79,8 +102,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--json", required=True, help="`gh pr view --json files,changedFiles` output"
     )
+    parser.add_argument(
+        "--plane",
+        action="store_true",
+        help="print what still needs a manual apply (empty if nothing), not the tags",
+    )
     ns = parser.parse_args(argv)
     payload = json.loads(ns.json)
+    if ns.plane:
+        print(plane_note([f["path"] for f in payload.get("files", [])]))
+        return 0
     tags, source = derive(
         [f["path"] for f in payload.get("files", [])],
         # -1 rather than 0: `gh` omitting the field must not be read as agreement with an

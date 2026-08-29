@@ -26,8 +26,9 @@
 #   75  gave up waiting — the CI budget elapsed, or the deploy lock stayed busy
 #
 # Verdicts printed on stdout: settled | unhealthy | deploy-failed | nothing-to-deploy |
-# blocked. `blocked` is not a failure of this PR — something else in the incoming range needs
-# an operator, and nothing was deployed.
+# blocked | needs-manual-apply. `blocked` is not a failure of this PR — something else in the
+# incoming range needs an operator, and nothing was deployed. `needs-manual-apply` means this
+# PR reaches a plane no deploy tag covers (the setup plane), so it is landed but not live.
 set -uo pipefail
 
 PR=''
@@ -126,8 +127,16 @@ case "$tick_rc" in
 esac
 
 echo "== 5/6  deploying what the tick deferred"
+PLANE=''
 if [ -z "$TAGS" ]; then
   pr_json=$(gh pr view "$PR" --json files,changedFiles) || die "could not read PR files" 1
+  # What a deploy tag cannot reach. deploy.yml is a containers_list loop, so a setup-plane
+  # change needs initial_setup.yml and derives no tag at all — which land.sh used to report
+  # as nothing-to-deploy. Computed whether or not tags were derived: a PR can touch a k8s
+  # role AND the setup plane, and then the deploy succeeds while half the change is
+  # unapplied, under a `settled` verdict.
+  PLANE=$(uv run python scripts/deploy_tools/land_tags.py --plane --json "$pr_json") ||
+    die "plane classification failed" 1
   derived=$(uv run python scripts/deploy_tools/land_tags.py --json "$pr_json") ||
     die "tag derivation failed" 1
   source_kind=${derived%% *}
@@ -152,6 +161,11 @@ if [ -z "$TAGS" ]; then
 fi
 
 if [ -z "$TAGS" ]; then
+  if [ -n "$PLANE" ]; then
+    echo "  it needs applying by hand: $PLANE"
+    echo "VERDICT: needs-manual-apply (PR #$PR reaches no service tag, but is not done)"
+    exit 1
+  fi
   echo "VERDICT: nothing-to-deploy (PR #$PR touched no service)"
   exit 0
 fi
@@ -212,7 +226,15 @@ uv run python scripts/deploy_tools/deploy_detach_notify.py \
   --status 0 --log /dev/null --tags "$TAGS" --no-post
 verdict_rc=$?
 
+if [ -n "$PLANE" ]; then
+  echo "  STILL UNAPPLIED, and no deploy tag covers it: $PLANE"
+fi
+
 if [ "$verdict_rc" -eq 0 ]; then
+  if [ -n "$PLANE" ]; then
+    echo "VERDICT: needs-manual-apply (PR #$PR, $MERGE_SHA — services deployed, setup plane not)"
+    exit 1
+  fi
   echo "VERDICT: settled (PR #$PR, $MERGE_SHA, tags: $TAGS)"
   exit 0
 fi
