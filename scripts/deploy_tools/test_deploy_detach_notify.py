@@ -189,3 +189,43 @@ def test_main_parses_empty_tags_to_empty_list(monkeypatch):
     monkeypatch.setattr(notify_mod, "notify", lambda content: None)
     notify_mod.main(["--status", "0", "--log", "/tmp/x.log"])
     assert captured["tags"] == []
+
+
+def test_no_post_prints_the_verdict_without_notifying(monkeypatch, capsys, tmp_path):
+    """land.sh reuses this verdict but returns it to the session, not to Discord.
+    Posting from both paths would split one verdict across two channels."""
+    posted = []
+    monkeypatch.setattr(notify_mod, "notify", lambda c: posted.append(c))
+    monkeypatch.setattr(notify_mod, "gate", lambda tags, ok: (True, ["sonarr: ok"]))
+    log = tmp_path / "deploy.log"
+    log.write_text("")
+    rc = notify_mod.main(
+        ["--status", "0", "--log", str(log), "--tags", "sonarr", "--no-post"]
+    )
+    assert rc == 0
+    assert posted == [], "--no-post must not reach Discord"
+    assert "sonarr: ok" in capsys.readouterr().out
+
+
+def test_without_no_post_the_verdict_is_notified(monkeypatch, capsys, tmp_path):
+    """The reject half. Without it a --no-post that silently disabled ALL posting would
+    pass the test above, and every automated deploy outcome would stop reporting."""
+    posted = []
+    monkeypatch.setattr(notify_mod, "notify", lambda c: posted.append(c))
+    monkeypatch.setattr(notify_mod, "gate", lambda tags, ok: (True, ["sonarr: ok"]))
+    log = tmp_path / "deploy.log"
+    log.write_text("")
+    notify_mod.main(["--status", "0", "--log", str(log), "--tags", "sonarr"])
+    assert len(posted) == 1
+
+
+def test_no_post_still_reports_an_unhealthy_verdict(monkeypatch, tmp_path):
+    """The flag changes the destination, never the verdict."""
+    monkeypatch.setattr(notify_mod, "notify", lambda c: None)
+    monkeypatch.setattr(notify_mod, "gate", lambda tags, ok: (False, ["sonarr: down"]))
+    log = tmp_path / "deploy.log"
+    log.write_text("")
+    rc = notify_mod.main(
+        ["--status", "0", "--log", str(log), "--tags", "sonarr", "--no-post"]
+    )
+    assert rc == 1

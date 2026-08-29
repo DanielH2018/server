@@ -12,6 +12,7 @@ from deploy_logic import (
     services_from_changed_paths,
     broad_remediation,
     deferred_service_alerts,
+    setup_tags_for,
 )
 
 
@@ -542,3 +543,74 @@ def test_config_change_with_compose_change_dedupes_to_one_service():
         ]
     )
     assert cs.services == {"traefik"}
+
+
+# --- broad three-way split -------------------------------------------------------------
+#
+# `broad` used to mean one thing: defer and alert. It now splits into what the deployer
+# applies itself and what it must never touch, so every case below states which side it
+# lands on. The manual set is the load-bearing half -- applying this deployer's OWN role
+# runs a playbook whose handler restarts the unit executing the tick.
+
+BROAD_AUTO_SETUP = ["ansible/roles/setup/renovate_notify/tasks/main.yml"]
+BROAD_MANUAL_SELF = ["ansible/roles/setup/gitops_deploy/files/gitops_deploy.py"]
+BROAD_MANUAL_BRINGUP = ["ansible/k3s-bringup.yml"]
+BROAD_AUTO_DEPLOY = ["ansible/templates/traefik.yml.j2"]
+
+
+def test_ordinary_setup_role_is_clean_for_auto_apply():
+    cs = services_from_changed_paths(BROAD_AUTO_SETUP)
+    assert cs.broad and cs.broad_setup
+    assert not cs.broad_manual
+    assert setup_tags_for(BROAD_AUTO_SETUP) == {"renovate_notify"}
+
+
+def test_the_deployers_own_role_is_flagged_manual():
+    """Applying roles/setup/gitops_deploy/ runs a playbook whose handler restarts the unit
+    currently executing the tick. That is a self-modification defect, not a risk
+    trade-off: the run is SIGTERMed partway and the state it leaves is undefined."""
+    cs = services_from_changed_paths(BROAD_MANUAL_SELF)
+    assert cs.broad and cs.broad_manual
+
+
+def test_bringup_playbooks_are_flagged_manual():
+    cs = services_from_changed_paths(BROAD_MANUAL_BRINGUP)
+    assert cs.broad and cs.broad_manual
+
+
+def test_shared_template_is_clean_for_auto_apply():
+    cs = services_from_changed_paths(BROAD_AUTO_DEPLOY)
+    assert cs.broad and cs.broad_deploy
+    assert not cs.broad_manual
+
+
+def test_a_manual_path_bundled_with_an_auto_one_stays_manual():
+    """Mixed pushes must not half-apply: the manual arm wins over the whole tick."""
+    cs = services_from_changed_paths(BROAD_AUTO_SETUP + BROAD_MANUAL_SELF)
+    assert cs.broad_manual
+
+
+def test_setup_tag_derivation_rejects_a_playbook_path():
+    """An empty set means "cannot be applied automatically". Returning a bogus tag would
+    be worse than nothing: `--tags` matching nothing makes Ansible exit 0, so the deployer
+    would report a successful apply having done nothing at all."""
+    assert setup_tags_for(["ansible/bootstrap.yml"]) == set()
+
+
+def test_requirements_yml_derives_the_collections_tag():
+    assert setup_tags_for(["ansible/requirements.yml"]) == {"collections"}
+
+
+def test_setup_tag_derivation_skips_the_manual_set():
+    assert setup_tags_for(BROAD_MANUAL_SELF) == set()
+
+
+def test_broad_stays_true_for_every_split_arm():
+    """`broad` keeps its old meaning so every existing consumer is unchanged."""
+    for paths in (
+        BROAD_AUTO_SETUP,
+        BROAD_MANUAL_SELF,
+        BROAD_MANUAL_BRINGUP,
+        BROAD_AUTO_DEPLOY,
+    ):
+        assert services_from_changed_paths(paths).broad is True

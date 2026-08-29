@@ -54,41 +54,59 @@ pending, never green.
 
 **The tree is dirty.** Someone left uncommitted changes in the primary checkout.
 
-**A broad change.** This is the one that surprises people, so it has its own section.
+**A broad change the deployer must not apply itself.** This is the one that surprises people,
+so it has its own section.
 
-## The broad-change deferral
+## Broad changes
 
-A change under a **broad prefix** makes the deployer alert and `return 0` **without
-fast-forwarding at all** (`gitops_deploy.py:1017`).
+A change under a **broad prefix** is one that maps to no single service. The deployer splits
+them three ways, by which playbook applies them and whether it may run that playbook at all.
 
-The prefixes are declared in two lists, split by which playbook actually applies them:
+| Class | Prefixes | What the deployer does |
+|---|---|---|
+| Setup, scoped | `ansible/roles/setup/<name>/`, `ansible/requirements.yml` (`_BROAD_SETUP_PREFIXES`) | fast-forwards, then runs `initial_setup.yml --tags <name>` |
+| Deploy plane | `ansible/templates/`, `ansible/inventory/`, `ansible/roles/containers/common/`, `ansible/deploy.yml`, `ansible/filter_plugins/`, `ansible.cfg` (`_BROAD_DEPLOY_PREFIXES`) | fast-forwards, then runs a full `ansible/deploy.yml` |
+| Never applied here | `ansible/roles/setup/gitops_deploy/`, `ansible/bootstrap.yml`, `ansible/k3s-bringup.yml`, `ansible/initial_setup.yml` (`_BROAD_MANUAL_PREFIXES`) | alerts and returns **without fast-forwarding** |
 
-- `_BROAD_DEPLOY_PREFIXES` (`deploy_logic.py:67`) — `ansible/templates/`,
-  `ansible/inventory/`, `ansible/roles/containers/common/`, `ansible/deploy.yml`,
-  `ansible/filter_plugins/`, `ansible.cfg`.
-- `_BROAD_SETUP_PREFIXES` (`deploy_logic.py:91`) — `ansible/requirements.yml`,
-  `ansible/roles/setup/`, and the bring-up playbooks.
+The setup/deploy split exists because `deploy.yml` is a `containers_list` loop and renders
+nothing for the setup plane, so pointing an operator at it for a `roles/setup/` change is a
+no-op that leaves the change unapplied.
 
-The split exists because `deploy.yml` is a `containers_list` loop and renders nothing for the
-setup plane, so pointing an operator at it for a `roles/setup/` change is a no-op that leaves
-the change unapplied.
+The third class is not caution. Applying `roles/setup/gitops_deploy/` runs a playbook whose
+handler restarts the systemd unit executing the tick, so the run is killed partway and the
+state it leaves is undefined. The bring-up playbooks run by hand by construction.
 
-**The deferral is evaluated over the whole `local..origin` range, not just your commit.** One
-broad change anywhere in that range parks everything behind it — a docs-only commit in the
-same range never lands either.
+### Both apply arms are forward-only
 
-**The symptom is a tick that exits 0, logs nothing, and writes `behind_since`.** Diagnose it
+A failed apply writes `hold_sha` and `hold_plane`, alerts, and leaves the tree
+fast-forwarded. Nothing is rolled back, and the alert says so.
+
+`deploy_logic.broad_budget_ok` is why. A full `deploy.yml` takes 1212s (measured
+2026-08-22); adding a rollback re-run and the 180s worst-case flock wait comes to 2604s
+against `TimeoutStartSec=2700`. A 96-second margin means a run four percent slower than
+measured is killed mid-rollback, which is worse than never starting one.
+
+It deliberately does not reset the tree either. Resetting without redeploying would leave the
+tree claiming the old commit while live state is half-new — a tree that lies, over which every
+repo-side check reads green.
+
+### When a tick parks
+
+Only the third class parks now, and the symptom is unchanged: **a tick that exits 0, logs
+nothing, and writes `behind_since`.** The deferral is evaluated over the whole `local..origin`
+range, so one such change anywhere in that range holds back everything behind it. Diagnose it
 by diffing the range:
 
 ```bash
 git diff --name-only <local-HEAD>..origin/master
 ```
 
-The Discord alert names the playbook to run. Clearing it means running that playbook and then
-`git merge --ff-only origin/master` in the primary checkout.
+The Discord alert names the playbook to run. **Fast-forward first, then run it** —
+`git merge --ff-only origin/master` in the primary checkout, and only then the playbook.
+Running the playbook first renders from the pre-merge tree and applies nothing.
 
-**If the broad change is another session's, it is theirs to clear.** Say so and stop, rather
-than applying a setup-plane change you did not write.
+**If the change is another session's, it is theirs to clear.** Say so and stop, rather than
+applying a setup-plane change you did not write.
 
 ## Triggering a tick by hand
 

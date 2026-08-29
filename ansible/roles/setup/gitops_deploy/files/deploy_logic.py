@@ -114,6 +114,26 @@ _BROAD_SETUP_PREFIXES = (
     "ansible/bootstrap.yml",
     "ansible/k3s-bringup.yml",
 )
+# Broad paths the deployer must NEVER apply itself, even though every other broad path now
+# fast-forwards and applies.
+#
+# roles/setup/gitops_deploy/ is this deployer's own role. Applying it runs a playbook whose
+# handler restarts the unit currently executing the tick — the run is SIGTERMed partway and
+# the state it leaves is undefined. That is a self-modification defect, not a risk
+# trade-off, so no budget or timeout makes it safe.
+#
+# The bring-up playbooks are hand-run by construction (see broad_remediation), and
+# initial_setup.yml unqualified is a whole-host reprovision rather than a scoped apply.
+#
+# These keep the OLD behaviour in full: defer, alert, and do not fast-forward. Staying
+# parked is what keeps `behind_since` set, and that marker is the only durable signal that
+# an unapplied plane exists.
+_BROAD_MANUAL_PREFIXES = (
+    "ansible/roles/setup/gitops_deploy/",
+    "ansible/bootstrap.yml",
+    "ansible/k3s-bringup.yml",
+    "ansible/initial_setup.yml",
+)
 # The SOPS-encrypted secrets file. A change here maps to no service template, but the new
 # value only reaches a container on its next deploy — so a secrets-ONLY push must NOT be
 # silently fast-forwarded; the deployer defers-and-alerts (see gitops_deploy.py). NOT in
@@ -132,6 +152,10 @@ class ChangeSet:
     # command so a setup-plane change isn't sent to deploy.yml (a no-op). A push can set both.
     broad_deploy: bool = False
     broad_setup: bool = False
+    # A broad path the deployer must not apply itself (_BROAD_MANUAL_PREFIXES). ORed across
+    # the push: ONE manual path makes the whole tick manual, because a half-applied broad
+    # change is exactly the state the defer-and-alert arm exists to prevent.
+    broad_manual: bool = False
     secrets: bool = False
     # `tasks` is the defer-and-alert channel for a service's structural, not-auto-deployed dirs:
     # tasks/ plus the _ACTIVE_ROLE catch-all (defaults/, vars/, handlers/, …). The alert names all
@@ -210,6 +234,14 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
         if p == _SECRETS_FILE:
             cs.secrets = True
             continue
+        # Tested FIRST, and it does not `continue` past the plane flags below: the manual
+        # set overlaps _BROAD_SETUP_PREFIXES (roles/setup/gitops_deploy/ is under
+        # roles/setup/), and the alert still needs to name the right remediation playbook.
+        if any(p.startswith(prefix) for prefix in _BROAD_MANUAL_PREFIXES):
+            cs.broad = True
+            cs.broad_manual = True
+            cs.broad_setup = True
+            continue
         if any(p.startswith(prefix) for prefix in _BROAD_SETUP_PREFIXES):
             cs.broad = True
             cs.broad_setup = True
@@ -242,6 +274,56 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
         if r and not p.endswith(".md"):
             cs.tasks.add(r.group(1))
     return cs
+
+
+_SETUP_ROLE = re.compile(r"^ansible/roles/setup/([^/]+)/")
+
+
+def setup_tags_for(paths) -> set[str]:
+    """The `initial_setup.yml --tags` values a set of setup-plane paths needs.
+
+    broad_remediation emits a literal `<role>` placeholder, which is fine for a human
+    reading an alert and useless for a machine about to run the playbook. This derives the
+    real tags, and the alert text uses it too so the two can never disagree.
+
+    Returns an EMPTY set for anything it cannot resolve — a bring-up playbook, or any path
+    in _BROAD_MANUAL_PREFIXES. Empty means "cannot be applied automatically", which the
+    caller must treat as a deferral rather than as an unscoped run. Returning a wrong tag
+    would be worse than returning none: `--tags` matching nothing makes Ansible exit 0, so
+    the deployer would report a successful apply having changed nothing at all.
+    """
+    tags: set[str] = set()
+    for p in paths:
+        if any(p.startswith(prefix) for prefix in _BROAD_MANUAL_PREFIXES):
+            continue
+        if p == "ansible/requirements.yml":
+            # Installed by sops_setup — see the comment on _BROAD_SETUP_PREFIXES.
+            tags.add("collections")
+            continue
+        m = _SETUP_ROLE.match(p)
+        if m:
+            tags.add(m.group(1))
+    return tags
+
+
+# A rollback re-run must fit inside the unit's TimeoutStartSec alongside the forward run and
+# the worst-case flock wait. Below that margin systemd SIGTERMs mid-rollback, which strands
+# the tree at the failed commit with live state half-applied — exactly what every
+# hold-before-reset in gitops_deploy.py exists to prevent.
+BROAD_BUDGET_MARGIN_S = 300
+
+
+def broad_budget_ok(
+    forward_s: int, rollback_s: int, flock_s: int, timeout_s: int
+) -> bool:
+    """Can this broad apply carry a rollback inside the unit's start timeout?
+
+    Measured 2026-08-22, a full deploy.yml is 1212s. 180 + 1212 + 1212 = 2604 against
+    TimeoutStartSec=2700 leaves 96s — 3.5%, so a run four percent slower than measured is
+    killed mid-rollback. That is why the deploy-plane arm is forward-only, and this
+    predicate is what makes the reasoning executable rather than a comment that rots.
+    """
+    return flock_s + forward_s + rollback_s + BROAD_BUDGET_MARGIN_S <= timeout_s
 
 
 def broad_remediation(broad_deploy: bool, broad_setup: bool) -> str:

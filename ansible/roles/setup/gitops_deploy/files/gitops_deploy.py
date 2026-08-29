@@ -36,6 +36,7 @@ from deploy_logic import (  # noqa: E402
     behind_marker,
     broad_remediation,
     ci_verdict,
+    setup_tags_for,
     containers_to_gate,
     declared_denylist,
     declared_k8s_services,
@@ -95,6 +96,11 @@ DIVERGED_FILE = "/var/lib/gitops-deploy/diverged_sha"
 # The first-seen stamp is preserved across ticks and reset ONLY on convergence — not per-SHA, or a
 # steady trickle of pushes to a permanently-stuck host would keep restarting the clock.
 BEHIND_FILE = "/var/lib/gitops-deploy/behind_since"
+# The playbook (and tags) whose broad apply failed, written alongside hold_sha. hold_sha
+# alone is service-shaped — monitor-bridge's message says "revert the offending PR", which
+# is the wrong remediation here: the tree is already fast-forwarded and a playbook is what
+# broke, so reverting the PR undoes nothing. This names what to re-run instead.
+HOLD_PLANE_FILE = "/var/lib/gitops-deploy/hold_plane"
 # The sorted stale-compose set last alerted on, so a lingering stale dir doesn't re-page
 # every tick — only a CHANGED set (new stale dir, or one cleaned up) re-alerts.
 STALE_COMPOSE_FILE = "/var/lib/gitops-deploy/stale_composes_alerted"
@@ -269,6 +275,13 @@ K8S_DEPLOY_TIMEOUT_S = int(C.get("K8S_DEPLOY_TIMEOUT_S", "900"))
 # defaults/main.yml's gitops_deploy_k8s_rollback_timeout_s comment — this fallback is only what a
 # host runs on before its config.env is re-templated with the new value.
 K8S_ROLLBACK_TIMEOUT_S = int(C.get("K8S_ROLLBACK_TIMEOUT_S", "1320"))
+# Bounds ONE broad-plane apply (initial_setup.yml --tags <role>, or a full deploy.yml).
+# Bounded because that arm is forward-only: without a timeout a wedged run spends the unit's
+# whole TimeoutStartSec and is SIGTERMed with no hold written and no alert sent, leaving the
+# tree fast-forwarded onto a commit nothing recorded as bad. 1800s covers the 1212s measured
+# full deploy (2026-08-22) with headroom, inside TimeoutStartSec=2700 alongside the 180s max
+# flock wait. See deploy_logic.broad_budget_ok for why no rollback is funded on top.
+BROAD_DEPLOY_TIMEOUT_S = int(C.get("BROAD_DEPLOY_TIMEOUT_S", "1800"))
 
 # ── the staging gate (Phase C slice 3) ──────────────────────────────────────────────────────
 # OFF by default. Turning it on costs every k8s-deploying tick the staging deploy's wall-clock,
@@ -891,6 +904,23 @@ def read_local_k8s_default(role: str) -> str | None:
         return None
 
 
+def deploy_broad(playbook: str, tags: list[str], timeout: float) -> None:
+    """Run a broad-plane playbook, bounded. Raises on failure or timeout.
+
+    `uv run --frozen` for the same reason deploy() uses it: the repo's pinned env, and never
+    mutating uv.lock on the host.
+
+    No tags means the whole playbook — only ever reached for the deploy plane, where
+    `ansible/deploy.yml` unscoped IS the remediation. The setup plane never lands here
+    unscoped: setup_tags_for returning an empty set routes to the defer-and-alert arm
+    instead, because an unscoped initial_setup.yml is a whole-host reprovision.
+    """
+    cmd = ["uv", "run", "--frozen", "ansible-playbook", playbook]
+    if tags:
+        cmd += ["--tags", ",".join(tags)]
+    run(cmd, timeout=timeout)
+
+
 def deploy(services: set[str]) -> None:
     tags = ",".join(sorted(services))
     # Run via `uv run` so the deploy uses the repo's pinned env (ansible-core plus
@@ -1134,19 +1164,76 @@ def main() -> int:
     )
 
     if cs.broad:
-        # Broad doesn't ff-merge, so it re-evals next tick — the per-SHA marker (inside alert_once)
-        # stops a re-queue while the pending queue owns redelivery. Name the RIGHT playbook per plane:
-        # deploy.yml applies only container roles, so a setup-plane change (roles/setup/,
-        # requirements.yml, bring-up playbooks) needs initial_setup.yml (2026-07-16 review M1).
-        alert_once(
-            BROAD_FILE,
-            "broad",
-            origin,
-            f"⚠️ gitops-deploy: broad change (shared template / inventory / setup role) in "
-            f"`{origin[:8]}` — deferring to a manual deploy. Run "
-            f"{broad_remediation(cs.broad_deploy, cs.broad_setup)} on the host, then "
-            f"`git merge --ff-only origin/{BRANCH}` to clear it.",
-        )
+        setup_tags = setup_tags_for(paths)
+        # The MANUAL subset keeps the old behaviour exactly: defer, alert, and do NOT
+        # ff-merge. Staying parked is what keeps `behind_since` set, and that marker is the
+        # only durable signal that an unapplied plane exists — ff-merging here would clear
+        # it and leave the host green while running a plane it never applied.
+        #
+        # A setup-plane change whose tag cannot be derived joins them: an unresolvable tag
+        # means the only automatic option is an UNSCOPED initial_setup.yml, which is a
+        # whole-host reprovision rather than the scoped apply this arm is funded for.
+        if cs.broad_manual or (cs.broad_setup and not setup_tags):
+            # Broad-manual doesn't ff-merge, so it re-evals next tick — the per-SHA marker
+            # (inside alert_once) stops a re-queue while the pending queue owns redelivery.
+            # Name the RIGHT playbook per plane: deploy.yml applies only container roles, so
+            # a setup-plane change needs initial_setup.yml (2026-07-16 review M1).
+            alert_once(
+                BROAD_FILE,
+                "broad",
+                origin,
+                f"⚠️ gitops-deploy: broad change needing a hand in `{origin[:8]}` — "
+                f"deferring to a manual deploy. Run "
+                f"{broad_remediation(cs.broad_deploy, cs.broad_setup)} on the host, then "
+                f"`git merge --ff-only origin/{BRANCH}` to clear it.",
+            )
+            return 0
+
+        # Everything else fast-forwards and applies itself.
+        #
+        # The ff-merge happens FIRST, before the apply, so an unrelated commit sharing this
+        # tick lands even if the apply below fails. Stranding a docs-only commit behind
+        # somebody else's setup change — a tick that exits 0, logs nothing, and writes
+        # behind_since — was the original complaint this arm exists to fix.
+        run(["git", "merge", "--ff-only", origin])
+
+        if setup_tags:
+            playbook, tags = "ansible/initial_setup.yml", sorted(setup_tags)
+        else:
+            playbook, tags = "ansible/deploy.yml", []
+
+        # FORWARD-ONLY. deploy_logic.broad_budget_ok shows a full deploy.yml (1212s measured
+        # 2026-08-22) plus a rollback re-run does not fit TimeoutStartSec, and a rollback
+        # SIGTERMed partway is worse than none. On failure: hold, mark the plane, alert.
+        #
+        # It deliberately does NOT git-reset. Resetting without redeploying would leave the
+        # tree claiming the old commit while live state is half-new — undiagnosable from the
+        # repo side, where every check would read green against a tree that lies. hold_sha
+        # is what stops the retry loop, and it does that whether or not the tree moved.
+        try:
+            deploy_broad(playbook, tags, BROAD_DEPLOY_TIMEOUT_S)
+        except Exception as exc:  # noqa: BLE001 — any playbook failure, or the timeout
+            log(f"broad apply failed ({playbook} {tags}): {exc}")
+            write_hold(origin)
+            _write_marker(HOLD_PLANE_FILE, f"{playbook} {','.join(tags)}".strip())
+            posted = discord(
+                f"🚨 gitops-deploy: **broad apply failed** on {HOSTNAME}.\n"
+                f"`{playbook}`"
+                + (f" --tags `{','.join(tags)}`" if tags else "")
+                + f" errored on `{origin[:8]}`:\n`{exc}`\n"
+                f"The tree is fast-forwarded and the plane is **unapplied**. This arm is "
+                f"forward-only — **nothing was rolled back**, so live state is whatever the "
+                f"failed run left.\n"
+                f"**Action:** fix forward and re-run that playbook by hand."
+            )
+            # Exit 0 on a delivered detailed post so systemd's OnFailure generic curl doesn't
+            # double-page; exit 1 only if the post failed, leaving OnFailure the backstop.
+            return 0 if posted else 1
+
+        _write_marker(HOLD_PLANE_FILE, None)
+        write_hold(None)
+        alert_secrets_deferred(origin, cs)
+        alert_deferred(origin, set(), cs, k8s_services)
         return 0
     if cs.k8s_deploy:
         run(["git", "merge", "--ff-only", origin])

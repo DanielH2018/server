@@ -1440,6 +1440,7 @@ def gitops_status(
     behind_since=None,
     now=None,
     max_behind_s=GITOPS_BEHIND_MAX_S,
+    hold_plane=None,
 ):
     """Pure: is the deploy pipeline in a state needing operator action? Returns (ok, msg).
 
@@ -1460,6 +1461,16 @@ def gitops_status(
     "behind" only names the symptom.
     """
     if hold_sha:
+        # A held BROAD apply is a different fault with a different fix. That arm is
+        # forward-only: the tree is already fast-forwarded and a plane playbook failed
+        # partway, so reverting the PR undoes nothing and the operator has to fix forward
+        # and re-run. hold_sha still decides whether we page — hold_plane only says which
+        # sentence to print, so a stale marker left by a cleared hold cannot page alone.
+        if hold_plane:
+            return False, (
+                "broad apply held at %s — %s failed, plane unapplied; "
+                "fix forward and re-run it" % (hold_sha[:8], hold_plane)
+            )
         return False, "deploy held at %s — revert the offending PR" % hold_sha[:8]
     if diverged_sha:
         return False, (
@@ -1611,6 +1622,7 @@ def check_gitops_status():
         _read_gitops_marker("hold_sha"),
         _read_gitops_marker("diverged_sha"),
         _read_gitops_marker("behind_since"),
+        hold_plane=_read_gitops_marker("hold_plane"),
     )
 
 
