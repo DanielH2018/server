@@ -21,9 +21,12 @@ will not boot, a dirty tree on daniel-server, an expired ssh key and a genuine b
 look identical if they collapse into a single non-zero exit — and an operator who cannot tell
 them apart learns to override on reflex.
 
-ONE SSH CALL, NOT FOUR. `ufw limit ssh` REJECTs the 6th connection in 30s, so the fetch, the
-cleanliness check, the fast-forward and the deploy are one remote script piped over `bash -s`
-rather than four hops.
+ONE SSH CALL, NOT FOUR. The fetch, the cleanliness check, the fast-forward and the deploy are
+one remote script piped over `bash -s` rather than four hops. The original reason was `ufw
+limit ssh`, which REJECTs the 6th connection in 30s; daniel-box is inside `lan_subnet` and the
+LAN is now exempt from that limiter, so the sharp edge is gone. Keep the single call anyway —
+four hops is four chances for the transport to fail mid-prep, and a partial prep is a
+NO_VERDICT that reads like a staging outage.
 """
 
 from __future__ import annotations

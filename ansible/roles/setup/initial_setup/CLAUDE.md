@@ -68,10 +68,26 @@ invariant when adding tasks, or tag-scoped runs die on undefined variables.
   `AllowTcpForwarding` bounds a key used purely as a tunnel, not an interactive account.
   `GatewayPorts` stays at its default `no`, so a reverse forward binds loopback only.
   → `notify: Restart SSH`.
-- **Firewall (UFW):** default-deny incoming / allow outgoing, **rate-limited** SSH (replaces a
-  plain allow), then enable. No WireGuard allow: Docker-published ports (incl. wg-easy's UDP
-  port) bypass UFW INPUT via Docker's own chains; a stale Pi-only `51820/udp` allow from the
-  pre-port-split era is actively deleted (the Pi listens on 51822).
+- **Firewall (UFW):** default-deny incoming / allow outgoing, an SSH allow for `lan_subnet`,
+  **rate-limited** SSH for everything else (both replace a plain allow), then enable. No
+  WireGuard allow: Docker-published ports (incl. wg-easy's UDP port) bypass UFW INPUT via
+  Docker's own chains; a stale Pi-only `51820/udp` allow from the pre-port-split era is
+  actively deleted (the Pi listens on 51822).
+
+  **The LAN allow must sort above the limit rule, and the task declares `insert: 0` /
+  `insert_relative_to: first-ipv4` to make sure of it.** ufw takes the first matching rule, so
+  an allow appended below the limiter is inert — the same present-but-does-nothing shape #508
+  cost this role. `ansible/tests/test_ssh_rate_limit_lan_exempt.py` pins both the exemption and
+  its ordering.
+
+  The exemption exists because `limit` REJECTs a source IP at 6 connections in 30 seconds on a
+  **rolling** window, counting successful connections. Retries therefore sustain the block
+  rather than ride it out. Several Claude sessions work this repo at once over ssh; twice that
+  quorum crossed the threshold, was misread as sshd being down, and was answered with retry
+  loops that held the host locked. Brute-force cover is unchanged — fail2ban's sshd jail
+  (bantime 1h, triggered by auth *failures*) is what actually answers a credential attack, and
+  it still covers the LAN. Non-LAN sources, WireGuard peers included, keep the limiter, so this
+  removes no access from anyone.
 - **sudo credential cache:** `/etc/sudoers.d/10-timestamp` sets `timestamp_type=global`
   (+ a 60-min timeout), so one authentication covers every tmux pane and every shell with no
   tty. Without it, sudo keys the ticket on its parent pid when no terminal is present and each
