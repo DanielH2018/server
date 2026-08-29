@@ -62,6 +62,16 @@
         name: fail2ban
         state: restarted
 
+    # BEFORE Restart systemd-journald, and the order is the point: handlers fire in the order
+    # they are DEFINED here, not the order tasks notify them. journald forwards at info
+    # (MaxLevelSyslog, see roles/setup/initial_setup/tasks/system-tuning.yml), so if journald
+    # restarted first there would be a window where every info line on the host reached
+    # /var/log/syslog before the filter that discards them was loaded.
+    - name: Restart rsyslog
+      ansible.builtin.service:
+        name: rsyslog
+        state: restarted
+
     - name: Restart systemd-journald
       ansible.builtin.service:
         name: systemd-journald
