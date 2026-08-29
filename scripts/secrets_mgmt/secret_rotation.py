@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Secret rotation registry: audit + staggered rotation for ansible/vars/secrets.yml.
 
-Three subcommands:
+Four subcommands:
+  consumers — list every role that references one secret, measured from the tree, with the
+           exact commands that make a rotation take effect. Answers the question a rotation
+           poses and `audit` does not: who is still holding the old value? Setup-plane roles
+           are called out separately because `deploy.sh` cannot reach them.
   sync   — reconcile the registry (ansible/secret_rotation.yml) with the live secret
            names. New secrets are classified into a tier and given a STAGGERED seed
            date so their rotations never all fall due on the same day. Removed secrets
@@ -231,6 +235,133 @@ def consumer_tags(name: str) -> tuple[str, ...]:
     if name.endswith("_push_token"):
         return (pusher, UPTIME_KUMA_TAG)
     return (pusher,)
+
+
+# Planes a role can live on, and what redeploying it actually costs the operator. The
+# distinction is not cosmetic: `deploy.sh` derives its valid tags from `containers_list`, so a
+# setup-plane role HAS no deploy tag and `deploy.sh --tags fake_remux` exits 2 having deployed
+# nothing (CLAUDE.md, Common Commands). That is the trap this census exists to surface.
+_ROLE_PLANES = {
+    "k8s": "deploy",
+    "containers": "deploy",
+    "setup": "setup",
+}
+
+# Directories whose hits are not consumers. `archive/` is retired code; `collections/` is
+# vendored third-party; the registry and secrets file name every secret by definition, so
+# including them would make every census non-empty and the check vacuous.
+_CENSUS_SKIP = (
+    os.path.join("roles", "containers", "archive"),
+    "collections",
+)
+_CENSUS_SKIP_FILES = {"secrets.yml", "secret_rotation.yml"}
+
+# Markdown is EXCLUDED, and this is a correctness fix rather than tidiness. A role's CLAUDE.md
+# names secrets it explains without rendering any of them, so counting docs makes the census
+# claim consumers that hold no copy — and sends the operator to redeploy a role that cannot
+# help. Measured 2026-08-29 across all 149 secrets: 5 secrets gained 11 doc-only roles, and
+# `r2_access_key_id` is the clearest — monitor-bridge's CLAUDE.md discusses it while the only
+# renderers are setup/k3s's longhorn-r2-secret.yaml.j2 and health-crons.yml.
+#
+# Checked in the direction that matters before making the change: excluding docs creates ZERO
+# new phantom tags, so no real consumer is only discoverable through prose.
+_CENSUS_SKIP_SUFFIXES = (".md",)
+
+
+def tree_consumers(name: str, repo: str = REPO) -> dict[str, str]:
+    """Every role that REFERENCES this secret, measured from the tree — role -> plane.
+
+    The counterpart to `consumer_tags()` above, and deliberately a different mechanism.
+    `consumer_tags()` routes by NAME, which is fast and covers the push-token fleet, but its
+    own comment records what name-routing costs: nine of 41 `monitor_bridge_*` tokens named a
+    role that renders them nowhere, and the fix was measured with `grep -rl <token>
+    ansible/roles/` rather than reasoned from the prefix. This does that grep in code so the
+    measurement is repeatable and can be asserted against.
+
+    It answers the question a rotation actually poses — "who now holds a stale copy?" — which
+    `consumer_tags()` cannot for anything outside its table. `sonarr_api_key` falls to that
+    function's default and returns `()`, meaning MANUAL: correct, but it names nobody, and on
+    2026-08-29 that left seven consumers holding a dead key for ~40 minutes.
+
+    Returns a plane per role because the repair command differs by plane and one of them is
+    unreachable from `deploy.sh` — see `_ROLE_PLANES`.
+    """
+    found: dict[str, str] = {}
+    ansible_dir = os.path.join(repo, "ansible")
+    for dirpath, dirnames, filenames in os.walk(ansible_dir):
+        rel = os.path.relpath(dirpath, ansible_dir)
+        if any(skip in rel for skip in _CENSUS_SKIP):
+            dirnames[:] = []
+            continue
+        for filename in filenames:
+            if filename in _CENSUS_SKIP_FILES or filename.endswith(
+                _CENSUS_SKIP_SUFFIXES
+            ):
+                continue
+            path = os.path.join(dirpath, filename)
+            try:
+                with open(path, encoding="utf-8", errors="ignore") as handle:
+                    text = handle.read()
+            except OSError:
+                # A file this process cannot read is not evidence of absence, but it is also
+                # not something a census can act on. Skipping is right; failing the whole
+                # census on one unreadable file would make the tool useless in a worktree.
+                continue
+            if name not in text:
+                continue
+            parts = os.path.relpath(path, ansible_dir).split(os.sep)
+            if len(parts) >= 3 and parts[0] == "roles" and parts[1] in _ROLE_PLANES:
+                found[parts[2]] = _ROLE_PLANES[parts[1]]
+    return found
+
+
+def consumer_commands(name: str, repo: str = REPO) -> list[str]:
+    """The exact commands that make a rotated `name` take effect everywhere, deploy plane first.
+
+    Setup-plane roles are listed with their own playbook because `deploy.sh` cannot reach them
+    and exits 2 rather than failing loudly at the role.
+    """
+    consumers = tree_consumers(name, repo=repo)
+    deploy_tags = sorted(r for r, plane in consumers.items() if plane == "deploy")
+    setup_roles = sorted(r for r, plane in consumers.items() if plane == "setup")
+    # BACKTICKS ARE LOAD-BEARING, not decoration. This module is reached by two crons, and
+    # `gen_reference_scripts.py` classifies a script as `scheduled` when a scheduled script's
+    # text invokes it — so a bare `./scripts/deploy.sh ...` literal here would reclassify the
+    # interactive deploy path as cron-driven in the generated reference. That resolver already
+    # draws the distinction this needs (`_invoked_in`, gen_reference_scripts.py:102): a line
+    # carrying a backtick is prose CITING a command rather than running one, which is exactly
+    # what these strings are. Quoting them says so in the one way the tree can read.
+    commands = []
+    if deploy_tags:
+        commands.append('`./scripts/deploy.sh --tags "%s"`' % ",".join(deploy_tags))
+    for role in setup_roles:
+        commands.append(
+            "`uv run ansible-playbook ansible/initial_setup.yml --tags %s`" % role
+        )
+    return commands
+
+
+def cmd_consumers(args) -> int:
+    consumers = tree_consumers(args.name)
+    if not consumers:
+        print(
+            "%s: no role references this secret.\n"
+            "That is either a genuinely unused secret or a name that is built up in a "
+            "template rather than written literally — check by hand before concluding it is "
+            "safe to drop." % args.name
+        )
+        return 0
+    print("%s — %d consuming role(s):" % (args.name, len(consumers)))
+    for role in sorted(consumers):
+        plane = consumers[role]
+        note = (
+            "" if plane == "deploy" else "   [setup plane — deploy.sh cannot reach it]"
+        )
+        print("  %-22s %s%s" % (role, plane, note))
+    print("\nTo make a rotation take effect:")
+    for command in consumer_commands(args.name):
+        print("  %s" % command)
+    return 0
 
 
 def _stable_offset(name: str, span: int) -> int:
@@ -627,6 +758,9 @@ def main(argv=None) -> int:
     )
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("sync").set_defaults(func=cmd_sync)
+    pc = sub.add_parser("consumers")
+    pc.add_argument("name", help="secret name, as it appears in secrets.yml")
+    pc.set_defaults(func=cmd_consumers)
     pa = sub.add_parser("audit")
     pa.add_argument("--push", action="store_true", help="post status to Uptime Kuma")
     pa.add_argument(
