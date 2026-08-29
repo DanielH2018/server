@@ -56,6 +56,10 @@ TWO_FACTOR_SERVICES = [
     ("n8n", "n8n.io - Workflow Automation", "/"),
 ]
 
+MINT_HINT = (
+    "mint one with `uv run python scripts/diagnostics/ui_login.py --totp <code>`"
+)
+
 
 class McpClient:
     """A minimal JSON-RPC-over-stdio MCP client — enough to navigate and read the page."""
@@ -229,12 +233,22 @@ def test_a_route_with_no_backend_is_not_scored_as_a_rendered_ui(browser, domain)
 
 
 @pytest.fixture(scope="module")
-def two_factor_browser():
+def two_factor_browser(domain):
     """A browser carrying a two_factor session, or a skip when none is live.
 
     Skipping rather than failing is the honest outcome: a two_factor session lasts about an
     hour and can only be minted by a human typing a code, so its absence is the normal state
     of this machine, not a regression in anything.
+
+    **The gate is a real browse, not `/api/state`.** It used to ask `ui_login.py --check
+    --two-factor`, and the two questions came apart: measured 2026-08-29, the check reported
+    the session live, the wrapper's own check agreed, and all three navigations then landed
+    on the portal — three failures where three skips were the truth. Asking the browser to
+    fetch a `two_factor` route is the same question the tests ask, so the guard and the
+    assertions cannot disagree by construction.
+
+    The `--check` call survives as a cheap pre-filter only, to avoid starting Chromium when
+    the session is plainly gone.
     """
     # Through `uv run`, not the shebang: ui_login imports probe_core, which uses PEP 758
     # syntax that Ubuntu's 3.12 /usr/bin/python3 cannot parse.
@@ -253,21 +267,35 @@ def two_factor_browser():
         text=True,
     )
     if proc.returncode != 0:
-        pytest.skip(
-            "no live two_factor session — mint one with "
-            "`uv run python scripts/diagnostics/ui_login.py --totp <code>`"
-        )
+        pytest.skip(f"no live two_factor session — {MINT_HINT}")
+
     client = McpClient([str(WRAPPER), "--two-factor"])
     try:
-        client.call(
-            "initialize",
-            {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {},
-                "clientInfo": {"name": "ui-smoke-2fa", "version": "1"},
-            },
-        )
+        try:
+            client.call(
+                "initialize",
+                {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {"name": "ui-smoke-2fa", "version": "1"},
+                },
+            )
+        except AssertionError as exc:
+            # The wrapper runs its own check and exits when the session is gone. That is the
+            # same condition as the pre-filter above, so it deserves the same skip rather
+            # than an error about a server that failed to start.
+            if "two_factor session" not in str(exc):
+                raise
+            pytest.skip(f"the wrapper found no live two_factor session — {MINT_HINT}")
         client.notify("notifications/initialized")
+
+        canary = TWO_FACTOR_SERVICES[0][0]
+        report, _ = client.navigate(f"https://{canary}.local.{domain}/")
+        if "auth.local." in report:
+            pytest.skip(
+                f"the two_factor session no longer opens {canary} — {MINT_HINT}"
+            )
+
         yield client
     finally:
         client.close()
