@@ -29,9 +29,13 @@
 # (modules/file.py, "try to replace atomically"). There is no unlink-then-symlink window, so a
 # cron firing mid-deploy cannot get ENOENT. Verified by reading the module, not assumed.
 #
-# NEVER PUT A SECRET-RENDERING SCRIPT IN A GROUP. Seven host scripts render a credential inline
-# and carry `no_log: true` for it — the two secret-rotation wrappers, claude-otel-health,
-# registry-gc, janitorr-health, configarr-health, qbittorrent-prefs-check. Retention is the
+# NEVER PUT A SECRET-RENDERING SCRIPT IN A GROUP. Ten host scripts render a credential inline.
+# Seven carry `no_log: true` for it — the two secret-rotation wrappers, claude-otel-health,
+# registry-gc, janitorr-health, configarr-health, qbittorrent-prefs-check. Three do NOT, and are
+# no less ineligible for it: docs-refresh (`docs_refresh_push_token`), pi-sd-health
+# (`pi_sd_health_push_token`) and pi-recovery-health (`pi_recovery_push_token`). `no_log` hides
+# the value from the deploy log; it says nothing about what the rendered file holds, so it is a
+# symptom of ineligibility rather than the test for it. Retention is the
 # problem, not the render: keeping five releases of those would leave five copies of a rotated
 # token on disk, turning a rollback convenience into a credential archive. Scripts that SOURCE a
 # token from a separate env file (the kuma-push pattern) are fine and are what these groups hold.
