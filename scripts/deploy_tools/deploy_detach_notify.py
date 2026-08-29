@@ -146,6 +146,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--tags", default="", help="comma-separated service tags that were deployed"
     )
+    parser.add_argument(
+        "--no-post",
+        action="store_true",
+        help=(
+            "print the verdict, do not post it. land.sh returns the verdict to the "
+            "session instead; posting from both paths would split one verdict across "
+            "two channels."
+        ),
+    )
     ns = parser.parse_args(argv)
 
     tags = [t for t in ns.tags.split(",") if t]
@@ -160,7 +169,8 @@ def main(argv: list[str] | None = None) -> int:
         ]
     )
     print(content)
-    notify(content)
+    if not ns.no_post:
+        notify(content)
     return 0 if settled else 1
 
 
