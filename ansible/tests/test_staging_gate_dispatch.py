@@ -311,3 +311,61 @@ def test_a_forced_command_pointing_somewhere_else_is_flagged():
     ]
     problems = authorization_problems(drifted)
     assert any("not the templated dispatch path" in p for p in problems), problems
+
+
+def _validate_in(cwd, tmp_path, request: str) -> subprocess.CompletedProcess:
+    """Drive the validator with the process's working directory set to `cwd`.
+
+    The shared `validate` helper runs wherever pytest does. Pathname expansion is the one rule
+    whose outcome depends on what is on disk next to the process, so this test needs to choose
+    that directory rather than inherit it.
+    """
+    script = _script(tmp_path)
+    return subprocess.run(
+        [
+            "bash",
+            "-c",
+            'source "$1"; validate_request "$2"; echo "OK $SHA $TAGS"',
+            "_",
+            str(script),
+            request,
+        ],
+        capture_output=True,
+        text=True,
+        cwd=str(cwd),
+    )
+
+
+def test_a_glob_cannot_smuggle_a_filename_in_as_the_sha(tmp_path):
+    """The field split is unquoted on purpose, and an unquoted expansion also GLOBS.
+
+    Without `set -f` this is not a sharp edge, it is an accepted request: a caller sends
+    `gate * traefik`, the `*` expands against the login directory, and if any file there is
+    named like a 40-hex object the split yields exactly three valid-looking fields. The
+    dispatcher would then hand a filename to the gate as the SHA under test.
+
+    Measured 2026-08-29 against the unhardened version: `gate * traefik` split into 267 fields
+    in a real directory. This test builds the narrower case that actually gets through.
+    """
+    login_dir = tmp_path / "login"
+    login_dir.mkdir()
+    (login_dir / ("b" * 40)).write_text("a decoy named like an object id")
+
+    result = _validate_in(login_dir, tmp_path, "gate * traefik")
+    assert result.returncode == _REFUSED, (
+        f"`gate * traefik` must be refused; got rc={result.returncode} "
+        f"stdout={result.stdout.strip()!r}. If this accepted, the split glob-expanded and a "
+        f"filename reached the gate as the SHA."
+    )
+
+
+def test_the_glob_guard_does_not_break_a_normal_request(tmp_path):
+    """The accepting half of the pair: disabling pathname expansion must not disturb the
+    ordinary path, and the field split must still happen."""
+    login_dir = tmp_path / "login"
+    login_dir.mkdir()
+    (login_dir / ("b" * 40)).write_text("the same decoy")
+
+    result = _validate_in(login_dir, tmp_path, f"gate {_SHA} traefik,freshrss")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == f"OK {_SHA} traefik,freshrss"

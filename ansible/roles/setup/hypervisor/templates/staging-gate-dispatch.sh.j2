@@ -58,12 +58,27 @@ refuse() {
 # the live path drives. That is what the BASH_SOURCE guard at the bottom is for.
 validate_request() {
   local request="${1-}"
+  # Word-split WITHOUT pathname expansion. The unquoted expansion below is deliberate — it is
+  # what bounds the field count — but an unquoted expansion also GLOBS, and `request` is
+  # caller-controlled.
+  #
+  # This is a hole, not a sharp edge, and the difference was established by testing rather than
+  # by reading. `gate * traefik` looks like it must fail the `-eq 3` check, and in a directory
+  # with 266 entries it does. But the caller chooses the pattern: with a single file named like
+  # an object id in the login directory, `*` expands to exactly one field and the split yields
+  # three, whose second is 40 hex characters. Driven against this validator with `set -f`
+  # removed, that request is ACCEPTED — rc=0, with the FILENAME handed onward as the SHA under
+  # test. `ansible/tests/test_staging_gate_dispatch.py::
+  # test_a_glob_cannot_smuggle_a_filename_in_as_the_sha` is that exact case, and it goes red
+  # without the two lines below.
+  set -f
   # Deliberate word-split into positional parameters, which is what bounds the field count.
   # `set --` inside a function is local to it. (Positional parameters rather than an array
   # because bash's array-length syntax pairs a brace with a hash, which Jinja reads as the
   # start of a comment tag, and this file is a template.)
   # shellcheck disable=SC2086
   set -- $request
+  set +f
 
   [ "$#" -eq 3 ] || refuse "expected exactly 3 fields (gate <sha> <tags>)"
   [ "$1" = "gate" ] || refuse "unknown operation"
