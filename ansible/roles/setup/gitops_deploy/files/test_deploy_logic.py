@@ -1095,3 +1095,43 @@ def test_a_consumer_this_host_does_not_declare_is_not_escalated():
     assert "`ansible-playbook ansible/deploy.yml`" not in msg, (
         "an undeclared consumer escalated the instruction to a full deploy: %s" % msg
     )
+
+
+# --- broad apply budget ------------------------------------------------------------------
+#
+# The reason the deploy-plane arm is forward-only, written as a predicate rather than as a
+# comment. A comment rots silently when TimeoutStartSec or the measured deploy time moves;
+# this fails.
+
+
+def test_a_scoped_setup_run_fits_the_budget():
+    """`initial_setup.yml --tags <role>` is small enough to fund a rollback re-run."""
+    from deploy_logic import broad_budget_ok
+
+    assert broad_budget_ok(forward_s=300, rollback_s=300, flock_s=180, timeout_s=2700)
+
+
+def test_a_full_deploy_plus_rollback_is_flagged_over_budget():
+    """Measured 2026-08-22: a full deploy.yml is 1212s. 180 + 1212 + 1212 = 2604 against
+    TimeoutStartSec=2700 leaves 96s, so a run four percent slower than measured is
+    SIGTERMed mid-rollback -- which strands the tree at the failed commit with live state
+    half-applied. This is the reject half, and it is the whole argument for forward-only."""
+    from deploy_logic import broad_budget_ok
+
+    assert not broad_budget_ok(
+        forward_s=1212, rollback_s=1212, flock_s=180, timeout_s=2700
+    )
+
+
+def test_the_budget_predicate_tracks_the_units_real_timeout():
+    """Pins the numbers the forward-only decision rests on. If TimeoutStartSec is raised in
+    gitops-deploy.service.j2, this fails and the decision gets revisited deliberately
+    rather than drifting."""
+    unit = (
+        pathlib.Path(__file__).resolve().parents[1]
+        / "templates"
+        / "gitops-deploy.service.j2"
+    )
+    assert "TimeoutStartSec=45min" in unit.read_text(), (
+        "TimeoutStartSec moved — re-derive broad_budget_ok's verdict before trusting it"
+    )
