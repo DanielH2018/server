@@ -318,19 +318,42 @@ def _tasks():
     return docs if isinstance(docs, list) else []
 
 
+def _release_bin_group_templates(group: str) -> list[str]:
+    """The repo-relative template paths a release_bin group deploys, from the role defaults."""
+    doc = load_yaml(CRONS.parent.parent / "defaults" / "main.yml") or {}
+    for value in doc.values() if isinstance(doc, dict) else []:
+        if not isinstance(value, list):
+            continue
+        for entry in value:
+            if isinstance(entry, dict) and entry.get("name") == group:
+                return [str(t) for t in entry.get("templates") or []]
+    return []
+
+
 def _deploy_task_for(src_basename: str):
-    """The template task that renders `src_basename`, whether via a plain `src:` or a `loop:`
-    item — health-crons.yml folds several same-shaped scripts into one looped
-    `ansible.builtin.template` task, so a source file's task is not always a 1:1 lookup by name.
+    """The task that deploys `src_basename`, in any of the three shapes health-crons.yml uses.
+
+    A plain `src:`; a `loop:` of src/dest dicts (several same-shaped scripts folded into one
+    `ansible.builtin.template`); and since the backup-health group became a versioned release,
+    an `import_tasks` of release_bin.yml naming a GROUP whose file list lives in the role
+    defaults. The third shape names no template in this file at all, so a resolver that only
+    knew the first two returned None and the drill's guards below asserted on nothing.
     """
     for task in _tasks():
         tpl = task.get("ansible.builtin.template")
-        if not isinstance(tpl, dict):
-            continue
-        if tpl.get("src") == src_basename:
-            return task
-        for item in task.get("loop") or []:
-            if isinstance(item, dict) and item.get("src") == src_basename:
+        if isinstance(tpl, dict):
+            if tpl.get("src") == src_basename:
+                return task
+            for item in task.get("loop") or []:
+                if isinstance(item, dict) and item.get("src") == src_basename:
+                    return task
+        target = str(task.get("ansible.builtin.import_tasks") or "")
+        if target.endswith("release_bin.yml"):
+            group = (task.get("vars") or {}).get("release_bin_group")
+            if group and any(
+                Path(t).name == src_basename
+                for t in _release_bin_group_templates(group)
+            ):
                 return task
     return None
 
