@@ -32,7 +32,8 @@ import pytest
 
 pytestmark = pytest.mark.ui
 
-WRAPPER = Path(__file__).resolve().parents[2] / "scripts" / "diagnostics" / "ui_mcp.sh"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+WRAPPER = REPO_ROOT / "scripts" / "diagnostics" / "ui_mcp.sh"
 
 # Hardcoded, NOT derived from containers_list: deriving it would silently enlist every new
 # service into a suite CI never runs, so the next person to type `-m ui` inherits failures
@@ -43,6 +44,12 @@ SERVICES = [
     ("sonarr", "Sonarr", "/"),
     ("freshrss", "Login · FreshRSS", "/i/"),
 ]
+
+# `two_factor` in Authelia's access control, so a one_factor cookie is turned away at the
+# portal (config-secret.yaml.j2:85-99). These skip unless a live two_factor session exists,
+# which only `ui_login.py --totp <code>` can create — the shared secret stays on the phone,
+# so there is no unattended path here by design.
+TWO_FACTOR_SERVICES = ["longhorn", "code-server", "n8n"]
 
 
 class McpClient:
@@ -113,6 +120,16 @@ class McpClient:
             self.proc.kill()
 
 
+def http_status(report: str) -> int | None:
+    """The status Playwright reported, or None when it reported none (a 200 is not always
+    printed). Checked before the title so a mid-rollout 404 says `HTTP 404` rather than
+    making someone work backwards from a missing title."""
+    for line in report.splitlines():
+        if "HTTP status:" in line:
+            return int(line.split("HTTP status:", 1)[1].strip())
+    return None
+
+
 def page_title(report: str) -> str | None:
     """The title Playwright reported, or None when the page carried none — which is what
     Traefik's 404 looks like, and the reason a missing title must never pass."""
@@ -165,6 +182,11 @@ def test_service_serves_its_own_ui(browser, domain, service, title, path):
         f"{service}: landed on the Authelia portal, so the session cookie was not accepted. "
         f"Re-mint it with `uv run python scripts/diagnostics/ui_login.py`."
     )
+    status = http_status(report)
+    assert status is None or status < 400, (
+        f"{service}: the route answered HTTP {status}. A 404 here usually means the pod is "
+        f"mid-rollout rather than that the route is wrong — check `probe.py health {service}`."
+    )
     assert page_title(report) == title, (
         f"{service}: expected the page titled {title!r}, got {page_title(report)!r}. "
         f"An absent title means Traefik answered rather than the app."
@@ -186,4 +208,74 @@ def test_a_route_with_no_backend_is_not_scored_as_a_rendered_ui(browser, domain)
     assert not is_error, "expected Traefik to answer rather than the navigation to fail"
     assert page_title(report) is None, (
         f"expected no title from an unrouted host, got {page_title(report)!r}"
+    )
+
+
+@pytest.fixture(scope="module")
+def two_factor_browser():
+    """A browser carrying a two_factor session, or a skip when none is live.
+
+    Skipping rather than failing is the honest outcome: a two_factor session lasts about an
+    hour and can only be minted by a human typing a code, so its absence is the normal state
+    of this machine, not a regression in anything.
+    """
+    # Through `uv run`, not the shebang: ui_login imports probe_core, which uses PEP 758
+    # syntax that Ubuntu's 3.12 /usr/bin/python3 cannot parse.
+    proc = subprocess.run(
+        [
+            "uv",
+            "run",
+            "--directory",
+            str(REPO_ROOT),
+            "python",
+            "scripts/diagnostics/ui_login.py",
+            "--check",
+            "--two-factor",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        pytest.skip(
+            "no live two_factor session — mint one with "
+            "`uv run python scripts/diagnostics/ui_login.py --totp <code>`"
+        )
+    client = McpClient([str(WRAPPER), "--two-factor"])
+    try:
+        client.call(
+            "initialize",
+            {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "ui-smoke-2fa", "version": "1"},
+            },
+        )
+        client.notify("notifications/initialized")
+        yield client
+    finally:
+        client.close()
+
+
+@pytest.mark.parametrize("service", TWO_FACTOR_SERVICES)
+def test_two_factor_service_is_reachable(two_factor_browser, domain, service):
+    """That the two_factor session gets past the portal and the app answers.
+
+    Deliberately weaker than the one_factor tests above, which pin an exact title. These
+    three cannot be reached to learn their titles without a live code, and inventing one
+    would be a guess dressed as an assertion. Not-the-portal plus a title present is what is
+    actually being claimed: the second factor worked and the backend served HTML.
+    """
+    report, is_error = two_factor_browser.navigate(f"https://{service}.local.{domain}/")
+
+    assert not is_error, f"{service}: navigation reported an error:\n{report}"
+    assert "auth.local." not in report, (
+        f"{service}: landed on the Authelia portal, so the two_factor session was not "
+        f"accepted. Re-mint with `ui_login.py --totp <code>`; it lapses after about an hour."
+    )
+    status = http_status(report)
+    assert status is None or status < 400, (
+        f"{service}: the route answered HTTP {status} — check `probe.py health {service}`."
+    )
+    assert page_title(report) is not None, (
+        f"{service}: no page title, so Traefik answered rather than the app."
     )
