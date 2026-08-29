@@ -39,6 +39,16 @@
             "type": "command",
             "command": "~/server/.claude/hooks/block-protected-bash.sh",
             "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "~/server/.claude/hooks/nudge-land-sh.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "~/server/.claude/hooks/block-footguns.sh",
+            "timeout": 10
           }
         ]
       },

@@ -230,6 +230,20 @@ if [[ "$detach" == 1 && ( "$check_requested" == 1 || "$dry_run" == 1 ) ]]; then
     exit 64
 fi
 
+# The fact cache is shared by host across every worktree on this machine, and it pins the
+# interpreter of whichever session gathered facts first. A cache naming a worktree that is gone
+# fails EVERY deploy at Gathering Facts for the full 7200s TTL, with an error that names a module
+# rather than the cache -- and it does so AFTER the ~9 minute wait on the lock below, so the run
+# looks like it built for ten minutes and then died having done nothing. Clearing costs one
+# re-gather, so this clears rather than refuses. Runs before --check and --dry-run too: a dry run
+# gathers facts like any other run, which is how the cache gets re-poisoned in the first place.
+#
+# DECIDED: this preflight fails OPEN. It is a remediation, not a verdict -- if it cannot clear the
+# cache, the deploy proceeds and dies at Gathering Facts exactly as it does today, except now with
+# this script's stderr naming the cache directly above the misleading module error. Blocking every
+# deploy on a bug in a cache-cleaner would be a worse failure than the one it prevents.
+uv run python scripts/deploy_tools/fact_cache_guard.py --clear || true
+
 # A tree behind origin/master renders stale templates and reverts live config for the roles
 # it targets, while every repo-side check still reads green -- the stale tree is consistent
 # with itself. Measured 2026-08-19; see scripts/deploy_tools/deploy_staleness.py. This runs before --check

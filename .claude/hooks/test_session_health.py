@@ -243,6 +243,7 @@ def _run_main(
     master_moved=None,
     env=None,
     sessions=None,
+    worktrees=None,
 ):
     monkeypatch.setattr(_mod.sys, "stdin", io.StringIO(stdin))
     monkeypatch.setattr(_mod, "docker_problems", lambda: (dock or [], ok))
@@ -254,6 +255,10 @@ def _run_main(
     # stubbed by default: the real one reads this machine's live worktrees, which would
     # make every main() assertion depend on what else happens to be open right now
     monkeypatch.setattr(_mod, "other_live_sessions", lambda cwd: sessions or [])
+    # stubbed by default for the same reason: the real one shells out to
+    # prune_worktrees.py, whose answer depends on this machine's live worktrees and on
+    # GitHub being reachable
+    monkeypatch.setattr(_mod, "stale_worktree_lines", lambda: worktrees or [])
     if env:
         for k, v in env.items():
             monkeypatch.setenv(k, v)
@@ -345,3 +350,39 @@ def test_main_prints_master_moved_line(monkeypatch, capsys):
     )
     assert _mod.main() == 0
     assert "3 commits behind origin/master" in capsys.readouterr().out
+
+
+def test_main_prints_the_removable_worktree_lines(monkeypatch, capsys):
+    _run_main(
+        monkeypatch,
+        '{"source":"startup"}',
+        worktrees=[
+            "\U0001f9f9 1 merged worktree(s) can be removed:",
+            "  old-thing — x",
+        ],
+    )
+    assert _mod.main() == 0
+    assert "old-thing" in capsys.readouterr().out
+
+
+def test_stale_worktree_lines_reports_removable(monkeypatch):
+    brief = (
+        "\U0001f9f9 1 merged worktree(s) can be removed:\n"
+        "  old-thing — worktree-old-thing merged, clean, unlocked\n"
+        "  → uv run python scripts/dev/prune_worktrees.py --prune\n"
+    )
+    monkeypatch.setattr(_mod, "_run", lambda *a, **k: _result(brief))
+    assert any("old-thing" in line for line in _mod.stale_worktree_lines())
+
+
+def test_stale_worktree_lines_silent_when_clean(monkeypatch):
+    monkeypatch.setattr(_mod, "_run", lambda *a, **k: _result(""))
+    assert _mod.stale_worktree_lines() == []
+
+
+def test_stale_worktree_lines_swallows_a_timeout(monkeypatch):
+    def boom(*a, **k):
+        raise subprocess.TimeoutExpired(cmd="prune_worktrees.py", timeout=30)
+
+    monkeypatch.setattr(_mod, "_run", boom)
+    assert _mod.stale_worktree_lines() == []

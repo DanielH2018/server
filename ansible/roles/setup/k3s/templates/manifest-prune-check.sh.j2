@@ -149,6 +149,34 @@ EXCLUDED_NS_KINDS=(
 ORPHANS=""
 add_orphan() { ORPHANS="${ORPHANS:+$ORPHANS; }$1"; }
 
+# What the staged manifests declare, read ONCE as `kind/name` pairs.
+#
+# This used to be a per-object `grep -rlE "name: <name>$"` across the whole staged tree, whose
+# false negative is recorded in this script's header: `name:` appears at a dozen nesting levels
+# in a manifest, so a container, volume, port or ConfigMap key sharing a name with the orphaned
+# object read as "still declared" — in ANY file, of ANY kind — and the orphan was missed by the
+# check that exists to find it. manifest-declares.py reads document position instead: a
+# top-level `kind` paired with the `name` inside that document's own `metadata:` block.
+# ansible/tests/test_manifest_declares.py asserts it returns what PyYAML returns for every
+# manifest this repo renders, so a shape it cannot read fails CI rather than going quiet here.
+#
+# Namespace is deliberately not part of the key — see that script's header. `kind/name` is
+# strictly tighter than the match it replaces and never invents a namespace it would get wrong.
+declare -A DECLARED=()
+DECLARED_ERR=""
+while IFS= read -r entry; do
+  [[ -n "$entry" ]] && DECLARED["$entry"]=1
+done < <(/usr/local/bin/manifest-declares.py "$MANIFEST_ROOT" 2>/dev/null)
+
+# An empty set would mark every live object an orphan and push a spectacular false red. Report
+# the read failure itself instead: it is one line, and it is the actual fault.
+#
+# Emptiness is tested with "${DECLARED[*]}" rather than the usual array-length form, because
+# this file is a Jinja template and `${` followed by `#` opens a Jinja comment tag.
+if [[ -z "${DECLARED[*]:-}" ]]; then
+  DECLARED_ERR="manifest-declares.py read no objects from ${MANIFEST_ROOT} — orphan arm skipped"
+fi
+
 is_excluded_ns() {
   local ns="$1" kind="$2" entry entry_kind
   for entry in "${EXCLUDED_NS_KINDS[@]}"; do
@@ -168,7 +196,7 @@ check_kind() {
     # child of something else — our templates would never declare it, so its absence here is
     # expected, not drift.
     [[ -n "$owner" ]] && continue
-    if ! grep -rlE "name: ${name}[[:space:]]*\$" "$MANIFEST_ROOT" >/dev/null 2>&1; then
+    if [[ -z "${DECLARED[${kind}/${name}]:-}" ]]; then
       add_orphan "${kind}/${ns}/${name}"
     fi
   done < <($KUBECTL get "$kind" -A \
@@ -206,9 +234,15 @@ check_kind() {
 # The homelab namespace's four live policies (flaresolverr, headlamp, n8n-broker, registry) are
 # all staged by their own roles, so this kind starts green; longhorn-system's seven are excluded
 # above.
-for KIND in ingressroute middleware service tlsoption deployment daemonset cronjob networkpolicy; do
-  check_kind "$KIND"
-done
+#
+# Skipped entirely when the declared set could not be read: with an empty set every live object
+# is an orphan, so running the arm would bury the one real fault under several hundred false
+# ones. DECLARED_ERR carries that fault into the message below instead.
+if [[ -z "$DECLARED_ERR" ]]; then
+  for KIND in ingressroute middleware service tlsoption deployment daemonset cronjob networkpolicy; do
+    check_kind "$KIND"
+  done
+fi
 
 # SECOND AND THIRD ARMS: is the code deployed on this host the code in the repo, and are the
 # template-rendered scripts current? Both live in setup-drift-lib.sh, sourced above, because
@@ -226,7 +260,7 @@ setup_drift_scan
 DEPLOYED_NOTE="${DEPLOYED_NOTE/the setup plays once each/initial_setup.yml and k3s-bringup.yml once each}"
 MANIFEST_NOTE="${MANIFEST_NOTE/the setup plays once each/k3s-bringup.yml and initial_setup.yml once each}"
 
-if [[ -z "$ORPHANS" && -z "$DRIFTED" && -z "$STALE" ]]; then
+if [[ -z "$ORPHANS" && -z "$DRIFTED" && -z "$STALE" && -z "$DECLARED_ERR" ]]; then
   STATUS=up
   # Names the arms it actually covered. The old wording — "deployed scripts match the repo" —
   # was true of the three copy:-deployed files and silently claimed the other twenty.
@@ -234,7 +268,8 @@ if [[ -z "$ORPHANS" && -z "$DRIFTED" && -z "$STALE" ]]; then
 else
   STATUS=down
   MSG=""
-  [[ -n "$ORPHANS" ]] && MSG="live but absent from staged manifests: ${ORPHANS}"
+  [[ -n "$DECLARED_ERR" ]] && MSG="$DECLARED_ERR"
+  [[ -n "$ORPHANS" ]] && MSG="${MSG:+$MSG; }live but absent from staged manifests: ${ORPHANS}"
   # Each name is a repo-relative path, so the role it belongs to says which playbook renders it:
   # roles/setup/k3s/... comes from k3s-bringup.yml, every other setup role from initial_setup.yml.
   [[ -n "$DRIFTED" ]] && MSG="${MSG:+$MSG; }deployed code differs from the repo (re-run the playbook that renders it): ${DRIFTED}"

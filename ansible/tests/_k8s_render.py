@@ -61,12 +61,17 @@ def _render_all():
             rendered, err = render_or_error(env, tpl.name, ctx)
             if err:
                 raise AssertionError(f"{role}/{tpl.name} failed to render: {err}")
+            _TEXTS.append((role, tpl.name, rendered))
             for doc in yaml.safe_load_all(rendered):
                 if isinstance(doc, dict) and doc.get("kind"):
                     yield role, tpl.name, doc
 
 
 _CACHE: tuple | None = None
+# Filled by _render_all as a side effect, because the render is the expensive part and a
+# second pass over the tree would double it. Only reachable through rendered_texts(), which
+# forces the render first.
+_TEXTS: list[tuple[str, str, str]] = []
 
 
 def rendered_docs():
@@ -83,5 +88,18 @@ def rendered_docs():
     """
     global _CACHE
     if _CACHE is None:
+        _TEXTS.clear()
         _CACHE = tuple(_render_all())
     return iter(_CACHE)
+
+
+def rendered_texts():
+    """(role, template name, rendered TEXT) for every manifest template.
+
+    The docs above are what a manifest means; this is what it looks like. A reader that parses
+    YAML by position — manifest_declares.py, which runs stdlib-only on the host — has to be
+    tested against the bytes, because re-serialising a parsed doc normalises exactly the
+    formatting such a reader could trip over.
+    """
+    rendered_docs()
+    return iter(tuple(_TEXTS))

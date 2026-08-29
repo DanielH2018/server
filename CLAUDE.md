@@ -104,6 +104,11 @@ takes `/var/lock/server-git-tree.lock` — the same lock `gitops-deploy.service`
 and the weekly secret-rotate cron hold — so a deploy cannot interleave with the automated
 pipeline or with another Claude session.
 
+Before it takes the lock it clears an Ansible fact cache pinning another worktree's interpreter
+(`scripts/deploy_tools/fact_cache_guard.py`). That cache is keyed by host, not by checkout, so a
+pruned worktree used to fail EVERY deploy at Gathering Facts for the full 7200s TTL — with an
+error naming a module rather than the cache, after the ~9-minute wait on the lock.
+
 Its four non-zero exits all mean **nothing was deployed**, and each is a resume point rather
 than a playbook failure. They arrive as a bare `Exit code N`, which is why they are here:
 
@@ -265,6 +270,17 @@ history, the `homelab-ui` DNS/auth/secrecy triad and its `-m ui` suite, per-file
   a content-printing read (`cat`, `head`, `grep` without `-o`/`-c`/`-l`) of a deployed host
   script that renders a credential inline; that set is derived from the tree by
   `scripts/secrets_mgmt/secret_bearing_host_paths.py`, not listed, and covers 15 paths today.
+- **nudge-land-sh** (PreToolUse, Bash) — *denies* a command that blocks on CI (`gh run watch`,
+  `gh pr checks --watch`) and the third or later CI-status read in one session, naming the
+  `land.sh --pr <n> --since <sha>` form instead. The first two reads are an ordinary glance and
+  pass. Measured over the 7 days to 2026-08-29: 173 `gh pr checks` + 75 `gh run list` + 61
+  `gh run watch` against 29 `land.sh` runs, which is why the CLAUDE.md paragraph became a hook.
+- **block-footguns** (PreToolUse, Bash) — *denies* four commands that return a plausible wrong
+  answer rather than an error: `grep -Z`/`-z` (this host's grep is ugrep, where those mean
+  `--fuzzy` and `--decompress`, not the NUL flags — use `--null`/`--null-data`), a bare
+  `git stash pop`/`apply` (the stash stack is per-repository, so it can take another session's
+  WIP), `kubectl rollout restart` (Forbidden to the read-only SA, and it prints "successfully
+  rolled out" anyway), and `ssh daniel-<host> '<git …>'` with no `cd` into the repo.
 - **validate-compose** (PostToolUse) — re-renders all compose templates after you edit a
   `docker-compose.yml.j2`, an `ansible/templates/*.j2` macro, or `host_vars`/`group_vars/all.yml`;
   fails on malformed YAML (catches Jinja indent bugs `ansible-lint` misses) and on an
