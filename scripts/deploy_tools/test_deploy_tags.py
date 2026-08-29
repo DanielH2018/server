@@ -159,18 +159,71 @@ def test_describe_does_not_change_lists_own_shape(capsys):
 
 
 def test_changed_prints_tags_for_a_service_and_k8s_change(capsys, monkeypatch):
+    # Both names must be live containers_list entries: `changed` splits shared roles out of
+    # the tag list against real inventory, so a retired service now reads as shared. `dozzle`
+    # stood here until it was retired on 2026-08-29.
     monkeypatch.setattr(
         deploy_tags,
         "_git_diff_paths",
         lambda ref: [
-            "ansible/roles/containers/dozzle/templates/docker-compose.yml.j2",
+            "ansible/roles/containers/glances/templates/docker-compose.yml.j2",
             "ansible/roles/k8s/jellyfin/templates/deployment.yaml.j2",
         ],
     )
     assert deploy_tags.main(["changed"]) == 0
     captured = capsys.readouterr()
-    assert captured.out.strip() == "dozzle,jellyfin"
-    assert "dozzle, jellyfin" in captured.err
+    assert captured.out.strip() == "glances,jellyfin"
+    assert "glances, jellyfin" in captured.err
+
+
+def test_split_shared_roles_separates_an_undeclared_role(host_vars):
+    deployable, shared = deploy_tags.split_shared_roles(
+        {"sonarr", "jellyfin", "manifests"}, host_vars
+    )
+    assert deployable == ["jellyfin", "sonarr"]
+    assert shared == ["manifests"]
+
+
+def test_split_shared_roles_calls_nothing_shared_when_all_are_declared(host_vars):
+    """The reject half. A splitter that pushed everything into `shared` would derive no tags
+    at all and turn every landing into a full-deploy instruction."""
+    deployable, shared = deploy_tags.split_shared_roles(
+        {"sonarr", "jellyfin"}, host_vars
+    )
+    assert deployable == ["jellyfin", "sonarr"]
+    assert shared == []
+
+
+def test_changed_drops_a_shared_role_and_deploys_the_rest(capsys, monkeypatch):
+    """PR #617's shape. Emitting `manifests` as a tag makes deploy.sh refuse the whole list
+    (exit 2), so the valid service beside it never deploys."""
+    monkeypatch.setattr(
+        deploy_tags,
+        "_git_diff_paths",
+        lambda ref: [
+            "ansible/roles/k8s/manifests/tasks/main.yml",
+            "ansible/roles/k8s/jellyfin/defaults/main.yml",
+        ],
+    )
+    assert deploy_tags.main(["changed"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "jellyfin"
+    assert "manifests" in captured.err
+    assert "ansible-playbook ansible/deploy.yml" in captured.err
+
+
+def test_changed_refuses_when_only_shared_roles_changed(capsys, monkeypatch):
+    """Exit 3, not 0. An empty tag list returned as success makes deploy.sh exit 0 having
+    deployed nothing, which is the same false green in a different place."""
+    monkeypatch.setattr(
+        deploy_tags,
+        "_git_diff_paths",
+        lambda ref: ["ansible/roles/k8s/manifests/tasks/main.yml"],
+    )
+    assert deploy_tags.main(["changed"]) == 3
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "manifests" in captured.err
 
 
 def test_changed_refuses_a_broad_change(capsys, monkeypatch):

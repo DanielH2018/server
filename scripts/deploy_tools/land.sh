@@ -28,7 +28,8 @@
 # Verdicts printed on stdout: settled | unhealthy | deploy-failed | nothing-to-deploy |
 # blocked | needs-manual-apply. `blocked` is not a failure of this PR — something else in the
 # incoming range needs an operator, and nothing was deployed. `needs-manual-apply` means this
-# PR reaches a plane no deploy tag covers (the setup plane), so it is landed but not live.
+# PR reaches a plane no deploy tag covers — the setup plane, or a shared k8s role with no
+# `containers_list` entry — so it is landed but not live.
 set -uo pipefail
 
 PR=''
@@ -132,9 +133,10 @@ if [ -z "$TAGS" ]; then
   pr_json=$(gh pr view "$PR" --json files,changedFiles) || die "could not read PR files" 1
   # What a deploy tag cannot reach. deploy.yml is a containers_list loop, so a setup-plane
   # change needs initial_setup.yml and derives no tag at all — which land.sh used to report
-  # as nothing-to-deploy. Computed whether or not tags were derived: a PR can touch a k8s
-  # role AND the setup plane, and then the deploy succeeds while half the change is
-  # unapplied, under a `settled` verdict.
+  # as nothing-to-deploy. A shared k8s role (manifests, seed-volume, …) has no entry in that
+  # list either, so it needs a full deploy. Computed whether or not tags were derived: a PR
+  # can touch a deployable role AND one of those planes, and then the deploy succeeds while
+  # half the change is unapplied, under a `settled` verdict.
   PLANE=$(uv run python scripts/deploy_tools/land_tags.py --plane --json "$pr_json") ||
     die "plane classification failed" 1
   derived=$(uv run python scripts/deploy_tools/land_tags.py --json "$pr_json") ||
@@ -207,8 +209,13 @@ fi
 case "$deploy_rc" in
   0) ;;
   2)
-    echo "VERDICT: nothing-to-deploy (no service tag matched)"
-    exit 0
+    # A tag matched no service, so deploy.sh refused the WHOLE list and nothing was deployed
+    # — including every valid service beside the bad tag. This read as `nothing-to-deploy`
+    # and exit 0 until 2026-08-29, which is how PR #617 left 22 digest pins undeployed behind
+    # a green verdict. The derivation is fixed upstream; this stays as the backstop, because
+    # a tag list deploy.sh will not accept is a defect and never a finished landing.
+    echo "VERDICT: deploy-failed (PR #$PR — a derived tag matched no service, so nothing deployed; tags: $TAGS)"
+    exit 1
     ;;
   75) die "deploy lock stayed busy after $LOCK_RETRIES attempts — nothing deployed" 75 ;;
   *)
@@ -232,7 +239,7 @@ fi
 
 if [ "$verdict_rc" -eq 0 ]; then
   if [ -n "$PLANE" ]; then
-    echo "VERDICT: needs-manual-apply (PR #$PR, $MERGE_SHA — services deployed, setup plane not)"
+    echo "VERDICT: needs-manual-apply (PR #$PR, $MERGE_SHA — services deployed, the plane above not)"
     exit 1
   fi
   echo "VERDICT: settled (PR #$PR, $MERGE_SHA, tags: $TAGS)"

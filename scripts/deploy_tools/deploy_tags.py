@@ -107,6 +107,29 @@ def known_tags(host_vars: Path = HOST_VARS) -> set[str]:
     return service_tags(host_vars) | set(BLOCK_TAGS) | set(RESERVED_TAGS)
 
 
+def split_shared_roles(
+    tags, host_vars: Path = HOST_VARS
+) -> tuple[list[str], list[str]]:
+    """Split derived role names into (deployable, shared).
+
+    A path-to-tag derivation reads a role DIRECTORY name, but only a role with a
+    `containers_list` entry has a deploy tag. Eight roles under ansible/roles/k8s/ have no
+    entry — manifests, rollout-drain, seed-volume, volume-snapshot, volume-revert,
+    image-builder, longhorn-api, cronjob-gate — because other roles include them by literal
+    name. Handing one to `--tags` poisons the WHOLE list: deploy.sh validates every tag and
+    exits 2 on the first unknown one, so the valid services beside it are refused too.
+
+    That is not hypothetical. PR #617 (2026-08-29) bumped digest pins in 22 deployable roles
+    alongside `roles/k8s/manifests/` and `roles/k8s/seed-volume/`; land.sh derived all 24
+    names, deploy.sh refused the list, and 22 services sat undeployed behind a green master.
+
+    `deploy_logic.k8s_remediation` turns the shared half into an instruction that works.
+    """
+    declared = service_tags(host_vars)
+    tags = set(tags)
+    return sorted(tags & declared), sorted(tags - declared)
+
+
 def dry_run_unsupported(all_vars: Path = ALL_VARS) -> set[str]:
     loaded = yaml.safe_load(all_vars.read_text()) or {}
     return set(loaded.get("k8s_dry_run_unsupported") or [])
@@ -185,10 +208,16 @@ def _load_deploy_logic():
     from deploy_logic import (  # noqa: E402  (see docstring above)
         broad_remediation,
         expand_build_couplings,
+        k8s_remediation,
         services_from_changed_paths,
     )
 
-    return services_from_changed_paths, broad_remediation, expand_build_couplings
+    return (
+        services_from_changed_paths,
+        broad_remediation,
+        expand_build_couplings,
+        k8s_remediation,
+    )
 
 
 def _git_diff_paths(ref: str, cwd: Path = REPO) -> list[str]:
@@ -228,7 +257,7 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
     at exit 4, with the blocker (another session's gitops_deploy.py change) already visible in
     the range the whole time.
     """
-    services_from_changed_paths, broad_remediation, _ = _load_deploy_logic()
+    services_from_changed_paths, broad_remediation, _, _ = _load_deploy_logic()
     try:
         paths = _incoming_paths(args.ref)
     except subprocess.CalledProcessError as exc:
@@ -278,9 +307,12 @@ def _cmd_changed(args: argparse.Namespace) -> int:
     """Print, on stdout, the comma-joined --tags value for every service changed vs `ref`
     (default origin/master) — nothing else goes to stdout, so scripts/deploy.sh can capture it
     directly. Everything explaining the derivation goes to stderr."""
-    services_from_changed_paths, broad_remediation, expand_build_couplings = (
-        _load_deploy_logic()
-    )
+    (
+        services_from_changed_paths,
+        broad_remediation,
+        expand_build_couplings,
+        k8s_remediation,
+    ) = _load_deploy_logic()
     try:
         paths = _git_diff_paths(args.ref)
     except subprocess.CalledProcessError as exc:
@@ -333,7 +365,22 @@ def _cmd_changed(args: argparse.Namespace) -> int:
         )
 
     # A build role whose workload lives in a different role must not deploy alone.
-    tags = sorted(expand_build_couplings(cs.k8s) | cs.services)
+    tags, shared = split_shared_roles(expand_build_couplings(cs.k8s) | cs.services)
+    if shared:
+        # Emitting these as tags is what PR #617 did, and deploy.sh then refuses the whole
+        # list (exit 2) — so the shared roles leave the tag list and become an instruction
+        # that can actually apply them.
+        print(
+            f"deploy --changed: {', '.join(shared)} "
+            f"{'is a shared role' if len(shared) == 1 else 'are shared roles'} with no "
+            f"containers_list entry. {k8s_remediation(set(shared), service_tags())}",
+            file=sys.stderr,
+        )
+        if not tags:
+            # Exit 3, the documented "broad, maps to no single service" refusal. Returning 0
+            # with an empty tag list makes deploy.sh exit 0 having deployed nothing, which is
+            # the false green this change removes.
+            return 3
     if not tags:
         print(
             f"deploy --changed: no deployable service changed vs {args.ref}.",

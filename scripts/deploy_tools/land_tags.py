@@ -6,6 +6,12 @@ that range covers every other session's merged work too. Deploying somebody else
 half-finished landing is not this session's to do. A PR's file list is exactly this
 session's scope.
 
+WHY A ROLE NAME IS NOT AUTOMATICALLY A TAG. Only a role with a `containers_list` entry has
+one. Eight roles under ansible/roles/k8s/ have no entry because other roles include them by
+literal name, and handing one to `--tags` makes deploy.sh refuse the WHOLE list (exit 2) --
+so the valid services beside it are refused too. PR #617 landed 22 digest pins that way and
+none of them deployed. Those roles come out of the tags and into `plane_note` instead.
+
 WHY THE COUNT ASSERTION. `gh pr view --json files` paginates at 100. A 137-file PR returns
 100 entries with no error and no marker, so the derived tag list is a silent subset of what
 merged -- and every downstream check reads green over it. When the returned count disagrees
@@ -40,8 +46,14 @@ sys.path.insert(
 from deploy_logic import (  # noqa: E402 — needs the path insert above
     broad_remediation,
     expand_build_couplings,
+    k8s_remediation,
     services_from_changed_paths,
 )
+
+# Same directory, so a direct invocation already has it on sys.path. `service_tags` is the
+# one reader of containers_list, and sharing it is what keeps "is this name a deploy tag?"
+# answered identically here and in deploy.sh's own validation.
+import deploy_tags  # noqa: E402
 
 _K8S = re.compile(r"^ansible/roles/k8s/([^/]+)/")
 _DOCKER = re.compile(r"^ansible/roles/containers/([^/]+)/")
@@ -53,8 +65,17 @@ _DOCKER = re.compile(r"^ansible/roles/containers/([^/]+)/")
 _NOT_SERVICES = frozenset({"common", "archive"})
 
 
-def tag_for(path: str) -> str | None:
-    """The deploy tag a changed path maps to, or None."""
+def declared_tags() -> set[str]:
+    """Every name that selects a service, read from containers_list."""
+    return deploy_tags.service_tags()
+
+
+def role_for(path: str) -> str | None:
+    """The role directory a changed path belongs to, or None.
+
+    Not the same question as `tag_for`: a role directory under roles/k8s/ need not have a
+    `containers_list` entry, and eight of them do not.
+    """
     for pattern in (_K8S, _DOCKER):
         m = pattern.match(path)
         if m and m.group(1) not in _NOT_SERVICES:
@@ -62,7 +83,29 @@ def tag_for(path: str) -> str | None:
     return None
 
 
-def plane_note(files) -> str:
+def tag_for(path: str, declared: set[str] | None = None) -> str | None:
+    """The deploy tag a changed path maps to, or None."""
+    role = role_for(path)
+    if role is None:
+        return None
+    declared = declared_tags() if declared is None else declared
+    return role if role in declared else None
+
+
+def shared_roles(files, declared: set[str] | None = None) -> list[str]:
+    """The changed role directories that have no `containers_list` entry.
+
+    These are the shared k3s plane — `manifests` is the apply-and-roll path every workload
+    includes, `seed-volume` and `volume-revert` are storage paths several include. Naming one
+    in `--tags` makes deploy.sh refuse the ENTIRE list (exit 2), so they must be split off the
+    tags and reported as work a human still owes. PR #617 is the measured case.
+    """
+    declared = declared_tags() if declared is None else declared
+    roles = {r for p in files if (r := role_for(p))}
+    return sorted(roles - declared)
+
+
+def plane_note(files, declared: set[str] | None = None) -> str:
     """What this PR still needs a HUMAN to apply, or "" if nothing.
 
     A deploy tag covers roles/k8s and roles/containers. It does not cover the setup plane,
@@ -74,26 +117,52 @@ def plane_note(files) -> str:
     Returned for the tag-carrying case too. A PR can touch a k8s role AND the setup plane,
     where the deploy genuinely succeeds and half the change is still unapplied -- the harder
     version of the same silence, because the verdict reads `settled`.
+
+    A shared k8s role is the same shape, one plane over: `--tags manifests` matches nothing,
+    so no derived tag can ever apply it and only a full deploy will. Reusing this note rather
+    than minting a verdict keeps one meaning for "landed, not live".
     """
-    cs = services_from_changed_paths(list(files))
-    if not (cs.broad_setup or cs.broad_deploy):
-        return ""
-    return broad_remediation(cs.broad_deploy, cs.broad_setup)
+    files = list(files)
+    declared = declared_tags() if declared is None else declared
+    notes = []
+    shared = shared_roles(files, declared)
+    if shared:
+        # DECIDED: report the shared plane, do not fan it out to its dependents. 53 roles
+        # include k8s/manifests, so a fan-out is a full deploy wearing a tag list — 20
+        # minutes of run time, and every rollout gate and stabilisation window with it — for
+        # what is usually a two-line change. Reporting it keeps the operator's choice of
+        # when. deploy_logic.k8s_remediation reached the same conclusion for the deployer's
+        # alert path and carries the longer argument, including why routing it to `cs.broad`
+        # is worse than either.
+        # Passing ONLY the shared half. k8s_remediation appends a scoped `--tags` line for
+        # any deployable role it is given, and land.sh has already deployed those itself.
+        notes.append(k8s_remediation(set(shared), declared))
+    cs = services_from_changed_paths(files)
+    if cs.broad_setup or cs.broad_deploy:
+        notes.append(broad_remediation(cs.broad_deploy, cs.broad_setup))
+    return " ".join(notes)
 
 
-def derive(files, changed_files: int) -> tuple[list[str], str]:
+def derive(
+    files, changed_files: int, declared: set[str] | None = None
+) -> tuple[list[str], str]:
     """(sorted tags, 'pr'|'fallback').
 
     'fallback' means the file list could not be trusted and the caller must widen to a SHA
     range. The tag list returned alongside it is empty on purpose: a partial list is worse
     than none, because it looks like an answer.
+
+    A changed role with no `containers_list` entry yields no tag. It is not dropped silently
+    -- `plane_note` names it and what applies it -- because dropping it from BOTH is how the
+    setup plane used to read as `nothing-to-deploy`.
     """
     files = list(files)
     if len(files) != changed_files:
         return [], "fallback"
+    declared = declared_tags() if declared is None else declared
     # A build role whose workload lives in a different role must not deploy alone: the build
     # would push a new image that nothing rolls onto, and report green doing it.
-    tags = expand_build_couplings({t for p in files if (t := tag_for(p))})
+    tags = expand_build_couplings({t for p in files if (t := tag_for(p, declared))})
     return sorted(tags), "pr"
 
 
