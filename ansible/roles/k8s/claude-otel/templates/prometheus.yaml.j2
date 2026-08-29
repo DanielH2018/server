@@ -384,6 +384,24 @@ data:
             action: keep
           - source_labels: [__meta_kubernetes_endpoint_address_target_name]
             target_label: pod
+        # Longhorn re-exports client-go and workqueue histograms under a `longhorn_` prefix, and
+        # they are 59.3% of this job on their own — 5,511 of 9,288 series measured 2026-08-29
+        # (1991 + 1760 + 880 + 880). Nothing reads them: the same grep that returns zero hits for
+        # these four returns 12 for longhorn_volume_robustness and 5 for longhorn_disk_usage_bytes,
+        # so a longhorn_ metric name in this repo is findable and these are genuinely unused.
+        #
+        # `_sum` and `_count` survive (1002 series), matching control_plane_bucket_drop()'s stated
+        # philosophy above — rates and averages stay available even though nothing reads them yet.
+        #
+        # DELIBERATELY A SEPARATE BLOCK, not an extension of control_plane_bucket_drop(). That
+        # macro's regex names the UNPREFIXED workqueue_* and rest_client_* families, which is what
+        # the kubelet job emits; adding the longhorn_-prefixed twins to it would apply this job's
+        # decision to that one by a route nobody reading either job would expect.
+        metric_relabel_configs:
+          - source_labels: [__name__]
+            action: drop
+            regex: >-
+              (longhorn_rest_client_rate_limiter_latency_seconds|longhorn_rest_client_request_latency_seconds|longhorn_workqueue_queue_duration_seconds|longhorn_workqueue_work_duration_seconds)_bucket
       # This stack's OWN Loki/Tempo internals, distinct from the loki-homelab job above
       # (that one is the general-purpose homelab log store). instance_role separates the
       # two so a dashboard/alert query doesn't accidentally blend claude-otel's internal
@@ -429,6 +447,25 @@ data:
         relabel_configs:
           - action: labelmap
             regex: __meta_kubernetes_node_label_(.+)
+        # Three cAdvisor housekeeping families nothing here reads — 4,657 series measured
+        # 2026-08-29 on this job (1750 + 1615 + 1292). Dropped for the same BYTES reason as the
+        # control-plane buckets above.
+        #
+        # The census that cleared them had a control, because "grep found nothing" and "grep asked
+        # the wrong question" look identical: the same search over the same file set finds
+        # container_cpu_usage_seconds_total in both cadvisor dashboards and in
+        # homelab-mcp/files/app.py:305, and finds check.py's container_start_time_seconds,
+        # container_oom_events_total and container_cpu_cfs_*. So a live consumer IS findable, and
+        # these three return zero hits repo-wide.
+        #
+        # NAMED EXPLICITLY, never a prefix glob. container_memory_failcnt is a DIFFERENT family
+        # (323 series) that check.py:377 reads as a real cross-estate signal, and any
+        # `container_memory_fail.*` spelling would swallow it. Prometheus anchors these regexes
+        # fully, so the exact names below cannot reach it.
+        metric_relabel_configs:
+          - source_labels: [__name__]
+            action: drop
+            regex: (container_blkio_device_usage_total|container_tasks_state|container_memory_failures_total)
       # The kubelet's OWN metrics, distinct from the cadvisor job above. cadvisor answers "what
       # is each container doing"; these answer "is the kubelet itself healthy" — pod start
       # duration, PLEG relist latency, eviction counts, volume mount failures. A node that is
@@ -457,7 +494,18 @@ data:
       # cgroup walk. Cheaper and lower-cardinality than the cadvisor series, and it is what
       # `kubectl top` reads — so a dashboard built on it agrees with the CLI, where one built
       # on cadvisor's container_memory_working_set_bytes does not always.
+      # 1m, not the 15s global — see the interval note at the kube-state-metrics job. This job was
+      # the one member of that family the 2026-08-29 relaxation missed; it is 890 series.
+      #
+      # One thing to know before touching it: /metrics/resource emits container_cpu_usage_seconds_total,
+      # container_memory_working_set_bytes and container_start_time_seconds under names that COLLIDE
+      # with the cadvisor job, and monitor-bridge's cadvisor_sel() (check.py:448) is not job-pinned —
+      # it selects on {container!="", container!="POD"} alone, so check_restarts spans both jobs.
+      # The 1m interval is still safe there: the dominant source is already at 1m, 15 samples across
+      # the 15m window still register a start-time change, and the crash-loop spacing that arm is
+      # tuned for is 15-19 minutes (check.py:558), not sub-minute.
       - job_name: kubernetes-kubelet-resource
+        scrape_interval: 1m
         scheme: https
         metrics_path: /metrics/resource
         tls_config:
