@@ -31,13 +31,12 @@ from __future__ import annotations
 
 import json
 import re
-import shlex
 import sys
 import tempfile
 import time
 from pathlib import Path
 
-from _hook_common import emit_pretooluse_decision
+from _hook_common import emit_pretooluse_decision, invokes, split_stages
 
 # Reads that answer "what is CI doing right now". `gh pr view` and `gh api` are absent on
 # purpose: both are general-purpose and used for far more than CI status.
@@ -65,53 +64,12 @@ _LAND = (
 )
 
 
-def _tokens(command: str) -> list[list[str]]:
-    """Every pipeline/sequence stage of `command`, split into argv-ish tokens.
-
-    A hook that only inspected the first word would miss `git fetch && gh run watch`, which is
-    how these calls are usually written.
-    """
-    stages = []
-    try:
-        words = shlex.split(command)
-    except ValueError:
-        # Unbalanced quotes: nothing reliable to match on, so decline to judge.
-        return []
-    current: list[str] = []
-    for word in words:
-        if word in ("&&", "||", "|", ";", "&"):
-            if current:
-                stages.append(current)
-            current = []
-        else:
-            current.append(word)
-    if current:
-        stages.append(current)
-    return stages
-
-
-def _starts_with(stage: list[str], prefix: tuple[str, ...]) -> bool:
-    """True when `stage` invokes `prefix`, allowing global flags before the subcommand.
-
-    `gh run watch` and `gh --repo o/r run watch` are the same command. Dropping every flag
-    instead would drop a flag's VALUE with it (`--repo o/r` leaves a bare `o/r` that shifts
-    every position), so the subcommand words are matched as an adjacent run anywhere after
-    `gh` -- which also keeps `gh issue list --search run --label watch` from matching.
-    """
-    if not stage or stage[0] != prefix[0]:
-        return False
-    words, rest = list(prefix[1:]), stage[1:]
-    if not words:
-        return True
-    return any(rest[i : i + len(words)] == words for i in range(len(rest)))
-
-
 def classify(command: str) -> str | None:
     """ "watch", "status", or None -- what kind of CI polling this command is."""
-    for stage in _tokens(command):
-        if any(_starts_with(stage, p) for p in _WATCH_COMMANDS):
+    for stage in split_stages(command):
+        if any(invokes(stage, p) for p in _WATCH_COMMANDS):
             return "watch"
-        if any(_starts_with(stage, p) for p in _STATUS_COMMANDS):
+        if any(invokes(stage, p) for p in _STATUS_COMMANDS):
             # `--watch` turns a one-shot read into a blocking wait.
             if "--watch" in stage or "-w" in stage:
                 return "watch"
