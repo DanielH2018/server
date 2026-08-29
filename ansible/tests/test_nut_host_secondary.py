@@ -325,3 +325,20 @@ def test_the_watchdog_does_not_page_on_battery_state():
     """check_ups already owns battery state; alerting on OB here double-pages one event."""
     assert "ups.status" in WATCHDOG
     assert '"OB"' not in WATCHDOG
+
+
+def test_the_watchdog_keeps_upsc_stdout_and_stderr_apart():
+    """`2>&1` on the upsc call puts its diagnostics inside the VALUE.
+
+    upsc writes "Init SSL without certificate database" to stderr on every successful call
+    against this endpoint. Folding the streams made the pushed message multi-line and made the
+    empty-status branch unreachable, since the noise is never empty. Both shipped and were
+    caught on the check's first live cycle, 2026-08-29.
+    """
+    assert 'upsc "$ENDPOINT" ups.status 2>&1' not in WATCHDOG
+    assert 'ups.status 2>"$UPSC_STDERR"' in WATCHDOG
+
+
+def test_the_watchdog_collapses_newlines_out_of_its_message():
+    """A newline in either half breaks the syslog line and the Kuma push message."""
+    assert WATCHDOG.count("tr '\\n' ' '") >= 2
