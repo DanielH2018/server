@@ -227,6 +227,70 @@ def test_the_cwd_check_rejects_an_inherited_cwd() -> None:
     )
 
 
+def children_that_cannot_time_out_first(fn: ast.FunctionDef) -> list[str]:
+    """Child launches whose own --timeout is not strictly under the subprocess.run timeout.
+
+    The shared verdict for the pair below. A child that cannot time out first never gets to
+    report its own NO VERDICT: the outer subprocess.run raises TimeoutExpired, the broad except
+    logs and returns, and no alert is sent.
+    """
+    offenders = []
+    for node in ast.walk(fn):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "run"
+            and node.args
+            and isinstance(node.args[0], ast.List)
+        ):
+            continue
+        argv = [ast.unparse(e) for e in node.args[0].elts]
+        outer = next(
+            (ast.unparse(kw.value) for kw in node.keywords if kw.arg == "timeout"), None
+        )
+        if outer is None:
+            offenders.append(f"{argv} has no outer timeout at all")
+            continue
+        if "'--timeout'" not in argv:
+            offenders.append(f"{argv} passes no --timeout to the child")
+            continue
+        inner = argv[argv.index("'--timeout'") + 1]
+        if outer not in inner or "_INNER_TIMEOUT_MARGIN_S" not in inner:
+            offenders.append(f"child timeout {inner} is not {outer} minus the margin")
+    return offenders
+
+
+def test_each_staging_child_times_out_before_its_wrapper() -> None:
+    """A slow staging must page, not just log.
+
+    staging_gate.py and staging_expectations.py each catch their own TimeoutExpired and return
+    SSH_FAILURE, which classify() maps to NO VERDICT — so the EXISTING alert_once fires with the
+    right verdict word. That only happens if the child's deadline is the one that expires. Until
+    this check, consult_staging passed no --timeout at all, leaving staging_gate.py on its
+    argparse default of 1800s inside a 1200s wrapper: a race the child could not win, making its
+    own NO_VERDICT path dead code from its only caller.
+    """
+    offenders = children_that_cannot_time_out_first(_fn("consult_staging"))
+    assert not offenders, (
+        f"a wedged staging would be logged and never alerted: {offenders}"
+    )
+
+
+def test_the_inner_timeout_check_rejects_a_child_with_no_deadline() -> None:
+    """The rejecting half: the pre-fix call shape, verbatim, must fail the check above."""
+    before_the_fix = ast.parse(
+        "def consult_staging(services, origin):\n"
+        "    subprocess.run(\n"
+        "        [*_UV_PYTHON, STAGING_GATE_SCRIPT, origin, '--tags', tags],\n"
+        "        timeout=STAGING_GATE_TIMEOUT_S,\n"
+        "    )\n"
+    )
+    offenders = children_that_cannot_time_out_first(
+        _fn("consult_staging", before_the_fix)
+    )
+    assert offenders, "the check no longer sees a child that cannot time out first"
+
+
 def test_the_gate_is_off_by_default() -> None:
     """A slice that silently added wall-clock to every k8s tick on merge would be a behaviour
     change nobody opted into. The default lives in the source, so it is checkable here."""

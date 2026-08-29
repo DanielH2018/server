@@ -127,10 +127,24 @@ def missing_expectations() -> list[str]:
     return sorted(routable_services() - declared)
 
 
-def expectations() -> list[tuple[str, str, str, int]]:
-    """(service, hostname, path, expected_status) for everything declared."""
+def expectations(services: set[str] | None = None) -> list[tuple[str, str, str, int]]:
+    """(service, hostname, path, expected_status) for everything declared.
+
+    `services` narrows this to what the caller actually deployed. Unfiltered, a tick gating
+    node-exporter also measures traefik, authelia and ical-proxy — none of which it deployed,
+    three of which are `k8s_autodeploy: false` and so can never be gated at all. A broken
+    staging traefik then produced `staging: REJECTED ['node-exporter'] — deployed, but a
+    service did not answer as declared`, naming a service with no declared expectations,
+    because staging_verdict_summary interpolates the gated set rather than the failing one.
+    That blames a bystander and corrupts the false-failure rate slice 4 waits on.
+
+    Deliberately NOT applied to missing_expectations(): that is the coverage guard, and the
+    services it most needs to cover are exactly the ones a tick can never gate.
+    """
     out = []
     for entry in staging_entries():
+        if services is not None and entry["name"] not in services:
+            continue
         for want in entry.get("staging_expect") or []:
             out.append(
                 (entry["name"], want["hostname"], want["path"], int(want["status"]))
@@ -192,8 +206,18 @@ def main() -> int:
     parser.add_argument(
         "--timeout", type=float, default=180.0, help="seconds for the whole probe run"
     )
+    parser.add_argument(
+        "--services",
+        help="comma-separated services to measure (default: every declared expectation). "
+        "The coverage guard below ignores this and always checks the whole inventory.",
+    )
     args = parser.parse_args()
 
+    # UNFILTERED on purpose, even when --services narrows the measurement below. This is the
+    # only live caller of the coverage guard — nothing in CI or prek runs it — and the services
+    # it most needs to cover (traefik, authelia, registry) are `k8s_autodeploy: false`, so a
+    # tick can never gate them. Scoping it would make a coverage gap on exactly those three
+    # permanently invisible. It is a local manifest read with no network cost.
     uncovered = missing_expectations()
     if uncovered:
         print(
@@ -201,9 +225,14 @@ def main() -> int:
             f"staging_expect, so the gate would pass without checking them",
             file=sys.stderr,
         )
-        return FAILED
+        # NO_VERDICT, not FAILED: a hole in this harness is not evidence that the change under
+        # test is bad, and FAILED renders as "deployed, but a service did not answer as
+        # declared" — a sentence about the change, describing a gap in the checker.
+        return NO_VERDICT
 
-    wanted = expectations()
+    wanted = expectations(
+        {s for s in args.services.split(",") if s} if args.services else None
+    )
     if not wanted:
         print("staging-expect: nothing declared", file=sys.stderr)
         return NO_VERDICT
