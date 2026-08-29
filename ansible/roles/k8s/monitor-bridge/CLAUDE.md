@@ -125,6 +125,28 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     unreachable *arr API is NOT given grace/hysteresis — it surfaces as `down` immediately via
     the same `_evaluate` path as `check_n8n`/`check_scrutiny` (no shared root cause here to
     gate, unlike the Prometheus/exporter checks). Pure `queue_warnings()` is unit-tested.)
+  - **Bazarr Health** (bazarr's `/api/system/status` + `/api/system/health` over `media`:
+    `down` when a peer version field is present-but-empty, or when bazarr self-reports a health
+    issue. **Bazarr is the *arr with no exporter, and that is the whole point.** It holds its
+    OWN copies of Sonarr's and Radarr's API keys, in its config on the `bazarr-config` PVC and
+    entered through its UI, so no Ansible template carries them and no deploy updates them —
+    the 2026-08-29 rotation swept the eight templated consumers and missed the ninth. Bazarr
+    then reconnect-looped, leaked 173 MiB to its 1Gi cap in 90 minutes and OOM-killed, and the
+    only signal was the "k3s Container OOM" tile, which clears one hour after the kill and takes
+    the evidence with it. Sonarr's and Radarr's own stale keys surfaced immediately as failing
+    exportarr scrapes; bazarr had nothing.
+    The peer-version fields are the detector: bazarr fills `sonarr_version`/`radarr_version` by
+    calling each app with its stored key, so an empty one is a rejected key seen from outside.
+    An **absent** field is ignored — bazarr omits it when that integration is switched off, and
+    alerting there would page forever. Header is `X-API-KEY`, not the `X-Api-Key` sonarr/radarr
+    take. Empty `BAZARR_API_KEY` disables the check (stays up), like `N8N_API_KEY`; an
+    unreachable bazarr surfaces via `_evaluate`, which is also how the 401 from a stale
+    `bazarr_api_key` in SOPS shows up. Pure `bazarr_problems()` is unit-tested both ways.
+    **Not an exportarr sidecar, deliberately:** exportarr does speak bazarr, but at the pinned
+    v2.3.0 its collector always runs the full episode-subtitle walk — upstream measures it in
+    "tens of seconds", spent *inside* bazarr — and v2.3.0 predates the overlapping-collection
+    skip added upstream for exactly that drainage (their #380). These two endpoints measured
+    2-7 ms and 477+13 bytes, 2026-08-29.)
   - **Prowlarr Indexers** (Prowlarr's `/api/v1/indexerstatus` + `/api/v1/indexer` over `media`,
     `X-Api-Key`: `down` only when an indexer has been failing ≥ `PROWLARR_INDEXER_MIN_DOWN_MIN`
     (1 week = 10080 min — only a genuinely long outage pages; short flaps are noise) measured from
@@ -622,9 +644,9 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   the state and the descriptive msg lands in the event + Discord notification. Trade-off:
   a dead bridge pages after one missed 600s window (acceptable — that's the dead-man's
   switch doing its job).
-- **Startup/redeploy grace for the reach-out checks (`STARTUP_GRACE`, 2026-07-12):** the five
+- **Startup/redeploy grace for the reach-out checks (`STARTUP_GRACE`, 2026-07-12):** the six
   checks that poll a live app dependency with **no reachability gate and no per-check hysteresis**
-  — **n8n Prod Workflows** (n8n), **Arr Queue Warnings**
+  — **n8n Prod Workflows** (n8n), **Arr Queue Warnings**, **Bazarr Health** (bazarr)
   (sonarr/radarr), **Prowlarr Indexers** (prowlarr) and **SMART Data / Health** (scrutiny) (both
   added 2026-07-14), **Pi Pressure** (the Pi glances) — get a consecutive-down grace applied in
   `run_once` (peer mechanism to `PROM_DEPENDENT`/`LOKI_DEPENDENT`, but a *hysteresis* not a
@@ -650,7 +672,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   list**; no test reads this prose, so treat the names below as a reading aid that can go stale
   rather than as the source of truth. (It had: it carried eight tokens retired at the
   2026-08-14 host flips and was missing six added since.) As of 2026-08-16:
-  `monitor_bridge_{arr_queue,b2_reachable,b2_storage,cert,cluster_prometheus,cluster_targets,cpu,discord,disk,gitops_alive,gitops_status,ha,k8s_workloads,loki,loki_reachable,mem,n8n,oom,pi,prometheus,promtail_dropped,prowlarr_indexers,r2_usage,restarts,scrutiny,targets,traefik,traefik_latency,ups}_push_token`
+  `monitor_bridge_{arr_queue,bazarr,b2_reachable,b2_storage,cert,cluster_prometheus,cluster_targets,cpu,discord,disk,gitops_alive,gitops_status,ha,k8s_workloads,loki,loki_reachable,mem,n8n,oom,pi,prometheus,promtail_dropped,prowlarr_indexers,r2_usage,restarts,scrutiny,targets,traefik,traefik_latency,ups}_push_token`
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
 - The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA

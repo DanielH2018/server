@@ -174,6 +174,19 @@ SONARR_API_KEY = _env("SONARR_API_KEY", "")
 RADARR_URL = _env("RADARR_URL", "http://radarr:7878").rstrip("/")
 RADARR_API_KEY = _env("RADARR_API_KEY", "")
 
+# Bazarr's link to Sonarr and Radarr. Bazarr holds its OWN copies of their API keys, in its
+# config on the bazarr-config PVC and entered through its UI — so no Ansible template carries
+# them and no deploy updates them. On 2026-08-29 a rotation swept the eight templated
+# consumers, missed Bazarr, and its SignalR client dropped into a reconnect loop that leaked
+# 173 MiB to its 1Gi cap in 90 minutes and OOM-killed it. The ONLY signal was the "k3s
+# Container OOM" tile, which clears one hour after the kill and takes the evidence with it,
+# leaving Bazarr fetching no subtitles, silently.
+#
+# NOTE the header spelling: `X-API-KEY`, not the `X-Api-Key` Sonarr and Radarr take. Verified
+# against the live app 2026-08-29 — a request with no key returns 401, so the key is doing work.
+BAZARR_URL = _env("BAZARR_URL", "http://bazarr:6767").rstrip("/")
+BAZARR_API_KEY = _env("BAZARR_API_KEY", "")
+
 # Prowlarr sustained-indexer watchdog: Prowlarr's in-app health notification is binary — with
 # warnings on every indexer flap pages, with warnings off only the all-indexers-down red error
 # fires; there's no duration grace. We poll /api/v1/indexerstatus and go `down` only when an
@@ -1599,6 +1612,74 @@ def check_arr_queue():
         )
         return False, "%d queue item(s) need review: %s" % (len(offenders), desc)
     return True, "queue clean (%s)" % ", ".join(a[0] for a in configured)
+
+
+def bazarr_problems(status, health):
+    """Problems from Bazarr's /api/system/status and /api/system/health payloads.
+
+    Pure, so the reject case is testable without a live Bazarr.
+
+    The peer-version fields are the interesting half. Bazarr fills `sonarr_version` /
+    `radarr_version` by calling each app with ITS OWN stored copy of that app's API key, so a
+    key Bazarr no longer holds correctly leaves the field empty while everything else about
+    Bazarr still looks healthy. Measured against the live app 2026-08-29 after the keys were
+    fixed: `sonarr_version='4.0.17.2952'`, `radarr_version='6.1.1.10360'`.
+
+    An ABSENT field is not the same as an empty one and is deliberately ignored: Bazarr omits
+    the key entirely when that integration is switched off, and alerting on a peer the operator
+    turned off would page forever. Empty-but-present is the broken case.
+    """
+    problems = []
+    data = (status or {}).get("data") or {}
+    for peer in ("sonarr", "radarr"):
+        field = "%s_version" % peer
+        if field not in data:
+            continue
+        if not str(data.get(field) or "").strip():
+            problems.append(
+                "bazarr cannot reach %s (empty %s — stale API key in bazarr's own config?)"
+                % (peer, field)
+            )
+    for item in (health or {}).get("data") or []:
+        problems.append(
+            "%s: %s" % (sanitize(item.get("object")), sanitize(item.get("issue")))
+        )
+    return problems
+
+
+def check_bazarr():
+    """Bazarr's own health, and whether it can still talk to Sonarr and Radarr.
+
+    Bazarr is the one *arr with no exporter, and that is why the 2026-08-29 stale-key incident
+    surfaced only as an OOM 90 minutes later. Sonarr's and Radarr's own stale keys showed up
+    immediately as failing exportarr scrapes; Bazarr had nothing watching it.
+
+    NOT an exportarr sidecar, deliberately. exportarr does speak bazarr, but at the pinned
+    v2.3.0 its collector always performs the full episode-subtitle walk — upstream measures
+    that in "tens of seconds", spent inside Bazarr — and v2.3.0 predates the
+    overlapping-collection skip that upstream added specifically to stop concurrent walks
+    stacking (their issue #380, "bazarr CPU drainage"). Pointing that at the workload that had
+    just OOM-killed would risk causing the failure this exists to detect. These two endpoints
+    cost 477 and 13 bytes and measured 2-7 ms over three runs each, 2026-08-29.
+
+    Empty BAZARR_API_KEY -> disabled (stays up), like check_n8n. An unreachable Bazarr is NOT
+    caught here — it bubbles up and _evaluate renders it `down` with the error, the
+    check_arr_queue/check_prowlarr_indexers convention. That covers the 401 a wrong key
+    returns, which is itself the signal that Bazarr's API key in SOPS has gone stale.
+    """
+    if not BAZARR_API_KEY:
+        return True, "bazarr monitoring disabled (no API key)"
+    headers = {"X-API-KEY": BAZARR_API_KEY}
+    status = _get_json(BAZARR_URL + "/api/system/status", headers=headers)
+    health = _get_json(BAZARR_URL + "/api/system/health", headers=headers)
+    problems = bazarr_problems(status, health)
+    if problems:
+        return False, "; ".join(problems[:5])
+    versions = (status or {}).get("data") or {}
+    return True, "bazarr ok (sonarr %s, radarr %s)" % (
+        versions.get("sonarr_version") or "n/a",
+        versions.get("radarr_version") or "n/a",
+    )
 
 
 def check_prowlarr_indexers():
@@ -3050,6 +3131,7 @@ CHECKS = [
     ),
     ("n8n", _env("KUMA_PUSH_N8N", ""), check_n8n),
     ("arr_queue", _env("KUMA_PUSH_ARR_QUEUE", ""), check_arr_queue),
+    ("bazarr", _env("KUMA_PUSH_BAZARR", ""), check_bazarr),
     (
         "prowlarr_indexers",
         _env("KUMA_PUSH_PROWLARR_INDEXERS", ""),
@@ -3200,6 +3282,7 @@ STARTUP_GRACE = frozenset(
     {
         "n8n",
         "arr_queue",
+        "bazarr",
         "pi_pressure",
         "prowlarr_indexers",
         "scrutiny",

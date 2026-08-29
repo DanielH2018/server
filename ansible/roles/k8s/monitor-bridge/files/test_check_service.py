@@ -1557,3 +1557,67 @@ def test_a_plane_marker_without_a_hold_does_not_page():
     must not keep the monitor red on its own."""
     ok, _ = check.gitops_status(None, hold_plane="ansible/deploy.yml")
     assert ok
+
+
+# Bazarr holds its OWN copies of Sonarr's and Radarr's API keys, on its PVC and entered
+# through its UI, so no deploy updates them. On 2026-08-29 a rotation missed it and the only
+# signal was an OOM tile that self-clears after an hour. These pin both directions.
+#
+# Field values are the ones the live app returned on 2026-08-29 with the keys working.
+_HEALTHY_BAZARR = {
+    "data": {
+        "bazarr_version": "1.5.6",
+        "sonarr_version": "4.0.17.2952",
+        "radarr_version": "6.1.1.10360",
+    }
+}
+
+
+def test_bazarr_healthy_status_and_health_report_nothing():
+    """Both peers answering, no self-reported issues."""
+    assert check.bazarr_problems(_HEALTHY_BAZARR, {"data": []}) == []
+
+
+@pytest.mark.parametrize("peer", ["sonarr", "radarr"])
+def test_bazarr_empty_peer_version_is_the_stale_key_signal(peer):
+    """The 2026-08-29 failure itself.
+
+    Bazarr fills these fields by calling each app with its own stored key, so an
+    empty-but-present field is what a rejected key looks like from outside.
+    """
+    status = {"data": dict(_HEALTHY_BAZARR["data"], **{f"{peer}_version": ""})}
+
+    problems = check.bazarr_problems(status, {"data": []})
+
+    assert len(problems) == 1, problems
+    assert peer in problems[0]
+    assert "stale API key" in problems[0]
+
+
+def test_bazarr_absent_peer_version_is_not_a_problem():
+    """A disabled integration omits the field entirely.
+
+    Alerting on that would page forever on a peer the operator turned off, so absent and
+    empty must not be read alike.
+    """
+    assert (
+        check.bazarr_problems({"data": {"bazarr_version": "1.5.6"}}, {"data": []}) == []
+    )
+
+
+def test_bazarr_self_reported_health_issues_are_surfaced():
+    health = {"data": [{"object": "/tv/Show", "issue": "path does not exist"}]}
+
+    assert check.bazarr_problems(_HEALTHY_BAZARR, health) == [
+        "/tv/Show: path does not exist"
+    ]
+
+
+def test_bazarr_check_is_disabled_without_an_api_key(monkeypatch):
+    """No key means stay up, the check_n8n convention — not a permanently red monitor."""
+    monkeypatch.setattr(check, "BAZARR_API_KEY", "")
+
+    ok, msg = check.check_bazarr()
+
+    assert ok
+    assert "disabled" in msg
