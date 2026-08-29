@@ -184,10 +184,11 @@ def _load_deploy_logic():
     sys.path.insert(0, str(DEPLOY_LOGIC_DIR))
     from deploy_logic import (  # noqa: E402  (see docstring above)
         broad_remediation,
+        expand_build_couplings,
         services_from_changed_paths,
     )
 
-    return services_from_changed_paths, broad_remediation
+    return services_from_changed_paths, broad_remediation, expand_build_couplings
 
 
 def _git_diff_paths(ref: str, cwd: Path = REPO) -> list[str]:
@@ -201,11 +202,85 @@ def _git_diff_paths(ref: str, cwd: Path = REPO) -> list[str]:
     return [line for line in result.stdout.splitlines() if line]
 
 
+def _incoming_paths(ref: str, cwd: Path = REPO) -> list[str]:
+    """Paths this checkout has yet to receive from `ref` — the range the TICK will evaluate.
+
+    Two dots and this direction on purpose. `_git_diff_paths` answers "what have I changed",
+    which is the wrong question here: the blocker is a commit somebody else already pushed.
+    """
+    result = subprocess.run(
+        ["git", "diff", "--name-only", f"HEAD..{ref}"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return [line for line in result.stdout.splitlines() if line]
+
+
+def _cmd_blockers(args: argparse.Namespace) -> int:
+    """Exit 3 if a `_BROAD_MANUAL_PREFIXES` path sits between HEAD and `ref`.
+
+    The deployer never fast-forwards past one — applying the deployer's own role restarts the
+    unit running the tick — so a deploy after that tick is guaranteed to hit deploy.sh's
+    staleness refusal (exit 4). This is checkable in milliseconds and BEFORE any CI wait.
+    Landing PR #570 on 2026-08-29 waited about six minutes for CI, ticked, and only then failed
+    at exit 4, with the blocker (another session's gitops_deploy.py change) already visible in
+    the range the whole time.
+    """
+    services_from_changed_paths, broad_remediation, _ = _load_deploy_logic()
+    try:
+        paths = _incoming_paths(args.ref)
+    except subprocess.CalledProcessError as exc:
+        print(
+            f"deploy blockers: `git diff HEAD..{args.ref}` failed: {exc.stderr.strip()}",
+            file=sys.stderr,
+        )
+        return 1
+
+    if not paths:
+        print(f"deploy blockers: nothing incoming from {args.ref}.", file=sys.stderr)
+        return 0
+
+    cs = services_from_changed_paths(paths)
+    if not cs.broad_manual:
+        print(
+            f"deploy blockers: {len(paths)} incoming file(s) from {args.ref}, none needing a "
+            "hand — the tick can fast-forward.",
+            file=sys.stderr,
+        )
+        return 0
+
+    culprits = [p for p in paths if _is_broad_manual(p)]
+    print(
+        f"deploy blockers: {args.ref} carries a change the deployer will never apply itself, "
+        "so the tick cannot fast-forward past it and any deploy after it is refused as stale:",
+        file=sys.stderr,
+    )
+    for path in culprits:
+        print(f"  {path}", file=sys.stderr)
+    print(
+        "  Applying it means applying whoever wrote it — if it is another session's, say so "
+        f"and stop. Otherwise: {broad_remediation(cs.broad_deploy, cs.broad_setup)}",
+        file=sys.stderr,
+    )
+    return 3
+
+
+def _is_broad_manual(path: str) -> bool:
+    sys.path.insert(0, str(DEPLOY_LOGIC_DIR))
+    from deploy_logic import _BROAD_MANUAL_PREFIXES  # noqa: E402
+
+    return any(path.startswith(prefix) for prefix in _BROAD_MANUAL_PREFIXES)
+
+
 def _cmd_changed(args: argparse.Namespace) -> int:
     """Print, on stdout, the comma-joined --tags value for every service changed vs `ref`
     (default origin/master) — nothing else goes to stdout, so scripts/deploy.sh can capture it
     directly. Everything explaining the derivation goes to stderr."""
-    services_from_changed_paths, broad_remediation = _load_deploy_logic()
+    services_from_changed_paths, broad_remediation, expand_build_couplings = (
+        _load_deploy_logic()
+    )
     try:
         paths = _git_diff_paths(args.ref)
     except subprocess.CalledProcessError as exc:
@@ -257,7 +332,8 @@ def _cmd_changed(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
 
-    tags = sorted(cs.k8s | cs.services)
+    # A build role whose workload lives in a different role must not deploy alone.
+    tags = sorted(expand_build_couplings(cs.k8s) | cs.services)
     if not tags:
         print(
             f"deploy --changed: no deployable service changed vs {args.ref}.",
@@ -296,6 +372,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     ch.add_argument("ref", nargs="?", default="origin/master")
     ch.set_defaults(func=_cmd_changed)
+
+    bl = sub.add_parser(
+        "blockers",
+        help="exit 3 if an incoming change needs a hand and so blocks the tick",
+    )
+    bl.add_argument("ref", nargs="?", default="origin/master")
+    bl.set_defaults(func=_cmd_blockers)
 
     args = parser.parse_args(argv)
     return args.func(args)

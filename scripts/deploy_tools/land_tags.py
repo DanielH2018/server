@@ -21,6 +21,23 @@ import argparse
 import json
 import re
 import sys
+from pathlib import Path
+
+# The build/roll couplings live in deploy_logic so this and `deploy_tags.py changed` widen
+# identically -- two derivations that disagree is the defect this import exists to prevent.
+sys.path.insert(
+    0,
+    str(
+        Path(__file__).resolve().parents[2]
+        / "ansible"
+        / "roles"
+        / "setup"
+        / "gitops_deploy"
+        / "files"
+    ),
+)
+
+from deploy_logic import expand_build_couplings  # noqa: E402 — needs the path insert above
 
 _K8S = re.compile(r"^ansible/roles/k8s/([^/]+)/")
 _DOCKER = re.compile(r"^ansible/roles/containers/([^/]+)/")
@@ -51,7 +68,9 @@ def derive(files, changed_files: int) -> tuple[list[str], str]:
     files = list(files)
     if len(files) != changed_files:
         return [], "fallback"
-    tags = {t for p in files if (t := tag_for(p))}
+    # A build role whose workload lives in a different role must not deploy alone: the build
+    # would push a new image that nothing rolls onto, and report green doing it.
+    tags = expand_build_couplings({t for p in files if (t := tag_for(p))})
     return sorted(tags), "pr"
 
 
