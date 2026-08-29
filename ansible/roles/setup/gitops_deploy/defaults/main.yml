@@ -133,6 +133,18 @@ gitops_deploy_k8s_timeout_s: 900
 # ./scripts/deploy.sh (exit 75, nothing deployed) or the secret-rotate cron (waits on the lock).
 gitops_deploy_k8s_rollback_timeout_s: 1320
 
+# Bounds ONE broad-plane apply: `initial_setup.yml --tags <role>` for a setup-plane change, or
+# a full `deploy.yml` for a shared-template/inventory one. That arm is FORWARD-ONLY, so this is
+# the only bound between a wedged playbook and systemd's TimeoutStartSec SIGTERM — and a SIGTERM
+# lands with no hold written and no alert sent, leaving the tree fast-forwarded onto a commit
+# nothing recorded as bad.
+#
+# 1800 covers the 1212s measured full deploy (2026-08-22, 1753 tasks) with headroom, and fits
+# inside TimeoutStartSec=2700 alongside the 180s max flock wait. It deliberately does NOT fund a
+# rollback re-run on top: deploy_logic.broad_budget_ok shows 180 + 1212 + 1212 = 2604 leaves a
+# 96s margin, so a run four percent slower than measured would be killed mid-rollback.
+gitops_deploy_broad_timeout_s: 1800
+
 # The staging gate (Phase C slice 3, docs/staging-phase-c.md). ADVISORY: the deployer asks
 # daniel-stage about the commit, logs and alerts the verdict, and deploys prod either way.
 # Blocking is slice 4 and is a separate change.
