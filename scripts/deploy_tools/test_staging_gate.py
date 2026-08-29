@@ -12,12 +12,17 @@ stopped discriminating fails here rather than in an alert nobody trusts.
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
+
+_real_run = subprocess.run
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import staging_gate as sg  # noqa: E402 — needs the path insert above
 
 from staging_gate import (  # noqa: E402 — needs the path insert above
     DEPLOY_SH_NO_VERDICT,
@@ -195,3 +200,150 @@ def test_a_staleness_refusing_invocation_is_caught() -> None:
     assert deploy_invocation("# ./scripts/deploy.sh in a comment only\n") == "", (
         "a commented-out call must not count as the invocation"
     )
+
+
+# ── the restricted identity, and the fallback it must not allow ─────────────────────────────
+# staging_gate.py authenticates with a dedicated key pinned to a forced command. The danger in
+# that switch is not the key failing loudly — it is the key failing SILENTLY: ssh falls back to
+# the operator's own identity, the gate keeps returning verdicts, and M-3 is reopened with
+# nothing to show for it. `IdentitiesOnly=yes` does not prevent that, because the default
+# identity files still count as configured. So these drive the check that does.
+
+
+def _fake_ssh(monkeypatch, rc=0):
+    """Capture the argv and kwargs staging_gate would hand subprocess.run, without connecting."""
+    calls = {}
+
+    def fake_run(cmd, **kwargs):
+        # ssh-keygen still has to really run for the identity check; only intercept ssh.
+        if cmd and cmd[0] == "ssh":
+            calls["cmd"] = cmd
+            calls["kwargs"] = kwargs
+            return subprocess.CompletedProcess(cmd, rc)
+        return _real_run(cmd, **kwargs)
+
+    monkeypatch.setattr(sg.subprocess, "run", fake_run)
+    return calls
+
+
+def _install_identity(
+    monkeypatch, tmp_path, *, authorized: bool, loadable: bool = True
+):
+    """Point staging_gate at a real generated key, optionally not the authorized one."""
+    key = tmp_path / "id"
+    _real_run(
+        ["ssh-keygen", "-t", "ed25519", "-N", "", "-C", "t", "-f", str(key)],
+        capture_output=True,
+        check=True,
+    )
+    pub = tmp_path / "authorized.pub"
+    if authorized:
+        pub.write_text(
+            _real_run(
+                ["ssh-keygen", "-y", "-f", str(key)],
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout
+        )
+    else:
+        other = tmp_path / "other"
+        _real_run(
+            ["ssh-keygen", "-t", "ed25519", "-N", "", "-C", "t", "-f", str(other)],
+            capture_output=True,
+            check=True,
+        )
+        pub.write_text(
+            _real_run(
+                ["ssh-keygen", "-y", "-f", str(other)],
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout
+        )
+    if not loadable:
+        # Exactly the 2026-08-29 artefact: a key one byte short of its trailing newline.
+        key.write_bytes(key.read_bytes()[:-1])
+    monkeypatch.setattr(sg, "IDENTITY", key)
+    monkeypatch.setattr(sg, "AUTHORIZED_PUBKEY", pub)
+    return key
+
+
+def test_the_authorized_identity_is_accepted(monkeypatch, tmp_path):
+    _install_identity(monkeypatch, tmp_path, authorized=True)
+    assert sg.identity_problem() is None
+
+
+def test_a_missing_identity_refuses_to_connect(monkeypatch, tmp_path):
+    monkeypatch.setattr(sg, "IDENTITY", tmp_path / "absent")
+    problem = sg.identity_problem()
+    assert problem is not None and "does not exist" in problem
+
+
+def test_an_unloadable_identity_refuses_to_connect(monkeypatch, tmp_path):
+    """The exact failure that caused the silent fallback: it must stop the run, not be ignored."""
+    _install_identity(monkeypatch, tmp_path, authorized=True, loadable=False)
+    problem = sg.identity_problem()
+    assert problem is not None and "does not load" in problem
+
+
+def test_an_identity_the_far_side_does_not_authorize_refuses_to_connect(
+    monkeypatch, tmp_path
+):
+    _install_identity(monkeypatch, tmp_path, authorized=False)
+    problem = sg.identity_problem()
+    assert problem is not None and "is not the key" in problem
+
+
+def test_an_unusable_identity_never_reaches_ssh(monkeypatch, tmp_path):
+    """The point of the check: no connection is attempted at all, so ssh cannot pick a key."""
+    _install_identity(monkeypatch, tmp_path, authorized=True, loadable=False)
+    calls = _fake_ssh(monkeypatch)
+    rc = sg.run_gate("a" * 40, "freshrss", 30.0)
+    assert rc == sg.IDENTITY_UNUSABLE
+    assert "cmd" not in calls, "ssh was invoked despite an unusable identity"
+    assert sg.classify(rc) == sg.NO_VERDICT
+
+
+def test_the_request_is_one_argument_and_nothing_is_piped(monkeypatch, tmp_path):
+    """A forced command does not stop ssh forwarding stdin, so nothing may be sent on it."""
+    key = _install_identity(monkeypatch, tmp_path, authorized=True)
+    calls = _fake_ssh(monkeypatch)
+    sha = "b" * 40
+    sg.run_gate(sha, "freshrss,traefik", 30.0)
+
+    cmd = calls["cmd"]
+    assert cmd[-1] == f"gate {sha} freshrss,traefik", (
+        "the request must be a single argument in the shape the forced command parses"
+    )
+    assert "bash" not in cmd, (
+        "the piped `bash -s` shape is what M-3 was about; it must be gone"
+    )
+    assert calls["kwargs"].get("stdin") is subprocess.DEVNULL
+    assert "input" not in calls["kwargs"], (
+        "nothing may be written to the remote's stdin"
+    )
+    assert ["-i", str(key)] == [cmd[cmd.index("-i")], cmd[cmd.index("-i") + 1]]
+    assert "IdentitiesOnly=yes" in cmd
+
+
+def test_a_short_sha_is_refused_locally(monkeypatch, tmp_path):
+    """The forced command would refuse it anyway; failing here names the real problem."""
+    _install_identity(monkeypatch, tmp_path, authorized=True)
+    calls = _fake_ssh(monkeypatch)
+    rc = sg.run_gate("deadbeef", "freshrss", 30.0)
+    assert rc == sg.DISPATCH_REFUSED
+    assert "cmd" not in calls, "a malformed request must not be sent"
+    assert sg.classify(rc) == sg.NO_VERDICT
+
+
+def test_a_shell_fallback_is_no_verdict_not_a_rejection(monkeypatch, tmp_path):
+    """127 means the far side had no forced command, so somebody else's key authenticated.
+
+    Classifying that as REJECTED would fail a merge on the strength of a security regression.
+    """
+    _install_identity(monkeypatch, tmp_path, authorized=True)
+    _fake_ssh(monkeypatch, rc=sg.SHELL_FALLBACK)
+    rc = sg.run_gate("c" * 40, "freshrss", 30.0)
+    assert rc == sg.SHELL_FALLBACK
+    assert sg.classify(rc) == sg.NO_VERDICT
