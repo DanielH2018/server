@@ -237,11 +237,24 @@ role having been applied and the new path proven by hand:
 
 ```bash
 # on daniel-box, after `initial_setup.yml --tags hypervisor` has run on daniel-server
-ssh -i /etc/gitops-deploy/staging_gate_ed25519 -o IdentitiesOnly=yes daniel-server \
-    "gate $(git rev-parse origin/master) freshrss"      # must return a verdict
-ssh -i /etc/gitops-deploy/staging_gate_ed25519 -o IdentitiesOnly=yes daniel-server \
-    "bash -s" </dev/null                                # must be REFUSED (exit 71)
+./scripts/deploy_tools/verify_staging_gate_key.sh "$(git rev-parse origin/master)"
 ```
 
-The second command is the one that demonstrates the change. Removing or restricting the
-operator's own key is a separate decision and is not part of this work.
+**Do not hand-roll those two ssh commands.** This file prescribed them until 2026-08-29 and they
+are unsound. The negative check was `ssh -i <key> -o IdentitiesOnly=yes <host> "bash -s"`
+expecting 71 — and it printed **0**, the signal of the restriction failing, when the real cause
+was that the key would not load, so ssh silently fell back to a default identity and ran a normal
+shell. `IdentitiesOnly=yes` does not prevent that: the DEFAULT identity files still count as
+configured, so it bounds which keys are offered without guaranteeing ours is one of them.
+
+A check that reports "your security control is broken" when the truth is "your key file is
+unreadable" is worse than no check, because the next person acts on the wrong diagnosis. The
+script closes both halves: it refuses to connect at all until `ssh-keygen -y` on the key matches
+`files/staging-gate.pub`, and it requires the negative case to produce **both** a 71 and the
+dispatcher's own refusal marker on stderr — a fallback to another key cannot print that marker,
+so "fell back" and "restriction bypassed" stay distinguishable. Its exit codes name them
+separately: 10 key unusable, 11 fell back, 12 restriction open, 13 no verdict.
+`ansible/tests/test_verify_staging_gate_key.py` drives that verdict function without a network.
+
+Removing or restricting the operator's own key is a separate decision and is not part of this
+work.

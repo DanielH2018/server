@@ -151,10 +151,22 @@
   # private key outright, so a wrong mode here fails loudly rather than quietly widening.
   #
   # `content` rather than a template: the value is the whole file, and a template would invite
-  # someone to add a trailing edit to key material. The newline matters — ssh rejects a private
-  # key whose final line is unterminated.
+  # someone to add a trailing edit to key material.
+  #
+  # `| trim` then an EXPLICIT newline, and this is load-bearing rather than tidiness. Ansible
+  # strips exactly one trailing newline when templating `{{ var }}` into a string, so a bare
+  # `content: "{{ staging_gate_ssh_key }}"` wrote the key one byte short and OpenSSH refused it
+  # with `error in libcrypto` — which reads as a corrupt or truncated key rather than as a
+  # missing line terminator. Measured 2026-08-29: the SOPS value is 399 bytes over 7 lines,
+  # what that form wrote was 398 over 6, and removing only the final newline from an otherwise
+  # good key reproduces the identical error.
+  #
+  # Doing both halves is what makes it idempotent in either direction: trim collapses whatever
+  # trailing whitespace the stored scalar carries, and the `\n` puts back exactly one. Neither
+  # alone is safe — trim alone leaves it unterminated, and appending alone doubles the newline
+  # if the strip behaviour ever changes.
   ansible.builtin.copy:
-    content: "{{ staging_gate_ssh_key }}"
+    content: "{{ staging_gate_ssh_key | trim }}\n"
     dest: "{{ gitops_deploy_staging_gate_key_path }}"
     owner: "{{ sys_user }}"
     group: "{{ sys_user }}"
