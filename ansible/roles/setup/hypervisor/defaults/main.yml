@@ -77,3 +77,29 @@ hypervisor_staging_vm_instance_id: "01"
 # First boot runs cloud-init, grows the root filesystem and generates host keys, so ssh
 # answers well after the guest is up. Generous because that work happens once.
 hypervisor_staging_vm_boot_timeout: 300
+
+# The checkout the staging gate deploys FROM, and the lock that serialises it.
+#
+# It exists because the gate used to render from /home/ubuntu/server — this host's own
+# checkout — which it fast-forwarded to the SHA under test, unlocked, and never restored
+# (2026-08-29 review M-2). Three things were wrong with that, and only the first is obvious:
+# an operator's tree jumped to arbitrary commits behind their back; two gate runs could
+# interleave on one tree; and a dirty tree there made the gate answer PREP_FAILED for every
+# commit until someone noticed, because a NO VERDICT is silent by design.
+#
+# A dedicated clone fixes all three by giving the gate a tree it owns. The gate moving its
+# OWN tree forward is the point, not a defect — what M-2 objects to is it moving someone
+# else's.
+#
+# Deliberately NOT a git worktree of the primary checkout: that shares .git, so the two
+# trees' fates are coupled again through the object store and `git worktree list` on this
+# host stops being about Claude sessions. A separate clone costs one working tree and
+# nothing else. `ansible.builtin.git` is set `update: no` below, so Ansible creates this
+# once and then never fights the gate for the branch it is sitting on.
+hypervisor_staging_gate_repo: /home/ubuntu/server-staging
+hypervisor_staging_gate_repo_url: https://github.com/DanielH2018/server.git
+# Serialises two gate runs against that one tree — the timer's, and an operator driving
+# staging_gate.py by hand. NOT /var/lock/server-git-tree.lock: deploy.sh takes that one
+# inside the gate, and a lock is not reentrant across a fresh open, so sharing it would
+# deadlock the gate against itself.
+hypervisor_staging_gate_lock: /var/lock/staging-gate.lock

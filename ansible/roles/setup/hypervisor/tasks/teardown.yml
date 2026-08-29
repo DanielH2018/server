@@ -100,3 +100,56 @@
     purge: true
     autoremove: true
   become: true
+
+- name: Check whether the staging-gate checkout exists
+  tags: [hypervisor]
+  ansible.builtin.stat:
+    path: "{{ hypervisor_staging_gate_repo }}/.git"
+  register: hypervisor_teardown_gate_repo
+  become: true
+
+- name: Read whether the staging-gate checkout has uncommitted work # noqa command-instead-of-module
+  tags: [hypervisor]
+  # `command`, not ansible.builtin.git: that module clones, checks out and pulls, and has no
+  # mode that REPORTS working-tree status. There is nothing to switch to here.
+  when: hypervisor_teardown_gate_repo.stat.exists
+  ansible.builtin.command:
+    cmd: git status --porcelain
+    chdir: "{{ hypervisor_staging_gate_repo }}"
+  register: hypervisor_teardown_gate_dirty
+  changed_when: false
+  failed_when: false
+  become: true
+  become_user: "{{ sys_user }}"
+
+- name: Refuse to remove a staging-gate checkout with uncommitted work in it
+  tags: [hypervisor]
+  # Same reasoning as the guests assert above, and the same reasoning that leaves
+  # /var/lib/libvirt alone: this tree is reproducible from the remote, so removing a CLEAN
+  # one costs a re-clone. An edit that exists only here is not reproducible from anywhere,
+  # and a flag flip is not a decision to discard it.
+  when:
+    - hypervisor_teardown_gate_repo.stat.exists
+    - hypervisor_teardown_gate_dirty.rc == 0
+  ansible.builtin.assert:
+    that: hypervisor_teardown_gate_dirty.stdout | trim | length == 0
+    fail_msg: >-
+      {{ hypervisor_staging_gate_repo }} has uncommitted changes
+      ({{ hypervisor_teardown_gate_dirty.stdout_lines | select | join(', ') }}), so it is not
+      being removed. The staging gate owns this tree and never leaves it dirty, so an edit
+      here is someone's — commit or discard it deliberately, then re-run.
+
+- name: Remove the staging-gate checkout
+  tags: [hypervisor]
+  when: hypervisor_teardown_gate_repo.stat.exists
+  ansible.builtin.file:
+    path: "{{ hypervisor_staging_gate_repo }}"
+    state: absent
+  become: true
+
+- name: Remove the staging-gate lock
+  tags: [hypervisor]
+  ansible.builtin.file:
+    path: "{{ hypervisor_staging_gate_lock }}"
+    state: absent
+  become: true
