@@ -54,23 +54,30 @@ def test_the_load_names_a_variable_and_not_a_literal_file():
 def test_a_mixed_play_is_refused_before_anything_is_loaded():
     """Without this, `run_once` silently applies one host's file to hosts that chose another."""
     tasks = _tasks()
-    asserts = [i for i, t in enumerate(tasks) if "ansible.builtin.assert" in t]
-    assert asserts, (
+    # Selected by CONTENT, not position. The preamble carries a second, unrelated assert (the
+    # wrong-machine guard, ansible/tests/test_local_connection_target.py), and this test used to
+    # take the first assert in the file — which silently became that one when it landed.
+    mine = [
+        i
+        for i, t in enumerate(tasks)
+        if VAR_NAME in str(t.get("ansible.builtin.assert", {}).get("that", ""))
+    ]
+    assert mine, (
         f"{PREAMBLE} has no assert guarding the load. `community.sops.load_vars` runs "
         f"`run_once: true`, so a play spanning a staging host and a production one loads ONE "
         f"of their files for both. Read this file's docstring before removing the guard."
     )
     load = next(i for i, t in enumerate(tasks) if "community.sops.load_vars" in t)
-    assert min(asserts) < load, (
+    assert min(mine) < load, (
         f"the assert in {PREAMBLE} runs AFTER the load, so the wrong secrets are already in "
         f"scope by the time it fires."
     )
-    guard = tasks[min(asserts)]["ansible.builtin.assert"]["that"]
+    guard = tasks[min(mine)]["ansible.builtin.assert"]["that"]
     assert "ansible_play_hosts_all" in guard and VAR_NAME in guard, (
         f"the assert in {PREAMBLE} is {guard!r}. It has to compare {VAR_NAME} across "
         f"`ansible_play_hosts_all` — checking anything else does not catch a mixed play."
     )
-    assert "run_once" in tasks[min(asserts)], (
+    assert "run_once" in tasks[min(mine)], (
         f"the assert in {PREAMBLE} is not `run_once`, so it re-runs per host. It reads the "
         f"whole play either way; running it once matches the load it guards."
     )
