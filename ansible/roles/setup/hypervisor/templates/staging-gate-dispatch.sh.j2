@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# The forced command behind the staging gate's restricted ssh key. Rendered by
+# roles/setup/hypervisor onto daniel-server; the key's authorized_keys entry is
+# `restrict,command="<this path>"`, so this script is the ONLY thing that key can run.
+#
+# WHY A DISPATCHER AND NOT JUST `command=`. A forced command does NOT stop ssh forwarding
+# stdin. The gate pipes its remote script to `bash -s`, so a forced command that still read
+# stdin would execute whatever the caller sent and the restriction would be decorative — the
+# key would be a full shell with extra steps (2026-08-29 review M-3). That is the whole reason
+# this file exists, and it is why the first executable line closes stdin and why the operation
+# is named by ARGUMENT rather than supplied as a script body.
+#
+# WHAT THIS SCRIPT DELIBERATELY DOES NOT DO. It does no git work and takes no lock. All of
+# that lives in scripts/deploy_tools/staging_gate_remote.sh, in the gate's checkout, and this
+# script execs it. Two reasons, and the second is the one that is easy to get wrong:
+#
+#   1. One copy. Prep logic here as well would be a second implementation to keep in step, and
+#      the two would drift silently because a gate failure is a NO_VERDICT, which is quiet.
+#   2. The lock cannot be taken twice. flock attaches to the open file description, not to the
+#      process, so a second `exec 9>` on the same path conflicts with the first even inside one
+#      process tree — this script taking the lock would deadlock the gate against itself.
+#      Inheriting fd 9 across the exec would happen to work, but only because the fd is not
+#      CLOEXEC, which is not a thing to rely on.
+#
+# WHAT LAGS, AND WHY THAT IS SAFE. This script is pre-deployed, so it can be older than the SHA
+# being gated. It reads nothing from the tree, so the only thing that can lag is the validation
+# above, and stale validation can only refuse — never approve. Once it execs, everything after
+# that point comes from the checkout: the prep, and the deploy wrapper it runs, whose exit code
+# becomes the verdict. The tree under test therefore governs the verdict, which is the guarantee
+# that piping the script over ssh used to provide.
+set -uo pipefail
+
+# Nothing here reads stdin, and ssh forwards it regardless of `command=`. Closing it means a
+# caller who pipes a script body gets it discarded rather than interpreted. This must stay the
+# first executable line.
+exec 0</dev/null
+
+# A refusal is NOT a rejection of the change. staging_gate.py maps this to NO_VERDICT alongside
+# PREP_FAILED (70): both mean the gate could not be asked, and reading either as "staging
+# rejected this" would fail a merge for a reason that has nothing to do with the merge.
+DISPATCH_REFUSED=71
+
+REPO={{ hypervisor_staging_gate_repo }}
+
+refuse() {
+  # Deliberately does not echo back what was sent. The caller is authenticated but restricted,
+  # and reflecting an arbitrary string into this host's logs is free to abuse.
+  echo "staging-gate: refused: $1" >&2
+  exit "$DISPATCH_REFUSED"
+}
+
+# THE SECURITY BOUNDARY. $SSH_ORIGINAL_COMMAND is caller-controlled, so every field is checked
+# against a whitelist charset and REJECTED rather than sanitised. There is no escaping step
+# anywhere in this script and no field is ever interpolated into a shell string.
+#
+# Takes its argument explicitly rather than reading the environment so that
+# ansible/tests/test_staging_gate_dispatch.py can source this file and drive the same validator
+# the live path drives. That is what the BASH_SOURCE guard at the bottom is for.
+validate_request() {
+  local request="${1-}"
+  # Deliberate word-split into positional parameters, which is what bounds the field count.
+  # `set --` inside a function is local to it. (Positional parameters rather than an array
+  # because bash's array-length syntax pairs a brace with a hash, which Jinja reads as the
+  # start of a comment tag, and this file is a template.)
+  # shellcheck disable=SC2086
+  set -- $request
+
+  [ "$#" -eq 3 ] || refuse "expected exactly 3 fields (gate <sha> <tags>)"
+  [ "$1" = "gate" ] || refuse "unknown operation"
+
+  # A full 40-hex object name. Not a ref and not an abbreviation: a ref resolves to whatever it
+  # points at later, which is not the commit anyone reviewed.
+  [[ "$2" =~ ^[0-9a-f]{40}$ ]] || refuse "sha is not a 40-character object name"
+
+  # Deploy tags. Charset-bounded rather than checked against the staging subset: that list
+  # already exists in staging_gate.py and the gitops_deploy role, pinned equal by
+  # test_staging_subset_copies_agree.py, and a third copy here would be one more thing to
+  # drift. The charset is what closes the injection hole; narrowing WHICH services may reach a
+  # staging VM is not what this boundary is for.
+  [[ "$3" =~ ^[a-z0-9][a-z0-9,_-]*$ ]] || refuse "tags contain characters outside [a-z0-9,_-]"
+
+  SHA="$2"
+  TAGS="$3"
+}
+
+main() {
+  validate_request "${SSH_ORIGINAL_COMMAND-}"
+
+  cd "$REPO" || {
+    echo "staging-gate: prep failed: no checkout at $REPO — run initial_setup.yml --tags hypervisor" >&2
+    exit 70
+  }
+
+  exec ./scripts/deploy_tools/staging_gate_remote.sh "$SHA" "$TAGS"
+}
+
+# Sourcing this file defines the validator without running the gate, which is what the test
+# suite does. Executing it runs the gate.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  main
+fi

@@ -306,7 +306,14 @@ def test_the_live_tree_classifies_the_names_we_already_know():
         "probe.py": "gate",
         "docs_provenance.py": "library",
         "probe_core.py": "library",
-        "deploy.sh": "adhoc",
+        # "gate" rather than "adhoc" since 2026-08-29, and the call graph changed rather than
+        # the classifier. The staging gate has always ended in `deploy.sh`, but it reached it
+        # through a script PIPED over ssh, which is invisible to a scan of the tree. The
+        # restricted key's dispatcher is a role template, so the chain
+        # dispatcher -> staging_gate_remote.sh -> deploy.sh is now visible and deploy.sh
+        # inherits the caller's kind. A person still runs it by hand too; the gate is simply no
+        # longer the caller nobody could see.
+        "deploy.sh": "gate",
         "etcd_restore_drill.sh": "adhoc",
     }
     assert {name: verdicts[name][0] for name in expected} == expected

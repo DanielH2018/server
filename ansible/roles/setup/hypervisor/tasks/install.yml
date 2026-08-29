@@ -143,3 +143,37 @@
     update: false
   become: true
   become_user: "{{ sys_user }}"
+
+- name: Install the staging-gate ssh dispatcher
+  tags: [hypervisor]
+  # Root-owned and not writable by sys_user, which is the point rather than habit: the
+  # restricted key's authorized_keys entry pins this path as its forced command, so anything
+  # that could rewrite this file could choose what that key runs.
+  ansible.builtin.template:
+    src: staging-gate-dispatch.sh.j2
+    dest: "{{ hypervisor_staging_gate_dispatch_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Authorize the staging-gate key against that dispatcher only
+  tags: [hypervisor]
+  # `restrict` turns off port/agent/X11 forwarding, pty allocation and user rc — the whole
+  # tunnelling surface — and `command=` pins the one program the key may run. The two are not
+  # redundant: without `restrict` the key could still forward a port even while being unable to
+  # run a shell.
+  #
+  # A forced command does NOT stop ssh forwarding stdin, which is the trap that makes the naive
+  # version of this useless. The dispatcher closes stdin itself; see the header there and
+  # ansible/tests/test_staging_gate_dispatch.py, which drives that property.
+  #
+  # This ADDS a key. It deliberately does not touch the operator's own key, and `exclusive` is
+  # left false: removing the only other way into this host in the same change that adds an
+  # untested one is how a host becomes reachable only with a screwdriver.
+  ansible.posix.authorized_key:
+    user: "{{ sys_user }}"
+    key: "{{ lookup('file', role_path ~ '/files/' ~ hypervisor_staging_gate_pubkey_file) }}"
+    key_options: 'restrict,command="{{ hypervisor_staging_gate_dispatch_path }}"'
+    state: present
+  become: true

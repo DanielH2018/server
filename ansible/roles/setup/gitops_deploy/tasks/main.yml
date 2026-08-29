@@ -144,3 +144,20 @@
         src: ansible/roles/setup/gitops_deploy/files/deploy_logic.py
       - live: /opt/gitops-deploy/host_lib.py
         src: ansible/roles/setup/common/files/host_lib.py
+
+- name: Install the staging gate's ssh identity
+  # 0600 and owned by sys_user because that is who runs the gate, both under the timer and
+  # when an operator drives staging_gate.py by hand. ssh refuses a group- or world-readable
+  # private key outright, so a wrong mode here fails loudly rather than quietly widening.
+  #
+  # `content` rather than a template: the value is the whole file, and a template would invite
+  # someone to add a trailing edit to key material. The newline matters — ssh rejects a private
+  # key whose final line is unterminated.
+  ansible.builtin.copy:
+    content: "{{ staging_gate_ssh_key }}"
+    dest: "{{ gitops_deploy_staging_gate_key_path }}"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0600"
+  become: true
+  no_log: true

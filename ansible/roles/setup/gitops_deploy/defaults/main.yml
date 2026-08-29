@@ -182,3 +182,11 @@ gitops_deploy_staging_gate_timeout_s: 600
 # out; it answered in seconds in every drill. 120s is slack for a cold first request, not a
 # budget anything is expected to approach.
 gitops_deploy_staging_expect_timeout_s: 120
+
+# The staging gate's dedicated ssh identity, deployed from SOPS (`staging_gate_ssh_key`).
+#
+# The gate hops to daniel-server to reach the staging guest. That hop used to authenticate with
+# the operator's own unrestricted key, so anything able to invoke the gate had a full shell on
+# that host (2026-08-29 review M-3). This key is pinned on the far side to a single forced
+# command by roles/setup/hypervisor, which also holds the matching public half.
+gitops_deploy_staging_gate_key_path: /etc/gitops-deploy/staging_gate_ed25519
