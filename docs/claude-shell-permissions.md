@@ -89,6 +89,19 @@ rule are decorative.** Measured 2026-08-08 against the OTEL `tool_decision` stre
 So: only allow-list a verb whose **entire** surface is acceptable. Never write a rule that looks like
 it narrows a verb — it doesn't, and it reads as a guarantee that isn't there.
 
+**Read that last bullet as being about the NATIVE matcher only.** On this machine a hook restores
+flag-level matching, and reading the bullet as universal has already cost something: a 2026-08-29
+review proposed deleting about two dozen `deny`/`ask` rules in the chezmoi `settings.permissions.json`
+as decorative, citing this section. They are not decorative. `allow-compound-bash.sh` — a
+`PermissionRequest` hook, so it runs before the native engine reaches a verdict — routes any pattern
+carrying an **interior** `*` to a real glob match against the whole command text
+(`~/.claude/hooks/allow-compound-bash.sh:78-81`, `:278`). That is what enforces
+`Bash(git commit *--no-verify*)`, `Bash(* | sh*)`, `Bash(find *-exec*)` and the `gh api *-X POST*`
+family. `tests/hooks/allow-compound-bash.test.js` in the dotfiles repo proves it both ways: one test
+fires those rules on the flag form, another proves they leave the everyday form of each command
+allowed. The rules in THIS repo's `.claude/settings.json` are plain verb prefixes and the native
+limitation applies to them unchanged.
+
 **That limitation is exactly why `classifyAllShell` is on.** A `Bash()` rule cannot see a flag, so
 `Bash(kubectl apply *)` also approves `apply --prune`; the classifier reads the whole line and can.
 The 2026-08-08 note below — that `exec` had to be blanket-allowed because "no rule can distinguish

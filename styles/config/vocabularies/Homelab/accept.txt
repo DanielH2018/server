@@ -332,3 +332,6 @@ SNATs
 [Vv]endored
 two_factor
 rc
+
+# Claude shell permissions (docs/claude-shell-permissions.md)
+dotfiles

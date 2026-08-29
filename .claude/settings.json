@@ -17,23 +17,7 @@
       "Bash(kubectl version *)",
       "Bash(kubectl diff *)",
       "Bash(kubectl wait *)",
-      "Bash(kubectl auth *)",
-      "Bash(kubectl apply *)",
-      "Bash(kubectl create *)",
-      "Bash(kubectl patch *)",
-      "Bash(kubectl set *)",
-      "Bash(kubectl exec *)",
-      "Bash(kubectl cp *)",
-      "Bash(kubectl port-forward *)",
-      "Bash(kubectl scale *)",
-      "Bash(kubectl rollout restart *)",
-      "Bash(kubectl rollout undo *)",
-      "Bash(kubectl rollout pause *)",
-      "Bash(kubectl rollout resume *)",
-      "Bash(kubectl label *)",
-      "Bash(kubectl annotate *)",
-      "Bash(kubectl cordon *)",
-      "Bash(kubectl uncordon *)"
+      "Bash(kubectl auth *)"
     ]
   },
   "hooks": {
@@ -43,11 +27,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/server/.claude/hooks/auto-approve-readonly.sh"
+            "command": "~/server/.claude/hooks/auto-approve-readonly.sh",
+            "timeout": 10
           },
           {
             "type": "command",
-            "command": "~/server/.claude/hooks/uv-python.sh"
+            "command": "~/server/.claude/hooks/uv-python.sh",
+            "timeout": 10
           }
         ]
       },
@@ -56,7 +42,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/server/.claude/hooks/block-protected-edits.sh"
+            "command": "~/server/.claude/hooks/block-protected-edits.sh",
+            "timeout": 10
           }
         ]
       }
@@ -90,6 +77,18 @@
         ]
       }
     ],
+    "PermissionRequest": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/server/.claude/hooks/auto-approve-remote-ssh.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "PermissionDenied": [
       {
         "matcher": "Bash",
@@ -107,7 +106,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/server/.claude/hooks/log-instructions.sh"
+            "command": "~/server/.claude/hooks/log-instructions.sh",
+            "timeout": 10
           }
         ]
       }
