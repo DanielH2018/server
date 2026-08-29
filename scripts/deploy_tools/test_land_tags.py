@@ -15,9 +15,52 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import land_tags  # noqa: E402 — needs the path insert above
+
+# A fixture, not live inventory. These tests pin the DERIVATION, and reading containers_list
+# would make them fail whenever a service is retired -- `dozzle` was in this file until it was
+# removed from the cluster on 2026-08-29. The live set is checked once, separately, by
+# test_the_shared_roles_are_still_undeclared.
+_DECLARED = frozenset(
+    {
+        "artifacts",
+        "autofix-bridge",
+        "docs",
+        "dozzle",
+        "headlamp",
+        "home-assistant",
+        "homepage",
+        "jellyfin",
+        "karakeep",
+        "media-volume",
+        "monitor-bridge",
+        "n8n",
+        "n8n-images",
+        "netpol-baseline",
+        "peanut",
+        "prowlarr",
+        "qbittorrent",
+        "radarr",
+        "registry",
+        "scrutiny",
+        "sonarr",
+        "terraria-stats",
+        "traefik",
+        "valheim-stats",
+        "zigbee2mqtt",
+    }
+)
+
+
+@pytest.fixture(autouse=True)
+def _pin_declared(monkeypatch):
+    """Pin the declared set for every test here, so a service retirement cannot turn a
+    derivation test red for a reason that has nothing to do with the derivation."""
+    monkeypatch.setattr(land_tags, "declared_tags", lambda: set(_DECLARED))
 
 
 def test_small_pr_scopes_to_its_services():
@@ -189,6 +232,107 @@ def test_a_mixed_pr_reports_both_a_tag_and_a_manual_apply():
 
 def test_land_reports_a_setup_plane_pr_as_unfinished():
     assert "needs-manual-apply" in _LAND_SH
+
+
+# PR #617's real 32-path file list, read from `gh pr view 617 --json files` on 2026-08-29.
+# 22 of its role directories have a containers_list entry; `manifests` and `seed-volume` do
+# not, and naming either in --tags makes deploy.sh refuse the whole list.
+_PR_617_FILES = [
+    "ansible/roles/k8s/artifacts/defaults/main.yml",
+    "ansible/roles/k8s/autofix-bridge/defaults/main.yml",
+    "ansible/roles/k8s/docs/defaults/main.yml",
+    "ansible/roles/k8s/headlamp/defaults/main.yml",
+    "ansible/roles/k8s/home-assistant/defaults/main.yml",
+    "ansible/roles/k8s/homepage/defaults/main.yml",
+    "ansible/roles/k8s/jellyfin/defaults/main.yml",
+    "ansible/roles/k8s/karakeep/defaults/main.yml",
+    "ansible/roles/k8s/manifests/defaults/main.yml",
+    "ansible/roles/k8s/manifests/tasks/main.yml",
+    "ansible/roles/k8s/manifests/tasks/release_stamp.yml",
+    "ansible/roles/k8s/media-volume/defaults/main.yml",
+    "ansible/roles/k8s/monitor-bridge/defaults/main.yml",
+    "ansible/roles/k8s/n8n/defaults/main.yml",
+    "ansible/roles/k8s/netpol-baseline/defaults/main.yml",
+    "ansible/roles/k8s/peanut/defaults/main.yml",
+    "ansible/roles/k8s/prowlarr/defaults/main.yml",
+    "ansible/roles/k8s/qbittorrent/defaults/main.yml",
+    "ansible/roles/k8s/registry/defaults/main.yml",
+    "ansible/roles/k8s/scrutiny/defaults/main.yml",
+    "ansible/roles/k8s/seed-volume/defaults/main.yml",
+    "ansible/roles/k8s/sonarr/defaults/main.yml",
+    "ansible/roles/k8s/terraria-stats/defaults/main.yml",
+    "ansible/roles/k8s/traefik/defaults/main.yml",
+    "ansible/roles/k8s/valheim-stats/defaults/main.yml",
+    "ansible/roles/k8s/zigbee2mqtt/defaults/main.yml",
+    "ansible/roles/setup/k3s/defaults/main.yml",
+    "ansible/tests/test_base_images_digest_pinned.py",
+    "docs/claude-tooling.md",
+    "scripts/diagnostics/probe.py",
+    "scripts/diagnostics/probe_releases.py",
+    "scripts/diagnostics/test_probe_releases.py",
+]
+
+
+def test_pr_617_derives_its_services_and_not_the_shared_roles():
+    """The measured failure. `manifests` and `seed-volume` have no containers_list entry, so
+    including them made deploy.sh exit 2 and refuse the 22 valid services beside them --
+    land.sh printed nothing-to-deploy and 22 digest pins sat undeployed (2026-08-29)."""
+    tags, source = land_tags.derive(_PR_617_FILES, changed_files=len(_PR_617_FILES))
+    assert source == "pr"
+    assert "manifests" not in tags
+    assert "seed-volume" not in tags
+    assert len(tags) == 22
+    assert {"sonarr", "jellyfin", "traefik", "n8n"} <= set(tags)
+
+
+def test_pr_617_reports_the_shared_roles_as_owed_work():
+    """Dropping them from the tags is only half the fix. Dropping them from the REPORT too is
+    the setup-plane silence again: landed, unapplied, and nothing says so."""
+    note = land_tags.plane_note(_PR_617_FILES)
+    assert "manifests" in note
+    assert "seed-volume" in note
+    assert "ansible/deploy.yml" in note, (
+        "a full deploy is the only thing that applies them"
+    )
+    assert "initial_setup.yml" in note, "roles/setup/k3s is in this PR too"
+
+
+def test_a_shared_role_alone_derives_no_tag_and_still_reports():
+    files = ["ansible/roles/k8s/manifests/tasks/main.yml"]
+    tags, source = land_tags.derive(files, changed_files=1)
+    assert (tags, source) == ([], "pr")
+    assert land_tags.plane_note(files) != ""
+
+
+def test_an_ordinary_service_role_is_neither_dropped_nor_reported():
+    """The reject half of both rules above. A splitter that called every role shared would
+    derive no tags at all and report a full deploy on every landing."""
+    files = ["ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"]
+    tags, _ = land_tags.derive(files, changed_files=1)
+    assert tags == ["sonarr"]
+    assert land_tags.plane_note(files) == ""
+
+
+def test_the_shared_roles_are_still_undeclared(monkeypatch):
+    """The one test that reads live inventory. The split is only correct while these names
+    really have no containers_list entry -- give one an entry and it becomes an ordinary
+    deployable role, and this test is where that gets noticed."""
+    monkeypatch.undo()
+    declared = land_tags.declared_tags()
+    assert "manifests" not in declared
+    assert "seed-volume" not in declared
+    assert "sonarr" in declared, (
+        "the reject half: a lookup returning nothing would pass"
+    )
+
+
+def test_land_does_not_call_a_refused_tag_list_nothing_to_deploy():
+    """deploy.sh exit 2 means it refused the WHOLE list and deployed nothing, including every
+    valid service beside the bad tag. Reporting that as nothing-to-deploy and exiting 0 is
+    what hid PR #617. Matched literally: a guard read through a variable stops matching
+    silently."""
+    assert 'echo "VERDICT: nothing-to-deploy (no service tag matched)"' not in _LAND_SH
+    assert "deploy-failed (PR #$PR — a derived tag matched no service" in _LAND_SH
 
 
 def test_land_still_has_a_nothing_to_deploy_path():
