@@ -382,12 +382,23 @@
   # fast-forwarding, parking every other session's unrelated commits until someone applies
   # the bring-up playbook by hand. A Pi log cap is not worth that, so the reload stays here.
   #
-  # `reloaded`, NOT `restarted`: auditd.service ships RefuseManualStop=yes on Debian/Ubuntu,
-  # so a restart fails outright. Reload runs ExecReload (SIGHUP), which is how auditd
-  # re-reads auditd.conf — without it the cap sits inert until the next host start.
+  # `restarted`, and the reverse was tried first. This said `reloaded`, on the general claim
+  # that auditd.service ships RefuseManualStop=yes with an ExecReload — which is written about
+  # Debian/Ubuntu widely enough to sound safe, and is FALSE on this host. Measured 2026-08-29
+  # with `systemctl show auditd`: `CanReload=no` and `RefuseManualStop=no`, the opposite of
+  # both halves. The apply failed with:
+  #
+  #   Unable to reload service auditd: Job type reload is not applicable for unit auditd.service
+  #
+  # `--check` could not catch it. Check mode does not execute a service action, so the dry run
+  # reported this task `changed` against a unit that cannot do what was being asked. A green
+  # dry run says the task is well-formed, never that the service accepts the verb.
+  #
+  # Restarting drops nothing that matters here: auditd is running with no rules loaded, and
+  # the config being applied governs rotation size rather than what is captured.
   ansible.builtin.service:
     name: auditd
-    state: reloaded
+    state: restarted
   when: optimize_pi_auditd_cap is changed
   become: true
 
