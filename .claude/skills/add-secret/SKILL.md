@@ -59,3 +59,19 @@ themselves (via the `! ` prefix) rather than putting the value in a command you 
 - The key decrypts from `secrets.yml`, the on-disk file is ciphertext, `secret_rotation.py audit`
   shows it registered, and the change is committed. Report which template now references it and
   which deploy tag would apply it.
+
+## Onboarding a host that cannot decrypt yet
+
+A host with no age key of its own fails `initial_setup.yml` and `deploy.yml` at their
+secret-load `pre_task`, which reads as a playbook bug rather than a missing key. The
+chicken-and-egg is why `bootstrap.yml` exists: it has no secret dependency at all.
+
+1. On the new host: `uv run ansible-playbook ansible/bootstrap.yml --limit <host>`. It
+   generates that host's own key and prints its **public** key.
+2. Add that public key to `ansible/.sops.yaml` — tracked, and public keys only.
+3. On a host that can already decrypt: `sops updatekeys ansible/vars/secrets.yml`.
+4. Commit and push, then `git pull` on the new host.
+
+Multi-recipient is **OR**: any listed key decrypts the whole file, so adding one grants the
+new host everything. The private key never leaves `~/.config/sops/age/keys.txt` on the host
+that generated it. `ansible/bootstrap.yml`'s own header carries the full flow.

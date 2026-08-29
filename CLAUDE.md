@@ -50,22 +50,23 @@ Route to the source of truth by what you're doing, before reading linearly:
 
 | If you're… | Start here |
 |---|---|
-| Adding / changing a service (k3s — the default) | `## Adding a New Service` below · a sibling role in `ansible/roles/k8s/` |
-| Adding / changing a Docker service (the Pi only) | `## Adding a New Service` → *Adding a Docker service* · `/new-container` skill |
-| Deploying or redeploying a service | `/deploy` skill · `## Common Commands` |
-| A PR just merged — what now | `## After a PR Merges — Pull, Deploy, Verify` below. Default is pull → deploy → verify in the same session, no ask. |
-| Checking a k8s manifest change without deploying it | `## Common Commands` → *Checking a k8s change without deploying it* (`--dry-run` vs `--check` — they check different things) |
-| Running or testing a GitOps tick without waiting 30 min | `./scripts/deploy_tools/gitops_tick.sh` · `ansible/roles/setup/gitops_deploy/CLAUDE.md` → *Triggering a tick by hand*. A real tick, not a rehearsal — there is no dry-run mode. |
+| Adding / changing a service (k3s — the default) | `/new-k8s-service` skill · a sibling role in `ansible/roles/k8s/` |
+| Adding / changing a Docker service (the Pi only) | `/new-container` skill (daniel-pi only — neither cluster node has Docker) |
+| Deploying or redeploying a service | `/deploy` skill · `## Common Commands` below for the exit codes |
+| Retiring a finished worktree, or `ExitWorktree` refuses to remove one | `/worktree-cleanup` skill |
+| A PR just merged — what now | `## After a PR Merges — Pull, Deploy, Verify` below (the directive and *When to wait*) · `/land-after-merge` skill (the commands). Default is pull → deploy → verify in the same session, no ask. |
+| Checking a k8s manifest change without deploying it | `/deploy` skill → *Checking a k8s change without deploying it* (`--dry-run` vs `--check` vs `prek` — they check different things) |
+| Running or testing a GitOps tick without waiting 30 min | `/gitops-tick` skill. A real tick, not a rehearsal — there is no dry-run mode, and an uneventful tick logs nothing. |
 | Adding / rotating a secret | `/add-secret` skill · `docs/secret-rotation.md` · `## Secrets Management` |
 | A Bash or `kubectl` command keeps prompting, or you need the full permission tables | `## Shell Commands — Shape Them to Auto-Approve` below (summary) · `docs/claude-shell-permissions.md` (full detail) |
 | Editing HA automations / lighting / fans | `ansible/roles/k8s/home-assistant/CLAUDE.md` (config and workload both live there; it routes to `docs/` for per-topic behaviour) · `/ha-edit-automation` |
 | Reviewing the homelab for gaps | `/homelab-review` skill (per-domain reviewer agents) |
 | Answering "what runs here / where / behind what" | `docs/reference/` — generated from the tree by the `docs-refresh` cron, browsable at `docs.local.<domain>`. Services, hosts, secret rotation, scheduled jobs, networking. **Never hand-edit a generated page**; a hook rejects it. Change the generator (`scripts/docs/build_docs.py` lists them). The hook decides by the `generated_from:` provenance banner rather than the path, so `reference/topology.md` — hand-written prose, the one page there nobody generates — stays editable. |
 | Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` + monitor-bridge `check.py` **first** — mature setup, most are handled |
-| Checking that a service's UI actually renders, not just that its pod is Ready | The `homelab-ui` MCP server — see `## Claude Tooling in This Repo`. `probe.py health` cannot see a broken UI behind a healthy pod. |
+| Checking that a service's UI actually renders, not just that its pod is Ready | The `homelab-ui` MCP server — see `## Claude Tooling in This Repo` below, and `docs/claude-tooling.md` for the full reference. `probe.py health` cannot see a broken UI behind a healthy pod. |
 | A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment. The general mechanism is the central rollout-restart at `roles/k8s/manifests/tasks/main.yml:298`, which fires when a role's rendered manifests change. A role whose pod depends on a file the manifests *don't* carry adds its own `checksum/<thing>` pod annotation instead — e.g. `checksum/check-script` in `roles/k8s/monitor-bridge/templates/deployment.yaml.j2`. |
 | A config edit won't recreate the container (Docker) | `ansible/roles/containers/common/CLAUDE.md` (config-change wiring) |
-| A host can't decrypt secrets | `## Secrets Management` → *Onboarding a host to SOPS* |
+| A host can't decrypt secrets | `add-secret` skill → *Onboarding a host that cannot decrypt yet* |
 | Starting Claude Code sessions from a phone | `ansible/roles/setup/claude_code/CLAUDE.md` — `claude-rc.service` hosts them. `/remote-control` inside a session and `claude rc` from a shell are different features; only the second creates sessions on demand. |
 | Adding / changing a cron that changes state | that role's `CLAUDE.md` *Autonomous-role contract* |
 
@@ -75,135 +76,52 @@ Route to the source of truth by what you're doing, before reading linearly:
 on `daniel-pi` (LAN-only utilities, WireGuard) — `daniel-server` and `daniel-box` have no
 Docker at all, so a Compose role there deploys nothing.
 
-1. Create `ansible/roles/k8s/<name>/tasks/main.yml` plus the manifest templates it needs
-   (`deployment.yaml.j2`, `service.yaml.j2`, `ingressroute.yaml.j2`, `pvc.yaml.j2`).
-   Copy the shape from a close sibling — `roles/k8s/freshrss` for a plain web app,
-   `roles/k8s/sonarr` for one on the media volume. Name every `volumes[].name` for the
-   workload or component that owns it — `sonarr-config`, never `config` — so a mount reads
-   unambiguously in a diff or a `kubectl describe`. ENFORCED by
-   `ansible/tests/test_volume_names_descriptive.py`, which also catches the half-finished
-   rename (a `volumeMounts` entry with no matching volume) that no schema check can see.
-2. Add the service to `containers_list` in `ansible/inventory/host_vars/daniel-box.yml` with
-   `platform: k8s`. **Position matters**: that play has no toposort and runs in list order,
-   so place the entry *after* `traefik` (which installs the CRDs its IngressRoute needs) and
-   after `authelia` if the route uses the `authelia` middleware.
-3. Secrets: add to `ansible/vars/secrets.yml` (`sops ansible/vars/secrets.yml`), reference as
-   `{{ variable_name }}` in a `secret.yaml.j2`. Note `kubectl apply` leaves *stale* Secret
-   keys behind — removing a key from the manifest does not remove it live.
-4. Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "<name>"`.
+The step-by-step for each platform is a skill, because it is a procedure you follow once per
+service rather than a fact you need in every session:
 
-### Adding a Docker service (daniel-pi only)
-1. Create `ansible/roles/containers/<name>/tasks/main.yml`
-2. Add a `docker-compose.yml.j2` template in `ansible/roles/containers/<name>/templates/`.
-   Use the shared macros in `ansible/templates/` rather than hand-rolling boilerplate:
-   `traefik.yml.j2` (`labels`), `autokuma.yml.j2` (`kuma`), `networks.yml.j2`
-   (`service_networks()` / `external_networks()` — the per-service and top-level
-   `networks:` blocks), and `resources.yml.j2`
-   (`resources(cpu_limit, mem_limit, cpu_res, mem_res)` — the `deploy.resources` caps).
-   There is **no shared healthcheck macro** — it was deleted and its jittered-interval body
-   inlined into the one compose file that still uses it (`roles/containers/dozzle/`). Write
-   the `healthcheck:` block directly. (`ansible/tests/test_documented_macros_exist.py`
-   ENFORCES that every macro named here still exists.)
-   The `/new-container` skill has the canonical skeleton.
-3. Add the service to `containers_list` in `ansible/inventory/host_vars/daniel-pi.yml`
-   (`name`, `port` if web-facing, `use_authelia`, `networks`). Deploy tags derive from
-   `name` automatically — `deploy.yml` needs no edit.
-4. Add any secrets to `ansible/vars/secrets.yml` (edit with `sops ansible/vars/secrets.yml`)
-5. Reference secrets via `{{ variable_name }}` in templates
-6. **If the service bind-mounts an Ansible-templated config file:** `register:` each config
-   task with a `<role>_`-prefixed name and pass `common_config_changed: "{{ <reg> is changed }}"`
-   (OR several) on the `common`/`docker_deploy` include. Deploys are idempotent (`recreate: auto`
-   by default), so without this an edit to that config won't recreate the container. See
-   `ansible/roles/containers/common/CLAUDE.md`.
+- **k3s** → the `new-k8s-service` skill. Role skeleton, which sibling to copy, the
+  `containers_list` entry, secrets, and what a `--dry-run` does *not* prove about a
+  brand-new service.
+- **Docker on `daniel-pi`** → the `new-container` skill. It carries the canonical compose
+  skeleton, the shared macros in `ansible/templates/`, and the `common_config_changed`
+  wiring a bind-mounted config file needs.
+
+Two facts stay here because they bite from outside those procedures:
+
+- **Position in `containers_list` matters.** That play has no toposort and runs in list
+  order, so a new entry goes *after* `traefik` (which installs the CRDs its IngressRoute
+  needs) and after `authelia` if the route uses the `authelia` middleware. Editing that list
+  for any reason means keeping the order.
+- **`kubectl apply` leaves stale Secret keys behind.** Removing a key from a `secret.yaml.j2`
+  does not remove it live.
 
 ## Common Commands
 Run ansible through `uv run` so it uses the repo's pinned env (`ansible-core` + the
 `community.docker` deps `requests`/`docker` — see **Python & Tests**). Bare `ansible-playbook`
 (the uv-tool shim) lacks those module deps and deploys will fail.
-Deploy through `scripts/deploy.sh`. It takes `/var/lock/server-git-tree.lock` — the same
-lock `gitops-deploy.service` (30-min timer) and the weekly secret-rotate cron hold — so a
-deploy can't interleave with the automated pipeline or with another Claude session. The
-lock guards the local git tree every deploy reads its templates from (gitops-deploy
-rewrites it with a `git pull` mid-run), so a `-e target=daniel-pi` deploy takes it too. Exit
-**75** means the lock stayed busy and *nothing was deployed*; it is not a playbook failure.
-`--check` runs unlocked. Exit **2** means a `--tags` value matched no service and *nothing
-was deployed* — Ansible itself exits 0 on an unmatched tag, so the wrapper checks the tags
-against `containers_list` first (`scripts/deploy_tools/deploy_tags.py`); `--list-services` prints every
-valid value and `--skip-tag-check` bypasses. Exit **4** means the tree is behind
-`origin/master` and *nothing was deployed* — a stale tree renders stale templates and reverts
-live config while every repo-side check still reads green (`scripts/deploy_tools/deploy_staleness.py`);
-`--skip-staleness-check` bypasses it. That check runs ahead of `--check` and `--dry-run` too,
-because a green dry run against a stale tree is itself the misleading signal; being *ahead* of
-master is normal branch work and is never refused. `--dry-run` validates the k8s manifests against
-the live API server without applying them, and runs unlocked because it mutates nothing —
-see *Checking a k8s change without deploying it* below. The bare `ansible-playbook` forms
-below still work and are what the wrapper runs, but they have neither the lock, the tag
-check, nor the staleness check; use them only when you deliberately want that.
+**Deploy through `./scripts/deploy.sh --tags "<service>"`**, not the playbook directly. It
+takes `/var/lock/server-git-tree.lock` — the same lock `gitops-deploy.service` (30-min timer)
+and the weekly secret-rotate cron hold — so a deploy cannot interleave with the automated
+pipeline or with another Claude session.
 
-```bash
-# Deploy a specific container
-./scripts/deploy.sh --tags "<service-name>"
+Its four non-zero exits all mean **nothing was deployed**, and each is a resume point rather
+than a playbook failure. They arrive as a bare `Exit code N`, which is why they are here:
 
-# Target the Pi (NB: -e target=, NOT --limit — the play's hosts: defaults to the local
-# hostname, so --limit daniel-pi matches zero hosts). The Pi is ansible_connection=ssh, so
-# this reaches it from either node. `-e target=` a LOCAL-connection host (either cluster
-# node) and the tasks run on the machine you typed it on — see ansible/inventory/hosts.ini.
-uv run ansible-playbook ansible/deploy.yml --tags "<service-name>" -e target=daniel-pi
+| Exit | Meaning | What to do |
+|---|---|---|
+| 75 | the lock stayed busy | retry |
+| 4 | the tree is behind `origin/master` | `git pull`, never `--skip-staleness-check` |
+| 3 | the change is broad and maps to no single service | see *When to wait* |
+| 2 | a `--tags` value matched no service | `--list-services` prints every valid value |
 
-# Deploy all containers
-uv run ansible-playbook ansible/deploy.yml
-
-# Dry run
-uv run ansible-playbook ansible/deploy.yml --tags "<service-name>" --check
-
-# Validate a k8s change against the live API server without applying it
-./scripts/deploy.sh --tags "<service-name>" --dry-run
-
-# Config-only: render dirs/templates/host config WITHOUT touching the container
-# (every container-role task is block-tagged config/deploy/cron; tags union in
-# Ansible, so scope with --skip-tags. --skip-tags config is NOT supported — the
-# registered config-change facts feed docker_deploy's recreate decision.)
-uv run ansible-playbook ansible/deploy.yml --tags "<service-name>" --skip-tags deploy
-
-# Edit encrypted secrets
-sops ansible/vars/secrets.yml
-
-# List the services --dry-run refuses to cover (k8s_dry_run_unsupported)
-grep -A20 "^k8s_dry_run_unsupported:" ansible/inventory/group_vars/all.yml
-
-# Trigger a GitOps tick now instead of waiting for the 30-min timer (daniel-box only).
-# Runs the identical code path the timer runs — there is no dry-run mode.
-./scripts/deploy_tools/gitops_tick.sh
-
-# Initial server setup — first-host bring-up ORDER (uv → SOPS onboarding → this) is in ansible/README.md
-uv run ansible-playbook ansible/initial_setup.yml
-```
+The full command reference — the Pi's `-e target=`, config-only runs, the GitOps tick, initial
+setup — and why each exit code exists are in the **`deploy` skill**.
 
 ### Checking a k8s change without deploying it
-Three modes, and they check genuinely different things — reaching for the wrong one is how a
-manifest bug reaches production.
-
-| Mode | What sees the manifests | Catches |
-|---|---|---|
-| `prek run --all-files` | nothing (renders locally, then parses and schema-checks) | Jinja indent bugs, invalid YAML, duplicate keys, **undefined fields and wrong types** — everything but CRDs, which have no upstream schema |
-| `--check` | nothing — the apply is **skipped**, so no API server is involved | task-level wiring; not the manifests themselves |
-| `--dry-run` | the **live API server**, via `kubectl apply --dry-run=server` | what prek catches, plus **CRD** schemas, CRD-ordering mistakes and admission rejections |
-
-`--dry-run` renders to a temp dir, applies with `--dry-run=server`, and discards the temp dir.
-Nothing is staged, applied, patched or rolled. It does **not** catch scheduling, PVC binding,
-probe or rollout behaviour — those need a real deploy.
-
-Two limits worth knowing before you trust a green dry run:
-- **It refuses the roles named in `k8s_dry_run_unsupported`** (count it with the grep two
-  sections above — don't hand-maintain the number here; it read "~17" against a real 15 for two
-  commits). Roles that mutate outside `roles/k8s/manifests` (sidecar
-  ConfigMaps built with `kubectl create`, netpol-probe Jobs, `exec -i` into a live pod) would
-  half-apply, so `deploy.yml` fails fast and names them. `k8s_dry_run_unsupported` in
-  `group_vars/all.yml` is the list; `ansible/tests/test_k8s_dry_run.py` re-derives it from the
-  role sources so it cannot drift.
-- **A brand-new service is only half-checked.** `seed-volume` is skipped (it is a dependency of
-  25 roles and mutates), and nothing at admission verifies that a referenced PVC exists — so
-  the Deployment validates while the volume is never proven provisionable.
+`prek run --all-files`, `--check` and `--dry-run` check genuinely different things, and
+reaching for the wrong one is how a manifest bug reaches production — only `--dry-run` shows
+the manifests to an API server. The three-mode table and the two limits that make a green dry
+run less than it looks are in the **`deploy` skill**.
 
 ## After a PR Merges — Pull, Deploy, Verify
 
@@ -220,36 +138,18 @@ refuses outright — and then say which command and why.
 
 ### The procedure
 
-Record the pre-merge master SHA, merge, then run the follow-through as ONE backgrounded
-command:
+Merge, then hand the follow-through to `./scripts/deploy_tools/land.sh --pr <n> --since
+<pre-merge-sha>` as ONE backgrounded command. It waits for master CI on the merge commit,
+ticks, deploys what the tick deferred, and prints a `VERDICT:` line. **Do not hand-poll CI and
+do not hand-merge** — hand-polling cost 835 polls across 213 wait episodes before `land.sh`
+existed. The exact commands, the `VERDICT:` values and the reason `--since` is needed are in
+the **`land-after-merge` skill**.
 
-```bash
-git rev-parse origin/master          # keep this; land.sh needs it for the fallback
-gh pr merge --squash
-./scripts/deploy_tools/land.sh --pr <n> --since <pre-merge-sha>
-```
-
-Run `land.sh` with `run_in_background` and let the session be re-invoked when it exits. It
-waits for master CI on the merge commit, ticks, deploys what the tick deferred, and prints a
-`VERDICT:` line — `settled`, `unhealthy`, `deploy-failed` or `nothing-to-deploy`.
-
-**Do not hand-poll CI and do not hand-merge.** `await_ci.py` reads the same check-runs
-endpoint the deployer reads, so its verdict and the tick's agree by construction. Hand-polling
-cost 835 polls across 213 wait episodes before it existed.
-
-It also owns the rule that used to live here: `cancelled`, `stale` and `skipped_by_concurrency`
-mean *no verdict for this SHA*, never *this SHA is bad* — `_CI_NO_VERDICT_CONCLUSIONS` in
-`deploy_logic.py` is the list, and a commit whose merge was immediately followed by another
-reads `cancelled` permanently. `await_ci.py` follows the tip in that case, but only once your
-commit is an ancestor of it. If you ever check by hand, check that way.
-
-`land.sh` runs from the primary checkout wherever you invoke it, because `deploy.sh` renders
-from its working directory and a worktree is behind master after a squash merge.
-
-It scopes the deploy to the PR's own file list rather than a SHA range, so another session's
-merged work is not swept in. `gh` paginates that list at 100 files, so it falls back to
-`--changed <since>` when the count disagrees — which is the only reason `--since` is needed.
-Pass `--tags` to override the scope entirely.
+`cancelled`, `stale` and `skipped_by_concurrency` mean *no verdict for this SHA*, never *this
+SHA is bad* — `_CI_NO_VERDICT_CONCLUSIONS` in `deploy_logic.py` is the list, and a commit whose
+merge was immediately followed by another reads `cancelled` permanently. If you ever check by
+hand, check that way. (ENFORCED: `ansible/tests/test_ci_cancelled_is_not_a_verdict.py` requires
+this paragraph to stay in CLAUDE.md rather than move to the skill.)
 
 **Verify the change, not just the workload.** The `VERDICT:` line gates the rollout and the
 180s restart window. It cannot see whether *your change* took effect: an Authelia 302 fires
@@ -321,83 +221,38 @@ Full tables, hook wiring and measurement history: `docs/claude-shell-permissions
 Per-verb tiers, the RBAC evidence and the rule-matching measurements: `docs/claude-shell-permissions.md`.
 
 ## Claude Tooling in This Repo (`.claude/`)
-- **`scripts/diagnostics/probe.py`** — read-only homelab diagnostics, allow-listed (no prompt). Resolves the
-  live container IP via `docker inspect`, so prefer it over curling bridge IPs (which change on
-  recreate): `uv run python scripts/diagnostics/probe.py <targets | metric '<promql>' | loki-query '<logql>' |
-  alerts | monitors | kuma-drift | scrutiny | pi <path> | cert <host> | health <svc> |
-  ha <state|automation|get> …>`.
-  `alerts [--days N --check X]` reconstructs DOWN alert history from Loki (Kuma keeps only
-  current state) — one row per firing episode; the same view is the "Alert History" Grafana
-  board (Infrastructure folder). It reads **two** streams: monitor-bridge's container log, and
-  the `{job="syslog"}` `status=down` lines the host crons emit, which push Kuma directly and so
-  have no other durable record. Until 2026-08-22 it read only the first, and the whole
-  backup/drift plane left no episode anywhere. `monitors` answers "what is down"; **`kuma-drift`
-  answers "what is missing"**, which `monitors` structurally cannot — it counts the exporter's
-  own set, so a monitor that is gone rather than down leaves the ratio at N/N up (a fenced-off
-  push tile read green for a day on 2026-08-20). `kuma-drift` diffs that set against
-  `static-monitors.yaml.j2` and treats a push monitor inside its own interval after a Kuma
-  restart as pending, since Kuma exports a monitor only once it has beaten. `health <svc>` is a k8s post-deploy gate: it exits 0 only
-  when the Deployment **or DaemonSet** is fully rolled out (observed generation caught up, every
-  replica updated + ready + available) **and** no container restarted in the last 180s. An
-  unreadable restart time counts as recent, so it fails closed. Both halves matter — readiness
-  flips a Deployment to Available before a bad liveness probe starts killing it, so a rollout check
-  alone reports green on a crashlooping pod. `--docker` inspects the Pi's container over ssh
-  instead; that was the only mode until 2026-08-16, which is why it died with
-  `FileNotFoundError: 'docker'` on both cluster nodes for the two days after the Docker
-  retirement. `ha …`
-  reads live Home Assistant state (authed with the SOPS `claude_ha_token`); `ha automation
-  <id-or-alias>` resolves the alias-slug≠id trap. See the home-assistant role's CLAUDE.md.
-- **`homelab-ui` MCP server** — a headless Chromium Claude drives against the LAN routes, so
-  it can *see* a service's UI (navigate, click, type, accessibility snapshot, screenshot)
-  rather than infer it from a status code. This is the half `probe.py health` structurally
-  cannot cover: readiness flips a Deployment to Available while the UI behind it is broken,
-  which is how 19 dead Grafana panels sat behind a 1/1 pod. Registered user-scope, so it is
-  per-operator config rather than a repo file, and launched by
-  `scripts/diagnostics/ui_mcp.sh`.
-  Three things have to be true for a browser to work here, and the wrapper supplies all
-  three. **DNS:** this host's resolver bypasses the LAN DNS, so `.local.<domain>` does not
-  resolve to the cluster edge from a shell — the wrapper passes Chromium
-  `--host-resolver-rules` pinned to the MetalLB ingress VIP, the browser equivalent of the
-  `curl --resolve` pin `probe_core.k8s_endpoint` documents. **Auth:** every
-  `*.local.<domain>` route is Authelia `one_factor`, so the context loads a session cookie
-  minted by `uv run python scripts/diagnostics/ui_login.py`. That login sets
-  `keepMeLoggedIn`, which is load-bearing — the session config's `inactivity: '5m'` would
-  otherwise expire the cookie between two idle minutes, where `remember_me: '1M'` applies
-  only when the login asks for it. **Secrecy:** `domain` is SOPS-encrypted, so the config
-  is generated into a 0600 file at launch instead of being written into `~/.claude.json`.
-  `ui_login.py --verify <svc>` proves the cookie reaches the backend without involving the
-  browser, and it reads a portal 302 as a failure rather than as a reachable service.
-  **`--check` asks Authelia, never the clock.** The expiry stamped in the state file is a
-  claim, and the two come apart in exactly the cases that matter: restarting Authelia or
-  rotating `authelia_secret` invalidates every live session while the local timestamp reads
-  valid for weeks. So `--check` calls `/api/state` and requires `authentication_level >= 1`
-  — Authelia answers HTTP 200 with level 0 to a cookie it no longer honours, so neither the
-  status code nor the timestamp can stand as the verdict. An unreachable portal counts as
-  invalid: minting needs the same network the browsing does, so there is nothing useful to
-  do with a session that cannot be confirmed.
-  **Going through Traefik is not a shortcut here, it is the only path.** Hitting a ClusterIP
-  directly reaches only pods on the node you run from: the baseline NetworkPolicy admits the
-  two cni0 gateways alone (`netpol-baseline/defaults/main.yml:41`), and host-to-remote-node
-  traffic SNATs to flannel.1, which is not listed. `kubectl port-forward` does not route
-  around it either — the read-only ServiceAccount is denied `create pods/portforward`.
-  **`uv run pytest -m ui` is the regression suite** (`scripts/diagnostics/test_ui_smoke.py`).
-  It drives this same MCP server over stdio, so a break in the wrapper's DNS pin, session
-  minting or launch config fails a test rather than silently degrading a Claude session. The
-  `ui` marker is deselected by `addopts`, because these tests need the host's age key, LAN
-  reachability and a browser — none of which a GitHub runner has. Pin the **exact** page
-  title when adding a service: several apps carry their own login behind Authelia (FreshRSS
-  lands on `/i/`, uptime-kuma on `/dashboard`, karakeep on `/signin`), so a substring like
-  `FreshRSS` also matches `Login · FreshRSS` and scores a broken app green.
-  **code-server, n8n and longhorn are `two_factor`**, so the ordinary session bounces off
-  them at the portal. Reach them by minting a second, short-lived session with a code from
-  your authenticator — `uv run python scripts/diagnostics/ui_login.py --totp <code>` — then
-  launching `ui_mcp.sh --two-factor` (the `-m ui` tests for those three skip when no such
-  session is live). **The TOTP secret is deliberately NOT in SOPS.** Storing it would put
-  both factors under one age key, and unlike a password its rotation costs a phone
-  re-enrollment; nothing here runs unattended anyway, since the `ui` marker is deselected in
-  CI. The two_factor session also gets its own state file and is never a fallback for the
-  default one: `ui_mcp.sh` loads a jar unconditionally, so promoting it would put a shell as
-  the repo user (code-server) and volume deletion (longhorn) behind every page load.
+The gotchas below are the ones that change a verdict. The full reference — probe's `alerts`
+history, the `homelab-ui` DNS/auth/secrecy triad and its `-m ui` suite, per-file edit costs,
+`auto-mode-bridge` internals, and the `/audit-permissions` Loki break — is in
+`docs/claude-tooling.md`.
+
+- **`scripts/diagnostics/probe.py`** — read-only homelab diagnostics, allow-listed (no prompt).
+  Resolves the live container IP via `docker inspect`, so prefer it over curling bridge IPs
+  (which change on recreate): `uv run python scripts/diagnostics/probe.py <targets |
+  metric '<promql>' | loki-query '<logql>' | alerts | monitors | kuma-drift | scrutiny |
+  pi <path> | cert <host> | health <svc> | ha <state|automation|get> …>`.
+  - `monitors` answers "what is down"; **`kuma-drift` answers "what is missing"**, which
+    `monitors` structurally cannot — it counts the exporter's own set, so a monitor that is gone
+    rather than down leaves the ratio at N/N up.
+  - **`health <svc>` is the k8s post-deploy gate.** It exits 0 only when the Deployment **or
+    DaemonSet** is fully rolled out **and** no container restarted in the last 180s (an
+    unreadable restart time counts as recent, so it fails closed). Both halves matter —
+    readiness flips a Deployment to Available before a bad liveness probe starts killing it, so
+    a rollout check alone reports green on a crashlooping pod. `--docker` inspects the Pi's
+    container over ssh instead, and is the only mode that touches Docker at all.
+  - `ha …` reads live Home Assistant state (authed with the SOPS `claude_ha_token`); `ha
+    automation <id-or-alias>` resolves the alias-slug≠id trap. See the home-assistant role's
+    CLAUDE.md.
+- **`homelab-ui` MCP server** — a headless Chromium Claude drives against the LAN routes, so it
+  can *see* a service's UI rather than infer it from a status code. This is the half `probe.py
+  health` structurally cannot cover: readiness flips a Deployment to Available while the UI
+  behind it is broken, which is how 19 dead Grafana panels sat behind a 1/1 pod. Launched by
+  `scripts/diagnostics/ui_mcp.sh`, which supplies the DNS pin, the Authelia session and the
+  0600 config. **Going through Traefik is not a shortcut here, it is the only path** — a
+  ClusterIP reaches only pods on the node you run from (the baseline NetworkPolicy admits the
+  two cni0 gateways alone, `netpol-baseline/defaults/main.yml:41`), and `kubectl port-forward`
+  is denied to the read-only ServiceAccount. code-server, n8n and longhorn are `two_factor` and
+  need `ui_login.py --totp <code>` plus `ui_mcp.sh --two-factor`.
 - **block-protected-edits** (PreToolUse) — *denies* direct edits to (a) anything under
   `containers/` (edit the `ansible/roles/containers/<svc>/templates/` source instead) and
   (b) SOPS-encrypted files like `ansible/vars/secrets.yml` (use `sops` / the `/add-secret` skill).
@@ -406,51 +261,11 @@ Per-verb tiers, the RBAC evidence and the rule-matching measurements: `docs/clau
   fails on malformed YAML (catches Jinja indent bugs `ansible-lint` misses) and on an
   un-escaped `$` in a `command`/`entrypoint`/`healthcheck.test` (Compose interpolates a lone
   `$VAR`/`$(…)` at parse time — shell `$` must be doubled `$$`; legit `${VAR-…}` in
-  `environment:` is not flagged).
-  **What an edit costs, by file type.** Six hooks match `Edit|Write`, and each is a ~7 ms
-  no-op except on the paths it owns. Measured directly 2026-08-23, one payload per hook:
-  `ansible-lint` takes **1,642 ms** on `roles/*/tasks/main.yml` and 7 ms on a `.j2` manifest,
-  a Compose template or a Markdown file; `validate-compose` takes **177 ms** on
-  `docker-compose.yml.j2` and 7 ms on everything else. Over the same 24h the OTEL telemetry
-  put `PostToolUse:Edit` at a 559 ms average and `PostToolUse:Write` at 234 ms — the two
-  populations differ in which file types they touch, not in which hooks run. So editing a
-  tasks file is the slow case by an order of magnitude, and that is the price of the coverage
-  rather than overhead to trim. Recorded so a slow-feeling edit isn't mistaken for a stuck hook.
-- **auto-mode-bridge** (PermissionDenied + PostToolUseFailure, both Bash) — the two places auto
-  mode and this repo have to talk. On a **denial**, it retries `gitops_tick.sh` and nothing else:
-  the tick is allow-listed and still denied about 1 run in 7 on identical text, which is
-  classifier variance rather than a rule, so `retry: true` reissues the call and the classifier
-  judges it again. Two retries per session, and a compound command that merely contains the tick
-  gets none — the classifier judged the whole line. On a **failure**, it decodes `deploy.sh`
-  exits 75/4/3/2 into what each one means, because all four mean *nothing was deployed* and they
-  reach Claude as a bare `Exit code N` that reads like a playbook failure. It does **not** use
-  `classifierContext`: that field is PostToolUse-only, so a failed deploy can't carry one, and
-  the standing facts (public repo, read-only kubectl SA) already live in `autoMode.environment`
-  and `autoMode.allow`, where the classifier reads them as configuration rather than as
-  unverified application context.
-- **permission auditing** — no longer lives here. A `log-permission` hook used to count tool calls
-  and prompts into `.claude/logs/permissions.json` for `audit-permissions.py` to read; Claude Code's
-  own OTEL `tool_decision` events carry that now, and name the deciding authority (`config` rule,
-  `hook`, `user`) instead of leaving it inferred. Both hosts' Claude Code exports OTLP to their
-  local node's hostPort (127.0.0.1:4317); since Phase F (2026-08-13) the cluster claude-otel
-  collector is a DaemonSet with a loopback hostPort on every node, so both hosts reach their
-  own node's collector directly — the Docker forwarder is dissolved/archived. The reader is the
-  `claude-permission-audit` plugin
-  (`/audit-permissions`), installed globally rather than vendored per-repo.
-  **`/audit-permissions` breaks whenever Loki is not on the node you run it from, and the fix is
-  not in this repo.** Its `loki-source.js` hardcodes `LOKI_URL || http://127.0.0.1:3100` with no
-  ClusterIP fallback and no retry, reporting "could not read Loki … Set $LOKI_URL"; `$LOKI_URL`
-  is unset in `settings.json`, the chezmoi base template, the shell rc files and the plugin's own
-  frontmatter, so the loopback default is what runs. Loki, Prometheus and Tempo are Deployments
-  with **no `nodeSelector`**, bound to `hostIP: 127.0.0.1` hostPorts — all three sit on daniel-box
-  by scheduler luck, and a reboot can move them. The 2026-08-23 ClusterIP pin (`c0d8731e`) gave
-  `otelq` and `otel-sweep` a stable second address; the plugin never got it. Workaround now:
-  `LOKI_URL=http://10.43.99.158:3100`. Durable fix: apply the ClusterIP-fallback pattern in the
-  `daniel-tools` marketplace repo, which is where the plugin lives — an operator searching under
-  `ansible/` will not find it (2026-08-23b review M11). Do **not** pin the workloads to a node;
-  `roles/setup/k3s/defaults/main.yml:893-896` pre-rejects that — fix the firewall, not the
-  placement. In-cluster consumers (Grafana datasources, monitor-bridge, autofix-bridge) use
-  Service DNS and are unaffected.
+  `environment:` is not flagged). Editing a `tasks/main.yml` costs ~1.6 s to `ansible-lint`,
+  an order of magnitude more than any other file type — that is coverage, not a stuck hook.
+- **auto-mode-bridge** (PermissionDenied + PostToolUseFailure, both Bash) — retries a denied
+  `gitops_tick.sh` (classifier variance, ~1 run in 7), and decodes `deploy.sh` exits 75/4/3/2,
+  all four of which mean *nothing was deployed* and reach Claude as a bare `Exit code N`.
 - **session-health** (SessionStart) — on opening a session here, prints a banner of any unhealthy/
   restarting containers + down Prometheus targets (silent when all-green; read-only, timeout-bounded).
 - **homelab-network-diagnostician** agent — connectivity/DNS/Traefik/WireGuard/CrowdSec triage (read-only).
@@ -500,18 +315,10 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
   `group_vars/`, a shared role) rather than assuming you're alone.
 - **Deploys serialize on a lock** — use `./scripts/deploy.sh`, see *Common Commands*.
 - **`ExitWorktree` refuses to remove a squash-merged or rebase-merged worktree**, reporting
-  "N commits on <branch>" — both land the content on master under new SHAs, so the tool
-  cannot see that the work survived. Do **not** pass `discard_changes` to argue with it: the
-  branch reads identically to one holding real unlanded work. Verify by content instead —
-  `git merge-tree --write-tree origin/master <branch>` equals `git rev-parse
-  origin/master^{tree}` when the branch has nothing left to give — then leave the tree for
-  the pruner.
-- **`uv run python scripts/dev/prune_worktrees.py`** reports which worktrees are finished with;
-  `--prune` removes the merged, clean, unlocked ones. It applies the same content check, so
-  it collects what `ExitWorktree` refused. A lock held by a *running* session is never
-  overridden; a lock whose process is gone is ignored, because Claude Code doesn't release
-  the lock when a session ends — which is why a worktree this session still holds stays
-  `keep` until the session exits.
+  "N commits on <branch>". Do **not** pass `discard_changes` to argue with it — that is how
+  unlanded work is lost, and from the tool's side the two cases look identical. Retiring a
+  worktree is the `worktree-cleanup` skill: the content check that settles it, and
+  `scripts/dev/prune_worktrees.py`, which collects what `ExitWorktree` refused.
 
 ## Secrets Management
 - Secrets live in `ansible/vars/secrets.yml`, encrypted with SOPS + age
@@ -549,12 +356,10 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
   a flag that emits no content cannot leak however it is typed.
 - **Never commit plaintext secrets** (private age keys never leave `~/.config/sops/age/keys.txt`;
   `.gitignore` blocks `keys.txt`/`*.agekey`/`*.key` and gitleaks scans every commit)
-- **Onboarding a host to SOPS** (it can't decrypt yet, so `initial_setup.yml`/`deploy.yml`
-  fail at their secret-load pre_task): run `uv run ansible-playbook ansible/bootstrap.yml --limit <host>`
-  on it (no secret dependency — generates the host's own key, prints its public key), add that
-  pubkey to `ansible/.sops.yaml`, `sops updatekeys ansible/vars/secrets.yml` on a host that can already
-  decrypt, commit + push, then `git pull` on the new host. Multi-recipient is OR — any listed
-  key decrypts the whole file. See `ansible/bootstrap.yml` header for the full flow.
+- **A host that can't decrypt yet** fails `initial_setup.yml`/`deploy.yml` at their
+  secret-load `pre_task`, which reads as a playbook bug rather than a missing key.
+  `ansible/bootstrap.yml` is the way in — it has no secret dependency. The four-step
+  onboarding is in the **`add-secret` skill**.
 
 ## Ansible Conventions
 - All tasks must be **idempotent** — rerunning should be side-effect-free
