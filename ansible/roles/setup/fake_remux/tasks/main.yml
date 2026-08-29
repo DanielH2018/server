@@ -53,6 +53,8 @@
     - "{{ role_path }}/files/fake_remux_logic.py"
     - "{{ role_path }}/files/fake_remux_replace.py"
     - "{{ role_path }}/files/fake_remux_replace_logic.py"
+    - "{{ role_path }}/files/mkv_attachment_repair.py"
+    - "{{ role_path }}/files/mkv_attachment_logic.py"
     # Runtime sibling both entry scripts `from host_lib import`.
     - "{{ role_path }}/../common/files/host_lib.py"
   become: true
@@ -136,6 +138,23 @@
     cron_file: fake-remux-reconcile
   become: true
 
+- name: Schedule the mkv attachment-name repair
+  tags: [fake_remux]
+  # DECIDED: takes fake_remux_lock, though it shares no ledger with the other two crons. The
+  # reconciler deletes and swaps the same mkv files this rewrites the header of, and mkvpropedit
+  # rewriting a header mid-swap corrupts the file it was called to fix. The lock costs a wait.
+  ansible.builtin.cron:
+    name: "mkv attachment repair"
+    hour: "{{ fake_remux_mkv_attachment_cron_hour }}"
+    minute: "{{ fake_remux_mkv_attachment_cron_minute }}"
+    user: "{{ sys_user }}"
+    job: >-
+      /usr/bin/flock -w 600 {{ fake_remux_lock }}
+      /usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} {{ fake_remux_opt_dir }}/mkv_attachment_repair.py
+      >/dev/null 2>&1 || logger -t mkv-attachment-repair 'repair wrapper failed'
+    cron_file: mkv-attachment-repair
+  become: true
+
 # DECIDED: rendered here rather than reusing the k3s role's /etc/rancher/k3s/kuma-push.env. This
 # role is host-conditional and tag-scoped, so `initial_setup.yml --tags fake_remux` would render
 # the script without ever writing that file — and the script then exits 0 without pushing, which
@@ -211,3 +230,7 @@
         src: ansible/roles/setup/fake_remux/files/fake_remux_replace.py
       - live: "{{ fake_remux_opt_dir }}/fake_remux_replace_logic.py"
         src: ansible/roles/setup/fake_remux/files/fake_remux_replace_logic.py
+      - live: "{{ fake_remux_opt_dir }}/mkv_attachment_repair.py"
+        src: ansible/roles/setup/fake_remux/files/mkv_attachment_repair.py
+      - live: "{{ fake_remux_opt_dir }}/mkv_attachment_logic.py"
+        src: ansible/roles/setup/fake_remux/files/mkv_attachment_logic.py
