@@ -65,6 +65,15 @@ ansible/vars/secrets.yml '["<name>"]' '"<new>"'`, update the registry date (`syn
 since the value already existed — set `last_rotated` by hand or re-run after editing), then
 redeploy the app **and** every consumer (for example, Homepage, monitor-bridge, configarr). Examples:
 - `*_api_key` (sonarr/radarr/jellyfin/prowlarr): Settings → General → regenerate API key.
+  **Bazarr is a consumer of `sonarr_api_key` and `radarr_api_key` that no deploy reaches.** It
+  stores both in its own config on the `bazarr-config` PVC, entered through its UI, so there is
+  no Ansible template holding them and no redeploy that updates them. After rotating either key,
+  set it in Bazarr → Settings → Sonarr → API Key and Settings → Radarr → API Key, then restart
+  Bazarr from System → Restart. The restart is required, not cosmetic: Bazarr's SignalR client
+  raises `UnAuthorizedHubError` and its thread exits, so it does not retry on a key change alone.
+  Missing this on 2026-08-29 left Bazarr reconnecting in a loop that leaked 173 MiB → its 1Gi cap
+  in 90 minutes and OOM-killed it; the only visible signal was the "k3s Container OOM" monitor,
+  which self-clears one hour after the kill while subtitle fetching stays silently broken.
 - **CrowdSec bouncer keys** (`crowdsec_k8s_bouncer_api_key`, the cluster edge's — the only
   bouncer since E7 retired the Docker edge and its `dockertraefik` key) and the agent password
   (`crowdsec_k8s_agent_password`, shared by all four agents). Since slice-6 B2 the single

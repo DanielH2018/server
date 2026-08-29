@@ -65,6 +65,16 @@ def parse_down_line(line):
 # pipes nothing to `logger`. Both fixes are one-line edits to files this change does not own
 # (roles/k8s/.../secret-rotation-audit.sh.j2 and setup/k3s/tasks/health-crons.yml). Confirmed
 # absent, not merely unmatched: a 7-day Loki query for either name returned "no logs".
+#
+# EVERY daniel-pi CRON IS INVISIBLE HERE, AND ADDING `logger` TO ONE DOES NOT FIX IT. The Pi
+# ships no host logs at all: rsyslog is inactive there and /var/log/syslog does not exist, so
+# the `{job="syslog"}` stream this reads carries nothing from that host, and the Pi's own
+# promtail (roles/containers/promtail/templates/promtail.yml.j2:46) scrapes only the
+# `pi-containers` job. `logger` on the Pi therefore reaches the local journal and stops. That
+# is how a real "Daniel Pi Recovery" DOWN on 2026-08-29 — autoheal exited and stayed down for
+# ~50 min — read as "no DOWN alerts in the last 7d" while the monitor was live-DOWN. The fix
+# is to ship Pi host logs (enable rsyslog, or a promtail journal scrape), NOT to add a
+# `logger` call to pi-recovery-health.sh.j2, which would land inert.
 SYSLOG_ALERT_LOGQL = '{job="syslog"} |= "status=down"'
 _SYSLOG_LINE_RE = re.compile(
     r"^\S+\s+\S+\s+(?P<name>[A-Za-z0-9_.-]+?)(?:\[\d+\])?:\s+(?P<rest>.*status=down.*)$"
