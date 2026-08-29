@@ -249,3 +249,31 @@ def test_index_cost_counts_the_index_and_the_store_excludes_it(tmp_path):
 def test_a_link_repeated_in_the_index_is_counted_once(tmp_path):
     d = _mem(tmp_path, "- [A](a.md)\nsee also [again](a.md)\n", {"a.md": "x"})
     assert _survey(d)["index"]["pointer_links"] == 1
+
+
+# --- link titles carrying square brackets --------------------------------------
+#
+# The index really does carry `- [A task tagged [config, deploy] is skipped …](file.md)`.
+# The pair below is per-direction: the file must read as linked (not an orphan), and a
+# bracketed title naming a MISSING file must still trip the dead-link gate. The second half
+# is the one that matters — a title the regex cannot parse is a pointer nothing polices.
+
+
+def test_bracketed_title_is_clean_when_its_file_exists(tmp_path):
+    d = _mem(
+        tmp_path,
+        "- [A task tagged [config, deploy] is skipped](dual.md) — hook\n",
+        {"dual.md": "body"},
+    )
+    s = _survey(d)
+    assert s["dead_links"] == []
+    assert s["orphans"] == []
+
+
+def test_bracketed_title_is_flagged_when_its_file_is_missing(tmp_path):
+    d = _mem(
+        tmp_path,
+        "- [A task tagged [config, deploy] is skipped](gone.md)\n",
+        {"a.md": "body"},
+    )
+    assert _survey(d)["dead_links"] == ["gone.md"]
