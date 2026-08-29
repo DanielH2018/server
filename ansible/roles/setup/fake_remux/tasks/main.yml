@@ -5,13 +5,23 @@
 # (2026-08-14): containers/autofix-bridge — which had owned them since the sidecar era —
 # archived, and this became their only consumer.
 
-- name: Ensure ffprobe is installed
+- name: Ensure the media-inspection tools are installed
   tags: [fake_remux]
   # Both crons probe on this host now. The scan used to reach jellyfin's bundled ffmpeg through
   # `docker exec`; there is no Docker here, and the library is a local directory, so the probe is
   # a plain binary against a plain path.
+  #
+  # mkvtoolnix rides along for mkvpropedit, which rewrites an mkv header in place without
+  # re-encoding. jellyfin-ffmpeg 7.1 rejects a font attachment whose filename holds anything
+  # outside [A-Za-z0-9_.-] (fftools/ffmpeg_demux.c, safe_filename), and it aborts the WHOLE input
+  # rather than skipping that one attachment — so a font named `Nexa Bold.otf` kills every
+  # burned-in-subtitle transcode of that file while direct play stays fine. Renaming the
+  # attachment is safe: ASS scripts reference fonts by internal family name, never by attachment
+  # filename. This host's own ffmpeg is 6.1.1, predates the check, and cannot reproduce it.
   ansible.builtin.apt:
-    name: ffmpeg
+    name:
+      - ffmpeg
+      - mkvtoolnix
     state: present
   become: true
 
