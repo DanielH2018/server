@@ -131,9 +131,21 @@ def test_the_remote_script_returns_deploy_sh_untouched() -> None:
         for line in REMOTE_SCRIPT.read_text().splitlines()
         if line.strip() and not line.strip().startswith("#")
     ]
-    assert lines[-1].startswith("./scripts/deploy.sh"), (
+    # The body lives in a `main` function -- bash reads a script by byte offset, and the
+    # dispatcher execs this file from the very checkout it fast-forwards, so the whole body has
+    # to be parsed before any of it runs. The property below is unchanged by that: what must be
+    # last is still the deploy.sh call, now followed only by the closing brace and the call.
+    assert lines[-1] == 'main "$@"', (
         f"the last executable line of staging_gate_remote.sh is {lines[-1]!r}, not the "
-        f"deploy.sh call — its exit code, not deploy.sh's, is what the gate would classify."
+        f'`main "$@"` that runs the body.'
+    )
+    assert lines[-2] == "}", (
+        f"expected the `main` function to close immediately before it is called, found "
+        f"{lines[-2]!r}"
+    )
+    assert lines[-3].startswith("./scripts/deploy.sh"), (
+        f"the last command inside main() is {lines[-3]!r}, not the deploy.sh call — its exit "
+        f"code, not deploy.sh's, is what the gate would classify."
     )
 
 

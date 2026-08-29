@@ -134,9 +134,16 @@ for months, which is how `has_docker: false` came to describe a state nothing co
 ## The staging gate's checkout
 
 `install.yml` clones `/home/ubuntu/server-staging`, and it is the tree the staging gate deploys
-FROM. `scripts/deploy_tools/staging_gate_remote.sh` — piped over ssh by `staging_gate.py`, never
-deployed — cds there, fast-forwards it to the SHA under test, and runs
-`./scripts/deploy.sh --tags <svc> -e target=daniel-stage`.
+FROM. `scripts/deploy_tools/staging_gate_remote.sh` cds there, fast-forwards it to the SHA under
+test, and runs `./scripts/deploy.sh --tags <svc> -e target=daniel-stage`.
+
+That script has **two callers**, and the file is written to suit both. `staging_gate.py` still
+pipes it over ssh (`bash -s`), which is the live path. The restricted key described below execs
+it from the checkout instead. Because the second caller runs it from disk in a tree it
+fast-forwards, **its body is wrapped in a `main` function** — bash reads a script by byte offset
+as it executes, so a `git merge --ff-only` rewriting the file mid-run would resume at a
+meaningless offset. Wrapping makes bash parse the whole body before any of it runs. Don't unwrap
+it.
 
 **It exists because the gate used to do all of that to `/home/ubuntu/server`, this host's own
 checkout** (2026-08-29 review M-2). Three things were wrong with that and only the first is
@@ -176,3 +183,65 @@ The path and the lock are duplicated between this role's `defaults/main.yml` and
 script, which cannot read a Jinja var. `ansible/tests/test_staging_gate_paths_agree.py` pins them
 equal — the drift is silent in the worst direction, since a stale path in the script makes every
 tick answer NO_VERDICT rather than fail.
+
+## The staging gate's restricted ssh key
+
+The gate runs on daniel-box and has to reach the staging guest, which only daniel-server routes
+to — so it hops here over ssh (`docs/staging-phase-c.md`, Decision 1). Until 2026-08-29 that hop
+authenticated with **the operator's own unrestricted key**, so anything able to invoke the gate
+had a full shell on this host (review M-3).
+
+`install.yml` now also deploys a dedicated ed25519 identity:
+
+- The **public** half is `files/staging-gate.pub`, authorized for `sys_user` with
+  `restrict,command="/usr/local/bin/staging-gate-dispatch"`.
+- The **private** half is `staging_gate_ssh_key` in SOPS, written to
+  `/etc/gitops-deploy/staging_gate_ed25519` (0600) on daniel-box by `roles/setup/gitops_deploy`.
+- The forced command is rendered from `templates/staging-gate-dispatch.sh.j2`, root-owned 0755 —
+  if `sys_user` could rewrite it, that user would choose what the key runs.
+
+**The trap that makes the naive version useless: a `command=` forced command does NOT stop ssh
+forwarding stdin.** The gate's own design pipes a script to `bash -s`, so a forced command that
+still read stdin would execute whatever the caller sent, and the restriction would be
+decorative. The dispatcher therefore closes stdin on its first executable line and takes an
+**operation name plus arguments** — `gate <40-hex sha> <tags>` in `$SSH_ORIGINAL_COMMAND` —
+never a script body. Every field is checked against a whitelist charset and *rejected* rather
+than escaped; nothing is interpolated into a shell string.
+
+`ansible/tests/test_staging_gate_dispatch.py` drives the dispatcher's own `validate_request`
+(the file guards `main` on `BASH_SOURCE` so the test can source it) and pins both properties.
+Its rejecting half covers `bash -s`, an empty command, a ref name in place of a SHA, and shell
+metacharacters in the tags; two tests feed a script body on stdin and assert it does not run.
+
+**The dispatcher does no git work and takes no lock**, on purpose. All of that stays in
+`staging_gate_remote.sh` so there is one copy, and because **flock attaches to the open file
+description rather than the process** — a second `exec 9>` on the same path conflicts with the
+first even inside one process tree, so a dispatcher that took the lock would deadlock the gate
+against itself.
+
+**What may lag, and why that is safe.** The dispatcher is pre-deployed, so it can be older than
+the SHA being gated. It reads nothing from the tree, so the only thing that can lag is its
+validation, and stale validation can only *refuse* — never approve. Everything after the `exec`
+comes from the checkout, including `deploy.sh`, whose exit code is the verdict. Refusals exit
+71 (`DISPATCH_REFUSED`) and prep failures 70, both of which `staging_gate.py` maps to
+NO_VERDICT: the gate could not be *asked*, which must never read as staging rejecting a change.
+
+**Residual risk, accepted:** a holder of this key can gate any commit reachable on `origin`,
+because the gate fetches from there. That is inherent to "the gate deploys a SHA" and is not
+made worse by this change.
+
+**Not done here, and deliberately:** `staging_gate.py` still authenticates with the operator's
+key, so nothing about the live path changed. Switching it to `-i
+/etc/gitops-deploy/staging_gate_ed25519 -o IdentitiesOnly=yes` is a follow-up, gated on this
+role having been applied and the new path proven by hand:
+
+```bash
+# on daniel-box, after `initial_setup.yml --tags hypervisor` has run on daniel-server
+ssh -i /etc/gitops-deploy/staging_gate_ed25519 -o IdentitiesOnly=yes daniel-server \
+    "gate $(git rev-parse origin/master) freshrss"      # must return a verdict
+ssh -i /etc/gitops-deploy/staging_gate_ed25519 -o IdentitiesOnly=yes daniel-server \
+    "bash -s" </dev/null                                # must be REFUSED (exit 71)
+```
+
+The second command is the one that demonstrates the change. Removing or restricting the
+operator's own key is a separate decision and is not part of this work.

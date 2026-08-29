@@ -45,6 +45,16 @@ NO_VERDICT = 2
 # test_the_prep_code_matches_the_remote_script rather than by hoping.
 PREP_FAILED = 70
 
+# The restricted key's dispatcher refusing the request outright — a malformed operation name,
+# a SHA that is not a 40-hex object name, tags outside its charset. Defined in
+# roles/setup/hypervisor/templates/staging-gate-dispatch.sh.j2 and pinned to this constant by
+# ansible/tests/test_staging_gate_dispatch.py.
+#
+# It classifies as NO_VERDICT for the same reason PREP_FAILED does: the gate could not be
+# ASKED. Reading a malformed request as "staging rejected this change" would fail a merge for
+# a reason that has nothing to do with the merge.
+DISPATCH_REFUSED = 71
+
 # deploy.sh exit codes that all mean *nothing was deployed*, so staging never formed an opinion:
 # 2 = a tag matched no service, 3 = the change is broad, 4 = the tree is behind origin,
 # 75 = the git-tree lock stayed busy. Reading any of these as a rejection would fail a merge for
@@ -80,7 +90,7 @@ def classify(rc: int) -> int:
     """
     if rc == PASS:
         return PASS
-    if rc == PREP_FAILED or rc == SSH_FAILURE or rc in DEPLOY_SH_NO_VERDICT:
+    if rc in (PREP_FAILED, DISPATCH_REFUSED, SSH_FAILURE) or rc in DEPLOY_SH_NO_VERDICT:
         return NO_VERDICT
     return REJECTED
 
@@ -94,7 +104,27 @@ def run_gate(sha: str, tags: str, timeout: float) -> int:
     script = REMOTE_SCRIPT.read_text()
     try:
         completed = subprocess.run(
-            ["ssh", REMOTE_HOST, "bash", "-s", "--", sha, tags],
+            # ServerAlive* is the fix for M-5, and it is not cosmetic. When the transport wedges,
+            # the local timeout below kills ssh here — but the remote `bash -s` is a different
+            # process group on a different host, so nothing local reaches it and it keeps holding
+            # /var/lock/staging-gate.lock. The next tick then answers PREP_FAILED on lock
+            # contention, which is NO_VERDICT, which is silent. Making the CLIENT notice a dead
+            # connection is what lets sshd reap the remote side: three missed 15s probes tears the
+            # session down at ~45s, well inside the 1800s timeout, so the orphan is cleaned up by
+            # the far end rather than left for someone to find.
+            [
+                "ssh",
+                "-o",
+                "ServerAliveInterval=15",
+                "-o",
+                "ServerAliveCountMax=3",
+                REMOTE_HOST,
+                "bash",
+                "-s",
+                "--",
+                sha,
+                tags,
+            ],
             input=script,
             text=True,
             timeout=timeout,

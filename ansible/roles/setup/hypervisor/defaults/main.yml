@@ -103,3 +103,16 @@ hypervisor_staging_gate_repo_url: https://github.com/DanielH2018/server.git
 # inside the gate, and a lock is not reentrant across a fresh open, so sharing it would
 # deadlock the gate against itself.
 hypervisor_staging_gate_lock: /var/lock/staging-gate.lock
+
+# The forced command behind the staging gate's restricted ssh key, and the key itself.
+#
+# The gate reaches this host over ssh (daniel-box cannot route to the staging guest's NAT
+# network, so something has to cross a host boundary — docs/staging-phase-c.md, Decision 1).
+# Until 2026-08-29 that hop authenticated with the operator's own unrestricted key, so anything
+# able to invoke the gate had a full shell here (review M-3). A dedicated key pinned to one
+# forced command replaces it.
+#
+# The public half is committed; the private half is `staging_gate_ssh_key` in SOPS and is
+# deployed to daniel-box by roles/setup/gitops_deploy, which is where the gate runs from.
+hypervisor_staging_gate_dispatch_path: /usr/local/bin/staging-gate-dispatch
+hypervisor_staging_gate_pubkey_file: staging-gate.pub

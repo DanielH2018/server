@@ -153,3 +153,24 @@
     path: "{{ hypervisor_staging_gate_lock }}"
     state: absent
   become: true
+
+- name: Deauthorize the staging-gate key
+  tags: [hypervisor]
+  # Before removing the dispatcher below, so the window where the key is authorized but its
+  # forced command is missing never exists. sshd would refuse such a key anyway, but the
+  # ordering means the host is never described by a state nobody intended.
+  #
+  # Removes only this key, by its public half. The operator's own key is untouched — this
+  # teardown must never be able to lock the host out.
+  ansible.posix.authorized_key:
+    user: "{{ sys_user }}"
+    key: "{{ lookup('file', role_path ~ '/files/' ~ hypervisor_staging_gate_pubkey_file) }}"
+    state: absent
+  become: true
+
+- name: Remove the staging-gate ssh dispatcher
+  tags: [hypervisor]
+  ansible.builtin.file:
+    path: "{{ hypervisor_staging_gate_dispatch_path }}"
+    state: absent
+  become: true
