@@ -341,6 +341,79 @@
     line: 'ACCT_LOGGING="3"'
   become: true
 
+# auditd was the third server-sized default in this tmpfs and the last one left. Measured
+# 2026-08-29: /var/log/audit was 28 MB of 128 MB, and 20 MB of that was rotated history dating to
+# June 21 and July 15 — auditd's shipped defaults are max_log_file=8 MB with num_logs=5, a 40 MB
+# ceiling written for a server disk. It fills slowly (roughly 8 MB every three weeks here), which
+# is exactly why it went unnoticed: nothing about it ever moves.
+#
+# CAP, DO NOT DISABLE. A review proposed masking auditd on the grounds that nothing reads it, and
+# the machine-side census behind that was right as far as it went — fail2ban uses `backend =
+# systemd` (/etc/fail2ban/jail.d/defaults-debian.conf:4) and promtail ships only container logs.
+# What it missed is the HUMAN reader: docs/security-tools.md documents auditd as a deployed
+# security tool with a runbook, and its triage table routes "Sensitive file modified" to
+# `ausearch -k identity` / `-k sshd`. The same check clears sysstat and acct, which that review
+# also proposed removing — `sar` and `lastcomm` have their own sections and triage rows. A census
+# that only looks for machine consumers cannot see a documented operator procedure.
+#
+# Capping keeps the tool and takes back the RAM, which is also what this section already decided
+# for journald and acct above.
+- name: Cap auditd's rotation to fit the log2ram tmpfs
+  tags: [log2ram]
+  ansible.builtin.lineinfile:
+    path: /etc/audit/auditd.conf
+    regexp: "^{{ item.key }}\\s*="
+    line: "{{ item.key }} = {{ item.value }}"
+  loop:
+    # 4 MB x (1 live + 2 rotated) = a 12 MB ceiling, down from 40 MB. At the observed fill rate
+    # that is still ~6 weeks of history, well past the window any of the runbook queries use.
+    - {key: max_log_file, value: "4"}
+    - {key: num_logs, value: "3"}
+  loop_control:
+    label: "{{ item.key }}"
+  register: optimize_pi_auditd_cap
+  become: true
+
+- name: Make auditd re-read the capped config # noqa: no-handler
+  tags: [log2ram]
+  # Inline rather than a `notify:`, deliberately. This role's handlers live in
+  # initial_setup.yml (see the role's CLAUDE.md), and that file is one of the deployer's
+  # _BROAD_MANUAL_PREFIXES — a commit touching it defers the GitOps tick WITHOUT
+  # fast-forwarding, parking every other session's unrelated commits until someone applies
+  # the bring-up playbook by hand. A Pi log cap is not worth that, so the reload stays here.
+  #
+  # `reloaded`, NOT `restarted`: auditd.service ships RefuseManualStop=yes on Debian/Ubuntu,
+  # so a restart fails outright. Reload runs ExecReload (SIGHUP), which is how auditd
+  # re-reads auditd.conf — without it the cap sits inert until the next host start.
+  ansible.builtin.service:
+    name: auditd
+    state: reloaded
+  when: optimize_pi_auditd_cap is changed
+  become: true
+
+- name: Find the audit rotations left behind by the old 40 MB ceiling
+  tags: [log2ram]
+  # num_logs is applied at ROTATION, so auditd does not drop the now-surplus generations until it
+  # next fills a log — roughly three weeks away at this fill rate. Collect them so the RAM comes
+  # back on this deploy rather than at some unattended point later.
+  ansible.builtin.find:
+    paths: /var/log/audit
+    patterns: ["audit.log.[3-9]", "audit.log.[1-9][0-9]"]
+    use_regex: false
+    recurse: false
+  register: optimize_pi_surplus_audit_logs
+  become: true
+
+- name: Remove the surplus audit rotations
+  tags: [log2ram]
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ optimize_pi_surplus_audit_logs.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  become: true
+
 # 8. EARLYOOM (kill the hog before the watchdog reboots)
 - name: Install earlyoom
   tags: [earlyoom]
