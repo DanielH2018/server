@@ -128,6 +128,11 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         # --tags uptime-kuma` would rotate the tile and leave the cron pushing the old value —
         # which reads as the monitor going silent, the exact fault it was added to report.
         "docs_refresh_push_token",
+        # daniel-SERVER cron (setup/initial_setup) + a k8s/uptime-kuma tile deployed from
+        # daniel-box: two hosts, so no single redeploy can move both halves. Rotating the tile
+        # alone would leave the cron pushing the old value, silencing the only monitor that can
+        # report a stale render on the host that owns the UPS shutdown chain.
+        "setup_drift_push_token",
         "secret_rotation_push_token",  # self-referential
         # Pushed by a setup role with no deploy tag, so there is nothing for --deploy to run.
         # Named `monitor_bridge_*` only for Kuma monitor-history continuity after the check

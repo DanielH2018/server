@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# Setup-plane drift check for hosts that run no manifest-prune-check — managed by Ansible
+# (initial_setup role); edits overwritten.
+#
+# WHAT THIS EXISTS FOR (2026-08-29 review M-10). The setup plane is deployed only by a manual
+# `initial_setup.yml`; nothing converges it, so a host can run an old render of a script or an
+# old copy of deployed code indefinitely. manifest-prune-check.sh reports exactly that — and it
+# is installed by roles/setup/k3s/tasks/health-crons.yml, imported only from that role's
+# main.yml, which k3s-bringup.yml asserts onto k3s_server_hosts. So the reader exists on
+# daniel-box and NOWHERE else, while daniel-server renders the entire UPS shutdown chain
+# (roles/nut_host: upsmon.conf, nut.conf, the secondary watchdog). Live on 2026-08-29:
+# daniel-server had no /var/lib/homelab/setup-render-manifest.d at all, and its
+# /etc/nut/upsmon.conf was dated Aug 17 against a template changed on 2026-08-28.
+#
+# The two drift arms are NOT reimplemented here — they are sourced from setup-drift-lib.sh, the
+# same library manifest-prune-check.sh sources. Two copies of a drift check are free to drift
+# from each other, which is the fault the check exists to report.
+#
+# WHAT IT DELIBERATELY DOES NOT DO: the orphaned-cluster-object arm. That reads
+# /etc/rancher/k3s/manifests and needs the control plane's staged manifest set; on an agent node
+# the directory does not exist and the kubectl calls have nothing to compare against. A third arm
+# that structurally cannot fire is worse than no arm, because it reads as coverage.
+#
+# Runs as root: the deployed-code arm compares live artifacts under /usr/local, some of which are
+# not world-readable, and the render arm reads fragments written 0644 root:root. Same trade-off
+# as manifest-prune-check.sh — root buys the file reads and nothing else; this script makes no
+# cluster or network call beyond its own two pushes.
+set -uo pipefail
+
+# shellcheck source=/dev/null
+source /usr/local/lib/kuma-push-lib.sh || {
+  logger -t setup-drift-check "kuma-push-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+# shellcheck source=/dev/null
+source /usr/local/lib/setup-drift-lib.sh || {
+  logger -t setup-drift-check "setup-drift-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+
+REPO_DIR=/home/{{ sys_user }}/server
+# The tree this compares against does not refresh itself on a host without gitops-deploy. Past
+# this many days the drift arms are comparing a stale render to the stale template it came from,
+# which agree — so the age is reported as its own fault rather than left to silence the arms.
+TREE_MAX_DAYS={{ setup_drift_tree_max_days }}
+
+KUMA_HOST="uptime-kuma.local.{{ domain }}"
+# Pinned to the cluster ingress VIP like every sibling: Kuma serves from the k8s edge and the
+# push must not depend on DNS.
+KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
+
+# Sourced, never inlined: this script lands 0755, so an inlined token would be readable by every
+# local account. Its own env file rather than /etc/rancher/k3s/kuma-push.env, which is a
+# whole-content template owned by roles/setup/k3s and does not exist on an agent node at all.
+SETUP_DRIFT_PUSH_TOKEN=""
+# shellcheck source=/dev/null
+[[ -r /etc/homelab/kuma-push.env ]] && . /etc/homelab/kuma-push.env
+if [[ -z "$SETUP_DRIFT_PUSH_TOKEN" ]]; then
+  logger -t setup-drift-check "setup_drift_push_token not set — skipping push (see /add-secret)"
+  exit 0
+fi
+PUSH_URL="https://${KUMA_HOST}/api/push/${SETUP_DRIFT_PUSH_TOKEN}"
+
+setup_drift_scan
+
+TREE_AGE=$(setup_drift_tree_age_days) || TREE_AGE=""
+TREE_NOTE=""
+TREE_FAULT=""
+if [[ -z "$TREE_AGE" ]]; then
+  # Unreadable is a fault, not an exemption: with no age the arms below cannot be trusted, and
+  # the honest report is that the tree could not be read, not that nothing has drifted.
+  TREE_FAULT="cannot read the checkout at ${REPO_DIR} — the drift arms below have nothing to compare against"
+elif ((TREE_AGE > TREE_MAX_DAYS)); then
+  TREE_FAULT="checkout is ${TREE_AGE}d old (> ${TREE_MAX_DAYS}d) — re-pull before trusting the arms below, a stale tree makes them agree with themselves"
+else
+  TREE_NOTE="; checkout ${TREE_AGE}d old"
+fi
+
+if [[ -z "$DRIFTED" && -z "$STALE" && -z "$TREE_FAULT" ]]; then
+  STATUS=up
+  MSG="deployed code and rendered setup scripts match the repo${TREE_NOTE}${DEPLOYED_NOTE}${MANIFEST_NOTE}"
+else
+  STATUS=down
+  MSG=""
+  [[ -n "$TREE_FAULT" ]] && MSG="$TREE_FAULT"
+  # Each name is a repo-relative path, so the role it belongs to says which playbook renders it.
+  [[ -n "$DRIFTED" ]] && MSG="${MSG:+$MSG; }deployed code differs from the repo (re-run the playbook that renders it): ${DRIFTED}"
+  [[ -n "$STALE" ]] && MSG="${MSG:+$MSG; }host is running an OLD render of (re-run the playbook that renders it): ${STALE}"
+  MSG="${MSG}${TREE_NOTE}${DEPLOYED_NOTE}${MANIFEST_NOTE}"
+fi
+
+# Unconditional and before the push: the `|| logger` inside kuma_push only fires when the curl
+# fails, so a successfully-pushed DOWN would otherwise leave no durable record and
+# `probe.py alerts` could never reconstruct this monitor. NOTICE rather than INFO — journald here
+# caps MaxLevelStore=notice, so an info line is dropped from the journal and from forwarding.
+logger -p daemon.notice -t setup-drift-check "status=${STATUS} ${MSG}"
+
+kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" setup-drift-check

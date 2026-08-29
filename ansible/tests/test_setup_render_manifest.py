@@ -35,6 +35,16 @@ _ROLE = _REPO / "ansible/roles/setup/k3s"
 _TEMPLATES = _ROLE / "templates"
 _HEALTH_CRONS = _ROLE / "tasks/health-crons.yml"
 _MANIFEST_DIR = "/var/lib/homelab/setup-render-manifest.d"
+# Arms 2 and 3 moved out of manifest-prune-check.sh.j2 on 2026-08-29 (review M-10): that script
+# is installed only on k3s server hosts, so daniel-server rendered the whole UPS shutdown chain
+# with no reader at all. Both consumers now source this library, and the guards below assert
+# against the file that literally holds the loops — a guard pointed at a wrapper asserts nothing
+# about the code that runs.
+_ARMS_LIB = _REPO / "ansible/roles/setup/initial_setup/files/setup-drift-lib.sh"
+_ARM_CONSUMERS = (
+    _REPO / "ansible/roles/setup/k3s/templates/manifest-prune-check.sh.j2",
+    _REPO / "ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2",
+)
 
 # Shell templates that are NOT rendered onto this host as standalone scripts, each with the
 # reason. Anything here is exempt from the manifest; everything else must be in it.
@@ -155,13 +165,29 @@ def test_the_check_reads_the_manifest_it_is_given():
     stamp_task = (
         _REPO / "ansible/roles/setup/common/tasks/stamp_render.yml"
     ).read_text()
-    script = (_TEMPLATES / "manifest-prune-check.sh.j2").read_text()
     assert _MANIFEST_DIR in stamp_task, (
         "stamp_render.yml no longer writes the render manifest"
     )
-    assert _MANIFEST_DIR in script, (
-        "manifest-prune-check.sh.j2 no longer reads the render manifest"
+    assert _MANIFEST_DIR in _ARMS_LIB.read_text(), (
+        "setup-drift-lib.sh no longer reads the render manifest"
     )
+
+
+def test_both_readers_source_the_shared_arms():
+    """The indirection guard. Arms 2 and 3 live in one library so daniel-box's reader and
+    daniel-server's cannot diverge — but every assertion in this file now points at that
+    library, so a consumer that quietly re-inlined the loops would satisfy none of them and
+    break nothing. This is what fails in that case."""
+    for path in _ARM_CONSUMERS:
+        text = path.read_text()
+        assert "source /usr/local/lib/setup-drift-lib.sh" in text, (
+            f"{path.name} no longer sources the shared drift arms, so the guards in this file "
+            f"assert nothing about the code it runs (2026-08-29 review M-10)."
+        )
+        assert "setup_drift_scan" in text, (
+            f"{path.name} sources the library but never calls setup_drift_scan, so both arms "
+            f"are absent behind a script that still pushes a verdict."
+        )
 
 
 def test_other_setup_roles_stamp_their_own_artifacts():
@@ -206,16 +232,16 @@ def test_the_deployed_code_arm_derives_its_pairs_from_fragments():
     A fragment directory makes it per-host by construction, the same shape the stale-script arm
     already uses: a pair exists only where the role that deploys it ran.
     """
-    script = (_TEMPLATES / "manifest-prune-check.sh.j2").read_text()
+    script = _ARMS_LIB.read_text()
     assert _DEPLOYED_DIR in script, (
-        "manifest-prune-check.sh.j2 no longer reads the deployed manifest directory."
+        "setup-drift-lib.sh no longer reads the deployed manifest directory."
     )
-    assert "DEPLOYED_ENTRIES" in script, (
+    assert "deployed_entries" in script, (
         "the arm no longer counts declared pairs, so an empty or absent fragment directory "
         "reads as 'everything matches' instead of 'nothing is armed' — the L2 shape, one arm "
         "over."
     )
-    assert not re.search(r"^check_deployed /", script, re.MULTILINE), (
+    assert not re.search(r"^\s*_?check_deployed /", script, re.MULTILINE), (
         "a hardcoded check_deployed pair is back. Declare it in the owning role via "
         "stamp_deployed.yml instead, or this arm narrows to whatever the next author "
         "remembered (2026-08-24 review M-5)."
@@ -232,9 +258,9 @@ def test_a_deleted_source_is_drift_not_an_exemption():
     Returning 0 swallows it, and the entry still counts toward DEPLOYED_ENTRIES: armed, and
     checking nothing. Introduced and caught in the same change.
     """
-    script = (_TEMPLATES / "manifest-prune-check.sh.j2").read_text()
-    fn = re.search(r"^check_deployed\(\) \{.*?^\}", script, re.MULTILINE | re.DOTALL)
-    assert fn, "check_deployed() is gone or no longer a plain function."
+    script = _ARMS_LIB.read_text()
+    fn = re.search(r"^_check_deployed\(\) \{.*?^\}", script, re.MULTILINE | re.DOTALL)
+    assert fn, "_check_deployed() is gone or no longer a plain function."
     body = fn.group(0)
     assert "return 0" not in body.split('if [[ ! -r "$src" ]]')[0], (
         "check_deployed still short-circuits on an unreadable source. A source missing from "
@@ -271,9 +297,9 @@ def test_every_role_that_deploys_code_declares_its_pairs():
 def test_an_absent_manifest_is_not_reported_as_drift():
     """A host that predates the mechanism has no manifest; that is unproven coverage, not a
     failure, and paging for it would train the operator to ignore this monitor."""
-    script = (_TEMPLATES / "manifest-prune-check.sh.j2").read_text()
+    script = _ARMS_LIB.read_text()
     assert "render manifest absent" in script
-    assert "MANIFEST_ENTRIES" in script, (
+    assert "manifest_entries" in script, (
         "the arm no longer counts stamped entries, so a directory of empty fragments reads as "
         "'everything matches' instead of 'nothing is armed' (2026-08-23b review L2)."
     )
@@ -283,8 +309,8 @@ def test_an_empty_fragment_cannot_disarm_the_arm():
     """L2. The guard was `[[ -r … ]]`: a zero-byte manifest is readable, so it took the present
     branch, contributed no comparisons, and the check reported a confident green while watching
     nothing at all."""
-    script = (_TEMPLATES / "manifest-prune-check.sh.j2").read_text()
-    assert re.search(r'\[\[\s+-s\s+"\$FRAGMENT"', script), (
+    script = _ARMS_LIB.read_text()
+    assert re.search(r'\[\[\s+-s\s+"\$fragment"', script), (
         "the fragment loop must test -s, not -r: an empty file is readable and silently "
         "contributes nothing, which disarms this arm behind a green heartbeat."
     )
@@ -311,7 +337,7 @@ def test_the_two_halves_hash_the_same_bytes():
         "drops the trailing newline before hashing and no entry can ever match sha256sum."
     )
 
-    script = (_TEMPLATES / "manifest-prune-check.sh.j2").read_text()
+    script = _ARMS_LIB.read_text()
     assert "sha256sum" in script, "the check no longer recomputes with sha256sum"
 
     # Prove the two digests actually differ on a real template, so this test fails loudly if a

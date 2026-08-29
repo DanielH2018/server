@@ -30,6 +30,21 @@
     mode: "0644"
   become: true
 
+- name: Deploy the shared setup-plane drift arms
+  # `always` for the same reason as the push helper above: it is sourced by scripts rendered
+  # under other roles' tags (manifest-prune-check.sh under the k3s role's, setup-drift-check.sh
+  # under this one's), so any tag selecting a consumer must also select this. Both consumers
+  # source it with a `|| exit 1` guard, so a host that misses it fails its cron loudly and drops
+  # the heartbeat rather than reporting a green with two arms silently absent.
+  tags: [always]
+  ansible.builtin.copy:
+    src: setup-drift-lib.sh
+    dest: /usr/local/lib/setup-drift-lib.sh
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: Deploy the daily secret-rotation audit wrapper (gitops host only)
   tags: [crons]
   # Gated on has_gitops, not a hostname: this reads ansible/secret_rotation.yml and the key
@@ -292,6 +307,82 @@
     stamp_deployed_pairs:
       - live: /usr/local/lib/kuma-push-lib.sh
         src: ansible/roles/setup/initial_setup/files/kuma-push-lib.sh
+
+# The drift library is itself copy:-deployed, so the arm it implements watches it. `tags:
+# [always]`, matching the copy task above, so a tag-scoped run cannot leave this fragment
+# describing a version it never deployed.
+- name: Record the deployed setup-drift library
+  tags: [always]
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
+  vars:
+    stamp_deployed_name: setup-drift-lib
+    stamp_deployed_pairs:
+      - live: /usr/local/lib/setup-drift-lib.sh
+        src: ansible/roles/setup/initial_setup/files/setup-drift-lib.sh
+
+# ── setup-plane drift reader for hosts with no manifest-prune-check ───────────────────────────
+- name: Create the setup-drift credentials directory
+  tags: [crons, setup_drift]
+  when: inventory_hostname in setup_drift_check_hosts
+  ansible.builtin.file:
+    path: /etc/homelab
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Deploy the setup-drift push credentials
+  tags: [crons, setup_drift]
+  when: inventory_hostname in setup_drift_check_hosts
+  # 0640 root:{{ sys_user }}, sourced rather than inlined: the script lands 0755, so an inlined
+  # token would be readable by every local account. Its own file rather than
+  # /etc/rancher/k3s/kuma-push.env, which roles/setup/k3s owns as a whole-content template and
+  # which does not exist on an agent node at all.
+  ansible.builtin.template:
+    src: setup-drift-kuma-push.env.j2
+    dest: /etc/homelab/kuma-push.env
+    owner: root
+    group: "{{ sys_user }}"
+    mode: "0640"
+  become: true
+  no_log: true  # renders setup_drift_push_token
+
+- name: Deploy the setup-plane drift check
+  tags: [crons, setup_drift]
+  when: inventory_hostname in setup_drift_check_hosts
+  ansible.builtin.template:
+    src: setup-drift-check.sh.j2
+    dest: /usr/local/bin/setup-drift-check.sh
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Schedule the setup-plane drift check
+  tags: [crons, setup_drift]
+  when: inventory_hostname in setup_drift_check_hosts
+  # Daily rather than hourly: the setup plane changes only when someone runs a play by hand, so
+  # a shorter period would re-read the same answer all day. 07:50 sits after the Sunday 07:30
+  # reboot has settled and before the 08:00 secret-rotation audit. Root, because the
+  # deployed-code arm compares live artifacts under /usr/local that are not all world-readable.
+  ansible.builtin.cron:
+    name: "Setup-plane drift check"
+    minute: "50"
+    hour: "7"
+    job: "/usr/local/bin/setup-drift-check.sh"
+    user: root
+  become: true
+
+- name: Record the rendered setup-drift check
+  tags: [crons, setup_drift]
+  when: inventory_hostname in setup_drift_check_hosts
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: setup-drift-check
+    stamp_render_templates:
+      - ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2
+      - ansible/roles/setup/initial_setup/templates/setup-drift-kuma-push.env.j2
 
 - name: Install the docs refresh script (box only)
   tags: [crons, docs]

@@ -265,6 +265,15 @@ stringData:
   manifest-prune-check.json: |
     {"type": "push", "name": "Manifest Prune Drift", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ manifest_prune_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
+{# The same two drift arms, on the hosts the monitor above cannot see: manifest-prune-check is
+   installed only on k3s server nodes, so daniel-server rendered the whole UPS shutdown chain
+   with nothing able to report it stale (review M-10). Gated on the token like its siblings —
+   the cron skips its push until the secret exists, so an ungated monitor would sit red from
+   creation. Daily cron, hence the same 90000s interval. #}
+{% if setup_drift_push_token | default('') %}
+  setup-drift-check.json: |
+    {"type": "push", "name": "Setup Plane Drift (agent hosts)", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ setup_drift_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+{% endif %}
 {# Gated the same way as the check above: the cron skips its push until the token exists, so an
    ungated monitor would sit red from creation until /add-secret is run. Daily cron, so the same
    90000s interval as the other once-a-day pushes. Emails as well as the default channel — this
