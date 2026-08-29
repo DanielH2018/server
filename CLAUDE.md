@@ -533,12 +533,20 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
   encrypted — this is a review-hygiene trap, not a repo defect, and the driver is worth keeping
   because an encrypted diff is unreadable. But the plaintext lands in the terminal, the scrollback,
   and any agent transcript that captured the command, so a value exposed that way needs rotating.
-  A reviewer did exactly this during the 2026-08-24 review (L-5). To see WHICH keys changed without
-  their values, diff the names: `git diff ansible/vars/secrets.yml | grep -oE '^[-+][a-z_]+:'`.
-  **`-o` is load-bearing, and this line said `-E` until 2026-08-27.** Without it grep prints the
-  whole matching line — key *and* plaintext value — so the command offered here as the safe
-  alternative did exactly what the paragraph above warns about. It leaked a freshly minted push
-  token into a session transcript on 2026-08-27; the token was rotated before it was committed.
+  A reviewer did exactly this during the 2026-08-24 review (L-5). To see THAT it changed without
+  seeing anything it holds, use `git diff --stat ansible/vars/secrets.yml` or `--name-only`: the
+  driver still decrypts, but those emit no file content, so no plaintext reaches stdout. To see
+  what actually changed, open it with `sops ansible/vars/secrets.yml`.
+  **Do not filter the plaintext through a pipe.** This file prescribed
+  `git diff … | grep -oE '^[-+][a-z_]+:'` until 2026-08-29, and `block-dangerous-bash` now denies
+  every `git diff`/`show`/`log -p` naming a SOPS path unless one of the content-free flags above
+  is present. Two reasons, and the second is the one that generalises. The hook matched the
+  `git diff` half regardless of what followed the pipe, so for a while the remedy this file named
+  was denied by the rule printing it. And `-o` is load-bearing: without it grep prints the whole
+  matching line — key *and* plaintext value. That is not hypothetical, it is how this line read
+  until 2026-08-27, and it leaked a freshly minted push token into a session transcript before the
+  token was rotated. A filter that leaks everything when mistyped is the wrong shape for the job;
+  a flag that emits no content cannot leak however it is typed.
 - **Never commit plaintext secrets** (private age keys never leave `~/.config/sops/age/keys.txt`;
   `.gitignore` blocks `keys.txt`/`*.agekey`/`*.key` and gitleaks scans every commit)
 - **Onboarding a host to SOPS** (it can't decrypt yet, so `initial_setup.yml`/`deploy.yml`
