@@ -113,12 +113,23 @@ if [ -z "$TAGS" ]; then
   if [ "$source_kind" = "fallback" ]; then
     [ -n "$SINCE" ] ||
       die "PR file list was truncated and no --since was given — rerun with --since <pre-merge-sha>"
-    say "file list truncated; widening to --changed $SINCE"
-    TAGS=''
+    say "file list truncated; deriving from the diff since $SINCE instead"
+    # Resolve to a tag list HERE rather than handing deploy.sh --changed. Both run the same
+    # deriver, but only this leaves step 5 something to health-check: --changed resolves
+    # internally, so deploy.sh would deploy real services while the verdict call received an
+    # empty --tags and reported settled having checked nothing — on the large-PR path, where
+    # verification matters most.
+    TAGS=$(uv run python scripts/deploy_tools/deploy_tags.py changed "$SINCE")
+    changed_rc=$?
+    case "$changed_rc" in
+      0) ;;
+      3) die "the change is broad and maps to no service list — deploy it by hand" 1 ;;
+      *) die "deploy_tags.py changed failed (exit $changed_rc)" 1 ;;
+    esac
   fi
 fi
 
-if [ -z "$TAGS" ] && [ -z "$SINCE" ]; then
+if [ -z "$TAGS" ]; then
   echo "VERDICT: nothing-to-deploy (PR #$PR touched no service)"
   exit 0
 fi
@@ -126,11 +137,7 @@ fi
 deploy_rc=0
 attempt=1
 while [ "$attempt" -le "$LOCK_RETRIES" ]; do
-  if [ -n "$TAGS" ]; then
-    ./scripts/deploy.sh --tags "$TAGS"
-  else
-    ./scripts/deploy.sh --changed "$SINCE"
-  fi
+  ./scripts/deploy.sh --tags "$TAGS"
   deploy_rc=$?
   # 75 = the git-tree lock stayed busy (the 30-min timer, or another session). Nothing was
   # deployed, so this is a resume point rather than a failure.
@@ -165,8 +172,8 @@ uv run python scripts/deploy_tools/deploy_detach_notify.py \
 verdict_rc=$?
 
 if [ "$verdict_rc" -eq 0 ]; then
-  echo "VERDICT: settled (PR #$PR, $MERGE_SHA, tags: ${TAGS:-<changed>})"
+  echo "VERDICT: settled (PR #$PR, $MERGE_SHA, tags: $TAGS)"
   exit 0
 fi
-echo "VERDICT: unhealthy (PR #$PR, $MERGE_SHA, tags: ${TAGS:-<changed>})"
+echo "VERDICT: unhealthy (PR #$PR, $MERGE_SHA, tags: $TAGS)"
 exit 1

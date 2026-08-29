@@ -1,9 +1,15 @@
-"""The required CI context names must match .github/workflows/ci.yml exactly.
+"""await_ci's required CI contexts must match the deployer's gate, and both must name real jobs.
 
-A name that no longer matches a `name:` in the workflow silently drops a required check.
-`ci_verdict` holds the verdict at `pending` for a required name with no runs, so a stale
-name here does not fail open -- it hangs the wait forever, which is its own outage. Either
-way the two lists must not drift.
+Two drifts, each an outage of its own shape:
+
+A name that no longer matches a `name:` in .github/workflows/ci.yml silently drops a required
+check. `ci_verdict` holds the verdict at `pending` for a required name with no runs, so a stale
+name does not fail open -- it hangs the wait forever.
+
+A set that differs from `gitops_deploy_ci_contexts` breaks the "agree by construction" claim
+await_ci rests on. A name await_ci requires and the deployer does not parks a landing the
+deployer would have deployed; the reverse lets a session deploy past a gate the tick would
+have held. So the two sets must be EQUAL, not merely overlapping.
 
 Run: uv run pytest ansible/tests/test_ci_contexts_match_workflows.py
 """
@@ -27,6 +33,27 @@ _JOB_NAME = re.compile(r"^\s{4}name:\s*(.+?)\s*$", re.M)
 def _workflow_job_names() -> set[str]:
     text = (REPO / ".github" / "workflows" / "ci.yml").read_text()
     return set(_JOB_NAME.findall(text))
+
+
+def _deployer_contexts() -> set[str]:
+    """The deployer's own gate, read from the YAML defaults rather than from config.env --
+    that file is rendered, root-owned, and only exists on daniel-box."""
+    text = (
+        REPO / "ansible" / "roles" / "setup" / "gitops_deploy" / "defaults" / "main.yml"
+    ).read_text()
+    block = re.search(r"^gitops_deploy_ci_contexts:\s*\n((?:\s*-\s.+\n)+)", text, re.M)
+    assert block, "gitops_deploy_ci_contexts is not a literal list in defaults/main.yml"
+    return {line.strip().lstrip("-").strip() for line in block.group(1).splitlines()}
+
+
+def test_await_ci_requires_exactly_what_the_deployer_requires():
+    assert await_ci.required_contexts() == _deployer_contexts()
+
+
+def test_the_deployer_context_parse_actually_finds_names():
+    """A regex that matched nothing would make the equality test compare two empty sets --
+    and an empty required set is the disarmed gate await_ci refuses to report against."""
+    assert _deployer_contexts()
 
 
 def test_every_required_context_names_a_real_job():

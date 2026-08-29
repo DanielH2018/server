@@ -84,3 +84,26 @@ def test_missing_changed_files_count_falls_back_rather_than_guessing():
     tags, source = land_tags.derive(["docs/index.md"], changed_files=-1)
     assert source == "fallback"
     assert tags == []
+
+
+# Comment lines are stripped: land.sh's own comment explains why `deploy.sh --changed` is
+# NOT used, and matching that sentence would fail the very rule it documents.
+_LAND_SH = "\n".join(
+    line
+    for line in (Path(__file__).resolve().parent / "land.sh").read_text().splitlines()
+    if not line.lstrip().startswith("#")
+)
+
+
+def test_land_health_checks_the_tags_it_deployed():
+    """land.sh must resolve the fallback path to a tag list itself, not hand deploy.sh
+    `--changed`. deploy.sh resolves --changed internally, so the verdict call downstream
+    would receive an empty --tags -- and gate() with no tags reports settled having health
+    checked nothing, on exactly the large-PR path where verification matters most."""
+    assert "deploy.sh --changed" not in _LAND_SH
+
+
+def test_land_still_invokes_the_deployer():
+    """The reject half. A test for an absent string passes identically against an empty
+    file or a renamed script, so pin what must be present too."""
+    assert "./scripts/deploy.sh --tags" in _LAND_SH

@@ -42,18 +42,20 @@ from deploy_logic import (  # noqa: E402 — needs the path insert above
 
 CI_REPO = "DanielH2018/server"
 
-# The check-run NAMES that must be green. These are GitHub's own `name:` values and must
-# match .github/workflows/ci.yml exactly -- a name that matches nothing silently drops a
-# required check. CI_CONTEXTS in the deployer's config.env carries the same list, but that
-# file is root-owned and exists only on daniel-box, so a session running from a worktree
-# cannot read it. ansible/tests/test_ci_contexts_match_workflows.py pins these against the
-# workflow so the two cannot drift apart unnoticed.
-REQUIRED_CONTEXTS = frozenset(
-    {
-        "prek (lint + validate + tests + secrets)",
-        "renovate config validator",
-    }
-)
+# The check-run NAMES that must be green -- GitHub's own `name:` values, which must match
+# .github/workflows/ci.yml exactly, since a name matching nothing silently drops a required
+# check.
+#
+# This must equal the deployer's gate, which is `gitops_deploy_ci_contexts` in
+# roles/setup/gitops_deploy/defaults/main.yml (rendered to CI_CONTEXTS in config.env, a
+# root-owned file on daniel-box that a worktree session cannot read). Equal in BOTH
+# directions: a name here the deployer does not require blocks a landing the deployer would
+# have deployed. `renovate config validator` is the live instance -- it runs on master and
+# can go red, and the deployer deliberately excludes it because a red renovate.json changes
+# nothing a deploy renders. Requiring it here would have parked every landing behind a
+# dependency-management fault.
+# ansible/tests/test_ci_contexts_match_workflows.py pins both directions.
+REQUIRED_CONTEXTS = frozenset({"prek (lint + validate + tests + secrets)"})
 
 
 class DisarmedGateError(RuntimeError):
@@ -104,6 +106,10 @@ def _git(*args: str) -> str:
 
 
 def _fetch_tip() -> str:
+    # This runs from the primary checkout (land.sh cd's there) and takes no git-tree lock,
+    # so it can run while the 30-min timer is mid-tick. Safe: a fetch appends objects and
+    # moves a remote-tracking ref under git's own per-ref lock. It touches neither HEAD nor
+    # the working tree, which is what /var/lock/server-git-tree.lock exists to guard.
     _git("fetch", "-q", "origin", "master")
     return _git("rev-parse", "origin/master")
 
