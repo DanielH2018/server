@@ -279,8 +279,10 @@ K8S_ROLLBACK_TIMEOUT_S = int(C.get("K8S_ROLLBACK_TIMEOUT_S", "1320"))
 # Bounded because that arm is forward-only: without a timeout a wedged run spends the unit's
 # whole TimeoutStartSec and is SIGTERMed with no hold written and no alert sent, leaving the
 # tree fast-forwarded onto a commit nothing recorded as bad. 1800s covers the 1212s measured
-# full deploy (2026-08-22) with headroom, inside TimeoutStartSec=2700 alongside the 180s max
-# flock wait. See deploy_logic.broad_budget_ok for why no rollback is funded on top.
+# full deploy (2026-08-22) with headroom, inside TimeoutStartSec alongside the 180s max flock
+# wait. This arm does not stack with the k8s one — it returns before that block — so it is
+# never the term that sizes the ceiling. See deploy_logic.broad_budget_ok for why no rollback
+# is funded on top, including why raising the ceiling for the staging gate did not change that.
 BROAD_DEPLOY_TIMEOUT_S = int(C.get("BROAD_DEPLOY_TIMEOUT_S", "1800"))
 
 # ── the staging gate (Phase C slice 3) ──────────────────────────────────────────────────────
@@ -305,10 +307,14 @@ STAGING_EXPECT_SCRIPT = os.path.join(
     REPO, "scripts", "deploy_tools", "staging_expectations.py"
 )
 
-# Generous against K8S_DEPLOY_TIMEOUT_S: the staging deploy runs the same play, on a smaller
-# subset, over an ssh hop. A timeout here is NO VERDICT, never a rejection.
-STAGING_GATE_TIMEOUT_S = int(C.get("STAGING_GATE_TIMEOUT_S", "1200"))
-STAGING_EXPECT_TIMEOUT_S = int(C.get("STAGING_EXPECT_TIMEOUT_S", "180"))
+# Sized from a measured staging deploy, not from K8S_DEPLOY_TIMEOUT_S — see
+# defaults/main.yml, which carries the measurement and the unit-budget arithmetic. These
+# fallbacks MUST equal the Ansible defaults, because config.env.j2 renders both and a host
+# whose config predates that render falls back to exactly these literals. Pinned by
+# test_gitops_discord_contract.py::test_staging_timeout_fallbacks_match_the_ansible_defaults.
+# A timeout here is NO VERDICT, never a rejection.
+STAGING_GATE_TIMEOUT_S = int(C.get("STAGING_GATE_TIMEOUT_S", "600"))
+STAGING_EXPECT_TIMEOUT_S = int(C.get("STAGING_EXPECT_TIMEOUT_S", "120"))
 
 STAGING_ALERT_FILE = "/var/lib/gitops-deploy/staging_alerted_sha"
 
@@ -1228,9 +1234,11 @@ def main() -> int:
         else:
             playbook, tags = "ansible/deploy.yml", []
 
-        # FORWARD-ONLY. deploy_logic.broad_budget_ok shows a full deploy.yml (1212s measured
-        # 2026-08-22) plus a rollback re-run does not fit TimeoutStartSec, and a rollback
-        # SIGTERMed partway is worse than none. On failure: hold, mark the plane, alert.
+        # FORWARD-ONLY. deploy_logic.broad_budget_ok carries the argument and its 2026-08-29
+        # re-derivation: at the 60min ceiling a full deploy.yml (1212s measured 2026-08-22) plus
+        # a rollback re-run now fits, so the budget is no longer the reason — but a rollback
+        # SIGTERMed partway is still worse than none, and funding one needs a fresh measurement
+        # rather than the slack a ceiling raise left behind. On failure: hold, mark the plane, alert.
         #
         # It deliberately does NOT git-reset. Resetting without redeploying would leave the
         # tree claiming the old commit while live state is half-new — undiagnosable from the

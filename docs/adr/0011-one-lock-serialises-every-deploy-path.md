@@ -4,7 +4,7 @@ title: One lock serialises every path that writes the git tree
 status: Accepted
 date: 2026-08-23
 governs:
-  - ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2:64
+  - ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2:77
 ---
 
 # ADR-0011: One lock serialises every path that writes the git tree
@@ -55,5 +55,5 @@ contention outlasting `GITOPS_MAX_AGE_S` still pages through the GitOps-Alive mo
 
 ## Governs
 
-`ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2:64` — the marker
+`ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2:77` — the marker
 recording that contention exits 75 and the unit succeeds.

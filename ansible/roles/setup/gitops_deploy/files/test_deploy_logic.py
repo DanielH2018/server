@@ -1126,12 +1126,30 @@ def test_a_full_deploy_plus_rollback_is_flagged_over_budget():
 def test_the_budget_predicate_tracks_the_units_real_timeout():
     """Pins the numbers the forward-only decision rests on. If TimeoutStartSec is raised in
     gitops-deploy.service.j2, this fails and the decision gets revisited deliberately
-    rather than drifting."""
+    rather than drifting.
+
+    It fired as designed on 2026-08-29, when the staging gate's budgets raised the ceiling to
+    60min. Re-derived at that ceiling: 180 + 1212 + 1212 + 300 = 2904 against 3600 now FITS, so
+    the budget is no longer what makes the deploy-plane arm forward-only. Nothing was armed by
+    that — broad_budget_ok has no production caller; it is the reasoning made executable, and
+    gitops_deploy.py's broad arm is forward-only in code either way. Funding a broad rollback is
+    a deliberate change to make on its own evidence (a re-measured deploy.yml, and a decision
+    about a rollback that can still be SIGTERMed), not a side effect of a ceiling raised for an
+    unrelated feature.
+    """
+    from deploy_logic import broad_budget_ok
+
     unit = (
         pathlib.Path(__file__).resolve().parents[1]
         / "templates"
         / "gitops-deploy.service.j2"
     )
-    assert "TimeoutStartSec=45min" in unit.read_text(), (
+    assert "TimeoutStartSec=60min" in unit.read_text(), (
         "TimeoutStartSec moved — re-derive broad_budget_ok's verdict before trusting it"
+    )
+    assert broad_budget_ok(
+        forward_s=1212, rollback_s=1212, flock_s=180, timeout_s=3600
+    ), (
+        "the re-derivation above says a broad rollback now fits at 60min; if this goes red the "
+        "note in this docstring is stale and forward-only needs re-arguing from the budget again"
     )

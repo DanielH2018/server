@@ -155,3 +155,30 @@ gitops_deploy_broad_timeout_s: 1800
 # because the point of the slice is to measure a false-failure rate against real merges before
 # anything depends on the answer.
 gitops_deploy_staging_gate: false
+
+# How long one staging consultation may take. Both are rendered into config.env AND duplicated
+# as the `C.get(...)` fallbacks in gitops_deploy.py, because a host whose config predates the
+# render falls back to the literal — the two are pinned equal by
+# test_staging_timeout_fallbacks_match_the_ansible_defaults.
+#
+# MEASURED, not derived from K8S_DEPLOY_TIMEOUT_S, and measured twice. A full six-service
+# staging deploy of the whole STAGING_SUBSET on 2026-08-29 took 130s cold and 53s warm against
+# 0c0b03d1, then 54s and 52s against 7781d7b9 — four runs, all PASS. The 130s is a genuinely
+# cold cache (image pulls); steady state is ~53s. Six services is the upper bound by
+# construction: the gated set is the change intersected with the subset, and
+# gitops_deploy_k8s_autodeploy_max_per_tick caps a tick at 3 anyway. 600s is ~4.6x the cold run
+# and ~11x steady state. Do not shrink it back toward the steady-state figure on a warm reading
+# alone — the cold run is the one a real tick pays after an image bump.
+#
+# Sizing UP is not free and sizing DOWN is not safe:
+#   - Every second here is inside the unit's TimeoutStartSec and inside the git-tree lock, so
+#     it lengthens the worst case an operator's ./scripts/deploy.sh waits on. See the budget
+#     arithmetic in gitops-deploy.service.j2 and the two flock waits derived from it.
+#   - A gate that times out reports NO VERDICT, which is indistinguishable from a staging that
+#     is down. Slice 4's entry condition is a measured false-failure rate, so an under-sized
+#     timeout does not fail safe — it manufactures the number the decision depends on.
+gitops_deploy_staging_gate_timeout_s: 600
+# The expectation check is a handful of HTTP probes against services staging has just rolled
+# out; it answered in seconds in every drill. 120s is slack for a cold first request, not a
+# budget anything is expected to approach.
+gitops_deploy_staging_expect_timeout_s: 120

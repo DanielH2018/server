@@ -27,7 +27,7 @@ Two things make the plain `systemctl start` awkward, and the wrapper exists for 
   `subject.active`/`subject.local` and must return `polkit.Result.YES` — a caller with no
   active local seat (a cron, a `systemd-run` job, a Claude Code Bash call) otherwise matches
   the rule and is still refused. `ansible/tests/test_gitops_manual_trigger.py` pins that.
-- **`Type=oneshot` + `TimeoutStartSec=45min`.** A blocking start returns only when the tick
+- **`Type=oneshot` + `TimeoutStartSec=60min`.** A blocking start returns only when the tick
   finishes, which reads as a hang to anything with less patience. The wrapper starts with
   `--no-block`, waits on its own budget, then prints the journal for that run and exits with
   its status (75 = still running, the script stopped watching; 3 = the tick was skipped for
@@ -120,9 +120,14 @@ stay).
     renders from the pre-merge tree and deploys nothing. It also means an unrelated commit sharing
     the tick lands even when the apply fails — stranding a docs-only commit behind somebody else's
     setup change was the original complaint this arm fixes.
-  - **Both arms are FORWARD-ONLY.** `deploy_logic.broad_budget_ok` shows a rollback re-run does
+  - **Both arms are FORWARD-ONLY.** `deploy_logic.broad_budget_ok` showed a rollback re-run did
     not fit: 180s max flock + 1212s forward (measured 2026-08-22) + 1212s rollback against
-    `TimeoutStartSec=2700` leaves 96s, and a rollback SIGTERMed partway is worse than none. A
+    `TimeoutStartSec=2700` left 96s, and a rollback SIGTERMed partway is worse than none.
+    **The budget argument expired on 2026-08-29** — the staging gate raised the ceiling to 60min,
+    at which the same numbers fit (2904 against 3600). The arm is still forward-only, on the
+    second half of the argument alone: funding a broad rollback needs a fresh deploy.yml
+    measurement against today's tree, not the slack a ceiling raise left behind. Nothing changed
+    behaviour when the ceiling moved — `broad_budget_ok` has no production caller. A
     failure writes `hold_sha` **and** `hold_plane`, alerts saying nothing was rolled back, and
     leaves the tree fast-forwarded. It deliberately does not `git reset` — resetting without
     redeploying would leave the tree claiming the old commit while live state is half-new.
@@ -558,30 +563,43 @@ changes whether a SLOW SUCCESS gets cut short.
 unit activation.** A failed forward deploy can spend its full `K8S_DEPLOY_TIMEOUT_S` (900s)
 before `gitops_deploy.py` gives up on it; the rollback that follows can then spend its full
 `K8S_ROLLBACK_TIMEOUT_S` (1320s, re-sized above). `gitops-deploy.service.j2`'s `TimeoutStartSec`
-was raised from 25min to 35min (task 6b), then to 45min (this fix) so 180s max flock wait +
-900 + 1320 = 2400s fits with margin — see that template's own arithmetic comment for both the
-Docker-path and k8s-path budgets it now covers.
+was raised from 25min to 35min (task 6b), then to 45min so 180s max flock wait + 900 + 1320 =
+2400s fits with margin — see that template's own arithmetic comment for both the Docker-path and
+k8s-path budgets it now covers.
+
+**With the staging gate armed, two more budgets join that same sequence, which is why the
+ceiling is 60min.** `consult_staging` runs inside `main()`'s `if cs.k8s_deploy:` block, ahead of
+`deploy_k8s`, so `STAGING_GATE_TIMEOUT_S` (600s) and `STAGING_EXPECT_TIMEOUT_S` (120s) are
+additive to the pair above rather than alternative to them: 180 + 600 + 120 + 900 + 1320 = 3120s
+against 3600s. Both are sized from a measured staging deploy — a full six-service run of the
+whole `STAGING_SUBSET` took 130s cold and 53s warm on 2026-08-29, so 600s is ~4.6x the cold
+case — and `defaults/main.yml` carries the measurement. Under-sizing them does not fail safe: a
+staging consultation that times out reports NO VERDICT, indistinguishable from a staging that is
+down, and slice 4's entry condition is a measured false-failure rate.
 
 **Consequence for the lock, newly true at 1320s: this unit's own lock hold can now exceed the
 30-minute timer interval, where at 900s it landed exactly at the edge (900 + 900 = 1800s = 30min
 flat) without crossing it.** `ExecStart` wraps the whole run in `flock -w 180
 /var/lock/server-git-tree.lock` — the same lock `./scripts/deploy.sh` and the weekly
 secret-rotate cron take. In the pathological case (a stalled forward deploy followed by a
-stalled rollback), this unit can hold that lock for up to 2220s (900 + 1320, excluding its own
-flock wait) — past the 30-minute (1800s) timer interval. A concurrent `./scripts/deploy.sh`
-during that window waits `LOCK_WAIT=2700` (`deploy.sh:57`, used at `:286`) — **not** the unit's
-own `-w 180`, which governs only the deployer — so it **outlasts the 2220s hold and then
+stalled rollback), this unit can hold that lock for up to 2940s (600 + 120 + 900 + 1320 with the
+staging gate armed, 2220s without it, excluding its own flock wait) — past the 30-minute (1800s)
+timer interval. A concurrent `./scripts/deploy.sh`
+during that window waits `LOCK_WAIT=3000` (`deploy.sh:57`, used at `:286`) — **not** the unit's
+own `-w 180`, which governs only the deployer — so it **outlasts the 2940s hold and then
 deploys**, rather than returning exit 75. It returns exit 75 only if the lock stays busy past
-the full 2700s. The secret-rotate cron waits on the same lock rather than failing outright,
-which is true only because its `flock -w` is likewise 2700s and so clears that 2220s hold. The
+the full 3000s. The secret-rotate cron waits on the same lock rather than failing outright,
+which is true only because its `flock -w` is likewise 3000s and so clears that 2940s hold. The
 cron's was 1200s until 2026-08-22, at which point this paragraph was wrong in the direction that
 matters: the cron gave up mid-incident and skipped that week's rotation, with no retry until the
 next weekly tick.
 
-Both 2700s waits are derived from the same two timeouts and are machine-pinned against them —
+Both 3000s waits are derived from the same four timeouts and are machine-pinned against them —
 `files/test_gitops_discord_contract.py`, `test_secret_rotate_lock_wait_clears_the_deployers_worst_case_hold`
-and `test_deploy_sh_lock_wait_clears_the_deployers_worst_case_hold`. Raising either
-`gitops_deploy_k8s_timeout_s` or `gitops_deploy_k8s_rollback_timeout_s` fails those tests rather
+and `test_deploy_sh_lock_wait_clears_the_deployers_worst_case_hold`, which share one
+`_worst_lock_hold()` derivation so the two waits cannot disagree. Raising any of
+`gitops_deploy_k8s_timeout_s`, `gitops_deploy_k8s_rollback_timeout_s`,
+`gitops_deploy_staging_gate_timeout_s` or `gitops_deploy_staging_expect_timeout_s` fails those tests rather
 than silently shortening an operator's wait, which is how `deploy.sh`'s copy rotted once already
 (it sat at 1500 through two `TimeoutStartSec` bumps).
 
