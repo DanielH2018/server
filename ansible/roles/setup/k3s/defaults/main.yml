@@ -270,7 +270,7 @@ k3s_longhorn_restore_drill_max_actual_bytes: 4294967296
 # this asserts "real data came back", not any particular size, so it does not need revisiting
 # when the service grows or shrinks.
 k3s_longhorn_restore_drill_min_bytes: 1024
-k3s_longhorn_restore_drill_image: busybox:stable
+k3s_longhorn_restore_drill_image: busybox:stable@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
 # The 2026-08-16 drill restored 51 MB in ~21s. Doubled from 900s when the rotation admitted
 # volumes 25x that size: a slow restore is not itself a failure, but a hung one must not leave a
 # Volume CR attached forever, and a timeout fires as a restore failure that nothing distinguishes

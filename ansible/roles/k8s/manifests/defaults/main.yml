@@ -1,0 +1,9 @@
+---
+# Where release_stamp.yml records which commit produced each service's applied manifests.
+#
+# Under /var/lib/homelab/ with the setup plane's two stamp manifests
+# (setup-deployed-manifest.d, setup-render-manifest.d) because it answers the same class of
+# question for the k8s plane. World-readable, unlike the 0700 render dir it describes: the
+# record holds file names, checksums and a commit id, and a reader that needs root is a reader
+# nobody runs. `probe.py releases` is that reader.
+manifests_release_dir: /var/lib/homelab/k8s-releases.d

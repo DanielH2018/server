@@ -128,7 +128,7 @@ traefik_k8s_access_log_size: 1Gi
 # a real version tag, not a `latest` rolling one, so Renovate's k8s-defaults manager tracks it by
 # tag bump with no digest-pin plumbing needed. Alpine's busybox provides everything the
 # access-log-rotate sidecar's script needs: sh, tail, cp, mv, wc.
-traefik_k8s_logrotate_image: alpine:3.24
+traefik_k8s_logrotate_image: alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 traefik_k8s_logrotate_cpu_limit: "100m"
 traefik_k8s_logrotate_mem_limit: 64Mi
 traefik_k8s_logrotate_cpu_request: "10m"

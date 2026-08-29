@@ -2,7 +2,7 @@
 # Stock image, not an image-builder build: stats.py is pure stdlib, mounted from a
 # ConfigMap — no registry coupling, so the pod can schedule on any node once the cordon
 # lifts (the loopback registry cannot serve cross-node pulls). Same call as terraria-stats.
-valheim_stats_k8s_image: python:3.14-alpine
+valheim_stats_k8s_image: python:3.14-alpine@sha256:05b2b8b732ecd268fee8727a369f936f022d1321b59befd13c30ede22769dcdc
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Games: companion stats exporter for the hand-operated valheim game server — grouped with it

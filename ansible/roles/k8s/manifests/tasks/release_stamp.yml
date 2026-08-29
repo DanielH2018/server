@@ -1,0 +1,169 @@
+---
+# Record WHICH COMMIT produced the manifests that were just applied for this service.
+#
+# THE PROBLEM. Nothing on either node can answer "which commit produced the manifests currently
+# live for sonarr". The rendered manifests persist at /etc/rancher/k3s/manifests/<service>/, but
+# they are overwritten in place on every deploy and carry no identity, so the tree is a mutable
+# working copy rather than a release. `deploy.sh` renders from whatever git tree it runs in
+# (scripts/deploy_tools/deploy_staleness.py states the problem in full), which makes the
+# question genuinely open rather than merely unrecorded: on 2026-08-19 a worktree 48 commits
+# behind master reverted claude-otel for nine minutes, and the only reason anyone noticed was a
+# scrape-target count moving for no reason the diff explained.
+#
+# Three guards already compensate for this — the /var/lock/server-git-tree.lock, deploy.sh's
+# exit-4 staleness refusal, and the fact cache pinning a deleted worktree's venv. Each is
+# sound. All three exist because the artifact has no name. This gives it one.
+#
+# WHAT THIS IS NOT. It is not a deploy gate and it refuses nothing. It is a record written after
+# a successful apply, so a later reader can tell a release apart from the tree it came from.
+# `uv run python scripts/diagnostics/probe.py releases` is that reader.
+#
+# WHY THE RENDERED BYTES, not the repo sources. stamp_render.yml already hashes repo sources for
+# the setup plane, and that answers a different question ("is the deployed copy the repo's
+# copy"). A twelve-factor release is build PLUS config, and on this plane the config is the
+# per-host Ansible variables that only exist after rendering. Two commits can render identical
+# manifests and one commit can render differently on two hosts; only the rendered bytes
+# distinguish those cases.
+#
+# SECRET MANIFESTS ARE RECORDED BY NAME, NEVER HASHED. A sha256 leaks nothing, but the files in
+# manifests_secret_files are rendered under `no_log: true` from decrypted SOPS values, and
+# hashing them adds a new read path over that output — a task result, a fact, and anything that
+# later prints either. `grep-on-a-script-prints-the-secret-it-embeds` has three occurrences in
+# this homelab's memory and every one ended in a rotation. The release identity is complete
+# without them: a secret manifest changes only when a secret changes, which the rotation
+# registry already tracks.
+#
+# Included from main.yml after the apply and the secret-key reconcile. Never under k8s_dry_run:
+# that mode persists nothing, so a record would name a release that does not exist.
+
+- name: Resolve the release commit for the k8s plane
+  tags: [deploy]
+  # Once per play, not once per service: `set_fact` is host-scoped and survives across the roles
+  # in a play, so the `when` guard turns 54 git invocations into two subprocesses total. The
+  # names carry the role prefix ansible-lint requires; the sharing works regardless, because a
+  # set_fact is scoped to the host rather than to the role that set it.
+  when: manifests_release_sha is not defined
+  delegate_to: localhost
+  block:
+    - name: Read the deploy commit
+      ansible.builtin.command:
+        argv: [git, rev-parse, HEAD]
+        chdir: "{{ playbook_dir }}/.."
+      changed_when: false
+      check_mode: false
+      register: manifests_release_rev
+
+    - name: Read whether the deploy tree is dirty
+      # Tracked files only. An untracked file cannot reach a rendered manifest — every template
+      # src is a tracked path — so counting them would mark most worktrees dirty for reasons
+      # that do not affect the bytes this record identifies.
+      ansible.builtin.command:
+        argv: [git, status, --porcelain, --untracked-files=no]
+        chdir: "{{ playbook_dir }}/.."
+      changed_when: false
+      check_mode: false
+      register: manifests_release_status
+
+    - name: Publish the release identity for this play
+      ansible.builtin.set_fact:
+        manifests_release_sha: "{{ manifests_release_rev.stdout | trim }}"
+        manifests_release_dirty: "{{ (manifests_release_status.stdout | trim | length) > 0 }}"
+
+- name: Check that the release commit resolved
+  tags: [deploy]
+  # Same reasoning as volume-snapshot's assert: the read above has no `failed_when: false`, so a
+  # git failure already aborts. What this covers is an rc-0 empty answer, which would stamp
+  # every service with an empty release id and make the record worse than absent — it would read
+  # as an answer.
+  ansible.builtin.assert:
+    that:
+      - (manifests_release_sha | default('') | trim | length) == 40
+    fail_msg: >-
+      `git rev-parse HEAD` in {{ playbook_dir }}/.. did not return a full commit id, so the
+      release record for {{ manifests_service }} would name no commit. Refusing to write a
+      record that cannot be traced back to a tree.
+    quiet: true
+
+- name: Create the k8s release record directory
+  tags: [deploy]
+  ansible.builtin.file:
+    path: "{{ manifests_release_dir }}"
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Checksum the rendered manifests for {{ manifests_service }}
+  tags: [deploy]
+  # `stat` rather than `sha256sum`, so no rendered path is ever interpolated into a shell
+  # command line. The render dir is 0700 root, hence become.
+  ansible.builtin.stat:
+    path: "{{ manifests_dest_dir }}/{{ item }}"
+    checksum_algorithm: sha256
+  loop: "{{ manifests_files | default([]) }}"
+  register: manifests_release_stat
+  become: true
+
+- name: Look for an existing release record for {{ manifests_service }}
+  tags: [deploy]
+  ansible.builtin.stat:
+    path: "{{ manifests_release_dir }}/{{ manifests_service }}.json"
+  register: manifests_release_current
+  become: true
+
+- name: Keep the previous release record for {{ manifests_service }}
+  tags: [deploy]
+  # DECIDED: one step of history, not an append-only log. The question a record has to answer in
+  # an incident is "what was live before this deploy", and one step answers it. An unbounded
+  # JSONL grows by one line per service per deploy — up to 54 lines every 30-minute tick — and
+  # would need rotation, a rotation cron, and a monitor for the rotation cron. Depth beyond one
+  # step is what git history is for: every record names a commit, so the trail continues there.
+  ansible.builtin.copy:
+    src: "{{ manifests_release_dir }}/{{ manifests_service }}.json"
+    dest: "{{ manifests_release_dir }}/{{ manifests_service }}.previous.json"
+    remote_src: true
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+  when: manifests_release_current.stat.exists
+
+- name: Write the release record for {{ manifests_service }}
+  tags: [deploy]
+  ansible.builtin.copy:
+    dest: "{{ manifests_release_dir }}/{{ manifests_service }}.json"
+    mode: "0644"
+    owner: root
+    group: root
+    content: "{{ manifests_release_record | to_nice_json }}\n"
+  become: true
+  vars:
+    # `default='ABSENT'` is load-bearing. A `stat` on a file that is not there returns
+    # `exists: false` and NO `checksum` key, and an undefined-attribute map aborts the whole
+    # deploy — a record-keeping task must never be the thing that fails a working apply.
+    # Recording the name with ABSENT also keeps the gap visible, which dropping the entry
+    # would not. Verified against Ansible's own zip/map, not bare Jinja: `zip` is an Ansible
+    # filter and does not exist in plain Jinja, so this expression cannot be checked outside a
+    # play.
+    manifests_release_files: >-
+      {{ dict(manifests_release_stat.results | map(attribute='item') | list
+              | zip(manifests_release_stat.results
+                    | map(attribute='stat.checksum', default='ABSENT') | list)) }}
+    manifests_release_record:
+      service: "{{ manifests_service }}"
+      commit: "{{ manifests_release_sha }}"
+      commit_short: "{{ manifests_release_sha[:8] }}"
+      # A dirty tree renders bytes no commit reproduces, so the commit above is a near-miss
+      # rather than an identity. Recording it as a field beats omitting the commit: the operator
+      # still gets a starting point, and knows not to read it as exact.
+      tree_dirty: "{{ manifests_release_dirty }}"
+      applied_at: "{{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') }}"
+      render_dir: "{{ manifests_dest_dir }}"
+      manifests: "{{ manifests_release_files }}"
+      # One identifier for the whole release, so a staging run and a prod run can be compared
+      # without walking the per-file map. `dictsort` before `to_json` because dict ordering is
+      # not guaranteed and an order-dependent digest would differ for identical bytes.
+      manifests_digest: "{{ (manifests_release_files | dictsort | to_json) | hash('sha256') }}"
+      # Names only — see the header. The count is what makes a dropped secret manifest visible.
+      secret_manifests: "{{ manifests_secret_files | default([]) | sort }}"

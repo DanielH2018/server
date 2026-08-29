@@ -54,7 +54,7 @@ sonarr_k8s_mem_request: 128Mi
 # Kept after the isolation-probe harness was retired (2026-08-17). qbittorrent's verify.yml read
 # this var for its own probe pod until 2026-08-22 and now carries its own; nothing outside this
 # role consumes it.
-sonarr_k8s_probe_image: alpine:3.24
+sonarr_k8s_probe_image: alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 
 # Logging, bound through Sonarr's own config system rather than config.xml — the *arr apps read
 # `<App>:Log` from IConfiguration, and AddEnvironmentVariables() is registered with NO prefix

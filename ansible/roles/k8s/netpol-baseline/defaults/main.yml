@@ -43,7 +43,7 @@ netpol_baseline_node_cidrs:
   - 10.42.1.1/32
 
 # Matches headlamp_k8s_netpol_probe_image and registry_k8s_netpol_probe_image.
-netpol_baseline_probe_image: alpine:3.24
+netpol_baseline_probe_image: alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]

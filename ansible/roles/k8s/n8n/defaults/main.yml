@@ -80,4 +80,4 @@ n8n_k8s_broker_port: 5679
 # The runners' readiness gate (see deployment-runners.yaml.j2). alpine because busybox `nc -z`
 # is all it needs and the image is already the fleet's small-utility choice — seed-volume uses
 # the same one.
-n8n_k8s_wait_image: alpine:3.24
+n8n_k8s_wait_image: alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b

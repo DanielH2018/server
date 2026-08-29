@@ -75,7 +75,7 @@ registry_k8s_probe_repo: registry-selftest
 # and musl `getent` both need to be present. It tracks those probes at 3.24, NOT
 # registry_k8s_probe_source above — that one is deliberately held apart from what the fleet
 # runs, so the two are different images and pulling one does not warm the other.
-registry_k8s_netpol_probe_image: alpine:3.24
+registry_k8s_netpol_probe_image: alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 
 # The CNI bridge gateway on daniel-box — `ip -4 addr show cni0` reads `10.42.0.1/24`, matching
 # the live podCIDR `kubectl get node daniel-box -o jsonpath='{.spec.podCIDR}'` = 10.42.0.0/24

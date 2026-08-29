@@ -92,6 +92,7 @@ from probe_health import (
 )
 from probe_metrics import run_query
 from probe_monitors import run_kuma_drift, run_monitors
+from probe_releases import run_releases
 from probe_storage import (
     LONGHORN_PREFIX,
     run_b2_budget,
@@ -306,6 +307,21 @@ def _build_parser():
         action="store_true",
         help="also dump every live entity grouped by domain",
     )
+    rel = sub.add_parser(
+        "releases",
+        help="which commit produced each k8s service's applied manifests",
+    )
+    rel.add_argument(
+        "service",
+        nargs="?",
+        help="show the full record for one service instead of the table",
+    )
+    rel.add_argument(
+        "--previous",
+        action="store_true",
+        help="read the record kept from before the last deploy",
+    )
+    rel.add_argument("--json", action="store_true", help="raw records, unformatted")
     return p
 
 
@@ -404,6 +420,7 @@ def main(argv=None):
         "ha-state": run_ha_state,
         "monitors": run_monitors,
         "kuma-drift": run_kuma_drift,
+        "releases": run_releases,
     }
     if ns.cmd in handlers:
         return handlers[ns.cmd](ns)
