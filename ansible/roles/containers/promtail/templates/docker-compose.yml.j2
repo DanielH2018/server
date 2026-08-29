@@ -31,6 +31,10 @@ services:
       # container's log from the beginning on each recreate, which both duplicates lines in
       # Loki and spends the Pi's uplink re-sending them.
       - ./positions:/positions
+      # The two host health crons' verdict lines (pi-health job). Read-only, and the same
+      # path inside and out so the config's __path__ needs no translation. No group_add: the
+      # crons write as uid 1000 and this container already runs as 1000:1000.
+      - /var/log/pi-health:/var/log/pi-health:ro
     environment:
       # A HARD ceiling on the Go heap, not a hint. The cluster's promtail measures 58-73 MiB
       # against ~50 pods; this one has 6 containers and almost no volume, but the Go runtime

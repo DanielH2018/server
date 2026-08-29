@@ -45,3 +45,19 @@ else
 fi
 
 kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" pi-sd-health
+
+# Durable record of this cycle, so `probe.py alerts` can reconstruct the episode. The full
+# reasoning — why a file and not `logger`, and why the timestamp format is load-bearing —
+# is in pi-recovery-health.sh.j2, which emits the same shape under its own tag.
+#
+# A failing SD card is the one signal on this host where the history matters more than the
+# current state: `errors_count` only ever climbs, so knowing WHEN it first moved is the whole
+# diagnosis, and Kuma cannot answer that.
+HEALTH_LOG="/var/log/pi-health/health.log"
+mkdir -p "${HEALTH_LOG%/*}" 2>/dev/null || true
+if [ "${KUMA_PUSH_OK:-1}" = "1" ]; then
+  DETAIL="status=${STATUS} ${MSG}"
+else
+  DETAIL="push failed (status=${STATUS}: ${MSG})"
+fi
+printf '%s %s %s: %s\n' "$(date -Is)" "$(hostname)" pi-sd-health "$DETAIL" >>"$HEALTH_LOG"

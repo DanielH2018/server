@@ -66,15 +66,25 @@ def parse_down_line(line):
 # (roles/k8s/.../secret-rotation-audit.sh.j2 and setup/k3s/tasks/health-crons.yml). Confirmed
 # absent, not merely unmatched: a 7-day Loki query for either name returned "no logs".
 #
-# EVERY daniel-pi CRON IS INVISIBLE HERE, AND ADDING `logger` TO ONE DOES NOT FIX IT. The Pi
-# ships no host logs at all: rsyslog is inactive there and /var/log/syslog does not exist, so
-# the `{job="syslog"}` stream this reads carries nothing from that host, and the Pi's own
-# promtail (roles/containers/promtail/templates/promtail.yml.j2:46) scrapes only the
-# `pi-containers` job. `logger` on the Pi therefore reaches the local journal and stops. That
-# is how a real "Daniel Pi Recovery" DOWN on 2026-08-29 — autoheal exited and stayed down for
-# ~50 min — read as "no DOWN alerts in the last 7d" while the monitor was live-DOWN. The fix
-# is to ship Pi host logs (enable rsyslog, or a promtail journal scrape), NOT to add a
-# `logger` call to pi-recovery-health.sh.j2, which would land inert.
+# daniel-pi WAS invisible here for two independent reasons, and fixing either alone changed
+# nothing. A real "Daniel Pi Recovery" DOWN on 2026-08-29 — autoheal exited and stayed down
+# ~50 min — read as "no DOWN alerts in the last 7d" while the monitor was live-DOWN.
+#   1. NOTHING WAS EMITTED. The Pi's two crons end at `kuma_push`, and kuma-push-lib.sh calls
+#      `logger` only when the PUSH fails. The server crons that ARE visible log their verdict
+#      themselves (longhorn-backup-health, manifest-prune-check: `logger -t <tag>
+#      "status=${STATUS} ${MSG}"`).
+#   2. NOTHING WOULD HAVE SHIPPED IT. The Pi has no journal path to Loki: rsyslog is not
+#      installed and optimize_pi masks it deliberately, and that image's promtail is a stub
+#      for journal support (verified on the running arm64 3.6.8 binary — carries "not
+#      compiled into this build", no `sd_journal_open`, no libsystemd).
+# Both are now closed: each cron appends an rsyslog-shaped line to /var/log/pi-health/, and
+# the Pi's promtail tails it as the `pi-health` job under `job="syslog"`.
+#
+# THE TIMESTAMP FORMAT IS LOAD-BEARING. `_SYSLOG_LINE_RE` below wants exactly two
+# whitespace-free tokens before the tag, which is what rsyslog's own prefix gives. The Pi
+# emits `date -Is` (one token) to match; traditional syslog format ("Aug 29 19:12:26 host")
+# is four tokens and parses as nothing. Changing either side alone silently drops every Pi
+# episode, which is why ansible/tests/test_pi_health_log_line_shape.py pins the pair.
 SYSLOG_ALERT_LOGQL = '{job="syslog"} |= "status=down"'
 _SYSLOG_LINE_RE = re.compile(
     r"^\S+\s+\S+\s+(?P<name>[A-Za-z0-9_.-]+?)(?:\[\d+\])?:\s+(?P<rest>.*status=down.*)$"
