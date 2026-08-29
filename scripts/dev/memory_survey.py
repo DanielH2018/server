@@ -46,7 +46,13 @@ DEFAULT_TRANSCRIPT_DIR = Path.home() / ".claude/projects/-home-ubuntu-server"
 # A pointer line in MEMORY.md looks like `- [Title](some-file.md) — hook`. Links may also
 # appear inline in a prose paragraph, which is why this is a search over the whole file
 # rather than a per-line parse anchored to a leading dash.
-_LINK = re.compile(r"\[[^\]]+\]\(([^)]+\.md)\)")
+#
+# The title alternation admits ONE level of nested square brackets, because real titles carry
+# them: `- [A task tagged [config, deploy] is skipped by --skip-tags of either](...)`. A plain
+# `[^\]]+` stops at the inner `]` and the link stops being a link at all — which mis-reports the
+# file as an orphan AND, worse, hides it from the dead-link check, the one condition that fails
+# this run. A title the regex cannot parse is a pointer the gate cannot police.
+_LINK = re.compile(r"\[(?:[^\[\]]|\[[^\[\]]*\])+\]\(([^)]+\.md)\)")
 
 # Rough characters-per-token for English prose. Only ever used to turn bytes into an
 # order-of-magnitude token figure; it is not a tokenizer and does not pretend to be.
