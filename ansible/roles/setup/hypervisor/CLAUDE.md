@@ -197,6 +197,9 @@ had a full shell on this host (review M-3).
   `restrict,command="/usr/local/bin/staging-gate-dispatch"`.
 - The **private** half is `staging_gate_ssh_key` in SOPS, written to
   `/etc/gitops-deploy/staging_gate_ed25519` (0600) on daniel-box by `roles/setup/gitops_deploy`.
+- **Withdrawn** public halves live in `files/staging-gate-retired/*.pub` and are removed with
+  `state: absent`. See *Rotating it* below — without that directory, swapping the live file
+  is half a rotation.
 - The forced command is rendered from `templates/staging-gate-dispatch.sh.j2`, root-owned 0755 —
   if `sys_user` could rewrite it, that user would choose what the key runs.
 
@@ -258,3 +261,42 @@ separately: 10 key unusable, 11 fell back, 12 restriction open, 13 no verdict.
 
 Removing or restricting the operator's own key is a separate decision and is not part of this
 work.
+
+## Rotating it
+
+**`authorized_key` here runs `state: present` with `exclusive` left false, so it only ever
+ADDS.** Swapping `files/staging-gate.pub` therefore authorizes the new key and leaves the old
+one working — a rotation that reads as done from every angle except the one that matters.
+`files/staging-gate-retired/*.pub` is the other half: a second task withdraws every key in
+there with `state: absent`. `ansible/tests/test_staging_gate_retired_keys.py` pins both
+properties, including that a retired key is never also the live one — the role would
+otherwise authorize a key and immediately withdraw it, since `absent` runs second.
+
+The order across the two hosts is what keeps the gate up, and it works because the add is
+not exclusive:
+
+1. **daniel-server first.** `initial_setup.yml --tags hypervisor` authorizes the NEW public
+   half. The old one is still authorized at this point, so the live gate keeps working.
+2. **Then daniel-box.** `deploy.yml --tags gitops-deploy` writes the new private half to
+   `/etc/gitops-deploy/staging_gate_ed25519`. The gate now uses the new key.
+3. **Prove it**, from daniel-box:
+   `./scripts/deploy_tools/verify_staging_gate_key.sh "$(git rev-parse origin/master)"`.
+4. **Then daniel-server again**, with the old key listed under `staging-gate-retired/`, to
+   withdraw it. In practice steps 1 and 4 are the same run once the retired file is in the
+   tree — the add and the withdrawal are both in `install.yml` — so a single hypervisor run
+   does both and step 2 is the only thing that has to follow it.
+
+Reversing 1 and 2 is what breaks the gate: the new private half would be in place before
+anything authorized it.
+
+Keep a retired key in the tree until every host that ever held it has run this role. Deleting
+the file is what stops it being withdrawn, so pruning early leaves the key live on a host that
+had not converged.
+
+**2026-08-29 — the first rotation, and why.** `staging_gate_ssh_key` was rotated because the
+private half reached a Claude transcript in plaintext: a tool result printed
+`/etc/gitops-deploy/staging_gate_ed25519` while the restricted-key work was being verified,
+and `claude-transcript-scan` caught it twelve minutes later. The withdrawn key is
+`files/staging-gate-retired/2026-08-29-transcript-leak.pub`
+(`SHA256:hBZlj/febW80oXzSdsJcJABaL4+Jg5uR+u9Kh/mZ+0g`). That is the case the retired
+directory exists for — the old key has to stop being *accepted*, not merely stop being used.
