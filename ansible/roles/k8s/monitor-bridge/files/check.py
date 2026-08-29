@@ -3121,8 +3121,17 @@ PROM_DEPENDENT = frozenset(
 # dead node-exporter drops that host's hwmon series and trips the floor, so without this entry
 # one root cause would page twice — Scrape Targets plus a coverage complaint naming the same
 # host. Same reason disk and memory are here.
+#
+# The Pi scrapes under its OWN job — measured 2026-08-29, `count by (job, origin)
+# (node_hwmon_temp_celsius)` returns job=node for daniel-server (12) and daniel-box (7) but
+# job=node-pi for daniel-pi (2). This map is keyed by the Prometheus job, so a `node` entry alone
+# suppresses two of the three hosts and the Pi's exporter death still double-pages. node-pi maps
+# ONLY to host_temp: disk and memory exclude the Pi by origin (HOST_METRIC_ORIGIN_EXCLUDE, since
+# check_pi_pressure owns them), so they have nothing to suppress there, while the hwmon floor
+# counts all three hosts.
 EXPORTER_DEPENDENT = {
     "node": frozenset({"disk", "memory", "host_temp"}),
+    "node-pi": frozenset({"host_temp"}),
 }
 
 # Loki-reachability gate — the peer of the Prometheus gate for the Loki-querying checks. A single

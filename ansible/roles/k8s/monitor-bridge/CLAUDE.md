@@ -301,8 +301,12 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     shared 15-minute grace would have paged on. The two hysteresis mechanisms are never
     compounded — `down_streak` is the thermal-spike grace and applies only to the hot-sensor
     path, so a missing host pages on its own 5th cycle rather than the 15th.
-    Adding the arm is also why `host_temp` joined `EXPORTER_DEPENDENT["node"]`: a dead
-    node-exporter now trips the floor, and without the entry one root cause would page twice. Pure `hwmon_temp_limits()` / `hwmon_temp_verdict()` are unit-tested in
+    Adding the arm is also why `host_temp` joined `EXPORTER_DEPENDENT` — under **two** job
+    keys, `node` and `node-pi`. A dead node-exporter now trips the floor, and without the entry
+    one root cause would page twice; the Pi scrapes under its own job (`count by (job, origin)
+    (node_hwmon_temp_celsius)` measured 2026-08-29: job=node for daniel-server and daniel-box,
+    job=node-pi for daniel-pi), so a `node`-only entry suppresses two of the three hosts and
+    leaves the Pi double-paging. Pure `hwmon_temp_limits()` / `hwmon_temp_verdict()` are unit-tested in
     `test_host_temp.py`, each rule as an accept/reject pair; the coverage test is the load-bearing
     one, since this check's failure mode is silence rather than a wrong threshold.)
   - **UPS Battery Health** (the APC UPS's charge % + estimated runtime + the replace-battery

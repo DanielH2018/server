@@ -10,6 +10,7 @@ matters most: it is the only test that can fail when a future edit narrows cover
 from pathlib import Path
 
 import check
+import pytest
 
 
 def _temp(instance, chip, sensor, value):
@@ -384,3 +385,17 @@ def test_a_dead_node_exporter_suppresses_this_check():
     this entry one root cause pages twice — Scrape Targets plus a coverage complaint."""
     assert "host_temp" in check.EXPORTER_DEPENDENT["node"]
     assert check.down_exporters([({"job": "node"}, 0)]) == {"node"}
+
+
+@pytest.mark.parametrize("job", ["node", "node-pi"])
+def test_every_job_carrying_hwmon_series_suppresses_this_check(job):
+    """The reject half of the test above: a `node`-only map leaves the Pi double-paging.
+
+    daniel-pi scrapes under job=node-pi (measured 2026-08-29), so its exporter death drops the
+    two hwmon origins the floor counts while Scrape Targets pages for the same fact. Asserting
+    only the `node` key passes with the Pi's gap wide open, which is how it was missed.
+    """
+    suppressed = set()
+    for down in check.down_exporters([({"job": job}, 0)]):
+        suppressed |= check.EXPORTER_DEPENDENT[down]
+    assert "host_temp" in suppressed

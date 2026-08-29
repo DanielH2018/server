@@ -190,6 +190,31 @@ def test_both_readers_source_the_shared_arms():
         )
 
 
+def test_the_k3s_readers_note_rewording_still_matches_the_library():
+    """A bash `${var/from/to}` that matches nothing is a silent no-op.
+
+    manifest-prune-check.sh re-words the library's two unarmed notes to name the playbooks a k3s
+    server actually runs. If the library's phrasing changes, the substitution stops matching and
+    daniel-box's message reverts to the generic wording with nothing failing — the textual
+    coupling this repo escalates to a check rather than leaving as a comment.
+    """
+    lib = _ARMS_LIB.read_text()
+    reader = (
+        _REPO / "ansible/roles/setup/k3s/templates/manifest-prune-check.sh.j2"
+    ).read_text()
+    patterns = re.findall(r"\$\{(?:DEPLOYED|MANIFEST)_NOTE/([^/]+)/", reader)
+    assert patterns, (
+        "manifest-prune-check.sh.j2 no longer re-words the library's notes. If that was "
+        "deliberate, delete this test; if the substitution was renamed, update the regex."
+    )
+    for needle in patterns:
+        assert needle in lib, (
+            f"manifest-prune-check.sh.j2 substitutes {needle!r} out of the library's unarmed "
+            f"note, but setup-drift-lib.sh no longer contains that phrasing — the substitution "
+            f"is a no-op and daniel-box silently shows the generic wording."
+        )
+
+
 def test_other_setup_roles_stamp_their_own_artifacts():
     """H1's actual finding: nine rendered artifacts outside the k3s role were watched by nothing.
     Each owning role now includes the shared stamp, and this fails if one stops.
