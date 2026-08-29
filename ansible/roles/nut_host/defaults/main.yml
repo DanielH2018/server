@@ -11,3 +11,19 @@
 # That makes the rendered value a snapshot: see the reachability assert in tasks/main.yml, which
 # is what stops a stale snapshot from sitting silently broken until the next power cut.
 nut_host_upsd_host: "{{ '127.0.0.1' if inventory_hostname == ups_host else nut_host_upsd_clusterip | default('') }}"
+
+# ── Runtime watchdog for the secondary's upsd link ──────────────────────────────
+# The assert in tasks/main.yml proves reachability exactly once, at deploy. Nothing re-checked
+# it afterwards, and the two things that would break it in between — the nut Service being
+# recreated with a different ClusterIP, or nut-monitor dying — are both invisible until the
+# power cut this chain exists for. The k8s "nut (upsd)" Kuma tile does not cover it: that probe
+# runs from a POD and re-resolves Service DNS every cycle, while this host's upsmon connects
+# from the host netns to a ClusterIP frozen into /etc/nut/upsmon.conf at deploy time. A green
+# tile there says nothing about this path (2026-08-29 review M-8).
+nut_host_watchdog_armed: true
+
+# One value drives both the cron cadence and the Kuma tile's interval below, so a schedule
+# change cannot leave the tile with a grace period derived from the old one. The tile gets 2x
+# the cadence, which is one missed run of slack — the same ratio daniel-box Disk uses (10 min
+# cron, 1200 s interval).
+nut_host_watchdog_interval_minutes: 10
