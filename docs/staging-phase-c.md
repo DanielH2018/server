@@ -141,19 +141,34 @@ deletes at 2 AM, and the deletion will not be reviewed. An extra-var or a marker
 the staging step for one tick, alerting loudly that it was used, is sufficient — the requirement
 is that using it is easy and *visible*, not that it is hard.
 
-**Staging can only be asked about the tip, and slice 4 has to answer for that.** The remote
-script fetches, then fast-forwards daniel-server to the SHA under test, and `deploy.sh` then
-refuses any tree behind `origin/master` (exit 4). So a merge landing anywhere in the window
-between the tick reading `origin` and the staging deploy finishing turns a perfectly good
-change into NO VERDICT. Observed 2026-08-28 on the first hand-run of the gate: `720cb6b0` was
-master's tip when the run started, `#567` merged while it deployed, and the gate returned exit
-2 — correctly, since `deploy.sh` had exit 4 and slice 1's `classify()` maps that to NO VERDICT
-rather than a rejection.
+**~~Staging can only be asked about the tip, and slice 4 has to answer for that.~~ RESOLVED
+2026-08-29 — and the premise was wrong.** The remote script fetches, then fast-forwards the
+staging checkout to the SHA under test, and `deploy.sh` then refuses any tree behind
+`origin/master` (exit 4). So a merge landing anywhere in the window between the tick reading
+`origin` and the staging deploy finishing turned a perfectly good change into NO VERDICT.
+Observed 2026-08-28 on the first hand-run of the gate: `720cb6b0` was master's tip when the run
+started, `#567` merged while it deployed, and the gate returned exit 2 — correctly, since
+`deploy.sh` had exit 4 and slice 1's `classify()` maps that to NO VERDICT rather than a
+rejection. It happened twice more on 2026-08-29, in two of four hand-runs.
 
-Advisory mode absorbs this: the alert says NO VERDICT and prod deploys anyway. Blocking mode
-cannot, and neither obvious answer is acceptable — treating it as a block parks prod behind an
-unrelated merge, and treating it as a pass makes any concurrent merge a way through the gate.
-Slice 4 therefore needs a third path: re-ask at the new tip, once, and only then decide.
+**The gate was never asking about the tip, so the staleness refusal was measuring the wrong
+property.** `gitops_deploy.py`'s `main()` resolves `origin` ONCE, ff-merges to it, calls
+`consult_staging(cs.k8s_deploy, origin)` with that same SHA, and then deploys that same tree —
+all inside `if cs.k8s_deploy:`. A merge landing mid-run moves the tip but changes nothing about
+what this tick ships. Prod gets the pinned SHA and staging was asked about the pinned SHA;
+they agree by construction, whatever master does meanwhile.
+
+`deploy.sh`'s staleness guard is right for a production host, where a tree behind origin renders
+stale templates and reverts live config while every repo-side check reads green. On the staging
+checkout, being behind origin is the *intended* state. The remote script therefore passes
+`--skip-staleness-check`, with the reasoning at the line, pinned by
+`scripts/deploy_tools/test_staging_gate.py::test_the_staging_deploy_does_not_refuse_a_tree_behind_the_tip`
+and its red proof.
+
+**This removes a slice-4 requirement rather than satisfying one.** The earlier draft of this
+section prescribed a third path: re-ask at the new tip, once, and only then decide. Do not
+build that — it would ask staging about a SHA this tick is not deploying, which is a worse
+question than the one that was being refused. The next tick asks about the new tip on its own.
 
 ---
 
