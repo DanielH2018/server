@@ -15,34 +15,21 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 import time
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import configarr_health_logic as logic  # noqa: E402  (sibling module, via the sys.path insert)
+import host_lib  # noqa: E402  (sibling copy, deployed alongside — see the k8s/configarr role)
 
 NAMESPACE = os.environ.get("CONFIGARR_NAMESPACE", "homelab")
 CRONJOB = os.environ.get("CONFIGARR_CRONJOB", "configarr")
 MAX_AGE_S = float(os.environ.get("CONFIGARR_MAX_AGE_H", "26")) * 3600
-KUBECTL = os.environ.get("CONFIGARR_KUBECTL", "k3s kubectl").split()
+KUBECTL = os.environ.get("CONFIGARR_KUBECTL", "k3s kubectl")
 TIMEOUT = int(os.environ.get("CONFIGARR_KUBECTL_TIMEOUT_S", "30"))
 
-
-def kubectl(*args) -> tuple[int, str]:
-    try:
-        proc = subprocess.run(
-            [*KUBECTL, "-n", NAMESPACE, *args],
-            capture_output=True,
-            text=True,
-            timeout=TIMEOUT,
-        )
-    except subprocess.TimeoutExpired:
-        return 124, "kubectl timed out after %ss" % TIMEOUT
-    except OSError as e:
-        return 125, "could not run kubectl: %s" % e
-    return proc.returncode, proc.stdout if proc.returncode == 0 else proc.stderr
+kubectl = host_lib.kubectl_runner(KUBECTL, NAMESPACE, TIMEOUT)
 
 
 def age_seconds(stamp: str) -> float:
