@@ -5,7 +5,13 @@ when the off-box snapshot cron landed (2026-08-16). Unlike `kopia-disaster-recov
 restore has been performed from these snapshots — treat every step below as needing
 verification the first time it is used, and update this file with what actually happened.
 
-What was verified on 2026-08-22, with `scripts/backup/etcd_restore_drill.sh --list-only` and the runs
+**The `--list-only` leg is no longer a hand check.** `k3s_etcd_restore_drill_cron` runs it weekly
+on daniel-box (Mondays 10:20, armed by `k3s_etcd_restore_drill_armed`, PR #531), and
+`check_etcd_restore_drill()` in monitor-bridge reads its stamp fail-closed onto a Kuma tile
+(PR #535). The headline above still stands: what recurs is the *listing* leg, and the full
+restore has still never been performed. Do not read a green tile as a drilled restore.
+
+What was first verified on 2026-08-22, with `scripts/backup/etcd_restore_drill.sh --list-only` and the runs
 that followed it:
 
 - The credentials, bucket and folder work, and `k3s etcd-snapshot list --s3` returns real

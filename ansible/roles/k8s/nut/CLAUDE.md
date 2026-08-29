@@ -60,4 +60,9 @@ or a `monitor-bridge` check is the follow-up.
 - Manifests/config: `templates/*.j2` (config-secret.yaml.j2 holds all six NUT files)
 - Deploy (on daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "nut"`
 - Host half (udev rule, secondary upsmon): `ansible/roles/nut_host/`, via
-  `initial_setup.yml --tags nut_host` on daniel-server
+  `initial_setup.yml --tags nut_host` on **both** daniel-server and daniel-box. The role's
+  own `when:` (`initial_setup.yml`) is `inventory_hostname == ups_host or
+  nut_host_secondary_armed`, so daniel-box is in scope from the moment its secondary was
+  armed — running this on daniel-server alone re-arms the primary and silently skips the
+  secondary. This line said "on daniel-server" until 2026-08-29, three lines below the
+  section that already said both nodes are armed.

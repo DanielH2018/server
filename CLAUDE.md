@@ -283,7 +283,7 @@ refuses outright — and then say which command and why.
    `_BROAD_SETUP_PREFIXES` or `_BROAD_DEPLOY_PREFIXES` path — `ansible/roles/setup/`,
    `ansible/inventory/`, `ansible/templates/`, `ansible.cfg`, the bring-up playbooks) makes the
    deployer defer-and-alert and **return without fast-forwarding at all**
-   (`gitops_deploy.py:1017`, the `cs.broad` arm of `main`). Your docs-only commit then never lands locally either, and the
+   (`gitops_deploy.py:1136`, the `cs.broad` arm of `main`). Your docs-only commit then never lands locally either, and the
    symptom is a tick that exits 0, logs nothing, and writes `behind_since`. Diagnose it by
    diffing the range — `git diff --name-only <local-HEAD>..origin/master` — and read the
    Discord alert, which names the playbook to run. Clearing it means running that playbook and
