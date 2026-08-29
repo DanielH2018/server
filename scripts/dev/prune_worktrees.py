@@ -321,6 +321,55 @@ def remove(repo: str, tree: Worktree) -> tuple[bool, str]:
     return result.returncode == 0, result.stderr.strip()
 
 
+def primary_checkout() -> str | None:
+    """The checkout the worktrees hang off, or None when we are not in a git repo.
+
+    Not the current one: worktrees live under the primary's .claude/worktrees/, and
+    --show-toplevel run from inside a worktree returns the worktree itself, which made the
+    orphan scan look in a directory that doesn't exist.
+    """
+    common_dir = _git(["rev-parse", "--path-format=absolute", "--git-common-dir"])
+    return str(Path(common_dir).parent) if common_dir else None
+
+
+def survey(repo: str) -> list[tuple[str, Worktree, str]]:
+    """(verdict, worktree, reason) for every session worktree, primary excluded."""
+    trees = parse_worktree_list(_git(["worktree", "list", "--porcelain"], cwd=repo))
+    out = []
+    for tree in trees[1:]:
+        verdict, reason = classify(
+            tree,
+            merged=is_merged(repo, tree.head, tree.branch),
+            dirty=is_dirty(tree.path),
+        )
+        out.append((verdict, tree, reason))
+    return out
+
+
+def brief() -> int:
+    """One line per removable worktree; silent when there is nothing to remove.
+
+    This exists for the SessionStart banner, which prints nothing on a healthy day and has to
+    stay cheap to read. Claude Code's own worktree keeper already lists every branch whose
+    commits landed by squash or rebase, but each line ends by asking the reader to go run
+    `gh pr list --state merged --head <branch>` themselves — the lookup is_merged() already
+    performs. This prints the answer instead of the homework.
+    """
+    repo = primary_checkout()
+    if repo is None:
+        return 0
+    removable = [
+        (tree, reason) for verdict, tree, reason in survey(repo) if verdict == REMOVABLE
+    ]
+    if not removable:
+        return 0
+    print(f"\U0001f9f9 {len(removable)} merged worktree(s) can be removed:")
+    for tree, reason in removable:
+        print(f"  {Path(tree.path).name} — {reason}")
+    print("  → uv run python scripts/dev/prune_worktrees.py --prune")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -328,40 +377,39 @@ def main() -> int:
         action="store_true",
         help="remove the worktrees reported as removable (default: report only)",
     )
+    parser.add_argument(
+        "--brief",
+        action="store_true",
+        help="one line per removable worktree and nothing else; silent when clean",
+    )
     args = parser.parse_args()
 
-    # The primary checkout, not this one: worktrees live under the primary's
-    # .claude/worktrees/, and --show-toplevel run from inside a worktree returns the
-    # worktree itself, which made the orphan scan look in a directory that doesn't exist.
-    common_dir = _git(["rev-parse", "--path-format=absolute", "--git-common-dir"])
-    if not common_dir:
+    if args.brief:
+        return brief()
+
+    repo = primary_checkout()
+    if repo is None:
         print("not inside a git repository", file=sys.stderr)
         return 1
-    repo = str(Path(common_dir).parent)
 
-    trees = parse_worktree_list(_git(["worktree", "list", "--porcelain"], cwd=repo))
-    # The first entry is the checkout the others hang off; it is not a session worktree.
-    sessions = trees[1:]
-
-    orphans = find_orphan_dirs(
-        str(Path(repo) / ".claude" / "worktrees"), {t.path for t in trees}
-    )
-    for path in orphans:
+    tracked = {
+        t.path
+        for t in parse_worktree_list(
+            _git(["worktree", "list", "--porcelain"], cwd=repo)
+        )
+    }
+    for path in find_orphan_dirs(str(Path(repo) / ".claude" / "worktrees"), tracked):
         print(
             f"[{ORPHAN:9}] {path}\n            git does not track this — remove by hand"
         )
 
-    if not sessions:
+    surveyed = survey(repo)
+    if not surveyed:
         print("no session worktrees")
         return 0
 
     removable = []
-    for tree in sessions:
-        verdict, reason = classify(
-            tree,
-            merged=is_merged(repo, tree.head, tree.branch),
-            dirty=is_dirty(tree.path),
-        )
+    for verdict, tree, reason in surveyed:
         print(f"[{verdict:9}] {tree.path}\n            {reason}")
         if verdict == REMOVABLE:
             removable.append(tree)

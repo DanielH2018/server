@@ -234,6 +234,34 @@ def other_live_sessions(cwd):
     return lines
 
 
+WORKTREE_TIMEOUT_S = 30
+
+
+def stale_worktree_lines():
+    """Merged worktrees this repo can remove, as ready-to-print banner lines.
+
+    Claude Code's own worktree keeper reports these too, but each of its lines ends by asking
+    the reader to run `gh pr list --state merged --head <branch>` by hand to tell a
+    squash-merged branch from one that is merely behind. prune_worktrees.py already makes
+    that call, so this prints its verdict instead. Bounded and skipped on any failure, like
+    every other check here — it reaches GitHub, and a slow API must never stall session start.
+    """
+    try:
+        proc = _run(
+            [
+                "uv",
+                "run",
+                "python",
+                "scripts/dev/prune_worktrees.py",
+                "--brief",
+            ],
+            WORKTREE_TIMEOUT_S,
+        )
+    except Exception:
+        return []
+    return [line for line in proc.stdout.splitlines() if line.strip()]
+
+
 def format_banner(problems):
     """Render the problem list as the session banner (empty string => print nothing)."""
     if not problems:
@@ -280,6 +308,9 @@ def main():
         print("\U0001f500 Other Claude sessions in this repo:")
         for line in sessions:
             print(line)
+
+    for line in stale_worktree_lines():
+        print(line)
     return 0
 
 
