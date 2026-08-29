@@ -91,7 +91,7 @@ jellyfin_k8s_anisync_md5: "4d95c608192395b72efe57551a6f2ae0"
 # an alpine container would need `apk add unzip` as root — and root there holds no
 # DAC_OVERRIDE and so could not write what it had unpacked. Named here rather than written
 # into the template because Renovate's k8s-defaults manager only scans defaults/main.yml.
-jellyfin_k8s_anisync_init_image: python:3.14-alpine
+jellyfin_k8s_anisync_init_image: python:3.14-alpine@sha256:05b2b8b732ecd268fee8727a369f936f022d1321b59befd13c30ede22769dcdc
 
 jellyfin_k8s_cpu_limit: "4"
 jellyfin_k8s_mem_limit: 4096Mi

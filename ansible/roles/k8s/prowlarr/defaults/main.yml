@@ -52,7 +52,7 @@ prowlarr_k8s_flaresolverr_port: 8191
 prowlarr_k8s_flaresolverr_claim: prowlarr-flaresolverr-config
 
 # busybox nc is all the isolation probe needs.
-prowlarr_k8s_probe_image: alpine:3.24
+prowlarr_k8s_probe_image: alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 
 # Mirrors resources('1.0', '1024M', '0.10', '128M') for prowlarr and
 # resources('2.0', '1024M', '0.10', '128M') for flaresolverr.

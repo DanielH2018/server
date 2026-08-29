@@ -261,6 +261,15 @@
     loop_var: secret_file
   when: not k8s_dry_run | bool
 
+# After the apply, not after the rollout: this records WHICH BYTES are applied, which is a fact
+# the moment kubectl accepts them. Whether the resulting pods are healthy is a different
+# question, and post_tasks/k8s_stabilise_gate.yml already owns it. A record written only on a
+# healthy rollout would be missing for exactly the deploys an operator most needs to identify.
+- name: Record the applied release for {{ manifests_service }}
+  tags: [deploy]
+  ansible.builtin.include_tasks: release_stamp.yml
+  when: not k8s_dry_run | bool
+
 # Whether k8s/image-builder rebuilt THIS service's image to a new digest earlier in the play.
 # Keyed on manifests_service because every built image is named after the role that deploys it
 # — including n8n, whose image is built by the separate n8n-images role in an earlier batch,

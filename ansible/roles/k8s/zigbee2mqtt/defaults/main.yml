@@ -21,7 +21,7 @@ k8s_autodeploy_snapshot_pvcs: [zigbee2mqtt-data]  # noqa var-naming[no-role-pref
 
 # The config-install initContainer needs alpine (`install`). Same init image peanut and
 # home-assistant use.
-zigbee2mqtt_k8s_init_image: alpine:3.24
+zigbee2mqtt_k8s_init_image: alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 
 zigbee2mqtt_k8s_cpu_limit: "500m"
 zigbee2mqtt_k8s_mem_limit: 256Mi

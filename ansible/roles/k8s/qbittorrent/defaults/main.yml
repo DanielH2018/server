@@ -10,7 +10,7 @@ qbittorrent_k8s_wireguard_image: lscr.io/linuxserver/wireguard:latest@sha256:3ab
 # scope when that role ran in the same play. The Jinja `default()` that covered the miss was
 # invisible to Renovate's k8s-defaults manager, so it sat on alpine:3.22 while every other
 # alpine pin moved to 3.24 with nothing to raise a PR about it.
-qbittorrent_k8s_probe_image: alpine:3.24
+qbittorrent_k8s_probe_image: alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # DENIED for state coupling, not missing recovery. The snapshot and revert machinery work

@@ -18,7 +18,7 @@ headlamp_k8s_uid: 100
 headlamp_k8s_gid: 101
 # How long a browser session survives before Headlamp re-reads the ServiceAccount token.
 headlamp_k8s_session_ttl: 86400
-headlamp_k8s_netpol_probe_image: alpine:3.24
+headlamp_k8s_netpol_probe_image: alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 # CRD groups the built-in `view` ClusterRole cannot cover — nothing aggregates into `view`,
 # so a group missing here degrades silently: the UI loads, that one resource list is empty,
 # and it reads as "the cluster has none of those". Mirrors k3s_readonly_crd_api_groups

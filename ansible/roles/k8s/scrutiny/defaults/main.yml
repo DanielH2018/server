@@ -7,7 +7,7 @@
 # matchUpdateTypes automerge rule doesn't touch them — they still land manually (2026-08-13 pin).
 scrutiny_k8s_web_image: ghcr.io/analogj/scrutiny:master-web@sha256:192656ce791dc3e5bda7f7bf81cd3cb9f77ab2cde42a9bd0d8cac442b7e8bee1
 scrutiny_k8s_collector_image: ghcr.io/analogj/scrutiny:master-collector@sha256:e0d55d2742017c7025e491e05eb516bc71758c575f7e0bfefe34f9ce13aced89
-scrutiny_k8s_influxdb_image: influxdb:2.9
+scrutiny_k8s_influxdb_image: influxdb:2.9@sha256:f75e48af0598e8aec7986e991a848d19a119101a7d563a2e5db1dfaac9c45daa
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Stateful / manual-upgrade: pins a rolling upstream branch tag on a stateful monitoring

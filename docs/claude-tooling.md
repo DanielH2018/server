@@ -12,7 +12,7 @@ Read-only homelab diagnostics, allow-listed (no prompt). It resolves the live co
 
 ```
 uv run python scripts/diagnostics/probe.py <targets | metric '<promql>' | loki-query '<logql>' |
-  alerts | monitors | kuma-drift | scrutiny | pi <path> | cert <host> | health <svc> |
+  alerts | monitors | kuma-drift | releases | scrutiny | pi <path> | cert <host> | health <svc> |
   ha <state|automation|get> …>
 ```
 
@@ -34,6 +34,33 @@ down leaves the ratio at N/N up (a fenced-off push tile read green for a day on 
 `kuma-drift` diffs that set against `static-monitors.yaml.j2` and treats a push monitor inside
 its own interval after a Kuma restart as pending, since Kuma exports a monitor only once it has
 beaten.
+
+### `releases [<service>] [--previous] [--json]`
+
+Which commit produced the manifests each k8s service is running. `kubectl` reports what is
+running and git reports what is committed; until this existed, nothing joined the two. That join
+matters here because `deploy.sh` renders from whatever git tree it is invoked in, so the running
+manifests and master can disagree with every repo-side check still green — a worktree 48 commits
+behind reverted claude-otel for nine minutes on 2026-08-19, and the only symptom was a
+scrape-target count moving.
+
+The records come from `roles/k8s/manifests/tasks/release_stamp.yml`, which writes one JSON file
+per service under `/var/lib/homelab/k8s-releases.d/` after every apply. Secret manifests are
+listed by name and never hashed.
+
+Two flags carry the finding, and both are normal mid-slice and alarming a week later:
+
+- **`dirty`** — the deploying tree had uncommitted tracked changes, so no commit reproduces
+  those bytes.
+- **`unmerged`** — the commit is not an ancestor of `origin/master`. A service is running code
+  that never landed.
+
+Exit 0 when every record is clean, 1 when any service carries a flag, 2 when no records exist —
+which means nothing has been deployed since the stamp shipped, not that the fleet is clean.
+
+`--previous` reads the record kept from before the last deploy. One step of history, not a log:
+the incident question is "what was live before this deploy," and depth beyond that is what git
+is for, since every record names a commit.
 
 ### `health <svc>`
 

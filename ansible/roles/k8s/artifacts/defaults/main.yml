@@ -2,7 +2,7 @@
 # Same base image as the other stdlib-only Python workloads here (monitor-bridge,
 # autofix-bridge) — artifact_server.py imports nothing off PyPI, so there is no wheel to
 # build and no image to maintain.
-artifacts_k8s_image: python:3.14-alpine
+artifacts_k8s_image: python:3.14-alpine@sha256:05b2b8b732ecd268fee8727a369f936f022d1321b59befd13c30ede22769dcdc
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Stateless Deployment, RollingUpdate, no PVC, HTTP readinessProbe, and the base image tag
