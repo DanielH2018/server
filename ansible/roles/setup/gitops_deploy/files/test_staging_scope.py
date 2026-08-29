@@ -58,6 +58,24 @@ def test_a_fully_gated_pass_does_not_claim_unchecked_services() -> None:
     assert "unchecked" not in summary
 
 
+def test_every_verdict_names_what_it_did_not_check() -> None:
+    """Not just the pass. A rejection is where an operator is most likely to read the line as
+    covering the whole deploy, so that is where omitting the ungated half misleads most.
+
+    Observed 2026-08-28: a drill gating {freshrss, ical-proxy} out of a deploy that also carried
+    sonarr returned `staging: REJECTED ['freshrss', 'ical-proxy'] — deployed, but a service did
+    not answer as declared`. sonarr appeared nowhere, so the line reads as a verdict on the
+    deploy rather than on two thirds of it.
+    """
+    for deploy_rc, expect_rc in ((2, 2), (1, 2), (0, 1)):
+        summary = staging_verdict_summary(
+            {"freshrss"}, {"jellyfin", "sonarr"}, deploy_rc, expect_rc
+        )
+        assert "2 unchecked" in summary, (
+            f"deploy_rc={deploy_rc} expect_rc={expect_rc} dropped the ungated half: {summary!r}"
+        )
+
+
 def test_nothing_to_gate_is_not_reported_as_a_pass() -> None:
     """A deploy staging cannot speak for must never read as staging having approved it."""
     summary = staging_verdict_summary(set(), {"jellyfin"}, 0, 0)

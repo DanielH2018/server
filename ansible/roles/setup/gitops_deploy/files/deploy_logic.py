@@ -1075,20 +1075,24 @@ def staging_verdict_summary(
         return (
             f"staging: nothing to gate; {len(ungated)} service(s) unchecked by staging"
         )
+    # Named on EVERY verdict, not just the pass. A rejection is the moment an operator is most
+    # likely to read the line as a statement about the whole deploy, and Decision 3's point is
+    # that a silent skip and a silent pass look identical afterwards — which is just as true of
+    # a silent skip beside a rejection.
+    unchecked = f"; {len(ungated)} unchecked" if ungated else ""
     if deploy_rc == 2 or expect_rc == 2:
         return (
             f"staging: NO VERDICT on {sorted(gated)} "
             f"(deploy={deploy_rc}, expect={expect_rc}) — staging could not be asked, "
-            f"which is not a rejection"
+            f"which is not a rejection{unchecked}"
         )
     if deploy_rc != 0:
-        return f"staging: REJECTED {sorted(gated)} — the deploy failed on staging"
+        return f"staging: REJECTED {sorted(gated)} — the deploy failed on staging{unchecked}"
     if expect_rc != 0:
         return (
             f"staging: REJECTED {sorted(gated)} — deployed, but a service did not answer "
-            f"as declared"
+            f"as declared{unchecked}"
         )
-    unchecked = f"; {len(ungated)} unchecked" if ungated else ""
     return f"staging: PASS on {sorted(gated)}{unchecked}"
 
 

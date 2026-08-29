@@ -185,6 +185,48 @@ def test_the_pinned_env_check_rejects_a_sys_executable_launch() -> None:
     )
 
 
+def cwdless_launches(fn: ast.FunctionDef) -> list[str]:
+    """The subprocess calls in this function that do not pin cwd.
+
+    `uv run` picks its project from the working directory, so a call that inherits cwd resolves
+    the repo's env only while the caller happens to be standing in it.
+    """
+    return [
+        ast.unparse(node.func)
+        for node in ast.walk(fn)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "run"
+        and not any(kw.arg == "cwd" for kw in node.keywords)
+    ]
+
+
+def test_the_staging_scripts_run_from_the_repo() -> None:
+    """Pinning the interpreter is not enough on its own — `uv run` resolves by cwd.
+
+    Observed 2026-08-28: with `_UV_PYTHON` already in place, driving consult_staging from a
+    scratch directory still died on `ModuleNotFoundError: No module named 'yaml'`, because uv
+    found no project there and fell back to a bare interpreter. That is the same exit 1 the
+    interpreter fix was written to prevent, reached by the other half of the same mechanism.
+    """
+    offenders = cwdless_launches(_fn("consult_staging"))
+    assert not offenders, (
+        f"{offenders} in consult_staging inherit cwd, so `uv run` resolves whatever project "
+        f"the caller was standing in. Pass cwd=REPO."
+    )
+
+
+def test_the_cwd_check_rejects_an_inherited_cwd() -> None:
+    """The rejecting half: the pre-fix call shape, verbatim, must fail the check above."""
+    before_the_fix = ast.parse(
+        "def consult_staging(services, origin):\n"
+        "    subprocess.run([*_UV_PYTHON, STAGING_EXPECT_SCRIPT], check=False)\n"
+    )
+    assert cwdless_launches(_fn("consult_staging", before_the_fix)), (
+        "the check no longer sees a cwd-less launch, so it has stopped being a check."
+    )
+
+
 def test_the_gate_is_off_by_default() -> None:
     """A slice that silently added wall-clock to every k8s tick on merge would be a behaviour
     change nobody opted into. The default lives in the source, so it is checkable here."""

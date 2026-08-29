@@ -306,6 +306,13 @@ STAGING_ALERT_FILE = "/var/lib/gitops-deploy/staging_alerted_sha"
 # unsynced one would make the expectation script die at import with exit 1 — which
 # staging_verdict_summary reads as REJECTED. An infrastructure fault would then report as a
 # rejection on every gated tick, poisoning the one number this slice exists to collect.
+#
+# Both call sites pass cwd=REPO, and that is load-bearing rather than tidiness: `uv run` picks
+# its project from the working directory, so outside one it falls back to a bare interpreter and
+# reproduces the same ModuleNotFoundError this constant exists to avoid. Observed 2026-08-28
+# driving consult_staging from a scratch directory, which is exactly how a caller with a
+# different cwd would hit it. The unit's WorkingDirectory happens to be REPO today; relying on
+# that is what made the first version of this fix incomplete.
 _UV_PYTHON = ("uv", "run", "--frozen", "python")
 
 # ── CI gate ───────────────────────────────────────────────────────────────────────────────────
@@ -793,6 +800,7 @@ def consult_staging(services: set[str], origin: str) -> None:
         tags = ",".join(sorted(gated))
         deploy_rc = subprocess.run(
             [*_UV_PYTHON, STAGING_GATE_SCRIPT, origin, "--tags", tags],
+            cwd=REPO,
             timeout=STAGING_GATE_TIMEOUT_S,
             check=False,
         ).returncode
@@ -801,6 +809,7 @@ def consult_staging(services: set[str], origin: str) -> None:
         if deploy_rc == 0:
             expect_rc = subprocess.run(
                 [*_UV_PYTHON, STAGING_EXPECT_SCRIPT],
+                cwd=REPO,
                 timeout=STAGING_EXPECT_TIMEOUT_S,
                 check=False,
             ).returncode
