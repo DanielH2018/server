@@ -318,3 +318,8 @@ cours
 [Qq]emu
 [Cc]iphertext
 [Pp]asswordless
+[Bb]ackgrounded
+[Bb]ackoff
+SIGTERMed
+pid
+[Pp]ytest
