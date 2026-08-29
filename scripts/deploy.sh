@@ -49,12 +49,15 @@
 set -u
 
 LOCK=/var/lock/server-git-tree.lock
-# Covers gitops-deploy's worst-case hold of 2220s (K8S_DEPLOY_TIMEOUT_S 900 +
-# K8S_ROLLBACK_TIMEOUT_S 1320), not its TimeoutStartSec. Was 1500 from d1a5b6c9 until 2026-08-23,
-# when the unit's TimeoutStartSec really was 25min; it then went 25 -> 35 -> 45min and this value
-# was left behind, so a deploy launched during a pathological gitops run gave up having deployed
-# nothing while the run it was queued behind was still legitimately working.
-LOCK_WAIT=2700
+# Covers gitops-deploy's worst-case hold of 2940s (STAGING_GATE_TIMEOUT_S 600 +
+# STAGING_EXPECT_TIMEOUT_S 120 + K8S_DEPLOY_TIMEOUT_S 900 + K8S_ROLLBACK_TIMEOUT_S 1320), not its
+# TimeoutStartSec. Was 1500 from d1a5b6c9 until 2026-08-23, when the unit's TimeoutStartSec really
+# was 25min; it then went 25 -> 35 -> 45min and this value was left behind, so a deploy launched
+# during a pathological gitops run gave up having deployed nothing while the run it was queued
+# behind was still legitimately working. Derived from the same role defaults the deployer reads
+# and pinned by test_deploy_sh_lock_wait_clears_the_deployers_worst_case_hold, so raising any of
+# the four fails that test rather than silently shortening this wait again.
+LOCK_WAIT=3000
 LOCK_BUSY=75
 
 # Record a successful deploy where Grafana can draw it as a dashboard annotation.

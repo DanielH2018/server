@@ -455,20 +455,70 @@ def test_deploy_timeout_budget_survives_max_flock_contention():
 _DEFAULTS = pathlib.Path(__file__).parents[1] / "defaults" / "main.yml"
 
 
+def _worst_lock_hold(defaults: dict) -> int:
+    """Longest one gitops-deploy activation can hold the git-tree lock, EXCLUDING its own flock
+    wait (which is spent before the lock is held).
+
+    All four terms are on the SAME path and are additive, not alternative: consult_staging runs
+    inside `if cs.k8s_deploy:` in main(), ahead of deploy_k8s, so an activation that stalls the
+    staging gate and then stalls both playbook budgets spends all four in sequence. The BROAD arm
+    returns before that block and so cannot stack with any of them.
+
+    The staging terms are counted even though gitops_deploy_staging_gate is false by default. The
+    host that has the gate ON is the one whose budget has to fit, and a budget that only holds
+    while a feature is off is not a budget — that reading is exactly how the 2026-08-29 review's
+    H-1 got in: 1200 + 180 sat unsummed inside a 2700s ceiling and every check read green.
+    """
+    return (
+        int(defaults["gitops_deploy_staging_gate_timeout_s"])
+        + int(defaults["gitops_deploy_staging_expect_timeout_s"])
+        + int(defaults["gitops_deploy_k8s_timeout_s"])
+        + int(defaults["gitops_deploy_k8s_rollback_timeout_s"])
+    )
+
+
+def _budget_fits(defaults: dict, flock_wait: int, timeout_start: int) -> bool:
+    return flock_wait + _worst_lock_hold(defaults) <= timeout_start
+
+
 def test_k8s_deploy_timeout_budget_survives_max_flock_contention():
     unit = (_TEMPLATES / "gitops-deploy.service.j2").read_text()
     defaults = yaml.safe_load(_DEFAULTS.read_text())
     flock_wait = int(_search1(r"^ExecStart=.*?flock\s+-w\s+(\d+)", unit))
-    forward_timeout = int(defaults["gitops_deploy_k8s_timeout_s"])
-    rollback_timeout = int(defaults["gitops_deploy_k8s_rollback_timeout_s"])
     timeout_start = _systemd_seconds(_search1(r"^TimeoutStartSec=(\S+)", unit))
-    budget = flock_wait + forward_timeout + rollback_timeout
-    assert budget <= timeout_start, (
-        f"flock -w {flock_wait} + K8S_DEPLOY_TIMEOUT_S {forward_timeout} + "
-        f"K8S_ROLLBACK_TIMEOUT_S {rollback_timeout} = {budget}s must fit inside TimeoutStartSec "
-        f"{timeout_start}s, or a stalled forward deploy followed by a stalled rollback gets "
-        f"SIGTERMed mid-rollback, stranding the bad commit live with the volume revert possibly "
-        f"half-done (task 6b)."
+    hold = _worst_lock_hold(defaults)
+    assert _budget_fits(defaults, flock_wait, timeout_start), (
+        f"flock -w {flock_wait} + the worst-case lock hold {hold}s (staging gate + staging "
+        f"expectations + K8S_DEPLOY_TIMEOUT_S + K8S_ROLLBACK_TIMEOUT_S) = "
+        f"{flock_wait + hold}s must fit inside TimeoutStartSec {timeout_start}s, or a stalled "
+        f"forward deploy followed by a stalled rollback gets SIGTERMed mid-rollback, stranding "
+        f"the bad commit live with the volume revert possibly half-done (task 6b)."
+    )
+
+
+def test_an_uncounted_staging_budget_is_caught():
+    # Red proof for the three budget tests that share _worst_lock_hold. They can only ever be
+    # observed passing, so this drives the same verdict function with the pre-fix numbers: the
+    # 2026-08-29 review's H-1, where a 1200s gate and a 180s expectation check sat inside a
+    # 2700s ceiling that nothing summed them into.
+    sized = {
+        "gitops_deploy_staging_gate_timeout_s": 600,
+        "gitops_deploy_staging_expect_timeout_s": 120,
+        "gitops_deploy_k8s_timeout_s": 900,
+        "gitops_deploy_k8s_rollback_timeout_s": 1320,
+    }
+    assert _worst_lock_hold(sized) == 2940
+    assert _budget_fits(sized, 180, 3600)
+
+    h1 = {
+        **sized,
+        "gitops_deploy_staging_gate_timeout_s": 1200,
+        "gitops_deploy_staging_expect_timeout_s": 180,
+    }
+    assert _worst_lock_hold(h1) == 3600
+    assert not _budget_fits(h1, 180, 2700), (
+        "the budget check must REJECT the H-1 shape (180 + 1200 + 180 + 900 + 1320 = 3780s "
+        "against TimeoutStartSec 2700s); a check that passes it is measuring nothing."
     )
 
 
@@ -495,15 +545,13 @@ def test_secret_rotate_lock_wait_clears_the_deployers_worst_case_hold():
     # fails this test instead of silently re-opening the gap. A single failing service reaches
     # the worst case; it does not need a batch.
     defaults = yaml.safe_load(_DEFAULTS.read_text())
-    forward_timeout = int(defaults["gitops_deploy_k8s_timeout_s"])
-    rollback_timeout = int(defaults["gitops_deploy_k8s_rollback_timeout_s"])
-    worst_hold = forward_timeout + rollback_timeout
+    worst_hold = _worst_lock_hold(defaults)
 
     cron_wait = int(_search1(r"^flock\s+-w\s+(\d+)\s+9", _SECRET_ROTATE.read_text()))
     assert cron_wait >= worst_hold, (
         f"secret-rotate's `flock -w {cron_wait}` must clear gitops-deploy's worst-case lock hold "
-        f"(K8S_DEPLOY_TIMEOUT_S {forward_timeout} + K8S_ROLLBACK_TIMEOUT_S {rollback_timeout} = "
-        f"{worst_hold}s), or a legitimate long rollback makes the weekly rotation skip a week "
+        f"({worst_hold}s: the staging gate and expectation check, then K8S_DEPLOY_TIMEOUT_S and "
+        f"K8S_ROLLBACK_TIMEOUT_S), or a legitimate long rollback makes the weekly rotation skip a week "
         f"with no retry (2026-08-22 review M4)."
     )
 
@@ -592,15 +640,13 @@ def test_deploy_sh_lock_wait_clears_the_deployers_worst_case_hold():
     # through two TimeoutStartSec bumps. Deriving it from the same defaults the deployer reads
     # means the next bump fails here instead of silently shortening an operator's wait.
     defaults = yaml.safe_load(_DEFAULTS.read_text())
-    forward_timeout = int(defaults["gitops_deploy_k8s_timeout_s"])
-    rollback_timeout = int(defaults["gitops_deploy_k8s_rollback_timeout_s"])
-    worst_hold = forward_timeout + rollback_timeout
+    worst_hold = _worst_lock_hold(defaults)
 
     lock_wait = int(_search1(r"^LOCK_WAIT=(\d+)", _DEPLOY_SH.read_text()))
     assert lock_wait >= worst_hold, (
         f"deploy.sh's LOCK_WAIT={lock_wait} must clear gitops-deploy's worst-case lock hold "
-        f"(K8S_DEPLOY_TIMEOUT_S {forward_timeout} + K8S_ROLLBACK_TIMEOUT_S {rollback_timeout} = "
-        f"{worst_hold}s), or an operator deploy queued behind a legitimately long rollback exits "
+        f"({worst_hold}s: the staging gate and expectation check, then K8S_DEPLOY_TIMEOUT_S and "
+        f"K8S_ROLLBACK_TIMEOUT_S), or an operator deploy queued behind a legitimately long rollback exits "
         f"75 having deployed nothing (2026-08-23b review M13)."
     )
 
@@ -774,3 +820,77 @@ def test_cap_pending_is_imported_from_the_pure_module():
         for alias in node.names
     }
     assert {"cap_pending", "PENDING_ALERTS_MAX"} <= imported
+
+
+# ── the staging timeouts exist in three places, and only one of them gates production ─────────
+# defaults/main.yml is the source; config.env.j2 renders it onto the host; gitops_deploy.py
+# carries a `C.get(name, "<literal>")` fallback for a host whose config predates that render.
+# Until 2026-08-29 the render was missing entirely, so the FALLBACK was what production ran on
+# and editing the defaults would have moved nothing. These two pin all three together.
+
+
+def _env_fallbacks(source: str) -> dict[str, int]:
+    """The literal defaults gitops_deploy.py falls back to when config.env lacks a key."""
+    return {
+        name: int(value)
+        for name, value in re.findall(
+            r'C\.get\(\s*"([A-Z0-9_]+)"\s*,\s*"(\d+)"\s*\)', source
+        )
+    }
+
+
+def _rendered_env_keys(template: str) -> set[str]:
+    """The keys config.env.j2 actually emits (`KEY={{ ... }}` or `KEY=literal`)."""
+    return set(re.findall(r"^([A-Z0-9_]+)=", template, re.MULTILINE))
+
+
+def test_staging_timeout_fallbacks_match_the_ansible_defaults():
+    defaults = yaml.safe_load(_DEFAULTS.read_text())
+    fallbacks = _env_fallbacks(_SRC.read_text())
+    for env_key, default_key in (
+        ("STAGING_GATE_TIMEOUT_S", "gitops_deploy_staging_gate_timeout_s"),
+        ("STAGING_EXPECT_TIMEOUT_S", "gitops_deploy_staging_expect_timeout_s"),
+    ):
+        assert env_key in fallbacks, (
+            f"{env_key} lost its C.get fallback in gitops_deploy.py"
+        )
+        assert fallbacks[env_key] == int(defaults[default_key]), (
+            f"gitops_deploy.py falls back to {env_key}={fallbacks[env_key]} while "
+            f"{default_key} is {defaults[default_key]}. A host whose config.env predates the "
+            f"render uses the fallback, so the two disagreeing means the budget the unit is "
+            f"sized against is not the budget that host spends."
+        )
+
+
+def test_a_drifted_fallback_is_caught():
+    # Red proof for the pair above: the same parser, driven with a source whose literal
+    # disagrees with the default it shadows.
+    assert _env_fallbacks('X = int(C.get("STAGING_GATE_TIMEOUT_S", "600"))') == {
+        "STAGING_GATE_TIMEOUT_S": 600
+    }
+    drifted = _env_fallbacks('X = int(C.get("STAGING_GATE_TIMEOUT_S", "1200"))')
+    assert drifted["STAGING_GATE_TIMEOUT_S"] != 600, (
+        "the parser must read the literal rather than the name, or a drifted fallback "
+        "reads as agreeing with whatever the defaults say."
+    )
+
+
+def test_staging_timeouts_are_rendered_into_config_env():
+    keys = _rendered_env_keys((_TEMPLATES / "config.env.j2").read_text())
+    for env_key in ("STAGING_GATE_TIMEOUT_S", "STAGING_EXPECT_TIMEOUT_S"):
+        assert env_key in keys, (
+            f"config.env.j2 must emit {env_key}, or gitops_deploy.py's C.get fallback is what "
+            f"gates production and changing the Ansible default moves nothing on the host."
+        )
+
+
+def test_an_unrendered_key_is_caught():
+    # Red proof for the test above, on the same extractor. The rejected input is the shape
+    # config.env.j2 actually had until 2026-08-29: STAGING_GATE rendered, its two timeouts not.
+    assert _rendered_env_keys("STAGING_GATE={{ x }}\nSTAGING_GATE_TIMEOUT_S=600\n") == {
+        "STAGING_GATE",
+        "STAGING_GATE_TIMEOUT_S",
+    }
+    assert "STAGING_GATE_TIMEOUT_S" not in _rendered_env_keys(
+        "STAGING_GATE={{ x }}\n# STAGING_GATE_TIMEOUT_S is only a comment\n"
+    ), "a key named only in a comment must not count as rendered"

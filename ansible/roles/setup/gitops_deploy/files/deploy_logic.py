@@ -322,6 +322,14 @@ def broad_budget_ok(
     TimeoutStartSec=2700 leaves 96s — 3.5%, so a run four percent slower than measured is
     killed mid-rollback. That is why the deploy-plane arm is forward-only, and this
     predicate is what makes the reasoning executable rather than a comment that rots.
+
+    # DECIDED: the ceiling has since moved and the arm stays forward-only anyway.
+    TimeoutStartSec went to 60min on 2026-08-29 to fund the staging gate, at which the same
+    numbers FIT (2904 against 3600). This predicate has no production caller, so nothing changed
+    behaviour; the arm is forward-only in gitops_deploy.py's code. Arming a broad rollback needs
+    its own evidence — a re-measured deploy.yml on today's tree — not a ceiling raised for an
+    unrelated feature. Pinned by test_deploy_logic.py::
+    test_the_budget_predicate_tracks_the_units_real_timeout, which carries the re-derivation.
     """
     return flock_s + forward_s + rollback_s + BROAD_BUDGET_MARGIN_S <= timeout_s
 

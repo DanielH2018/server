@@ -11,7 +11,7 @@ Type=oneshot
 # intervention.
 #
 # Two independent worst cases must fit inside this ceiling, and task 6b's k8s one is why it is
-# 45min rather than 25min:
+# 45min rather than 25min (the staging gate below is why it is now 60min):
 #   - Docker path: 180s max flock wait + RUN_BUDGET_S (1020s, the health-gate phase) +
 #     HEALTH_TIMEOUT_S (300s, the rollback redeploy) = 1500s = 25min exactly, still true and
 #     now with slack under the larger ceiling. See config.env.j2.
@@ -19,10 +19,21 @@ Type=oneshot
 #     gitops_deploy.py catches the timeout, THEN the rollback redeploy can spend its whole
 #     K8S_ROLLBACK_TIMEOUT_S (1320s, re-sized against the real per-service ceiling — see
 #     defaults/main.yml) — the two run SEQUENTIALLY in one unit activation, not concurrently,
-#     and neither shares the Docker path's RUN_BUDGET_S. 180 (max flock wait) + 900 + 1320 =
-#     2400s, which needs more than 25min (1500s) and is why this is 45min (2700s) — see
+#     and neither shares the Docker path's RUN_BUDGET_S. That pair alone is 180 (max flock
+#     wait) + 900 + 1320 = 2400s, which needs more than 25min (1500s) — see
 #     ansible/roles/k8s/volume-revert/CLAUDE.md for the drill that sized the two revert-role
 #     timeouts feeding K8S_ROLLBACK_TIMEOUT_S.
+#   - k8s path WITH the staging gate armed (STAGING_GATE, off by default), which is why this is
+#     60min rather than 45min. consult_staging runs INSIDE the same `if cs.k8s_deploy:` block,
+#     before deploy_k8s, so its two budgets are additive to the pair above rather than
+#     alternative to them: 180 + STAGING_GATE_TIMEOUT_S (600) + STAGING_EXPECT_TIMEOUT_S (120)
+#     + 900 + 1320 = 3120s. The BROAD arm does not stack with any of it — it returns before the
+#     k8s block, so the true ceiling is max(broad 1800 + 180, 3120), not a sum.
+#
+# Sized against a MEASURED staging deploy (defaults/main.yml carries the number), and the
+# 480s of remaining slack is deliberate: shrinking the staging budget to avoid raising this
+# ceiling would turn a slow staging into NO VERDICT, which is the one failure the gate exists
+# to measure.
 #
 # This deliberately GIVES UP the old invariant ("stay under the 30-min interval so the next tick
 # always fires on schedule") in exchange for the k8s rollback getting a budget that can actually
@@ -37,10 +48,12 @@ Type=oneshot
 #
 # The lock this unit's ExecStart holds (`/var/lock/server-git-tree.lock`, below) is now held for
 # up to this same pathological duration, which EXCEEDS the 30-min timer interval — a concurrent
-# `./scripts/deploy.sh` waits its own `-w 180`, then returns exit 75 (nothing deployed) if this
-# unit is still running; the weekly secret-rotate cron waits on the same lock. See
+# `./scripts/deploy.sh` waits its own LOCK_WAIT (not this `-w 180`, which governs only this
+# unit), then returns exit 75 (nothing deployed) if the lock stays busy past it — so it normally
+# OUTLASTS this hold and deploys. The weekly secret-rotate cron waits on the same lock, with the
+# same wait, derived from the same budgets. See
 # ansible/roles/setup/gitops_deploy/CLAUDE.md.
-TimeoutStartSec=45min
+TimeoutStartSec=60min
 User={{ sys_user }}
 WorkingDirectory=/home/{{ sys_user }}/server
 # Need ~/.local/bin on PATH for `uv` (the deployer runs `uv run ansible-playbook`,
@@ -56,7 +69,7 @@ SyslogLevel=notice
 # this same git working tree, and this deployer's `git reset --hard` on a failed health gate
 # could silently discard a half-rotated secret. RUN_START (and so RUN_BUDGET_S, see
 # gitops_deploy.py) is measured from process start, AFTER flock acquires — so time spent
-# waiting here is pure overhead against this unit's 45min TimeoutStartSec, uncounted by that
+# waiting here is pure overhead against this unit's TimeoutStartSec, uncounted by that
 # budget. -w 180 outlasts any normal deploy-step contention (secret-rotate is short — 0-2
 # tokens) but fails fast enough to leave the health-gate/rollback budget intact; /run/lock is
 # world-writable+sticky, so the unprivileged {{ sys_user }} can create the lockfile.
@@ -66,9 +79,11 @@ SyslogLevel=notice
 # `./scripts/deploy.sh` (~20min, holding this same lock) paged via OnFailure: seven such silent
 # exit-1 ticks in the seven days to 2026-08-23, each logging nothing at all because flock died
 # before the deployer started. Raising -w cannot fix it — this unit's own worst case is
-# K8S_DEPLOY_TIMEOUT_S + K8S_ROLLBACK_TIMEOUT_S = 2220s against TimeoutStartSec 2700s, so the
-# largest legal -w is 480s, still short of a routine 20-minute deploy; test_gitops_discord_
-# contract.py:458 asserts that bound and goes red if you try. So -E 75 + SuccessExitStatus=75
+# STAGING_GATE_TIMEOUT_S + STAGING_EXPECT_TIMEOUT_S + K8S_DEPLOY_TIMEOUT_S +
+# K8S_ROLLBACK_TIMEOUT_S = 2940s against TimeoutStartSec 3600s, so the largest legal -w is 660s,
+# still short of a routine 20-minute deploy; test_gitops_discord_contract.py::test_k8s_deploy_
+# timeout_budget_survives_max_flock_contention asserts that bound and goes red if you try. So
+# -E 75 + SuccessExitStatus=75
 # instead, the same "lock busy, nothing deployed" contract scripts/deploy.sh:281 already uses.
 # Contention is not silent starvation: the flock path never writes last_run, so contention
 # lasting past GITOPS_MAX_AGE_S (90min, check.py:148) still pages via GitOps-Alive. (ADR-0011)
