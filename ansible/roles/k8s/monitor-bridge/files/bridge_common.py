@@ -49,6 +49,19 @@ def _env(name, default):
     return os.environ.get(name, default)
 
 
+# The seconds every outbound HTTP call in both bridges is bounded by. Defined here rather than
+# once per bridge because it was the same line in both, and a timeout that drifts between two
+# scripts drifts in the one direction nobody notices: the slower copy fails open more often, and
+# a check that fails open is inert behind a green monitor.
+#
+# It is a CEILING, not a budget. The glances incident (see with_pi_ports in check.py) is what
+# that distinction costs: /api/4/containers answered in 4.43s and then timed out at this bound
+# on the very next call, where its siblings answer in 0.03-0.06s. A source that slow needs the
+# cheap signal to decide and the expensive one only to explain — this constant cannot make that
+# choice for a caller, it can only stop a hang.
+HTTP_TIMEOUT = int(_env("HTTP_TIMEOUT", "10"))
+
+
 def log(*args):
     """Print a bracketed-timestamp log line.
 
