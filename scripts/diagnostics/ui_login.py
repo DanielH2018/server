@@ -24,7 +24,7 @@ asks for it. Without that flag this file would need re-minting continuously.
 
 Usage:
     uv run python scripts/diagnostics/ui_login.py            # mint (or refresh) the state file
-    uv run python scripts/diagnostics/ui_login.py --check    # report whether it is still valid
+    uv run python scripts/diagnostics/ui_login.py --check    # ask Authelia if the session still stands
     uv run python scripts/diagnostics/ui_login.py --path     # print the state file path
 
 Exit 0 = a usable state file is on disk. Exit 1 = it is missing, expired or rejected.
@@ -44,6 +44,11 @@ import probe_core as core
 # `authelia_k8s_cookie_name` in roles/k8s/authelia/defaults/main.yml:48 — a rename there
 # must land here too, which test_ui_login.py asserts against the role default.
 COOKIE_NAME = "authelia_session_k8s"
+
+# Authelia's own view of the caller's session. Cheaper than a service route and it needs no
+# service to be up, so `--check` stays a question about the cookie rather than about whatever
+# happened to be picked as a target.
+STATE_ENDPOINT_PATH = "/api/state"
 
 # Deliberately NOT $CLAUDE_JOB_DIR/tmp: that is per-job and vanishes with the job, which
 # would re-mint a session on every new one. ~/.claude survives across sessions and hosts
@@ -174,24 +179,94 @@ def mint():
     return STATE_PATH
 
 
+def local_state_problem(state, now):
+    """What is wrong with the state file on its own terms, or None if nothing is.
+
+    A cheap pre-filter, NOT the verdict. It answers "is this file shaped like a live
+    session", which is a strictly weaker question than "does Authelia still accept it" —
+    see check().
+    """
+    cookies = (state or {}).get("cookies") or []
+    if not cookies:
+        return "holds no cookies"
+    expires = cookies[0].get("expires", 0)
+    remaining = expires - now
+    if remaining <= 0:
+        return f"expired {int(-remaining / 86400)}d ago"
+    return None
+
+
+def classify_state(payload):
+    """(valid, detail) from Authelia's /api/state body.
+
+    `authentication_level` is the field that matters: 0 is an anonymous session, 1 is
+    one_factor, 2 is two_factor. Authelia answers 200 with level 0 to a cookie it no longer
+    honours, so the status code says nothing on its own.
+    """
+    if not isinstance(payload, dict):
+        return False, "unreadable /api/state response"
+    if payload.get("status") != "OK":
+        return False, f"authelia reported status={payload.get('status')!r}"
+    level = (payload.get("data") or {}).get("authentication_level")
+    if not isinstance(level, int):
+        return False, "no authentication_level in /api/state"
+    if level < 1:
+        return False, "cookie is no longer authenticated (authentication_level 0)"
+    return True, f"authenticated (authentication_level {level})"
+
+
 def check():
-    """Report whether the state file exists and its cookie is still in date."""
+    """Report whether the saved cookie is one Authelia still accepts.
+
+    The expiry stamped in the file is a *claim*, not a fact, and the two come apart in the
+    cases that matter: restarting Authelia or rotating `authelia_secret` invalidates every
+    live session while the local timestamp goes on reading valid for weeks. Trusting it
+    fails open — the browser launches with a dead cookie and lands on the login portal,
+    which presents as a puzzling blank page rather than as an auth error.
+
+    So the timestamp is only ever a fast reject; the verdict comes from asking Authelia.
+    An unreachable portal counts as invalid, which is the fail-closed direction: minting
+    needs the same network the browsing does, so there is nothing useful to do with a
+    session that cannot be confirmed.
+    """
     if not os.path.exists(STATE_PATH):
         print(f"no state file at {STATE_PATH} — run without --check to mint one")
         return 1
     with open(STATE_PATH) as f:
         state = json.load(f)
-    cookies = state.get("cookies") or []
-    if not cookies:
-        print(f"{STATE_PATH} holds no cookies — re-mint")
+
+    problem = local_state_problem(state, time.time())
+    if problem is not None:
+        print(f"{STATE_PATH} {problem} — re-mint")
         return 1
-    expires = cookies[0].get("expires", 0)
-    remaining = expires - time.time()
-    if remaining <= 0:
-        print(f"session expired {int(-remaining / 86400)}d ago — re-mint")
+
+    domain = core.sops_extract("domain")
+    host = portal_host(domain)
+    out = _curl(
+        [
+            "curl",
+            "-sS",
+            "--max-time",
+            str(TIMEOUT),
+            "--resolve",
+            f"{host}:443:{core.metallb_vip()}",
+            "--config",
+            "-",
+            f"https://{host}{STATE_ENDPOINT_PATH}",
+        ],
+        stdin_text=f'cookie = "{COOKIE_NAME}={state["cookies"][0]["value"]}"\n',
+    )
+    if out.returncode != 0:
+        print(f"could not reach the Authelia portal: {out.stderr.strip()} — re-mint")
         return 1
-    print(f"session valid for {int(remaining / 86400)}d ({STATE_PATH})")
-    return 0
+    try:
+        payload = json.loads(out.stdout)
+    except json.JSONDecodeError:
+        payload = None
+
+    valid, detail = classify_state(payload)
+    print(f"{detail} ({STATE_PATH})" if valid else f"{detail} — re-mint")
+    return 0 if valid else 1
 
 
 def classify_response(status, location):
@@ -250,7 +325,9 @@ def verify(service):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--check", action="store_true", help="report validity without logging in"
+        "--check",
+        action="store_true",
+        help="ask Authelia whether the saved session is still honoured, without logging in",
     )
     parser.add_argument(
         "--path", action="store_true", help="print the state file path and exit"

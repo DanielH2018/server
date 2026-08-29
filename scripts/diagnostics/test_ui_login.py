@@ -88,6 +88,75 @@ def test_server_error_is_flagged():
     assert "502" in detail
 
 
+# --- classify_state: does Authelia still honour the cookie ---------------------------
+
+
+def _state(level, status="OK"):
+    return {"status": status, "data": {"authentication_level": level}}
+
+
+def test_one_factor_session_is_accepted():
+    valid, detail = ui_login.classify_state(_state(1))
+    assert valid is True
+    assert "1" in detail
+
+
+def test_two_factor_session_is_accepted():
+    assert ui_login.classify_state(_state(2))[0] is True
+
+
+def test_deauthenticated_cookie_is_flagged():
+    """The whole point of asking Authelia. It answers HTTP 200 with level 0 to a cookie it
+    no longer honours — after a restart or an authelia_secret rotation — while the expiry
+    stamped in the local file goes on reading valid for weeks."""
+    valid, detail = ui_login.classify_state(_state(0))
+    assert valid is False
+    assert "authentication_level 0" in detail
+
+
+def test_non_ok_status_is_flagged():
+    valid, detail = ui_login.classify_state(_state(1, status="KO"))
+    assert valid is False
+    assert "KO" in detail
+
+
+def test_missing_authentication_level_is_flagged():
+    valid, detail = ui_login.classify_state({"status": "OK", "data": {}})
+    assert valid is False
+    assert "authentication_level" in detail
+
+
+def test_unparseable_body_is_flagged():
+    """check() passes None when the response is not JSON — a captive portal or an error
+    page must not read as a live session."""
+    assert ui_login.classify_state(None)[0] is False
+
+
+# --- local_state_problem: the cheap pre-filter, not the verdict ----------------------
+
+
+def test_a_dated_session_file_has_no_local_problem():
+    state = ui_login.build_storage_state("tok", "example.com", 2000)
+    assert ui_login.local_state_problem(state, now=1000) is None
+
+
+def test_an_expired_session_file_is_flagged_locally():
+    state = ui_login.build_storage_state("tok", "example.com", 1000)
+    assert "expired" in ui_login.local_state_problem(state, now=1000 + 86400)
+
+
+def test_a_cookieless_state_file_is_flagged_locally():
+    assert "no cookies" in ui_login.local_state_problem({"cookies": []}, now=0)
+
+
+def test_local_check_cannot_see_a_revoked_cookie():
+    """Pins the reason check() calls Authelia at all: a cookie revoked server-side leaves a
+    file this function is happy with, so passing here must never stand as the verdict."""
+    state = ui_login.build_storage_state("revoked-server-side", "example.com", 2**31)
+    assert ui_login.local_state_problem(state, now=0) is None
+    assert ui_login.classify_state(_state(0))[0] is False
+
+
 # --- build_storage_state -------------------------------------------------------------
 
 
