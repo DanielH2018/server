@@ -338,3 +338,37 @@ def test_a_manifest_path_is_not_mistaken_for_a_check(tmp_path):
         "See ansible/roles/k8s/traefik/templates/deployment.yaml.j2.\n",
     )
     assert memory_survey.enforcement([p], root)["unenforced"] == ["e.md"]
+
+
+def test_a_hook_that_lives_only_under_home_claude_is_enforced(tmp_path, monkeypatch):
+    """chezmoi deploys hooks to ~/.claude/hooks; the repo has its own. Both are owners."""
+    home = tmp_path / "home"
+    (home / ".claude" / "hooks").mkdir(parents=True)
+    (home / ".claude" / "hooks" / "prune-worktrees.py").write_text("")
+    monkeypatch.setattr(memory_survey.Path, "home", classmethod(lambda cls: home))
+    root = _repo(tmp_path, "ansible/tests/test_thing.py")
+    p = _memfile(tmp_path, "f.md", "See ~/.claude/hooks/prune-worktrees.py.\n")
+    assert memory_survey.enforcement([p], root)["enforced"] == ["f.md"]
+
+
+def test_a_hook_missing_from_both_roots_is_still_dangling(tmp_path, monkeypatch):
+    """The home fallback must not turn every hook citation green."""
+    home = tmp_path / "home"
+    (home / ".claude" / "hooks").mkdir(parents=True)
+    monkeypatch.setattr(memory_survey.Path, "home", classmethod(lambda cls: home))
+    root = _repo(tmp_path, "ansible/tests/test_thing.py")
+    p = _memfile(tmp_path, "g.md", "See .claude/hooks/never-existed.py.\n")
+    result = memory_survey.enforcement([p], root)
+    assert result["dangling"] and "never-existed.py" in result["dangling"][0]
+
+
+def test_a_non_hook_path_gets_no_home_fallback(tmp_path, monkeypatch):
+    """Only `.claude/` is ambiguous between the two roots; a repo test path is not."""
+    home = tmp_path / "home"
+    (home / "ansible" / "tests").mkdir(parents=True)
+    (home / "ansible" / "tests" / "test_elsewhere.py").write_text("")
+    monkeypatch.setattr(memory_survey.Path, "home", classmethod(lambda cls: home))
+    root = _repo(tmp_path, "ansible/tests/test_thing.py")
+    p = _memfile(tmp_path, "h.md", "ENFORCED by ansible/tests/test_elsewhere.py.\n")
+    result = memory_survey.enforcement([p], root)
+    assert result["dangling"] and "test_elsewhere.py" in result["dangling"][0]

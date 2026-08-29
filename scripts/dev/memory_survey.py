@@ -253,6 +253,19 @@ _CHECK_PATH = re.compile(
 )
 
 
+def _resolves(cited: str, repo_root: Path) -> bool:
+    """Whether a cited check path exists, under the repo OR the user's `~/.claude` tree.
+
+    `.claude/hooks/` is the one prefix that lives in both places: this repo has its own hooks,
+    and chezmoi deploys others to `~/.claude/hooks/`. Resolving against the repo alone reports a
+    hook that exists as DANGLING — which is the survey's loudest verdict, and claiming a memory
+    has lost its enforcer when it has not is worse than not counting it at all.
+    """
+    if (repo_root / cited).exists():
+        return True
+    return cited.startswith(".claude/") and (Path.home() / cited).exists()
+
+
 def enforcement(files: list[Path], repo_root: Path) -> dict[str, list[str]]:
     """Which memory files name a check that exists, and which name none.
 
@@ -272,7 +285,7 @@ def enforcement(files: list[Path], repo_root: Path) -> dict[str, list[str]]:
         if not cited:
             unenforced.append(path.name)
             continue
-        if any((repo_root / c).exists() for c in cited):
+        if any(_resolves(c, repo_root) for c in cited):
             enforced.append(path.name)
         else:
             dangling.append(f"{path.name} -> {', '.join(cited)}")
