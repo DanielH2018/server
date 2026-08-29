@@ -45,23 +45,63 @@ spec:
             capabilities:
               drop:
                 - ALL
-          # /metrics measured at 0.30s (daniel-box) / 0.34s (daniel-server); timeoutSeconds: 3
-          # keeps headroom over the 1s default, since scrape cost grows with mount/disk count.
+          # PROBING /metrics COSTS ONE LOG LINE PER UNWRITTEN METRIC FAMILY, and until
+          # 2026-08-29 both probes did it. kubelet's HTTP prober reads a bounded prefix of the
+          # response and closes; /metrics is 250,165 bytes over 312 families (measured on
+          # daniel-box), so every probe was cut off mid-body and node_exporter logged
+          #
+          #     error encoding and sending metric family: write tcp ...: connection reset by peer
+          #
+          # once for each family it could no longer write — ~180 lines per probe. At 6 readiness
+          # + 2 liveness probes a minute that was 21-24 lines/sec/pod, and 97% of ALL
+          # k8s-namespace Loki ingest.
+          #
+          # It is NOT a throttling problem, though it looked like one: node-exporter was
+          # throttled on 42% of CFS periods, and raising the CPU limit to 1 core took throttling
+          # to zero while the flood stayed at 21-24 lines/sec. The prober closes after its fixed
+          # read no matter how fast the body is produced.
+          #
+          # Neither is it fixable by making the response smaller. node_exporter serves exactly
+          # two 200 paths — there is no /-/healthy (404, checked) — and `?collect[]=<one
+          # collector>` still costs ~10KB because the go_*/process_*/promhttp_* floor rides
+          # along on every filtered response; that lands within ~200 bytes of the prober's read
+          # limit, a margin an image bump could erase silently, back into this same flood. A
+          # bogus collector name is small but answers 400.
           livenessProbe:
             httpGet:
               path: /metrics
               port: 9100
             initialDelaySeconds: 15
-            periodSeconds: 30
+            # 300s, not 30s. This is the one probe that still renders metrics, because it is the
+            # only thing that restarts a container whose collector has WEDGED — a hung collector
+            # (a dead NFS mount is the classic) leaves the listener answering / while /metrics
+            # hangs, and only a probe that asks for metrics times out on it. Keeping that at 30s
+            # would keep 360 lines/min of the flood for a fault that has never been seen here, so
+            # it is kept and slowed rather than dropped: ~36 lines/min, a 97.5% cut.
+            # The cost is recovery latency, not detection latency — 3 failures at 300s is up to
+            # 15 min to restart, while Prometheus scrapes at 1m and monitor-bridge's Scrape
+            # Targets check pages on up{job="node"} == 0 within its 5-min cycle regardless.
+            periodSeconds: 300
+            # /metrics measured at 0.30s (daniel-box) / 0.34s (daniel-server); 3s keeps headroom
+            # over the 1s default, since scrape cost grows with mount/disk count.
             timeoutSeconds: 3
           # `rollout status daemonset/node-exporter` gates on numberAvailable (== numberReady,
           # since minReadySeconds is unset), which without a readiness probe means "Running" —
           # it would return green on a container that never served a scrape. Shorter delay than
           # the liveness probe: this one decides when the rollout is allowed to proceed, not
           # when to kill the container.
+          #
+          # `/` (1,490 bytes, HTTP 200) rather than /metrics, and it gates the rollout just as
+          # well: node_exporter serves both paths from ONE listener that binds after the
+          # collectors register, so a container that could not serve a scrape cannot serve this
+          # either. What / does not catch is the wedged-collector case above, which is why
+          # liveness still asks for metrics. Note the probe never distinguished a healthy
+          # exporter from one whose collectors all fail in the first place — node_exporter
+          # answers 200 either way and the prober discards the body, so that half of the
+          # original rationale was never delivered by the path it justified.
           readinessProbe:
             httpGet:
-              path: /metrics
+              path: /
               port: 9100
             initialDelaySeconds: 5
             periodSeconds: 10
