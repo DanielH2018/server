@@ -145,7 +145,6 @@
   # rewriting a header mid-swap corrupts the file it was called to fix. The lock costs a wait.
   ansible.builtin.cron:
     name: "mkv attachment repair"
-    hour: "{{ fake_remux_mkv_attachment_cron_hour }}"
     minute: "{{ fake_remux_mkv_attachment_cron_minute }}"
     user: "{{ sys_user }}"
     job: >-

@@ -45,16 +45,19 @@ fake_remux_scan_max_age_hours: 26
 fake_remux_replace_max_age_hours: 1.2
 fake_remux_health_cron_minute: "*/10"
 
-# mkv attachment-name repair. Daily, 30 minutes after the fake-remux scan: both take
-# fake_remux_lock, so overlapping them would only make one wait, and 04:45 + a 61-file ffprobe
-# sweep finishes in seconds.
+# mkv attachment-name repair. Every 15 minutes, which is what bounds how long a newly imported
+# file can sit unplayable with burned-in subtitles: the repair is only reachable by a sweep, so
+# the sweep interval IS the exposure window. It was daily until 2026-08-29 and the cost of the
+# change is nil — the sweep reads mkv headers and never the streams, and took 5s over 61 files
+# measured on daniel-box. It shares fake_remux_lock with the daily scan and the */20 reconcile;
+# flock waits rather than skipping, so the extra contention costs a wait, not a missed run.
 #
-# The max-age is derived from the schedule rather than picked: a daily cron with a 26h grace has
-# missed a full run before the monitor goes DOWN, which is the same 2h margin the scan uses.
-# A grace shorter than the gap flaps; one much longer clears the DOWN it exists to make sticky.
-fake_remux_mkv_attachment_cron_hour: "5"
-fake_remux_mkv_attachment_cron_minute: "15"
-fake_remux_mkv_attachment_max_age_hours: 26
+# The max-age is derived from the schedule rather than picked, and it MOVED with the schedule:
+# 26h against a 15-minute gap would leave the monitor green through 103 consecutive missed runs.
+# 1.2h is the reconciler's value, against the same */20-ish cadence — a grace shorter than the
+# gap flaps, one much longer clears the DOWN it exists to make sticky.
+fake_remux_mkv_attachment_cron_minute: "*/15"
+fake_remux_mkv_attachment_max_age_hours: 1.2
 
 # The SAME three paths the autofix-bridge role used on daniel-server, and that is load-bearing
 # rather than tidy: both scripts fall back to /etc/autofix-fake-remux/config.env when their
