@@ -1080,7 +1080,13 @@ def staging_verdict_summary(
     # that a silent skip and a silent pass look identical afterwards — which is just as true of
     # a silent skip beside a rejection.
     unchecked = f"; {len(ungated)} unchecked" if ungated else ""
-    if deploy_rc == 2 or expect_rc == 2:
+    # The deploy's verdict is read FIRST, and expect_rc only counts once the deploy passed.
+    # The caller leaves expect_rc at 2 whenever it never ran the expectation check, so a real
+    # staging deploy failure always arrives as (1, 2) — and a plain `or` on that pair reported
+    # a genuinely bad manifest as "staging could not be asked, which is not a rejection".
+    # Decision 4's whole point is keeping those two apart, and that ordering told the operator
+    # to discount the one verdict worth acting on.
+    if deploy_rc == 2 or (deploy_rc == 0 and expect_rc == 2):
         return (
             f"staging: NO VERDICT on {sorted(gated)} "
             f"(deploy={deploy_rc}, expect={expect_rc}) — staging could not be asked, "
