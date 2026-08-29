@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/gen_reference_networking.py
-generated_at: 2026-08-28 18:17 UTC
-generated_sha: 52332157
+generated_at: 2026-08-29 06:17 UTC
+generated_sha: 41bb5baa
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 52332157
 
 # Networking
 
-37 routed k8s service(s).
+38 routed k8s service(s).
 
 !!! note "The domain is filled in by your browser"
     `domain` is SOPS-sourced with no static default, and these pages are rendered by static parsing, so the generator writes `<domain>` rather than guessing. On the docs site the routes below become links, built from the domain of the URL you are reading this on — so you get LAN links on the LAN name and public links on the public one.
@@ -41,6 +41,7 @@ generated_sha: 52332157
 | home-assistant | daniel-box | <span class="fqdn" data-host="home-assistant">home-assistant.&lt;domain&gt;</span> · <span class="fqdn" data-host="home-assistant.local">home-assistant.local.&lt;domain&gt;</span> | LAN + public | `rate-limit` |
 | homepage | daniel-box | <span class="fqdn" data-host="homepage">homepage.&lt;domain&gt;</span> · <span class="fqdn" data-host="homepage.local">homepage.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | ical-proxy | daniel-box | <span class="fqdn" data-host="ical-proxy">ical-proxy.&lt;domain&gt;</span> · <span class="fqdn" data-host="ical-proxy.local">ical-proxy.local.&lt;domain&gt;</span> | LAN + public | `rate-limit` |
+| ical-proxy | daniel-stage | <span class="fqdn" data-host="ical-proxy">ical-proxy.&lt;domain&gt;</span> · <span class="fqdn" data-host="ical-proxy.local">ical-proxy.local.&lt;domain&gt;</span> | LAN + public | `rate-limit` |
 | jellyfin | daniel-box | <span class="fqdn" data-host="jellyfin">jellyfin.&lt;domain&gt;</span> · <span class="fqdn" data-host="jellyfin.local">jellyfin.local.&lt;domain&gt;</span> | LAN + public | `rate-limit` |
 | karakeep | daniel-box | <span class="fqdn" data-host="karakeep">karakeep.&lt;domain&gt;</span> · <span class="fqdn" data-host="karakeep.local">karakeep.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia`, `csp-karakeep` |
 | littlelink | daniel-box | <span class="fqdn" data-host="www">www.&lt;domain&gt;</span> · <span class="fqdn" data-host="www.local">www.local.&lt;domain&gt;</span> | LAN + public | `rate-limit` |

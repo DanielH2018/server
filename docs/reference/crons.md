@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/gen_reference_crons.py
-generated_at: 2026-08-28 18:17 UTC
-generated_sha: 52332157
+generated_at: 2026-08-29 06:17 UTC
+generated_sha: 41bb5baa
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 52332157
 
 # Scheduled jobs
 
-36 cron entrie(s) installed across the roles.
+35 cron entrie(s) installed across the roles.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a cron task declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
@@ -37,7 +37,6 @@ generated_sha: 52332157
 | Redeploy {{ container_item.name }} | `{{ common_redeploy_cron_minute }} 6 * * 0` | every host in the play | `{{ sys_user }}` | yes (deploy) | `ansible/roles/containers/common/tasks/redeploy_cron.yml` |
 | Refresh generated docs | `17 6,18 * * *` | daniel-box | `{{ sys_user }}` | read the script | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Refresh homelab infrastructure map | `*/15 * * * *` | daniel-box | `{{ sys_user }}` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
-| Registry garbage collection | `{{ registry_k8s_gc_cron_minute }} {{ registry_k8s_gc_cron_hour }} * * {{ registry_k8s_gc_cron_weekday }}` | every host in the play | `root` | read the script | `ansible/roles/k8s/registry/tasks/main.yml` |
 | Sync peer Claude artifacts | `{{ artifacts_sync_minute }} * * * *` | conditional (not k8s_dry_run | bool) | `{{ sys_user }}` | read the script | `ansible/roles/k8s/artifacts/tasks/main.yml` |
 | Weekly AIDE file integrity check | `0 3 * * 1` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/integrity.yml` |
 | Weekly apt autoremove | `0 2 * * 0` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/accounting.yml` |

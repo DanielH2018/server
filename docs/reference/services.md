@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-08-28 18:17 UTC
-generated_sha: 52332157
+generated_at: 2026-08-29 06:17 UTC
+generated_sha: 41bb5baa
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 52332157
 
 # Services
 
-65 service(s) declared across 3 host(s).
+67 service(s) declared across 3 host(s).
 
 
 ## daniel-box
@@ -92,15 +92,17 @@ generated_sha: 52332157
 
 ## daniel-stage
 
-4 service(s).
+6 service(s).
 
 | Service | Platform | Route | Auth | Backup tier | Auto-deploy |
 |---|---|---|---|---|---|
 | authelia | k8s | <span class="fqdn" data-host="auth">auth.&lt;domain&gt;</span> · <span class="fqdn" data-host="auth.local">auth.local.&lt;domain&gt;</span> | none (public/no-auth) | daily -> R2 | denylisted (platform — SSO/OIDC gate; a failed deploy locks out access to everything behind it, including the tools to fix it) |
 | freshrss | k8s | <span class="fqdn" data-host="freshrss">freshrss.&lt;domain&gt;</span> · <span class="fqdn" data-host="freshrss.local">freshrss.local.&lt;domain&gt;</span> | Authelia | weekly -> B2 (default target) | eligible |
+| ical-proxy | k8s | <span class="fqdn" data-host="ical-proxy">ical-proxy.&lt;domain&gt;</span> · <span class="fqdn" data-host="ical-proxy.local">ical-proxy.local.&lt;domain&gt;</span> | none (public/no-auth) | no PVC (stateless) | eligible |
 | node-exporter | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
+| registry | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | daily -> B2 (default group) | denylisted (dependency edges — image-supply path for n8n/homelab-mcp/ical-proxy/nut/pi-peer-backup/code-server; no intra-tick ordering. ALSO Recreate + its own PVC (blob store) — two independent reasons. COUPLING NOTE for a future promotion: a revert drops recently-pushed digests from the blob store while nodes that already pulled them keep running until their next pull 404s) |
 | traefik | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | daily -> R2 | denylisted (platform — ingress edge; a failed deploy removes the ability to reach or fix anything else, and host probes stay green through that kind of outage. COUPLING NOTE for a future promotion: the traefik-acme PVC holds the ACME account key and issued certs; reverting past a real rotation reinstates stale cert state) |
 
 ## Underivable facts
 
-22 field(s) read `unknown`. A fact with no machine-readable source prints its reason rather than a guess — see the FIELD NOTES section of `scripts/docs/service_catalog.py` for which facts those are and why.
+23 field(s) read `unknown`. A fact with no machine-readable source prints its reason rather than a guess — see the FIELD NOTES section of `scripts/docs/service_catalog.py` for which facts those are and why.
