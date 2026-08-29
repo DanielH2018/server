@@ -7,6 +7,7 @@ DOWN is the arm that catches a sweep which stopped seeing files.
 """
 
 import os
+import pathlib
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -144,3 +145,37 @@ def test_a_failure_is_down_even_with_files_scanned():
     assert not ok
     assert "FAILED" in msg
     assert "x.mkv" in msg
+
+
+# --- iter_targets: a named file is checked, not reported as an empty library ----------------------
+
+
+def test_a_directory_root_is_walked_recursively(tmp_path):
+    (tmp_path / "tv" / "Show").mkdir(parents=True)
+    (tmp_path / "tv" / "Show" / "a.mkv").touch()
+    (tmp_path / "tv" / "Show" / "b.mp4").touch()
+    assert mal.iter_targets([tmp_path]) == [tmp_path / "tv" / "Show" / "a.mkv"]
+
+
+def test_a_file_root_is_the_target_itself(tmp_path):
+    """`rglob` on a file yields nothing, so this arm is the difference between checking the named
+    file and reporting the whole sweep DOWN as "no mkv files found"."""
+    f = tmp_path / "a.mkv"
+    f.touch()
+    assert mal.iter_targets([f]) == [f]
+
+
+def test_overlapping_roots_yield_each_file_once():
+    """A file named alongside its own directory must not be probed and rewritten twice."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as d:
+        root = pathlib.Path(d)
+        f = root / "a.mkv"
+        f.touch()
+        assert mal.iter_targets([root, f]) == [f]
+
+
+def test_a_missing_root_yields_nothing_rather_than_raising():
+    """The DOWN arm's input: an unmounted media root must reach `verdict`, not raise."""
+    assert mal.iter_targets([pathlib.Path("/nonexistent-media-root")]) == []

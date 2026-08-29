@@ -106,7 +106,7 @@ def sweep(cfg, roots, apply_changes: bool):
     timeout = int(cfg.get("MKV_ATTACHMENT_TIMEOUT", cfg.get("HTTP_TIMEOUT", "60")))
     webhook = cfg.get("ARR_DISCORD_WEBHOOK_URL", "")
 
-    files = sorted({f for r in roots for f in pathlib.Path(r).rglob("*.mkv")})
+    files = mal.iter_targets(roots)
     scanned = 0
     repaired = 0
     failures: list[str] = []
@@ -128,7 +128,11 @@ def sweep(cfg, roots, apply_changes: bool):
             continue
         try:
             reason = repair_file(f, renames, timeout)
-        except (subprocess.TimeoutExpired, OSError) as e:
+        except (
+            subprocess.CalledProcessError,  # the re-probe inside repair_file runs check=True
+            subprocess.TimeoutExpired,
+            OSError,
+        ) as e:
             reason = "%s: rewrite failed: %s" % (f.name, e)
         if reason:
             failures.append(reason)
@@ -181,7 +185,9 @@ def main(argv=None) -> int:
     log("OK  " if ok else "DOWN", msg)
     if not args.dry_run:
         write_state(state_file, ok, msg)
-    return 0 if ok else 1
+    # 0 even on a DOWN verdict, matching fake_remux_scan.py: the state file is the signal, and the
+    # cron's `|| logger` arm is for a wrapper that could not run at all. A DOWN is data to report.
+    return 0
 
 
 if __name__ == "__main__":

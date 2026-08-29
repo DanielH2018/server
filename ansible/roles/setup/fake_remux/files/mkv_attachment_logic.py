@@ -13,6 +13,7 @@ script owns the probe and the rewrite and this module owns every decision they m
 
 from __future__ import annotations
 
+import pathlib
 import re
 
 # The exact character class ffmpeg's safe_filename() accepts. A leading '.' is excluded here on
@@ -71,6 +72,20 @@ def mkvpropedit_args(renames: list[tuple[str, str]]) -> list[str]:
     for old, new in renames:
         args += ["--attachment-name", new, "--update-attachment", f"name:{old}"]
     return args
+
+
+def iter_targets(roots) -> list[pathlib.Path]:
+    """Every mkv the sweep should check, deduplicated and ordered.
+
+    A root is either a directory to walk or a single file to check. This lives beside the pure
+    rules rather than in the entry script because getting it wrong is silent: `rglob` on a file
+    yields nothing, so a named file reported as "no mkv files found" — the sweep's DOWN arm —
+    rather than being checked.
+    """
+    out: set[pathlib.Path] = set()
+    for r in map(pathlib.Path, roots):
+        out.update([r] if r.is_file() else r.rglob("*.mkv"))
+    return sorted(out)
 
 
 def verdict(scanned: int, repaired: int, failures: list[str]) -> tuple[bool, str]:
