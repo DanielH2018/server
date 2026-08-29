@@ -62,6 +62,7 @@ Route to the source of truth by what you're doing, before reading linearly:
 | Reviewing the homelab for gaps | `/homelab-review` skill (per-domain reviewer agents) |
 | Answering "what runs here / where / behind what" | `docs/reference/` — generated from the tree by the `docs-refresh` cron, browsable at `docs.local.<domain>`. Services, hosts, secret rotation, scheduled jobs, networking. **Never hand-edit a generated page**; a hook rejects it. Change the generator (`scripts/docs/build_docs.py` lists them). The hook decides by the `generated_from:` provenance banner rather than the path, so `reference/topology.md` — hand-written prose, the one page there nobody generates — stays editable. |
 | Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` + monitor-bridge `check.py` **first** — mature setup, most are handled |
+| Checking that a service's UI actually renders, not just that its pod is Ready | The `homelab-ui` MCP server — see `## Claude Tooling in This Repo`. `probe.py health` cannot see a broken UI behind a healthy pod. |
 | A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment. The general mechanism is the central rollout-restart at `roles/k8s/manifests/tasks/main.yml:298`, which fires when a role's rendered manifests change. A role whose pod depends on a file the manifests *don't* carry adds its own `checksum/<thing>` pod annotation instead — e.g. `checksum/check-script` in `roles/k8s/monitor-bridge/templates/deployment.yaml.j2`. |
 | A config edit won't recreate the container (Docker) | `ansible/roles/containers/common/CLAUDE.md` (config-change wiring) |
 | A host can't decrypt secrets | `## Secrets Management` → *Onboarding a host to SOPS* |
@@ -344,6 +345,31 @@ Per-verb tiers, the RBAC evidence and the rule-matching measurements: `docs/clau
   retirement. `ha …`
   reads live Home Assistant state (authed with the SOPS `claude_ha_token`); `ha automation
   <id-or-alias>` resolves the alias-slug≠id trap. See the home-assistant role's CLAUDE.md.
+- **`homelab-ui` MCP server** — a headless Chromium Claude drives against the LAN routes, so
+  it can *see* a service's UI (navigate, click, type, accessibility snapshot, screenshot)
+  rather than infer it from a status code. This is the half `probe.py health` structurally
+  cannot cover: readiness flips a Deployment to Available while the UI behind it is broken,
+  which is how 19 dead Grafana panels sat behind a 1/1 pod. Registered user-scope, so it is
+  per-operator config rather than a repo file, and launched by
+  `scripts/diagnostics/ui_mcp.sh`.
+  Three things have to be true for a browser to work here, and the wrapper supplies all
+  three. **DNS:** this host's resolver bypasses the LAN DNS, so `.local.<domain>` does not
+  resolve to the cluster edge from a shell — the wrapper passes Chromium
+  `--host-resolver-rules` pinned to the MetalLB ingress VIP, the browser equivalent of the
+  `curl --resolve` pin `probe_core.k8s_endpoint` documents. **Auth:** every
+  `*.local.<domain>` route is Authelia `one_factor`, so the context loads a session cookie
+  minted by `uv run python scripts/diagnostics/ui_login.py`. That login sets
+  `keepMeLoggedIn`, which is load-bearing — the session config's `inactivity: '5m'` would
+  otherwise expire the cookie between two idle minutes, where `remember_me: '1M'` applies
+  only when the login asks for it. **Secrecy:** `domain` is SOPS-encrypted, so the config
+  is generated into a 0600 file at launch instead of being written into `~/.claude.json`.
+  `ui_login.py --verify <svc>` proves the cookie reaches the backend without involving the
+  browser, and it reads a portal 302 as a failure rather than as a reachable service.
+  **Going through Traefik is not a shortcut here, it is the only path.** Hitting a ClusterIP
+  directly reaches only pods on the node you run from: the baseline NetworkPolicy admits the
+  two cni0 gateways alone (`netpol-baseline/defaults/main.yml:41`), and host-to-remote-node
+  traffic SNATs to flannel.1, which is not listed. `kubectl port-forward` does not route
+  around it either — the read-only ServiceAccount is denied `create pods/portforward`.
 - **block-protected-edits** (PreToolUse) — *denies* direct edits to (a) anything under
   `containers/` (edit the `ansible/roles/containers/<svc>/templates/` source instead) and
   (b) SOPS-encrypted files like `ansible/vars/secrets.yml` (use `sops` / the `/add-secret` skill).
