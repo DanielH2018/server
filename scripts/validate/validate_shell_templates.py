@@ -36,6 +36,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from lib import release_bin_groups  # noqa: E402
 from lib._render_guard import (  # noqa: E402
     ALL_VARS,
     ANSIBLE,
@@ -219,35 +220,18 @@ def _release_bin_pairs(task: dict, task_file: Path):
     2026-08-27: the cron rules would read `[ok]` because no rule applied, not because the script
     satisfied one.
 
-    The group is resolved structurally rather than by hardcoding `k3s_render_stamp_groups`: any
-    list of dicts in the role's defaults carrying `name` and `templates` can define one, so a
-    second role adopting the mechanism needs no edit here.
+    The resolution lives in `scripts/lib/release_bin_groups.py` because the secrets guard needs
+    the same answer, and two resolvers that can disagree about a group's contents is the defect
+    this shape already caused once: `release_bin_templates` parses as a folded Jinja string, and
+    the guard's own copy iterated it into nothing and passed having scanned zero files.
 
     The host name of a rendered script is its basename minus `.j2`, which is release_bin.yml's
-    own rule for the same derivation.
+    own rule for the same derivation. Only `.j2` sources yield a pair — the consumer filters on
+    shell templates anyway, and a `files` entry may be renamed on the host.
     """
-    target = str(task.get("ansible.builtin.import_tasks") or "")
-    if not target.endswith("release_bin.yml"):
-        return
-    group = (task.get("vars") or {}).get("release_bin_group")
-    if not group:
-        return
-    defaults = task_file.parent.parent / "defaults" / "main.yml"
-    if not defaults.is_file():
-        return
-    try:
-        doc = yaml.safe_load(defaults.read_text()) or {}
-    except yaml.YAMLError:
-        return
-    for value in doc.values():
-        if not isinstance(value, list):
-            continue
-        for entry in value:
-            if not isinstance(entry, dict) or entry.get("name") != group:
-                continue
-            for src in entry.get("templates") or []:
-                name = Path(str(src)).name.removesuffix(".j2")
-                yield str(src), f"/usr/local/bin/{name}"
+    for src in release_bin_groups.task_sources(task, task_file):
+        if src.endswith(".j2"):
+            yield src, f"/usr/local/bin/{release_bin_groups.host_name(src)}"
 
 
 def _cron_targets(roles: Path = ROLES):

@@ -56,7 +56,9 @@ SETUP_DRIFT_PUSH_TOKEN=""
 # shellcheck source=/dev/null
 [[ -r /etc/homelab/kuma-push.env ]] && . /etc/homelab/kuma-push.env
 if [[ -z "$SETUP_DRIFT_PUSH_TOKEN" ]]; then
-  logger -t setup-drift-check "setup_drift_push_token not set — skipping push (see /add-secret)"
+  # Names the ENV VAR, not the registry secret: the release-group secrets guard whole-word
+  # matches registry names against raw template text and cannot tell a log line from a render.
+  logger -t setup-drift-check "SETUP_DRIFT_PUSH_TOKEN not set — skipping push (see /add-secret)"
   exit 0
 fi
 PUSH_URL="https://${KUMA_HOST}/api/push/${SETUP_DRIFT_PUSH_TOKEN}"

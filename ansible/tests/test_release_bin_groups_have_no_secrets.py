@@ -23,6 +23,7 @@ Run: uv run pytest ansible/tests/test_release_bin_groups_have_no_secrets.py
 """
 
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -30,12 +31,26 @@ import yaml
 
 ANSIBLE = Path(__file__).resolve().parents[1]
 REPO = ANSIBLE.parent
+
+# The resolver is shared with scripts/validate/validate_shell_templates.py so the two checks
+# cannot disagree about what a group contains. pytest's `pythonpath` covers the repo root only.
+sys.path.insert(0, str(REPO / "scripts"))
+
+from lib import release_bin_groups  # noqa: E402
+
 REGISTRY = ANSIBLE / "secret_rotation.yml"
 
 # Names that appear in the registry but are too generic to match on: a substring hit would flag
-# every script mentioning the word. Empty today; kept as the documented escape hatch so a future
-# generic name is handled here rather than by weakening the regex.
-GENERIC_NAMES = frozenset()
+# every script mentioning the word. This is the escape hatch for that, so a generic name is
+# handled here rather than by weakening the regex.
+#
+# DECIDED: `domain` is exempt. It is in the registry at `tier: ignore`
+# (ansible/secret_rotation.yml:108-110) because it is a hostname, not a credential — leaking it
+# costs nothing, and every script that builds a URL names it. Left in, it flags 6 of the 9
+# candidate scripts plus one already converted, so the guard would refuse every group and be
+# turned off rather than obeyed. Exempting the name is right; loosening the whole-word regex
+# that finds it would not be.
+GENERIC_NAMES = frozenset({"domain"})
 
 
 def secret_names():
@@ -53,33 +68,19 @@ def scan_for_secrets(text, names):
     return sorted(n for n in names if re.search(rf"\b{re.escape(n)}\b", text))
 
 
-def _walk(node):
-    """Yield every dict nested anywhere in a parsed task file."""
-    if isinstance(node, dict):
-        yield node
-        for v in node.values():
-            yield from _walk(v)
-    elif isinstance(node, list):
-        for v in node:
-            yield from _walk(v)
-
-
 def release_bin_sources():
-    """Every `src` handed to release_bin.yml anywhere in the tree, as (task_file, src)."""
-    found = []
-    for path in sorted(ANSIBLE.glob("roles/**/tasks/*.yml")):
-        if "/archive/" in str(path):
-            continue
-        try:
-            doc = yaml.safe_load(path.read_text())
-        except yaml.YAMLError:
-            continue
-        for node in _walk(doc):
-            for key in ("release_bin_templates", "release_bin_files"):
-                for entry in node.get(key) or []:
-                    if isinstance(entry, dict) and entry.get("src"):
-                        found.append((path.relative_to(REPO), entry["src"]))
-    return found
+    """Every `src` handed to release_bin.yml anywhere in the tree, as (task_file, src).
+
+    Delegates to the shared resolver so this guard and `validate_shell_templates.py` cannot
+    disagree about a group's contents. This function used to keep its own copy, which iterated
+    `release_bin_templates` looking for dicts — and that key is a folded Jinja string naming a
+    group, so it matched nothing and the guard passed having scanned zero files.
+    `test_discovery_finds_the_converted_group` is the proof that it scans something.
+    """
+    return [
+        (path.relative_to(REPO), src)
+        for path, src in release_bin_groups.iter_sources(ANSIBLE / "roles")
+    ]
 
 
 def test_no_versioned_host_script_renders_a_secret():
@@ -103,6 +104,34 @@ def test_no_versioned_host_script_renders_a_secret():
 def test_the_registry_yields_names():
     """A guard whose name list came back empty would pass for every input."""
     assert len(secret_names()) > 20
+
+
+def test_discovery_finds_the_converted_group():
+    """The half that was missing, and the reason this guard shipped scanning nothing.
+
+    `test_the_registry_yields_names` proves the NAME list is non-empty; nothing proved the
+    SOURCE list was. From 2026-08-29 until this test existed, `release_bin_sources()` returned
+    `[]` — `release_bin_templates` is a folded Jinja string naming a group, and the old resolver
+    kept only dict entries — so the guard passed for every input, including one that renders a
+    credential. A guard is only ever observed passing, so the empty-scan case has to be an
+    assertion rather than something a reader would have to notice.
+
+    Named rather than counted: asserting a count locks the test to how many scripts happen to be
+    converted, and it would be "fixed" by lowering the number.
+    """
+    found = {Path(src).name for _, src in release_bin_sources()}
+    assert "longhorn-backup-health.sh.j2" in found, (
+        "release_bin discovery resolved no source for the k3s-backup-health group. The guard "
+        f"below cannot see anything it should refuse. Discovered: {sorted(found)}"
+    )
+
+
+def test_every_discovered_source_exists():
+    """A src that resolves to no file would be scanned as absent and silently pass."""
+    missing = [
+        str(src) for _, src in release_bin_sources() if not (REPO / src).is_file()
+    ]
+    assert not missing, f"release_bin names sources that do not exist: {missing}"
 
 
 # ── red proofs ───────────────────────────────────────────────────────────────────────────────
