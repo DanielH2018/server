@@ -11,6 +11,9 @@ Run: uv run pytest ansible/roles/setup/k3s/files/test_live_drift_check.py
 """
 
 import copy
+import pathlib
+import re
+import syslog
 
 import live_drift_check as ldc
 
@@ -206,3 +209,92 @@ def test_a_read_failure_outranks_a_clean_comparison():
     # exactly the false green this ordering prevents.
     code, _ = ldc.verdict([], [], ["service: timeout"])
     assert code == 2
+
+
+# ── the syslog line has to survive the host's own journald cap ──────────────────────────
+#
+# push()'s docstring says its syslog line is what makes this check visible to `probe.py
+# alerts` and the Alert History board. That is only true if the level it logs at is one the
+# host actually stores. It was not, for the up path, from creation until 2026-08-29.
+#
+# Derived from the Ansible source rather than hardcoded, so it goes RED from either side: if
+# the check drops back to INFO, or if the host cap is tightened past NOTICE.
+
+_SYSTEM_TUNING = (
+    pathlib.Path(__file__).resolve().parents[2]
+    / "initial_setup"
+    / "tasks"
+    / "system-tuning.yml"
+)
+
+# syslog severities: lower is more severe, and journald stores a line iff level <= the cap.
+_SEVERITY = {
+    "emerg": 0,
+    "alert": 1,
+    "crit": 2,
+    "err": 3,
+    "warning": 4,
+    "notice": 5,
+    "info": 6,
+    "debug": 7,
+}
+
+
+def _journald_store_cap() -> int:
+    """The MaxLevelStore initial_setup deploys, as a numeric severity."""
+    text = _SYSTEM_TUNING.read_text()
+    match = re.search(r"^\s*MaxLevelStore=(\w+)\s*$", text, re.MULTILINE)
+    assert match, (
+        f"no MaxLevelStore= in {_SYSTEM_TUNING} — the derivation lost its source"
+    )
+    return _SEVERITY[match.group(1)]
+
+
+def test_the_cap_is_readable_from_the_ansible_source():
+    # Without this, a moved file or a renamed key would make every assertion below vacuous
+    # rather than failing — the corpus-went-empty trap.
+    assert _journald_store_cap() == _SEVERITY["notice"]
+
+
+def _level_push_uses(status: str, monkeypatch) -> int:
+    """The severity push() actually hands to syslog for `status`.
+
+    Calls the real push(). Asserting a literal here instead would be the guard-scope trap
+    this whole file's newest tests exist to avoid: it would stay green if the code went back
+    to LOG_INFO, because it would be testing the constant rather than the caller's choice.
+    push() returns before any network work when PUSH_TOKEN/KUMA_HOST are unset.
+    """
+    seen: list[int] = []
+    monkeypatch.setattr(ldc.syslog, "openlog", lambda **kwargs: None)
+    monkeypatch.setattr(ldc.syslog, "closelog", lambda: None)
+    monkeypatch.setattr(ldc.syslog, "syslog", lambda level, msg: seen.append(level))
+    monkeypatch.delenv("PUSH_TOKEN", raising=False)
+    monkeypatch.delenv("KUMA_HOST", raising=False)
+    ldc.push(status, "message")
+    assert len(seen) == 1, f"expected exactly one syslog line, got {len(seen)}"
+    return seen[0]
+
+
+def test_the_up_path_logs_at_a_level_this_host_stores(monkeypatch):
+    assert _level_push_uses("up", monkeypatch) <= _journald_store_cap(), (
+        "the up-path syslog line is logged below the host's MaxLevelStore, so it is dropped "
+        "from the journal and from forwarding to rsyslog — the check beats its Kuma tile "
+        "while leaving no positive record it ran"
+    )
+
+
+def test_the_down_path_logs_at_a_level_this_host_stores(monkeypatch):
+    # The down line is what `probe.py alerts` matches on to reconstruct episodes.
+    assert _level_push_uses("down", monkeypatch) <= _journald_store_cap()
+
+
+def test_the_two_paths_are_not_the_same_level(monkeypatch):
+    # down must outrank up, or the severity carries no information.
+    assert _level_push_uses("down", monkeypatch) < _level_push_uses("up", monkeypatch)
+
+
+def test_info_would_not_survive_this_cap():
+    # The rejecting half: proves the assertions above are discriminating rather than trivially
+    # true of every level. Reverting push() to LOG_INFO makes the up-path test fail, and this
+    # is what says so. If this ever passes, the cap moved and that guard stopped testing.
+    assert syslog.LOG_INFO > _journald_store_cap()

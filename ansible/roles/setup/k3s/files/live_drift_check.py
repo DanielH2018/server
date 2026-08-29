@@ -258,11 +258,20 @@ def push(status: str, message: str) -> None:
 
     Emitted BEFORE the push and outside the token guard, so it still lands when the push fails
     or no token is configured — the cases where syslog is the only record there will ever be.
+
+    NOTICE, not INFO, on the up path. initial_setup's system-tuning.yml sets BOTH
+    MaxLevelStore=notice and MaxLevelSyslog=notice on these hosts, so an info-level line is
+    dropped from the journal AND from forwarding to rsyslog — hence never reaches Loki. This
+    ran at LOG_INFO from its creation until 2026-08-29, which made the docstring above false
+    for the up path: the check beat its Kuma tile daily while leaving zero positive record
+    that it had run, so "clean" and "never ran" were indistinguishable in Loki. The sibling
+    host checks all shell out to `logger`, whose default is user.notice, which is why only
+    this one was affected. ENFORCED by test_the_up_path_logs_at_a_level_this_host_stores.
     """
     syslog.openlog(ident="live-drift-check", facility=syslog.LOG_DAEMON)
     try:
         syslog.syslog(
-            syslog.LOG_WARNING if status == "down" else syslog.LOG_INFO,
+            syslog.LOG_WARNING if status == "down" else syslog.LOG_NOTICE,
             f"status={status} {message[:900]}",
         )
     finally:
