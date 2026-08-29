@@ -69,6 +69,8 @@
   # stamp_deployed.yml and stamp_render.yml hardcode their paths for the same reason; this sets
   # them once because six tasks below use them and two of those must agree exactly or the
   # symlinks point at nothing.
+  # Safe when one play deploys two groups: import_tasks is static, so every consumer of these
+  # facts runs before the next group's set_fact overwrites them.
   ansible.builtin.set_fact:
     common_release_group_root: "/opt/homelab/releases/{{ release_bin_group }}"
     common_release_current_root: /opt/homelab/current
