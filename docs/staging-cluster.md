@@ -496,16 +496,18 @@ templates read comes from `group_vars/all.yml` or the builder's own defaults. Le
 rather than a widening, on the same reasoning as the cron-PATH guard — don't extend a check
 on principle when the uncovered forms have been audited.
 
-Phase C (pipeline gating) starts after 6 has run against real merges for long enough to know its
-false-failure rate.
+Phase C (pipeline gating) has started. Slices 1-3 are built and the gate is ON in advisory
+mode on daniel-box, which is how the false-failure rate above gets measured — leaving it off
+collects nothing. [staging-phase-c.md](staging-phase-c.md) carries the live status; do not
+restate it here, because a second copy is what made this paragraph assert an unmet
+precondition for a day after the gate was already running.
 
 ## Open questions for Phase C, recorded now
 
-Answered, or at least given a recommendation, in [staging-phase-c.md](staging-phase-c.md) —
-drafted 2026-08-28, not started. The three below are kept here because they are what that
-document had to resolve, and because it added a fourth the spike had not surfaced: **the
-deployer runs on daniel-box and staging is reachable only from daniel-server**, so gating cannot
-be a step added to `main()`.
+Answered, or at least given a recommendation, in [staging-phase-c.md](staging-phase-c.md).
+The three below are kept here because they are what that document had to resolve, and because
+it added a fourth the spike had not surfaced: **the deployer runs on daniel-box and staging is
+reachable only from daniel-server**, so gating cannot be a step added to `main()`.
 
 - What counts as a staging pass. `probe.py health` per service is the obvious gate and now
   covers Deployments and DaemonSets, but the pass criteria for a whole-cluster deploy is a

@@ -10,6 +10,7 @@ Every case drives `compare` or `missing_expectations` — the same functions the
 
 from __future__ import annotations
 
+import inspect
 import sys
 from pathlib import Path
 
@@ -119,6 +120,36 @@ def test_every_expectation_names_a_service_in_the_subset() -> None:
         assert service in names, (
             f"{service} declares an expectation but is not in the subset"
         )
+
+
+def test_filtering_measures_only_the_named_services() -> None:
+    """A tick measures what it deployed, so a bystander's failure cannot be blamed on it.
+
+    staging_verdict_summary names the GATED set, never the failing one — so an unfiltered
+    measurement of a broken traefik reported `REJECTED ['node-exporter']`, naming a service
+    with no declared expectations at all.
+    """
+    everything = expectations()
+    scoped = expectations({"freshrss"})
+    assert scoped, "freshrss declares expectations; the filter dropped all of them"
+    assert {s for s, _, _, _ in scoped} == {"freshrss"}
+    assert len(scoped) < len(everything), (
+        "the filter kept every expectation, so it is not filtering"
+    )
+
+
+def test_the_coverage_guard_is_not_narrowed_by_the_filter() -> None:
+    """missing_expectations() takes no services argument, and must not grow one.
+
+    It is the only live coverage check — nothing in CI or prek runs this script — and the three
+    services it most needs to cover (traefik, authelia, registry) are `k8s_autodeploy: false`,
+    so no tick can ever gate them. Scoping it to the gated set would make a coverage gap on
+    exactly those three permanently invisible, which is the narrowing-a-derived-list failure.
+    """
+    assert not inspect.signature(missing_expectations).parameters, (
+        "missing_expectations now takes arguments — if that is a scoping parameter, a coverage "
+        "gap on a service no tick can gate becomes invisible."
+    )
 
 
 @pytest.mark.parametrize(

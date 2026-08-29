@@ -312,6 +312,14 @@ STAGING_EXPECT_TIMEOUT_S = int(C.get("STAGING_EXPECT_TIMEOUT_S", "180"))
 
 STAGING_ALERT_FILE = "/var/lib/gitops-deploy/staging_alerted_sha"
 
+# How much sooner each child times out than the subprocess.run wrapping it, so the CHILD wins
+# the race. Both children map their own timeout to NO VERDICT and say which stage wedged; the
+# outer subprocess.run raises TimeoutExpired instead, which the broad `except` below logs and
+# returns on — BEFORE the alert. Without this margin a slow or wedged staging is the one failure
+# mode that pages nobody, while a staging that is merely down pages normally. The outer timeout
+# stays as the backstop for a child that cannot honour its own.
+_INNER_TIMEOUT_MARGIN_S = 30
+
 # Both staging scripts import yaml and jinja2, so they need the repo's pinned env — the same one
 # deploy_k8s already runs ansible-playbook in. NOT sys.executable: this unit's ExecStart is
 # `uv run --no-project`, which never creates or syncs a venv, so sys.executable is whatever
@@ -812,7 +820,15 @@ def consult_staging(services: set[str], origin: str) -> None:
     try:
         tags = ",".join(sorted(gated))
         deploy_rc = subprocess.run(
-            [*_UV_PYTHON, STAGING_GATE_SCRIPT, origin, "--tags", tags],
+            [
+                *_UV_PYTHON,
+                STAGING_GATE_SCRIPT,
+                origin,
+                "--tags",
+                tags,
+                "--timeout",
+                str(STAGING_GATE_TIMEOUT_S - _INNER_TIMEOUT_MARGIN_S),
+            ],
             cwd=REPO,
             timeout=STAGING_GATE_TIMEOUT_S,
             check=False,
@@ -821,7 +837,17 @@ def consult_staging(services: set[str], origin: str) -> None:
         # skipped when the deploy itself produced no verdict.
         if deploy_rc == 0:
             expect_rc = subprocess.run(
-                [*_UV_PYTHON, STAGING_EXPECT_SCRIPT],
+                [
+                    *_UV_PYTHON,
+                    STAGING_EXPECT_SCRIPT,
+                    # Measure only what this tick deployed. Unscoped, a broken staging traefik
+                    # made the summary reject the service that WAS gated, since the summary
+                    # names the gated set and not the failing one.
+                    "--services",
+                    tags,
+                    "--timeout",
+                    str(STAGING_EXPECT_TIMEOUT_S - _INNER_TIMEOUT_MARGIN_S),
+                ],
                 cwd=REPO,
                 timeout=STAGING_EXPECT_TIMEOUT_S,
                 check=False,
