@@ -1,0 +1,41 @@
+---
+# Admits monitor-bridge to bazarr's API, which the ingress default-deny otherwise refuses.
+#
+# `baseline-ingress` (netpol-baseline role) admits exactly four sources to every pod carrying
+# `netpol-baseline: enforced`: traefik, prometheus from the observability namespace, and the two
+# cni0 gateways. monitor-bridge is in none of them, so its Bazarr Health check got
+# `Connection refused` on bazarr.homelab.svc.cluster.local:6767 on its first three cycles after
+# the check shipped (2026-08-29) — the Service and its endpoint were correct throughout, and the
+# pod answered fine on its own IP. A check that cannot reach its subject reports the fence, not
+# the subject.
+#
+# Same shape and same reasoning as roles/k8s/prowlarr/templates/networkpolicy-prowlarr.yaml.j2.
+# PORT-SCOPED: the grant is this one port, not the pod.
+#
+# traefik is listed deliberately and is NOT redundant to remove. While bazarr carries the
+# baseline label the union is identical with or without it, because policies are additive. It
+# stays so this policy states its own complete caller set rather than depending on the baseline
+# continuing to admit traefik on every port — if that baseline rule is ever port-scoped, or this
+# pod template loses the label, this line is what keeps the UI reachable.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bazarr
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: bazarr
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: traefik
+        - podSelector:
+            matchLabels:
+              app: monitor-bridge
+      ports:
+        - protocol: TCP
+          port: {{ container_item.port }}

@@ -23,6 +23,11 @@
   vars:
     manifests_service: bazarr
     manifests_files:
+      # Listed FIRST so it exists before the pod can be scheduled. Ordering within a single
+      # `kubectl apply -f <dir>` is not guaranteed, which is why the pod also cannot be reached
+      # in the gap: it takes seconds to pull and start, and the policy is applied in the same
+      # call. Same reasoning as roles/k8s/prowlarr.
+      - networkpolicy-bazarr.yaml
       - deployment.yaml
       - service.yaml
       - ingressroute.yaml
