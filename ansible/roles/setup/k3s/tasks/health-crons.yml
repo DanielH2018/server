@@ -144,15 +144,14 @@
     cron_file: longhorn-restore-drill
   become: true
 
-- name: Deploy the root-disk headroom heartbeat
+- name: Deploy the root-disk headroom heartbeat as a versioned release
   tags: [disk-health]
-  ansible.builtin.template:
-    src: disk-health.sh.j2
-    dest: /usr/local/bin/disk-health.sh
-    mode: "0755"
-    owner: root
-    group: root
-  become: true
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/release_bin.yml"
+  vars:
+    release_bin_group: k3s-disk-health
+    release_bin_templates: >-
+      {{ (k3s_render_stamp_groups | selectattr('name', 'eq', 'k3s-disk-health')
+          | first).templates }}
 
 - name: Schedule the root-disk headroom heartbeat
   tags: [disk-health]
@@ -164,15 +163,14 @@
     cron_file: disk-health
   become: true
 
-- name: Deploy the remember log-rotation heartbeat
+- name: Deploy the remember log-rotation heartbeat as a versioned release
   tags: [remember-logs]
-  ansible.builtin.template:
-    src: remember-logs-health.sh.j2
-    dest: /usr/local/bin/remember-logs-health.sh
-    mode: "0755"
-    owner: root
-    group: root
-  become: true
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/release_bin.yml"
+  vars:
+    release_bin_group: k3s-remember-logs
+    release_bin_templates: >-
+      {{ (k3s_render_stamp_groups | selectattr('name', 'eq', 'k3s-remember-logs')
+          | first).templates }}
 
 - name: Schedule the remember log-rotation heartbeat
   tags: [remember-logs]
@@ -188,20 +186,19 @@
     cron_file: remember-logs-health
   become: true
 
-- name: Deploy the manifest-prune drift check
+- name: Deploy the manifest-prune drift check as a versioned release
   tags: [manifest-prune]
   # Root-owned AND root-run (see the cron task below): /etc/rancher/k3s/manifests/*/ is mode
   # 0700 (k8s/manifests role), so comparing live objects against the staged manifests needs
   # root at the OS level. The kubectl calls inside the script stay scoped to the read-only
   # ServiceAccount kubeconfig regardless, same as the heartbeats above — root here buys
-  # filesystem access, not cluster-mutation ability.
-  ansible.builtin.template:
-    src: manifest-prune-check.sh.j2
-    dest: /usr/local/bin/manifest-prune-check.sh
-    mode: "0755"
-    owner: root
-    group: root
-  become: true
+  # filesystem access, not cluster-mutation ability. release_bin.yml owns root by default.
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/release_bin.yml"
+  vars:
+    release_bin_group: k3s-manifest-prune
+    release_bin_templates: >-
+      {{ (k3s_render_stamp_groups | selectattr('name', 'eq', 'k3s-manifest-prune')
+          | first).templates }}
 
 - name: Schedule the manifest-prune drift check
   tags: [manifest-prune]
@@ -221,13 +218,16 @@
   # compares each live object against its own last-applied annotation, which is a plain
   # `kubectl get`. So it runs as {{ sys_user }} with the read-only ServiceAccount kubeconfig
   # and needs no privilege of any kind.
-  ansible.builtin.copy:
-    src: live_drift_check.py
-    dest: /usr/local/bin/live-drift-check.py
-    mode: "0755"
-    owner: root
-    group: root
-  become: true
+  #
+  # The one `release_bin_files` caller: this is copied verbatim, not rendered, and the host name
+  # differs from the source name (live_drift_check.py -> live-drift-check.py), which is exactly
+  # why that parameter takes {src, name} dicts rather than bare paths.
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/release_bin.yml"
+  vars:
+    release_bin_group: k3s-live-drift
+    release_bin_files: >-
+      {{ (k3s_release_file_groups | selectattr('name', 'eq', 'k3s-live-drift')
+          | first).files }}
 
 - name: Deploy the live-drift check Kuma credentials
   tags: [live-drift]
@@ -283,18 +283,22 @@
   become: true
   no_log: true  # renders the R2 access key and secret
 
-- name: Deploy the off-box etcd snapshot
+- name: Deploy the off-box etcd snapshot as a versioned release
   tags: [etcd-snapshot]
   # Root-run: `k3s etcd-snapshot save` talks to the local etcd through the server's own data-dir
   # and token. Unlike the heartbeats above it cannot use the read-only ServiceAccount at all —
   # this is a control-plane operation, not a cluster API read.
-  ansible.builtin.template:
-    src: etcd-snapshot-offbox.sh.j2
-    dest: /usr/local/bin/etcd-snapshot-offbox.sh
-    mode: "0755"
-    owner: root
-    group: root
-  become: true
+  #
+  # Eligible for a release despite the task above carrying `no_log`: that one renders the R2
+  # credentials into a SEPARATE env file, and this script only sources them. What disqualifies a
+  # script is a credential in its own rendered bytes, which retention would then keep five copies
+  # of — not the presence of a secret anywhere in its role.
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/release_bin.yml"
+  vars:
+    release_bin_group: k3s-etcd-snapshot
+    release_bin_templates: >-
+      {{ (k3s_render_stamp_groups | selectattr('name', 'eq', 'k3s-etcd-snapshot')
+          | first).templates }}
 
 - name: Schedule the off-box etcd snapshot
   tags: [etcd-snapshot]

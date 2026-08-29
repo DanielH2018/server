@@ -906,6 +906,17 @@ k3s_render_stamp_groups:
     templates:
       - ansible/roles/setup/k3s/templates/etcd-snapshot-offbox.sh.j2
 
+# Release groups whose artifacts are COPIED verbatim rather than rendered, so they have no
+# `templates` list and cannot live in k3s_render_stamp_groups above (stamp_render.yml renders
+# what it is given). Separate list, same structure: the release resolver in
+# scripts/lib/release_bin_groups.py matches any list of dicts carrying `name`, and reads
+# `templates` and `files` alike, so both checks see this group without an edit.
+k3s_release_file_groups:
+  - name: k3s-live-drift            # tags: [live-drift]
+    files:
+      - src: ansible/roles/setup/k3s/files/live_drift_check.py
+        name: live-drift-check.py
+
 # Node-to-node traffic UFW must admit (both hosts default-deny INPUT, and unlike every
 # service port this traffic terminates in host processes, not Docker/kube NAT):
 #   6443/tcp  agent -> server   apiserver registration + watch
