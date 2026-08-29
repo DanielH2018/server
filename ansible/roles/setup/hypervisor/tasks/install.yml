@@ -177,3 +177,28 @@
     key_options: 'restrict,command="{{ hypervisor_staging_gate_dispatch_path }}"'
     state: present
   become: true
+
+- name: Deauthorize retired staging-gate keys
+  tags: [hypervisor]
+  # Rotating this key is only half done by swapping files/staging-gate.pub. The task above
+  # runs `state: present` with `exclusive` left false — it ADDS, and by design never removes
+  # — so without this the previous public half stays in authorized_keys forever and a
+  # "rotation" leaves the old key working. The first rotation, 2026-08-29, was forced by the
+  # private half reaching a Claude transcript in plaintext, which is exactly the case where
+  # the old key must stop being accepted rather than merely stop being used.
+  #
+  # A directory rather than one more filename, so the next rotation appends instead of
+  # overwriting the record of what was withdrawn. Empty is the normal steady state once a
+  # retired key has been removed from every host that ever held it; the task is idempotent
+  # and a no-op then, and `with_fileglob` over an empty directory is a skip, not an error.
+  #
+  # Keep a retired key here until every host has run this role at least once. Deleting the
+  # file is what stops it being withdrawn, so an entry removed early leaves the key live on
+  # any host that had not converged yet.
+  ansible.posix.authorized_key:
+    user: "{{ sys_user }}"
+    key: "{{ lookup('file', item) }}"
+    state: absent
+  with_fileglob:
+    - "{{ role_path }}/files/staging-gate-retired/*.pub"
+  become: true

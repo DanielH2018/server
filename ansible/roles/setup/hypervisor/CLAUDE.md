@@ -197,6 +197,9 @@ had a full shell on this host (review M-3).
   `restrict,command="/usr/local/bin/staging-gate-dispatch"`.
 - The **private** half is `staging_gate_ssh_key` in SOPS, written to
   `/etc/gitops-deploy/staging_gate_ed25519` (0600) on daniel-box by `roles/setup/gitops_deploy`.
+- **Withdrawn** public halves live in `files/staging-gate-retired/*.pub` and are removed with
+  `state: absent`. See *Rotating it* below — without that directory, swapping the live file
+  is half a rotation.
 - The forced command is rendered from `templates/staging-gate-dispatch.sh.j2`, root-owned 0755 —
   if `sys_user` could rewrite it, that user would choose what the key runs.
 
@@ -267,3 +270,52 @@ to REJECTED: a security regression must not read as staging rejecting a change.
 
 Removing or restricting the operator's own key is a separate decision and is not part of this
 work.
+
+## Rotating it
+
+**`authorized_key` here runs `state: present` with `exclusive` left false, so it only ever
+ADDS.** Swapping `files/staging-gate.pub` therefore authorizes the new key and leaves the old
+one working — a rotation that reads as done from every angle except the one that matters.
+`files/staging-gate-retired/*.pub` is the other half: a second task withdraws every key in
+there with `state: absent`. `ansible/tests/test_staging_gate_retired_keys.py` pins both
+properties, including that a retired key is never also the live one — the role would
+otherwise authorize a key and immediately withdraw it, since `absent` runs second.
+
+**Merging a rotation stops the gate until both hosts have converged, and that is not
+avoidable.** `staging_gate.py:identity_problem()` refuses to connect unless `ssh-keygen -y`
+on the deployed private key matches `files/staging-gate.pub` **in the checkout** — the check
+added by #608 to stop a silent fallback to the operator's key. So the moment master carries
+a new public half, daniel-box's still-old private key fails that comparison and every gate
+run answers NO_VERDICT. It cannot be ordered around: the tree is what both sides read.
+
+NO_VERDICT is the safe direction — the deployer reports "staging could not be asked, which
+is not a rejection" and deploys prod unguarded — but the window is real, so close it
+promptly rather than leaving it over a weekend:
+
+1. **daniel-server.** `uv run ansible-playbook ansible/initial_setup.yml --tags hypervisor`,
+   run **on that host**. Authorizes the new public half and withdraws the retired one in the
+   same run.
+2. **daniel-box.** `./scripts/deploy.sh --tags gitops-deploy` writes the new private half to
+   `/etc/gitops-deploy/staging_gate_ed25519`. The identity check now passes and the gate
+   answers again.
+3. **Prove it**, from daniel-box:
+   `./scripts/deploy_tools/verify_staging_gate_key.sh "$(git rev-parse origin/master)"`.
+
+Reversing 1 and 2 makes the window longer, not shorter: the new private half would be on the
+gate before anything authorized it, so the far side would reject rather than merely mismatch.
+
+**If the window is unacceptable**, split step 1: run it once with the retired file moved
+aside, so both keys are authorized, then step 2, then restore the file and re-run step 1 to
+withdraw the old one. The retired list being separate from the live key is what buys that.
+
+Keep a retired key in the tree until every host that ever held it has run this role. Deleting
+the file is what stops it being withdrawn, so pruning early leaves the key live on a host that
+had not converged.
+
+**2026-08-29 — the first rotation, and why.** `staging_gate_ssh_key` was rotated because the
+private half reached a Claude transcript in plaintext: a tool result printed
+`/etc/gitops-deploy/staging_gate_ed25519` while the restricted-key work was being verified,
+and `claude-transcript-scan` caught it twelve minutes later. The withdrawn key is
+`files/staging-gate-retired/2026-08-29-transcript-leak.pub`
+(`SHA256:hBZlj/febW80oXzSdsJcJABaL4+Jg5uR+u9Kh/mZ+0g`). That is the case the retired
+directory exists for — the old key has to stop being *accepted*, not merely stop being used.
