@@ -47,6 +47,7 @@ from verdicts_cluster import (
     targets_verdict,
 )
 from verdicts_host import (
+    hwmon_included_series,
     hwmon_temp_limits,
     hwmon_temp_verdict,
     pi_ports_verdict,
@@ -613,6 +614,25 @@ HWMON_TEMP_EXCLUDE_CHIP = _env("HWMON_TEMP_EXCLUDE_CHIP", "nvme_")
 # cadence is sustained heat, not a burst.
 HWMON_TEMP_CONSECUTIVE = int(_env("HWMON_TEMP_CONSECUTIVE", "3"))
 
+# Host-coverage floor for the thermal check, the peer of HOST_ORIGINS_MIN and deliberately a
+# DIFFERENT number. Until 2026-08-29 hwmon_temp_verdict paged only on a fully empty vector, so
+# any non-empty subset passed: lose one host's hwmon collector and the other two answered "all
+# below limit" for the whole estate, forever. A total node-exporter death is already caught by
+# check_cluster_targets; the gap is the PARTIAL failure — node-exporter up, one collector blind —
+# which check.py's own HOST_ORIGINS_MIN comment names as node-exporter's normal failure mode.
+#
+# 3 rather than the shared 2 because all three hosts declare non-excluded sensors, measured live
+# 2026-08-29 after HWMON_TEMP_EXCLUDE_CHIP: daniel-server 9, daniel-box 5, daniel-pi 2. The
+# shared floor of 2 would be met by any two of them, which is exactly the state this must catch.
+HWMON_TEMP_ORIGINS_MIN = int(_env("HWMON_TEMP_ORIGINS_MIN", "3"))
+# Its own grace, longer than HOST_ORIGINS_CONSECUTIVE, because the third host is daniel-pi and
+# the Pi drops out for longer than either amd64 node. Measured over the 7d to 2026-08-29 at a 5m
+# step: 1054 samples, coverage below 3 in 6 of them, all daniel-pi (1048/1054 present), and the
+# worst 30m window held 4 consecutive short samples — about 20 minutes. The shared grace of 3
+# cycles is 15 minutes at INTERVAL=300, so it would have paged once in that week on a healthy
+# estate. 5 cycles is 25 minutes: one cycle of margin over the observed worst case.
+HWMON_TEMP_ORIGINS_CONSECUTIVE = int(_env("HWMON_TEMP_ORIGINS_CONSECUTIVE", "5"))
+
 # UPS battery health via Home Assistant's Prometheus scrape (the APC UPS is on NUT/peanut; HA's
 # prometheus integration exposes its sensors as hass_sensor_*). The only pre-existing UPS alert is
 # an HA automation -> mobile push (a separate channel from this Kuma->Discord brain), and nothing
@@ -990,31 +1010,40 @@ HOST_ORIGINS_CONSECUTIVE = int(_env("HOST_ORIGINS_CONSECUTIVE", "3"))
 _host_origin_streaks: dict[str, int] = {}
 
 
-def _host_origin_shortfall(key, vec, what):
-    """(ok, msg) when `vec` covers fewer than HOST_ORIGINS_MIN hosts, else None.
+def _host_origin_shortfall(key, vec, what, min_origins=None, consecutive=None):
+    """(ok, msg) when `vec` covers fewer than `min_origins` hosts, else None.
 
-    Passes (green, but says so) while the shortfall is younger than HOST_ORIGINS_CONSECUTIVE
-    cycles, so a reboot doesn't page; fails once it persists. Any full-coverage cycle resets.
-    `key` separates the streaks so disk and memory age independently.
+    Passes (green, but says so) while the shortfall is younger than `consecutive` cycles, so a
+    reboot doesn't page; fails once it persists. Any full-coverage cycle resets. `key` separates
+    the streaks so disk, memory and host temperature age independently.
+
+    Both thresholds are PARAMETERS defaulting to the shared globals, not reads of the globals.
+    check_host_temp needs a different floor from disk and memory — every host declares hwmon
+    sensors, where a mountpoint need not exist everywhere — and the 2026-08-29 review M-9
+    proposal added an env key that nothing read, leaving hwmon on the shared floor of 2 while
+    reading as new coverage. A caller that wants a different floor passes one here; nothing
+    reaches for a global whose name it happens to know.
     """
+    floor = HOST_ORIGINS_MIN if min_origins is None else min_origins
+    grace = HOST_ORIGINS_CONSECUTIVE if consecutive is None else consecutive
     origins = {_origin_name(labels) for labels, _ in vec}
-    if len(origins) >= HOST_ORIGINS_MIN:
+    if len(origins) >= floor:
         _host_origin_streaks[key] = 0
         return None
     streak = _host_origin_streaks.get(key, 0) + 1
     _host_origin_streaks[key] = streak
     seen = ", ".join(sorted(origins)) or "none"
-    if streak < HOST_ORIGINS_CONSECUTIVE:
+    if streak < grace:
         return (
             True,
             "%s: only %d of %d hosts reporting (%s), cycle %d/%d — node rebooting?"
             % (
                 what,
                 len(origins),
-                HOST_ORIGINS_MIN,
+                floor,
                 seen,
                 streak,
-                HOST_ORIGINS_CONSECUTIVE,
+                grace,
             ),
         )
     return (
@@ -1023,7 +1052,7 @@ def _host_origin_shortfall(key, vec, what):
         % (
             what,
             len(origins),
-            HOST_ORIGINS_MIN,
+            floor,
             seen,
         ),
     )
@@ -1745,12 +1774,19 @@ def check_host_temp():
     The limit selection is pure and lives in verdicts_host, which is what lets the red-proof
     tests drive it without a Prometheus.
 
-    Empty vector pages rather than passing: no sensors means the collector went blind, and a
+    Empty vector pages rather than passing: no sensors means EVERY collector went blind, and a
     "nothing is too hot" verdict from zero readings is the inert-check failure this repo has
-    paid for twice.
+    paid for twice. A PARTIAL blindness — one host gone, the others answering — is what
+    HWMON_TEMP_ORIGINS_MIN covers, and the empty-vector arm structurally cannot see it.
+
+    Ordering mirrors check_disk and check_mem: a host that IS reporting and IS too hot pages
+    ahead of a complaint about the absent one. The two graces stay separate and are never
+    compounded — down_streak is the thermal-spike grace and applies only to the hot-sensor path,
+    while the coverage shortfall carries its own hysteresis inside _host_origin_shortfall.
     """
+    temps = prom_vector("node_hwmon_temp_celsius")
     limits = hwmon_temp_limits(
-        prom_vector("node_hwmon_temp_celsius"),
+        temps,
         prom_vector("node_hwmon_temp_max_celsius"),
         HWMON_TEMP_RATIO,
         HWMON_TEMP_FALLBACK_C,
@@ -1758,17 +1794,28 @@ def check_host_temp():
         HWMON_TEMP_MAX_PLAUSIBLE_C,
         HWMON_TEMP_EXCLUDE_CHIP,
     )
-    ok, msg = hwmon_temp_verdict(limits)
-    if ok:
-        _down_streaks["host_temp"] = 0
-        return True, msg
-    _down_streaks["host_temp"], ok, msg = down_streak(
-        _down_streaks.get("host_temp", 0),
-        HWMON_TEMP_CONSECUTIVE,
-        msg,
-        "thermal spike grace",
+    # Counted over the series that survive exclusion, via the same predicate hwmon_temp_limits
+    # uses — a host whose only sensors are excluded is not a host this check covers.
+    short = _host_origin_shortfall(
+        "host_temp",
+        hwmon_included_series(temps, HWMON_TEMP_EXCLUDE_CHIP),
+        "host temperature",
+        min_origins=HWMON_TEMP_ORIGINS_MIN,
+        consecutive=HWMON_TEMP_ORIGINS_CONSECUTIVE,
     )
-    return ok, msg
+    ok, msg = hwmon_temp_verdict(limits)
+    if not ok:
+        _down_streaks["host_temp"], ok, msg = down_streak(
+            _down_streaks.get("host_temp", 0),
+            HWMON_TEMP_CONSECUTIVE,
+            msg,
+            "thermal spike grace",
+        )
+        return ok, msg
+    _down_streaks["host_temp"] = 0
+    if short is not None:
+        return short
+    return True, msg
 
 
 # Per-check consecutive-down count (check_ups/check_ha_heartbeat/check_discord/
@@ -3069,8 +3116,22 @@ PROM_DEPENDENT = frozenset(
 # one-root-cause-one-alert shape as the Prometheus gate, keyed by the Prometheus `job` label.
 # Guarded by a test against CHECKS. (`cert`/`traefik5xx` read Traefik's own metrics, not these
 # two exporters, so they're not mapped here.)
+# host_temp joined 2026-08-29 with HWMON_TEMP_ORIGINS_MIN. Before the floor it had no per-host
+# arm, so a single node-exporter death left it green and there was nothing to suppress. Now a
+# dead node-exporter drops that host's hwmon series and trips the floor, so without this entry
+# one root cause would page twice — Scrape Targets plus a coverage complaint naming the same
+# host. Same reason disk and memory are here.
+#
+# The Pi scrapes under its OWN job — measured 2026-08-29, `count by (job, origin)
+# (node_hwmon_temp_celsius)` returns job=node for daniel-server (12) and daniel-box (7) but
+# job=node-pi for daniel-pi (2). This map is keyed by the Prometheus job, so a `node` entry alone
+# suppresses two of the three hosts and the Pi's exporter death still double-pages. node-pi maps
+# ONLY to host_temp: disk and memory exclude the Pi by origin (HOST_METRIC_ORIGIN_EXCLUDE, since
+# check_pi_pressure owns them), so they have nothing to suppress there, while the hwmon floor
+# counts all three hosts.
 EXPORTER_DEPENDENT = {
-    "node": frozenset({"disk", "memory"}),
+    "node": frozenset({"disk", "memory", "host_temp"}),
+    "node-pi": frozenset({"host_temp"}),
 }
 
 # Loki-reachability gate — the peer of the Prometheus gate for the Loki-querying checks. A single

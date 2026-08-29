@@ -134,14 +134,17 @@
     cron_file: ups-secondary-health
   become: true
 
-# The stale-render arm of manifest-prune-check.sh can only report drift for templates that
-# stamped a sha256, and nut_host stamped none — so a change to the shutdown chain's config
-# could never be reported stale (2026-08-29 review M-10). Stamping it here closes that on
-# daniel-box. It does NOT close it on daniel-server: manifest-prune-check.sh is installed by
+# The stale-render arm can only report drift for templates that stamped a sha256, and nut_host
+# stamped none — so a change to the shutdown chain's config could never be reported stale
+# (2026-08-29 review M-10).
+#
+# The reader half is no longer daniel-box-only. manifest-prune-check.sh is still installed by
 # the k3s role's health-crons.yml, which k3s-bringup.yml gates to k3s_server_hosts, so
-# /var/lib/homelab/setup-render-manifest.d/ does not exist there at all. That host stays
-# structurally uncovered and the decision to leave it so is the operator's — see this role's
-# entry in the review report rather than reading this stamp as full coverage.
+# /var/lib/homelab/setup-render-manifest.d/ existed nowhere else — which made this stamp alone
+# a LAUNDERS fix, writing a fragment on a host with no reader. setup-drift-check.sh
+# (roles/setup/initial_setup, armed via setup_drift_check_hosts) now runs the same two arms on
+# daniel-server, sourced from the same library, so a stale render of these three templates is
+# reported on the host that actually renders them.
 - name: Record the rendered UPS host config
   when: nut_host_watchdog_armed | bool
   ansible.builtin.import_tasks: "{{ role_path }}/../setup/common/tasks/stamp_render.yml"

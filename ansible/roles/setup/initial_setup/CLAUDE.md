@@ -98,6 +98,40 @@ invariant when adding tasks, or tag-scoped runs die on undefined variables.
   `scripts/infra_map/gen_infra_map.py`.
 - **Unattended upgrades:** enable periodic security upgrades + local policy.
 
+## Setup-plane drift reader (`setup_drift` tag)
+`setup-drift-check.sh` answers two questions daily on the hosts named in
+`setup_drift_check_hosts` (`group_vars/all.yml`): is the `copy:`-deployed code here identical to
+its repo source, and has any `template:`-rendered setup script's SOURCE changed since this host
+rendered it?
+
+**Why it exists separately from `manifest-prune-check.sh`.** That check answers the same two
+questions plus an orphaned-cluster-object arm, but it is installed by
+`roles/setup/k3s/tasks/health-crons.yml`, imported only from that role's `main.yml`, which
+`k3s-bringup.yml` asserts onto `k3s_server_hosts`. So it exists on daniel-box and nowhere else,
+while daniel-server renders the entire UPS shutdown chain ([[nut_host]]). Confirmed live
+2026-08-29: daniel-server had no `/var/lib/homelab/setup-render-manifest.d` at all, and its
+`/etc/nut/upsmon.conf` was dated Aug 17 against a template changed on 2026-08-28 (review M-10).
+
+- **The two arms are not reimplemented** — both readers source `files/setup-drift-lib.sh`, copied
+  to `/usr/local/lib` like `kuma-push-lib.sh`. Two copies of a drift check are free to drift from
+  each other, which is the fault a drift check reports.
+- **It does NOT carry the orphan arm.** That needs `/etc/rancher/k3s/manifests` and the control
+  plane's staged set; an agent node has neither, and an arm that structurally cannot fire reads
+  as coverage.
+- **A third arm reports the checkout's age**, because the render arm compares a render against
+  the tree on THIS host and a host without gitops-deploy does not refresh that tree —
+  daniel-server was measured 39 commits behind origin on 2026-08-17. A stale checkout makes the
+  stamp and the template agree, so the arm would read green exactly when the host is furthest
+  behind. Past `setup_drift_tree_max_days` (14) the age is its own DOWN; an unreadable checkout
+  is a DOWN too, never a pass.
+- Pushes the "Setup Plane Drift (agent hosts)" Kuma tile. Its token is in
+  `CROSS_HOST_PUSH_TOKENS`: the cron is on daniel-server and the tile deploys from daniel-box, so
+  no single `rotate --deploy` can move both halves.
+
+Guarded by `ansible/tests/test_setup_drift_check.py`, which EXECUTES the library against a
+fixture rather than grepping it, and by `ansible/tests/test_setup_render_manifest.py`, whose
+guards now point at the library plus one that both consumers still source it.
+
 ## Notable
 - **Handlers live in the playbook, not this role** (there is no `handlers/main.yml`) — `Restart
   SSH`, `Restart fail2ban`, `Reload audit rules`, `Reload Postfix`, `Restart Postfix`, `Restart

@@ -50,6 +50,15 @@ source /usr/local/lib/kuma-push-lib.sh || {
   logger -t manifest-prune-check "kuma-push-lib.sh missing — run initial_setup on this host"
   exit 1
 }
+# Arms 2 and 3 below live in this library, shared with setup-drift-check.sh — the reader
+# daniel-server got on 2026-08-29, because this script is installed only on k3s server hosts and
+# that host renders the whole UPS shutdown chain (review M-10). Two copies of a drift check are
+# free to drift from each other, which is the fault a drift check exists to report.
+# shellcheck source=/dev/null
+source /usr/local/lib/setup-drift-lib.sh || {
+  logger -t manifest-prune-check "setup-drift-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
 
 # Runs as root under cron, whose default PATH (/usr/bin:/bin) omits /usr/local/bin — where
 # the k3s install script puts the binary. Without this, `k3s` resolves to nothing, the
@@ -198,126 +207,21 @@ for KIND in ingressroute middleware service tlsoption deployment daemonset cronj
   check_kind "$KIND"
 done
 
-# SECOND ARM: is the code deployed on this host the code in the repo?
+# SECOND AND THIRD ARMS: is the code deployed on this host the code in the repo, and are the
+# template-rendered scripts current? Both live in setup-drift-lib.sh, sourced above, because
+# daniel-server needs the identical pair and this script never runs there. The library's own
+# header carries the full account of why each arm exists and what its guards are for; the short
+# version is that the k8s plane converges on every gitops tick while the setup plane is written
+# only by a manual play, so nothing else compares either against the repo.
 #
-# The k8s plane is deployed by the gitops tick and re-rendered on every run, so it converges on
-# its own. The setup plane does not: /opt/gitops-deploy and /usr/local/bin are written only by a
-# manual `initial_setup.yml`, and nothing compared them against the repo. On 2026-08-16 the
-# deployer had been running 2-day-old code since a batch of fixes merged — with every monitor
-# green, because a stale deployer still writes its `last_run` heartbeat exactly like a current
-# one would. Nothing about the failure was visible from anything that watches it.
-#
-# Only `copy:`-deployed artifacts are compared. The heartbeat scripts beside this one are
-# `template:`-rendered, so their on-disk form legitimately differs from the .j2 source and a
-# digest comparison against it would report permanent drift — the shape this check exists to
-# catch, rebuilt one level up. Rendering them here would need every role's vars and secrets, the
-# same reason the orphan arm above reads staged manifests rather than templates.
+# setup_drift_scan sets DRIFTED, STALE, DEPLOYED_NOTE and MANIFEST_NOTE. The wording of the
+# message stays here: this script has a third arm the library knows nothing about, and its
+# unarmed notes name the two playbooks a k3s server host runs.
+# shellcheck disable=SC2034  # read by setup_drift_scan in the sourced library.
 REPO_DIR=/home/{{ sys_user }}/server
-DRIFTED=""
-DEPLOYED_MANIFEST_DIR=/var/lib/homelab/setup-deployed-manifest.d
-DEPLOYED_NOTE=""
-DEPLOYED_ENTRIES=0
-
-check_deployed() {
-  local live="$1" src="$2"
-  # An unreadable SOURCE is drift, not an exemption. It meant "not a file this repo ships on
-  # this host" while the pairs were hardcoded — the repo source exists on every host, so the
-  # guard never actually gated anything. Once the pairs come from a fragment, a pair exists
-  # ONLY because a role deployed it here, so an unreadable source means the file was deleted
-  # from the repo while the artifact is still live on this host. Arm 3 reports exactly that
-  # (see "template gone from the repo" below); returning 0 here would swallow it, and worse,
-  # the entry still counts toward DEPLOYED_ENTRIES — armed, and checking nothing.
-  if [[ ! -r "$src" ]]; then
-    DRIFTED="${DRIFTED:+$DRIFTED, }${live} (source gone from the repo)"
-    return 0
-  fi
-  if [[ ! -r "$live" ]]; then
-    DRIFTED="${DRIFTED:+$DRIFTED, }${live} (missing)"
-    return 0
-  fi
-  cmp -s "$live" "$src" || DRIFTED="${DRIFTED:+$DRIFTED, }${live}"
-}
-
-# The pairs come from a DIRECTORY of fragments, one per role, each written by the run that
-# deployed those artifacts — not from a list hardcoded here. Three paths were hardcoded until
-# 2026-08-24, all of them gitops-deploy's, so this arm was structurally incapable of seeing the
-# other nine `copy:`-deployed files on this host: renovate-notify's notifier and its host_lib
-# copy, fake-remux's five scripts, live-drift-check.py, and the shared kuma-push-lib.sh. Each
-# could run arbitrarily stale while this same script reported "deployed scripts match the repo"
-# — the exact 2026-08-16 failure this arm was built for, surviving inside the fix (review M-5).
-#
-# `-s`, not `-r`, and the entry counter: same two guards as the render arm below, for the same
-# reason — a zero-byte fragment or an empty directory must read as UNARMED, never as a green.
-for FRAGMENT in "$DEPLOYED_MANIFEST_DIR"/*; do
-  [[ -s "$FRAGMENT" ]] || continue
-  while read -r LIVE SRC; do
-    [[ -n "$LIVE" && -n "$SRC" ]] || continue
-    DEPLOYED_ENTRIES=$((DEPLOYED_ENTRIES + 1))
-    check_deployed "$LIVE" "${REPO_DIR}/${SRC}"
-  done < "$FRAGMENT"
-done
-
-if [[ "$DEPLOYED_ENTRIES" -eq 0 ]]; then
-  DEPLOYED_NOTE="; deployed manifest absent or empty (run initial_setup.yml and k3s-bringup.yml once each to arm the deployed-code arm)"
-fi
-
-# THIRD ARM: are the TEMPLATE-rendered scripts current?
-#
-# The arm above deliberately cannot answer this — a rendered file differs from its .j2 by design.
-# So the comparison happens one level up, on the source: health-crons.yml stamps each template's
-# sha256 into the manifest below at render time, and this recomputes them from the repo. A
-# mismatch means this host has not re-run that template's playbook since it changed, so it is
-# still executing the old rendered copy. Found 2026-08-23: longhorn-backup-health.sh was two
-# commits stale for two days, and THIS script was six days stale, while the message below still
-# read "deployed scripts match the repo".
-#
-# Missing manifest is NOT drift: the setup plays write it, so its absence means this host
-# predates the mechanism. Say so rather than paging — the arm is unproven, not failing.
-# A DIRECTORY of fragments, one per role and tag family, each written by the run that rendered
-# those templates. Two things changed here on 2026-08-23b and both were coverage bugs:
-#
-#   * It was a single file whose entries were bare filenames joined onto a hardcoded k3s
-#     templates dir, so this arm was structurally incapable of seeing any other role's
-#     artifacts. Nine on this host were watched by nothing — both gitops-deploy units, both
-#     renovate-notify units, secret-rotate.sh and its audit sibling, and fake-remux-health.sh.
-#     The exit-75 unit fix sat merged-and-undeployed here for exactly that reason (review H1).
-#     Entries now carry their own repo-relative path and this joins nothing.
-#   * That one file was rewritten wholesale by every partial run, so `--tags manifest-prune`
-#     declared all eight k3s scripts current while rendering one (review M6). A fragment is
-#     rewritten only by a run carrying its own tags, so the others stay as they were — stale,
-#     and reported as such.
-#
-# Per-host by construction: a fragment exists only where its role ran. daniel-pi's optimize_pi
-# scripts are NOT covered by anything — that host runs no manifest-prune-check — and a flat glob
-# over the repo would have stamped them here as if this host rendered them.
-#
-# Missing manifest is NOT drift: the setup plays write it, so its absence means this host
-# predates the mechanism. Say so rather than paging — the arm is unproven, not failing.
-RENDER_MANIFEST_DIR=/var/lib/homelab/setup-render-manifest.d
-STALE=""
-MANIFEST_NOTE=""
-MANIFEST_ENTRIES=0
-
-# `-s`, not `-r`: a zero-byte fragment is readable, contributes no lines, and would otherwise
-# take the present branch and disarm this arm behind a confident green (review L2). The entry
-# counter below is the same guard one level up, for a directory of empty or absent fragments.
-for FRAGMENT in "$RENDER_MANIFEST_DIR"/*; do
-  [[ -s "$FRAGMENT" ]] || continue
-  while read -r TPL WANT; do
-    [[ -n "$TPL" && -n "$WANT" ]] || continue
-    MANIFEST_ENTRIES=$((MANIFEST_ENTRIES + 1))
-    if [[ ! -r "${REPO_DIR}/${TPL}" ]]; then
-      STALE="${STALE:+$STALE, }${TPL} (template gone from the repo)"
-      continue
-    fi
-    HAVE=$(sha256sum "${REPO_DIR}/${TPL}" | cut -d' ' -f1)
-    [[ "$HAVE" == "$WANT" ]] || STALE="${STALE:+$STALE, }${TPL}"
-  done < "$FRAGMENT"
-done
-
-if [[ "$MANIFEST_ENTRIES" -eq 0 ]]; then
-  MANIFEST_NOTE="; render manifest absent or empty (run k3s-bringup.yml and initial_setup.yml once each to arm the stale-script arm)"
-fi
+setup_drift_scan
+DEPLOYED_NOTE="${DEPLOYED_NOTE/the setup plays once each/initial_setup.yml and k3s-bringup.yml once each}"
+MANIFEST_NOTE="${MANIFEST_NOTE/the setup plays once each/k3s-bringup.yml and initial_setup.yml once each}"
 
 if [[ -z "$ORPHANS" && -z "$DRIFTED" && -z "$STALE" ]]; then
   STATUS=up

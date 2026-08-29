@@ -282,9 +282,31 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     (a 0xFFFF sentinel for "no max"), and a ratio of that is unreachable, so those sensors
     would read green through a fire. A max outside
     (`HWMON_TEMP_MIN_PLAUSIBLE_C`, `HWMON_TEMP_MAX_PLAUSIBLE_C`] is treated as UNDECLARED.
-    An EMPTY sensor vector is `down`, not `up` — zero readings means the collector went blind,
+    An EMPTY sensor vector is `down`, not `up` — zero readings means EVERY collector went blind,
     and "nothing is too hot" from no data is a lie. `HWMON_TEMP_CONSECUTIVE` (3) rides out a
-    transcode spike. Pure `hwmon_temp_limits()` / `hwmon_temp_verdict()` are unit-tested in
+    transcode spike.
+    **A PARTIAL blindness is a separate arm** (`HWMON_TEMP_ORIGINS_MIN`, added 2026-08-29 for
+    review M-9): the empty-vector branch fires only when ALL hosts go quiet, so until this arm
+    existed one host's hwmon collector could die while the other two answered "all below limit"
+    for the estate. It reuses `_host_origin_shortfall`, the same helper Root Disk and Memory
+    use, but passes its OWN floor — **3, not the shared `HOST_ORIGINS_MIN` of 2**, because all
+    three hosts declare non-excluded sensors (measured 2026-08-29: 9 / 5 / 2), so a floor of 2
+    is met by any two of them. Origins are counted over the series that survive
+    `HWMON_TEMP_EXCLUDE_CHIP`, through the same predicate `hwmon_temp_limits` uses — a host
+    whose only sensors are nvme is a host this check does not cover, and counting it would
+    satisfy the floor with a host nothing watches.
+    `HWMON_TEMP_ORIGINS_CONSECUTIVE` (5) is **longer than `HOST_ORIGINS_CONSECUTIVE`** (3) on
+    purpose: the third host is the Pi, and over the 7d to 2026-08-29 its hwmon series went
+    absent for about 20 minutes (6 of 1054 samples at a 5m step, all daniel-pi), which the
+    shared 15-minute grace would have paged on. The two hysteresis mechanisms are never
+    compounded — `down_streak` is the thermal-spike grace and applies only to the hot-sensor
+    path, so a missing host pages on its own 5th cycle rather than the 15th.
+    Adding the arm is also why `host_temp` joined `EXPORTER_DEPENDENT` — under **two** job
+    keys, `node` and `node-pi`. A dead node-exporter now trips the floor, and without the entry
+    one root cause would page twice; the Pi scrapes under its own job (`count by (job, origin)
+    (node_hwmon_temp_celsius)` measured 2026-08-29: job=node for daniel-server and daniel-box,
+    job=node-pi for daniel-pi), so a `node`-only entry suppresses two of the three hosts and
+    leaves the Pi double-paging. Pure `hwmon_temp_limits()` / `hwmon_temp_verdict()` are unit-tested in
     `test_host_temp.py`, each rule as an accept/reject pair; the coverage test is the load-bearing
     one, since this check's failure mode is silence rather than a wrong threshold.)
   - **UPS Battery Health** (the APC UPS's charge % + estimated runtime + the replace-battery
@@ -668,7 +690,8 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   `HA_URL`/`HA_TOKEN`/`HA_HEARTBEAT_MAX_AGE`/`HA_CONSECUTIVE`; speedtest:
   `SPEEDTEST_URL`/`SPEEDTEST_TOKEN`/`SPEEDTEST_DOWNLOAD_MIN_MBPS`/`SPEEDTEST_MAX_AGE_H`/`SPEEDTEST_CONSECUTIVE`;
   host-coverage floor:
-  `HOST_ORIGINS_MIN`/`HOST_ORIGINS_CONSECUTIVE`). A failed
+  `HOST_ORIGINS_MIN`/`HOST_ORIGINS_CONSECUTIVE`, and the thermal check's own pair
+  `HWMON_TEMP_ORIGINS_MIN`/`HWMON_TEMP_ORIGINS_CONSECUTIVE`). A failed
   query/unreachable source makes that monitor `down` with an explanatory msg — a broken
   exporter is surfaced, not silently green.
 

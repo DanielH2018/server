@@ -171,6 +171,30 @@ k3s_server_hosts:
   - daniel-box
   - daniel-stage
 
+# Hosts that render setup-plane templates but run NO manifest-prune-check, so nothing there can
+# report a stale render. That check is installed by roles/setup/k3s/tasks/health-crons.yml,
+# imported only from that role's main.yml, which k3s-bringup.yml asserts onto k3s_server_hosts —
+# so it exists on daniel-box alone, while daniel-server renders the entire UPS shutdown chain.
+# Confirmed live 2026-08-29: daniel-server had no /var/lib/homelab/setup-render-manifest.d at
+# all, and its /etc/nut/upsmon.conf was dated Aug 17 against a template changed on 2026-08-28
+# (review M-10).
+#
+# An allowlist for the same reason as k3s_server_hosts above, though the failure directions
+# differ: naming a host that already runs manifest-prune-check gives it a second, redundant
+# reader, while forgetting one leaves it unwatched. Redundancy is the safe direction, so a host
+# in doubt belongs here. daniel-pi is deliberately absent — it renders setup templates
+# (optimize_pi) but stamps none, so a reader there would report only that it is unarmed.
+# ENFORCED by ansible/tests/test_setup_drift_check.py.
+setup_drift_check_hosts:
+  - daniel-server
+
+# Past this, the checkout the drift arms compare against is reported as its own fault. A host
+# without gitops-deploy does not refresh its tree — daniel-server was measured 39 commits behind
+# origin on 2026-08-17 — and a stale tree makes the render arm compare a stale render against
+# the stale template it came from, which agree. So the arm reads green exactly when the host is
+# furthest behind, which is the laundering this threshold exists to prevent.
+setup_drift_tree_max_days: 14
+
 # Which SOPS file `pre_tasks/load_secrets.yml` decrypts, chosen per host. Production is the
 # default so a host nobody thought about gets the production file and fails closed on a
 # missing key, rather than silently running with no secrets at all.

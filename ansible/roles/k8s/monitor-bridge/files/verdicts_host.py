@@ -279,6 +279,28 @@ def _hwmon_sensor_key(labels):
     )
 
 
+def _hwmon_chip_excluded(labels, exclude_chip):
+    """Whether this series' chip is one check_scrutiny owns rather than check_host_temp.
+
+    ONE predicate, called by both hwmon_temp_limits and hwmon_included_series. The host-coverage
+    floor counts origins over the series that survive exclusion, so a second exclusion added to
+    only one of the two would leave a host whose sensors are all dropped still counting toward
+    the floor — coverage that reads green for a host nothing is checking.
+    """
+    return bool(exclude_chip) and exclude_chip in labels.get("chip", "?")
+
+
+def hwmon_included_series(temps, exclude_chip):
+    """Pure: the scraped temp series check_host_temp actually covers, exclusions applied.
+
+    Same shape in as out — [(labels, value), ...] — so the result feeds _host_origin_shortfall,
+    which reads the `origin` label off each entry.
+    """
+    return [
+        (la, v) for la, v in temps or [] if not _hwmon_chip_excluded(la, exclude_chip)
+    ]
+
+
 def hwmon_temp_limits(
     temps, maxes, ratio, fallback_c, min_plausible, max_plausible, exclude_chip
 ):
@@ -297,10 +319,7 @@ def hwmon_temp_limits(
         if min_plausible < value <= max_plausible:
             declared[_hwmon_sensor_key(labels)] = value
     out = []
-    for labels, temp in temps or []:
-        chip = labels.get("chip", "?")
-        if exclude_chip and exclude_chip in chip:
-            continue
+    for labels, temp in hwmon_included_series(temps, exclude_chip):
         key = _hwmon_sensor_key(labels)
         label = "%s/%s/%s" % key
         cap = declared.get(key)

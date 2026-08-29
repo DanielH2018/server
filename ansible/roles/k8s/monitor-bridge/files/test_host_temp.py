@@ -10,6 +10,7 @@ matters most: it is the only test that can fail when a future edit narrows cover
 from pathlib import Path
 
 import check
+import pytest
 
 
 def _temp(instance, chip, sensor, value):
@@ -213,3 +214,188 @@ def test_the_kuma_tile_exists_for_the_token():
     assert "monitor_bridge_host_temp_push_token" in tile, (
         "a token with no Kuma tile pushes into the void"
     )
+
+
+# ── host-coverage floor (HWMON_TEMP_ORIGINS_MIN) ──────────────────────────────────────────────
+# THE GAP THESE PIN (2026-08-29 review M-9): hwmon_temp_verdict pages only on a WHOLLY empty
+# list, so any non-empty subset passed. Lose one host's hwmon collector — node-exporter still
+# up, which is its documented normal failure mode — and the surviving hosts answered "all below
+# limit" for the whole estate. check_cluster_targets catches a TOTAL node outage; nothing caught
+# the partial one, which is the shape of the 2026-08-23 incident that produced HOST_ORIGINS_MIN.
+#
+# The refuted first fix is worth naming: it added an env key nothing read, leaving hwmon on the
+# shared floor of 2, so two of three hosts still satisfied it. Every test here therefore drives
+# check_host_temp() rather than asserting a constant.
+
+ALL_THREE = ("daniel-server", "daniel-box", "daniel-pi")
+
+
+def _origin_temp(origin, chip, sensor, value):
+    """One prom_vector element carrying the `origin` label the coverage floor counts."""
+    return (
+        {"origin": origin, "instance": origin, "chip": chip, "sensor": sensor},
+        value,
+    )
+
+
+def _cool_estate(origins):
+    """A cool, non-excluded sensor for each named host."""
+    return [
+        _origin_temp(o, "thermal_thermal_zone0", "temp0", 40.0) for o in sorted(origins)
+    ]
+
+
+def _reset():
+    check._host_origin_streaks.clear()
+    check._down_streaks.pop("host_temp", None)
+
+
+def test_full_coverage_is_clean(monkeypatch):
+    _reset()
+    _stub_prom(monkeypatch, _cool_estate(ALL_THREE))
+    ok, msg = check.check_host_temp()
+    assert ok
+    assert "hosts reporting" not in msg, (
+        "full coverage must not carry a shortfall complaint"
+    )
+
+
+def test_a_missing_host_pages_once_the_grace_expires(monkeypatch):
+    """The rejecting half. Two of three hosts is exactly the state the shared floor of 2 met."""
+    _reset()
+    _stub_prom(monkeypatch, _cool_estate(("daniel-server", "daniel-box")))
+    results = [
+        check.check_host_temp() for _ in range(check.HWMON_TEMP_ORIGINS_CONSECUTIVE)
+    ]
+    assert not results[-1][0], "a host absent for the whole grace must page"
+    msg = results[-1][1]
+    assert "2 of 3" in msg and "NOT being checked" in msg, msg
+
+
+def test_a_short_coverage_gap_is_held(monkeypatch):
+    """The accepting half: the Pi's hwmon series went absent for about 20 minutes over the 7d to
+    2026-08-29, so a floor with no grace would page on a healthy estate."""
+    _reset()
+    _stub_prom(monkeypatch, _cool_estate(("daniel-server", "daniel-box")))
+    held = [
+        check.check_host_temp() for _ in range(check.HWMON_TEMP_ORIGINS_CONSECUTIVE - 1)
+    ]
+    assert all(ok for ok, _msg in held), "a brief gap must not page"
+    assert "cycle" in held[-1][1], "a held gap must still say what it is holding"
+
+
+def test_full_coverage_clears_the_shortfall_streak(monkeypatch):
+    _reset()
+    _stub_prom(monkeypatch, _cool_estate(("daniel-server", "daniel-box")))
+    check.check_host_temp()
+    _stub_prom(monkeypatch, _cool_estate(ALL_THREE))
+    ok, _msg = check.check_host_temp()
+    assert ok
+    assert check._host_origin_streaks["host_temp"] == 0, (
+        "a full-coverage cycle must reset the shortfall streak"
+    )
+
+
+def test_a_hot_sensor_outranks_a_coverage_shortfall(monkeypatch):
+    """Precedence, mirroring check_disk: a host that IS reporting and IS too hot pages ahead of
+    a complaint about the absent one. Reporting the shortfall first would bury a real breach."""
+    _reset()
+    _stub_prom(
+        monkeypatch,
+        [
+            _origin_temp("daniel-server", "thermal_thermal_zone0", "temp0", 99.0),
+            _origin_temp("daniel-box", "thermal_thermal_zone0", "temp0", 40.0),
+        ],
+    )
+    for _ in range(check.HWMON_TEMP_CONSECUTIVE):
+        ok, msg = check.check_host_temp()
+    assert not ok
+    assert "OVER limit" in msg, msg
+    assert "hosts reporting" not in msg, (
+        "the breach message must not be replaced by the coverage complaint"
+    )
+
+
+def test_the_two_graces_are_not_compounded(monkeypatch):
+    """A missing host must page within its OWN grace, not that grace times the thermal one.
+
+    down_streak is the thermal-spike grace. Routing the shortfall's failing verdict through it
+    as well would take a missing host from 25 minutes to 75 before anything fired, which is the
+    kind of delay that reads as coverage right up until it matters.
+    """
+    _reset()
+    _stub_prom(monkeypatch, _cool_estate(("daniel-server", "daniel-box")))
+    fired = None
+    for i in range(1, check.HWMON_TEMP_ORIGINS_CONSECUTIVE * 3 + 1):
+        if not check.check_host_temp()[0] and fired is None:
+            fired = i
+    assert fired == check.HWMON_TEMP_ORIGINS_CONSECUTIVE, (
+        "the shortfall must page on its own Nth cycle, with no second grace stacked on it"
+    )
+
+
+def test_a_host_whose_only_sensors_are_excluded_does_not_count(monkeypatch):
+    """The shared-predicate guard. HWMON_TEMP_EXCLUDE_CHIP drops the nvme chips, so a host that
+    scrapes nothing else is a host this check does not cover — counting it toward the floor
+    would satisfy the coverage requirement with a host nothing is watching."""
+    _reset()
+    _stub_prom(
+        monkeypatch,
+        _cool_estate(("daniel-server", "daniel-box"))
+        + [_origin_temp("daniel-pi", "nvme_nvme0", "temp1", 40.0)],
+    )
+    results = [
+        check.check_host_temp() for _ in range(check.HWMON_TEMP_ORIGINS_CONSECUTIVE)
+    ]
+    assert not results[-1][0], (
+        "an all-excluded host must not satisfy the floor; if it does, the origin count is "
+        "reading the raw vector rather than the series the check actually covers"
+    )
+
+
+def test_the_floor_and_its_grace_are_pinned_and_overridable():
+    """Pins the shipped values and their env keys together — the refuted M-9 fix was a key
+    nothing read, which is indistinguishable from this test's absence."""
+    assert check.HWMON_TEMP_ORIGINS_MIN == 3, (
+        "3, not the shared HOST_ORIGINS_MIN of 2: all three hosts declare non-excluded hwmon "
+        "sensors (measured 2026-08-29: 9 / 5 / 2), so a floor of 2 is met by any two of them"
+    )
+    assert check.HOST_ORIGINS_MIN == 2, (
+        "the shared floor must stay 2 — disk and memory depend on it and test_check_host pins it"
+    )
+    assert check.HWMON_TEMP_ORIGINS_CONSECUTIVE > check.HOST_ORIGINS_CONSECUTIVE, (
+        "the Pi drops out for longer than either amd64 node: about 20 min observed over the 7d "
+        "to 2026-08-29, against 15 min of the shared grace at INTERVAL=300"
+    )
+    env_secret = (
+        Path(check.__file__).resolve().parents[1] / "templates" / "env-secret.yaml.j2"
+    ).read_text()
+    for key, value in (
+        ("HWMON_TEMP_ORIGINS_MIN", "3"),
+        ("HWMON_TEMP_ORIGINS_CONSECUTIVE", "5"),
+    ):
+        assert '%s: "%s"' % (key, value) in env_secret, (
+            "%s must be rendered so an operator can stand the arm down for a planned "
+            "single-host maintenance window rather than editing check.py" % key
+        )
+
+
+def test_a_dead_node_exporter_suppresses_this_check():
+    """With the floor armed, a dead node-exporter drops that host's series and trips it. Without
+    this entry one root cause pages twice — Scrape Targets plus a coverage complaint."""
+    assert "host_temp" in check.EXPORTER_DEPENDENT["node"]
+    assert check.down_exporters([({"job": "node"}, 0)]) == {"node"}
+
+
+@pytest.mark.parametrize("job", ["node", "node-pi"])
+def test_every_job_carrying_hwmon_series_suppresses_this_check(job):
+    """The reject half of the test above: a `node`-only map leaves the Pi double-paging.
+
+    daniel-pi scrapes under job=node-pi (measured 2026-08-29), so its exporter death drops the
+    two hwmon origins the floor counts while Scrape Targets pages for the same fact. Asserting
+    only the `node` key passes with the Pi's gap wide open, which is how it was missed.
+    """
+    suppressed = set()
+    for down in check.down_exporters([({"job": job}, 0)]):
+        suppressed |= check.EXPORTER_DEPENDENT[down]
+    assert "host_temp" in suppressed
