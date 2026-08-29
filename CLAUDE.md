@@ -256,6 +256,15 @@ history, the `homelab-ui` DNS/auth/secrecy triad and its `-m ui` suite, per-file
 - **block-protected-edits** (PreToolUse) — *denies* direct edits to (a) anything under
   `containers/` (edit the `ansible/roles/containers/<svc>/templates/` source instead) and
   (b) SOPS-encrypted files like `ansible/vars/secrets.yml` (use `sops` / the `/add-secret` skill).
+- **block-protected-bash** (PreToolUse, Bash) — the same two rules on the surface auto mode
+  actually uses. `block-protected-edits` matches `Edit|Write` only, and auto mode instructs
+  file changes through `sed`, heredocs and short scripts, so `sed -i … ansible/vars/secrets.yml`
+  reached a bare permission prompt with nothing saying the file was encrypted. A write here
+  becomes an **ask** carrying `classify()`'s reason — never a deny, because the path extraction
+  is a heuristic over command text and a wrong extraction must not block work. It also **denies**
+  a content-printing read (`cat`, `head`, `grep` without `-o`/`-c`/`-l`) of a deployed host
+  script that renders a credential inline; that set is derived from the tree by
+  `scripts/secrets_mgmt/secret_bearing_host_paths.py`, not listed, and covers 15 paths today.
 - **validate-compose** (PostToolUse) — re-renders all compose templates after you edit a
   `docker-compose.yml.j2`, an `ansible/templates/*.j2` macro, or `host_vars`/`group_vars/all.yml`;
   fails on malformed YAML (catches Jinja indent bugs `ansible-lint` misses) and on an

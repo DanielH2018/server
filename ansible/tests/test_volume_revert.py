@@ -573,20 +573,29 @@ def test_the_validator_skips_a_role_with_no_manifests() -> None:
     """`validate_k8s_manifests.py` renders every role's templates. This role has none, so it
     must be in SKIP_ROLES or the validator fails on an absent templates directory.
 
-    Read as a parsed set literal rather than searched for as a substring: a commented-out entry
+    Read as parsed set literals rather than searched for as a substring: a commented-out entry
     satisfies a substring search while the validator no longer skips anything, which is the
-    mutation that found this test asserting nothing on 2026-08-21. The set is parsed instead of
+    mutation that found this test asserting nothing on 2026-08-21. They are parsed instead of
     imported because importing the validator pulls in `kubernetes_validate` and its sys.path
     setup for a one-line fact.
+
+    The two component sets are read rather than `SKIP_ROLES` itself, which is now their union
+    and so is a BinOp that `ast.literal_eval` refuses. Same trap this test already documents in
+    a different spelling: a check that reads source text breaks the moment the source gains an
+    indirection.
     """
     tree = ast.parse(_VALIDATOR.read_text())
-    skip_roles = next(
-        node.value
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Assign)
-        and any(isinstance(t, ast.Name) and t.id == "SKIP_ROLES" for t in node.targets)
+    skipped: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        names = {t.id for t in node.targets if isinstance(t, ast.Name)}
+        if names & {"NO_MANIFEST_ROLES", "CALLER_RENDERED_ROLES"}:
+            skipped |= set(ast.literal_eval(node.value))
+    assert skipped, (
+        "neither component of SKIP_ROLES parsed — the guard is asserting nothing"
     )
-    assert "volume-revert" in ast.literal_eval(skip_roles)
+    assert "volume-revert" in skipped
 
 
 def test_the_role_is_absent_from_the_dry_run_refusal_list() -> None:
