@@ -50,12 +50,13 @@ Route to the source of truth by what you're doing, before reading linearly:
 
 | If you're… | Start here |
 |---|---|
-| Adding / changing a service (k3s — the default) | `## Adding a New Service` below · a sibling role in `ansible/roles/k8s/` |
-| Adding / changing a Docker service (the Pi only) | `## Adding a New Service` → *Adding a Docker service* · `/new-container` skill |
-| Deploying or redeploying a service | `/deploy` skill · `## Common Commands` |
+| Adding / changing a service (k3s — the default) | `/new-k8s-service` skill · a sibling role in `ansible/roles/k8s/` |
+| Adding / changing a Docker service (the Pi only) | `/new-container` skill (daniel-pi only — neither cluster node has Docker) |
+| Deploying or redeploying a service | `/deploy` skill · `## Common Commands` below for the exit codes |
+| Retiring a finished worktree, or `ExitWorktree` refuses to remove one | `/worktree-cleanup` skill |
 | A PR just merged — what now | `## After a PR Merges — Pull, Deploy, Verify` below (the directive and *When to wait*) · `/land-after-merge` skill (the commands). Default is pull → deploy → verify in the same session, no ask. |
 | Checking a k8s manifest change without deploying it | `/deploy` skill → *Checking a k8s change without deploying it* (`--dry-run` vs `--check` vs `prek` — they check different things) |
-| Running or testing a GitOps tick without waiting 30 min | `./scripts/deploy_tools/gitops_tick.sh` · `ansible/roles/setup/gitops_deploy/CLAUDE.md` → *Triggering a tick by hand*. A real tick, not a rehearsal — there is no dry-run mode. |
+| Running or testing a GitOps tick without waiting 30 min | `/gitops-tick` skill. A real tick, not a rehearsal — there is no dry-run mode, and an uneventful tick logs nothing. |
 | Adding / rotating a secret | `/add-secret` skill · `docs/secret-rotation.md` · `## Secrets Management` |
 | A Bash or `kubectl` command keeps prompting, or you need the full permission tables | `## Shell Commands — Shape Them to Auto-Approve` below (summary) · `docs/claude-shell-permissions.md` (full detail) |
 | Editing HA automations / lighting / fans | `ansible/roles/k8s/home-assistant/CLAUDE.md` (config and workload both live there; it routes to `docs/` for per-topic behaviour) · `/ha-edit-automation` |
@@ -65,7 +66,7 @@ Route to the source of truth by what you're doing, before reading linearly:
 | Checking that a service's UI actually renders, not just that its pod is Ready | The `homelab-ui` MCP server — see `## Claude Tooling in This Repo` below, and `docs/claude-tooling.md` for the full reference. `probe.py health` cannot see a broken UI behind a healthy pod. |
 | A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment. The general mechanism is the central rollout-restart at `roles/k8s/manifests/tasks/main.yml:298`, which fires when a role's rendered manifests change. A role whose pod depends on a file the manifests *don't* carry adds its own `checksum/<thing>` pod annotation instead — e.g. `checksum/check-script` in `roles/k8s/monitor-bridge/templates/deployment.yaml.j2`. |
 | A config edit won't recreate the container (Docker) | `ansible/roles/containers/common/CLAUDE.md` (config-change wiring) |
-| A host can't decrypt secrets | `## Secrets Management` → *Onboarding a host to SOPS* |
+| A host can't decrypt secrets | `add-secret` skill → *Onboarding a host that cannot decrypt yet* |
 | Starting Claude Code sessions from a phone | `ansible/roles/setup/claude_code/CLAUDE.md` — `claude-rc.service` hosts them. `/remote-control` inside a session and `claude rc` from a shell are different features; only the second creates sessions on demand. |
 | Adding / changing a cron that changes state | that role's `CLAUDE.md` *Autonomous-role contract* |
 
@@ -75,109 +76,46 @@ Route to the source of truth by what you're doing, before reading linearly:
 on `daniel-pi` (LAN-only utilities, WireGuard) — `daniel-server` and `daniel-box` have no
 Docker at all, so a Compose role there deploys nothing.
 
-1. Create `ansible/roles/k8s/<name>/tasks/main.yml` plus the manifest templates it needs
-   (`deployment.yaml.j2`, `service.yaml.j2`, `ingressroute.yaml.j2`, `pvc.yaml.j2`).
-   Copy the shape from a close sibling — `roles/k8s/freshrss` for a plain web app,
-   `roles/k8s/sonarr` for one on the media volume. Name every `volumes[].name` for the
-   workload or component that owns it — `sonarr-config`, never `config` — so a mount reads
-   unambiguously in a diff or a `kubectl describe`. ENFORCED by
-   `ansible/tests/test_volume_names_descriptive.py`, which also catches the half-finished
-   rename (a `volumeMounts` entry with no matching volume) that no schema check can see.
-2. Add the service to `containers_list` in `ansible/inventory/host_vars/daniel-box.yml` with
-   `platform: k8s`. **Position matters**: that play has no toposort and runs in list order,
-   so place the entry *after* `traefik` (which installs the CRDs its IngressRoute needs) and
-   after `authelia` if the route uses the `authelia` middleware.
-3. Secrets: add to `ansible/vars/secrets.yml` (`sops ansible/vars/secrets.yml`), reference as
-   `{{ variable_name }}` in a `secret.yaml.j2`. Note `kubectl apply` leaves *stale* Secret
-   keys behind — removing a key from the manifest does not remove it live.
-4. Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "<name>"`.
+The step-by-step for each platform is a skill, because it is a procedure you follow once per
+service rather than a fact you need in every session:
 
-### Adding a Docker service (daniel-pi only)
-1. Create `ansible/roles/containers/<name>/tasks/main.yml`
-2. Add a `docker-compose.yml.j2` template in `ansible/roles/containers/<name>/templates/`.
-   Use the shared macros in `ansible/templates/` rather than hand-rolling boilerplate:
-   `traefik.yml.j2` (`labels`), `autokuma.yml.j2` (`kuma`), `networks.yml.j2`
-   (`service_networks()` / `external_networks()` — the per-service and top-level
-   `networks:` blocks), and `resources.yml.j2`
-   (`resources(cpu_limit, mem_limit, cpu_res, mem_res)` — the `deploy.resources` caps).
-   There is **no shared healthcheck macro** — it was deleted and its jittered-interval body
-   inlined into the one compose file that still uses it (`roles/containers/dozzle/`). Write
-   the `healthcheck:` block directly. (`ansible/tests/test_documented_macros_exist.py`
-   ENFORCES that every macro named here still exists.)
-   The `/new-container` skill has the canonical skeleton.
-3. Add the service to `containers_list` in `ansible/inventory/host_vars/daniel-pi.yml`
-   (`name`, `port` if web-facing, `use_authelia`, `networks`). Deploy tags derive from
-   `name` automatically — `deploy.yml` needs no edit.
-4. Add any secrets to `ansible/vars/secrets.yml` (edit with `sops ansible/vars/secrets.yml`)
-5. Reference secrets via `{{ variable_name }}` in templates
-6. **If the service bind-mounts an Ansible-templated config file:** `register:` each config
-   task with a `<role>_`-prefixed name and pass `common_config_changed: "{{ <reg> is changed }}"`
-   (OR several) on the `common`/`docker_deploy` include. Deploys are idempotent (`recreate: auto`
-   by default), so without this an edit to that config won't recreate the container. See
-   `ansible/roles/containers/common/CLAUDE.md`.
+- **k3s** → the `new-k8s-service` skill. Role skeleton, which sibling to copy, the
+  `containers_list` entry, secrets, and what a `--dry-run` does *not* prove about a
+  brand-new service.
+- **Docker on `daniel-pi`** → the `new-container` skill. It carries the canonical compose
+  skeleton, the shared macros in `ansible/templates/`, and the `common_config_changed`
+  wiring a bind-mounted config file needs.
+
+Two facts stay here because they bite from outside those procedures:
+
+- **Position in `containers_list` matters.** That play has no toposort and runs in list
+  order, so a new entry goes *after* `traefik` (which installs the CRDs its IngressRoute
+  needs) and after `authelia` if the route uses the `authelia` middleware. Editing that list
+  for any reason means keeping the order.
+- **`kubectl apply` leaves stale Secret keys behind.** Removing a key from a `secret.yaml.j2`
+  does not remove it live.
 
 ## Common Commands
 Run ansible through `uv run` so it uses the repo's pinned env (`ansible-core` + the
 `community.docker` deps `requests`/`docker` — see **Python & Tests**). Bare `ansible-playbook`
 (the uv-tool shim) lacks those module deps and deploys will fail.
-Deploy through `scripts/deploy.sh`. It takes `/var/lock/server-git-tree.lock` — the same
-lock `gitops-deploy.service` (30-min timer) and the weekly secret-rotate cron hold — so a
-deploy can't interleave with the automated pipeline or with another Claude session. The
-lock guards the local git tree every deploy reads its templates from (gitops-deploy
-rewrites it with a `git pull` mid-run), so a `-e target=daniel-pi` deploy takes it too. Exit
-**75** means the lock stayed busy and *nothing was deployed*; it is not a playbook failure.
-`--check` runs unlocked. Exit **2** means a `--tags` value matched no service and *nothing
-was deployed* — Ansible itself exits 0 on an unmatched tag, so the wrapper checks the tags
-against `containers_list` first (`scripts/deploy_tools/deploy_tags.py`); `--list-services` prints every
-valid value and `--skip-tag-check` bypasses. Exit **4** means the tree is behind
-`origin/master` and *nothing was deployed* — a stale tree renders stale templates and reverts
-live config while every repo-side check still reads green (`scripts/deploy_tools/deploy_staleness.py`);
-`--skip-staleness-check` bypasses it. That check runs ahead of `--check` and `--dry-run` too,
-because a green dry run against a stale tree is itself the misleading signal; being *ahead* of
-master is normal branch work and is never refused. `--dry-run` validates the k8s manifests against
-the live API server without applying them, and runs unlocked because it mutates nothing —
-see *Checking a k8s change without deploying it* below. The bare `ansible-playbook` forms
-below still work and are what the wrapper runs, but they have neither the lock, the tag
-check, nor the staleness check; use them only when you deliberately want that.
+**Deploy through `./scripts/deploy.sh --tags "<service>"`**, not the playbook directly. It
+takes `/var/lock/server-git-tree.lock` — the same lock `gitops-deploy.service` (30-min timer)
+and the weekly secret-rotate cron hold — so a deploy cannot interleave with the automated
+pipeline or with another Claude session.
 
-```bash
-# Deploy a specific container
-./scripts/deploy.sh --tags "<service-name>"
+Its four non-zero exits all mean **nothing was deployed**, and each is a resume point rather
+than a playbook failure. They arrive as a bare `Exit code N`, which is why they are here:
 
-# Target the Pi (NB: -e target=, NOT --limit — the play's hosts: defaults to the local
-# hostname, so --limit daniel-pi matches zero hosts). The Pi is ansible_connection=ssh, so
-# this reaches it from either node. `-e target=` a LOCAL-connection host (either cluster
-# node) and the tasks run on the machine you typed it on — see ansible/inventory/hosts.ini.
-uv run ansible-playbook ansible/deploy.yml --tags "<service-name>" -e target=daniel-pi
+| Exit | Meaning | What to do |
+|---|---|---|
+| 75 | the lock stayed busy | retry |
+| 4 | the tree is behind `origin/master` | `git pull`, never `--skip-staleness-check` |
+| 3 | the change is broad and maps to no single service | see *When to wait* |
+| 2 | a `--tags` value matched no service | `--list-services` prints every valid value |
 
-# Deploy all containers
-uv run ansible-playbook ansible/deploy.yml
-
-# Dry run
-uv run ansible-playbook ansible/deploy.yml --tags "<service-name>" --check
-
-# Validate a k8s change against the live API server without applying it
-./scripts/deploy.sh --tags "<service-name>" --dry-run
-
-# Config-only: render dirs/templates/host config WITHOUT touching the container
-# (every container-role task is block-tagged config/deploy/cron; tags union in
-# Ansible, so scope with --skip-tags. --skip-tags config is NOT supported — the
-# registered config-change facts feed docker_deploy's recreate decision.)
-uv run ansible-playbook ansible/deploy.yml --tags "<service-name>" --skip-tags deploy
-
-# Edit encrypted secrets
-sops ansible/vars/secrets.yml
-
-# List the services --dry-run refuses to cover (k8s_dry_run_unsupported)
-grep -A20 "^k8s_dry_run_unsupported:" ansible/inventory/group_vars/all.yml
-
-# Trigger a GitOps tick now instead of waiting for the 30-min timer (daniel-box only).
-# Runs the identical code path the timer runs — there is no dry-run mode.
-./scripts/deploy_tools/gitops_tick.sh
-
-# Initial server setup — first-host bring-up ORDER (uv → SOPS onboarding → this) is in ansible/README.md
-uv run ansible-playbook ansible/initial_setup.yml
-```
+The full command reference — the Pi's `-e target=`, config-only runs, the GitOps tick, initial
+setup — and why each exit code exists are in the **`deploy` skill**.
 
 ### Checking a k8s change without deploying it
 `prek run --all-files`, `--check` and `--dry-run` check genuinely different things, and
@@ -377,18 +315,10 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
   `group_vars/`, a shared role) rather than assuming you're alone.
 - **Deploys serialize on a lock** — use `./scripts/deploy.sh`, see *Common Commands*.
 - **`ExitWorktree` refuses to remove a squash-merged or rebase-merged worktree**, reporting
-  "N commits on <branch>" — both land the content on master under new SHAs, so the tool
-  cannot see that the work survived. Do **not** pass `discard_changes` to argue with it: the
-  branch reads identically to one holding real unlanded work. Verify by content instead —
-  `git merge-tree --write-tree origin/master <branch>` equals `git rev-parse
-  origin/master^{tree}` when the branch has nothing left to give — then leave the tree for
-  the pruner.
-- **`uv run python scripts/dev/prune_worktrees.py`** reports which worktrees are finished with;
-  `--prune` removes the merged, clean, unlocked ones. It applies the same content check, so
-  it collects what `ExitWorktree` refused. A lock held by a *running* session is never
-  overridden; a lock whose process is gone is ignored, because Claude Code doesn't release
-  the lock when a session ends — which is why a worktree this session still holds stays
-  `keep` until the session exits.
+  "N commits on <branch>". Do **not** pass `discard_changes` to argue with it — that is how
+  unlanded work is lost, and from the tool's side the two cases look identical. Retiring a
+  worktree is the `worktree-cleanup` skill: the content check that settles it, and
+  `scripts/dev/prune_worktrees.py`, which collects what `ExitWorktree` refused.
 
 ## Secrets Management
 - Secrets live in `ansible/vars/secrets.yml`, encrypted with SOPS + age
@@ -426,12 +356,10 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
   a flag that emits no content cannot leak however it is typed.
 - **Never commit plaintext secrets** (private age keys never leave `~/.config/sops/age/keys.txt`;
   `.gitignore` blocks `keys.txt`/`*.agekey`/`*.key` and gitleaks scans every commit)
-- **Onboarding a host to SOPS** (it can't decrypt yet, so `initial_setup.yml`/`deploy.yml`
-  fail at their secret-load pre_task): run `uv run ansible-playbook ansible/bootstrap.yml --limit <host>`
-  on it (no secret dependency — generates the host's own key, prints its public key), add that
-  pubkey to `ansible/.sops.yaml`, `sops updatekeys ansible/vars/secrets.yml` on a host that can already
-  decrypt, commit + push, then `git pull` on the new host. Multi-recipient is OR — any listed
-  key decrypts the whole file. See `ansible/bootstrap.yml` header for the full flow.
+- **A host that can't decrypt yet** fails `initial_setup.yml`/`deploy.yml` at their
+  secret-load `pre_task`, which reads as a playbook bug rather than a missing key.
+  `ansible/bootstrap.yml` is the way in — it has no secret dependency. The four-step
+  onboarding is in the **`add-secret` skill**.
 
 ## Ansible Conventions
 - All tasks must be **idempotent** — rerunning should be side-effect-free
