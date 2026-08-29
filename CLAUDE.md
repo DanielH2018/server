@@ -365,6 +365,14 @@ Per-verb tiers, the RBAC evidence and the rule-matching measurements: `docs/clau
   is generated into a 0600 file at launch instead of being written into `~/.claude.json`.
   `ui_login.py --verify <svc>` proves the cookie reaches the backend without involving the
   browser, and it reads a portal 302 as a failure rather than as a reachable service.
+  **`--check` asks Authelia, never the clock.** The expiry stamped in the state file is a
+  claim, and the two come apart in exactly the cases that matter: restarting Authelia or
+  rotating `authelia_secret` invalidates every live session while the local timestamp reads
+  valid for weeks. So `--check` calls `/api/state` and requires `authentication_level >= 1`
+  — Authelia answers HTTP 200 with level 0 to a cookie it no longer honours, so neither the
+  status code nor the timestamp can stand as the verdict. An unreachable portal counts as
+  invalid: minting needs the same network the browsing does, so there is nothing useful to
+  do with a session that cannot be confirmed.
   **Going through Traefik is not a shortcut here, it is the only path.** Hitting a ClusterIP
   directly reaches only pods on the node you run from: the baseline NetworkPolicy admits the
   two cni0 gateways alone (`netpol-baseline/defaults/main.yml:41`), and host-to-remote-node
