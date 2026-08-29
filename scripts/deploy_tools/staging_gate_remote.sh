@@ -2,22 +2,23 @@
 # The daniel-server half of the staging gate. Two arguments: the SHA under test, and the
 # comma-separated deploy tags.
 #
-# TWO CALLERS, AND THE FILE HAS TO SUIT BOTH.
-#   1. Piped over ssh by staging_gate.py — `ssh daniel-server 'bash -s'` sends the caller's own
-#      copy, so the version that runs is the one in the tree the deployer is testing.
-#   2. Exec'd from the gate's checkout by the pre-deployed dispatcher behind the restricted ssh
-#      key (roles/setup/hypervisor/templates/staging-gate-dispatch.sh.j2). That key exists
-#      because piping requires the far side to run `bash -s`, and a key that can run `bash -s`
-#      is a full shell no matter what `command=` says — a forced command does NOT stop ssh
-#      forwarding stdin (2026-08-29 review M-3).
+# ONE CALLER. It is exec'd from the gate's checkout by the pre-deployed dispatcher behind the
+# restricted ssh key (roles/setup/hypervisor/templates/staging-gate-dispatch.sh.j2). Nothing
+# invokes it directly and nothing pipes it any more.
 #
-# WHY THE BODY IS A FUNCTION. Under caller 2 this file is executed from disk, and it
-# fast-forwards the very checkout it lives in. bash reads a script by byte offset as it goes,
-# so a `git merge --ff-only` that rewrites this file mid-run would resume at a meaningless
-# offset. Wrapping everything in `main` and calling it on the last line makes bash parse the
-# whole body before any of it runs, so the rewrite cannot reach the code still to execute.
-# Caller 1 was immune to this for free, because the body arrives on stdin rather than from the
-# file being rewritten. Do not unwrap this.
+# staging_gate.py used to send this file over ssh to `bash -s`. That gave anything able to
+# invoke the gate a full shell on this host (2026-08-29 review M-3), and a forced command alone
+# would not have closed it: ssh forwards stdin regardless of `command=`, so a far side still
+# reading stdin executes whatever the caller pipes. The fix is that the far side reads a request
+# — an operation name and arguments — and never a script body.
+#
+# WHY THE BODY IS A FUNCTION. This file is executed from disk, and it fast-forwards the very
+# checkout it lives in. bash reads a script by byte offset as it goes, so a `git merge --ff-only`
+# that rewrites this file mid-run would resume at a meaningless offset. Wrapping everything in
+# `main` and calling it on the last line makes bash parse the whole body before any of it runs,
+# so the rewrite cannot reach the code still to execute. Piping was immune to this for free,
+# because the body arrived on stdin rather than from the file being rewritten; executing from
+# disk is not. Do not unwrap this.
 #
 # EXIT CODE IS THE WHOLE INTERFACE. `PREP_FAILED` means the deploy never started, so staging has
 # no opinion about the change; anything else is deploy.sh's own exit code passed through

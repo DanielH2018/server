@@ -230,10 +230,9 @@ NO_VERDICT: the gate could not be *asked*, which must never read as staging reje
 because the gate fetches from there. That is inherent to "the gate deploys a SHA" and is not
 made worse by this change.
 
-**Not done here, and deliberately:** `staging_gate.py` still authenticates with the operator's
-key, so nothing about the live path changed. Switching it to `-i
-/etc/gitops-deploy/staging_gate_ed25519 -o IdentitiesOnly=yes` is a follow-up, gated on this
-role having been applied and the new path proven by hand:
+**The gate uses this key.** `staging_gate.py` authenticates with
+`/etc/gitops-deploy/staging_gate_ed25519` and sends `gate <sha> <tags>` as its request; it no
+longer pipes a script to `bash -s`. Prove the path with:
 
 ```bash
 # on daniel-box, after `initial_setup.yml --tags hypervisor` has run on daniel-server
@@ -255,6 +254,16 @@ dispatcher's own refusal marker on stderr — a fallback to another key cannot p
 so "fell back" and "restriction bypassed" stay distinguishable. Its exit codes name them
 separately: 10 key unusable, 11 fell back, 12 restriction open, 13 no verdict.
 `ansible/tests/test_verify_staging_gate_key.py` drives that verdict function without a network.
+
+**What stops a silent fallback.** `IdentitiesOnly=yes` does not guarantee this key is the one
+used — the default identity files still count as configured — so if the key were missing or
+unloadable, ssh would quietly authenticate as the operator and the gate would keep returning
+verdicts while running unrestricted. That would hide the very regression the key exists to
+prevent. `staging_gate.py:identity_problem()` therefore refuses to connect at all unless
+`ssh-keygen -y` on the key matches `files/staging-gate.pub`, and a far side that answers 127 —
+the shell not finding a `gate` command, which only happens when no forced command is attached —
+is reported as a failed authentication rather than as a verdict. Both map to NO_VERDICT, never
+to REJECTED: a security regression must not read as staging rejecting a change.
 
 Removing or restricting the operator's own key is a separate decision and is not part of this
 work.
