@@ -48,8 +48,13 @@ SERVICES = [
 # `two_factor` in Authelia's access control, so a one_factor cookie is turned away at the
 # portal (config-secret.yaml.j2:85-99). These skip unless a live two_factor session exists,
 # which only `ui_login.py --totp <code>` can create — the shared secret stays on the phone,
-# so there is no unattended path here by design.
-TWO_FACTOR_SERVICES = ["longhorn", "code-server", "n8n"]
+# so there is no unattended path here by design. Titles observed through a real two_factor
+# session; code-server carries its own login on top of Authelia, as FreshRSS does.
+TWO_FACTOR_SERVICES = [
+    ("longhorn", "Longhorn", "/#/dashboard"),
+    ("code-server", "code-server login", "/login"),
+    ("n8n", "n8n.io - Workflow Automation", "/"),
+]
 
 
 class McpClient:
@@ -171,16 +176,12 @@ def browser():
         client.close()
 
 
-@pytest.mark.parametrize(
-    "service,title,path", SERVICES, ids=[s for s, _, _ in SERVICES]
-)
-def test_service_serves_its_own_ui(browser, domain, service, title, path):
-    report, is_error = browser.navigate(f"https://{service}.local.{domain}/")
-
+def assert_serves_ui(report, is_error, domain, service, title, path, remint):
+    """The four claims both tiers make, in the order that gives the best failure message."""
     assert not is_error, f"{service}: navigation reported an error:\n{report}"
     assert "auth.local." not in report, (
         f"{service}: landed on the Authelia portal, so the session cookie was not accepted. "
-        f"Re-mint it with `uv run python scripts/diagnostics/ui_login.py`."
+        f"Re-mint it with `{remint}`."
     )
     status = http_status(report)
     assert status is None or status < 400, (
@@ -193,6 +194,22 @@ def test_service_serves_its_own_ui(browser, domain, service, title, path):
     )
     assert f"Page URL: https://{service}.local.{domain}{path}" in report, (
         f"{service}: expected to land on {path!r}; the app redirected somewhere else."
+    )
+
+
+@pytest.mark.parametrize(
+    "service,title,path", SERVICES, ids=[s for s, _, _ in SERVICES]
+)
+def test_service_serves_its_own_ui(browser, domain, service, title, path):
+    report, is_error = browser.navigate(f"https://{service}.local.{domain}/")
+    assert_serves_ui(
+        report,
+        is_error,
+        domain,
+        service,
+        title,
+        path,
+        remint="uv run python scripts/diagnostics/ui_login.py",
     )
 
 
@@ -256,26 +273,24 @@ def two_factor_browser():
         client.close()
 
 
-@pytest.mark.parametrize("service", TWO_FACTOR_SERVICES)
-def test_two_factor_service_is_reachable(two_factor_browser, domain, service):
-    """That the two_factor session gets past the portal and the app answers.
-
-    Deliberately weaker than the one_factor tests above, which pin an exact title. These
-    three cannot be reached to learn their titles without a live code, and inventing one
-    would be a guess dressed as an assertion. Not-the-portal plus a title present is what is
-    actually being claimed: the second factor worked and the backend served HTML.
-    """
+@pytest.mark.parametrize(
+    "service,title,path",
+    TWO_FACTOR_SERVICES,
+    ids=[s for s, _, _ in TWO_FACTOR_SERVICES],
+)
+def test_two_factor_service_serves_its_own_ui(
+    two_factor_browser, domain, service, title, path
+):
+    """Same four claims as the one_factor tier, plus the fact that the second factor worked:
+    reaching any of these at all requires `authentication_level 2`."""
     report, is_error = two_factor_browser.navigate(f"https://{service}.local.{domain}/")
-
-    assert not is_error, f"{service}: navigation reported an error:\n{report}"
-    assert "auth.local." not in report, (
-        f"{service}: landed on the Authelia portal, so the two_factor session was not "
-        f"accepted. Re-mint with `ui_login.py --totp <code>`; it lapses after about an hour."
-    )
-    status = http_status(report)
-    assert status is None or status < 400, (
-        f"{service}: the route answered HTTP {status} — check `probe.py health {service}`."
-    )
-    assert page_title(report) is not None, (
-        f"{service}: no page title, so Traefik answered rather than the app."
+    assert_serves_ui(
+        report,
+        is_error,
+        domain,
+        service,
+        title,
+        path,
+        # A two_factor session lapses after about an hour, so this is the usual reason.
+        remint="uv run python scripts/diagnostics/ui_login.py --totp <code>",
     )
