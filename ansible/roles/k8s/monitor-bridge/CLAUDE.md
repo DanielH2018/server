@@ -353,12 +353,17 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     a 456 MB box, which is why its collector set is trimmed in the role's compose template.
     **If you add a third node-exporter host, decide explicitly whether it belongs in the
     estate-wide Memory/Root Disk checks or in a check of its own** — that choice is what this
-    bullet exists to force. Since 2026-08-29 a test forces it too:
-    `test_every_node_exporter_job_is_mapped_in_exporter_dependent` (test_check_gates.py) derives
-    the node-exporter scrape jobs from the Prometheus config and fails until each one has an
+    bullet exists to force. Since 2026-08-29 a test forces it for ONE of the two ways a host
+    arrives: `test_every_node_exporter_job_is_mapped_in_exporter_dependent` (test_check_gates.py)
+    derives the node-exporter scrape jobs from the Prometheus config and fails until each has an
     `EXPORTER_DEPENDENT` entry, and its sibling fails if a job whose origins are all excluded by
-    `HOST_METRIC_ORIGIN_EXCLUDE` suppresses `disk`/`memory` anyway. Prose asking for a decision is
-    what let `node-pi` ship unmapped; the tests are what make the decision unavoidable. Empty
+    `HOST_METRIC_ORIGIN_EXCLUDE` suppresses `disk`/`memory` anyway. That covers a host under a
+    **new scrape job**, which is how daniel-pi arrived.
+    **A host joining the existing `node` DaemonSet is still on you.** The job set does not change,
+    so nothing fires — and `HWMON_TEMP_ORIGINS_MIN` is a literal 3, justified by "all three hosts
+    declare non-excluded sensors". A fourth host makes that floor satisfiable by any three of
+    four, so one host can go dark silently: exactly the partial blindness the arm was added for.
+    Raise the floor by hand when you add a node. Empty
     `PI_GLANCES_URL` = disabled (stays up); the static Kuma HTTP monitor
     `daniel-pi-glances` covers glances itself being down.
     **Published-port arm** (`with_pi_ports`, folded here rather than given its own monitor for
