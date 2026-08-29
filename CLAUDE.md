@@ -8,7 +8,7 @@ Docker + k3s homelab managed with Ansible. ~50 containerized services deployed a
 - `daniel-server` — k3s agent node (Intel XE graphics, LVM storage, UPS hardware + the
   `nut_host` shutdown chain; Docker uninstalled 2026-08-14 — the migration's end state)
 - `daniel-pi` — Raspberry Pi, the **only** remaining Docker host (LAN-only: wg-easy, glances,
-  dozzle, autoheal, docker-proxy). Driven remotely over SSH with `-e target=daniel-pi`.
+  autoheal, docker-proxy). Driven remotely over SSH with `-e target=daniel-pi`.
 
 **Key technologies:** k3s (Kubernetes), Ansible, Docker Compose (Pi only), Traefik (reverse proxy), Cloudflare DNS, Authelia (SSO), SOPS/age (secret encryption), Longhorn (storage), CrowdSec (WAF)
 
@@ -41,7 +41,7 @@ docs/             # Runbooks, design specs, security notes
 
 > **`containers/` is not a directory in this repo** — it is untracked and rendered by Ansible onto the *target host* at `/home/<user>/server/containers/<svc>/docker-compose.yml`. Post-migration it exists only on `daniel-pi`; neither cluster node has one. It is still read-only: edits are overwritten on the next deploy, so always modify `ansible/roles/containers/*/templates/` instead. (The `block-protected-edits` hook enforces this.)
 
-> **`roles/containers/` is now only the Pi.** Every role there is a Docker service live on `daniel-pi` — `autoheal`, `docker-proxy`, `dozzle`, `glances`, `wg-easy` — plus the shared `common` deploy path and `archive/`. A service's config lives in the role that deploys it, on both trees: **if a k3s workload reads it, it is under `roles/k8s/<name>/`**, not across the tree boundary. (Until 2026-08-14 eleven roles here were config-only sources for a k8s counterpart; they moved into it. To revive one as a Docker service, take its Compose plumbing from git history.)
+> **`roles/containers/` is now only the Pi.** Every role there is a Docker service live on `daniel-pi` — `autoheal`, `docker-proxy`, `glances`, `wg-easy` — plus the shared `common` deploy path and `archive/`. A service's config lives in the role that deploys it, on both trees: **if a k3s workload reads it, it is under `roles/k8s/<name>/`**, not across the tree boundary. (Until 2026-08-14 eleven roles here were config-only sources for a k8s counterpart; they moved into it. To revive one as a Docker service, take its Compose plumbing from git history.)
 >
 > **Where a k8s role's non-manifest config goes.** `roles/k8s/<name>/templates/` is for **manifests only** — `validate_k8s_manifests.py` renders every `*.j2` there and parses it as YAML. App config a manifest embeds via `lookup()` goes one level down in **`templates/config/`** (CouchDB's `local.ini`, HA's `configuration.yaml`, homepage's `custom.css` — none of them YAML manifests), and static assets go in `files/`. `Dockerfile*` is exempt and may sit in `templates/` directly; the validator skips it by name.
 

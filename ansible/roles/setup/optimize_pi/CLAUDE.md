@@ -87,9 +87,11 @@ See repo-root `CLAUDE.md` for conventions.
    `^/api/push/` (authelia role). Nonzero count = explicit `down`; a dead cron/host
    trips the 600s push watchdog. Token: `pi_sd_health_push_token` in `secrets.yml`.
 10. **Container-recovery heartbeat** — AutoKuma reads only the SERVER's docker socket, so the
-    Pi's `autoheal` (restarts unhealthy containers) and `docker-proxy` (dozzle's read-only
-    socket) have no liveness monitor — a dead autoheal silently stops recovering Pi containers,
-    and a dead docker-proxy leaves dozzle serving 200 so its http monitor stays green.
+    Pi's `autoheal` (restarts unhealthy containers) and `docker-proxy` (the read-only socket
+    promtail's container-log discovery and glances both read) have no liveness monitor — a dead
+    autoheal silently stops recovering Pi containers, and a dead docker-proxy stops this host's
+    container logs reaching Loki while promtail keeps running with zero targets and glances
+    keeps answering its own HTTP, so nothing else goes red.
     `templates/pi-recovery-health.sh.j2` (cron, */5) pushes both containers' running-state
     (via `docker ps`, which reads the real socket through the docker group — so it still
     reports docker-proxy's own death) to the static "Daniel Pi Recovery" Kuma push monitor

@@ -26,8 +26,9 @@ ENV_SECRET = (
     ANSIBLE / "roles" / "k8s" / "monitor-bridge" / "templates" / "env-secret.yaml.j2"
 )
 
-# Measured against the live glances payload, 2026-08-27: these five report a `->` mapping.
-EXPECTED_PUBLISHERS = {"dozzle", "glances", "node-exporter", "promtail", "wg-easy"}
+# Measured against the live glances payload, 2026-08-27: these report a `->` mapping.
+# dozzle was the fifth until it was retired 2026-08-29 (see daniel-pi.yml).
+EXPECTED_PUBLISHERS = {"glances", "node-exporter", "promtail", "wg-easy"}
 # These report `ports: ""` permanently. A rule that flagged them would page forever.
 EXPECTED_NON_PUBLISHERS = {"docker-proxy", "autoheal", "docker-proxy-lifecycle"}
 

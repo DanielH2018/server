@@ -21,7 +21,7 @@ on the cluster nodes:
 - Role under `ansible/roles/k8s/<service>/`, entry has `platform: k8s` in
   `host_vars/daniel-box.yml` → **k3s workload** (this is nearly everything).
 - Role under `ansible/roles/containers/<service>/`, entry in `host_vars/daniel-pi.yml` →
-  **Docker on the Pi** (docker-proxy, wg-easy, glances, dozzle, autoheal).
+  **Docker on the Pi** (docker-proxy, wg-easy, glances, autoheal).
 
 `daniel-server` and `daniel-box` have had **no Docker since 2026-08-14** — never verify a
 deploy there with a `docker` command; it doesn't exist on those hosts.

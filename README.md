@@ -27,7 +27,7 @@ work already executed.
 |------|------|-------|
 | `daniel-box` | k3s server (control plane) | Runs almost every workload. Traefik edge, Authelia SSO + OIDC issuer, Pi-hole DNS, Longhorn storage, CrowdSec. Internet-exposed via Cloudflare, and the **public WireGuard endpoint** (wg-easy, 51820/udp — the router forward moved here). Ansible runs *on* this host. |
 | `daniel-server` | k3s agent node | Intel XE iGPU (Jellyfin/Tdarr transcode), LVM storage, UPS hardware + the NUT shutdown chain. **Docker uninstalled 2026-08-14** — it hosts no Compose services. |
-| `daniel-pi` | Raspberry Pi — Docker | **LAN-only**, never internet-exposed or on the tunnel. A second, LAN-only wg-easy (51822/udp) + a small utility stack (Glances, Dozzle, autoheal, docker-proxy). The only remaining Docker host. |
+| `daniel-pi` | Raspberry Pi — Docker | **LAN-only**, never internet-exposed or on the tunnel. A second, LAN-only wg-easy (51822/udp) + a small utility stack (Glances, autoheal, docker-proxy). The only remaining Docker host. |
 
 ## Repository layout
 
@@ -85,7 +85,7 @@ flowchart TD
     monitoring --- longhorn
 
     subgraph pi["daniel-pi — Docker, LAN-only"]
-      wg[wg-easy] --- glances[Glances · Dozzle · autoheal]
+      wg[wg-easy] --- glances[Glances · autoheal]
     end
 ```
 

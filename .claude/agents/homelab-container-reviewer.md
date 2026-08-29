@@ -35,8 +35,9 @@ highest-signal findings.
   hand-roll: `traefik.yml.j2` `labels()`, `autokuma.yml.j2` `kuma()`,
   `networks.yml.j2` `service_networks()`/`external_networks()`, `resources.yml.j2`
   `resources(cpu_limit, mem_limit, cpu_res, mem_res)`. There is **no shared healthcheck
-  macro** — it was deleted and its jittered-interval body inlined into the one compose file
-  that still uses it (`roles/containers/dozzle/`); write the `healthcheck:` block directly.
+  macro** — it was deleted, and the one compose file that still inlined its jittered-interval
+  body (`roles/containers/dozzle/`) retired 2026-08-29, so no live template uses it at all;
+  write the `healthcheck:` block directly.
 - **The service set + per-service shape** (port/use_authelia/networks) live in
   `ansible/inventory/host_vars/<host>.yml` `containers_list`.
 - **Pinning:** **Watchtower is retired** — nothing auto-updates any more. Every image is

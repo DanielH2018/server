@@ -302,7 +302,7 @@ stay).
   a phantom container until `HEALTH_TIMEOUT_S` and false-rollbacks (`deploy_logic.containers_to_gate`).
   - **By design: Pi-only services are NOT auto-deployed by GitOps (accepted, 2026-06-30).** The Pi
     has `has_gitops: false`; there is deliberately **no GitOps/CI deploy path to daniel-pi**. A
-    change to a Pi-only service (e.g. `wg-easy`/`dozzle` on the Pi) ff-merges and
+    change to a Pi-only service (e.g. `wg-easy`/`glances` on the Pi) ff-merges and
     "deploys" as a local no-op, then skips the health gate per the rule above — so the tick reports
     success while the Pi never actually redeploys ("cross-host phantom-success", review CI-L2). This
     is intentional, not a gap: the Pi is a memory-constrained Zero 2 W driven manually over SSH (see
