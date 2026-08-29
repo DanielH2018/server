@@ -1,0 +1,211 @@
+---
+# Deploy a group of host scripts as a VERSIONED RELEASE rather than a file copied over the last
+# one, so a cron's provenance is readable and its rollback is one symlink.
+#
+# THE PROBLEM. Live crons invoke /usr/local/bin/<name>. Those are copies left by whichever deploy
+# last ran the role, so their provenance is a past deploy rather than the tree the next deploy
+# renders from — twelve-factor's admin-process failure mode exactly: a one-off task not running
+# against the release. The repo already noticed and built a DETECTOR (stamp_deployed.yml,
+# stamp_render.yml, setup-drift-lib.sh), which answers "has this drifted" but not "which commit
+# is this" and offers no way back. This is the release the detector was compensating for.
+#
+# THE SHAPE.
+#   /opt/homelab/releases/<group>/<sha>/<name>   the release, immutable once written
+#   /opt/homelab/current/<group>  -> releases/<group>/<sha>
+#   /usr/local/bin/<name>         -> /opt/homelab/current/<group>/<name>
+#
+# Crons keep pointing at /usr/local/bin/<name> and need no edit. `cmp` and `[[ -r ]]` read
+# through symlinks, so setup-drift-lib.sh's arms keep working unchanged against the same paths.
+#
+# WHY PER GROUP AND NOT PER HOST. A release is only meaningful as the unit deployed together, and
+# here that unit is the role: `--tags k3s` deploys the k3s scripts and nothing else. A host-wide
+# `current` would have to name one commit for artifacts deployed at different times from
+# different trees, so it would be wrong for every group but the last deployed. renovate.json
+# reaches the same conclusion for image bumps and states it as "makes the rollback unit equal the
+# deploy unit".
+#
+# WHY THE SYMLINK IS SAFE TO SWING UNDER A LIVE CRON. ansible.builtin.file's `state: link` over an
+# existing path symlinks to a temp name in the same directory and then `os.rename`s it into place
+# (modules/file.py, "try to replace atomically"). There is no unlink-then-symlink window, so a
+# cron firing mid-deploy cannot get ENOENT. Verified by reading the module, not assumed.
+#
+# NEVER PUT A SECRET-RENDERING SCRIPT IN A GROUP. Seven host scripts render a credential inline
+# and carry `no_log: true` for it — the two secret-rotation wrappers, claude-otel-health,
+# registry-gc, janitorr-health, configarr-health, qbittorrent-prefs-check. Retention is the
+# problem, not the render: keeping five releases of those would leave five copies of a rotated
+# token on disk, turning a rollback convenience into a credential archive. Scripts that SOURCE a
+# token from a separate env file (the kuma-push pattern) are fine and are what these groups hold.
+# ENFORCED by ansible/tests/test_release_bin_groups_have_no_secrets.py.
+#
+# Callers pass:
+#   release_bin_group      a filename-safe group id, unique across roles (e.g. k3s-backup-health)
+#   release_bin_templates  list of repo-relative .j2 paths. The host name is the basename minus
+#                          `.j2`, which holds for every rendered script in this repo — so a
+#                          caller can hand over the SAME list it already gives stamp_render.yml
+#                          and the release cannot drift from the stamp.
+#   release_bin_files      list of {src: <repo-relative>, name: <basename on host>} for artifacts
+#                          copied verbatim. A dict rather than a bare path because the copy case
+#                          is where the two names diverge: files/live_drift_check.py is deployed
+#                          as live-drift-check.py.
+#   release_bin_owner      optional, defaults to root
+#   release_bin_keep       optional, defaults to 5 releases retained
+#
+# NO TAGS IN THIS FILE, deliberately, matching stamp_render.yml and stamp_deployed.yml. Tags
+# UNION in Ansible, so a task tagged `config` here would also inherit the caller's tag and become
+# selectable two ways — and a `tags: [always]` one would run its git read and its assert on every
+# play, including runs deploying an entirely different group. Carrying none means an imported task
+# is selected by exactly the caller's tag, which is the only correct answer: a release is the
+# caller's group.
+#
+# `src` is repo-relative and interpolated onto {{ playbook_dir }}/.. rather than resolved by
+# Ansible's search path. A task file imported from another role resolves `template:` src against
+# the role that OWNS the file — this one — so a bare basename would look in
+# roles/setup/common/templates and miss the caller's entirely. roles/k8s/manifests/tasks/main.yml
+# carries the same absolute-path workaround and the same explanation.
+
+- name: Resolve the release paths for {{ release_bin_group }}
+  # Set here rather than in defaults/main.yml because roles/setup/common is never RUN as a role
+  # — every file in it is import_tasks'd from another role, so its defaults would never load.
+  # stamp_deployed.yml and stamp_render.yml hardcode their paths for the same reason; this sets
+  # them once because six tasks below use them and two of those must agree exactly or the
+  # symlinks point at nothing.
+  ansible.builtin.set_fact:
+    common_release_group_root: "/opt/homelab/releases/{{ release_bin_group }}"
+    common_release_current_root: /opt/homelab/current
+    # Every host path this group owns, rendered and copied alike, so the symlink loop below is
+    # one pass over one list rather than two loops that could disagree about what the group is.
+    common_release_names: >-
+      {{ (release_bin_templates | default([]) | map('basename')
+          | map('regex_replace', '\.j2$', '') | list)
+         + (release_bin_files | default([]) | map(attribute='name') | list) }}
+
+- name: Resolve the release commit for the setup plane
+  # Once per play: `set_fact` is host-scoped and survives across roles, so the guard turns one
+  # git call per group into one per play.
+  when: common_release_sha is not defined
+  delegate_to: localhost
+  block:
+    - name: Read the deploy commit for host scripts
+      ansible.builtin.command:
+        argv: [git, rev-parse, --short=12, HEAD]
+        chdir: "{{ playbook_dir }}/.."
+      changed_when: false
+      check_mode: false
+      register: common_release_rev
+
+    - name: Publish the host-script release commit
+      ansible.builtin.set_fact:
+        common_release_sha: "{{ common_release_rev.stdout | trim }}"
+
+- name: Check that the host-script release commit resolved
+  # An rc-0 empty answer would name the release directory `.../<group>/`, which collides with the
+  # group root itself. Refusing beats writing a release nobody can name.
+  ansible.builtin.assert:
+    that:
+      - (common_release_sha | default('') | trim | length) >= 7
+    fail_msg: >-
+      `git rev-parse --short=12 HEAD` in {{ playbook_dir }}/.. returned no usable commit, so the
+      release directory for {{ release_bin_group }} cannot be named. Refusing to deploy host
+      scripts to an unnamed release.
+    quiet: true
+
+- name: Create the release directory for {{ release_bin_group }}
+  ansible.builtin.file:
+    path: "{{ common_release_group_root }}/{{ common_release_sha }}"
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Render the versioned host scripts for {{ release_bin_group }}
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/../{{ item }}"
+    dest: >-
+      {{ common_release_group_root }}/{{ common_release_sha
+         }}/{{ item | basename | regex_replace('\.j2$', '') }}
+    owner: "{{ release_bin_owner | default('root') }}"
+    group: "{{ release_bin_owner | default('root') }}"
+    mode: "{{ release_bin_mode | default('0755') }}"
+  loop: "{{ release_bin_templates | default([]) }}"
+  loop_control:
+    label: "{{ item | basename }}"
+  become: true
+
+- name: Copy the versioned host artifacts for {{ release_bin_group }}
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../{{ item.src }}"
+    dest: "{{ common_release_group_root }}/{{ common_release_sha }}/{{ item.name }}"
+    owner: "{{ release_bin_owner | default('root') }}"
+    group: "{{ release_bin_owner | default('root') }}"
+    mode: "{{ release_bin_mode | default('0755') }}"
+  loop: "{{ release_bin_files | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  become: true
+
+- name: Create the current-release pointer directory
+  ansible.builtin.file:
+    path: "{{ common_release_current_root }}"
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Swing the current-release pointer for {{ release_bin_group }}
+  # The whole group swings in one rename, so the scripts are never a mixture of two releases.
+  ansible.builtin.file:
+    src: "{{ common_release_group_root }}/{{ common_release_sha }}"
+    dest: "{{ common_release_current_root }}/{{ release_bin_group }}"
+    state: link
+    owner: root
+    group: root
+    force: true
+    follow: false
+  become: true
+
+- name: Link the /usr/local/bin paths for {{ release_bin_group }}
+  # Through `current`, not straight at the release dir, so the previous task is the ONLY thing
+  # that has to swing on a rollback. Pointing these at <sha> directly would make a rollback N
+  # renames instead of one, with a window where the group is half rolled back.
+  ansible.builtin.file:
+    src: "{{ common_release_current_root }}/{{ release_bin_group }}/{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
+    state: link
+    owner: root
+    group: root
+    force: true
+    follow: false
+  loop: "{{ common_release_names }}"
+  become: true
+
+- name: Prune superseded releases for {{ release_bin_group }}
+  # The guard that matters lives in the script, with its red proofs in
+  # scripts/deploy_tools/test_prune_releases.py: pruning whatever `current` resolves to would
+  # dangle every symlink above at once, and the crons that would report it are the scripts that
+  # just vanished. `changed_when` reads the script's own report rather than its exit code, which
+  # is 0 both when it removed something and when it had nothing to remove.
+  ansible.builtin.command:
+    # Through uv on a pinned interpreter, never /usr/bin/python3: the hosts' system Python is
+    # Ubuntu 24.04's 3.12 and this repo is on 3.14, so reaching for the system one puts a script
+    # back under the old floor with nothing left to notice. ENFORCED by
+    # ansible/tests/test_host_python_invocations.py, which caught exactly that here.
+    # `--no-project` because the prune script is stdlib-only and must not drag in the repo venv.
+    argv:
+      - /usr/local/bin/uv
+      - run
+      - --no-project
+      - --no-python-downloads
+      - --python
+      - "{{ host_python_version }}"
+      - "{{ playbook_dir }}/../scripts/deploy_tools/prune_releases.py"
+      - "{{ common_release_group_root }}"
+      - --current
+      - "{{ common_release_current_root }}/{{ release_bin_group }}"
+      - --keep
+      - "{{ release_bin_keep | default(5) }}"
+      - --apply
+  register: common_release_prune
+  changed_when: "'removing ' in common_release_prune.stdout"
+  become: true

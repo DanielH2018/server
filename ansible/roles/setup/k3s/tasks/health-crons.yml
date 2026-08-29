@@ -81,61 +81,29 @@
   become: true
   no_log: true  # renders the Healthchecks.io ping key
 
-- name: Deploy the backup-health scripts
+# Deployed as a VERSIONED RELEASE rather than rendered straight over /usr/local/bin — see
+# roles/setup/common/tasks/release_bin.yml. Each script lands in
+# /opt/homelab/releases/k3s-backup-health/<sha>/ and /usr/local/bin/<name> becomes a symlink
+# through /opt/homelab/current/k3s-backup-health, so a cron's provenance is readable
+# (`probe.py releases` for the k8s plane, `readlink -f` here) and a rollback is one symlink
+# swing rather than a git revert plus a redeploy. The crons below are unchanged: they still
+# invoke /usr/local/bin/<name>, and setup-drift-lib.sh's `cmp` reads through the symlink.
+#
+# The file list comes from k3s_render_stamp_groups, the SAME list stamp_render.yml is given
+# below. That is deliberate: a release and its stamp describing different sets of files is
+# exactly the partial-group false-green the comment above that stamp task warns about, and
+# sharing one list makes the two incapable of disagreeing.
+#
+# The per-script notes that used to sit in this loop now live beside that list in
+# roles/setup/k3s/defaults/main.yml, next to the paths they describe.
+- name: Deploy the backup-health scripts as a versioned release
   tags: [backup-health]
-  ansible.builtin.template:
-    src: "{{ item.src }}"
-    dest: "{{ item.dest }}"
-    mode: "0755"
-    owner: root
-    group: root
-  become: true
-  loop:
-    # Longhorn backup-plane heartbeat. Runs as {{ sys_user }}, not root: it reads the cluster
-    # through that user's read-only kubeconfig, which is the whole point — the cron cannot
-    # mutate anything. No no_log: this renders no secret. The Kuma push token moved to
-    # kuma-push.env on 2026-08-23 (the task at :43) and the script sources it at runtime. The
-    # `no_log: true # renders the Kuma push token` that used to sit here outlived the thing it
-    # described and told the next reader the opposite of what that extraction achieved
-    # (2026-08-23b L4).
-    - src: longhorn-backup-health.sh.j2
-      dest: /usr/local/bin/longhorn-backup-health.sh
-    # Orphaned-backup reaper. Installed but DELIBERATELY NOT SCHEDULED. It deletes backups, and
-    # the set that is safe to delete depends on live state — as of 2026-08-16 the answer is
-    # "none of them", because the weekly tier has produced nothing and the strays are the only
-    # recovery those volumes have. The script enforces that floor itself, but an operator should
-    # read its dry run before any cron does.
-    #   dry run: /usr/local/bin/longhorn-reap-orphan-backups.sh
-    #   delete:  sudo /usr/local/bin/longhorn-reap-orphan-backups.sh --apply
-    # The dry run reads through the {{ sys_user }} read-only kubeconfig; --apply needs the
-    # root-only admin one and refuses to start without it, rather than issuing deletes that come
-    # back Forbidden while the run reports success.
-    - src: longhorn-reap-orphan-backups.sh.j2
-      dest: /usr/local/bin/longhorn-reap-orphan-backups.sh
-    # Orphaned-snapshot reaper. Installed but DELIBERATELY NOT SCHEDULED, for the same reason as
-    # its backup sibling above: it deletes recovery points, and which ones are safe to delete
-    # depends on live state. Run the dry run and read it before running --apply.
-    #   dry run: /usr/local/bin/longhorn-reap-orphan-snapshots.sh
-    #   delete:  sudo /usr/local/bin/longhorn-reap-orphan-snapshots.sh --apply
-    # Deletes here are LOCAL ONLY — a Longhorn snapshot is not a backup, and the B2 objects are
-    # untouched. What it buys is reclamation: one retained snapshot pins every block beneath it
-    # against filesystem trim, so this is the step that lets longhorn-trim-volumes.sh do
-    # anything.
-    - src: longhorn-reap-orphan-snapshots.sh.j2
-      dest: /usr/local/bin/longhorn-reap-orphan-snapshots.sh
-    # Longhorn filesystem-trim sweep. Runs as {{ sys_user }} through the read-only kubeconfig: it
-    # reads volume state with kubectl and issues the trim through the longhorn-backend API,
-    # which needs no Kubernetes write.
-    - src: longhorn-trim-volumes.sh.j2
-      dest: /usr/local/bin/longhorn-trim-volumes.sh
-    # Longhorn restore drill. Check 7 (manifest-prune-check.sh) reads a stamp only this script
-    # writes, so it must ship under the same tag as the backup-plane heartbeat above — deploying
-    # one without the other either installs a drill nothing watches or leaves check 7 paging for
-    # a drill that was never installed.
-    - src: longhorn-restore-drill.sh.j2
-      dest: /usr/local/bin/longhorn-restore-drill.sh
-  loop_control:
-    label: "{{ item.dest }}"
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/release_bin.yml"
+  vars:
+    release_bin_group: k3s-backup-health
+    release_bin_templates: >-
+      {{ (k3s_render_stamp_groups | selectattr('name', 'eq', 'k3s-backup-health')
+          | first).templates }}
 
 - name: Schedule the Longhorn backup-plane heartbeat
   tags: [backup-health]

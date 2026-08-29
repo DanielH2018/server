@@ -209,6 +209,47 @@ def _template_pairs(task: dict, mod: dict):
             yield str(item["src"]), str(item["dest"])
 
 
+def _release_bin_pairs(task: dict, task_file: Path):
+    """Yield (repo-relative src, dest) for a group deployed by release_bin.yml.
+
+    A third deploy shape, after the direct `template:` and the looped one. A role hands
+    release_bin.yml a GROUP NAME and the file list lives in that role's defaults, so nothing in
+    the task file itself names a template — which made every script in a converted group
+    invisible to this resolver. That is the same coverage loss the looped form caused before
+    2026-08-27: the cron rules would read `[ok]` because no rule applied, not because the script
+    satisfied one.
+
+    The group is resolved structurally rather than by hardcoding `k3s_render_stamp_groups`: any
+    list of dicts in the role's defaults carrying `name` and `templates` can define one, so a
+    second role adopting the mechanism needs no edit here.
+
+    The host name of a rendered script is its basename minus `.j2`, which is release_bin.yml's
+    own rule for the same derivation.
+    """
+    target = str(task.get("ansible.builtin.import_tasks") or "")
+    if not target.endswith("release_bin.yml"):
+        return
+    group = (task.get("vars") or {}).get("release_bin_group")
+    if not group:
+        return
+    defaults = task_file.parent.parent / "defaults" / "main.yml"
+    if not defaults.is_file():
+        return
+    try:
+        doc = yaml.safe_load(defaults.read_text()) or {}
+    except yaml.YAMLError:
+        return
+    for value in doc.values():
+        if not isinstance(value, list):
+            continue
+        for entry in value:
+            if not isinstance(entry, dict) or entry.get("name") != group:
+                continue
+            for src in entry.get("templates") or []:
+                name = Path(str(src)).name.removesuffix(".j2")
+                yield str(src), f"/usr/local/bin/{name}"
+
+
 def _cron_targets(roles: Path = ROLES):
     """Yield (template_path, task_file, cron_task) for every cron-scheduled shell template.
 
@@ -238,16 +279,25 @@ def _cron_targets(roles: Path = ROLES):
         if not isinstance(tasks, list):
             continue
 
-        dest_to_src: dict[str, str] = {}
+        # Maps to an absolute template PATH, not a bare src, because the two deploy shapes
+        # resolve from different roots: a `template:` src is relative to the role's templates/
+        # dir, while a release_bin src is repo-relative. Resolving at insert time, where the
+        # shape is known, keeps that difference out of every consumer below.
+        dest_to_src: dict[str, Path] = {}
         for task in tasks:
             if not isinstance(task, dict):
                 continue
+            for src, dest in _release_bin_pairs(task, task_file):
+                if src.endswith(".sh.j2") and dest.startswith("/usr/local/bin/"):
+                    dest_to_src[Path(dest).name] = REPO / src
             mod = task.get("ansible.builtin.template")
             if not isinstance(mod, dict):
                 continue
             for src, dest in _template_pairs(task, mod):
                 if src.endswith(".sh.j2") and dest.startswith("/usr/local/bin/"):
-                    dest_to_src[Path(dest).name] = src
+                    dest_to_src[Path(dest).name] = (
+                        task_file.parent.parent / "templates" / src
+                    )
 
         for task in tasks:
             if not isinstance(task, dict):
@@ -259,10 +309,9 @@ def _cron_targets(roles: Path = ROLES):
             m = _CRON_JOB_TARGET.match(job)
             if not m:
                 continue
-            src = dest_to_src.get(m.group("script"))
-            if not src:
+            template_path = dest_to_src.get(m.group("script"))
+            if not template_path:
                 continue
-            template_path = task_file.parent.parent / "templates" / src
             # The leading `VAR=value` assignments are parsed HERE, once, so a consumer cannot
             # re-derive them from the raw job and disagree about what the line sets.
             yield template_path, task_file, mod, m.group("env")
