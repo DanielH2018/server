@@ -16,8 +16,28 @@
   # grown to 3.9G of low-value history. Container logs are already rotated by the
   # Docker daemon (10m × 3) and shipped to Loki, so 1G is plenty for host forensics.
   # journald vacuums archived files down to the cap on restart.
-  # MaxLevel* drops debug/info chatter at the source (this was a hand-edit to the base
+  # MaxLevelStore drops debug/info chatter at the source (this was a hand-edit to the base
   # journald.conf on daniel-server; managing it here survives a rebuild).
+  #
+  # MaxLevelSyslog is deliberately HIGHER than MaxLevelStore, and the two are not
+  # interchangeable: Store bounds what the journal keeps, Syslog bounds what journald hands
+  # to rsyslog, and journald applies them to each sink independently.
+  #
+  # It read `notice` here until 2026-08-29, which silently deleted the host's entire SSH
+  # authentication trail. journald owns /dev/log, so rsyslog only ever sees what journald
+  # forwards; `Accepted publickey ... SHA256:` and every `pam_unix(...:session)` line is
+  # priority info, so none of them reached auth.log. sshd's own `LogLevel VERBOSE` was set
+  # correctly the whole time and had nothing to do with it — an application's log level is an
+  # upper bound on what it emits, not on what survives. Measured on daniel-box: 2,719 such
+  # lines on the last full day before the cap, and zero on every day after it.
+  #
+  # Two things depend on those lines. Which key authenticated is recorded nowhere else — auditd
+  # logs that a login happened and from where, never the fingerprint. And the crowdsec node
+  # agent (roles/k8s/crowdsec) tails auth.log for the SSH brute-force signal, so its source was
+  # empty for 27 days.
+  #
+  # The task below is what keeps this cheap: /var/log/syslog stays at its former volume, so the
+  # cost is the 0.34 MB/day/host of auth records rather than every info line k3s emits.
   ansible.builtin.copy:
     dest: /etc/systemd/journald.conf.d/50-homelab.conf
     content: |
@@ -25,11 +45,77 @@
       [Journal]
       SystemMaxUse=1G
       MaxLevelStore=notice
-      MaxLevelSyslog=notice
+      MaxLevelSyslog=info
     mode: "0644"
   become: true
   notify: Restart systemd-journald
   tags: [journald]
+
+- name: Keep the info-level forwarding out of /var/log/syslog
+  become: true
+  tags: [journald]
+  # The other half of MaxLevelSyslog=info above, and it must exist wherever that does.
+  # Without it every info line on the host — k3s alone was 53% of pre-cap syslog — lands in
+  # /var/log/syslog, which promtail ships to Loki as {job="syslog"}. Measured floor for that:
+  # +7 MB/day/host against 1.33 MB/day today, and a floor rather than a figure, because the
+  # pre-cap sample predates the migration that moved most workloads onto daniel-box.
+  #
+  # 49- so it sorts before 50-default.conf: `stop` only prevents a message reaching the rules
+  # that write /var/log/syslog if it runs before them.
+  #
+  # The exemptions are load-bearing, not a preference. auth and authpriv carry the records the
+  # change exists to deliver. kern and mail must be exempt because they do NOT arrive through
+  # journald — rsyslog reads kernel messages itself via imklog, and postfix writes to its own
+  # listen socket (/etc/rsyslog.d/postfix.conf) — so discarding their info here would delete
+  # lines from kern.log and mail.log that are present today. Adding a facility to that list is
+  # how you would widen this; removing one silently drops logs.
+  #
+  # `validate:` on the copy cannot be used here, which is not a style choice. AppArmor confines
+  # rsyslogd to /etc/rsyslog.conf and /etc/rsyslog.d/** (usr.sbin.rsyslogd), and Ansible's
+  # validate writes the candidate to a temp directory — rsyslogd is denied that path and the
+  # task would fail on every run, including runs that change nothing. So the config is checked
+  # in place after the write, and the write is undone when the check fails. Nothing has
+  # restarted at that point (the handler fires at end of play, and a failed play never reaches
+  # it), so a fragment that does not parse never reaches a running rsyslog.
+  block:
+    - name: Render the rsyslog info filter
+      ansible.builtin.copy:
+        dest: /etc/rsyslog.d/49-homelab-info-filter.conf
+        content: |
+          # Managed by Ansible (initial_setup role) — edits here are overwritten.
+          # Discard info/debug for every facility that reaches rsyslog through journald, so
+          # raising MaxLevelSyslog to info restores the auth trail without growing syslog.
+          if ($syslogseverity >= 6) and ($syslogfacility-text != "auth") and ($syslogfacility-text != "authpriv") and ($syslogfacility-text != "kern") and ($syslogfacility-text != "mail") then {
+              stop
+          }
+        mode: "0644"
+      notify: Restart rsyslog
+
+    - name: Verify the rsyslog configuration still parses
+      # rc AND stderr, because only one of them is verified. rsyslogd -N1 exits 0 on a good
+      # config (measured), but its exit code on a bad one could not be proven here without
+      # write access to /etc/rsyslog.d — the only directory it is allowed to read. A guard
+      # resting on an unverified exit-code contract is one that may never fire, so the
+      # reported text is checked too. It writes to stderr, not stdout (measured).
+      ansible.builtin.command: rsyslogd -N1
+      changed_when: false
+      register: initial_setup_rsyslog_parse
+      failed_when: >-
+        initial_setup_rsyslog_parse.rc != 0
+        or 'error' in (initial_setup_rsyslog_parse.stderr | lower)
+
+  rescue:
+    - name: Withdraw the filter that broke the rsyslog configuration
+      ansible.builtin.file:
+        path: /etc/rsyslog.d/49-homelab-info-filter.conf
+        state: absent
+
+    - name: Fail with the parse error
+      ansible.builtin.fail:
+        msg: >-
+          rsyslogd rejected the config after 49-homelab-info-filter.conf was written, so the
+          file has been removed and rsyslog was left running its previous config.
+          rsyslogd -N1 said: {{ initial_setup_rsyslog_parse.stderr | default('(no output)') }}
 
 # ── Server performance tuning (NOT the Pi — it needs powersave + eager zram swap) ──
 # REVERTED 2026-06-11: the performance governor (added 8074318) set EPP=performance on

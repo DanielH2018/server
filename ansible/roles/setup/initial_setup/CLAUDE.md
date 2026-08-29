@@ -151,9 +151,35 @@ guards now point at the library plus one that both consumers still source it.
 ## Notable
 - **Handlers live in the playbook, not this role** (there is no `handlers/main.yml`) — `Restart
   SSH`, `Restart fail2ban`, `Reload audit rules`, `Reload Postfix`, `Restart Postfix`, `Restart
-  systemd-journald`, `Rebuild initramfs for i915`, `Warn that a reboot is required for i915 GuC`
-  are defined in `initial_setup.yml`. Same pattern as [[optimize_pi]]: a new `notify:` here needs a matching
-  handler added to that playbook.
+  rsyslog`, `Restart systemd-journald`, `Rebuild initramfs for i915`, `Warn that a reboot is
+  required for i915 GuC` are defined in `initial_setup.yml`. Same pattern as [[optimize_pi]]: a
+  new `notify:` here needs a matching handler added to that playbook.
+  **`Restart rsyslog` is defined ABOVE `Restart systemd-journald` on purpose** — handlers fire
+  in definition order, not notify order, and journald begins forwarding at info the moment it
+  restarts. ENFORCED by `ansible/tests/test_journald_syslog_forwarding.py`.
+- **`journald` tag: the two files are one change.** `50-homelab.conf` caps the journal
+  (`SystemMaxUse=1G`, `MaxLevelStore=notice`) and sets `MaxLevelSyslog=info`;
+  `/etc/rsyslog.d/49-homelab-info-filter.conf` then discards info for every facility that
+  reaches rsyslog *through* journald. Deploying either alone is a defect, so
+  `ansible/tests/test_journald_syslog_forwarding.py` pins them together.
+
+  **Why they differ.** journald owns `/dev/log`, so rsyslog only ever sees what journald
+  forwards, and `Store` and `Syslog` are applied to their sinks independently. `MaxLevelSyslog`
+  read `notice` from 2026-08-01 to 2026-08-29 and deleted the host's SSH authentication trail:
+  `Accepted publickey ... SHA256:` and every `pam_unix(...:session)` line is priority info.
+  sshd's `LogLevel VERBOSE` was correct throughout and irrelevant — an application's log level
+  bounds what it emits, not what survives. Two things depended on those lines: which key
+  authenticated is recorded nowhere else (auditd has the login, never the fingerprint), and
+  the crowdsec node agent tails `auth.log` for the SSH brute-force signal.
+
+  **The filter's exemptions are load-bearing.** `auth`/`authpriv` carry the records; `kern` and
+  `mail` must be exempt because they do *not* arrive via journald — rsyslog reads kernel
+  messages itself through `imklog`, and postfix writes to its own listen socket — so discarding
+  their info removes lines from `kern.log` and `mail.log` that are present today.
+  Measured cost of the pair: +0.34 MB/day/host, against a +7 MB/day/host floor without the
+  filter. **`validate:` cannot be used on the filter** — AppArmor confines `rsyslogd` to
+  `/etc/rsyslog.conf` and `/etc/rsyslog.d/**`, and Ansible validates a candidate in a temp
+  directory, so the config is checked in place afterwards and the write undone on failure.
 - **iGPU (`igpu` tag)** writes `/etc/modprobe.d/i915.conf` (`options i915 enable_guc=2`) and
   rebuilds the initramfs, but **never reboots** — unlike `Reboot Pi`, this fires on the machine
   running the whole homelab, so it only prints a reboot reminder.
