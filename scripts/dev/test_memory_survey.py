@@ -277,3 +277,64 @@ def test_bracketed_title_is_flagged_when_its_file_is_missing(tmp_path):
         {"a.md": "body"},
     )
     assert _survey(d)["dead_links"] == ["gone.md"]
+
+
+# --- enforcement -----------------------------------------------------------------------------
+# Three outcomes, each with the input it must produce and an input it must not: a memory whose
+# cited check exists, one that cites nothing, and one whose cited check is gone. The third is the
+# interesting case — the memory claims an owner it no longer has.
+
+
+def _repo(tmp_path, *paths):
+    root = tmp_path / "repo"
+    for rel in paths:
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("")
+    root.mkdir(exist_ok=True)
+    return root
+
+
+def _memfile(tmp_path, name, body):
+    d = tmp_path / "mem"
+    d.mkdir(exist_ok=True)
+    p = d / name
+    p.write_text(body)
+    return p
+
+
+def test_a_memory_citing_a_live_check_is_enforced(tmp_path):
+    root = _repo(tmp_path, "ansible/tests/test_thing.py")
+    p = _memfile(tmp_path, "a.md", "ENFORCED by ansible/tests/test_thing.py.\n")
+    assert memory_survey.enforcement([p], root)["enforced"] == ["a.md"]
+
+
+def test_a_memory_citing_nothing_is_unenforced(tmp_path):
+    root = _repo(tmp_path, "ansible/tests/test_thing.py")
+    p = _memfile(tmp_path, "b.md", "A fact nobody checks.\n")
+    assert memory_survey.enforcement([p], root)["unenforced"] == ["b.md"]
+
+
+def test_a_memory_citing_a_missing_check_is_dangling(tmp_path):
+    root = _repo(tmp_path, "ansible/tests/test_thing.py")
+    p = _memfile(tmp_path, "c.md", "ENFORCED by ansible/tests/test_gone.py.\n")
+    result = memory_survey.enforcement([p], root)
+    assert result["dangling"] and "test_gone.py" in result["dangling"][0]
+    assert result["enforced"] == [] and result["unenforced"] == []
+
+
+def test_a_hook_path_counts_as_a_check(tmp_path):
+    root = _repo(tmp_path, ".claude/hooks/block-footguns.py")
+    p = _memfile(tmp_path, "d.md", "Denied by .claude/hooks/block-footguns.py.\n")
+    assert memory_survey.enforcement([p], root)["enforced"] == ["d.md"]
+
+
+def test_a_manifest_path_is_not_mistaken_for_a_check(tmp_path):
+    """A memory citing the thing it DESCRIBES has no owner; only a check counts."""
+    root = _repo(tmp_path, "ansible/roles/k8s/traefik/templates/deployment.yaml.j2")
+    p = _memfile(
+        tmp_path,
+        "e.md",
+        "See ansible/roles/k8s/traefik/templates/deployment.yaml.j2.\n",
+    )
+    assert memory_survey.enforcement([p], root)["unenforced"] == ["e.md"]

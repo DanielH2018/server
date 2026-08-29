@@ -40,6 +40,10 @@ import re
 import sys
 from pathlib import Path
 
+# The checkout a memory's cited check paths are resolved against. Taken from this file's own
+# location so the survey works from a worktree, where the primary checkout's paths would be the
+# wrong tree to ask.
+REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MEMORY_DIR = Path.home() / ".claude/projects/-home-ubuntu-server/memory"
 DEFAULT_TRANSCRIPT_DIR = Path.home() / ".claude/projects/-home-ubuntu-server"
 
@@ -237,6 +241,44 @@ def last_referenced(
     return result
 
 
+# A path that looks like a check this repo could own. Deliberately narrow: a memory naming
+# `ansible/roles/k8s/traefik/templates/deployment.yaml.j2` is citing the thing it describes, not
+# a check that enforces it.
+_CHECK_PATH = re.compile(
+    r"(?:ansible/tests/[\w./-]+\.py"
+    r"|scripts/[\w./-]*test_[\w./-]+\.py"
+    r"|scripts/validate/[\w./-]+\.py"
+    r"|\.claude/hooks/[\w./-]+\.(?:py|sh)"
+    r"|[\w./-]*files/test_[\w./-]+\.py)"
+)
+
+
+def enforcement(files: list[Path], repo_root: Path) -> dict[str, list[str]]:
+    """Which memory files name a check that exists, and which name none.
+
+    The repo's own ladder is run-local note -> memory -> CLAUDE.md rule -> executable check,
+    and MEMORY.md marks a handful of entries ENFORCED. Nothing counts the rest, so the ladder
+    is aspirational: there is no way to ask which memories are still carried by an agent
+    remembering them.
+
+    This is a PROXY, and a deliberately weak one. It reports whether a memory cites a check
+    path that resolves, which is evidence the fact has an owner — not proof the check tests
+    what the memory claims. A cited path that no longer exists is the more interesting half:
+    the memory says it is enforced and the enforcer is gone.
+    """
+    enforced, unenforced, dangling = [], [], []
+    for path in files:
+        cited = sorted(set(_CHECK_PATH.findall(_read(path))))
+        if not cited:
+            unenforced.append(path.name)
+            continue
+        if any((repo_root / c).exists() for c in cited):
+            enforced.append(path.name)
+        else:
+            dangling.append(f"{path.name} -> {', '.join(cited)}")
+    return {"enforced": enforced, "unenforced": unenforced, "dangling": dangling}
+
+
 def survey(
     memory_dir: Path,
     transcript_dir: Path,
@@ -295,6 +337,7 @@ def survey(
             e["file"] for e in entries if e["last_referenced"] is None
         ),
         "duplicate_candidates": duplicate_candidates(files, duplicate_threshold),
+        "enforcement": enforcement(files, REPO_ROOT),
         "entries": entries,
         "transcript_window_days": transcript_days,
     }
@@ -335,6 +378,24 @@ def _render(s: dict) -> str:
         out.extend(
             f"  {score:.3f}  {a}  <->  {b}" for a, b, score in s["duplicate_candidates"]
         )
+
+    enf = s["enforcement"]
+    total = len(enf["enforced"]) + len(enf["unenforced"]) + len(enf["dangling"])
+    out.append(
+        f"\nenforcement: {len(enf['enforced'])}/{total} memories cite a check that exists"
+    )
+    if enf["dangling"]:
+        out.append(
+            f"  DANGLING ({len(enf['dangling'])}) — cites a check that is GONE, so the memory "
+            "claims an owner it no longer has:"
+        )
+        out.extend(f"    {n}" for n in enf["dangling"])
+    if enf["unenforced"]:
+        out.append(
+            f"  unenforced ({len(enf['unenforced'])}) — carried by an agent remembering them. "
+            "Candidates for the next rung of the ladder, not a defect list:"
+        )
+        out.extend(f"    {n}" for n in enf["unenforced"])
 
     out.append("\nlargest entries:")
     for e in s["entries"][:15]:
