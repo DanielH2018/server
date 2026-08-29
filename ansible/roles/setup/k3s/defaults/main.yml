@@ -916,6 +916,13 @@ k3s_release_file_groups:
     files:
       - src: ansible/roles/setup/k3s/files/live_drift_check.py
         name: live-drift-check.py
+  # Shares the k3s-manifest-prune release with the rendered script that calls it, so the two
+  # version together: a reader that drifted from its caller is exactly the fault this check
+  # exists to report. Stdlib-only — the cron runs it directly, with no uv and no PyYAML.
+  - name: k3s-manifest-prune        # tags: [manifest-prune]
+    files:
+      - src: ansible/roles/setup/k3s/files/manifest_declares.py
+        name: manifest-declares.py
 
 # Node-to-node traffic UFW must admit (both hosts default-deny INPUT, and unlike every
 # service port this traffic terminates in host processes, not Docker/kube NAT):
