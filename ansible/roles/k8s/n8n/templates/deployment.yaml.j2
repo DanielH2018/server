@@ -95,6 +95,22 @@ spec:
               value: "2"
             - name: N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS
               value: "true"
+            # Four outbound calls this instance makes by default and nobody here consumes. All
+            # four were simply UNSET before 2026-08-29, which meant n8n's defaults (all enabled)
+            # were live, not that a choice had been made.
+            #
+            # N8N_TEMPLATES_ENABLED=false is a REAL UI change, not a silent one: it removes the
+            # editor's "browse workflow templates" panel, which pulls from n8n.io. That is the
+            # trade being made here — this instance runs one set of self-authored workflows, and
+            # the panel has not been used. Set it back to "true" if you want the browser again.
+            - name: N8N_DIAGNOSTICS_ENABLED
+              value: "false"
+            - name: N8N_VERSION_NOTIFICATIONS_ENABLED
+              value: "false"
+            - name: N8N_TEMPLATES_ENABLED
+              value: "false"
+            - name: N8N_HIRING_BANNER_ENABLED
+              value: "false"
             - name: N8N_RUNNERS_ENABLED
               value: "true"
             - name: NODE_RUNNERS_ENABLED

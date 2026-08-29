@@ -68,8 +68,17 @@ spec:
               drop:
                 - ALL
           env:
+            # `warning`, not `info`: at info this container wrote 11,571 lines a day to serve 11
+            # real requests, and measured 2026-08-29 the bulk of that was the kubelet's own
+            # readiness probe hitting `/` every 10s and being logged as a request. A genuine
+            # challenge-solve failure raises, and FlareSolverr logs that at ERROR, so it still
+            # prints here.
+            #
+            # The signal that a challenge is failing was never this log anyway: monitor-bridge
+            # reads Prowlarr's /api/v1/indexerstatus (check.py:1578), which is independent of
+            # anything FlareSolverr writes to stdout.
             - name: LOG_LEVEL
-              value: info
+              value: warning
             - name: TZ
               value: "{{ tz }}"
           volumeMounts:

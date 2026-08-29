@@ -41,7 +41,7 @@ k8s_autodeploy_reason: "observability — Claude Code's own telemetry stack, six
 #     verbatim. The default class would copy transcript-grade data into B2 automatically.
 claude_otel_storage_class: longhorn-nobackup
 claude_otel_loki_storage: 10Gi
-claude_otel_prometheus_storage: 5Gi
+claude_otel_prometheus_storage: 12Gi
 # Grafana keeps only its own SQLite (users, prefs, starred dashboards). Datasources and
 # dashboards are provisioned from ConfigMaps, so this volume is small and losing it costs
 # nothing but UI state — it is on the no-backup class for that reason, not just size.
@@ -126,11 +126,23 @@ claude_otel_loki_homelab_uid: bf4q19tuivta8e
 claude_otel_deploy_annotation_expr: '{job="syslog"} |= "event=deploy" | logfmt'
 
 claude_otel_prometheus_retention: 30d
-# Deliberately well under claude_otel_prometheus_storage (5Gi), not close to it. The cap bounds
-# persisted BLOCKS only — the WAL, the in-memory head as it flushes, and compaction (which needs
-# room for the output block alongside its inputs) all consume the same PVC on top of this number.
-# Sizing it near the volume is how a size-capped Prometheus still fills its disk.
-claude_otel_prometheus_retention_size: 3GB
+# Deliberately well under claude_otel_prometheus_storage (12Gi), not close to it. What the cap
+# counts is persisted blocks PLUS the WAL and the m-mapped head chunks; what it does NOT cover is
+# compaction, which needs room for the output block alongside its inputs. (This comment said
+# "BLOCKS only" until 2026-08-29 — measured that day, the accounting was 2.70GB against 2.55GB of
+# blocks, so the cap was understated by ~6%.) Sizing it near the volume is how a size-capped
+# Prometheus still fills its disk; the ~58% ratio below is the thing to hold, not the absolute.
+#
+# 3GB/5Gi until 2026-08-29, and the size cap was binding: `retention: 30d` was configured while the
+# TSDB held 3.67 DAYS. Raising it is not deferring a cardinality problem — the same-day relaxation
+# of the four control-plane jobs to 1m cut ingest 66.5%, and at the post-cut rate 30 days costs
+# ~6.6GB (1957.7 samples/s x 1.297 bytes/sample = 219 MB/day). The model is validated against
+# history rather than assumed: the pre-cut 5,734 samples/s predicts 642 MB/day, and the blocks
+# actually grew at 695 MB/day — 8% agreement.
+#
+# Expect the window to widen over WEEKS, not on the next deploy. The existing blocks hold
+# old-rate data, so they age out at the old cost before the new rate shows in the retained span.
+claude_otel_prometheus_retention_size: 7GB
 
 # Traces (slice 3). Claude Code emits spans only with both CLAUDE_CODE_ENHANCED_TELEMETRY_BETA
 # and OTEL_TRACES_EXPORTER set — the chezmoi settings template already sets both, so this is

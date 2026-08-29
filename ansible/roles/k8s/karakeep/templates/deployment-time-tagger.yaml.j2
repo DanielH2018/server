@@ -92,6 +92,33 @@ spec:
               drop:
                 - ALL
           env:
+            # This container was the homelab's single largest Loki emitter — 22,786 lines per 30
+            # minutes measured 2026-08-29 — and every INFO line was written THREE times, byte- and
+            # timestamp-identical. Three loguru stderr handlers were active at once:
+            #
+            #   1. loguru's own pre-configured default handler,
+            #   2. the vendored script's, added by setup_logging(),
+            #   3. karakeep_python_api's, added on every KarakeepAPI() construction
+            #      (karakeep_api.py:146, reached from the script's line 288).
+            #
+            # Handlers 2 and 3 each sit directly below a COMMENTED-OUT `logger.remove()` — the
+            # same upstream bug, in two different packages.
+            #
+            # LOGURU_AUTOINIT=false removes handler 1 at import, which is loguru's supported way
+            # to suppress the pre-configured sink (_defaults.py:30). It takes the line rate to 2x.
+            #
+            # THE OBVIOUS FIX IS THE WRONG ONE HERE. Uncommenting `logger.remove()` in the
+            # vendored script would also reach handler 1 — but that file is upstream's bytes,
+            # pinned by sha256 to an immutable commit in the archived Docker role, and
+            # ansible/tests/test_karakeep_time_tagger_script.py exists to fail when the vendored
+            # copy stops matching what upstream serves. Editing it and re-pinning to our own hash
+            # would keep the test green while destroying what it checks.
+            #
+            # Handler 3 has no env-var escape: karakeep_api.py adds its sink unconditionally,
+            # and KARAKEEP_PYTHON_API_VERBOSE only picks its LEVEL. Removing it needs an upstream
+            # fix, so 2x is the floor without one.
+            - name: LOGURU_AUTOINIT
+              value: "false"
             - name: TZ
               value: "{{ tz }}"
             - name: KARAKEEP_PYTHON_API_ENDPOINT
