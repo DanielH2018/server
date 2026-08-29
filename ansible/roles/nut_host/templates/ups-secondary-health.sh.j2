@@ -66,6 +66,19 @@ UPSMON_CONF=/etc/nut/upsmon.conf
 ENDPOINT="$(awk '$1 == "MONITOR" { print $2; exit }' "$UPSMON_CONF" 2>/dev/null)"
 UNIT_STATE="$(systemctl is-active nut-monitor 2>/dev/null || true)"
 
+# stdout and stderr are kept APART. upsc writes "Init SSL without certificate database" to
+# stderr on every successful call here, so folding the two with 2>&1 puts that line inside the
+# value: the pushed message goes multi-line, and the empty-status branch below becomes
+# unreachable because the noise is never empty. Both were live for one cycle on 2026-08-29.
+UPSC_STDERR="$(mktemp)"
+UPS_STATUS="$(upsc "$ENDPOINT" ups.status 2>"$UPSC_STDERR")"
+UPSC_RC=$?
+# Collapsed to one line: ups.status is legitimately multi-token ("OL CHRG"), and a newline in
+# either half would break the syslog line and the push message.
+UPS_STATUS="$(printf '%s' "$UPS_STATUS" | tr '\n' ' ' | sed 's/  */ /g; s/^ //; s/ $//')"
+UPSC_ERR="$(tr '\n' ' ' < "$UPSC_STDERR" | sed 's/  */ /g; s/^ //; s/ $//')"
+rm -f "$UPSC_STDERR"
+
 if [[ ! -r "$UPSMON_CONF" ]]; then
   STATUS=down
   MSG="${UPSMON_CONF} is unreadable — the secondary is not configured on this host"
@@ -75,10 +88,9 @@ elif [[ -z "$ENDPOINT" ]]; then
 elif [[ "$UNIT_STATE" != "active" ]]; then
   STATUS=down
   MSG="nut-monitor is ${UNIT_STATE:-unknown} — nothing on this host will act on FSD"
-elif ! UPS_STATUS="$(upsc "$ENDPOINT" ups.status 2>&1)"; then
-  # upsc writes its diagnostics to stderr, so $UPS_STATUS holds the reason on this branch.
+elif (( UPSC_RC != 0 )); then
   STATUS=down
-  MSG="upsd unreachable at ${ENDPOINT}: ${UPS_STATUS}"
+  MSG="upsd unreachable at ${ENDPOINT}: ${UPSC_ERR:-upsc exited ${UPSC_RC} with no diagnostic}"
 elif [[ -z "$UPS_STATUS" ]]; then
   STATUS=down
   MSG="upsd at ${ENDPOINT} returned an empty ups.status"
