@@ -217,6 +217,15 @@ stringData:
     {"type": "push", "name": "Longhorn Volume Redundancy", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_longhorn_volumes_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   daniel-box-disk.json: |
     {"type": "push", "name": "daniel-box Disk", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ daniel_box_disk_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+{# The host half of the shutdown chain. Its producer is nut_host's root cron, whose cadence and
+   this deadline both derive from nut_host_watchdog_interval_minutes, so a schedule change cannot
+   leave the tile graced against the old one. Gated on the token like its siblings: an ungated
+   tile sits red from creation until the secret exists. Carries `email` because a dead secondary
+   is only discovered at a power cut, which is exactly when Discord is unreachable. #}
+{% if ups_secondary_push_token | default('') %}
+  ups-secondary.json: |
+    {"type": "push", "name": "UPS Secondary (host)", "interval": {{ nut_host_watchdog_interval_minutes | default(10) * 60 * 2 }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ ups_secondary_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+{% endif %}
   # DECIDED: 5400s, not the 1200 its host-cron siblings use — the deadline must exceed the
   # PRODUCER'S PERIOD, and this producer is an hourly cron (k3s_remember_logs_cron_minute), not a
   # */10 one. 3600s plus the run leaves 5400 with 30 min of margin. At 1200 it would fire DOWN

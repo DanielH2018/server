@@ -192,3 +192,136 @@ def test_a_delay_that_outlasts_the_battery_is_flagged():
 def test_the_band_binds_only_once_a_second_host_is_armed():
     """With ups_host alone armed, an agent node stopping early is its own business."""
     assert onbatt_delay_verdict(120, False) is None
+
+
+# ── the runtime watchdog on the secondary's upsd link (2026-08-29 review M-8) ────────────
+#
+# The `wait_for` above proves reachability once, at deploy. These guard the check that proves
+# it every 10 minutes afterwards. Each asserts a property whose failure is invisible: a
+# watchdog reading the wrong address, or one leaking the credential that sits on the line it
+# reads, both look exactly like a working one.
+
+WATCHDOG = (ROLE / "templates" / "ups-secondary-health.sh.j2").read_text()
+WATCHDOG_ENV = (ROLE / "templates" / "kuma-push.env.j2").read_text()
+STATIC_MONITORS = (
+    ANSIBLE / "roles" / "k8s" / "uptime-kuma" / "templates" / "static-monitors.yaml.j2"
+).read_text()
+NUT_HOST_DEFAULTS = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
+
+# A MONITOR line in the shape host-upsmon.conf.j2 renders. The fifth field is a fake stand-in
+# for the credential that sits there in the real file; it exists only to be searched for in the
+# extractor's output.
+_FAKE_CREDENTIAL = "not-a-real-value-xyz"
+_MONITOR_LINE = f"MONITOR apc-ups@10.43.171.124 1 upsmon {_FAKE_CREDENTIAL} secondary"
+
+
+def _endpoint_extractor() -> str:
+    """The awk program the shipped script uses, taken from the template rather than retyped.
+
+    Retyping it would guard a copy: the script could switch to a bare grep and these tests
+    would keep passing against the awk they still held.
+    """
+    import re
+
+    match = re.search(r"ENDPOINT=\"\$\(awk '([^']+)'", WATCHDOG)
+    assert match, (
+        "no awk endpoint extraction found in the watchdog — did it change shape?"
+    )
+    return match.group(1)
+
+
+def _extract_endpoint(conf_text: str) -> str:
+    import subprocess
+
+    return subprocess.run(
+        ["awk", _endpoint_extractor()],
+        input=conf_text,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+
+def test_the_extractor_returns_the_endpoint():
+    assert _extract_endpoint(_MONITOR_LINE) == "apc-ups@10.43.171.124"
+
+
+def test_the_extractor_never_prints_the_fifth_field():
+    """The rejecting half, and the reason this is awk rather than grep.
+
+    `grep MONITOR upsmon.conf` returns the whole line — including the credential in field 5 —
+    into syslog and into any transcript that ran the check. This estate has rotated three
+    secrets after exactly that mistake.
+    """
+    assert _FAKE_CREDENTIAL not in _extract_endpoint(_MONITOR_LINE)
+
+
+def test_the_extractor_is_empty_when_no_monitor_line_exists():
+    """Drives the script's `no MONITOR line` DOWN branch — an empty result must not read clean."""
+    assert _extract_endpoint("MINSUPPLIES 1\nPOLLFREQ 5\n") == ""
+
+
+def test_the_watchdog_reads_the_deployed_conf_not_an_ansible_var():
+    """A re-templated var would resolve fresh at render time.
+
+    A tag-scoped run that touched only this cron would then bake a CURRENT ClusterIP into the
+    check while upsmon kept using the stale one, so the check would pass against an address
+    upsmon does not use — reproducing the blindness it exists to remove.
+    """
+    assert "/etc/nut/upsmon.conf" in WATCHDOG
+    assert "nut_host_upsd_host" not in WATCHDOG
+
+
+def test_the_watchdog_checks_both_the_unit_and_the_link():
+    """Either alone is a half-check: a live nut-monitor talking to nothing still never fires."""
+    assert "systemctl is-active nut-monitor" in WATCHDOG
+    assert "upsc" in WATCHDOG
+
+
+def test_the_watchdog_logs_above_the_journald_store_cap():
+    """journald here is capped at MaxLevelStore=notice, so an info line never reaches Loki.
+
+    That was 2026-08-29 review M-15, found in live_drift_check.py. Pinned here so this check
+    cannot ship the same bug.
+    """
+    assert "daemon.notice" in WATCHDOG
+    assert "daemon.info" not in WATCHDOG
+
+
+def test_the_watchdog_renders_its_own_env_file():
+    """/etc/rancher/k3s/kuma-push.env is a whole-content template owned by roles/setup/k3s.
+
+    Adding a key to it from this role would be clobbered on that role's next run, leaving the
+    cron with no token — which reads as the monitor going silent, not as a broken deploy.
+    """
+    # Asserted on the `source` line, not on any mention: the script's own comment names the
+    # k3s file to explain why it is not used, and a bare substring check would trip on that.
+    assert ". /etc/nut/kuma-push.env" in WATCHDOG
+    assert ". /etc/rancher/" not in WATCHDOG
+    assert "ups_secondary_push_token" in WATCHDOG_ENV
+
+
+def test_the_tile_is_gated_on_its_token():
+    """An ungated tile sits red from creation until the secret exists."""
+    assert "{% if ups_secondary_push_token | default('') %}" in STATIC_MONITORS
+
+
+def test_the_tile_deadline_is_derived_from_the_cron_cadence():
+    """A hardcoded interval survives a schedule change and grants the wrong grace.
+
+    A 24h grace against a 23h gap once cleared the DOWN it was added to make sticky.
+    """
+    assert "nut_host_watchdog_interval_minutes" in STATIC_MONITORS
+    assert "*/{{ nut_host_watchdog_interval_minutes }}" in TASKS
+
+
+def test_the_watchdog_is_armable_and_armed():
+    assert NUT_HOST_DEFAULTS["nut_host_watchdog_armed"] is True
+    assert NUT_HOST_DEFAULTS["nut_host_watchdog_interval_minutes"] == 10
+    assert "nut_host_watchdog_armed | bool" in TASKS
+
+
+def test_the_watchdog_does_not_page_on_battery_state():
+    """check_ups already owns battery state; alerting on OB here double-pages one event."""
+    assert "ups.status" in WATCHDOG
+    assert '"OB"' not in WATCHDOG

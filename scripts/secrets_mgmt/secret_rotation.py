@@ -138,6 +138,11 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         # Same reason as its two fake_remux siblings above: pushed by a setup role with no deploy
         # tag, so there is nothing for --deploy to run. The tile is in k8s/uptime-kuma.
         "mkv_attachment_repair_push_token",
+        # nut_host cron (renders /etc/nut/kuma-push.env) + k8s/uptime-kuma static tile. Same shape
+        # as docs_refresh_push_token above: nut_host runs only from initial_setup.yml and has no
+        # deploy tag, so `--deploy --tags uptime-kuma` would move the tile and leave the root cron
+        # pushing the old value — silencing the monitor that watches the shutdown chain.
+        "ups_secondary_push_token",
     }
 )
 

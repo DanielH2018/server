@@ -53,25 +53,30 @@ services:
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.50', '128M', '0.05', '16M') }}
 
-  # Write-capable proxy for lifecycle automation only (Watchtower + Autoheal).
-  # POST=1 enables create/start/stop/restart; EXEC stays off. It lives solely on the
-  # private `lifecycle` network those two containers join, so write access to the
-  # Docker API is NOT exposed to the proxy/monitoring/apps networks.
+  # Write-capable proxy for lifecycle automation only — Autoheal, and nothing else since
+  # Watchtower was retired (35c0dc8d, Renovate owns image updates). It lives solely on the
+  # private `lifecycle` network autoheal joins, so write access to the Docker API is NOT
+  # exposed to the proxy/monitoring/apps networks.
+  #
+  # IMAGES, NETWORKS, ALLOW_START and ALLOW_STOP were dropped 2026-08-29 (review M-11). Each
+  # existed for Watchtower alone and said so in its own comment; the retirement commit's diff
+  # on this file is empty, so they outlived their only consumer by three weeks. Autoheal issues
+  # POST /containers/{id}/restart and nothing else, which ALLOW_RESTARTS gates on its own —
+  # verified against a canary container before and after this change, not inferred.
+  #
+  # POST=1 STAYS: a restart is a POST, so this proxy remains write-capable by design. The
+  # narrowing is real but partial, and the residual below is unchanged.
   docker-proxy-lifecycle:
     image: lscr.io/linuxserver/socket-proxy:latest
     container_name: docker-proxy-lifecycle
     environment:
       - CONTAINERS=1
-      - IMAGES=1         # Watchtower pulls/prunes images
-      - NETWORKS=1       # Watchtower needs network info to recreate containers
       - INFO=1
       - VERSION=1
       - PING=1
       - EVENTS=1
-      - POST=1           # Allow write methods (POST/PUT/DELETE): create/remove containers + image cleanup
-      - ALLOW_START=1    # Watchtower: start recreated containers
-      - ALLOW_STOP=1     # Watchtower: stop old containers before replacing
-      - ALLOW_RESTARTS=1 # Autoheal: restart unhealthy containers (also covers Watchtower kill)
+      - POST=1           # Allow write methods (POST/PUT/DELETE) — Autoheal's restart is a POST
+      - ALLOW_RESTARTS=1 # Autoheal: restart unhealthy containers
       # EXEC=0 blocks the exec *run* path (/exec/{id}/start -> 403, verified). Note: create-exec
       # (/containers/{id}/exec) still slips through via CONTAINERS+POST, but with /exec/start
       # blocked it can't execute. Accepted: this proxy is already create-capable (POST=1, needed

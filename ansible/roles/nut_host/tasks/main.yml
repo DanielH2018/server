@@ -98,3 +98,56 @@
     enabled: true
     state: "{{ 'restarted' if (nut_host_nutconf is changed or nut_host_upsmon is changed) else 'started' }}"
   become: true
+
+# ── Runtime watchdog for the link the assert above only proves once ─────────────
+# See defaults/main.yml for why the neighbouring UPS checks do not cover this path.
+- name: Deploy the UPS secondary watchdog's Kuma credentials
+  when: nut_host_watchdog_armed | bool
+  ansible.builtin.template:
+    src: kuma-push.env.j2
+    dest: /etc/nut/kuma-push.env
+    owner: root
+    group: "{{ sys_user }}"
+    mode: "0640"
+  no_log: true
+  become: true
+
+- name: Deploy the UPS secondary watchdog
+  when: nut_host_watchdog_armed | bool
+  ansible.builtin.template:
+    src: ups-secondary-health.sh.j2
+    dest: /usr/local/bin/ups-secondary-health.sh
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+# Root-run because the script reads /etc/nut/upsmon.conf (0640 root:nut) to take the endpoint
+# from the file upsmon actually uses. Same shape as manifest-prune-check.sh.
+- name: Schedule the UPS secondary watchdog
+  when: nut_host_watchdog_armed | bool
+  ansible.builtin.cron:
+    name: "UPS secondary watchdog"
+    minute: "*/{{ nut_host_watchdog_interval_minutes }}"
+    user: root
+    job: "/usr/local/bin/ups-secondary-health.sh"
+    cron_file: ups-secondary-health
+  become: true
+
+# The stale-render arm of manifest-prune-check.sh can only report drift for templates that
+# stamped a sha256, and nut_host stamped none — so a change to the shutdown chain's config
+# could never be reported stale (2026-08-29 review M-10). Stamping it here closes that on
+# daniel-box. It does NOT close it on daniel-server: manifest-prune-check.sh is installed by
+# the k3s role's health-crons.yml, which k3s-bringup.yml gates to k3s_server_hosts, so
+# /var/lib/homelab/setup-render-manifest.d/ does not exist there at all. That host stays
+# structurally uncovered and the decision to leave it so is the operator's — see this role's
+# entry in the review report rather than reading this stamp as full coverage.
+- name: Record the rendered UPS host config
+  when: nut_host_watchdog_armed | bool
+  ansible.builtin.import_tasks: "{{ role_path }}/../setup/common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: nut-host
+    stamp_render_templates:
+      - ansible/roles/nut_host/templates/host-upsmon.conf.j2
+      - ansible/roles/nut_host/templates/host-nut.conf.j2
+      - ansible/roles/nut_host/templates/ups-secondary-health.sh.j2

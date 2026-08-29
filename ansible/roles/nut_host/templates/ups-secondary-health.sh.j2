@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# Host-side UPS secondary watchdog — managed by Ansible (nut_host role); edits overwritten.
+#
+# Answers the one question nothing else in this estate asks: can THIS host's upsmon still
+# reach upsd, right now?
+#
+# The role's `wait_for` assert proves that at deploy time and never again. Two things break it
+# silently in between, and both stay invisible until the power cut the chain exists for:
+#   * the nut Service is recreated with a different ClusterIP, stranding the address frozen
+#     into /etc/nut/upsmon.conf (the Service does not pin its clusterIP — see defaults/main.yml)
+#   * nut-monitor dies or is left disabled
+#
+# WHY THE NEIGHBOURING CHECKS DO NOT COVER THIS, all three for the same reason — they observe a
+# different path from the one that carries the shutdown:
+#   * monitor-bridge's check_ups reads Home Assistant's Prometheus-scraped NUT sensors, i.e. the
+#     UPS as seen THROUGH the pod. It says the UPS is fine, not that this host can hear it.
+#   * the "k3s nut (upsd)" Kuma tile is a TCP probe from the Kuma POD over Service DNS,
+#     re-resolved every cycle. A ClusterIP change that strands this host's frozen literal leaves
+#     that tile green — it is the wrong side of the exact thing in dispute.
+#   * node-exporter runs without --collector.systemd, so no node_systemd_unit_state series
+#     exists for anything to alert on nut-monitor being dead.
+#
+# THE ADDRESS IS READ OUT OF THE DEPLOYED FILE, not re-templated from an Ansible var. A var
+# would be resolved fresh at render time, so a tag-scoped run that touched this cron without
+# re-rendering upsmon.conf would bake a CURRENT ClusterIP into the check while upsmon kept using
+# the stale one — the check would pass against an address upsmon does not use, reproducing the
+# blindness it exists to remove.
+#
+# The MONITOR line carries nut_monitor_password in field 5, which is why the read is
+# field-scoped awk and never a bare grep: printing that line prints the credential into syslog
+# and into any agent transcript that ran the check. This estate has rotated three secrets after
+# exactly that mistake.
+#
+# Runs as root because /etc/nut/upsmon.conf is 0640 root:nut. Same trade-off as
+# manifest-prune-check.sh: root buys the file read, nothing more. The consequence worth knowing
+# is that an agent session cannot trigger a beat to verify this one by hand.
+set -uo pipefail
+
+# shellcheck source=/dev/null
+source /usr/local/lib/kuma-push-lib.sh || {
+  logger -t ups-secondary-health "kuma-push-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+
+KUMA_HOST="uptime-kuma.local.{{ domain }}"
+# Pinned to the cluster ingress VIP, like every sibling: Kuma serves from the k8s edge and the
+# push must not depend on DNS.
+KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
+
+# This role's OWN env file, deliberately not /etc/rancher/k3s/kuma-push.env. That one is a
+# whole-content template owned by roles/setup/k3s, so adding a key to it from here would be
+# clobbered on that role's next run — and nut_host also has to work on a host where the k3s
+# role's file does not exist.
+UPS_SECONDARY_PUSH_TOKEN=""
+# shellcheck source=/dev/null
+[[ -r /etc/nut/kuma-push.env ]] && . /etc/nut/kuma-push.env
+if [[ -z "$UPS_SECONDARY_PUSH_TOKEN" ]]; then
+  logger -t ups-secondary-health "push token unreadable — skipping push (see /add-secret)"
+  exit 0
+fi
+PUSH_URL="https://${KUMA_HOST}/api/push/${UPS_SECONDARY_PUSH_TOKEN}"
+
+UPSMON_CONF=/etc/nut/upsmon.conf
+
+# Field 2 only: `MONITOR <ups>@<host> <powervalue> <user> <password> <mode>`.
+ENDPOINT="$(awk '$1 == "MONITOR" { print $2; exit }' "$UPSMON_CONF" 2>/dev/null)"
+UNIT_STATE="$(systemctl is-active nut-monitor 2>/dev/null || true)"
+
+if [[ ! -r "$UPSMON_CONF" ]]; then
+  STATUS=down
+  MSG="${UPSMON_CONF} is unreadable — the secondary is not configured on this host"
+elif [[ -z "$ENDPOINT" ]]; then
+  STATUS=down
+  MSG="no MONITOR line in ${UPSMON_CONF} — upsmon has no upsd to watch"
+elif [[ "$UNIT_STATE" != "active" ]]; then
+  STATUS=down
+  MSG="nut-monitor is ${UNIT_STATE:-unknown} — nothing on this host will act on FSD"
+elif ! UPS_STATUS="$(upsc "$ENDPOINT" ups.status 2>&1)"; then
+  # upsc writes its diagnostics to stderr, so $UPS_STATUS holds the reason on this branch.
+  STATUS=down
+  MSG="upsd unreachable at ${ENDPOINT}: ${UPS_STATUS}"
+elif [[ -z "$UPS_STATUS" ]]; then
+  STATUS=down
+  MSG="upsd at ${ENDPOINT} returned an empty ups.status"
+else
+  # Deliberately does NOT page on OB/LB. Battery state is check_ups's job; alerting on it here
+  # would double-page the same event from two mechanisms. This check is about the LINK.
+  STATUS=up
+  MSG="nut-monitor active, upsd reachable at ${ENDPOINT} (ups.status=${UPS_STATUS})"
+fi
+
+# Unconditional and before the push — a successfully-pushed DOWN otherwise leaves no durable
+# record, and `probe.py alerts` reconstructs host-cron episodes by matching status=down in
+# syslog. NOTICE rather than INFO: journald here is capped at MaxLevelStore=notice, so an
+# info-level line is dropped from the journal AND from forwarding to rsyslog, never reaching
+# Loki (2026-08-29 review M-15, which was exactly that bug in live_drift_check.py).
+logger -p daemon.notice -t ups-secondary-health "status=${STATUS} ${MSG}"
+
+kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" ups-secondary-health
