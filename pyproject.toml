@@ -52,7 +52,14 @@ testpaths = [                        # single source of truth for WHAT runs; exc
 # hook so a bare `uv run pytest` gets it too. The suite is filesystem-read-only and order-
 # independent, so it parallelises cleanly — if you add a test that writes shared state, fix the
 # test rather than dropping this. Pass `-n0` to disable it for a debugging run (--pdb needs that).
-addopts = "-q -n auto"
+addopts = "-q -n auto -m 'not ui'"
+# `ui` is registered here so it stays a marker rather than becoming a typo nobody notices,
+# and so `--markers` documents it. The deselection lives in addopts above: these tests drive
+# a real browser against live LAN routes and read SOPS, none of which a GitHub runner has.
+# Run them with `uv run pytest -m ui`, which overrides the default -m.
+markers = [
+  "ui: live browser smoke against the homelab's own routes (scripts/diagnostics/test_ui_smoke.py)",
+]
 # filter_plugins: lets test_toposort import toposort. setup/common/files: host_lib is a cross-role
 # shared module (deployed INTO each setup script's /opt dir as a sibling) — on pythonpath so the
 # import-tested renovate_notify.py + test_host_lib.py resolve it in CI. scripts: the k8s manifest

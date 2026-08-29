@@ -70,4 +70,8 @@ cat >"$CONFIG_PATH" <<EOF
 }
 EOF
 
-exec playwright-mcp --config "$CONFIG_PATH" "$@"
+# Snapshots, console logs and screenshots default to `.playwright-mcp/` in the CURRENT
+# directory, so without this the server litters whatever tree it was launched from — the
+# repo root, for a Claude session or the `ui` test suite. `.gitignore`'s catch-all hides it
+# from `git status`, which makes the mess easy to miss rather than harmless.
+exec playwright-mcp --config "$CONFIG_PATH" --output-dir "$RUNTIME_DIR/output" "$@"

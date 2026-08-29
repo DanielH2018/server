@@ -378,6 +378,14 @@ Per-verb tiers, the RBAC evidence and the rule-matching measurements: `docs/clau
   two cni0 gateways alone (`netpol-baseline/defaults/main.yml:41`), and host-to-remote-node
   traffic SNATs to flannel.1, which is not listed. `kubectl port-forward` does not route
   around it either — the read-only ServiceAccount is denied `create pods/portforward`.
+  **`uv run pytest -m ui` is the regression suite** (`scripts/diagnostics/test_ui_smoke.py`).
+  It drives this same MCP server over stdio, so a break in the wrapper's DNS pin, session
+  minting or launch config fails a test rather than silently degrading a Claude session. The
+  `ui` marker is deselected by `addopts`, because these tests need the host's age key, LAN
+  reachability and a browser — none of which a GitHub runner has. Pin the **exact** page
+  title when adding a service: several apps carry their own login behind Authelia (FreshRSS
+  lands on `/i/`, uptime-kuma on `/dashboard`, karakeep on `/signin`), so a substring like
+  `FreshRSS` also matches `Login · FreshRSS` and scores a broken app green.
 - **block-protected-edits** (PreToolUse) — *denies* direct edits to (a) anything under
   `containers/` (edit the `ansible/roles/containers/<svc>/templates/` source instead) and
   (b) SOPS-encrypted files like `ansible/vars/secrets.yml` (use `sops` / the `/add-secret` skill).
