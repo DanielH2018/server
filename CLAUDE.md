@@ -144,8 +144,10 @@ check, nor the staleness check; use them only when you deliberately want that.
 # Deploy a specific container
 ./scripts/deploy.sh --tags "<service-name>"
 
-# Target the Pi from the server (NB: -e target=, NOT --limit — the play's hosts:
-# defaults to the local hostname, so --limit daniel-pi matches zero hosts)
+# Target the Pi (NB: -e target=, NOT --limit — the play's hosts: defaults to the local
+# hostname, so --limit daniel-pi matches zero hosts). The Pi is ansible_connection=ssh, so
+# this reaches it from either node. `-e target=` a LOCAL-connection host (either cluster
+# node) and the tasks run on the machine you typed it on — see ansible/inventory/hosts.ini.
 uv run ansible-playbook ansible/deploy.yml --tags "<service-name>" -e target=daniel-pi
 
 # Deploy all containers
