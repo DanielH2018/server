@@ -400,7 +400,7 @@ def _render(s: dict) -> str:
     if enf["dangling"]:
         out.append(
             f"  DANGLING ({len(enf['dangling'])}) — cites a check that is GONE, so the memory "
-            "claims an owner it no longer has:"
+            "claims an owner it no longer has (searched the repo, and ~/ for a .claude path):"
         )
         out.extend(f"    {n}" for n in enf["dangling"])
     if enf["unenforced"]:
