@@ -124,3 +124,22 @@
   # After network.yml: the domain's interface names that network, and libvirt refuses to
   # start a domain whose network is not defined.
   ansible.builtin.include_tasks: guest.yml
+
+- name: Clone the checkout the staging gate deploys from
+  tags: [hypervisor]
+  # `update: no` is the whole point, not a performance choice. The gate fetches and
+  # fast-forwards this tree itself, every tick, to the SHA under test. An updating clone
+  # would race that: Ansible would yank the tree back to master's tip while a gate run was
+  # rendering from an older commit, and deploy.sh renders from the working directory, so the
+  # verdict would describe a tree nobody asked about. Ansible creates this once; the gate
+  # owns it thereafter.
+  #
+  # Cloned from the remote rather than from /home/ubuntu/server, so the two checkouts share
+  # no object store and this one cannot be broken by anything done to that one.
+  ansible.builtin.git:
+    repo: "{{ hypervisor_staging_gate_repo_url }}"
+    dest: "{{ hypervisor_staging_gate_repo }}"
+    version: master
+    update: false
+  become: true
+  become_user: "{{ sys_user }}"

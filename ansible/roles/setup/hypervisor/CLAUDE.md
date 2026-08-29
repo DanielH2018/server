@@ -130,3 +130,49 @@ teardown. Undefining a guest is a decision; the assert names the guests in the w
 ENFORCED by `ansible/tests/test_has_flag_roles_have_both_directions.py`: a role dispatching
 on a `has_*` flag must handle both values. `docker_install` honoured only the true branch
 for months, which is how `has_docker: false` came to describe a state nothing converged to.
+
+## The staging gate's checkout
+
+`install.yml` clones `/home/ubuntu/server-staging`, and it is the tree the staging gate deploys
+FROM. `scripts/deploy_tools/staging_gate_remote.sh` — piped over ssh by `staging_gate.py`, never
+deployed — cds there, fast-forwards it to the SHA under test, and runs
+`./scripts/deploy.sh --tags <svc> -e target=daniel-stage`.
+
+**It exists because the gate used to do all of that to `/home/ubuntu/server`, this host's own
+checkout** (2026-08-29 review M-2). Three things were wrong with that and only the first is
+obvious:
+
+- An operator's tree jumped to arbitrary commits behind their back, since the gate never restored
+  what it merged. daniel-server's checkout was found sitting on whatever SHA the gate last tested.
+- Two gate runs — the 30-minute tick's and an operator driving `staging_gate.py` by hand — could
+  interleave a fetch, a merge and a deploy on one tree, each believing it had pinned the commit it
+  was measuring.
+- A dirty tree there made the gate answer `PREP_FAILED` for every commit. That maps to NO_VERDICT,
+  which the deployer reports as "staging could not be asked, which is not a rejection" and then
+  deploys prod anyway — so the gate could be dead for days and read as staging being down.
+
+The clone fixes all three by giving the gate a tree it owns. **The gate moving its own tree
+forward is the point, not a residual defect** — what M-2 objected to was it moving someone else's.
+
+Three things are load-bearing:
+
+- **`update: false` on the git task.** The gate fast-forwards this tree every tick; an updating
+  clone would yank it back to master's tip mid-run, and `deploy.sh` renders from the working
+  directory, so the verdict would describe a tree nobody asked about. Ansible creates it once and
+  never touches the branch again.
+- **Cloned from the remote, not from `/home/ubuntu/server`.** A local clone would share an object
+  store and re-couple the two trees' fates, which is the thing being undone.
+- **`/var/lock/staging-gate.lock` is NOT `/var/lock/server-git-tree.lock`.** `deploy.sh` takes the
+  latter *inside* the gate, and `flock` re-opens the file it is given while POSIX locks are not
+  reentrant across a fresh open — sharing one would deadlock the gate against itself. Contention
+  on the staging lock is a PREP failure, because a run that never started learned nothing about
+  the SHA.
+
+Teardown removes the clone and the lock, but **refuses while the tree is dirty**, on the same
+reasoning that leaves `/var/lib/libvirt` alone: a clean tree costs a re-clone to rebuild, and an
+edit that exists only here is not reproducible from anywhere.
+
+The path and the lock are duplicated between this role's `defaults/main.yml` and that shell
+script, which cannot read a Jinja var. `ansible/tests/test_staging_gate_paths_agree.py` pins them
+equal — the drift is silent in the worst direction, since a stale path in the script makes every
+tick answer NO_VERDICT rather than fail.
