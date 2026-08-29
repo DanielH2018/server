@@ -234,6 +234,8 @@ stringData:
     {"type": "push", "name": "Fake Remux Scan", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_fake_remux_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   autofix-fake-remux-replace.json: |
     {"type": "push", "name": "Fake Remux Replace", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_fake_remux_replace_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  mkv-attachment-repair.json: |
+    {"type": "push", "name": "MKV Attachment Repair", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ mkv_attachment_repair_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   daniel-pi-sd-health.json: |
     {"type": "push", "name": "Daniel Pi SD Health", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ pi_sd_health_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   daniel-pi-recovery.json: |

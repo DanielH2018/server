@@ -29,9 +29,10 @@ KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 
 FAKE_REMUX_SCAN_PUSH_TOKEN=""
 FAKE_REMUX_REPLACE_PUSH_TOKEN=""
+MKV_ATTACHMENT_PUSH_TOKEN=""
 # shellcheck source=/dev/null
 [[ -r {{ fake_remux_config_dir }}/kuma-push.env ]] && . {{ fake_remux_config_dir }}/kuma-push.env
-if [[ -z "$FAKE_REMUX_SCAN_PUSH_TOKEN" || -z "$FAKE_REMUX_REPLACE_PUSH_TOKEN" ]]; then
+if [[ -z "$FAKE_REMUX_SCAN_PUSH_TOKEN" || -z "$FAKE_REMUX_REPLACE_PUSH_TOKEN" || -z "$MKV_ATTACHMENT_PUSH_TOKEN" ]]; then
   logger -t fake-remux-health "kuma push tokens unreadable — skipping push (run initial_setup.yml --tags fake_remux)"
   exit 0
 fi
@@ -40,13 +41,18 @@ fi
 # tokens below are consumed in that same order.
 mapfile -t LINES < <(/usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} {{ fake_remux_opt_dir }}/state_push.py \
   "fake-remux scan" "{{ fake_remux_state_dir }}/state.json" "{{ fake_remux_scan_max_age_hours }}" \
-  "fake-remux replace" "{{ fake_remux_state_dir }}/replace_state.json" "{{ fake_remux_replace_max_age_hours }}")
+  "fake-remux replace" "{{ fake_remux_state_dir }}/replace_state.json" "{{ fake_remux_replace_max_age_hours }}" \
+  "mkv attachment repair" "{{ fake_remux_state_dir }}/mkv_attachment_state.json" "{{ fake_remux_mkv_attachment_max_age_hours }}")
 
-TOKENS=("$FAKE_REMUX_SCAN_PUSH_TOKEN" "$FAKE_REMUX_REPLACE_PUSH_TOKEN")
-LABELS=("fake-remux scan" "fake-remux replace")
-TAGS=(fake-remux-health fake-remux-health)
+TOKENS=("$FAKE_REMUX_SCAN_PUSH_TOKEN" "$FAKE_REMUX_REPLACE_PUSH_TOKEN" "$MKV_ATTACHMENT_PUSH_TOKEN")
+LABELS=("fake-remux scan" "fake-remux replace" "mkv attachment repair")
+TAGS=(fake-remux-health fake-remux-health fake-remux-health)
 
-for i in 0 1; do
+# Indexed off LABELS rather than a literal `0 1`, which is what this loop said while it pushed two
+# monitors. A third triple added above a literal index list renders a state_push line nobody reads
+# and pushes nothing — the monitor then times out with no explanation, which is the failure this
+# whole script exists to report.
+for i in "${!LABELS[@]}"; do
   LINE="${LINES[$i]:-}"
   if [[ -z "$LINE" ]]; then
     # A missing line means the reader itself broke. Report that rather than pushing nothing, which
