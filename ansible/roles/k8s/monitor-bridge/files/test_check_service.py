@@ -1529,3 +1529,31 @@ def test_speedtest_requests_the_newest_row_not_the_oldest(monkeypatch):
     check.check_speedtest()
     assert "sort=-created_at" in seen["url"]
     assert seen["headers"]["Authorization"] == "Bearer t"
+
+
+# --- a held BROAD apply needs a different remediation than a held service deploy ----------
+
+
+def test_a_service_hold_names_the_pr():
+    ok, msg = check.gitops_status("deadbeefcafe")
+    assert not ok
+    assert "revert the offending PR" in msg
+
+
+def test_a_plane_hold_names_the_playbook_instead():
+    """The forward-only broad arm leaves the tree fast-forwarded with a playbook failed
+    partway. Reverting the PR undoes none of that, so the message must name what to re-run
+    instead -- otherwise the monitor prescribes a remediation that cannot work."""
+    ok, msg = check.gitops_status(
+        "deadbeefcafe", hold_plane="ansible/initial_setup.yml renovate_notify"
+    )
+    assert not ok
+    assert "ansible/initial_setup.yml" in msg
+    assert "revert the offending PR" not in msg
+
+
+def test_a_plane_marker_without_a_hold_does_not_page():
+    """hold_sha is still what decides. A stale hold_plane left behind by a cleared hold
+    must not keep the monitor red on its own."""
+    ok, _ = check.gitops_status(None, hold_plane="ansible/deploy.yml")
+    assert ok
