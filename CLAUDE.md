@@ -235,6 +235,27 @@ refuses outright — and then say which command and why.
    runs yet holds the verdict at pending. Reading the same endpoint as the deployer is what
    makes your verdict and the tick's agree by construction.
 
+   **How to wait: one `--watch` call with a raised timeout, never a loop.** Every blocking
+   primitive a session reaches for first is refused inside a worktree, and each refusal costs a
+   turn while returning nothing. `sleep 90; gh api …` comes back `Blocked: sleep 90 followed
+   by:`; an `until … sleep … done` loop and a `Monitor` `while true` body both come back "too
+   complex to verify that it stays inside the worktree. Refusing", because shell control flow
+   and command substitution defeat the containment check. What survives is a single command
+   carrying no `$( )`:
+   ```bash
+   # before the merge — covers every required check in one call
+   gh pr checks <n> --watch --fail-fast --required --interval 20   # Bash timeout: 600000
+   # after the merge — resolve the run id in its own call, then watch it by literal id
+   gh run list --repo DanielH2018/server --branch master --limit 3 --json databaseId,headSha
+   gh run watch <id> --exit-status --interval 20                   # Bash timeout: 600000
+   ```
+   Pass `timeout: 600000` on the Bash call. The default is 2 minutes against a 3-5 minute CI, so
+   without it the watch dies early and the session degrades to hand-polling on no schedule —
+   measured 2026-08-29 at 835 polls across 213 wait episodes, p90 9 polls per episode and 24 at
+   worst. `gh run watch` covers **one** workflow, and a master SHA carries four check-runs from
+   three (`prek`, two CodeQL `Analyze` jobs, `renovate config validator`), so finish on the
+   check-runs endpoint above rather than reading a returned watch as the verdict.
+
    **A `cancelled` conclusion never becomes green — wait on the tip instead.** Two merges in
    quick succession cancel the first run, so a commit whose merge was immediately followed by
    another reads `completed cancelled` permanently, and polling it waits forever. Read it as
