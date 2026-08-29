@@ -218,3 +218,96 @@ def test_the_refusal_codes_map_to_no_verdict_in_the_caller():
             f"exit {code} must classify as NO_VERDICT -- a dispatcher refusal means staging "
             f"could not be asked, never that it rejected the change"
         )
+
+
+# ── the authorization, which is a separate property from the script ─────────────────────────
+# Everything above proves the dispatcher is safe to run. None of it proves the key is actually
+# CONFINED to it: drop `key_options` from the install task and every test above still passes
+# while the key becomes an ordinary unrestricted login. That is the present-but-inert shape this
+# repo keeps paying for, so the authorization gets its own guard.
+
+
+def _install_tasks() -> list[dict]:
+    return yaml.safe_load((_ROLE / "tasks" / "install.yml").read_text())
+
+
+def authorization_problems(tasks: list[dict]) -> list[str]:
+    """Every reason the staging-gate key would not be confined to the dispatcher."""
+    problems = []
+    entries = [
+        task["ansible.posix.authorized_key"]
+        for task in tasks or []
+        if isinstance(task, dict)
+        and isinstance(task.get("ansible.posix.authorized_key"), dict)
+        and task["ansible.posix.authorized_key"].get("state") == "present"
+    ]
+    if not entries:
+        return ["install.yml authorizes no ssh key at all"]
+
+    for entry in entries:
+        options = str(entry.get("key_options") or "")
+        if "restrict" not in options:
+            problems.append(
+                "the authorized_key entry does not carry `restrict`, so the key keeps port, "
+                "agent and X11 forwarding even if it cannot open a shell"
+            )
+        if "command=" not in options:
+            problems.append(
+                "the authorized_key entry has no forced `command=`, so the key is an ordinary "
+                "unrestricted login and the dispatcher is bypassed entirely"
+            )
+        elif "hypervisor_staging_gate_dispatch_path" not in options:
+            problems.append(
+                "the forced command is not the templated dispatch path, so it can drift from "
+                "the file the role actually installs"
+            )
+    return problems
+
+
+def test_the_staging_gate_key_is_confined_to_the_dispatcher():
+    assert authorization_problems(_install_tasks()) == []
+
+
+def test_an_unrestricted_authorization_is_flagged():
+    bare = [
+        {
+            "ansible.posix.authorized_key": {
+                "user": "ubuntu",
+                "key": "x",
+                "state": "present",
+            }
+        }
+    ]
+    problems = authorization_problems(bare)
+    assert any("no forced `command=`" in p for p in problems), problems
+    assert any("does not carry `restrict`" in p for p in problems), problems
+
+
+def test_a_forced_command_without_restrict_is_flagged():
+    forced = [
+        {
+            "ansible.posix.authorized_key": {
+                "user": "ubuntu",
+                "key": "x",
+                "state": "present",
+                "key_options": 'command="{{ hypervisor_staging_gate_dispatch_path }}"',
+            }
+        }
+    ]
+    problems = authorization_problems(forced)
+    assert any("does not carry `restrict`" in p for p in problems), problems
+
+
+def test_a_forced_command_pointing_somewhere_else_is_flagged():
+    drifted = [
+        {
+            "ansible.posix.authorized_key": {
+                "user": "ubuntu",
+                "key": "x",
+                "state": "present",
+                "key_options": 'restrict,command="/usr/local/bin/something-else"',
+            }
+        }
+    ]
+    problems = authorization_problems(drifted)
+    assert any("not the templated dispatch path" in p for p in problems), problems

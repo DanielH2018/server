@@ -6,6 +6,11 @@ where they are USED, as bash literals, because that script is piped over ssh by 
 and never rendered by Ansible. It cannot read a Jinja var, so the duplication is structural
 rather than sloppy.
 
+The restricted key's dispatcher (roles/setup/hypervisor/templates/staging-gate-dispatch.sh.j2)
+is NOT a third copy and must not become one: it is rendered by Ansible, so it reads
+`hypervisor_staging_gate_repo` directly and cannot drift by construction. If the piped caller
+ever retires, this guard retires with it rather than growing another literal to pin.
+
 The failure it invites is silent in the worst direction. Move the checkout in the role and the
 gate keeps cding to the old path: `cd` fails, every tick answers PREP_FAILED, and PREP_FAILED
 maps to NO_VERDICT — which the deployer reports as "staging could not be asked, which is not a
