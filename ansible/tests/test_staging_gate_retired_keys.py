@@ -90,3 +90,75 @@ def test_install_withdraws_every_retired_key():
     assert "staging-gate-retired" in globs, (
         "the withdrawal task no longer reads files/staging-gate-retired/*.pub"
     )
+
+
+REPO = Path(__file__).resolve().parents[2]
+REL = str(LIVE.relative_to(REPO))
+
+
+def _fingerprint_blob(blob: bytes) -> str:
+    out = subprocess.run(
+        ["ssh-keygen", "-lf", "/dev/stdin"],
+        input=blob,
+        capture_output=True,
+        check=True,
+    ).stdout.decode()
+    return out.split()[1]
+
+
+def historical_fingerprints() -> dict[str, str]:
+    """Every fingerprint staging-gate.pub has held, keyed by short commit."""
+    shas = subprocess.run(
+        ["git", "-C", str(REPO), "log", "--format=%H", "--", REL],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    return {
+        sha[:8]: _fingerprint_blob(
+            subprocess.run(
+                ["git", "-C", str(REPO), "show", f"{sha}:{REL}"],
+                capture_output=True,
+                check=True,
+            ).stdout
+        )
+        for sha in shas
+    }
+
+
+def unretired(retired_fingerprints: set[str]) -> dict[str, str]:
+    live = fingerprint(LIVE)
+    return {
+        sha: fp
+        for sha, fp in historical_fingerprints().items()
+        if fp != live and fp not in retired_fingerprints
+    }
+
+
+def test_every_superseded_key_is_retired():
+    """The retired directory must account for every generation git remembers.
+
+    The 2026-08-29 rotation retired one key and left another authorized, because the
+    retired directory was created empty and seeded with the generation being replaced.
+    Every generation before that one was invisible to it -- a list that starts empty
+    cannot know about the keys already on the host. Git does know, so ask git.
+    """
+    history = historical_fingerprints()
+    assert history, f"git remembers no version of {REL}; this check cannot run"
+    stray = unretired({fingerprint(p) for p in retired()})
+    assert not stray, (
+        "these superseded gate keys are in no retired file, so nothing withdraws them "
+        f"and they stay in authorized_keys: {stray}"
+    )
+
+
+def test_an_unretired_key_is_flagged():
+    # The rejecting half. Passing an empty retired set is the state the directory was in
+    # before the first rotation, and every superseded generation must show up as stray --
+    # otherwise the check above passes by finding nothing rather than by finding nothing
+    # wrong. Fails if the key has never been rotated, which is the correct reading: there
+    # would be nothing for this guard to catch.
+    assert unretired(set()), (
+        "no superseded key was detected even with an empty retired set, so "
+        "test_every_superseded_key_is_retired cannot fail and proves nothing"
+    )
