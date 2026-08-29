@@ -66,4 +66,18 @@ git cat-file -e "${SHA}^{commit}" 2>/dev/null || fail_prep "commit $SHA is not i
 git merge --ff-only "$SHA" >/dev/null || fail_prep "cannot fast-forward to $SHA"
 
 # The verdict-bearing command. Its exit code is returned verbatim.
-./scripts/deploy.sh --tags "$TAGS" -e target=daniel-stage
+#
+# --skip-staleness-check is CORRECT here and is not a bypass. deploy.sh refuses a tree behind
+# origin/master because, on a production host, a stale tree renders stale templates and reverts
+# live config while every repo-side check reads green. This tree is behind origin/master by
+# construction and on purpose: it is pinned to the SHA under test, which is the SHA the tick
+# will deploy to prod (gitops_deploy.py resolves `origin` once, ff-merges to it, asks staging
+# about it, and deploys it — see main()'s `if cs.k8s_deploy:` block). A merge landing during the
+# run moves the tip but does NOT change what this tick deploys, so refusing on that basis
+# answers a question nobody asked.
+#
+# Before this flag, any merge inside the run's window turned a good change into exit 4, which
+# classify() maps to NO_VERDICT. Two of four hand-runs on 2026-08-29 died that way, and every
+# one of them feeds the false-failure rate slice 4's entry condition is waiting on. See
+# docs/staging-phase-c.md, Decision 4.
+./scripts/deploy.sh --tags "$TAGS" -e target=daniel-stage --skip-staleness-check

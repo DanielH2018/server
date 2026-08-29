@@ -135,3 +135,51 @@ def test_the_remote_script_returns_deploy_sh_untouched() -> None:
         f"the last executable line of staging_gate_remote.sh is {lines[-1]!r}, not the "
         f"deploy.sh call — its exit code, not deploy.sh's, is what the gate would classify."
     )
+
+
+def deploy_invocation(source: str) -> str:
+    """The gate's verdict-bearing deploy.sh command line, as the remote shell will run it."""
+    for line in source.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("./scripts/deploy.sh"):
+            return stripped
+    return ""
+
+
+def test_the_staging_deploy_does_not_refuse_a_tree_behind_the_tip() -> None:
+    """The staging clone is pinned to the SHA under test, so it is behind origin/master
+    whenever anything merges during the run — by construction, not by accident.
+
+    deploy.sh's staleness guard is right for a production host and wrong here: the tick
+    resolves `origin` once, ff-merges to it, asks staging about it, and deploys THAT to prod
+    (gitops_deploy.py, `if cs.k8s_deploy:`). A merge landing mid-run moves the tip without
+    changing what this tick ships, so exit 4 -> NO_VERDICT is a false failure. Two of four
+    hand-runs on 2026-08-29 died that way, and NO_VERDICT is silent by design.
+    """
+    invocation = deploy_invocation(REMOTE_SCRIPT.read_text())
+    assert invocation, "no ./scripts/deploy.sh call found in staging_gate_remote.sh"
+    assert "--skip-staleness-check" in invocation, (
+        f"the staging deploy must pass --skip-staleness-check; got {invocation!r}. Without it "
+        f"any merge inside the run's window makes deploy.sh exit 4, which classify() maps to "
+        f"NO_VERDICT — a false failure against the rate slice 4 gates on."
+    )
+
+
+def test_a_staleness_refusing_invocation_is_caught() -> None:
+    # Red proof, on the same extractor. The rejected input is what the script said until
+    # 2026-08-29, and the accepted one is what it says now.
+    now = deploy_invocation(
+        '# a comment\n./scripts/deploy.sh --tags "$TAGS" -e target=daniel-stage --skip-staleness-check\n'
+    )
+    assert "--skip-staleness-check" in now
+
+    before = deploy_invocation(
+        './scripts/deploy.sh --tags "$TAGS" -e target=daniel-stage\n'
+    )
+    assert before and "--skip-staleness-check" not in before, (
+        "the extractor must read the actual command line, or dropping the flag reads as "
+        "still carrying it"
+    )
+    assert deploy_invocation("# ./scripts/deploy.sh in a comment only\n") == "", (
+        "a commented-out call must not count as the invocation"
+    )
