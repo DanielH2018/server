@@ -88,9 +88,12 @@ stay).
   - Both outcomes leave the host parked on `local`, which `behind_marker` records — so a
     persistently red master pages through the existing **6h behind-origin watchdog** rather than
     needing an escalation path of its own. That reuse is deliberate; don't add a second timer.
-  - **This gates the DEPLOY; branch protection gates the MERGE.** They are not redundant: PR CI is
-    scoped to changed files while master runs the full sweep, so a whole-tree failure can only
-    appear *after* the merge — which is exactly the window this closes.
+  - **This gates the DEPLOY, and it is the only gate.** This line read "branch protection gates
+    the MERGE" until 2026-08-29, when `gh api repos/DanielH2018/server/branches/master/protection`
+    was found to return 404 — there is no branch protection on `master`. The gate's value is
+    unchanged and its necessity is higher than the old wording implied: PR CI is scoped to changed
+    files while master runs the full sweep, so a whole-tree failure can only appear *after* the
+    merge, and nothing else stops it landing. Adding branch protection is a separate decision.
   - `cancelled`/`stale` count as **no verdict, not failure**: `ci.yml` sets
     `concurrency: cancel-in-progress` on `github.ref`, so two pushes in quick succession cancel the
     first run. Mapping those to a failure would page on an ordinary back-to-back push.
@@ -106,8 +109,32 @@ stay).
   per slot — twice per America/Chicago day, on the first tick at/after 08:00 CT (morning) and
   at/after 20:00 CT (evening) — without it a long edit session would re-page every 30-min tick.
   State: `/var/lib/gitops-deploy/dirty_alerted_date` (holds the `YYYY-MM-DD:am|pm` slot key).
-- **Broad changes** (shared `ansible/templates/*`, `inventory/`, `common/`, `deploy.yml`)
-  are NOT auto-scoped — the deployer alerts and defers to a manual full deploy.
+- **Broad changes split three ways** (`deploy_logic._BROAD_*_PREFIXES`). A setup-plane change
+  under `roles/setup/<name>/` (or `requirements.yml`) fast-forwards and applies as
+  `initial_setup.yml --tags <name>`, with the tag derived by `setup_tags_for` rather than left as
+  the `<role>` placeholder `broad_remediation` prints. A deploy-plane change (shared
+  `ansible/templates/*`, `inventory/`, `common/`, `deploy.yml`) fast-forwards and applies as a
+  full `deploy.yml`.
+  - **The ff-merge happens BEFORE the apply**, which is the order the *Deploying this role under
+    the shared tree lock* trap below already prescribes for the manual path: applying first
+    renders from the pre-merge tree and deploys nothing. It also means an unrelated commit sharing
+    the tick lands even when the apply fails — stranding a docs-only commit behind somebody else's
+    setup change was the original complaint this arm fixes.
+  - **Both arms are FORWARD-ONLY.** `deploy_logic.broad_budget_ok` shows a rollback re-run does
+    not fit: 180s max flock + 1212s forward (measured 2026-08-22) + 1212s rollback against
+    `TimeoutStartSec=2700` leaves 96s, and a rollback SIGTERMed partway is worse than none. A
+    failure writes `hold_sha` **and** `hold_plane`, alerts saying nothing was rolled back, and
+    leaves the tree fast-forwarded. It deliberately does not `git reset` — resetting without
+    redeploying would leave the tree claiming the old commit while live state is half-new.
+  - **`_BROAD_MANUAL_PREFIXES` keeps the old defer-and-alert with no ff-merge**:
+    `roles/setup/gitops_deploy/`, `bootstrap.yml`, `k3s-bringup.yml`, `initial_setup.yml`.
+    Applying this role runs a playbook whose handler restarts the unit executing the tick — a
+    self-modification defect no timeout makes safe. Staying parked is also what keeps
+    `behind_since` set, which is the only durable signal that an unapplied plane exists. A
+    setup-plane change whose tag cannot be derived joins them, since the only automatic
+    alternative is an unscoped `initial_setup.yml` (a whole-host reprovision).
+  - `BROAD_DEPLOY_TIMEOUT_S` (1800, `gitops_deploy_broad_timeout_s`) bounds one apply. Without it
+    a wedged run is SIGTERMed at `TimeoutStartSec` with no hold written and no alert sent.
 - **Behind-origin watchdog** (`deploy_logic.behind_marker`): every deferral above leaves the host
   parked on an old tree, and until 2026-08-02 nothing but a Discord message said so — `last_run`
   keeps ticking (Alive green) and `is_diverged` is false (origin is a strict *descendant*, so

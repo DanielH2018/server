@@ -217,99 +217,41 @@ refuses outright — and then say which command and why.
 
 ### The procedure
 
-1. **Merge, and record the pre-merge master SHA first.** `git rev-parse origin/master` before
-   `gh pr merge --squash`. Step 4 needs it, and `--changed`'s default ref (`origin/master`)
-   is useless once the pull has happened.
-2. **Wait for master CI to go green on the merge commit specifically.** Take the SHA from
-   `gh pr view <n> --json mergeCommit -q .mergeCommit.oid`, then poll the same endpoint the
-   deployer reads:
-   ```bash
-   gh api repos/DanielH2018/server/commits/<merge-sha>/check-runs \
-     --jq '.check_runs[] | "\(.name) \(.status) \(.conclusion)"'
-   ```
-   Do **not** gate on `gh run list --branch master --limit 1`. GitHub creates the run for a
-   freshly-pushed merge commit a moment after the push, so that query returns the *previous*
-   master run — green — and the wait returns instantly having watched the wrong commit.
-   **An empty or incomplete list is pending, never green**, which is how `ci_verdict()`
-   (`ansible/roles/setup/gitops_deploy/files/deploy_logic.py`) reads it too: a required name with no
-   runs yet holds the verdict at pending. Reading the same endpoint as the deployer is what
-   makes your verdict and the tick's agree by construction.
+Record the pre-merge master SHA, merge, then run the follow-through as ONE backgrounded
+command:
 
-   **How to wait: one `--watch` call with a raised timeout, never a loop.** Every blocking
-   primitive a session reaches for first is refused inside a worktree, and each refusal costs a
-   turn while returning nothing. `sleep 90; gh api …` comes back `Blocked: sleep 90 followed
-   by:`; an `until … sleep … done` loop and a `Monitor` `while true` body both come back "too
-   complex to verify that it stays inside the worktree. Refusing", because shell control flow
-   and command substitution defeat the containment check. What survives is a single command
-   carrying no `$( )`:
-   ```bash
-   # before the merge — covers every required check in one call
-   gh pr checks <n> --watch --fail-fast --required --interval 20   # Bash timeout: 600000
-   # after the merge — resolve the run id in its own call, then watch it by literal id
-   gh run list --repo DanielH2018/server --branch master --limit 3 --json databaseId,headSha
-   gh run watch <id> --exit-status --interval 20                   # Bash timeout: 600000
-   ```
-   Pass `timeout: 600000` on the Bash call. The default is 2 minutes against a 3-5 minute CI, so
-   without it the watch dies early and the session degrades to hand-polling on no schedule —
-   measured 2026-08-29 at 835 polls across 213 wait episodes, p90 9 polls per episode and 24 at
-   worst. `gh run watch` covers **one** workflow, and a master SHA carries four check-runs from
-   three (`prek`, two CodeQL `Analyze` jobs, `renovate config validator`), so finish on the
-   check-runs endpoint above rather than reading a returned watch as the verdict.
+```bash
+git rev-parse origin/master          # keep this; land.sh needs it for the fallback
+gh pr merge --squash
+./scripts/deploy_tools/land.sh --pr <n> --since <pre-merge-sha>
+```
 
-   **A `cancelled` conclusion never becomes green — wait on the tip instead.** Two merges in
-   quick succession cancel the first run, so a commit whose merge was immediately followed by
-   another reads `completed cancelled` permanently, and polling it waits forever. Read it as
-   pending, which is what `_CI_NO_VERDICT_CONCLUSIONS` (`deploy_logic.py`) does — `cancelled`,
-   `stale` and `skipped_by_concurrency` all mean *no verdict for this SHA*, not *this SHA is
-   bad*. The verdict then comes from the tip: `git fetch && git log --oneline -3 origin/master`,
-   and gate on the tip's check-runs once your commit is an ancestor of it. Measured 2026-08-27:
-   `449c46d2` (#497) reads cancelled to this day because #498 merged seconds later, and green
-   arrived on `17d71879`, which contains it.
+Run `land.sh` with `run_in_background` and let the session be re-invoked when it exits. It
+waits for master CI on the merge commit, ticks, deploys what the tick deferred, and prints a
+`VERDICT:` line — `settled`, `unhealthy`, `deploy-failed` or `nothing-to-deploy`.
 
-   This is a gate, not politeness. PR CI is scoped to changed files, so whole-tree tests can
-   only fail after merge. A **pending** master CI also blocks the fast-forward itself —
-   `next_action()` returns `ci_pending` *before* the `--ff-only` merge (`deploy_logic.py`), so
-   a tick fired seconds after the merge pulls nothing and every later step reads as stale.
-3. **Pull with `./scripts/deploy_tools/gitops_tick.sh`, never a hand `git pull`.** The tick fetches,
-   CI-gates, `--ff-only` merges, deploys what is eligible, health-gates it and rolls back on
-   failure — all under `/var/lock/server-git-tree.lock`, which is what keeps it from racing the
-   30-minute timer or another session. A bare `git pull` in the primary checkout takes no lock
-   and skips the `hold_sha` machinery. Read the wrapper's `last_run` / `hold_sha` / `behind_since`
-   lines: a non-empty `hold_sha` means a previous SHA is held, and you diagnose that before
-   deploying anything.
+**Do not hand-poll CI and do not hand-merge.** `await_ci.py` reads the same check-runs
+endpoint the deployer reads, so its verdict and the tick's agree by construction. Hand-polling
+cost 835 polls across 213 wait episodes before it existed.
 
-   **The tick evaluates the whole `local..origin` range, not just your merge — so another
-   session's change can park your pull.** A **broad** change anywhere in that range (a
-   `_BROAD_SETUP_PREFIXES` or `_BROAD_DEPLOY_PREFIXES` path — `ansible/roles/setup/`,
-   `ansible/inventory/`, `ansible/templates/`, `ansible.cfg`, the bring-up playbooks) makes the
-   deployer defer-and-alert and **return without fast-forwarding at all**
-   (`gitops_deploy.py:1136`, the `cs.broad` arm of `main`). Your docs-only commit then never lands locally either, and the
-   symptom is a tick that exits 0, logs nothing, and writes `behind_since`. Diagnose it by
-   diffing the range — `git diff --name-only <local-HEAD>..origin/master` — and read the
-   Discord alert, which names the playbook to run. Clearing it means running that playbook and
-   then `git merge --ff-only origin/master` in the primary checkout. **If the broad change is
-   another session's, that is theirs to clear, not yours**: say so and stop, rather than
-   applying a setup-plane change you did not write.
-4. **Deploy what the tick deferred, from the primary checkout.** `deploy.sh` resolves its
-   checkout with `git rev-parse --show-toplevel`, so it renders from the **working directory**,
-   not from the path you invoked it by. After a squash merge the worktree branch is behind
-   master, so deploying from the worktree is refused (exit 4) — and would render stale templates
-   if it weren't.
-   ```bash
-   cd /home/ubuntu/server && ./scripts/deploy.sh --changed <pre-merge-SHA>
-   ```
-   `--changed` derives the tags from `git diff <ref>...HEAD` and refuses a broad change (exit 3).
-   The three-dot form diffs from the merge base, which equals the plain `<ref>..HEAD` range here
-   because the pre-merge SHA is an ancestor of the new master — so pass the pre-merge SHA and not
-   a branch name, whose merge base would be older.
-   Use explicit `--tags` instead when another session's PR merged in the same window — the SHA
-   range then covers their services too, and deploying someone else's half-finished landing is
-   not yours to do.
-5. **Verify twice — the workload, then the change.** `uv run python scripts/diagnostics/probe.py health
-   <svc>` per deployed tag gates the rollout and the 180s restart window. It cannot see whether
-   *your change* took effect: an Authelia 302 fires in the middleware before the backend is
-   reached, and 19 dead Grafana panels sat behind a 1/1 pod. Exercise the thing you actually
-   changed as well.
+It also owns the rule that used to live here: `cancelled`, `stale` and `skipped_by_concurrency`
+mean *no verdict for this SHA*, never *this SHA is bad* — `_CI_NO_VERDICT_CONCLUSIONS` in
+`deploy_logic.py` is the list, and a commit whose merge was immediately followed by another
+reads `cancelled` permanently. `await_ci.py` follows the tip in that case, but only once your
+commit is an ancestor of it. If you ever check by hand, check that way.
+
+`land.sh` runs from the primary checkout wherever you invoke it, because `deploy.sh` renders
+from its working directory and a worktree is behind master after a squash merge.
+
+It scopes the deploy to the PR's own file list rather than a SHA range, so another session's
+merged work is not swept in. `gh` paginates that list at 100 files, so it falls back to
+`--changed <since>` when the count disagrees — which is the only reason `--since` is needed.
+Pass `--tags` to override the scope entirely.
+
+**Verify the change, not just the workload.** The `VERDICT:` line gates the rollout and the
+180s restart window. It cannot see whether *your change* took effect: an Authelia 302 fires
+in the middleware before the backend is reached, and 19 dead Grafana panels sat behind a 1/1
+pod. Exercise the thing you actually changed as well.
 
 ### Working alongside other sessions
 
@@ -317,7 +259,8 @@ refuses outright — and then say which command and why.
   (the timer or another session) — retry. 4 = the tree is behind origin/master — pull again,
   never `--skip-staleness-check`. 2 = the tag matched nothing.
 - **The tick pulls all of master, not just your commit.** Another session's merged work
-  fast-forwards with yours. Scope your deploy to your own services; don't widen it to cover theirs.
+  fast-forwards with yours. `land.sh` already scopes to your PR's own files; if you override with
+  `--tags`, keep it to your own services.
 - **Check the SessionStart banner before deploying a shared role.** It lists the other live
   sessions and the paths each has touched.
 - **`--detach` returning is not a verified deploy.** It backgrounds the rollout wait, which is
@@ -327,10 +270,14 @@ refuses outright — and then say which command and why.
 
 Say which of these applies, then stop:
 
-- Master CI is red or still pending.
-- The host holds a non-empty `hold_sha` — a previous SHA already failed its health gate.
-- A broad change from **another session** sits in the `local..origin` range and parks the tick's
-  fast-forward. Clearing it means applying their setup- or shared-plane change; name it and stop.
+- Master CI is red. (Pending is no longer a reason to stop — `land.sh` waits on it for you.)
+- The host holds a non-empty `hold_sha` — a previous SHA already failed its health gate, or a
+  broad apply failed. `hold_plane` names the playbook when it was the latter.
+- A change in `_BROAD_MANUAL_PREFIXES` — `roles/setup/gitops_deploy/`, `bootstrap.yml`,
+  `k3s-bringup.yml`, `initial_setup.yml` — sits in the `local..origin` range. The deployer applies
+  every other broad change itself, but not these: applying the deployer's own role restarts the
+  unit running the tick. If it is another session's, clearing it means applying their change; name
+  it and stop.
 - `deploy.sh` exits 3: the change is broad (shared templates, inventory, the setup plane) and
   maps to no single service.
 - The change is docs- or `tasks/`-only — the deployer skips those deliberately, and so do you.
