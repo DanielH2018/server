@@ -14,34 +14,22 @@ templated wrapper and never appears here; this file is plaintext in git.
 from __future__ import annotations
 
 import os
-import subprocess
 import sys
 import time
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import host_lib  # noqa: E402  (sibling copy, deployed alongside — see the k8s/janitorr role)
 import janitorr_health_logic as logic  # noqa: E402  (sibling module, via the sys.path insert)
 
 NAMESPACE = os.environ.get("JANITORR_NAMESPACE", "homelab")
 WINDOW_S = float(os.environ.get("JANITORR_WINDOW_H", "12")) * 3600
 GRACE_S = float(os.environ.get("JANITORR_STARTUP_GRACE_S", "600"))
-KUBECTL = os.environ.get("JANITORR_KUBECTL", "k3s kubectl").split()
+KUBECTL = os.environ.get("JANITORR_KUBECTL", "k3s kubectl")
 TIMEOUT = int(os.environ.get("JANITORR_KUBECTL_TIMEOUT_S", "30"))
 
 
-def kubectl(*args) -> tuple[int, str]:
-    try:
-        proc = subprocess.run(
-            [*KUBECTL, "-n", NAMESPACE, *args],
-            capture_output=True,
-            text=True,
-            timeout=TIMEOUT,
-        )
-    except subprocess.TimeoutExpired:
-        return 124, "kubectl timed out after %ss" % TIMEOUT
-    except OSError as e:
-        return 125, "could not run kubectl: %s" % e
-    return proc.returncode, proc.stdout if proc.returncode == 0 else proc.stderr
+kubectl = host_lib.kubectl_runner(KUBECTL, NAMESPACE, TIMEOUT)
 
 
 def uptime_seconds(started_at: str) -> float:

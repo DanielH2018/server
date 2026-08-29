@@ -101,3 +101,109 @@ def test_discord_post_false_and_logs_on_exception():
         ok = host_lib.discord_post("https://x", "hi", "ua", log=logs.append)
     assert ok is False
     assert logs  # the failure was logged, not raised
+
+
+# --- kubectl_runner ------------------------------------------------------------------------
+# The single source for what janitorr_health.py and configarr_health.py each carried a
+# byte-identical copy of. Each rule is an accept/reject pair: what the runner must return on a
+# clean call, and what it must return on each failure it is supposed to distinguish.
+
+
+class _Proc:
+    def __init__(self, returncode, stdout="", stderr=""):
+        self.returncode, self.stdout, self.stderr = returncode, stdout, stderr
+
+
+def test_a_successful_call_returns_stdout():
+    with mock.patch(
+        "host_lib.subprocess.run", lambda *a, **k: _Proc(0, "pods", "noise")
+    ):
+        assert host_lib.kubectl_runner("k3s kubectl", "homelab", 30)("get", "pod") == (
+            0,
+            "pods",
+        )
+
+
+def test_a_failing_call_returns_stderr():
+    """The caller reports the reason without branching, so the failing half must carry it."""
+    with mock.patch(
+        "host_lib.subprocess.run", lambda *a, **k: _Proc(1, "", "NotFound")
+    ):
+        assert host_lib.kubectl_runner("k3s kubectl", "homelab", 30)("get", "pod") == (
+            1,
+            "NotFound",
+        )
+
+
+def test_the_binary_namespace_and_args_reach_the_subprocess():
+    seen = {}
+
+    def capture(argv, **kwargs):
+        seen["argv"] = argv
+        return _Proc(0, "", "")
+
+    with mock.patch("host_lib.subprocess.run", capture):
+        host_lib.kubectl_runner("k3s kubectl", "homelab", 30)("get", "pod")
+    assert seen["argv"] == ["k3s", "kubectl", "-n", "homelab", "get", "pod"]
+
+
+def test_a_timeout_is_distinct_from_a_cluster_refusal():
+    def boom(*a, **k):
+        raise host_lib.subprocess.TimeoutExpired(cmd="kubectl", timeout=30)
+
+    with mock.patch("host_lib.subprocess.run", boom):
+        rc, msg = host_lib.kubectl_runner("k3s kubectl", "homelab", 30)("get", "pod")
+    assert rc == host_lib.KUBECTL_TIMEOUT_RC
+    assert "timed out" in msg
+
+
+def test_an_unrunnable_binary_is_distinct_from_a_timeout():
+    def boom(*a, **k):
+        raise OSError("No such file or directory: 'k3s'")
+
+    with mock.patch("host_lib.subprocess.run", boom):
+        rc, msg = host_lib.kubectl_runner("k3s kubectl", "homelab", 30)("get", "pod")
+    assert rc == host_lib.KUBECTL_UNRUNNABLE_RC
+    assert rc != host_lib.KUBECTL_TIMEOUT_RC
+    assert "could not run kubectl" in msg
+
+
+def test_local_bin_is_prepended_when_the_path_omits_it(monkeypatch):
+    """Cron's default PATH omits /usr/local/bin, where both k3s and kubectl live."""
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    seen = {}
+
+    def capture(argv, **kwargs):
+        seen["path"] = kwargs["env"]["PATH"]
+        return _Proc(0, "", "")
+
+    with mock.patch("host_lib.subprocess.run", capture):
+        host_lib.kubectl_runner("k3s kubectl", "homelab", 30)("get", "pod")
+    assert seen["path"].split(":")[0] == host_lib.LOCAL_BIN
+
+
+def test_local_bin_is_not_duplicated_when_the_path_already_has_it(monkeypatch):
+    monkeypatch.setenv("PATH", f"{host_lib.LOCAL_BIN}:/usr/bin")
+    seen = {}
+
+    def capture(argv, **kwargs):
+        seen["path"] = kwargs["env"]["PATH"]
+        return _Proc(0, "", "")
+
+    with mock.patch("host_lib.subprocess.run", capture):
+        host_lib.kubectl_runner("k3s kubectl", "homelab", 30)("get", "pod")
+    assert seen["path"].count(host_lib.LOCAL_BIN) == 1
+
+
+def test_the_rest_of_the_environment_survives(monkeypatch):
+    """KUBECONFIG is the caller's job, so the runner must not drop it."""
+    monkeypatch.setenv("KUBECONFIG", "/home/ubuntu/.kube/config")
+    seen = {}
+
+    def capture(argv, **kwargs):
+        seen["env"] = kwargs["env"]
+        return _Proc(0, "", "")
+
+    with mock.patch("host_lib.subprocess.run", capture):
+        host_lib.kubectl_runner("k3s kubectl", "homelab", 30)("get", "pod")
+    assert seen["env"]["KUBECONFIG"] == "/home/ubuntu/.kube/config"

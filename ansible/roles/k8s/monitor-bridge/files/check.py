@@ -31,7 +31,7 @@ from datetime import datetime, timedelta, timezone
 # `bridge_common.log`/`bridge_common.touch_heartbeat` rather than importing them by name —
 # enforced by ansible/tests/test_bridge_patch_boundary.py.
 import bridge_common
-from bridge_common import _env, sanitize
+from bridge_common import HTTP_TIMEOUT, _env, sanitize
 from bridge_parsing import (
     FETCH_BODY_MAX,
     describe_fetch_failure,
@@ -97,7 +97,6 @@ def _env_file(name, default=""):
 
 
 INTERVAL = int(_env("INTERVAL", "300"))
-HTTP_TIMEOUT = int(_env("HTTP_TIMEOUT", "10"))
 # Startup/redeploy grace for the reach-out checks (STARTUP_GRACE, applied in run_once). The
 # bridge's first cycle after a host reboot runs before the heavy apps it polls (n8n,
 # sonarr/radarr, prowlarr, scrutiny, the Pi glances) finish starting, so an un-graced reach-out

@@ -40,13 +40,18 @@
   tags: [config]
   ansible.builtin.copy:
     src: "{{ item }}"
-    dest: "/opt/janitorr-health/{{ item }}"
+    dest: "/opt/janitorr-health/{{ item | basename }}"
     owner: "{{ sys_user }}"
     group: "{{ sys_user }}"
     mode: "0755"
   loop:
     - janitorr_health.py
     - janitorr_health_logic.py
+    # The kubectl runner this reader and configarr's used to carry a byte-identical copy of.
+    # Copied INTO this /opt dir rather than imported from a shared path: the reader does a
+    # sys.path.insert of its own directory and nothing else, which is the sibling-copy pattern
+    # gitops_deploy.py and renovate_notify.py already use for this same file.
+    - "{{ role_path }}/../../setup/common/files/host_lib.py"
   become: true
 
 - name: Deploy the janitorr error heartbeat

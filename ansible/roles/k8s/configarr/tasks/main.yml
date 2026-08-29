@@ -77,6 +77,10 @@
     # `import configarr_status` resolves at runtime, and a second edited copy is how two callers
     # quietly stop agreeing about what a failed sync looks like.
     - "{{ role_path }}/files/configarr_status.py"
+    # The kubectl runner this reader and janitorr's used to carry a byte-identical copy of.
+    # Same sibling-copy reasoning as the line above, and the same file gitops_deploy.py and
+    # renovate_notify.py already import.
+    - "{{ role_path }}/../../setup/common/files/host_lib.py"
   become: true
 
 - name: Deploy the configarr sync heartbeat

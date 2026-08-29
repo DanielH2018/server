@@ -23,10 +23,9 @@ import urllib.parse
 import urllib.request
 
 import bridge_common
-from bridge_common import _env, sanitize
+from bridge_common import HTTP_TIMEOUT, _env, sanitize
 
 INTERVAL = int(_env("INTERVAL", "300"))
-HTTP_TIMEOUT = int(_env("HTTP_TIMEOUT", "10"))
 HEARTBEAT_FILE = _env("HEARTBEAT_FILE", "/tmp/heartbeat")
 KUMA_URL = _env("KUMA_URL", "http://uptime-kuma:3001").rstrip("/")
 KUMA_PUSH = _env("KUMA_PUSH_ARR_AUTOBLOCK", "")
