@@ -703,7 +703,18 @@ UPS_CONSECUTIVE = int(_env("UPS_CONSECUTIVE", "2"))
 #   green: the Pi's logs simply stop arriving and no monitor says so (2026-08-25 review M-11).
 #   The window is the tolerant one, and for a stronger reason than arm 1's: the Pi is a
 #   Zero 2 W running five LAN-only containers, so its log volume is genuinely low and bursty.
-LOKI_STREAM = _env("LOKI_STREAM", '{job=~"authlog|syslog|traefik"}')
+#   `machine!="daniel-pi"` is the SAME masking rule as the docker_sd exclusion above, applied
+#   to a second source that has since started writing into `job="syslog"`. daniel-pi's promtail
+#   now ships its two health crons' verdict lines under that job (roles/containers/promtail,
+#   the pi-health scrape job) so `probe.py alerts` can reconstruct a Pi episode. Those ~576
+#   lines/day arrive from a HOST OUTSIDE the cluster, so a total cluster file-tail outage would
+#   no longer reach zero and arm 1 would never fire — the Pi would be holding the alert open on
+#   behalf of the streams it knows nothing about. Loki's `!=` also matches a stream that has no
+#   `machine` label at all, so the cluster's own authlog/syslog/traefik streams are unaffected.
+#   The Pi's own liveness stays covered by arm 3.
+LOKI_STREAM = _env(
+    "LOKI_STREAM", '{job=~"authlog|syslog|traefik", machine!="daniel-pi"}'
+)
 LOKI_DOCKER_STREAM = _env("LOKI_DOCKER_STREAM", '{container=~".+"}')
 LOKI_PI_STREAM = _env("LOKI_PI_STREAM", '{job="pi"}')
 LOKI_WINDOW = _env("LOKI_WINDOW", "30m")

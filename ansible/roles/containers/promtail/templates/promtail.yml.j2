@@ -4,9 +4,17 @@
 #
 # Scope is deliberately one job. This is a Zero 2 W with 456 MB of RAM and measurable CPU
 # pressure at idle, so every target costs something real — see the resource notes in
-# docker-compose.yml.j2. Host logs are NOT shipped: rsyslog is inactive here, so /var/log
-# holds no syslog to tail, and promtail's journal reader needs a build this image does not
-# guarantee on arm64. The host's own health is covered by node-exporter's metrics instead.
+# docker-compose.yml.j2.
+#
+# The host JOURNAL is still not shipped, and cannot be: this image's promtail is a stub for
+# journal support. Verified 2026-08-29 on the running arm64 3.6.8 binary — it contains the
+# string "not compiled into this build", contains no `sd_journal_open`, links no libsystemd
+# (`ldd` shows libc and the vdso only), and a 30s `-dry-run` with a `journal:` job over the
+# host's persistent /var/log/journal produced zero entries. rsyslog is not an alternative
+# either: it is not installed, and this role's debloat section masks it on purpose.
+#
+# What IS shipped is the two health crons' verdict lines, via the pi-health job below — the
+# narrow slice `probe.py alerts` needs, at ~1.5% of the journal's volume.
 server:
   http_listen_port: 9080
   # `warn`, not the default `info`: at info promtail logs a line per target discovery pass,
@@ -65,3 +73,23 @@ scrape_configs:
         replacement: daniel-pi
       - source_labels: ['__meta_docker_container_log_stream']
         target_label: stream
+
+  # The two host health crons' verdict lines — the ONLY host logs shipped from this box, and
+  # deliberately not the journal. `probe.py alerts` reconstructs DOWN episodes from
+  # `{job="syslog"} |= "status=down"`, and until this job existed every daniel-pi cron was
+  # invisible to it: a real "Daniel Pi Recovery" outage on 2026-08-29 (autoheal down ~50 min)
+  # left no episode anywhere. Shipping the whole journal would carry ~38k lines/day for these
+  # two signals; this is ~576, for the same coverage.
+  #
+  # `job: syslog` matches the label the cluster hosts' rsyslog stream already carries, so one
+  # parser and one Grafana board read both estates. `machine: daniel-pi` is what keeps the two
+  # apart — monitor-bridge's Loki liveness check excludes this machine by that label, because
+  # a Pi-shipped stream under the same `job` would otherwise stop a total cluster file-tail
+  # outage from ever reaching the zero-entry threshold that check alerts on.
+  - job_name: pi-health
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: syslog
+          machine: daniel-pi
+          __path__: /var/log/pi-health/*.log

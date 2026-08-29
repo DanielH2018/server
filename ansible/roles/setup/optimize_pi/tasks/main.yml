@@ -330,6 +330,23 @@
   become: true
   notify: Restart systemd-journald
 
+- name: Keep 2 days of sysstat history, not 7 (HISTORY)
+  tags: [log2ram]
+  # The fourth server-sized default in this tmpfs, and the one the auditd census above
+  # missed. initial_setup installs sysstat with its shipped HISTORY=7 (accounting.yml),
+  # which on this host is 18 sa/sar files and 9.9 MB of the 128 MB log2ram tmpfs —
+  # measured 2026-08-29, second only to journald.
+  #
+  # CAP, DO NOT DISABLE, for the same reason auditd is capped rather than masked:
+  # docs/security-tools.md gives `sar` its own triage row, so a machine-side census that
+  # finds no consumer is not evidence nothing reads it. 2 days keeps "what did the box do
+  # overnight", which is the window that row actually uses.
+  ansible.builtin.lineinfile:
+    path: /etc/sysstat/sysstat
+    regexp: '^#?HISTORY='
+    line: 'HISTORY=2'
+  become: true
+
 - name: Keep 3 days of process accounting, not 30 (ACCT_LOGGING)
   tags: [log2ram]
   # /etc/cron.daily/acct rotates pacct with savelog -c $ACCT_LOGGING. The healthcheck
@@ -415,12 +432,36 @@
   register: optimize_pi_surplus_audit_logs
   become: true
 
+- name: Find audit rotations older than the retention the cap was sized for
+  tags: [log2ram]
+  # The index-based find above collects generations the NEW num_logs excludes. It cannot see
+  # the other half of the problem: a rotation written under the OLD 8 MB max_log_file is
+  # double the capped size, and keeping index 1 and 2 is exactly what num_logs=3 asks for.
+  # Measured 2026-08-29, after the cap had already landed: audit.log 4.1 MB (correctly capped)
+  # but audit.log.1 and audit.log.2 at 8.39 MB each — 20.9 MB against the 12 MB ceiling this
+  # section set. auditd only replaces a generation when it rotates, ~3 weeks apart here, so
+  # the surplus outlives the cap by months.
+  #
+  # Collect by AGE, not by size. Size would also take audit.log.1 (26 days old), which is
+  # inside the ~6 weeks of history the cap's own comment above defends as "well past the
+  # window any of the runbook queries use" — reclaiming RAM by deleting history the section
+  # deliberately kept would contradict the decision, not complete it. Age takes only what is
+  # already past that window, which brings the directory to ~12.5 MB and holds it there.
+  ansible.builtin.find:
+    paths: /var/log/audit
+    patterns: ["audit.log.[1-9]", "audit.log.[1-9][0-9]"]
+    use_regex: false
+    recurse: false
+    age: 6w
+  register: optimize_pi_expired_audit_logs
+  become: true
+
 - name: Remove the surplus audit rotations
   tags: [log2ram]
   ansible.builtin.file:
     path: "{{ item.path }}"
     state: absent
-  loop: "{{ optimize_pi_surplus_audit_logs.files }}"
+  loop: "{{ optimize_pi_surplus_audit_logs.files + optimize_pi_expired_audit_logs.files }}"
   loop_control:
     label: "{{ item.path }}"
   become: true
@@ -437,15 +478,39 @@
   tags: [earlyoom]
   # Without this the only escape from a memory spiral is the hardware watchdog
   # hard-rebooting at load 24 (≥10 min of full stall first). earlyoom SIGTERMs the
-  # largest process once BOTH avail mem < 10% AND free swap < 10% — a true OOM
-  # spiral, not the swap-heavy-but-stable steady state this box likes to run.
+  # largest process, then SIGKILLs it at half the threshold.
   # --avoid shields the processes whose death would be worse than the stall.
+  #
+  # THE SWAP CONDITION IS DELIBERATELY NON-BINDING, and this reverses an earlier choice
+  # here. This read `-s 10`, described as firing "once BOTH avail mem < 10% AND free swap
+  # < 10% — a true OOM spiral, not the swap-heavy-but-stable steady state this box likes
+  # to run". The intent was right; the setting could never express it. earlyoom's own help
+  # states the rule: "both memory and swap must be below minimum for earlyoom to act". This
+  # host has 1.37 GB of combined swap (350 MB zram at priority 100, a 1 GB SD-card swapfile
+  # at -2), so free swap < 10% means less than 137 MB free across both — a state reached
+  # only after hours of SD-card thrashing, long past the point the guard exists to prevent.
+  # Measured 2026-08-29 over four hours of earlyoom's own report lines: mem avail never left
+  # 30-34%, free swap never left 77-79%. The guard was inert for its whole life, which is
+  # why the 2026-08-29 autoheal failure ("Timeout waiting for systemd to create scope",
+  # /proc/pressure/memory full avg10=30.74) hit a box with no escape hatch at all.
+  #
+  # `-s 100,100` makes both swap thresholds always true, so the memory condition alone
+  # decides. That is not a loosening in practice: `-m 10` still means 45 MB available of
+  # 456 MB, against the 137-156 MB this box actually sits at, so it fires only in genuine
+  # exhaustion. The zram device is NOT the thing to shrink to buy headroom — measured
+  # 4.61:1 compression (mm_stat: 275.7 MiB stored in 62.4 MiB), so it is the cheapest RAM
+  # on the box.
+  #
+  # dbus-daemon joins --avoid because Docker's cgroup driver is `systemd`: runc asks systemd
+  # over dbus to create a scope for every container start. Killing dbus-daemon would turn a
+  # recoverable stall into the exact create-time failure that took autoheal down, and leave
+  # nothing able to start a container until reboot.
   ansible.builtin.lineinfile:
     path: /etc/default/earlyoom
     regexp: '^#?EARLYOOM_ARGS='
     line: >-
-      EARLYOOM_ARGS="-m 10 -s 10 -r 3600 --avoid
-      '(^|/)(systemd|systemd-.*|init|sshd|dockerd|containerd|containerd-shim.*|watchdog)$'"
+      EARLYOOM_ARGS="-m 10 -s 100,100 -r 3600 --avoid
+      '(^|/)(systemd|systemd-.*|init|sshd|dbus-daemon|dbus-broker|dockerd|containerd|containerd-shim.*|watchdog)$'"
   become: true
   notify: Restart earlyoom
 
@@ -469,6 +534,46 @@
   ansible.builtin.file:
     path: /usr/local/lib/pi-kuma-push-lib.sh
     state: absent
+  become: true
+
+- name: Create the directory both health crons write their verdict to
+  tags: [sd-health, recovery-health]
+  # Both scripts append an rsyslog-shaped `status=` line here, which the Pi's promtail tails
+  # under `job="syslog"` so `probe.py alerts` can reconstruct a Pi episode. Owned by the cron
+  # user rather than root: the crons run as {{ sys_user }} (uid 1000), and so does promtail
+  # (`user: "1000:1000"`), so the same uid writes and reads and no group_add is needed.
+  #
+  # This is under /var/log, which is log2ram's 128 MB RAM tmpfs — hence the logrotate stanza
+  # below rather than letting it grow. Two crons x 288 runs/day x ~90 B is ~52 KB/day, so the
+  # cap is precautionary, not load-bearing.
+  ansible.builtin.file:
+    path: /var/log/pi-health
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Cap the health log so it cannot grow into the log2ram tmpfs
+  tags: [sd-health, recovery-health]
+  # `create`, NOT `copytruncate`. promtail holds the file open and tracks a byte offset;
+  # truncating in place leaves that offset past the new end, so it silently ships nothing
+  # until the offset happens to be passed again. Renaming and creating a fresh inode is the
+  # rotation promtail's glob-based tailer handles correctly.
+  ansible.builtin.copy:
+    dest: /etc/logrotate.d/pi-health
+    content: |
+      # Managed by Ansible (optimize_pi role) — edits here are overwritten.
+      /var/log/pi-health/*.log {
+        daily
+        rotate 1
+        size 256k
+        missingok
+        notifempty
+        create 0644 {{ sys_user }} {{ sys_user }}
+        su {{ sys_user }} {{ sys_user }}
+      }
+    mode: "0644"
   become: true
 
 - name: Deploy the SD-card health heartbeat script
