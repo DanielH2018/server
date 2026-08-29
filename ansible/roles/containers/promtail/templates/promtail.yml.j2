@@ -48,7 +48,8 @@ scrape_configs:
   # which promtail cannot do. Service discovery gets the name from the API directly.
   #
   # Through docker-proxy, never the raw socket: the proxy is already on this host serving
-  # glances and dozzle, it is read-only (POST=0, EXEC=0), and CONTAINERS=1 covers both the
+  # glances (and this job — the two are its only consumers since dozzle retired 2026-08-29),
+  # it is read-only (POST=0, EXEC=0), and CONTAINERS=1 covers both the
   # container list and the log stream. Handing promtail the bare socket would give a log
   # shipper full control of the daemon.
   - job_name: pi-containers

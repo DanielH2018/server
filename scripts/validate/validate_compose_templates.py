@@ -57,8 +57,12 @@ ROLES = ANSIBLE / "roles" / "containers"
 
 def build_env(role: str) -> Environment:
     env = make_env([ROLES / role / "templates", SHARED_TPL])
-    # Used by the jittered healthcheck interval inlined in roles/containers/dozzle. It came
-    # from a shared healthcheck.yml.j2 macro that no longer exists; the filter is still needed.
+    # Ansible's `hash` filter, which this Jinja environment does not get for free. No LIVE
+    # compose template uses it since dozzle retired 2026-08-29 — dozzle's inlined jittered
+    # healthcheck interval was the last caller, inherited from a shared healthcheck.yml.j2
+    # macro that no longer exists. Kept anyway: the job of this environment is to render what
+    # Ansible would, so dropping a filter Ansible provides would make the validator reject a
+    # template Ansible accepts — a false failure on the next template that reaches for it.
     env.filters["hash"] = _ansible_hash
     return env
 

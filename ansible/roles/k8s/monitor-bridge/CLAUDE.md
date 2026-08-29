@@ -387,7 +387,8 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     `udp_port` is excluded: there is no TCP-connect equivalent for UDP. `PI_PORTS_CONSECUTIVE`
     (2) rides out the seconds of closed ports a Pi deploy's container recreate causes.
     **This arm adds no reachability coverage — it adds attribution, and that is the whole
-    case for it.** Measured 2026-08-27: Kuma HTTP-monitors glances, dozzle and wg-easy, and
+    case for it.** Measured 2026-08-27: Kuma HTTP-monitors glances and wg-easy (and dozzle,
+    until it retired 2026-08-29), and
     `promtail`/`node-exporter` are Prometheus scrape targets (`job=promtail-pi`, `job=node-pi`)
     that `check_targets_down` already covers. So every publisher was already watched. What
     nothing said was *why* a port went quiet, and on 2026-08-08 that cost a manual sweep

@@ -172,7 +172,7 @@
   # (both hosts share one public IP, so the listen ports must differ) and this rule
   # was never updated. No replacement is added: wg-easy publishes its UDP port via
   # Docker, whose nat/FORWARD rules bypass UFW INPUT entirely — proven by the Pi's
-  # dozzle/glances web UIs being LAN-reachable with no UFW allows for 8080/61208.
+  # glances web UI being LAN-reachable with no UFW allow for 61208.
   # The Pi's manually-added 51822 allow is left in place (harmless, documents intent).
   # Kept as a delete-task (not just removed) so existing hosts converge.
   community.general.ufw:

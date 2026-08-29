@@ -8,7 +8,7 @@ ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
 # was removed 2026-06-11: that zone does not resolve, and it was only harmless because the
 # SOPS value shadowed it (un-shadowed it would have broken the VPN endpoint). To give a
 # future Pi-exposed service a "daniel-pi" hostname, use a `pi.`-prefixed subdomain of the
-# working zone (e.g. dozzle.pi.daniel-hunter.com — real DNS via cloudflare-ddns), not a
+# working zone (e.g. glances.pi.daniel-hunter.com — real DNS via cloudflare-ddns), not a
 # separate daniel-pi.com zone.
 # LAN-only host: publish web UIs bound to the LAN IP instead of routing through Traefik.
 expose_mode: lan
@@ -28,8 +28,8 @@ pi_swapfile_size: 1G
 # this is unset (the server keeps 10s/30s). Detection latency worst-case = 60s x 3 retries.
 container_healthcheck_interval: 60s
 containers_list:
-  # Read-only Docker socket proxy — serves glances + dozzle; the hardcoded
-  # docker-proxy-lifecycle sub-proxy (restart-only) serves autoheal.
+  # Read-only Docker socket proxy — serves promtail's docker_sd log discovery and glances;
+  # the hardcoded docker-proxy-lifecycle sub-proxy (restart-only) serves autoheal.
   - name: docker-proxy
     use_authelia: false
     networks:
@@ -48,11 +48,16 @@ containers_list:
     use_authelia: false
     networks:
       - proxy
-  - name: dozzle
-    port: 8080
-    use_authelia: false
-    networks:
-      - proxy
+  # dozzle retired 2026-08-29. It was a live-tail UI for container logs, and promtail has
+  # shipped this host's container logs to loki-homelab since the slice-7 work — so Grafana
+  # already answers what dozzle answered, with history dozzle never had. What it still cost
+  # was ~15 MiB of a 456 MB board (9.3 MiB RSS plus its ~6 MiB containerd-shim), on a host
+  # measured at 8% sustained full memory stall, where that shim tax is the only lever left
+  # short of removing a container. This contradicts the marker in
+  # roles/containers/archive/portainer-agent/CLAUDE.md ("dozzle stays … dozzle is 6 MB, a
+  # nicer merged live-tail"): it is 9.3 MiB now, and the log path it was kept ahead of has
+  # since been built. Its container and image were removed from the Pi imperatively at
+  # retire time; nothing in Ansible recreates them. Role in roles/containers/archive/.
   # portainer-agent retired 2026-08-09 with the server's Portainer (slice-7 Phase B, design
   # decision 4). Its host artifacts — /etc/portainer-agent-firewall.sh, the systemd oneshot,
   # and the DOCKER-USER rules for :9001 — were removed imperatively at retire time; nothing

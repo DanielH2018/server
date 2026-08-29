@@ -2,9 +2,11 @@
 # Pi container-recovery heartbeat — managed by Ansible (optimize_pi role); edits overwritten.
 #
 # AutoKuma only reads the SERVER's docker socket, so the Pi's own autoheal (restarts
-# unhealthy containers) and docker-proxy (read-only socket that dozzle's log UI reads) have
-# no liveness monitor: if autoheal dies, unhealthy Pi containers stop self-recovering; if
-# docker-proxy dies, dozzle still serves 200 (its SPA shell) so its http monitor stays green.
+# unhealthy containers) and docker-proxy (read-only socket serving promtail's container-log
+# discovery and glances) have no liveness monitor: if autoheal dies, unhealthy Pi containers
+# stop self-recovering; if docker-proxy dies, promtail's docker_sd finds no targets and this
+# host's container logs stop reaching Loki, silently — nothing about that turns a monitor red,
+# because glances keeps serving its own HTTP and promtail keeps running with zero targets.
 # Both deaths are otherwise silent. This cron pushes `up` only while BOTH run, to the static
 # "Daniel Pi Recovery" Kuma push monitor (uptime-kuma role), every 5 min. Dead-man's-switch:
 # an explicit `down` names the dead container fast, while a dead cron/host stops pushing and

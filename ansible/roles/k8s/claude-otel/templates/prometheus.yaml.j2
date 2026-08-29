@@ -284,8 +284,8 @@ data:
       # Reached at the LAN IP, not a bridge address: Docker's published-port NAT bypasses the
       # Pi's UFW INPUT chain (documented in initial_setup/tasks/network.yml, where the stale
       # WireGuard allow was removed on exactly this evidence), so no firewall rule is needed
-      # and the exporters are LAN-reachable — the same posture glances and dozzle already
-      # have on that host.
+      # and the exporters are LAN-reachable — the same posture glances already has on that
+      # host.
       - job_name: node-pi
         scrape_interval: 1m
         static_configs:
