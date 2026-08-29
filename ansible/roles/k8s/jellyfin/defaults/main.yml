@@ -96,4 +96,10 @@ jellyfin_k8s_anisync_init_image: python:3.14-alpine
 jellyfin_k8s_cpu_limit: "4"
 jellyfin_k8s_mem_limit: 4096Mi
 jellyfin_k8s_cpu_request: "250m"
-jellyfin_k8s_mem_request: 256Mi
+# 2Gi against measured working-set peaks of 1.85GiB and 2.8GiB across two pod incarnations
+# (2026-08-29). The request is the kubelet's eviction datum — it ranks pods that exceed their
+# request ahead of those that don't — so a 256Mi request put jellyfin in the worst bucket while
+# genuinely needing several GiB. Stays under the 4096Mi limit, so QoS remains Burstable.
+# Preventative: 37 pods at homelab-best-effort priority evict ahead of it, and no pod on this
+# cluster has ever OOMKilled.
+jellyfin_k8s_mem_request: 2Gi

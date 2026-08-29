@@ -59,7 +59,21 @@ def test_hashing_threads_stays_within_the_container_cpu_limit() -> None:
 def test_memory_working_set_fits_the_container_memory_limit() -> None:
     # qbittorrent_k8s_mem_limit is 2048Mi. libtorrent 2.0's mmap I/O holds dirty pages up
     # to this bound, so it has to leave headroom for the rest of the process.
+    #
+    # NB the bound is the only thing this asserts, and that is now the only thing worth
+    # asserting: the setting is inert on Linux (see the DESIRED comment), so it cannot
+    # actually exceed anything. Kept so a future edit can't raise it past the container
+    # limit on the assumption that it works.
     assert apply_prefs.DESIRED["memory_working_set_limit"] <= 1536
+
+
+def test_checking_memory_use_leaves_room_under_the_container_memory_limit() -> None:
+    # In MiB, and additive to the resident session rather than carved out of it: the recheck
+    # buffer is held on top of whatever the session already holds. Against a 2048Mi container
+    # limit — with mmap page cache already growing to fill it, since memory_working_set_limit
+    # bounds nothing here — a large value turns a routine post-restore recheck into the one
+    # operation that can push the cgroup over. 256 keeps it to an eighth of the limit.
+    assert apply_prefs.DESIRED["checking_memory_use"] <= 256
 
 
 class _StubClient:
