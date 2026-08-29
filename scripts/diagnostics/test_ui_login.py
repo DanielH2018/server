@@ -105,6 +105,33 @@ def test_two_factor_session_is_accepted():
     assert ui_login.classify_state(_state(2))[0] is True
 
 
+def test_two_factor_requirement_accepts_a_level_two_session():
+    assert ui_login.classify_state(_state(2), required_level=2)[0] is True
+
+
+def test_two_factor_requirement_rejects_a_one_factor_session():
+    """The guard that keeps a valid-but-insufficient cookie from reading green. A level-1
+    session is genuinely authenticated and still bounces off code-server, n8n and longhorn,
+    so `authenticated` alone is the wrong question for the two_factor jar."""
+    valid, detail = ui_login.classify_state(_state(1), required_level=2)
+    assert valid is False
+    assert "one_factor" in detail
+
+
+def test_the_two_tiers_never_share_a_state_file():
+    """`ui_mcp.sh` loads a jar unconditionally, so an admin-capable session sharing the
+    default path would put two_factor auth behind every ordinary page load."""
+    assert ui_login.state_path(two_factor=True) != ui_login.state_path(two_factor=False)
+    assert ui_login.state_path() == ui_login.STATE_PATH
+
+
+def test_an_expired_two_factor_session_reports_minutes_not_days():
+    """A two_factor session lives an hour, so a days-rounded message would read
+    'expired 0d ago' for every real expiry and tell nobody anything."""
+    state = ui_login.build_storage_state("tok", "example.com", 0)
+    assert ui_login.local_state_problem(state, now=600) == "expired 10m ago"
+
+
 def test_deauthenticated_cookie_is_flagged():
     """The whole point of asking Authelia. It answers HTTP 200 with level 0 to a cookie it
     no longer honours — after a restart or an authelia_secret rotation — while the expiry

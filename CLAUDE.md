@@ -386,6 +386,16 @@ Per-verb tiers, the RBAC evidence and the rule-matching measurements: `docs/clau
   title when adding a service: several apps carry their own login behind Authelia (FreshRSS
   lands on `/i/`, uptime-kuma on `/dashboard`, karakeep on `/signin`), so a substring like
   `FreshRSS` also matches `Login · FreshRSS` and scores a broken app green.
+  **code-server, n8n and longhorn are `two_factor`**, so the ordinary session bounces off
+  them at the portal. Reach them by minting a second, short-lived session with a code from
+  your authenticator — `uv run python scripts/diagnostics/ui_login.py --totp <code>` — then
+  launching `ui_mcp.sh --two-factor` (the `-m ui` tests for those three skip when no such
+  session is live). **The TOTP secret is deliberately NOT in SOPS.** Storing it would put
+  both factors under one age key, and unlike a password its rotation costs a phone
+  re-enrollment; nothing here runs unattended anyway, since the `ui` marker is deselected in
+  CI. The two_factor session also gets its own state file and is never a fallback for the
+  default one: `ui_mcp.sh` loads a jar unconditionally, so promoting it would put a shell as
+  the repo user (code-server) and volume deletion (longhorn) behind every page load.
 - **block-protected-edits** (PreToolUse) — *denies* direct edits to (a) anything under
   `containers/` (edit the `ansible/roles/containers/<svc>/templates/` source instead) and
   (b) SOPS-encrypted files like `ansible/vars/secrets.yml` (use `sops` / the `/add-secret` skill).

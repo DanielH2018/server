@@ -25,15 +25,33 @@ REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}/claude-ui-mcp"
 CONFIG_PATH="$RUNTIME_DIR/playwright-mcp.json"
 
+# `--two-factor` opts this launch into the short-lived two_factor jar, which is the only way
+# to reach code-server, n8n and longhorn. It is opt-in per launch and never a fallback: those
+# three are a shell as the repo user, arbitrary workflow execution, and volume deletion
+# including the B2 backup chain. Picking the jar up automatically when it happened to exist
+# would put admin-capable auth behind every ordinary page load.
+TIER_ARGS=()
+if [[ "${1:-}" == "--two-factor" ]]; then
+  TIER_ARGS=(--two-factor)
+  CONFIG_PATH="$RUNTIME_DIR/playwright-mcp-2fa.json"
+  shift
+fi
+
 export PATH="$NODE_BIN:$PATH"
 
-# Mint the Authelia session if it is missing or expired. --check exits non-zero in both
-# cases, and minting is a single API call, so this is cheap enough to do every launch.
-if ! uv --directory "$REPO_ROOT" run python scripts/diagnostics/ui_login.py --check >/dev/null 2>&1; then
+# Check the session, and mint one if it is missing or expired. --check exits non-zero in
+# both cases and is one API call, so it is cheap enough to do every launch.
+if ! uv --directory "$REPO_ROOT" run python scripts/diagnostics/ui_login.py --check "${TIER_ARGS[@]}" >/dev/null 2>&1; then
+  if [[ ${#TIER_ARGS[@]} -gt 0 ]]; then
+    # A two_factor session cannot be minted unattended — that is the design, not a gap.
+    echo "no live two_factor session. Mint one with:" >&2
+    echo "  uv run python scripts/diagnostics/ui_login.py --totp <code>" >&2
+    exit 1
+  fi
   uv --directory "$REPO_ROOT" run python scripts/diagnostics/ui_login.py >&2
 fi
 
-STATE_PATH="$(uv --directory "$REPO_ROOT" run python scripts/diagnostics/ui_login.py --path)"
+STATE_PATH="$(uv --directory "$REPO_ROOT" run python scripts/diagnostics/ui_login.py --path "${TIER_ARGS[@]}")"
 DOMAIN="$(sops -d --extract '["domain"]' "$REPO_ROOT/ansible/vars/secrets.yml")"
 VIP="$(awk -F': *' '/^k3s_metallb_ingress_vip:/ {print $2; exit}' \
   "$REPO_ROOT/ansible/inventory/group_vars/all.yml")"

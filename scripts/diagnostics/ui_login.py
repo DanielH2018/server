@@ -25,6 +25,14 @@ asks for it. Without that flag this file would need re-minting continuously.
 Usage:
     uv run python scripts/diagnostics/ui_login.py            # mint (or refresh) the state file
     uv run python scripts/diagnostics/ui_login.py --check    # ask Authelia if the session still stands
+    uv run python scripts/diagnostics/ui_login.py --totp 123456   # a two_factor session, ~1h
+
+The `--totp` form exists because code-server, n8n and longhorn are `two_factor`
+(`roles/k8s/authelia/templates/config-secret.yaml.j2:85-99`), and a one_factor cookie
+bounces off them. The code is typed, never derived: the TOTP shared secret stays on the
+phone. Storing it in SOPS would put both factors under one age key, and rotating it would
+mean re-enrolling the device — the one credential here whose rotation costs more than an
+edit. Nothing runs these unattended anyway, since the `ui` test marker is deselected in CI.
     uv run python scripts/diagnostics/ui_login.py --path     # print the state file path
 
 Exit 0 = a usable state file is on disk. Exit 1 = it is missing, expired or rejected.
@@ -50,12 +58,31 @@ COOKIE_NAME = "authelia_session_k8s"
 # happened to be picked as a target.
 STATE_ENDPOINT_PATH = "/api/state"
 
+SECOND_FACTOR_PATH = "/api/secondfactor/totp"
+
 # Deliberately NOT $CLAUDE_JOB_DIR/tmp: that is per-job and vanishes with the job, which
 # would re-mint a session on every new one. ~/.claude survives across sessions and hosts
 # the same kind of local operator state.
-STATE_PATH = os.path.expanduser("~/.claude/playwright/authelia-state.json")
+STATE_DIR = os.path.expanduser("~/.claude/playwright")
+STATE_PATH = os.path.join(STATE_DIR, "authelia-state.json")
+
+# The two_factor session lives in its OWN file and never upgrades the one above.
+# `ui_mcp.sh` loads a jar unconditionally, so promoting the default would make every
+# ordinary page load carry admin-capable auth — code-server is a shell as the repo user and
+# longhorn deletes volumes and their B2 backup chain. Reaching those is opt-in per launch.
+TWO_FACTOR_STATE_PATH = os.path.join(STATE_DIR, "authelia-state-2fa.json")
+
+# A first-factor session asks for remember_me (1M), so it is worth saving. A two_factor one
+# deliberately does not: `expiration: '1h'` and `inactivity: '5m'` are what keep an
+# admin-capable cookie from lying around, and re-minting costs one typed code.
+FIRST_FACTOR_LIFETIME = 29 * 24 * 3600
+TWO_FACTOR_LIFETIME = 3600
 
 TIMEOUT = 15
+
+
+def state_path(two_factor=False):
+    return TWO_FACTOR_STATE_PATH if two_factor else STATE_PATH
 
 
 def portal_host(domain):
@@ -111,8 +138,61 @@ def _curl(argv, stdin_text=None):
     )
 
 
-def mint():
-    """Log in and write the state file. Returns the path."""
+def post_json(host, path, body, cookie=None):
+    """POST JSON to the portal and return its raw response headers.
+
+    Bodies and cookies go in on stdin, never in argv — a password or a session value in
+    argv is visible in `ps` and in any shell history that captured the call.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        headers_path = os.path.join(tmp, "headers")
+        argv = [
+            "curl",
+            "-sS",
+            "--max-time",
+            str(TIMEOUT),
+            "--resolve",
+            f"{host}:443:{core.metallb_vip()}",
+            "-D",
+            headers_path,
+            "-o",
+            os.path.join(tmp, "body"),
+            "-X",
+            "POST",
+            "-H",
+            "Content-Type: application/json",
+            "-H",
+            f"Origin: https://{host}",
+            "--data",
+            "@-",
+        ]
+        stdin_text = body
+        if cookie is not None:
+            # curl reads its config from stdin too, so the body moves to a file to keep
+            # both off argv.
+            body_path = os.path.join(tmp, "post")
+            with open(body_path, "w") as f:
+                f.write(body)
+            argv[argv.index("--data") + 1] = f"@{body_path}"
+            argv += ["--config", "-"]
+            stdin_text = f'cookie = "{COOKIE_NAME}={cookie}"\n'
+        out = _curl(argv + [f"https://{host}{path}"], stdin_text=stdin_text)
+        if out.returncode != 0:
+            raise SystemExit(f"POST {path} failed: {out.stderr.strip()}")
+        with open(headers_path) as f:
+            return f.read()
+
+
+def mint(totp_code=None):
+    """Log in and write the state file. Returns the path.
+
+    With `totp_code`, the first-factor session is upgraded through Authelia's second-factor
+    endpoint and written to the two_factor state file instead. The code is passed in rather
+    than derived: keeping the TOTP shared secret OFF this host is the point — storing it
+    beside the password in SOPS would put both factors under one age key, and rotating it
+    would mean re-enrolling the phone.
+    """
+    two_factor = totp_code is not None
     domain = core.sops_extract("domain")
     user = core.sops_extract("authelia_user")
     password = core.sops_extract("authelia_password")
@@ -122,61 +202,44 @@ def mint():
         {
             "username": user,
             "password": password,
-            "keepMeLoggedIn": True,
+            # A two_factor session is deliberately short-lived; see TWO_FACTOR_LIFETIME.
+            "keepMeLoggedIn": not two_factor,
             "targetURL": f"https://{host}/",
         }
     )
 
-    with tempfile.TemporaryDirectory() as tmp:
-        headers_path = os.path.join(tmp, "headers")
-        # The password goes in on stdin, never in argv — otherwise it is visible in `ps`
-        # and in any shell history that captured the call.
-        out = _curl(
-            [
-                "curl",
-                "-sS",
-                "--max-time",
-                str(TIMEOUT),
-                "--resolve",
-                f"{host}:443:{core.metallb_vip()}",
-                "-D",
-                headers_path,
-                "-o",
-                os.path.join(tmp, "body"),
-                "-X",
-                "POST",
-                "-H",
-                "Content-Type: application/json",
-                "-H",
-                f"Origin: https://{host}",
-                "--data",
-                "@-",
-                f"https://{host}/api/firstfactor",
-            ],
-            stdin_text=body,
-        )
-        if out.returncode != 0:
-            raise SystemExit(f"authelia login request failed: {out.stderr.strip()}")
-        with open(headers_path) as f:
-            header_text = f.read()
-
-    cookie = parse_set_cookie(header_text)
+    cookie = parse_set_cookie(post_json(host, "/api/firstfactor", body))
     if cookie is None:
         raise SystemExit(
             "authelia issued no session cookie — check authelia_user / authelia_password "
             "in ansible/vars/secrets.yml (a wrong password still answers HTTP 200)"
         )
 
-    # remember_me is 1M; expire the file a day early so a stale jar surfaces as a re-mint
-    # rather than as a puzzling mid-session redirect to the login portal.
-    expires = int(time.time()) + 29 * 24 * 3600
-    state = build_storage_state(cookie, domain, expires)
+    if two_factor:
+        upgraded = parse_set_cookie(
+            post_json(
+                host,
+                SECOND_FACTOR_PATH,
+                json.dumps({"token": totp_code, "targetURL": f"https://{host}/"}),
+                cookie=cookie,
+            )
+        )
+        # Authelia may raise the level on the existing session rather than reissue the
+        # cookie, so no new Set-Cookie is normal and the first-factor value carries on.
+        # Whether the upgrade actually took is settled by --check, not by this response.
+        cookie = upgraded or cookie
 
-    os.makedirs(os.path.dirname(STATE_PATH), mode=0o700, exist_ok=True)
-    fd = os.open(STATE_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    # Expire a little early so a stale jar surfaces as a re-mint rather than as a puzzling
+    # mid-session redirect to the login portal.
+    lifetime = TWO_FACTOR_LIFETIME if two_factor else FIRST_FACTOR_LIFETIME
+    state = build_storage_state(cookie, domain, int(time.time()) + lifetime)
+
+    path = state_path(two_factor)
+    os.makedirs(STATE_DIR, mode=0o700, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
         json.dump(state, f, indent=2)
-    return STATE_PATH
+    return path
 
 
 def local_state_problem(state, now):
@@ -192,16 +255,22 @@ def local_state_problem(state, now):
     expires = cookies[0].get("expires", 0)
     remaining = expires - now
     if remaining <= 0:
-        return f"expired {int(-remaining / 86400)}d ago"
+        # Minutes, not days: a two_factor session lives an hour, so "expired 0d ago" would
+        # be the usual reading and would tell nobody anything.
+        return f"expired {int(-remaining / 60)}m ago"
     return None
 
 
-def classify_state(payload):
+def classify_state(payload, required_level=1):
     """(valid, detail) from Authelia's /api/state body.
 
     `authentication_level` is the field that matters: 0 is an anonymous session, 1 is
     one_factor, 2 is two_factor. Authelia answers 200 with level 0 to a cookie it no longer
     honours, so the status code says nothing on its own.
+
+    `required_level` is 2 for the two_factor jar. A level-1 cookie is perfectly valid and
+    still cannot open code-server, n8n or longhorn, so checking only for "authenticated"
+    would call a jar good that is about to bounce off the portal.
     """
     if not isinstance(payload, dict):
         return False, "unreadable /api/state response"
@@ -212,10 +281,15 @@ def classify_state(payload):
         return False, "no authentication_level in /api/state"
     if level < 1:
         return False, "cookie is no longer authenticated (authentication_level 0)"
+    if level < required_level:
+        return False, (
+            f"session is only one_factor (authentication_level {level}); the two_factor "
+            f"services need a fresh `--totp <code>`"
+        )
     return True, f"authenticated (authentication_level {level})"
 
 
-def check():
+def check(two_factor=False):
     """Report whether the saved cookie is one Authelia still accepts.
 
     The expiry stamped in the file is a *claim*, not a fact, and the two come apart in the
@@ -229,15 +303,17 @@ def check():
     needs the same network the browsing does, so there is nothing useful to do with a
     session that cannot be confirmed.
     """
-    if not os.path.exists(STATE_PATH):
-        print(f"no state file at {STATE_PATH} — run without --check to mint one")
+    path = state_path(two_factor)
+    mint_hint = "--totp <code>" if two_factor else "no arguments"
+    if not os.path.exists(path):
+        print(f"no state file at {path} — mint one by running with {mint_hint}")
         return 1
-    with open(STATE_PATH) as f:
+    with open(path) as f:
         state = json.load(f)
 
     problem = local_state_problem(state, time.time())
     if problem is not None:
-        print(f"{STATE_PATH} {problem} — re-mint")
+        print(f"{path} {problem} — re-mint with {mint_hint}")
         return 1
 
     domain = core.sops_extract("domain")
@@ -264,8 +340,8 @@ def check():
     except json.JSONDecodeError:
         payload = None
 
-    valid, detail = classify_state(payload)
-    print(f"{detail} ({STATE_PATH})" if valid else f"{detail} — re-mint")
+    valid, detail = classify_state(payload, required_level=2 if two_factor else 1)
+    print(f"{detail} ({path})" if valid else f"{detail} — re-mint")
     return 0 if valid else 1
 
 
@@ -283,11 +359,12 @@ def classify_response(status, location):
     return False, f"backend answered HTTP {status}"
 
 
-def verify(service):
+def verify(service, two_factor=False):
     """Fetch one service route with the saved cookie and report whether it got through."""
-    if not os.path.exists(STATE_PATH):
-        raise SystemExit(f"no state file at {STATE_PATH} — mint one first")
-    with open(STATE_PATH) as f:
+    path = state_path(two_factor)
+    if not os.path.exists(path):
+        raise SystemExit(f"no state file at {path} — mint one first")
+    with open(path) as f:
         state = json.load(f)
     cookie_value = state["cookies"][0]["value"]
     domain = core.sops_extract("domain")
@@ -338,18 +415,33 @@ def main(argv=None):
         help="fetch <service>.local.<domain> with the saved cookie and report whether "
         "it reached the backend rather than the login portal",
     )
+    parser.add_argument(
+        "--totp",
+        metavar="CODE",
+        help="mint a two_factor session using this code from your authenticator, for "
+        "code-server / n8n / longhorn. Written to a separate, short-lived state file; the "
+        "TOTP secret itself is never stored here",
+    )
+    parser.add_argument(
+        "--two-factor",
+        action="store_true",
+        help="make --check / --verify / --path act on the two_factor state file",
+    )
     args = parser.parse_args(argv)
 
     if args.path:
-        print(STATE_PATH)
+        print(state_path(args.two_factor))
         return 0
     if args.verify:
-        return verify(args.verify)
+        return verify(args.verify, two_factor=args.two_factor)
     if args.check:
-        return check()
+        return check(two_factor=args.two_factor)
 
-    path = mint()
-    print(f"logged in as the authelia user; storage state written to {path}")
+    path = mint(totp_code=args.totp)
+    tier = "two_factor" if args.totp else "one_factor"
+    print(
+        f"minted a {tier} session as the authelia user; storage state written to {path}"
+    )
     return 0
 
 

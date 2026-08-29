@@ -32,7 +32,8 @@ import pytest
 
 pytestmark = pytest.mark.ui
 
-WRAPPER = Path(__file__).resolve().parents[2] / "scripts" / "diagnostics" / "ui_mcp.sh"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+WRAPPER = REPO_ROOT / "scripts" / "diagnostics" / "ui_mcp.sh"
 
 # Hardcoded, NOT derived from containers_list: deriving it would silently enlist every new
 # service into a suite CI never runs, so the next person to type `-m ui` inherits failures
@@ -42,6 +43,17 @@ SERVICES = [
     ("homepage", "My Awesome Homepage", "/"),
     ("sonarr", "Sonarr", "/"),
     ("freshrss", "Login · FreshRSS", "/i/"),
+]
+
+# `two_factor` in Authelia's access control, so a one_factor cookie is turned away at the
+# portal (config-secret.yaml.j2:85-99). These skip unless a live two_factor session exists,
+# which only `ui_login.py --totp <code>` can create — the shared secret stays on the phone,
+# so there is no unattended path here by design. Titles observed through a real two_factor
+# session; code-server carries its own login on top of Authelia, as FreshRSS does.
+TWO_FACTOR_SERVICES = [
+    ("longhorn", "Longhorn", "/#/dashboard"),
+    ("code-server", "code-server login", "/login"),
+    ("n8n", "n8n.io - Workflow Automation", "/"),
 ]
 
 
@@ -113,6 +125,16 @@ class McpClient:
             self.proc.kill()
 
 
+def http_status(report: str) -> int | None:
+    """The status Playwright reported, or None when it reported none (a 200 is not always
+    printed). Checked before the title so a mid-rollout 404 says `HTTP 404` rather than
+    making someone work backwards from a missing title."""
+    for line in report.splitlines():
+        if "HTTP status:" in line:
+            return int(line.split("HTTP status:", 1)[1].strip())
+    return None
+
+
 def page_title(report: str) -> str | None:
     """The title Playwright reported, or None when the page carried none — which is what
     Traefik's 404 looks like, and the reason a missing title must never pass."""
@@ -154,16 +176,17 @@ def browser():
         client.close()
 
 
-@pytest.mark.parametrize(
-    "service,title,path", SERVICES, ids=[s for s, _, _ in SERVICES]
-)
-def test_service_serves_its_own_ui(browser, domain, service, title, path):
-    report, is_error = browser.navigate(f"https://{service}.local.{domain}/")
-
+def assert_serves_ui(report, is_error, domain, service, title, path, remint):
+    """The four claims both tiers make, in the order that gives the best failure message."""
     assert not is_error, f"{service}: navigation reported an error:\n{report}"
     assert "auth.local." not in report, (
         f"{service}: landed on the Authelia portal, so the session cookie was not accepted. "
-        f"Re-mint it with `uv run python scripts/diagnostics/ui_login.py`."
+        f"Re-mint it with `{remint}`."
+    )
+    status = http_status(report)
+    assert status is None or status < 400, (
+        f"{service}: the route answered HTTP {status}. A 404 here usually means the pod is "
+        f"mid-rollout rather than that the route is wrong — check `probe.py health {service}`."
     )
     assert page_title(report) == title, (
         f"{service}: expected the page titled {title!r}, got {page_title(report)!r}. "
@@ -171,6 +194,22 @@ def test_service_serves_its_own_ui(browser, domain, service, title, path):
     )
     assert f"Page URL: https://{service}.local.{domain}{path}" in report, (
         f"{service}: expected to land on {path!r}; the app redirected somewhere else."
+    )
+
+
+@pytest.mark.parametrize(
+    "service,title,path", SERVICES, ids=[s for s, _, _ in SERVICES]
+)
+def test_service_serves_its_own_ui(browser, domain, service, title, path):
+    report, is_error = browser.navigate(f"https://{service}.local.{domain}/")
+    assert_serves_ui(
+        report,
+        is_error,
+        domain,
+        service,
+        title,
+        path,
+        remint="uv run python scripts/diagnostics/ui_login.py",
     )
 
 
@@ -186,4 +225,72 @@ def test_a_route_with_no_backend_is_not_scored_as_a_rendered_ui(browser, domain)
     assert not is_error, "expected Traefik to answer rather than the navigation to fail"
     assert page_title(report) is None, (
         f"expected no title from an unrouted host, got {page_title(report)!r}"
+    )
+
+
+@pytest.fixture(scope="module")
+def two_factor_browser():
+    """A browser carrying a two_factor session, or a skip when none is live.
+
+    Skipping rather than failing is the honest outcome: a two_factor session lasts about an
+    hour and can only be minted by a human typing a code, so its absence is the normal state
+    of this machine, not a regression in anything.
+    """
+    # Through `uv run`, not the shebang: ui_login imports probe_core, which uses PEP 758
+    # syntax that Ubuntu's 3.12 /usr/bin/python3 cannot parse.
+    proc = subprocess.run(
+        [
+            "uv",
+            "run",
+            "--directory",
+            str(REPO_ROOT),
+            "python",
+            "scripts/diagnostics/ui_login.py",
+            "--check",
+            "--two-factor",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        pytest.skip(
+            "no live two_factor session — mint one with "
+            "`uv run python scripts/diagnostics/ui_login.py --totp <code>`"
+        )
+    client = McpClient([str(WRAPPER), "--two-factor"])
+    try:
+        client.call(
+            "initialize",
+            {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "ui-smoke-2fa", "version": "1"},
+            },
+        )
+        client.notify("notifications/initialized")
+        yield client
+    finally:
+        client.close()
+
+
+@pytest.mark.parametrize(
+    "service,title,path",
+    TWO_FACTOR_SERVICES,
+    ids=[s for s, _, _ in TWO_FACTOR_SERVICES],
+)
+def test_two_factor_service_serves_its_own_ui(
+    two_factor_browser, domain, service, title, path
+):
+    """Same four claims as the one_factor tier, plus the fact that the second factor worked:
+    reaching any of these at all requires `authentication_level 2`."""
+    report, is_error = two_factor_browser.navigate(f"https://{service}.local.{domain}/")
+    assert_serves_ui(
+        report,
+        is_error,
+        domain,
+        service,
+        title,
+        path,
+        # A two_factor session lapses after about an hour, so this is the usual reason.
+        remint="uv run python scripts/diagnostics/ui_login.py --totp <code>",
     )
