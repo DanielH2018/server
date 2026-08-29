@@ -76,6 +76,34 @@ def test_every_verdict_names_what_it_did_not_check() -> None:
         )
 
 
+def test_a_failed_staging_deploy_is_a_rejection_not_a_missing_verdict() -> None:
+    """(1, 2) is the ONLY shape a real staging deploy failure can take.
+
+    consult_staging leaves expect_rc at 2 unless the deploy passed, so a bad manifest always
+    arrives here as deploy=1, expect=2. Reading expect_rc before the deploy's own verdict made
+    that pair report `staging could not be asked, which is not a rejection` — an alert that
+    tells the operator to discount the one verdict worth acting on, and the exact conflation
+    Decision 4 exists to prevent. No drill can reach this: every drill so far passed.
+    """
+    summary = staging_verdict_summary({"freshrss"}, set(), 1, 2)
+    assert "REJECTED" in summary, (
+        f"a failed staging deploy must read as a rejection; got {summary!r}"
+    )
+    assert "NO VERDICT" not in summary
+
+
+def test_an_unaskable_expectation_check_is_still_a_missing_verdict() -> None:
+    """The other side of the same ordering: the deploy passed, the check could not run.
+
+    Without this the fix above could be 'deploy_rc decides everything', which would report a
+    checker that never ran as a PASS — a false green, and worse than the false NO VERDICT.
+    """
+    summary = staging_verdict_summary({"freshrss"}, set(), 0, 2)
+    assert "NO VERDICT" in summary, (
+        f"an expectation check that could not run is not a pass; got {summary!r}"
+    )
+
+
 def test_nothing_to_gate_is_not_reported_as_a_pass() -> None:
     """A deploy staging cannot speak for must never read as staging having approved it."""
     summary = staging_verdict_summary(set(), {"jellyfin"}, 0, 0)
