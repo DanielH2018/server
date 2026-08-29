@@ -150,3 +150,48 @@ def test_land_never_bypasses_the_staleness_guard():
     """The reject half of the retry: the tempting fix for exit 4 is the flag that disables
     the check, which deploys stale templates over live config."""
     assert "--skip-staleness-check" not in _LAND_SH
+
+
+def test_a_setup_plane_pr_is_not_nothing_to_deploy():
+    """PR #587's real shape: no k8s or containers role, so zero deploy tags — but it changed
+    the deployer and needed `initial_setup.yml --tags gitops_deploy` by hand. land.sh reported
+    `nothing-to-deploy` and exited 0 (2026-08-29)."""
+    files = [
+        "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
+        "scripts/deploy_tools/land.sh",
+        "mkdocs.yml",
+    ]
+    tags, _ = land_tags.derive(files, changed_files=3)
+    assert tags == [], "no service tag should be derived from these paths"
+    assert "initial_setup.yml" in land_tags.plane_note(files)
+
+
+def test_an_ordinary_service_pr_needs_no_manual_apply():
+    """The reject half. A classifier that always returned a remediation would make every
+    landing report needs-manual-apply and train the operator to ignore it."""
+    assert (
+        land_tags.plane_note(["ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"])
+        == ""
+    )
+
+
+def test_a_mixed_pr_reports_both_a_tag_and_a_manual_apply():
+    """The harder silence: the deploy genuinely succeeds and half the change is unapplied, so
+    a tag-carrying PR must still surface the setup-plane half."""
+    files = [
+        "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2",
+        "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
+    ]
+    tags, _ = land_tags.derive(files, changed_files=2)
+    assert tags == ["sonarr"]
+    assert land_tags.plane_note(files) != ""
+
+
+def test_land_reports_a_setup_plane_pr_as_unfinished():
+    assert "needs-manual-apply" in _LAND_SH
+
+
+def test_land_still_has_a_nothing_to_deploy_path():
+    """The reject half of the verdict change: a docs-only PR really is finished, and must not
+    be reported as needing a human."""
+    assert "nothing-to-deploy" in _LAND_SH
