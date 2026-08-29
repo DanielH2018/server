@@ -21,9 +21,13 @@
 #
 # Exit codes:
 #   0   deployed and settled, or there was nothing to deploy
-#   1   CI red, deploy failed, or the health gate failed
+#   1   CI red, blocked by a change needing a hand, deploy failed, or the health gate failed
 #   2   bad arguments
 #   75  gave up waiting — the CI budget elapsed, or the deploy lock stayed busy
+#
+# Verdicts printed on stdout: settled | unhealthy | deploy-failed | nothing-to-deploy |
+# blocked. `blocked` is not a failure of this PR — something else in the incoming range needs
+# an operator, and nothing was deployed.
 set -uo pipefail
 
 PR=''
@@ -31,6 +35,7 @@ SINCE=''
 TAGS=''
 CI_TIMEOUT=900
 PRIMARY=/home/ubuntu/server
+BRANCH=master
 LOCK_RETRIES=5
 LOCK_BACKOFF=60
 
@@ -59,7 +64,7 @@ while [ $# -gt 0 ]; do
       shift 2
       ;;
     -h | --help)
-      sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *) die "unknown argument '$1'" ;;
@@ -74,7 +79,7 @@ done
 # stale templates if it were not. Everything below therefore runs from the primary checkout.
 cd "$PRIMARY" || die "cannot cd to $PRIMARY" 1
 
-echo "== 1/5  resolving PR #$PR"
+echo "== 1/6  resolving PR #$PR"
 MERGE_SHA=$(gh pr view "$PR" --json mergeCommit --jq '.mergeCommit.oid') ||
   die "could not read PR #$PR" 1
 if [ -z "$MERGE_SHA" ] || [ "$MERGE_SHA" = "null" ]; then
@@ -82,7 +87,24 @@ if [ -z "$MERGE_SHA" ] || [ "$MERGE_SHA" = "null" ]; then
 fi
 say "merge commit $MERGE_SHA"
 
-echo "== 2/5  waiting for master CI"
+# Before waiting on anything. A _BROAD_MANUAL_PREFIXES change anywhere in the incoming range
+# stops the tick fast-forwarding, which guarantees deploy.sh refuses as stale (exit 4) however
+# green CI turns out. Landing PR #570 on 2026-08-29 spent ~6 minutes waiting for CI and then
+# failed at step 4, with the blocker visible in the range before the wait began.
+echo "== 2/6  pre-flight: can the tick cross what is incoming?"
+git fetch -q origin "$BRANCH" || die "could not fetch origin/$BRANCH" 1
+uv run python scripts/deploy_tools/deploy_tags.py blockers "origin/$BRANCH"
+pf_rc=$?
+case "$pf_rc" in
+  0) say "nothing in the way" ;;
+  3)
+    echo "VERDICT: blocked (PR #$PR — an incoming change needs a hand; see above)"
+    exit 1
+    ;;
+  *) die "pre-flight failed (exit $pf_rc) — nothing deployed" 1 ;;
+esac
+
+echo "== 3/6  waiting for master CI"
 uv run python scripts/deploy_tools/await_ci.py "$MERGE_SHA" --timeout "$CI_TIMEOUT"
 ci_rc=$?
 case "$ci_rc" in
@@ -92,7 +114,7 @@ case "$ci_rc" in
   *) die "await_ci failed (exit $ci_rc) — nothing deployed" 1 ;;
 esac
 
-echo "== 3/5  GitOps tick (fetch, ff-merge, deploy what is eligible)"
+echo "== 4/6  GitOps tick (fetch, ff-merge, deploy what is eligible)"
 ./scripts/deploy_tools/gitops_tick.sh
 tick_rc=$?
 # 3 = lock contention, 75 = the wrapper stopped watching a run still in flight. Neither is
@@ -103,7 +125,7 @@ case "$tick_rc" in
   *) die "gitops tick failed (exit $tick_rc)" 1 ;;
 esac
 
-echo "== 4/5  deploying what the tick deferred"
+echo "== 5/6  deploying what the tick deferred"
 if [ -z "$TAGS" ]; then
   pr_json=$(gh pr view "$PR" --json files,changedFiles) || die "could not read PR files" 1
   derived=$(uv run python scripts/deploy_tools/land_tags.py --json "$pr_json") ||
@@ -149,6 +171,25 @@ while [ "$attempt" -le "$LOCK_RETRIES" ]; do
   attempt=$((attempt + 1))
 done
 
+# 4 = the tree is behind origin/master. CLAUDE.md classes this a resume point: pull again,
+# never --skip-staleness-check. It happens when someone merges during the CI wait, so the tick
+# at step 4 had a newer tip than the pre-flight checked. One more tick fetches and crosses it.
+# Bounded at a single retry on purpose — if the new tip carries a broad-manual change the tick
+# will never cross it, and re-ticking forever would hide that behind a stalled landing.
+if [ "$deploy_rc" -eq 4 ]; then
+  say "tree went stale mid-landing (someone merged during the wait); re-ticking once"
+  git fetch -q origin "$BRANCH" || die "could not fetch origin/$BRANCH" 1
+  uv run python scripts/deploy_tools/deploy_tags.py blockers "origin/$BRANCH"
+  retry_pf_rc=$?
+  if [ "$retry_pf_rc" -eq 3 ]; then
+    echo "VERDICT: blocked (PR #$PR — a change needing a hand landed during the wait; see above)"
+    exit 1
+  fi
+  ./scripts/deploy_tools/gitops_tick.sh
+  ./scripts/deploy.sh --tags "$TAGS"
+  deploy_rc=$?
+fi
+
 case "$deploy_rc" in
   0) ;;
   2)
@@ -162,7 +203,7 @@ case "$deploy_rc" in
     ;;
 esac
 
-echo "== 5/5  health verdict"
+echo "== 6/6  health verdict"
 # --status 0 because the deploy above already succeeded; this call is here for the health
 # gate, which is the half `ansible-playbook` exiting 0 cannot speak to. --no-post keeps the
 # verdict in this session rather than duplicating it onto Discord, where the --detach path

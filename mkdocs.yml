@@ -151,7 +151,7 @@ nav:
       # Specced, not started — same convention as Staging Phase C below. It changes what a
       # session does after every merge, so a reader arriving at the pipeline page should find
       # it rather than discover the behaviour changed under them.
-      - Post-merge automation (specced): post-merge-automation.md
+      - Post-merge automation: post-merge-automation.md
       # The "(planned)" suffix was dropped on 2026-08-28 when Phase B landed: the cluster
       # exists on daniel-server and serves freshrss, so a reader arriving from Operations now
       # finds what the label promises. The page is still a spec as well as a description —

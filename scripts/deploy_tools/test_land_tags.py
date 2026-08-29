@@ -107,3 +107,46 @@ def test_land_still_invokes_the_deployer():
     """The reject half. A test for an absent string passes identically against an empty
     file or a renamed script, so pin what must be present too."""
     assert "./scripts/deploy.sh --tags" in _LAND_SH
+
+
+def test_a_build_role_pulls_in_the_workload_that_runs_its_image():
+    """PR #570's real shape: Renovate bumped only the two n8n Dockerfiles. Deriving
+    `n8n-images` alone builds the images and rolls nothing, because k8s_rebuilt_images is
+    play-scoped -- the 2026-08-08 `@n8n/di` failure. Caught landing #570 on 2026-08-29."""
+    files = [
+        "ansible/roles/k8s/n8n-images/templates/Dockerfile.j2",
+        "ansible/roles/k8s/n8n-images/templates/Dockerfile-runners.j2",
+    ]
+    tags, source = land_tags.derive(files, changed_files=2)
+    assert source == "pr"
+    assert tags == ["n8n", "n8n-images"]
+
+
+def test_an_ordinary_role_is_not_widened():
+    """The reject half. A deriver that widened everything would pass the test above."""
+    tags, source = land_tags.derive(
+        ["ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"], changed_files=1
+    )
+    assert source == "pr"
+    assert tags == ["sonarr"]
+
+
+def test_land_preflights_before_waiting_on_ci():
+    """Order is the entire value. Checking blockers AFTER the CI wait would still catch the
+    condition but keep the ~6 wasted minutes that motivated it (PR #570, 2026-08-29)."""
+    preflight = _LAND_SH.index("deploy_tags.py blockers")
+    ci_wait = _LAND_SH.index("await_ci.py")
+    assert preflight < ci_wait, "land.sh waits on CI before checking for blockers"
+
+
+def test_land_treats_a_stale_tree_as_a_resume_point():
+    """deploy.sh exit 4 means nothing was deployed and the tree is behind — CLAUDE.md calls
+    that a resume point. Reporting it as deploy-failed sends the operator after a fault that
+    is not there."""
+    assert 'deploy_rc" -eq 4' in _LAND_SH
+
+
+def test_land_never_bypasses_the_staleness_guard():
+    """The reject half of the retry: the tempting fix for exit 4 is the flag that disables
+    the check, which deploys stale templates over live config."""
+    assert "--skip-staleness-check" not in _LAND_SH

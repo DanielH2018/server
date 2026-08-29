@@ -58,6 +58,50 @@ _ACTIVE_ROLE = re.compile(r"^ansible/roles/containers/(?!archive/)([^/]+)/")
 # for any of its subdirs to be scoped against — the alert just needs to name the role. *.md (role
 # CLAUDE.md) stays a silent ff-merge, same as the containers/ catch-all.
 _ACTIVE_K8S = re.compile(r"^ansible/roles/k8s/([^/]+)/")
+
+# Build roles that render no workload of their own, mapped to the roles that run what they
+# build. Deploying the key WITHOUT the value builds a new image that nothing rolls onto,
+# and reports green doing it.
+#
+# WHY A COUPLING EXISTS AT ALL. image-builder appends a rebuilt image to `k8s_rebuilt_images`,
+# which roles/k8s/manifests turns into `manifests_image_changed` and rolls on. That fact is
+# PLAY-SCOPED, so the build and the rollout must happen in one ansible-playbook run; two runs
+# lose it and leave the old pods up. `roles/k8s/n8n/defaults/main.yml` records the incident
+# (2026-08-08 `@n8n/di`) and prescribes `--tags "n8n-images,n8n"`. That prescription was prose,
+# so every path→tag derivation missed it: a Renovate Dockerfile bump derives `n8n-images` alone.
+#
+# ONE ENTRY, NOT A MECHANISM. Six roles under roles/k8s/ include image-builder, and five of
+# them (code-server, homelab-mcp, ical-proxy, nut, pi-peer-backup) render their own workload
+# manifest, so a single tag already covers build and roll and the fact never crosses a role
+# boundary. n8n-images is the only split one. test_build_roll_couplings.py re-derives that
+# population from the role sources, so a second split build role fails the test rather than
+# silently inheriting the bug.
+#
+# ONE-DIRECTIONAL. Editing roles/k8s/n8n's manifests needs no rebuild — a manifest change rolls
+# on its own — so this must not be read as a symmetric pair.
+_BUILD_ROLL_COUPLINGS = {"n8n-images": ("n8n",)}
+
+
+def expand_build_couplings(tags):
+    """`tags` plus the workload roles any build role among them requires.
+
+    Called by the TAG derivations -- `deploy_tags.py changed` and land_tags.py -- and
+    deliberately NOT by `services_from_changed_paths`, whose `cs.k8s` also feeds
+    `split_k8s_auto_deploy`. A coupled role is added with no changed path of its own, so
+    `image_only()` would diff an untouched defaults/main.yml and could read the empty result
+    as vacuously image-only, promoting a role nothing asked for. n8n is denylisted today, so
+    that is a latent hazard rather than a live one -- which is exactly the kind that should
+    not be created. Widening a hand-scoped deploy is safe: the added role is one a correct
+    deploy would have included anyway, and deploying a workload whose image did not move
+    rolls nothing.
+    """
+    widened = set(tags)
+    for build_role, needs in _BUILD_ROLL_COUPLINGS.items():
+        if build_role in widened:
+            widened.update(needs)
+    return widened
+
+
 # A `container_name:` line in a rendered docker-compose.yml.
 _CONTAINER_NAME = re.compile(r'^\s*container_name:\s*["\']?([^\s"\']+)["\']?\s*$')
 # Changes whose blast radius we don't try to scope automatically. Split by which manual playbook
