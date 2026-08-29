@@ -82,6 +82,51 @@
     direction: outgoing
   become: true
 
+# DECIDED: the LAN is exempt from SSH rate-limiting, and this rule must sort ABOVE the
+# `limit` rule below. ufw matches in order and takes the first hit, so an allow appended
+# after the limit rule is inert — the "present but does nothing" shape that #508 already
+# cost this role once, described at length further down.
+#
+# WHY THE EXEMPTION. `limit` REJECTs a source IP that opens 6 connections in 30 seconds, on a
+# ROLLING window, so sustained retries hold the block open instead of riding it out. Several
+# Claude sessions work this repo at once and each reaches daniel-server over ssh; on
+# 2026-08-06 and again on 2026-08-29 that quorum crossed the threshold, every session read
+# the resulting "Connection refused" as sshd being down, and four of them started retry loops
+# that fed the same counter. The block then never lifted. Loki showed `[UFW LIMIT BLOCK]
+# SRC=10.0.0.215 DST=10.0.0.161 DPT=22` arriving at exactly the loops' cadence; killing the
+# loops and leaving 90 seconds of silence let a single connection through immediately. The
+# host was healthy throughout. The downstream cost is larger than a stalled shell — the
+# staging gate reaches daniel-stage only through an ssh hop to this host, so a self-inflicted
+# block surfaces as NO VERDICT on every commit, which is silent by design.
+#
+# WHAT THE EXEMPTION COSTS. Very little. `limit` is a brute-force control, and the thing that
+# actually answers a credential attack is fail2ban's sshd jail (bantime 1h, triggered by auth
+# FAILURES rather than by connection count) — that is untouched here and still covers the LAN.
+# `limit` counts successful connections too, which is why well-behaved automation trips it and
+# an attacker pacing himself does not.
+#
+# Non-LAN sources keep the limiter. That deliberately includes WireGuard peers, whose source
+# address is the wg subnet rather than lan_subnet: this change removes no access from anyone,
+# it only stops rate-limiting hosts that are already inside the LAN.
+- name: Configure UFW firewall - allow SSH from the LAN without rate-limiting
+  tags: [firewall]
+  community.general.ufw:
+    rule: allow
+    port: ssh
+    proto: tcp
+    from_ip: "{{ lan_subnet }}"
+    # Insert at the top rather than appending. On a host that already carries the `limit`
+    # rule from an earlier run — which is every host this has ever deployed to — appending
+    # would place this BELOW it and change nothing at all.
+    #
+    # `insert_relative_to: first-ipv4` rather than a bare `insert: 1` because the module
+    # degrades it gracefully: on a fresh host with no rules yet it computes a position past
+    # the last rule number and drops the `insert` clause, appending instead. A bare
+    # `insert: 1` makes ufw fail on a host whose rule list is still empty.
+    insert: 0
+    insert_relative_to: first-ipv4
+  become: true
+
 - name: Configure UFW firewall - rate-limit SSH
   tags: [firewall]
   community.general.ufw:
