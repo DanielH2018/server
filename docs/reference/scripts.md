@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/gen_reference_scripts.py
-generated_at: 2026-08-29 06:17 UTC
-generated_sha: 41bb5baa
+generated_at: 2026-08-29 18:22 UTC
+generated_sha: afa98ffc
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 41bb5baa
 
 # Scripts
 
-59 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
+64 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
 
 The sections below split them by **how each one is run**, which is derived from the tree rather than declared: a cron `job:`, a `prek.toml` entry, a workflow step, a Claude hook, an Ansible task, or an import edge. The *Reached by* column is the evidence, so a wrong answer is a wrong answer about a real file.
 
@@ -20,7 +20,7 @@ The sections below split them by **how each one is run**, which is derived from 
     Whether a script is safe to run. The summary is whatever its author wrote, and nothing here judges blast radius. For the ones that run unattended, and which of those change state, see [Scheduled jobs](crons.md).
 
 
-**0 of the 22 scripts that run unattended have no test; 7 of all 59 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
+**0 of the 22 scripts that run unattended have no test; 8 of all 64 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
 
 !!! note "Where the Tests column looks"
     First for a `scripts/test_<name>.py`. Failing that, for any test in `scripts/` or `ansible/tests/` that names the script — `gitops_tick.sh` has five, in `test_gitops_manual_trigger.py`, and the naming convention alone called it untested. Those show as *(indirect)*, which means a test exercises it, not that the test is about it.
@@ -78,7 +78,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/infra_map/infra_map_render.py` | Rendering: turn the reconciled model into one self-contained HTML page. | imported by gen_infra_map.py | `test_gen_infra_map.py` *(indirect)* |
 | `scripts/diagnostics/probe_alerts.py` | `probe.py alerts` -- DOWN history reconstructed from Loki, since Kuma keeps only current state. | imported by probe.py | `test_probe_alerts.py` |
 | `scripts/diagnostics/probe_arr.py` | `probe.py arr <app> <api-path>` — read-only *arr API GETs against sonarr/radarr/prowlarr. | imported by postflight.py, probe.py | `test_probe.py` *(indirect)* |
-| `scripts/diagnostics/probe_core.py` | Shared plumbing for probe's subcommands: endpoints, secrets, HTTP, durations. | imported by postflight.py, probe.py, probe_alerts.py, probe_arr.py, probe_ha.py, probe_health.py, probe_metrics.py, probe_monitors.py, probe_storage.py | `test_probe.py` *(indirect)* |
+| `scripts/diagnostics/probe_core.py` | Shared plumbing for probe's subcommands: endpoints, secrets, HTTP, durations. | imported by postflight.py, probe.py, probe_alerts.py, probe_arr.py, probe_ha.py, probe_health.py, probe_metrics.py, probe_monitors.py, probe_storage.py, ui_login.py | `test_probe.py` *(indirect)* |
 | `scripts/diagnostics/probe_ha.py` | Home Assistant: live state, automations, and the read-only WebSocket trace client. | imported by postflight.py, probe.py | `test_probe_ha.py` |
 | `scripts/diagnostics/probe_health.py` | `probe.py health <svc>` — the post-deploy gate, plus the argv builders it shares. | imported by postflight.py, probe.py, probe_arr.py, probe_monitors.py | `test_probe_health.py` |
 | `scripts/diagnostics/probe_metrics.py` | `probe.py metric` and `probe.py loki-query` -- Prometheus and Loki queries. | imported by probe.py | `test_probe.py` *(indirect)* |
@@ -88,20 +88,23 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Run by hand
 
-20 script(s) — a person runs it.
+25 script(s) — a person runs it.
 
 | Script | What it does | Reached by | Tests |
 |---|---|---|---|
+| `scripts/deploy_tools/await_ci.py` | Wait for master CI to reach a verdict on one SHA. | land.sh (a person runs it) | `test_await_ci.py` |
 | `scripts/backup/b2_drain.py` | Delete a stranded Longhorn backup prefix directly through the B2 API. | playbook: ansible/drain_backup_prefix.yml | `test_b2_drain.py` |
-| `scripts/deploy.sh` | Run an interactive Ansible deploy under the same lock the automated deployers take. | staging_gate_remote.sh (a person runs it) | `test_deploy_annotations.py` *(indirect)* |
+| `scripts/deploy.sh` | Run an interactive Ansible deploy under the same lock the automated deployers take. | land.sh (a person runs it) | `test_deploy_annotations.py` *(indirect)* |
 | `scripts/backup/drain_stranded.sh` | Drain stranded Longhorn backup prefixes from B2. | no automated caller in the tree | — |
 | `scripts/backup/etcd_restore_drill.sh` | prove an off-box etcd snapshot actually restores, without an outage. | no automated caller in the tree | `test_etcd_restore_drill_cron.py` *(indirect)* |
 | `scripts/grafana/export_grafana_dashboards.py` | Export the *customized* Grafana dashboards from the live DB into code. | no automated caller in the tree | `test_export_grafana_dashboards.py` |
 | `scripts/grafana/fetch_grafana_dashboards.py` | Fetch + adapt Grafana community dashboards for headless (provisioned) use. | no automated caller in the tree | — |
 | `scripts/dev/gen_hosts_block.py` | Emit an /etc/hosts block for every homelab `.local` name, with the right IP per service. | no automated caller in the tree | `test_gen_hosts_block.py` |
-| `scripts/deploy_tools/gitops_tick.sh` | trigger a GitOps deploy tick by hand and report what it did. | no automated caller in the tree | `test_gitops_manual_trigger.py` *(indirect)* |
+| `scripts/deploy_tools/gitops_tick.sh` | trigger a GitOps deploy tick by hand and report what it did. | land.sh (a person runs it) | `test_gitops_manual_trigger.py` *(indirect)* |
 | `scripts/availability_bots/glenstone-bot.py` | Watch Glenstone's timed-entry calendar and alert when a target date opens up. | no automated caller in the tree | `test_availability_bots.py` *(indirect)* |
 | `scripts/dev/k8s_autodeploy_counts.py` | Print the k8s auto-deploy eligible and denylist counts, measured off the tree. | no automated caller in the tree | `test_script_bootstraps_present.py` *(indirect)* |
+| `scripts/deploy_tools/land.sh` | follow a merged PR through to a verified deploy, in one invocation. | no automated caller in the tree | — |
+| `scripts/deploy_tools/land_tags.py` | Derive deploy tags from a merged PR's own file list. | land.sh (a person runs it) | `test_land_tags.py` |
 | `scripts/dev/measure_rollout_gap.py` | Measure real downtime across a rollout by polling a service while it restarts. | no automated caller in the tree | `test_measure_rollout_gap.py` |
 | `scripts/availability_bots/osteria-francescana-bot.py` | Watch Osteria Francescana (via CoverManager) for a table on the target dates. | no automated caller in the tree | `test_availability_bots.py` *(indirect)* |
 | `scripts/diagnostics/postflight.py` | Verify the post-deploy setup that Ansible can't do (ansible/README.md §9). | playbook: ansible/bring-up.sh | `test_postflight.py` |
@@ -111,7 +114,9 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/deploy_tools/staging_expect_remote.sh` | The daniel-server half of the staging expectation check. Piped over ssh by | no automated caller in the tree | — |
 | `scripts/deploy_tools/staging_expectations.py` | Check that staging's services ANSWER the way they are supposed to, not just that they start. | no automated caller in the tree | `test_staging_expectations.py` |
 | `scripts/deploy_tools/staging_gate.py` | Ask the staging cluster whether it accepts a commit, from daniel-box. | no automated caller in the tree | `test_staging_gate.py` |
-| `scripts/deploy_tools/staging_gate_remote.sh` | The daniel-server half of the staging gate. Piped over ssh by staging_gate.py — it is never | no automated caller in the tree | — |
+| `scripts/deploy_tools/staging_gate_remote.sh` | The daniel-server half of the staging gate. Piped over ssh by staging_gate.py — it is never | no automated caller in the tree | `test_staging_gate_paths_agree.py` *(indirect)* |
+| `scripts/diagnostics/ui_login.py` | Mint a Playwright storage-state file holding a logged-in Authelia session. | ui_mcp.sh (a person runs it) | `test_ui_login.py` |
+| `scripts/diagnostics/ui_mcp.sh` | Launch @playwright/mcp against this homelab's LAN routes. | no automated caller in the tree | — |
 
 ## Usage
 

@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/gen_reference_secrets.py
-generated_at: 2026-08-29 06:17 UTC
-generated_sha: 41bb5baa
+generated_at: 2026-08-29 18:22 UTC
+generated_sha: afa98ffc
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 41bb5baa
 
 # Secrets
 
-146 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
+149 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
 
 !!! note "Names and dates only"
     This page is generated from the plaintext rotation registry. No secret VALUE is read here, and the generator never opens the encrypted store or invokes the decryption tool — a test enforces that.
@@ -87,11 +87,11 @@ needs a human to mint the new value, then `secret_rotation.py rotate`.
 | `qbittorrent_password` | 2025-09-20 | 2026-09-20 | 22 |
 | `r2_access_key_id` | 2026-04-28 | 2027-04-28 | 242 |
 | `r2_secret_access_key` | 2026-04-11 | 2027-04-11 | 225 |
-| `radarr_api_key` | 2026-01-06 | 2027-01-06 | 130 |
+| `radarr_api_key` | 2026-08-29 | 2027-08-29 | 365 |
 | `scrutiny_influxdb_admin_password` | 2026-07-23 | 2027-07-23 | 328 |
 | `scrutiny_influxdb_token` | 2026-03-10 | 2027-03-10 | 193 |
 | `smtp_notify_app_password` | 2026-04-29 | 2027-04-29 | 243 |
-| `sonarr_api_key` | 2026-02-19 | 2027-02-19 | 174 |
+| `sonarr_api_key` | 2026-08-29 | 2027-08-29 | 365 |
 | `speedtest_api_token` | 2026-06-08 | 2027-06-08 | 283 |
 | `speedtest_app_key` | 2025-08-25 | 2026-08-25 | -4 |
 | `terraria_password` | 2025-12-26 | 2026-12-26 | 119 |
@@ -134,6 +134,7 @@ rotated unattended by the weekly secret-rotate cron.
 | `live_drift_push_token` | 2026-08-15 | 2027-02-11 | 166 |
 | `longhorn_backup_push_token` | 2026-08-28 | 2027-02-24 | 179 |
 | `manifest_prune_push_token` | 2026-08-28 | 2027-02-24 | 179 |
+| `mkv_attachment_repair_push_token` | 2026-04-02 | 2026-09-29 | 31 |
 | `monitor_bridge_appsec_push_token` | 2026-08-28 | 2027-02-24 | 179 |
 | `monitor_bridge_arr_queue_push_token` | 2026-08-10 | 2027-02-06 | 161 |
 | `monitor_bridge_b2_reachable_push_token` | 2026-08-10 | 2027-02-06 | 161 |
@@ -180,6 +181,8 @@ rotated unattended by the weekly secret-rotate cron.
 | `pi_sd_health_push_token` | 2026-08-10 | 2027-02-06 | 161 |
 | `remember_logs_push_token` | 2026-04-16 | 2026-10-13 | 45 |
 | `secret_rotation_push_token` | 2026-08-28 | 2027-02-24 | 179 |
+| `setup_drift_push_token` | 2026-04-05 | 2026-10-02 | 34 |
+| `ups_secondary_push_token` | 2026-08-22 | 2027-02-18 | 173 |
 
 ## ignore
 
