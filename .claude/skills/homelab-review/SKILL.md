@@ -59,6 +59,23 @@ this at runtime — never rely on a hardcoded list (it goes stale, the exact fai
 reviews keep finding). The standing list is a **prior, not a verdict**: re-flag any of it on new
 evidence at a cited `file:line`.
 
+**A row's section and its provenance token decide how much work overturning it takes.** They are
+not all the same strength, and treating them alike is what makes reviewers either re-derive
+settled reasoning or suppress a live finding:
+
+| Where / what | What it means | What overturns it |
+|---|---|---|
+| `## Deliberate trade-offs`, `[operator]` | The operator ruled. | Only the operator. Report it as a settled decision, never as a finding. |
+| `## Deliberate trade-offs`, `[enforced]` | A test, hook or `# DECIDED:` marker makes the alternative fail. | **Run the named check.** Do not re-derive the reasoning — the row already names the thing that decides. |
+| `## Durable refutations` | An agent disproved it at a cited `file:line`. | New evidence at a cited `file:line`. This is the ordinary re-flaggable case. |
+| `## Open and recurring` | The finding is **live**. Some rows also bar a specific remediation. | Nothing — report it as a recurrence. A barred fix means *don't propose that fix*, never *don't report the finding*. |
+
+That last row is the one that has misfired: two open findings sat under a *do not re-flag*
+heading with only their prose saying they were open, so a reviewer extracting the section's
+list would have suppressed both. **A barred remediation is not a settled finding** — if a row
+prohibits a fix while calling the underlying gap real, it belongs in *Open and recurring*, and
+step 7 moves it there.
+
 **Also extract the still-OPEN confirmed findings**, not just the settled ones. A finding carried
 across runs must be reported as a **recurrence** — "open since 2026-08-15, third run" — never as a
 discovery. A third appearance is an escalation signal (it belongs in a durable owner: a test, a
@@ -236,6 +253,17 @@ control is the "fires on nothing" case the repo warns about, and it reads exactl
   writes only its dated ledger quietly re-grows the priming cost this skill was rebuilt to avoid.
   Per the repo's corroborate-before-promote rule, promote an item only on a **second** independent
   occurrence or against real evidence; a single run's say-so stays in the dated ledger.
+- **Every row you write into `Deliberate trade-offs` opens with a provenance token** — `[operator]`
+  if the operator ruled, `[enforced]` if a named test, hook or `# DECIDED:` marker makes the
+  alternative fail. Step 2's table says what each licenses, and the two differ in cost: an
+  `[enforced]` row is settled by running the check it names, where an `[operator]` row can only be
+  reopened by the operator. A trade-off you cannot label as either is not a trade-off yet — it is
+  one run's inference, so leave it in the dated ledger.
+- **A row that bars a fix while calling the gap real goes in `Open and recurring`, not
+  `Deliberate trade-offs`.** The heading is what a reviewer extracts against, so an open finding
+  filed under *do not re-flag* is suppressed by the very step meant to prime them. Write the
+  finding as the row and the barred remediation as its second sentence, so *don't propose that
+  fix* cannot be read as *don't report the finding*.
 - **On its third run, a recurring class stops being a ledger row.** The standing list already counts
   runs per recurring-open class — the guard-scope class reached run 4 and the push-token one run 3,
   each time by incrementing a counter and writing the finding again. Incrementing is what let them
