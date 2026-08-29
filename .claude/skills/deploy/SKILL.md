@@ -1,6 +1,6 @@
 ---
 name: deploy
-description: Deploy a service using Ansible — k3s workloads (the default) or the Pi's Docker services. Use when the user wants to deploy or redeploy a specific service.
+description: Deploy a service using Ansible — k3s workloads (the default) or the Pi's Docker services. Use when the user wants to deploy or redeploy a specific service, or to check a k8s manifest change without deploying it (`prek` vs `--check` vs `--dry-run`).
 allowed-tools: Bash, Glob
 ---
 
@@ -26,10 +26,38 @@ on the cluster nodes:
 `daniel-server` and `daniel-box` have had **no Docker since 2026-08-14** — never verify a
 deploy there with a `docker` command; it doesn't exist on those hosts.
 
+## Checking a k8s change without deploying it
+
+Three modes, and they check genuinely different things — reaching for the wrong one is how a
+manifest bug reaches production.
+
+| Mode | What sees the manifests | Catches |
+|---|---|---|
+| `prek run --all-files` | nothing (renders locally, then parses and schema-checks) | Jinja indent bugs, invalid YAML, duplicate keys, **undefined fields and wrong types** — everything but CRDs, which have no upstream schema |
+| `--check` | nothing — the apply is **skipped**, so no API server is involved | task-level wiring; not the manifests themselves |
+| `--dry-run` | the **live API server**, via `kubectl apply --dry-run=server` | what prek catches, plus **CRD** schemas, CRD-ordering mistakes and admission rejections |
+
+`--dry-run` renders to a temp dir, applies with `--dry-run=server`, and discards the temp dir.
+Nothing is staged, applied, patched or rolled. It runs unlocked, because it mutates nothing. It
+does **not** catch scheduling, PVC binding, probe or rollout behaviour — those need a real deploy.
+
+Two limits worth knowing before you trust a green dry run:
+- **It refuses the roles named in `k8s_dry_run_unsupported`** — count them with
+  `grep -A20 "^k8s_dry_run_unsupported:" ansible/inventory/group_vars/all.yml`; don't
+  hand-maintain the number, it read "~17" against a real 15 for two commits. Roles that mutate
+  outside `roles/k8s/manifests` (sidecar ConfigMaps built with `kubectl create`, netpol-probe
+  Jobs, `exec -i` into a live pod) would half-apply, so `deploy.yml` fails fast and names them.
+  `ansible/tests/test_k8s_dry_run.py` re-derives the list from the role sources so it cannot drift.
+- **A brand-new service is only half-checked.** `seed-volume` is skipped (it is a dependency of
+  25 roles and mutates), and nothing at admission verifies that a referenced PVC exists — so
+  the Deployment validates while the volume is never proven provisionable.
+
 Steps:
 1. Confirm the service name matches a role, and note which of the two trees it's in.
-2. Ask if they want a dry run first (`--check` mode)
-3. If dry run: `./scripts/deploy.sh --tags "<service>" --check`
+2. Ask if they want a dry run first. For a k8s workload that means `--dry-run`, which is the
+   only mode that shows the manifests to an API server; `--check` answers a different question
+   and is the right choice only when the doubt is about task wiring.
+3. If dry run: `./scripts/deploy.sh --tags "<service>" --dry-run` (or `--check`, per step 2)
 4. If dry run passes or they skip it: `./scripts/deploy.sh --tags "<service>"`
    (add `-e target=daniel-pi` for a Pi service)
 

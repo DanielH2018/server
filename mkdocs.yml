@@ -162,6 +162,7 @@ nav:
       - Staging Phase C (drafted): staging-phase-c.md
       - Secret rotation: secret-rotation.md
       - Claude shell permissions: claude-shell-permissions.md
+      - Claude tooling reference: claude-tooling.md
       - Security tools: security-tools.md
       - WireGuard private access: wireguard-private-homelab-access.md
       - Healthchecks.io deadman: healthchecks-io-deadman.md

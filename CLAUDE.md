@@ -53,8 +53,8 @@ Route to the source of truth by what you're doing, before reading linearly:
 | Adding / changing a service (k3s — the default) | `## Adding a New Service` below · a sibling role in `ansible/roles/k8s/` |
 | Adding / changing a Docker service (the Pi only) | `## Adding a New Service` → *Adding a Docker service* · `/new-container` skill |
 | Deploying or redeploying a service | `/deploy` skill · `## Common Commands` |
-| A PR just merged — what now | `## After a PR Merges — Pull, Deploy, Verify` below. Default is pull → deploy → verify in the same session, no ask. |
-| Checking a k8s manifest change without deploying it | `## Common Commands` → *Checking a k8s change without deploying it* (`--dry-run` vs `--check` — they check different things) |
+| A PR just merged — what now | `## After a PR Merges — Pull, Deploy, Verify` below (the directive and *When to wait*) · `/land-after-merge` skill (the commands). Default is pull → deploy → verify in the same session, no ask. |
+| Checking a k8s manifest change without deploying it | `/deploy` skill → *Checking a k8s change without deploying it* (`--dry-run` vs `--check` vs `prek` — they check different things) |
 | Running or testing a GitOps tick without waiting 30 min | `./scripts/deploy_tools/gitops_tick.sh` · `ansible/roles/setup/gitops_deploy/CLAUDE.md` → *Triggering a tick by hand*. A real tick, not a rehearsal — there is no dry-run mode. |
 | Adding / rotating a secret | `/add-secret` skill · `docs/secret-rotation.md` · `## Secrets Management` |
 | A Bash or `kubectl` command keeps prompting, or you need the full permission tables | `## Shell Commands — Shape Them to Auto-Approve` below (summary) · `docs/claude-shell-permissions.md` (full detail) |
@@ -62,7 +62,7 @@ Route to the source of truth by what you're doing, before reading linearly:
 | Reviewing the homelab for gaps | `/homelab-review` skill (per-domain reviewer agents) |
 | Answering "what runs here / where / behind what" | `docs/reference/` — generated from the tree by the `docs-refresh` cron, browsable at `docs.local.<domain>`. Services, hosts, secret rotation, scheduled jobs, networking. **Never hand-edit a generated page**; a hook rejects it. Change the generator (`scripts/docs/build_docs.py` lists them). The hook decides by the `generated_from:` provenance banner rather than the path, so `reference/topology.md` — hand-written prose, the one page there nobody generates — stays editable. |
 | Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` + monitor-bridge `check.py` **first** — mature setup, most are handled |
-| Checking that a service's UI actually renders, not just that its pod is Ready | The `homelab-ui` MCP server — see `## Claude Tooling in This Repo`. `probe.py health` cannot see a broken UI behind a healthy pod. |
+| Checking that a service's UI actually renders, not just that its pod is Ready | The `homelab-ui` MCP server — see `## Claude Tooling in This Repo` below, and `docs/claude-tooling.md` for the full reference. `probe.py health` cannot see a broken UI behind a healthy pod. |
 | A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment. The general mechanism is the central rollout-restart at `roles/k8s/manifests/tasks/main.yml:298`, which fires when a role's rendered manifests change. A role whose pod depends on a file the manifests *don't* carry adds its own `checksum/<thing>` pod annotation instead — e.g. `checksum/check-script` in `roles/k8s/monitor-bridge/templates/deployment.yaml.j2`. |
 | A config edit won't recreate the container (Docker) | `ansible/roles/containers/common/CLAUDE.md` (config-change wiring) |
 | A host can't decrypt secrets | `## Secrets Management` → *Onboarding a host to SOPS* |
@@ -180,30 +180,10 @@ uv run ansible-playbook ansible/initial_setup.yml
 ```
 
 ### Checking a k8s change without deploying it
-Three modes, and they check genuinely different things — reaching for the wrong one is how a
-manifest bug reaches production.
-
-| Mode | What sees the manifests | Catches |
-|---|---|---|
-| `prek run --all-files` | nothing (renders locally, then parses and schema-checks) | Jinja indent bugs, invalid YAML, duplicate keys, **undefined fields and wrong types** — everything but CRDs, which have no upstream schema |
-| `--check` | nothing — the apply is **skipped**, so no API server is involved | task-level wiring; not the manifests themselves |
-| `--dry-run` | the **live API server**, via `kubectl apply --dry-run=server` | what prek catches, plus **CRD** schemas, CRD-ordering mistakes and admission rejections |
-
-`--dry-run` renders to a temp dir, applies with `--dry-run=server`, and discards the temp dir.
-Nothing is staged, applied, patched or rolled. It does **not** catch scheduling, PVC binding,
-probe or rollout behaviour — those need a real deploy.
-
-Two limits worth knowing before you trust a green dry run:
-- **It refuses the roles named in `k8s_dry_run_unsupported`** (count it with the grep two
-  sections above — don't hand-maintain the number here; it read "~17" against a real 15 for two
-  commits). Roles that mutate outside `roles/k8s/manifests` (sidecar
-  ConfigMaps built with `kubectl create`, netpol-probe Jobs, `exec -i` into a live pod) would
-  half-apply, so `deploy.yml` fails fast and names them. `k8s_dry_run_unsupported` in
-  `group_vars/all.yml` is the list; `ansible/tests/test_k8s_dry_run.py` re-derives it from the
-  role sources so it cannot drift.
-- **A brand-new service is only half-checked.** `seed-volume` is skipped (it is a dependency of
-  25 roles and mutates), and nothing at admission verifies that a referenced PVC exists — so
-  the Deployment validates while the volume is never proven provisionable.
+`prek run --all-files`, `--check` and `--dry-run` check genuinely different things, and
+reaching for the wrong one is how a manifest bug reaches production — only `--dry-run` shows
+the manifests to an API server. The three-mode table and the two limits that make a green dry
+run less than it looks are in the **`deploy` skill**.
 
 ## After a PR Merges — Pull, Deploy, Verify
 
@@ -220,36 +200,18 @@ refuses outright — and then say which command and why.
 
 ### The procedure
 
-Record the pre-merge master SHA, merge, then run the follow-through as ONE backgrounded
-command:
+Merge, then hand the follow-through to `./scripts/deploy_tools/land.sh --pr <n> --since
+<pre-merge-sha>` as ONE backgrounded command. It waits for master CI on the merge commit,
+ticks, deploys what the tick deferred, and prints a `VERDICT:` line. **Do not hand-poll CI and
+do not hand-merge** — hand-polling cost 835 polls across 213 wait episodes before `land.sh`
+existed. The exact commands, the `VERDICT:` values and the reason `--since` is needed are in
+the **`land-after-merge` skill**.
 
-```bash
-git rev-parse origin/master          # keep this; land.sh needs it for the fallback
-gh pr merge --squash
-./scripts/deploy_tools/land.sh --pr <n> --since <pre-merge-sha>
-```
-
-Run `land.sh` with `run_in_background` and let the session be re-invoked when it exits. It
-waits for master CI on the merge commit, ticks, deploys what the tick deferred, and prints a
-`VERDICT:` line — `settled`, `unhealthy`, `deploy-failed` or `nothing-to-deploy`.
-
-**Do not hand-poll CI and do not hand-merge.** `await_ci.py` reads the same check-runs
-endpoint the deployer reads, so its verdict and the tick's agree by construction. Hand-polling
-cost 835 polls across 213 wait episodes before it existed.
-
-It also owns the rule that used to live here: `cancelled`, `stale` and `skipped_by_concurrency`
-mean *no verdict for this SHA*, never *this SHA is bad* — `_CI_NO_VERDICT_CONCLUSIONS` in
-`deploy_logic.py` is the list, and a commit whose merge was immediately followed by another
-reads `cancelled` permanently. `await_ci.py` follows the tip in that case, but only once your
-commit is an ancestor of it. If you ever check by hand, check that way.
-
-`land.sh` runs from the primary checkout wherever you invoke it, because `deploy.sh` renders
-from its working directory and a worktree is behind master after a squash merge.
-
-It scopes the deploy to the PR's own file list rather than a SHA range, so another session's
-merged work is not swept in. `gh` paginates that list at 100 files, so it falls back to
-`--changed <since>` when the count disagrees — which is the only reason `--since` is needed.
-Pass `--tags` to override the scope entirely.
+`cancelled`, `stale` and `skipped_by_concurrency` mean *no verdict for this SHA*, never *this
+SHA is bad* — `_CI_NO_VERDICT_CONCLUSIONS` in `deploy_logic.py` is the list, and a commit whose
+merge was immediately followed by another reads `cancelled` permanently. If you ever check by
+hand, check that way. (ENFORCED: `ansible/tests/test_ci_cancelled_is_not_a_verdict.py` requires
+this paragraph to stay in CLAUDE.md rather than move to the skill.)
 
 **Verify the change, not just the workload.** The `VERDICT:` line gates the rollout and the
 180s restart window. It cannot see whether *your change* took effect: an Authelia 302 fires
@@ -321,83 +283,38 @@ Full tables, hook wiring and measurement history: `docs/claude-shell-permissions
 Per-verb tiers, the RBAC evidence and the rule-matching measurements: `docs/claude-shell-permissions.md`.
 
 ## Claude Tooling in This Repo (`.claude/`)
-- **`scripts/diagnostics/probe.py`** — read-only homelab diagnostics, allow-listed (no prompt). Resolves the
-  live container IP via `docker inspect`, so prefer it over curling bridge IPs (which change on
-  recreate): `uv run python scripts/diagnostics/probe.py <targets | metric '<promql>' | loki-query '<logql>' |
-  alerts | monitors | kuma-drift | scrutiny | pi <path> | cert <host> | health <svc> |
-  ha <state|automation|get> …>`.
-  `alerts [--days N --check X]` reconstructs DOWN alert history from Loki (Kuma keeps only
-  current state) — one row per firing episode; the same view is the "Alert History" Grafana
-  board (Infrastructure folder). It reads **two** streams: monitor-bridge's container log, and
-  the `{job="syslog"}` `status=down` lines the host crons emit, which push Kuma directly and so
-  have no other durable record. Until 2026-08-22 it read only the first, and the whole
-  backup/drift plane left no episode anywhere. `monitors` answers "what is down"; **`kuma-drift`
-  answers "what is missing"**, which `monitors` structurally cannot — it counts the exporter's
-  own set, so a monitor that is gone rather than down leaves the ratio at N/N up (a fenced-off
-  push tile read green for a day on 2026-08-20). `kuma-drift` diffs that set against
-  `static-monitors.yaml.j2` and treats a push monitor inside its own interval after a Kuma
-  restart as pending, since Kuma exports a monitor only once it has beaten. `health <svc>` is a k8s post-deploy gate: it exits 0 only
-  when the Deployment **or DaemonSet** is fully rolled out (observed generation caught up, every
-  replica updated + ready + available) **and** no container restarted in the last 180s. An
-  unreadable restart time counts as recent, so it fails closed. Both halves matter — readiness
-  flips a Deployment to Available before a bad liveness probe starts killing it, so a rollout check
-  alone reports green on a crashlooping pod. `--docker` inspects the Pi's container over ssh
-  instead; that was the only mode until 2026-08-16, which is why it died with
-  `FileNotFoundError: 'docker'` on both cluster nodes for the two days after the Docker
-  retirement. `ha …`
-  reads live Home Assistant state (authed with the SOPS `claude_ha_token`); `ha automation
-  <id-or-alias>` resolves the alias-slug≠id trap. See the home-assistant role's CLAUDE.md.
-- **`homelab-ui` MCP server** — a headless Chromium Claude drives against the LAN routes, so
-  it can *see* a service's UI (navigate, click, type, accessibility snapshot, screenshot)
-  rather than infer it from a status code. This is the half `probe.py health` structurally
-  cannot cover: readiness flips a Deployment to Available while the UI behind it is broken,
-  which is how 19 dead Grafana panels sat behind a 1/1 pod. Registered user-scope, so it is
-  per-operator config rather than a repo file, and launched by
-  `scripts/diagnostics/ui_mcp.sh`.
-  Three things have to be true for a browser to work here, and the wrapper supplies all
-  three. **DNS:** this host's resolver bypasses the LAN DNS, so `.local.<domain>` does not
-  resolve to the cluster edge from a shell — the wrapper passes Chromium
-  `--host-resolver-rules` pinned to the MetalLB ingress VIP, the browser equivalent of the
-  `curl --resolve` pin `probe_core.k8s_endpoint` documents. **Auth:** every
-  `*.local.<domain>` route is Authelia `one_factor`, so the context loads a session cookie
-  minted by `uv run python scripts/diagnostics/ui_login.py`. That login sets
-  `keepMeLoggedIn`, which is load-bearing — the session config's `inactivity: '5m'` would
-  otherwise expire the cookie between two idle minutes, where `remember_me: '1M'` applies
-  only when the login asks for it. **Secrecy:** `domain` is SOPS-encrypted, so the config
-  is generated into a 0600 file at launch instead of being written into `~/.claude.json`.
-  `ui_login.py --verify <svc>` proves the cookie reaches the backend without involving the
-  browser, and it reads a portal 302 as a failure rather than as a reachable service.
-  **`--check` asks Authelia, never the clock.** The expiry stamped in the state file is a
-  claim, and the two come apart in exactly the cases that matter: restarting Authelia or
-  rotating `authelia_secret` invalidates every live session while the local timestamp reads
-  valid for weeks. So `--check` calls `/api/state` and requires `authentication_level >= 1`
-  — Authelia answers HTTP 200 with level 0 to a cookie it no longer honours, so neither the
-  status code nor the timestamp can stand as the verdict. An unreachable portal counts as
-  invalid: minting needs the same network the browsing does, so there is nothing useful to
-  do with a session that cannot be confirmed.
-  **Going through Traefik is not a shortcut here, it is the only path.** Hitting a ClusterIP
-  directly reaches only pods on the node you run from: the baseline NetworkPolicy admits the
-  two cni0 gateways alone (`netpol-baseline/defaults/main.yml:41`), and host-to-remote-node
-  traffic SNATs to flannel.1, which is not listed. `kubectl port-forward` does not route
-  around it either — the read-only ServiceAccount is denied `create pods/portforward`.
-  **`uv run pytest -m ui` is the regression suite** (`scripts/diagnostics/test_ui_smoke.py`).
-  It drives this same MCP server over stdio, so a break in the wrapper's DNS pin, session
-  minting or launch config fails a test rather than silently degrading a Claude session. The
-  `ui` marker is deselected by `addopts`, because these tests need the host's age key, LAN
-  reachability and a browser — none of which a GitHub runner has. Pin the **exact** page
-  title when adding a service: several apps carry their own login behind Authelia (FreshRSS
-  lands on `/i/`, uptime-kuma on `/dashboard`, karakeep on `/signin`), so a substring like
-  `FreshRSS` also matches `Login · FreshRSS` and scores a broken app green.
-  **code-server, n8n and longhorn are `two_factor`**, so the ordinary session bounces off
-  them at the portal. Reach them by minting a second, short-lived session with a code from
-  your authenticator — `uv run python scripts/diagnostics/ui_login.py --totp <code>` — then
-  launching `ui_mcp.sh --two-factor` (the `-m ui` tests for those three skip when no such
-  session is live). **The TOTP secret is deliberately NOT in SOPS.** Storing it would put
-  both factors under one age key, and unlike a password its rotation costs a phone
-  re-enrollment; nothing here runs unattended anyway, since the `ui` marker is deselected in
-  CI. The two_factor session also gets its own state file and is never a fallback for the
-  default one: `ui_mcp.sh` loads a jar unconditionally, so promoting it would put a shell as
-  the repo user (code-server) and volume deletion (longhorn) behind every page load.
+The gotchas below are the ones that change a verdict. The full reference — probe's `alerts`
+history, the `homelab-ui` DNS/auth/secrecy triad and its `-m ui` suite, per-file edit costs,
+`auto-mode-bridge` internals, and the `/audit-permissions` Loki break — is in
+`docs/claude-tooling.md`.
+
+- **`scripts/diagnostics/probe.py`** — read-only homelab diagnostics, allow-listed (no prompt).
+  Resolves the live container IP via `docker inspect`, so prefer it over curling bridge IPs
+  (which change on recreate): `uv run python scripts/diagnostics/probe.py <targets |
+  metric '<promql>' | loki-query '<logql>' | alerts | monitors | kuma-drift | scrutiny |
+  pi <path> | cert <host> | health <svc> | ha <state|automation|get> …>`.
+  - `monitors` answers "what is down"; **`kuma-drift` answers "what is missing"**, which
+    `monitors` structurally cannot — it counts the exporter's own set, so a monitor that is gone
+    rather than down leaves the ratio at N/N up.
+  - **`health <svc>` is the k8s post-deploy gate.** It exits 0 only when the Deployment **or
+    DaemonSet** is fully rolled out **and** no container restarted in the last 180s (an
+    unreadable restart time counts as recent, so it fails closed). Both halves matter —
+    readiness flips a Deployment to Available before a bad liveness probe starts killing it, so
+    a rollout check alone reports green on a crashlooping pod. `--docker` inspects the Pi's
+    container over ssh instead, and is the only mode that touches Docker at all.
+  - `ha …` reads live Home Assistant state (authed with the SOPS `claude_ha_token`); `ha
+    automation <id-or-alias>` resolves the alias-slug≠id trap. See the home-assistant role's
+    CLAUDE.md.
+- **`homelab-ui` MCP server** — a headless Chromium Claude drives against the LAN routes, so it
+  can *see* a service's UI rather than infer it from a status code. This is the half `probe.py
+  health` structurally cannot cover: readiness flips a Deployment to Available while the UI
+  behind it is broken, which is how 19 dead Grafana panels sat behind a 1/1 pod. Launched by
+  `scripts/diagnostics/ui_mcp.sh`, which supplies the DNS pin, the Authelia session and the
+  0600 config. **Going through Traefik is not a shortcut here, it is the only path** — a
+  ClusterIP reaches only pods on the node you run from (the baseline NetworkPolicy admits the
+  two cni0 gateways alone, `netpol-baseline/defaults/main.yml:41`), and `kubectl port-forward`
+  is denied to the read-only ServiceAccount. code-server, n8n and longhorn are `two_factor` and
+  need `ui_login.py --totp <code>` plus `ui_mcp.sh --two-factor`.
 - **block-protected-edits** (PreToolUse) — *denies* direct edits to (a) anything under
   `containers/` (edit the `ansible/roles/containers/<svc>/templates/` source instead) and
   (b) SOPS-encrypted files like `ansible/vars/secrets.yml` (use `sops` / the `/add-secret` skill).
@@ -406,51 +323,11 @@ Per-verb tiers, the RBAC evidence and the rule-matching measurements: `docs/clau
   fails on malformed YAML (catches Jinja indent bugs `ansible-lint` misses) and on an
   un-escaped `$` in a `command`/`entrypoint`/`healthcheck.test` (Compose interpolates a lone
   `$VAR`/`$(…)` at parse time — shell `$` must be doubled `$$`; legit `${VAR-…}` in
-  `environment:` is not flagged).
-  **What an edit costs, by file type.** Six hooks match `Edit|Write`, and each is a ~7 ms
-  no-op except on the paths it owns. Measured directly 2026-08-23, one payload per hook:
-  `ansible-lint` takes **1,642 ms** on `roles/*/tasks/main.yml` and 7 ms on a `.j2` manifest,
-  a Compose template or a Markdown file; `validate-compose` takes **177 ms** on
-  `docker-compose.yml.j2` and 7 ms on everything else. Over the same 24h the OTEL telemetry
-  put `PostToolUse:Edit` at a 559 ms average and `PostToolUse:Write` at 234 ms — the two
-  populations differ in which file types they touch, not in which hooks run. So editing a
-  tasks file is the slow case by an order of magnitude, and that is the price of the coverage
-  rather than overhead to trim. Recorded so a slow-feeling edit isn't mistaken for a stuck hook.
-- **auto-mode-bridge** (PermissionDenied + PostToolUseFailure, both Bash) — the two places auto
-  mode and this repo have to talk. On a **denial**, it retries `gitops_tick.sh` and nothing else:
-  the tick is allow-listed and still denied about 1 run in 7 on identical text, which is
-  classifier variance rather than a rule, so `retry: true` reissues the call and the classifier
-  judges it again. Two retries per session, and a compound command that merely contains the tick
-  gets none — the classifier judged the whole line. On a **failure**, it decodes `deploy.sh`
-  exits 75/4/3/2 into what each one means, because all four mean *nothing was deployed* and they
-  reach Claude as a bare `Exit code N` that reads like a playbook failure. It does **not** use
-  `classifierContext`: that field is PostToolUse-only, so a failed deploy can't carry one, and
-  the standing facts (public repo, read-only kubectl SA) already live in `autoMode.environment`
-  and `autoMode.allow`, where the classifier reads them as configuration rather than as
-  unverified application context.
-- **permission auditing** — no longer lives here. A `log-permission` hook used to count tool calls
-  and prompts into `.claude/logs/permissions.json` for `audit-permissions.py` to read; Claude Code's
-  own OTEL `tool_decision` events carry that now, and name the deciding authority (`config` rule,
-  `hook`, `user`) instead of leaving it inferred. Both hosts' Claude Code exports OTLP to their
-  local node's hostPort (127.0.0.1:4317); since Phase F (2026-08-13) the cluster claude-otel
-  collector is a DaemonSet with a loopback hostPort on every node, so both hosts reach their
-  own node's collector directly — the Docker forwarder is dissolved/archived. The reader is the
-  `claude-permission-audit` plugin
-  (`/audit-permissions`), installed globally rather than vendored per-repo.
-  **`/audit-permissions` breaks whenever Loki is not on the node you run it from, and the fix is
-  not in this repo.** Its `loki-source.js` hardcodes `LOKI_URL || http://127.0.0.1:3100` with no
-  ClusterIP fallback and no retry, reporting "could not read Loki … Set $LOKI_URL"; `$LOKI_URL`
-  is unset in `settings.json`, the chezmoi base template, the shell rc files and the plugin's own
-  frontmatter, so the loopback default is what runs. Loki, Prometheus and Tempo are Deployments
-  with **no `nodeSelector`**, bound to `hostIP: 127.0.0.1` hostPorts — all three sit on daniel-box
-  by scheduler luck, and a reboot can move them. The 2026-08-23 ClusterIP pin (`c0d8731e`) gave
-  `otelq` and `otel-sweep` a stable second address; the plugin never got it. Workaround now:
-  `LOKI_URL=http://10.43.99.158:3100`. Durable fix: apply the ClusterIP-fallback pattern in the
-  `daniel-tools` marketplace repo, which is where the plugin lives — an operator searching under
-  `ansible/` will not find it (2026-08-23b review M11). Do **not** pin the workloads to a node;
-  `roles/setup/k3s/defaults/main.yml:893-896` pre-rejects that — fix the firewall, not the
-  placement. In-cluster consumers (Grafana datasources, monitor-bridge, autofix-bridge) use
-  Service DNS and are unaffected.
+  `environment:` is not flagged). Editing a `tasks/main.yml` costs ~1.6 s to `ansible-lint`,
+  an order of magnitude more than any other file type — that is coverage, not a stuck hook.
+- **auto-mode-bridge** (PermissionDenied + PostToolUseFailure, both Bash) — retries a denied
+  `gitops_tick.sh` (classifier variance, ~1 run in 7), and decodes `deploy.sh` exits 75/4/3/2,
+  all four of which mean *nothing was deployed* and reach Claude as a bare `Exit code N`.
 - **session-health** (SessionStart) — on opening a session here, prints a banner of any unhealthy/
   restarting containers + down Prometheus targets (silent when all-green; read-only, timeout-bounded).
 - **homelab-network-diagnostician** agent — connectivity/DNS/Traefik/WireGuard/CrowdSec triage (read-only).

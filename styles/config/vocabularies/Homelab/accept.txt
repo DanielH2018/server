@@ -323,3 +323,12 @@ cours
 SIGTERMed
 pid
 [Pp]ytest
+
+# Claude tooling reference (docs/claude-tooling.md)
+[Cc]rashlooping
+[Aa]uthed
+SNATs
+[Ss]ubstring
+[Vv]endored
+two_factor
+rc
