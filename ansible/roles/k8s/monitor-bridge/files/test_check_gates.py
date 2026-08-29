@@ -23,6 +23,8 @@ import bridge_common
 import bridge_parsing
 import check
 
+_REPO = Path(__file__).resolve().parents[5]
+
 
 def test_loki_reachable_ok(monkeypatch):
     monkeypatch.setattr(
@@ -769,6 +771,97 @@ def test_exporter_dependent_values_are_real_checks():
     for deps in check.EXPORTER_DEPENDENT.values():
         assert deps <= names
         assert deps <= check.PROM_DEPENDENT
+
+
+# ── EXPORTER_DEPENDENT's KEYS, the axis the test above cannot cover ─────────────────────────
+# The guard above checks the map's VALUES. Its keys went unchecked until 2026-08-29, and the map
+# shipped carrying only `node` while daniel-pi scrapes under `node-pi` — so the Pi's exporter death
+# suppressed nothing and double-paged. A value guard structurally cannot see a missing key: the
+# entries that ARE there stay correct, and the test reads green.
+#
+# Derived from the scrape config rather than transcribed, for the reason _promtail_relabel_targets
+# gives in test_check_service.py — a transcribed list cannot follow a rename. Renaming a scrape job
+# would leave a literal here naming a job nothing emits, so the NEW name goes unmapped while the
+# dead one passes: the guard reporting the opposite of the truth.
+_PROM_SCRAPE_CONFIG = (
+    _REPO / "ansible/roles/k8s/claude-otel/templates/prometheus.yaml.j2"
+)
+NODE_EXPORTER_PORT = "9100"
+
+
+def _scrape_job_blocks(text):
+    """(job_name, body) for each `- job_name:` block, in file order."""
+    blocks = re.split(r"^\s*- job_name:\s*", text, flags=re.M)[1:]
+    return [(b.partition("\n")[0].strip(), b.partition("\n")[2]) for b in blocks]
+
+
+def _node_exporter_jobs():
+    """Scrape job names whose target is node-exporter, identified by its port.
+
+    Port rather than job name: `node` finds its targets by k8s SD on `app=node-exporter` while
+    `node-pi` uses a static `<ip>:9100`, so the port is the only thing both spell out. Comments are
+    stripped first — a retirement note two blocks earlier mentions 9100 and would otherwise
+    attribute the port to `traefik-k8s`.
+    """
+    body = "\n".join(
+        line
+        for line in _PROM_SCRAPE_CONFIG.read_text().splitlines()
+        if not line.lstrip().startswith("#")
+    )
+    return {
+        name for name, block in _scrape_job_blocks(body) if NODE_EXPORTER_PORT in block
+    }
+
+
+def test_the_scrape_config_is_actually_parseable():
+    """A path typo or a reshaped config empties _node_exporter_jobs(), and the guard below then
+    passes vacuously — the inert-check case this repo has paid for twice."""
+    jobs = _node_exporter_jobs()
+    assert "node" in jobs, (
+        f"no node-exporter scrape jobs parsed from {_PROM_SCRAPE_CONFIG.name} (got {jobs!r}) — "
+        "the path or the config shape changed, and the key guard below is now inert"
+    )
+
+
+def test_every_node_exporter_job_is_mapped_in_exporter_dependent():
+    """The reject half: adding a node-exporter host fails here until its job is placed.
+
+    Every node-exporter job carries hwmon series, so losing a host from any of them trips
+    HWMON_TEMP_ORIGINS_MIN. The map is keyed by Prometheus `job`, so an unmapped job means one root
+    cause pages twice — Scrape Targets plus a coverage complaint naming the same host.
+    """
+    unmapped = _node_exporter_jobs() - set(check.EXPORTER_DEPENDENT)
+    assert not unmapped, (
+        f"node-exporter scrape job(s) {sorted(unmapped)} have no EXPORTER_DEPENDENT entry, so a "
+        "dead exporter there suppresses nothing. Decide which checks that job's hosts feed and add "
+        "it — `host_temp` at minimum, plus disk/memory unless HOST_METRIC_ORIGIN_EXCLUDE excludes "
+        "every origin the job declares."
+    )
+
+
+def test_a_job_whose_origins_are_all_excluded_suppresses_no_host_metric_check():
+    """The other half of the same defect: the two axes have to agree.
+
+    EXPORTER_DEPENDENT keys by job; check_disk and check_mem exclude by ORIGIN. A host added to one
+    axis and not the other is exactly what shipped on 2026-08-29. Only statically-labelled jobs are
+    readable here — `node` discovers its origins from k8s at scrape time — so this covers `node-pi`.
+    """
+    excluded = re.compile(check.HOST_METRIC_ORIGIN_EXCLUDE)
+    checked = 0
+    for name, block in _scrape_job_blocks(_PROM_SCRAPE_CONFIG.read_text()):
+        if name not in check.EXPORTER_DEPENDENT:
+            continue
+        origins = re.findall(r"^\s+origin:\s*(\S+)", block, flags=re.M)
+        if not origins or not all(excluded.fullmatch(o) for o in origins):
+            continue
+        checked += 1
+        leaked = check.EXPORTER_DEPENDENT[name] & {"disk", "memory"}
+        assert not leaked, (
+            f"job {name!r} declares only origins excluded by HOST_METRIC_ORIGIN_EXCLUDE "
+            f"({check.HOST_METRIC_ORIGIN_EXCLUDE!r}), so check_disk and check_mem never read them "
+            f"— suppressing {sorted(leaked)} there hides a real fault and reports nothing"
+        )
+    assert checked, "no excluded statically-labelled job found; this guard is inert"
 
 
 def _wire_run_once_prom_up(monkeypatch, up_vector, checks, prom_dependent):
