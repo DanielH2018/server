@@ -89,6 +89,39 @@ data:
         # with a `:`), check stage `- cri`".
         pipeline_stages:
           - cri: {}
+          # Drop routine Traefik access lines. Measured 2026-08-29: 130 lines in 120s at 987
+          # bytes average — ~172 MB/day — of which 89 were 200, 38 were 304 and 4 were 204,
+          # against 4 401s and 4 404s. Homepage's own widget polling was 46 of the 130.
+          #
+          # THIS DOES NOT TOUCH CROWDSEC. Traefik's own accessLog must never gain a `filters`
+          # block, because the crowdsec agent sidecar tails /var/log/traefik/access.log DIRECTLY
+          # for ban detection (traefik/templates/crowdsec-secret.yaml.j2's acquis.yaml) and
+          # filtering the file would starve the WAF. Promtail reads a different stream: the
+          # access-log-rotate sidecar `tail -f`s the same inode to ITS OWN STDOUT, which this job
+          # discovers as a container log. Two tails, one file — so dropping here is invisible to
+          # crowdsec. Scope this to the sidecar's container name and nothing else.
+          #
+          # Nothing reads 2xx/3xx access lines out of Loki: every Traefik panel in
+          # claude-otel's dashboards is Prometheus (traefik_service_requests_total and the
+          # duration histogram), and monitor-bridge's check_traefik_5xx / check_traefik_latency
+          # read those same histograms. Request rate and latency percentiles are unaffected.
+          #
+          # 302 is deliberately KEPT — those are Authelia redirects, and they are the cheapest
+          # evidence of an auth loop. Errors and slow requests are kept for the same reason.
+          # The expression pairs a routine status with a sub-second Duration (nanoseconds, so
+          # under 1e9 is at most 9 digits); Traefik emits these fields alphabetically, which is
+          # what puts DownstreamStatus ahead of Duration on every line.
+          #
+          # The counter this bumps is logentry_dropped_lines_total, NOT the
+          # promtail_dropped_entries_total that monitor-bridge's Promtail Dropped Entries check
+          # watches at 1000/hour — different metric family, so a deliberate drop here cannot
+          # self-page as shipping loss.
+          - match:
+              selector: '{container="access-log-rotate"}'
+              stages:
+                - drop:
+                    expression: '"DownstreamStatus":(200|204|304),.*"Duration":[0-9]{1,9},'
+                    drop_counter_reason: traefik_routine_access_log
         relabel_configs:
           - source_labels: [__meta_kubernetes_pod_node_name]
             target_label: __host__

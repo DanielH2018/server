@@ -75,10 +75,28 @@ DESIRED: dict[str, object] = {
     # 100m, so 2 is the ceiling worth setting and it is burst capacity, not two reserved
     # cores.
     "hashing_threads": 2,
-    # libtorrent 2.0 uses mmap disk I/O, so this bounds how much dirty page cache the
-    # session holds before flushing. Raised against a 2048Mi container limit with ~844Mi
-    # in use. Raise the container limit too before going past this.
+    # INERT ON LINUX, kept only so a WebUI edit cannot set something worse. Traced in
+    # qBittorrent's source 2026-08-29: applyMemoryWorkingSetLimit() (app/application.cpp) is
+    # compiled under `QBT_USES_LIBTORRENT2 && !Q_OS_LINUX && !Q_OS_MACOS`, so on this image the
+    # function does not exist and is never called — setMemoryWorkingSetLimit() only persists the
+    # value to QSettings. Even the unreachable Q_OS_UNIX branch says "has no effect on linux" and
+    # implements it as setrlimit(RLIMIT_RSS), which the kernel stopped enforcing in the 2.4 era.
+    # So there is NO application-side bound on libtorrent's mmap page cache; the cgroup memory
+    # limit is the only ceiling, and page cache expands to fill whatever it is given. That is why
+    # the container limit stays at 2048Mi: a working set pinned at 99.9% of it with zero restarts
+    # and zero OOM events is reclaimable cache, not unmet demand, and raising the limit would just
+    # move where it pins. The earlier comment here read this setting as a working control and told
+    # the next reader to raise the container limit "before going past this" — it isn't, and doing
+    # so buys nothing.
     "memory_working_set_limit": 1024,
+    # Blocks held in memory while hash-checking, in MiB (sessionimpl.cpp multiplies by 64 to reach
+    # libtorrent's count of 16 KiB blocks). 32 is stock. Raised because piece verification here
+    # runs over multi-GB remuxes and is the same bottleneck `hashing_threads: 2` above was set to
+    # lift — two threads reading through a 32 MiB window stay window-bound. Consumed in
+    # torrent.cpp's start_checking(), which is backend-agnostic: `checking_mem_usage` appears
+    # nowhere in mmap_disk_io.cpp, so libtorrent 2.0's mmap path does not bypass it. Costs up to
+    # ~96 MiB more RSS during a recheck only, against the 2048Mi limit.
+    "checking_memory_use": 128,
     # fallocate the full file up front on ext4. Avoids fragmentation across a multi-hour
     # 60GB+ download and fails fast on out-of-space instead of part-way through.
     "preallocate_all": True,

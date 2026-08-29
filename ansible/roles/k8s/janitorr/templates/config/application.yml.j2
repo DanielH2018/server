@@ -80,7 +80,19 @@ clients:
     apikey: "{{ radarr_api_key }}"
     only-delete-files: false
     determine-age-by: MOST_RECENT
-    import-exclusions: false
+    # true here but false for sonarr above, and the asymmetry is the point. With
+    # `only-delete-files: false` a cleanup removes the movie from Radarr entirely, so an import
+    # list re-adds it on its next sync and the file is downloaded again through the VPN — the
+    # exclusion is what stops that loop. Sonarr needs no equivalent because it carries
+    # `autoUnmonitorPreviouslyDownloadedEpisodes: true` in its own (live, un-templated) config,
+    # while Radarr's mirror of that setting is false. Radarr's setting would not help anyway: it
+    # governs a movie whose file is gone but whose record survives, which is a state
+    # `only-delete-files: false` never produces.
+    #
+    # The cost, deliberately accepted: re-adding an excluded movie later means clearing the
+    # exclusion in Radarr first. Not latent — the media-deletion block above has no
+    # minimum-free-disk-percent gate, so deletion fires on the age tiers regardless of headroom.
+    import-exclusions: true
 
   ## User login is only needed if deletion is enabled.
   jellyfin:

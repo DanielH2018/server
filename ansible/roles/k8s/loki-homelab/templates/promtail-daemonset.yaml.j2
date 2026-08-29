@@ -114,7 +114,11 @@ spec:
 {% endif %}
           resources:
             limits:
-              cpu: "250m"
+              # 1 core, not 250m: promtail's work arrives in bursts as log lines do, and a quota
+              # clipped them for no benefit on a node running ~1.5 of 24 cores. Throttled seconds
+              # measured 0.0076/s on 2026-08-29 — small, but the ceiling bought nothing against
+              # it. The request (50m) is what reserves capacity under contention and is unchanged.
+              cpu: "1"
               memory: 256Mi
             requests:
               cpu: "50m"

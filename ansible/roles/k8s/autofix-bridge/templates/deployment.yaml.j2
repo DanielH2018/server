@@ -71,7 +71,13 @@ spec:
               cpu: 20m
               memory: 32Mi
             limits:
-              cpu: 100m
+              # 1 core, not 100m: a periodic poller wakes, bursts, and sleeps, so a 100m quota —
+              # 10ms of every 100ms period — is exhausted by a sub-second burst while the minute
+              # average reads near zero. Throttled on 45.8% of CFS periods, measured 2026-08-29,
+              # against p95 usage of 0.0015 cores. On a cluster burning ~1.5 of 24 cores the
+              # request is what earns this pod CPU under contention; the limit only clipped
+              # bursts. Requests and the memory limit are unchanged.
+              cpu: "1"
               memory: 64Mi
       volumes:
         - name: autofix-bridge-script

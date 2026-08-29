@@ -102,6 +102,16 @@ spec:
               value: gemini-2.5-flash-lite
             - name: INFERENCE_TAGS_ENABLED
               value: "true"
+            # Upstream defaults this to 1 (packages/shared/config.ts). That fits local inference,
+            # where a second worker just contends for the same GPU — but OPENAI_BASE_URL above
+            # points at Gemini, so a tagging job is a network round-trip and one worker serializes
+            # the whole backlog behind latency rather than compute. The container has 2 CPU and
+            # 2048Mi and sits near-idle.
+            # The bounded downside: the tagging queue runs numRetries 3 with keepFailedJobs false,
+            # so three workers make Gemini free-tier 429s likelier and an exhausted job is dropped
+            # silently. The failure is a bookmark that never gets auto-tagged, not a lost bookmark.
+            - name: INFERENCE_NUM_WORKERS
+              value: "3"
             - name: MEILI_MASTER_KEY
               valueFrom:
                 secretKeyRef:

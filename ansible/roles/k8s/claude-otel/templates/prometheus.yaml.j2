@@ -102,7 +102,27 @@ data:
       # Workload readiness for every Pod/Deployment in the cluster (slice 3, D8). This is what
       # gives the seven previously-unmonitorable workloads a health signal at all — see the
       # header of kube-state-metrics.yaml.j2.
+      # THE FOUR CONTROL-PLANE JOBS SCRAPE AT 1m, NOT THE 15s GLOBAL, and this is the note the
+      # other three point back at. kube-state-metrics, kubernetes-cadvisor, kubernetes-kubelet
+      # and kubernetes-apiserver were the only jobs in this file without an explicit interval,
+      # so they inherited `global.scrape_interval` while every application job carried 1m. They
+      # are also the largest producers: measured 2026-08-29 at 76,287 of 110,522 series (69%),
+      # appending 5,086 of 5,734 samples/s. Relaxing them to 1m cuts total ingest 66.5%.
+      #
+      # That matters because retention here is bound by BYTES, not time: `retention.size` is 3GB
+      # (defaults/main.yml) against a configured 30d, and the TSDB was holding 3.56 DAYS at 2.48GB
+      # when this was measured. The cut takes that to roughly 10.5 days.
+      #
+      # Safe because nothing reads these at sub-minute resolution — checked, not assumed:
+      # no recording or alerting rules exist (no `rule_files` in this role, no Grafana alert
+      # provisioning); no `irate()` anywhere in files/dashboards/; the only boards touching these
+      # families use fixed [5m] windows or the daniel-server datasource, which already declares
+      # timeInterval 1m (grafana.yaml.j2). monitor-bridge's `check_k8s_workloads` reads
+      # kube_deployment_/kube_daemonset_/kube_node_ as instant vectors on a 300s cycle, and its
+      # restart arm reads increase(kube_pod_container_status_restarts_total[1h]) — a COUNTER, so
+      # a 1m scrape loses no restart event, only its timing to within 60s against a 30m/1h window.
       - job_name: kube-state-metrics
+        scrape_interval: 1m
         static_configs:
           - targets: ['kube-state-metrics:8080']
       # Slice-6 B2: the CrowdSec engine (LAPI+AppSec) moved in-cluster; its :6060 carries the
@@ -395,7 +415,9 @@ data:
       # insecure_skip_verify is on the kubelet hop: k3s's kubelet serving cert doesn't carry a
       # SAN Prometheus can validate against here. The bearer token is still verified by the API
       # server via TokenReview, so this weakens transport identity, not authn.
+      # 1m, not the 15s global — see the interval note at the kube-state-metrics job.
       - job_name: kubernetes-cadvisor
+        scrape_interval: 1m
         scheme: https
         metrics_path: /metrics/cadvisor
         tls_config:
@@ -416,7 +438,9 @@ data:
       # Same host, same auth, same RBAC as cadvisor: the kubelet authorizer maps /metrics and
       # /metrics/resource onto `nodes/metrics` exactly as it maps /metrics/cadvisor, so this
       # needs no new grant. insecure_skip_verify is on for the reason stated above.
+      # 1m, not the 15s global — see the interval note at the kube-state-metrics job.
       - job_name: kubernetes-kubelet
+        scrape_interval: 1m
         scheme: https
         metrics_path: /metrics
         tls_config:
@@ -458,7 +482,9 @@ data:
       #
       # No insecure_skip_verify here: unlike the kubelet, the API server's serving cert carries
       # a SAN for kubernetes.default.svc, so the in-cluster CA validates it properly.
+      # 1m, not the 15s global — see the interval note at the kube-state-metrics job.
       - job_name: kubernetes-apiserver
+        scrape_interval: 1m
         scheme: https
         metrics_path: /metrics
         tls_config:
@@ -624,10 +650,19 @@ spec:
           resources:
             requests:
               cpu: 50m
-              memory: 128Mi
+              # 512Mi, not 128Mi, and the REQUEST is the half that matters. The kubelet ranks
+              # eviction by usage-above-request, so a 128Mi request against a measured 893.6MiB
+              # peak working set (2026-08-29) put Prometheus in the worst bucket on a node
+              # already at 151% memory-limit overcommit — i.e. the workload every other check
+              # here reads from was among the first to be evicted under node pressure.
+              memory: 512Mi
             limits:
               cpu: "1"
-              memory: 1Gi
+              # 2Gi against that same 893.6MiB peak: 94.5% of the old 1Gi ceiling, never
+              # OOMKilled, but 57MiB of headroom on a TSDB is not headroom — an OOMKill loses
+              # the unflushed head block. Cheap insurance; a limit is a ceiling, not a
+              # reservation, so it costs nothing if the scrape-interval cut above reclaims it.
+              memory: 2Gi
       volumes:
         - name: prometheus-config
           configMap:

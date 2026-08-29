@@ -86,7 +86,13 @@ spec:
               cpu: 20m
               memory: 32Mi
             limits:
-              cpu: 200m
+              # 1 core, not 200m — same burst-shaped poller as autofix-bridge, throttled on
+              # 10.7-16.2% of CFS periods across six pod generations (2026-08-29). This is also
+              # the workload whose own CPU Throttling check documents why the period ratio alone
+              # is a poor signal for exactly these sidecars; `CPU_MIN_THROTTLED_CORES` is the
+              # floor that keeps it from paging about itself, and raising the ceiling here moves
+              # the underlying condition rather than the threshold.
+              cpu: "1"
               memory: 96Mi
       volumes:
         - name: monitor-bridge-script
