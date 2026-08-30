@@ -36,12 +36,25 @@ Measured on 2026-08-30 — hosts went down at 07:36:31, Traefik's pod reached Re
 and the last workload (Authelia) at 07:45:06. That is **8m35s of edge downtime**, comfortably past
 any 5-minute check interval, so every monitor pointed through that edge was guaranteed to fire.
 
-Two consequences worth acting on, in the console:
+### There is no failure threshold to raise
 
-**Raise the confirmation threshold past a normal restart.** A monitor that alerts on the first
-failed check cannot distinguish a restart from an outage. Set each monitor's interval to 5 minutes
-and require **two consecutive failed checks** before alerting, which puts the alerting floor at
-~10 minutes — above the 8m35s a full restart costs, and still well inside a real outage.
+Uptime Robot exposes no "alert after N consecutive failures" setting, on any plan. Its
+confirmation logic is fixed and internal: a connection failure is retried up to 3 times 20 seconds
+apart, an HTTP-status or keyword failure up to 3 times 10 seconds apart, and an SSL error not at
+all. That absorbs a blip of **seconds**. It cannot absorb minutes.
+
+So on the free plan the arithmetic has no slack in it. The interval floor is 5 minutes, the
+restart costs 8m35s, and at least one check is therefore guaranteed to fail and alert. Raising the
+interval is not a fix either — it degrades detection of a real outage without reliably stepping
+over a restart, which can land anywhere in the cycle.
+
+**The paid-plan lever is a postponed notification**, not a failure count: a per-alert-contact
+delay in minutes, set under *show advanced options* on a monitor (the settings icon beside each
+alert contact), and settable in bulk. A 15-minute delay would have silenced all four of these
+monitors, since the outage ended at 8m35s. It is a paid feature and worth knowing about before
+concluding this plane cannot be quieted — but it is a subscription decision, not a config change.
+
+Which leaves one lever that works on the plan in use today.
 
 **Collapse the four backend probes into one edge probe.** Four monitors through one ingress buy no
 coverage the ingress monitor does not already have; what they buy is four notifications per edge
