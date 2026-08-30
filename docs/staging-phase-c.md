@@ -272,6 +272,23 @@ rather than guessing: nothing in an exit code distinguishes the gate misfiring f
 defect in that commit, and guessing either way corrupts the measurement in a different
 direction. Any run left untriaged holds the verdict at NOT MET.
 
+**History cannot supply 20 samples, and the script does not pretend otherwise.** Measured
+2026-08-30, eleven of the last 400 master commits are gateable once two filters apply: the
+commit must change a service in the staging subset, and staging must have *run* that service at
+that commit. The second filter is not fussiness — a commit predating its role's per-cluster
+switch deploys prod-shaped config to a cluster that cannot take it and comes back REJECTED, an
+outcome that is neither a gate misfire nor a defect in the commit and so has no honest triage
+answer. So the 20 accumulate in a **ledger**: `--jsonl <path>` is read back as well as written,
+and the streak spans every recorded run rather than one invocation. Eleven historical samples
+plus each future gated commit reach 20 without a third rescope.
+
+**A backfill is a one-shot.** The gate's checkout only fast-forwards, so a run leaves it at the
+newest commit in the window and a second pass over the same window is all ancestors. The script
+reads that checkout's HEAD before running and refuses a plan it has already moved past, naming
+the `git reset --hard` that would make the window runnable — a refusal is cheaper than eleven
+false failures that say nothing about the gate. Resuming a run that died partway needs another
+reset for the same reason.
+
 - A *false* failure is any non-PASS whose cause is the gate rather than the change: staleness,
   prep failure, ssh transport, dispatcher refusal, timeout, lock contention.
 - A REJECTED traced to a genuine defect in that SHA is a **true** failure. It does not break the
