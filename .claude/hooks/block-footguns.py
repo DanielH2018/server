@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse(Bash) guard: four commands that fail silently on this machine.
+"""PreToolUse(Bash) guard: six commands that fail silently on this machine.
 
 Each has a deterministic signature, a recorded cost, and a one-line fix — which is what makes
 them worth a hook rather than a paragraph. What they share is that none of them ERRORS: every
@@ -24,6 +24,17 @@ one produces a plausible-looking result that is wrong, so nothing downstream not
      repo, so the git command runs somewhere else entirely — usually reporting "not a git
      repository", sometimes finding a different repo.
 
+  5. A load generator aimed at the PUBLIC hostname. That name egresses to Cloudflare and comes
+     back through the homelab's own CrowdSec edge, so a burst looks like an attack from this
+     address. 120 requests on 2026-08-06 tripped two scenarios at once and 403'd every
+     `*.daniel-hunter.com` for everyone at home. The `.local.` name stays on the LAN and still
+     traverses the full route.
+
+  6. `pgrep -f <pattern>`. The shell running the check has the pattern in its own /proc cmdline,
+     so pgrep matches the waiter itself and the check reads as "still running" forever. Five
+     such waiters were left spinning on 2026-08-17 and none ever fired — two of them created
+     because the earlier ones seemed not to work.
+
 Reads the hook JSON on stdin. Emits a PreToolUse "deny" decision carrying the fix; otherwise no
 output -> normal permission flow. The hook can only ever DENY.
 """
@@ -32,8 +43,15 @@ from __future__ import annotations
 
 import json
 import sys
+from urllib.parse import urlsplit
 
-from _hook_common import emit_pretooluse_decision, invokes, short_flags, split_stages
+from _hook_common import (
+    emit_pretooluse_decision,
+    invokes,
+    short_flags,
+    split_stages,
+    strip_shell_keywords,
+)
 
 # ugrep's spelling of each GNU flag people reach for. The values are what to write instead.
 _UGREP_FLAG_FIXES = {
@@ -43,6 +61,44 @@ _UGREP_FLAG_FIXES = {
 
 _SSH_HOSTS = ("daniel-server", "daniel-pi", "daniel-box", "daniel-stage")
 _REPO_PATH = "/home/ubuntu/server"
+
+# Load generators, by the name you type. A single `curl` is deliberately absent: one request to
+# the public name is ordinary and must stay clean, and "many requests" is not visible in the
+# text of a `curl` call the way it is in the name of a tool built to make them.
+_BURST_TOOLS = frozenset(
+    {
+        "ab",
+        "wrk",
+        "wrk2",
+        "hey",
+        "siege",
+        "vegeta",
+        "k6",
+        "bombardier",
+        "autocannon",
+        "locust",
+    }
+)
+_PUBLIC_SUFFIX = ".daniel-hunter.com"
+_LAN_SUFFIX = ".local" + _PUBLIC_SUFFIX
+
+
+def _host_of(word: str) -> str:
+    """The hostname of `word`, whether it is a URL or a bare host argument.
+
+    Matched on the HOST and by suffix, never as a substring of the whole argument. Both halves
+    matter: `https://n8n.daniel-hunter.com/x/.local./y` contains `.local.` in its PATH, and a
+    substring test read that as a LAN target and let the burst through — verified against this
+    rule's first draft.
+    """
+    if "://" in word:
+        return (urlsplit(word).hostname or "").lower()
+    return word.split("/", 1)[0].split(":", 1)[0].lower()
+
+
+def _is_public_target(word: str) -> bool:
+    host = _host_of(word)
+    return host.endswith(_PUBLIC_SUFFIX) and not host.endswith(_LAN_SUFFIX)
 
 
 def ugrep_flag_problem(stage: list[str]) -> str | None:
@@ -101,11 +157,53 @@ def remote_git_problem(stage: list[str]) -> str | None:
     )
 
 
+def burst_public_hostname_problem(stage: list[str]) -> str | None:
+    """A load-test tool aimed at the PUBLIC hostname, which bans the homelab's own address."""
+    words = strip_shell_keywords(stage)
+    if not words or words[0] not in _BURST_TOOLS:
+        return None
+    targets = [w for w in words if _is_public_target(w)]
+    if not targets:
+        return None
+    host = _host_of(targets[0])
+    fixed = targets[0].replace(host, host.replace(_PUBLIC_SUFFIX, _LAN_SUFFIX), 1)
+    return (
+        f"Burst-testing {targets[0]} egresses to Cloudflare and back through the homelab's own "
+        "CrowdSec edge, so it looks like an attack from this address — a 2026-08-06 run of 120 "
+        "requests tripped http-crawl-non_statics and http-probing at once and 403'd every "
+        f"*{_PUBLIC_SUFFIX} for everyone at home. Use the `.local.` name, which stays on the LAN "
+        "and still traverses the full route: " + fixed
+    )
+
+
+def pgrep_self_match_problem(stage: list[str]) -> str | None:
+    """`pgrep -f <pattern>` whose pattern matches the shell running it."""
+    words = strip_shell_keywords(stage)
+    if not words or words[0] != "pgrep":
+        return None
+    if "f" not in short_flags(words):
+        return None
+    # A character class breaks the self-match, which is the documented fix. Its presence is
+    # the signal the author already knows about this.
+    if any("[" in word for word in words):
+        return None
+    return (
+        "`pgrep -f` matches the shell running it, because this command's own /proc cmdline "
+        "contains the pattern — so the check reads as 'still running' forever. Five such "
+        "waiters were left spinning on 2026-08-17 and none ever fired. Wait on the thing "
+        "itself: prefer `run_in_background: true` and let the harness notify on exit, or match "
+        "the PID (`while kill -0 <pid> 2>/dev/null`), or break the self-match with a character "
+        "class: `pgrep -f 'b2_[w]ipe_prefixes'`."
+    )
+
+
 _RULES = (
     ugrep_flag_problem,
     bare_stash_problem,
     rollout_restart_problem,
     remote_git_problem,
+    burst_public_hostname_problem,
+    pgrep_self_match_problem,
 )
 
 

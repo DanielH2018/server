@@ -36,6 +36,39 @@ def split_stages(command: str) -> list[list[str]]:
     return stages
 
 
+# Words that can precede the real binary in a stage. `shlex.split` leaves `;` attached to the
+# word before it, so `until ! pgrep -f x; do sleep 15; done` arrives as ONE stage whose first
+# word is `until` — a rule testing `stage[0]` would never see the pgrep.
+_LEADING_KEYWORDS = frozenset(
+    {
+        "!",
+        "until",
+        "while",
+        "if",
+        "elif",
+        "then",
+        "do",
+        "time",
+        "command",
+        "then;",
+        "do;",
+    }
+)
+
+
+def strip_shell_keywords(stage: list[str]) -> list[str]:
+    """`stage` with any leading shell keywords and negations removed.
+
+    Use this before testing `stage[0]`, so a rule catches the command inside a loop or an `if`
+    as well as the bare form. It only strips from the FRONT: a later `do`/`then` belongs to the
+    loop body, and dropping those would splice unrelated words onto the command being judged.
+    """
+    i = 0
+    while i < len(stage) and stage[i] in _LEADING_KEYWORDS:
+        i += 1
+    return stage[i:]
+
+
 def invokes(stage: list[str], prefix: tuple[str, ...]) -> bool:
     """True when `stage` invokes `prefix`, allowing global flags before the subcommand.
 
