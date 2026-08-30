@@ -266,30 +266,96 @@ def _resolves(cited: str, repo_root: Path) -> bool:
     return cited.startswith(".claude/") and (Path.home() / cited).exists()
 
 
+# `enforceable: no` in a memory's frontmatter, with the reason on the same line. Matched
+# textually rather than by parsing YAML, so the survey stays stdlib-only like the rest of it.
+_ENFORCEABLE_NO = re.compile(
+    r"^\s*enforceable:\s*(?:no|false)\b\s*(?:[-—:]\s*(?P<reason>.+?))?\s*$",
+    re.MULTILINE | re.IGNORECASE,
+)
+
+
+def _frontmatter(text: str) -> str:
+    """The YAML frontmatter block, or "" when the file has none.
+
+    Read separately from the body so a `enforceable: no` written in prose — quoting this
+    convention, say — cannot change a memory's bucket.
+    """
+    if not text.startswith("---"):
+        return ""
+    parts = text.split("---", 2)
+    return parts[1] if len(parts) == 3 else ""
+
+
+def declared_unenforceable(text: str) -> tuple[bool, str]:
+    """Whether the frontmatter declares `enforceable: no`, and the reason given.
+
+    The reason is REQUIRED. A bare `enforceable: no` is reported as a defect rather than
+    honoured: without one, the field becomes a way to retire any memory that looks hard, and
+    the bucket it feeds is the one nobody is expected to act on.
+    """
+    match = _ENFORCEABLE_NO.search(_frontmatter(text))
+    if not match:
+        return False, ""
+    return True, (match.group("reason") or "").strip()
+
+
 def enforcement(files: list[Path], repo_root: Path) -> dict[str, list[str]]:
-    """Which memory files name a check that exists, and which name none.
+    """Which memory files name a check that exists, which name none, and which never can.
 
     The repo's own ladder is run-local note -> memory -> CLAUDE.md rule -> executable check,
-    and MEMORY.md marks a handful of entries ENFORCED. Nothing counts the rest, so the ladder
-    is aspirational: there is no way to ask which memories are still carried by an agent
+    and MEMORY.md marks a handful of entries ENFORCED. Nothing counted the rest, so the ladder
+    was aspirational: there was no way to ask which memories are still carried by an agent
     remembering them.
 
     This is a PROXY, and a deliberately weak one. It reports whether a memory cites a check
     path that resolves, which is evidence the fact has an owner — not proof the check tests
     what the memory claims. A cited path that no longer exists is the more interesting half:
     the memory says it is enforced and the enforcer is gone.
+
+    WHY A FOURTH BUCKET. Some memories are judgment ("a skeptic resolves uncertainty
+    downward"), a ledger, or a measurement — no check will ever own them. Counting those in
+    the denominator makes the ratio imply a backlog that does not exist, and a number nobody
+    can act on is worse than no number. `enforceable: no` in the frontmatter moves one out of
+    the denominator; the reason is required, and a memory that declares it while ALSO citing a
+    live check is reported as a contradiction rather than silently believed.
     """
     enforced, unenforced, dangling = [], [], []
+    not_enforceable, contradictions = [], []
     for path in files:
-        cited = sorted(set(_CHECK_PATH.findall(_read(path))))
-        if not cited:
+        text = _read(path)
+        cited = sorted(set(_CHECK_PATH.findall(text)))
+        resolved = [c for c in cited if _resolves(c, repo_root)]
+        declared, reason = declared_unenforceable(text)
+
+        if declared and resolved:
+            contradictions.append(
+                f"{path.name} -> declares enforceable: no, cites {resolved[0]}"
+            )
+            enforced.append(path.name)
+            continue
+        if declared and not reason:
+            contradictions.append(
+                f"{path.name} -> declares enforceable: no with no reason"
+            )
             unenforced.append(path.name)
             continue
-        if any(_resolves(c, repo_root) for c in cited):
+        if declared:
+            not_enforceable.append(f"{path.name} — {reason}")
+            continue
+
+        if not cited:
+            unenforced.append(path.name)
+        elif resolved:
             enforced.append(path.name)
         else:
             dangling.append(f"{path.name} -> {', '.join(cited)}")
-    return {"enforced": enforced, "unenforced": unenforced, "dangling": dangling}
+    return {
+        "enforced": enforced,
+        "unenforced": unenforced,
+        "dangling": dangling,
+        "not_enforceable": not_enforceable,
+        "contradictions": contradictions,
+    }
 
 
 def survey(
@@ -395,8 +461,22 @@ def _render(s: dict) -> str:
     enf = s["enforcement"]
     total = len(enf["enforced"]) + len(enf["unenforced"]) + len(enf["dangling"])
     out.append(
-        f"\nenforcement: {len(enf['enforced'])}/{total} memories cite a check that exists"
+        f"\nenforcement: {len(enf['enforced'])}/{total} ENFORCEABLE memories cite a check "
+        "that exists"
     )
+    if enf.get("not_enforceable"):
+        out.append(
+            f"  not enforceable ({len(enf['not_enforceable'])}) — declared `enforceable: no`, "
+            "so they are OUT of the ratio above. Judgment, ledgers and measurements no check "
+            "can own:"
+        )
+        out.extend(f"    {n}" for n in enf["not_enforceable"])
+    if enf.get("contradictions"):
+        out.append(
+            f"  CONTRADICTION ({len(enf['contradictions'])}) — a declaration that disagrees "
+            "with the file, so the declaration was NOT honoured:"
+        )
+        out.extend(f"    {n}" for n in enf["contradictions"])
     if enf["dangling"]:
         out.append(
             f"  DANGLING ({len(enf['dangling'])}) — cites a check that is GONE, so the memory "

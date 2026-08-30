@@ -372,3 +372,88 @@ def test_a_non_hook_path_gets_no_home_fallback(tmp_path, monkeypatch):
     p = _memfile(tmp_path, "h.md", "ENFORCED by ansible/tests/test_elsewhere.py.\n")
     result = memory_survey.enforcement([p], root)
     assert result["dangling"] and "test_elsewhere.py" in result["dangling"][0]
+
+
+# --- `enforceable: no` ------------------------------------------------------------------------
+# The field exists so the ratio stops implying a backlog that does not exist. Every rule below
+# is an accept/reject pair, because a field that can retire any memory is worse than no field.
+
+
+def _declared(tmp_path, name, meta_line, body="A fact nobody checks.\n"):
+    return _memfile(
+        tmp_path,
+        name,
+        f"---\nname: {name[:-3]}\nmetadata:\n  type: project\n  {meta_line}\n---\n\n{body}",
+    )
+
+
+def test_a_declared_memory_leaves_the_denominator(tmp_path):
+    root = _repo(tmp_path, "ansible/tests/test_thing.py")
+    p = _declared(
+        tmp_path, "a.md", "enforceable: no — judgment, no mechanism can own it"
+    )
+    result = memory_survey.enforcement([p], root)
+    assert result["not_enforceable"] == ["a.md — judgment, no mechanism can own it"]
+    assert result["enforced"] == [] and result["unenforced"] == []
+
+
+def test_an_undeclared_memory_stays_in_the_denominator(tmp_path):
+    """The reject half: absence of the field must not quietly exempt anything."""
+    root = _repo(tmp_path, "ansible/tests/test_thing.py")
+    p = _memfile(tmp_path, "b.md", "A fact nobody checks.\n")
+    result = memory_survey.enforcement([p], root)
+    assert result["unenforced"] == ["b.md"] and result["not_enforceable"] == []
+
+
+def test_a_declaration_with_no_reason_is_not_honoured(tmp_path):
+    """Without a reason the field retires anything that looks hard, so it stays in the ratio."""
+    root = _repo(tmp_path, "ansible/tests/test_thing.py")
+    p = _declared(tmp_path, "c.md", "enforceable: no")
+    result = memory_survey.enforcement([p], root)
+    assert result["not_enforceable"] == []
+    assert result["unenforced"] == ["c.md"]
+    assert result["contradictions"] and "no reason" in result["contradictions"][0]
+
+
+def test_a_declaration_that_also_cites_a_live_check_is_a_contradiction(tmp_path):
+    """The file disagrees with itself. Believe the check, which is the verifiable half."""
+    root = _repo(tmp_path, "ansible/tests/test_thing.py")
+    p = _declared(
+        tmp_path,
+        "d.md",
+        "enforceable: no — nothing can check this",
+        body="ENFORCED by ansible/tests/test_thing.py.\n",
+    )
+    result = memory_survey.enforcement([p], root)
+    assert result["enforced"] == ["d.md"] and result["not_enforceable"] == []
+    assert result["contradictions"] and "test_thing.py" in result["contradictions"][0]
+
+
+def test_the_field_is_read_from_frontmatter_only(tmp_path):
+    """A memory DESCRIBING this convention in its body must not thereby exempt itself."""
+    root = _repo(tmp_path, "ansible/tests/test_thing.py")
+    p = _memfile(
+        tmp_path,
+        "e.md",
+        "Write `enforceable: no — <reason>` in the frontmatter to leave the ratio.\n",
+    )
+    result = memory_survey.enforcement([p], root)
+    assert result["unenforced"] == ["e.md"] and result["not_enforceable"] == []
+
+
+def test_false_is_accepted_as_well_as_no(tmp_path):
+    """YAML users write either; a field that silently ignored one spelling would read as a typo."""
+    root = _repo(tmp_path, "ansible/tests/test_thing.py")
+    p = _declared(tmp_path, "f.md", "enforceable: false — a ledger, not a rule")
+    assert memory_survey.enforcement([p], root)["not_enforceable"] == [
+        "f.md — a ledger, not a rule"
+    ]
+
+
+def test_enforceable_yes_is_not_a_declaration(tmp_path):
+    """Only `no`/`false` declare. An explicit `yes` must leave the memory in the ratio."""
+    root = _repo(tmp_path, "ansible/tests/test_thing.py")
+    p = _declared(tmp_path, "g.md", "enforceable: yes")
+    result = memory_survey.enforcement([p], root)
+    assert result["unenforced"] == ["g.md"] and result["not_enforceable"] == []
+    assert result["contradictions"] == []
