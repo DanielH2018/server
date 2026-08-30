@@ -159,8 +159,46 @@ def test_a_burst_against_the_public_name_is_denied():
 
 
 def test_the_fix_names_the_local_hostname():
+    """Assert on the whole rewritten URL, not a substring of it.
+
+    A substring test would pass on a rewrite that mangled the path, and CodeQL flags the shape
+    as incomplete URL sanitization (py/incomplete-url-substring-sanitization) — correctly, as
+    the bypass test below shows.
+    """
     found = _mod.problem("hey -n 120 https://n8n.daniel-hunter.com/webhook/burst")
-    assert "n8n.local.daniel-hunter.com" in found
+    assert found.endswith("https://n8n.local.daniel-hunter.com/webhook/burst")
+
+
+def test_a_local_segment_in_the_path_does_not_exempt_a_public_host():
+    """The bypass in this rule's first draft.
+
+    It tested `".local." not in word` against the WHOLE argument, so a `.local.` anywhere in the
+    path read as a LAN target and the burst went through to the public name. Matching on the
+    parsed hostname by suffix is what closes it.
+    """
+    assert (
+        _mod.problem("ab -n 120 https://n8n.daniel-hunter.com/x/.local./y") is not None
+    )
+
+
+def test_a_public_host_as_a_query_value_does_not_trip_a_local_target():
+    """The mirror: the host decides, so the public name inside a LAN URL's query is not a hit."""
+    assert (
+        _mod.problem(
+            "ab -n 10 https://n8n.local.daniel-hunter.com/?next=n8n.daniel-hunter.com"
+        )
+        is None
+    )
+
+
+def test_a_bare_host_argument_is_matched():
+    """Not every load generator takes a URL; `siege n8n.daniel-hunter.com` is the bare form."""
+    assert _mod.problem("siege -c 20 n8n.daniel-hunter.com") is not None
+
+
+def test_a_lookalike_domain_is_not_matched():
+    """Suffix matching, so a domain merely ENDING in the same letters must not be caught."""
+    assert _mod.problem("ab -n 100 https://notdaniel-hunter.com/") is None
 
 
 def test_every_named_burst_tool_is_matched():

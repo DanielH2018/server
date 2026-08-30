@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import json
 import sys
+from urllib.parse import urlsplit
 
 from _hook_common import (
     emit_pretooluse_decision,
@@ -79,7 +80,25 @@ _BURST_TOOLS = frozenset(
     }
 )
 _PUBLIC_SUFFIX = ".daniel-hunter.com"
-_LAN_INFIX = ".local."
+_LAN_SUFFIX = ".local" + _PUBLIC_SUFFIX
+
+
+def _host_of(word: str) -> str:
+    """The hostname of `word`, whether it is a URL or a bare host argument.
+
+    Matched on the HOST and by suffix, never as a substring of the whole argument. Both halves
+    matter: `https://n8n.daniel-hunter.com/x/.local./y` contains `.local.` in its PATH, and a
+    substring test read that as a LAN target and let the burst through — verified against this
+    rule's first draft.
+    """
+    if "://" in word:
+        return (urlsplit(word).hostname or "").lower()
+    return word.split("/", 1)[0].split(":", 1)[0].lower()
+
+
+def _is_public_target(word: str) -> bool:
+    host = _host_of(word)
+    return host.endswith(_PUBLIC_SUFFIX) and not host.endswith(_LAN_SUFFIX)
 
 
 def ugrep_flag_problem(stage: list[str]) -> str | None:
@@ -143,16 +162,17 @@ def burst_public_hostname_problem(stage: list[str]) -> str | None:
     words = strip_shell_keywords(stage)
     if not words or words[0] not in _BURST_TOOLS:
         return None
-    targets = [w for w in words if _PUBLIC_SUFFIX in w and _LAN_INFIX not in w]
+    targets = [w for w in words if _is_public_target(w)]
     if not targets:
         return None
+    host = _host_of(targets[0])
+    fixed = targets[0].replace(host, host.replace(_PUBLIC_SUFFIX, _LAN_SUFFIX), 1)
     return (
         f"Burst-testing {targets[0]} egresses to Cloudflare and back through the homelab's own "
         "CrowdSec edge, so it looks like an attack from this address — a 2026-08-06 run of 120 "
         "requests tripped http-crawl-non_statics and http-probing at once and 403'd every "
         f"*{_PUBLIC_SUFFIX} for everyone at home. Use the `.local.` name, which stays on the LAN "
-        "and still traverses the full route: "
-        + targets[0].replace(_PUBLIC_SUFFIX, _LAN_INFIX + _PUBLIC_SUFFIX.lstrip("."))
+        "and still traverses the full route: " + fixed
     )
 
 
