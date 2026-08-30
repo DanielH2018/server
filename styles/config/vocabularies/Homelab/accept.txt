@@ -342,3 +342,5 @@ dotfiles
 venv
 cwd
 [Uu]ntriaged
+[Gg]ateable
+[Rr]escope

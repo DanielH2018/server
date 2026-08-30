@@ -6,6 +6,7 @@ the runner drives, and each has a rejecting half — a check only ever observed 
 evidence it can fail.
 """
 
+import json
 import pathlib
 import sys
 
@@ -113,6 +114,7 @@ def test_only_subset_services_are_gated(monkeypatch):
             "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2",
         ],
     )
+    monkeypatch.setattr(bf, "staged_services_at", lambda _sha: {"freshrss", "traefik"})
     assert bf.gateable_services("x") == {"freshrss"}
 
 
@@ -122,7 +124,77 @@ def test_a_commit_touching_no_subset_service_is_not_gateable(monkeypatch):
     monkeypatch.setattr(
         bf, "changed_paths", lambda _sha: ["docs/staging-phase-c.md", "README.md"]
     )
+    monkeypatch.setattr(bf, "staged_services_at", lambda _sha: {"freshrss"})
     assert bf.gateable_services("x") == set()
+
+
+def test_a_commit_predating_the_services_staging_support_is_not_gateable(monkeypatch):
+    """The era filter. Such a commit deploys prod-shaped config to a cluster that cannot take
+    it and comes back REJECTED, which has no honest triage answer — it is neither a gate
+    misfire nor a defect in the commit — so it would block the verdict forever."""
+    monkeypatch.setattr(
+        bf,
+        "changed_paths",
+        lambda _sha: ["ansible/roles/k8s/freshrss/templates/deployment.yaml.j2"],
+    )
+    monkeypatch.setattr(bf, "staged_services_at", lambda _sha: {"traefik"})
+    assert bf.gateable_services("x") == set()
+
+
+def test_the_era_filter_reads_the_inventory_at_that_commit(monkeypatch):
+    """Rejecting half: the filter must come from the commit's own inventory, not today's."""
+    monkeypatch.setattr(
+        bf,
+        "run_git",
+        lambda *_a: "containers_list:\n  - name: traefik\n  - name: freshrss\n",
+    )
+    assert bf.staged_services_at("x") == {"traefik", "freshrss"}
+
+
+def test_a_commit_before_the_staging_inventory_existed_stages_nothing(monkeypatch):
+    def missing(*_a):
+        raise bf.subprocess.CalledProcessError(128, "git")
+
+    monkeypatch.setattr(bf, "run_git", missing)
+    assert bf.staged_services_at("x") == set()
+
+
+# ── the gate checkout only fast-forwards ─────────────────────────────────────────────────
+
+
+def _plan(*shas):
+    return [(sha, "subject", {"freshrss"}) for sha in shas]
+
+
+def test_a_commit_the_gate_checkout_has_passed_is_unrunnable():
+    """The remote assert refuses a SHA that is not HEAD after the merge, so planning one is
+    planning a false failure. Catching it here turns a wasted run into a message naming the
+    reset that would make the window runnable."""
+    stale = bf.unrunnable(
+        _plan("old"), "head", ancestor_check=lambda sha, _of: sha == "old"
+    )
+    assert stale == ["old"]
+
+
+def test_a_commit_ahead_of_the_gate_checkout_is_runnable():
+    assert bf.unrunnable(_plan("new"), "head", ancestor_check=lambda *_a: False) == []
+
+
+# ── the ledger ───────────────────────────────────────────────────────────────────────────
+
+
+def test_the_ledger_carries_earlier_runs_forward(tmp_path):
+    """A backfill is a one-shot — the gate's tree ends it at the newest planned commit — so a
+    streak that only counted one invocation could never reach the required length."""
+    path = tmp_path / "runs.jsonl"
+    path.write_text(
+        "\n".join(json.dumps(bf.asdict(_run(bf.OK))) for _ in range(3)) + "\n"
+    )
+    assert bf.clean_streak(bf.load_ledger(path)) == 3
+
+
+def test_a_missing_ledger_starts_from_nothing(tmp_path):
+    assert bf.load_ledger(tmp_path / "absent.jsonl") == []
 
 
 def test_the_subset_comes_from_staging_gate_rather_than_a_local_copy():
