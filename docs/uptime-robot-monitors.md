@@ -15,28 +15,43 @@ Changing anything below means opening <https://dashboard.uptimerobot.com> and ed
 
 ## What is configured
 
-**Four monitors are live**, confirmed by the account holder on 2026-08-30. All four alerted on
-that morning's restart.
+**Two monitors, live since 2026-08-30.** Both confirmed up by the account holder that day.
 
-| Monitor | Target | Type |
-|---|---|---|
-| Auth Keyword | `auth.daniel-hunter.com` | Keyword |
-| Jellyfin Monitor | Jellyfin's public hostname | HTTP |
-| Home Assistant Keyword | Home Assistant's public hostname | Keyword |
-| Littlelink | `www.daniel-hunter.com` | Keyword |
+| Monitor | Target | Type | Proves |
+|---|---|---|---|
+| Auth Keyword | `https://auth.daniel-hunter.com/api/health` | Keyword `"status":"OK"` | DNS, Cloudflare, Traefik, TLS and Authelia — the single sign-on gate every authed service depends on |
+| Jellyfin Monitor | Jellyfin's public hostname | HTTP | the house is reachable from the internet for the one service whose remote use is the point |
 
-Fill in the exact URLs, keywords and intervals from the console the next time you are in it — an
+Record the exact Jellyfin URL and interval here the next time you are in the console — an
 un-auditable monitor is only marginally better than no monitor.
 
-### The recorded disaster-recovery backstop is not in that list
+**Two were retired the same day**, `Littlelink` and `Home Assistant Keyword`. Both probed through
+the same Traefik edge as the two above and so reported nothing the edge probe does not, and both
+keep a 60-second on-prem Kuma tile (`k3s littlelink`, `k3s Home Assistant`). The reasoning is under
+*What was collapsed, and why* below; the 2026-08-30 restart is what prompted it, when four monitors
+sent four alerts for one 8m35s outage.
+
+### Consider aiming the Jellyfin monitor at its health endpoint
+
+Measured 2026-08-30, `https://jellyfin.daniel-hunter.com/` answers **302** to `web/`, which
+resolves to 200. That is Jellyfin's own redirect, not an auth gate — Uptime Robot counts a 302 as
+up, so a plain HTTP monitor there is honest today.
+
+`https://jellyfin.daniel-hunter.com/health` returns `Healthy` with HTTP 200, and a keyword monitor
+on `Healthy` is strictly better: it survives a change to Jellyfin's root redirect, and it asserts
+the application answered rather than that something returned a status code. Same reasoning as the
+auth monitor, and it makes the pair symmetrical.
+
+### The recorded disaster-recovery backstop is not among them
 
 `docs/kopia-disaster-recovery.md` and `docs/longhorn-disaster-recovery.md` both name monitor
 `803270234`, probing `https://homepage.daniel-hunter.com`, as the ONE backstop for a total
-in-house monitoring death. It is not among the four live monitors.
+in-house monitoring death. It is not among the two live monitors, and was not among the four that
+preceded them.
 
 Two possibilities, and they need different actions:
 
-- **It was aimed somewhere else at some point** and is now one of the four under a different name — most
+- **It was aimed somewhere else at some point** and is now one of the live monitors under a different name — most
   plausibly `Auth Keyword`. Then the DR docs are describing the right monitor by the wrong URL,
   and both need correcting to match.
 - **It was deleted.** Then the documented backstop has not existed for some unknown period, and
@@ -45,9 +60,9 @@ Two possibilities, and they need different actions:
 Check the monitor id in the console before trusting either DR doc. This is exactly the failure
 the top of this file warns about: nothing in the repo can tell which of the two happened.
 
-## Why one restart produced four alerts
+## Why one restart produced four alerts (the 2026-08-30 event)
 
-All four sit behind the same Traefik ingress, so they do not report four facts. They report one:
+All four sat behind the same Traefik ingress, so they did not report four facts. They reported one:
 the edge was not answering.
 
 Measured on 2026-08-30 — hosts went down at 07:36:31, Traefik's pod reached Ready at 07:43:57,
@@ -74,14 +89,13 @@ concluding this plane cannot be quieted — but it is a subscription decision, n
 
 Which leaves one lever that works on the plan in use today.
 
-**Run fewer monitors.** Four probes through one ingress buy no coverage one of them does not
-already have; what they buy is four notifications per edge event. Which four become which two is
-below, after the fact that decides it.
+**Run fewer monitors**, which is what was done. Four probes through one ingress buy no coverage
+one of them does not already have; what they buy is four notifications per edge event.
 
-## None of the four sits behind Authelia
+## None of the four sat behind Authelia
 
-Worth stating because the opposite is the natural assumption. From `containers_list` in
-`ansible/inventory/host_vars/daniel-box.yml`:
+Worth stating because the opposite is the natural assumption, and it is what decided which two
+survived. From `containers_list` in `ansible/inventory/host_vars/daniel-box.yml`:
 
 | Monitor | Host | `use_authelia` | What a probe gets |
 |---|---|---|---|
@@ -95,29 +109,29 @@ live. An Uptime Robot probe there counts Authelia's 302 as up, so it proves the 
 and nothing beyond it: the weakest possible check, and the trap already recorded in
 `docs/kopia-disaster-recovery.md`. If the backstop is restored, do not restore it there.
 
-## What to collapse to
+## What was collapsed, and why
 
-**Two monitors, from four.** Every one of these services already has an on-prem Kuma tile at a
-60-second interval — `k3s Authelia Portal`, `k3s littlelink`, `k3s Home Assistant`,
+**Four monitors became two on 2026-08-30.** Every one of the four services already held an on-prem
+Kuma tile at a 60-second interval — `k3s Authelia Portal`, `k3s littlelink`, `k3s Home Assistant`,
 `k3s Jellyfin (VIP)`. Kuma answers whether the service is healthy. The only thing Uptime Robot
 adds that none of them can is **whether the outside world can reach the house** — DNS, Cloudflare,
 the public route, the WAN link. That is one fact, and it was being reported four times.
 
-1. **Keep `Auth Keyword` as the edge probe**, aimed at Authelia's health API — see the next
-   section for the URL and keyword. It exercises DNS, Cloudflare, Traefik, TLS and Authelia in one
-   check, and Authelia is the single sign-on gate every authed service depends on.
-2. **Keep `Jellyfin Monitor`.** Jellyfin is the one service whose *external* reachability is the
-   point — streaming from outside the house — so "reachable from the internet" is a distinct fact
-   for it rather than a second copy of the edge's.
-3. **Delete `Littlelink` and `Home Assistant Keyword`.**
+- **`Auth Keyword` stayed, as the edge probe**, aimed at Authelia's health API. It exercises DNS,
+  Cloudflare, Traefik, TLS and Authelia in one check, and Authelia is the single sign-on gate every
+  authed service depends on.
+- **`Jellyfin Monitor` stayed.** Jellyfin is the one service whose *external* reachability is the
+  point — streaming from outside the house — so "reachable from the internet" is a distinct fact
+  for it rather than a second copy of the edge's.
+- **`Littlelink` and `Home Assistant Keyword` were deleted.**
 
-**What that gives up, stated plainly:** if a single service's *public* route breaks while the edge
-stays healthy, nothing external notices any more. That is a narrow case — every route is rendered
-from the same `ingressroute.yml.j2` macro, so they break together far more often than singly — and
-both dropped services keep their 60-second on-prem tile. Jellyfin is the exception kept precisely
+**What that gave up, stated plainly:** if a single service's *public* route breaks while the edge
+stays healthy, nothing external notices. That is a narrow case — every route is rendered from the
+same `ingressroute.yml.j2` macro, so they break together far more often than singly — and both
+dropped services keep their 60-second on-prem tile. Jellyfin is the exception kept precisely
 because remote use is what it is for.
 
-A restart then costs two Uptime Robot alerts instead of four.
+A restart now costs two Uptime Robot alerts instead of four.
 
 ## The keyword for the auth monitor
 
