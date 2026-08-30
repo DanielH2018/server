@@ -86,6 +86,47 @@ def _sha(path: Path) -> str:
     ).stdout.split()[0]
 
 
+def _old_repo(tmp_path, permissive_system_config=False):
+    """A one-commit repo dated 2020, and the env that reproduces it. Returns (repo, env).
+
+    The env pins every git config scope the fixture does not own, because the ownership tests
+    below are decided by exactly those scopes. A `safe.directory = *` in the SYSTEM config makes
+    git accept any repo, which suppresses the refusal those tests are built on — that is not
+    hypothetical, it is how this pair failed on the GitHub runner while passing on a host with
+    no /etc/gitconfig. `permissive_system_config` reproduces the runner deliberately, so the
+    neutralisation has a test of its own rather than being an unproven precaution.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    system_config = tmp_path / "gitconfig.system"
+    system_config.write_text("[safe]\n\tdirectory = *\n")
+    global_config = tmp_path / "gitconfig.global"
+    global_config.write_text("")
+    env = {
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@e",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@e",
+        "GIT_AUTHOR_DATE": "2020-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2020-01-01T00:00:00Z",
+        "PATH": "/usr/bin:/bin",
+        "HOME": str(tmp_path),
+        "GIT_CONFIG_SYSTEM": str(system_config),
+        "GIT_CONFIG_GLOBAL": str(global_config),
+    }
+    if not permissive_system_config:
+        env["GIT_CONFIG_NOSYSTEM"] = "1"
+    subprocess.run(["git", "init", "-q", str(repo)], check=True, env=env)
+    (repo / "f").write_text("x")
+    subprocess.run(["git", "-C", str(repo), "add", "f"], check=True, env=env)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-q", "-m", "old", "--no-gpg-sign"],
+        check=True,
+        env=env,
+    )
+    return repo, env
+
+
 # ── arm 3: the render-staleness arm, the one M-10 is about ────────────────────────────────────
 
 
@@ -188,26 +229,7 @@ def test_the_tree_age_arm_reads_the_checkout(tmp_path):
     does not refresh that tree — daniel-server was 39 commits behind on 2026-08-17. A stale
     checkout makes the stamp and the template agree, so the arm reads green exactly when the
     host is furthest behind. The age is reported so that cannot pass unnoticed."""
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    env = {
-        "GIT_AUTHOR_NAME": "t",
-        "GIT_AUTHOR_EMAIL": "t@e",
-        "GIT_COMMITTER_NAME": "t",
-        "GIT_COMMITTER_EMAIL": "t@e",
-        "GIT_AUTHOR_DATE": "2020-01-01T00:00:00Z",
-        "GIT_COMMITTER_DATE": "2020-01-01T00:00:00Z",
-        "PATH": "/usr/bin:/bin",
-        "HOME": str(tmp_path),
-    }
-    subprocess.run(["git", "init", "-q", str(repo)], check=True, env=env)
-    (repo / "f").write_text("x")
-    subprocess.run(["git", "-C", str(repo), "add", "f"], check=True, env=env)
-    subprocess.run(
-        ["git", "-C", str(repo), "commit", "-q", "-m", "old", "--no-gpg-sign"],
-        check=True,
-        env=env,
-    )
+    repo, env = _old_repo(tmp_path)
     script = tmp_path / "age.sh"
     script.write_text(
         f"set -uo pipefail\nREPO_DIR={repo}\nsource {_LIB}\nsetup_drift_tree_age_days\n"
@@ -234,6 +256,79 @@ def test_an_unreadable_checkout_is_a_fault_not_a_pass(tmp_path):
     assert "cannot read the checkout" in text and "STATUS=down" in text, (
         "the check must turn an unreadable checkout into a DOWN, not a silent green"
     )
+
+
+# ── the arm under the uid it actually runs as ─────────────────────────────────────────────────
+#
+# The two tests above run git as the user that owns the fixture, which is the precise reason
+# they were green while the arm was dead. The cron runs as root against an ubuntu-owned
+# checkout, git refuses on dubious ownership, and `2>/dev/null` hides the reason — so every
+# real run reported "cannot read the checkout" and the tile sat DOWN from the day it shipped.
+# GIT_TEST_ASSUME_DIFFERENT_OWNER=1 is git's own hook for forcing that path without a second
+# uid, so the pair below can run unprivileged in CI.
+
+
+def test_a_permissive_system_gitconfig_defeats_the_refusal(tmp_path):
+    """Why the fixture pins GIT_CONFIG_NOSYSTEM, proven rather than asserted.
+
+    A `safe.directory = *` in the system config makes git accept a repo it would otherwise
+    refuse, so the control below reports no refusal and the pair silently stops testing
+    anything. That is the shape of the CI failure on 2026-08-30: green on a host with no
+    /etc/gitconfig, red on the GitHub runner."""
+    repo, env = _old_repo(tmp_path, permissive_system_config=True)
+    env = {**env, "GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"}
+    done = subprocess.run(
+        ["git", "-C", str(repo), "log", "-1", "--format=%ct"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert done.returncode == 0, (
+        "a permissive system config no longer suppresses the ownership refusal, so the "
+        "GIT_CONFIG_NOSYSTEM pin in the fixture is now guarding nothing"
+    )
+
+
+def test_a_foreign_owned_checkout_refuses_a_bare_git_read(tmp_path):
+    """The CONTROL for the test below, and the red half of the pair.
+
+    Without it, asserting that the helper returns an age under GIT_TEST_ASSUME_DIFFERENT_OWNER
+    proves nothing: an env var that silently did nothing would leave that test green for the
+    same bad reason the original pair was green. This pins the simulation by showing the bare
+    read — the code as it shipped — does fail."""
+    repo, env = _old_repo(tmp_path)
+    env = {**env, "GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"}
+    done = subprocess.run(
+        ["git", "-C", str(repo), "log", "-1", "--format=%ct"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert done.returncode != 0, (
+        "GIT_TEST_ASSUME_DIFFERENT_OWNER no longer forces the dubious-ownership refusal, so "
+        "the test below is not exercising the failure it claims to cover"
+    )
+    assert "dubious ownership" in done.stderr
+
+
+def test_the_tree_age_arm_reads_a_foreign_owned_checkout(tmp_path):
+    """The accept half: under the same refusal the helper must still return an age.
+
+    This is the arm as the cron runs it. It fails against the pre-2026-08-30 helper, which
+    called git with no safe.directory exception."""
+    repo, env = _old_repo(tmp_path)
+    env = {**env, "GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"}
+    script = tmp_path / "age.sh"
+    script.write_text(
+        f"set -uo pipefail\nREPO_DIR={repo}\nsource {_LIB}\nsetup_drift_tree_age_days\n"
+    )
+    age = subprocess.run(
+        ["bash", str(script)], capture_output=True, text=True, check=True, env=env
+    ).stdout.strip()
+    assert age, (
+        "the arm reported no age at all — the ownership refusal is still fatal to it"
+    )
+    assert int(age) > 1800, "a 2020 commit must read as thousands of days old"
 
 
 # ── wiring: the halves that have to agree across four files ───────────────────────────────────

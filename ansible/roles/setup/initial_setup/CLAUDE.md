@@ -140,6 +140,16 @@ while daniel-server renders the entire UPS shutdown chain ([[nut_host]]). Confir
   stamp and the template agree, so the arm would read green exactly when the host is furthest
   behind. Past `setup_drift_tree_max_days` (14) the age is its own DOWN; an unreadable checkout
   is a DOWN too, never a pass.
+
+  **That third arm reads the tree with `git -c safe.directory="$REPO_DIR"`, and the exception is
+  load-bearing.** The cron runs as root against a checkout owned by `sys_user`, which is exactly
+  git's dubious-ownership case, so a bare `git log` exits non-zero and the arm reports "cannot
+  read the checkout" on every run. It did: the tile was DOWN from the arm's first cron run
+  (2026-08-30 07:50) until this fix. The 2026-08-29 hand-run that verified the arm ran as
+  `ubuntu` and passed, which is the whole shape of the miss — **verify a cron arm as the user
+  cron runs it, not as yourself.** `ansible/tests/test_setup_drift_check.py` now forces the
+  refusal with `GIT_TEST_ASSUME_DIFFERENT_OWNER=1`, and carries a control asserting a bare read
+  still fails under it, so the accept half cannot pass because the simulation went inert.
 - Pushes the "Setup Plane Drift (agent hosts)" Kuma tile. Its token is in
   `CROSS_HOST_PUSH_TOKENS`: the cron is on daniel-server and the tile deploys from daniel-box, so
   no single `rotate --deploy` can move both halves.

@@ -108,9 +108,17 @@ setup_drift_scan() {
 # user, and fetching would write root-owned objects into it. Age of HEAD is the signal available
 # without a network call or a write, and in a repo that takes commits most days it tracks
 # behind-ness closely enough to say "stop trusting the arms above".
+#
+# `-c safe.directory`, and why the arm was dead from the day it shipped. Running as root against
+# an ubuntu-owned checkout trips git's dubious-ownership refusal, so `git log` exited non-zero,
+# the `2>/dev/null` swallowed the reason, and every cron run reported "cannot read the checkout"
+# — a DOWN naming the tree rather than the ownership. The hand-run that verified this arm on
+# 2026-08-29 ran as ubuntu and passed; the first real cron run, on 2026-08-30 07:50, did not.
+# Passed on the command line rather than written to /etc/gitconfig or the repo: the exception
+# belongs to this one read, and this function is explicitly the half that writes nothing.
 setup_drift_tree_age_days() {
   local head_epoch now_epoch
-  head_epoch=$(git -C "$REPO_DIR" log -1 --format=%ct 2>/dev/null) || return 1
+  head_epoch=$(git -c safe.directory="$REPO_DIR" -C "$REPO_DIR" log -1 --format=%ct 2>/dev/null) || return 1
   [[ -n "$head_epoch" ]] || return 1
   now_epoch=$(date +%s)
   echo $(((now_epoch - head_epoch) / 86400))
