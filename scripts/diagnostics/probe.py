@@ -99,6 +99,7 @@ from probe_storage import (
     run_b2_longhorn,
     run_b2_record,
     run_b2_spend,
+    run_longhorn_blocks,
 )
 
 
@@ -245,6 +246,16 @@ def _build_parser():
     b2r.add_argument("--class-b", type=int, default=0, dest="class_b")
     b2r.add_argument("--class-c", type=int, default=0, dest="class_c")
     b2r.add_argument("--note", default="")
+    lb = sub.add_parser(
+        "longhorn-blocks",
+        help="census live Longhorn volumes by tier and backup block size; exit 1 when a "
+        "weekly-shard volume is not on 16 MiB blocks. Reads the cluster, spends no B2.",
+    )
+    lb.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="print the kubectl call without making it",
+    )
     pi = sub.add_parser("pi", help="Pi glances API")
     pi.add_argument("subpath", help="e.g. fs, quicklook, mem, cpu")
     ct = sub.add_parser(
@@ -416,6 +427,7 @@ def main(argv=None):
         "b2-longhorn": run_b2_longhorn,
         "b2-budget": run_b2_budget,
         "b2-spend": run_b2_spend,
+        "longhorn-blocks": run_longhorn_blocks,
         "b2-record": run_b2_record,
         "ha-state": run_ha_state,
         "monitors": run_monitors,

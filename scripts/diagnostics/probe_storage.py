@@ -682,3 +682,104 @@ def run_b2_longhorn(ns):
     text, code = format_longhorn_summary(parse_longhorn_listing(lines))
     print(text)
     return code
+
+
+# --- longhorn-blocks: is every B2-tier volume on 16 MiB blocks? --------------------------------
+
+# 16 MiB. The migration's whole point: it cuts B2 prune, backup and restore cost ~8x, and
+# `default-backup-block-size` is IMMUTABLE per volume, so only volumes created after the change
+# get it. That is why this is a census of live state rather than a setting to read once.
+LONGHORN_WEEKLY_BLOCK_BYTES = 16 * 1024 * 1024
+
+_RECURRING_GROUP_PREFIX = "recurring-job-group.longhorn.io/"
+
+
+def volume_tier_census(volumes):
+    """Group Longhorn Volume CRs by RecurringJob group, target and backup block size.
+
+    The GROUP decides the tier, not `spec.backupTargetName`. `default` is literally the default
+    target name, so every volume that was never moved to another target reports it — including
+    the ones no job selects at all. Grouping by target alone therefore reads 18 unbacked
+    volumes as members of the B2 tier, which is the same trap
+    `seed-backups-do-not-count-as-rotation-coverage` records on the coverage side.
+    """
+    rows = {}
+    for item in (volumes or {}).get("items", []):
+        spec = item.get("spec") or {}
+        labels = (item.get("metadata") or {}).get("labels") or {}
+        groups = sorted(
+            key[len(_RECURRING_GROUP_PREFIX) :]
+            for key in labels
+            if key.startswith(_RECURRING_GROUP_PREFIX)
+        )
+        key = (
+            ",".join(groups) or "-",
+            spec.get("backupTargetName") or "-",
+            str(spec.get("backupBlockSize") or "-"),
+        )
+        rows.setdefault(key, []).append((item.get("metadata") or {}).get("name", "?"))
+    return rows
+
+
+def weekly_volumes_off_block_size(rows, expected=LONGHORN_WEEKLY_BLOCK_BYTES):
+    """Names of weekly-shard volumes NOT on the expected block size.
+
+    Only `weekly-backup-*` is asserted. `no-backup` volumes are unconstrained — nothing backs
+    them up, so their block size cannot cost anything — and the R2/daily volumes are a recorded
+    exception, immutable in place and not worth recreating.
+    """
+    offenders = []
+    for (group, _target, block), names in rows.items():
+        if not group.startswith("weekly-backup-"):
+            continue
+        if block != str(expected):
+            offenders.extend(f"{n} ({group}, blockSize={block})" for n in names)
+    return sorted(offenders)
+
+
+def format_block_census(rows, expected=LONGHORN_WEEKLY_BLOCK_BYTES):
+    """Render the census, and fail when a weekly-shard volume is off the expected size."""
+    lines = []
+    for (group, target, block), names in sorted(rows.items()):
+        mib = int(block) // (1024 * 1024) if block.isdigit() else "?"
+        lines.append(
+            f"  group={group:<20} target={target:<8} block={mib}MiB  count={len(names)}"
+        )
+    offenders = weekly_volumes_off_block_size(rows, expected)
+    if offenders:
+        lines.append("")
+        lines.append(
+            f"FAIL: {len(offenders)} weekly-shard volume(s) are not on "
+            f"{expected // (1024 * 1024)} MiB blocks. Block size is immutable per volume, so "
+            "the fix is migrate_volume_block_size.yml followed by a seed backup:"
+        )
+        lines.extend(f"    {o}" for o in offenders)
+        return "\n".join(lines), 1
+    lines.append("")
+    lines.append(
+        f"OK: every weekly-shard volume is on {expected // (1024 * 1024)} MiB blocks."
+    )
+    return "\n".join(lines), 0
+
+
+def run_longhorn_blocks(ns):
+    """Census live Volume CRs by tier and backup block size (read-only, spends no B2)."""
+    argv = [
+        "kubectl",
+        "-n",
+        "longhorn-system",
+        "get",
+        "volumes.longhorn.io",
+        "-o",
+        "json",
+    ]
+    if getattr(ns, "dry_run", False):
+        print(" ".join(argv))
+        return 0
+    proc = subprocess.run(argv, capture_output=True, text=True)
+    if proc.returncode != 0:
+        print(f"cannot list Longhorn volumes: {proc.stderr.strip()}")
+        return 2
+    text, code = format_block_census(volume_tier_census(json.loads(proc.stdout)))
+    print(text)
+    return code
