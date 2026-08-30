@@ -60,6 +60,12 @@ bundle is no more sensitive than the GitHub repo; the age key is the part to pro
 
 ## The external dead-man's switch (re-homed 2026-08-14; re-validate at drain close)
 
+> **UNVERIFIED as of 2026-08-30 — do not rely on this without checking the console.** The
+> account holder confirmed four live Uptime Robot monitors that day, and none of them probes
+> `homepage.daniel-hunter.com`. So monitor `803270234` was either aimed elsewhere or deleted at
+> some unrecorded point, and this section may be promising a safety net that does not exist.
+> `docs/uptime-robot-monitors.md` carries the two cases and what distinguishes them.
+
 The one backstop for a total in-house monitoring death is the external UptimeRobot monitor
 (dashboard `https://dashboard.uptimerobot.com/monitors/803270234`, probing
 `https://homepage.daniel-hunter.com`). Recorded here because an external SaaS can't be

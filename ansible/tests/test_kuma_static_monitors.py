@@ -16,6 +16,7 @@ the filenames — must stay unique.
 """
 
 import json
+import re
 
 import yaml
 from jinja2 import Environment, FileSystemLoader
@@ -239,6 +240,93 @@ EMAIL_TIER = {
     "UPS Battery Health",
     "Discord Delivery",
 }
+
+
+BRIDGE_ENV_SECRET = ANSIBLE / "roles/k8s/monitor-bridge/templates/env-secret.yaml.j2"
+
+# The bridge loop's own cadence, from the same env-secret the pushes are declared in. A push
+# monitor's window has to be a multiple of the cadence that feeds it, so reading both from the
+# bridge is what keeps kuma_bridge_push_interval derived rather than picked.
+BRIDGE_LOOP_INTERVAL_S = 300
+
+
+def _bridge_push_tokens() -> set[str]:
+    """The push-token variable names monitor-bridge itself pushes, read from its env-secret.
+
+    Derived, not listed: four monitors carry a `monitor_bridge_*` token name while being fed by
+    something else entirely (CrowdSec Home Allowlist moved to a cron on daniel-box, and the two
+    Pi monitors and Arr Auto-Block never were bridge checks). A hand-kept list here would put
+    those on the bridge's heartbeat window and relax a tile whose feeder runs on another clock.
+    """
+    return set(
+        re.findall(r"\{\{ ([a-z0-9_]+_push_token) \}\}", BRIDGE_ENV_SECRET.read_text())
+    )
+
+
+def _monitor_tokens() -> dict[str, str]:
+    """monitor name -> the push-token variable the template renders into it."""
+    text = TEMPLATE.read_text()
+    found = {}
+    for name, token in re.findall(
+        r'"name": "([^"]+)".*?"push_token": "\{\{ ([a-z0-9_]+) \}\}"', text
+    ):
+        found[name] = token
+    return found
+
+
+def test_bridge_push_monitors_share_one_interval():
+    # Every tile the bridge feeds must take its heartbeat window from kuma_bridge_push_interval,
+    # so widening the window after the 2026-08-30 restart is one edit rather than 34. A new bridge
+    # check that hardcodes an interval reads as covered while sitting on the old, tighter window —
+    # which is the flap this variable exists to stop.
+    bridge_tokens = _bridge_push_tokens()
+    assert bridge_tokens, "no push tokens found in the bridge env-secret"
+    tokens = _monitor_tokens()
+    want = ROLE_DEFAULTS["kuma_bridge_push_interval"]
+    off = {
+        name: e["interval"]
+        for name, e in ((n, e) for n, e in _entities().items())
+        if e["type"] == "push"
+        and tokens.get(e["name"]) in bridge_tokens
+        and e["interval"] != want
+    }
+    assert not off, "bridge-fed monitors not on kuma_bridge_push_interval: %s" % off
+
+
+def test_non_bridge_push_monitors_keep_their_own_interval():
+    # The REJECT half. A guard that only asserted "every bridge tile uses the variable" would pass
+    # just as happily with the non-bridge tiles swept onto it too, which is the mistake it is here
+    # to prevent — their feeders are crons on other cadences, not the 300s loop.
+    #
+    # Asserted against the TEMPLATE, not the rendered interval: eight non-bridge monitors already
+    # sit at 1200 for their own reasons, so comparing rendered numbers would call a coincidence a
+    # violation. What matters is whether a monitor is WIRED to the variable — that is what makes a
+    # future change to kuma_bridge_push_interval move it.
+    bridge_tokens = _bridge_push_tokens()
+    swept = {
+        name
+        for name, token in re.findall(
+            r'"name": "([^"]+)", "interval": \{\{ kuma_bridge_push_interval \}\}.*?'
+            r'"push_token": "\{\{ ([a-z0-9_]+) \}\}"',
+            TEMPLATE.read_text(),
+        )
+        if token not in bridge_tokens
+    }
+    assert not swept, (
+        "non-bridge monitors wired to the bridge's heartbeat window: %s" % sorted(swept)
+    )
+
+
+def test_bridge_push_interval_is_a_multiple_of_the_loop():
+    # The window must be a whole number of bridge cycles, and must tolerate more than one missed
+    # push — at exactly 2x it is back to the 600s that flapped on 2026-08-30.
+    want = ROLE_DEFAULTS["kuma_bridge_push_interval"]
+    assert want % BRIDGE_LOOP_INTERVAL_S == 0, (
+        "%s is not a whole number of %ss bridge cycles" % (want, BRIDGE_LOOP_INTERVAL_S)
+    )
+    assert want >= 3 * BRIDGE_LOOP_INTERVAL_S, (
+        "%s tolerates fewer than two missed pushes" % want
+    )
 
 
 def test_email_tier_membership_is_exactly_declared():

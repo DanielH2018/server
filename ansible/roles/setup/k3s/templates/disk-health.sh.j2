@@ -37,6 +37,21 @@ if [[ -z "$DANIEL_BOX_DISK_PUSH_TOKEN" ]]; then
   exit 0
 fi
 PUSH_URL="https://${KUMA_HOST}/api/push/${DANIEL_BOX_DISK_PUSH_TOKEN}"
+
+# Skip the first run after a boot, same reasoning as its */10 sibling longhorn-backup-health:
+# this feeds the daniel-box-disk-health dead-man, which sends `/fail` on a failed run and so
+# pages immediately regardless of its configured grace.
+#
+# The Kuma beat still goes, and that is why the guard sits AFTER PUSH_URL rather than at the top
+# of the script. The `daniel-box Disk` tile has a 1200s window against this 600s cron, so it
+# tolerates exactly one missed push — the one a silent skip would consume, leaving the tile's
+# margin decided by cron jitter. Pushing `up` with a skip message keeps the heartbeat alive
+# without claiming a reading, the same thing run_once does for a gated bridge check.
+if boot_grace_active {{ k3s_health_cron_boot_grace_s }} disk-health; then
+  kuma_push up "skipped — host still booting" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" disk-health
+  exit 0
+fi
+
 MAX_PCT={{ k3s_disk_max_pct }}
 
 read -r USED_PCT AVAIL_KB < <(df -P / | awk 'NR==2 { sub("%","",$5); print $5, $4 }')

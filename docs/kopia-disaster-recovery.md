@@ -156,6 +156,13 @@ Scrape-Targets monitor flags this if you miss it.
   backstop un-auditable. **Record the configured UptimeRobot target here so it can be verified:**
   - **UptimeRobot monitor (recorded 2026-07-12):** dashboard
     `https://dashboard.uptimerobot.com/monitors/803270234`, probing `https://homepage.daniel-hunter.com`.
+  - **UNVERIFIED as of 2026-08-30.** The account holder confirmed four live monitors that day and
+    none probes `homepage.daniel-hunter.com`, so this monitor was aimed elsewhere or deleted at an
+    unrecorded point. Check the console before relying on it. This is the un-auditability the
+    paragraph above predicted, arriving. `docs/uptime-robot-monitors.md` holds the current set and
+    the replacement edge probe (`auth.daniel-hunter.com/api/health`, keyword `"status":"OK"`),
+    which answers the "must not be a generic Traefik-served URL" requirement above better than the
+    Authelia-gated 302 did.
   - **KNOWN RESIDUAL — operator-accepted 2026-07-12:** that target is a generic, **Authelia-gated**
     route, NOT a Kuma-served endpoint. `homepage` is `use_authelia: true`, so an external probe only
     reaches Authelia's 302 → login portal (UptimeRobot counts the 302 as "up"). This DOES back-stop a

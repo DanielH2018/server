@@ -619,6 +619,28 @@ k3s_longhorn_daily_backup_budget: 16
 k3s_disk_max_pct: 75
 k3s_disk_health_cron_minute: "*/10"
 
+# Boot grace for the */10 health crons (boot_grace_active in kuma-push-lib.sh). A cron firing
+# seconds after boot evaluates a half-started cluster and sends a healthchecks.io `/fail`, which
+# alerts immediately — the check's own grace cannot absorb it. The 2026-08-30 restart is the
+# worked example: daniel-box booted at 07:39:48, the */10 crons ran at 07:40:00, and the last pod
+# reached Ready at 07:45:06, so both `longhorn-backup-health` and `uptime-kuma-alive` paged.
+#
+# DERIVED, not chosen. Two bounds, and the value is the only round number between them:
+#   LOWER  — must exceed the worst observed boot-to-Ready, 5m18s on 2026-08-30 (07:39:48 boot,
+#            07:45:06 last pod Ready). Anything shorter lets the cron run against a cluster that
+#            is still coming up, which is the bug.
+#   UPPER  — must stay STRICTLY BELOW the 600s cron interval, so at most one slot is ever skipped
+#            whatever minute the host boots on. That single-miss bound is what lets the dead-men
+#            keep a grace of period + one slot instead of an open-ended one.
+# 420 < 600 satisfies the upper bound with 3 minutes of margin, and clears the lower by 102s.
+# Raising this past 599 breaks the arithmetic in docs/healthchecks-io-deadman.md — the guard test
+# in ansible/tests/test_health_cron_boot_grace.py enforces the bound rather than the number.
+#
+# NOT applied to the daily crons (manifest-prune 05:15, etcd-snapshot-offbox 02:45). For them a
+# skipped slot is a skipped DAY, which is a worse trade than the rare boot landing inside their
+# one-minute window; their 1-hour graces already cover a late run.
+k3s_health_cron_boot_grace_s: 420
+
 # Claude Code `remember` plugin log-rotation heartbeat (templates/remember-logs-health.sh.j2).
 #
 # The plugin's own rotate_logs() tars memory-*.log older than 7 days into monthly archives, but

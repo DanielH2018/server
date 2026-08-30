@@ -279,6 +279,11 @@ B2_PROBE_APPLICATION_KEY = _env_file("B2_PROBE_APPLICATION_KEY")
 # At 1800s this is 48 calls/day flat, and detection lands within 30 min of a breach that last time
 # went 9.5 hours unactioned.
 B2_PROBE_INTERVAL_S = float(_env("B2_PROBE_INTERVAL_S", "1800"))
+# The TTL for a failure that never reached B2 (DNS, connect, timeout). Deliberately NOT
+# B2_PROBE_INTERVAL_S: the whole reason that interval is long is that a probe costs a transaction,
+# and a connection that never landed costs nothing, so the argument above does not apply to it.
+# One INTERVAL, so the next cycle re-probes and the recovery is not held back — see b2_reachable.
+B2_TRANSPORT_RETRY_S = float(_env("B2_TRANSPORT_RETRY_S", str(INTERVAL)))
 
 # B2 free-tier STORAGE headroom — the other half of the B2 budget, billed separately from the
 # transaction cap b2_reachable watches. kopia reported this as `kopia_b2_billable_bytes`; that
@@ -2357,7 +2362,9 @@ def check_loki_reachable():
     return True, "Loki reachable"
 
 
-_b2_probe = {"ts": 0.0, "ok": True, "msg": "not yet probed"}
+# `ttl` is how long THIS cached verdict is held, chosen per outcome by b2_reachable — a billed
+# answer from B2 holds B2_PROBE_INTERVAL_S, a transport failure holds B2_TRANSPORT_RETRY_S.
+_b2_probe = {"ts": 0.0, "ok": True, "msg": "not yet probed", "ttl": B2_PROBE_INTERVAL_S}
 _b2_storage = {"ts": 0.0, "ok": False, "msg": "not yet probed"}
 
 
@@ -2523,29 +2530,51 @@ def b2_authorize():
 def b2_reachable(now=None):
     """Throttled B2 reachability probe — the gate for the B2_DEPENDENT checks. (ok, msg).
 
-    Empty credentials -> disabled (stays up), like check_n8n's empty API key. BOTH outcomes are
-    cached for B2_PROBE_INTERVAL_S: unlike email_backstop, a failure must not re-probe every cycle,
-    because the failure being detected is a transaction cap and retrying would spend more of it.
-    The cached verdict is returned (and pushed) every cycle regardless, so the push monitor's
-    heartbeat stays alive and the dead-bridge watchdog isn't tripped.
+    Empty credentials -> disabled (stays up), like check_n8n's empty API key. Outcomes are cached
+    rather than re-probed every cycle: unlike email_backstop, the failure being detected is a
+    transaction cap, and retrying would spend more of the budget this check exists to watch. The
+    cached verdict is returned (and pushed) every cycle regardless, so the push monitor's heartbeat
+    stays alive and the dead-bridge watchdog isn't tripped.
+
+    The cache TTL depends on WHERE the probe failed, because only one of the two shapes costs a B2
+    transaction:
+
+      * A response from B2 — success, or an HTTPError such as the 403 carrying
+        `transaction_cap_exceeded` — reached the API and was billed. Cached for
+        B2_PROBE_INTERVAL_S (30 min), so a cap breach is not re-spent every cycle.
+      * Anything else (DNS, connect, timeout) never reached B2 and was billed nothing.
+        _get_json wraps exactly this class as RuntimeError while re-raising HTTPError untouched,
+        which is what makes the two separable here. Cached for B2_TRANSPORT_RETRY_S (one cycle).
+
+    Without that split, one transient failure pinned the gate DOWN for the full 30 minutes: on the
+    2026-08-30 restart the bridge's first cycle probed B2 before cluster egress was serving, and
+    `B2 Reachable` then read DOWN for 25 minutes against an 8m35s outage — the cache was holding
+    back the RECOVERY, not just the retry. Re-probing a connection that never landed is free, so
+    there is nothing to protect there.
 
     Module-global cache, reset on container restart, like the streak counters.
     """
     if not B2_PROBE_KEY_ID or not B2_PROBE_APPLICATION_KEY:
         return True, "B2 reachability check disabled (no credentials)"
     now = now if now is not None else time.time()
-    if now - _b2_probe["ts"] < B2_PROBE_INTERVAL_S:
+    if now - _b2_probe["ts"] < _b2_probe["ttl"]:
         return _b2_probe["ok"], "%s (checked %.0fm ago)" % (
             _b2_probe["msg"],
             (now - _b2_probe["ts"]) / 60,
         )
     try:
         ok, msg = b2_authorize()
+        ttl = B2_PROBE_INTERVAL_S
+    except urllib.error.HTTPError as e:
+        # B2 answered, so the call was billed — hold the full interval.
+        ok, msg, ttl = False, "B2 unreachable: %s" % e, B2_PROBE_INTERVAL_S
     except Exception as e:
-        ok, msg = False, "B2 unreachable: %s" % e
+        # Never reached B2, so nothing was billed — retry on the next cycle.
+        ok, msg, ttl = False, "B2 unreachable: %s" % e, B2_TRANSPORT_RETRY_S
     _b2_probe["ts"] = now
     _b2_probe["ok"] = ok
     _b2_probe["msg"] = msg
+    _b2_probe["ttl"] = ttl
     return ok, msg
 
 
