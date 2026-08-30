@@ -237,6 +237,45 @@ def test_a_missing_ledger_starts_from_nothing(tmp_path):
     assert bf.load_ledger(tmp_path / "absent.jsonl") == []
 
 
+def test_the_scheduled_form_refuses_to_replay_history_from_an_empty_ledger(
+    tmp_path, monkeypatch, capsys
+):
+    """A timer must never plan the historical window.
+
+    Those commits are ancestors of the gate's checkout, so the plan is unrunnable and the run
+    exits COULD_NOT_RUN — every hour, forever, on a host where nobody has seeded the ledger.
+    Replaying history resets that checkout first, which is an operator's decision.
+    """
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "backfill_staging_gate.py",
+            "--since-ledger",
+            "--jsonl",
+            str(tmp_path / "absent.jsonl"),
+        ],
+    )
+    assert bf.main() == bf.CONDITION_NOT_MET
+    assert "records no runs yet" in capsys.readouterr().out
+
+
+def test_that_refusal_is_not_the_could_not_run_code(tmp_path, monkeypatch):
+    """The rejecting half. COULD_NOT_RUN is not tolerated by the unit, so returning it for an
+    unseeded ledger would page hourly for a state that is merely unstarted."""
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "backfill_staging_gate.py",
+            "--since-ledger",
+            "--jsonl",
+            str(tmp_path / "absent.jsonl"),
+        ],
+    )
+    assert bf.main() != bf.COULD_NOT_RUN
+
+
 def test_the_subset_comes_from_staging_gate_rather_than_a_local_copy():
     """Pins the reuse. A fourth copy of the subset here would drift from the three that
     test_staging_subset_copies_agree.py already keeps in step."""
