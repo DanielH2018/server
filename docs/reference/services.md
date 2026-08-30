@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-08-29 06:17 UTC
-generated_sha: 41bb5baa
+generated_at: 2026-08-30 06:17 UTC
+generated_sha: 6958cef9
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 41bb5baa
 
 # Services
 
-67 service(s) declared across 3 host(s).
+66 service(s) declared across 3 host(s).
 
 
 ## daniel-box
@@ -78,13 +78,12 @@ generated_sha: 41bb5baa
 
 ## daniel-pi
 
-7 service(s).
+6 service(s).
 
 | Service | Platform | Route | Auth | Backup tier | Auto-deploy |
 |---|---|---|---|---|---|
 | autoheal | docker | LAN-direct (no Traefik route) | none (public/no-auth) | n/a (Docker/Pi, not Longhorn-backed) | n/a (host has no GitOps auto-deploy path) |
 | docker-proxy | docker | LAN-direct (no Traefik route) | none (public/no-auth) | n/a (Docker/Pi, not Longhorn-backed) | n/a (host has no GitOps auto-deploy path) |
-| dozzle | docker | LAN-direct (no Traefik route) | none (public/no-auth) | n/a (Docker/Pi, not Longhorn-backed) | n/a (host has no GitOps auto-deploy path) |
 | glances | docker | LAN-direct (no Traefik route) | none (public/no-auth) | n/a (Docker/Pi, not Longhorn-backed) | n/a (host has no GitOps auto-deploy path) |
 | node-exporter | docker | LAN-direct (no Traefik route) | none (public/no-auth) | n/a (Docker/Pi, not Longhorn-backed) | n/a (host has no GitOps auto-deploy path) |
 | promtail | docker | LAN-direct (no Traefik route) | none (public/no-auth) | n/a (Docker/Pi, not Longhorn-backed) | n/a (host has no GitOps auto-deploy path) |
