@@ -116,3 +116,7 @@ hypervisor_staging_gate_lock: /var/lock/staging-gate.lock
 # deployed to daniel-box by roles/setup/gitops_deploy, which is where the gate runs from.
 hypervisor_staging_gate_dispatch_path: /usr/local/bin/staging-gate-dispatch
 hypervisor_staging_gate_pubkey_file: staging-gate.pub
+
+# The verdict-bearing half, installed here rather than executed from the gate's checkout so the
+# gate that runs is not chosen by the commit it is judging.
+hypervisor_staging_gate_runner_path: /usr/local/bin/staging-gate-run

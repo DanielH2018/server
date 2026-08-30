@@ -11,8 +11,8 @@
 # is named by ARGUMENT rather than supplied as a script body.
 #
 # WHAT THIS SCRIPT DELIBERATELY DOES NOT DO. It does no git work and takes no lock. All of
-# that lives in scripts/deploy_tools/staging_gate_remote.sh, in the gate's checkout, and this
-# script execs it. Two reasons, and the second is the one that is easy to get wrong:
+# that lives in the runner this script execs — staging_gate_remote.sh, pre-deployed by the same
+# role. Two reasons, and the second is the one that is easy to get wrong:
 #
 #   1. One copy. Prep logic here as well would be a second implementation to keep in step, and
 #      the two would drift silently because a gate failure is a NO_VERDICT, which is quiet.
@@ -22,12 +22,15 @@
 #      Inheriting fd 9 across the exec would happen to work, but only because the fd is not
 #      CLOEXEC, which is not a thing to rely on.
 #
-# WHAT LAGS, AND WHY THAT IS SAFE. This script is pre-deployed, so it can be older than the SHA
-# being gated. It reads nothing from the tree, so the only thing that can lag is the validation
-# above, and stale validation can only refuse — never approve. Once it execs, everything after
-# that point comes from the checkout: the prep, and the deploy wrapper it runs, whose exit code
-# becomes the verdict. The tree under test therefore governs the verdict, which is the guarantee
-# that piping the script over ssh used to provide.
+# WHAT LAGS, AND WHY THAT IS SAFE. Both this script and the runner are pre-deployed, so both
+# can be older than the SHA being gated. Neither reads anything from the tree, so what can lag
+# is the validation here and the prep there — and stale prep, like stale validation, can only
+# refuse. What the tree under test still governs is the verdict itself: the runner cds into the
+# checkout and runs its deploy.sh, whose exit code is returned untouched.
+#
+# The runner used to be exec'd out of the checkout instead, which made the gate's own mechanism
+# a property of the commit under test — a commit could gate itself with its own edited copy of
+# the gate, and rewinding that checkout removed the runner outright.
 set -uo pipefail
 
 # Nothing here reads stdin, and ssh forwards it regardless of `command=`. Closing it means a
@@ -106,7 +109,7 @@ main() {
     exit 70
   }
 
-  exec ./scripts/deploy_tools/staging_gate_remote.sh "$SHA" "$TAGS"
+  exec {{ hypervisor_staging_gate_runner_path }} "$SHA" "$TAGS"
 }
 
 # Sourcing this file defines the validator without running the gate, which is what the test

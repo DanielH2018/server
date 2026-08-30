@@ -94,10 +94,10 @@ GATE_OPERATION = "gate"
 # the request never left this host.
 IDENTITY_UNUSABLE = 72
 
-# `command not found` on the far side. If the restricted key did not authenticate, ssh falls back
-# to the operator's key, whose session has no forced command — so the remote shell tries to run
-# the literal string `gate <sha> <tags>` and exits 127. There is no such command, which makes
-# this a reliable signal that authentication silently used the wrong identity.
+# `command not found` on the far side, from either of two causes: the restricted key did not
+# authenticate, so a login shell tried to run the literal request string; or the dispatcher ran
+# and its exec target was missing. Both mean the gate could not be asked. It is NOT a reliable
+# signal about the identity on its own — see the message at the bottom of consult().
 SHELL_FALLBACK = 127
 
 # Everything that means "the gate could not be asked". Two of these are local refusals that never
@@ -246,14 +246,17 @@ def run_gate(sha: str, tags: str, timeout: float) -> int:
         return SSH_FAILURE
 
     if completed.returncode == SHELL_FALLBACK:
-        # The far side had no forced command, so it tried to run the request as a shell command
-        # and found no `gate` binary. That means ssh authenticated as somebody else — almost
-        # certainly the operator — which is the silent regression this switch exists to prevent.
+        # 127 has TWO causes and this message used to assert the first one. Measured 2026-08-30
+        # it was the second: the key authenticated, the forced command ran, and the dispatcher's
+        # exec target was missing — and the message sent an operator to audit authorized_keys.
+        # Name both, and give the one command that tells them apart.
         print(
-            f"staging-gate: the far side ran the request as a shell command (exit "
-            f"{SHELL_FALLBACK}), so the restricted key did NOT authenticate. Check that "
-            f"{IDENTITY} is the key daniel-server authorizes and that its forced command is "
-            f"installed; do not treat this as a verdict.",
+            f"staging-gate: the far side exited {SHELL_FALLBACK} (command not found), which is "
+            f"NOT a verdict. Either the dispatcher's exec target is missing on daniel-server, "
+            f"or the restricted key did not authenticate and a login shell tried to run the "
+            f"request as a command. `ssh -v -i {IDENTITY} daniel-server true` tells them apart: "
+            f"a 'key options: command' line means the key and its forced command are fine, so "
+            f"the exec target is what to look at.",
             file=sys.stderr,
         )
     return completed.returncode
