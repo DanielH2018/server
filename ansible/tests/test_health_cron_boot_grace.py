@@ -92,6 +92,39 @@ def test_the_frequent_crons_call_the_guard():
         )
 
 
+def test_a_guarded_cron_still_beats_its_kuma_tile():
+    # The half that is easy to miss: these scripts feed a Kuma push tile as well as a
+    # healthchecks.io dead-man, and the two have different tolerances. `k3s Longhorn Backup` and
+    # `daniel-box Disk` run a 1200s window against a 600s cron, so they tolerate exactly ONE
+    # missed push — the one a silent skip would consume, leaving the margin to cron jitter.
+    #
+    # So the guard pushes `up` with a skip message instead of exiting quietly. Asserted at the
+    # call site rather than by rendering the tile, because what breaks this is someone moving the
+    # guard back above PUSH_URL for tidiness.
+    for name in FREQUENT_SCRIPTS:
+        text = (ANSIBLE / "roles/setup/k3s/templates" / name).read_text()
+        guard = text.index("boot_grace_active {{ k3s_health_cron_boot_grace_s }}")
+        assert text.index('PUSH_URL="') < guard, (
+            f"{name}: the boot guard runs before PUSH_URL is set, so it cannot beat"
+        )
+        assert 'kuma_push up "skipped — host still booting"' in text[guard:], (
+            f"{name}: the boot guard skips the run without keeping the Kuma tile's heartbeat"
+        )
+
+
+def test_a_skipped_run_pings_no_healthchecks_slug():
+    # The other direction, and the one that would be worse. Pinging a dead-man's success URL for
+    # a run that did not happen holds the check green on no evidence — the failure the dead-man
+    # exists to catch. Silence is correct here; the grace covers it.
+    for name in FREQUENT_SCRIPTS:
+        text = (ANSIBLE / "roles/setup/k3s/templates" / name).read_text()
+        guard = text.index("if boot_grace_active")
+        skip_block = text[guard : text.index("\nfi\n", guard)]
+        assert "hc-ping" not in skip_block and "HC_" not in skip_block, (
+            f"{name}: the skip path pings healthchecks.io for a run that did not happen"
+        )
+
+
 def test_the_daily_crons_do_not():
     # Deliberate, and the reject half of the wiring pair: for a daily cron a skipped slot is a
     # skipped DAY. Their 1-hour graces already tolerate a late run.
