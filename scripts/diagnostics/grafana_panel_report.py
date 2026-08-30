@@ -66,6 +66,7 @@ FLAGGED = "flagged"
 class Verdict:
     status: str
     detail: str
+    empty: bool = False
 
     @property
     def retryable(self) -> bool:
@@ -74,6 +75,21 @@ class Verdict:
     @property
     def ok(self) -> bool:
         return self.status == OK
+
+    @property
+    def worth_renavigating(self) -> bool:
+        """Whether to load the page again before believing this.
+
+        A page that mounted and then drew NOTHING — no panel, no row — is the one verdict
+        worth a second load. Measured 2026-08-30: `crowdsec-details-per-machine` drew its 12
+        rows in 2.1s on 6 of 6 isolated loads, and drew nothing as the fourth dashboard of a
+        run in the same browser. Re-navigating cannot hide a real break, because a dashboard
+        that is actually empty is empty on every attempt and still reported.
+
+        A partial render is NOT retried: some panels drawn and some missing is a finding, and
+        loading again would just average over it.
+        """
+        return self.retryable or self.empty
 
 
 def classify(state: dict, min_headers: int = 1) -> Verdict:
@@ -120,17 +136,20 @@ def classify(state: dict, min_headers: int = 1) -> Verdict:
     where = f"(url {state.get('path')!r}, {state.get('testids')} testids)"
 
     headers = state.get("headers", 0)
+    drew_nothing = not headers and not state.get("rows", 0)
     if min_headers:
         if headers < min_headers:
             return Verdict(
                 FLAGGED,
                 f"the dashboard mounted but drew {headers} panel header(s), expected at "
                 f"least {min_headers} — panels are provisioned and not rendering {where}",
+                empty=drew_nothing,
             )
     elif not state.get("rows", 0):
         return Verdict(
             FLAGGED,
             f"a row-only dashboard mounted but drew no rows at all {where}",
+            empty=drew_nothing,
         )
 
     return Verdict(OK, f"{headers} panel header(s), {state.get('rows', 0)} row(s)")

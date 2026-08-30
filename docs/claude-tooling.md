@@ -138,6 +138,18 @@ Pin the **exact** page title when adding a service. Several apps carry their own
 Authelia (`FreshRSS` lands on `/i/`, uptime-kuma on `/dashboard`, karakeep on `/signin`), so a
 substring like `FreshRSS` also matches `Login · FreshRSS` and scores a broken app green.
 
+**The title is read back after the page settles, not taken from the navigate report.** A
+single-page app can pass through a title of its own before applying its configured one —
+homepage momentarily reads `Homepage` before `My Awesome Homepage` — and the report captures
+whichever moment load-complete caught. Reading once failed a service whose title was correct
+half a second later, and looked exactly like a rename.
+
+Two retries in `McpClient` absorb transients rather than reporting them, and
+`test_ui_smoke_helpers.py` holds a pass/fail pair for each. `evaluate` retries a reply that
+carries the echoed code and no `### Result` block; `settled_title` re-reads the title until
+it matches, then returns whatever it last saw so a genuine rename still reaches the
+assertion.
+
 ### The Grafana panel tier
 
 `test_grafana_dashboard_renders_its_panels` goes one step further for Grafana alone: it logs
@@ -161,6 +173,11 @@ Three things it separates, each of which cost a debugging session to find:
   testid count alone reads a dashboard-shaped hole as a mounted page.
 - **A row-only dashboard passes on rows.** `crowdsec-details-per-machine` is 4 panels, every
   one a `row`; it draws no panel header until a row is expanded.
+- **A dashboard that drew *nothing* gets a second load before it is reported.** Measured
+  2026-08-30: that same dashboard drew its 12 rows in 2.1s on 6 of 6 isolated loads and drew
+  nothing as the fourth dashboard of a run in the same browser. Re-navigating cannot hide a
+  real break — an empty dashboard is empty on every attempt. A **partial** render is never
+  retried: some panels drawn and some missing is the finding.
 - **`No data` is not an error.** Grafana marks an empty panel with the same testid it marks a
   broken one. Failing on the count flags every dashboard whose window is quiet — so the
   message decides. The cost is that a panel whose metric *died* also reads `No data` and

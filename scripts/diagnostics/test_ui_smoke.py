@@ -71,6 +71,14 @@ MINT_HINT = (
 )
 
 
+# Both budgets absorb a transient, not a slow load. Measured 2026-08-30: a settled title
+# arrives on the second read, and a resultless evaluate succeeded on its retry every time.
+_EVALUATE_ATTEMPTS = 3
+_EVALUATE_RETRY_INTERVAL = 0.5
+_TITLE_SETTLE_ATTEMPTS = 4
+_TITLE_SETTLE_INTERVAL = 0.75
+
+
 class McpClient:
     """A minimal JSON-RPC-over-stdio MCP client — enough to navigate and read the page."""
 
@@ -126,6 +134,55 @@ class McpClient:
             if block.get("type") == "text"
         )
         return text, bool(result.get("isError"))
+
+    def evaluate(self, js: str):
+        """Run JS in the page and return its parsed result.
+
+        **A reply with no result block is retried, not reported.** The server answers an
+        evaluate with the code it ran plus a `### Result` section, and occasionally — seen
+        on 2026-08-30, shortly after a navigation — it returns the echo alone. That is the
+        transport having a moment, not the page saying anything, so treating it as a verdict
+        fails a service that is fine.
+        """
+        last = ""
+        for attempt in range(_EVALUATE_ATTEMPTS):
+            if attempt:
+                time.sleep(_EVALUATE_RETRY_INTERVAL)
+            result = self.call(
+                "tools/call",
+                {"name": "browser_evaluate", "arguments": {"function": js}},
+            )
+            last = "\n".join(
+                block.get("text", "")
+                for block in result.get("content") or []
+                if block.get("type") == "text"
+            )
+            # Only the "### Result" block: the rest is the echoed code.
+            match = re.search(r"### Result\n(.*?)(?=\n### |\Z)", last, re.S)
+            if match:
+                value = json.loads(match.group(1).strip())
+                return json.loads(value) if isinstance(value, str) else value
+        raise AssertionError(
+            f"browser_evaluate returned no result in {_EVALUATE_ATTEMPTS} attempts:\n"
+            f"{last[:400]}"
+        )
+
+    def settled_title(self, expected: str) -> str:
+        """The page title once it stops changing, or the last one seen.
+
+        A single-page app can pass through a title of its own before applying its
+        configured one — homepage momentarily reads `Homepage` before `My Awesome
+        Homepage`, and the navigate report captures whichever moment it caught. Reading once
+        therefore fails a service whose title is correct half a second later.
+        """
+        last = ""
+        for attempt in range(_TITLE_SETTLE_ATTEMPTS):
+            if attempt:
+                time.sleep(_TITLE_SETTLE_INTERVAL)
+            last = self.evaluate("() => JSON.stringify(document.title)")
+            if last == expected:
+                return last
+        return last
 
     def close(self) -> None:
         try:
@@ -190,8 +247,15 @@ def browser():
         client.close()
 
 
-def assert_serves_ui(report, is_error, domain, service, title, path, remint):
-    """The four claims both tiers make, in the order that gives the best failure message."""
+def assert_serves_ui(
+    report, is_error, domain, service, title, path, remint, observed_title=None
+):
+    """The four claims both tiers make, in the order that gives the best failure message.
+
+    `observed_title` is the title read back after the page settled. It supersedes the one in
+    the navigate report, which is whatever the title happened to be at load-complete — an
+    app that sets its own title during hydration is still mid-change at that moment.
+    """
     assert not is_error, f"{service}: navigation reported an error:\n{report}"
     assert "auth.local." not in report, (
         f"{service}: landed on the Authelia portal, so the session cookie was not accepted. "
@@ -202,8 +266,9 @@ def assert_serves_ui(report, is_error, domain, service, title, path, remint):
         f"{service}: the route answered HTTP {status}. A 404 here usually means the pod is "
         f"mid-rollout rather than that the route is wrong — check `probe.py health {service}`."
     )
-    assert page_title(report) == title, (
-        f"{service}: expected the page titled {title!r}, got {page_title(report)!r}. "
+    seen = page_title(report) if observed_title is None else observed_title
+    assert seen == title, (
+        f"{service}: expected the page titled {title!r}, got {seen!r}. "
         f"An absent title means Traefik answered rather than the app."
     )
     assert f"Page URL: https://{service}.local.{domain}{path}" in report, (
@@ -224,6 +289,7 @@ def test_service_serves_its_own_ui(browser, domain, service, title, path):
         title,
         path,
         remint="uv run python scripts/diagnostics/ui_login.py",
+        observed_title=browser.settled_title(title),
     )
 
 
@@ -331,6 +397,7 @@ def test_two_factor_service_serves_its_own_ui(
         path,
         # A two_factor session lapses after about an hour, so this is the usual reason.
         remint="uv run python scripts/diagnostics/ui_login.py --totp <code>",
+        observed_title=two_factor_browser.settled_title(title),
     )
 
 
@@ -402,25 +469,15 @@ class GrafanaPage:
         return text.replace(self._secret, "<redacted>")
 
     def evaluate(self, js: str):
+        """The client's evaluate, with the password kept out of anything it raises.
+
+        The server echoes the JS it ran, and this tier's login inlines the credential into
+        that JS, so every failure message from here has to be scrubbed before it surfaces.
+        """
         try:
-            result = self.client.call(
-                "tools/call",
-                {"name": "browser_evaluate", "arguments": {"function": js}},
-            )
-        except (
-            AssertionError
-        ) as exc:  # the server echoes the JS it ran, password included
+            return self.client.evaluate(js)
+        except AssertionError as exc:
             raise AssertionError(self._scrub(str(exc))) from None
-        text = "\n".join(
-            block.get("text", "")
-            for block in result.get("content") or []
-            if block.get("type") == "text"
-        )
-        # Only the "### Result" block: the rest is the echoed JS.
-        match = re.search(r"### Result\n(.*?)(?=\n### |\Z)", text, re.S)
-        assert match, f"browser_evaluate returned no result:\n{self._scrub(text)[:400]}"
-        value = json.loads(match.group(1).strip())
-        return json.loads(value) if isinstance(value, str) else value
 
     def _settle_on_grafana(self) -> str:
         """Navigate to Grafana and return once the page really is Grafana.
@@ -525,7 +582,7 @@ class GrafanaPage:
                 # look like at 1.5s. Keep sampling and let the settled state be the verdict.
                 if last.ok:
                     return last
-            if not last.retryable:
+            if not last.worth_renavigating:
                 return last
         return last
 
