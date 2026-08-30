@@ -90,6 +90,7 @@ from probe_health import (
     resolve_ip,
     run_health,
     run_readonly_rbac,
+    run_vip_placement,
 )
 from probe_metrics import run_query
 from probe_monitors import run_kuma_drift, run_monitors
@@ -271,6 +272,17 @@ def _build_parser():
         action="store_true",
         help="print the can-i calls without making them",
     )
+    vp = sub.add_parser(
+        "vip-placement",
+        help="assert every ETP=Local MetalLB VIP has a Ready endpoint on the node that "
+        "announces it — exit 1 when one is stranded (the announcer DROPs its traffic while "
+        "the Service reads healthy), 2 when the read came back empty.",
+    )
+    vp.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="print the kubectl calls without making them",
+    )
     pi = sub.add_parser("pi", help="Pi glances API")
     pi.add_argument("subpath", help="e.g. fs, quicklook, mem, cpu")
     ct = sub.add_parser(
@@ -444,6 +456,7 @@ def main(argv=None):
         "b2-spend": run_b2_spend,
         "longhorn-blocks": run_longhorn_blocks,
         "readonly-rbac": run_readonly_rbac,
+        "vip-placement": run_vip_placement,
         "b2-record": run_b2_record,
         "ha-state": run_ha_state,
         "monitors": run_monitors,
