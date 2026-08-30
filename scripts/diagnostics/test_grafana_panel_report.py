@@ -85,6 +85,28 @@ def test_grafanas_chrome_without_a_dashboard_is_retryable():
     assert v.retryable
 
 
+def test_a_dashboard_that_drew_nothing_is_worth_a_second_load():
+    v = classify(RENDERED | {"headers": 0, "rows": 0}, min_headers=10)
+    assert v.status == FLAGGED, "still a finding if it persists"
+    assert v.worth_renavigating, (
+        "an empty render deserves a re-navigate before reporting"
+    )
+
+
+def test_a_partial_render_is_reported_without_retrying():
+    """The rejecting half. Some panels drawn and some missing is a finding, and loading
+    again would average over exactly the breakage the tier exists to see."""
+    v = classify(RENDERED | {"headers": 3, "rows": 4}, min_headers=10)
+    assert v.status == FLAGGED
+    assert not v.worth_renavigating
+
+
+def test_a_row_only_dashboard_that_drew_nothing_is_worth_a_second_load():
+    v = classify(ROW_ONLY | {"rows": 0}, min_headers=0)
+    assert v.status == FLAGGED
+    assert v.worth_renavigating
+
+
 def test_a_row_only_dashboard_is_clean():
     v = classify(ROW_ONLY, min_headers=0)
     assert v.status == OK, v.detail
