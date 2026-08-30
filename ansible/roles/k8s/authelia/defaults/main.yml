@@ -49,9 +49,11 @@ authelia_k8s_cookie_name: authelia_session_k8s
 
 # Its own SQLite database on its own volume. This is the slice-1 hazard named in
 # docs/archive/k3s-migration/design.md: two Authelias writing one SQLite file corrupts it for both.
-# The storage ENCRYPTION KEY is deliberately shared with the Docker instance
-# (authelia_storage) so the slice-6 cutover is a plain file copy with no re-encryption, and
-# so this adds no second `pinned` secret to the rotation registry.
+# The storage encryption key (authelia_storage) was shared with the Docker instance so the
+# slice-6 cutover could be a plain file copy with no re-encryption. That instance is gone —
+# roles/containers/archive/authelia, and Docker was uninstalled from both cluster nodes on
+# 2026-08-14 — so this role is the key's only consumer and it rotates on its own. The
+# procedure is in docs/secret-rotation.md under `pinned`; it is not a `sops set`.
 authelia_k8s_storage: 1Gi
 
 # "1", not "1.0" — see the same note in the traefik role. Kubernetes canonicalises quantities, so

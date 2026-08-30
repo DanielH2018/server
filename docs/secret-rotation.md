@@ -121,11 +121,16 @@ before you destroy the old one):
 2. **Re-key through the tool, not `sops set`** (`authelia storage encryption change-key`;
    retired instance: `kopia repository change-password`) so the data is re-anchored to the
    new value.
-3. **Prove the new value opens the data BEFORE removing anything** (an Authelia login +
-   TOTP). If this fails, the old artifact is still on disk and still works.
+3. **Prove the new value opens the data BEFORE overwriting the old one.** **Whether you still
+   hold a live fallback here depends on the tool, so check before you rely on one.** Some
+   re-key tools leave the original artifact intact, and the old value still opens it.
+   Authelia's `change-key` does not: it re-encrypts the SQLite database **in place**, so the
+   instant it succeeds the old key opens nothing and the step-1 backup is the only way back.
+   Assume in-place unless the tool documents otherwise.
 4. **Only then** `sops set` the new value and redeploy the consumer.
 5. **Verify live** (audit resets green, Kuma monitor green, a real restore/login works) — and only
-   after that delete the pre-rotation backup. If any step fails, anchored data + old value are intact.
+   after that delete the pre-rotation backup. If any step fails, restore the step-1 backup;
+   see step 3 for why the old value itself may no longer be a fallback.
 
 The failure this prevents: `sops set` first, redeploy, discover the data is now undecryptable — and
 the only value that could open it has already been overwritten. The two procedures below are concrete
@@ -138,13 +143,40 @@ instances of this discipline:
   worked example of a pinned secret leaving the registry: the anchored data is destroyed
   first, deliberately, and only then does the key go. (The `kopia_b2_*` credentials are NOT
   kopia's — they are the B2 account keys, still live as Longhorn's backup-target credential.)
-- **`authelia_storage`** — the Authelia DB encryption key. Use Authelia's migration, never a
-  raw swap (a raw swap makes the existing SQLite DB undecryptable → TOTP/sessions lost):
+- **`authelia_storage`** — the Authelia DB encryption key. It encrypts the TOTP secrets and
+  WebAuthn credentials in `/config/db.sqlite3` on the authelia Longhorn PVC. A raw swap makes
+  that database undecryptable, and code-server, n8n and longhorn are `two_factor` — so a
+  botched rotation locks those three behind a challenge nobody can satisfy until every
+  enrolment is redone. Snapshot the PVC in the Longhorn UI first.
+
+  The container reads the current key from its mounted config, so only the **new** value ever
+  reaches a command line. Run these on daniel-box, and **not from a Claude Code session** — a
+  bash-input is transcribed, and a transcribed key is the exposure this file exists to prevent:
+
   ```bash
-  kubectl -n homelab exec -it deploy/authelia -- authelia storage encryption change-key --help
+  NEW=$(openssl rand -hex 32)
+  sudo k3s kubectl -n homelab exec deploy/authelia -c authelia -- \
+    authelia storage encryption change-key -c /secrets/configuration.yml --new-encryption-key "$NEW"
+
+  # must SUCCEED — the new key opens the data
+  sudo k3s kubectl -n homelab exec deploy/authelia -c authelia -- \
+    authelia storage encryption check -c /secrets/configuration.yml --encryption-key "$NEW"
+
+  # must FAIL — the config still carries the old key, which should now open nothing
+  sudo k3s kubectl -n homelab exec deploy/authelia -c authelia -- \
+    authelia storage encryption check -c /secrets/configuration.yml
   ```
-  Back up the DB first — it lives at `/config/db.sqlite3` on the authelia Longhorn PVC
-  (take a Longhorn snapshot, or copy the file out with `kubectl cp`).
+
+  Take both halves of that pair. A `check` observed only succeeding does not show that
+  `change-key` did anything; the second command failing is the evidence that it did.
+
+  Between `change-key` and the redeploy, the database is on the new key while the running pod's
+  config still carries the old one, so TOTP verification is broken. Keep the gap short. The
+  redeploy is also a real SSO outage for everything behind the Authelia middleware, because the
+  Deployment is `replicas: 1` with `strategy: Recreate`.
+
+  Verify with a **TOTP challenge, not a login** — a password login succeeds without the storage
+  key ever being read.
 
 After any rotation, run `audit` to confirm the secret's window resets (green), and watch the
 "Secret Rotation" Kuma monitor.
