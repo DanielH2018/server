@@ -31,7 +31,60 @@ from deploy_logic import (
     rollback_volume_revert_note,
     SHARED_K8S_ROLES,
     k8s_role_paths,
+    dirty_summary,
 )
+
+
+# ── the dirty skip's journal line ───────────────────────────────────────────────────────────
+#
+# The skip itself is deliberate and healthy (operator mid-edit). What was missing is any trace
+# of it in the journal between the two throttled Discord slots: on 2026-08-30 one untracked
+# file parked the primary checkout 7 commits behind for ~40 minutes while `journalctl -t
+# gitops-deploy` read `-- No entries --`, identical to "ticked, nothing to do".
+
+
+def test_an_untracked_file_is_named_with_its_code():
+    """The case that costs the diagnosis time.
+
+    `git status --porcelain` counts untracked files, so the tree reads dirty with nothing
+    modified. The `??` code is what tells the reader that, so it has to survive into the line.
+    """
+    summary = dirty_summary("?? .claude/staging-backfill.jsonl\n")
+    assert summary == "?? .claude/staging-backfill.jsonl"
+
+
+def test_a_modified_file_keeps_its_code_and_path():
+    assert (
+        dirty_summary(" M ansible/vars/secrets.yml\n") == "M ansible/vars/secrets.yml"
+    )
+
+
+def test_several_entries_are_joined():
+    summary = dirty_summary("?? a.txt\n M b.txt\n")
+    assert summary == "?? a.txt, M b.txt"
+
+
+def test_a_rename_is_left_whole():
+    """Both halves of `old -> new` are the fact; truncating to one would misreport it."""
+    assert dirty_summary("R  old.py -> new.py\n") == "R old.py -> new.py"
+
+
+def test_a_long_list_is_truncated_with_a_count():
+    """A parked tree can be dirty by hundreds of files. One journal line, not hundreds."""
+    summary = dirty_summary("".join(f"?? f{i}.txt\n" for i in range(30)), limit=12)
+    assert summary.endswith(", +18 more")
+    assert summary.count("??") == 12
+
+
+def test_an_empty_status_does_not_render_an_empty_line():
+    """`dirty` is decided from the same string, so empty here means the tree changed under us.
+    Saying that is better than logging a bare trailing colon."""
+    assert "no entries" in dirty_summary("")
+
+
+def test_a_blank_trailing_line_is_not_an_entry():
+    """`splitlines` on porcelain output yields a trailing empty string. It is not a path."""
+    assert dirty_summary("?? a.txt\n\n") == "?? a.txt"
 
 
 # ── k8s auto-deploy: the diff-shape predicate ───────────────────────────────────────────────
