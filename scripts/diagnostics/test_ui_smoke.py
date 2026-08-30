@@ -37,12 +37,18 @@ WRAPPER = REPO_ROOT / "scripts" / "diagnostics" / "ui_mcp.sh"
 
 # Hardcoded, NOT derived from containers_list: deriving it would silently enlist every new
 # service into a suite CI never runs, so the next person to type `-m ui` inherits failures
-# they did not cause. One service per node placement, plus one that carries its own login.
+# they did not cause. One service per node placement, plus two that carry their own login.
 # (service, exact page title, path it should land on)
 SERVICES = [
     ("homepage", "My Awesome Homepage", "/"),
     ("sonarr", "Sonarr", "/"),
     ("freshrss", "Login · FreshRSS", "/i/"),
+    # Routed by the `claude-otel` role, whose containers_list entry names Grafana alone.
+    # `Grafana` at `/login` is Grafana's OWN login page: it sits behind the one_factor
+    # Authelia rule, so reaching it proves ingress → Authelia → backend. It does NOT prove a
+    # dashboard renders — the 19 dead panels in this module's docstring would score green
+    # here, because they are a logged-in page this tier never reaches.
+    ("grafana", "Grafana", "/login"),
 ]
 
 # `two_factor` in Authelia's access control, so a one_factor cookie is turned away at the
