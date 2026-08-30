@@ -341,3 +341,4 @@ dotfiles
 [Ss]HAs
 venv
 cwd
+[Uu]ntriaged

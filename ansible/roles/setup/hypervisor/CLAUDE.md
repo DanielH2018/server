@@ -179,6 +179,15 @@ Teardown removes the clone and the lock, but **refuses while the tree is dirty**
 reasoning that leaves `/var/lib/libvirt` alone: a clean tree costs a re-clone to rebuild, and an
 edit that exists only here is not reproducible from anywhere.
 
+**The gate refuses to report on a tree that is not the SHA it was asked about.** `git merge
+--ff-only <ancestor>` exits 0 and leaves HEAD where it was — git says "Already up to date" and
+means it — so a request for a commit older than this checkout's HEAD would deploy the tree it
+already had and return a verdict attributed to a commit that was never rendered. Measured
+2026-08-30 on a scratch repo. The 30-minute tick cannot reach it, since it only ever asks about
+master's tip and this tree only moves forward; a hand-run or a backfill can, which is why
+`staging_gate_remote.sh` asserts `HEAD == SHA` after the merge rather than trusting the exit
+code. A PASS about the wrong commit is worse than any refusal.
+
 The path and the lock are duplicated between this role's `defaults/main.yml` and that shell
 script, which cannot read a Jinja var. `ansible/tests/test_staging_gate_paths_agree.py` pins them
 equal — the drift is silent in the worst direction, since a stale path in the script makes every
