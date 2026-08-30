@@ -597,6 +597,31 @@ def behind_marker(
     return f"{origin_head} {now}"
 
 
+def dirty_summary(porcelain: str, limit: int = 12) -> str:
+    """The paths making the tree dirty, with their porcelain status codes, for one log line.
+
+    Names the paths rather than reporting the state, because the state alone sends the reader
+    to `git status` on a host they may not be on. `??` is the code worth seeing: it means an
+    untracked file, and `git status --porcelain` counts those — so the tree can be dirty with
+    nothing modified, which is the case that is genuinely surprising.
+
+    Porcelain v1 is two status characters, a space, then the path, so the path starts at
+    index 3. A rename arrives as `R  old -> new` and is left whole: both halves are the fact.
+    """
+    entries = []
+    for line in porcelain.splitlines():
+        if not line.strip():
+            continue
+        code, path = line[:2].strip() or "??", line[3:].strip()
+        entries.append(f"{code} {path}" if path else code)
+    if not entries:
+        return "(no entries — the tree changed under us)"
+    if len(entries) > limit:
+        extra = len(entries) - limit
+        return ", ".join(entries[:limit]) + f", +{extra} more"
+    return ", ".join(entries)
+
+
 def dirty_alert_slot(now, morning_hour: int = 8, evening_hour: int = 20) -> str | None:
     """The dirty-alert time slot `now` falls in, or None before the morning slot.
 

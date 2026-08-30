@@ -44,6 +44,7 @@ from deploy_logic import (  # noqa: E402
     declares_snapshot_claims,
     deferred_service_alerts,
     dirty_alert_slot,
+    dirty_summary,
     gate_services,
     health_decision,
     is_diverged,
@@ -1055,6 +1056,21 @@ def main() -> int:
         ci = fetch_ci_verdict(origin)
     action = next_action(local, origin, hold, dirty, origin_ahead, ci)
     if action == "dirty":
+        # Say so in the journal on EVERY tick, before the throttle. The Discord page is
+        # throttled to twice a day, so between slots `journalctl -t gitops-deploy` was the only
+        # place left to look and it said `-- No entries --` — indistinguishable from "ticked,
+        # nothing to do". On 2026-08-30 one untracked file parked the primary checkout 7
+        # commits behind for ~40 minutes, and reading the empty journal is most of what that
+        # cost: every other signal (last_run fresh, hold_sha empty, CI green, the unit exiting
+        # 0) was healthy, because a dirty skip IS healthy.
+        #
+        # `git status --porcelain` counts untracked files, so the tree can be dirty with
+        # nothing modified — which is why the line names the paths rather than just the state.
+        # Unthrottled at 48 lines/day only while parked, which is exactly when they are wanted.
+        log(
+            "working tree dirty — skipping (git status --porcelain counts untracked files): "
+            + dirty_summary(status.stdout)
+        )
         # Healthy skip (operator mid-edit). Throttle the page to twice a day at
         # ~08:00 and ~20:00 CT instead of every 30-min tick (see DIRTY_ALERT_FILE).
         now_ct = datetime.now(CHICAGO)
