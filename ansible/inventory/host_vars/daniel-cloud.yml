@@ -1,0 +1,69 @@
+---
+# daniel-cloud — Oracle Always Free A1 (VM.Standard.A1.Flex, 2 OCPU / 12 GB, arm64).
+#
+# The remote node from docs "Remote free-tier node — design" (2026-08-30). It hosts the
+# PERMANENT primaries for services that need neither home state nor home hardware, so the
+# house is allowed to be down without taking them with it.
+#
+# NOT YET IN hosts.ini. Adding the inventory entry needs the instance's real IP:
+#   daniel-cloud  ansible_host=<ip> ansible_user=ubuntu ansible_connection=ssh
+# Never `ansible_connection=local` here — that selects this host's vars and then executes
+# on whatever machine you typed the command on, which would install the whole stack on the
+# wrong node behind a green recap.
+#
+# This file is already live for validation purposes: validate_compose_templates.py walks
+# every host_vars file and renders each entry's role, so the roles below are checked on
+# every prek run even before the node exists.
+
+# Traefik fronts every UI here; nothing is published on a host port.
+expose_mode: traefik
+
+# The GitOps deployer runs on daniel-box against the cluster only. This node is deployed
+# by hand over SSH, like daniel-pi.
+has_gitops: false
+
+# Only read when expose_mode is 'lan', which it never is here. Fill it in with the
+# instance's private IP when the node is provisioned, so a future per-container
+# `expose_mode: lan` override cannot silently render an empty bind address.
+# server_ip: <fill when provisioned>
+
+containers_list:
+  # NOTE ON use_authelia: every entry below is `false` pending decision 2 of the design
+  # (Authelia-on-node vs Cloudflare Access), which must close before any stateful service
+  # is exposed. `false` is already correct for the Cloudflare Access path — Access
+  # terminates identity ahead of Traefik. If Authelia-on-node wins instead, flip these to
+  # `true` AND add `authelia` to each role's meta/deps.yml.
+  # Order is not the sequencer — toposort reads each role's meta/deps.yml — but keep
+  # traefik first here when the edge role lands, matching daniel-pi's file.
+  - name: homepage
+    port: 3000
+    use_authelia: false
+    networks:
+      - proxy
+
+  - name: freshrss
+    port: 80
+    use_authelia: false
+    networks:
+      - proxy
+
+  - name: karakeep
+    port: 3000
+    use_authelia: false
+    networks:
+      - proxy
+
+  - name: uptime-kuma
+    port: 3001
+    use_authelia: false
+    networks:
+      - proxy
+
+  # `www` rather than `littlelink`: the router name comes from `hostname`, and this is the
+  # public landing page.
+  - name: littlelink
+    hostname: www
+    port: 3000
+    use_authelia: false
+    networks:
+      - proxy

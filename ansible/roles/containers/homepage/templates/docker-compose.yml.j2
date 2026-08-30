@@ -1,0 +1,48 @@
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
+{% from 'expose.yml.j2' import web_ui_labels, web_ui_ports_block with context %}
+---
+
+services:
+  homepage:
+    container_name: homepage
+    # Digest verified 2026-08-30 as a multi-arch INDEX carrying arm64.
+    image: ghcr.io/gethomepage/homepage:latest@sha256:a0b71c8e757298d02560186bab9fbe3fc2d375c523a62cc1019177b37e48aa28
+    restart: unless-stopped
+    environment:
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
+      - TZ={{ tz }}
+      # Homepage rejects any Host header not listed here. This instance answers on its
+      # own hostname only — it is a different dashboard from the cluster's, not a mirror.
+      - HOMEPAGE_ALLOWED_HOSTS={{ container_item.hostname | default(container_item.name) }}.{{ domain }}
+    volumes:
+      - ./config:/app/config
+    # The cluster role seeds config into a writable emptyDir because Homepage EROFS-
+    # crashloops when it cannot write kubernetes.yaml/custom.js. A bind mount is already
+    # writable, so no seed step is needed here — but that is also why the rootfs is not
+    # read_only: Homepage writes into /app/config at boot.
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETGID
+      - SETUID
+      - CHOWN
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/"]
+      interval: {{ container_healthcheck_interval | default('30s') }}
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    {{ service_networks() }}
+    labels:
+{{ web_ui_labels('3000') }}
+      {{ kuma(container_item.name) }}
+{{ web_ui_ports_block('3000') }}
+    # Resource caps for blast-radius containment; tune from cAdvisor/Grafana.
+    {{ resources('0.50', '256M', '0.05', '32M') }}
+
+{{ external_networks() }}

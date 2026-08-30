@@ -1,0 +1,15 @@
+---
+- name: Create required directories
+  tags: [config]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    common_dirs_to_create:
+      - "{{ container_item.name }}"
+
+- name: Deploy Container
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_deploy.yml

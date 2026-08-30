@@ -1,0 +1,20 @@
+---
+title: Offsite
+description: Services that survive the house being down
+
+# Group order and column counts. Deliberately short: this dashboard exists to answer
+# "what is still up" at a glance on a phone, not to mirror the cluster's 14 tiles.
+layout:
+  Reading:
+    style: row
+    columns: 2
+  Status:
+    style: row
+    columns: 2
+
+headerStyle: clean
+statusStyle: dot
+hideVersion: true
+
+# No `providers:` block: every widget on this dashboard reads its credential straight
+# from the rendered config, the same way the cluster's copy does.

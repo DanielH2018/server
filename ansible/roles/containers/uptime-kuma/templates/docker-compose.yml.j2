@@ -1,0 +1,46 @@
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
+{% from 'expose.yml.j2' import web_ui_labels, web_ui_ports_block with context %}
+---
+
+services:
+  uptime-kuma:
+    container_name: uptime-kuma
+    # Tag-only, matching the cluster role. Verified 2026-08-30: 2.5.3 publishes arm64.
+    image: louislam/uptime-kuma:2.5.3
+    restart: unless-stopped
+    volumes:
+      # Bind mount so the monitor set and heartbeat history land in the nightly pull
+      # to the cluster, like FreshRSS's config.
+      - ./data:/app/data
+    cap_drop:
+      - ALL
+    cap_add:
+      # Ping monitors need raw ICMP sockets; with cap_drop ALL the ping binary fails
+      # with "operation not permitted" and the monitor can never come up.
+      - NET_RAW
+    security_opt:
+      - no-new-privileges:true
+    {{ service_networks() }}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3001/"]
+      interval: {{ container_healthcheck_interval | default('30s') }}
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    labels:
+{{ web_ui_labels('3001') }}
+      {{ kuma(container_item.name) }}
+{{ web_ui_ports_block('3001') }}
+    # Resource caps for blast-radius containment; tune from cAdvisor/Grafana.
+    {{ resources('1.0', '512M', '0.10', '64M') }}
+
+# NO AutoKuma sidecar here, unlike the cluster role. AutoKuma's job is to create monitors
+# from the Docker labels of the services beside it; this instance's purpose is the
+# opposite — to watch the HOUSE from outside it, via push heartbeats the home crons send
+# here. Its monitors are therefore push monitors that no local label can describe.
+# The `kuma.*` labels above are inert without AutoKuma; they are kept so the templates stay
+# uniform and so adding AutoKuma later needs no template change.
+
+{{ external_networks() }}

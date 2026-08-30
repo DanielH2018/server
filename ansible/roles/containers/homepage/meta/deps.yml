@@ -1,0 +1,7 @@
+---
+# `traefik` is not yet in daniel-cloud's containers_list — toposort silently ignores a
+# dep absent from the host's list, so declaring it now is safe and becomes load-bearing
+# the moment the node's edge role lands.
+# Add `authelia` here only if decision 2 in the design settles on Authelia-on-node.
+role_deps:
+  - traefik

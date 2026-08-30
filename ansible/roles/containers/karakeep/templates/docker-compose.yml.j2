@@ -1,0 +1,239 @@
+{% from 'traefik.yml.j2' import labels with context %}
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
+---
+
+services:
+  karakeep:
+    container_name: karakeep
+    # Digest verified 2026-08-30 as a multi-arch INDEX carrying arm64, so the cluster's pin
+    # runs unchanged here. `:release` is a mutable floating tag Compose never re-pulls once
+    # present, so the digest is what gives the image an update signal at all; keeping the
+    # tag in `repo:release@sha256:` is what lets Renovate track and bump it.
+    image: ghcr.io/karakeep-app/karakeep:release@sha256:64d6a9bbf2d37b5c808cf06b5d87f1f1c7846fdd3844724145a9741aeb06fd31
+    restart: unless-stopped
+    environment:
+      - TZ={{ tz }}
+      - DATA_DIR=/data
+      - MEILI_ADDR=http://karakeep-meilisearch:7700
+      - MEILI_MASTER_KEY={{ karakeep_meili_master_key }}
+      - BROWSER_WEB_URL=http://karakeep-chrome:9222
+      - NEXTAUTH_URL=https://{{ container_item.hostname | default(container_item.name) }}.{{ domain }}
+      - NEXTAUTH_SECRET={{ karakeep_nextauth_secret }}
+      - DISABLE_NEW_USERS_REGISTRATION=true
+      - OPENAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
+      - OPENAI_API_KEY={{ karakeep_gemini_api_key }}
+      - INFERENCE_TEXT_MODEL=gemini-2.5-flash-lite
+      - INFERENCE_IMAGE_MODEL=gemini-2.5-flash-lite
+      - INFERENCE_TAGS_ENABLED=true
+    volumes:
+      # Bind mount so the bookmark library, archived snapshots and db.db sit in one
+      # directory the nightly pull from the cluster can copy. Once the cluster role is
+      # retired this IS the only copy — arm the backup slice before that happens.
+      - ./data:/data
+      # Next.js image-optimization cache. The image dir is node-owned 755 but the container
+      # runs as root with cap_drop ALL (no DAC_OVERRIDE), so every thumbnail write EACCESes
+      # and gets re-optimized per request. Ephemeral scratch is enough.
+      - type: tmpfs
+        target: /app/apps/web/.next/cache
+        tmpfs:
+          size: 268435456  # 256 MiB
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    {{ service_networks() }}
+      - internal
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
+      interval: {{ container_healthcheck_interval | default('30s') }}
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      # Gate on health, not just start order: meili's index must be ready or karakeep logs
+      # search errors on a cold `up` until it catches up. Both deps define a healthcheck,
+      # so the gate is free.
+      karakeep-chrome:
+        condition: service_healthy
+      karakeep-meilisearch:
+        condition: service_healthy
+    labels:
+      # karakeep is coupled to the pinned meili version (see the VERSION POLICY below), so
+      # nothing may auto-bump any service in this stack and desync the pair.
+      - "com.centurylinklabs.watchtower.enable=false"
+      {# Called directly rather than via expose.yml.j2's web_ui_labels, which takes no
+         extra_middlewares argument — karakeep needs csp-karakeep. This host is always
+         expose_mode: traefik, so that macro's mode branch would be dead code here.
+         The whitespace-stripping dash on this comment's closing tag is load-bearing:
+         the traefik macro body already carries its own six-space indent, so the call
+         must not add another or every label renders at twelve and the YAML breaks. -#}
+      {{ labels(
+          container_item.hostname | default(container_item.name),
+          '3000',
+          (container_item.networks | default([docker_network]))[0],
+          container_item.use_authelia,
+          'csp-karakeep@file'
+        )
+      }}
+      {{ kuma(container_item.name) }}
+
+      ## API bypass (browser extension, mobile app, programmatic clients)
+      # /api/v1 is protected by a Bearer token, so the auth boundary is not needed on it.
+      # The trailing slash anchors the prefix to the /api/ path SEGMENT: a bare
+      # PathPrefix(`/api`) would also match siblings like /api-docs and silently extend
+      # the bypass to them.
+      - "traefik.http.routers.karakeep-api.rule=Host(`{{ container_item.hostname | default(container_item.name) }}.{{ domain }}`) && PathPrefix(`/api/`)"
+      - "traefik.http.routers.karakeep-api.entrypoints=https"
+      - "traefik.http.routers.karakeep-api.tls=true"
+      - "traefik.http.routers.karakeep-api.service={{ container_item.hostname | default(container_item.name) }}"
+      # rate-limit is per-router, not on the entrypoint — re-acquire the default here.
+      - "traefik.http.routers.karakeep-api.middlewares=rate-limit@file"
+      - "traefik.http.routers.karakeep-api.priority=100"
+    # Resource caps for blast-radius containment; tune from cAdvisor/Grafana.
+    {{ resources('2.0', '2048M', '0.10', '128M') }}
+
+  karakeep-chrome:
+    container_name: karakeep-chrome
+    # Major-pinned to a known-good Chromium (124) — bump deliberately, not on every push.
+    # Digest verified 2026-08-30 as a multi-arch INDEX carrying arm64.
+    image: zenika/alpine-chrome:124@sha256:47da877e5622528039625218d15d7e1ccae4e426c6cc7671d165837ea98aacc8
+    restart: unless-stopped
+    command:
+      - --no-sandbox
+      - --disable-gpu
+      - --disable-dev-shm-usage
+      - --remote-debugging-address=0.0.0.0
+      - --remote-debugging-port=9222
+      - --hide-scrollbars
+    # Chrome already runs with --no-sandbox, so it needs no SYS_ADMIN / sandbox caps.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9222/json/version"]
+      interval: {{ container_healthcheck_interval | default('30s') }}
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+      {{ kuma('karakeep-chrome') }}
+    # Headless Chrome can spike memory, so size generously and tune from cAdvisor/Grafana.
+    {{ resources('2.0', '2048M', '0.10', '128M') }}
+
+  karakeep-meilisearch:
+    container_name: karakeep-meilisearch
+    # VERSION POLICY: track the version karakeep officially tests against — NOT latest.
+    # Verified 2026-08-30: v1.53.1 publishes arm64.
+    # UPGRADE RUNBOOK (meili refuses to boot on an older minor's DB; the index is disposable
+    # by design — a named volume, outside the backup pull, rebuilt from karakeep's DB):
+    #   1. bump this tag   2. docker stop karakeep-meilisearch
+    #   3. docker run --rm -v karakeep_karakeep_meili:/meili_data alpine rm -rf /meili_data/data.ms
+    #   4. deploy karakeep   5. Karakeep UI: Admin Settings -> Background Jobs ->
+    #      "Reindex All Bookmarks"   6. verify /stats doc count recovered.
+    image: getmeili/meilisearch:v1.53.1
+    restart: unless-stopped
+    environment:
+      - MEILI_NO_ANALYTICS=true
+      - MEILI_MASTER_KEY={{ karakeep_meili_master_key }}
+    volumes:
+      # Named volume, deliberately NOT a bind mount: this index is derived state, and the
+      # nightly pull to the cluster copies bind mounts only. Reverting karakeep's data
+      # without reindexing desyncs the pair, so the restore runbook says "reindex after
+      # restore" rather than "also restore this".
+      - karakeep_meili:/meili_data
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:7700/health"]
+      interval: {{ container_healthcheck_interval | default('30s') }}
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+      {{ kuma('karakeep-meilisearch') }}
+    # Resource caps for blast-radius containment; tune from cAdvisor/Grafana.
+    {{ resources('1.0', '1024M', '0.10', '128M') }}
+
+  karakeep-time-tagger:
+    container_name: karakeep-time-tagger
+    # uv base: the tagger installs its version-pinned Python deps at container start, so a
+    # fresh base is harmless — but the tag is a rolling channel Compose never re-pulls, so
+    # the digest is what gives it an update signal. Verified 2026-08-30 as a multi-arch
+    # INDEX carrying arm64.
+    image: ghcr.io/astral-sh/uv:python3.14-bookworm-slim@sha256:7cf77f594be8042dab6daa9fe326f90962252268b4f120a7f5dccce4d947e6c1
+    restart: unless-stopped
+    environment:
+      - TZ={{ tz }}
+      - KARAKEEP_PYTHON_API_ENDPOINT=http://karakeep:3000/api/v1/
+      - KARAKEEP_PYTHON_API_KEY={{ karakeep_python_api_key }}
+    volumes:
+      - ./time-tagger/script:/script:ro
+      # Named volume rather than the bind mount the cluster's Docker predecessor used. That
+      # bind mount was owned by uid 1000 while the container runs as root, which forced a
+      # DAC_OVERRIDE grant just so `uv pip install` could write its cache. A named volume is
+      # root-owned, so the capability is not needed and is not granted below.
+      - karakeep_uv_cache:/root/.cache/uv
+    # Runtime deps are version-pinned rather than floating so a container start cannot
+    # silently re-resolve them to whatever is newest on PyPI — the same silent drift the
+    # image digest closes, one layer down. Kept identical to the cluster's command.
+    command: >-
+      bash -c "uv pip install karakeep-python-api==1.8.0 fire==0.7.1 tqdm==4.70.0
+      beautifulsoup4==4.15.0 loguru==0.7.3 -q --system &&
+      while true; do
+      python /script/karakeep-time-tagger.py --cache_file /tmp/bookmarks.temp --reset_all=True
+      && touch /tmp/healthy;
+      sleep 900;
+      done"
+    # The script's loguru sink rotates at 10 MB with NO retention, dropping rotated files
+    # into the working directory. Pointing that at a tmpfs makes them die with the container,
+    # which is why there is no prune step here — the cluster does the same with an emptyDir.
+    working_dir: /work
+    tmpfs:
+      - /work
+      - /tmp
+    # `touch /tmp/healthy` happens only on a SUCCESSFUL run, so this goes unhealthy when the
+    # file ages past ~2 cycles (hung or persistently failing). The loop sleeps 900s, so
+    # <2100 allows one missed cycle. start_period covers the uv install plus the first run.
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import os,sys,time; sys.exit(0 if time.time()-os.stat('/tmp/healthy').st_mtime<2100 else 1)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 600s
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - internal
+    depends_on:
+      karakeep:
+        condition: service_healthy
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+      {{ kuma('karakeep-time-tagger') }}
+    # cpu 1.0 is deliberate: the boot-time `uv pip install` plus the per-cycle tag burst hit
+    # an earlier 0.5 cap and CFS-throttled ~67% of periods, though the 24h average is ~0.01
+    # cores. The 0.05 reservation keeps the steady-state footprint tiny.
+    {{ resources('1.0', '512M', '0.05', '64M') }}
+
+volumes:
+  karakeep_meili:
+  karakeep_uv_cache:
+
+{{ external_networks() }}
+  # Despite the name, NOT a true-internal net: karakeep-chrome must reach the internet to
+  # fetch bookmarked URLs, so `internal: true` would break crawling.
+  internal:
+    internal: false

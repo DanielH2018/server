@@ -1,0 +1,29 @@
+---
+- name: Create required directories
+  tags: [config]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    common_dirs_to_create:
+      - "{{ container_item.name }}/data"
+      - "{{ container_item.name }}/time-tagger/script"
+      - "{{ container_item.name }}/time-tagger/uv-cache"
+
+- name: Copy time-tagger script
+  tags: [config]
+  ansible.builtin.copy:
+    src: karakeep-time-tagger.py
+    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/time-tagger/script/karakeep-time-tagger.py"
+    mode: "0644"
+  register: karakeep_tagger_script
+
+- name: Deploy Container
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_deploy.yml
+  vars:
+    # The tagger script is bind-mounted, so editing it does not change the compose hash
+    # and the running container would keep executing the old copy.
+    common_config_changed: "{{ karakeep_tagger_script is changed }}"

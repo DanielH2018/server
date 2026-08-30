@@ -1,0 +1,62 @@
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
+{% from 'expose.yml.j2' import web_ui_labels, web_ui_ports_block with context %}
+---
+
+services:
+  littlelink:
+    container_name: littlelink
+    # Digest verified 2026-08-30 as a multi-arch INDEX carrying arm64, so the pin the
+    # k8s role uses runs unchanged on the Ampere node — no arm64-specific digest needed.
+    image: ghcr.io/techno-tim/littlelink-server:latest@sha256:e84ea9d93b60362cf9e292dba43adb604e375d9206d5fcf1de6bb766a20aabd1
+    restart: unless-stopped
+    environment:
+      - META_TITLE=Daniel Hunter
+      - META_DESCRIPTION=Software Engineer
+      - META_AUTHOR=Daniel Hunter
+      - META_KEYWORDS=Engineering
+      - LANG=en
+      - META_INDEX_STATUS=all
+      - OG_SITE_NAME=Daniel Hunter
+      - OG_TITLE=Daniel Hunter
+      - OG_DESCRIPTION=The home of Daniel Hunter
+      - OG_URL=https://www.{{ domain }}
+      - OG_IMAGE=https://i.imgur.com/HAq1SNZ.jpg
+      - OG_IMAGE_WIDTH=400
+      - OG_IMAGE_HEIGHT=400
+      - THEME=Dark
+      - FAVICON_URL=https://i.imgur.com/HAq1SNZ.jpg
+      - AVATAR_URL=https://i.imgur.com/HAq1SNZ.jpg
+      - AVATAR_2X_URL=https://i.imgur.com/HAq1SNZ.jpg
+      - AVATAR_ALT=Daniel Hunter Profile Pic
+      - NAME=Daniel Hunter
+      - BIO=Software Engineer @ Lithic Inc.
+      # use ENV variable names for order, listed buttons will be boosted to the top
+      - BUTTON_ORDER=GITHUB,LINKED_IN
+      - GITHUB=https://github.com/DanielH2018
+      - LINKED_IN=https://www.linkedin.com/in/danielrhunter/
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: {{ container_healthcheck_interval | default('30s') }}
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    # Read-only rootfs: `docker diff` shows zero rootfs writes. tmpfs /tmp is defensive
+    # (Node's os.tmpdir) — this is the public landing page, so favor a safe margin.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    {{ service_networks() }}
+    labels:
+{{ web_ui_labels('3000') }}
+      {{ kuma(container_item.name) }}
+{{ web_ui_ports_block('3000') }}
+    # Resource caps for blast-radius containment; tune from cAdvisor/Grafana.
+    {{ resources('0.50', '128M', '0.05', '16M') }}
+
+{{ external_networks() }}
