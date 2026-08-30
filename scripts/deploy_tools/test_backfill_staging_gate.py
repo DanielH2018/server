@@ -44,6 +44,22 @@ def test_a_rejection_is_not_silently_called_a_false_failure():
     assert bf.classify(bf.REJECTED)[0] == bf.NEEDS_TRIAGE
 
 
+def test_a_run_that_never_started_is_skipped_rather_than_scored():
+    """A lock held by the 30-minute tick measured nothing about the gate.
+
+    Scored as a false failure it would reset the streak to zero on every collision, so the
+    scheduled runner would drive the metric down by existing. The commit stays in the window
+    and the next run picks it up.
+    """
+    assert bf.classify(bf.NOT_RUN)[0] == bf.SKIPPED
+
+
+def test_a_skip_is_not_a_pass_either():
+    # The rejecting half. Counting it as a pass would let a permanently wedged lock backfill
+    # twenty clean runs without the gate being asked once.
+    assert bf.classify(bf.NOT_RUN)[0] != bf.OK
+
+
 def test_an_unexpected_exit_code_is_a_false_failure():
     # Fails closed. An exit staging_gate.py does not define means the harness does not
     # understand what happened, which is not evidence the gate is healthy.

@@ -190,3 +190,16 @@ gitops_deploy_staging_expect_timeout_s: 120
 # that host (2026-08-29 review M-3). This key is pinned on the far side to a single forced
 # command by roles/setup/hypervisor, which also holds the matching public half.
 gitops_deploy_staging_gate_key_path: /etc/gitops-deploy/staging_gate_ed25519
+
+# The backfill ratchet (docs/staging-phase-c.md, entry condition part 1). Slice 4 needs 20 clean
+# gate runs, and the advisory tick reaches the gate about once a month, so the evidence is
+# gathered by asking the gate about master commits it has not been asked about yet.
+#
+# Rides `gitops_deploy_staging_gate` rather than carrying its own switch: a ratchet that ran
+# while the gate was off would deploy to staging for a measurement nobody was collecting.
+gitops_deploy_staging_backfill_ledger: /var/lib/gitops-deploy/staging-backfill.jsonl
+# Commits per run. Small on purpose — each one is a real staging deploy, and the window is a
+# range from the ledger, so anything not reached this hour is reached the next.
+gitops_deploy_staging_backfill_count: 2
+# Matches gitops_deploy_staging_gate_timeout_s: the same deploy, so the same budget.
+gitops_deploy_staging_backfill_timeout_s: 600

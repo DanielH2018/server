@@ -101,11 +101,35 @@
   # there is nothing to restart. The rule's own header explains the narrow scope
   # (this unit, `start` only) and why it must not test subject.active.
 
+- name: Install the staging-backfill units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - staging-backfill.service
+    - staging-backfill.timer
+  become: true
+  # Deliberately NOT notifying "Run gitops-deploy once": this pair has nothing to do with
+  # whether a deploy is pending, and a template change here should not ship one.
+  notify: Reload systemd
+
 - name: Enable and start the timer
   ansible.builtin.systemd:
     name: gitops-deploy.timer
     enabled: true
     state: started
+    daemon_reload: true
+  become: true
+
+- name: Match the staging-backfill timer to whether the gate is armed
+  # Both directions in one task. The ratchet exists to measure the gate, so running it while the
+  # gate is off would deploy to staging hourly for a measurement nobody is collecting — and a
+  # switch that only turns something on is the half of a feature that gets noticed a month later.
+  ansible.builtin.systemd:
+    name: staging-backfill.timer
+    enabled: "{{ gitops_deploy_staging_gate }}"
+    state: "{{ 'started' if gitops_deploy_staging_gate else 'stopped' }}"
     daemon_reload: true
   become: true
 
@@ -127,6 +151,8 @@
       # re-hashes that same source (manifest-prune-check.sh.j2:284) — the rendered file with
       # the secret in it is never read by either side. Omitting them meant a change to the
       # deployer's budget or CI lines rendered stale and nothing saw it (2026-08-24 review M-9).
+      - ansible/roles/setup/gitops_deploy/templates/staging-backfill.service.j2
+      - ansible/roles/setup/gitops_deploy/templates/staging-backfill.timer.j2
       - ansible/roles/setup/gitops_deploy/templates/config.env.j2
       - ansible/roles/setup/gitops_deploy/templates/alert-webhook.env.j2
 

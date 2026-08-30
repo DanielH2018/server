@@ -52,6 +52,22 @@ NO_VERDICT = 2
 # test_the_prep_code_matches_the_remote_script rather than by hoping.
 PREP_FAILED = 70
 
+# The remote's lock-contention code, also defined in staging_gate_remote.sh and pinned to it by
+# test_the_busy_code_matches_the_remote_script. It is in NO_VERDICT_CODES below, so by default
+# this script behaves exactly as it did before the code existed — the deployer cannot tell a busy
+# lock from any other reason the gate could not be asked, and does not need to.
+#
+# `--report-busy` is what makes it visible, and only backfill_staging_gate.py passes it. A run
+# that never started is not a sample: recording it as a false failure would let the 30-minute
+# tick reset the measured streak to zero every time the two collided, which is the metric
+# destroying itself rather than measuring anything.
+GATE_BUSY = 76
+
+# What --report-busy returns instead of NO_VERDICT. Deliberately NOT returned by default:
+# deploy_logic.staging_verdict_summary reads any non-zero that is not 2 as REJECTED, so a third
+# code reaching the deployer would report a busy lock as staging rejecting the change.
+NOT_RUN = 3
+
 # The restricted key's dispatcher refusing the request outright — a malformed operation name,
 # a SHA that is not a 40-hex object name, tags outside its charset. Defined in
 # roles/setup/hypervisor/templates/staging-gate-dispatch.sh.j2 and pinned to this constant by
@@ -104,8 +120,19 @@ SHELL_FALLBACK = 127
 # reach the network, and SHELL_FALLBACK means the request reached a shell instead of the forced
 # command — a security regression, which must still not read as staging rejecting the change.
 NO_VERDICT_CODES = frozenset(
-    {PREP_FAILED, DISPATCH_REFUSED, SSH_FAILURE, IDENTITY_UNUSABLE, SHELL_FALLBACK}
+    {
+        PREP_FAILED,
+        DISPATCH_REFUSED,
+        SSH_FAILURE,
+        IDENTITY_UNUSABLE,
+        SHELL_FALLBACK,
+        GATE_BUSY,
+    }
 )
+
+# The subset of the above that means the run never STARTED, as opposed to started and could not
+# finish. deploy.sh's own 75 is the git-tree lock, which is the same situation one lock down.
+BUSY_CODES = frozenset({GATE_BUSY, 75})
 
 # The staging subset (docs/staging-cluster.md, Decision 6). A caller may narrow this; it may not
 # widen it to a service the cluster does not run, which would exit 2 on the far side as a tag
@@ -120,21 +147,32 @@ STAGING_SERVICES = (
 )
 
 
-def classify(rc: int) -> int:
+def classify(rc: int, report_busy: bool = False) -> int:
     """Map the remote script's exit code to a verdict.
 
     Pure, so the rejecting half of the test suite can drive the same function the runner drives
     instead of asserting arithmetic of its own.
+
+    `report_busy` is off for every caller but the backfill harness, and the default is what the
+    deployer gets: a busy lock is NO_VERDICT, indistinguishable from any other reason the gate
+    could not be asked. Only a caller measuring the gate needs the distinction.
     """
     if rc == PASS:
         return PASS
+    if report_busy and rc in BUSY_CODES:
+        return NOT_RUN
     if rc in NO_VERDICT_CODES or rc in DEPLOY_SH_NO_VERDICT:
         return NO_VERDICT
     return REJECTED
 
 
 def verdict_name(verdict: int) -> str:
-    return {PASS: "PASS", REJECTED: "REJECTED", NO_VERDICT: "NO_VERDICT"}[verdict]
+    return {
+        PASS: "PASS",
+        REJECTED: "REJECTED",
+        NO_VERDICT: "NO_VERDICT",
+        NOT_RUN: "NOT_RUN",
+    }[verdict]
 
 
 def identity_problem() -> str | None:
@@ -276,10 +314,17 @@ def main() -> int:
         default=1800.0,
         help="seconds to wait for the remote deploy (default: 1800)",
     )
+    parser.add_argument(
+        "--report-busy",
+        action="store_true",
+        help=f"exit {NOT_RUN} when the run never started because a lock was held, instead of "
+        f"folding it into NO_VERDICT. For callers that MEASURE the gate; the deployer must "
+        f"not pass this.",
+    )
     args = parser.parse_args()
 
     rc = run_gate(args.sha, args.tags, args.timeout)
-    verdict = classify(rc)
+    verdict = classify(rc, report_busy=args.report_busy)
     print(
         f"staging-gate: {verdict_name(verdict)} (remote exit {rc}) for {args.sha[:8]}"
     )
