@@ -31,11 +31,42 @@
   min-width: 0;
 }
 
-/* The pair above is confirmed working on the Services page (operator, 2026-08-25). What stays
- * unknown is WHICH of the two binds at a given viewport: the session that wrote them had no
- * browser, so the mechanism is read off Material's stylesheet rather than measured. Both are
- * inert on a table that already fits -- auto layout still sizes columns by max-content where
- * the space exists -- so the attribution is inference even though the outcome is not. */
+/* MEASURED 2026-08-30 in a headless Chromium against the live site, which corrects the
+ * inference this comment used to carry. Only `overflow-wrap: anywhere` binds: reverting
+ * `min-width: 0` alone changes not one column width on any reference page, because the rule
+ * above already lets a squeezed header wrap below Material's floor. Keep it anyway -- it is
+ * what lets the `min-width` floor two rules down be the only floor in play.
+ *
+ * `anywhere` also has a cost the no-browser session could not see, and it is the reason the
+ * next two rules exist. It drops every column's min-content width to a single character, so
+ * auto layout has no floor to respect and hands out width in proportion to max-content alone.
+ * On services.md that gave the Auto-deploy column 456px of 908 while Service got 57px --
+ * "Service" rendered as "Ser/vice" and every service name broke mid-word. The prose column
+ * won because it is prose, not because it needed the room. */
+
+/* Restore a floor, one per axis, so the prose column takes the surplus rather than the lot.
+ *
+ * A header is short by construction, so refusing to wrap it costs at most its own width and
+ * buys back the column's real minimum: services.md's header row drops 106px -> 44px.
+ *
+ * `12ch` is the widest floor that still fits every reference table at the narrowest desktop
+ * content column (~750px, unchanged from 1024px to 1280px). 18ch overflows by 10px. The floor
+ * is desktop-only: below 60em the content column is ~390px and six columns at 12ch overflow it
+ * by ~150px, where the stock behaviour fits. Material's own breakpoints are em, and a media
+ * query's em is always 16px however the theme scales the root font.
+ *
+ * MEASURED at 1024/1280/1920 across all six reference pages, no horizontal overflow at any of
+ * them: services.md's table body shrinks 10131px -> 8575px and its columns go
+ * [54,48,86,78,118,362] -> [87,84,102,98,129,247]. */
+.md-typeset table:not([class]) th {
+  white-space: nowrap;
+}
+
+@media screen and (min-width: 60em) {
+  .md-typeset table:not([class]) td {
+    min-width: 12ch;
+  }
+}
 
 /* WIDER LAYOUT. Material caps the whole grid at 61rem and centres it, so on a 2000px screen
  * roughly 650px of the window is margin. The cap is there to hold prose to a readable line
