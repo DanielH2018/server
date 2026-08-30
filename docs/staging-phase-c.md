@@ -261,6 +261,17 @@ measured deliberately. Three parts, all required.
 
 **1. A backfill of 20 consecutive gate runs against real master SHAs, with zero false failures.**
 
+Run it with `uv run python scripts/deploy_tools/backfill_staging_gate.py`, `--dry-run` first —
+that lists the commits and the tags it would gate and touches staging not at all. It exits 0
+only when the condition below is met, so it is a check rather than a report to interpret.
+
+Two properties of that script are load-bearing rather than tidy. It gates **oldest-first**,
+because the staging checkout only moves forward and asking about a commit older than its HEAD
+used to return a verdict about the wrong tree. And it reports a REJECTED as `needs-triage`
+rather than guessing: nothing in an exit code distinguishes the gate misfiring from a genuine
+defect in that commit, and guessing either way corrupts the measurement in a different
+direction. Any run left untriaged holds the verdict at NOT MET.
+
 - A *false* failure is any non-PASS whose cause is the gate rather than the change: staleness,
   prep failure, ssh transport, dispatcher refusal, timeout, lock contention.
 - A REJECTED traced to a genuine defect in that SHA is a **true** failure. It does not break the

@@ -82,6 +82,20 @@ main() {
   # what M-2 objected to was it moving the operator's.
   git merge --ff-only "$SHA" >/dev/null || fail_prep "cannot fast-forward to $SHA"
 
+# A fast-forward to an ANCESTOR exits 0 and leaves HEAD where it was — git reports "Already up
+# to date" and means it. So without this, a request for a commit older than this checkout's
+# HEAD deploys the tree it already had and returns a verdict about a SHA that was never
+# rendered: a PASS attributed to the wrong commit, which is worse than any refusal. Measured
+# 2026-08-30 on a scratch repo: `merge --ff-only HEAD~1` exits 0, HEAD unmoved.
+#
+# The 30-minute tick cannot reach this, because it only ever asks about master's tip and this
+# tree only moves forward. A hand-run can, and so can backfill_staging_gate.py, which is why
+# that script walks oldest-to-newest and why this assert exists rather than a comment telling
+# people to. Both sides go through rev-parse so a caller passing an abbreviation compares
+# equal instead of failing spuriously.
+[ "$(git rev-parse HEAD)" = "$(git rev-parse "$SHA")" ] ||
+  fail_prep "HEAD is $(git rev-parse --short HEAD) after merging $SHA — refusing to report a verdict about a tree that is not the SHA under test"
+
   # The verdict-bearing command. Its exit code is returned verbatim.
   #
   # --skip-staleness-check is CORRECT here and is not a bypass. deploy.sh refuses a tree behind
