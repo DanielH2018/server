@@ -1,0 +1,10 @@
+---
+galaxy_info:
+  author: DanielH2018
+  description: "Cloudflare Tunnel — the remote node's only inbound path"
+  license: MIT
+  min_ansible_version: "2.15"
+
+# No logical ordering dependency: cloudflared dials outbound and starts fine before the
+# services it routes exist. Sequencing lives in meta/deps.yml regardless of this field.
+dependencies: []

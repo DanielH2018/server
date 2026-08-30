@@ -1,7 +1,8 @@
 ---
-# `traefik` is not yet in daniel-cloud's containers_list — toposort silently ignores a
-# dep absent from the host's list, so declaring it now is safe and becomes load-bearing
-# the moment the node's edge role lands.
-# Add `authelia` here only if decision 2 in the design settles on Authelia-on-node.
+# cloudflared, not traefik: the node terminates no TLS and runs no reverse proxy. The
+# tunnel reaches this container by Docker service name on the shared network, so nothing
+# here publishes a host port and the node opens no inbound port at all.
+# See the design doc, "the node needs no Traefik" — Traefik's certresolver would have
+# needed a DNS-editing Cloudflare token on a machine outside the house.
 role_deps:
-  - traefik
+  - cloudflared

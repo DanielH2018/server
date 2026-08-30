@@ -15,8 +15,14 @@
 # every host_vars file and renders each entry's role, so the roles below are checked on
 # every prek run even before the node exists.
 
-# Traefik fronts every UI here; nothing is published on a host port.
-expose_mode: traefik
+# Cloudflare Tunnel is the only inbound path. `tunnel` emits neither Traefik labels nor
+# published host ports: cloudflared reaches each container by Docker service name on the
+# shared network, so the node opens no inbound port beyond SSH.
+#
+# This is the security property the auth decision was made for. Setting this to `traefik`
+# would put a DNS-editing Cloudflare token on a machine outside the house, because that
+# mode's labels name certresolver=cloudflare and its DNS-01 challenge needs one.
+expose_mode: tunnel
 
 # The GitOps deployer runs on daniel-box against the cluster only. This node is deployed
 # by hand over SSH, like daniel-pi.
@@ -28,13 +34,23 @@ has_gitops: false
 # server_ip: <fill when provisioned>
 
 containers_list:
-  # NOTE ON use_authelia: every entry below is `false` pending decision 2 of the design
-  # (Authelia-on-node vs Cloudflare Access), which must close before any stateful service
-  # is exposed. `false` is already correct for the Cloudflare Access path — Access
-  # terminates identity ahead of Traefik. If Authelia-on-node wins instead, flip these to
-  # `true` AND add `authelia` to each role's meta/deps.yml.
-  # Order is not the sequencer — toposort reads each role's meta/deps.yml — but keep
-  # traefik first here when the edge role lands, matching daniel-pi's file.
+  # `use_authelia: false` throughout, and settled rather than pending: Cloudflare Access
+  # terminates identity at the edge, so nothing here forward-auths. The key stays because
+  # the shared Traefik macro reads it, and under expose_mode: tunnel that macro emits
+  # nothing at all.
+  #
+  # Order is not the sequencer — toposort reads each role's meta/deps.yml, and all five
+  # services declare cloudflared — but cloudflared leads the list the way docker-proxy
+  # leads daniel-pi's.
+  #
+  # cloudflared's entry has NO `port`, which is load-bearing: the tunnel's ingress map is
+  # generated from every entry that declares one, so giving it a port would point the
+  # tunnel at itself.
+  - name: cloudflared
+    use_authelia: false
+    networks:
+      - proxy
+
   - name: homepage
     port: 3000
     use_authelia: false

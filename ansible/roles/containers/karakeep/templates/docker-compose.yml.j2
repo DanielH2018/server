@@ -1,7 +1,7 @@
-{% from 'traefik.yml.j2' import labels with context %}
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
+{% from 'expose.yml.j2' import web_ui_labels, web_ui_ports_block with context %}
 ---
 
 services:
@@ -63,34 +63,20 @@ services:
       # karakeep is coupled to the pinned meili version (see the VERSION POLICY below), so
       # nothing may auto-bump any service in this stack and desync the pair.
       - "com.centurylinklabs.watchtower.enable=false"
-      {# Called directly rather than via expose.yml.j2's web_ui_labels, which takes no
-         extra_middlewares argument — karakeep needs csp-karakeep. This host is always
-         expose_mode: traefik, so that macro's mode branch would be dead code here.
-         The whitespace-stripping dash on this comment's closing tag is load-bearing:
-         the traefik macro body already carries its own six-space indent, so the call
-         must not add another or every label renders at twelve and the YAML breaks. -#}
-      {{ labels(
-          container_item.hostname | default(container_item.name),
-          '3000',
-          (container_item.networks | default([docker_network]))[0],
-          container_item.use_authelia,
-          'csp-karakeep@file'
-        )
-      }}
+{{ web_ui_labels('3000') }}
       {{ kuma(container_item.name) }}
 
-      ## API bypass (browser extension, mobile app, programmatic clients)
-      # /api/v1 is protected by a Bearer token, so the auth boundary is not needed on it.
-      # The trailing slash anchors the prefix to the /api/ path SEGMENT: a bare
-      # PathPrefix(`/api`) would also match siblings like /api-docs and silently extend
-      # the bypass to them.
-      - "traefik.http.routers.karakeep-api.rule=Host(`{{ container_item.hostname | default(container_item.name) }}.{{ domain }}`) && PathPrefix(`/api/`)"
-      - "traefik.http.routers.karakeep-api.entrypoints=https"
-      - "traefik.http.routers.karakeep-api.tls=true"
-      - "traefik.http.routers.karakeep-api.service={{ container_item.hostname | default(container_item.name) }}"
-      # rate-limit is per-router, not on the entrypoint — re-acquire the default here.
-      - "traefik.http.routers.karakeep-api.middlewares=rate-limit@file"
-      - "traefik.http.routers.karakeep-api.priority=100"
+      # NO Traefik labels and no /api/ bypass router here, unlike the cluster role and the
+      # retired Docker one. Under expose_mode: tunnel this host runs no reverse proxy, so
+      # what those labels expressed now lives at Cloudflare and NOT in this repo:
+      #   - the csp-karakeep header set  -> a Cloudflare response-header transform rule
+      #   - rate-limit                   -> Cloudflare WAF rate limiting, which sheds load
+      #                                     at the edge rather than on a 2-OCPU box
+      #   - the /api/ auth bypass        -> a Cloudflare Access BYPASS POLICY on /api/*
+      # That last one is not optional. The browser extension and mobile app authenticate
+      # with a Bearer token and cannot complete an interactive Access login, so without the
+      # bypass they are locked out while the web UI keeps working — a failure that looks
+      # like a broken client rather than a missing policy.
     # Resource caps for blast-radius containment; tune from cAdvisor/Grafana.
     {{ resources('2.0', '2048M', '0.10', '128M') }}
 
