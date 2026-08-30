@@ -54,3 +54,29 @@ kuma_push() {
     }
   return 0
 }
+
+# boot_grace_active GRACE_S TAG
+#
+# True (exit 0) when this host booted less than GRACE_S ago, meaning the caller should skip this
+# run. A frequent health cron fires within seconds of boot: the 2026-08-30 restart brought
+# daniel-box up at 07:39:48 and the */10 crons ran at 07:40:00, twelve seconds later, while k3s,
+# Longhorn and Uptime-Kuma were still starting — the last pod reached Ready at 07:45:06. Both
+# healthchecks.io dead-men those crons feed send `/fail` on a failed run, and a `/fail` alerts
+# IMMEDIATELY regardless of the check's configured grace, so period/grace tuning cannot reach this
+# case at all. Skipping the run instead lets the dead-man's own period+grace cover the gap.
+#
+# GRACE_S MUST be shorter than the caller's cron interval, so at most ONE slot is ever skipped and
+# the dead-man's grace only has to tolerate a single miss. See k3s_health_cron_boot_grace_s in the
+# k3s role's defaults for the derivation, and docs/healthchecks-io-deadman.md for the grace table
+# it produces.
+#
+# Fails OPEN: an unreadable /proc/uptime returns non-zero so the caller runs its check anyway. A
+# guard that cannot read the clock must not silence monitoring indefinitely.
+boot_grace_active() {
+  local grace="$1" tag="$2" up
+  up=$(cut -d. -f1 </proc/uptime 2>/dev/null) || return 1
+  [ -n "$up" ] || return 1
+  [ "$up" -lt "$grace" ] || return 1
+  logger -t "$tag" "boot grace: uptime ${up}s < ${grace}s — skipped, dead-man grace covers it"
+  return 0
+}

@@ -22,6 +22,11 @@ source /usr/local/lib/kuma-push-lib.sh || {
   exit 1
 }
 
+# Skip the first run after a boot, same reasoning as its */10 sibling longhorn-backup-health:
+# this feeds the daniel-box-disk-health dead-man, which sends `/fail` on a failed run and so
+# pages immediately regardless of its configured grace.
+boot_grace_active {{ k3s_health_cron_boot_grace_s }} disk-health && exit 0
+
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 # Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
 # edge's bridge route for this name was removed in the slice-7 bridge teardown.

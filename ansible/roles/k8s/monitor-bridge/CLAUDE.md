@@ -224,11 +224,22 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     twice for one root cause. That check queries B2 live rather than reading a cron's state file,
     which is what made the five kopia-era checks report a stale success in the first place. This check reports B2's own
     `transaction_cap_exceeded` error text directly. **Throttled**, unlike the other two gates: the
-    probe runs at most once per `B2_PROBE_INTERVAL_S` (1800 s = 48 calls/day) and **both** outcomes
-    are cached, because the fault being detected is a transaction cap and an every-cycle probe
+    probe runs at most once per `B2_PROBE_INTERVAL_S` (1800 s = 48 calls/day) and a BILLED outcome
+    is cached, because the fault being detected is a transaction cap and an every-cycle probe
     (288/day) — or `email_backstop`'s cache-successes-only idiom, which retries on failure — would
     spend the budget it's watching. The cached verdict is still pushed every cycle so the push
-    monitor's heartbeat stays alive. Empty credentials = disabled (stays up). `B2_DEPENDENT` is
+    monitor's heartbeat stays alive. Empty credentials = disabled (stays up).
+    **A failure that never reached B2 takes a short TTL instead** (`B2_TRANSPORT_RETRY_S`, one
+    INTERVAL — added 2026-08-30). Only an answer from B2 costs a transaction, so the argument for
+    the long cache does not cover a DNS/connect/timeout failure, and `_get_json`'s contract makes
+    the two separable: it re-raises `HTTPError` untouched and wraps everything else as
+    `RuntimeError`. Caching both alike meant one transient failure pinned this gate DOWN for the
+    full 30 minutes — on the 2026-08-30 restart the bridge's first cycle probed B2 before cluster
+    egress was serving, and the tile read DOWN for 25 minutes against an 8m35s outage. The cache
+    was holding back the RECOVERY, not just the retry.
+    Note for anyone writing a test here: a real cap denial arrives as `HTTPError`, so faking it as
+    a `RuntimeError` now exercises the transport path and proves the opposite of what it claims.
+    The tests used to do exactly that; `_cap_denial()` in `test_check_gates.py` is the fix. `B2_DEPENDENT` is
     guarded by tests against the live `CHECKS` and against `STARTUP_GRACE` so it can't drift.
     **Assumption, stated in the code because it can't be tested without a live breach:** that
     `b2_authorize_account` is itself subject to the cap — Backblaze's endpoint docs list
@@ -634,16 +645,29 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
 
 - The restart/OOM/cpu/target/5xx checks use `prom_vector()` (keeps series labels) so the alert
   names *which* container / target / route is failing; the others use `prom_scalar()`.
-- Explicit `down` = fast, descriptive alert; the push monitor's heartbeat interval (600 s,
-  2× the loop) is the backstop for "the bridge itself died". Same dead-man's-switch idea as
-  `cloudflare-ddns` — see [[its CLAUDE.md]] and the `kuma(..., monitor_type='push')` macro.
+- Explicit `down` = fast, descriptive alert; the push monitor's heartbeat interval
+  (`kuma_bridge_push_interval`, 1200 s = 4× the loop) is the backstop for "the bridge itself
+  died". Same dead-man's-switch idea as `cloudflare-ddns` — see [[its CLAUDE.md]] and the
+  `kuma(..., monitor_type='push')` macro.
+  **It was 600 s until 2026-08-30**, tolerating a single missed push — which a host restart
+  exceeds. Hosts went down at 07:36:31 and the last pod reached Ready at 07:45:06, but the
+  bridge's last push landed before 07:36 and its first after was ~07:45, so nine bridge-fed
+  tiles flipped DOWN and notified for one 8m35s event that had already ended. At 1200 s three
+  missed pushes are absorbed and a genuinely dead bridge still pages, 20 min in rather than 10.
+  The knob is the interval and NOT `max_retries`, which buys the same tolerance and costs the
+  descriptive message — see the next bullet.
 - **All push monitors set `max_retries=0`** (2026-06-12): with retries, Kuma parks a pushed
   `down` in PENDING and the 60s watchdog — which only `up` pushes satisfy — crosses
   maxretries first, so every visible DOWN event read "No heartbeat in the time window"
   instead of the check's named-offender msg. Zero retries means the bridge's own push flips
   the state and the descriptive msg lands in the event + Discord notification. Trade-off:
-  a dead bridge pages after one missed 600s window (acceptable — that's the dead-man's
+  a dead bridge pages after one missed heartbeat window (acceptable — that's the dead-man's
   switch doing its job).
+  **This is why post-boot flapping is fixed by widening the window, never by adding retries.**
+  The two are interchangeable as tolerance and are not interchangeable as alerts: a wider
+  window costs only detection latency, while a retry parks the push in PENDING and hands the
+  Discord message back to the watchdog. `test_push_monitors_never_retry` in
+  `ansible/tests/test_kuma_static_monitors.py` is the guard.
 - **Startup/redeploy grace for the reach-out checks (`STARTUP_GRACE`, 2026-07-12):** the six
   checks that poll a live app dependency with **no reachability gate and no per-check hysteresis**
   — **n8n Prod Workflows** (n8n), **Arr Queue Warnings**, **Bazarr Health** (bazarr)

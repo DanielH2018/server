@@ -24,6 +24,12 @@ source /usr/local/lib/kuma-push-lib.sh || {
   exit 1
 }
 
+# Skip the first run after a boot. This script carries BOTH healthchecks.io dead-men
+# (longhorn-backup-health and uptime-kuma-alive) and sends `/fail` on a failed run, which pages
+# immediately whatever grace the check is configured with — so this guard, not a grace value, is
+# what makes a restart quiet. Exit 0, not 1: a skipped run must not itself read as a failure.
+boot_grace_active {{ k3s_health_cron_boot_grace_s }} longhorn-backup-health && exit 0
+
 # Cron's PATH is /usr/bin:/bin, which omits /usr/local/bin where k3s lives. Without this the
 # cron run dies on "k3s: command not found" instead of reporting backup state.
 export PATH="/usr/local/bin:${PATH}"

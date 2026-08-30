@@ -24,6 +24,37 @@ Cadences are the host's clock, and daniel-box runs **UTC** — not the `America/
 containers use. A check created in Chicago time drifts 5-6 hours from the cron that feeds it
 and fires false alarms.
 
+## Period and grace — the console settings
+
+These live only in the Healthchecks.io console; nothing in this repo can set them. Until
+2026-08-30 only three of the seven were written down anywhere, so the other four could not be
+verified against their crons at all. Set them to match this table.
+
+| Check slug | Schedule type | Period / expression | Grace |
+|---|---|---|---|
+| `longhorn-backup-health` | Simple | 10 minutes | 20 minutes |
+| `daniel-box-disk-health` | Simple | 10 minutes | 20 minutes |
+| `uptime-kuma-alive` | Simple | 10 minutes | 20 minutes |
+| `manifest-prune-check` | Cron | `15 5 * * *` UTC | 1 hour |
+| `etcd-snapshot-offbox` | Cron | `45 2 * * *` UTC | 1 hour |
+| `pi-peer-backup` | Cron | `30 23 * * *` UTC | 1 hour |
+| `registry-gc` | Cron | `20 4 * * 0` UTC | 1 hour |
+
+**The 20-minute grace on the three 10-minute checks is derived, not chosen.** Their crons skip
+their first run after a boot — `boot_grace_active` in `kuma-push-lib.sh`, sized by
+`k3s_health_cron_boot_grace_s` — so the widest legitimate gap between two pings is *two* periods,
+20 minutes, not one. The grace has to cover that gap and nothing wider: at 30 minutes a genuinely
+dead cron would sit undetected through three slots.
+
+That bound is what keeps the boot grace itself under 600 seconds. A boot grace longer than the
+cron interval could skip two consecutive slots, widening the legitimate gap to 30 minutes and
+making this table wrong. `ansible/tests/test_health_cron_boot_grace.py` enforces the relation
+rather than either number.
+
+**A `/fail` ping ignores all of this.** Grace bounds *silence*; a `/fail` is an explicit failure
+report and alerts on arrival. That is why the fix for post-boot noise is a skipped run rather
+than a wider grace — see the boot-grace note under *Watching the spine itself*.
+
 ## Watching the spine itself
 
 The five job checks above all answer "did this job run and succeed." `uptime-kuma-alive`
@@ -42,6 +73,25 @@ pings, failure pings `/fail`. It was chosen over a dedicated cron because it alr
 
 Set the check's **period to 10 minutes and its grace to 20**, matching the cron. It is not a
 job check, so `/start` is never sent and the duration column stays empty; that is expected.
+
+### The first run after a boot is skipped
+
+Both slugs this script feeds page on a `/fail`, and a `/fail` alerts immediately whatever the
+grace says. So a cron firing seconds after a boot — against a cluster whose pods have not
+started — pages every time the host restarts, and no console setting can prevent it.
+
+That is the 2026-08-30 restart, exactly: daniel-box came up at 07:39:48, this cron ran at
+07:40:00, and the last pod reached Ready at 07:45:06. Both `longhorn-backup-health` and
+`uptime-kuma-alive` sent `/fail` at 07:40 for an outage that ended five minutes later.
+
+The script now calls `boot_grace_active` and exits 0 while the host's uptime is under
+`k3s_health_cron_boot_grace_s`, so the first slot is skipped and the second reports honestly.
+The guard **fails open**: an unreadable `/proc/uptime` runs the check, because a guard that
+cannot read the clock must not silence the dead-man indefinitely.
+
+It covers only the `*/10` crons. For a daily check a skipped slot is a skipped day, which is a
+worse trade than the rare boot landing inside its one-minute window — and their 1-hour graces
+already tolerate a late run.
 
 What it does not cover: Kuma accepting pushes while failing to *deliver* notifications. The
 `Discord Delivery` tile watches the Discord leg from inside Kuma, and the email tier is the

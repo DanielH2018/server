@@ -74,6 +74,32 @@ autokuma_k8s_mem_request: 32Mi
 # every push monitor).
 kuma_push_resend_interval_minutes: 360
 
+# Heartbeat window for the 34 push monitors monitor-bridge feeds. The bridge pushes each of them
+# once per loop (INTERVAL=300s), so this is how many consecutive pushes may go missing before Kuma
+# flips the tile DOWN — and, because a push monitor's watchdog is the only thing that notices a
+# dead bridge, it is also the detection latency for the bridge itself.
+#
+# 1200 = 4x the loop, tolerating THREE missed pushes; it was 600, tolerating one. The 2026-08-30
+# restart is what moved it: hosts went down at 07:36:31 and the last pod reached Ready at 07:45:06,
+# an 8m35s outage, but the bridge's last push landed before 07:36 and its first after was ~07:45 —
+# a gap over 600s, so nine bridge-fed tiles flipped DOWN and notified for a single event that had
+# already ended. At 1200 that gap is absorbed and a genuinely dead bridge still pages, 20 min in
+# rather than 10.
+#
+# NOT `max_retries`, which is the other way to buy the same tolerance and is the reason this knob
+# exists instead. Every push monitor holds max_retries=0 deliberately (2026-06-12, see the
+# monitor-bridge CLAUDE.md): with retries, Kuma parks a pushed `down` in PENDING and its own
+# heartbeat watchdog — which only `up` pushes satisfy — crosses maxretries first, so the Discord
+# message reads "No heartbeat in the time window" instead of the check's named offender. Widening
+# the window costs none of that: no PENDING state, and an explicit `down` push still flips the tile
+# immediately and carries its message.
+#
+# The four 600s push monitors that are NOT bridge-fed keep their own interval, because their
+# feeders run on their own cadences: CrowdSec Home Allowlist, Daniel Pi SD Health, Daniel Pi
+# Recovery, Arr Auto-Block. `test_bridge_push_monitors_share_one_interval` is what keeps the split
+# honest, deriving bridge membership from the bridge's own env-secret rather than from a list here.
+kuma_bridge_push_interval: 1200
+
 # HISTORY, measured 2026-08-21: on AutoKuma v2.0.0 this value reached the 25 http monitors and
 # NONE of the 50 push monitors. v2.0.0 declared `resendInterval` on MonitorHttp, MonitorJsonQuery
 # and MonitorKeyword only; MonitorPush had no such field, so serde dropped it and every push tile

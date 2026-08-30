@@ -14,6 +14,7 @@ import json
 import os
 import re
 import time
+import urllib.error
 from pathlib import Path
 
 import pytest
@@ -570,12 +571,34 @@ def _run_once_with_gates(monkeypatch, cluster_ok, checks, cluster_dependent):
     return pushed
 
 
-def _reset_b2_probe(monkeypatch, key_id="kid", app_key="akey", interval=1800):
+def _reset_b2_probe(
+    monkeypatch, key_id="kid", app_key="akey", interval=1800, transport_retry=300
+):
     monkeypatch.setattr(check, "B2_PROBE_KEY_ID", key_id)
     monkeypatch.setattr(check, "B2_PROBE_APPLICATION_KEY", app_key)
     monkeypatch.setattr(check, "B2_PROBE_INTERVAL_S", interval)
+    monkeypatch.setattr(check, "B2_TRANSPORT_RETRY_S", transport_retry)
     monkeypatch.setattr(
-        check, "_b2_probe", {"ts": 0.0, "ok": True, "msg": "not yet probed"}
+        check,
+        "_b2_probe",
+        {"ts": 0.0, "ok": True, "msg": "not yet probed", "ttl": interval},
+    )
+
+
+def _cap_denial():
+    """The exception a real transaction-cap breach raises.
+
+    _get_json re-raises urllib HTTPError UNTOUCHED (check.py, "Re-raise the SAME type") and wraps
+    only non-HTTP failures as RuntimeError. b2_reachable now branches on exactly that distinction
+    to pick a cache TTL, so a test that fakes a 403 as a RuntimeError would exercise the transport
+    path and prove the opposite of what it claims. These tests used to do that.
+    """
+    return urllib.error.HTTPError(
+        check.B2_PROBE_URL,
+        403,
+        "Forbidden: transaction_cap_exceeded",
+        {},
+        None,
     )
 
 
@@ -620,7 +643,7 @@ def test_b2_reachable_surfaces_the_cap_error_text(monkeypatch):
     _reset_b2_probe(monkeypatch)
 
     def _boom(url, headers=None):
-        raise RuntimeError("HTTP Error 403: transaction_cap_exceeded")
+        raise _cap_denial()
 
     monkeypatch.setattr(check, "_get_json", _boom)
     ok, msg = check.b2_reachable(now=10_000)
@@ -635,7 +658,7 @@ def test_b2_reachable_caches_failure_and_does_not_reprobe(monkeypatch):
 
     def _boom(url, headers=None):
         calls.append(url)
-        raise RuntimeError("HTTP Error 403: transaction_cap_exceeded")
+        raise _cap_denial()
 
     monkeypatch.setattr(check, "_get_json", _boom)
     first_ok, _ = check.b2_reachable(now=10_000)
@@ -648,6 +671,38 @@ def test_b2_reachable_caches_failure_and_does_not_reprobe(monkeypatch):
         )  # cached verdict still reported every cycle
     assert first_ok is False
     assert len(calls) == 1, "a cached failure must not re-probe: %d calls" % len(calls)
+
+
+def test_b2_reachable_reprobes_a_transport_failure_next_cycle(monkeypatch):
+    # The REJECT half of the caching pair above, and the 2026-08-30 restart's fix. A failure that
+    # never reached B2 was billed nothing, so the cost argument that justifies the 30-minute cache
+    # does not apply to it — and holding it pinned the gate DOWN for 25 minutes against an 8m35s
+    # outage, because the cache was holding back the RECOVERY as well as the retry.
+    _reset_b2_probe(monkeypatch, interval=1800, transport_retry=300)
+    calls = []
+    # _get_json wraps DNS/connect/timeout failures as RuntimeError; only these take the short TTL.
+    outcomes = [RuntimeError("b2 api: Temporary failure in name resolution")]
+
+    def _flaky(url, headers=None):
+        calls.append(url)
+        if outcomes:
+            raise outcomes.pop(0)
+        return {"accountId": "a1"}
+
+    monkeypatch.setattr(check, "_get_json", _flaky)
+    ok, msg = check.b2_reachable(now=10_000)
+    assert ok is False and "name resolution" in msg
+    # One cycle later the transport TTL has expired, so the gate re-probes and recovers — where a
+    # cap denial would still be reporting its cached verdict for another 25 minutes.
+    ok, msg = check.b2_reachable(now=10_300)
+    assert ok is True, "a transport failure must re-probe next cycle, got: %s" % msg
+    assert len(calls) == 2, "expected a re-probe, got %d calls" % len(calls)
+
+
+def test_b2_transport_retry_is_shorter_than_the_probe_interval():
+    # The two TTLs must not converge: if the transport retry ever reached B2_PROBE_INTERVAL_S the
+    # split above would be a no-op that still reads as implemented.
+    assert check.B2_TRANSPORT_RETRY_S < check.B2_PROBE_INTERVAL_S
 
 
 def test_b2_reachable_reprobes_after_the_interval(monkeypatch):

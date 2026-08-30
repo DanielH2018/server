@@ -166,6 +166,7 @@ nav:
       - Security tools: security-tools.md
       - WireGuard private access: wireguard-private-homelab-access.md
       - Healthchecks.io deadman: healthchecks-io-deadman.md
+      - Uptime Robot monitors: uptime-robot-monitors.md
       # Label omits the word this document's title carries before "drain". With it,
       # gitleaks' generic-api-key rule reads the label plus the high-entropy filename
       # after the colon as a credential and fails the commit.
