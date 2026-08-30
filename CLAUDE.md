@@ -50,7 +50,7 @@ Route to the source of truth by what you're doing, before reading linearly:
 
 | If you're… | Start here |
 |---|---|
-| Adding / changing a service (k3s — the default) | `/new-k8s-service` skill · a sibling role in `ansible/roles/k8s/` |
+| Adding / changing a service (k3s — the default) | `/new-k8s-service` skill · a sibling role in `ansible/roles/k8s/` · `ansible/roles/k8s/manifests/CLAUDE.md` for the shared render → apply → queue contract all 57 of them include |
 | Adding / changing a Docker service (the Pi only) | `/new-container` skill (daniel-pi only — neither cluster node has Docker) |
 | Deploying or redeploying a service | `/deploy` skill · `## Common Commands` below for the exit codes |
 | Retiring a finished worktree, or `ExitWorktree` refuses to remove one | `/worktree-cleanup` skill |
@@ -64,7 +64,7 @@ Route to the source of truth by what you're doing, before reading linearly:
 | Answering "what runs here / where / behind what" | `docs/reference/` — generated from the tree by the `docs-refresh` cron, browsable at `docs.local.<domain>`. Services, hosts, secret rotation, scheduled jobs, networking. **Never hand-edit a generated page**; a hook rejects it. Change the generator (`scripts/docs/build_docs.py` lists them). The hook decides by the `generated_from:` provenance banner rather than the path, so `reference/topology.md` — hand-written prose, the one page there nobody generates — stays editable. |
 | Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` + monitor-bridge `check.py` **first** — mature setup, most are handled |
 | Checking that a service's UI actually renders, not just that its pod is Ready | The `homelab-ui` MCP server — see `## Claude Tooling in This Repo` below, and `docs/claude-tooling.md` for the full reference. `probe.py health` cannot see a broken UI behind a healthy pod. |
-| A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment. The general mechanism is the central rollout-restart at `roles/k8s/manifests/tasks/main.yml:298`, which fires when a role's rendered manifests change. A role whose pod depends on a file the manifests *don't* carry adds its own `checksum/<thing>` pod annotation instead — e.g. `checksum/check-script` in `roles/k8s/monitor-bridge/templates/deployment.yaml.j2`. |
+| A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment. The general mechanism is the central rollout-restart in `ansible/roles/k8s/manifests/CLAUDE.md`, which fires when a role's rendered manifests change. A role whose pod depends on a file the manifests *don't* carry adds its own `checksum/<thing>` pod annotation instead — e.g. `checksum/check-script` in `roles/k8s/monitor-bridge/templates/deployment.yaml.j2`. |
 | A config edit won't recreate the container (Docker) | `ansible/roles/containers/common/CLAUDE.md` (config-change wiring) |
 | A host can't decrypt secrets | `add-secret` skill → *Onboarding a host that cannot decrypt yet* |
 | Starting Claude Code sessions from a phone | `ansible/roles/setup/claude_code/CLAUDE.md` — `claude-rc.service` hosts them. `/remote-control` inside a session and `claude rc` from a shell are different features; only the second creates sessions on demand. |
@@ -163,9 +163,9 @@ pod. Exercise the thing you actually changed as well.
 
 ### Working alongside other sessions
 
-- **The lock serializes; exit codes are resume points, not failures.** 75 = the lock stayed busy
-  (the timer or another session) — retry. 4 = the tree is behind origin/master — pull again,
-  never `--skip-staleness-check`. 2 = the tag matched nothing.
+- **The lock serializes, and the exit codes are resume points rather than failures** — the table
+  in *Common Commands* above is the one copy. Two of them mean another session got there first:
+  75 (the lock stayed busy) and 4 (the tree is behind `origin/master`).
 - **The tick pulls all of master, not just your commit.** Another session's merged work
   fast-forwards with yours. `land.sh` already scopes to your PR's own files; if you override with
   `--tags`, keep it to your own services.

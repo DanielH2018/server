@@ -330,8 +330,9 @@
   # manifests_-scoped: it is an accumulator every role in a batch appends to and
   # roles/k8s/rollout-drain consumes. A role prefix would make it look role-local, which is
   # exactly the wrong mental model for a fact that outlives this role.
-  # DOES NOT WAIT. The rollout is watched by ansible/tasks/k8s_rollout_drain.yml at the end of this
-  # role's batch, together with every other rollout the batch started — 1386s of serial waiting
+  # DOES NOT WAIT. The rollout is watched by roles/k8s/rollout-drain, invoked from
+  # ansible/tasks/k8s_batch.yml at the end of this role's batch, together with every other
+  # rollout the batch started — 1386s of serial waiting
   # across 31 services on 2026-08-15 becomes max() per batch instead of sum().
   #
   # `changed` is recorded here, not recomputed at the drain: it decides whether the stabilisation
