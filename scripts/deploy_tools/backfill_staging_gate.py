@@ -32,8 +32,8 @@ the tree is already past the commits that failed. `--allow-ancestors` exists onl
 operator watch that failure happen deliberately.
 
 THE LEDGER IS THE POINT, not any single invocation. History supplies far fewer usable samples
-than the entry condition asks for — measured 2026-08-30, eleven of the last 400 master commits,
-once the era filter below is applied. So `--jsonl` is read back as well as written: runs
+than the entry condition asks for — measured 2026-08-30, five of the last 400 master commits,
+once the era filters below are applied. So `--jsonl` is read back as well as written: runs
 accumulate across invocations and
 the condition ratchets toward MET as future commits are gated, rather than needing a third
 rescope down to whatever one backfill happened to yield.
@@ -131,6 +131,30 @@ def staged_services_at(sha: str) -> set[str]:
     }
 
 
+def resolves_collections_at(sha: str) -> bool:
+    """Whether a deploy at this commit can find the Ansible collections.
+
+    The gate's checkout has no collections of its own — nothing runs `ansible-galaxy install`
+    there. It borrows the primary checkout's, through an absolute FALLBACK entry in
+    `collections_path` that landed in #560. Before that commit the path is repo-relative, so
+    `community.sops.load_vars` is unresolvable and deploy.sh exits 4 during pre_tasks.
+
+    Measured 2026-08-30: six of eleven backfill runs died exactly there, and exit 4 is
+    deploy.sh's staleness code, so they read as a stale tree rather than a missing collection.
+    Derived from the file rather than pinned to a SHA, because the fix is the absolute entry
+    and not the commit that happened to add it.
+    """
+    try:
+        text = run_git("show", f"{sha}:ansible.cfg")
+    except subprocess.CalledProcessError:
+        return False
+    for line in text.splitlines():
+        name, _, value = line.partition("=")
+        if name.strip() == "collections_path":
+            return any(part.strip().startswith("/") for part in value.split(":"))
+    return False
+
+
 def gateable_services(sha: str) -> set[str]:
     """The services this commit changed that staging can speak for.
 
@@ -141,7 +165,11 @@ def gateable_services(sha: str) -> set[str]:
 
     Intersected a second time with what staging ran AT THAT COMMIT, so a change to a role that
     only became staging-capable later is not gated on a cluster that could not have taken it.
+    And gated at all only if that commit's ansible.cfg can find the collections — see
+    `resolves_collections_at`.
     """
+    if not resolves_collections_at(sha):
+        return set()
     cs = deploy_logic.services_from_changed_paths(changed_paths(sha))
     return set(cs.k8s) & set(staging_gate.STAGING_SERVICES) & staged_services_at(sha)
 

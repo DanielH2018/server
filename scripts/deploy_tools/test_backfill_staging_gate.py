@@ -115,6 +115,7 @@ def test_only_subset_services_are_gated(monkeypatch):
         ],
     )
     monkeypatch.setattr(bf, "staged_services_at", lambda _sha: {"freshrss", "traefik"})
+    monkeypatch.setattr(bf, "resolves_collections_at", lambda _sha: True)
     assert bf.gateable_services("x") == {"freshrss"}
 
 
@@ -149,6 +150,29 @@ def test_the_era_filter_reads_the_inventory_at_that_commit(monkeypatch):
         lambda *_a: "containers_list:\n  - name: traefik\n  - name: freshrss\n",
     )
     assert bf.staged_services_at("x") == {"traefik", "freshrss"}
+
+
+def test_a_commit_whose_ansible_cfg_cannot_find_the_collections_is_not_gateable(
+    monkeypatch,
+):
+    """The gate's checkout installs no collections of its own and borrows the primary
+    checkout's through an absolute fallback entry. Without it, deploy.sh exits 4 in pre_tasks —
+    which is its STALENESS code, so the run reads as a stale tree rather than the real cause."""
+    monkeypatch.setattr(
+        bf, "run_git", lambda *_a: "collections_path = ansible/collections\n"
+    )
+    assert bf.resolves_collections_at("x") is False
+
+
+def test_an_absolute_fallback_entry_makes_a_commit_gateable(monkeypatch):
+    monkeypatch.setattr(
+        bf,
+        "run_git",
+        lambda *_a: (
+            "collections_path = ansible/collections:/home/ubuntu/server/ansible/collections\n"
+        ),
+    )
+    assert bf.resolves_collections_at("x") is True
 
 
 def test_a_commit_before_the_staging_inventory_existed_stages_nothing(monkeypatch):

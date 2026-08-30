@@ -273,14 +273,21 @@ defect in that commit, and guessing either way corrupts the measurement in a dif
 direction. Any run left untriaged holds the verdict at NOT MET.
 
 **History cannot supply 20 samples, and the script does not pretend otherwise.** Measured
-2026-08-30, eleven of the last 400 master commits are gateable once two filters apply: the
-commit must change a service in the staging subset, and staging must have *run* that service at
-that commit. The second filter is not fussiness — a commit predating its role's per-cluster
-switch deploys prod-shaped config to a cluster that cannot take it and comes back REJECTED, an
-outcome that is neither a gate misfire nor a defect in the commit and so has no honest triage
-answer. So the 20 accumulate in a **ledger**: `--jsonl <path>` is read back as well as written,
-and the streak spans every recorded run rather than one invocation. Eleven historical samples
-plus each future gated commit reach 20 without a third rescope.
+2026-08-30, **five** of the last 400 master commits are gateable once three filters apply. The
+commit must change a service in the staging subset; staging must have *run* that service at
+that commit; and the `ansible.cfg` at that commit must be able to find the Ansible collections.
+
+None of the three is fussiness, and each was found by a run rather than by reading. A commit
+predating its role's per-cluster switch deploys prod-shaped config to a cluster that cannot
+take it and comes back REJECTED — neither a gate misfire nor a defect in the commit, so it has
+no honest triage answer. A commit predating #560 has a repo-relative `collections_path`, and the
+gate's checkout installs no collections of its own, so `community.sops.load_vars` is
+unresolvable and `deploy.sh` exits 4 in `pre_tasks`. Exit 4 is its *staleness* code, so six of
+the first eleven runs read as a stale tree while the real cause was a missing collection.
+
+So the 20 accumulate in a **ledger**: `--jsonl <path>` is read back as well as written, and the
+streak spans every recorded run rather than one invocation. Five historical samples plus each
+future gated commit reach 20 without a third rescope.
 
 **A backfill is a one-shot.** The gate's checkout only fast-forwards, so a run leaves it at the
 newest commit in the window and a second pass over the same window is all ancestors. The script
