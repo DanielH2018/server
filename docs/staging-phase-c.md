@@ -4,14 +4,17 @@ Makes `gitops-deploy` deploy a merged change to `daniel-stage` first, and touch 
 that succeeded. Phases A and B (`staging-cluster.md`) built a cluster and taught the repo to
 deploy to it. This is the phase where the cluster starts refusing things.
 
-**Status as of 2026-08-28: slices 1-3 built, and the gate is ON in advisory mode on
+**Status as of 2026-08-30: slices 1-3 built, and the gate is ON in advisory mode on
 daniel-box.** It asks daniel-stage about every commit that would auto-deploy a k8s service,
 logs and alerts the verdict, and deploys prod either way. Slice 4 (blocking) is not started,
-and its entry condition is evidence rather than effort — see *Entry condition* at the end.
-The clock on that evidence starts here: the rate accrues only while the gate runs against real
-merges. Set `gitops_deploy_staging_gate: false` and re-run `initial_setup.yml --tags
-gitops_deploy` to switch it back off, at which point the deployer behaves exactly as it did
-before any of this existed.
+and its entry condition is evidence rather than effort — see *Entry condition* at the end,
+**rescoped 2026-08-30** because the original version could not be satisfied: the gate is
+reachable by roughly one real tick a month, so the evidence is now gathered by a deliberate
+backfill rather than by waiting on merges.
+
+Set `gitops_deploy_staging_gate: false` and re-run `initial_setup.yml --tags gitops_deploy` to
+switch it back off, at which point the deployer behaves exactly as it did before any of this
+existed.
 
 ---
 
@@ -203,9 +206,12 @@ Vertical slices; each leaves something exercisable, and the gate arrives last on
    alerts the verdict, and deploys prod regardless. It is advisory *by construction*, not by
    intent: the function returns nothing, every child process it starts sits inside a broad
    `except`, and `test_staging_gate_is_advisory.py` fails if either changes or if `main()`
-   starts branching on it. **This is the slice that collects the false-failure rate**, which is
-   why it is switched on (`gitops_deploy_staging_gate: true`) rather than merely built —
-   building it collects nothing.
+   starts branching on it. It is switched on (`gitops_deploy_staging_gate: true`) rather than
+   merely built, because building it exercises nothing. **It does not, on its own, collect the
+   false-failure rate** — that was this spec's original plan and it does not work; see *Entry
+   condition* for why the organic sample rate is about one a month, and what replaced it. What
+   slice 3 does supply is the two real gated ticks part 2 of that condition requires, and the
+   live path a backfill would otherwise only simulate.
 4. **Enforcing mode, with the override.** Flip advisory to blocking. Ship the override in the
    same slice, never later.
 
@@ -216,16 +222,87 @@ works and enforcing is one flag away.
 
 ## Entry condition, and why it is not "when the code is ready"
 
-The Phase A/B spec gates Phase C on slice 6 having run against real merges for long enough to
-know its false-failure rate. That clock started on 2026-08-28, when the subset completed.
-
 The number matters because it decides whether the gate can be trusted, and trust is the whole
 mechanism. A gate whose false-failure rate is unknown will block a good deploy, get overridden
 once, and then get overridden by habit — at which point it costs 20 minutes a tick and prevents
-nothing.
+nothing. That reasoning is unchanged. What changed is how the number is obtained.
 
-**Slice 3 above is how the number gets collected**, so the entry condition is not a reason to
-delay starting — it is a reason not to reach slice 4 early.
+### The original condition could not be met, and waiting was never going to fix it
+
+The Phase A/B spec gated Phase C on slice 6 having run against real merges for long enough to
+know its false-failure rate, and said slice 3 would collect it. The clock started 2026-08-28.
+**Thirty-six hours later it had produced zero samples, and that is the expected result rather
+than bad luck.**
+
+`consult_staging` runs only when a tick carries `cs.k8s_deploy`, so a verdict needs a service
+that is in the staging subset AND auto-deployable AND image-pin-bumped by that commit. Measured
+2026-08-29:
+
+| subset service | `k8s_autodeploy` | can a tick ever gate it? |
+|---|---|---|
+| traefik | false | no |
+| authelia | false | no |
+| registry | false | no |
+| freshrss | true | yes |
+| node-exporter | true | yes |
+| ical-proxy | true | yes |
+
+Half the subset is structurally unreachable by a tick, and no image-pin bump landed for the other three in
+the preceding three weeks — the bumps that did land were Traefik, Prometheus and the OpenTelemetry
+collector, none of them in that set. The organic rate is on the order of **one sample a month**,
+so a *rate* is not reachable by waiting at all. An entry condition that cannot be met is not a
+high bar; it is a condition that will eventually be waived under pressure, which is worse than a
+lower one honestly stated.
+
+### The rescoped condition (2026-08-30)
+
+The false-failure rate is a property of the gate MECHANISM, not of Renovate's schedule, so it is
+measured deliberately. Three parts, all required.
+
+**1. A backfill of 20 consecutive gate runs against real master SHAs, with zero false failures.**
+
+- A *false* failure is any non-PASS whose cause is the gate rather than the change: staleness,
+  prep failure, ssh transport, dispatcher refusal, timeout, lock contention.
+- A REJECTED traced to a genuine defect in that SHA is a **true** failure. It does not break the
+  run, is recorded separately, and is evidence *for* the gate.
+- Each run must use a tick's own shape: the SHA that was master's tip, and tags equal to that
+  services changed by that commit, intersected with `STAGING_SUBSET`. A backfill that gates services no
+  tick would have gated measures a gate nobody runs.
+- **Consecutive, not averaged.** A fix that takes the failure rate from 60% to 5% is not ready,
+  and a mean over the whole history hides exactly that.
+
+**2. At least two real gated ticks, both PASS.**
+
+Not a rate — proof that the invocation path works at all. The backfill drives `staging_gate.py`
+from an operator shell; the deployer drives `consult_staging` from a systemd unit, under
+`uv run --no-project`, from a different working directory and a different environment. That
+difference has already produced two defects no harness could have seen (#569: `sys.executable`
+resolving to whichever venv sat in `WorkingDirectory`, and `uv run` picking its project from
+cwd). If no eligible bump lands naturally, force one by bumping an image pin on freshrss,
+node-exporter or ical-proxy.
+
+**3. A written answer to what blocking mode does on NO_VERDICT.**
+
+A decision rather than data, and the old condition hid it inside the phrase "false-failure rate." NO_VERDICT
+means the gate could not be asked, which is never the change's fault. Blocking on it parks prod
+behind staging's availability; passing on it makes any staging outage a way through the gate.
+Slice 4 must state which, and if the answer is to block, it must also state the operator's route
+past it — the override this slice ships anyway.
+
+### What is deliberately NOT in the condition
+
+**A false-PASS rate.** That measures the gate's *coverage*, which is what the expectation checks
+and the subset already bound, and it is the wrong question for this decision. A gate that misses
+a defect leaves prod exactly where it is today; a gate that blocks a good change is a regression
+against today. Only the second decides whether blocking is safe.
+
+### Where the evidence stands
+
+Not yet satisfied. Encouraging, and not a substitute for part 1: after the staleness fix (#599),
+six consecutive hand runs against real master SHAs all returned PASS, two of them through the
+restricted key. Those were ad-hoc — varied tags, chosen SHAs — so they are a prior, not the
+backfill. Every NO VERDICT observed before that fix was the gate's own staleness bug rather than
+staging's opinion, which is the reason the count starts from #599 rather than from 2026-08-28.
 
 One honest input to that rate, from the day the subset landed: staging's own tooling produced
 three wrong verdicts (two guard bugs in the variable sentinel, one stand-in value read as

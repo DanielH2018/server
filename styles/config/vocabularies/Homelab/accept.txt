@@ -335,3 +335,9 @@ rc
 
 # Claude shell permissions (docs/claude-shell-permissions.md)
 dotfiles
+
+# Staging phase C (docs/staging-phase-c.md)
+[Rr]escoped
+[Ss]HAs
+venv
+cwd

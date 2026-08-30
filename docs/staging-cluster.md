@@ -497,10 +497,13 @@ rather than a widening, on the same reasoning as the cron-PATH guard — don't e
 on principle when the uncovered forms have been audited.
 
 Phase C (pipeline gating) has started. Slices 1-3 are built and the gate is ON in advisory
-mode on daniel-box, which is how the false-failure rate above gets measured — leaving it off
-collects nothing. [staging-phase-c.md](staging-phase-c.md) carries the live status; do not
-restate it here, because a second copy is what made this paragraph assert an unmet
-precondition for a day after the gate was already running.
+mode on daniel-box. **Advisory mode is not, on its own, how the false-failure rate gets
+measured** — that was this spec's assumption and it did not survive contact: only about one
+tick a month can reach the gate, so the rate is now gathered by a deliberate backfill.
+[staging-phase-c.md](staging-phase-c.md) carries the live status and the rescoped entry
+condition; do not restate either here, because a second copy is what made this paragraph
+assert an unmet precondition for a day after the gate was already running — and what made it
+assert a measurement plan for two days after that plan was known not to work.
 
 ## Open questions for Phase C, recorded now
 
