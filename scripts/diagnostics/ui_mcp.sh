@@ -77,7 +77,8 @@ cat >"$CONFIG_PATH" <<EOF
       "headless": true,
       "args": [
         "--host-resolver-rules=MAP *.local.$DOMAIN $VIP",
-        "--no-sandbox"
+        "--no-sandbox",
+        "--disable-http2"
       ]
     },
     "contextOptions": {
@@ -87,6 +88,16 @@ cat >"$CONFIG_PATH" <<EOF
   }
 }
 EOF
+
+# `--disable-http2` is load-bearing, not tuning. The resolver rule above maps every
+# `*.local.<domain>` name to ONE address, and they share one wildcard certificate, so
+# Chromium considers the connections interchangeable and coalesces them. A request that then
+# arrives on a connection opened for a different hostname is answered by Traefik with
+# `421 Misdirected Request`. For a navigation the browser hides that by retrying on a fresh
+# connection; for the page's OWN XHRs it does not, so a dashboard would mount its chrome and
+# then render no panels at all — silently, and only sometimes. Measured 2026-08-30: the
+# Grafana panel tier failed this way on 5 dashboards in one run and a disjoint 2 in the next.
+# HTTP/1.1 has no coalescing, so the failure cannot occur.
 
 # Snapshots, console logs and screenshots default to `.playwright-mcp/` in the CURRENT
 # directory, so without this the server litters whatever tree it was launched from — the

@@ -138,6 +138,39 @@ Pin the **exact** page title when adding a service. Several apps carry their own
 Authelia (`FreshRSS` lands on `/i/`, uptime-kuma on `/dashboard`, karakeep on `/signin`), so a
 substring like `FreshRSS` also matches `Login · FreshRSS` and scores a broken app green.
 
+### The Grafana panel tier
+
+`test_grafana_dashboard_renders_its_panels` goes one step further for Grafana alone: it logs
+in and counts the panels a dashboard actually drew. A title check cannot do that, and the
+gap is the reason the tier exists — 19 Angular panels were provisioned to a Grafana that had
+dropped Angular and rendered nothing for 55 minutes behind a 1/1 pod.
+
+It authenticates by POSTing Grafana's own `/login` from inside the page with the SOPS
+`grafana_admin_password`. Same origin, so the Authelia session `ui_mcp.sh` already minted
+carries it — no route is opened for a machine caller, and the password never leaves the
+pytest process and the MCP server. Grafana registers that endpoint behind its
+not-signed-in middleware, so the tier checks `/api/user` **before** posting: once a session
+exists the mint endpoint answers 404, which reads exactly like a wrong password.
+
+`grafana_panel_report.classify()` holds the judgement and is unit-tested without a browser.
+Three things it separates, each of which cost a debugging session to find:
+
+- **A page that never mounted is retried, never reported.** Its signature is a URL still at
+  the bare `/d/<uid>/` — Grafana rewrites it to `/d/<uid>/<slug>` once it has the dashboard —
+  or fewer than 10 `data-testid` attributes. Grafana's own chrome is 27 to 53 of them, so a
+  testid count alone reads a dashboard-shaped hole as a mounted page.
+- **A row-only dashboard passes on rows.** `crowdsec-details-per-machine` is 4 panels, every
+  one a `row`; it draws no panel header until a row is expanded.
+- **`No data` is not an error.** Grafana marks an empty panel with the same testid it marks a
+  broken one. Failing on the count flags every dashboard whose window is quiet — so the
+  message decides. The cost is that a panel whose metric *died* also reads `No data` and
+  passes here.
+
+**Rendering these dashboards is expensive server-side.** Opening four of them OOMKilled
+Grafana at its old 512Mi limit and again at 1Gi; the working set peaks at ~1084 MiB, and the
+limit is now 2Gi. A pod in `CrashLoopBackOff` with nothing but 200s in its log is this, not a
+fault — check `Last State` for `OOMKilled`.
+
 ### The `two_factor` services
 
 **code-server, n8n and longhorn are `two_factor`**, so the ordinary session bounces off them at
