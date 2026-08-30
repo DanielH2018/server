@@ -79,3 +79,14 @@ id_ed25519
 # Ephemeral per-session git worktrees (.claude/worktrees/<name>). Session state, not repo
 # content — and each is itself a git repo, so committing one adds a gitlink nothing can clone.
 .claude/worktrees/
+
+# Output of scripts/deploy_tools/backfill_staging_gate.py — one JSONL row per replayed commit,
+# regenerated on every run. Local measurement, not repo content.
+#
+# It is ignored rather than merely untracked because the GitOps deployer reads
+# `git status --porcelain` (gitops_deploy.py:998), which COUNTS untracked files, and treats a
+# dirty tree as a healthy skip: the tick completes and writes last_run, so GitOps-Alive stays
+# green while nothing fast-forwards. On 2026-08-30 that parked the primary checkout 7 commits
+# behind for ~40 minutes with every signal green — the deployer was working exactly as designed
+# and the only cause was this file existing.
+.claude/staging-backfill.jsonl
