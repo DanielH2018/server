@@ -285,3 +285,37 @@ def test_stripping_a_stage_that_is_all_keywords_is_empty_not_an_error():
     from _hook_common import strip_shell_keywords
 
     assert strip_shell_keywords(["until", "!"]) == []
+
+
+# --- 7. a partial security_and_analysis PATCH ---------------------------------------------------
+
+
+def test_a_partial_security_and_analysis_patch_is_denied():
+    found = _mod.problem(
+        "gh api -X PATCH repos/o/r -f security_and_analysis[secret_scanning][status]=enabled"
+    )
+    assert found is not None
+    assert "dependabot_security_updates" in found
+
+
+def test_a_patch_naming_all_five_members_is_clean():
+    """The safe partial edit. The rule exists to send you here, so it must not fire on it."""
+    members = " ".join(
+        f"-f security_and_analysis[{m}][status]=enabled"
+        for m in _mod._SECURITY_ANALYSIS_MEMBERS
+    )
+    assert _mod.problem(f"gh api -X PATCH repos/o/r {members}") is None
+
+
+def test_the_dedicated_endpoint_is_clean():
+    """The other documented way to change one setting without touching the rest."""
+    assert _mod.problem("gh api -X PUT repos/o/r/vulnerability-alerts") is None
+
+
+def test_a_read_of_security_and_analysis_is_clean():
+    """A GET cannot reset anything, so reading the object must stay unblocked."""
+    assert _mod.problem("gh api repos/o/r --jq .security_and_analysis") is None
+
+
+def test_an_unrelated_gh_api_patch_is_clean():
+    assert _mod.problem("gh api -X PATCH repos/o/r -f description=hi") is None

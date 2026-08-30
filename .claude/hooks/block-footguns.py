@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse(Bash) guard: six commands that fail silently on this machine.
+"""PreToolUse(Bash) guard: seven commands that fail silently on this machine.
 
 Each has a deterministic signature, a recorded cost, and a one-line fix — which is what makes
 them worth a hook rather than a paragraph. What they share is that none of them ERRORS: every
@@ -34,6 +34,10 @@ one produces a plausible-looking result that is wrong, so nothing downstream not
      so pgrep matches the waiter itself and the check reads as "still running" forever. Five
      such waiters were left spinning on 2026-08-17 and none ever fired — two of them created
      because the earlier ones seemed not to work.
+
+  7. A partial `security_and_analysis` PATCH. GitHub REPLACES the object, so every member left
+     out is reset rather than preserved, and the call returns 200 either way. One such PATCH
+     disabled Dependabot alerts and enabled nothing.
 
 Reads the hook JSON on stdin. Emits a PreToolUse "deny" decision carrying the fix; otherwise no
 output -> normal permission flow. The hook can only ever DENY.
@@ -79,6 +83,16 @@ _BURST_TOOLS = frozenset(
         "locust",
     }
 )
+# Every member of GitHub's `security_and_analysis` object. A PATCH REPLACES the object, so any
+# member left out is reset rather than preserved — naming all five is the only safe partial edit.
+_SECURITY_ANALYSIS_MEMBERS = (
+    "advanced_security",
+    "secret_scanning",
+    "secret_scanning_push_protection",
+    "dependabot_security_updates",
+    "secret_scanning_validity_checks",
+)
+
 _PUBLIC_SUFFIX = ".daniel-hunter.com"
 _LAN_SUFFIX = ".local" + _PUBLIC_SUFFIX
 
@@ -197,6 +211,34 @@ def pgrep_self_match_problem(stage: list[str]) -> str | None:
     )
 
 
+def security_and_analysis_problem(stage: list[str]) -> str | None:
+    """A `security_and_analysis` PATCH naming fewer than all five members.
+
+    GitHub REPLACES the whole object, so an omitted member is RESET rather than left alone.
+    Sending only `secret_scanning` disabled Dependabot alerts and enabled nothing, and the call
+    returns 200 either way.
+    """
+    words = strip_shell_keywords(stage)
+    if not invokes(words, ("gh", "api")):
+        return None
+    text = " ".join(words)
+    if "security_and_analysis" not in text:
+        return None
+    if "PATCH" not in text and "-X" not in text:
+        return None
+    missing = [m for m in _SECURITY_ANALYSIS_MEMBERS if m not in text]
+    if not missing:
+        return None
+    return (
+        "A `security_and_analysis` PATCH REPLACES the object — every member you omit is reset, "
+        "and the call returns 200 either way. This one omits: "
+        + ", ".join(missing)
+        + ". Send all five, or use the dedicated endpoints "
+        "(`PUT /repos/{o}/{r}/vulnerability-alerts`, `.../automated-security-fixes`), which "
+        "change one setting without touching the rest."
+    )
+
+
 _RULES = (
     ugrep_flag_problem,
     bare_stash_problem,
@@ -204,6 +246,7 @@ _RULES = (
     remote_git_problem,
     burst_public_hostname_problem,
     pgrep_self_match_problem,
+    security_and_analysis_problem,
 )
 
 
