@@ -157,6 +157,22 @@
     mode: "0755"
   become: true
 
+- name: Install the staging-gate runner outside the tree it renders
+  tags: [hypervisor]
+  # The dispatcher used to exec this script out of the gate's own checkout, which made the
+  # gate's mechanism a property of the commit under test. Two consequences, and the second is
+  # the one that bit: a commit could gate itself with its own edited copy of the gate, and
+  # resetting that checkout behind a backfill window removed the script entirely — measured
+  # 2026-08-30, eleven runs came back 127 and read as an authentication failure. Root-owned for
+  # the same reason as the dispatcher above: the key's forced command reaches this file.
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/deploy_tools/staging_gate_remote.sh"
+    dest: "{{ hypervisor_staging_gate_runner_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
 - name: Authorize the staging-gate key against that dispatcher only
   tags: [hypervisor]
   # `restrict` turns off port/agent/X11 forwarding, pty allocation and user rc — the whole

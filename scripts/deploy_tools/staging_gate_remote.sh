@@ -12,13 +12,14 @@
 # reading stdin executes whatever the caller pipes. The fix is that the far side reads a request
 # — an operation name and arguments — and never a script body.
 #
-# WHY THE BODY IS A FUNCTION. This file is executed from disk, and it fast-forwards the very
-# checkout it lives in. bash reads a script by byte offset as it goes, so a `git merge --ff-only`
-# that rewrites this file mid-run would resume at a meaningless offset. Wrapping everything in
-# `main` and calling it on the last line makes bash parse the whole body before any of it runs,
-# so the rewrite cannot reach the code still to execute. Piping was immune to this for free,
-# because the body arrived on stdin rather than from the file being rewritten; executing from
-# disk is not. Do not unwrap this.
+# WHY THE BODY IS A FUNCTION. The copy that runs is installed at
+# hypervisor_staging_gate_runner_path, OUTSIDE the checkout it fast-forwards, so the hazard this
+# guards against is no longer reachable — but it was, and the wrapper costs nothing. bash reads
+# a script by byte offset as it goes, so when this file was exec'd from the checkout, a
+# `git merge --ff-only` that rewrote it mid-run resumed at a meaningless offset. Wrapping
+# everything in `main` and calling it on the last line makes bash parse the whole body before
+# any of it runs. Do not unwrap this: it is what makes running from the checkout safe if anyone
+# ever does so by hand.
 #
 # EXIT CODE IS THE WHOLE INTERFACE. `PREP_FAILED` means the deploy never started, so staging has
 # no opinion about the change; anything else is deploy.sh's own exit code passed through

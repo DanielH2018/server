@@ -174,3 +174,11 @@
     path: "{{ hypervisor_staging_gate_dispatch_path }}"
     state: absent
   become: true
+
+- name: Remove the staging-gate runner
+  tags: [hypervisor]
+  # After the dispatcher, which is the only thing that execs it.
+  ansible.builtin.file:
+    path: "{{ hypervisor_staging_gate_runner_path }}"
+    state: absent
+  become: true

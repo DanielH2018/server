@@ -289,6 +289,15 @@ the `git reset --hard` that would make the window runnable — a refusal is chea
 false failures that say nothing about the gate. Resuming a run that died partway needs another
 reset for the same reason.
 
+**That reset was not safe until the runner moved out of the checkout.** The first attempt on
+2026-08-30 reset the tree to `9bc53639`, a commit predating the gate itself, and the dispatcher
+exec'd `./scripts/deploy_tools/staging_gate_remote.sh` from that tree — which did not exist
+there. Eleven runs returned 127, and `staging_gate.py` reported 127 as proof the restricted key
+had not authenticated. That was false: `ssh -v` showed the key accepted and the forced command
+running. The runner is now installed by `roles/setup/hypervisor` at
+`hypervisor_staging_gate_runner_path`, so the gate's mechanism is no longer chosen by the commit
+it is judging, and the 127 message names both of its causes.
+
 - A *false* failure is any non-PASS whose cause is the gate rather than the change: staleness,
   prep failure, ssh transport, dispatcher refusal, timeout, lock contention.
 - A REJECTED traced to a genuine defect in that SHA is a **true** failure. It does not break the
