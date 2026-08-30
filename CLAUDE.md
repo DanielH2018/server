@@ -20,7 +20,7 @@ ansible/          # Ansible playbooks, roles, inventory, templates  ← EDIT HER
     archive/        # Roles retired by the k3s migration, kept for reference
 scripts/          # Helper scripts, grouped by what they act on
   lib/              # The two helpers everything else imports: _render_guard, docs_provenance
-  backup/ deploy_tools/ diagnostics/ docs/ grafana/
+  availability_bots/ backup/ deploy_tools/ diagnostics/ docs/ grafana/
   home_assistant/ infra_map/ secrets_mgmt/ validate/ dev/
 docs/             # Runbooks, design specs, security notes
   archive/          # Superseded planning docs, incl. the completed Docker → k3s migration
@@ -41,7 +41,7 @@ docs/             # Runbooks, design specs, security notes
 
 > **`containers/` is not a directory in this repo** — it is untracked and rendered by Ansible onto the *target host* at `/home/<user>/server/containers/<svc>/docker-compose.yml`. Post-migration it exists only on `daniel-pi`; neither cluster node has one. It is still read-only: edits are overwritten on the next deploy, so always modify `ansible/roles/containers/*/templates/` instead. (The `block-protected-edits` hook enforces this.)
 
-> **`roles/containers/` is now only the Pi.** Every role there is a Docker service live on `daniel-pi` — `autoheal`, `docker-proxy`, `glances`, `wg-easy` — plus the shared `common` deploy path and `archive/`. A service's config lives in the role that deploys it, on both trees: **if a k3s workload reads it, it is under `roles/k8s/<name>/`**, not across the tree boundary. (Until 2026-08-14 eleven roles here were config-only sources for a k8s counterpart; they moved into it. To revive one as a Docker service, take its Compose plumbing from git history.)
+> **`roles/containers/` is now only the Pi.** Every role there is a Docker service live on `daniel-pi` — `autoheal`, `docker-proxy`, `glances`, `node-exporter`, `promtail`, `wg-easy` — plus the shared `common` deploy path and `archive/`. (`containers_list` in `ansible/inventory/host_vars/daniel-pi.yml` is the source of truth for which are deployed.) A service's config lives in the role that deploys it, on both trees: **if a k3s workload reads it, it is under `roles/k8s/<name>/`**, not across the tree boundary. (Until 2026-08-14 eleven roles here were config-only sources for a k8s counterpart; they moved into it. To revive one as a Docker service, take its Compose plumbing from git history.)
 >
 > **Where a k8s role's non-manifest config goes.** `roles/k8s/<name>/templates/` is for **manifests only** — `validate_k8s_manifests.py` renders every `*.j2` there and parses it as YAML. App config a manifest embeds via `lookup()` goes one level down in **`templates/config/`** (CouchDB's `local.ini`, HA's `configuration.yaml`, homepage's `custom.css` — none of them YAML manifests), and static assets go in `files/`. `Dockerfile*` is exempt and may sit in `templates/` directly; the validator skips it by name.
 
@@ -269,7 +269,8 @@ history, the `homelab-ui` DNS/auth/secrecy triad and its `-m ui` suite, per-file
   is a heuristic over command text and a wrong extraction must not block work. It also **denies**
   a content-printing read (`cat`, `head`, `grep` without `-o`/`-c`/`-l`) of a deployed host
   script that renders a credential inline; that set is derived from the tree by
-  `scripts/secrets_mgmt/secret_bearing_host_paths.py`, not listed, and covers 15 paths today.
+  `scripts/secrets_mgmt/secret_bearing_host_paths.py`, not listed — run it to see the current
+  set rather than trusting a count written here.
 - **nudge-land-sh** (PreToolUse, Bash) — *denies* a command that blocks on CI (`gh run watch`,
   `gh pr checks --watch`) and the third or later CI-status read in one session, naming the
   `land.sh --pr <n> --since <sha>` form instead. The first two reads are an ordinary glance and
@@ -318,8 +319,10 @@ feedback + MLD discipline):
   memory file or a commit message is a decision every future reviewer re-derives; one written as a
   comment where the code makes the trade-off is one they trip over before they spend an hour on it.
   Write the marker, then the reasoning, and point at the long form rather than at a line number
-  that will drift — the live example is `gitops_deploy.py:1053`: `# DECIDED: origin[:8] is a fixed
-  slice while volume-snapshot names with --short=8, a MINIMUM width … Full analysis in this role's
+  that will drift — this file cited `gitops_deploy.py:1053` for the live example until the marker
+  moved 239 lines to 1292, so cite the marker text instead: `grep -rn 'DECIDED: `origin\[:8\]`'
+  ansible/roles/setup/gitops_deploy/files/` finds it wherever it lands, and reads `a fixed slice
+  while volume-snapshot names with --short=8, a MINIMUM width … Full analysis in this role's
   CLAUDE.md.` Reviewer briefs grep for it
   (`.claude/skills/homelab-review/SKILL.md`, step 3), so the marker is what carries the decision to
   the agent that would otherwise re-open it. It is a prior, not a verdict: contradict one with new
@@ -432,11 +435,11 @@ uv run pytest scripts         # just one suite
 - **Deps live once** in the `dev` dependency group; the prek `pytest` and
   `validate-compose-templates` hooks call `uv run`, so there's no duplicated dependency list.
   **uv must be on `PATH` for `prek run`** (CI installs it via `astral-sh/setup-uv`).
-- **Suites:** `ansible/tests/` (toposort deploy-ordering filters, the k8s auto-deploy guard,
-  and the auto-deploy denylist derivation),
-  `ansible/roles/k8s/monitor-bridge/files/` + `ansible/roles/k8s/autofix-bridge/files/`
-  (B2/Prometheus/Loki check logic),
-  `.claude/hooks/` (read-only Bash classifier), `scripts/` (image-diff parser).
+- **Suites:** read `testpaths` in `pyproject.toml` — it names every one, with a comment saying
+  what each covers. Four shapes recur: repo-wide guards in `ansible/tests/` (deploy ordering,
+  the auto-deploy gates, the documented-path and macro checks), a role's own cluster-side logic
+  under `ansible/roles/<plane>/<role>/files/`, the Bash classifier in `.claude/hooks/`, and
+  `scripts/`. A role that ships a `files/*.py` with logic adds itself to `testpaths`.
 - **A new check ships with a proof it can go RED.** Any validator, guard, health check or probe
   lands with a paired test: one input it must accept, and one input it must reject. A check is only
   ever observed passing, so without the rejecting half there is no evidence it can fail — and this
