@@ -3,7 +3,7 @@
 # pair is stopped and removed (compose file kept for rollback beside the tar snapshot),
 # both volumes force-seeded, and this instance is the alerting spine now.
 # SAME tag as the Docker copy on purpose — the seeded SQLite crosses hosts, not versions.
-uptime_kuma_k8s_image: louislam/uptime-kuma:2.5.0
+uptime_kuma_k8s_image: louislam/uptime-kuma:2.5.3
 # Pinned (the Docker sidecar ran :latest): the k8s-defaults Renovate manager only tracks
 # versioned pins. v2.0.0 is what the KD5 gate verified (docker.enabled, static-file
 # notification entities, on_delete semantics); 2.1.0-rc.2 is a deliberate prerelease, taken on
