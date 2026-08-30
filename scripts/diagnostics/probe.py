@@ -89,6 +89,7 @@ from probe_health import (
     k8s_pods_argv,
     resolve_ip,
     run_health,
+    run_readonly_rbac,
 )
 from probe_metrics import run_query
 from probe_monitors import run_kuma_drift, run_monitors
@@ -255,6 +256,20 @@ def _build_parser():
         "--dry-run",
         action="store_true",
         help="print the kubectl call without making it",
+    )
+    rb = sub.add_parser(
+        "readonly-rbac",
+        help="assert plain kubectl is still read-only — exit 1 on privilege creep, 2 when the "
+        "control verbs are refused and nothing can be concluded. Uses `auth can-i`, writes "
+        "nothing.",
+    )
+    rb.add_argument(
+        "--namespace", help="namespace to ask about (default: the workload one)"
+    )
+    rb.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="print the can-i calls without making them",
     )
     pi = sub.add_parser("pi", help="Pi glances API")
     pi.add_argument("subpath", help="e.g. fs, quicklook, mem, cpu")
@@ -428,6 +443,7 @@ def main(argv=None):
         "b2-budget": run_b2_budget,
         "b2-spend": run_b2_spend,
         "longhorn-blocks": run_longhorn_blocks,
+        "readonly-rbac": run_readonly_rbac,
         "b2-record": run_b2_record,
         "ha-state": run_ha_state,
         "monitors": run_monitors,
