@@ -56,25 +56,53 @@ concluding this plane cannot be quieted — but it is a subscription decision, n
 
 Which leaves one lever that works on the plan in use today.
 
-**Collapse the four backend probes into one edge probe.** Four monitors through one ingress buy no
-coverage the ingress monitor does not already have; what they buy is four notifications per edge
-event. Keep one monitor on the edge — the homepage dead-man already is one — and drop or pause the
-rest unless a specific service has a failure mode its own probe would catch and the edge probe
-would not. Jellyfin is the plausible candidate, since it can serve a 200 while its library is
-broken; Littlelink is static and behind the same edge, so its monitor reports only what the edge
-monitor reports.
+**Run fewer monitors.** Four probes through one ingress buy no coverage a single one does not
+already have; what they buy is four notifications per edge event. Which four become which two is
+below, after the fact that decides it.
 
-## The keyword monitors and Authelia
+## Which of these actually sit behind Authelia
 
-`Auth Keyword` and `Home Assistant Keyword` probe hostnames behind Authelia, which answers an
-unauthenticated request with a 302 to the login portal. Uptime Robot counts that 302 as up, so a
-plain HTTP monitor there proves the edge is routing and **nothing about the backend** — the same
-trap recorded in `docs/kopia-disaster-recovery.md`. A keyword monitor asserting on the login page's
-own text is a genuine improvement over that, but be clear about what it still cannot see: it
-confirms Authelia rendered a portal, not that the service behind Authelia is alive.
+Only the homepage dead-man does, and that inverts the obvious reading of this set. From
+`containers_list` in `ansible/inventory/host_vars/daniel-box.yml`:
 
-Pair each with the on-prem Kuma tile for the same service, which probes past the middleware. Kuma
-answers whether the service is healthy; Uptime Robot answers whether the outside world can reach the house.
+| Monitor | Host | `use_authelia` | What a probe gets |
+|---|---|---|---|
+| Homepage dead-man | `homepage` | **true** | a 302 from the middleware; the backend is never reached |
+| Auth Keyword | `auth` | false | a real 200 — it *is* Authelia |
+| Jellyfin Monitor | `jellyfin` | false | a real 200 from Jellyfin, which owns its own auth |
+| Home Assistant Keyword | `home-assistant` | false | a real 200 from HA, likewise |
+| Littlelink | `www` | false | a real 200 from a static page |
+
+So the recorded backstop is the **weakest** monitor in the set, not the strongest: Uptime Robot
+counts Authelia's 302 as up, so it proves the edge is routing and nothing beyond it. That is the
+trap recorded in `docs/kopia-disaster-recovery.md`, which already suggests aiming it elsewhere.
+
+## What to collapse to
+
+**Two monitors, from five.** Every one of these services already has an on-prem Kuma tile at a
+60-second interval — `k3s Authelia Portal`, `k3s littlelink`, `k3s Home Assistant`,
+`k3s Jellyfin (VIP)`. Kuma answers whether the service is healthy. The only thing Uptime Robot
+adds that none of them can is **whether the outside world can reach the house** — DNS, Cloudflare,
+the public route, the WAN link. That is one fact, and it was being reported four times.
+
+1. **Repoint monitor `803270234` from `homepage` to `auth.<domain>`, as a keyword monitor**
+   asserting on the login portal's own text. This is the edge probe: it exercises DNS, Cloudflare,
+   Traefik, TLS and Authelia in one check, and unlike its current target it validates a rendered
+   page rather than a redirect. Editing it rather than replacing it keeps the monitor id the two
+   disaster-recovery docs cite, and keeps its uptime history.
+2. **Keep `Jellyfin Monitor`.** Jellyfin is the one service whose *external* reachability is the
+   point — streaming from outside the house — so "reachable from the internet" is a distinct fact
+   for it rather than a second copy of the edge's.
+3. **Delete `Auth Keyword`** (folded into 1), **`Littlelink`** and **`Home Assistant Keyword`**.
+
+**What that gives up, stated plainly:** if a single service's *public* route breaks while the edge
+stays healthy, nothing external notices any more. That is a narrow case — every route is rendered
+from the same `ingressroute.yml.j2` macro, so they break together far more often than singly — and
+both dropped services keep their 60-second on-prem tile. Jellyfin is the exception kept precisely
+because remote use is what it is for.
+
+A restart then costs two Uptime Robot alerts instead of four, and one of the two is a strictly
+better check than the monitor it replaced.
 
 ## If this should stop being un-auditable
 
