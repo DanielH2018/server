@@ -17,13 +17,24 @@ Changing anything below means opening <https://dashboard.uptimerobot.com> and ed
 
 **Two monitors, live since 2026-08-30.** Both confirmed up by the account holder that day.
 
-| Monitor | Target | Type | Proves |
+| Monitor | Id | Target | Keyword |
 |---|---|---|---|
-| Auth Keyword | `https://auth.daniel-hunter.com/api/health` | Keyword `"status":"OK"` | DNS, Cloudflare, Traefik, TLS and Authelia — the single sign-on gate every authed service depends on |
-| Jellyfin Monitor | Jellyfin's public hostname | HTTP | the house is reachable from the internet for the one service whose remote use is the point |
+| Auth Health | `803868101` | `https://auth.daniel-hunter.com/api/health` | `"status":"OK"` must exist |
+| Jellyfin Health | `803868270` | `https://jellyfin.daniel-hunter.com/health` | `Healthy` must exist |
 
-Record the exact Jellyfin URL and interval here the next time you are in the console — an
-un-auditable monitor is only marginally better than no monitor.
+Both are **keyword** monitors with **case sensitivity ON**, and for Jellyfin that setting is
+load-bearing rather than a preference — see *Why Jellyfin's keyword must be case-sensitive* below.
+
+Measured against the live public routes on 2026-08-30:
+
+| Endpoint | Status | Content type | Body |
+|---|---|---|---|
+| `auth…/api/health` | 200 | `application/json` | `{"status":"OK"}` |
+| `jellyfin…/health` | 200 | `text/plain` | `Healthy` — 7 bytes, no trailing newline |
+
+Neither response is edge-cached (`cf-cache-status: DYNAMIC`, and Jellyfin's carries
+`cache-control: no-store, no-cache`), so both monitors read the origin rather than a Cloudflare
+copy that could stay green through an outage.
 
 **Two were retired the same day**, `Littlelink` and `Home Assistant Keyword`. Both probed through
 the same Traefik edge as the two above and so reported nothing the edge probe does not, and both
@@ -31,34 +42,48 @@ keep a 60-second on-prem Kuma tile (`k3s littlelink`, `k3s Home Assistant`). The
 *What was collapsed, and why* below; the 2026-08-30 restart is what prompted it, when four monitors
 sent four alerts for one 8m35s outage.
 
-### Consider aiming the Jellyfin monitor at its health endpoint
+### Why Jellyfin's keyword must be case-sensitive
 
-Measured 2026-08-30, `https://jellyfin.daniel-hunter.com/` answers **302** to `web/`, which
-resolves to 200. That is Jellyfin's own redirect, not an auth gate — Uptime Robot counts a 302 as
-up, so a plain HTTP monitor there is honest today.
+**`Unhealthy` contains `healthy`.** Jellyfin's `/health` is an ASP.NET health-check endpoint, so
+its body is one of `Healthy`, `Degraded` or `Unhealthy` — and a case-INSENSITIVE keyword of
+`Healthy`, set to alert when the word is missing, matches the `healthy` inside `Unhealthy` and
+holds the monitor green through exactly the fault it was created to catch.
 
-`https://jellyfin.daniel-hunter.com/health` returns `Healthy` with HTTP 200, and a keyword monitor
-on `Healthy` is strictly better: it survives a change to Jellyfin's root redirect, and it asserts
-the application answered rather than that something returned a status code. Same reasoning as the
-auth monitor, and it makes the pair symmetrical.
+Case sensitivity is a per-monitor toggle in the console and it is ON for this monitor. Turning it
+off does not degrade the check, it inverts it. If Uptime Robot ever removes the toggle, this
+endpoint stops being a safe target for a must-exist keyword and the monitor should move to
+`Unhealthy` **must not exist**, which has no such collision.
 
-### The recorded disaster-recovery backstop is not among them
+`Auth Health` does not share the hazard: Authelia answers a failure with `{"status":"KO"}`, and
+`"status":"OK"` is not a substring of that in any casing. Its case sensitivity is a consistency
+choice rather than a correctness one.
 
-`docs/kopia-disaster-recovery.md` and `docs/longhorn-disaster-recovery.md` both name monitor
+### Why `/health` rather than the root
+
+`https://jellyfin.daniel-hunter.com/` answers **302** to `web/`, which resolves to 200 — Jellyfin's
+own redirect, not an auth gate, so a plain HTTP monitor there was honest. `/health` is better on
+two counts: it survives a change to that root redirect, and it asserts the application's own health
+checks passed rather than that something returned a status code.
+
+### The recorded disaster-recovery backstop is gone
+
+`docs/kopia-disaster-recovery.md` and `docs/longhorn-disaster-recovery.md` both named monitor
 `803270234`, probing `https://homepage.daniel-hunter.com`, as the ONE backstop for a total
-in-house monitoring death. It is not among the two live monitors, and was not among the four that
-preceded them.
+in-house monitoring death. **It no longer exists.** The two live ids are `803868101` and
+`803868270`, neither of which is it, and it was not among the four monitors that preceded them
+either — so it was deleted at some point nothing recorded, and both runbooks were promising a
+safety net that was not there.
 
-Two possibilities, and they need different actions:
+`Auth Health` (`803868101`) is the backstop now, and it is a better one than the id it replaces.
+The kopia runbook's own requirement was that the backstop must not be a generic Traefik-served
+URL, because a host and Traefik staying up while the alert brain dies would still return 200. The
+old target was `homepage`, the one service that IS behind Authelia, so an external probe there
+only ever saw the middleware's 302 — the runbook recorded that as a known residual. The new target
+returns Authelia's own `{"status":"OK"}`.
 
-- **It was aimed somewhere else at some point** and is now one of the live monitors under a different name — most
-  plausibly `Auth Keyword`. Then the DR docs are describing the right monitor by the wrong URL,
-  and both need correcting to match.
-- **It was deleted.** Then the documented backstop has not existed for some unknown period, and
-  the DR runbooks have been promising a safety net that is not there.
-
-Check the monitor id in the console before trusting either DR doc. This is exactly the failure
-the top of this file warns about: nothing in the repo can tell which of the two happened.
+**This is the failure the top of this file describes, arriving.** A monitor was deleted, nothing in
+the repo could notice, and two runbooks kept citing it for an unknown number of months. The id
+column in the table above exists so the next occurrence is one console glance to detect.
 
 ## Why one restart produced four alerts (the 2026-08-30 event)
 
