@@ -377,9 +377,19 @@ def main() -> int:
             print("--since-ledger needs --jsonl to read the window from")
             return COULD_NOT_RUN
         previous = load_ledger(args.jsonl)
-        if previous:
-            ref = f"{previous[-1].sha}..{args.ref}"
-            print(f"window: {ref} ({len(previous)} run(s) already recorded)")
+        if not previous:
+            # An empty ledger has no window, and the historical one is not a substitute: those
+            # commits are ancestors of the gate's checkout, so the scheduled runner would plan
+            # a window it cannot run and exit COULD_NOT_RUN every hour. Replaying history is a
+            # deliberate operation that resets the gate's checkout first — never a timer's job.
+            print(
+                f"{args.jsonl} records no runs yet. The scheduled form only gates commits "
+                f"newer than the newest recorded run; seed it with a deliberate backfill "
+                f"(see docs/staging-phase-c.md)."
+            )
+            return CONDITION_NOT_MET
+        ref = f"{previous[-1].sha}..{args.ref}"
+        print(f"window: {ref} ({len(previous)} run(s) already recorded)")
 
     plan = collect(ref, args.count)
     if not plan and not args.since_ledger:
