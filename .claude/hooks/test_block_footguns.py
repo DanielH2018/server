@@ -319,3 +319,54 @@ def test_a_read_of_security_and_analysis_is_clean():
 
 def test_an_unrelated_gh_api_patch_is_clean():
     assert _mod.problem("gh api -X PATCH repos/o/r -f description=hi") is None
+
+
+# --- 8. a leading shell keyword must not slip any rule ----------------------------------------
+#
+# Rules 5 and 6 called `strip_shell_keywords` from the day they were written; rules 1-4 predate
+# it and decided on `stage[0]` directly. Measured 2026-08-30, before the strip moved into
+# `problem()`: each of the four commands below was ALLOWED while its bare form was denied.
+#
+# `! git stash pop` is the one that matters. A bare pop can apply another session's
+# work-in-progress into this tree — it has, 25 files of it — and a negation is exactly what
+# someone writes when they expect the pop to fail and want the pipeline to continue.
+
+
+def test_a_negated_stash_pop_is_denied():
+    assert _mod.problem("! git stash pop")
+
+
+def test_a_timed_stash_pop_is_denied():
+    assert _mod.problem("time git stash pop")
+
+
+def test_a_negated_rollout_restart_is_denied():
+    assert _mod.problem("! kubectl rollout restart deploy/sonarr")
+
+
+def test_a_command_prefixed_ugrep_flag_is_denied():
+    assert "--fuzzy" in _mod.problem("command grep -Z foo .")
+
+
+def test_a_negated_remote_git_is_denied():
+    assert _mod.problem("! ssh daniel-server 'git log --oneline -1'")
+
+
+def test_a_keyword_prefix_does_not_invent_a_denial():
+    """The accept half, and the load-bearing one.
+
+    Stripping keywords widens what every rule sees, so the risk it introduces is a false
+    deny — not a false allow. These are the near-misses each rule must still pass once the
+    prefix is gone.
+    """
+    assert _mod.problem("! git stash list") is None
+    assert _mod.problem("time git status") is None
+    assert _mod.problem("command grep -rn foo .") is None
+    assert _mod.problem("! kubectl get pods") is None
+
+
+def test_a_keyword_in_argument_position_is_not_stripped():
+    """`strip_shell_keywords` only strips from the front, so an argument named `time` or
+    `command` stays an argument. Stripping one mid-stage would shift every later position."""
+    assert _mod.problem("grep -rn time .") is None
+    assert _mod.problem("git stash list command") is None
