@@ -1,0 +1,13 @@
+[Unit]
+Description=Hourly staging-gate backfill, until the entry condition is met
+
+[Timer]
+OnBootSec=20min
+OnUnitActiveSec=1h
+# Offset from the 30-minute deployer so the common case is no contention at all. GATE_BUSY
+# handles the rest; this only makes it rarer.
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

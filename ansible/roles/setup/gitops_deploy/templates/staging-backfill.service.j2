@@ -1,0 +1,38 @@
+[Unit]
+Description=Ask the staging gate about master commits it has not been asked about yet
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User={{ sys_user }}
+WorkingDirectory=/home/{{ sys_user }}/server
+# uv lives in the user's ~/.local/bin, which systemd's default PATH omits.
+Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
+# journald stores notice+ on these hosts, and a unit's stdout logs at info — so without this the
+# verdict line this unit exists to produce is discarded at the source.
+SyslogLevel=notice
+# NOT MET is the expected state for weeks, so it must not read as a failed unit; the harness
+# splits its exit codes for exactly this (CONDITION_NOT_MET=1, COULD_NOT_RUN=2). A unit that
+# pages while the streak is merely short teaches an operator to ignore it before it ever means
+# anything.
+SuccessExitStatus=1
+# Two runs at the gate's own budget, plus room for the git walk and the ssh round trips.
+TimeoutStartSec=25min
+# DECIDED: this deliberately does NOT take /var/lock/server-git-tree.lock, unlike every other
+# writer of this tree. It only reads (git log, git show) and drives the gate over ssh. Taking
+# that lock would serialize it against the 30-minute deployer, whose pathological run holds the
+# lock for the better part of an hour — so a hourly ratchet would either starve it or be starved
+# by it. Collision is handled where it actually occurs instead: the staging-side lock returns
+# GATE_BUSY, staging_gate.py --report-busy surfaces it as NOT_RUN, and the harness records
+# nothing for that commit and reaches it on the next run. See backfill_staging_gate.py's SKIPPED.
+# --no-python-downloads unlike the deployer beside it. That unit omits it because a loud failure
+# there would stop the machine that ships the correction; this one is a measurement, so a missing
+# pinned interpreter should fail rather than be silently fetched. Pinned by
+# ansible/tests/test_host_python_invocations.py.
+ExecStart=/home/{{ sys_user }}/.local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
+  scripts/deploy_tools/backfill_staging_gate.py \
+  --since-ledger \
+  --jsonl {{ gitops_deploy_staging_backfill_ledger }} \
+  --count {{ gitops_deploy_staging_backfill_count }} \
+  --timeout {{ gitops_deploy_staging_backfill_timeout_s }}

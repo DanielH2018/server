@@ -81,6 +81,7 @@ STAGE_REPO = "/home/ubuntu/server-staging"
 PASS = staging_gate.PASS
 REJECTED = staging_gate.REJECTED
 NO_VERDICT = staging_gate.NO_VERDICT
+NOT_RUN = staging_gate.NOT_RUN
 
 # Outcome names. These are about WHOSE fault a non-PASS is, which is the only distinction the
 # entry condition cares about — a gate that blocks good changes is a regression, a gate that
@@ -89,6 +90,19 @@ OK = "pass"
 FALSE_FAILURE = "false-failure"
 TRUE_FAILURE = "true-failure"
 NEEDS_TRIAGE = "needs-triage"
+
+# Not an outcome — a run that never started, so there is nothing to record. It is returned by
+# classify() and then dropped rather than written to the ledger, because the alternative is the
+# 30-minute tick resetting the measured streak to zero every time the two collide.
+SKIPPED = "skipped"
+
+# This script's own exit codes. Split three ways because a scheduled caller has to tell "ran,
+# not there yet" from "could not run at all". Collapsing them makes the timer either red forever
+# — NOT MET is the expected state for weeks — or green forever, including when the harness is
+# broken. `SuccessExitStatus=1` on the unit is what consumes this.
+CONDITION_MET = 0
+CONDITION_NOT_MET = 1
+COULD_NOT_RUN = 2
 
 
 @dataclass
@@ -185,6 +199,8 @@ def classify(rc: int) -> tuple[str, str]:
     """
     if rc == PASS:
         return OK, ""
+    if rc == NOT_RUN:
+        return SKIPPED, "a lock was held, so the run never started — nothing measured"
     if rc == NO_VERDICT:
         return (
             FALSE_FAILURE,
@@ -308,6 +324,9 @@ def gate(sha: str, tags: str, timeout: int) -> int:
             tags,
             "--timeout",
             str(timeout),
+            # This caller MEASURES the gate, so a run that never started must be
+            # distinguishable from one that started and could not finish.
+            "--report-busy",
         ],
         check=False,
     ).returncode
@@ -344,21 +363,35 @@ def main() -> int:
         action="store_true",
         help="plan commits the gate's checkout has already moved past (they will fail prep)",
     )
+    ap.add_argument(
+        "--since-ledger",
+        action="store_true",
+        help="gate only commits newer than the newest run in --jsonl. The scheduled form: "
+        "those commits are descendants of the gate's checkout, so no reset is needed.",
+    )
     args = ap.parse_args()
 
-    plan = collect(args.ref, args.count)
-    if not plan:
-        print(
-            f"no commit in the last 400 of {args.ref} touches a staging-subset service"
-        )
-        return 1
+    ref = args.ref
+    if args.since_ledger:
+        if not args.jsonl:
+            print("--since-ledger needs --jsonl to read the window from")
+            return COULD_NOT_RUN
+        previous = load_ledger(args.jsonl)
+        if previous:
+            ref = f"{previous[-1].sha}..{args.ref}"
+            print(f"window: {ref} ({len(previous)} run(s) already recorded)")
+
+    plan = collect(ref, args.count)
+    if not plan and not args.since_ledger:
+        print(f"no commit in {ref} touches a staging-subset service")
+        return COULD_NOT_RUN
     print(f"{len(plan)} gateable commit(s), oldest first:")
     for sha, subject, services in plan:
         print(f"  {sha[:8]}  {','.join(sorted(services)):<40}  {subject[:60]}")
-    head = staging_head()
-    if head is None:
+    head = staging_head() if plan else None
+    if plan and head is None:
         print(f"warning: cannot read {STAGE_HOST}:{STAGE_REPO} HEAD — planning blind")
-    else:
+    elif plan:
         stale = unrunnable(plan, head)
         if stale and not args.allow_ancestors:
             print(
@@ -369,9 +402,9 @@ def main() -> int:
                 f"  ssh {STAGE_HOST} 'cd {STAGE_REPO} && git reset --hard {plan[0][0][:8]}~1'\n"
                 f"Or narrow the window: --from {head[:8]}..origin/master"
             )
-            return 1
+            return COULD_NOT_RUN
     if args.dry_run:
-        return 0
+        return CONDITION_MET
 
     runs: list[Run] = load_ledger(args.jsonl) if args.jsonl else []
     if runs:
@@ -381,11 +414,15 @@ def main() -> int:
         print(f"\n=== {index}/{len(plan)}  {sha[:8]}  --tags {tags} ===", flush=True)
         rc = gate(sha, tags, args.timeout)
         outcome, note = classify(rc)
+        print(f"--> {outcome}{(' — ' + note) if note else ''}", flush=True)
+        if outcome == SKIPPED:
+            # Neither recorded nor counted. The commit stays in the window, so the next
+            # scheduled run picks it up again.
+            continue
         record = Run(
             sha=sha, subject=subject, tags=tags, rc=rc, outcome=outcome, note=note
         )
         runs.append(record)
-        print(f"--> {outcome}{(' — ' + note) if note else ''}", flush=True)
         if args.jsonl:
             with args.jsonl.open("a") as handle:
                 handle.write(json.dumps(asdict(record)) + "\n")
@@ -397,7 +434,7 @@ def main() -> int:
         print(f"  {name:<14} {sum(1 for r in runs if r.outcome == name)}")
     for reason in reasons:
         print(f"  ! {reason}")
-    return 0 if verdict == "MET" else 1
+    return CONDITION_MET if verdict == "MET" else CONDITION_NOT_MET
 
 
 if __name__ == "__main__":

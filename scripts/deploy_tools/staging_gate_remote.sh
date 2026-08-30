@@ -29,6 +29,13 @@ set -uo pipefail
 
 PREP_FAILED=70 # outside deploy.sh's vocabulary (2, 3, 4, 75) and outside 0/1
 
+# Lock contention specifically, split out of PREP_FAILED because it is the one prep failure that
+# says nothing at all — not about the gate and not about the commit. Another run simply held the
+# lock. Callers that MEASURE the gate (backfill_staging_gate.py) must not record such a run as a
+# sample; the 30-minute tick and this script's own callers still treat it as NO_VERDICT, which is
+# what it was before this code existed.
+GATE_BUSY=76
+
 # The gate's OWN checkout, not this host's. Until 2026-08-29 (review M-2) this was
 # /home/ubuntu/server, which the gate fast-forwarded to the SHA under test, unlocked, and
 # never restored — so asking staging a question moved an operator's tree to an arbitrary
@@ -54,15 +61,18 @@ main() {
 
   # One gate run at a time against that one tree. The timer's run and an operator driving
   # staging_gate.py by hand would otherwise interleave a fetch, a merge and a deploy on a tree
-  # each believes it pinned. Contention is a PREP failure, not a verdict: this run learned
-  # nothing about the SHA.
+  # each believes it pinned. Contention is GATE_BUSY, not a verdict: this run learned nothing
+  # about the SHA — see that constant.
   #
   # A DIFFERENT lock from /var/lock/server-git-tree.lock, which deploy.sh takes below. flock
   # attaches to the open file description rather than to the process, so a second `exec 9>` on
   # the same path conflicts with the first even inside one process tree — which is also why the
   # dispatcher does not take this lock before exec'ing here.
   exec 9>"$LOCK" || fail_prep "cannot open $LOCK"
-  flock -n 9 || fail_prep "another staging-gate run holds $LOCK"
+  flock -n 9 || {
+    echo "staging-gate: busy: another staging-gate run holds $LOCK" >&2
+    exit "$GATE_BUSY"
+  }
 
   # A dirty tree is prep failure, not a verdict: deploy.sh renders from the working directory, so
   # an uncommitted edit here would make the gate measure something other than the SHA under test.

@@ -289,6 +289,29 @@ So the 20 accumulate in a **ledger**: `--jsonl <path>` is read back as well as w
 streak spans every recorded run rather than one invocation. Five historical samples plus each
 future gated commit reach 20 without a third rescope.
 
+**The ledger ratchets on a timer, not by hand.** `staging-backfill.timer` on daniel-box runs the
+harness hourly with `--since-ledger`, which derives its window from the newest recorded run.
+Those commits are descendants of the gate's checkout, so the scheduled form needs no reset —
+that is the whole reason the ratchet is a different shape from the backfill. It rides
+`gitops_deploy_staging_gate`: the role stops and disables the timer when the gate is off, because
+a ratchet running then would deploy to staging hourly for a measurement nobody is collecting.
+
+**Measured 2026-08-30, the arrival rate is about 2.5 gateable commits a week, and it is lumpy.**
+Over 592 master commits in the preceding fortnight, five were gateable — and none at all in the
+last thirty merged PRs. So the remaining fifteen samples are roughly six weeks away rather than
+days, which is still a different order from the one-a-month tick rate the rescope was reacting
+to. Do not read the timer's hourly cadence as the sample rate; it is only how often the harness
+checks whether master has produced anything to ask about.
+
+**Contention with the 30-minute tick is a skip, not a sample.** Both reach the same staging lock.
+The loser used to answer PREP_FAILED, which the harness scored as a false failure — so the tick
+would have reset the measured streak to zero on every collision, the metric destroying itself.
+`staging_gate_remote.sh` now exits `GATE_BUSY` for lock contention specifically,
+`staging_gate.py --report-busy` surfaces it as `NOT_RUN`, and the harness records nothing and
+reaches that commit on the next run. The default stays NO_VERDICT, so the deployer's contract is
+unchanged — `staging_verdict_summary` reads any non-zero that is not 2 as REJECTED, so a third
+code reaching the tick would report a busy lock as staging rejecting the change.
+
 **A backfill is a one-shot.** The gate's checkout only fast-forwards, so a run leaves it at the
 newest commit in the window and a second pass over the same window is all ancestors. The script
 reads that checkout's HEAD before running and refuses a plan it has already moved past, naming
