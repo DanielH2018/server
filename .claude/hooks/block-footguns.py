@@ -251,10 +251,25 @@ _RULES = (
 
 
 def problem(command: str) -> str | None:
-    """The first footgun this command trips, or None."""
+    """The first footgun this command trips, or None.
+
+    Leading shell keywords are stripped ONCE here rather than per rule. Every rule decides on
+    the first word — `stage[0]` directly, or `invokes()`, which does the same — so a keyword
+    in front of the binary made all four of the original rules miss: measured 2026-08-30,
+    `! git stash pop`, `time git stash pop`, `! kubectl rollout restart …` and `command grep
+    -Z …` were each allowed while the bare form was denied. `! git stash pop` is the one that
+    matters: a bare pop can apply another session's work-in-progress into this tree, and a
+    negation is exactly what someone writes when they expect the pop to fail.
+
+    Stripping at the dispatch site rather than in each rule means a rule added later inherits
+    it instead of having to remember. The two rules that already call `strip_shell_keywords`
+    keep the call — it is idempotent, and a rule that only works when its caller strips first
+    is a trap for whoever reuses it.
+    """
     for stage in split_stages(command):
+        words = strip_shell_keywords(stage)
         for rule in _RULES:
-            found = rule(stage)
+            found = rule(words)
             if found:
                 return found
     return None
