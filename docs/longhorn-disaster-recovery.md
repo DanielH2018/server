@@ -60,15 +60,18 @@ bundle is no more sensitive than the GitHub repo; the age key is the part to pro
 
 ## The external dead-man's switch (re-homed 2026-08-14; re-validate at drain close)
 
-> **UNVERIFIED as of 2026-08-30 — do not rely on this without checking the console.** The
-> account holder confirmed four live Uptime Robot monitors that day, and none of them probes
-> `homepage.daniel-hunter.com`. So monitor `803270234` was either aimed elsewhere or deleted at
-> some unrecorded point, and this section may be promising a safety net that does not exist.
-> `docs/uptime-robot-monitors.md` carries the two cases and what distinguishes them.
-
 The one backstop for a total in-house monitoring death is the external UptimeRobot monitor
-(dashboard `https://dashboard.uptimerobot.com/monitors/803270234`, probing
-`https://homepage.daniel-hunter.com`). Recorded here because an external SaaS can't be
+**`Auth Health`** (dashboard `https://dashboard.uptimerobot.com/monitors/803868101`, a
+case-sensitive keyword monitor requiring `"status":"OK"` from
+`https://auth.daniel-hunter.com/api/health`).
+
+> **Corrected 2026-08-30.** This named monitor `803270234` probing `homepage.daniel-hunter.com`
+> until that date. **That monitor no longer exists** — the account holder's live set is
+> `803868101` and `803868270`, and the deletion was never recorded anywhere, so this runbook
+> promised a backstop that was absent for an unknown period. The replacement is also a stronger
+> check: `homepage` is Authelia-gated, so the old probe only ever saw a 302 from the middleware,
+> which is the known residual the kopia runbook recorded. `docs/uptime-robot-monitors.md` is the
+> live record and carries both ids. Recorded here because an external SaaS can't be
 IaC-managed, so this record is its only audit trail. The kopia-era analysis (operator-
 accepted residual: the target is an Authelia-gated 302, so it back-stops host/edge/Authelia
 death but NOT a Kuma-only container death) predates the migration — the alert brain now

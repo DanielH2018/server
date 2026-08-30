@@ -154,22 +154,26 @@ Scrape-Targets monitor flags this if you miss it.
   when Kuma can no longer evaluate its own monitors. The monitor is deliberately out-of-repo (an
   external SaaS can't be IaC-managed), but its target is otherwise unrecorded, making this SPOF's only
   backstop un-auditable. **Record the configured UptimeRobot target here so it can be verified:**
-  - **UptimeRobot monitor (recorded 2026-07-12):** dashboard
-    `https://dashboard.uptimerobot.com/monitors/803270234`, probing `https://homepage.daniel-hunter.com`.
-  - **UNVERIFIED as of 2026-08-30.** The account holder confirmed four live monitors that day and
-    none probes `homepage.daniel-hunter.com`, so this monitor was aimed elsewhere or deleted at an
-    unrecorded point. Check the console before relying on it. This is the un-auditability the
-    paragraph above predicted, arriving. `docs/uptime-robot-monitors.md` holds the current set and
-    the replacement edge probe (`auth.daniel-hunter.com/api/health`, keyword `"status":"OK"`),
-    which answers the "must not be a generic Traefik-served URL" requirement above better than the
-    Authelia-gated 302 did.
-  - **KNOWN RESIDUAL — operator-accepted 2026-07-12:** that target is a generic, **Authelia-gated**
-    route, NOT a Kuma-served endpoint. `homepage` is `use_authelia: true`, so an external probe only
-    reaches Authelia's 302 → login portal (UptimeRobot counts the 302 as "up"). This DOES back-stop a
-    total host / Cloudflare / Traefik / **Authelia** outage — but it does NOT catch a *uptime-kuma-
-    container* death: with the host + Traefik + Authelia up, homepage still 302s "up" while Kuma can no
-    longer evaluate its own monitors. The SPOF is real but narrow (a Kuma-only crash while everything
-    else stays healthy) and consciously accepted; it is NOT a fresh review finding — don't re-flag.
+  - **UptimeRobot monitor (recorded 2026-08-30):** `Auth Health`, dashboard
+    `https://dashboard.uptimerobot.com/monitors/803868101` — a case-sensitive keyword monitor
+    requiring `"status":"OK"` from `https://auth.daniel-hunter.com/api/health`.
+  - **The monitor this recorded until 2026-08-30 no longer exists.** It was `803270234` probing
+    `https://homepage.daniel-hunter.com`, recorded 2026-07-12. The live set is `803868101` and
+    `803868270`; neither is it, and nothing recorded its deletion — so this runbook cited an
+    absent backstop for an unknown period. **That is precisely the un-auditability the paragraph
+    above predicted**, and the reason ids are now written down rather than URLs alone.
+    `docs/uptime-robot-monitors.md` is the live record.
+  - **KNOWN RESIDUAL — operator-accepted 2026-07-12, re-stated for the new target 2026-08-30:**
+    the backstop is still NOT a Kuma-served endpoint, so it does NOT catch a *uptime-kuma-container*
+    death: with the host, Traefik and Authelia up, `auth…/api/health` still answers `"status":"OK"`
+    while Kuma can no longer evaluate its own monitors. The SPOF is real but narrow (a Kuma-only
+    crash while everything else stays healthy) and consciously accepted; it is NOT a fresh review
+    finding — don't re-flag.
+    **One half of the old residual did close.** Until 2026-08-30 the target was `homepage`, which is
+    `use_authelia: true`, so an external probe only ever reached Authelia's 302 → login portal and
+    UptimeRobot counted that redirect as "up" — it never touched a backend at all. The new target
+    returns Authelia's own JSON, so the backstop now proves an application answered rather than that
+    a middleware redirected. What remains unproven is only Kuma itself.
   - **To close it later:** `uptime-kuma.daniel-hunter.com` is already publicly routed (Cloudflare), so
     add an Authelia `bypass` rule for `^/status/.*$` on `uptime-kuma.{{ domain }}`
     (`ansible/roles/k8s/authelia/templates/config-secret.yaml.j2`, where `access_control` lives;
