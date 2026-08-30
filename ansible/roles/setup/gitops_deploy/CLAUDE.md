@@ -342,7 +342,8 @@ smoke run wait its full 180s and deploy nothing.
 `handlers/main.yml:11-16`'s `ansible.builtin.systemd: state: started` returns rc 0 and the play
 recaps green. Nothing deployed, `last_run` untouched, no Discord message (the webhook belongs to
 the deployer, which never started), no `OnFailure`. The first alert of any kind is GitOps-Alive,
-once `last_run` ages past `GITOPS_MAX_AGE_S` — up to 90 minutes later (`check.py:148`). The one
+once `last_run` ages past `GITOPS_MAX_AGE_S` — up to 90 minutes later (grep that name in
+`ansible/roles/k8s/monitor-bridge/files/check.py`). The one
 immediate signal is the unit's `ExecStopPost` marker in the journal, `tick skipped (lock
 contention)`, which `scripts/deploy_tools/gitops_tick.sh` also reads to exit 3.
 
