@@ -86,10 +86,22 @@ def _sha(path: Path) -> str:
     ).stdout.split()[0]
 
 
-def _old_repo(tmp_path):
-    """A one-commit repo dated 2020, and the env that reproduces it. Returns (repo, env)."""
+def _old_repo(tmp_path, permissive_system_config=False):
+    """A one-commit repo dated 2020, and the env that reproduces it. Returns (repo, env).
+
+    The env pins every git config scope the fixture does not own, because the ownership tests
+    below are decided by exactly those scopes. A `safe.directory = *` in the SYSTEM config makes
+    git accept any repo, which suppresses the refusal those tests are built on — that is not
+    hypothetical, it is how this pair failed on the GitHub runner while passing on a host with
+    no /etc/gitconfig. `permissive_system_config` reproduces the runner deliberately, so the
+    neutralisation has a test of its own rather than being an unproven precaution.
+    """
     repo = tmp_path / "repo"
     repo.mkdir()
+    system_config = tmp_path / "gitconfig.system"
+    system_config.write_text("[safe]\n\tdirectory = *\n")
+    global_config = tmp_path / "gitconfig.global"
+    global_config.write_text("")
     env = {
         "GIT_AUTHOR_NAME": "t",
         "GIT_AUTHOR_EMAIL": "t@e",
@@ -99,7 +111,11 @@ def _old_repo(tmp_path):
         "GIT_COMMITTER_DATE": "2020-01-01T00:00:00Z",
         "PATH": "/usr/bin:/bin",
         "HOME": str(tmp_path),
+        "GIT_CONFIG_SYSTEM": str(system_config),
+        "GIT_CONFIG_GLOBAL": str(global_config),
     }
+    if not permissive_system_config:
+        env["GIT_CONFIG_NOSYSTEM"] = "1"
     subprocess.run(["git", "init", "-q", str(repo)], check=True, env=env)
     (repo / "f").write_text("x")
     subprocess.run(["git", "-C", str(repo), "add", "f"], check=True, env=env)
@@ -250,6 +266,27 @@ def test_an_unreadable_checkout_is_a_fault_not_a_pass(tmp_path):
 # real run reported "cannot read the checkout" and the tile sat DOWN from the day it shipped.
 # GIT_TEST_ASSUME_DIFFERENT_OWNER=1 is git's own hook for forcing that path without a second
 # uid, so the pair below can run unprivileged in CI.
+
+
+def test_a_permissive_system_gitconfig_defeats_the_refusal(tmp_path):
+    """Why the fixture pins GIT_CONFIG_NOSYSTEM, proven rather than asserted.
+
+    A `safe.directory = *` in the system config makes git accept a repo it would otherwise
+    refuse, so the control below reports no refusal and the pair silently stops testing
+    anything. That is the shape of the CI failure on 2026-08-30: green on a host with no
+    /etc/gitconfig, red on the GitHub runner."""
+    repo, env = _old_repo(tmp_path, permissive_system_config=True)
+    env = {**env, "GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"}
+    done = subprocess.run(
+        ["git", "-C", str(repo), "log", "-1", "--format=%ct"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert done.returncode == 0, (
+        "a permissive system config no longer suppresses the ownership refusal, so the "
+        "GIT_CONFIG_NOSYSTEM pin in the fixture is now guarding nothing"
+    )
 
 
 def test_a_foreign_owned_checkout_refuses_a_bare_git_read(tmp_path):
