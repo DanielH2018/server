@@ -88,10 +88,10 @@ fast-forwarded. Nothing is rolled back, and the alert says so.
 A rollback re-run has to fit inside the unit's `TimeoutStartSec`, or it is killed partway —
 worse than never starting one. The arm stays forward-only because proving it fits needs a
 fresh `deploy.yml` measurement, not because of any particular timeout value:
-`deploy_logic.broad_budget_ok` encodes the check and has no production caller. The role's
-[CLAUDE.md](../ansible/roles/setup/gitops_deploy/CLAUDE.md) carries the numbers and the date
-they were taken; read `TimeoutStartSec` out of `gitops-deploy.service.j2` rather than from
-prose, since it moves when the staging gate's budget changes.
+`deploy_logic.broad_budget_ok` encodes the check and has no production caller. The role's own
+`ansible/roles/setup/gitops_deploy/CLAUDE.md` carries the numbers and the date they were taken;
+read `TimeoutStartSec` out of `gitops-deploy.service.j2` rather than from prose, since it moves
+when the staging gate's budget changes.
 
 It deliberately does not reset the tree either. Resetting without redeploying would leave the
 tree claiming the old commit while live state is half-new — a tree that lies, over which every
