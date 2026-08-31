@@ -53,6 +53,13 @@ spec:
                 # seeded owner, the backups are created fresh by root each save.
                 # Without it every world-save FATAL-crashes on the backup step while
                 # startup looks fine (the 39-restarts/11-days Docker lesson).
+                #
+                # The obvious question — why not run as 1000 and need no capability — was
+                # tried and deployed 2026-08-31. It CrashLoopBackOffs: the image entrypoint
+                # hardcodes `mkdir -p /root/.local/share/Terraria` under `set -euo pipefail`,
+                # and Debian's /root is 0700 root:root. The full evidence, and why neither
+                # fsGroup nor an emptyDir over /root fixes it, is in the terraria entry of
+                # `ansible/tests/test_container_security_context.py`.
                 - DAC_OVERRIDE
           volumeMounts:
             - name: terraria-config

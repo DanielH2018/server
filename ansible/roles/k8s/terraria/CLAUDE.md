@@ -16,8 +16,13 @@ irreplaceable data kopia still uniquely protected; the Docker role is in
   seeded from the Docker copy at cutover
 - **Probes:** a `/proc/net/tcp` listen-check on :7777 (`1E61`), NOT a connect probe — a
   TCP connect spams the game console with join/leave noise
-- **Caps:** `DAC_OVERRIDE` only (the image's world-save backup rotation touches
-  root-owned files); `stdin`/`tty` kept so the server console stays attachable
+- **Caps:** `DAC_OVERRIDE` only — PID 1 is root in a uid-1000-owned `/config`, so it cannot
+  create or unlink the `.wld.bak` rotation without it. **The container runs as root because the
+  image requires it**, not by choice: the entrypoint hardcodes `/root/.local/share/Terraria`
+  under `set -euo pipefail` and Debian's `/root` is 0700, so `runAsUser: 1000` CrashLoopBackOffs
+  at entrypoint line 1. Tried and deployed 2026-08-31; see the terraria entry in
+  `ansible/tests/test_container_security_context.py` for the evidence and the image-builder exit
+  path. `stdin`/`tty` kept so the server console stays attachable
 - **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
   (`name: terraria`, no port/hostname — not Traefik-routed) and `defaults/main.yml`
 
