@@ -64,6 +64,7 @@ spec:
             - -c
             - touch /data/acme.json && chmod 600 /data/acme.json
           securityContext:
+            runAsNonRoot: true
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             capabilities:
@@ -100,6 +101,7 @@ spec:
           # pod). Creating the file as that user sidesteps the capability; the agent reads
           # it as root regardless.
           securityContext:
+            runAsNonRoot: true
             allowPrivilegeEscalation: false
             capabilities:
               drop:
@@ -149,6 +151,7 @@ spec:
               value: /secrets/cf_dns_token
 {% endif %}
           securityContext:
+            runAsNonRoot: true
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             capabilities:
@@ -246,6 +249,7 @@ spec:
             - name: COLLECTIONS
               value: "{{ traefik_k8s_agent_collections }}"
           securityContext:
+            runAsNonRoot: true
             allowPrivilegeEscalation: false
             capabilities:
               drop:
@@ -384,6 +388,7 @@ spec:
                 fi
               done
           securityContext:
+            runAsNonRoot: true
             allowPrivilegeEscalation: false
             capabilities:
               drop:

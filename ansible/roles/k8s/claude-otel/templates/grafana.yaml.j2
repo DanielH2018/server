@@ -145,6 +145,7 @@ spec:
           image: {{ claude_otel_grafana_image }}
           securityContext:
             allowPrivilegeEscalation: false
+            runAsNonRoot: true
             capabilities:
               drop: [ALL]
           env:

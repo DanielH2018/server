@@ -48,6 +48,7 @@ spec:
               hostIP: {{ k8s_registry_host_ip }}
               hostPort: {{ k8s_registry_port }}
           securityContext:
+            runAsNonRoot: true
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             capabilities:

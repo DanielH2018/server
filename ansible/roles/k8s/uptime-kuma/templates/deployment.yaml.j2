@@ -149,6 +149,9 @@ spec:
           securityContext:
             runAsUser: 1000
             runAsGroup: 1000
+            # Per-container, not pod-level: the uptime-kuma container in this same pod
+            # runs as root and cannot carry this assertion.
+            runAsNonRoot: true
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities:

@@ -36,6 +36,7 @@ spec:
             - containerPort: {{ container_item.port }}
           securityContext:
             readOnlyRootFilesystem: true
+            runAsNonRoot: true
             allowPrivilegeEscalation: false
             capabilities:
               drop:

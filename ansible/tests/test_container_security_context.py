@@ -167,6 +167,250 @@ def test_the_corpus_covers_every_role_except_a_named_set():
     )
 
 
+# Containers that do NOT assert `runAsNonRoot: true`, grouped by the mechanism that stops them.
+#
+# The 2026-08-31 review reported this as a karakeep defect against "~10 other roles". Both halves
+# were wrong: 38 of 50 roles carried no assertion, and the reviewer had inferred root from image
+# names — karakeep-chrome was reported root and measured uid 1000, node-exporter was assumed to
+# need root for host access and measured 65534. A census then measured every container live, by
+# cgroup or container id rather than a `ps` name grep, and the sets below are its result.
+#
+# The allowlist is the guard, exactly as _PRIVILEGED above is: the 42 assertions that now exist
+# are individually near-worthless restatements of measured facts, and collectively they are what
+# makes this list small enough to read. A new container fails until it either asserts or is added
+# here with a mechanism.
+
+# LSIO images: PID 1 is `s6-svscan` as uid 0, which chowns /config and hands the app to uid 1000
+# through `s6-supervise`. Traced three-hop per container, so the root half is measured, not
+# inferred from the image name. `runAsNonRoot` refuses the pod at admission and the chown never
+# runs — jellyfin's template records the failure it caused: `sed: couldn't open temporary file
+# /config/sedUo9qXt: Permission denied`, which reads like a read-only mount and is not one.
+_LSIO_CHOWN_THEN_DROP = {
+    ("bazarr", "bazarr"),
+    ("code-server", "code-server"),
+    ("freshrss", "freshrss"),
+    ("healthchecks", "healthchecks"),
+    ("home-assistant", "home-assistant"),
+    ("jellyfin", "jellyfin"),
+    ("prowlarr", "prowlarr"),
+    ("qbittorrent", "qbittorrent"),
+    ("radarr", "radarr"),
+    ("sonarr", "sonarr"),
+    ("speedtest", "speedtest"),
+    ("tdarr", "tdarr"),
+}
+
+# The same shape without s6: the entrypoint starts as root and drops the app itself.
+_ENTRYPOINT_DROPS = {
+    # The LAPI plugin broker forks the notifier and drops it to uid 65534 — observed live in the
+    # same container.
+    ("crowdsec", "crowdsec"),
+    # CouchDB chowns /opt/couchdb/data, then `setpriv`s to uid 5984.
+    ("livesync", "couchdb"),
+    # `start.sh` runs as 0 and hands off to `pihole-FTL` at 1000. SETFCAP is the binding
+    # constraint — FTL applies file capabilities to its own binary — not the privileged ports,
+    # which NET_BIND_SERVICE already covers.
+    ("pihole", "pihole"),
+    # Entrypoint chowns the data dir then gosu-drops to 1000.
+    ("scrutiny", "influxdb"),
+    # su-exec drop. Mounts only an emptyDir and a read-only ConfigMap, so whether it tolerates
+    # starting unprivileged is a deploy test rather than a template question.
+    ("homepage", "homepage"),
+}
+
+# Root for host or network access that k8s cannot express any other way.
+_HOST_OR_NETWORK_ROOT = {
+    # DAC_READ_SEARCH over a wholesale /var/log hostPath; syslog and auth.log are syslog:adm 640.
+    ("loki-homelab", "promtail"),
+    ("crowdsec", "crowdsec-agent"),
+    # NET_ADMIN for wg-quick and iptables, plus two pod sysctls.
+    ("wg-easy", "wg-easy"),
+    ("qbittorrent", "wireguard"),
+}
+
+# Deliberately root, declared as such, to fix up ownership before the workload starts.
+_ROOT_BY_DESIGN = {
+    ("code-server", "seed-workspace-claim"),
+    ("wg-easy", "config-chown"),
+}
+
+# Runs as root over root-owned data. These are the ones with real work behind them: each needs an
+# fsGroup the role currently avoids, or a one-time chown, before it can assert.
+_ROOT_OWNED_DATA = {
+    # No USER in the image, dumb-init at uid 0, /app/data root-owned. Its template avoids fsGroup
+    # deliberately — it would recursively chown the PVC on every mount — so this needs a chown Job.
+    ("uptime-kuma", "uptime-kuma"),
+    # Root writing a SQLite DB + WAL in a root-owned PVC.
+    ("scrutiny", "web"),
+    # Data is uid-0-owned by explicit design; see the role's CLAUDE.md.
+    ("valheim", "valheim"),
+    # BLOCKED ON A CONTRADICTION, not on effort: deployment.yaml.j2 says DAC_OVERRIDE exists
+    # because the .wld.bak files are uid-1000-owned, and the role's CLAUDE.md says world files are
+    # root-600. That ownership is the whole discriminator. One of the two is wrong.
+    ("terraria", "terraria"),
+    # Stock nginx runs its master as root to bind :80 and fork `user nginx;` workers. texbrain
+    # proves nginx-unprivileged runs 101 end to end on the same job, so an image swap plus a port
+    # change would move this one.
+    ("freshrss", "nginx"),
+}
+
+# Measured non-root, but from the image's own USER with nothing declared. Asserting here is the
+# valuable half of this class — it converts an implicit property into an admission gate — and it
+# is NOT a template-only edit: `runAsNonRoot` without an explicit `runAsUser` makes the kubelet
+# refuse a container whose image names its user rather than numbering it. Each needs its measured
+# uid pinned and a deploy test, one at a time.
+_NON_ROOT_BY_IMAGE_DEFAULT = {
+    ("cloudflare-ddns", "cloudflare-ddns"),
+    ("ical-proxy", "ical-proxy"),
+    ("karakeep", "karakeep"),
+    ("karakeep", "meilisearch"),
+    ("karakeep", "time-tagger"),
+    ("n8n", "n8n"),
+    ("n8n", "n8n-runners"),
+    ("node-exporter", "node-exporter"),
+    ("pihole", "unbound"),
+    ("prowlarr", "flaresolverr"),
+}
+
+# The operator declined pinning a uid on these, in both templates, in the same words: doing it
+# "would be a behaviour change smuggled in under a platform move". Root buys them nothing; that is
+# not the question. Listed so a later census does not re-open a settled decision.
+_UID_PIN_DECLINED = {
+    ("littlelink", "littlelink"),
+    ("peanut", "peanut"),
+}
+
+# Short-lived init and probe containers with no uid declared and no persistent process to measure.
+# Unclassified rather than cleared: the census could not observe them, and guessing from an image
+# name is the error that produced the finding this list came from.
+_UNMEASURED_SHORT_LIVED = {
+    ("claude-otel", "otel-collector"),
+    ("crowdsec", "config-install"),
+    ("headlamp", "probe"),
+    ("homepage", "seed-config"),
+    ("karakeep", "wait-for-deps"),
+    ("karakeep", "wait-for-karakeep"),
+    ("livesync", "seed-config"),
+    ("n8n", "probe"),
+    ("n8n", "wait-for-broker"),
+    ("netpol-baseline", "probe"),
+    ("peanut", "seed-config"),
+    ("prowlarr", "probe"),
+    ("registry", "crane"),
+    ("registry", "probe"),
+    ("registry", "pulled"),
+}
+
+_ROOT_ALLOWED = (
+    _LSIO_CHOWN_THEN_DROP
+    | _ENTRYPOINT_DROPS
+    | _HOST_OR_NETWORK_ROOT
+    | _ROOT_BY_DESIGN
+    | _ROOT_OWNED_DATA
+    | _NON_ROOT_BY_IMAGE_DEFAULT
+    | _UID_PIN_DECLINED
+    | _UNMEASURED_SHORT_LIVED
+)
+
+
+def _containers_with_pod():
+    """As _containers(), plus the pod-level securityContext each container inherits from."""
+    for role, tpl, doc in rendered_docs():
+        if doc.get("kind") not in _POD_KINDS:
+            continue
+        pod = _pod_specs(doc)
+        pod_sc = pod.get("securityContext") or {}
+        for key in ("initContainers", "containers"):
+            for container in pod.get(key) or []:
+                yield (
+                    role,
+                    tpl,
+                    container.get("name", "<unnamed>"),
+                    container.get("securityContext") or {},
+                    pod_sc,
+                )
+
+
+def _asserts_non_root(container_sc: dict, pod_sc: dict) -> bool:
+    """runAsNonRoot in effect — the container's own value, else the pod's."""
+    if "runAsNonRoot" in container_sc:
+        return container_sc["runAsNonRoot"] is True
+    return pod_sc.get("runAsNonRoot") is True
+
+
+def _root_offenders(rows, allowed):
+    """Containers that neither assert non-root nor are excused. Pure, so it can be driven RED.
+
+    Split out from the test below for exactly that reason: a guard over the live fleet is only
+    ever observed passing, which is indistinguishable from a guard that fires on nothing. The
+    synthetic pair beneath the real test is what proves this one can fail.
+    """
+    return [
+        f"{role}/{tpl}:{name}"
+        for role, tpl, name, sc, pod_sc in rows
+        if (role, name) not in _PRIVILEGED
+        and (role, name) not in allowed
+        and not _asserts_non_root(sc, pod_sc)
+    ]
+
+
+def test_a_container_with_no_assertion_and_no_entry_is_flagged():
+    """The rejecting half."""
+    rows = [("newrole", "deployment.yaml.j2", "app", {}, {})]
+    assert _root_offenders(rows, frozenset()) == ["newrole/deployment.yaml.j2:app"]
+
+
+def test_an_asserting_container_and_an_allowlisted_one_are_clean():
+    """The accepting half, both ways a container can legitimately pass."""
+    rows = [
+        # asserts at the container level
+        ("a", "t.j2", "x", {"runAsNonRoot": True}, {}),
+        # inherits the assertion from its pod
+        ("b", "t.j2", "y", {}, {"runAsNonRoot": True}),
+        # excused by name
+        ("c", "t.j2", "z", {}, {}),
+    ]
+    assert _root_offenders(rows, frozenset({("c", "z")})) == []
+
+
+def test_runasnonroot_false_does_not_count_as_an_assertion():
+    """`runAsNonRoot: false` is a declaration that it MAY run as root, not an assertion."""
+    rows = [("a", "t.j2", "x", {"runAsNonRoot": False}, {"runAsNonRoot": True})]
+    assert _root_offenders(rows, frozenset()) == ["a/t.j2:x"]
+
+
+def test_every_container_asserts_non_root_or_is_allowlisted():
+    offenders = _root_offenders(_containers_with_pod(), _ROOT_ALLOWED)
+    assert not offenders, (
+        "these containers neither assert runAsNonRoot nor appear in _ROOT_ALLOWED, so nothing "
+        "records whether they run as root deliberately: " + ", ".join(sorted(offenders))
+    )
+
+
+def test_the_root_allowlist_has_no_stale_entries():
+    """An entry that stops matching a real container is a reason nobody can check any more.
+
+    This is the half that makes the list above shrink rather than only grow: assert a container
+    non-root and its entry must come out, or this fails.
+    """
+    live = {(role, name) for role, _tpl, name, _sc, _pod_sc in _containers_with_pod()}
+    stale = _ROOT_ALLOWED - live
+    assert not stale, (
+        "_ROOT_ALLOWED names containers that no longer exist under those names: "
+        + ", ".join(f"{r}/{n}" for r, n in sorted(stale))
+    )
+    asserting = {
+        (role, name)
+        for role, _tpl, name, sc, pod_sc in _containers_with_pod()
+        if _asserts_non_root(sc, pod_sc)
+    }
+    contradictory = _ROOT_ALLOWED & asserting
+    assert not contradictory, (
+        "these containers assert runAsNonRoot AND are allowlisted as root — remove them from "
+        "_ROOT_ALLOWED: " + ", ".join(f"{r}/{n}" for r, n in sorted(contradictory))
+    )
+
+
 def test_no_container_allows_privilege_escalation():
     offenders = [
         f"{role}/{tpl}:{name}"
