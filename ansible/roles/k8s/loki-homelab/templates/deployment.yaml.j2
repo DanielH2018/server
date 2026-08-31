@@ -38,6 +38,7 @@ spec:
           # /loki mount, and the fleet-standard pair is what actually closes the gap here.
           securityContext:
             allowPrivilegeEscalation: false
+            runAsNonRoot: true
             capabilities:
               drop: [ALL]
           ports:

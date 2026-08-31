@@ -85,6 +85,7 @@ spec:
             # capability at all.
             runAsUser: {{ puid }}
             runAsGroup: {{ pgid }}
+            runAsNonRoot: true
           volumeMounts:
             - name: jellyfin-config
               mountPath: /config
@@ -204,6 +205,7 @@ spec:
                 - ALL
             runAsUser: {{ puid }}
             runAsGroup: {{ pgid }}
+            runAsNonRoot: true
           volumeMounts:
             - name: jellyfin-config
               mountPath: /config

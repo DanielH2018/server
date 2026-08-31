@@ -104,6 +104,7 @@ spec:
           args: ["-config.file=/etc/tempo/config.yaml"]
           securityContext:
             allowPrivilegeEscalation: false
+            runAsNonRoot: true
             capabilities:
               drop: [ALL]
           ports:

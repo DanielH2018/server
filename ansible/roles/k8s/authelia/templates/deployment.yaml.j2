@@ -62,6 +62,7 @@ spec:
               install -m 640 /dev/null /var/log/authelia/authelia.log
           securityContext:
             allowPrivilegeEscalation: false
+            runAsNonRoot: true
             capabilities:
               drop:
                 - ALL
@@ -114,6 +115,7 @@ spec:
             # The Docker role this was ported from sets no read_only, so dropping it is not a
             # regression against the instance being migrated — keeping it was the divergence.
             allowPrivilegeEscalation: false
+            runAsNonRoot: true
             capabilities:
               drop:
                 - ALL
@@ -184,6 +186,7 @@ spec:
           # to the LAPI.
           securityContext:
             allowPrivilegeEscalation: false
+            runAsNonRoot: true
             capabilities:
               drop:
                 - ALL

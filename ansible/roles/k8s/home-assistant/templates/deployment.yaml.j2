@@ -57,6 +57,10 @@ spec:
             runAsGroup: {{ pgid }}
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
+            # Asserted here, not on the pod: the main container below must still start as
+            # root for LSIO's s6 chown-then-drop, so this container-level runAsUser is the
+            # only place a non-root assertion is safe.
+            runAsNonRoot: true
             capabilities:
               drop:
                 - ALL

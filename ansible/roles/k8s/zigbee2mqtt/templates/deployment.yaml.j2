@@ -39,6 +39,7 @@ spec:
             - -c
             - install -m 640 /secret/configuration.yaml /data/configuration.yaml
           securityContext:
+            runAsNonRoot: true
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities:
@@ -70,6 +71,7 @@ spec:
           # The compose template's posture: non-root uid owning its data, no caps, immutable
           # rootfs (verified there — every persisted path resolves under the data mount).
           securityContext:
+            runAsNonRoot: true
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities:

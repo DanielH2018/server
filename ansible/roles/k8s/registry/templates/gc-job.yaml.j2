@@ -46,6 +46,7 @@ spec:
             - "--delete-untagged"
             - "/etc/distribution/config.yml"
           securityContext:
+            runAsNonRoot: true
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             capabilities:
