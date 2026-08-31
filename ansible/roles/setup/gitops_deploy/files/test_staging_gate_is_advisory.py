@@ -299,3 +299,68 @@ def test_the_gate_is_off_by_default() -> None:
         "STAGING_GATE no longer defaults to false — enabling the gate for every host on merge "
         "is a deliberate decision, not a default."
     )
+
+
+def merge_precedes_the_gate(fn: ast.FunctionDef) -> bool:
+    """Does a `git merge --ff-only` run BEFORE consult_staging() in this function?
+
+    The verdict both halves of the red-proof below share. True is the defect: the gate blocks for up
+    to STAGING_GATE_TIMEOUT_S + STAGING_EXPECT_TIMEOUT_S, so a process death inside that window used
+    to leave local == origin with nothing deployed — next_action() then returns noop forever and
+    both Kuma tiles stay green over a permanently stranded deploy (2026-08-29 H-2).
+
+    Scoped to the branch that actually holds the gate: main() ff-merges on several paths (docker,
+    broad, defer), and comparing across all of them would compare a merge in one branch against a
+    gate in another. Only the k8s branch containing consult_staging is the one under test.
+    """
+
+    def _is_ff_merge(node: ast.AST) -> bool:
+        return (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "run"
+            and bool(node.args)
+            and isinstance(node.args[0], ast.List)
+            and {"merge", "--ff-only"}
+            <= {e.value for e in node.args[0].elts if isinstance(e, ast.Constant)}
+        )
+
+    def _calls_gate(node: ast.AST) -> bool:
+        return (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "consult_staging"
+        )
+
+    for block in ast.walk(fn):
+        if not isinstance(block, ast.If):
+            continue
+        gate_lines = [n.lineno for n in ast.walk(block) if _calls_gate(n)]
+        if not gate_lines:
+            continue
+        merge_lines = [n.lineno for n in ast.walk(block) if _is_ff_merge(n)]
+        if merge_lines and min(merge_lines) < min(gate_lines):
+            return True
+    return False
+
+
+def test_the_gate_is_consulted_before_the_ff_merge() -> None:
+    """The accepting half: main() consults the gate, THEN merges."""
+    assert not merge_precedes_the_gate(_fn("main")), (
+        "a `git merge --ff-only` runs before consult_staging() in main() — a death in the gate "
+        "window then strands the promoted SHA as a permanent noop with every monitor green"
+    )
+
+
+def test_a_merge_before_the_gate_is_flagged() -> None:
+    """The rejecting half: the pre-fix ordering must come back True, or the check above is inert."""
+    before_the_fix = ast.parse(
+        "def main():\n"
+        "    if cs.k8s_deploy:\n"
+        "        run(['git', 'merge', '--ff-only', origin])\n"
+        "        consult_staging(cs.k8s_deploy, origin)\n"
+        "        deploy_k8s(cs.k8s_deploy, K8S_DEPLOY_TIMEOUT_S)\n"
+    )
+    assert merge_precedes_the_gate(_fn("main", before_the_fix)), (
+        "the check no longer sees a merge that precedes the gate"
+    )

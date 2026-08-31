@@ -135,10 +135,65 @@ OUTPUT=$(k3s etcd-snapshot save \
 RC=$?
 
 if [[ $RC -eq 0 ]]; then
-  report up "etcd snapshot uploaded to s3://${ETCD_S3_BUCKET}/{{ k3s_etcd_s3_folder }}"
+  SNAP_STATUS=up
+  SNAP_MSG="etcd snapshot uploaded to s3://${ETCD_S3_BUCKET}/{{ k3s_etcd_s3_folder }}"
 else
   # The message reaches Kuma on the LAN and the local journal. It can name the bucket; the keys
   # are never in $OUTPUT because they were passed through the environment.
   SUMMARY=$(printf '%s' "$OUTPUT" | tail -n 3 | tr '\n' ' ')
-  report down "etcd snapshot FAILED (rc=${RC}): ${SUMMARY}"
+  SNAP_STATUS=down
+  SNAP_MSG="etcd snapshot FAILED (rc=${RC}): ${SUMMARY}"
+fi
+
+# --- Has the cluster token drifted from the copy that can actually decrypt these snapshots? ---
+#
+# The token is what decrypts the /bootstrap blob in every snapshot above (see the header). It is
+# held out of band, in the password manager, and docs/k3s-etcd-restore.md correctly says nothing
+# can check THAT COPY STILL EXISTS. But that exemption is narrower than it reads: whether the LIVE
+# token still matches what was copied is a sha256 comparison, and until 2026-08-31 nothing did it.
+# `k3s token rotate --new-token` exists on the installed binary, so one deliberate command leaves
+# the cluster Ready, every monitor green, and every snapshot from that moment on undecryptable
+# with the copy anyone holds. The weekly restore drill cannot see it either — it reads the LIVE
+# token off this disk, so it passes identically before and after a rotation.
+#
+# The stamp is written BY THE OPERATOR, at the moment the out-of-band copy is taken, and by
+# nothing else. Ansible must never create it: an absent -> create step would cure the condition
+# before this arm could report it, making the check a tautology on any host that lost the stamp.
+# That is the same self-re-baselining hole that rules out recording the hash in host_vars.
+#
+# It runs AFTER the upload on purpose. The snapshot is the thing being protected — a token
+# problem must never stop one being taken, which is why this is not an early `report down; exit`
+# like the disarmed and missing-credentials branches above.
+#
+# What it proves is narrow, and saying so here is deliberate: "unchanged since stamped", NOT "the
+# off-box copy is valid". A green arm is not a reason to skip re-copying the token.
+TOKEN_FILE=/var/lib/rancher/k3s/server/token
+TOKEN_STAMP=/var/lib/homelab/etcd-token.sha256
+DRIFT_MSG=""
+if [[ ! -r "$TOKEN_FILE" ]]; then
+  # Fails closed: unreadable is reported, never assumed fine.
+  DRIFT_MSG="cannot read ${TOKEN_FILE} — cluster-token drift UNVERIFIED"
+elif [[ ! -f "$TOKEN_STAMP" ]]; then
+  DRIFT_MSG="cluster-token baseline missing — copy the token out of band, then run: sha256sum ${TOKEN_FILE} | awk '{print \$1}' | install -m 0600 -D /dev/stdin ${TOKEN_STAMP}"
+elif [[ ! -r "$TOKEN_STAMP" ]]; then
+  DRIFT_MSG="${TOKEN_STAMP} exists but is unreadable — cluster-token drift UNVERIFIED"
+else
+  LIVE_HASH=$(sha256sum "$TOKEN_FILE" 2>/dev/null | awk '{print $1}')
+  STAMPED_HASH=$(tr -d '[:space:]' < "$TOKEN_STAMP")
+  if [[ -z "$LIVE_HASH" || -z "$STAMPED_HASH" ]]; then
+    DRIFT_MSG="cluster-token hash unreadable on one side — drift UNVERIFIED"
+  elif [[ "$LIVE_HASH" != "$STAMPED_HASH" ]]; then
+    # Only the first 8 hex chars, and only of a HASH — enough to tell two states apart in a
+    # message, never enough to reconstruct the token.
+    DRIFT_MSG="CLUSTER TOKEN ROTATED since the off-box copy was taken (live ${LIVE_HASH:0:8}… vs stamped ${STAMPED_HASH:0:8}…) — every off-box snapshot is undecryptable with the held copy until you re-copy it and re-stamp"
+  fi
+fi
+
+if [[ -n "$DRIFT_MSG" ]]; then
+  # Down even when the upload succeeded: a snapshot nobody can decrypt is not a backup. This does
+  # fail the off-premises dead-man alongside Kuma, and that is the intended reading — the restore
+  # path is genuinely unproven in every branch above.
+  report down "${SNAP_MSG}; ${DRIFT_MSG}"
+else
+  report "$SNAP_STATUS" "${SNAP_MSG}; cluster token unchanged since stamped"
 fi

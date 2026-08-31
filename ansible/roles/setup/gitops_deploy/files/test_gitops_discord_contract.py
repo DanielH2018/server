@@ -308,6 +308,101 @@ def test_deliver_queues_undelivered_for_retry():
     assert _calls(fn, "discord"), "deliver() must attempt delivery via discord()"
 
 
+# The 2026-08-31 review M-1. alert_once advances its per-SHA marker BEFORE calling deliver(), and
+# discord() blocks for up to 10s inside urlopen. While deliver() queued only AFTER that call, a
+# process death in the window (a reboot, a `systemctl stop`, the UPS shutdown chain) left a durable
+# "already alerted" marker with nothing delivered and nothing queued — and the ff-merged channels
+# never re-reach their alert code on a later tick, so the alert was gone for good with every monitor
+# green. Queue-first makes the same death recoverable: drain_pending() runs at the top of the next
+# tick, ahead of every short-circuit, and reposts it.
+def _first_call_line(fn: ast.FunctionDef, name: str) -> int | None:
+    lines = [
+        n.lineno
+        for n in ast.walk(fn)
+        if isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Name)
+        and n.func.id == name
+    ]
+    return min(lines) if lines else None
+
+
+def sends_before_queueing(fn: ast.FunctionDef) -> bool:
+    """Does this deliver() POST before it persists the queue? The verdict both halves share."""
+    write_line = _first_call_line(fn, "_write_pending")
+    send_line = _first_call_line(fn, "discord")
+    if write_line is None or send_line is None:
+        return False
+    return send_line < write_line
+
+
+def test_deliver_queues_before_it_sends():
+    """The accepting half: the live deliver() writes the queue ahead of the POST."""
+    assert not sends_before_queueing(_fn("deliver")), (
+        "deliver() calls discord() before _write_pending() — a death inside the 10s POST then "
+        "drops the alert permanently, because alert_once has already advanced its marker"
+    )
+
+
+def test_a_deliver_that_sends_first_is_flagged():
+    """The rejecting half: the pre-fix shape must come back True, or the check above is inert."""
+    before_the_fix = ast.parse(
+        "def deliver(key, content):\n"
+        "    pending = _read_pending()\n"
+        "    delivered = discord(content)\n"
+        "    updated = apply_send_result(pending, key, content, delivered)\n"
+        "    updated, dropped = cap_pending(updated)\n"
+        "    if updated != pending:\n"
+        "        _write_pending(updated)\n"
+        "    return delivered\n"
+    )
+    fn = next(
+        n
+        for n in ast.walk(before_the_fix)
+        if isinstance(n, ast.FunctionDef) and n.name == "deliver"
+    )
+    assert sends_before_queueing(fn), (
+        "the check no longer sees a deliver() that POSTs before it queues"
+    )
+
+
+def test_deliver_clears_against_the_queued_baseline():
+    """Queue-first has one trap, and it turns the fix into a repost-every-tick bug.
+
+    The post-send persist is guarded by an inequality. Compared against the PRE-queue dict, a
+    successful send produces a dict equal to it, the guard is False, the entry never leaves the
+    file, and drain_pending() reposts that alert on every tick forever. The baseline must be the
+    dict that was actually written before the POST.
+    """
+    fn = _fn("deliver")
+    written = {
+        n.args[0].id
+        for n in ast.walk(fn)
+        if isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Name)
+        and n.func.id == "_write_pending"
+        and n.args
+        and isinstance(n.args[0], ast.Name)
+    }
+    # Only the guard AFTER the POST matters. The pre-send write is legitimately guarded by
+    # `queued != pending` — that one compares against the pre-queue dict by design.
+    send_line = _first_call_line(fn, "discord") or 0
+    baselines = {
+        cmp.comparators[0].id
+        for cmp in ast.walk(fn)
+        if isinstance(cmp, ast.Compare)
+        and isinstance(cmp.comparators[0], ast.Name)
+        and any(isinstance(op, ast.NotEq) for op in cmp.ops)
+        and cmp.lineno > send_line
+    }
+    assert "queued" in written, (
+        "deliver() no longer writes a pre-send `queued` dict — the queue-first fix is gone"
+    )
+    assert "pending" not in baselines, (
+        "deliver()'s persist guard compares against the pre-queue `pending` dict, so a delivered "
+        "alert is never removed from the queue and drain_pending() reposts it every tick"
+    )
+
+
 def test_rollback_return_is_gated_on_delivered_post():
     # 2026-07-14 run-5 L2: each rollback path must `return 0 if posted else 1` — exit 0 when the
     # detailed Discord post was delivered so systemd's OnFailure generic curl doesn't ALSO fire

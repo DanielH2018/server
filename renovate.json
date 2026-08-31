@@ -99,6 +99,31 @@
     },
     {
       "customType": "regex",
+      "description": "Pinned Vale binary in the CI workflow. TWO matchStrings on purpose: the download URL carries the version TWICE (the tag `v3.18.0` and the asset name `vale_3.18.0_Linux_64-bit.tar.gz`), and a manager that rewrites only the tag produces a 404 URL. `curl -sSL` has no `-f`, so it would write the error body and fail at `tar xzf` instead of at the download. Asset naming is stable across releases.",
+      "managerFilePatterns": [
+        "/(^|/)\\.github/workflows/ci\\.yml$/"
+      ],
+      "matchStrings": [
+        "vale-cli/vale/releases/download/v(?<currentValue>[\\d.]+)/",
+        "vale_(?<currentValue>[\\d.]+)_Linux"
+      ],
+      "depNameTemplate": "vale-cli/vale",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Pinned Vale style package in .vale.ini. A bare `Packages = Google` resolves to the newest release at `vale sync` time, so the rules gating CI could change with no commit — the pin closes that, and this manager stops the pin ageing silently in its place.",
+      "managerFilePatterns": [
+        "/(^|/)\\.vale\\.ini$/"
+      ],
+      "matchStrings": [
+        "vale-cli/Google/releases/download/v(?<currentValue>[\\d.]+)/"
+      ],
+      "depNameTemplate": "vale-cli/Google",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
       "description": "CrowdSec bouncer Traefik plugin pin in k8s/traefik/defaults/main.yml. Re-homed at E7 (2026-08-13) when the Docker traefik role that used to carry the literal moduleName+version block retired \u2014 the k8s static config references this var instead of a literal, so the var is now the only place a regex manager can read the version. None of the other custom managers match this file, so this WAF-enforcement plugin would age silently \u2014 a stale version can lag Traefik API changes or miss plugin security fixes. depName is fixed (the var has no moduleName next to it); track GitHub releases.",
       "managerFilePatterns": [
         "/(^|/)ansible/roles/k8s/traefik/defaults/main\\.yml$/"

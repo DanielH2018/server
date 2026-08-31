@@ -677,3 +677,85 @@ def test_python_version_pins_in_lockstep() -> None:
         f"python-version drifted: .python-version {dotver} vs the workflows' {c.group(1)} — bump "
         f"the pyenv .python-version to match (its Renovate PR doesn't automerge, so it can lag)."
     )
+
+
+_DOWNLOAD_URL_FILES = (".github/workflows/ci.yml", ".vale.ini")
+
+
+def _covered_spans(path: str, text: str) -> list[tuple[int, int]]:
+    """Every span in `text` that some customManager scanning `path` actually matches."""
+    spans: list[tuple[int, int]] = []
+    for mgr in _MANAGERS:
+        if not any(
+            _file_pattern_to_regex(p).search(path) for p in mgr["managerFilePatterns"]
+        ):
+            continue
+        for ms in mgr["matchStrings"]:
+            for m in re.finditer(_to_python_regex(ms), text):
+                spans.append(m.span())
+    return spans
+
+
+def _uncovered_version_occurrences(path: str) -> list[str]:
+    """Occurrences of a pinned release version that no matchString covers.
+
+    The verdict both halves of the red-proof below share. A release-download URL carries its
+    version more than once — `.../download/v3.18.0/vale_3.18.0_Linux_64-bit.tar.gz` — and a
+    manager matching only the tag rewrites half of it on a bump, producing a 404. Asserting that
+    the pin LINE is matched cannot see that; asserting that every occurrence of the captured
+    version is matched can.
+    """
+    text = (_REPO / path).read_text()
+    spans = _covered_spans(path, text)
+    captured = {m.group(1) for m in re.finditer(r"releases/download/v([\d.]+)/", text)}
+    uncovered = []
+    for version in captured:
+        for occ in re.finditer(re.escape(version), text):
+            if not any(s <= occ.start() and occ.end() <= e for s, e in spans):
+                line = text[: occ.start()].count("\n") + 1
+                uncovered.append(f"{path}:{line}: {version}")
+    return uncovered
+
+
+def test_every_release_download_version_occurrence_is_tracked() -> None:
+    """A pinned release URL must have EVERY occurrence of its version tracked, not just the tag.
+
+    2026-08-31 review: the Vale binary was pinned with no manager at all, and the first proposed
+    manager matched only the tag — which would have rewritten
+    `.../download/v3.19.0/vale_3.18.0_Linux_64-bit.tar.gz`, a 404. `curl -sSL` carries no `-f`, so
+    the step writes the error body and dies at `tar xzf` instead, and the bump rides in a shared
+    automerge group where it stalls every other non-major update bundled with it.
+    """
+    uncovered = [
+        p for f in _DOWNLOAD_URL_FILES for p in _uncovered_version_occurrences(f)
+    ]
+    assert not uncovered, (
+        "a pinned release version occurs where no customManager matchString reaches, so a "
+        "Renovate bump would rewrite only part of the URL and leave a broken download:\n"
+        + "\n".join(uncovered)
+    )
+
+
+def test_a_tag_only_matchstring_is_flagged(tmp_path) -> None:
+    """The rejecting half: the tag-only manager must come back uncovered, or the check is inert."""
+    text = (
+        "          curl -sSL -o /tmp/vale.tar.gz \\\n"
+        "            https://github.com/vale-cli/vale/releases/download/v3.18.0/"
+        "vale_3.18.0_Linux_64-bit.tar.gz\n"
+    )
+    tag_only = [
+        (m.span())
+        for m in re.finditer(
+            r"vale-cli/vale/releases/download/v(?P<currentValue>[\d.]+)/", text
+        )
+    ]
+    captured = {m.group(1) for m in re.finditer(r"releases/download/v([\d.]+)/", text)}
+    uncovered = [
+        occ.start()
+        for version in captured
+        for occ in re.finditer(re.escape(version), text)
+        if not any(s <= occ.start() and occ.end() <= e for s, e in tag_only)
+    ]
+    assert uncovered, (
+        "the check no longer sees the asset-name occurrence a tag-only matchString misses"
+    )
