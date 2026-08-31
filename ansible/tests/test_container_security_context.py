@@ -286,6 +286,11 @@ _UID_PIN_DECLINED = {
 _UNMEASURED_SHORT_LIVED = {
     ("claude-otel", "otel-collector"),
     ("crowdsec", "config-install"),
+    # Added by the LAPI startup gate that landed in #675, one PR before this guard. Neither PR
+    # could see the other: PR CI is scoped to changed files, so both were green and master was
+    # not. It is a `nc` retry loop from the crowdsec image, whose default user is root — the same
+    # image whose node-agent is allowlisted above under _HOST_OR_NETWORK_ROOT.
+    ("crowdsec", "wait-for-lapi"),
     ("headlamp", "probe"),
     ("homepage", "seed-config"),
     ("karakeep", "wait-for-deps"),
