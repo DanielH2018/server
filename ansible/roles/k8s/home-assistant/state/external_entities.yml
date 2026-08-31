@@ -28,6 +28,8 @@ entities:
   - automation.bedroom_unexpected_occupancy
   - automation.bedroom_wake_ramp
   - automation.bedroom_window_advisor
+  - automation.bedroom_window_close_advisor
+  - automation.bedroom_window_left_open_reminder
   - automation.ha_heartbeat
   - automation.ha_runtime_error_alert
   - automation.update_available_digest
@@ -88,6 +90,7 @@ entities:
   - number.aqara_fp300_temp_and_humidity_sampling_period
   - number.aqara_fp300_temp_reporting_interval
   - number.aqara_fp300_temp_reporting_threshold
+  - number.aqara_t1_detection_period
   - number.bedroom_airgradient_one_display_brightness
   - number.bedroom_airgradient_one_led_bar_brightness
   - number.behind_bed_countdown_to_turn_off
@@ -164,6 +167,9 @@ entities:
   - sensor.aqara_fp300_target_distance
   - sensor.aqara_fp300_temperature
   - sensor.aqara_fp300_voltage
+  - sensor.aqara_t1_battery
+  - sensor.aqara_t1_illuminance
+  - sensor.aqara_t1_voltage
   - sensor.backup_backup_manager_state
   - sensor.backup_last_attempted_automatic_backup
   - sensor.backup_last_successful_automatic_backup
@@ -243,6 +249,7 @@ entities:
   - update.air_purifier
   - update.airgradient_lamp
   - update.aqara_fp300
+  - update.aqara_t1
   - update.bedroom_airgradient_one_firmware
   - update.behind_bed
   - update.desk_surge_protector_strip

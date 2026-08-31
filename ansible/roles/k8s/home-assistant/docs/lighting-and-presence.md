@@ -130,6 +130,40 @@ and the bedtime/wake routines that drive them.
   so `automation.bedroom_color_tracking` (id `bedroom_color_track`) knows what color it last set
   and can drift from there without treating it as a manual override.
 
+- **Aqara T1 ambient light sensor (added 2026-08-31), `sensor.aqara_t1_illuminance`.** A dedicated
+  illuminance sensor mounted near the desk, clear of the bedroom bulbs' cones, to give the room a
+  reading the lights cannot contaminate — the defect the FP300 feedback-loop caveat above describes.
+  **Nothing reads it yet.** The lux gate still runs on `sensor.aqara_fp300_illuminance`; this entry
+  records the hardware and the measurements so a future swap has real numbers to pick a threshold from.
+  Measured live on install day with the sensor stationary: switching `light.bedroom_lights` moved the
+  T1 by 17-30 lx (49 dark ↔ 79 lit) while it moved the FP300 by ~550 lx (9 dark ↔ 561 lit) — a 23:1
+  reduction in bulb bleed. True ambient with both the bulbs and the desk lamp off read 57 lx at 08:11
+  local. The presence-triggered desk lamp beside it was measured and is NOT a contaminant: switching it
+  off did not lower the reading (49 → 57 over six minutes, morning daylight rising). That mattered
+  because the lamp fires on presence, so a contribution there would have biased the gate at exactly the
+  moment it is evaluated — the FP300's failure mode with occupancy as the trigger instead of the bulbs.
+  Daylight drift over the same window bounds the magnitude rather than pinning it, so the claim is "not
+  a dominant source", not "exactly zero".
+- **The T1 shrinks the circularity, it does not remove it.** The FP300 swings 13× across a light switch
+  (48 ↔ 640); the T1 swings 1.6× (49 ↔ 79). So a gate threshold moved onto the T1 must sit clearly
+  ABOVE 79 or clearly BELOW 49, never between — a value inside that band reintroduces the same
+  self-referential gate in miniature. Real daylight runs into the hundreds, so a threshold picked from
+  a few days of the sensor's own recorder history will land well above 79. **Pick it from data, not by
+  scaling the current 75** — that number was chosen against a lights-contaminated scale and means
+  nothing here.
+- **Z2M runtime state on the T1 (NOT in git — a re-pair wipes it).** `detection_period: 5` s, the
+  factory default, left as-is: it is already the fast end and reports landed 2-9 s after a light
+  switch. It is also the aggressive end for the CR2450, so revisit once the battery sensor reports
+  (this model can take up to 24 h to publish battery for the first time). Re-apply after any re-pair
+  with `zigbee2mqtt/Aqara T1/set` — see the `z2m-device-setting` skill.
+- **The T1's HA entity parks at `unknown` after a Z2M rename or an HA restart**, because a rename
+  republishes the MQTT-discovery configs and clears the state while the sensor only reports on change.
+  Observed for 3.5 min on install day, cleared by the next brightness change. Anything that consumes
+  this sensor must tolerate `unknown` — in a stable room that is a normal steady state, not a fault.
+  `probe.py ha verify-entities` is unaffected either way: it compares entity_ids against
+  `/api/states` and never reads state values, so an `unavailable` or `unknown` entity still counts as
+  present.
+
 ## Manual override, bedtime and wake
 - **Manual light detect (since 2026-06-21).** `automation.bedroom_manual_light_detect` makes a
   hand/voice/dashboard turn-off of `light.bedroom_lights` engage `input_boolean.bedroom_manual_off`
