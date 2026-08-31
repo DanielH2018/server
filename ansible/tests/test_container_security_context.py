@@ -253,9 +253,16 @@ _ROOT_OWNED_DATA = {
     ("scrutiny", "web"),
     # Data is uid-0-owned by explicit design; see the role's CLAUDE.md.
     ("valheim", "valheim"),
-    # BLOCKED ON A CONTRADICTION, not on effort: deployment.yaml.j2 says DAC_OVERRIDE exists
-    # because the .wld.bak files are uid-1000-owned, and the role's CLAUDE.md says world files are
-    # root-600. That ownership is the whole discriminator. One of the two is wrong.
+    # The contradiction here was settled 2026-08-31 by reading the live volume: /config and the
+    # live .wld are 1000:1000, .wld.bak/.wld.bak2/.seeded are 0:0. CLAUDE.md's "root-600" was
+    # about the pre-migration SOURCE; both texts now say so.
+    #
+    # So this entry is mis-named -- the data is not root-owned, root needs DAC_OVERRIDE precisely
+    # BECAUSE it isn't. The exit path is small but needs a write: chown the three root-owned
+    # files to 1000, then the container drops to runAsUser 1000 and needs no capability at all.
+    # Not done here because a wrong guess about how the server rotates its backups shows up as a
+    # FATAL on world-save, not at startup -- the 39-restarts/11-days lesson. Anyone taking it on
+    # must verify a real save afterwards, not just a Running pod.
     ("terraria", "terraria"),
     # Stock nginx runs its master as root to bind :80 and fork `user nginx;` workers. texbrain
     # proves nginx-unprivileged runs 101 end to end on the same job, so an image swap plus a port
