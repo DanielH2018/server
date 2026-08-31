@@ -27,6 +27,14 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+# `scripts/` alone is not enough for `from diagnostics import probe_ha`. Every module in
+# scripts/diagnostics/ imports its siblings BARE (`import probe_core`), which resolves only
+# when that directory is itself on sys.path — true when probe.py is invoked directly, false
+# when we import it as a namespace-package member. Without this, `refresh` dies with
+# `ModuleNotFoundError: No module named 'probe_core'`. See cmd_refresh's docstring: this is
+# the THIRD time that one live path broke on an import, and the first two fixes both moved
+# the failing name rather than the sys.path that resolves it.
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "diagnostics"))
 
 _TEMPLATE_MARKERS = ("{{", "{%")
 

@@ -822,3 +822,42 @@ def test_ha_state_rows_renders_cell_values_and_anomaly():
     out = probe_ha.ha_state_rows(states, model)
     assert "input_boolean.bedroom_sleep_mode" in out
     assert "on" in out
+
+
+def test_cmd_refresh_live_imports_resolve_under_direct_invocation():
+    """`refresh`'s live branch must import cleanly with ONLY the script's own directory on
+    sys.path — the layout a direct `python scripts/home_assistant/ha_state_model.py` gets,
+    and the one the cron and the prek hook actually run under.
+
+    This runs in a subprocess with PYTHONPATH cleared on purpose. pyproject's `pythonpath`
+    is a pytest setting, so an in-process import resolves names a direct invocation cannot
+    see — which is how this one path broke three times behind a green suite.
+    `test_cmd_refresh_writes_both_snapshots` injects get_states/get_services and is
+    structurally upstream of the import, so it stays green either way.
+
+    Red-proof: delete the `scripts/diagnostics` sys.path insert in ha_state_model.py and
+    this fails with `ModuleNotFoundError: No module named 'probe_core'`.
+    """
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    script_dir = Path(hsm.__file__).resolve().parent
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; sys.path.insert(0, sys.argv[1]); import ha_state_model; "
+            "from diagnostics import probe_core, probe_ha; "
+            "print(probe_core.__name__, probe_ha.__name__)",
+            str(script_dir),
+        ],
+        cwd=str(script_dir.parent.parent),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "diagnostics.probe_ha" in proc.stdout
