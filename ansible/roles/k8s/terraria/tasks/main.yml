@@ -5,6 +5,13 @@
 # where nothing listened until now. terraria-stats stays on Docker and goes dark until
 # Phase D's Loki step (it read the game console via Docker promtail).
 
+- name: Build the terraria image
+  ansible.builtin.include_role:
+    name: k8s/image-builder
+  vars:
+    image_builder_name: terraria
+    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/terraria/templates/Dockerfile.j2"
+
 - name: Seed the terraria config volume
   tags: [deploy]
   ansible.builtin.include_role:

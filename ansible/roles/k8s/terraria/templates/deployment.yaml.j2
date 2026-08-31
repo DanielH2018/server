@@ -30,6 +30,23 @@ spec:
         kubernetes.io/hostname: {{ k8s_primary_node }}
       enableServiceLinks: false
       automountServiceAccountToken: false
+      # Runs as 1000, which is what lets the capability set below be empty. The volume is
+      # uid-1000-owned from the cutover seed and measured 1000:1000 on 2026-08-31, so the server
+      # now writes its own data as its owner rather than overriding the permission check to reach
+      # it. The image cannot do this unmodified — see templates/Dockerfile.j2.
+      #
+      # fsGroup is separately load-bearing and must not be dropped as redundant. Each world-save
+      # rewrites .wld.bak, and the ones on the volume today were created by the OLD root process,
+      # so they sit 0:0 644 and a uid-1000 truncate would EACCES on the backup step — the exact
+      # failure the removed DAC_OVERRIDE comment warned about. fsGroup has the kubelet chown the
+      # volume's group and OR in group-write at every mount, which fixes them declaratively where
+      # a one-shot chown would drift back. Same mechanism valheim-stats documents on its own
+      # Longhorn claim.
+      securityContext:
+        runAsUser: {{ puid }}
+        runAsGroup: {{ pgid }}
+        runAsNonRoot: true
+        fsGroup: {{ pgid }}
       priorityClassName: homelab-standard
       containers:
         - name: terraria
@@ -42,25 +59,18 @@ spec:
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
+              # Empty, and the pod-level uid above plus the chowned image is what earns that.
+              # This carried DAC_OVERRIDE until 2026-08-31, because PID 1 ran as root in a
+              # uid-1000-owned /config where root cannot create or unlink without it. Running as
+              # the owner removed the need rather than the symptom.
+              #
+              # WHAT TO WATCH IF THIS REGRESSES: the failure lands on the world-save backup step,
+              # not at startup, so a Running pod proves nothing — that is how the Docker-era
+              # version of this bug survived 39 restarts over 11 days. The signal is a complete
+              # `Saving world data … Validating world save … Backing up world file` cycle in the
+              # log, which fires every 1-2 min, plus new .wld.bak files owned by 1000.
               drop:
                 - ALL
-              add:
-                # PID 1 runs as root, and /config is uid-1000-owned drwxr-xr-x — so root
-                # cannot create or unlink the .wld.bak rotation there, nor rewrite the
-                # uid-1000-owned live .wld (644), without DAC_OVERRIDE. Measured on the live
-                # volume 2026-08-31: the dir and DBoys_Terraria_Server.wld are 1000:1000, while
-                # .wld.bak/.wld.bak2 are 0:0 — the world is rewritten in place and keeps its
-                # seeded owner, the backups are created fresh by root each save.
-                # Without it every world-save FATAL-crashes on the backup step while
-                # startup looks fine (the 39-restarts/11-days Docker lesson).
-                #
-                # The obvious question — why not run as 1000 and need no capability — was
-                # tried and deployed 2026-08-31. It CrashLoopBackOffs: the image entrypoint
-                # hardcodes `mkdir -p /root/.local/share/Terraria` under `set -euo pipefail`,
-                # and Debian's /root is 0700 root:root. The full evidence, and why neither
-                # fsGroup nor an emptyDir over /root fixes it, is in the terraria entry of
-                # `ansible/tests/test_container_security_context.py`.
-                - DAC_OVERRIDE
           volumeMounts:
             - name: terraria-config
               mountPath: /config

@@ -1,0 +1,43 @@
+# A one-layer image whose only job is to make the upstream image runnable as a non-root uid.
+#
+# beardedio/terraria is built to run as root and cannot be persuaded out of it from the manifest
+# side. Its entrypoint (`run-vanilla.sh`) runs under `set -euo pipefail` and hardcodes an
+# absolute HOME rather than $HOME:
+#
+#     mkdir -p /root/.local/share/Terraria
+#     ln -sT /config /root/.local/share/Terraria/Worlds
+#
+# Debian's /root is 0700 root:root, so a non-root uid cannot traverse it. Deployed with
+# `runAsUser: 1000` against the stock image on 2026-08-31 the pod CrashLoopBackOff'd on
+#
+#     mkdir: cannot create directory '/root': Permission denied
+#
+# — at the entrypoint's first filesystem write, nowhere near the world data, which is why an
+# analysis of the volume's ownership did not predict it.
+#
+# Neither manifest-side workaround rescues it, and both were considered. `fsGroup` acts on the
+# mounted volume and /root is image rootfs. Shadowing /root with an emptyDir hides
+# `/root/My Games/Terraria/favorites.json`, which the upstream Dockerfile seeds there
+# specifically to fix an error ("fix for favorites.json error", its words), so it trades this
+# bug for that one plus a root init container.
+#
+# DIGEST-PINNED, and doubly load-bearing here: this image holds the one irreplaceable dataset in
+# the fleet. `vanilla-latest` is the only tag beardedio publishes for the vanilla channel — there
+# is no version stream to track — so the digest is the entire pin. Renovate's dockerfile manager
+# raises a digest PR when the tag re-points; keep the tag alongside the digest so the channel is
+# still legible. A bump is realised by a rebuild, never by a pull: see defaults/main.yml.
+FROM beardedio/terraria:vanilla-latest@sha256:901bc1178a9db0b331bf483724e6bac3d065c1dfd45a604818dfcbd4f755f4b0
+
+# The whole fix. Two paths, for two different reasons:
+#
+#   /root     the hardcoded HOME above. Left at 0700 rather than widened to 0755 — owned by
+#             1000 it is already traversable by the only uid that needs it, and 0700 is the
+#             tighter of the two.
+#   /vanilla  the WORKDIR. The server prints "Error Logging Enabled" at startup and writes its
+#             error log relative to the working directory, so a read-only /vanilla would fail
+#             the first time it actually had something to report — the worst possible moment.
+#
+# Chowning /vanilla lets the app rewrite its own binaries, which is worth stating plainly. It is
+# still strictly LESS privilege than the status quo: today PID 1 is root and can rewrite every
+# path in the container, this one included.
+RUN chown -R 1000:1000 /root /vanilla

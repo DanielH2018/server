@@ -253,33 +253,6 @@ _ROOT_OWNED_DATA = {
     ("scrutiny", "web"),
     # Data is uid-0-owned by explicit design; see the role's CLAUDE.md.
     ("valheim", "valheim"),
-    # The contradiction here was settled 2026-08-31 by reading the live volume: /config and the
-    # live .wld are 1000:1000, .wld.bak/.wld.bak2/.seeded are 0:0. CLAUDE.md's "root-600" was
-    # about the pre-migration SOURCE; both texts now say so.
-    #
-    # So the bucket name is wrong for this one: the DATA is uid 1000. What pins it to root is the
-    # HOME. Do not re-attempt the obvious drop to runAsUser 1000 -- it was tried and deployed
-    # 2026-08-31 and it CrashLoopBackOff'd on:
-    #
-    #     mkdir: cannot create directory '/root': Permission denied
-    #
-    # beardedio/terraria's entrypoint (`containers/vanilla/*/run-vanilla.sh` upstream) runs under
-    # `set -euo pipefail` and hardcodes an absolute HOME, not $HOME:
-    #
-    #     mkdir -p /root/.local/share/Terraria
-    #     ln -sT /config /root/.local/share/Terraria/Worlds
-    #
-    # Debian's /root is 0700 root:root, so uid 1000 cannot traverse it, and the abort is at
-    # entrypoint line 1 rather than anywhere near the world data. fsGroup does not help: it acts
-    # on the mounted volume, and /root is image rootfs. Shadowing /root with an emptyDir does not
-    # help either -- the Dockerfile seeds /root/My Games/Terraria/favorites.json there
-    # ("fix for favorites.json error", its words), so a mount hides it.
-    #
-    # The real exit is an image change: build a thin layer over the pinned digest that chowns
-    # /root and sets USER 1000, via the image-builder role. Not taken unilaterally because it
-    # replaces a digest pin that exists precisely because this volume holds irreplaceable world
-    # data, and it moves the Renovate update path to a base-image bump. Operator's call.
-    ("terraria", "terraria"),
     # Stock nginx runs its master as root to bind :80 and fork `user nginx;` workers. texbrain
     # proves nginx-unprivileged runs 101 end to end on the same job, so an image swap plus a port
     # change would move this one.
