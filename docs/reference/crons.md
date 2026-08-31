@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/gen_reference_crons.py
-generated_at: 2026-08-29 18:22 UTC
-generated_sha: afa98ffc
+generated_at: 2026-08-31 18:17 UTC
+generated_sha: ccc237f5
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: afa98ffc
 
 # Scheduled jobs
 
-38 cron entrie(s) installed across the roles.
+39 cron entrie(s) installed across the roles.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a cron task declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
@@ -26,6 +26,7 @@ generated_sha: afa98ffc
 | CrowdSec AppSec verify | `*/15 * * * *` | every host in the play | `root` | read the script | `ansible/roles/k8s/crowdsec/tasks/main.yml` |
 | CrowdSec home allowlist | `*/5 * * * *` | every host in the play | `root` | read the script | `ansible/roles/k8s/crowdsec/tasks/main.yml` |
 | Daily secret rotation audit | `0 8 * * *` | the gitops host | `{{ sys_user }}` | read the script | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
+| GitHub ruleset drift | `{{ gitops_deploy_ruleset_drift_cron_minute }} {{ gitops_deploy_ruleset_drift_cron_hour }} * * *` | every host in the play | `root` | read the script | `ansible/roles/setup/gitops_deploy/tasks/main.yml` |
 | Live object drift check | `{{ k3s_live_drift_cron_minute }} {{ k3s_live_drift_cron_hour }} * * *` | every host in the play | `{{ sys_user }}` | no (read-only by its command) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Longhorn backup health | `{{ k3s_longhorn_backup_health_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | yes (backup) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Longhorn filesystem trim | `{{ k3s_longhorn_trim_cron_minute }} {{ k3s_longhorn_trim_cron_hour }} * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
