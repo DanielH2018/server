@@ -42,6 +42,12 @@ spec:
           securityContext:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
+            # Host access here is READ-ONLY and comes from the four hostPath mounts below, not
+            # from a uid — a 2026-08-31 review assumed the reverse and reported this as needing
+            # root. It measures 65534 on both nodes from the image's own USER, so pinning it
+            # changes nothing today and guards the image bump that would.
+            runAsNonRoot: true
+            runAsUser: 65534
             capabilities:
               drop:
                 - ALL

@@ -47,6 +47,13 @@ spec:
             - containerPort: {{ n8n_k8s_broker_port }}
           securityContext:
             allowPrivilegeEscalation: false
+            # Pins what the comment below already relies on. `USER node` is an image property
+            # that a rebuild can move silently; asserted here, a move fails admission instead.
+            # The uid is explicit because `runAsNonRoot` alone pins nothing, and the kubelet
+            # refuses a container whose image names its user rather than numbering it — `node`
+            # is a name. PID 1 (`tini`) measured at uid 1000 on 2026-08-31, so this is a no-op.
+            runAsNonRoot: true
+            runAsUser: 1000
             capabilities:
               # The compose template's cap_drop: ALL with no cap_add. The image runs as `node`
               # (uid 1000) and the seeded tree is uid 1000 too — tar restored it with

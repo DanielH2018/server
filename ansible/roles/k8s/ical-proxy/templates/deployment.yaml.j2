@@ -41,6 +41,12 @@ spec:
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
+            # The uid is pinned alongside the assertion, not left to the image: `runAsNonRoot`
+            # alone makes the kubelet REFUSE a container whose image names its user rather than
+            # numbering it, and it would not pin the uid even where it works. 1000 is this repo's
+            # own `useradd -u 1000` in Dockerfile.j2, measured live 2026-08-31.
+            runAsNonRoot: true
+            runAsUser: 1000
             capabilities:
               drop:
                 - ALL

@@ -56,6 +56,12 @@ spec:
           imagePullPolicy: Always
           securityContext:
             allowPrivilegeEscalation: false
+            # `USER runner` named in the comment below is an image property, so it is pinned here
+            # rather than trusted. This is the workload where it matters most: it executes
+            # arbitrary workflow code, so an image rebuild that moved the uid to 0 would hand
+            # that code root. PID 1 (`tini`) measured at uid 1000 on 2026-08-31.
+            runAsNonRoot: true
+            runAsUser: 1000
             capabilities:
               # Executes arbitrary workflow code — the most code-exposed workload in the fleet,
               # so drop everything. The image ends `USER runner`, talks only to the broker, and
