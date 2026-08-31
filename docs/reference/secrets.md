@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/gen_reference_secrets.py
-generated_at: 2026-08-31 06:17 UTC
-generated_sha: 57725de6
+generated_at: 2026-08-31 18:17 UTC
+generated_sha: ccc237f5
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 57725de6
 
 # Secrets
 
-150 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
+151 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
 
 !!! note "Names and dates only"
     This page is generated from the plaintext rotation registry. No secret VALUE is read here, and the generator never opens the encrypted store or invokes the decryption tool — a test enforces that.
@@ -57,7 +57,7 @@ needs a human to mint the new value, then `secret_rotation.py rotate`.
 | `grafana_admin_password` | 2026-02-02 | 2027-02-02 | 155 |
 | `handy_master_secret` | 2026-07-03 | 2027-07-03 | 306 |
 | `healthchecks_password` | 2026-08-23 | 2027-08-23 | 357 |
-| `healthchecks_ping_key` | 2026-08-30 | 2027-08-30 | 364 |
+| `healthchecks_ping_key` | 2026-08-31 | 2027-08-31 | 365 |
 | `homelab_mcp_token` | 2025-09-01 | 2026-09-01 | 1 |
 | `homepage_ha_token` | 2025-09-14 | 2026-09-14 | 14 |
 | `jellyfin_api_key` | 2025-10-15 | 2026-10-15 | 45 |
@@ -181,6 +181,7 @@ rotated unattended by the weekly secret-rotate cron.
 | `pi_recovery_push_token` | 2026-08-30 | 2027-02-26 | 179 |
 | `pi_sd_health_push_token` | 2026-08-30 | 2027-02-26 | 179 |
 | `remember_logs_push_token` | 2026-04-16 | 2026-10-13 | 43 |
+| `ruleset_drift_push_token` | 2026-08-05 | 2027-02-01 | 154 |
 | `secret_rotation_push_token` | 2026-08-28 | 2027-02-24 | 177 |
 | `setup_drift_push_token` | 2026-04-05 | 2026-10-02 | 32 |
 | `ups_secondary_push_token` | 2026-08-22 | 2027-02-18 | 171 |
