@@ -213,6 +213,15 @@ _ENTRYPOINT_DROPS = {
     ("pihole", "pihole"),
     # Entrypoint chowns the data dir then gosu-drops to 1000.
     ("scrutiny", "influxdb"),
+    # s6-svscan at uid 0, like the LSIO set above, except this one does NOT drop: `node
+    # dist/index.js` and next-server both measure uid 0 too. Filed as non-root by image default
+    # on 2026-08-31 from a census summary, corrected the same day by measuring it.
+    ("karakeep", "karakeep"),
+    # Starts as root to read its config and drops to the unbound user — SETUID/SETGID are granted
+    # for exactly that, and the template says so at the container. The census measured the settled
+    # process at uid 101 and missed the entrypoint, which is the same steady-state-vs-PID-1 error
+    # that mis-filed karakeep. Asserting here would refuse the container at admission.
+    ("pihole", "unbound"),
     # su-exec drop. Mounts only an emptyDir and a read-only ConfigMap, so whether it tolerates
     # starting unprivileged is a deploy test rather than a template question.
     ("homepage", "homepage"),
@@ -244,33 +253,54 @@ _ROOT_OWNED_DATA = {
     ("scrutiny", "web"),
     # Data is uid-0-owned by explicit design; see the role's CLAUDE.md.
     ("valheim", "valheim"),
-    # BLOCKED ON A CONTRADICTION, not on effort: deployment.yaml.j2 says DAC_OVERRIDE exists
-    # because the .wld.bak files are uid-1000-owned, and the role's CLAUDE.md says world files are
-    # root-600. That ownership is the whole discriminator. One of the two is wrong.
+    # The contradiction here was settled 2026-08-31 by reading the live volume: /config and the
+    # live .wld are 1000:1000, .wld.bak/.wld.bak2/.seeded are 0:0. CLAUDE.md's "root-600" was
+    # about the pre-migration SOURCE; both texts now say so.
+    #
+    # So the bucket name is wrong for this one: the DATA is uid 1000. What pins it to root is the
+    # HOME. Do not re-attempt the obvious drop to runAsUser 1000 -- it was tried and deployed
+    # 2026-08-31 and it CrashLoopBackOff'd on:
+    #
+    #     mkdir: cannot create directory '/root': Permission denied
+    #
+    # beardedio/terraria's entrypoint (`containers/vanilla/*/run-vanilla.sh` upstream) runs under
+    # `set -euo pipefail` and hardcodes an absolute HOME, not $HOME:
+    #
+    #     mkdir -p /root/.local/share/Terraria
+    #     ln -sT /config /root/.local/share/Terraria/Worlds
+    #
+    # Debian's /root is 0700 root:root, so uid 1000 cannot traverse it, and the abort is at
+    # entrypoint line 1 rather than anywhere near the world data. fsGroup does not help: it acts
+    # on the mounted volume, and /root is image rootfs. Shadowing /root with an emptyDir does not
+    # help either -- the Dockerfile seeds /root/My Games/Terraria/favorites.json there
+    # ("fix for favorites.json error", its words), so a mount hides it.
+    #
+    # The real exit is an image change: build a thin layer over the pinned digest that chowns
+    # /root and sets USER 1000, via the image-builder role. Not taken unilaterally because it
+    # replaces a digest pin that exists precisely because this volume holds irreplaceable world
+    # data, and it moves the Renovate update path to a base-image bump. Operator's call.
     ("terraria", "terraria"),
     # Stock nginx runs its master as root to bind :80 and fork `user nginx;` workers. texbrain
     # proves nginx-unprivileged runs 101 end to end on the same job, so an image swap plus a port
     # change would move this one.
     ("freshrss", "nginx"),
+    # Measured uid 0 (`tini -- /bin/sh -c /bin/meilisearch`), writing a PVC it owns as root.
+    ("karakeep", "meilisearch"),
+    # Measured uid 0. Its uv cache is mounted at /root/.cache/uv, a hardcoded root HOME, so a
+    # non-root uid cannot write it — the mount path is the blocker, not the data's ownership.
+    ("karakeep", "time-tagger"),
 }
 
-# Measured non-root, but from the image's own USER with nothing declared. Asserting here is the
-# valuable half of this class — it converts an implicit property into an admission gate — and it
-# is NOT a template-only edit: `runAsNonRoot` without an explicit `runAsUser` makes the kubelet
-# refuse a container whose image names its user rather than numbering it. Each needs its measured
-# uid pinned and a deploy test, one at a time.
-_NON_ROOT_BY_IMAGE_DEFAULT = {
-    ("cloudflare-ddns", "cloudflare-ddns"),
-    ("ical-proxy", "ical-proxy"),
-    ("karakeep", "karakeep"),
-    ("karakeep", "meilisearch"),
-    ("karakeep", "time-tagger"),
-    ("n8n", "n8n"),
-    ("n8n", "n8n-runners"),
-    ("node-exporter", "node-exporter"),
-    ("pihole", "unbound"),
-    ("prowlarr", "flaresolverr"),
-}
+# Emptied 2026-08-31, one deploy after it was written, by measuring every member instead of
+# trusting the census summary that produced it. Seven were real and are now pinned and asserted in
+# their templates. Three were never non-root at all — karakeep's app, meilisearch and time-tagger
+# measure uid 0 — and moved to _ENTRYPOINT_DROPS and _ROOT_OWNED_DATA below.
+#
+# Kept as an empty named set rather than deleted, because the category is the thing worth
+# remembering: a container that lands non-root only from its image's USER needs `runAsUser` pinned
+# alongside the assertion, since `runAsNonRoot` alone makes the kubelet refuse a container whose
+# image NAMES its user rather than numbering it. A future one belongs here until it is measured.
+_NON_ROOT_BY_IMAGE_DEFAULT: set[tuple[str, str]] = set()
 
 # The operator declined pinning a uid on these, in both templates, in the same words: doing it
 # "would be a behaviour change smuggled in under a platform move". Root buys them nothing; that is

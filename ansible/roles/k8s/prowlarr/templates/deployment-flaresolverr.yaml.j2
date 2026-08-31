@@ -61,6 +61,12 @@ spec:
             - containerPort: {{ prowlarr_k8s_flaresolverr_port }}
           securityContext:
             allowPrivilegeEscalation: false
+            # The comment below is what makes this assertable where its LSIO siblings are not:
+            # no config chown means no root phase to preserve. PID 1 (`dumb-init`) measured at
+            # uid 1000 on 2026-08-31. It renders untrusted pages, so pinning the uid is worth
+            # more here than on a passive workload.
+            runAsNonRoot: true
+            runAsUser: 1000
             capabilities:
               # cap_drop: ALL with nothing added back, matching the compose template. Unlike the
               # LSIO images this one does not chown a config tree on startup, so it needs none of

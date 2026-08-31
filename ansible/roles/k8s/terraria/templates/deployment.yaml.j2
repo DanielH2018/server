@@ -45,10 +45,21 @@ spec:
               drop:
                 - ALL
               add:
-                # PID 1 runs as root and rotates the uid-1000-owned .wld.bak backups —
-                # unlink+rename in a directory root doesn't own needs DAC_OVERRIDE.
+                # PID 1 runs as root, and /config is uid-1000-owned drwxr-xr-x — so root
+                # cannot create or unlink the .wld.bak rotation there, nor rewrite the
+                # uid-1000-owned live .wld (644), without DAC_OVERRIDE. Measured on the live
+                # volume 2026-08-31: the dir and DBoys_Terraria_Server.wld are 1000:1000, while
+                # .wld.bak/.wld.bak2 are 0:0 — the world is rewritten in place and keeps its
+                # seeded owner, the backups are created fresh by root each save.
                 # Without it every world-save FATAL-crashes on the backup step while
                 # startup looks fine (the 39-restarts/11-days Docker lesson).
+                #
+                # The obvious question — why not run as 1000 and need no capability — was
+                # tried and deployed 2026-08-31. It CrashLoopBackOffs: the image entrypoint
+                # hardcodes `mkdir -p /root/.local/share/Terraria` under `set -euo pipefail`,
+                # and Debian's /root is 0700 root:root. The full evidence, and why neither
+                # fsGroup nor an emptyDir over /root fixes it, is in the terraria entry of
+                # `ansible/tests/test_container_security_context.py`.
                 - DAC_OVERRIDE
           volumeMounts:
             - name: terraria-config

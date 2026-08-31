@@ -29,6 +29,11 @@ spec:
           securityContext:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
+            # uid pinned with the assertion: `runAsNonRoot` alone does not pin one, and the
+            # kubelet refuses a container whose image names its user instead of numbering it.
+            # `/bin/ddns` measured at uid 1000 on 2026-08-31.
+            runAsNonRoot: true
+            runAsUser: 1000
             capabilities:
               drop:
                 - ALL

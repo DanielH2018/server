@@ -16,8 +16,13 @@ irreplaceable data kopia still uniquely protected; the Docker role is in
   seeded from the Docker copy at cutover
 - **Probes:** a `/proc/net/tcp` listen-check on :7777 (`1E61`), NOT a connect probe — a
   TCP connect spams the game console with join/leave noise
-- **Caps:** `DAC_OVERRIDE` only (the image's world-save backup rotation touches
-  root-owned files); `stdin`/`tty` kept so the server console stays attachable
+- **Caps:** `DAC_OVERRIDE` only — PID 1 is root in a uid-1000-owned `/config`, so it cannot
+  create or unlink the `.wld.bak` rotation without it. **The container runs as root because the
+  image requires it**, not by choice: the entrypoint hardcodes `/root/.local/share/Terraria`
+  under `set -euo pipefail` and Debian's `/root` is 0700, so `runAsUser: 1000` CrashLoopBackOffs
+  at entrypoint line 1. Tried and deployed 2026-08-31; see the terraria entry in
+  `ansible/tests/test_container_security_context.py` for the evidence and the image-builder exit
+  path. `stdin`/`tty` kept so the server console stays attachable
 - **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
   (`name: terraria`, no port/hostname — not Traefik-routed) and `defaults/main.yml`
 
@@ -27,9 +32,12 @@ irreplaceable data kopia still uniquely protected; the Docker role is in
   daniel-server, reading the cluster Loki since Phase D.2).
 - cloudflare-ddns publishes `terraria.<domain>` (direct/unproxied — game traffic can't
   ride Cloudflare's HTTP proxy).
-- Seeding used a sudo-staged copy (world files are root-600; the unprivileged seed
-  pipeline can't read them in place) — see the BL1 record in
-  `docs/archive/k3s-migration/backup-consolidation-longhorn.md`.
+- Seeding used a sudo-staged copy — the world files **on the pre-migration Docker host**
+  were root-600, which the unprivileged seed pipeline can't read in place. See the BL1 record
+  in `docs/archive/k3s-migration/backup-consolidation-longhorn.md`. This describes the SOURCE,
+  not the live volume: the seed landed everything uid-1000, and `/config` measured 1000:1000
+  drwxr-xr-x on 2026-08-31. Read as a claim about live state it contradicts the DAC_OVERRIDE
+  comment in `templates/deployment.yaml.j2`, which is why the epoch is spelled out here.
 
 ## Editing
 - Manifests: `templates/*.yaml.j2` · Defaults: `defaults/main.yml`
