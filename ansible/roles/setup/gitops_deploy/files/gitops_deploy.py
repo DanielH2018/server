@@ -528,10 +528,29 @@ def deliver(key: str, content: str) -> bool:
     """Post an alert now, queuing it (keyed by "<channel>:<sha>") for retry on a delivery FAILURE so a
     transient webhook blip can't permanently drop it — the ff-merged secrets/tasks/meta/combined paths
     never re-reach their alert code on the next (noop) tick, so `discord()`'s own 'retry next tick'
-    doesn't hold for them. drain_pending() resends any queued entry every tick. Returns discord()'s result."""
+    doesn't hold for them. drain_pending() resends any queued entry every tick. Returns discord()'s result.
+
+    The queue write happens BEFORE the send, so a process death during discord() leaves the alert
+    queued rather than lost — see the DECIDED note below."""
     pending = _read_pending()
+    # DECIDED: queue BEFORE the send, not after. discord() blocks for up to 10s in urlopen, and
+    # alert_once has already advanced its per-SHA marker by the time we get here — so a process
+    # death inside that window (a reboot, a `systemctl stop`, the UPS shutdown chain) used to leave
+    # a durable "already alerted" marker with nothing delivered and nothing queued, and the
+    # ff-merged channels never re-reach their alert code on a later tick. Queue-first trades
+    # lost-on-crash for duplicate-on-crash: a death after the 2xx but before the removal write below
+    # makes drain_pending() repost once. At-least-once is the right side for an alert.
+    queued = apply_send_result(pending, key, content, False)
+    if queued != pending:
+        # Deliberately uncapped: capping here could evict a real backlogged alert to make room for
+        # one that is about to be delivered anyway. The queue may sit at PENDING_ALERTS_MAX + 1 for
+        # the length of one discord() call; the post-send write below is what enforces the cap.
+        _write_pending(queued)
     delivered = discord(content)
-    updated = apply_send_result(pending, key, content, delivered)
+    # `queued`, NOT `pending`, is the baseline from here on. Comparing the removal against the
+    # pre-queue dict would make it a permanent no-op, so the entry would never leave and every
+    # alert would repost on every tick.
+    updated = apply_send_result(queued, key, content, delivered)
     updated, dropped = cap_pending(updated)
     for stale in dropped:
         # Logged, never silent: this is an alert being discarded undelivered, which is the exact
@@ -540,7 +559,7 @@ def deliver(key: str, content: str) -> bool:
         log(
             f"pending-alert queue over {PENDING_ALERTS_MAX}; dropping oldest undelivered {stale}"
         )
-    if updated != pending:
+    if updated != queued:
         _write_pending(updated)
     return delivered
 
@@ -1286,8 +1305,15 @@ def main() -> int:
         alert_deferred(origin, set(), cs, k8s_services)
         return 0
     if cs.k8s_deploy:
-        run(["git", "merge", "--ff-only", origin])
+        # DECIDED: consult the gate BEFORE the ff-merge, never after. consult_staging blocks for up
+        # to STAGING_GATE_TIMEOUT_S + STAGING_EXPECT_TIMEOUT_S, and a process death inside that
+        # window used to leave local == origin with nothing deployed — next_action() then returns
+        # noop forever (the SHA is already merged, so nothing re-triggers), `last_run` keeps ticking,
+        # and both Kuma tiles stay green over a permanently stranded deploy. Merging after the gate
+        # makes the same death self-healing: local is still behind, so the next tick re-evaluates.
+        # The gate stays advisory either way — it returns no verdict and cannot block this deploy.
         consult_staging(cs.k8s_deploy, origin)
+        run(["git", "merge", "--ff-only", origin])
         try:
             deploy_k8s(cs.k8s_deploy, K8S_DEPLOY_TIMEOUT_S)
         except Exception as exc:  # noqa: BLE001 — any playbook failure, or the timeout above

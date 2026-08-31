@@ -44,6 +44,16 @@ spec:
             - containerPort: 9222
           securityContext:
             allowPrivilegeEscalation: false
+            # The image already starts chromium as uid 1000 (verified on the live pod, 2026-08-31);
+            # asserting it here is what makes that an API-server guarantee rather than an image
+            # default a future tag bump could drop silently. runAsNonRoot alone would not do it —
+            # the kubelet only rejects a numeric root uid, so the uid is the load-bearing half.
+            # Safe for THIS container specifically because it mounts no volumes and binds 9222,
+            # an unprivileged port. Do not copy it to the sibling karakeep deployments without
+            # checking each one: karakeep's own /data seed tree and time-tagger's /root/.cache/uv
+            # are root-owned, so the same three lines would break them (2026-08-31 review).
+            runAsNonRoot: true
+            runAsUser: 1000
             capabilities:
               # Chrome already runs with --no-sandbox, so it needs no SYS_ADMIN or sandbox caps.
               drop:

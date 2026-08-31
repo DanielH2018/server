@@ -88,6 +88,30 @@ sudo sha256sum /var/lib/rancher/k3s/server/token   # compare against the saved c
 The token changes only on a deliberate rotation, so the copy stays valid until one happens. **If
 you ever rotate it, this line is stale the moment you do** — re-copy first, then update the date.
 
+### Baseline the drift stamp when you take the copy
+
+Whether the copy still *exists* is not machine-checkable, as above. Whether the LIVE token still
+matches what you copied is a hash comparison, and `etcd-snapshot-offbox.sh` makes it daily: it reports the
+snapshot DOWN when the live token no longer matches the stamp, because a snapshot nobody can
+decrypt is not a backup. Until the stamp exists the arm reports the baseline as missing, which is
+the correct reading — the restore path is unproven until you take the copy.
+
+Run this on daniel-box **at the same moment you save the token to the password manager**, and only
+then:
+
+```bash
+sudo sh -c 'sha256sum /var/lib/rancher/k3s/server/token | awk "{print \$1}" \
+  | install -m 0600 -D /dev/stdin /var/lib/homelab/etcd-token.sha256'
+```
+
+**No Ansible task writes this file, and none may be added.** A task that creates the stamp from
+the live token would cure the mismatch before the daily arm could report it, turning the check
+into a tautology on any host that lost its stamp — the same reason the hash is not recorded in
+`host_vars`. Re-run the command by hand after a deliberate rotation, once the new token is copied.
+
+The stamp proves *unchanged since stamped*. It does not prove the off-box copy is still readable,
+still in the password manager, or still correct — a green arm is not a reason to skip re-copying.
+
 - **Restoring onto daniel-box with its disk intact**: nothing changes, everything is already there.
 - **Restoring onto a rebuilt or replacement host**: supply the token. `--cluster-reset` reads it
   from `<data-dir>/server/token` and checks for that FILE — `--token-file` does not satisfy it

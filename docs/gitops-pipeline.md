@@ -21,9 +21,13 @@ order:
 2. Read the check runs for the origin SHA and decide a CI verdict
    (`deploy_logic.py:274`).
 3. Choose an action from the verdict and the changed paths (`deploy_logic.py:312`).
-4. Fast-forward the checkout, if the action allows it.
-5. Deploy whatever is eligible.
-6. Health-gate the result, and roll back on failure.
+4. Consult the staging cluster, on a k8s deploy where `gitops_deploy_staging_gate` is armed
+   and the services intersect `STAGING_SUBSET`. Advisory: it returns no verdict and cannot
+   block the deploy, but it adds up to `STAGING_GATE_TIMEOUT_S` + `STAGING_EXPECT_TIMEOUT_S`
+   (600s + 120s) to the tick — worth knowing when a tick looks stuck.
+5. Fast-forward the checkout, if the action allows it.
+6. Deploy whatever is eligible.
+7. Health-gate the result, and roll back on failure.
 
 All of it runs while holding `/var/lock/server-git-tree.lock`, which is what stops a tick
 racing an operator's deploy or the secret-rotation cron. See
@@ -81,10 +85,13 @@ state it leaves is undefined. The bring-up playbooks run by hand by construction
 A failed apply writes `hold_sha` and `hold_plane`, alerts, and leaves the tree
 fast-forwarded. Nothing is rolled back, and the alert says so.
 
-`deploy_logic.broad_budget_ok` is why. A full `deploy.yml` takes 1212s (measured
-2026-08-22); adding a rollback re-run and the 180s worst-case flock wait comes to 2604s
-against `TimeoutStartSec=2700`. A 96-second margin means a run four percent slower than
-measured is killed mid-rollback, which is worse than never starting one.
+A rollback re-run has to fit inside the unit's `TimeoutStartSec`, or it is killed partway —
+worse than never starting one. The arm stays forward-only because proving it fits needs a
+fresh `deploy.yml` measurement, not because of any particular timeout value:
+`deploy_logic.broad_budget_ok` encodes the check and has no production caller. The role's own
+`ansible/roles/setup/gitops_deploy/CLAUDE.md` carries the numbers and the date they were taken;
+read `TimeoutStartSec` out of `gitops-deploy.service.j2` rather than from prose, since it moves
+when the staging gate's budget changes.
 
 It deliberately does not reset the tree either. Resetting without redeploying would leave the
 tree claiming the old commit while live state is half-new — a tree that lies, over which every
