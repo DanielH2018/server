@@ -28,6 +28,12 @@ binary_sensor.aqara_fp300_pir_detection:
   friendly_name: PIR Detection
 sensor.aqara_fp300_illuminance:
   friendly_name: Illuminance
+# Aqara T1 (GZCGQ11LM), added 2026-08-31 — a dedicated ambient illuminance sensor mounted clear
+# of the bedroom bulbs. Deliberately NOT `Illuminance`: the FP300 above already owns that name,
+# and two entities sharing a display name is unreadable on a dashboard. "Ambient" is the whole
+# distinction between them — see docs/lighting-and-presence.md.
+sensor.aqara_t1_illuminance:
+  friendly_name: Ambient Illuminance
 sensor.aqara_fp300_temperature:
   friendly_name: Temperature
 sensor.aqara_fp300_humidity:

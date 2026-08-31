@@ -106,6 +106,10 @@ every task in this directory whether or not it is needed.
   below the lights-off daytime ambient if you want to stop daytime auto-lighting (this is why the fan
   button stays out of light control entirely). The illuminance also **LAGS** (sleepy battery sensor on
   `light_sampling: low`, ~100 s to reflect a lights-off drop) — see the sun-aware button-1 HOLD note below.
+  **Before tuning that 75-lux threshold, know that a clean ambient sensor now exists:**
+  `sensor.aqara_t1_illuminance` (Aqara T1, added 2026-08-31) sees 23× less bulb bleed and nothing reads
+  it yet. Measurements, the 49-79 band a moved threshold must clear, and the Z2M runtime settings are in
+  [`docs/lighting-and-presence.md`](docs/lighting-and-presence.md).
 
 ## Testing
 - **Bedroom Jinja math is unit-tested** (`tests/`, run via `uv run pytest` / the prek `pytest`

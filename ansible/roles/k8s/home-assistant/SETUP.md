@@ -37,6 +37,7 @@ uv run ansible-playbook ansible/deploy.yml --tags "home-assistant"
 | 3× Hue color bulbs (Lamp, Left Light, Right Light) | Zigbee2MQTT | grouped as `light.bedroom_lights` |
 | Hue Tap Dial (RDM002) | Zigbee2MQTT (raw topic `zigbee2mqtt/Tap Dial`) | `sensor.0x001788010f0ccda4_battery` |
 | Aqara FP300 presence sensor | Zigbee2MQTT | `binary_sensor.aqara_fp300_presence` / `_pir_detection`, `sensor.aqara_fp300_{illuminance,temperature,humidity,battery,target_distance}` |
+| Aqara T1 light sensor (GZCGQ11LM) | Zigbee2MQTT (Z2M name `Aqara T1`) | `sensor.aqara_t1_{illuminance,battery,voltage}`, `number.aqara_t1_detection_period` |
 | AirGradient ONE air monitor | AirGradient (local) | `sensor.bedroom_airgradient_one_{carbon_dioxide,pm2_5,voc_index,nox_index,temperature,humidity}` |
 | DREO tower fan | `dreo` (HACS, cloud) | `fan.tower_fan` |
 | APC UPS | NUT | (power monitoring) |
