@@ -345,6 +345,12 @@ stringData:
   # gives a daily push one missed run of slack, matching Secret Rotation / Manifest Prune.
   cloudflare-ip-drift.json: |
     {"type": "push", "name": "Cloudflare IP Drift", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_cloudflare_drift_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # 90000s (25h) for the same reason as Cloudflare IP Drift directly above: fed by a DAILY cron
+  # (setup/gitops_deploy's github-ruleset-drift.sh), so the interval gives one missed run of
+  # slack. Watches the merge gate the deployer's CI verdict rests on — a required context
+  # removed in the GitHub UI otherwise changes what can reach master with no commit anywhere.
+  github-ruleset-drift.json: |
+    {"type": "push", "name": "GitHub Ruleset Drift", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ ruleset_drift_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # 1800s, NOT the bridge fleet's 600s: this monitor's feeder is k8s/crowdsec's `*/15`
   # cron, not the 300s monitor-bridge loop. A 600s interval expired mid-cycle, so the tile
   # alternated up/down every ~7.5 min (measured 2026-08-21: 24 transitions in 3h, up 2/3

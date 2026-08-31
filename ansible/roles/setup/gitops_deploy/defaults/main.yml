@@ -24,6 +24,30 @@ gitops_deploy_ci_contexts:
 # Queried unauthenticated (public repo), one GET per tick that would otherwise deploy.
 gitops_deploy_github_repo: DanielH2018/server
 
+# --- The MERGE gate, which is a different thing from gitops_deploy_ci_contexts above ---
+#
+# The list above is what this DEPLOYER waits for. The list here is what GitHub's ruleset requires
+# before a PR can merge at all, and it is a superset: `renovate config validator` gates merges
+# while deliberately not gating deploys (see the reasoning above), and `pull + boot changed
+# images` is required for merges but has no `push:` trigger, so it never produces a check run on
+# master and could never be waited on by a tick.
+#
+# Declared here so github-ruleset-drift.sh can compare it against the live ruleset daily. That
+# comparison is the whole point: this list is a hand-copy of remote state, and by 2026-08-31 two
+# other hand-copies of the same state had silently gone stale. Reconcile this list when the drift
+# monitor fires — do not edit the ruleset to match the list.
+gitops_deploy_ruleset_id: 20912512
+gitops_deploy_expected_ruleset_contexts:
+  - prek (lint + validate + tests + secrets)
+  - pull + boot changed images
+  - renovate config validator
+
+# Daily, offset from the other daniel-box health crons. Rulesets change on a human cadence, and
+# the endpoint is rate-limited per source IP (60/hr unauthenticated, shared with renovate_notify),
+# so this is a safety net rather than a control loop.
+gitops_deploy_ruleset_drift_cron_hour: "6"
+gitops_deploy_ruleset_drift_cron_minute: "40"
+
 # k8s auto-deploy — design: docs/superpowers/specs/2026-08-14-renovate-k8s-autodeploy-design.md
 #
 # Ships OFF. Slice 1 enables it scoped to the pilot service; slice 3 clears the pilot list once

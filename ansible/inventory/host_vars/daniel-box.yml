@@ -512,5 +512,6 @@ render_gid: 993
 # roles/k8s/nut/CLAUDE.md before this reaches the host. Setting it true installs a chain whose
 # only job is to power this machine off, and a broken chain is indistinguishable from a working
 # one while mains power is up. The role asserts upsd is reachable at deploy time, which catches
-# a stale ClusterIP snapshot then — but nothing re-checks it afterwards.
+# a stale ClusterIP snapshot then; `nut_host_watchdog_armed` (roles/nut_host/defaults/main.yml)
+# is what re-checks it afterwards, every 10 minutes via ups-secondary-health.sh.
 nut_host_secondary_armed: true

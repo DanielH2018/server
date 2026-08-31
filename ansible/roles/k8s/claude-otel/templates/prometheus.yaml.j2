@@ -9,8 +9,9 @@
   scheduler_plugin_execution, both workqueue duration families, watch_events_sizes and
   storage_operation_duration.
 
-  That matters because the cap here is BYTES, not series: retention.size is 3GB against a 5Gi
-  PVC (deliberately under it — the WAL, the head and compaction share the volume). Doubling the
+  That matters because the cap here is BYTES, not series: retention.size is
+  `claude_otel_prometheus_retention_size` (7GB as of 2026-08-31) against a 12Gi PVC
+  (deliberately under it — the WAL, the head and compaction share the volume). Doubling the
   series roughly doubles the block growth rate, so the visible effect of keeping every bucket
   would be retention quietly falling from 30 days to under three weeks. Nothing would report
   that; the boards would simply stop going back as far.
@@ -109,9 +110,11 @@ data:
       # are also the largest producers: measured 2026-08-29 at 76,287 of 110,522 series (69%),
       # appending 5,086 of 5,734 samples/s. Relaxing them to 1m cuts total ingest 66.5%.
       #
-      # That matters because retention here is bound by BYTES, not time: `retention.size` is 3GB
-      # (defaults/main.yml) against a configured 30d, and the TSDB was holding 3.56 DAYS at 2.48GB
-      # when this was measured. The cut takes that to roughly 10.5 days.
+      # That matters because retention here is bound by BYTES, not time: `retention.size` is
+      # `claude_otel_prometheus_retention_size` (defaults/main.yml) against a configured 30d, so
+      # the window is whatever that many bytes buys. It was 3.56 DAYS at 2.48GB when this was
+      # measured against a 3GB cap; at the 7GB cap set since, the TSDB held 5.5 days at 2.94GB
+      # (measured 2026-08-31) and was still filling. Re-measure rather than trusting either figure.
       #
       # Safe because nothing reads these at sub-minute resolution — checked, not assumed:
       # no recording or alerting rules exist (no `rule_files` in this role, no Grafana alert
