@@ -1,0 +1,114 @@
+#!/bin/bash
+# Daily drift check: does the LIVE GitHub ruleset still require the contexts this repo declares?
+#
+# The ruleset is what stops an un-CI'd commit reaching master, and the deployer trusts that: a
+# tick reads the check runs for the origin SHA and deploys on a green verdict. Nothing in the
+# repo watched the ruleset itself, so an edit in the GitHub UI — dropping a required context,
+# adding a bypass actor, flipping enforcement to `evaluate` — changed the gate with no commit,
+# no PR and no signal. That is not hypothetical: by 2026-08-31 TWO in-repo records had gone stale
+# unnoticed. The standing review memory recorded one required context and
+# roles/setup/gitops_deploy/CLAUDE.md recorded none at all ("no branch protection on master",
+# from a genuine `branches/master/protection` 404 — legacy protection is a SEPARATE API from
+# rulesets), while the live ruleset required three with no bypass actors.
+#
+# WHY THIS IS A CRON AND NOT A TEST. A pytest asserting the same list would be a third hand-copy
+# of the same remote state, going stale by the identical mechanism and reading green while it did
+# — the reason exactly that fix was rejected in the 2026-08-31 review. The declaration below is
+# still a copy; the difference is that this compares it against the LIVE endpoint every day, so
+# the copy going stale is the thing being detected rather than the thing being trusted.
+#
+# It ALERTS on drift, it never reconciles. Changing a ruleset is a deliberate act; this only makes
+# it a visible one.
+#
+# UNAUTHENTICATED on purpose. The endpoint returns 200 with `enforcement` and every
+# `rules[].parameters.required_status_checks[].context` to an anonymous caller, and the repo holds
+# no GitHub token in SOPS. Same call shape renovate_notify.py already uses from this host. Note
+# `bypass_actors` is ABSENT anonymously rather than empty — so this checks contexts and
+# enforcement, and deliberately claims nothing about bypass actors. See the count guard below.
+#
+# Rate limit: GitHub allows 60 req/hr per source IP unauthenticated, shared with renovate_notify
+# on this same host. Once a day is two calls a day between them, which is why this is daily and
+# not a monitor-bridge check on the 300s loop.
+#
+# set -uo (not -euo): a failed curl must be captured + reported, not swallowed by an early exit.
+set -uo pipefail
+
+export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin # cron ships a bare PATH
+
+# shellcheck source=/dev/null
+source /usr/local/lib/kuma-push-lib.sh || {
+  logger -t github-ruleset-drift "kuma-push-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+
+KUMA_HOST="uptime-kuma.local.{{ domain }}"
+KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
+PUSH_URL="https://${KUMA_HOST}/api/push/{{ ruleset_drift_push_token }}"
+
+# Via the shared library, which feeds the token-bearing URL to curl on stdin (`-K -`) rather than
+# as an argv element: /proc is mounted without hidepid here.
+push() { # up|down msg
+  kuma_push "$1" "$2" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" github-ruleset-drift
+}
+
+RULESET_URL="https://api.github.com/repos/{{ gitops_deploy_github_repo }}/rulesets/{{ gitops_deploy_ruleset_id }}"
+
+# The expected set, baked in at template time from defaults/main.yml. Quoted heredoc so nothing
+# in a context name is shell-expanded — they contain spaces, parentheses and `+`.
+# The blank-line filter is not belt-and-braces: whether the `{% raw %}{% for %}{% endraw %}` above
+# leaves an empty line per iteration depends on Jinja's trim_blocks, which Ansible sets and a bare
+# Environment does not. Filtering makes the comparison identical either way, so the rendered file
+# cannot differ from the one a test renders.
+EXPECTED=$(
+  sed '/^[[:space:]]*$/d' <<'CONTEXTS' | sort
+{% for ctx in gitops_deploy_expected_ruleset_contexts %}
+{{ ctx }}
+{% endfor %}
+CONTEXTS
+)
+
+if ! BODY=$(curl -sf --max-time 20 -H "Accept: application/vnd.github+json" "$RULESET_URL"); then
+  # Unreachable is NOT "no drift". A check whose source is down must say it could not look,
+  # or it is a deadman reporting a pass.
+  push down "failed to fetch ruleset {{ gitops_deploy_ruleset_id }} — branch protection UNVERIFIED"
+  exit 1
+fi
+
+ENFORCEMENT=$(printf '%s' "$BODY" | jq -r '.enforcement // empty')
+if [ -z "$ENFORCEMENT" ]; then
+  # A 200 carrying something that is not a ruleset — an error object, an HTML interstitial, a
+  # truncated body. Reported as a bad fetch, never as "the contexts are gone".
+  push down "ruleset {{ gitops_deploy_ruleset_id }} response had no .enforcement — bad fetch, UNVERIFIED"
+  exit 1
+fi
+
+LIVE=$(printf '%s' "$BODY" \
+  | jq -r '.rules[]?.parameters?.required_status_checks[]?.context // empty' \
+  | sed '/^[[:space:]]*$/d' | sort)
+LIVE_COUNT=$(printf '%s\n' "$LIVE" | grep -c .)
+
+# A parsed-but-empty context list is the same shape as "someone removed every required check".
+# Those need different responses, and only one of them is an emergency — but both are wrong, so
+# both are reported. The count is stated so the message distinguishes them by eye.
+if [ "$LIVE_COUNT" -eq 0 ]; then
+  push down "ruleset {{ gitops_deploy_ruleset_id }} requires NO status checks (enforcement=${ENFORCEMENT}) — every merge gate is open, or the response shape changed"
+  exit 1
+fi
+
+if [ "$ENFORCEMENT" != "active" ]; then
+  push down "ruleset {{ gitops_deploy_ruleset_id }} enforcement is '${ENFORCEMENT}', not active — required checks are advisory"
+  exit 1
+fi
+
+if [ "$LIVE" = "$EXPECTED" ]; then
+  push up "ruleset {{ gitops_deploy_ruleset_id }} active, ${LIVE_COUNT} required contexts, matches the declared set"
+  exit 0
+fi
+
+# Drift: name the direction. "removed" = we expect it and GitHub no longer requires it, the
+# dangerous way round — that check stops gating merges. "added" = required upstream but not
+# declared here, which usually means someone added a check and this list needs updating.
+REMOVED=$(comm -13 <(printf '%s\n' "$LIVE") <(printf '%s\n' "$EXPECTED") | tr '\n' ' ')
+ADDED=$(comm -23 <(printf '%s\n' "$LIVE") <(printf '%s\n' "$EXPECTED") | tr '\n' ' ')
+push down "ruleset {{ gitops_deploy_ruleset_id }} DRIFTED — no-longer-required:[${REMOVED}] newly-required:[${ADDED}] — reconcile gitops_deploy_expected_ruleset_contexts in roles/setup/gitops_deploy/defaults/main.yml"
+exit 1

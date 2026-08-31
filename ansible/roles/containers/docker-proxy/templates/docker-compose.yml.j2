@@ -64,6 +64,12 @@ services:
   # POST /containers/{id}/restart and nothing else, which ALLOW_RESTARTS gates on its own —
   # verified against a canary container before and after this change, not inferred.
   #
+  # EVENTS dropped 2026-08-31 (review L-2), the fifth of the same class. Watchtower watched the
+  # event stream; autoheal POLLS on AUTOHEAL_INTERVAL=30 and never opens /events. Measured, not
+  # inferred: 24h of this proxy's own logs served /containers/json?filters={"health":["unhealthy"]}
+  # and /version, nothing else. Autoheal is the only container on the `lifecycle` network, so
+  # there is no second consumer to break.
+  #
   # POST=1 STAYS: a restart is a POST, so this proxy remains write-capable by design. The
   # narrowing is real but partial, and the residual below is unchanged.
   docker-proxy-lifecycle:
@@ -74,13 +80,13 @@ services:
       - INFO=1
       - VERSION=1
       - PING=1
-      - EVENTS=1
       - POST=1           # Allow write methods (POST/PUT/DELETE) — Autoheal's restart is a POST
       - ALLOW_RESTARTS=1 # Autoheal: restart unhealthy containers
       # EXEC=0 blocks the exec *run* path (/exec/{id}/start -> 403, verified). Note: create-exec
       # (/containers/{id}/exec) still slips through via CONTAINERS+POST, but with /exec/start
       # blocked it can't execute. Accepted: this proxy is already create-capable (POST=1, needed
-      # by Watchtower) and isolated to the lifecycle net with only Watchtower + Autoheal.
+      # by Autoheal's restart) and isolated to the lifecycle net, where Autoheal is now the only
+      # member — Watchtower, which this sentence used to name, was retired in 35c0dc8d.
       - EXEC=0
     networks:
       - lifecycle

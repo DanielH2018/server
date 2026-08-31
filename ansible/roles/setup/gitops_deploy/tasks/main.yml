@@ -199,3 +199,31 @@
     mode: "0600"
   become: true
   no_log: true
+
+- name: Deploy the GitHub ruleset drift check
+  tags: [cron]
+  # The ruleset is the merge gate this deployer's CI verdict rests on, and nothing watched it:
+  # an edit in the GitHub UI changed it with no commit and no signal. Two in-repo records of it
+  # had already gone stale unnoticed by 2026-08-31. Pushes its own Kuma monitor directly, in the
+  # cloudflare-ip-drift shape, with no monitor-bridge hop.
+  ansible.builtin.template:
+    src: github-ruleset-drift.sh.j2
+    dest: /usr/local/bin/github-ruleset-drift.sh
+    mode: "0750"
+    owner: root
+    group: root
+  become: true
+
+- name: Schedule the GitHub ruleset drift check
+  tags: [cron]
+  # Daily. Rulesets change on a human cadence, so the cadence is about the monitor's heartbeat,
+  # not about catching drift fast — and GitHub's unauthenticated limit is 60 req/hr per source
+  # IP, shared with renovate_notify on this same host.
+  ansible.builtin.cron:
+    name: "GitHub ruleset drift"
+    minute: "{{ gitops_deploy_ruleset_drift_cron_minute }}"
+    hour: "{{ gitops_deploy_ruleset_drift_cron_hour }}"
+    user: root
+    job: "/usr/local/bin/github-ruleset-drift.sh"
+    cron_file: github-ruleset-drift
+  become: true

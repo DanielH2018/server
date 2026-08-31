@@ -1,7 +1,12 @@
 ---
 # Same tag the Docker instance runs, so a behavioural difference between the two is never
 # the version. The CRD manifests below are pinned to the matching minor.
-traefik_k8s_image: traefik:v3.7.11
+# Digest-pinned, like this file's other images: the edge terminates TLS and carries the CrowdSec
+# bouncer and the Authelia forward-auth chain, so it is the last workload that should be able to
+# change underneath a re-pull. The tag alone is exact but mutable — the digest is what makes the
+# pull reproducible. Digest read off the running pod 2026-08-31; Renovate updates `tag@sha256:`
+# pairs in place, as it already does for wg_easy_k8s_image.
+traefik_k8s_image: traefik:v3.7.11@sha256:5203c3f39ca70de6790d964624e042463ffbd57715bc82be155cf224c0dd5144
 traefik_k8s_crd_version: v3.7
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).

@@ -139,6 +139,7 @@ def test_discover_templates_finds_the_known_set():
         "remember-logs-health.sh.j2",
         "manifest-prune-check.sh.j2",
         "etcd-snapshot-offbox.sh.j2",
+        "github-ruleset-drift.sh.j2",
         "telemetry-health.sh.j2",
         "configarr-health.sh.j2",
         "janitorr-health.sh.j2",

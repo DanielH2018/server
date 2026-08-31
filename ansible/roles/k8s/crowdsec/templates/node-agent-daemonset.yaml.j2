@@ -55,6 +55,50 @@ spec:
             requests:
               cpu: 10m
               memory: 16Mi
+        # Wait for the LAPI to answer before the agent starts. The entrypoint calls
+        # `cscli lapi register`/`authenticate watcher` immediately and exits FATAL if the LAPI
+        # is unreachable — measured 2026-08-31: container up 07:43:23Z, dead 07:43:27Z with
+        # "dial tcp ...:8080: connect: connection refused", so there is no internal retry to
+        # rely on. An already-authenticated agent tolerates a LAPI bounce fine (the liveness
+        # probe below is `cscli lapi status` at 60s with the default failureThreshold 3); the
+        # gap is only at AGENT start, which in practice means the weekly node reboot racing
+        # the LAPI pod. That produced five crash-backoff cycles in one hour, and during them
+        # this node's auth.log is unparsed — the SSH brute-force scenarios are the ones that
+        # go blind. Waiting turns "crash, backoff, crash" into "not started yet".
+        - name: wait-for-lapi
+          image: {{ crowdsec_k8s_image }}
+          command:
+            - /bin/sh
+            - -c
+            # Bounded, not unbounded: 60 x 2s. If the LAPI is still down after two minutes the
+            # init container fails and the pod backs off exactly as it does today, so this can
+            # only improve on the current behaviour, never mask a genuinely dead LAPI.
+            #
+            # `nc` is busybox's, and this image is busybox-based — the config-install container
+            # above already relies on the busybox `install` applet in the same image. Same
+            # pattern as n8n's wait-for-broker (deployment-runners.yaml.j2:35). The retry also
+            # absorbs kube-router's source-pod lookup lagging pod creation, which a single
+            # connect attempt at init time would trip over.
+            - >-
+              i=0;
+              until nc -z crowdsec {{ crowdsec_k8s_lapi_port }}; do
+                i=$((i+1));
+                [ "$i" -ge 60 ] && echo "LAPI still unreachable after 120s" >&2 && exit 1;
+                sleep 2;
+              done;
+              echo "LAPI reachable after $((i*2))s"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            limits:
+              cpu: 100m
+              memory: 32Mi
+            requests:
+              cpu: 10m
+              memory: 16Mi
       automountServiceAccountToken: false
       priorityClassName: homelab-critical
       containers:
