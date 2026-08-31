@@ -1,10 +1,16 @@
 ---
-# Rolling tag, as under Docker: beardedio publishes vanilla-latest as the tserver channel;
-# there is no pinned-version stream worth tracking. The @sha256 digest below freezes the pod to
-# the build pulled at pin time — recreate now pulls that SAME digest, not whatever beardedio
-# has since pushed; updates arrive via a Renovate digest-bump PR + deliberate redeploy instead
-# of silently on next recreate (2026-08-13 pin).
-terraria_k8s_image: beardedio/terraria:vanilla-latest@sha256:901bc1178a9db0b331bf483724e6bac3d065c1dfd45a604818dfcbd4f755f4b0
+# Built in-cluster rather than pulled, since 2026-08-31. The upstream image cannot run as a
+# non-root uid — its entrypoint hardcodes /root, which is 0700 — so a one-layer image that chowns
+# HOME is what lets this workload drop root and its DAC_OVERRIDE. templates/Dockerfile.j2 carries
+# the evidence and the CrashLoopBackOff it came from.
+#
+# The upstream DIGEST PIN did not go away, it moved into that Dockerfile's FROM line, which is
+# where Renovate's built-in dockerfile manager reads it. What changes is how a bump is realised:
+# built images carry automerge: false, so a digest PR is applied by an operator rebuild
+# (`./scripts/deploy.sh --tags terraria`) rather than by the deployer applying a pin. That is a
+# small delta here precisely because k8s_autodeploy is already false below — nothing was applying
+# this pin automatically anyway.
+terraria_k8s_image: "{{ k8s_registry_pull_host }}/terraria:latest"
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Two independent reasons: (1) probe-less — the Deployment renders no readinessProbe, so
@@ -21,9 +27,12 @@ k8s_autodeploy_reason: "two reasons: (1) probe-less — no readinessProbe; (2) m
 terraria_k8s_claim: terraria-config
 terraria_k8s_size: 1Gi
 terraria_k8s_storage_class: longhorn
-# Overridden at the cutover seed: the world files are root-owned 600 (the in-game backup
-# rotation writes them as root), so the unprivileged ssh|tar pipeline can't read them in
-# place — a one-shot play stages a sudo copy first (the wg-easy pattern).
+# Overridden at the cutover seed. Describes the SOURCE on the pre-migration Docker host, where
+# the world files were root-owned 600 and the unprivileged ssh|tar pipeline could not read them in
+# place — a one-shot play staged a sudo copy first (the wg-easy pattern). It is NOT a description
+# of the live volume, which the seed landed uid-1000 and which measured 1000:1000 drwxr-xr-x on
+# 2026-08-31. The epoch is spelled out because reading this as live state is what kept a
+# DAC_OVERRIDE grant looking necessary for three weeks after it had stopped being so.
 terraria_k8s_source_path: /home/ubuntu/server/containers/terraria/config
 
 # Mirrors resources('2.0', '2048M', '0.25', '512M').

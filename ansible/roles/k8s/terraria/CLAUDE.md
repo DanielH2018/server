@@ -5,24 +5,30 @@ irreplaceable data kopia still uniquely protected; the Docker role is in
 `roles/containers/archive/terraria`). See repo-root `CLAUDE.md`.
 
 ## At a glance
-- **Image:** `beardedio/terraria:vanilla-latest@sha256:901bc117…` — **digest-pinned**
-  (2026-08-13). Upstream publishes no pinned vanilla versions, so `vanilla-latest` is the only tag
-  available; the digest is what stops it floating. A redeploy therefore does NOT pick up a new
-  upstream build — updates arrive as a Renovate digest-bump PR plus a deliberate redeploy. That
-  matters here because the volume holds irreplaceable world data.
+- **Image:** built in-cluster (`<registry>/terraria:latest`) from `templates/Dockerfile.j2`,
+  since 2026-08-31 — a single `chown` layer whose only purpose is to let the server run as a
+  non-root uid. The **digest pin did not go away**: it is the `FROM` line of that Dockerfile,
+  still `beardedio/terraria:vanilla-latest@sha256:901bc117…` (2026-08-13). Upstream publishes no
+  pinned vanilla versions, so `vanilla-latest` is the only tag available and the digest is what
+  stops it floating.
+  What changed is how an update lands. Renovate's built-in dockerfile manager still raises a
+  digest-bump PR, but built images carry `automerge: false`, so the bump is realised by an
+  operator rebuild (`./scripts/deploy.sh --tags terraria`) rather than by a pull. A redeploy
+  rebuilds only when the rendered context changed; `-e image_builder_force=true` overrides that
+  for a base-image CVE. All of this matters because the volume holds irreplaceable world data.
 - **Host:** daniel-box · **Port:** public 7777 via `Service type: LoadBalancer`,
   `externalTrafficPolicy: Local`, pinned to the host IP — the router's forward points here
 - **Storage:** worlds + config on a BACKED-UP Longhorn PVC (the point of the move),
   seeded from the Docker copy at cutover
 - **Probes:** a `/proc/net/tcp` listen-check on :7777 (`1E61`), NOT a connect probe — a
   TCP connect spams the game console with join/leave noise
-- **Caps:** `DAC_OVERRIDE` only — PID 1 is root in a uid-1000-owned `/config`, so it cannot
-  create or unlink the `.wld.bak` rotation without it. **The container runs as root because the
-  image requires it**, not by choice: the entrypoint hardcodes `/root/.local/share/Terraria`
-  under `set -euo pipefail` and Debian's `/root` is 0700, so `runAsUser: 1000` CrashLoopBackOffs
-  at entrypoint line 1. Tried and deployed 2026-08-31; see the terraria entry in
-  `ansible/tests/test_container_security_context.py` for the evidence and the image-builder exit
-  path. `stdin`/`tty` kept so the server console stays attachable
+- **Caps:** none — `drop: ALL` with nothing added back, since 2026-08-31. The server runs as
+  uid 1000 with `fsGroup` 1000, so it owns the data it writes instead of overriding the
+  permission check to reach it. This needed an IMAGE change, not just a manifest one: the
+  upstream entrypoint hardcodes `/root/.local/share/Terraria` under `set -euo pipefail` and
+  Debian's `/root` is 0700, so the stock image CrashLoopBackOffs under `runAsUser: 1000`. The
+  image is now built in-cluster from `templates/Dockerfile.j2`, a single `chown` layer over the
+  pinned upstream digest. `stdin`/`tty` kept so the server console stays attachable
 - **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
   (`name: terraria`, no port/hostname — not Traefik-routed) and `defaults/main.yml`
 
@@ -36,8 +42,8 @@ irreplaceable data kopia still uniquely protected; the Docker role is in
   were root-600, which the unprivileged seed pipeline can't read in place. See the BL1 record
   in `docs/archive/k3s-migration/backup-consolidation-longhorn.md`. This describes the SOURCE,
   not the live volume: the seed landed everything uid-1000, and `/config` measured 1000:1000
-  drwxr-xr-x on 2026-08-31. Read as a claim about live state it contradicts the DAC_OVERRIDE
-  comment in `templates/deployment.yaml.j2`, which is why the epoch is spelled out here.
+  drwxr-xr-x on 2026-08-31. The epoch is spelled out because reading it as live state is what
+  kept a `DAC_OVERRIDE` grant looking necessary for three weeks after it had stopped being so.
 
 ## Editing
 - Manifests: `templates/*.yaml.j2` · Defaults: `defaults/main.yml`
