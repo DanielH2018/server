@@ -64,6 +64,20 @@ _DOCKER = re.compile(r"^ansible/roles/containers/([^/]+)/")
 # so a green run would prove only that nothing happened.
 _NOT_SERVICES = frozenset({"common", "archive"})
 
+# The remediation for a rotated secret. Flat text rather than derived from the file list,
+# because the consuming role is not knowable from here: a secret's value lives in no role's
+# template, so the changed-path matching every other rule uses has nothing to match on.
+_SECRETS_NOTE = (
+    "`ansible/vars/secrets.yml` changed, and a secret's VALUE lives in no role's template — so "
+    "a rotation **maps to no deploy tag by construction** and every consumer keeps rendering "
+    "the OLD value until its own role is redeployed. Resolve the consumers with "
+    "`consumer_tags()` in `scripts/secrets_mgmt/secret_rotation.py`: it returns the deploy "
+    "tag(s) that re-render a given secret name, and returns EMPTY for a member of "
+    "`CROSS_HOST_PUSH_TOKENS` in that same file — those halves sit on different hosts or "
+    "planes, so no single redeploy covers both and each carries a written reason for what to "
+    "run instead."
+)
+
 
 def declared_tags() -> set[str]:
     """Every name that selects a service, read from containers_list."""
@@ -121,6 +135,12 @@ def plane_note(files, declared: set[str] | None = None) -> str:
     A shared k8s role is the same shape, one plane over: `--tags manifests` matches nothing,
     so no derived tag can ever apply it and only a full deploy will. Reusing this note rather
     than minting a verdict keeps one meaning for "landed, not live".
+
+    A rotated secret is the third shape, and the one with no path to match at all. A secret's
+    value lives in no role's template, so `ansible/vars/secrets.yml` derives zero tags however
+    many roles consume it: PR #695 rotated `ruleset_drift_push_token`, whose two consumers --
+    the uptime-kuma tile and the gitops_deploy pusher cron -- both kept rendering the old
+    value, and this reported `nothing-to-deploy` (2026-09-01).
     """
     files = list(files)
     declared = declared_tags() if declared is None else declared
@@ -140,6 +160,27 @@ def plane_note(files, declared: set[str] | None = None) -> str:
     cs = services_from_changed_paths(files)
     if cs.broad_setup or cs.broad_deploy:
         notes.append(broad_remediation(cs.broad_deploy, cs.broad_setup))
+    if cs.secrets:
+        # DECIDED: fire on ANY change to secrets.yml, and never try to name which keys moved.
+        # Naming them means decrypting both revisions, and no plaintext may reach a terminal, a
+        # transcript or a log. `.gitattributes` sets `diff=sops`, so even `git diff
+        # ansible/vars/secrets.yml` renders the values, which is why a hook denies that form.
+        # Over-firing on a key that needed no redeploy costs one exit code; under-firing leaves
+        # a rotated credential stale in a consumer this file list cannot show.
+        #
+        # DECIDED: fire on the tag-carrying path too, which is the opposite of what
+        # deploy_logic.alert_secrets_deferred does for the deployer. Not a contradiction, a
+        # different reader: that alert is unattended, so a false fire on the /add-secret happy
+        # path is noise nobody can act on. Here an operator is reading land.sh's output, and a
+        # PR shipping secrets.yml WITH one consuming template still cannot show the OTHER
+        # consumers -- PR #695's token had two, in two planes, and the landing got neither.
+        #
+        # `cs.secrets` rather than a path literal, so this and the deployer answer "did a secret
+        # change?" identically. It is exactly `ansible/vars/secrets.yml`: the registry
+        # `ansible/secret_rotation.yml` carries names and dates but no values, and
+        # `ansible/vars/secrets-staging.yml` belongs to daniel-stage, which land.sh never
+        # deploys. Both are correctly outside it.
+        notes.append(_SECRETS_NOTE)
     return " ".join(notes)
 
 
