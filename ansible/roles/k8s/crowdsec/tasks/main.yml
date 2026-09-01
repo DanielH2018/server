@@ -4,6 +4,19 @@
     name: k8s/manifests
   vars:
     manifests_service: crowdsec
+    # The node agents read AGENT_PASSWORD from this role's Secret through `secretKeyRef`
+    # (node-agent-daemonset.yaml.j2), and env is resolved once at pod start. The shared
+    # config-change restart rolls only `manifests_rollout` — deploy/crowdsec — so without this
+    # line a rotated crowdsec_k8s_agent_password lands in Secret crowdsec-env while every
+    # DaemonSet pod keeps logging in with the old value, behind a green deploy.
+    #
+    # ACCEPTED COST: that restart is gated on the render changing, not on the SECRET changing,
+    # so any crowdsec manifest edit now rolls both node agents while the engine Deployment is
+    # itself rolling. Per-node auth.log parsing is blank for that window; the wait-for-lapi
+    # init container absorbs up to 120s of it, and the LAPI keeps its own decisions.
+    manifests_extra_rollouts:
+      - name: crowdsec-node-agent
+        kind: daemonset
     manifests_files:
       - pvc.yaml
       - deployment.yaml
