@@ -42,7 +42,6 @@ from verdicts_cluster import (
     extended_resource_verdict,
     k8s_workloads_verdict,
     ksm_resource_label,
-    log_error_verdict,
     targets_verdict,
 )
 from verdicts_host import (
@@ -64,10 +63,8 @@ from verdicts_service import (
     ha_ban_verdict,
     ha_heartbeat_fresh,
     indexers_down,
-    loki_ingestion_fresh,
     n8n_update_streaks,
     n8n_verdict,
-    promtail_dropped,
     queue_warnings,
 )
 
@@ -75,6 +72,12 @@ from verdicts_service import (
 import bridge_config as cfg
 import bridge_io
 import bridge_streaks
+import checks_logs
+from checks_logs import (
+    check_loki_ingestion,
+    check_loki_reachable,
+    check_promtail_dropped,
+)
 
 
 # Per-check mutable state. The thresholds these pair with moved to bridge_config.py; the
@@ -1344,52 +1347,6 @@ def check_speedtest():
     )
 
 
-def check_loki_ingestion():
-    # Two arms, down if EITHER pipeline is silent: the file-tail union (arm 1) catches a
-    # file-tail break (all of authlog/syslog/traefik going silent — a total promtail death or
-    # a static_configs/bind regression) over a tolerant window; the container-stream arm
-    # (arm 2) catches a docker_sd-specific break the file-tail selector excludes (see
-    # LOKI_DOCKER_STREAM). The docker stream dwarfs the file-tail streams, so arm 1 must NOT
-    # include it (else a healthy docker stream masks a dead file-tail pipeline) — hence the
-    # separate selector + wider window (LOKI_FILETAIL_WINDOW).
-    ok_all, msg_all = loki_ingestion_fresh(
-        bridge_io.loki_count(cfg.LOKI_STREAM, cfg.LOKI_FILETAIL_WINDOW),
-        cfg.LOKI_FILETAIL_WINDOW,
-    )
-    if not ok_all:
-        return False, "file-tail streams silent — " + msg_all
-    ok_docker, msg_docker = loki_ingestion_fresh(
-        bridge_io.loki_count(cfg.LOKI_DOCKER_STREAM, cfg.LOKI_WINDOW), cfg.LOKI_WINDOW
-    )
-    if not ok_docker:
-        return False, "container log stream silent — " + msg_docker
-    # Arm 3: the Pi ships its own logs and neither arm above counts them, so its promtail
-    # dying is invisible while the cluster keeps talking.
-    ok_pi, msg_pi = loki_ingestion_fresh(
-        bridge_io.loki_count(cfg.LOKI_PI_STREAM, cfg.LOKI_FILETAIL_WINDOW),
-        cfg.LOKI_FILETAIL_WINDOW,
-    )
-    if not ok_pi:
-        return False, "daniel-pi log stream silent — " + msg_pi
-    return True, "%s (+ container stream, + pi)" % msg_all
-
-
-def check_promtail_dropped():
-    """Prometheus-based promtail partial-loss watchdog (see promtail_dropped). Prom-dependent."""
-    count = bridge_io.prom_scalar(
-        "sum(increase(%s[%s]))"
-        % (cfg.PROMTAIL_DROPPED_SELECTOR, cfg.PROMTAIL_DROPPED_WINDOW)
-    )
-    return promtail_dropped(
-        count, cfg.PROMTAIL_DROPPED_WINDOW, cfg.PROMTAIL_DROPPED_MAX
-    )
-
-
-def check_loki_reachable():
-    bridge_io.loki_reachable()
-    return True, "Loki reachable"
-
-
 # `ttl` is how long THIS cached verdict is held, chosen per outcome by b2_reachable — a billed
 # answer from B2 holds B2_PROBE_INTERVAL_S, a transport failure holds B2_TRANSPORT_RETRY_S.
 _b2_probe = {
@@ -1915,38 +1872,8 @@ def check_k8s_workloads():
         # The resource fault wins the message: an unschedulable-by-design cluster is more urgent
         # than whatever the workload arm has to say, and the workload arm's own text is preserved
         # after it rather than dropped.
-        return with_log_errors(False, "%s | %s" % (res_msg, msg))
-    return with_log_errors(ok, "%s, %s" % (msg, res_msg))
-
-
-def with_log_errors(ok, msg):
-    """Fold the log-pattern arm into the workload verdict, a burst winning the message.
-
-    Folded here rather than given its own monitor, for the reason the extended-resource and
-    ip_ban arms were: a new Kuma monitor needs a new push token in SOPS, and this arm answers
-    the question the other arms leave open. They read Kubernetes state — replicas, restarts,
-    allocatable — and every one of them reports a container that is Ready while failing at its
-    job as healthy, because by their measure it is.
-
-    FAILS OPEN on a Loki error, and is deliberately NOT in LOKI_DEPENDENT: membership there
-    suppresses the WHOLE check during a Loki outage, which would blind the three Kubernetes
-    arms that have nothing to do with Loki. Same reasoning as ha_heartbeat's ban arm.
-    """
-    if not cfg.LOG_ERROR_SELECTOR:
-        return ok, msg
-    ignore = {n.strip().lower() for n in cfg.LOG_ERROR_IGNORE.split(",") if n.strip()}
-    try:
-        matches, total = bridge_io.log_error_counts(
-            cfg.LOG_ERROR_SELECTOR, cfg.LOG_ERROR_PATTERN, cfg.LOG_ERROR_WINDOW
-        )
-    except Exception as e:
-        return ok, "%s, log-error arm unavailable (%s)" % (msg, e)
-    log_ok, log_msg = log_error_verdict(
-        matches, total, cfg.LOG_ERROR_MAX, cfg.LOG_ERROR_WINDOW, ignore
-    )
-    if log_ok:
-        return ok, "%s, %s" % (msg, log_msg)
-    return False, "%s | %s" % (log_msg, msg)
+        return checks_logs.with_log_errors(False, "%s | %s" % (res_msg, msg))
+    return checks_logs.with_log_errors(ok, "%s, %s" % (msg, res_msg))
 
 
 def check_cluster_targets():

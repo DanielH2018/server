@@ -16,7 +16,7 @@ import pytest
 
 import bridge_config
 import bridge_io
-import check
+import checks_logs
 
 _REPO = Path(__file__).resolve().parents[5]
 
@@ -210,7 +210,7 @@ def test_log_error_inert_when_the_selector_matches_nothing():
     on a typo. The total-volume count is the only thing separating "nothing is wrong" from
     "I asked the wrong question", and this test is what keeps it load-bearing.
     """
-    ok, msg = check.log_error_verdict([], 0, 20, "1h")
+    ok, msg = checks_logs.log_error_verdict([], 0, 20, "1h")
     assert ok
     assert "INERT" in msg, (
         "a selector matching no lines must SAY so, not read as healthy"
@@ -218,13 +218,13 @@ def test_log_error_inert_when_the_selector_matches_nothing():
 
 
 def test_log_error_quiet_estate_is_ok():
-    ok, msg = check.log_error_verdict([], 5000, 20, "1h")
+    ok, msg = checks_logs.log_error_verdict([], 5000, 20, "1h")
     assert ok
     assert "no log-error bursts" in msg
 
 
 def test_log_error_names_the_offending_container():
-    ok, msg = check.log_error_verdict(
+    ok, msg = checks_logs.log_error_verdict(
         [({"container": "grafana"}, 91.0), ({"container": "sonarr"}, 3.0)],
         5000,
         20,
@@ -236,14 +236,14 @@ def test_log_error_names_the_offending_container():
 
 
 def test_log_error_orders_offenders_worst_first():
-    _, msg = check.log_error_verdict(
+    _, msg = checks_logs.log_error_verdict(
         [({"container": "quiet"}, 21.0), ({"container": "loud"}, 900.0)], 5000, 20, "1h"
     )
     assert msg.index("loud") < msg.index("quiet")
 
 
 def test_log_error_ignore_list_is_case_insensitive():
-    ok, _ = check.log_error_verdict(
+    ok, _ = checks_logs.log_error_verdict(
         [({"container": "Chatty"}, 900.0)], 5000, 20, "1h", ignore={"chatty"}
     )
     assert ok
@@ -262,7 +262,7 @@ def test_log_error_burst_wins_the_message_over_healthy_workloads(monkeypatch):
         lambda *a, **k: ([({"container": "grafana"}, 91.0)], 5000),
     )
 
-    ok, msg = check.with_log_errors(True, "42 k8s workloads healthy")
+    ok, msg = checks_logs.with_log_errors(True, "42 k8s workloads healthy")
 
     assert not ok
     assert msg.startswith("fatal log lines"), "the actionable arm leads"
@@ -284,7 +284,7 @@ def test_log_error_arm_fails_open_on_a_loki_outage(monkeypatch):
 
     monkeypatch.setattr(bridge_io, "log_error_counts", boom)
 
-    ok, msg = check.with_log_errors(False, "2 workloads unavailable")
+    ok, msg = checks_logs.with_log_errors(False, "2 workloads unavailable")
 
     assert not ok, "the workload verdict survives the arm being unavailable"
     assert "2 workloads unavailable" in msg
@@ -305,20 +305,20 @@ def _loki_scalar(val):
 
 
 def test_loki_ingestion_with_lines_is_ok():
-    ok, msg = check.loki_ingestion_fresh(1234, "10m")
+    ok, msg = checks_logs.loki_ingestion_fresh(1234, "10m")
     assert ok
     assert "1234" in msg
 
 
 def test_loki_ingestion_zero_lines_is_down():
-    ok, msg = check.loki_ingestion_fresh(0, "10m")
+    ok, msg = checks_logs.loki_ingestion_fresh(0, "10m")
     assert not ok
     assert "silent" in msg
 
 
 def test_loki_ingestion_no_series_is_down():
     # an empty query result (no matching stream at all) is also a silent pipeline
-    ok, msg = check.loki_ingestion_fresh(None, "10m")
+    ok, msg = checks_logs.loki_ingestion_fresh(None, "10m")
     assert not ok
 
 
@@ -340,13 +340,13 @@ def test_loki_count_non_success_raises(monkeypatch):
 
 def test_check_loki_ingestion_fresh_is_up(monkeypatch):
     monkeypatch.setattr(bridge_io, "loki_count", lambda *a, **k: 500)
-    ok, _ = check.check_loki_ingestion()
+    ok, _ = checks_logs.check_loki_ingestion()
     assert ok
 
 
 def test_check_loki_ingestion_silent_is_down(monkeypatch):
     monkeypatch.setattr(bridge_io, "loki_count", lambda *a, **k: 0)
-    ok, msg = check.check_loki_ingestion()
+    ok, msg = checks_logs.check_loki_ingestion()
     assert not ok
 
 
@@ -358,7 +358,7 @@ def test_check_loki_ingestion_docker_stream_silent_is_down(monkeypatch):
         return 0 if "container" in selector else 500
 
     monkeypatch.setattr(bridge_io, "loki_count", fake_count)
-    ok, msg = check.check_loki_ingestion()
+    ok, msg = checks_logs.check_loki_ingestion()
     assert not ok
     assert "container" in msg
 
@@ -372,6 +372,6 @@ def test_check_loki_ingestion_filetail_silent_is_down(monkeypatch):
         return 500 if "container" in selector else 0
 
     monkeypatch.setattr(bridge_io, "loki_count", fake_count)
-    ok, msg = check.check_loki_ingestion()
+    ok, msg = checks_logs.check_loki_ingestion()
     assert not ok
     assert "file-tail" in msg
