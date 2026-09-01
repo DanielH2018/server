@@ -17,14 +17,21 @@
 #
 # Usage:
 #   land.sh --pr 574 --since <pre-merge-sha>
+#   land.sh --pr 574 --since <sha> --await-merge   # arm `gh pr merge --auto` first, then this
 #   land.sh --pr 574 --tags sonarr,radarr    # skip derivation, scope by hand
+#
+# --await-merge polls the PR's state (never CI) until it is merged, so the session's whole
+# procedure is `gh pr create`, `gh pr merge --squash --auto`, and ONE backgrounded land.sh.
+# Every landing on 2026-09-01 hand-wrote that wait as an `until MERGED; sleep 30` loop.
 #
 # Exit codes:
 #   0   deployed and settled, or there was nothing to deploy
-#   1   CI red, blocked by a change needing a hand, deploy failed, or the health gate failed
+#   1   CI red, blocked by a change needing a hand, deploy failed, the health gate failed, or
+#       the PR was closed unmerged
 #   2   bad arguments
-#   75  gave up waiting — the CI budget elapsed, the deploy lock stayed busy, the tick was
-#       skipped for lock contention every time, or the tick has not yet crossed origin
+#   75  gave up waiting — the merge budget or CI budget elapsed, the deploy lock stayed busy,
+#       the tick was skipped for lock contention every time, or the tick has not yet crossed
+#       origin
 #
 # Verdicts printed on stdout: settled | unhealthy | deploy-failed | nothing-to-deploy |
 # blocked | needs-manual-apply | deferred. `blocked` is not a failure of this PR — something
@@ -41,6 +48,13 @@ PR=''
 SINCE=''
 TAGS=''
 CI_TIMEOUT=900
+# --await-merge: poll `gh pr view` (not CI) until the PR is merged before doing anything else,
+# so `gh pr create` → `gh pr merge --auto` → one backgrounded land.sh is the whole procedure.
+# Sized for the merge queue's full sweep plus a PR run ahead of it; a PR that is still open
+# after this is not being merged, and the session should look at why.
+AWAIT_MERGE=0
+MERGE_TIMEOUT=2700
+MERGE_POLL=30
 PRIMARY=/home/ubuntu/server
 BRANCH=master
 LOCK_RETRIES=5
@@ -70,6 +84,10 @@ while [ $# -gt 0 ]; do
       CI_TIMEOUT="${2:?--ci-timeout needs seconds}"
       shift 2
       ;;
+    --await-merge)
+      AWAIT_MERGE=1
+      shift
+      ;;
     -h | --help)
       sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
@@ -85,6 +103,24 @@ done
 # worktree is behind master, so deploying from one is refused (exit 4) — and would render
 # stale templates if it were not. Everything below therefore runs from the primary checkout.
 cd "$PRIMARY" || die "cannot cd to $PRIMARY" 1
+
+if [ "$AWAIT_MERGE" -eq 1 ]; then
+  echo "== 0/6  waiting for PR #$PR to merge (auto-merge or the merge queue)"
+  waited=0
+  while :; do
+    state=$(gh pr view "$PR" --json state --jq '.state') || die "could not read PR #$PR" 1
+    case "$state" in
+      MERGED) break ;;
+      CLOSED) die "PR #$PR was closed without merging — nothing to land" 1 ;;
+    esac
+    if [ "$waited" -ge "$MERGE_TIMEOUT" ]; then
+      die "PR #$PR still $state after ${MERGE_TIMEOUT}s — not being merged; look at its checks or the queue" 75
+    fi
+    sleep "$MERGE_POLL"
+    waited=$((waited + MERGE_POLL))
+  done
+  say "merged after ${waited}s"
+fi
 
 echo "== 1/6  resolving PR #$PR"
 MERGE_SHA=$(gh pr view "$PR" --json mergeCommit --jq '.mergeCommit.oid') ||

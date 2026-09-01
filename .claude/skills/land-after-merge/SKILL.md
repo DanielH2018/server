@@ -10,14 +10,20 @@ through without asking, and the *When to wait* list. This skill owns the mechani
 
 ## The procedure
 
-Record the pre-merge master SHA, merge, then run the follow-through as ONE backgrounded
+Record the pre-merge master SHA, arm the merge, then hand everything else to ONE backgrounded
 command:
 
 ```bash
 git rev-parse origin/master          # keep this; land.sh needs it for the fallback
-gh pr merge --squash
-./scripts/deploy_tools/land.sh --pr <n> --since <pre-merge-sha>
+gh pr merge --squash --auto          # merges when the checks are green (or via the queue)
+./scripts/deploy_tools/land.sh --pr <n> --since <pre-merge-sha> --await-merge
 ```
+
+`--await-merge` polls the PR's state every 30s until it is merged and only then starts the
+landing. It reads the state, never the checks, so it is not the hand-polling this skill
+forbids. Without it the session has to notice the merge itself and start `land.sh` by hand,
+which every landing on 2026-09-01 did with a hand-written `until MERGED` loop. A PR still
+open after 45 minutes exits 75: it is not being merged, and the reason is on the PR.
 
 Run `land.sh` with `run_in_background` and let the session be re-invoked when it exits. It
 waits for master CI on the merge commit, ticks, deploys what the tick deferred, and prints a

@@ -280,6 +280,19 @@ def test_land_reads_the_deployers_state_for_a_self_applied_pr():
     assert "VERDICT: deferred" in _LAND_SH
 
 
+def test_land_can_wait_for_the_merge_itself_without_reading_ci():
+    """`--await-merge` exists so the session's procedure is create → `merge --auto` → one
+    backgrounded land.sh. The wait must poll the PR's STATE, never its checks — a CI read
+    here would be the hand-polling land.sh exists to replace, and the nudge hook denies it."""
+    assert "--await-merge" in _LAND_SH
+    start = _LAND_SH.index('"$AWAIT_MERGE" -eq 1')
+    end = _LAND_SH.index("== 1/6")
+    wait_block = _LAND_SH[start:end]
+    assert "gh pr view" in wait_block and "--json state" in wait_block
+    assert "gh pr checks" not in wait_block and "gh run" not in wait_block
+    assert "MERGED" in wait_block and "CLOSED" in wait_block
+
+
 def test_land_retries_a_tick_skipped_for_lock_contention():
     """gitops_tick.sh exit 3 means the unit's own flock gave up and NOTHING fast-forwarded.
     #723's landing carried on from there and every later reading said "the tick deferred"
