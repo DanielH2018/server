@@ -417,6 +417,21 @@ k8s_bridge_client_ip: 10.0.0.161
 # Two consumers: loki-homelab's push-only IngressRoute (ClientIP allowlist) and the Pi's two
 # static Prometheus scrape jobs.
 k8s_pi_client_ip: 10.0.0.139
+# daniel-box's own LAN address, as a POD sees it. A literal for the same reason as the two
+# above, and needed for the same reason despite daniel-box being the host the k8s play runs
+# on: `server_ip` is a host_var, so a manifest that used it would render correctly under
+# Ansible and blow up in the manifest-render test harness, which has no host_vars either.
+#
+# One consumer: the `coredns-host` scrape job. A pod cannot reach the host forwarder at
+# 127.0.0.1 — that is the pod's own loopback — so the job needs the node's routable address.
+k8s_node_client_ip: 10.0.0.215
+# The port daniel-box's host CoreDNS publishes its Prometheus endpoint on. DUPLICATED FROM
+# `k3s_host_dns_metrics_port` in roles/setup/k3s/defaults/main.yml, deliberately: role
+# defaults are only in scope while that role runs, and the k8s play never includes it, so a
+# reference across the boundary is undefined rather than shared. The two are kept equal by
+# ansible/tests/test_coredns_metrics_port_agrees.py — a drift would leave this job scraping
+# a closed port, which surfaces as a permanently down target rather than as anything subtle.
+k8s_node_dns_metrics_port: 9253
 # In-cluster image registry. Two addresses for the same registry, and both are needed
 # because the two consumers sit on opposite sides of the pod boundary:
 #

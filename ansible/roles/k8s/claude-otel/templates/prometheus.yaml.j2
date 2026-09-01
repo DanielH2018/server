@@ -310,6 +310,35 @@ data:
             labels:
               origin: daniel-pi
               instance: daniel-pi
+      # daniel-box's HOST resolver (roles/setup/k3s, `node-dns`). Every DNS lookup on the
+      # control-plane node passes through this CoreDNS, and `/etc/resolv.conf` names it and
+      # NOTHING else — the public fallback deliberately does not sit behind it, because a
+      # second nameserver would turn a dead forwarder from a loud outage into silently
+      # unfiltered DNS (the PR #693 failure, one layer up). This job is what pays for that
+      # choice: without it the only alarm is "DNS is down".
+      #
+      # It needs no new monitor. `check_cluster_targets` selects `up{origin!="daniel-server"}`
+      # and `targets_verdict` fails on ANY member at 0, so a dead forwarder turns the existing
+      # **Scrape Targets** monitor red naming this job.
+      #
+      # THE SERIES WORTH KNOWING is `coredns_proxy_request_duration_seconds_count{to=...}`,
+      # NOT `coredns_forward_requests_total` — 1.14.7 exports no such name, and the wrong
+      # guess reads as a dead forwarder rather than as a typo. Per-upstream, so it answers
+      # "what share of this node's DNS actually reached Pi-hole" instead of merely "is the
+      # process alive".
+      #
+      # The node's LAN IP, not 127.0.0.1: Prometheus scrapes from inside a pod, where
+      # loopback is the pod's own. Unlike the Pi's targets above this one is NOT reachable
+      # for free — pod-to-host traffic terminates in a host process, so it meets UFW's
+      # default-deny INPUT, and roles/setup/k3s/tasks/node.yml carries the matching allow
+      # from the pod CIDR. That allow and this job only work as a pair.
+      - job_name: coredns-host
+        scrape_interval: 1m
+        static_configs:
+          - targets: ['{{ k8s_node_client_ip }}:{{ k8s_node_dns_metrics_port }}']
+            labels:
+              origin: daniel-box
+              instance: daniel-box
       # Phase F drain (2026-08-13): the crowdsec_daniel-server job (the demoted Docker
       # agent's LAN-published 9103) retired with that agent. Its successor is the
       # node-agent DaemonSet — per-POD discovery like the otel jobs, one target per node.
