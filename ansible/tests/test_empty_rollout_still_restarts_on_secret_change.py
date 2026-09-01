@@ -68,14 +68,11 @@ _METADATA_NAME = re.compile(
 
 # Workloads that read a rendered Secret through env and are NOT restarted by their role.
 #
-# KNOWN GAP, not an exemption. karakeep's Secret carries `KARAKEEP_PYTHON_API_KEY`, which
-# `deployment-time-tagger.yaml.j2` reads through a `secretKeyRef`, so rotating that key leaves
-# the tagger on the old value exactly as crowdsec's node agents were. The role's comment
-# explains time-tagger's absence from `manifests_extra_rollouts` by its ConfigMap script being a
-# plain (kubelet-synced) mount, which is true and does not cover the env var. It is pinned here
-# rather than fixed in the same change that widened this guard, so that fix gets its own review
-# and its own deploy; removing the entry is the fix landing.
-_KNOWN_UNCOVERED = {("karakeep", "karakeep-time-tagger")}
+# Empty as of the karakeep-time-tagger fix (roles/k8s/karakeep/tasks/main.yml): every workload
+# this guard's selector reaches is now named in some role's manifests_rollout or
+# manifests_extra_rollouts. Left as a set literal, not deleted, so the next gap has somewhere to
+# be pinned with the same reasoning this one carried.
+_KNOWN_UNCOVERED: set[tuple[str, str]] = set()
 
 
 def _include_vars(role_tasks: Path) -> list[dict]:
