@@ -50,8 +50,8 @@ TAGS=''
 CI_TIMEOUT=900
 # --await-merge: poll `gh pr view` (not CI) until the PR is merged before doing anything else,
 # so `gh pr create` → `gh pr merge --auto` → one backgrounded land.sh is the whole procedure.
-# Sized for the merge queue's full sweep plus a PR run ahead of it; a PR that is still open
-# after this is not being merged, and the session should look at why.
+# Sized for a PR run plus queueing behind other PRs' runs; a PR that is still open after this
+# is not being merged, and the session should look at why.
 AWAIT_MERGE=0
 MERGE_TIMEOUT=2700
 MERGE_POLL=30

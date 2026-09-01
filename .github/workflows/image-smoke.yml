@@ -13,11 +13,11 @@ name: image-smoke
 # `docker pull` until 2026-08-21, so nothing has ever verified that those tags resolve.
 on:
   pull_request:
-  # `pull + boot changed images` is a required status context, and a merge-queue entry waits
-  # for every required context to report — a workflow that never runs on merge_group leaves
-  # the entry stuck until the queue times it out. On this event `github.base_ref` is empty,
-  # so the collect step finds nothing to diff and the job is a fast green; the images were
-  # already booted on the PR run.
+  # Inert: merge queues are not offered on this user-owned repository (see the note in
+  # ci.yml). Kept because `pull + boot changed images` is a required status context, and if
+  # a queue ever existed every required context would have to report on its entries. On this
+  # event `github.base_ref` is empty, so the collect step finds nothing to diff and the job is
+  # a fast green; the images were already booted on the PR run.
   merge_group:
   workflow_dispatch:
     inputs:

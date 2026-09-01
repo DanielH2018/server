@@ -15,7 +15,7 @@ command:
 
 ```bash
 git rev-parse origin/master          # keep this; land.sh needs it for the fallback
-gh pr merge --squash --auto          # merges when the checks are green (or via the queue)
+gh pr merge --squash --auto          # merges when the PR's checks are green
 ./scripts/deploy_tools/land.sh --pr <n> --since <pre-merge-sha> --await-merge
 ```
 
