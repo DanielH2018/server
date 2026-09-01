@@ -13,15 +13,21 @@ from infra_map_inventory import RoleIndex, declared_services
 
 
 def match_k8s_workloads(
-    service: dict, workloads: dict[tuple[str, str], dict]
+    service: dict,
+    workloads: dict[tuple[str, str], dict],
+    extra_namespaces: frozenset[str] = frozenset(),
 ) -> list[dict]:
-    """Find the Deployments backing a declared k8s service.
+    """Find the workloads backing a declared k8s service.
 
-    A namespace owner (``claude-otel``) claims every Deployment in its
-    namespace; everything else matches its own name plus ``<name>-*`` helper
-    Deployments in the app namespace.
+    A workload is a Deployment, DaemonSet or StatefulSet. A namespace owner
+    (``claude-otel``) claims every workload in its namespace; everything else
+    matches its own name plus ``<name>-*`` helpers in the app namespace, and in
+    any namespace its own manifests name literally (*extra_namespaces*):
+    dri-device-plugin's DaemonSet lives in kube-system because an extended
+    resource is a node property, and the inventory has no field saying so.
     """
     name, namespace = service["name"], service.get("namespace")
+    namespaces = {namespace, *extra_namespaces}
     matched = []
     if name in NAMESPACE_OWNERS:
         for (ns, wl_name), info in workloads.items():
@@ -29,7 +35,7 @@ def match_k8s_workloads(
                 matched.append({"name": wl_name, "namespace": ns, **info})
     else:
         for (ns, wl_name), info in workloads.items():
-            if ns != namespace:
+            if ns not in namespaces:
                 continue
             if wl_name == name or wl_name.startswith(f"{name}-"):
                 matched.append({"name": wl_name, "namespace": ns, **info})
@@ -68,19 +74,21 @@ def reconcile_docker(
 def reconcile_k8s(
     service: dict, workloads: dict[tuple[str, str], dict], roles: RoleIndex
 ) -> dict:
-    """Overlay live Deployment state onto one declared k8s service."""
-    matched = match_k8s_workloads(service, workloads)
+    """Overlay live workload state onto one declared k8s service."""
+    matched = match_k8s_workloads(
+        service, workloads, roles.manifest_namespaces.get(service["name"], frozenset())
+    )
     if not matched:
         if service["name"] in roles.batch_roles:
             return {
                 **service,
                 "status": "job",
-                "detail": "build/seed role — no long-running workload",
+                "detail": "declares no long-running workload",
             }
-        return {**service, "status": "missing", "detail": "no deployment found"}
+        return {**service, "status": "missing", "detail": "no workload found"}
     ready = sum(w["ready"] for w in matched)
     desired = sum(w["desired"] for w in matched)
-    detail = f"{ready}/{desired} replicas ready across {len(matched)} deployment"
+    detail = f"{ready}/{desired} replicas ready across {len(matched)} workload"
     detail += "s" if len(matched) != 1 else ""
     if ready == 0:
         status = "down"

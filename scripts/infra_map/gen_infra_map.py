@@ -56,6 +56,7 @@ from infra_map_common import (
     REPO_ROOT,
 )
 from infra_map_inventory import (
+    LONG_RUNNING_KINDS,
     RoleIndex,
     declared_services,
     load_inventory,
@@ -71,7 +72,7 @@ from infra_map_live import (
     find_tool,
     parse_backup_targets,
     parse_docker_ps,
-    parse_kubectl_deployments,
+    parse_kubectl_workloads,
     parse_kubectl_nodes,
     parse_pod_placement,
 )
@@ -117,11 +118,12 @@ __all__ = [
     "group_services",
     "load_inventory",
     "load_roles",
+    "LONG_RUNNING_KINDS",
     "main",
     "match_k8s_workloads",
     "parse_backup_targets",
     "parse_docker_ps",
-    "parse_kubectl_deployments",
+    "parse_kubectl_workloads",
     "parse_kubectl_nodes",
     "parse_pod_placement",
     "place_on_nodes",

@@ -7,7 +7,7 @@ actually running, and ``infra_map_model`` reconciles the two.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +23,18 @@ from infra_map_common import (
 )
 
 
+# The kinds the live collector reads; a role declaring none of them is a batch
+# role. Kept in step with ``infra_map_live.WORKLOAD_KINDS`` by a test.
+LONG_RUNNING_KINDS = frozenset({"Deployment", "DaemonSet", "StatefulSet"})
+
+# A ``namespace:`` line whose value is a bare name. A Jinja value fails the
+# character class, so ``{{ k8s_namespace }}`` is deliberately not captured: the
+# inventory already resolves that one, and this only records the exceptions.
+_LITERAL_NAMESPACE = re.compile(
+    r"^\s+namespace:\s*([a-z0-9][a-z0-9-]*)\s*$", re.MULTILINE
+)
+
+
 @dataclass(frozen=True)
 class RoleIndex:
     """What the repo says each role actually creates.
@@ -35,12 +47,18 @@ class RoleIndex:
 
     container_owners: dict[str, str]
     batch_roles: frozenset[str]
+    # Namespaces a k8s role's manifests name literally, rather than through the
+    # ``k8s_namespace`` variable the inventory resolves for it. The map looks a
+    # role's workloads up by namespace, so a role that places one elsewhere on
+    # purpose (dri-device-plugin's DaemonSet in kube-system) is found only here.
+    manifest_namespaces: dict[str, frozenset[str]] = field(default_factory=dict)
 
 
 def load_roles(repo_root: Path = REPO_ROOT) -> RoleIndex:
     """Build the role index by reading the role trees, not by guessing names."""
     owners: dict[str, str] = {}
     batch: set[str] = set()
+    manifest_namespaces: dict[str, frozenset[str]] = {}
 
     docker_roles = repo_root / "ansible" / "roles" / "containers"
     for role in sorted(p for p in docker_roles.glob("*") if p.is_dir()):
@@ -53,26 +71,37 @@ def load_roles(repo_root: Path = REPO_ROOT) -> RoleIndex:
         for name in names:
             owners[name] = role.name
 
-    # A k8s role with no templates directory builds images or seeds volumes; it
-    # has no Deployment to find.
+    # A k8s role that declares no long-running workload has nothing to find
+    # between deploys, so "not running" is correct for it, not a fault. That is
+    # a role with no templates directory (the seed and snapshot roles), one whose
+    # only workload is a CronJob, and one whose templates are all non-workload
+    # objects: Dockerfiles (n8n-images), an IngressRoute onto a chart-owned
+    # Deployment (longhorn-ui), a PVC (media-volume), NetworkPolicies
+    # (netpol-baseline). Derived from the manifests rather than from the Docker
+    # compose that used to declare no container name — that plumbing was deleted
+    # with the migration.
     k8s_roles = repo_root / "ansible" / "roles" / "k8s"
     for role in sorted(p for p in k8s_roles.glob("*") if p.is_dir()):
         templates = role / "templates"
         if not templates.is_dir():
             batch.add(role.name)
             continue
-        # A role whose only workload is a CronJob leaves nothing running between
-        # firings. Derived here rather than from the Docker compose that used to
-        # declare no container name — that plumbing was deleted with the migration.
-        kinds = {
-            kind
-            for tpl in templates.glob("*.yaml.j2")
-            for kind in _MANIFEST_KIND.findall(tpl.read_text())
-        }
-        if "CronJob" in kinds and "Deployment" not in kinds:
+        kinds: set[str] = set()
+        literal_namespaces: set[str] = set()
+        for tpl in templates.glob("*.yaml.j2"):
+            text = tpl.read_text()
+            kinds.update(_MANIFEST_KIND.findall(text))
+            literal_namespaces.update(_LITERAL_NAMESPACE.findall(text))
+        if not kinds & LONG_RUNNING_KINDS:
             batch.add(role.name)
+        if literal_namespaces:
+            manifest_namespaces[role.name] = frozenset(literal_namespaces)
 
-    return RoleIndex(container_owners=owners, batch_roles=frozenset(batch))
+    return RoleIndex(
+        container_owners=owners,
+        batch_roles=frozenset(batch),
+        manifest_namespaces=manifest_namespaces,
+    )
 
 
 def resolve_vars(value: Any, variables: dict[str, Any], _depth: int = 0) -> Any:

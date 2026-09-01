@@ -158,21 +158,69 @@ def deployment(name, ns="homelab", ready=1, desired=1, image="img:1"):
     }
 
 
-def test_parse_kubectl_deployments_extracts_replica_counts():
+def test_parse_kubectl_workloads_extracts_replica_counts():
     payload = json.dumps({"items": [deployment("traefik", ready=1, desired=2)]})
-    parsed = g.parse_kubectl_deployments(payload)
+    parsed = g.parse_kubectl_workloads(payload)
     assert parsed[("homelab", "traefik")]["ready"] == 1
     assert parsed[("homelab", "traefik")]["desired"] == 2
 
 
-def test_parse_kubectl_deployments_treats_absent_ready_replicas_as_zero():
+def test_parse_kubectl_workloads_treats_absent_ready_replicas_as_zero():
     """kubectl omits readyReplicas entirely at zero — None would break the sum."""
     payload = json.dumps({"items": [deployment("down", ready=0)]})
-    assert g.parse_kubectl_deployments(payload)[("homelab", "down")]["ready"] == 0
+    assert g.parse_kubectl_workloads(payload)[("homelab", "down")]["ready"] == 0
 
 
-def test_parse_kubectl_deployments_returns_empty_on_bad_json():
-    assert g.parse_kubectl_deployments("not json") == {}
+def test_parse_kubectl_workloads_returns_empty_on_bad_json():
+    assert g.parse_kubectl_workloads("not json") == {}
+
+
+def daemonset(name, ns="homelab", ready=2, desired=2, image="img:1"):
+    """A DaemonSet carries no spec.replicas; its counts live only in status."""
+    return {
+        "kind": "DaemonSet",
+        "metadata": {"name": name, "namespace": ns},
+        "spec": {"template": {"spec": {"containers": [{"image": image}]}}},
+        "status": {"desiredNumberScheduled": desired, "numberReady": ready},
+    }
+
+
+def test_parse_kubectl_workloads_reads_a_daemonset_from_its_status_counts():
+    """node-exporter and dri-device-plugin read as missing while the map fetched
+    Deployments alone; a DaemonSet's desired count is what the scheduler placed."""
+    payload = json.dumps({"items": [daemonset("node-exporter", ready=1, desired=2)]})
+    parsed = g.parse_kubectl_workloads(payload)
+    assert parsed[("homelab", "node-exporter")] == {
+        "kind": "DaemonSet",
+        "ready": 1,
+        "desired": 2,
+        "image": "img:1",
+    }
+
+
+def test_parse_kubectl_workloads_reads_a_statefulset_like_a_deployment():
+    item = {**deployment("db", ready=1, desired=1), "kind": "StatefulSet"}
+    parsed = g.parse_kubectl_workloads(json.dumps({"items": [item]}))
+    assert parsed[("homelab", "db")]["kind"] == "StatefulSet"
+    assert parsed[("homelab", "db")]["ready"] == 1
+
+
+def test_collect_k8s_asks_for_every_long_running_kind(monkeypatch):
+    """The inventory excuses a role that declares none of these kinds, so the
+    collector must fetch all of them or a declared kind becomes a false Missing."""
+    seen = []
+
+    def fake_run(argv, timeout):
+        seen.append(argv)
+        return True, json.dumps({"items": []})
+
+    monkeypatch.setattr(live, "find_tool", lambda name: "/usr/bin/kubectl")
+    monkeypatch.setattr(live, "find_kubeconfig", lambda: Path("/tmp/kubeconfig"))
+    monkeypatch.setattr(live, "_run", fake_run)
+    ok, workloads, err = live.collect_k8s("box", "box")
+    assert ok and workloads == {} and err == ""
+    requested = set(seen[0][seen[0].index("get") + 1].split(","))
+    assert requested == {k.lower() + "s" for k in g.LONG_RUNNING_KINDS}
 
 
 WORKLOADS = {
@@ -284,6 +332,24 @@ def test_reconcile_k8s_calls_a_build_role_a_job():
 def test_reconcile_k8s_marks_a_genuinely_absent_deployment_missing():
     svc = service("freshrss", platform="k8s", namespace="homelab")
     assert g.reconcile_k8s(svc, {}, ROLES)["status"] == "missing"
+
+
+def test_reconcile_k8s_looks_in_a_namespace_the_manifests_name_literally():
+    """dri-device-plugin's DaemonSet is in kube-system on purpose; the inventory
+    has no field for that, so it read as Missing behind 2/2 ready pods."""
+    workloads = {
+        ("kube-system", "dri-device-plugin"): {"ready": 2, "desired": 2, "image": "p:1"}
+    }
+    svc = service("dri-device-plugin", platform="k8s", namespace="homelab")
+    assert g.reconcile_k8s(svc, workloads, ROLES)["status"] == "missing"
+    roles = g.RoleIndex(
+        container_owners={},
+        batch_roles=frozenset(),
+        manifest_namespaces={"dri-device-plugin": frozenset({"kube-system"})},
+    )
+    result = g.reconcile_k8s(svc, workloads, roles)
+    assert result["status"] == "healthy"
+    assert result["workloads"][0]["namespace"] == "kube-system"
 
 
 def test_find_extra_containers_attributes_a_companion_to_its_role():
@@ -595,6 +661,54 @@ def test_load_roles_derives_ownership_from_the_role_trees():
     # manifests now — and pi-peer-backup, which the compose rule never saw, qualifies too.
     assert "configarr" in roles.batch_roles
     assert "pi-peer-backup" in roles.batch_roles
+    # Roles whose templates hold no long-running workload at all: Dockerfiles, a
+    # route onto a chart-owned Deployment, a PVC, NetworkPolicies. All four sat
+    # in the map as "Missing · no deployment found" until 2026-09-01.
+    for role in ("n8n-images", "longhorn-ui", "media-volume", "netpol-baseline"):
+        assert role in roles.batch_roles, role
+    # And a DaemonSet-only role is a real workload the collector must find.
+    assert "node-exporter" not in roles.batch_roles
+    assert "dri-device-plugin" not in roles.batch_roles
+    assert roles.manifest_namespaces["dri-device-plugin"] == {"kube-system"}
+    # A role whose namespace is the resolved variable records nothing here.
+    assert "freshrss" not in roles.manifest_namespaces
+
+
+def _k8s_role(repo_root, name, *manifests):
+    templates = repo_root / "ansible" / "roles" / "k8s" / name / "templates"
+    templates.mkdir(parents=True)
+    for index, kind in enumerate(manifests):
+        (templates / f"{index}.yaml.j2").write_text(f"kind: {kind}\n")
+
+
+def test_load_roles_excuses_a_role_with_no_long_running_workload(tmp_path):
+    (tmp_path / "ansible" / "roles" / "containers").mkdir(parents=True)
+    _k8s_role(tmp_path, "policies", "NetworkPolicy", "Job")
+    _k8s_role(tmp_path, "route-only", "IngressRoute", "Middleware")
+    roles = g.load_roles(tmp_path)
+    assert roles.batch_roles == frozenset({"policies", "route-only"})
+
+
+def test_load_roles_does_not_excuse_a_daemonset_or_statefulset_role(tmp_path):
+    (tmp_path / "ansible" / "roles" / "containers").mkdir(parents=True)
+    _k8s_role(tmp_path, "agent", "DaemonSet", "NetworkPolicy")
+    _k8s_role(tmp_path, "db", "StatefulSet")
+    _k8s_role(tmp_path, "web", "Deployment", "CronJob")
+    assert g.load_roles(tmp_path).batch_roles == frozenset()
+
+
+def test_load_roles_records_only_literal_manifest_namespaces(tmp_path):
+    (tmp_path / "ansible" / "roles" / "containers").mkdir(parents=True)
+    templates = tmp_path / "ansible" / "roles" / "k8s" / "plugin" / "templates"
+    templates.mkdir(parents=True)
+    (templates / "a.yaml.j2").write_text(
+        "kind: DaemonSet\nmetadata:\n  namespace: kube-system\n"
+    )
+    (templates / "b.yaml.j2").write_text(
+        "kind: Secret\nmetadata:\n  namespace: {{ k8s_namespace }}\n"
+    )
+    roles = g.load_roles(tmp_path)
+    assert roles.manifest_namespaces == {"plugin": frozenset({"kube-system"})}
 
 
 def node(name, ready=True, roles=(), ip="10.0.0.1"):
