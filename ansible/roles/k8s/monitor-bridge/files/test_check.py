@@ -14,6 +14,7 @@ import bridge_common
 import bridge_config
 import bridge_streaks
 import bridge_io
+import checks_storage
 import check
 
 
@@ -182,7 +183,7 @@ def test_pvc_under_threshold_is_clean(monkeypatch):
         monkeypatch,
         [_pvc_series("uptime-kuma-data", 38.6), _pvc_series("valheim-server", 33.8)],
     )
-    ok, msg = check.check_pvc_fullness()
+    ok, msg = checks_storage.check_pvc_fullness()
     assert ok
     assert "2 claim(s) under 85%" in msg
     assert "uptime-kuma-data 39%" in msg
@@ -193,7 +194,7 @@ def test_pvc_over_threshold_is_flagged(monkeypatch):
         monkeypatch,
         [_pvc_series("uptime-kuma-data", 38.6), _pvc_series("valheim-config", 91.2)],
     )
-    ok, msg = check.check_pvc_fullness()
+    ok, msg = checks_storage.check_pvc_fullness()
     # No grace on a fullness breach: it is monotonic, so a second cycle proves nothing.
     assert not ok
     assert "homelab/valheim-config 91%" in msg
@@ -207,7 +208,7 @@ def test_pvc_excluded_claim_is_clean(monkeypatch):
         monkeypatch,
         [_pvc_series("media-data", 99.0), _pvc_series("uptime-kuma-data", 38.6)],
     )
-    ok, msg = check.check_pvc_fullness()
+    ok, msg = checks_storage.check_pvc_fullness()
     assert ok
     assert "1 claim(s) under 85%" in msg
 
@@ -218,11 +219,11 @@ def test_pvc_claim_floor_shortfall_is_flagged(monkeypatch):
     # the vector alone still reads healthy and the census is the only thing that separates
     # "nothing is full" from "I cannot see daniel-server's claims". Held for the grace, then paged.
     _arm_pvc(monkeypatch, [_pvc_series("uptime-kuma-data", 38.6)], claims=27.0)
-    ok1, msg1 = check.check_pvc_fullness()
+    ok1, msg1 = checks_storage.check_pvc_fullness()
     assert ok1
     assert "only 27 kubelet_volume_stats claims visible" in msg1
-    check.check_pvc_fullness()
-    ok3, msg3 = check.check_pvc_fullness()
+    checks_storage.check_pvc_fullness()
+    ok3, msg3 = checks_storage.check_pvc_fullness()
     assert not ok3
     assert "only 27 kubelet_volume_stats claims visible" in msg3
 
@@ -232,7 +233,7 @@ def test_pvc_full_kubelet_coverage_is_clean(monkeypatch):
     # kubelet job reports all 43 claims on its own. A floor that fired here would page on a
     # harmless scrape change.
     _arm_pvc(monkeypatch, [_pvc_series("uptime-kuma-data", 38.6)], claims=43.0)
-    ok, msg = check.check_pvc_fullness()
+    ok, msg = checks_storage.check_pvc_fullness()
     assert ok
     assert "claims visible" not in msg
 
@@ -242,9 +243,9 @@ def test_pvc_absent_census_is_flagged(monkeypatch):
     # reaches the census arm rather than the empty-vector one below — the two must not be
     # conflated, which is why each asserts its own wording.
     _arm_pvc(monkeypatch, [_pvc_series("uptime-kuma-data", 38.6)], claims=None)
-    check.check_pvc_fullness()
-    check.check_pvc_fullness()
-    ok, msg = check.check_pvc_fullness()
+    checks_storage.check_pvc_fullness()
+    checks_storage.check_pvc_fullness()
+    ok, msg = checks_storage.check_pvc_fullness()
     assert not ok
     assert "no kubelet_volume_stats claims visible" in msg
 
@@ -253,9 +254,9 @@ def test_pvc_empty_ratio_vector_is_flagged(monkeypatch):
     # The other blind shape: the census answers but no claim reports a ratio. An empty vector is
     # indistinguishable from "no claim is full", so it must page rather than report a worst.
     _arm_pvc(monkeypatch, [], claims=43.0)
-    check.check_pvc_fullness()
-    check.check_pvc_fullness()
-    ok, msg = check.check_pvc_fullness()
+    checks_storage.check_pvc_fullness()
+    checks_storage.check_pvc_fullness()
+    ok, msg = checks_storage.check_pvc_fullness()
     assert not ok
     assert "no PVC reported a fullness ratio" in msg
 
@@ -264,16 +265,16 @@ def test_pvc_breach_outranks_a_coverage_shortfall(monkeypatch):
     # Same ordering as check_disk: a claim that IS reporting and IS full outranks a complaint
     # about the ones that are not.
     _arm_pvc(monkeypatch, [_pvc_series("valheim-config", 91.2)], claims=27.0)
-    ok, msg = check.check_pvc_fullness()
+    ok, msg = checks_storage.check_pvc_fullness()
     assert not ok
     assert "PVC over 85%" in msg
 
 
 def test_pvc_recovery_resets_the_census_streak(monkeypatch):
     _arm_pvc(monkeypatch, [_pvc_series("uptime-kuma-data", 38.6)], claims=27.0)
-    check.check_pvc_fullness()
+    checks_storage.check_pvc_fullness()
     _arm_pvc(monkeypatch, [_pvc_series("uptime-kuma-data", 38.6)])
-    assert check.check_pvc_fullness()[0]
+    assert checks_storage.check_pvc_fullness()[0]
     assert bridge_streaks._down_streaks.get("pvc_fullness", 0) == 0
 
 
@@ -291,6 +292,6 @@ def test_pvc_fullness_is_gated_by_the_cluster_prometheus():
 
 def test_pvc_fullness_is_disabled_without_a_cluster_prometheus(monkeypatch):
     monkeypatch.setattr(bridge_config, "CLUSTER_PROM_URL", "")
-    ok, msg = check.check_pvc_fullness()
+    ok, msg = checks_storage.check_pvc_fullness()
     assert ok
     assert "disabled" in msg

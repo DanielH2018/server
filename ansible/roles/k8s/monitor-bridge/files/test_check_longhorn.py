@@ -8,6 +8,7 @@ kube-state-metrics is not reporting at all.
 import bridge_config
 import bridge_io
 import bridge_streaks
+import checks_storage
 import check
 
 
@@ -23,7 +24,7 @@ def _arm_longhorn(monkeypatch, vector, volumes=43.0, consecutive=3):
 
 def test_longhorn_all_redundant_is_up_and_reports_the_volume_count(monkeypatch):
     _arm_longhorn(monkeypatch, [])
-    ok, msg = check.check_longhorn_volumes()
+    ok, msg = checks_storage.check_longhorn_volumes()
     assert ok
     assert "43 volume(s) redundant" in msg
 
@@ -32,9 +33,9 @@ def test_longhorn_degraded_holds_up_until_the_threshold_then_pages(monkeypatch):
     _arm_longhorn(monkeypatch, [_longhorn_series("freshrss-config", "degraded")])
     # A node drain degrades every volume on the departing node by design, so the first
     # cycles must hold `up` — otherwise this monitor pages every Sunday reboot.
-    ok1, msg1 = check.check_longhorn_volumes()
-    ok2, _ = check.check_longhorn_volumes()
-    ok3, msg3 = check.check_longhorn_volumes()
+    ok1, msg1 = checks_storage.check_longhorn_volumes()
+    ok2, _ = checks_storage.check_longhorn_volumes()
+    ok3, msg3 = checks_storage.check_longhorn_volumes()
     assert ok1 and ok2
     assert "1/3" in msg1
     assert not ok3
@@ -44,9 +45,9 @@ def test_longhorn_degraded_holds_up_until_the_threshold_then_pages(monkeypatch):
 
 def test_longhorn_recovery_resets_the_streak(monkeypatch):
     _arm_longhorn(monkeypatch, [_longhorn_series("freshrss-config", "degraded")])
-    check.check_longhorn_volumes()
+    checks_storage.check_longhorn_volumes()
     monkeypatch.setattr(bridge_io, "prom_vector", lambda *a, **k: [])
-    assert check.check_longhorn_volumes()[0]
+    assert checks_storage.check_longhorn_volumes()[0]
     assert bridge_streaks._down_streaks.get("longhorn", 0) == 0
 
 
@@ -55,11 +56,11 @@ def test_longhorn_absent_metric_is_not_green(monkeypatch):
     # cluster is healthy or the longhorn scrape job is dead. The volume count is the input
     # assertion, so a missing family must fail closed rather than read as "none degraded".
     _arm_longhorn(monkeypatch, [], volumes=None)
-    ok1, msg1 = check.check_longhorn_volumes()
+    ok1, msg1 = checks_storage.check_longhorn_volumes()
     assert ok1  # first cycle rides the grace, but says why
     assert "UNMONITORED" in msg1
-    check.check_longhorn_volumes()
-    ok3, msg3 = check.check_longhorn_volumes()
+    checks_storage.check_longhorn_volumes()
+    ok3, msg3 = checks_storage.check_longhorn_volumes()
     assert not ok3
     assert "not the same as healthy" in msg3
 
@@ -75,7 +76,7 @@ def test_longhorn_dedupes_a_volume_reported_by_both_managers(monkeypatch):
         ],
         consecutive=1,
     )
-    ok, msg = check.check_longhorn_volumes()
+    ok, msg = checks_storage.check_longhorn_volumes()
     assert not ok
     assert "1 degraded" in msg
 
@@ -89,7 +90,7 @@ def test_longhorn_faulted_outranks_degraded_for_the_same_volume(monkeypatch):
         ],
         consecutive=1,
     )
-    ok, msg = check.check_longhorn_volumes()
+    ok, msg = checks_storage.check_longhorn_volumes()
     assert not ok
     assert "1 faulted" in msg
     assert "degraded" not in msg
@@ -109,7 +110,7 @@ def test_longhorn_selects_on_the_state_label_not_a_value_ordinal():
     try:
         bridge_io.prom_vector = record
         bridge_io.prom_scalar = lambda *a, **k: 43.0
-        check.check_longhorn_volumes()
+        checks_storage.check_longhorn_volumes()
     finally:
         bridge_io.prom_vector, bridge_io.prom_scalar = saved_vector, saved_scalar
     assert len(queries) == 1

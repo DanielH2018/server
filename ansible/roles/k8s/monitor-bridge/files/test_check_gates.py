@@ -19,6 +19,7 @@ import bridge_common
 import bridge_parsing
 import bridge_config
 import bridge_io
+import checks_storage
 import check
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -588,7 +589,7 @@ def _reset_b2_probe(
     monkeypatch.setattr(bridge_config, "B2_PROBE_INTERVAL_S", interval)
     monkeypatch.setattr(bridge_config, "B2_TRANSPORT_RETRY_S", transport_retry)
     monkeypatch.setattr(
-        check,
+        checks_storage,
         "_b2_probe",
         {"ts": 0.0, "ok": True, "msg": "not yet probed", "ttl": interval},
     )
@@ -613,7 +614,7 @@ def _cap_denial():
 
 def test_b2_reachable_disabled_without_credentials(monkeypatch):
     _reset_b2_probe(monkeypatch, key_id="", app_key="")
-    ok, msg = check.b2_reachable(now=10_000)
+    ok, msg = checks_storage.b2_reachable(now=10_000)
     assert ok is True and "disabled" in msg
 
 
@@ -640,7 +641,7 @@ def test_b2_authorize(monkeypatch, response, ok, must_contain):
     monkeypatch.setattr(bridge_config, "B2_PROBE_KEY_ID", "kid")
     monkeypatch.setattr(bridge_config, "B2_PROBE_APPLICATION_KEY", "akey")
     monkeypatch.setattr(bridge_io, "_get_json", lambda url, headers=None: response)
-    result_ok, msg = check.b2_authorize()
+    result_ok, msg = checks_storage.b2_authorize()
     assert result_ok is ok
     for s in must_contain:
         assert s in msg
@@ -655,7 +656,7 @@ def test_b2_reachable_surfaces_the_cap_error_text(monkeypatch):
         raise _cap_denial()
 
     monkeypatch.setattr(bridge_io, "_get_json", _boom)
-    ok, msg = check.b2_reachable(now=10_000)
+    ok, msg = checks_storage.b2_reachable(now=10_000)
     assert ok is False and "transaction_cap_exceeded" in msg
 
 
@@ -670,10 +671,10 @@ def test_b2_reachable_caches_failure_and_does_not_reprobe(monkeypatch):
         raise _cap_denial()
 
     monkeypatch.setattr(bridge_io, "_get_json", _boom)
-    first_ok, _ = check.b2_reachable(now=10_000)
+    first_ok, _ = checks_storage.b2_reachable(now=10_000)
     # five more cycles inside the interval (INTERVAL=300 -> 25 min of cycles)
     for offset in (300, 600, 900, 1200, 1500):
-        ok, msg = check.b2_reachable(now=10_000 + offset)
+        ok, msg = checks_storage.b2_reachable(now=10_000 + offset)
         assert ok is False
         assert (
             "transaction_cap_exceeded" in msg
@@ -699,11 +700,11 @@ def test_b2_reachable_reprobes_a_transport_failure_next_cycle(monkeypatch):
         return {"accountId": "a1"}
 
     monkeypatch.setattr(bridge_io, "_get_json", _flaky)
-    ok, msg = check.b2_reachable(now=10_000)
+    ok, msg = checks_storage.b2_reachable(now=10_000)
     assert ok is False and "name resolution" in msg
     # One cycle later the transport TTL has expired, so the gate re-probes and recovers — where a
     # cap denial would still be reporting its cached verdict for another 25 minutes.
-    ok, msg = check.b2_reachable(now=10_300)
+    ok, msg = checks_storage.b2_reachable(now=10_300)
     assert ok is True, "a transport failure must re-probe next cycle, got: %s" % msg
     assert len(calls) == 2, "expected a re-probe, got %d calls" % len(calls)
 
@@ -723,10 +724,10 @@ def test_b2_reachable_reprobes_after_the_interval(monkeypatch):
         return {"accountId": "a1"}
 
     monkeypatch.setattr(bridge_io, "_get_json", _ok)
-    check.b2_reachable(now=10_000)
-    check.b2_reachable(now=10_000 + 1799)  # still cached
+    checks_storage.b2_reachable(now=10_000)
+    checks_storage.b2_reachable(now=10_000 + 1799)  # still cached
     assert len(calls) == 1
-    check.b2_reachable(now=10_000 + 1801)  # interval elapsed
+    checks_storage.b2_reachable(now=10_000 + 1801)  # interval elapsed
     assert len(calls) == 2
 
 

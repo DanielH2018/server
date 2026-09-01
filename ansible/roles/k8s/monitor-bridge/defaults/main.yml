@@ -18,6 +18,7 @@ monitor_bridge_modules:
   - bridge_io.py
   - bridge_streaks.py
   - checks_logs.py
+  - checks_storage.py
   - bridge_common.py
   - bridge_parsing.py
   - verdicts_cluster.py
