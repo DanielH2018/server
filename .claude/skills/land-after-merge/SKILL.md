@@ -24,13 +24,17 @@ waits for master CI on the merge commit, ticks, deploys what the tick deferred, 
 `VERDICT:` line — `settled`, `unhealthy`, `deploy-failed`, `nothing-to-deploy`, `blocked` or
 `needs-manual-apply`.
 
-`needs-manual-apply` means the PR reaches a plane no deploy tag covers, and the line names the
-command that does apply it. Two planes are in that position. The setup plane needs
+`needs-manual-apply` means the PR reaches something no deploy tag covers, and the line names the
+command that does apply it. Three things are in that position. The setup plane needs
 `initial_setup.yml`, because `deploy.yml` is a `containers_list` loop. A **shared k8s role** —
 `manifests`, `seed-volume`, `rollout-drain`, `volume-snapshot`, `volume-revert`,
 `image-builder`, `longhorn-api`, `cronjob-gate` — has no `containers_list` entry at all, so
-`--tags manifests` matches nothing and only a full `ansible/deploy.yml` applies it. The other
-services in the same PR still deploy normally; the verdict is about the half that did not.
+`--tags manifests` matches nothing and only a full `ansible/deploy.yml` applies it. A **rotated
+secret** is the third and has no path to match at all: a secret's value lives in no role's
+template, so `ansible/vars/secrets.yml` derives zero tags however many roles consume it. Run
+`uv run python scripts/secrets_mgmt/secret_rotation.py consumers <secret>` for who holds a stale
+copy and the repair command per plane. The other services in the same PR still deploy normally;
+the verdict is about the half that did not.
 
 **Do not hand-poll CI and do not hand-merge.** `await_ci.py` reads the same check-runs
 endpoint the deployer reads, so its verdict and the tick's agree by construction. Hand-polling

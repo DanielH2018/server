@@ -360,13 +360,14 @@ def test_a_secrets_rotation_is_flagged():
     )
     note = land_tags.plane_note(files)
     assert note != "", "a rotation must not read as nothing-to-deploy"
-    assert "consumer_tags()" in note, (
-        "the note must name the resolver that maps a secret to its consuming tag(s), not just "
-        "say a secret changed -- an operator who cannot resolve the consumers is where PR #695 "
-        "was already left"
+    assert "secret_rotation.py consumers" in note, (
+        "the note must name the RUNNABLE resolver, like both sibling notes do, not just say a "
+        "secret changed -- an operator who cannot resolve the consumers is where PR #695 was "
+        "already left. `consumers ruleset_drift_push_token` prints that PR's two missing "
+        "deploys, one per plane"
     )
-    assert "CROSS_HOST_PUSH_TOKENS" in note, (
-        "and the set whose members that resolver declines, each with a written reason"
+    assert "consumer_tags()" in note and "CROSS_HOST_PUSH_TOKENS" in note, (
+        "and the name-routing table behind it, whose MANUAL members each carry a written reason"
     )
 
 

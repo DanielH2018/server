@@ -28,8 +28,9 @@
 # Verdicts printed on stdout: settled | unhealthy | deploy-failed | nothing-to-deploy |
 # blocked | needs-manual-apply. `blocked` is not a failure of this PR — something else in the
 # incoming range needs an operator, and nothing was deployed. `needs-manual-apply` means this
-# PR reaches a plane no deploy tag covers — the setup plane, or a shared k8s role with no
-# `containers_list` entry — so it is landed but not live.
+# PR reaches something no deploy tag covers — the setup plane, a shared k8s role with no
+# `containers_list` entry, or a rotated secret, whose value lives in no role's template at all
+# — so it is landed but not live.
 set -uo pipefail
 
 PR=''

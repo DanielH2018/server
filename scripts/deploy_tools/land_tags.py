@@ -70,12 +70,12 @@ _NOT_SERVICES = frozenset({"common", "archive"})
 _SECRETS_NOTE = (
     "`ansible/vars/secrets.yml` changed, and a secret's VALUE lives in no role's template — so "
     "a rotation **maps to no deploy tag by construction** and every consumer keeps rendering "
-    "the OLD value until its own role is redeployed. Resolve the consumers with "
-    "`consumer_tags()` in `scripts/secrets_mgmt/secret_rotation.py`: it returns the deploy "
-    "tag(s) that re-render a given secret name, and returns EMPTY for a member of "
-    "`CROSS_HOST_PUSH_TOKENS` in that same file — those halves sit on different hosts or "
-    "planes, so no single redeploy covers both and each carries a written reason for what to "
-    "run instead."
+    "the OLD value until its own role is redeployed. Resolve them: `uv run python "
+    "scripts/secrets_mgmt/secret_rotation.py consumers <secret>` greps the tree for who now "
+    "holds a stale copy and prints the exact repair command per plane. Where it names a "
+    "`CROSS_HOST_PUSH_TOKENS` member — the set `consumer_tags()` in that same file returns "
+    "EMPTY for — the two halves sit on different hosts or planes, so no single redeploy covers "
+    "both and each carries a written reason for what to run instead."
 )
 
 
