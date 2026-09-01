@@ -17,40 +17,68 @@
   loop: "{{ k3s_agent_node_ips | product(k3s_join_server_ports) | list }}"
   become: true
 
-- name: Create the systemd-resolved drop-in directory
+# TASK ORDER IS THE SAFETY PROPERTY HERE. The real file is written BEFORE systemd-resolved is
+# stopped, so a run that dies midway leaves a working resolv.conf rather than a symlink to a
+# stub nothing is serving. Never reorder these three.
+- name: Check whether /etc/resolv.conf is still the systemd-resolved stub symlink
   tags: [node-dns]
-  ansible.builtin.file:
-    path: /etc/systemd/resolved.conf.d
-    state: directory
-    mode: "0755"
-    owner: root
-    group: root
+  ansible.builtin.stat:
+    path: /etc/resolv.conf
+    follow: false
+  register: k3s_node_resolv_stat
   become: true
 
-- name: Pin the node's DNS to upstream resolvers
+# Guarded on islnk so a rerun cannot delete the regular file the next task writes. An
+# unconditional `state: absent` here would blow away this node's resolver on every deploy.
+- name: Remove the stub symlink so a regular /etc/resolv.conf can replace it
+  tags: [node-dns]
+  ansible.builtin.file:
+    path: /etc/resolv.conf
+    state: absent
+  become: true
+  when: k3s_node_resolv_stat.stat.islnk | default(false)
+
+- name: Point the node at Pi-hole first with a public fallback
   tags: [node-dns]
   ansible.builtin.template:
-    src: node-dns.conf.j2
-    dest: /etc/systemd/resolved.conf.d/50-homelab-upstream.conf
+    src: resolv.conf.j2
+    dest: /etc/resolv.conf
     mode: "0644"
     owner: root
     group: root
   become: true
-  register: k3s_node_dns_dropin
 
-- name: Restart systemd-resolved to apply the pinned upstreams # noqa no-handler
+# systemd-resolved owns /etc/resolv.conf whenever it runs, so it has to go for the file above
+# to survive. It is DISABLED rather than masked, matching daniel-server, which has run without
+# it since 2026-08-10. With it gone, k3s reads /etc/resolv.conf directly for the pod template,
+# which is why no --resolv-conf kubelet arg is needed (daniel-server carries none either).
+- name: Stop and disable systemd-resolved
   tags: [node-dns]
   ansible.builtin.systemd:
     name: systemd-resolved
-    state: restarted
+    state: stopped
+    enabled: false
   become: true
-  when: k3s_node_dns_dropin.changed
 
-# The drop-in above pins WHICH resolvers the node uses; the netplan override below controls
-# HOW MANY end up in /run/systemd/resolve/resolv.conf. kubelet copies that file into every
-# pod whose effective dnsPolicy is Default and Kubernetes keeps only the first 3, so the
-# lease's four ISP resolvers cost the node a DNSConfigForming warning per pod sync for
-# nothing — `Domains=~.` means they are never queried.
+# The A1 drop-in is inert once resolved is disabled, and an inert config file that still reads
+# like the active mechanism is how the next reader gets it wrong. Remove it rather than leave
+# it: `k3s_node_dns_upstreams` now renders into resolv.conf, not into this.
+- name: Remove the retired systemd-resolved upstream drop-in
+  tags: [node-dns]
+  ansible.builtin.file:
+    path: /etc/systemd/resolved.conf.d/50-homelab-upstream.conf
+    state: absent
+  become: true
+
+# KEPT AS DEFENCE IN DEPTH, no longer the active mechanism. While systemd-resolved ran, this
+# override was what kept /run/systemd/resolve/resolv.conf from running six nameservers deep —
+# kubelet copies that file into every pod whose effective dnsPolicy is Default and Kubernetes
+# keeps only the first 3, so the lease's resolvers cost a DNSConfigForming warning per pod
+# sync. resolved is disabled above, so kubelet now reads the two-line /etc/resolv.conf this
+# role writes and that warning cannot recur. The override stays because it is what stops the
+# lease contributing resolvers again the moment anything re-enables resolved — an apt upgrade,
+# a re-image, or a future decision to reverse the task above. Removing it would make that
+# reversal silently wrong. ENFORCED by ansible/tests/test_netplan_dns_overrides.py.
 - name: Drop the DHCP-supplied resolvers from the node's DNS set
   tags: [node-dns]
   ansible.builtin.template:
