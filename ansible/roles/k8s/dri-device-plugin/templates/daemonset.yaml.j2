@@ -1,3 +1,4 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
 ---
 # Advertises the AMD render node as the schedulable resource `devic.es/dri` (slice 4, B1).
 #
@@ -49,13 +50,7 @@ spec:
             # device-plugin directory and hands the kubelet device file descriptors; both need
             # privilege. Consumers then just request `devic.es/dri` and stay unprivileged.
             privileged: true
-          resources:
-            requests:
-              cpu: 10m
-              memory: 20Mi
-            limits:
-              cpu: 100m
-              memory: 60Mi
+{{ container_resources(cpu_limit='100m', mem_limit='60Mi', cpu_request='10m', mem_request='20Mi') }}
           volumeMounts:
             - name: dri-device-plugin-socket
               mountPath: /var/lib/kubelet/device-plugins

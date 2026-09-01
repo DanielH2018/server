@@ -1,3 +1,5 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -60,12 +62,7 @@ spec:
               install -m 644 /seed/whitelist.yaml /seed/trusted-remote-whitelist.yaml
               /etc/crowdsec/parsers/s02-enrich/ &&
               install -m 640 /dev/null /var/log/authelia/authelia.log
-          securityContext:
-            allowPrivilegeEscalation: false
-            runAsNonRoot: true
-            capabilities:
-              drop:
-                - ALL
+{{ hardened_security_context(non_root=true) }}
           volumeMounts:
             - name: crowdsec-secret
               mountPath: /seed
@@ -79,13 +76,7 @@ spec:
             # here on the first rollout). Created uid-1000-owned so Authelia can write it.
             - name: authelia-logs
               mountPath: /var/log/authelia
-          resources:
-            limits:
-              cpu: 250m
-              memory: 128Mi
-            requests:
-              cpu: 10m
-              memory: 16Mi
+{{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
 {% endif %}
       automountServiceAccountToken: false
       containers:
@@ -100,25 +91,20 @@ spec:
           env:
             - name: TZ
               value: "{{ tz }}"
-          securityContext:
-            # NO readOnlyRootFilesystem, unlike traefik and bento-pdf. With it on, Authelia
-            # dies during provider construction — before a single startup check runs — and
-            # logs only an aggregate with no detail, at every level including trace:
-            #   level=fatal msg="Errors occurred performing startup checks"
-            # Measured on daniel-box: flipping this one field is the entire difference
-            # between that and "Startup complete ... Listening ... on '0.0.0.0:9091'".
-            # Config, the users database, /config's permissions, storage migration, DNS and
-            # NTP egress were each verified good independently, so none of them is the cause.
-            # It cannot be a plain permission problem either: as uid 1000 the process cannot
-            # write anywhere outside its mounts in the WORKING case either, which leaves
-            # EROFS-vs-EACCES on some path Authelia probes and never names.
-            # The Docker role this was ported from sets no read_only, so dropping it is not a
-            # regression against the instance being migrated — keeping it was the divergence.
-            allowPrivilegeEscalation: false
-            runAsNonRoot: true
-            capabilities:
-              drop:
-                - ALL
+          # NO readOnlyRootFilesystem, unlike traefik and bento-pdf. With it on, Authelia
+          # dies during provider construction — before a single startup check runs — and
+          # logs only an aggregate with no detail, at every level including trace:
+          #   level=fatal msg="Errors occurred performing startup checks"
+          # Measured on daniel-box: flipping this one field is the entire difference
+          # between that and "Startup complete ... Listening ... on '0.0.0.0:9091'".
+          # Config, the users database, /config's permissions, storage migration, DNS and
+          # NTP egress were each verified good independently, so none of them is the cause.
+          # It cannot be a plain permission problem either: as uid 1000 the process cannot
+          # write anywhere outside its mounts in the WORKING case either, which leaves
+          # EROFS-vs-EACCES on some path Authelia probes and never names.
+          # The Docker role this was ported from sets no read_only, so dropping it is not a
+          # regression against the instance being migrated — keeping it was the divergence.
+{{ hardened_security_context(non_root=true) }}
           volumeMounts:
             # Config and the users database come from the Secret, mounted OUTSIDE /config so
             # the PVC can own /config for the database Authelia writes.
@@ -147,13 +133,7 @@ spec:
               port: http
             initialDelaySeconds: 20
             periodSeconds: 30
-          resources:
-            limits:
-              cpu: "{{ authelia_k8s_cpu_limit }}"
-              memory: {{ authelia_k8s_mem_limit }}
-            requests:
-              cpu: "{{ authelia_k8s_cpu_request }}"
-              memory: {{ authelia_k8s_mem_request }}
+{{ container_resources(cpu_limit=authelia_k8s_cpu_limit, mem_limit=authelia_k8s_mem_limit, cpu_request=authelia_k8s_cpu_request, mem_request=authelia_k8s_mem_request) }}
 {% if authelia_k8s_manage_crowdsec %}
         # Parses THIS pod's auth log into the in-cluster LAPI, so failed-login scenarios
         # (LePresidente/authelia) cover the cluster portal the way daniel-server's agent
@@ -184,12 +164,7 @@ spec:
           # owns, and `cscli parsers install` dies on mkdir. As uid 1000 it owns that tree and
           # the log file outright. The agent needs no privilege — it reads a file and posts
           # to the LAPI.
-          securityContext:
-            allowPrivilegeEscalation: false
-            runAsNonRoot: true
-            capabilities:
-              drop:
-                - ALL
+{{ hardened_security_context(non_root=true) }}
           volumeMounts:
             - name: crowdsec-etc
               mountPath: /etc/crowdsec
@@ -206,13 +181,7 @@ spec:
             initialDelaySeconds: 120
             periodSeconds: 60
             timeoutSeconds: 10
-          resources:
-            limits:
-              cpu: "{{ authelia_k8s_agent_cpu_limit }}"
-              memory: {{ authelia_k8s_agent_mem_limit }}
-            requests:
-              cpu: "{{ authelia_k8s_agent_cpu_request }}"
-              memory: {{ authelia_k8s_agent_mem_request }}
+{{ container_resources(cpu_limit=authelia_k8s_agent_cpu_limit, mem_limit=authelia_k8s_agent_mem_limit, cpu_request=authelia_k8s_agent_cpu_request, mem_request=authelia_k8s_agent_mem_request) }}
 {% endif %}
       volumes:
         - name: authelia-secrets

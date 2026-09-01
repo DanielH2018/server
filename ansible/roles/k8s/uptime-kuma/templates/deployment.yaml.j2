@@ -1,3 +1,5 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 ---
 apiVersion: apps/v1
@@ -46,14 +48,8 @@ spec:
           image: {{ uptime_kuma_k8s_image }}
           ports:
             - containerPort: 3001
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-              add:
-                # The daniel-pi-host monitor is a real ICMP ping — compose parity.
-                - NET_RAW
+          # The daniel-pi-host monitor is a real ICMP ping — compose parity.
+{{ hardened_security_context(add=['NET_RAW']) }}
           volumeMounts:
             - name: uptime-kuma-data
               mountPath: /app/data
@@ -74,16 +70,10 @@ spec:
               path: /
               port: 3001
             periodSeconds: 30
-          resources:
-            limits:
-              cpu: "{{ uptime_kuma_k8s_cpu_limit }}"
-              memory: {{ uptime_kuma_k8s_mem_limit }}
-            requests:
-              cpu: "{{ uptime_kuma_k8s_cpu_request }}"
-              memory: {{ uptime_kuma_k8s_mem_request }}
-        # First true sidecar in the fleet, deliberately (KD4): recreating Kuma invalidates
-        # AutoKuma's Socket.IO session, and a shared pod reproduces Docker's
-        # `depends_on: {restart: true}` — a pod recreate cycles both.
+          # First true sidecar in the fleet, deliberately (KD4): recreating Kuma invalidates
+          # AutoKuma's Socket.IO session, and a shared pod reproduces Docker's
+          # `depends_on: {restart: true}` — a pod recreate cycles both.
+{{ container_resources(cpu_limit=uptime_kuma_k8s_cpu_limit, mem_limit=uptime_kuma_k8s_mem_limit, cpu_request=uptime_kuma_k8s_cpu_request, mem_request=uptime_kuma_k8s_mem_request) }}
         - name: autokuma
           image: {{ autokuma_k8s_image }}
           env:
@@ -146,17 +136,9 @@ spec:
             # cannot destroy history.
             - name: AUTOKUMA__ON_DELETE
               value: {{ autokuma_k8s_on_delete }}
-          securityContext:
-            runAsUser: 1000
-            runAsGroup: 1000
-            # Per-container, not pod-level: the uptime-kuma container in this same pod
-            # runs as root and cannot carry this assertion.
-            runAsNonRoot: true
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop:
-                - ALL
+          # Per-container, not pod-level: the uptime-kuma container in this same pod
+          # runs as root and cannot carry this assertion.
+{{ hardened_security_context(read_only=true, non_root=true, run_as_user=1000, run_as_group=1000) }}
           volumeMounts:
             - name: autokuma-data
               mountPath: /data
@@ -190,13 +172,7 @@ spec:
               port: 8090
             periodSeconds: 30
             failureThreshold: 3
-          resources:
-            limits:
-              cpu: "{{ autokuma_k8s_cpu_limit }}"
-              memory: {{ autokuma_k8s_mem_limit }}
-            requests:
-              cpu: "{{ autokuma_k8s_cpu_request }}"
-              memory: {{ autokuma_k8s_mem_request }}
+{{ container_resources(cpu_limit=autokuma_k8s_cpu_limit, mem_limit=autokuma_k8s_mem_limit, cpu_request=autokuma_k8s_cpu_request, mem_request=autokuma_k8s_mem_request) }}
       volumes:
         - name: uptime-kuma-data
           persistentVolumeClaim:

@@ -1,3 +1,5 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -143,11 +145,7 @@ spec:
       containers:
         - name: grafana
           image: {{ claude_otel_grafana_image }}
-          securityContext:
-            allowPrivilegeEscalation: false
-            runAsNonRoot: true
-            capabilities:
-              drop: [ALL]
+{{ hardened_security_context(non_root=true) }}
           env:
             - name: GF_SECURITY_ADMIN_PASSWORD
               valueFrom:
@@ -184,23 +182,17 @@ spec:
               port: 3000
             initialDelaySeconds: 20
             periodSeconds: 10
-          resources:
-            requests:
-              cpu: 50m
-              memory: 128Mi
-            limits:
-              cpu: "1"
-              # 2Gi, raised from 512Mi on 2026-08-30 after measuring what rendering these
-              # dashboards actually costs. Idle is ~390 MiB, but a browser opening four of
-              # them OOMKilled the container (exit 137) at 512Mi and again at 1Gi, six
-              # restarts and one more — with nothing but ordinary 200s in the log, so the pod
-              # read CrashLoopBackOff for a memory ceiling rather than a fault. This is not a
-              # cost the `ui` tier invented: four dashboards is an ordinary afternoon, and an
-              # earlier pod had already peaked at 485 MiB against the 512Mi limit unaided.
-              # The working set peaked at 1084 MiB across three clean tier runs — past 1Gi,
-              # which is why that limit was not enough either. daniel-box carries 28.2 GiB
-              # and sits at 44%, so the headroom is free.
-              memory: 2Gi
+          # 2Gi, raised from 512Mi on 2026-08-30 after measuring what rendering these
+          # dashboards actually costs. Idle is ~390 MiB, but a browser opening four of
+          # them OOMKilled the container (exit 137) at 512Mi and again at 1Gi, six
+          # restarts and one more — with nothing but ordinary 200s in the log, so the pod
+          # read CrashLoopBackOff for a memory ceiling rather than a fault. This is not a
+          # cost the `ui` tier invented: four dashboards is an ordinary afternoon, and an
+          # earlier pod had already peaked at 485 MiB against the 512Mi limit unaided.
+          # The working set peaked at 1084 MiB across three clean tier runs — past 1Gi,
+          # which is why that limit was not enough either. daniel-box carries 28.2 GiB
+          # and sits at 44%, so the headroom is free.
+{{ container_resources(cpu_limit='1', mem_limit='2Gi', cpu_request='50m', mem_request='128Mi') }}
       volumes:
         # The provisioning ConfigMap carries both files, but they mount at different paths,
         # so it is projected twice with a subPath-style item selector rather than mounted

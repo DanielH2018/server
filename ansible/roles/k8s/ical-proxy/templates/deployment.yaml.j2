@@ -1,3 +1,5 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 ---
 apiVersion: apps/v1
@@ -38,18 +40,11 @@ spec:
                 name: ical-proxy-env
           # The image drops to uid-1000 appuser itself; rootfs read-only as under Docker
           # (app.py caches calendars in memory, never on disk — /tmp scratch only).
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            # The uid is pinned alongside the assertion, not left to the image: `runAsNonRoot`
-            # alone makes the kubelet REFUSE a container whose image names its user rather than
-            # numbering it, and it would not pin the uid even where it works. 1000 is this repo's
-            # own `useradd -u 1000` in Dockerfile.j2, measured live 2026-08-31.
-            runAsNonRoot: true
-            runAsUser: 1000
-            capabilities:
-              drop:
-                - ALL
+          # The uid is pinned alongside the assertion, not left to the image: `runAsNonRoot`
+          # alone makes the kubelet REFUSE a container whose image names its user rather than
+          # numbering it, and it would not pin the uid even where it works. 1000 is this repo's
+          # own `useradd -u 1000` in Dockerfile.j2, measured live 2026-08-31.
+{{ hardened_security_context(read_only=true, non_root=true, run_as_user=1000) }}
           volumeMounts:
             - name: ical-proxy-tmp
               mountPath: /tmp
@@ -63,13 +58,7 @@ spec:
               port: 5000
             initialDelaySeconds: 15
             periodSeconds: 30
-          resources:
-            limits:
-              cpu: "{{ ical_proxy_k8s_cpu_limit }}"
-              memory: {{ ical_proxy_k8s_mem_limit }}
-            requests:
-              cpu: "{{ ical_proxy_k8s_cpu_request }}"
-              memory: {{ ical_proxy_k8s_mem_request }}
+{{ container_resources(cpu_limit=ical_proxy_k8s_cpu_limit, mem_limit=ical_proxy_k8s_mem_limit, cpu_request=ical_proxy_k8s_cpu_request, mem_request=ical_proxy_k8s_mem_request) }}
       volumes:
         - name: ical-proxy-tmp
           emptyDir: {}

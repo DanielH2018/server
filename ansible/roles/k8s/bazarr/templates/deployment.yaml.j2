@@ -1,3 +1,5 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -32,21 +34,11 @@ spec:
           image: {{ bazarr_k8s_image }}
           ports:
             - containerPort: {{ container_item.port }}
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              # The compose template's cap_drop/cap_add pair — the s6 privilege-drop set. No
-              # NET_BIND_SERVICE: bazarr listens on {{ container_item.port }} (>1024), which needs no
-# privilege. Interpolated rather than written out: this comment said 8989 — sonarr's port, from
-# the role it was copied from — until 2026-08-23b L6.
-              drop:
-                - ALL
-              add:
-                - CHOWN
-                - SETUID
-                - SETGID
-                - FOWNER
-                - DAC_OVERRIDE
+          # The compose template's cap_drop/cap_add pair — the s6 privilege-drop set. No
+          # NET_BIND_SERVICE: bazarr listens on {{ container_item.port }} (>1024), which needs no
+          # privilege. Interpolated rather than written out: this comment said 8989 — sonarr's port, from
+          # the role it was copied from — until 2026-08-23b L6.
+{{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID', 'FOWNER', 'DAC_OVERRIDE']) }}
           env:
             - name: PUID
               value: "{{ puid }}"
@@ -76,13 +68,7 @@ spec:
               port: {{ container_item.port }}
             initialDelaySeconds: 60
             periodSeconds: 30
-          resources:
-            limits:
-              cpu: "{{ bazarr_k8s_cpu_limit }}"
-              memory: {{ bazarr_k8s_mem_limit }}
-            requests:
-              cpu: "{{ bazarr_k8s_cpu_request }}"
-              memory: {{ bazarr_k8s_mem_request }}
+{{ container_resources(cpu_limit=bazarr_k8s_cpu_limit, mem_limit=bazarr_k8s_mem_limit, cpu_request=bazarr_k8s_cpu_request, mem_request=bazarr_k8s_mem_request) }}
       volumes:
         - name: bazarr-config
           persistentVolumeClaim:

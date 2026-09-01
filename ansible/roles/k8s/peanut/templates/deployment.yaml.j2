@@ -1,3 +1,5 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 ---
 apiVersion: apps/v1
@@ -40,25 +42,14 @@ spec:
           # zigbee2mqtt and home-assistant use.
           image: {{ peanut_k8s_init_image }}
           command: ["cp", "/config-seed/settings.yml", "/config/settings.yml"]
-          securityContext:
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
+{{ hardened_security_context(read_only=true) }}
           volumeMounts:
             - name: peanut-settings
               mountPath: /config-seed
               readOnly: true
             - name: peanut-config
               mountPath: /config
-          resources:
-            limits:
-              cpu: 250m
-              memory: 128Mi
-            requests:
-              cpu: 10m
-              memory: 16Mi
+{{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
       automountServiceAccountToken: false
       priorityClassName: homelab-best-effort
       # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
@@ -69,12 +60,7 @@ spec:
           image: {{ peanut_k8s_image }}
           ports:
             - containerPort: {{ container_item.port }}
-          securityContext:
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
+{{ hardened_security_context(read_only=true) }}
           env:
             - name: TZ
               value: "{{ tz }}"
@@ -109,13 +95,7 @@ spec:
               port: {{ container_item.port }}
             initialDelaySeconds: 15
             periodSeconds: 30
-          resources:
-            limits:
-              cpu: "{{ peanut_k8s_cpu_limit }}"
-              memory: {{ peanut_k8s_mem_limit }}
-            requests:
-              cpu: "{{ peanut_k8s_cpu_request }}"
-              memory: {{ peanut_k8s_mem_request }}
+{{ container_resources(cpu_limit=peanut_k8s_cpu_limit, mem_limit=peanut_k8s_mem_limit, cpu_request=peanut_k8s_cpu_request, mem_request=peanut_k8s_mem_request) }}
       volumes:
         - name: peanut-settings
           secret:

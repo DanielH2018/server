@@ -21,6 +21,7 @@ import yaml
 from ansible.plugins.filter.core import FilterModule
 from ansible.plugins.filter.mathstuff import FilterModule as _MathFilters
 from ansible.plugins.test.core import TestModule as _AnsibleTests
+from jinja2 import FileSystemLoader
 from jinja2.nativetypes import NativeEnvironment
 
 REPO = Path(__file__).resolve().parents[2]
@@ -121,7 +122,11 @@ def jinja_env() -> NativeEnvironment:
     than text. The filters and tests come from Ansible's own plugin modules so an expression
     renders against the same code Ansible runs, not a reimplementation of it.
     """
-    env = NativeEnvironment()
+    # The loader is what lets a template under test `{% import %}` a shared macro from
+    # ansible/templates/. Without one, Jinja raises `TypeError: no loader for this environment
+    # specified` at render time — an error naming the environment rather than the macro, which
+    # reads as a broken helper rather than a template that reaches outside itself.
+    env = NativeEnvironment(loader=FileSystemLoader(str(ANSIBLE / "templates")))
     env.filters.update(FilterModule().filters())
     # `difference`, `union`, `intersect` and the rest of the set filters live in mathstuff, NOT
     # core — an expression using one renders as `TemplateAssertionError: No filter named
