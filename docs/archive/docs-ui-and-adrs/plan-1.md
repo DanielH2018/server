@@ -8,9 +8,9 @@
 
 **Tech Stack:** MkDocs Material, nginx-unprivileged, Ansible, k3s, Python 3.14 + uv, pytest.
 
-**Spec:** `docs/archive/docs-ui-and-adrs-design.md`
+**Spec:** `docs/archive/docs-ui-and-adrs/design.md`
 
-**Follow-on plan:** `docs/archive/docs-ui-and-adrs-plan-2.md` covers ADRs, Vale, and D2. Do not start it until this plan is merged.
+**Follow-on plan:** `docs/archive/docs-ui-and-adrs/plan-2.md` covers ADRs, Vale, and D2. Do not start it until this plan is merged.
 
 ## Global Constraints
 
@@ -1233,7 +1233,7 @@ Write `docs/reference/topology.md` by hand — this page is prose around a gener
 
 How a request reaches a workload, and what it runs on.
 
-![Homelab infrastructure map](../assets/generated/infra-map.svg)
+![Homelab infrastructure map](../../assets/generated/infra-map.svg)
 
 The diagram's *shape* is fixed — the request path, the two cluster nodes, the Longhorn
 backup chain and the Pi's LAN-only plane live in role templates rather than in

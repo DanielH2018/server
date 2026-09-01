@@ -119,7 +119,7 @@ SQLite file corrupts it.
   deliberate: it makes the slice-6 cutover a **plain file copy** of `db.sqlite3` with no
   re-encryption step. It also means **no new SOPS entry and no `secret_rotation.py sync`** — worth
   stating, because `authelia_storage` is a `pinned` DANGER secret in
-  [`docs/secret-rotation.md`](../../secret-rotation.md) and adding a second one would double that
+  [`docs/secret-rotation.md`](../../../secret-rotation.md) and adding a second one would double that
   procedure's surface for no gain.
 - **Same `authelia_secret`** (session secret), same reasoning.
 
