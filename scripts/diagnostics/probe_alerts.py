@@ -234,7 +234,9 @@ def run_alerts(ns):
             print(" ".join(curl_argv(url, resolve=pin)))
         return 0
     raw, rows, truncated = [], [], []
-    for url, (logql, parser) in zip(urls, ALERT_SOURCES):
+    # strict=True holds alert_source_urls to its docstring ("one per stream in ALERT_SOURCES").
+    # A short list would otherwise drop a stream's alerts and still report success.
+    for url, (logql, parser) in zip(urls, ALERT_SOURCES, strict=True):
         fetched = _rows_from_loki(json.loads(core.fetch(url, resolve=pin)))
         # Per stream, not on the merged list: one stream hitting the cap says nothing about
         # the other, and reporting the union would cry truncation whenever the totals summed

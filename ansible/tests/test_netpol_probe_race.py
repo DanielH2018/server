@@ -32,7 +32,7 @@ _TASKS = _REPO / "ansible/roles/k8s/prowlarr/tasks/main.yml"
 
 
 def _probe_job() -> dict:
-    for role, tpl, doc in rendered_docs():
+    for role, _tpl, doc in rendered_docs():
         if role == "prowlarr" and doc.get("kind") == "Job":
             if doc["metadata"]["name"] == "flaresolverr-netpol-probe":
                 return doc

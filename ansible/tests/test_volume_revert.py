@@ -365,7 +365,7 @@ def test_the_whole_sequence_is_in_the_drill_proven_order() -> None:
     positions = [_index(names, fragment) for fragment in expected]
     assert positions == sorted(positions), (
         "claim.yml's tasks are not in the drill-proven order. Read the table in the role's "
-        f"CLAUDE.md before reordering. Positions found: {dict(zip(expected, positions))}"
+        f"CLAUDE.md before reordering. Positions found: {dict(zip(expected, positions, strict=True))}"
     )
     assert positions == list(range(len(expected)))
 

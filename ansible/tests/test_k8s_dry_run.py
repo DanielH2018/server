@@ -385,7 +385,9 @@ def _unguarded_mutations(role: Path) -> list[str]:
         if task_file.name in covered:
             continue
         guarded = _task_chunks(task_file, strip_trailing_comments=True)
-        for chunk, guard_text in zip(_task_chunks(task_file), guarded):
+        # strict=True: both lists are the same file's chunks, one comment-stripped. A stripper
+        # that dropped or merged a chunk would otherwise pair guards with the wrong tasks.
+        for chunk, guard_text in zip(_task_chunks(task_file), guarded, strict=True):
             if not _chunk_mutates(chunk):
                 continue
             if _GUARD_FACT.search(guard_text):

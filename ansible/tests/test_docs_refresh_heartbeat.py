@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import re
+from itertools import pairwise
 
 from _helpers import ANSIBLE
 
@@ -57,7 +58,7 @@ def _cron_period_seconds() -> int:
     )
     hours = sorted(int(h) for h in spec.split(","))
     assert len(hours) >= 2, "a single daily run needs a different period derivation"
-    gaps = [b - a for a, b in zip(hours, hours[1:])]
+    gaps = [b - a for a, b in pairwise(hours)]
     gaps.append(24 - hours[-1] + hours[0])
     return min(gaps) * 3600
 

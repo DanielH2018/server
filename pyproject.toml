@@ -106,6 +106,13 @@ extend-exclude = ["ansible/collections", "*.md"]
 
 [tool.ruff.lint]
 # Bug-catching rules only — pyflakes F (unused imports, undefined names, f-string bugs),
-# syntax errors E9, bare-except E722, and ==None/==True comparisons E711/E712. Stylistic
-# checks (E7 one-liners, ambiguous names) stay OFF — formatting is owned by `ruff format`.
-select = ["F", "E9", "E711", "E712", "E722"]
+# syntax errors E9, bare-except E722, ==None/==True comparisons E711/E712, and flake8-bugbear
+# B. Stylistic checks (E7 one-liners, ambiguous names) stay OFF — formatting is owned by
+# `ruff format`.
+#
+# B earns its place on the same "real bugs only" test as the rest: it is the ruleset for
+# constructs that are legal, silent and wrong. The 16 findings it opened on enabling were led
+# by B023 (a closure over a loop variable in await_ci's CI poller) and B905 (six `zip()` calls,
+# four of which had an equal-length invariant nothing asserted). Both classes fail by producing
+# a plausible wrong answer rather than an error, which is the block-footguns criterion.
+select = ["F", "E9", "E711", "E712", "E722", "B"]

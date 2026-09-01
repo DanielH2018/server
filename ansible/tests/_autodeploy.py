@@ -196,8 +196,9 @@ def _strip_comments(text: str) -> str:
 
 
 _FALSY_WHEN_LITERALS = {
+    # `False` alone also matches the int 0: they hash equal, so `0 in this_set` is True. A
+    # literal `0` entry would be the same key written twice, not a second form covered.
     False,
-    0,
     "false",
     "False",
     "FALSE",

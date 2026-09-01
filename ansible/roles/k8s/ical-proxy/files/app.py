@@ -102,7 +102,7 @@ def dedup_overlapping_recurrences(events):
 
     # For any group with more than one series, cap all but the latest
     to_cap = {}  # vevent index -> UNTIL value
-    for key, group in groups.items():
+    for _key, group in groups.items():
         if len(group) < 2:
             continue
 

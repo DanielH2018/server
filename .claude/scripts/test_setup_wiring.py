@@ -65,7 +65,7 @@ _PRUNE = {".git", ".venv", "node_modules", "__pycache__", "collections"}
 def _repo_python_basenames():
     """All .py basenames in the repo, skipping vendored/build dirs."""
     names = set()
-    for dirpath, dirs, files in os.walk(REPO):
+    for _dirpath, dirs, files in os.walk(REPO):
         dirs[:] = [d for d in dirs if d not in _PRUNE]
         for fn in files:
             if fn.endswith(".py"):

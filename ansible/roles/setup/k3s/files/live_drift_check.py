@@ -178,7 +178,9 @@ def subset_diff(live, applied, path: str = "") -> list[tuple[str, object, object
     elif isinstance(applied, list):
         if not isinstance(live, list) or len(live) != len(applied):
             return [(path or "<root>", live, applied)]
-        for index, (live_item, want) in enumerate(zip(live, applied)):
+        # strict=True documents the length guard three lines up rather than restating it: if
+        # that guard is ever loosened, this raises instead of silently comparing a prefix.
+        for index, (live_item, want) in enumerate(zip(live, applied, strict=True)):
             diffs += subset_diff(live_item, want, f"{path}[{index}]")
     elif not values_equal(live, applied):
         diffs.append((path or "<root>", live, applied))
