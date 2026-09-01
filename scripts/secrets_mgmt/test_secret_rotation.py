@@ -578,3 +578,66 @@ def test_the_tile_and_pusher_tags_are_both_real_deploy_targets():
         "uptime-kuma must be in daniel-box's containers_list for the tag to match anything"
     )
     assert "name: monitor-bridge" in host_vars
+
+
+# ── push-token shape (Kuma refuses anything but 32 letters/digits) ───────────
+# Synthetic values throughout: CI has no age key, so a test may never touch the real
+# secrets.yml. `malformed_push_tokens` is pure for exactly this reason.
+def test_push_token_shape_is_clean():
+    values = {
+        "ruleset_drift_push_token": "a" * 32,
+        # Built rather than written out: a 32-char hex literal, even a fake one, trips
+        # gitleaks' generic-api-key entropy rule in the pre-commit hook.
+        "monitor_bridge_pvc_push_token": "ab12" * 8,
+        "mixed_case_push_token": "aB3" + "x" * 29,
+        "cloudflare_api_token": "short-and-not-a-push-token",
+    }
+    assert sr.malformed_push_tokens(values) == []
+
+
+def test_push_token_shape_is_flagged():
+    values = {
+        "short_push_token": "a" * 30,  # the live PR #675 defect
+        "long_push_token": "a" * 33,
+        "punctuated_push_token": "a" * 31 + "-",  # right length, wrong character class
+        "nonstring_push_token": 12345,
+        "good_push_token": "a" * 32,
+    }
+    flagged = dict(sr.malformed_push_tokens(values))
+    assert set(flagged) == {
+        "short_push_token",
+        "long_push_token",
+        "punctuated_push_token",
+        "nonstring_push_token",
+    }
+    assert "30 chars" in flagged["short_push_token"]
+    assert "non-alphanumeric" in flagged["punctuated_push_token"]
+    # Reasons reach a Kuma push message and stdout, so they must never carry the value.
+    assert not any("aaaa" in reason for reason in flagged.values())
+
+
+def test_rotate_mints_a_token_the_shape_check_accepts():
+    """The auto-rotation path and the guard must agree, or every rotation flips the monitor."""
+    minted = {"x_push_token": sr.pysecrets.token_hex(16)}
+    assert sr.malformed_push_tokens(minted) == []
+
+
+def test_decrypt_without_an_age_key_returns_none(monkeypatch):
+    """CI has no age key. The arm must go quiet there, not raise — `audit --check` is a
+    prek/CI gate over this very file, so a hard failure would fail every secrets PR."""
+
+    def no_key(*a, **kw):
+        raise sr.subprocess.CalledProcessError(1, "sops", stderr="no key")
+
+    monkeypatch.setattr(sr.subprocess, "run", no_key)
+    assert sr.decrypted_values("whatever.yml") is None
+
+
+def test_decrypt_drops_the_sops_metadata_key(monkeypatch):
+    def fake_sops(*a, **kw):
+        return sr.subprocess.CompletedProcess(
+            a[0], 0, stdout="a_push_token: abc\nsops:\n  mac: xyz\n", stderr=""
+        )
+
+    monkeypatch.setattr(sr.subprocess, "run", fake_sops)
+    assert sr.decrypted_values("whatever.yml") == {"a_push_token": "abc"}

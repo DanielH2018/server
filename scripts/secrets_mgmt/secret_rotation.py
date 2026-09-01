@@ -26,8 +26,13 @@ Four subcommands:
            means rotations stay staggered.
 
 Secret NAMES are read straight from the encrypted secrets.yml — SOPS encrypts values but
-leaves keys in plaintext — so `audit`/`sync` never decrypt anything and never see a value.
-Only `rotate --commit` needs the age key (it shells out to `sops set`).
+leaves keys in plaintext — so `sync`, and every arm of `audit` that `--check` gates on, run
+without an age key and are safe in CI.
+
+`audit` has one arm that DOES decrypt: the push-token shape check, which is the only way to
+see a token Uptime Kuma will refuse. It degrades to "not checked" where there is no age key,
+and it reports through the Kuma push only — never through `--check`, so the CI gate stays
+decrypt-free. `rotate --commit` also needs the key (it shells out to `sops set`).
 
 Tiers (and default rotation cadence):
   auto     180d  locally-generated, no external coupling — this tool can rotate it
@@ -46,6 +51,7 @@ import argparse
 import datetime as dt
 import hashlib
 import os
+import re
 import secrets as pysecrets
 import subprocess
 import sys
@@ -585,6 +591,74 @@ def registry_drift(registered: set, present: set) -> tuple[list, list]:
     return sorted(present - registered), sorted(registered - present)
 
 
+# Uptime Kuma rejects a push token that is not exactly 32 letters/digits, and it rejects it at
+# monitor-CREATION time — so the tile is never made and every repo-side gate stays green: the
+# template interpolates the bad value fine, the manifest renders, CI passes, and the only
+# evidence is a validation error in the autokuma sidecar log. `ruleset_drift_push_token`
+# shipped 30 chars in PR #675 and its monitor never existed for a day before anyone noticed.
+# `cmd_rotate` mints `token_hex(16)`, which satisfies this, so the auto-rotation path agrees.
+PUSH_TOKEN_RE = re.compile(r"^[A-Za-z0-9]{32}$")
+
+
+def malformed_push_tokens(values: dict) -> list[tuple[str, str]]:
+    """Every `*_push_token` whose value Uptime Kuma would refuse, as (name, reason).
+
+    Reasons name the LENGTH and the offending character class, never the value — this feeds a
+    Kuma push message and a stdout line, both of which are readable places.
+
+    The `*_push_token` suffix is a complete selector, measured in both directions: every
+    secret so named lands in a `push_token` field of uptime-kuma's static-monitors tile, a
+    `KUMA_PUSH_*` env var, or an `/api/push/` URL; and every var interpolated into one of
+    those three positions is so named (62 of each, no exceptions). A Kuma push token added
+    under a different name would be invisible here — grep those three positions if this ever
+    needs rechecking."""
+    bad = []
+    for name, value in sorted(values.items()):
+        if not name.endswith("_push_token"):
+            continue
+        if not isinstance(value, str):
+            bad.append((name, "not a string"))
+        elif not PUSH_TOKEN_RE.match(value):
+            bad.append(
+                (
+                    name,
+                    "%d chars, wants 32 letters/digits" % len(value)
+                    if len(value) != 32
+                    else "32 chars but has a non-alphanumeric character",
+                )
+            )
+    return bad
+
+
+def decrypted_values(path: str = SECRETS_FILE) -> dict | None:
+    """Plaintext secrets, or None when this host cannot decrypt (no age key — e.g. CI).
+
+    None is a legitimate answer, not an error: the audit's other arms are deliberately
+    decrypt-free so they run in CI, and this one simply has nothing to say there. Nothing from
+    the subprocess is echoed on failure — stdout holds the plaintext, so putting it in a
+    message or a traceback is the one way this helper could leak."""
+    try:
+        r = subprocess.run(
+            ["sops", "--decrypt", path],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=REPO,
+            # A hung `sops` would otherwise hang the daily cron and the prek gate, which runs
+            # `audit` on every commit touching secrets.yml / the registry / this file.
+            timeout=30,
+        )
+        data = yaml.safe_load(r.stdout) or {}
+    except (
+        OSError,
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+        yaml.YAMLError,
+    ):
+        return None
+    return {k: v for k, v in data.items() if k != "sops"}
+
+
 def audit_summary(res: dict, missing: list, stale: list) -> str:
     """The one-line status pushed to the "Secret Rotation" Kuma monitor. NAMES the overdue
     secrets (most-overdue first, capped) — a bare count read identically whether a genuine cron
@@ -629,6 +703,27 @@ def cmd_audit(args) -> int:
         flag = "OVERDUE" if days_left < 0 else ("soon" if days_left <= 14 else "ok")
         print("  %-7s %-40s %-9s due %s (%+d d)" % (flag, name, tier, d, days_left))
     summary = audit_summary(res, missing, stale)
+    # Push-token shape. This arm decrypts, so it runs only where an age key exists — the daily
+    # cron on daniel-box, and an operator's shell. In CI `decrypted_values` returns None and the
+    # arm reports "not checked", which is why it feeds the Kuma push and NOT the --check exit
+    # code below: --check is the prek gate over secrets.yml / the registry / this file, and a
+    # decrypt-dependent verdict there would pass in CI and fail on a developer's machine, turning
+    # every future secrets PR red until an unrelated token was fixed.
+    values = decrypted_values()
+    if values is None:
+        print("  push-token shape: not checked (cannot decrypt here)")
+        malformed = []
+    else:
+        malformed = malformed_push_tokens(values)
+        for name, reason in malformed:
+            print("  MALFORMED %-40s %s" % (name, reason))
+        if not malformed:
+            print("  push-token shape: ok")
+    if malformed:
+        summary += "; %d push token(s) Kuma will reject: %s" % (
+            len(malformed),
+            ", ".join(n for n, _ in malformed),
+        )
     # An externally-detected fault the caller wants folded in. ADDITIVE, deliberately: the
     # caller could short-circuit to its own sticky DOWN instead (the two arms above it in
     # secret-rotation-audit.sh.j2 do exactly that), but those describe a registry that cannot
@@ -647,11 +742,18 @@ def cmd_audit(args) -> int:
         # `stale` too (a registry row for a since-removed secret), so the daily Kuma push and
         # the CI `--check` gate below agree on registry drift — otherwise a `stale`-only drift
         # fails CI while the monitor stays green.
-        ok = n_over == 0 and not missing and not stale and not extra_down
+        ok = (
+            n_over == 0
+            and not missing
+            and not stale
+            and not malformed
+            and not extra_down
+        )
         _push(url, ok=ok, msg=summary)
     # --check: a CI/PR gate that the registry is in sync with secrets.yml. Fails ONLY on drift,
     # NOT on overdue (a time-based runtime state the daily Kuma push owns — blocking an unrelated
-    # commit on a due-for-rotation secret would be wrong). Read-only (no decrypt), CI-safe.
+    # commit on a due-for-rotation secret would be wrong), and NOT on push-token shape (see the
+    # arm above). Read-only (no decrypt), CI-safe.
     if getattr(args, "check", False) and (missing or stale):
         print(
             "secret_rotation: registry out of sync with secrets.yml — run "
