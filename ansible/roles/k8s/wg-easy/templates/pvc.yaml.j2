@@ -1,15 +1,6 @@
+{% from 'pvc.yml.j2' import pvc with context %}
 ---
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: {{ wg_easy_k8s_claim }}
-  namespace: {{ k8s_namespace }}
-spec:
+{% call pvc(wg_easy_k8s_claim, wg_easy_k8s_storage_class, wg_easy_k8s_size) %}
   # Seeded from the Docker copy's config dir — the server KEYPAIR must survive the move or
   # every client has to re-import. See tasks/main.yml.
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: {{ wg_easy_k8s_storage_class }}
-  resources:
-    requests:
-      storage: {{ wg_easy_k8s_size }}
+{% endcall %}
