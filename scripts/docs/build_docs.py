@@ -37,7 +37,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
+# Reach the sibling package directories: a directly-invoked script gets only its own
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.repo_paths import REPO  # noqa: E402
 
 # (argv, output path relative to the repo root). Order is not significant -- no generator
 # reads another's output. Every output must sit under docs/, which is what the hand-edit

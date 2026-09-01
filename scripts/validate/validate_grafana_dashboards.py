@@ -18,12 +18,15 @@ from pathlib import Path
 
 import re
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-GRAFANA_ROLE = REPO_ROOT / "ansible/roles/k8s/claude-otel"
+# Reach the sibling package directories: a directly-invoked script gets only its own
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.repo_paths import K8S_ROLES, REPO  # noqa: E402
+
+GRAFANA_ROLE = K8S_ROLES / "claude-otel"
 DASHBOARDS_DIR = GRAFANA_ROLE / "files/dashboards"
-DATASOURCES_TEMPLATE = (
-    REPO_ROOT / "ansible/roles/k8s/claude-otel/templates/grafana.yaml.j2"
-)
+DATASOURCES_TEMPLATE = GRAFANA_ROLE / "templates/grafana.yaml.j2"
 
 # Grafana built-in pseudo-datasources — always valid, never provisioned.
 BUILTIN_DATASOURCE_UIDS = {"-- Grafana --", "-- Mixed --", "-- Dashboard --", "grafana"}
@@ -95,7 +98,7 @@ def datasource_refs_in(obj) -> list[tuple[str, str | None]]:
 
 def _display(path: Path) -> str:
     try:
-        return str(path.relative_to(REPO_ROOT))
+        return str(path.relative_to(REPO))
     except ValueError:
         return path.name
 

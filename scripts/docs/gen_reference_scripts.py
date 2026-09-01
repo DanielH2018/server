@@ -49,8 +49,8 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-REPO = Path(__file__).resolve().parents[2]
-SCRIPTS = REPO / "scripts"
+from lib.docs_provenance import md_cell as _md_cell  # noqa: E402
+from lib.repo_paths import REPO, SCRIPTS  # noqa: E402
 
 # Not documentation about the tree: a test, a pytest fixture module, or a private helper
 # whose name says it is not an entry point.
@@ -533,11 +533,6 @@ def build_rows(scripts: Path = SCRIPTS, repo: Path = REPO) -> list[dict[str, str
     return rows
 
 
-def _md_cell(value: str) -> str:
-    """A literal pipe in a summary adds a column silently — the table still renders, wrong."""
-    return value.replace("|", "\\|")
-
-
 def render_markdown(rows: list[dict[str, str]]) -> str:
     from lib.docs_provenance import generated_banner
 
@@ -633,15 +628,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--scripts", type=Path, default=SCRIPTS)
     args = parser.parse_args(argv)
 
-    from lib.docs_provenance import write_if_body_changed
+    from lib.docs_provenance import finish_generator
 
     rows = build_rows(args.scripts)
-    wrote = write_if_body_changed(args.out, render_markdown(rows))
-    print(
-        f"gen_reference_scripts: {len(rows)} script(s), "
-        f"{'wrote' if wrote else 'unchanged'} {args.out}"
+    return finish_generator(
+        "gen_reference_scripts", args.out, rows, render_markdown, "script"
     )
-    return 0
 
 
 if __name__ == "__main__":

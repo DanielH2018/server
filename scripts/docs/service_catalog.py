@@ -62,7 +62,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -71,12 +70,14 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from lib._render_guard import (  # noqa: E402
+from lib.docs_provenance import md_cell as _md_cell  # noqa: E402
+from lib.render_guard import (  # noqa: E402
     ALL_VARS,
     HOST_VARS,
     REPO,
     containers_entries,
     host_files,
+    load_yaml as _load_yaml,
 )
 from route_facts import linkify_fqdns, reachability, route_cell  # noqa: E402
 
@@ -95,13 +96,6 @@ class ServiceRow:
     auth_tier: str
     backup_tier: str
     autodeploy: str
-
-
-def _load_yaml(path: Path) -> dict[str, Any]:
-    if not path.is_file():
-        return {}
-    loaded = yaml.safe_load(path.read_text())
-    return loaded if isinstance(loaded, dict) else {}
 
 
 # containers_list — same source and shape scripts/deploy_tools/deploy_tags.py already parses.
@@ -415,16 +409,6 @@ def _count_unknown(rows: list[ServiceRow], field: str) -> int:
     return sum(1 for r in rows if getattr(r, field).startswith(UNKNOWN))
 
 
-def _md_cell(value: str) -> str:
-    """A table cell that cannot split its own row.
-
-    A literal pipe in a value adds a column silently — the table still renders, just
-    wrong, which is worse than failing. route and backup_tier are derived from template
-    text, so nothing stops one appearing.
-    """
-    return value.replace("|", "\\|")
-
-
 def render_markdown(rows: list[ServiceRow]) -> str:
     """The service catalogue as a MkDocs page, grouped by host.
 
@@ -569,15 +553,14 @@ def main(argv: list[str] | None = None) -> int:
     rows = build_rows(args.host_vars, args.k8s_roles, args.k3s_defaults, args.all_vars)
 
     if args.format == "markdown":
-        from lib.docs_provenance import write_if_body_changed
+        from lib.docs_provenance import finish_generator
 
         # Not write_text: the banner's timestamp moves on every run, so an
         # unconditional write would make the docs-refresh cron commit on every run
         # for no content change.
-        wrote = write_if_body_changed(args.out, render_markdown(rows))
-        state = "wrote" if wrote else "unchanged"
-        print(f"service_catalog: {len(rows)} service(s), {state} {args.out}")
-        return 0
+        return finish_generator(
+            "service_catalog", args.out, rows, render_markdown, "service"
+        )
 
     # The HTML path targets ~/.claude/artifacts/, which is not committed and has no
     # diff to protect, so it stays an unconditional write.

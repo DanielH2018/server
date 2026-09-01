@@ -19,7 +19,6 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import yaml
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -28,10 +27,8 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-REPO = Path(__file__).resolve().parents[2]
-HOSTS_INI = REPO / "ansible" / "inventory" / "hosts.ini"
-HOST_VARS = REPO / "ansible" / "inventory" / "host_vars"
-ALL_VARS = REPO / "ansible" / "inventory" / "group_vars" / "all.yml"
+from lib.render_guard import load_yaml as _load_yaml_mapping  # noqa: E402
+from lib.repo_paths import ALL_VARS, HOST_VARS, HOSTS_INI  # noqa: E402
 
 UNKNOWN = "unknown"
 
@@ -68,13 +65,6 @@ def parse_hosts_ini(path: Path = HOSTS_INI) -> list[dict[str, str]]:
                 entry[key] = value
         hosts.append(entry)
     return hosts
-
-
-def _load_yaml_mapping(path: Path) -> dict:
-    if not path.is_file():
-        return {}
-    loaded = yaml.safe_load(path.read_text())
-    return loaded if isinstance(loaded, dict) else {}
 
 
 def load_host_vars(name: str, host_vars: Path = HOST_VARS) -> dict:
@@ -164,15 +154,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--host-vars", type=Path, default=HOST_VARS)
     args = parser.parse_args(argv)
 
-    from lib.docs_provenance import write_if_body_changed
+    from lib.docs_provenance import finish_generator
 
     rows = build_rows(args.hosts_ini, args.host_vars)
-    wrote = write_if_body_changed(args.out, render_markdown(rows))
-    print(
-        f"gen_reference_hosts: {len(rows)} host(s), "
-        f"{'wrote' if wrote else 'unchanged'} {args.out}"
+    return finish_generator(
+        "gen_reference_hosts", args.out, rows, render_markdown, "host"
     )
-    return 0
 
 
 if __name__ == "__main__":

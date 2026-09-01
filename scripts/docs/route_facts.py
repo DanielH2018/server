@@ -27,9 +27,14 @@ from typing import Any
 
 import yaml
 
-REPO = Path(__file__).resolve().parents[2]
-GROUP_VARS = REPO / "ansible" / "inventory" / "group_vars" / "all.yml"
-K8S_ROLES = REPO / "ansible" / "roles" / "k8s"
+# Reach the sibling package directories: a directly-invoked script gets only its own
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
+from lib.repo_paths import ALL_VARS as GROUP_VARS  # noqa: E402
 
 # `public=false` in a role's own macro call opts the service out of the public Host rule
 # whatever k8s_public_route says. See ansible/templates/ingressroute.yml.j2.

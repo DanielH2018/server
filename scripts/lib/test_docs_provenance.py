@@ -11,7 +11,13 @@ from pathlib import Path
 
 import yaml
 
-from docs_provenance import generated_banner, head_sha, write_if_body_changed
+from docs_provenance import (
+    finish_generator,
+    generated_banner,
+    head_sha,
+    md_cell,
+    write_if_body_changed,
+)
 
 FIXED = dt.datetime(2026, 8, 24, 14, 30, tzinfo=dt.timezone.utc)
 
@@ -140,3 +146,29 @@ def test_a_horizontal_rule_in_the_body_does_not_truncate_the_comparison(tmp_path
 def test_creates_parent_directories(tmp_path):
     target = tmp_path / "deep" / "nested" / "p.md"
     assert write_if_body_changed(target, _page("x", "A")) is True
+
+
+def test_md_cell_escapes_a_pipe():
+    assert md_cell("a | b") == "a \\| b"
+
+
+def test_md_cell_leaves_a_clean_value_alone():
+    assert md_cell("plain text") == "plain text"
+
+
+def test_finish_generator_writes_and_reports_wrote(tmp_path, capsys):
+    out = tmp_path / "page.md"
+    rc = finish_generator(
+        "gen_x", out, [1, 2, 3], lambda rows: f"body {len(rows)}\n", "thing"
+    )
+    assert rc == 0
+    assert out.read_text() == "body 3\n"
+    assert capsys.readouterr().out.strip() == f"gen_x: 3 thing(s), wrote {out}"
+
+
+def test_finish_generator_reports_unchanged_on_a_second_run(tmp_path, capsys):
+    out = tmp_path / "page.md"
+    finish_generator("gen_x", out, [1], lambda rows: "same\n", "thing")
+    capsys.readouterr()
+    finish_generator("gen_x", out, [1], lambda rows: "same\n", "thing")
+    assert capsys.readouterr().out.strip() == f"gen_x: 1 thing(s), unchanged {out}"

@@ -34,8 +34,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-REPO = Path(__file__).resolve().parents[2]
-ROLES = REPO / "ansible" / "roles"
+from lib.repo_paths import REPO, ROLES  # noqa: E402
 
 # Commands that change durable state somewhere. Deliberately over-broad: a job wrongly
 # flagged as state-changing costs a reader one moment, and one wrongly cleared could cost
@@ -175,15 +174,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--roles", type=Path, default=ROLES)
     args = parser.parse_args(argv)
 
-    from lib.docs_provenance import write_if_body_changed
+    from lib.docs_provenance import finish_generator
 
     rows = build_rows(args.roles)
-    wrote = write_if_body_changed(args.out, render_markdown(rows))
-    print(
-        f"gen_reference_crons: {len(rows)} cron(s), "
-        f"{'wrote' if wrote else 'unchanged'} {args.out}"
+    return finish_generator(
+        "gen_reference_crons", args.out, rows, render_markdown, "cron"
     )
-    return 0
 
 
 if __name__ == "__main__":

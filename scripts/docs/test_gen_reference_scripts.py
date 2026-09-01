@@ -55,7 +55,7 @@ def test_a_script_with_no_docstring_says_so(tmp_path):
 def test_test_files_and_private_modules_are_excluded(tmp_path):
     _write(tmp_path / "test_probe.py", '"""x"""\n')
     _write(tmp_path / "conftest.py", '"""x"""\n')
-    _write(tmp_path / "_render_guard.py", '"""x"""\n')
+    _write(tmp_path / "_private_helper.py", '"""x"""\n')
     assert g.build_rows(tmp_path) == []
 
 

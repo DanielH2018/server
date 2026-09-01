@@ -18,7 +18,7 @@ own memory. Two real modules prove it:
     `parents[1]` substring check would wrongly flag this file as missing its bootstrap.
   - `scripts/deploy_tools/deploy_tags.py` needs `ansible/roles/setup/gitops_deploy/files`
     (for `from deploy_logic import ...`) via `DEPLOY_LOGIC_DIR`, a module-level constant built
-    from `REPO`, which is itself imported from `lib._render_guard` -- so the path arithmetic
+    from `REPO`, which is itself imported from `lib.render_guard` -- so the path arithmetic
     that matters is in a DIFFERENT file than the one being checked. A substring check has no
     way to follow that indirection at all.
 
@@ -83,7 +83,7 @@ def build_import_index() -> dict[str, set[Path]]:
 
 
 def _resolve_module_file(dotted: str, index: dict[str, set[Path]]) -> Path | None:
-    """The `.py` file a dotted absolute import name (`lib._render_guard`, `k8s_autodeploy`)
+    """The `.py` file a dotted absolute import name (`lib.render_guard`, `k8s_autodeploy`)
     resolves to, given the same directories `sys.path` would need."""
     parts = dotted.split(".")
     dirs = index.get(parts[0])

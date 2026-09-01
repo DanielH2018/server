@@ -24,7 +24,6 @@ import argparse
 import re
 from pathlib import Path
 
-import yaml
 
 from route_facts import (
     GROUP_VARS,
@@ -42,9 +41,8 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-REPO = Path(__file__).resolve().parents[2]
-HOST_VARS = REPO / "ansible" / "inventory" / "host_vars"
-K8S_ROLES = REPO / "ansible" / "roles" / "k8s"
+from lib.render_guard import host_files, load_yaml  # noqa: E402
+from lib.repo_paths import HOST_VARS, K8S_ROLES  # noqa: E402
 
 # The macro applies these to every route it renders, in this order. Read from
 # ansible/templates/ingressroute.yml.j2 rather than assumed; see _baseline_middlewares.
@@ -55,14 +53,7 @@ _QUOTED_RE = re.compile(r"['\"]([^'\"]+)['\"]")
 
 
 def _load_host_vars(host_vars: Path) -> dict[str, dict]:
-    out = {}
-    for path in sorted(host_vars.glob("*.yml")):
-        if path.stem.startswith("_"):
-            continue
-        loaded = yaml.safe_load(path.read_text())
-        if isinstance(loaded, dict):
-            out[path.stem] = loaded
-    return out
+    return {path.stem: load_yaml(path) for path in host_files(host_vars)}
 
 
 def build_rows(
@@ -155,15 +146,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--k8s-roles", type=Path, default=K8S_ROLES)
     args = parser.parse_args(argv)
 
-    from lib.docs_provenance import write_if_body_changed
+    from lib.docs_provenance import finish_generator
 
     rows = build_rows(args.host_vars, args.k8s_roles)
-    wrote = write_if_body_changed(args.out, render_markdown(rows))
-    print(
-        f"gen_reference_networking: {len(rows)} route(s), "
-        f"{'wrote' if wrote else 'unchanged'} {args.out}"
+    return finish_generator(
+        "gen_reference_networking", args.out, rows, render_markdown, "route"
     )
-    return 0
 
 
 if __name__ == "__main__":

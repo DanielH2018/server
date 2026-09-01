@@ -48,7 +48,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from lib._render_guard import (  # noqa: E402
+from lib.render_guard import (  # noqa: E402
     ALL_VARS,
     HOST_VARS,
     REPO,

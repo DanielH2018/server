@@ -34,10 +34,10 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from lib.repo_paths import ANSIBLE  # noqa: E402
 from secrets_mgmt import secret_rotation  # noqa: E402
 
-REPO = Path(__file__).resolve().parents[2]
-REGISTRY = REPO / "ansible" / "secret_rotation.yml"
+REGISTRY = ANSIBLE / "secret_rotation.yml"
 
 # What each tier means for an operator. The registry stores the tier name only.
 TIER_NOTES = {
@@ -127,15 +127,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--registry", type=Path, default=REGISTRY)
     args = parser.parse_args(argv)
 
-    from lib.docs_provenance import write_if_body_changed
+    from lib.docs_provenance import finish_generator
 
     rows = build_rows(args.registry)
-    wrote = write_if_body_changed(args.out, render_markdown(rows))
-    print(
-        f"gen_reference_secrets: {len(rows)} secret(s), "
-        f"{'wrote' if wrote else 'unchanged'} {args.out}"
+    return finish_generator(
+        "gen_reference_secrets", args.out, rows, render_markdown, "secret"
     )
-    return 0
 
 
 if __name__ == "__main__":

@@ -19,7 +19,7 @@ ansible/          # Ansible playbooks, roles, inventory, templates  ← EDIT HER
   roles/containers/ # One role per Docker service (the Pi's) + the shared `common` role
     archive/        # Roles retired by the k3s migration, kept for reference
 scripts/          # Helper scripts, grouped by what they act on
-  lib/              # The two helpers everything else imports: _render_guard, docs_provenance
+  lib/              # The helpers everything else imports: repo_paths, render_guard, docs_provenance
   availability_bots/ backup/ deploy_tools/ diagnostics/ docs/ grafana/
   home_assistant/ infra_map/ secrets_mgmt/ validate/ dev/
 docs/             # Runbooks, design specs, security notes
