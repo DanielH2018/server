@@ -559,6 +559,31 @@ K8S_EXTENDED_RESOURCES = [
 # cycles at the bridge cadence is longer than either takes to settle. Same shape as
 # CPU_CONSECUTIVE / UPS_CONSECUTIVE.
 LONGHORN_CONSECUTIVE = int(_env("LONGHORN_CONSECUTIVE", "3"))
+# Filesystem fullness of the cluster's PersistentVolumeClaims (check_pvc_fullness). A separate
+# arm from check_disk rather than another DISK_MOUNTPOINTS entry: a Longhorn PVC is its own
+# filesystem at a FIXED capacity, so it cannot borrow the host's free space and a full one is
+# invisible to every mountpoint query. 85 rather than DISK_MAX_PCT's 90 because a PVC cannot be
+# grown by deleting something elsewhere — the operator has to expand the volume, and the alert
+# has to arrive while that is still unhurried work. Measured 2026-09-01: the fullest claim was
+# uptime-kuma-data at 38.6%, and the smallest genuine claim is 973 MiB, where 85% leaves 146 MiB
+# of headroom against 97 MiB at 90%.
+PVC_MAX_PCT = float(_env("PVC_MAX_PCT", "85"))
+# Claims this arm must NOT scan, comma-separated bare claim names. media-data is a `local` PV at
+# /srv/media on daniel-box (k8s/media-volume/templates/pv.yaml.j2), i.e. the `/` filesystem
+# check_disk already watches — including it would page twice for one full disk. Every other claim
+# is Longhorn with a filesystem of its own. Keep this short and say WHY in the inventory, like
+# LOG_ERROR_IGNORE: a growing exclusion list means the arm is decaying.
+PVC_EXCLUDE = [
+    c.strip() for c in _env("PVC_EXCLUDE", "media-data").split(",") if c.strip()
+]
+# Coverage floor, in CLAIMS not series — see check_pvc_fullness for why the two differ. Live count
+# was 43 on 2026-09-01; 20 is the same kind of conservative under-count as CADVISOR_PODS_MIN's 20
+# against a live 99, so retiring a few services cannot pin this monitor red.
+PVC_MIN_CLAIMS = int(_env("PVC_MIN_CLAIMS", "20"))
+# Hysteresis on the coverage floor only. A kubelet restart or a node drain drops a node's volume
+# stats for a cycle or two, and that must not page; a fullness breach gets no grace because it is
+# monotonic rather than flappy.
+PVC_CLAIMS_CONSECUTIVE = int(_env("PVC_CLAIMS_CONSECUTIVE", "3"))
 # Crash-loop arm of the workload check: pods whose restart counter climbed more than
 # K8S_RESTART_MAX inside K8S_RESTART_WINDOW page even while readiness flaps green
 # (CrashLoopBackOff passes probes briefly each backoff cycle — the 2026-08-13 homepage
@@ -991,9 +1016,12 @@ def _instant_query(base_url, path, query, source):
 def prom_scalar(promql, base=None, source="prometheus"):
     """Run an instant query; return the first result's value as float, or None if empty.
 
-    `base` selects which Prometheus: the default (PROM_URL) is the Docker one every
-    PROM_DEPENDENT check reads. CLUSTER_PROM_URL is a genuinely different instance with a
-    different reachability gate — see check_k8s_workloads.
+    `base` selects which Prometheus. PROM_URL is the default and is what every PROM_DEPENDENT
+    check reads; CLUSTER_PROM_URL is what the CLUSTER_DEPENDENT ones read, under a reachability
+    gate of their own — see check_k8s_workloads. Since the Docker plane retired (2026-08-14)
+    both env vars render to the same cluster Service URL, so the two gates watch one instance;
+    the split is kept so a second Prometheus can be reintroduced without moving every caller.
+    Pick the base by which gate is meant to watch the check, not by which host answers.
     """
     result = _instant_query(base or PROM_URL, "/api/v1/query", promql, source)
     if not result:
@@ -3138,6 +3166,96 @@ def check_longhorn_volumes():
     return ok, msg
 
 
+def check_pvc_fullness():
+    """Filesystem fullness of every PersistentVolumeClaim the kubelet reports stats for.
+
+    Nothing else covered this. check_disk iterates DISK_MOUNTPOINTS — `/`, `/boot`, `/boot/efi`
+    — which are host filesystems, and check_longhorn_volumes reads longhorn_volume_robustness,
+    which is replica redundancy rather than space. A Longhorn PVC has its own filesystem at a
+    fixed capacity, so a 2 Gi claim can reach 100% while both hosts report hundreds of GB free:
+    the app starts failing writes and every existing monitor stays green.
+
+    Reads the CLUSTER Prometheus like check_k8s_workloads, so it belongs to CLUSTER_DEPENDENT
+    rather than PROM_DEPENDENT — the gate has to be the one watching this check's own source.
+
+    `max by (namespace, persistentvolumeclaim)` — not `sum` or `avg` — because daniel-box's
+    claims are scraped TWICE. k3s serves the kubelet's metric registry on the supervisor's
+    /metrics as well, so the same series arrives under job="kubernetes-kubelet" and under
+    job="kubernetes-apiserver" (measured 2026-09-01: 43 + 27 = 70 series over 43 claims).
+    `max` of two copies of one ratio is that ratio, so the double scrape is harmless; `sum`
+    would report a double-scraped claim at twice its real fullness and `avg` would silently
+    change meaning the day one job's coverage moved. Grouping is also what makes the count
+    below a claim census rather than a scrape-job artifact.
+    """
+    if not CLUSTER_PROM_URL:
+        return True, "PVC fullness check disabled (no CLUSTER_PROMETHEUS_URL)"
+    claims = prom_scalar(
+        "count(count by (namespace, persistentvolumeclaim)"
+        " (kubelet_volume_stats_capacity_bytes))",
+        base=CLUSTER_PROM_URL,
+        source="cluster prometheus",
+    )
+    vec = prom_vector(
+        "max by (namespace, persistentvolumeclaim) (100 *"
+        " (1 - kubelet_volume_stats_available_bytes"
+        " / kubelet_volume_stats_capacity_bytes))",
+        base=CLUSTER_PROM_URL,
+        source="cluster prometheus",
+    )
+    watched = [
+        (labels.get("persistentvolumeclaim", "?"), labels.get("namespace", "?"), pct)
+        for labels, pct in vec
+        if labels.get("persistentvolumeclaim") not in PVC_EXCLUDE
+    ]
+    if not watched:
+        # A DIFFERENT fault from a thin claim census below, and it must not reach the `worst`
+        # report: the ratio query returned nothing at all, which looks exactly like "no claim is
+        # full" and is not the same fact.
+        _down_streaks["pvc_fullness"], ok, msg = down_streak(
+            _down_streaks.get("pvc_fullness", 0),
+            PVC_CLAIMS_CONSECUTIVE,
+            "no PVC reported a fullness ratio — PVC fullness is UNKNOWN, not OK",
+            "kubelet scrape gap grace",
+        )
+        return ok, msg
+    # Fullest first, so a truncated message names the claims closest to failing.
+    breaching = [
+        "%s/%s %.0f%%" % (ns, pvc, pct)
+        for pvc, ns, pct in sorted(watched, key=lambda w: w[2], reverse=True)
+        if pct > PVC_MAX_PCT
+    ]
+    # The floor is the input assertion, and it is evaluated over ALL claims including the
+    # excluded ones: it asserts the metric family is being scraped, which is a different
+    # question from which claims this arm judges.
+    shortfall = None
+    if claims is None or claims < PVC_MIN_CLAIMS:
+        seen = "no" if claims is None else "only %d" % int(claims)
+        _down_streaks["pvc_fullness"], short_ok, short_msg = down_streak(
+            _down_streaks.get("pvc_fullness", 0),
+            PVC_CLAIMS_CONSECUTIVE,
+            "%s kubelet_volume_stats claims visible, below the floor of %d — PVC fullness is "
+            "UNKNOWN, not OK" % (seen, PVC_MIN_CLAIMS),
+            "kubelet scrape gap grace",
+        )
+        shortfall = (short_ok, short_msg)
+    else:
+        _down_streaks["pvc_fullness"] = 0
+    # A claim that IS reporting and IS full outranks a complaint about the ones that are not —
+    # same ordering as check_disk, and for the same reason.
+    if breaching:
+        return False, "PVC over %.0f%%: %s" % (PVC_MAX_PCT, ", ".join(breaching[:5]))
+    if shortfall is not None:
+        return shortfall
+    worst = max(watched, key=lambda w: w[2])
+    return True, "%d claim(s) under %.0f%%, worst %s/%s %.0f%%" % (
+        len(watched),
+        PVC_MAX_PCT,
+        worst[1],
+        worst[0],
+        worst[2],
+    )
+
+
 CHECKS = [
     ("disk", _env("KUMA_PUSH_DISK", ""), check_disk),
     ("cert", _env("KUMA_PUSH_CERT", ""), check_cert),
@@ -3199,6 +3317,7 @@ CHECKS = [
         _env("KUMA_PUSH_LONGHORN_VOLUMES", ""),
         check_longhorn_volumes,
     ),
+    ("pvc_fullness", _env("KUMA_PUSH_PVC", ""), check_pvc_fullness),
 ]
 
 # Checks that query Prometheus. A single Prometheus outage would fail every one of them at once
@@ -3279,10 +3398,17 @@ LOKI_DEPENDENT = frozenset({"loki_ingestion"})
 # must not light two monitors.
 B2_DEPENDENT = frozenset({"b2_storage"})
 
-# Checks that read the CLUSTER Prometheus (daniel-box) rather than the Docker one. Its own gate,
-# not an arm of PROM_DEPENDENT, because they are two instances on two hosts reached by two paths —
-# the Docker Prometheus being up says nothing about whether the cluster one is, and a gate that
-# is not watching a check's real source reports confidence it does not have.
+# Checks that read CLUSTER_PROM_URL rather than PROM_URL. Its own gate, not an arm of
+# PROM_DEPENDENT, because a gate that is not watching a check's real source reports confidence it
+# does not have.
+#
+# The two URLs used to name two instances on two hosts reached by two paths, and the Docker
+# Prometheus being up said nothing about whether the cluster one was. Since the Docker plane
+# retired (2026-08-14) PROMETHEUS_URL and CLUSTER_PROMETHEUS_URL render to the SAME cluster
+# Service URL, so today both gates observe one instance and run_once reuses the prometheus gate's
+# verdict here rather than probing twice. The split survives anyway, because it is what lets a
+# second Prometheus be reintroduced without re-deciding which gate watches which check. So
+# membership follows the URL a check reads, not which host happens to answer it.
 #
 # The division of labour with check_k8s_workloads' own fail-closed logic is deliberate and the two
 # halves are not interchangeable. THIS gate covers "the cluster Prometheus is unreachable", which
@@ -3291,7 +3417,19 @@ B2_DEPENDENT = frozenset({"b2_storage"})
 # this gate structurally cannot see, because the Prometheus answering `vector(1)` is perfectly
 # healthy. Suppression is right for the first and would be dangerous for the second: it would turn
 # a blind monitor green.
-CLUSTER_DEPENDENT = frozenset({"k8s_workloads", "cluster_targets"})
+# pvc_fullness joins for the same reason and with the same division of labour: this gate covers
+# "the cluster Prometheus is unreachable", while the check's own claim-count floor covers "the
+# cluster Prometheus is answering but the kubelet volume stats are not being scraped". Its
+# fail-closed arm pages on an empty vector, so a Prometheus outage must suppress it or one root
+# cause lights two monitors.
+#
+# It is NOT given an EXPORTER_DEPENDENT entry keyed on job="kubernetes-kubelet", which is the
+# nearest-looking wiring and would be wrong. Those claims are scraped under two jobs, so a dead
+# kubelet job still leaves the apiserver job answering for a subset — a PARTIAL blindness the
+# claim-count floor catches correctly and a job-keyed suppression would turn green. That is the
+# same mistake as the `node`-only entry that suppressed two hosts of three for host_temp, not a
+# fix for it.
+CLUSTER_DEPENDENT = frozenset({"k8s_workloads", "cluster_targets", "pvc_fullness"})
 
 # Reach-out checks that poll a live app dependency (n8n/sonarr/radarr/prowlarr/scrutiny/the Pi
 # glances/the Cloudflare GraphQL API) with NO reachability gate above them and NO per-check

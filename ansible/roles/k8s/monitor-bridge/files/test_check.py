@@ -150,3 +150,121 @@ def test_run_once_with_only_filter_touches_no_gate(monkeypatch):
     check.run_once()
     assert set(evaluated) == SUBSET_ONLY
     assert len(pushed) == len(SUBSET_ONLY)
+
+
+# ── check_pvc_fullness ──────────────────────────────────────────────────────
+#
+# These live here rather than beside check_longhorn_volumes in test_check_host.py only because
+# this file was the one in scope when the check landed. conftest.py's autouse _down_streaks reset
+# is directory-wide, so the fixtures behave identically either way.
+
+
+def _pvc_series(pvc, pct, namespace="homelab"):
+    return ({"namespace": namespace, "persistentvolumeclaim": pvc}, float(pct))
+
+
+def _arm_pvc(monkeypatch, vector, claims=43.0):
+    monkeypatch.setattr(check, "CLUSTER_PROM_URL", "http://prometheus:9090")
+    monkeypatch.setattr(check, "PVC_MAX_PCT", 85.0)
+    monkeypatch.setattr(check, "PVC_MIN_CLAIMS", 20)
+    monkeypatch.setattr(check, "PVC_CLAIMS_CONSECUTIVE", 3)
+    monkeypatch.setattr(check, "PVC_EXCLUDE", ["media-data"])
+    monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: claims)
+    monkeypatch.setattr(check, "prom_vector", lambda *a, **k: vector)
+
+
+def test_pvc_under_threshold_is_clean(monkeypatch):
+    # The live shape on 2026-09-01: fullest claim 38.6%, nothing near the limit.
+    _arm_pvc(
+        monkeypatch,
+        [_pvc_series("uptime-kuma-data", 38.6), _pvc_series("valheim-server", 33.8)],
+    )
+    ok, msg = check.check_pvc_fullness()
+    assert ok
+    assert "2 claim(s) under 85%" in msg
+    assert "uptime-kuma-data 39%" in msg
+
+
+def test_pvc_over_threshold_is_flagged(monkeypatch):
+    _arm_pvc(
+        monkeypatch,
+        [_pvc_series("uptime-kuma-data", 38.6), _pvc_series("valheim-config", 91.2)],
+    )
+    ok, msg = check.check_pvc_fullness()
+    # No grace on a fullness breach: it is monotonic, so a second cycle proves nothing.
+    assert not ok
+    assert "homelab/valheim-config 91%" in msg
+    assert "uptime-kuma-data" not in msg
+
+
+def test_pvc_excluded_claim_is_clean(monkeypatch):
+    # media-data is a `local` PV on daniel-box's `/`, which check_disk already watches. Full or
+    # not, this arm must not page for it — otherwise one full disk lights two monitors.
+    _arm_pvc(
+        monkeypatch,
+        [_pvc_series("media-data", 99.0), _pvc_series("uptime-kuma-data", 38.6)],
+    )
+    ok, msg = check.check_pvc_fullness()
+    assert ok
+    assert "1 claim(s) under 85%" in msg
+
+
+def test_pvc_claim_floor_shortfall_is_flagged(monkeypatch):
+    # The fail-closed arm. A vector that has lost most of its claims still looks healthy — every
+    # survivor is under the limit — so the census is what separates "nothing is full" from
+    # "I cannot see". Held for the grace, then paged.
+    _arm_pvc(monkeypatch, [_pvc_series("uptime-kuma-data", 38.6)], claims=4.0)
+    ok1, msg1 = check.check_pvc_fullness()
+    assert ok1
+    assert "UNKNOWN, not OK" in msg1
+    check.check_pvc_fullness()
+    ok3, msg3 = check.check_pvc_fullness()
+    assert not ok3
+    assert "only 4 kubelet_volume_stats claims visible" in msg3
+
+
+def test_pvc_absent_census_is_flagged(monkeypatch):
+    # prom_scalar returns None on an empty vector, which is what a dead kubelet scrape looks
+    # like. It must not read as "zero claims, all healthy".
+    _arm_pvc(monkeypatch, [], claims=None)
+    check.check_pvc_fullness()
+    check.check_pvc_fullness()
+    ok, msg = check.check_pvc_fullness()
+    assert not ok
+    assert "UNKNOWN, not OK" in msg
+
+
+def test_pvc_breach_outranks_a_coverage_shortfall(monkeypatch):
+    # Same ordering as check_disk: a claim that IS reporting and IS full outranks a complaint
+    # about the ones that are not.
+    _arm_pvc(monkeypatch, [_pvc_series("valheim-config", 91.2)], claims=4.0)
+    ok, msg = check.check_pvc_fullness()
+    assert not ok
+    assert "PVC over 85%" in msg
+
+
+def test_pvc_recovery_resets_the_census_streak(monkeypatch):
+    _arm_pvc(monkeypatch, [_pvc_series("uptime-kuma-data", 38.6)], claims=4.0)
+    check.check_pvc_fullness()
+    _arm_pvc(monkeypatch, [_pvc_series("uptime-kuma-data", 38.6)])
+    assert check.check_pvc_fullness()[0]
+    assert check._down_streaks.get("pvc_fullness", 0) == 0
+
+
+def test_pvc_fullness_is_gated_by_the_cluster_prometheus():
+    # It reads CLUSTER_PROM_URL, so the gate watching its source is cluster_prometheus.
+    # Membership in PROM_DEPENDENT would gate it on an instance it does not query (mirrors the
+    # cluster_targets guard in test_check_gates.py).
+    assert "pvc_fullness" in check.CLUSTER_DEPENDENT
+    assert "pvc_fullness" not in check.PROM_DEPENDENT
+    # A job-keyed suppression would turn the claim-count floor green on exactly the partial
+    # kubelet outage it exists to catch — those claims are scraped under two jobs.
+    for deps in check.EXPORTER_DEPENDENT.values():
+        assert "pvc_fullness" not in deps
+
+
+def test_pvc_fullness_is_disabled_without_a_cluster_prometheus(monkeypatch):
+    monkeypatch.setattr(check, "CLUSTER_PROM_URL", "")
+    ok, msg = check.check_pvc_fullness()
+    assert ok
+    assert "disabled" in msg
