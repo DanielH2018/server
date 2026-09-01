@@ -19,6 +19,8 @@
     owner: "{{ sys_user }}"
     group: "{{ sys_user }}"
     mode: "0755"
+  # ENFORCED by ansible/tests/test_gitops_deploy_ship_list.py: this loop and the
+  # stamp_deployed_pairs below must both name every runtime module in files/.
   loop:
     - gitops_deploy.py
     - deploy_logic.py

@@ -98,6 +98,12 @@ stay).
   rests on — no role ships a test file to a host — is enforced tree-wide by
   `ansible/tests/test_no_role_ships_a_test_file.py`, because a role that started shipping one
   would turn this skip into a change to deployed code that never deploys.
+- **A new module in `files/` goes in two lists in `tasks/main.yml`** — the copy task's `loop:`
+  that installs it under `/opt/gitops-deploy/`, and `stamp_deployed_pairs`, which records its
+  render provenance. pytest imports from `files/` on disk, so a module added and forgotten in
+  the copy loop passes CI and kills the deployer at import on its next tick. ENFORCED by
+  `ansible/tests/test_gitops_deploy_ship_list.py`, which fails when a runtime module in
+  `files/` is missing from either list; it is the sibling of `test_monitor_bridge_modules.py`.
 - **Broad changes split three ways** (`deploy_logic._BROAD_*_PREFIXES`). A setup-plane change
   under `roles/setup/<name>/` (or `requirements.yml`) fast-forwards and applies as
   `initial_setup.yml --tags <name>`, with the tag derived by `setup_tags_for` rather than left as
