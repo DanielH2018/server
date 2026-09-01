@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-08-30 06:17 UTC
-generated_sha: 6958cef9
+generated_at: 2026-09-01 19:34 UTC
+generated_sha: 442c7a9d
 ---
 
 !!! warning "Generated file — do not edit"
@@ -57,7 +57,7 @@ generated_sha: 6958cef9
 | nut | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | denylisted (NOT probe-less (has a readinessProbe) despite the denylist comment grouping — real reason: USB-passthrough + node-exclusive hostPort (Recreate strategy) on the UPS shutdown-chain pod, privileged:true) |
 | peanut | k8s | <span class="fqdn" data-host="peanut">peanut.&lt;domain&gt;</span> · <span class="fqdn" data-host="peanut.local">peanut.local.&lt;domain&gt;</span> | Authelia | no PVC (stateless) | eligible |
 | pi-peer-backup | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | weekly -> B2 (default target) | eligible |
-| pihole | k8s | <span class="fqdn" data-host="pihole">pihole.&lt;domain&gt;</span> · <span class="fqdn" data-host="pihole.local">pihole.local.&lt;domain&gt;</span> | Authelia | unknown (PVC present, claim name not statically resolvable: {{ inst.claim }}); daily -> B2 (default group) | denylisted (platform — LAN DNS resolver; a failed deploy breaks name resolution fleet-wide, and host probes stay green through that kind of outage) |
+| pihole | k8s | <span class="fqdn" data-host="pihole">pihole.&lt;domain&gt;</span> · <span class="fqdn" data-host="pihole.local">pihole.local.&lt;domain&gt;</span> | Authelia | unknown (PVC present, claim name not statically resolvable: {{ inst.claim }}) | denylisted (platform — LAN DNS resolver; a failed deploy breaks name resolution fleet-wide, and host probes stay green through that kind of outage) |
 | prowlarr | k8s | <span class="fqdn" data-host="prowlarr">prowlarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="prowlarr.local">prowlarr.local.&lt;domain&gt;</span> | Authelia | weekly -> B2 (default target) | eligible |
 | qbittorrent | k8s | <span class="fqdn" data-host="qbittorrent">qbittorrent.&lt;domain&gt;</span> · <span class="fqdn" data-host="qbittorrent.local">qbittorrent.local.&lt;domain&gt;</span> | Authelia | weekly -> B2 (default target); daily -> B2 (default group) | denylisted (state coupled outside the volume — reverting qbittorrent-config to a snapshot rewinds in-flight torrent bookkeeping while the media-data volume it references does not move; the pre-apply snapshot and revert work fine and are not the blocker) |
 | radarr | k8s | <span class="fqdn" data-host="radarr">radarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="radarr.local">radarr.local.&lt;domain&gt;</span> | Authelia | weekly -> B2 (default target); daily -> B2 (default group) | eligible |
