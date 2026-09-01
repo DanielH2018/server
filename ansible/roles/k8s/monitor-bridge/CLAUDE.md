@@ -502,11 +502,15 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     shipping is a different signal Loki Log Ingestion still surfaces. `LOKI_DEPENDENT` is guarded by
     a test against the live `CHECKS` so it can't drift.)
   - **Cluster Prometheus Reachable** (a `vector(1)` probe against the **k3s cluster's** Prometheus
-    over its in-cluster Service DNS name — a SECOND instance on daniel-box, not the one `PROM_URL`
-    points at. Its own gate rather than an arm of `PROM_DEPENDENT`, because they are two instances
-    on two hosts reached by two paths: the Docker Prometheus being up says nothing about whether
-    the cluster one is, and a gate that isn't watching a check's real source reports confidence it
-    doesn't have. Gates `CLUSTER_DEPENDENT`. Empty `CLUSTER_PROMETHEUS_URL` = disabled.)
+    over its in-cluster Service DNS name. Its own gate rather than an arm of `PROM_DEPENDENT`,
+    because a gate that isn't watching a check's real source reports confidence it doesn't have.
+    `PROMETHEUS_URL` and `CLUSTER_PROMETHEUS_URL` used to name two instances on two hosts reached
+    by two paths; since the Docker plane retired (2026-08-14) both render to the same cluster
+    Service URL, so the two gates observe ONE instance and `run_once` reuses the prometheus
+    gate's verdict here rather than probing twice. Do not read the pair as independent coverage.
+    The split survives because it is what lets a second Prometheus be reintroduced without
+    re-deciding which gate watches which check — so membership follows the URL a check reads.
+    Gates `CLUSTER_DEPENDENT`. Empty `CLUSTER_PROMETHEUS_URL` = disabled.)
   - **k3s Workload Health** (`kube_deployment_status_replicas_unavailable` from kube-state-metrics
     via the cluster Prometheus — the only monitor the seven routeless k8s workloads have, and the
     reason the metric exists at all: `registry`, both `cloudflare-ddns` copies, karakeep's
@@ -557,6 +561,29 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     `k8s_workloads_verdict()` and `extended_resource_verdict()` are unit-tested;
     `CLUSTER_DEPENDENT` is guarded against the live
     `CHECKS` and asserted disjoint from the other three skip sets.)
+  - **k3s PVC Fullness** (`kubelet_volume_stats_available_bytes / _capacity_bytes` via the cluster
+    Prometheus, added 2026-09-01 — the SPACE axis of the storage layer, where Longhorn Volume
+    Redundancy is the replica axis. A Longhorn PVC is its own filesystem at a fixed capacity, so a
+    2 Gi claim can fill to 100% while Root Disk reports 620 GB free; nothing watched that, and
+    `kubelet_volume_stats` appeared in zero files repo-wide before this. `PVC_MAX_PCT` is **85**,
+    not Root Disk's 90: a full PVC can't be relieved by deleting something elsewhere — the
+    operator has to expand the volume — and on the smallest genuine claim (973 MiB) 85% leaves
+    146 MiB of headroom against 97 MiB at 90%. `PVC_EXCLUDE` drops `media-data`, the one claim
+    backed by a `local` PV at `/srv/media` rather than by Longhorn: it IS the `/` filesystem Root
+    Disk already watches, so scanning it here pages twice for one full disk. **Aggregated `max by
+    (namespace, persistentvolumeclaim)`** because daniel-box's claims are scraped TWICE — k3s
+    serves the kubelet registry on the supervisor's `/metrics` too, so the same series arrives
+    under `job="kubernetes-kubelet"` and `job="kubernetes-apiserver"` (43 + 27 series over 43
+    claims, 2026-09-01); `sum` would report a double-scraped claim at twice its real fullness.
+    **Fails closed on a thin claim census**, and `PVC_MIN_CLAIMS` (32) is DERIVED, not a
+    conservative round number: the kubelet job alone reports all 43 claims and the apiserver job
+    alone 27, so losing the apiserver job costs no coverage and the only hazard is a dead kubelet
+    job — which leaves 27 claims answering, every one under the limit, while daniel-server's go
+    dark. Any floor at or under 27 reads that as healthy. For the same reason it gets **no
+    `EXPORTER_DEPENDENT` entry** keyed on the kubelet job: that would suppress the page on exactly
+    the partial outage the floor exists to catch, which is the `node`-only mistake that blinded
+    Host Temperature on two hosts of three, not a fix for it. A fullness breach gets no grace —
+    it is monotonic, not flappy — while the census arm rides `PVC_CLAIMS_CONSECUTIVE`.)
   - **Loki Log Ingestion** (three-arm LogQL freshness against the cluster `loki-homelab` via
     its in-cluster Service, `down`
     if ANY arm is silent — a silently-dead promtail→Loki pipeline (docker-proxy break,
@@ -692,11 +719,14 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   the container). Kuma push silence remains the alerting path; the probe adds auto-recovery.
   (This was a Compose healthcheck restarted by autoheal until the k8s migration. autoheal now
   runs only on daniel-pi, so looking for its log line here finds nothing.)
-- Push tokens — 29 of them, and **`templates/env-secret.yaml.j2`'s `KUMA_PUSH_*` keys are the
-  list**; no test reads this prose, so treat the names below as a reading aid that can go stale
-  rather than as the source of truth. (It had: it carried eight tokens retired at the
-  2026-08-14 host flips and was missing six added since.) As of 2026-08-16:
-  `monitor_bridge_{arr_queue,bazarr,b2_reachable,b2_storage,cert,cluster_prometheus,cluster_targets,cpu,discord,disk,gitops_alive,gitops_status,ha,k8s_workloads,loki,loki_reachable,mem,n8n,oom,pi,prometheus,promtail_dropped,prowlarr_indexers,r2_usage,restarts,scrutiny,targets,traefik,traefik_latency,ups}_push_token`
+- Push tokens — **`templates/env-secret.yaml.j2`'s `KUMA_PUSH_*` keys are the list**; no test
+  reads this prose, so treat the names below as a reading aid that can go stale rather than as the
+  source of truth. Count them rather than trusting a number written here — this bullet carried a
+  hand-maintained "29" that was wrong by five when it was replaced:
+  `grep -c '^\s*KUMA_PUSH_[A-Z0-9_]*:' ansible/roles/k8s/monitor-bridge/templates/env-secret.yaml.j2`.
+  (The names went stale the same way: they once carried eight tokens retired at the 2026-08-14
+  host flips and were missing six added since.) As of 2026-09-01:
+  `monitor_bridge_{arr_queue,b2_reachable,b2_storage,bazarr,cert,cluster_prometheus,cluster_targets,cpu,discord,disk,etcd_drill,gitops_alive,gitops_status,ha,host_temp,k8s_workloads,loki,loki_reachable,longhorn_volumes,mem,n8n,oom,pi,prometheus,promtail_dropped,prowlarr_indexers,pvc,r2_usage,restarts,scrutiny,speedtest,targets,traefik,traefik_latency,ups}_push_token`
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
 - The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA
