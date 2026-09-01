@@ -1,0 +1,233 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "description": "Where a landing's time goes, one point per land.sh run. land.sh writes a logfmt line to syslog from its EXIT trap (`logger -t landing-annotation`), promtail ships it to Loki, and this board reads it. wait_merge is `--await-merge` polling until the PR merged; wait_ci is master CI on the merge commit; tick is the GitOps tick; deploy is the scoped deploy.sh run. Empty phases were never reached (a `blocked` landing has no wait_ci). CLI equivalent: `uv run python scripts/diagnostics/probe.py loki-query '{job=\"syslog\"} |= \"event=landing\" | logfmt'`.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "bf4q19tuivta8e"
+      },
+      "description": "Seconds spent in each phase, one point per landing. A tall wait_merge is PR CI or a PR nobody armed; a tall wait_ci is the master sweep; a tall deploy is rollout and stabilisation waits.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "points",
+            "pointSize": 7,
+            "showPoints": "always",
+            "spanNulls": false
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | unwrap wait_merge [$__interval])",
+          "legendFormat": "wait_merge",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | unwrap wait_ci [$__interval])",
+          "legendFormat": "wait_ci",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | unwrap deploy [$__interval])",
+          "legendFormat": "deploy",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | unwrap total [$__interval])",
+          "legendFormat": "total",
+          "refId": "D"
+        }
+      ],
+      "title": "Landing phases",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "bf4q19tuivta8e"
+      },
+      "description": "Median over the selected range. This is the number to compare week to week before touching CI sharding or the deploy's soak windows.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 10
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | unwrap wait_merge [$__range])",
+          "legendFormat": "median wait_merge",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | unwrap wait_ci [$__range])",
+          "legendFormat": "median wait_ci",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | unwrap deploy [$__range])",
+          "legendFormat": "median deploy",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | unwrap total [$__range])",
+          "legendFormat": "median total",
+          "refId": "D"
+        }
+      ],
+      "title": "Medians over the range",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "bf4q19tuivta8e"
+      },
+      "description": "The raw lines, newest first: pr, sha, verdict, exit code, every phase, and the tags deployed. A verdict other than settled or nothing-to-deploy is a landing that stopped early; its phases show where.",
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "id": 3,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "{job=\"syslog\"} |= \"event=landing\"",
+          "refId": "A"
+        }
+      ],
+      "title": "Landings",
+      "type": "logs"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 39,
+  "tags": [
+    "gitops",
+    "ci"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Landings",
+  "uid": "landings",
+  "version": 1
+}
