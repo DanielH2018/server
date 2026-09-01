@@ -96,6 +96,12 @@ spec:
           args: ["--config=/conf/config.yaml"]
           securityContext:
             allowPrivilegeEscalation: false
+            # uid pinned with the assertion: `runAsNonRoot` alone does not pin one, and the
+            # kubelet refuses a container whose image names its user instead of numbering it.
+            # PID 1 measured at uid 10001 on both nodes (cgroup-traced, not a `ps` name grep),
+            # with `NSpid: <pid> 1` confirming no earlier root phase behind the capability drop.
+            runAsNonRoot: true
+            runAsUser: 10001
             capabilities:
               drop:
                 - ALL
