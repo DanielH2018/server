@@ -223,6 +223,10 @@ files = "^\\.github/workflows/[^/]+\\.ya?ml$"
 # `secret_rotation.py sync`. Read-only: reads plaintext key NAMES only, never decrypts a value
 # (no age key needed), so it's CI-safe. Catches the drift at commit time instead of a day later
 # when the daily "Secret Rotation" Kuma monitor goes down.
+# `audit` also runs a push-token shape check that decrypts, but --check deliberately does NOT
+# gate on it: CI has no age key, so a decrypt-dependent verdict here would read green in CI and
+# red on a developer's machine, failing every future secrets PR over an unrelated token. That
+# arm reports through the daily Kuma push instead.
 [[repos.hooks]]
 id = "secret-rotation-registry-sync"
 name = "Secret-rotation registry in sync with secrets.yml"
