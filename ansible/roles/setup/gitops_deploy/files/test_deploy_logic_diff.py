@@ -182,6 +182,63 @@ def test_broad_remediation_both_planes_names_both():
     assert "ansible/initial_setup.yml --tags <role>" in cmd
 
 
+def test_broad_remediation_names_the_playbook_that_includes_the_role():
+    """PR #702's failure: roles/setup/k3s is in k3s-bringup.yml, never initial_setup.yml."""
+    cmd = broad_remediation(False, True, {"k3s"})
+    assert "ansible/k3s-bringup.yml --tags k3s" in cmd
+    assert "initial_setup.yml" not in cmd
+
+
+def test_broad_remediation_uses_the_roles_real_tag():
+    """`--tags chezmoi_setup` matches nothing; the playbook tags that role `chezmoi`."""
+    cmd = broad_remediation(False, True, {"chezmoi_setup"})
+    assert "ansible/initial_setup.yml --tags chezmoi" in cmd
+
+
+def test_broad_remediation_for_a_role_no_playbook_includes_names_its_consumers():
+    """setup/common is read by two roles on two hosts and applied by no playbook of its own."""
+    cmd = broad_remediation(False, True, {"common"})
+    assert "applied by no playbook of its own" in cmd
+    assert "k3s-bringup.yml" in cmd
+    assert "-e target=daniel-pi" in cmd
+
+
+def test_broad_remediation_without_roles_keeps_the_generic_placeholder():
+    """Callers with no path list are unchanged — the placeholder is still correct for them."""
+    assert "ansible/initial_setup.yml --tags <role>" in broad_remediation(
+        False, True, set()
+    )
+
+
+def test_setup_tags_for_refuses_a_role_initial_setup_cannot_apply():
+    """THE SILENT FAILURE. A tag matching nothing exits 0, so the deployer records a success.
+
+    This is the automatic arm, not the alert text: returning `k3s` here made the tick run
+    `initial_setup.yml --tags k3s`, change nothing, and report the change applied.
+    """
+    assert setup_tags_for(["ansible/roles/setup/k3s/tasks/node.yml"]) == set()
+    assert (
+        setup_tags_for(["ansible/roles/setup/common/templates/resolv.conf.j2"]) == set()
+    )
+
+
+def test_setup_tags_for_maps_a_renamed_tag():
+    assert setup_tags_for(["ansible/roles/setup/chezmoi_setup/tasks/main.yml"]) == {
+        "chezmoi"
+    }
+
+
+def test_setup_roles_are_recorded_for_both_broad_setup_arms():
+    """gitops_deploy/ is in the MANUAL subset, and its remediation still needs the role name."""
+    cs = services_from_changed_paths(
+        [
+            "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
+            "ansible/roles/setup/k3s/defaults/main.yml",
+        ]
+    )
+    assert cs.setup_roles == {"gitops_deploy", "k3s"}
+
+
 def test_unrelated_path_ignored():
     paths = ["docs/superpowers/specs/x.md", "README.md"]
     cs = services_from_changed_paths(paths)

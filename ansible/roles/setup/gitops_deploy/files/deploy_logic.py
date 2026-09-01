@@ -219,6 +219,9 @@ class ChangeSet:
     # command so a setup-plane change isn't sent to deploy.yml (a no-op). A push can set both.
     broad_deploy: bool = False
     broad_setup: bool = False
+    # The `roles/setup/<name>` dirs this push touched, so the remediation can name the
+    # playbook that actually includes each one rather than assuming initial_setup.yml.
+    setup_roles: set[str] = field(default_factory=set)
     # A broad path the deployer must not apply itself (_BROAD_MANUAL_PREFIXES). ORed across
     # the push: ONE manual path makes the whole tick manual, because a half-applied broad
     # change is exactly the state the defer-and-alert arm exists to prevent.
@@ -318,10 +321,12 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
             cs.broad = True
             cs.broad_manual = True
             cs.broad_setup = True
+            _note_setup_role(cs, p)
             continue
         if any(p.startswith(prefix) for prefix in _BROAD_SETUP_PREFIXES):
             cs.broad = True
             cs.broad_setup = True
+            _note_setup_role(cs, p)
             continue
         if any(p.startswith(prefix) for prefix in _BROAD_DEPLOY_PREFIXES):
             cs.broad = True
@@ -356,6 +361,53 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
 _SETUP_ROLE = re.compile(r"^ansible/roles/setup/([^/]+)/")
 
 
+def _note_setup_role(cs: "ChangeSet", path: str) -> None:
+    """Record which setup role a broad path belongs to, if any. A bring-up playbook has none."""
+    m = _SETUP_ROLE.match(path)
+    if m:
+        cs.setup_roles.add(m.group(1))
+
+
+# Setup roles `ansible/initial_setup.yml` does NOT include, mapped to the playbook that does.
+# `None` means no playbook includes the role at all.
+#
+# THE BUG THIS EXISTS TO KILL. Both functions below used to assume every directory under
+# `roles/setup/` was a tag in initial_setup.yml. It is not, and the failure is silent in the
+# worst way: `--tags` matching nothing makes Ansible exit 0, so the deployer ff-merges, runs a
+# playbook that does nothing, and records a successful apply. `setup_tags_for`'s own docstring
+# names that outcome as the reason it returns an empty set rather than a guess — it was
+# guessing anyway.
+#
+# Occurred 2026-09-01 with PR #702, a `roles/setup/k3s/` change installing a host DNS
+# forwarder. The role appears only in `k3s-bringup.yml`, so the tick's `initial_setup.yml
+# --tags k3s` matched no task; the forwarder had to be installed by hand afterwards, and
+# nothing in the pipeline said it had not been.
+#
+# `common` is the sharper shape: no playbook includes it, and it is not dead code — two roles
+# read its templates by absolute path, on two different hosts. A change to its shared
+# resolv.conf.j2 has to be applied twice, via k3s-bringup.yml on daniel-box and via
+# initial_setup.yml on daniel-pi, and neither is what the old code named.
+_SETUP_ROLES_OUTSIDE_INITIAL_SETUP: dict[str, str | None] = {
+    "k3s": "ansible/k3s-bringup.yml",
+    "common": None,
+}
+# Setup roles whose `--tags` value is not their directory name. Same silent-exit-0 failure:
+# `--tags chezmoi_setup` matches nothing, because the playbook tags that role `chezmoi`.
+_SETUP_ROLE_TAG_OVERRIDES = {"chezmoi_setup": "chezmoi"}
+
+
+def setup_role_playbook(role: str) -> str | None:
+    """The playbook that applies a setup role, or None when no playbook includes it."""
+    if role in _SETUP_ROLES_OUTSIDE_INITIAL_SETUP:
+        return _SETUP_ROLES_OUTSIDE_INITIAL_SETUP[role]
+    return "ansible/initial_setup.yml"
+
+
+def setup_role_tag(role: str) -> str:
+    """The `--tags` value that actually selects a setup role, which is not always its name."""
+    return _SETUP_ROLE_TAG_OVERRIDES.get(role, role)
+
+
 def setup_tags_for(paths) -> set[str]:
     """The `initial_setup.yml --tags` values a set of setup-plane paths needs.
 
@@ -379,7 +431,14 @@ def setup_tags_for(paths) -> set[str]:
             continue
         m = _SETUP_ROLE.match(p)
         if m:
-            tags.add(m.group(1))
+            role = m.group(1)
+            # A role initial_setup.yml does not include cannot be applied by the automatic
+            # arm at all, so it must return NOTHING and route to defer-and-alert. Returning
+            # the role name here is the guess this function's docstring forbids: the run
+            # would exit 0 having matched no task.
+            if setup_role_playbook(role) != "ansible/initial_setup.yml":
+                continue
+            tags.add(setup_role_tag(role))
     return tags
 
 
@@ -411,7 +470,9 @@ def broad_budget_ok(
     return flock_s + forward_s + rollback_s + BROAD_BUDGET_MARGIN_S <= timeout_s
 
 
-def broad_remediation(broad_deploy: bool, broad_setup: bool) -> str:
+def broad_remediation(
+    broad_deploy: bool, broad_setup: bool, setup_roles: set[str] | None = None
+) -> str:
     """The manual command(s) a broad (defer-and-alert) change needs, by which plane it hit.
 
     deploy.yml runs only container roles, so a setup-plane change (roles/setup/, requirements.yml,
@@ -419,13 +480,40 @@ def broad_remediation(broad_deploy: bool, broad_setup: bool) -> str:
     silent no-op that leaves the change unapplied while a plain ff-merge clears the divergence —
     worst case a fix to gitops_deploy.py itself (2026-07-16 review M1). A push hitting both planes
     names both.
+
+    `setup_roles` narrows the setup half from that `<role>` placeholder to the real command,
+    and exists because the placeholder's *playbook* was wrong for some roles rather than merely
+    vague — see `_SETUP_ROLES_OUTSIDE_INITIAL_SETUP`. Omitting it keeps the old generic text,
+    which is what every caller with no path list still gets.
     """
     cmds: list[str] = []
     if broad_deploy:
         cmds.append("`ansible-playbook ansible/deploy.yml`")
     if broad_setup:
-        cmds.append("`ansible-playbook ansible/initial_setup.yml --tags <role>`")
+        cmds.extend(_setup_commands(setup_roles))
     return " and ".join(cmds)
+
+
+def _setup_commands(setup_roles: set[str] | None) -> list[str]:
+    """One command per setup role, or the generic placeholder when no roles are known."""
+    if not setup_roles:
+        return ["`ansible-playbook ansible/initial_setup.yml --tags <role>`"]
+    cmds = []
+    for role in sorted(setup_roles):
+        playbook = setup_role_playbook(role)
+        if playbook is None:
+            # No playbook includes this role, so there is no single command to print. Naming
+            # its consumers is the only actionable thing left, and it is genuinely two
+            # commands on two hosts — see the `common` note on the mapping above.
+            cmds.append(
+                f"`{role}` is read by other roles and applied by no playbook of its own — "
+                "apply each consumer (`ansible-playbook ansible/k3s-bringup.yml --tags "
+                "<tag>` on daniel-box, `ansible-playbook ansible/initial_setup.yml --tags "
+                "optimize_pi -e target=daniel-pi` on daniel-pi)"
+            )
+            continue
+        cmds.append(f"`ansible-playbook {playbook} --tags {setup_role_tag(role)}`")
+    return cmds
 
 
 def k8s_remediation(

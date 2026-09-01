@@ -1251,7 +1251,7 @@ def main() -> int:
                 origin,
                 f"⚠️ gitops-deploy: broad change needing a hand in `{origin[:8]}` — "
                 f"deferring to a manual deploy. Run "
-                f"{broad_remediation(cs.broad_deploy, cs.broad_setup)} on the host, then "
+                f"{broad_remediation(cs.broad_deploy, cs.broad_setup, cs.setup_roles)} on the host, then "
                 f"`git merge --ff-only origin/{BRANCH}` to clear it.",
             )
             return 0

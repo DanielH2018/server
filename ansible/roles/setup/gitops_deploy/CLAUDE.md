@@ -100,6 +100,21 @@ stay).
   the `<role>` placeholder `broad_remediation` prints. A deploy-plane change (shared
   `ansible/templates/*`, `inventory/`, `common/`, `deploy.yml`) fast-forwards and applies as a
   full `deploy.yml`.
+  - **`roles/setup/<name>/` is not the same thing as `initial_setup.yml --tags <name>`, and
+    assuming it was made this arm apply nothing while reporting success.** Two ways it breaks:
+    the playbook may not include the role (`k3s` is in `k3s-bringup.yml`; `common` is in no
+    playbook at all, and is read by two other roles on two different hosts), and the tag may not
+    be the directory name (`chezmoi_setup` is tagged `chezmoi`). Either way `--tags` matches no
+    task, `ansible-playbook` exits 0, and the tick records the change as applied — the exact
+    outcome `setup_tags_for`'s docstring says it returns an empty set to avoid.
+    Occurred 2026-09-01 on PR #702, a `roles/setup/k3s/` change installing daniel-box's host DNS
+    forwarder: the tick ff-merged and "applied" it as `initial_setup.yml --tags k3s`, and the
+    forwarder had to be installed by hand afterwards. `setup_role_playbook` / `setup_role_tag`
+    now own the routing, `setup_tags_for` returns nothing for a role initial_setup.yml cannot
+    apply (so it defers rather than guessing), and `broad_remediation` names the real playbook.
+    The map is hand-written because this module runs under `uv run --no-project` and cannot
+    import yaml; `ansible/tests/test_setup_role_playbooks_agree.py` derives the truth from the
+    playbooks and fails when the two drift.
   - **The ff-merge happens BEFORE the apply**, which is the order the *Deploying this role under
     the shared tree lock* trap below already prescribes for the manual path: applying first
     renders from the pre-merge tree and deploys nothing. It also means an unrelated commit sharing
