@@ -26,6 +26,16 @@ gitops_deploy_ci_contexts:
 # every landing's await_ci.py poll.
 gitops_deploy_github_repo: DanielH2018/server
 
+# How often the timer starts a tick (systemd time span). 30min from the role's first day until
+# 2026-09-01, sized so the CI gate's anonymous GitHub reads stayed far inside the 60/hour
+# per-IP budget. The gate authenticates now (5000/hour), so the budget no longer sets the
+# cadence, and what a shorter one buys is latency for everything not landed by hand through
+# land.sh — chiefly Renovate's auto-merged image bumps, which waited up to 30 minutes for the
+# timer. A noop tick costs one `git fetch`; the GitHub read is spent only on a tick that would
+# otherwise deploy. A tick that overruns the interval is safe: the elapse is coalesced into the
+# run in flight (timer template), and the tree lock serializes everything else.
+gitops_deploy_tick_interval: 10min
+
 # --- The MERGE gate, which is a different thing from gitops_deploy_ci_contexts above ---
 #
 # The list above is what this DEPLOYER waits for. The list here is what GitHub's ruleset requires

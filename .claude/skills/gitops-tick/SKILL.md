@@ -1,6 +1,6 @@
 ---
 name: gitops-tick
-description: Trigger the homelab's GitOps deploy tick by hand instead of waiting for the 30-minute timer, and read its result. Use when a merge needs deploying now, when a tick's outcome is unclear, or when the journal reads "No entries" and you need to tell "ticked, nothing to do" from "did not tick". Runs a real deploy — there is no dry-run mode.
+description: Trigger the homelab's GitOps deploy tick by hand instead of waiting for the 10-minute timer, and read its result. Use when a merge needs deploying now, when a tick's outcome is unclear, or when the journal reads "No entries" and you need to tell "ticked, nothing to do" from "did not tick". Runs a real deploy — there is no dry-run mode.
 allowed-tools: Bash, Read, Grep
 ---
 

@@ -20,15 +20,19 @@
 # It ALERTS on drift, it never reconciles. Changing a ruleset is a deliberate act; this only makes
 # it a visible one.
 #
-# UNAUTHENTICATED on purpose. The endpoint returns 200 with `enforcement` and every
+# Authenticated through the deploy user's `gh auth token` when that CLI is logged in, anonymous
+# otherwise. The endpoint returns 200 with `enforcement` and every
 # `rules[].parameters.required_status_checks[].context` to an anonymous caller, and the repo holds
-# no GitHub token in SOPS. Same call shape renovate_notify.py already uses from this host. Note
-# `bypass_actors` is ABSENT anonymously rather than empty — so this checks contexts and
-# enforcement, and deliberately claims nothing about bypass actors. See the count guard below.
+# no GitHub token in SOPS — the same call shape renovate_notify.py uses from this host, and the
+# same token source the deployer's CI gate uses since 2026-09-01. Note `bypass_actors` is ABSENT
+# anonymously rather than empty — so this checks contexts and enforcement, and deliberately claims
+# nothing about bypass actors. See the count guard below.
 #
-# Rate limit: GitHub allows 60 req/hr per source IP unauthenticated, shared with renovate_notify
-# on this same host. Once a day is two calls a day between them, which is why this is daily and
-# not a monitor-bridge check on the 300s loop.
+# Rate limit: anonymous GitHub allows 60 req/hr per source IP, shared by EVERY caller on this
+# host (the deployer's gate, a landing's await_ci.py poll, renovate_notify). Authenticated it is
+# 5000/hr per token. Once a day is still the right cadence — rulesets change on a human clock.
+# The token never lands in argv: curl reads it from a config on stdin (`-K -`), the same way the
+# push library feeds the Kuma URL, because /proc is mounted without hidepid here.
 #
 # set -uo (not -euo): a failed curl must be captured + reported, not swallowed by an early exit.
 set -uo pipefail
@@ -67,7 +71,18 @@ EXPECTED=$(
 CONTEXTS
 )
 
-if ! BODY=$(curl -sf --max-time 20 -H "Accept: application/vnd.github+json" "$RULESET_URL"); then
+# This cron runs as root; the gh login belongs to the deploy user, so the lookup drops to that
+# user. `-H` matters: gh finds its login under $HOME, and a plain runuser/sudo keeps root's.
+# Every failure — no sudo, no gh, logged out — leaves TOKEN empty and the fetch anonymous,
+# which is what this script did for its whole life before 2026-09-01.
+TOKEN=$(sudo -n -u "{{ sys_user }}" -H gh auth token 2>/dev/null || true)
+AUTH_CONFIG=""
+if [ -n "$TOKEN" ]; then
+  AUTH_CONFIG=$(printf 'header = "Authorization: Bearer %s"\n' "$TOKEN")
+fi
+
+if ! BODY=$(printf '%s\n' "$AUTH_CONFIG" |
+  curl -sf --max-time 20 -K - -H "Accept: application/vnd.github+json" "$RULESET_URL"); then
   # Unreachable is NOT "no drift". A check whose source is down must say it could not look,
   # or it is a deadman reporting a pass.
   push down "failed to fetch ruleset {{ gitops_deploy_ruleset_id }} — branch protection UNVERIFIED"

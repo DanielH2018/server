@@ -1,6 +1,6 @@
 # gitops_deploy — pull-based deploy on master change (every has_gitops host)
 
-Installs a systemd **timer** (every 30 min) that runs `/opt/gitops-deploy/gitops_deploy.py`
+Installs a systemd **timer** (every `gitops_deploy_tick_interval`, 10 min) that runs `/opt/gitops-deploy/gitops_deploy.py`
 as `{{ sys_user }}`. The script fetches `origin/master`; if it advanced, maps each changed file
 under `roles/containers/<svc>/{templates,files}/` (the compose template OR a bind-mounted config
 template / `files/` asset) to its service tag, `--ff-only` merges, and deploys each via

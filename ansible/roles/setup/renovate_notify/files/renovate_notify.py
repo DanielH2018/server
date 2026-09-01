@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import time
 import urllib.request
@@ -49,6 +50,27 @@ DASHBOARD_STALE_MSG = (
 
 def cfg() -> dict[str, str]:
     return parse_env_file(CONFIG)
+
+
+def github_token(config: dict[str, str], run) -> str:
+    """The token for the REST calls: `GITHUB_TOKEN` from config.env, else `gh auth token`.
+
+    Same shape as deploy_logic.github_token in roles/setup/gitops_deploy: the gh CLI on this
+    host is logged in as the repo owner and this unit runs as that user (ProtectHome=read-only
+    still lets it read ~/.config/gh). Anonymous GitHub is 60 req/hr PER SOURCE IP, shared by
+    every caller on the host — the deployer's CI gate exhausted it on 2026-09-01 — so even this
+    once-a-day run authenticates when it can. Empty string means anonymous, exactly as before.
+    """
+    token = config.get("GITHUB_TOKEN", "").strip()
+    if token:
+        return token
+    try:
+        proc = run(["gh", "auth", "token"], capture_output=True, text=True, timeout=10)
+    except Exception:  # noqa: BLE001 — absent binary, timeout, anything: anonymous is fine
+        return ""
+    if proc.returncode != 0:
+        return ""
+    return (proc.stdout or "").strip()
 
 
 def log(msg: str) -> None:
@@ -156,7 +178,7 @@ def main() -> int:
     # calls, so a large backlog (~19+ PRs) can exhaust the limit in one run -> the fetch 403s, main()
     # raises, the OnFailure alert unit fires a *false* page, and that day's digest is skipped. A
     # fine-grained read-only PAT lifts the ceiling to 5000/hr. Empty token = stay unauthenticated.
-    token = c.get("GITHUB_TOKEN", "")
+    token = github_token(c, subprocess.run)
     if token:
         HEADERS["Authorization"] = "Bearer " + token
     state_dir = c.get("STATE_DIR", "/var/lib/renovate-notify")

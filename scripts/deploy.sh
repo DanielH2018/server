@@ -1,7 +1,7 @@
 #!/bin/bash
 # Run an interactive Ansible deploy under the same lock the automated deployers take.
 #
-# gitops-deploy.service (every 30 min) and the weekly secret-rotate cron both serialize on
+# gitops-deploy.service (every 10 min) and the weekly secret-rotate cron both serialize on
 # /var/lock/server-git-tree.lock. A hand- or agent-run `ansible-playbook` took no lock at
 # all, so it could interleave with either of them -- writing the same rendered tree and
 # talking to the same cluster -- while several Claude sessions could do the same to each
@@ -11,7 +11,7 @@
 # should queue behind the unattended pipeline rather than give up. Note this does NOT
 # protect the pipeline from a slow deploy in the other direction -- if this run holds the
 # lock for more than 180s, the next gitops firing fails its unit and raises a Discord alert.
-# That alert is accurate (a deploy really was in progress) and the timer retries 30 minutes
+# That alert is accurate (a deploy really was in progress) and the timer retries 10 minutes
 # later, so it is left as a true signal rather than suppressed.
 #
 # A `-e target=daniel-pi` deploy takes the lock too, even though it writes to the Pi: what

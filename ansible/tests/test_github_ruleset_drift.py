@@ -73,6 +73,7 @@ def _run(tmp_path, curl_body=None, curl_rc=0):
         .render(
             domain="example.test",
             k3s_metallb_ingress_vip="10.0.0.240",
+            sys_user="ubuntu",
             ruleset_drift_push_token="stubtoken",
             gitops_deploy_github_repo="Example/repo",
             gitops_deploy_ruleset_id=20912512,
