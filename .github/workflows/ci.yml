@@ -2,24 +2,29 @@ name: CI
 
 on:
   pull_request:
-  # The merge queue's run. GitHub tests the squashed commit on a temporary queue branch and
-  # fast-forwards master to that exact commit, so the check-runs this event produces are the
-  # ones the deployer's CI gate and await_ci.py read on master. Every job below treats a
-  # merge_group event like a push: no PR scoping, the full sweep. Added ahead of the
-  # ruleset's merge_queue rule on purpose — a queue that finds no check for its required
-  # context times every entry out.
+  # The merge queue's run, and the ONLY full sweep. GitHub tests the squashed commit on a
+  # temporary queue branch and fast-forwards master to that exact commit, so the check-runs
+  # this event produces are the ones the deployer's CI gate and await_ci.py read on master —
+  # already complete at merge time. Every job below treats a merge_group event like the old
+  # push: no PR scoping, the full sweep.
+  #
+  # No `push: [master]` trigger, deliberately (removed 2026-09-01, third step of the merge
+  # queue). `deploy_logic.ci_verdict` reduces every run of a required name to the worst
+  # outcome, so a second run on the same commit would hold the verdict at pending until it
+  # finished — the ~5-minute post-merge wait the queue exists to remove. The ruleset routes
+  # every merge through the queue and has no bypass actors, so a master commit without a
+  # queue run does not happen; if one ever did, the deployer parks it and the 6h
+  # behind-origin watchdog pages, which is the fail-closed shape the gate has always had.
   merge_group:
-  push:
-    branches: [master]
 
 # Cancel a superseded run when new commits land on the same ref (PR force-push / stacked
 # pushes) so redundant lint/test runs don't pile up.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # Cancel a superseded run on a PR branch only. On master every SHA needs its own verdict:
-  # the deployer's CI gate and `await_ci.py` read check-runs per commit, and a run cancelled by
-  # the next merge leaves that commit with no verdict forever. 4 of the 10 master runs before
-  # 2026-09-01 ended that way, each one restarting a ~5-minute full sweep that every landing
+  # Cancel a superseded run on a PR branch only. A queue entry needs its own verdict: the
+  # deployer's CI gate and `await_ci.py` read check-runs per commit, and a cancelled run
+  # leaves that commit with no verdict forever. When this was a push trigger, 4 of the 10
+  # master runs before 2026-09-01 ended that way, each one restarting a ~5-minute full sweep that every landing
   # behind it then waited on. Runner minutes are free on a public repo.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
@@ -235,12 +240,12 @@ jobs:
           echo "::endgroup::"
           exit "$rc"
 
-      # Every push to master, and any PR the scoping step declined to trust: the full sweep.
+      # Every merge-queue entry, and any PR the scoping step declined to trust: the full sweep.
       #
       # This is what keeps the scoped path's residual gap bounded. ansible-lint does no cross-file
       # variable analysis, and each other hook's `files` regex is hand-maintained — so a change to
       # file X will not re-lint an unchanged file Y that consumes it, and a test added at a path
-      # pytest's regex does not match is skipped on the PR. Both surface on the merge to master
+      # pytest's regex does not match is skipped on the PR. Both surface in the merge queue
       # rather than never: a deliberate trade of post-merge detection for PR latency.
       - name: Run hooks (full sweep)
         if: github.event_name != 'pull_request' || steps.changed.outputs.mode == 'full'
@@ -347,7 +352,7 @@ jobs:
           # Three dots: against the merge base, so it is this PR's own change to the file.
           if git diff --quiet "origin/$BASE_REF...HEAD" -- renovate.json; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "renovate.json untouched by this PR — it is validated on the merge to master."
+            echo "renovate.json untouched by this PR — it is validated in the merge queue."
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
@@ -362,7 +367,7 @@ jobs:
       # the same hosted Mend app version that actually consumes the config, which is why it is
       # deliberately unpinned and why neither caching variant above was taken.
       #
-      # Runs unconditionally on push to master, so the config still meets a freshly-resolved
+      # Runs unconditionally on a merge-queue entry, so the config still meets a freshly-resolved
       # Renovate on every merge. That is what preserves the canary this job provides beyond
       # validating edits: a config that Renovate itself stops accepting is caught within one
       # merge, rather than only whenever renovate.json is next touched.

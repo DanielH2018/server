@@ -476,7 +476,7 @@ uv run pytest scripts         # just one suite
   `pytest` import. `test_toposort.py` lives in `ansible/tests/` and imports its target via the
   `pythonpath` setting in `pyproject.toml`.
 
-CI (`.github/workflows/ci.yml`) runs `prek run --all-files` on every PR and on push to master:
+CI (`.github/workflows/ci.yml`) runs `prek run --all-files` on every PR and on every merge-queue entry:
 these tests plus lint, template validation, and secret scanning.
 
 ## Variables

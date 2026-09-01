@@ -2,9 +2,11 @@
 """Wait for master CI to reach a verdict on one SHA.
 
 THE PROBLEM. After a merge a session must know whether master CI went green before it
-deploys: PR CI is scoped to changed files, so a whole-tree failure can appear only after
-the merge. Nothing exposed that wait, so sessions hand-polled -- 835 polls across 213 wait
-episodes, measured 2026-08-29.
+deploys: PR CI is scoped to changed files, so a whole-tree failure can appear only in the
+full sweep. Nothing exposed that wait, so sessions hand-polled -- 835 polls across 213 wait
+episodes, measured 2026-08-29. Since 2026-09-01 the full sweep runs in the merge queue on
+the commit that becomes master, so the verdict is normally complete before this is called
+and the wait is one request; the poll loop stays for the case where it is not.
 
 `deploy_logic.ci_verdict` is already the right logic and the deployer's own gate reads it.
 This is a CLI over that same function against that same endpoint, so a session's verdict

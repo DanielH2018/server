@@ -70,8 +70,13 @@ stay).
     the MERGE" until 2026-08-29, when `gh api repos/DanielH2018/server/branches/master/protection`
     was found to return 404 — there is no branch protection on `master`. The gate's value is
     unchanged and its necessity is higher than the old wording implied: PR CI is scoped to changed
-    files while master runs the full sweep, so a whole-tree failure can only appear *after* the
-    merge, and nothing else stops it landing. Adding branch protection is a separate decision.
+    files, so a whole-tree failure can only appear in the full sweep, and until 2026-09-01 that
+    sweep ran *after* the merge with nothing else stopping the commit landing. Since then ruleset
+    20912512 (`master CI gate`, active, no bypass actors) routes every merge through a merge
+    queue that runs the full sweep on the squashed commit before fast-forwarding master to it,
+    so the check-runs this gate reads are complete at merge time and a red tree cannot reach
+    master. The gate stays: it is what turns "the queue said green" into "this host may deploy",
+    and it is what parks a commit that somehow arrives without a queue run.
   - `cancelled`/`stale` count as **no verdict, not failure**: `ci.yml` sets
     `concurrency: cancel-in-progress` on `github.ref`, so two pushes in quick succession cancel the
     first run. Mapping those to a failure would page on an ordinary back-to-back push.
