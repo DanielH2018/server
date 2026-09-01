@@ -1,7 +1,7 @@
-# optimize_pi — Raspberry Pi hardware tuning
+# optimize_pi — Raspberry Pi host tuning
 
-Low-level OS/hardware tuning for the Pi. **Not a container role** — this is a host-setup
-role under `ansible/roles/setup/`, run by `initial_setup.yml`, not `deploy.yml`.
+Low-level OS, hardware and resolver tuning for the Pi. **Not a container role** — this is a
+host-setup role under `ansible/roles/setup/`, run by `initial_setup.yml`, not `deploy.yml`.
 See repo-root `CLAUDE.md` for conventions.
 
 ## Where it runs
@@ -13,7 +13,8 @@ See repo-root `CLAUDE.md` for conventions.
   the play's `hosts:` defaults to the local hostname, so `--limit daniel-pi` from the
   server intersects to zero hosts and silently does nothing.
 - **Granular tags** (one section without the whole role): `gpu-mem`, `zram`, `log2ram`,
-  `watchdog`, `debloat`, `earlyoom`, `sd-health`, `recovery-health`. The shared prep tasks are dual-tagged (`Set variables` →
+  `watchdog`, `debloat`, `earlyoom`, `sd-health`, `recovery-health`, `pi-dns`. The shared prep
+  tasks are dual-tagged (`Set variables` →
   `[gpu-mem, zram]`; the config.txt path detection → `[gpu-mem, watchdog]`) so
   tag-scoped runs still get the facts they consume. `log2ram` also covers the log
   RAM-budget tasks (journald cap, acct retention, the auditd cap and its rotation
@@ -118,6 +119,24 @@ See repo-root `CLAUDE.md` for conventions.
     is a journal stub — verified: no `sd_journal_open`, no libsystemd, and a `journal:` dry
     run yields zero entries). A file plus a static scrape job needs no new daemon, and carries
     ~576 lines/day where the whole journal would be ~38k.
+12. **Resolver** — a systemd-resolved drop-in (`50-homelab-dns.conf`) sets
+    `DNS=<dns_k8s_vip> 1.1.1.1` with `Domains=~.`, so the Pi resolves through the cluster
+    Pi-hole and falls back to a public resolver. Before this the DHCP lease's ISP resolvers
+    answered everything, including every internal `*.local.<domain>` name — those resolve
+    publicly via the Cloudflare wildcard, so the private hostnames were leaving the LAN.
+    `Domains=~.` overrides the per-link lease servers without touching netplan, which is why
+    this role needs no equivalent of the k3s role's `netplan-dns.yaml.j2`.
+    **It also moves the Pi's containers.** Docker's embedded resolver forwards to the host
+    stub (`ExtServers: [host(127.0.0.53)]` in a container's `/etc/resolv.conf`), so all seven
+    follow — promtail's `loki-homelab.local.<domain>` push URL included.
+    **The fallback is load-bearing, and its cutover is slower than daniel-server's.** That
+    host gets 2 seconds from glibc's `timeout:2 attempts:1` in a static `/etc/resolv.conf`;
+    resolved retries a server over several seconds and caches its choice. Accepted because
+    the ordering is the point: the Pi's wg-easy tunnel is the documented way in when the
+    cluster's own is unreachable (`roles/containers/wg-easy/CLAUDE.md`), so this host must
+    prefer the cluster for DNS and never depend on it.
+    Verify with a marked query: the Pi is not a k3s node, so it has no flannel SNAT and must
+    appear in Pi-hole's client list as its LAN address, not a `10.42.x` one.
     **The timestamp format is load-bearing**: `_SYSLOG_LINE_RE` wants exactly two
     whitespace-free tokens before the tag, so the scripts emit `date -Is` (one token).
     Traditional syslog format is four tokens and parses as nothing.
