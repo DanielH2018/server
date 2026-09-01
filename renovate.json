@@ -173,7 +173,7 @@
     },
     {
       "customType": "regex",
-      "description": "MetalLB pin in roles/setup/k3s/defaults/main.yml — the manifest URL in tasks/main.yml interpolates this var, so it decides which MetalLB the cluster installs. Same file, same blind spot as the k3s pin above; separate manager because a regex manager takes one depNameTemplate. Every LoadBalancer VIP in the estate (Traefik's edge, Pi-hole's DNS) is served by this component.",
+      "description": "MetalLB pin in roles/setup/k3s/defaults/main.yml — the manifest URL in tasks/main.yml interpolates this var, so it decides which MetalLB the cluster installs. Same file, same blind spot as the k3s pin above; separate manager because a regex manager takes one depNameTemplate. Every LoadBalancer VIP in the estate (Traefik's edge, Pi-hole's DNS) is served by this component. extractVersionTemplate is load-bearing: metallb/metallb publishes TWO tag families into one releases feed — the app (`v0.16.0`) and the Helm chart (`metallb-chart-0.16.1`) — and the chart runs a minor AHEAD of the app it packages, so on 2026-09-01 the newest release in the feed was a chart tag. This pin is the app; anchoring the extract to a leading `v` makes the manager read only app releases rather than relying on the datasource happening to skip a tag shape it cannot parse.",
       "managerFilePatterns": [
         "/(^|/)ansible/roles/setup/k3s/defaults/main\\.yml$/"
       ],
@@ -181,7 +181,8 @@
         "k3s_metallb_version:\\s*\"?(?<currentValue>v[^\"\\s]+)\"?"
       ],
       "depNameTemplate": "metallb/metallb",
-      "datasourceTemplate": "github-releases"
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
     },
     {
       "customType": "regex",

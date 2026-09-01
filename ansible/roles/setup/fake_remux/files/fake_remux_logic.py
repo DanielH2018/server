@@ -17,6 +17,9 @@ The NTRX "BD Remux 1080p AVC" that shipped a 10.4 s-GOP hevc_qsv re-encode (2026
 
 from __future__ import annotations
 
+from itertools import pairwise
+
+
 # Consumer re-encoder identifiers that appear in a video stream's ENCODER tag. A remux (stream copy)
 # preserves the disc's original tag (usually none), never one of these. Matched case-insensitively as
 # substrings. `lavc` (libavcodec) covers any generic ffmpeg encode; `x264`/`x265` the CLI encoders;
@@ -132,7 +135,7 @@ def max_keyframe_gap(keyframe_times, probe_window_s):
     times = sorted(t for t in (keyframe_times or []) if t is not None)
     if len(times) < 2:
         return float(probe_window_s)
-    return max(b - a for a, b in zip(times, times[1:]))
+    return max(b - a for a, b in pairwise(times))
 
 
 def gop_exceeds(keyframe_times, probe_window_s, gop_max_s) -> bool:

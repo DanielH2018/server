@@ -353,7 +353,7 @@ def ha_state_rows(states, model):
     """Render the derived cells/automations annotated with live values from a /api/states list."""
     by_id = {s["entity_id"]: s for s in states}
     lines = ["Cells:"]
-    for name, cell in model["cells"].items():
+    for _name, cell in model["cells"].items():
         s = by_id.get(cell["entity"])
         val = s["state"] if s else "—(absent)"
         when = s.get("last_changed", "") if s else ""

@@ -177,7 +177,10 @@ def wait(
             runs = fetch(target)
         except urllib.error.URLError, TimeoutError, ValueError, OSError:
             runs = []
-        verdict = verdict_for(target, fetch=lambda _s: runs)
+        # `runs` is bound as a default rather than closed over: verdict_for calls this
+        # synchronously within the iteration, so late binding is harmless today, but a
+        # future caller that deferred the call would silently read the next poll's runs.
+        verdict = verdict_for(target, fetch=lambda _s, _runs=runs: _runs)
         if verdict == "pass":
             return 0, f"{target[:8]}: CI green"
         if verdict == "fail":

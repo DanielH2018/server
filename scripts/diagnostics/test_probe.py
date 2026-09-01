@@ -445,7 +445,7 @@ def test_resolve_arr_ip_raises_on_kubectl_failure(monkeypatch):
     monkeypatch.setattr(probe.subprocess, "run", lambda argv, **kwargs: FakeResult())
     try:
         probe_arr.resolve_arr_ip("sonarr")
-        assert False, "expected SystemExit"
+        raise AssertionError("expected SystemExit")
     except SystemExit as e:
         assert "sonarr" in str(e)
 
@@ -461,7 +461,7 @@ def test_resolve_arr_ip_raises_on_empty_cluster_ip(monkeypatch):
     monkeypatch.setattr(probe.subprocess, "run", lambda argv, **kwargs: FakeResult())
     try:
         probe_arr.resolve_arr_ip("sonarr")
-        assert False, "expected SystemExit"
+        raise AssertionError("expected SystemExit")
     except SystemExit as e:
         assert "ClusterIP" in str(e)
 
