@@ -18,9 +18,10 @@ A systemd timer runs `gitops-deploy.service` on `daniel-box` every 30 minutes. O
 order:
 
 1. Fetch `origin`.
-2. Read the check runs for the origin SHA and decide a CI verdict
-   (`deploy_logic.py:274`).
-3. Choose an action from the verdict and the changed paths (`deploy_logic.py:312`).
+2. Read the check runs for the origin SHA and decide a CI verdict (`ci_verdict()` in
+   `deploy_logic.py`).
+3. Choose an action from the verdict and the changed paths (`next_action()` in
+   `deploy_logic.py`).
 4. Consult the staging cluster, on a k8s deploy where `gitops_deploy_staging_gate` is armed
    and the services intersect `STAGING_SUBSET`. Advisory: it returns no verdict and cannot
    block the deploy, but it adds up to `STAGING_GATE_TIMEOUT_S` + `STAGING_EXPECT_TIMEOUT_S`
@@ -49,8 +50,8 @@ anything.
 Four reasons, and they look identical from outside — the unit succeeds and exits 0 in every
 one of them.
 
-**CI is pending or red.** `next_action` returns `ci_pending` *before* the fast-forward
-(`deploy_logic.py:345`). A tick fired seconds after a merge therefore pulls nothing, because
+**CI is pending or red.** `next_action()` returns `ci_pending` *before* the fast-forward. A
+tick fired seconds after a merge therefore pulls nothing, because
 GitHub has not finished creating the run yet. An empty or incomplete check-run list is
 pending, never green.
 

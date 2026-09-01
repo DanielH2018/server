@@ -276,12 +276,13 @@ history, the `homelab-ui` DNS/auth/secrecy triad and its `-m ui` suite, per-file
   `land.sh --pr <n> --since <sha>` form instead. The first two reads are an ordinary glance and
   pass. Measured over the 7 days to 2026-08-29: 173 `gh pr checks` + 75 `gh run list` + 61
   `gh run watch` against 29 `land.sh` runs, which is why the CLAUDE.md paragraph became a hook.
-- **block-footguns** (PreToolUse, Bash) — *denies* four commands that return a plausible wrong
-  answer rather than an error: `grep -Z`/`-z` (this host's grep is ugrep, where those mean
-  `--fuzzy` and `--decompress`, not the NUL flags — use `--null`/`--null-data`), a bare
-  `git stash pop`/`apply` (the stash stack is per-repository, so it can take another session's
-  WIP), `kubectl rollout restart` (Forbidden to the read-only SA, and it prints "successfully
-  rolled out" anyway), and `ssh daniel-<host> '<git …>'` with no `cd` into the repo.
+- **block-footguns** (PreToolUse, Bash) — *denies* a growing set of commands that return a
+  plausible wrong answer rather than an error, each with a deterministic signature and a
+  recorded incident: `grep -Z`/`-z` (this host's grep is ugrep, where those mean `--fuzzy` and
+  `--decompress`, not the NUL flags — use `--null`/`--null-data`) and a bare `git stash
+  pop`/`apply` (the stash stack is per-repository, so it can take another session's WIP) are
+  two of them. Read `.claude/hooks/block-footguns.py`'s own docstring for the current full
+  list — enumerating it here is exactly what drifted before.
 - **validate-compose** (PostToolUse) — re-renders all compose templates after you edit a
   `docker-compose.yml.j2`, an `ansible/templates/*.j2` macro, or `host_vars`/`group_vars/all.yml`;
   fails on malformed YAML (catches Jinja indent bugs `ansible-lint` misses) and on an
