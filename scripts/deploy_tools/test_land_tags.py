@@ -294,7 +294,12 @@ def test_pr_617_reports_the_shared_roles_as_owed_work():
     assert "ansible/deploy.yml" in note, (
         "a full deploy is the only thing that applies them"
     )
-    assert "initial_setup.yml" in note, "roles/setup/k3s is in this PR too"
+    # `k3s-bringup.yml`, NOT `initial_setup.yml`, which this asserted until 2026-09-01. The
+    # k3s role appears only in the bring-up playbook, so the old expectation was pinning a
+    # command that exits 0 having matched no task — see `_SETUP_ROLES_OUTSIDE_INITIAL_SETUP`.
+    assert "ansible/k3s-bringup.yml --tags k3s" in note, (
+        "roles/setup/k3s is in this PR too"
+    )
 
 
 def test_a_shared_role_alone_derives_no_tag_and_still_reports():

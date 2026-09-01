@@ -159,7 +159,7 @@ def plane_note(files, declared: set[str] | None = None) -> str:
         notes.append(k8s_remediation(set(shared), declared))
     cs = services_from_changed_paths(files)
     if cs.broad_setup or cs.broad_deploy:
-        notes.append(broad_remediation(cs.broad_deploy, cs.broad_setup))
+        notes.append(broad_remediation(cs.broad_deploy, cs.broad_setup, cs.setup_roles))
     if cs.secrets:
         # DECIDED: fire on ANY change to secrets.yml, and never try to name which keys moved.
         # Naming them means decrypting both revisions, and no plaintext may reach a terminal, a
