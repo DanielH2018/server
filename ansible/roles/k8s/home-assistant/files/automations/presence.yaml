@@ -1,0 +1,113 @@
+---
+# Managed by Ansible (roles/k8s/home-assistant/files/automations/presence.yaml).
+# Source of truth — copied to /config/automations/ and overwritten on deploy. HA UI automation
+# edits are NOT persistent (the UI shows these as read-only). To change, edit this file and run:
+#   ./scripts/deploy.sh --tags home-assistant
+#
+# Every file in this directory is merged into one `automation:` list by
+# `!include_dir_merge_list automations/` in configuration.yaml.
+#
+# Away and arrive-home transitions.
+
+# Home/away: turn the bedroom off when you leave the HOUSE (person.daniel) — a different layer than
+# the FP300's ROOM presence. Two stages absorb GPS jitter: 'leave' at 10 min away, a 'failsafe'
+# re-sweep at 30 min. Triggering on from:"home" catches leaving to any away state (not_home or a
+# named zone); the `for:` cancels on an early return (mailbox/jitter bounce). Turn-off is
+# unconditional (leaving always allows off) and the override booleans are left UNTOUCHED (respecting
+# them = never writing them here). The fan/light on-paths are separately gated on person.daniel ==
+# home (bedroom_fan_temperature, bedroom_presence_on, the morning reset's fan apply) so nothing
+# turns back on while away. Known gap: an HA restart while already away misses these (from:"home"
+# needs a live transition) — the gates still prevent away-on, so it self-corrects.
+- id: bedroom_away
+  alias: Bedroom away
+  description: When you leave home (10 min) and as a 30-min failsafe, turn off the bedroom lights + fan and notify what was on.
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: person.daniel
+      from: "home"
+      for: "00:10:00"
+      id: leave
+    - platform: state
+      entity_id: person.daniel
+      from: "home"
+      for: "00:30:00"
+      id: failsafe
+  action:
+    - variables:
+        on_label: >-
+          {% from 'lighting.jinja' import away_items_label %}{{ away_items_label(is_state('light.bedroom_lights', 'on'), is_state('fan.tower_fan', 'on')) }}
+    - choose:
+        # Only act + notify when something is actually on — so the 30-min failsafe stays silent
+        # unless it caught something the 10-min leave missed (or that came on since).
+        - conditions: "{{ on_label != '' }}"
+          sequence:
+            - service: script.bedroom_lights_set
+              data:
+                reason: "off"
+            - service: script.bedroom_fan_set
+              data:
+                reason: "off"
+            # Routine notify (you're not quiet when leaving) — one notify path for the whole system.
+            - service: script.bedroom_notify
+              data:
+                title: "🏠 Left on"
+                message: "Turned off bedroom {{ on_label }} (you're away)"
+                tag: bedroom_away
+                # Deliver NOW, don't hold for the arrival digest: bedroom_away only ever fires while
+                # away, so without this the message + its "Turn back on" button are parked as a held
+                # persistent_notification (flushed phone-only on arrival, actions stripped) and the
+                # button can never be tapped — defeating the false-away undo it exists for.
+                # critical_away pushes while away without piercing DND at home.
+                critical_away: true
+                # One-tap undo for a false-away (GPS jitter while you're actually home).
+                actions:
+                  - action: BEDROOM_AWAY_TURN_ON
+                    title: Turn back on
+
+# Arrive home nudge: resume the gated automations promptly on return (person.daniel -> home). NOT a
+# welcome-home — never forces lights on. The fan resumes per the temperature band (unless the fan
+# override is on); lights only re-check if you're actually standing in the bedroom (FP300 present)
+# and haven't engaged the manual-off override — so arriving mid-day elsewhere in the house lights
+# nothing. Both routes go through the apply_* scripts, which honor the overrides internally.
+- id: bedroom_arrive_home
+  alias: Bedroom arrive home
+  description: On returning home, resume the fan per temperature and re-check lights if already in the bedroom.
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: person.daniel
+      to: "home"
+  action:
+    # Clear the away "Left on" note if it's still up — arriving home makes its false-away undo moot
+    # (created by bedroom_away with notification_id: bedroom_away; only the BEDROOM_AWAY_TURN_ON tap
+    # dismissed it before, and the hold_-prefixed arrival flush doesn't match it). A stray dismiss
+    # of an absent id no-ops, so this is safe when nothing was left on.
+    - service: persistent_notification.dismiss
+      data:
+        notification_id: bedroom_away
+    # ...and clear the DELIVERED phone push too. bedroom_away pushes via notify.mobile_app_pixel_9_pro
+    # with tag: bedroom_away, and critical_away bypasses the away-hold so it lands as a real Android
+    # push that the dismiss above can't touch. On a genuine away you (correctly) never tap "Turn back
+    # on", so this arrival clear is the tag's own recovery path — closing the "the bedroom_away tag has
+    # no recovery path of its own" gap noted at the BEDROOM_AWAY_TURN_ON handler. clear_notification is
+    # a no-op when nothing's showing; continue_on_error so a renamed notify slug can't abort the
+    # fan/light resume below (same reason bedroom_notify's pushes carry it).
+    - service: notify.mobile_app_pixel_9_pro
+      continue_on_error: true
+      data:
+        message: clear_notification
+        data:
+          tag: bedroom_away
+    - if: "{{ is_state('input_boolean.bedroom_fan_manual', 'off') }}"
+      then:
+        - service: script.bedroom_apply_fan
+    - if: >-
+        {% from 'lighting.jinja' import arrive_relight_allowed %}{{ arrive_relight_allowed(
+           is_state('binary_sensor.aqara_fp300_presence', 'on'),
+           is_state('input_boolean.bedroom_manual_off', 'on'),
+           is_state('light.bedroom_lights', 'on')) | bool }}
+      then:
+        - service: script.bedroom_lights_set
+          data:
+            reason: "natural"

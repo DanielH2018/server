@@ -78,7 +78,7 @@ Everything below is carried into the cluster by `templates/configmap.yaml.j2` wi
 | File | What it holds |
 |---|---|
 | `templates/config/configuration.yaml.j2` | `default_config`, helpers, Adaptive Lighting, 16 `threshold` sensors, `template: !include`, `recorder:` excludes, http/trusted-proxy, Lovelace |
-| `files/automations.yaml` | the 33 automations |
+| `files/automations/*.yaml` | the automations, one file per topic (lighting, wake-and-sleep, fan-and-air, alerts, presence, display, system), merged by `!include_dir_merge_list` |
 | `files/scripts.yaml` | the 16 scripts |
 | `files/scenes.yaml` | `bedroom_bright` / `bedroom_nightlight` |
 | `files/templates.yaml` | `sensor.bedroom_wake_start` template sensor |

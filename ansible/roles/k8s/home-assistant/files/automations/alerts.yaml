@@ -1,0 +1,442 @@
+---
+# Managed by Ansible (roles/k8s/home-assistant/files/automations/alerts.yaml).
+# Source of truth — copied to /config/automations/ and overwritten on deploy. HA UI automation
+# edits are NOT persistent (the UI shows these as read-only). To change, edit this file and run:
+#   ./scripts/deploy.sh --tags home-assistant
+#
+# Every file in this directory is merged into one `automation:` list by
+# `!include_dir_merge_list automations/` in configuration.yaml.
+#
+# Threshold, sensor-offline and calibration alerts, and the notification action/hold plumbing.
+
+# Unified threshold alert engine: ALL `threshold` binary-sensors in configuration.yaml.j2 (air
+# quality CO2/PM2.5/VOC/NOx + the SEVERE tier, battery FP300/Tap Dial, humidity high/low) feed this
+# ONE automation. Hysteresis lives in the threshold sensors, so this just reacts to off<->on edges,
+# anchored on off<->on (NOT unknown) so an HA restart while bad doesn't re-alert and an unavailable
+# source can't false-alert (sensor-offline owns offline). The category is encoded in each trigger id
+# (<category>_bad / <category>_ok); everything else is derived generically from the triggering
+# sensor. Per-category differences live in the `cfg` map: title, `pulse` (light flash, air quality
+# only), `watch` (wrist buzz), `pierce` (sound through DND — severe air quality only), `recovery`
+# (whether to send a "back to normal" notice). All notify routes through script.bedroom_notify
+# (DND/sleep-aware channel + importance + watch mirroring). Adding a metric = one threshold sensor +
+# add it to its category's two trigger lists; a NEW category = two trigger blocks + one `cfg` entry.
+- id: bedroom_threshold_alert
+  alias: Bedroom threshold alert
+  description: Notify when any air-quality/battery/humidity threshold crosses; recovery when it clears; pulse the lights for air quality only.
+  mode: queued
+  max: 10
+  trigger:
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_co2_high
+        - binary_sensor.bedroom_pm2_5_high
+        - binary_sensor.bedroom_voc_high
+        - binary_sensor.bedroom_nox_high
+      from: "off"
+      to: "on"
+      for: "00:00:30"
+      id: airquality_bad
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_co2_high
+        - binary_sensor.bedroom_pm2_5_high
+        - binary_sensor.bedroom_voc_high
+        - binary_sensor.bedroom_nox_high
+      from: "on"
+      to: "off"
+      for: "00:00:30"
+      id: airquality_ok
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_co2_severe
+        - binary_sensor.bedroom_pm2_5_severe
+        - binary_sensor.bedroom_voc_severe
+        - binary_sensor.bedroom_nox_severe
+      from: "off"
+      to: "on"
+      for: "00:00:30"
+      id: airqualitysevere_bad
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_co2_severe
+        - binary_sensor.bedroom_pm2_5_severe
+        - binary_sensor.bedroom_voc_severe
+        - binary_sensor.bedroom_nox_severe
+      from: "on"
+      to: "off"
+      for: "00:00:30"
+      id: airqualitysevere_ok
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_fp300_battery_low
+        - binary_sensor.bedroom_tap_dial_battery_low
+      from: "off"
+      to: "on"
+      for: "00:01:00"
+      id: battery_bad
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_fp300_battery_low
+        - binary_sensor.bedroom_tap_dial_battery_low
+      from: "on"
+      to: "off"
+      for: "00:01:00"
+      id: battery_ok
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_humidity_high
+        - binary_sensor.bedroom_humidity_low
+      from: "off"
+      to: "on"
+      for: "00:05:00"
+      id: humidity_bad
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_humidity_high
+        - binary_sensor.bedroom_humidity_low
+      from: "on"
+      to: "off"
+      for: "00:05:00"
+      id: humidity_ok
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_temp_high
+        - binary_sensor.bedroom_temp_low
+      from: "off"
+      to: "on"
+      for: "00:05:00"
+      id: temperature_bad
+    - platform: state
+      entity_id:
+        - binary_sensor.bedroom_temp_high
+        - binary_sensor.bedroom_temp_low
+      from: "on"
+      to: "off"
+      for: "00:05:00"
+      id: temperature_ok
+    - platform: state
+      entity_id:
+        - binary_sensor.outdoor_pm2_5_high
+      from: "off"
+      to: "on"
+      for: "00:00:30"
+      id: airqualityoutdoor_bad
+    - platform: state
+      entity_id:
+        - binary_sensor.outdoor_pm2_5_high
+      from: "on"
+      to: "off"
+      for: "00:00:30"
+      id: airqualityoutdoor_ok
+    - platform: state
+      entity_id:
+        - binary_sensor.outdoor_pm2_5_severe
+      from: "off"
+      to: "on"
+      for: "00:00:30"
+      id: airqualityoutdoorsevere_bad
+    - platform: state
+      entity_id:
+        - binary_sensor.outdoor_pm2_5_severe
+      from: "on"
+      to: "off"
+      for: "00:00:30"
+      id: airqualityoutdoorsevere_ok
+  action:
+    # Derive everything from the triggering threshold sensor — its `entity_id` attribute points at
+    # its SOURCE sensor (live value + unit); the label is the threshold sensor's own friendly name
+    # with the trailing " high"/" low" stripped (the extra ' low' strip is what makes battery and
+    # the low-humidity sensor read correctly). Category + edge come from the trigger id.
+    - variables:
+        category: "{{ trigger.id.split('_')[0] }}"
+        edge: "{{ trigger.id.split('_')[1] }}"
+        src: "{{ trigger.to_state.attributes.entity_id }}"
+        label: "{{ trigger.to_state.attributes.friendly_name | replace(' high', '') | replace(' low', '') | replace(' severe', '') }}"
+        value: "{{ states(src) }}"
+        unit: "{{ state_attr(src, 'unit_of_measurement') or '' }}"
+        unit_sp: "{{ ' ' ~ unit if unit else '' }}"
+        # Same tag for bad + recovery → the recovery replaces the alert on the phone.
+        tag: "threshold_alert_{{ trigger.entity_id }}"
+        # Per-category routing flags. `pulse` = brief red light flash (air quality only). `watch` =
+        # also buzz the wrist (glanceable). `pierce` = sound even while quiet/DND (severe air quality
+        # only — the can't-miss tier). `critical_away` = push while AWAY instead of holding for the
+        # arrival digest (temperature only — it's the damage-class safety net for when nobody's home;
+        # it does NOT pierce DND at home, so it's a tier below `pierce`). `recovery` = send a "back to
+        # normal" notice (severe skips it; the moderate recovery covers it). All notify goes through
+        # script.bedroom_notify (DND-aware).
+        cfg: >-
+          {{ {'airquality':       {'bad': '⚠️ Air quality', 'ok': '✅ Air quality', 'pulse': true,  'watch': true,  'pierce': false, 'recovery': true},
+              'airqualitysevere': {'bad': '🚨 Air quality HIGH', 'ok': '✅ Air quality', 'pulse': true, 'watch': true, 'pierce': true, 'recovery': false},
+              'battery':          {'bad': '🔋 Battery low', 'ok': '🔋 Battery OK', 'pulse': false, 'watch': false, 'pierce': false, 'recovery': true},
+              'humidity':         {'bad': '💧 Humidity', 'ok': '💧 Humidity OK', 'pulse': false, 'watch': false, 'pierce': false, 'recovery': true},
+              'temperature':      {'bad': '🌡️ Temperature', 'ok': '🌡️ Temperature OK', 'pulse': false, 'watch': true,  'pierce': false, 'critical_away': true, 'recovery': true},
+              'airqualityoutdoor':       {'bad': '🌫️ Outdoor air', 'ok': '✅ Outdoor air', 'pulse': false, 'watch': true,  'pierce': false, 'recovery': true},
+              'airqualityoutdoorsevere': {'bad': '🚨 Outdoor air HIGH', 'ok': '✅ Outdoor air', 'pulse': false, 'watch': true, 'pierce': true, 'recovery': false}}[category] }}
+        # Air-quality bad alerts get a "Boost fan" action button (circulate the air); other
+        # categories get none. Handled by bedroom_notification_action.
+        boost_actions: "{{ [{'action': 'BEDROOM_BOOST_FAN', 'title': 'Boost fan'}] if category in ['airquality', 'airqualitysevere'] else [] }}"
+        # A sudden spike can cross BOTH the moderate (_high) and severe (_severe) thresholds within
+        # the same 30s window, firing two bad alerts at once. Flag a moderate whose matching severe
+        # sensor is already on so we can suppress it (the severe alert, which pierces, supersedes it).
+        # Only the indoor/outdoor air-quality categories have a severe counterpart (_high -> _severe).
+        severe_shadowed: >-
+          {{ category in ['airquality', 'airqualityoutdoor']
+             and is_state(trigger.entity_id | replace('_high', '_severe'), 'on') }}
+    - choose:
+        - conditions: "{{ edge == 'bad' }}"
+          sequence:
+            # Suppress a moderate air-quality bad that an already-on severe sensor covers. Gate INSIDE
+            # the bad branch (not via the choose condition) so a shadowed moderate can't fall through
+            # to the recovery default below.
+            - if: "{{ not severe_shadowed }}"
+              then:
+                - service: script.bedroom_notify
+                  data:
+                    title: "{{ cfg.bad }}"
+                    message: "{{ label }} is {{ value }}{{ unit_sp }}"
+                    tag: "{{ tag }}"
+                    watch: "{{ cfg.watch }}"
+                    pierce: "{{ cfg.pierce }}"
+                    critical_away: "{{ cfg.critical_away | default(false) }}"
+                    actions: "{{ boost_actions }}"
+                # Light pulse only for air quality (cfg.pulse) and only when the lights are already on
+                # — never wakes you, never fights Adaptive Lighting / the manual-off override at night.
+                - if: "{{ cfg.pulse and is_state('light.bedroom_lights', 'on') }}"
+                  then:
+                    - service: script.bedroom_alert_pulse
+      # off<->on edges only, so the remaining case (edge == 'ok') is the default. Recovery is always
+      # routine (no watch/pierce); the severe tier skips it (cfg.recovery false).
+      default:
+        - if: "{{ cfg.recovery }}"
+          then:
+            - service: script.bedroom_notify
+              data:
+                title: "{{ cfg.ok }}"
+                message: "{{ label }} back to normal ({{ value }}{{ unit_sp }})"
+                tag: "{{ tag }}"
+                recovery: true
+                # A critical_away category (temperature) pushed its bad alert while away rather than
+                # holding it, so its all-clear should push too (there's no hold_<tag> to cancel).
+                critical_away: "{{ cfg.critical_away | default(false) }}"
+          else:
+            # Severe air quality (the only recovery:false categories) sends NO recovery PUSH by
+            # design — the moderate recovery covers the all-clear — but its bad alert pierced and so
+            # left a persistent "HIGH" note (id = tag) in the HA UI. Without this it lingered after
+            # the air recovered, contradicting the live state. Dismiss the note directly (no push):
+            # clears the stale HIGH while keeping the deliberate no-redundant-push behavior.
+            - service: persistent_notification.dismiss
+              data:
+                notification_id: "{{ tag }}"
+
+# Sensor-offline alert: any bedroom-automation dependency going `unavailable` for 5 min sends a
+# phone notification; a recovery notice fires when it returns (same tag, so it replaces the alert).
+# The 5-min `for:` rides out HA restarts and the ~120s deploy recreate (entities go briefly
+# unavailable, then back). Detection latency differs by device class and that's inherent: the
+# AirGradient ONE and DREO fan (polled integrations) go unavailable within minutes; the FP300
+# (battery Zigbee) only after Z2M's passive availability timeout (60 min — see the zigbee2mqtt
+# config), because a sleeping radio can't be actively pinged. Z2M availability MUST be enabled for
+# the FP300 to ever go unavailable.
+# The Tap Dial (RDM002) is deliberately NOT watched here: it's a passive INPUT device, so going
+# quiet from disuse trips Z2M's 60-min passive timeout as a routine false positive — nothing depends
+# on the dial reporting (unlike the FP300/fan/AirGradient, which feed live automations and whose
+# silence actually breaks things). A genuinely dead dial is still caught by
+# binary_sensor.bedroom_tap_dial_battery_low (the threshold engine) and is obvious on the next press.
+# (Removed from this alert 2026-06-24 to cut idle-dial noise.)
+# Adding a watched device = add its representative entity to BOTH trigger lists below (one entity
+# per device suffices — Z2M flips all of a device's entities together). Brief flaps can emit a lone
+# recovery with no prior alert (the offline edge needs a full 5 min down) — rare and low-harm,
+# accepted like the air-quality engine.
+- id: bedroom_sensor_offline_alert
+  alias: Bedroom sensor offline alert
+  description: Notify when a bedroom-automation dependency (AirGradient/FP300/fan) goes unavailable; recovery notice when it returns.
+  mode: queued
+  max: 10
+  trigger:
+    - platform: state
+      entity_id:
+        - sensor.bedroom_airgradient_one_carbon_dioxide
+        - binary_sensor.aqara_fp300_presence
+        - fan.tower_fan
+      to: "unavailable"
+      for: "00:05:00"
+      id: offline
+    - platform: state
+      entity_id:
+        - sensor.bedroom_airgradient_one_carbon_dioxide
+        - binary_sensor.aqara_fp300_presence
+        - fan.tower_fan
+      from: "unavailable"
+      id: recovery
+  action:
+    # An entity's friendly_name attribute is EMPTY while it is unavailable, so derive the human name
+    # from the AVAILABLE side of the transition: to_state for recovery, from_state for offline.
+    # default(entity_id, true) falls back to the raw entity_id if neither side carries a name.
+    - variables:
+        name: >-
+          {{ (trigger.to_state.attributes.friendly_name
+              if (trigger.to_state is not none and trigger.to_state.attributes.friendly_name is defined)
+              else trigger.from_state.attributes.friendly_name)
+             | default(trigger.entity_id, true) }}
+        # Same tag for offline + recovery → the recovery replaces the alert on the phone.
+        tag: "sensor_offline_{{ trigger.entity_id }}"
+    - choose:
+        # A dead dependency buzzes the watch (glanceable) but is routine for DND — a sensor offline
+        # overnight isn't worth waking for (no pierce). Recovery is routine, phone-only.
+        - conditions: "{{ trigger.id == 'offline' }}"
+          sequence:
+            - service: script.bedroom_notify
+              data:
+                title: "⚠️ Sensor offline"
+                message: "{{ name }} is offline (no data)"
+                tag: "{{ tag }}"
+                watch: true
+      # from:"unavailable" edges only, so the remaining case (id == 'recovery') is the default.
+      # Only notify recovery if the device was actually unavailable >= 5 min (the same threshold the
+      # offline alert needs) — otherwise the unavailable→available blip on every HA/Z2M restart would
+      # send a spurious "back online" with no preceding alert.
+      default:
+        - if: >-
+            {{ trigger.from_state is not none and trigger.to_state is not none
+               and (as_timestamp(trigger.to_state.last_changed) - as_timestamp(trigger.from_state.last_changed)) >= 300 }}
+          then:
+            - service: script.bedroom_notify
+              data:
+                title: "✅ Sensor back online"
+                message: "{{ name }} is reporting again"
+                tag: "{{ tag }}"
+                recovery: true
+
+# Flush held notifications on arrival: when you re-enter the home geofence, any alerts that were
+# parked while you were away (persistent_notification ids starting with hold_) and did NOT resolve
+# meanwhile are delivered as ONE "While you were out" digest, then cleared. Anything that resolved
+# while away was already dismissed by its recovery (bedroom_notify), so it never appears here. The
+# condition gates the whole thing so arriving with nothing held is silent. `match` is start-anchored,
+# so 'hold_' won't catch the pierce path's bare-tag persistent notifications.
+- id: bedroom_flush_held_notifications
+  alias: Bedroom flush held notifications
+  description: On arrival home, deliver any still-unresolved away-held alerts as one digest, then clear them.
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: person.daniel
+      to: "home"
+  condition:
+    - condition: template
+      value_template: "{{ states.persistent_notification | selectattr('object_id', 'match', 'hold_') | list | count > 0 }}"
+  action:
+    - variables:
+        held: "{{ states.persistent_notification | selectattr('object_id', 'match', 'hold_') | list }}"
+        count: "{{ held | count }}"
+        body: "{{ held | map(attribute='attributes.message') | map('regex_replace', '^', '• ') | join('\n') }}"
+    # Deliberately NO continue_on_error here (unlike bedroom_notify's pushes): if this push
+    # fails (renamed notify service), aborting BEFORE the dismiss loop below keeps the held
+    # notes visible in the UI instead of discarding them undelivered — and this automation's
+    # logger is NOT excluded by ha_runtime_error_alert, so the failure pages on its own.
+    - service: notify.mobile_app_pixel_9_pro
+      data:
+        title: "🏠 While you were out ({{ count }})"
+        message: "{{ body }}"
+        data:
+          tag: held_digest
+    - repeat:
+        for_each: "{{ held | map(attribute='object_id') | list }}"
+        sequence:
+          - service: persistent_notification.dismiss
+            data:
+              notification_id: "{{ repeat.item }}"
+
+# Actionable-notification dispatcher: handle taps on notification buttons. The companion app fires
+# mobile_app_notification_action with the BEDROOM_* action id from the button. Buttons are attached
+# by passing `actions` to script.bedroom_notify (air-quality bad -> Boost fan; away -> Turn back on;
+# the bedtime prompt -> Start now). Add a new button = add its case here + pass it in the actions list.
+- id: bedroom_notification_action
+  alias: Bedroom notification action
+  description: Dispatch taps on actionable notification buttons (mobile_app_notification_action).
+  mode: queued
+  max: 10
+  trigger:
+    - platform: event
+      event_type: mobile_app_notification_action
+  action:
+    - choose:
+        # Boost fan: max circulation. Engages the manual override so it persists (clear via Tap Dial
+        # button 3 or the morning reset). Honest caveat: moves air, doesn't lower CO2.
+        - conditions: "{{ trigger.event.data.action == 'BEDROOM_BOOST_FAN' }}"
+          sequence:
+            - service: script.bedroom_fan_set
+              data:
+                reason: "boost"
+        - conditions: "{{ trigger.event.data.action == 'BEDROOM_START_BEDTIME' }}"
+          sequence:
+            - service: script.bedroom_bedtime
+        # Undo a false-away: restore lights + fan. Calls the apply_* scripts directly so they ignore
+        # the home-gates (you're tapping because the tracker is wrong / you're actually home).
+        - conditions: "{{ trigger.event.data.action == 'BEDROOM_AWAY_TURN_ON' }}"
+          sequence:
+            - service: script.bedroom_lights_set
+              data:
+                reason: "natural"
+            - service: script.bedroom_fan_set
+              data:
+                reason: "auto"
+            # Clear the "Left on" HA persistent note (the critical_away visibility fallback) now that
+            # you've acted on it — the bedroom_away tag has no recovery path of its own.
+            - service: persistent_notification.dismiss
+              data:
+                notification_id: bedroom_away
+
+# Unexpected-occupancy tripwire: FP300 presence newly detected (off->on, 30s) while you're away ->
+# security alert. Triggers on the EDGE (a fresh detection), so a GPS glitch while you're physically
+# present can't fire it (presence already on). Away guard requires person not-home for >5 min, so a
+# brief away-glitch-then-return can't alarm; the fan is off while away (no airflow false-positive).
+# watch + pierce (a security event should reach you even in DND). Pairs with the home/away logic.
+- id: bedroom_unexpected_occupancy
+  alias: Bedroom unexpected occupancy
+  description: Alert (watch + pierce) when the bedroom is occupied while you're away.
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.aqara_fp300_presence
+      from: "off"
+      to: "on"
+      for: "00:00:30"
+  condition:
+    - condition: template
+      value_template: >-
+        {{ states('person.daniel') not in ['home', 'unknown', 'unavailable']
+           and (now() - states.person.daniel.last_changed).total_seconds() > 300 }}
+  action:
+    - service: script.bedroom_notify
+      data:
+        title: "🚨 Bedroom occupied"
+        message: "Motion detected in the bedroom while you're away."
+        tag: unexpected_occupancy
+        watch: true
+        pierce: true
+
+# Quarterly CO2 calibration reminder: the AirGradient ONE's SenseAir CO2 sensor drifts over months,
+# which would quietly skew the air-quality alert thresholds. 4x/year (the 1st of Jan/Apr/Jul/Oct at
+# 10:00 — daily trigger + a date condition, same shape as update_available_digest) nudge to
+# recalibrate. NOTIFY-ONLY with the live reading + an air-out-FIRST instruction: manual calibration
+# sets the CURRENT reading as the 400 ppm baseline, so it must be done at the outdoor baseline. A
+# one-tap "calibrate now" button is deliberately omitted — an accidental tap on stale indoor air
+# would lock in a wrong baseline. Routine via bedroom_notify (phone-only, silent while quiet).
+- id: bedroom_co2_calibration_reminder
+  alias: Bedroom CO2 calibration reminder
+  description: Quarterly nudge to recalibrate the AirGradient CO2 sensor against the outdoor ~400 ppm baseline.
+  mode: single
+  trigger:
+    - platform: time
+      at: "10:00:00"
+  condition:
+    - condition: template
+      value_template: "{{ now().day == 1 and now().month in [1, 4, 7, 10] }}"
+  action:
+    - service: script.bedroom_notify
+      data:
+        title: "🌬️ CO₂ sensor calibration due"
+        message: >-
+          Air the room out (~15 min, window open) to reach the outdoor ~400 ppm baseline, then press
+          the AirGradient "Calibrate CO₂" button (Settings → Devices → AirGradient ONE). Current
+          reading: {{ states('sensor.bedroom_airgradient_one_carbon_dioxide') }} ppm.
+        tag: co2_calibration_reminder

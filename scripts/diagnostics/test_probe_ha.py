@@ -7,6 +7,8 @@ that, and the WebSocket codec and trace parser are what `ha why` / `ha trace` ar
 
 import os
 
+import pytest
+
 import probe_core as core
 import probe_ha as ha
 
@@ -257,7 +259,7 @@ def test_automation_load_errors_flags_missing_and_unavailable():
     ]
     errs = automation_load_errors(expected, live)
     assert errs == [
-        "automation b_missing is defined in automations.yaml but did not load",
+        "automation b_missing is defined in files/automations/ but did not load",
         "automation c_unavailable loaded but is unavailable (config error at load)",
     ]
 
@@ -338,9 +340,32 @@ def test_verify_automations_path_exists():
     test above passed throughout, because it never opens the file. Reading it here means a
     future move of the role breaks a test instead of the post-deploy gate.
     """
-    from probe_ha import AUTOMATIONS_YAML, expected_automation_ids
+    from probe_ha import (
+        AUTOMATIONS_DIR,
+        automations_source_text,
+        expected_automation_ids,
+    )
 
-    assert os.path.isfile(AUTOMATIONS_YAML), f"{AUTOMATIONS_YAML} is not readable"
-    with open(AUTOMATIONS_YAML, encoding="utf-8") as f:
-        ids = expected_automation_ids(f.read())
-    assert ids, "no automation ids parsed from the git-managed source"
+    assert os.path.isdir(AUTOMATIONS_DIR), f"{AUTOMATIONS_DIR} is not a directory"
+    ids = expected_automation_ids(automations_source_text())
+    assert len(ids) > 1, "no automation ids parsed from the git-managed source"
+
+
+def test_automations_source_text_rejects_empty_dir(tmp_path):
+    # An empty directory must not read as "expect nothing": that gate passes on anything.
+    from probe_ha import automations_source_text
+
+    with pytest.raises(FileNotFoundError, match="no \\*\\.yaml"):
+        automations_source_text(str(tmp_path))
+
+
+def test_automations_source_text_concatenates_every_file(tmp_path):
+    from probe_ha import automations_source_text, expected_automation_ids
+
+    (tmp_path / "b.yaml").write_text("- id: two\n")
+    (tmp_path / "a.yaml").write_text("- id: one\n")
+    (tmp_path / "notes.txt").write_text("- id: ignored\n")
+    assert expected_automation_ids(automations_source_text(str(tmp_path))) == {
+        "one",
+        "two",
+    }

@@ -1,5 +1,5 @@
 {# Ventilation advisor — should you open a window? Pure decision math; entity reads (states/now)
-   stay in the caller (bedroom_window_advisor, files/automations.yaml). Returns 'stale' (indoor air
+   stay in the caller (bedroom_window_advisor, files/automations/fan-and-air.yaml). Returns 'stale' (indoor air
    is stale, ventilate), 'cool' (free cooling available), or 'none' (don't suggest). Every non-'none'
    verdict REQUIRES outdoor air to be under the safe caps (pm_safe / pm10_safe) — so the system can
    never advise ventilating into unsafe air (the smoke guard). Args coerce inside (like lighting.jinja)
@@ -32,7 +32,7 @@
 
 {# The CLOSE direction — the mirror of ventilation_advice, added when the SNZB-04 contact sensor
    made "is the window actually open?" knowable (2026-08-25). Same split: pure decision math here,
-   entity reads stay in the caller (bedroom_window_close_advisor, files/automations.yaml). Returns
+   entity reads stay in the caller (bedroom_window_close_advisor, files/automations/fan-and-air.yaml). Returns
    'smoke' (outdoor air went over the caps), 'rain' (weather turned wet), 'cold' (the room is being
    chilled) or 'none'.
    The caller MUST gate on the window actually being open. This macro takes no contact-state

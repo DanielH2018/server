@@ -49,12 +49,14 @@ ROLE_DIR = REPO_ROOT / "ansible/roles/k8s/home-assistant"
 _TEMPLATE_FILES = ["configuration.yaml.j2", "customize.yaml.j2", "ui-lovelace.yaml.j2"]
 # files/* copied as-is into the config dir root.
 _STATIC_FILES = [
-    "automations.yaml",
     "scenes.yaml",
     "scripts.yaml",
     "templates.yaml",
     "rest.yaml",
 ]
+# files/<dir>/ copied as-is as a directory. automations/ is pulled in by
+# `automation: !include_dir_merge_list automations/`; custom_templates/ holds the Jinja macros.
+_STATIC_DIRS = ["automations", "custom_templates"]
 _ANSIBLE_MARKERS = ("{{", "{%")
 # Entry files to structurally load. configuration.yaml pulls in customize/automations/scenes/
 # scripts/templates/rest via !include; ui-lovelace.yaml is referenced by filename (not !include),
@@ -122,12 +124,52 @@ def _construct_include(loader: HAConfigLoader, node: yaml.Node):
         _INCLUDE_STACK.discard(target)
 
 
+def _construct_include_dir_merge_list(loader: HAConfigLoader, node: yaml.Node):
+    """`!include_dir_merge_list dir/`: every *.yaml under dir (recursive, sorted, dotfiles
+    skipped — HA's `_find_files` order) loaded and concatenated into one list.
+
+    Stricter than HA on one point, on purpose: HA silently SKIPS a file whose top level is not
+    a list, so an automation file accidentally written as a mapping would ship nothing and
+    surface only as a missing automation at runtime. Here it is an error."""
+    target = (loader._root / loader.construct_scalar(node)).resolve()
+    mark = node.start_mark
+    if not target.is_dir():
+        raise HAConfigError(
+            f"!include_dir_merge_list target is not a directory: {target} "
+            f"(at {mark.name}:{mark.line + 1})"
+        )
+    merged: list = []
+    for path in sorted(target.rglob("*.yaml")):
+        if path.name.startswith("."):
+            continue
+        if path in _INCLUDE_STACK:
+            raise HAConfigError(
+                f"circular !include_dir_merge_list: {path} (at {mark.name}:{mark.line + 1})"
+            )
+        _INCLUDE_STACK.add(path)
+        try:
+            with path.open() as f:
+                loaded = yaml.load(f, Loader=HAConfigLoader)
+        finally:
+            _INCLUDE_STACK.discard(path)
+        if not isinstance(loaded, list):
+            raise HAConfigError(
+                f"!include_dir_merge_list file {path} must hold a YAML list at its top level, "
+                f"got {type(loaded).__name__} (at {mark.name}:{mark.line + 1})"
+            )
+        merged.extend(loaded)
+    return merged
+
+
 def _construct_placeholder(loader: HAConfigLoader, node: yaml.Node):
     # We don't validate secret/env values; return a harmless string so the tree loads.
     return f"<{node.tag.removeprefix('!')}>"
 
 
 HAConfigLoader.add_constructor("!include", _construct_include)
+HAConfigLoader.add_constructor(
+    "!include_dir_merge_list", _construct_include_dir_merge_list
+)
 HAConfigLoader.add_constructor("!secret", _construct_placeholder)
 HAConfigLoader.add_constructor("!env_var", _construct_placeholder)
 
@@ -153,7 +195,8 @@ def assemble_config(role_dir: Path, dest: Path) -> None:
         (dest / tpl.removesuffix(".j2")).write_text(text)
     for static in _STATIC_FILES:
         shutil.copy(files / static, dest / static)
-    shutil.copytree(files / "custom_templates", dest / "custom_templates")
+    for static_dir in _STATIC_DIRS:
+        shutil.copytree(files / static_dir, dest / static_dir)
 
 
 def load_config(dest: Path) -> tuple[list[str], list]:
@@ -278,6 +321,34 @@ def macro_bool_coercion_errors(trees: list, custom_templates_dir: Path) -> list[
     return errs
 
 
+def automation_file_list_errors(role_dir: Path) -> list[str]:
+    """`home_assistant_automation_files` in defaults/main.yml must name exactly the *.yaml
+    files under files/automations/. HA merges whatever is in the directory, but the ConfigMap
+    and the init container ship only what the list names, so a file in the directory and not
+    the list validates clean here and never reaches the pod."""
+    defaults = role_dir / "defaults" / "main.yml"
+    if not defaults.is_file():
+        return []
+    listed = yaml.safe_load(defaults.read_text()).get("home_assistant_automation_files")
+    if listed is None:
+        return []
+    on_disk = sorted(
+        p.name for p in (role_dir / "files" / "automations").glob("*.yaml")
+    )
+    errors = []
+    for name in sorted(set(on_disk) - set(listed)):
+        errors.append(
+            f"files/automations/{name} is not in home_assistant_automation_files "
+            "(defaults/main.yml): the ConfigMap would not carry it"
+        )
+    for name in sorted(set(listed) - set(on_disk)):
+        errors.append(
+            f"home_assistant_automation_files names {name} but files/automations/ has no "
+            "such file: the ConfigMap lookup would fail the deploy"
+        )
+    return errors
+
+
 def validate(role_dir: Path = ROLE_DIR) -> list[str]:
     """Assemble + structurally load + Jinja-syntax-check the HA config. Returns error strings
     ([] = clean)."""
@@ -288,6 +359,7 @@ def validate(role_dir: Path = ROLE_DIR) -> list[str]:
         except HAConfigError as exc:
             return [str(exc)]
         errors, trees = load_config(dest)
+        errors += automation_file_list_errors(role_dir)
         # Jinja-check whatever loaded (a structural failure drops that tree but the macro files
         # are checked independently).
         errors += jinja_errors(trees, dest / "custom_templates")

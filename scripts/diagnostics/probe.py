@@ -33,7 +33,7 @@ Subcommands:
     ha automation <id|alias> One automation's on/off + last_triggered (resolves alias!=id)
     ha get <api-path>        Raw GET /api/<path>, e.g. `ha get error_log`
     ha trace <id|alias>      Why an automation last ran/no-op'd (per-condition WS trace; alias: why)
-    ha verify-automations    Assert every automation in automations.yaml loaded (exit 0 = all loaded)
+    ha verify-automations    Assert every automation in files/automations/ loaded (exit 0 = all loaded)
     ha verify-entities       Assert every entity in external_entities.yml still exists live
     ha-state [--inventory]   Live view of the derived HA state model
 
@@ -333,7 +333,7 @@ def _build_parser():
     )
     hasub.add_parser(
         "verify-automations",
-        help="assert every automation in automations.yaml loaded (exit 0 = all loaded)",
+        help="assert every automation in files/automations/ loaded (exit 0 = all loaded)",
     )
     hasub.add_parser(
         "verify-entities",
