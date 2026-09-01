@@ -20,12 +20,12 @@ one without the other leaves Traefik reading a path nothing mounts.
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
 import pytest
 import yaml
+from _helpers import REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+_REPO = REPO
 sys.path.insert(0, str(_REPO / "scripts"))
 
 from validate_k8s_manifests import (  # noqa: E402 — needs the path insert above

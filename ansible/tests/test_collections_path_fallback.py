@@ -28,8 +28,9 @@ import configparser
 from pathlib import Path
 
 import pytest
+from _helpers import REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+_REPO = REPO
 _CFG = _REPO / "ansible.cfg"
 
 _RELATIVE = "ansible/collections"

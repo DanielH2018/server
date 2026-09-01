@@ -62,10 +62,10 @@ from pathlib import Path
 import pytest
 import yaml
 from jinja2.nativetypes import NativeEnvironment
-from _helpers import load_tasks, load_yaml
+from _helpers import K8S_ROLES, load_tasks, load_yaml
 from _helpers import task_named
 
-_ROLE = Path(__file__).resolve().parents[2] / "ansible/roles/k8s/cronjob-gate"
+_ROLE = K8S_ROLES / "cronjob-gate"
 _READ = "Read the container states of the failed gate run"
 _COLLECT = "Collect the container states read"
 _CLASSIFY = "Classify the gate failure"

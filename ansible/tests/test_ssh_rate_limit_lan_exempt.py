@@ -15,11 +15,10 @@ the allow rule has to declare a top insert rather than rely on task order alone:
 has ever deployed to already carries the `limit` rule, so a plain append lands after it.
 """
 
-import pathlib
-
 import yaml
+from _helpers import REPO
 
-_REPO = pathlib.Path(__file__).resolve().parents[2]
+_REPO = REPO
 _NETWORK = (
     _REPO / "ansible" / "roles" / "setup" / "initial_setup" / "tasks" / "network.yml"
 )

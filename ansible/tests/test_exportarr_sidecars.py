@@ -19,8 +19,9 @@ import sys
 from pathlib import Path
 
 import yaml
+from _helpers import REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+_REPO = REPO
 sys.path.insert(0, str(Path(__file__).parent))
 
 from _k8s_render import rendered_docs  # noqa: E402

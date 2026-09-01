@@ -44,8 +44,8 @@ from pathlib import Path
 import pytest
 from _k8s_render import rendered_docs
 from validate_k8s_manifests import K8S_ROLES
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
 
 DATA_RE = re.compile(r"^(\s*)(data|stringData|binaryData):\s*$")
 KEY_RE = re.compile(r"^(\s*)([A-Za-z0-9][A-Za-z0-9._\-]*):(\s|$)")

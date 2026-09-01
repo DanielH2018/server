@@ -19,8 +19,9 @@ from pathlib import Path
 
 import pytest
 import yaml
+from _helpers import REPO, SETUP_ROLES
 
-ROLE = Path(__file__).resolve().parents[1] / "roles" / "setup" / "hypervisor"
+ROLE = SETUP_ROLES / "hypervisor"
 LIVE = ROLE / "files" / "staging-gate.pub"
 RETIRED_DIR = ROLE / "files" / "staging-gate-retired"
 INSTALL = ROLE / "tasks" / "install.yml"
@@ -92,7 +93,6 @@ def test_install_withdraws_every_retired_key():
     )
 
 
-REPO = Path(__file__).resolve().parents[2]
 REL = str(LIVE.relative_to(REPO))
 
 

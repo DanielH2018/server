@@ -20,8 +20,9 @@ from pathlib import Path
 
 import yaml
 from k8s_autodeploy import k8s_autodeploy_denylist
+from _helpers import REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+_REPO = REPO
 _K8S_ROLES = _REPO / "ansible/roles/k8s"
 # Not a workload role — the shared include every other role calls. The invariant: no role in
 # _SHARED may pin an `_image:` var, because that's what makes a role Renovate-visible and

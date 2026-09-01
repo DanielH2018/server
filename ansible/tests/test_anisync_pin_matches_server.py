@@ -22,11 +22,10 @@ Run: uv run pytest ansible/tests/test_anisync_pin_matches_server.py
 """
 
 import re
-from pathlib import Path
 
 import yaml
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
 DEFAULTS = ANSIBLE / "roles" / "k8s" / "jellyfin" / "defaults" / "main.yml"
 DEPLOYMENT = ANSIBLE / "roles" / "k8s" / "jellyfin" / "templates" / "deployment.yaml.j2"
 

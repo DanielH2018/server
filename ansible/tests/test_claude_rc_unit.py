@@ -26,11 +26,10 @@ Run: uv run pytest ansible/tests/test_claude_rc_unit.py
 """
 
 import re
-from pathlib import Path
 
 import pytest
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
 TEMPLATES = ANSIBLE / "roles" / "setup" / "claude_code" / "templates"
 DEFAULTS = ANSIBLE / "roles" / "setup" / "claude_code" / "defaults" / "main.yml"
 UNIT = TEMPLATES / "claude-rc.service.j2"

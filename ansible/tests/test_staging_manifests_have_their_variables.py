@@ -23,13 +23,13 @@ from __future__ import annotations
 import ast
 import re
 import sys
-from pathlib import Path
 
 import pytest
 import yaml
 from jinja2 import Environment, StrictUndefined
+from _helpers import REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+_REPO = REPO
 sys.path.insert(0, str(_REPO / "scripts"))
 
 from validate_k8s_manifests import (  # noqa: E402 — needs the path insert above

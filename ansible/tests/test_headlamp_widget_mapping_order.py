@@ -19,11 +19,10 @@ Run: uv run pytest ansible/tests/test_headlamp_widget_mapping_order.py
 """
 
 import re
-from pathlib import Path
 
 import yaml
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
 HOMEPAGE = ANSIBLE / "roles" / "k8s" / "homepage"
 DEFAULTS = HOMEPAGE / "defaults" / "main.yml"
 SERVICES = HOMEPAGE / "templates" / "services.yaml.j2"

@@ -21,12 +21,12 @@ gitops_deploy/files/test_gitops_discord_contract.py: when a value has to exist i
 the test is what makes them one value.
 """
 
-import pathlib
 import re
 
 import yaml
+from _helpers import REPO
 
-_REPO = pathlib.Path(__file__).resolve().parents[2]
+_REPO = REPO
 _DEFAULTS = (
     _REPO / "ansible" / "roles" / "setup" / "hypervisor" / "defaults" / "main.yml"
 )

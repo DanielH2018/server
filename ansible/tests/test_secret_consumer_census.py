@@ -15,11 +15,11 @@ Run: uv run pytest ansible/tests/test_secret_consumer_census.py
 """
 
 import sys as _sys
-from pathlib import Path as _Path
 
 import pytest
+from _helpers import REPO
 
-_REPO = _Path(__file__).resolve().parents[2]
+_REPO = REPO
 _sys.path.insert(0, str(_REPO / "scripts" / "secrets_mgmt"))
 
 import secret_rotation as sr  # noqa: E402 — needs the path insert above

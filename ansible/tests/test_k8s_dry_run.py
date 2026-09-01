@@ -33,8 +33,9 @@ import re
 from pathlib import Path
 
 import yaml
+from _helpers import REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+_REPO = REPO
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
 _DEPLOY = _REPO / "ansible/deploy.yml"
 _ALL_VARS = _REPO / "ansible/inventory/group_vars/all.yml"

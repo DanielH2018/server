@@ -24,12 +24,11 @@ Run: uv run pytest ansible/tests/test_unattended_origins_pattern.py
 """
 
 import re
-from pathlib import Path
 
 import pytest
 import yaml
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
 GROUP_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
 ACCESS_TASKS = ANSIBLE / "roles" / "setup" / "initial_setup" / "tasks" / "access.yml"
 

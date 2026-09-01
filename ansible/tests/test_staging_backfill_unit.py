@@ -7,10 +7,10 @@ expected state while the streak is short — and an operator learns to ignore it
 means anything. A missing flag makes the run a no-op that still exits 0.
 """
 
-import pathlib
 import re
+from _helpers import REPO
 
-_REPO = pathlib.Path(__file__).resolve().parents[2]
+_REPO = REPO
 _UNIT = (
     _REPO / "ansible/roles/setup/gitops_deploy/templates/staging-backfill.service.j2"
 )

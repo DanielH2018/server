@@ -22,8 +22,9 @@ import subprocess
 
 import yaml
 from jinja2 import Environment
+from _helpers import REPO
 
-_REPO = pathlib.Path(__file__).resolve().parents[2]
+_REPO = REPO
 _ROLE = _REPO / "ansible" / "roles" / "setup" / "hypervisor"
 _TEMPLATE = _ROLE / "templates" / "staging-gate-dispatch.sh.j2"
 _DEFAULTS = _ROLE / "defaults" / "main.yml"

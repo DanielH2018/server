@@ -15,10 +15,11 @@ from pathlib import Path
 
 import pytest
 import yaml
+from _helpers import ANSIBLE, SETUP_ROLES
 
-ROLE = Path(__file__).resolve().parents[1] / "roles" / "setup" / "initial_setup"
+ROLE = SETUP_ROLES / "initial_setup"
 SYSTEM_TUNING = ROLE / "tasks" / "system-tuning.yml"
-PLAYBOOK = Path(__file__).resolve().parents[1] / "initial_setup.yml"
+PLAYBOOK = ANSIBLE / "initial_setup.yml"
 
 JOURNALD_DEST = "/etc/systemd/journald.conf.d/50-homelab.conf"
 FILTER_DEST = "/etc/rsyslog.d/49-homelab-info-filter.conf"

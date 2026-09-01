@@ -25,11 +25,11 @@ would need a live promtail to verify, and should not be written here in the firs
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import yaml
+from _helpers import REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+_REPO = REPO
 _CONFIGMAP = _REPO / "ansible/roles/k8s/loki-homelab/templates/configmap.yaml.j2"
 
 # The sidecar whose stdout carries the access log. CrowdSec tails the FILE instead, so this

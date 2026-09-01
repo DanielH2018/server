@@ -22,9 +22,9 @@ is a legitimate operator choice; what must not happen is the two halves divergin
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from _helpers import REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+_REPO = REPO
 _ALL_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
 _K3S_DEFAULTS = _REPO / "ansible/roles/setup/k3s/defaults/main.yml"
 _PROM_TEMPLATE = _REPO / "ansible/roles/k8s/claude-otel/templates/prometheus.yaml.j2"

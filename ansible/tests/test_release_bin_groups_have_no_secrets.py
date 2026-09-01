@@ -28,8 +28,8 @@ from pathlib import Path
 
 import pytest
 import yaml
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
 REPO = ANSIBLE.parent
 
 # The resolver is shared with scripts/validate/validate_shell_templates.py so the two checks
