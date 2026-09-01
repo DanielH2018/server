@@ -10,7 +10,7 @@ import bridge_parsing
 import bridge_config
 import bridge_io
 import checks_host
-import check
+import checks_cluster
 
 
 def test_disk_under_threshold_is_ok(monkeypatch):
@@ -237,7 +237,7 @@ def test_crash_loop_arm_gates_on_a_recent_restart_not_just_the_hour_window(monke
     monkeypatch.setattr(bridge_config, "CLUSTER_PROM_URL", "http://cluster-prom:9090")
     monkeypatch.setattr(bridge_io, "prom_vector", record)
     monkeypatch.setattr(bridge_io, "prom_scalar", lambda *a, **k: 66.0)
-    check.check_k8s_workloads()
+    checks_cluster.check_k8s_workloads()
 
     restart_queries = [q for q in queries if "status_restarts_total" in q]
     assert len(restart_queries) == 1

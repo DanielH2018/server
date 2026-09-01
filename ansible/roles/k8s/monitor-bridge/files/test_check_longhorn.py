@@ -9,7 +9,7 @@ import bridge_config
 import bridge_io
 import bridge_streaks
 import checks_storage
-import check
+import checks_cluster
 
 
 def _longhorn_series(pvc, state, pod="longhorn-manager-a"):
@@ -136,14 +136,16 @@ def test_the_query_uses_the_label_kube_state_metrics_actually_emits():
     stayed there until the sanitiser landed. The operator-facing name stays the one
     `kubectl describe node` prints; only the query is sanitised.
     """
-    assert check.ksm_resource_label("devic.es/dri") == "devic_es_dri"
-    assert check.ksm_resource_label("nvidia.com/gpu") == "nvidia_com_gpu"
-    assert check.ksm_resource_label("cpu") == "cpu"
+    assert checks_cluster.ksm_resource_label("devic.es/dri") == "devic_es_dri"
+    assert checks_cluster.ksm_resource_label("nvidia.com/gpu") == "nvidia_com_gpu"
+    assert checks_cluster.ksm_resource_label("cpu") == "cpu"
 
 
 def test_missing_extended_resource_names_both_the_resource_and_its_label():
     """A false fault and a real one look identical unless the alert names the label it queried."""
-    ok, msg = check.extended_resource_verdict(["devic.es/dri"], {"devic.es/dri": 0}, 12)
+    ok, msg = checks_cluster.extended_resource_verdict(
+        ["devic.es/dri"], {"devic.es/dri": 0}, 12
+    )
     assert ok is False
     assert "devic.es/dri" in msg
     assert "devic_es_dri" in msg
@@ -151,12 +153,14 @@ def test_missing_extended_resource_names_both_the_resource_and_its_label():
 
 def test_resource_absent_from_the_map_is_a_fault():
     """An absent key and a zero count mean the same thing: nothing advertises it."""
-    ok, _ = check.extended_resource_verdict(["devic.es/dri"], {}, 12)
+    ok, _ = checks_cluster.extended_resource_verdict(["devic.es/dri"], {}, 12)
     assert ok is False
 
 
 def test_advertised_resource_passes_and_reports_node_count():
-    ok, msg = check.extended_resource_verdict(["devic.es/dri"], {"devic.es/dri": 1}, 12)
+    ok, msg = checks_cluster.extended_resource_verdict(
+        ["devic.es/dri"], {"devic.es/dri": 1}, 12
+    )
     assert ok is True
     assert "1 node(s)" in msg
 
@@ -168,7 +172,7 @@ def test_no_series_at_all_is_inert_not_green_and_not_red():
     failure this arm exists to fix. Failing would page for a kube-state-metrics config change
     nobody made. Naming it is the only honest option.
     """
-    ok, msg = check.extended_resource_verdict(["devic.es/dri"], {}, 0)
+    ok, msg = checks_cluster.extended_resource_verdict(["devic.es/dri"], {}, 0)
     assert ok is True
     assert "INERT" in msg
     assert "devic.es/dri" in msg
@@ -181,13 +185,13 @@ def test_the_inert_arm_takes_prom_scalars_real_empty_value():
     fixture would stop matching the producer the moment that branch grew anything sharper than a
     truthiness test.
     """
-    ok, msg = check.extended_resource_verdict(["devic.es/dri"], {}, None)
+    ok, msg = checks_cluster.extended_resource_verdict(["devic.es/dri"], {}, None)
     assert ok is True
     assert "INERT" in msg
 
 
 def test_several_resources_are_all_checked():
-    ok, msg = check.extended_resource_verdict(
+    ok, msg = checks_cluster.extended_resource_verdict(
         ["devic.es/dri", "example.com/fpga"],
         {"devic.es/dri": 2, "example.com/fpga": 0},
         12,
@@ -197,7 +201,7 @@ def test_several_resources_are_all_checked():
 
 
 def test_nothing_expected_is_trivially_ok():
-    ok, _ = check.extended_resource_verdict([], {}, 12)
+    ok, _ = checks_cluster.extended_resource_verdict([], {}, 12)
     assert ok is True
 
 
