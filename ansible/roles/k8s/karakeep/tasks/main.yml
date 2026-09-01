@@ -28,11 +28,28 @@
     # value while `karakeep-meilisearch` keeps serving the old one — the app and its search
     # backend end up on different keys and the deploy reports green.
     #
-    # chrome and time-tagger are deliberately absent. chrome mounts no role-rendered config at
-    # all, and the tagger's script is a plain (non-subPath) ConfigMap mount, so kubelet syncs the
-    # file and its `while true; sleep 900` loop re-execs the new copy without a restart.
+    # time-tagger also reads a Secret value through env: KARAKEEP_PYTHON_API_KEY, via
+    # `secretKeyRef` in deployment-time-tagger.yaml.j2. Its script IS a plain (non-subPath)
+    # ConfigMap mount, so kubelet syncs a changed script and the `while true; sleep 900` loop
+    # re-execs it without a restart — but that mechanism only covers the script file, not the
+    # env var, which resolves once at pod start same as crowdsec's node agents (#689). Without
+    # this line a rotated KARAKEEP_PYTHON_API_KEY lands in the Secret while the tagger keeps
+    # calling the API with the old key.
+    #
+    # chrome is still absent: it mounts no role-rendered config at all.
+    #
+    # ACCEPTED COST: the restart is gated on the render changing, not on the SECRET changing, so
+    # any karakeep manifest edit now also rolls time-tagger, and this extra rollout is queued for
+    # the batch drain like any other, so the deploy waits on it. Unlike crowdsec's node agents
+    # (#689), that wait should be cheap: time-tagger has no readinessProbe
+    # (deployment-time-tagger.yaml.j2, and karakeep_autodeploy_reason cites this as
+    # "probe-less"), so a pod counts Ready as soon as its main container starts, which needs only
+    # the wait-for-karakeep initContainer's TCP probe of the karakeep Service to succeed — and
+    # the batch already waits on karakeep's own primary rollout in parallel, so that Service is
+    # normally ready before or around the same time.
     manifests_extra_rollouts:
       - name: karakeep-meilisearch
+      - name: karakeep-time-tagger
     manifests_files:
       - configmap.yaml
       - middleware.yaml
