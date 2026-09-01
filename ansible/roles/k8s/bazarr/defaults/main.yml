@@ -32,7 +32,6 @@ bazarr_k8s_claim: bazarr-config
 # rather than assumed, with B2 Reachable as the readout. docs/b2-transaction-cap-monitoring-gaps.md.
 bazarr_k8s_storage_class: longhorn
 bazarr_k8s_size: 1Gi
-bazarr_k8s_source_path: /home/ubuntu/server/containers/bazarr/config
 
 # Mounted at /data/media via subPath — NOT the whole tree. bazarr never imports, so it has no
 # hardlink seam to preserve and no reason to see /data/torrents.

@@ -1,53 +1,15 @@
 ---
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
-# Covered by every guard in the ansible/tests/test_k8s_autodeploy_*.py family — _SHARED, in
-# ansible/tests/_autodeploy.py, excludes a role only if it pins no `_image:` var (manifests and
-# rollout-drain both have no defaults/main.yml at all); seed-volume pins seed_volume_image, so
-# it does NOT belong in _SHARED and is evaluated like any other role. Also in
-# gitops_deploy_k8s_autodeploy_denylist,
-# matching this declaration. Declared false because it renders a bare Pod (seed-pod.yaml.j2),
-# never a Deployment, so there is nothing for `rollout status` to gate, and it is the shared
-# PVC-seeding path every migrating-state role above (prowlarr, sonarr, home-assistant, ...)
-# depends on — a stray auto-deploy here has an outsized blast radius for a role that would
-# otherwise be invisible to this whole mechanism. It is also not a containers_list entry, so a
-# promoted bump would match no play and deploy nothing while reporting success. Whoever writes
-# 1b still needs to decide whether the filter plugin reads _SHARED roles at all — moot for
-# manifests/rollout-drain today since neither pins an image, but not guaranteed to stay that
-# way.
+# Covered by every guard in the ansible/tests/test_k8s_autodeploy_*.py family. Also in
+# gitops_deploy_k8s_autodeploy_denylist, matching this declaration. Declared false because this
+# role renders only a PersistentVolumeClaim — there is no workload here for `rollout status` to
+# gate — and because it is the shared PVC path that 16 caller roles depend on, so a stray
+# auto-deploy has an outsized blast radius for a role that would otherwise be invisible to this
+# whole mechanism. It is also not a containers_list entry, so a promoted bump would match no
+# play and deploy nothing while reporting success.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "renders a bare Pod, not a Deployment — nothing for rollout status to gate; shared PVC-seeding path for every migrating-state role, so a stray auto-deploy has outsized blast radius; not a containers_list entry, so a promoted bump matches no play and deploys nothing while reporting success"  # noqa var-naming[no-role-prefix]
-
-# Where the data comes from. daniel-server is the only source in slice 2 — every Docker
-# service being migrated lives there — but it is a variable because slice 5 moves services
-# off the Pi.
-seed_volume_source_host: daniel-server
-# Absolute path on the source host. No default: a wrong guess here silently seeds the wrong
-# directory, and the failure only shows up as an application that has lost its data.
-# seed_volume_source_path: /home/ubuntu/server/containers/<svc>/config
+k8s_autodeploy_reason: "renders only a PVC, so there is no workload for rollout status to gate; shared PVC path for 16 caller roles, so a stray auto-deploy has outsized blast radius; not a containers_list entry, so a promoted bump matches no play and deploys nothing while reporting success"  # noqa var-naming[no-role-prefix]
 
 # PVC. seed_volume_claim defaults to <service>-data in the calling role.
 seed_volume_size: 1Gi
 seed_volume_storage_class: longhorn
-# Mount point inside the short-lived seed pod. Not the application's mount path — nothing in
-# this role knows or cares where the real workload will mount the claim.
-seed_volume_mount: /data
-# busybox tar + sha256sum are enough, and a small image keeps the seed pod's own startup off
-# the critical path of a migration window where the Docker service is already stopped.
-seed_volume_image: alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
-# How long the seed pod lingers before its own timeout kills it, in case a play dies between
-# creating the pod and deleting it. Long enough for a slow copy, short enough not to leak.
-seed_volume_pod_ttl: 3600
-# Bypass the .seeded marker and re-copy. The cutover run sets this; see tasks/main.yml.
-seed_volume_force: false
-
-# Whether a source that changes mid-copy is acceptable. Derived from seed_volume_force rather
-# than set independently, because the two always want opposite answers and tying them removes
-# a flag someone has to remember:
-#
-#   coexistence seed (force=false) — the Docker service is still running and still writing, so
-#   a torn snapshot is unavoidable and fine. The k8s copy is not authoritative yet.
-#
-#   cutover seed (force=true) — the Docker service has been stopped precisely so the source
-#   holds still. A source that moves here means it was NOT stopped, and accepting that copy
-#   would silently lose whatever was written after the read began.
-seed_volume_allow_moving_source: "{{ not (seed_volume_force | default(false) | bool) }}"

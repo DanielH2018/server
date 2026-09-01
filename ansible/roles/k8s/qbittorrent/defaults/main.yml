@@ -35,7 +35,6 @@ qbittorrent_k8s_claim: qbittorrent-config
 # tested rather than assumed — docs/b2-transaction-cap-monitoring-gaps.md.
 qbittorrent_k8s_storage_class: longhorn
 qbittorrent_k8s_size: 1Gi
-qbittorrent_k8s_source_path: /home/ubuntu/server/containers/qbittorrent/config
 
 # torrents/ ONLY, via subPath — NOT the whole media tree. Carried across from the Compose
 # comment and its reason (2026-07-02 review M2): qbittorrent handles the fleet's largest

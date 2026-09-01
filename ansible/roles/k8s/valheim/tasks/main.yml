@@ -1,19 +1,18 @@
 ---
 # Valheim reactivated onto k3s, 2026-08-13. Archived on Docker at 6f942bd2 (2026-01-07);
-# the world it left behind on daniel-server was last saved 2025-11-22 and is seeded here.
+# the world it left behind on daniel-server was last saved 2025-11-22 and is migrated here.
 #
-# Only /config is seeded. /opt/valheim (the SteamCMD install) gets an empty nobackup PVC and
+# Only /config is populated. /opt/valheim (the SteamCMD install) gets an empty nobackup PVC and
 # the image populates it on first start — a ~1.8 G download that takes several minutes, so
 # the first rollout is slow and the startupProbe budget is sized for it.
 
-- name: Seed the valheim config volume
+- name: Create the valheim config volume claim
   tags: [deploy]
   ansible.builtin.include_role:
     name: k8s/seed-volume
   vars:
     seed_volume_service: valheim
     seed_volume_claim: "{{ valheim_k8s_claim }}"
-    seed_volume_source_path: "{{ valheim_k8s_source_path }}"
     seed_volume_storage_class: "{{ valheim_k8s_storage_class }}"
     seed_volume_size: "{{ valheim_k8s_size }}"
 

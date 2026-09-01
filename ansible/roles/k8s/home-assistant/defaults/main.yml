@@ -42,4 +42,3 @@ home_assistant_k8s_mem_request: 256Mi
 home_assistant_k8s_claim: home-assistant-config
 home_assistant_k8s_storage_class: longhorn
 home_assistant_k8s_size: 4Gi
-home_assistant_k8s_source_path: /home/ubuntu/server/containers/home-assistant/config

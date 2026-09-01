@@ -1,42 +1,21 @@
 ---
 # n8n is the first migration in this slice with NO coexistence window, and that is a property of
 # the app rather than a shortcut. Its 7 workflows include scheduled ones — RSS polls, a daily
-# email, a TickTick calendar sync — and two n8n processes against the same seeded database each
-# run their own scheduler. Coexistence would double-fire every schedule and double-write to
-# TickTick. So the Docker copy is stopped BEFORE the seed, and this role's first run is also the
-# cutover run. See docs/archive/k3s-migration/slice-2-leaf-apps.md.
+# email, a TickTick calendar sync — and two n8n processes against the same database each run
+# their own scheduler. Coexistence would double-fire every schedule and double-write to TickTick.
+# See docs/archive/k3s-migration/slice-2-leaf-apps.md.
 
-- name: Seed the n8n data volume
+- name: Create the n8n data volume claim
   tags: [deploy]
   ansible.builtin.include_role:
     name: k8s/seed-volume
   vars:
     seed_volume_service: n8n
     seed_volume_claim: "{{ n8n_k8s_claim }}"
-    seed_volume_source_path: "{{ n8n_k8s_source_path }}"
     seed_volume_storage_class: "{{ n8n_k8s_storage_class }}"
     seed_volume_size: "{{ n8n_k8s_size }}"
-    # n8n itself is the only writer of this claim; the runners hold no volume. Empty on the
-    # first run, when no Deployment exists yet, and correct on any re-seed.
-    seed_volume_quiesce:
-      - n8n
-    # NO seed_volume_force here, and the marker is the only thing standing between a routine
-    # `--tags n8n` deploy and data loss. `seed_volume_force: true` was hardcoded at this point
-    # for the cutover run, and it was right for exactly that one run: the source is a live
-    # SQLite database with DB_SQLITE_VACUUM_ON_STARTUP, there is no "the k8s copy is not
-    # authoritative yet" phase for this service, and forcing the copy made a source that moved
-    # a hard failure rather than a warning.
-    #
-    # It stopped being right the moment the cutover completed, because force bypasses the
-    # `.seeded` marker unconditionally (seed-volume/tasks/main.yml:105). The Docker source is
-    # now frozen at the 2026-08-06 17:53 shutdown while the cluster copy has been the only
-    # writer since 17:56, so a rerun would quiesce n8n and `tar -x` that stale snapshot over
-    # the live PVC — overwriting database.sqlite and its 218 MB WAL. The copy.yml assert does
-    # fail afterwards (the destination keeps the files the source lacks, so the counts differ),
-    # but it fails AFTER the overwrite: loud, not safe.
-    #
-    # A deliberate re-seed is still available and is now opt-in per run, as seed-volume's own
-    # header documents: pass `-e seed_volume_force=true`.
+    # n8n itself is the only writer of this claim; the runners hold no volume. The claim
+    # is created empty on first cluster deployment.
 
 - name: Deploy n8n to the cluster
   ansible.builtin.include_role:

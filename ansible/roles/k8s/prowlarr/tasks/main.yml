@@ -2,18 +2,15 @@
 # Slice 4, B4a — the indexer proxy, plus the headless browser it drives.
 #
 
-- name: Seed the prowlarr config volume
+- name: Create the prowlarr config volume claim
   tags: [deploy]
   ansible.builtin.include_role:
     name: k8s/seed-volume
   vars:
     seed_volume_service: prowlarr
     seed_volume_claim: "{{ prowlarr_k8s_claim }}"
-    seed_volume_source_path: "{{ prowlarr_k8s_source_path }}"
     seed_volume_storage_class: "{{ prowlarr_k8s_storage_class }}"
     seed_volume_size: "{{ prowlarr_k8s_size }}"
-    seed_volume_quiesce:
-      - prowlarr
 
 # flaresolverr's volume is NOT seeded. It is a browser profile cache that regenerates on first
 # use, which is also why its class is longhorn-nobackup — copying it would spend a migration

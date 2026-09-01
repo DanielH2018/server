@@ -53,11 +53,9 @@ k8s_autodeploy_snapshot_pvcs: [tdarr-configs, tdarr-server]  # noqa var-naming[n
 # below keep off it.
 tdarr_k8s_server_claim: tdarr-server
 tdarr_k8s_server_size: 3Gi
-tdarr_k8s_server_source_path: /home/ubuntu/server/containers/tdarr/server
 
 tdarr_k8s_configs_claim: tdarr-configs
 tdarr_k8s_configs_size: 1Gi
-tdarr_k8s_configs_source_path: /home/ubuntu/server/containers/tdarr/configs
 
 # `longhorn` — backed up. Briefly `longhorn-nobackup` on 2026-08-08, after B2's TRANSACTION cap
 # fired twice in a week (08-02, 08-08) as slice 4 took Longhorn's daily run from 4 to 15 backups and

@@ -1,15 +1,13 @@
 ---
-# Seed BEFORE the workload starts. CouchDB writes a fresh _users/_dbs set on first boot against
-# an empty data dir, so a pod that started first would leave the seed copying over a database
-# the running process already holds open.
-- name: Seed the livesync data volume
+# Create the data volume claim BEFORE deploying the workload, so the pod has a PVC to mount
+# when it starts.
+- name: Create the livesync data volume claim
   tags: [deploy]
   ansible.builtin.include_role:
     name: k8s/seed-volume
   vars:
     seed_volume_service: livesync
     seed_volume_claim: "{{ livesync_k8s_claim }}"
-    seed_volume_source_path: "{{ livesync_k8s_source_path }}"
     seed_volume_storage_class: "{{ livesync_k8s_storage_class }}"
     seed_volume_size: "{{ livesync_k8s_size }}"
 

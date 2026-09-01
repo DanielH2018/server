@@ -12,14 +12,13 @@
     image_builder_name: terraria
     image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/terraria/templates/Dockerfile.j2"
 
-- name: Seed the terraria config volume
+- name: Create the terraria config volume claim
   tags: [deploy]
   ansible.builtin.include_role:
     name: k8s/seed-volume
   vars:
     seed_volume_service: terraria
     seed_volume_claim: "{{ terraria_k8s_claim }}"
-    seed_volume_source_path: "{{ terraria_k8s_source_path }}"
     seed_volume_storage_class: "{{ terraria_k8s_storage_class }}"
     seed_volume_size: "{{ terraria_k8s_size }}"
 

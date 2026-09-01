@@ -10,7 +10,6 @@
   vars:
     seed_volume_service: terraria-stats
     seed_volume_claim: terraria-stats-data
-    seed_volume_source_path: /home/ubuntu/server/containers/terraria-stats/data
     seed_volume_size: "{{ terraria_stats_k8s_pvc_size }}"
 
 - name: Create the staging directory

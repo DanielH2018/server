@@ -1,21 +1,43 @@
 ---
-# Entry point. The role's real work is seed.yml; this file exists only to gate it on
-# k8s_no_mutate.
+# Create the PersistentVolumeClaim for a k8s-hosted service.
 #
-# The gate has to live HERE rather than at the 25 call sites, because that is what the earlier
-# tag-based refusal in deploy.yml got wrong: it asserted against `ansible_run_tags`, which is
-# what the operator typed, while what actually runs is the role closure. `--tags freshrss`
-# names no unsupported role and still reached this one — measured 2026-08-16, a dry run of
-# freshrss started and removed a real seed pod against freshrss's live Longhorn PVC.
+# Callers set:
+#   seed_volume_service                 service name (labels the manifest directory)
+#   seed_volume_claim                   PVC name
+#   seed_volume_size / _storage_class   as needed
+#
+# WHY THIS ROLE EXISTS AT ALL, given k8s/manifests renders a role's manifests: 16 of the caller
+# roles ship no pvc.yaml.j2 of their own, and this is the only thing that creates their claim.
+# It runs BEFORE k8s/manifests so the workload never starts against a claim that does not exist.
+#
+# UNTIL 2026-09-01 THIS ROLE ALSO SEEDED. It copied a Docker bind-mount directory from
+# daniel-server into the new claim and verified the copy, which is what the name records. Every
+# source path pointed into /home/ubuntu/server/containers/<svc>/ on daniel-server — a tree that
+# stopped existing when Docker was uninstalled there on 2026-08-14, at the end of the k3s
+# migration. The seeding could no longer have a source, so it was removed along with the seed
+# pod, the quiesce/restore cycle, the `.seeded` marker and its PVC annotation short-circuit.
+# The PVC creation is all that was still doing work, and it is all that is left.
+#
+# The name is now wrong and is deliberately left alone in this change: `seed-volume` is
+# referenced by gitops_deploy's deploy_logic.py, land_tags.py, validate_k8s_manifests.SKIP_ROLES
+# and two skills, and renaming the deployer's own plumbing belongs in its own reviewable change
+# rather than riding along with a 900-line deletion.
+#
+# The k8s_no_mutate gate stays where it is. It has to live HERE rather than at the 24 call
+# sites, because that is what the earlier tag-based refusal in deploy.yml got wrong: it
+# asserted against `ansible_run_tags`, which is what the operator typed, while what actually
+# runs is the role closure. `--tags freshrss` names no unsupported role and still reached this
+# one — measured 2026-08-16, when a dry run of freshrss started and removed a real seed pod
+# against freshrss's live Longhorn PVC.
 #
 # `import_tasks`, not `include_tasks`: a static import propagates this `when` to every task in
-# seed.yml AND inherits the caller's tags cleanly. A dynamic include would need the tags
+# claim.yml AND inherits the caller's tags cleanly. A dynamic include would need the tags
 # forwarded by hand, which is the same `--tags deploy` trap the manifests role already hit.
 #
-# COVERAGE LIMIT, deliberate: skipping the seed means a dry run of a service whose PVC does not
-# exist yet validates its Deployment without ever proving the volume can be provisioned or
-# populated. Nothing at admission checks that a referenced PVC exists, so the apply passes
-# regardless. Dry-run is not a substitute for deploying a genuinely new service.
-- name: Seed the volume
-  ansible.builtin.import_tasks: seed.yml
+# COVERAGE LIMIT, deliberate: skipping this means a dry run of a service whose PVC does not
+# exist yet validates its Deployment without ever proving the volume can be provisioned.
+# Nothing at admission checks that a referenced PVC exists, so the apply passes regardless.
+# Dry-run is not a substitute for deploying a genuinely new service.
+- name: Create the volume claim
+  ansible.builtin.import_tasks: claim.yml
   when: not k8s_no_mutate

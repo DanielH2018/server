@@ -5,7 +5,7 @@ metadata:
   name: {{ zigbee2mqtt_k8s_claim }}
   namespace: {{ k8s_namespace }}
 spec:
-  # Seeded from the Docker data dir at cutover (seed_volume_force=true, source stopped).
+  # Migrated from the Docker data dir at cutover (until 2026-08-14).
   # database.db + devices.yaml + coordinator_backup.json are the device pairings — see the
   # storage-class note in defaults.
   accessModes:

@@ -1,22 +1,14 @@
 ---
-# Seed BEFORE the workload starts, so karakeep never runs its first-boot setup against an empty
-# /data that is about to be overwritten.
-- name: Seed the karakeep data volume
+# Create the data volume claim BEFORE deploying the workload, so the pod has a PVC to mount.
+- name: Create the karakeep data volume claim
   tags: [deploy]
   ansible.builtin.include_role:
     name: k8s/seed-volume
   vars:
     seed_volume_service: karakeep
     seed_volume_claim: "{{ karakeep_k8s_claim }}"
-    seed_volume_source_path: "{{ karakeep_k8s_source_path }}"
     seed_volume_storage_class: "{{ karakeep_k8s_storage_class }}"
     seed_volume_size: "{{ karakeep_k8s_size }}"
-    # Both write to karakeep-data — the app continuously, the tagger every 15 minutes — so a
-    # re-seed at cutover has to stop them. chrome and meilisearch are left running: neither
-    # touches this claim.
-    seed_volume_quiesce:
-      - karakeep
-      - karakeep-time-tagger
 
 - name: Deploy karakeep to the cluster
   ansible.builtin.include_role:

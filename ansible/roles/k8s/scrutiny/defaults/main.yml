@@ -23,13 +23,11 @@ k8s_autodeploy_reason: "stateful / manual-upgrade — rolling branch tag on a st
 scrutiny_k8s_influxdb_claim: scrutiny-influxdb-data
 scrutiny_k8s_influxdb_size: 2Gi
 scrutiny_k8s_influxdb_storage_class: longhorn
-scrutiny_k8s_influxdb_source_path: /home/ubuntu/server/containers/scrutiny/influxdb2
 
 # The web's SQLite config DB (32 KB) — device metadata, notification settings.
 scrutiny_k8s_config_claim: scrutiny-web-config
 scrutiny_k8s_config_size: 1Gi
 scrutiny_k8s_config_storage_class: longhorn
-scrutiny_k8s_config_source_path: /home/ubuntu/server/containers/scrutiny/config
 
 # Collector cadence, pinned for the same reason as the Docker copy: monitor-bridge's
 # SMART Data Freshness window (26 h) must not depend on the image's default.

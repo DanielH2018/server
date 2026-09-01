@@ -2,21 +2,15 @@
 # Slice 4, B4a — the film \*arr, the closest clone of the sonarr role.
 #
 
-# Seeded BEFORE the workload, so the app never runs its first-boot setup against an empty /config
-# that is about to be overwritten. The Docker copy is still writing, so a coexistence seed is torn
-# by construction — only B4c's force=true seed against a STOPPED source is authoritative.
-- name: Seed the radarr config volume
+- name: Create the radarr config volume claim
   tags: [deploy]
   ansible.builtin.include_role:
     name: k8s/seed-volume
   vars:
     seed_volume_service: radarr
     seed_volume_claim: "{{ radarr_k8s_claim }}"
-    seed_volume_source_path: "{{ radarr_k8s_source_path }}"
     seed_volume_storage_class: "{{ radarr_k8s_storage_class }}"
     seed_volume_size: "{{ radarr_k8s_size }}"
-    seed_volume_quiesce:
-      - radarr
 
 - name: Deploy radarr to the cluster
   ansible.builtin.include_role:

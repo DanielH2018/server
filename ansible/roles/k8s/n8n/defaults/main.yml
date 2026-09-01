@@ -62,7 +62,6 @@ n8n_k8s_mem_request: 128Mi
 n8n_k8s_claim: n8n-data
 n8n_k8s_storage_class: longhorn
 n8n_k8s_size: 4Gi
-n8n_k8s_source_path: /home/ubuntu/server/containers/n8n/data
 
 # The `/files` mount. EMPTY at migration time (last written Oct 2025), but a claim rather than an
 # emptyDir because a workflow references /files/PAL_E4389.pdf — so the path is live, and an

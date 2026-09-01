@@ -1,15 +1,13 @@
 ---
-# Seed BEFORE the workload starts. The Deployment mounts the same claim, so creating the PVC
-# here and letting seed-volume populate it first means the pod never sees an empty /config and
-# never runs Laravel's first-boot migrations against a volume that is about to be overwritten.
-- name: Seed the speedtest config volume
+# Create the PVC BEFORE the workload starts. The Deployment mounts the same claim, so the pod
+# has a claim ready on boot rather than a pending volume request.
+- name: Create the speedtest config volume claim
   tags: [deploy]
   ansible.builtin.include_role:
     name: k8s/seed-volume
   vars:
     seed_volume_service: speedtest
     seed_volume_claim: "{{ speedtest_k8s_claim }}"
-    seed_volume_source_path: "{{ speedtest_k8s_source_path }}"
     seed_volume_storage_class: "{{ speedtest_k8s_storage_class }}"
     seed_volume_size: "{{ speedtest_k8s_size }}"
 
