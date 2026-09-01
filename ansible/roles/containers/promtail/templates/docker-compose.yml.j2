@@ -8,7 +8,7 @@ services:
     container_name: promtail
     # Unpinned like every image on this host — the Pi has no GitOps path, so Renovate
     # deliberately does not track roles/containers/**.
-    image: grafana/promtail:latest
+    image: grafana/promtail:latest@sha256:6cfa64ec432b24a912d640e2edb940eeae2666f61861a66c121d763dd7241381
     restart: unless-stopped
     command: -config.file=/etc/promtail/promtail.yml
     # The image's own uid is 10001, and setup_dirs.yml creates the bind-mount source owned by

@@ -156,6 +156,40 @@ NO_NEW_PRIV_EXEMPT: dict = {}
 # the deliberate `deploy.yml --tags <svc> -e common_pull=always`.
 
 
+# Compose services whose image is built or supplied rather than pulled by tag, so there is no
+# upstream digest to pin. Kept empty until a real case appears, for the same reason as
+# NO_NEW_PRIV_EXEMPT: the whole Pi fleet pins today, and the guard exists so the next role added
+# there cannot quietly omit it.
+IMAGE_DIGEST_EXEMPT: dict = {}
+
+
+def find_undigested_images(docs, exempt=frozenset()) -> list[tuple[str, str]]:
+    """Return (service, image) for every compose image pinned by tag with no ``@sha256:`` digest.
+
+    A tag is a moving name. The removed watchtower guard's note above is still right that
+    ``pull: policy`` leaves an already-present ``latest`` ageing in place rather than drifting
+    under a redeploy — but that is the narrower half. The half that bit: a tag alone gives
+    Renovate NO update axis, so five of the Pi's six images sat on a bare ``latest`` that no
+    manager could ever raise a PR against, and nothing in the repo recorded which bytes were
+    running. ``tag@sha256:`` fixes both — it is reproducible on a cold pull, and it is the shape
+    the k8s plane already uses (see ansible/tests/test_base_images_digest_pinned.py, whose globs
+    reach roles/k8s and roles/setup but never roles/containers; this is that gate's Pi half).
+    """
+    missing: list[tuple[str, str]] = []
+    for doc in docs:
+        services = doc.get("services") if isinstance(doc, dict) else None
+        if not isinstance(services, dict):
+            continue
+        for svc, spec in services.items():
+            if not isinstance(spec, dict) or svc in exempt:
+                continue
+            image = spec.get("image")
+            # A service with no `image:` builds from `build:` — nothing to pin.
+            if isinstance(image, str) and image and "@sha256:" not in image:
+                missing.append((svc, image))
+    return missing
+
+
 def _cap_drops_all(spec: dict) -> bool:
     caps = spec.get("cap_drop")
     return isinstance(caps, list) and any(
@@ -270,6 +304,15 @@ def check_container(host_ctx: dict, ci: dict) -> str | None:
             "missing `security_opt: [no-new-privileges:true]` (companion of cap_drop: [ALL] — "
             f"blocks setuid re-escalation; allowlist in NO_NEW_PRIV_EXEMPT with a reason): "
             f"{', '.join(nnp_missing)}"
+        )
+
+    undigested = find_undigested_images(docs, IMAGE_DIGEST_EXEMPT)
+    if undigested:
+        detail = "; ".join(f"{svc}: {image}" for svc, image in undigested)
+        return (
+            "image pinned by tag with no '@sha256:' digest (a bare tag gives Renovate no "
+            "update axis and no record of which bytes run — read the live digest with "
+            f"`docker images --digests` and append it): {detail}"
         )
 
     return None

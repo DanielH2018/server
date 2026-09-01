@@ -8,7 +8,7 @@ services:
     container_name: node-exporter
     # Unpinned, like every image on this host — the Pi has no GitOps path, so Renovate
     # deliberately does not track roles/containers/** and a pin here only manufactures drift.
-    image: quay.io/prometheus/node-exporter:latest
+    image: quay.io/prometheus/node-exporter:latest@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
     restart: unless-stopped
     # The host's /proc and /sys, not the container's. Every collector reads through these
     # paths, so the netdev/cpu/meminfo/hwmon series describe daniel-pi even though the

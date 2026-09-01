@@ -7,7 +7,7 @@
 services:
   glances:
     container_name: glances
-    image: nicolargo/glances:latest
+    image: nicolargo/glances:latest@sha256:8e138cbfa3cf1eea59633e3a173c38b0c98267db9d506bf47c2a20678c9e9f37
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:61208/"]
