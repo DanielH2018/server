@@ -50,7 +50,10 @@ def test_dirty_alert_suppressed_when_already_alerted_this_morning():
 
 def test_dirty_alert_fires_in_evening_after_morning_alert():
     # Still dirty at night after the morning page -> the evening slot fires once.
-    now = datetime(2026, 6, 20, 20, 0)
+    # 21:00, not 20:00: the boundary itself is test_dirty_alert_at_exactly_8pm_boundary_
+    # inclusive's job, and using it here made the two tests the same case, so the evening
+    # slot's interior was never covered by either.
+    now = datetime(2026, 6, 20, 21, 0)
     assert should_alert_dirty(now, "2026-06-20:am") is True
 
 

@@ -110,14 +110,9 @@ def test_dry_run_exits_ok_when_nothing_has_changed(monkeypatch) -> None:
 
 
 def test_dry_run_exits_drift_when_a_preference_has_changed(monkeypatch) -> None:
-    current = dict(apply_prefs.DESIRED) | {"connection_speed": 30}
-    exit_code = _run_dry_run(monkeypatch, current)
-    assert exit_code == apply_prefs.EXIT_DRIFT
-
-
-def test_dry_run_never_writes(monkeypatch) -> None:
-    # set_preferences is not on _StubClient at all, so main() would raise AttributeError if
-    # --dry-run's early return stopped gating the write.
+    # This also covers "--dry-run never writes": set_preferences is not on _StubClient at all,
+    # so main() raises AttributeError — not EXIT_DRIFT — if the early return stops gating the
+    # write. A separate test asserting the same exit code on the same input added no branch.
     current = dict(apply_prefs.DESIRED) | {"connection_speed": 30}
     exit_code = _run_dry_run(monkeypatch, current)
     assert exit_code == apply_prefs.EXIT_DRIFT
