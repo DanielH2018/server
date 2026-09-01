@@ -19,6 +19,18 @@ _TASKS = _REPO / "ansible/roles/setup/gitops_deploy/tasks/main.yml"
 _HARNESS = _REPO / "scripts/deploy_tools/backfill_staging_gate.py"
 
 
+def onfailure_target(unit_text: str) -> str | None:
+    """The unit named by `OnFailure=`, or None. A pure function so it can be given text that
+    must be REJECTED — the real tree can only ever be observed passing."""
+    match = re.search(r"^OnFailure=(\S+)$", unit_text, re.M)
+    return match.group(1) if match else None
+
+
+def installed_units(tasks_text: str) -> set[str]:
+    """Every `*.service`/`*.timer` name the install loop enumerates. Pure for the same reason."""
+    return set(re.findall(r"^\s*- (\S+\.(?:service|timer))\s*$", tasks_text, re.M))
+
+
 def harness_constant(name: str) -> int:
     match = re.search(rf"^{name} = (\d+)$", _HARNESS.read_text(), re.M)
     assert match, f"{_HARNESS.name} no longer defines {name}"
@@ -65,3 +77,85 @@ def test_the_timer_is_not_wanted_by_the_deploy_tick():
     # The ratchet is hourly and independent. Coupling it to the 30-minute deployer would put a
     # staging deploy inside the tick's budget, which is the thing slice 3 deliberately bounded.
     assert "gitops-deploy.service" not in _TIMER.read_text()
+
+
+def test_the_unit_pages_on_the_failures_it_does_not_tolerate():
+    """The other half of the exit-code split above.
+
+    Preserving COULD_NOT_RUN as a failure is only worth anything if something observes the
+    failed state. Nothing did until 2026-09-01: check.py reads no staging marker, no Kuma tile
+    exists, node-exporter runs without --collector.systemd, and promtail ships pod logs rather
+    than host journals. So the ratchet could stop dead and read exactly like a quiet week.
+    """
+    target = onfailure_target(_UNIT.read_text())
+    assert target, (
+        "the backfill unit pages on nothing; a failed ratchet is silent again"
+    )
+    assert target != "gitops-deploy-alert.service", (
+        "that unit's payload names gitops-deploy and sends the operator to a journal that is "
+        "healthy in exactly this case, so the page gets dismissed as a false alarm"
+    )
+
+
+def test_the_onfailure_target_exists_and_is_installed():
+    """systemd does not validate an OnFailure= target at load, so a typo is silent.
+
+    A misnamed target is indistinguishable from no target at all: the unit still fails, and
+    systemd starts nothing.
+    """
+    target = onfailure_target(_UNIT.read_text())
+    assert (_UNIT.parent / f"{target}.j2").is_file(), (
+        f"{target} is named by OnFailure= but has no template"
+    )
+    assert target in installed_units(_TASKS.read_text()), (
+        f"{target} has a template but the install loop never renders it"
+    )
+
+
+def test_a_typo_in_the_onfailure_target_is_flagged():
+    """The rejecting half of the two tests above — the real tree can only be observed passing.
+
+    Both helpers get input they must not accept: a target the install loop does not carry, and
+    a unit with no OnFailure= at all.
+    """
+    typo = "staging-backfil-alert.service"
+    assert onfailure_target(f"[Unit]\nOnFailure={typo}\n") == typo
+    assert typo not in installed_units(_TASKS.read_text())
+    assert onfailure_target("[Unit]\nDescription=no alerting here\n") is None
+
+
+def test_the_alert_unit_names_the_backfill_rather_than_the_deployer():
+    """The LAUNDER this fix exists to avoid, asserted rather than trusted.
+
+    A sibling alert unit whose payload was copy-pasted from gitops-deploy-alert.service is the
+    same wrong-unit page as reusing that unit outright, and reads as fixed.
+    """
+    alert = (_UNIT.parent / "staging-backfill-alert.service.j2").read_text()
+    payload = re.search(r"^ExecStart=.*?(?=\n[A-Z#])", alert, re.M | re.S)
+    assert payload, "the alert unit has no ExecStart"
+    assert "staging-backfill" in payload.group(0)
+    assert "journalctl -u gitops-deploy`" not in payload.group(0)
+
+
+def test_the_alert_unit_reads_the_webhook_indirectly():
+    """`systemctl show -p ExecStart` prints unit content to any local user with no sudo, so a
+    0600 mode does not protect an embedded webhook — the sibling unit's own comment records
+    that leak (2026-08-23b review M5)."""
+    alert = (_UNIT.parent / "staging-backfill-alert.service.j2").read_text()
+    assert "EnvironmentFile=/etc/gitops-deploy/alert-webhook" in alert
+    assert "${ALERT_WEBHOOK}" in alert
+    assert "https://discord" not in alert, (
+        "the webhook is inlined; it leaks via systemctl show"
+    )
+
+
+def test_the_alert_units_delivery_line_survives_the_journald_cap():
+    """journald stores notice+ on these hosts and `curl -fsS` is silent on success, so without
+    BOTH directives a delivered page leaves `-- No entries --` — identical to never firing."""
+    alert = (_UNIT.parent / "staging-backfill-alert.service.j2").read_text()
+    assert "SyslogLevel=notice" in alert
+    echo = re.search(r"^ExecStartPost=/bin/echo (.*)$", alert, re.M)
+    assert echo, "a delivered page would leave no on-host record"
+    assert "staging-backfill" in echo.group(1), (
+        "the on-host record names the wrong unit, which is the payload trap one layer down"
+    )

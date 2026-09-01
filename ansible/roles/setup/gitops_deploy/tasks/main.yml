@@ -109,6 +109,10 @@
   loop:
     - staging-backfill.service
     - staging-backfill.timer
+    # Installed but deliberately NOT enabled, and not added to the gate-armed task below: an
+    # OnFailure= target is started by systemd on demand, so enabling it would only give it a
+    # boot-time WantedBy it has no use for. gitops-deploy-alert.service is installed the same way.
+    - staging-backfill-alert.service
   become: true
   # Deliberately NOT notifying "Run gitops-deploy once": this pair has nothing to do with
   # whether a deploy is pending, and a template change here should not ship one.
@@ -153,6 +157,7 @@
       # deployer's budget or CI lines rendered stale and nothing saw it (2026-08-24 review M-9).
       - ansible/roles/setup/gitops_deploy/templates/staging-backfill.service.j2
       - ansible/roles/setup/gitops_deploy/templates/staging-backfill.timer.j2
+      - ansible/roles/setup/gitops_deploy/templates/staging-backfill-alert.service.j2
       - ansible/roles/setup/gitops_deploy/templates/config.env.j2
       - ansible/roles/setup/gitops_deploy/templates/alert-webhook.env.j2
 

@@ -2,6 +2,18 @@
 Description=Ask the staging gate about master commits it has not been asked about yet
 After=network-online.target
 Wants=network-online.target
+# Safe ONLY because SuccessExitStatus=1 below keeps the expected NOT MET path out of `failed` —
+# verified on daniel-box 2026-09-01, where a run that exited 1 read back
+# `Result=success ExecMainStatus=1 ActiveState=inactive`. What reaches this line is
+# COULD_NOT_RUN (2: a missing pinned interpreter, the stale-ancestors refusal in
+# backfill_staging_gate.py) and a TimeoutStartSec hang, which systemd does put in `failed`.
+#
+# A SIBLING unit, not gitops-deploy-alert.service. That one's payload names gitops-deploy and
+# sends the operator to a journal that is healthy in exactly this case, so the page gets
+# dismissed as a false alarm. systemd does not validate this target at load, so a typo here is
+# silent — ansible/tests/test_staging_backfill_unit.py asserts the named unit exists and is
+# installed.
+OnFailure=staging-backfill-alert.service
 
 [Service]
 Type=oneshot
