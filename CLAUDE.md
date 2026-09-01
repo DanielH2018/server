@@ -56,7 +56,7 @@ Route to the source of truth by what you're doing, before reading linearly:
 | Retiring a finished worktree, or `ExitWorktree` refuses to remove one | `/worktree-cleanup` skill |
 | A PR just merged — what now | `## After a PR Merges — Pull, Deploy, Verify` below (the directive and *When to wait*) · `/land-after-merge` skill (the commands). Default is pull → deploy → verify in the same session, no ask. |
 | Checking a k8s manifest change without deploying it | `/deploy` skill → *Checking a k8s change without deploying it* (`--dry-run` vs `--check` vs `prek` — they check different things) |
-| Running or testing a GitOps tick without waiting 30 min | `/gitops-tick` skill. A real tick, not a rehearsal — there is no dry-run mode, and an uneventful tick logs nothing. |
+| Running or testing a GitOps tick without waiting for the timer | `/gitops-tick` skill. A real tick, not a rehearsal — there is no dry-run mode, and an uneventful tick logs nothing. |
 | Adding / rotating a secret | `/add-secret` skill · `docs/secret-rotation.md` · `## Secrets Management` |
 | A Bash or `kubectl` command keeps prompting, or you need the full permission tables | `## Shell Commands — Shape Them to Auto-Approve` below (summary) · `docs/claude-shell-permissions.md` (full detail) |
 | Editing HA automations / lighting / fans | `ansible/roles/k8s/home-assistant/CLAUDE.md` (config and workload both live there; it routes to `docs/` for per-topic behaviour) · `/ha-edit-automation` |
@@ -100,7 +100,7 @@ Run ansible through `uv run` so it uses the repo's pinned env (`ansible-core` + 
 `community.docker` deps `requests`/`docker` — see **Python & Tests**). Bare `ansible-playbook`
 (the uv-tool shim) lacks those module deps and deploys will fail.
 **Deploy through `./scripts/deploy.sh --tags "<service>"`**, not the playbook directly. It
-takes `/var/lock/server-git-tree.lock` — the same lock `gitops-deploy.service` (30-min timer)
+takes `/var/lock/server-git-tree.lock` — the same lock `gitops-deploy.service` (10-min timer)
 and the weekly secret-rotate cron hold — so a deploy cannot interleave with the automated
 pipeline or with another Claude session.
 

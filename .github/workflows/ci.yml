@@ -9,7 +9,12 @@ on:
 # pushes) so redundant lint/test runs don't pile up.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancel a superseded run on a PR branch only. On master every SHA needs its own verdict:
+  # the deployer's CI gate and `await_ci.py` read check-runs per commit, and a run cancelled by
+  # the next merge leaves that commit with no verdict forever. 4 of the 10 master runs before
+  # 2026-09-01 ended that way, each one restarting a ~5-minute full sweep that every landing
+  # behind it then waited on. Runner minutes are free on a public repo.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

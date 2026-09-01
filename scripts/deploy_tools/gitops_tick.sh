@@ -2,7 +2,7 @@
 #
 # gitops_tick.sh — trigger a GitOps deploy tick by hand and report what it did.
 #
-# The 30-minute timer does nothing but activate gitops-deploy.service, so starting that
+# The timer (gitops_deploy_tick_interval, 10 min) does nothing but activate gitops-deploy.service, so starting that
 # unit runs the identical code path: fetch origin/master, CI-gate, ff-merge, deploy the
 # changed services, health-gate, roll back on failure. There is no dry-run mode — a
 # manual tick is a real tick.

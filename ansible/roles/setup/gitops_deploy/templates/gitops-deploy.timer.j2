@@ -1,9 +1,13 @@
 [Unit]
-Description=Run the GitOps deployer every 30 minutes
+Description=Run the GitOps deployer every {{ gitops_deploy_tick_interval }}
 
 [Timer]
 OnBootSec=10min
-OnUnitActiveSec=30min
+# Measured from the last START of the unit, not its end (verified live, see the role CLAUDE.md).
+# An elapse that finds the unit still activating is coalesced into the run in flight, so a
+# long tick never produces a second concurrent one. The interval is a role default; its
+# history is beside the variable in defaults/main.yml.
+OnUnitActiveSec={{ gitops_deploy_tick_interval }}
 RandomizedDelaySec=2min
 Persistent=true
 

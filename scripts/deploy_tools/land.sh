@@ -178,7 +178,7 @@ attempt=1
 while [ "$attempt" -le "$LOCK_RETRIES" ]; do
   ./scripts/deploy.sh --tags "$TAGS"
   deploy_rc=$?
-  # 75 = the git-tree lock stayed busy (the 30-min timer, or another session). Nothing was
+  # 75 = the git-tree lock stayed busy (the 10-min timer, or another session). Nothing was
   # deployed, so this is a resume point rather than a failure.
   if [ "$deploy_rc" -ne 75 ]; then
     break
