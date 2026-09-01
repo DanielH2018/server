@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 import bridge_config
 import bridge_io
-import check
+import checks_host
 
 
 def _summary(*entries):
@@ -31,7 +31,7 @@ def _dev(wwn, name, collector_date=None, archived=False, device_status=None, tem
 
 def test_scrutiny_fresh_device_is_ok():
     s = _summary(_dev("w1", "nvme0", "2026-06-06T06:00:00Z"))
-    ok, msg = check.scrutiny_freshness(
+    ok, msg = checks_host.scrutiny_freshness(
         s, 26, now=datetime(2026, 6, 6, 12, 0, tzinfo=timezone.utc)
     )
     assert ok
@@ -43,7 +43,7 @@ def test_scrutiny_stale_device_is_named():
         _dev("w1", "nvme0", "2026-06-04T06:00:00Z"),
         _dev("w2", "sda", "2026-06-06T06:00:00Z"),
     )
-    ok, msg = check.scrutiny_freshness(
+    ok, msg = checks_host.scrutiny_freshness(
         s, 26, now=datetime(2026, 6, 6, 12, 0, tzinfo=timezone.utc)
     )
     assert not ok
@@ -52,7 +52,7 @@ def test_scrutiny_stale_device_is_named():
 
 def test_scrutiny_no_smart_data_is_down():
     s = _summary(_dev("w1", "nvme0"))
-    ok, msg = check.scrutiny_freshness(
+    ok, msg = checks_host.scrutiny_freshness(
         s, 26, now=datetime(2026, 6, 6, 12, 0, tzinfo=timezone.utc)
     )
     assert not ok
@@ -64,14 +64,14 @@ def test_scrutiny_archived_device_is_skipped():
         _dev("w1", "nvme0", "2026-06-06T06:00:00Z"),
         _dev("w2", "old-disk", "2020-01-01T00:00:00Z", archived=True),
     )
-    ok, _ = check.scrutiny_freshness(
+    ok, _ = checks_host.scrutiny_freshness(
         s, 26, now=datetime(2026, 6, 6, 12, 0, tzinfo=timezone.utc)
     )
     assert ok
 
 
 def test_scrutiny_no_devices_is_down():
-    ok, msg = check.scrutiny_freshness({}, 26)
+    ok, msg = checks_host.scrutiny_freshness({}, 26)
     assert not ok
     assert "no devices" in msg
 
@@ -81,7 +81,7 @@ def test_scrutiny_no_devices_is_down():
 
 def test_scrutiny_passing_device_is_healthy():
     s = _summary(_dev("w1", "nvme0", device_status=0))
-    ok, msg = check.scrutiny_health(s)
+    ok, msg = checks_host.scrutiny_health(s)
     assert ok
     assert "ok" in msg
 
@@ -91,7 +91,7 @@ def test_scrutiny_failed_smart_is_named():
         _dev("w1", "nvme0", device_status=1),
         _dev("w2", "sda", device_status=0),
     )
-    ok, msg = check.scrutiny_health(s)
+    ok, msg = checks_host.scrutiny_health(s)
     assert not ok
     assert "nvme0" in msg and "SMART self-assessment FAILED" in msg
     assert "sda" not in msg
@@ -99,7 +99,7 @@ def test_scrutiny_failed_smart_is_named():
 
 def test_scrutiny_failed_threshold_is_named():
     s = _summary(_dev("w1", "nvme0", device_status=2))
-    ok, msg = check.scrutiny_health(s)
+    ok, msg = checks_host.scrutiny_health(s)
     assert not ok
     assert "attribute threshold breached" in msg
 
@@ -107,20 +107,20 @@ def test_scrutiny_failed_threshold_is_named():
 def test_scrutiny_missing_device_status_is_ok():
     # An API that omits device_status must not false-page.
     s = _summary(_dev("w1", "nvme0", "2026-06-06T06:00:00Z"))
-    ok, _ = check.scrutiny_health(s)
+    ok, _ = checks_host.scrutiny_health(s)
     assert ok
 
 
 def test_scrutiny_archived_failing_device_is_skipped():
     s = _summary(_dev("w1", "old-disk", device_status=1, archived=True))
-    ok, _ = check.scrutiny_health(s)
+    ok, _ = checks_host.scrutiny_health(s)
     assert ok
 
 
 def test_scrutiny_temp_ceiling_flags_only_when_enabled():
     s = _summary(_dev("w1", "nvme0", device_status=0, temp=70))
-    assert check.scrutiny_health(s, temp_max=0)[0]  # disabled -> ok
-    ok, msg = check.scrutiny_health(s, temp_max=60)
+    assert checks_host.scrutiny_health(s, temp_max=0)[0]  # disabled -> ok
+    ok, msg = checks_host.scrutiny_health(s, temp_max=60)
     assert not ok
     assert "70" in msg and "60" in msg
 
@@ -141,31 +141,31 @@ def _attr(value):
 
 def test_scrutiny_device_wear_reads_newest_result():
     d = {"data": {"smart_results": [{"attrs": _attr(7)}, {"attrs": _attr(3)}]}}
-    assert check.scrutiny_device_wear(d) == 7
+    assert checks_host.scrutiny_device_wear(d) == 7
 
 
 def test_scrutiny_device_wear_missing_field_is_none():
     assert (
-        check.scrutiny_device_wear(_details(attrs={"temperature": {"value": 47}}))
+        checks_host.scrutiny_device_wear(_details(attrs={"temperature": {"value": 47}}))
         is None
     )
-    assert check.scrutiny_device_wear(_details(results=False)) is None
-    assert check.scrutiny_device_wear({}) is None
-    assert check.scrutiny_device_wear(None) is None
+    assert checks_host.scrutiny_device_wear(_details(results=False)) is None
+    assert checks_host.scrutiny_device_wear({}) is None
+    assert checks_host.scrutiny_device_wear(None) is None
 
 
 def test_scrutiny_device_wear_non_numeric_is_none():
-    assert check.scrutiny_device_wear(_details(attrs=_attr("n/a"))) is None
+    assert checks_host.scrutiny_device_wear(_details(attrs=_attr("n/a"))) is None
 
 
 def test_scrutiny_wear_under_ceiling_is_ok():
-    ok, msg = check.scrutiny_wear_verdict([("nvme0 (SHPP41-500GM)", 7)], 80)
+    ok, msg = checks_host.scrutiny_wear_verdict([("nvme0 (SHPP41-500GM)", 7)], 80)
     assert ok
     assert "7% used of 80%" in msg
 
 
 def test_scrutiny_wear_over_ceiling_is_down():
-    ok, msg = check.scrutiny_wear_verdict(
+    ok, msg = checks_host.scrutiny_wear_verdict(
         [("nvme0 (SHPP41-500GM)", 85), ("nvme0 (CT1000E100SSD8)", 0)], 80
     )
     assert not ok
@@ -174,7 +174,7 @@ def test_scrutiny_wear_over_ceiling_is_down():
 
 
 def test_scrutiny_wear_ceiling_disabled_never_fires():
-    ok, msg = check.scrutiny_wear_verdict([("nvme0", 99)], 0)
+    ok, msg = checks_host.scrutiny_wear_verdict([("nvme0", 99)], 0)
     assert ok
     assert "disabled" in msg
 
@@ -183,20 +183,20 @@ def test_scrutiny_wear_unreadable_is_inert_not_ok():
     # The recorded failure class: a check that cannot read its input must SAY so, not report the
     # healthy meaning. Passing is right (percentage_used is NVMe-only, so a SATA disk has none),
     # but the message has to name what is unwatched.
-    ok, msg = check.scrutiny_wear_verdict([("sda (WD40EFRX)", None)], 80)
+    ok, msg = checks_host.scrutiny_wear_verdict([("sda (WD40EFRX)", None)], 80)
     assert ok
     assert "INERT" in msg and "sda (WD40EFRX)" in msg
 
 
 def test_scrutiny_wear_names_partially_unwatched_devices():
-    ok, msg = check.scrutiny_wear_verdict([("nvme0", 7), ("sda", None)], 80)
+    ok, msg = checks_host.scrutiny_wear_verdict([("nvme0", 7), ("sda", None)], 80)
     assert ok
     assert "INERT" not in msg
     assert "7% used" in msg and "sda (unwatched)" in msg
 
 
 def test_scrutiny_wear_no_devices_is_inert():
-    ok, msg = check.scrutiny_wear_verdict([], 80)
+    ok, msg = checks_host.scrutiny_wear_verdict([], 80)
     assert ok
     assert "INERT" in msg
 
@@ -216,7 +216,7 @@ def test_scrutiny_wear_devices_skips_archived_and_labels_by_model(monkeypatch):
         "w1": {"device": {"device_name": "nvme0", "model_name": "SHPP41-500GM"}},
         "w2": {"device": {"device_name": "sda", "archived": True}},
     }
-    devices = check.scrutiny_wear_devices(summary)
+    devices = checks_host.scrutiny_wear_devices(summary)
     assert devices == [("nvme0 (SHPP41-500GM)", 7)]
     assert fetched == ["http://scrutiny:8080/api/device/w1/details"]
 
