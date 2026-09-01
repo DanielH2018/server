@@ -206,11 +206,18 @@ def other_live_sessions(cwd):
     go stale when a session forgets to announce itself or dies without cleaning up. Knowing
     another session is already in a role is what stops two of them editing it at once.
     """
-    sys.path.insert(0, os.path.join(REPO, "scripts"))
+    # scripts/dev/, not scripts/ — the module moved when scripts/ was regrouped into
+    # subdirectories by what each script acts on (#443), and this insert did not follow it.
+    # Nothing failed loudly, because the except below returned an empty list and an empty list
+    # is indistinguishable from "no other sessions are running" — so the banner's whole
+    # other-sessions section was silently absent from 2026-08 until 2026-09-01.
+    sys.path.insert(0, os.path.join(REPO, "scripts", "dev"))
     try:
         from prune_worktrees import parse_worktree_list, session_is_alive
-    except ImportError:
-        return []
+    except ImportError as exc:
+        # Fail open, because a SessionStart banner must never block a session from starting —
+        # but say so. The silence is what let the path bug live for a month.
+        return [f"  ⚠ other-session detection is broken: {exc}"]
 
     lines = []
     for tree in parse_worktree_list(
