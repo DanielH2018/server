@@ -161,7 +161,7 @@ For the ~35 workloads that stay on `Recreate`, the gap can still be cut:
   the convention; the gap case is a changed tag.
 
 **Measured, and withdrawn.** This section proposed the tuning above on the strength of an
-estimated 15–45s window. The measurement in [`zero-downtime-baseline.md`](zero-downtime-baseline.md)
+estimated 15–45s window. The measurement in [`baseline.md`](baseline.md)
 does not support it: median start→ready across the fleet is 11s, p90 is 31s, and
 `terminationGracePeriodSeconds` only contributes at all when an app ignores SIGTERM — which
 nothing here is shown to do. `minReadySeconds` runs the wrong way; it delays a rollout being
