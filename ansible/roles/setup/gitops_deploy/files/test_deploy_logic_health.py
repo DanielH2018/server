@@ -12,9 +12,8 @@ tick, and the dirty-tree alert has to throttle or it fires every half hour forev
 from datetime import datetime
 
 
-from deploy_logic import (
-    should_alert_dirty,
-    dirty_alert_slot,
+from deploy_git import should_alert_dirty, dirty_alert_slot
+from deploy_health import (
     health_decision,
     health_settles,
     gate_services,

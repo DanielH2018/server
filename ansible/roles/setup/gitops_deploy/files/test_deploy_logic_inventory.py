@@ -7,10 +7,9 @@ running while never catching up.
 
 # ansible/roles/setup/gitops_deploy/files/test_deploy_logic.py
 
-from deploy_logic import (
-    ChangeSet,
-    services_from_changed_paths,
-    behind_marker,
+from deploy_changes import ChangeSet, services_from_changed_paths
+from deploy_git import behind_marker
+from deploy_inventory import (
     declared_k8s_services,
     declared_services,
     reroute_k8s_services,

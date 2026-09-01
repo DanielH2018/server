@@ -17,22 +17,22 @@ import time
 import pytest
 import yaml
 
-from deploy_logic import (
+from deploy_changes import (
     ChangeSet,
     services_from_changed_paths,
-    next_action,
-    is_image_only_diff,
-    k8s_remediation,
     shared_module_consumers,
+)
+from deploy_git import next_action, ci_verdict, dirty_summary
+from deploy_k8s import (
+    is_image_only_diff,
     split_k8s_auto_deploy,
-    ci_verdict,
     declared_denylist,
     declares_snapshot_claims,
     rollback_volume_revert_note,
     SHARED_K8S_ROLES,
     k8s_role_paths,
-    dirty_summary,
 )
+from deploy_remediation import k8s_remediation
 
 
 # ── the dirty skip's journal line ───────────────────────────────────────────────────────────
@@ -1159,7 +1159,7 @@ def test_a_consumer_this_host_does_not_declare_is_not_escalated():
 
 def test_a_scoped_setup_run_fits_the_budget():
     """`initial_setup.yml --tags <role>` is small enough to fund a rollback re-run."""
-    from deploy_logic import broad_budget_ok
+    from deploy_remediation import broad_budget_ok
 
     assert broad_budget_ok(forward_s=300, rollback_s=300, flock_s=180, timeout_s=2700)
 
@@ -1169,7 +1169,7 @@ def test_a_full_deploy_plus_rollback_is_flagged_over_budget():
     TimeoutStartSec=2700 leaves 96s, so a run four percent slower than measured is
     SIGTERMed mid-rollback -- which strands the tree at the failed commit with live state
     half-applied. This is the reject half, and it is the whole argument for forward-only."""
-    from deploy_logic import broad_budget_ok
+    from deploy_remediation import broad_budget_ok
 
     assert not broad_budget_ok(
         forward_s=1212, rollback_s=1212, flock_s=180, timeout_s=2700
@@ -1190,7 +1190,7 @@ def test_the_budget_predicate_tracks_the_units_real_timeout():
     about a rollback that can still be SIGTERMed), not a side effect of a ceiling raised for an
     unrelated feature.
     """
-    from deploy_logic import broad_budget_ok
+    from deploy_remediation import broad_budget_ok
 
     unit = (
         pathlib.Path(__file__).resolve().parents[1]

@@ -7,12 +7,8 @@ A dirty tree outranks every other reason to deploy.
 
 # ansible/roles/setup/gitops_deploy/files/test_deploy_logic.py
 
-from deploy_logic import (
-    next_action,
-    is_diverged,
-    container_names,
-    containers_to_gate,
-)
+from deploy_git import next_action, is_diverged
+from deploy_health import container_names, containers_to_gate
 
 
 def test_next_action_noop_when_in_sync():
