@@ -226,17 +226,18 @@
   mode: single
   trigger:
     # Two ways in: you arrive (presence off->on), OR the room dims past the gate while you're
-    # already here (illuminance crossing below 75). The latter closes an edge-vs-level gap —
+    # already here (T1 illuminance crossing below 90). The latter closes an edge-vs-level gap —
     # entering while it was still bright used to leave you in the dark as dusk fell, since the
     # only trigger was the arrival edge. The `for:` rides out transient lux dips (a passing shadow).
     # Keep this `below:` in sync with the auto_light_allowed gate threshold (lighting.jinja's
-    # `lux < N`) — test_lux_gate_sync.py asserts they stay equal.
+    # `lux < N`) — test_lux_gate_sync.py asserts they stay equal, and the entity must match the one
+    # the gate reads (sensor.aqara_t1_illuminance) or the trigger fires on a different scale.
     - platform: state
       entity_id: binary_sensor.aqara_fp300_presence
       to: "on"
     - platform: numeric_state
-      entity_id: sensor.aqara_fp300_illuminance
-      below: 75
+      entity_id: sensor.aqara_t1_illuminance
+      below: 90
       for: "00:00:30"
   # Gating moved into script.bedroom_lights_set / light_decision (the 'presence' reason applies
   # exactly these checks: manual_off off, sleep off, person home, presence on, lux gate on, light
@@ -251,7 +252,7 @@
 # sharing ONLY the arrival edge (not the dusk lux-crossing — that path is when lights DO come on), with
 # the lux gate INVERTED. Mutually exclusive with presence_on per arrival: auto_light_allowed is either
 # on (presence_on lights up) or off (this blips). Won't loop the lux trigger: a ~1s blip can't satisfy
-# presence_on's `below: 75 for: 30s`, and it only fires when illuminance is already >= 75 (bright ambient).
+# presence_on's `below: 90 for: 30s`, and it only fires when T1 illuminance is already >= 90 (bright ambient).
 - id: bedroom_presence_blip
   alias: Bedroom presence blip too bright
   description: Soft acknowledgement flash when presence is detected on arrival but the lux gate blocks auto-on.
@@ -415,9 +416,12 @@
 
 # Manual light DETECT: make a hand/voice/dashboard light change set the SAME manual-off override the
 # Tap Dial's power button does — so an external "off" STICKS instead of being re-lit by
-# bedroom_presence_on's dusk-lux trigger. Turning the bulbs off drops sensor.aqara_fp300_illuminance
-# (dominated by the lights themselves, ~550 on / ~48 off) below the gate, which otherwise re-fires
-# presence_on ~30s later (the documented lights-dominate-illuminance feedback loop — see role CLAUDE.md).
+# bedroom_presence_on's dusk-lux trigger or by the next presence edge.
+# This used to be load-bearing against a feedback loop: the gate read the FP300, which the bulbs
+# themselves drove (~550 on / ~48 off), so turning them off dropped it below the gate and re-fired
+# presence_on ~30s later. The gate now reads the T1, which the bulbs move only ~30 lx, so a lights-off
+# rarely crosses the 90-lux trigger at all — the loop is much weaker, but the override is still what
+# makes a deliberate "off" survive the NEXT arrival edge, so this stays.
 # The Tap Dial already engaged manual-off on its off-press; voice (Google Assistant), the dashboard
 # tile, and the companion app did not — this closes that gap for every control surface at once.
 # Mirrors bedroom_fan_manual_detect: trigger.to_state.context.parent_id is none means the change came

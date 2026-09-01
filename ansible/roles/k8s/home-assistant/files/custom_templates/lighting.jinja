@@ -59,24 +59,37 @@
 {%- endif -%}
 {%- endmacro -%}
 
-{# Auto-light gate: dark enough OR inside the wake window. illuminance < 75 lux is "dark"; in_window
-   forces allow for the morning ramp regardless of ambient. The 75-lux literal is ALSO inlined in
-   bedroom_presence_on's numeric_state trigger (a trigger can't call a macro) — test_lux_gate_sync.py
-   asserts the two stay equal. in_window is coerced with `| bool` because a macro argument arrives as
-   a string when passed a macro's rendered output. #}
-{%- macro auto_light_allowed(in_window, illuminance) -%}
+{# Auto-light gate: dark enough OR inside the wake window. illuminance < 90 lux is "dark", read from
+   the Aqara T1 (sensor.aqara_t1_illuminance) — a dedicated ambient sensor clear of the bulbs' cones,
+   NOT the FP300, which the bulbs themselves swing 13x. in_window forces allow for the morning ramp
+   regardless of ambient. The 90-lux literal is ALSO inlined in bedroom_presence_on's numeric_state
+   trigger (a trigger can't call a macro) — test_lux_gate_sync.py asserts the two stay equal.
+   `dark_fallback` decides the gate when illuminance is NOT a number. The T1 reports only on change,
+   so it parks at `unknown` after an HA restart or a Z2M rename, and in a stable dark room nothing
+   clears that. The caller passes sun-below-horizon — the same deterministic fallback
+   script.bedroom_apply_natural_gated already uses for a stale read — so a night-time restart cannot
+   silently disable auto-lighting. -1 is the sentinel: illuminance is never negative.
+   Bools are coerced with `| bool` because a macro argument arrives as a string when passed a macro's
+   rendered output. #}
+{%- macro auto_light_allowed(in_window, illuminance, dark_fallback=False) -%}
 {%- set iw = in_window | bool -%}
-{%- set lux = illuminance | float(9999) -%}
-{{ iw or lux < 75 }}
+{%- set df = dark_fallback | bool -%}
+{%- set lux = illuminance | float(-1) -%}
+{%- set known = lux >= 0 -%}
+{{ iw or (lux < 90 if known else df) }}
 {%- endmacro -%}
 
 {# Ambient-fill auto-on brightness: the level to turn the lights on at, from the time of day AND the
    current ambient illuminance. Time-of-day base (the level if the room were pitch dark): morning
    (05-09) 55, daytime (09-17) 45, evening (else) 35. Then dimmed by ambient: factor falls linearly
-   1.0 -> 0.2 across 0 -> 75 lux (the auto_light_allowed gate ceiling), so a brighter room gets less
-   added light. Output floored at 5% so it's always visibly on. Read illuminance while the lights are
-   OFF (true ambient — the FP300 is dominated by the bulbs when on). Color comes from Adaptive
-   Lighting in the caller; this is brightness only. TUNE the bases / factor here. #}
+   1.0 -> 0.2 across 0 -> 75 lux, so a brighter room gets less added light. Output floored at 5% so
+   it's always visibly on. Read illuminance while the lights are OFF (true ambient — the FP300 is
+   dominated by the bulbs when on). Color comes from Adaptive Lighting in the caller; this is
+   brightness only. TUNE the bases / factor here.
+   The 75 here is this curve's OWN scale, no longer the auto_light_allowed ceiling — that gate moved
+   to the T1 at 90 lux. This curve still reads the FP300, so the two numbers are on different scales
+   and must NOT be resynced. Moving this curve onto the T1 is a separate change needing its own
+   recalibration of the 0.8 slope. #}
 {%- macro natural_brightness(hour, illuminance) -%}
 {%- set h = hour | int(12) -%}
 {%- set lux = illuminance | float(0) -%}

@@ -206,14 +206,17 @@ bedroom_apply_natural:
             transition: 2
 
 # Gated dispatcher: apply the natural lighting state if the shared darkness gate allows
-# (binary_sensor.bedroom_auto_light_allowed = wake window OR illuminance < 75, defined in
+# (binary_sensor.bedroom_auto_light_allowed = wake window OR T1 illuminance < 90, defined in
 # templates.yaml) OR the sun is below the horizon — otherwise turn the lights OFF, i.e. produce the
 # same outcome the automatic presence path would in a bright room. Used ONLY by the Tap Dial button-1
 # HOLD ("reset to auto"); the manual taps call the ungated bedroom_apply_natural directly.
-# The sun term is the deterministic fix for the FP300 illuminance reporting lag (~100s, sleepy battery
-# sensor): right after a manual/voice off the bulbs go dark but sensor.aqara_fp300_illuminance still
+# The sun term is the deterministic fix for illuminance reporting lag (a sleepy battery sensor):
+# right after a manual/voice off the bulbs go dark but the gate's illuminance sensor still
 # reads the STALE lights-on value, so the pure lux gate refused to relight on the first HOLD (it only
-# blipped — you had to hold a second time once the sensor caught up). At night a stale-bright reading
+# blipped — you had to hold a second time once the sensor caught up). The gate now reads the T1
+# (reports on change, ~5s detection period) rather than the FP300 (~100s), so the lag is shorter, but
+# the sun term stays: it also covers the T1 parking at `unknown` after a restart, which is the same
+# fallback auto_light_allowed's `dark_fallback` argument takes. At night a stale-bright reading
 # is physically impossible, so sun-below-horizon guarantees the reset lights on the first press; by
 # day we still honor the live lux (a genuinely bright room stays off). Scoped to this HOLD path only —
 # the automatic presence gate (the binary_sensor, used by bedroom_presence_on / the Button-4 sleep-exit)
