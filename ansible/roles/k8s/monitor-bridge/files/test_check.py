@@ -166,7 +166,7 @@ def _pvc_series(pvc, pct, namespace="homelab"):
 def _arm_pvc(monkeypatch, vector, claims=43.0):
     monkeypatch.setattr(check, "CLUSTER_PROM_URL", "http://prometheus:9090")
     monkeypatch.setattr(check, "PVC_MAX_PCT", 85.0)
-    monkeypatch.setattr(check, "PVC_MIN_CLAIMS", 20)
+    monkeypatch.setattr(check, "PVC_MIN_CLAIMS", 32)
     monkeypatch.setattr(check, "PVC_CLAIMS_CONSECUTIVE", 3)
     monkeypatch.setattr(check, "PVC_EXCLUDE", ["media-data"])
     monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: claims)
@@ -210,41 +210,64 @@ def test_pvc_excluded_claim_is_clean(monkeypatch):
 
 
 def test_pvc_claim_floor_shortfall_is_flagged(monkeypatch):
-    # The fail-closed arm. A vector that has lost most of its claims still looks healthy — every
-    # survivor is under the limit — so the census is what separates "nothing is full" from
-    # "I cannot see". Held for the grace, then paged.
-    _arm_pvc(monkeypatch, [_pvc_series("uptime-kuma-data", 38.6)], claims=4.0)
+    # The fail-closed arm, at the number it was sized for. A dead kubernetes-kubelet job leaves
+    # the apiserver job reporting 27 of the 43 claims, and every survivor is under the limit — so
+    # the vector alone still reads healthy and the census is the only thing that separates
+    # "nothing is full" from "I cannot see daniel-server's claims". Held for the grace, then paged.
+    _arm_pvc(monkeypatch, [_pvc_series("uptime-kuma-data", 38.6)], claims=27.0)
     ok1, msg1 = check.check_pvc_fullness()
     assert ok1
-    assert "UNKNOWN, not OK" in msg1
+    assert "only 27 kubelet_volume_stats claims visible" in msg1
     check.check_pvc_fullness()
     ok3, msg3 = check.check_pvc_fullness()
     assert not ok3
-    assert "only 4 kubelet_volume_stats claims visible" in msg3
+    assert "only 27 kubelet_volume_stats claims visible" in msg3
+
+
+def test_pvc_full_kubelet_coverage_is_clean(monkeypatch):
+    # The REJECT half of the floor: losing the APISERVER job costs no coverage, because the
+    # kubelet job reports all 43 claims on its own. A floor that fired here would page on a
+    # harmless scrape change.
+    _arm_pvc(monkeypatch, [_pvc_series("uptime-kuma-data", 38.6)], claims=43.0)
+    ok, msg = check.check_pvc_fullness()
+    assert ok
+    assert "claims visible" not in msg
 
 
 def test_pvc_absent_census_is_flagged(monkeypatch):
-    # prom_scalar returns None on an empty vector, which is what a dead kubelet scrape looks
-    # like. It must not read as "zero claims, all healthy".
-    _arm_pvc(monkeypatch, [], claims=None)
+    # prom_scalar returns None on an empty vector. The ratio query still answers here, so this
+    # reaches the census arm rather than the empty-vector one below — the two must not be
+    # conflated, which is why each asserts its own wording.
+    _arm_pvc(monkeypatch, [_pvc_series("uptime-kuma-data", 38.6)], claims=None)
     check.check_pvc_fullness()
     check.check_pvc_fullness()
     ok, msg = check.check_pvc_fullness()
     assert not ok
-    assert "UNKNOWN, not OK" in msg
+    assert "no kubelet_volume_stats claims visible" in msg
+
+
+def test_pvc_empty_ratio_vector_is_flagged(monkeypatch):
+    # The other blind shape: the census answers but no claim reports a ratio. An empty vector is
+    # indistinguishable from "no claim is full", so it must page rather than report a worst.
+    _arm_pvc(monkeypatch, [], claims=43.0)
+    check.check_pvc_fullness()
+    check.check_pvc_fullness()
+    ok, msg = check.check_pvc_fullness()
+    assert not ok
+    assert "no PVC reported a fullness ratio" in msg
 
 
 def test_pvc_breach_outranks_a_coverage_shortfall(monkeypatch):
     # Same ordering as check_disk: a claim that IS reporting and IS full outranks a complaint
     # about the ones that are not.
-    _arm_pvc(monkeypatch, [_pvc_series("valheim-config", 91.2)], claims=4.0)
+    _arm_pvc(monkeypatch, [_pvc_series("valheim-config", 91.2)], claims=27.0)
     ok, msg = check.check_pvc_fullness()
     assert not ok
     assert "PVC over 85%" in msg
 
 
 def test_pvc_recovery_resets_the_census_streak(monkeypatch):
-    _arm_pvc(monkeypatch, [_pvc_series("uptime-kuma-data", 38.6)], claims=4.0)
+    _arm_pvc(monkeypatch, [_pvc_series("uptime-kuma-data", 38.6)], claims=27.0)
     check.check_pvc_fullness()
     _arm_pvc(monkeypatch, [_pvc_series("uptime-kuma-data", 38.6)])
     assert check.check_pvc_fullness()[0]

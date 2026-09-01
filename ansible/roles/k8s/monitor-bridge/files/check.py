@@ -576,10 +576,16 @@ PVC_MAX_PCT = float(_env("PVC_MAX_PCT", "85"))
 PVC_EXCLUDE = [
     c.strip() for c in _env("PVC_EXCLUDE", "media-data").split(",") if c.strip()
 ]
-# Coverage floor, in CLAIMS not series — see check_pvc_fullness for why the two differ. Live count
-# was 43 on 2026-09-01; 20 is the same kind of conservative under-count as CADVISOR_PODS_MIN's 20
-# against a live 99, so retiring a few services cannot pin this monitor red.
-PVC_MIN_CLAIMS = int(_env("PVC_MIN_CLAIMS", "20"))
+# Coverage floor, in CLAIMS not series — see check_pvc_fullness for why the two differ. NOT a
+# conservative under-count like CADVISOR_PODS_MIN, because the degraded state here is a specific
+# number rather than an empty vector. The two scrape jobs cover unequally (measured 2026-09-01,
+# groups not series): kubelet alone reports all 43 claims, apiserver alone reports 27. So the
+# apiserver job dying costs no coverage at all, and the ONLY hazard is the kubelet job dying,
+# which leaves 27 claims answering while daniel-server's go dark. A floor at or under 27 reads
+# that as healthy — the same partial blindness HOST_ORIGINS_MIN exists for. 32 is strictly above
+# the 27-claim survivor and 11 below the live 43, so it fires on that outage and still tolerates
+# a dozen services being retired.
+PVC_MIN_CLAIMS = int(_env("PVC_MIN_CLAIMS", "32"))
 # Hysteresis on the coverage floor only. A kubelet restart or a node drain drops a node's volume
 # stats for a cycle or two, and that must not page; a fullness breach gets no grace because it is
 # monotonic rather than flappy.
@@ -3425,10 +3431,10 @@ B2_DEPENDENT = frozenset({"b2_storage"})
 #
 # It is NOT given an EXPORTER_DEPENDENT entry keyed on job="kubernetes-kubelet", which is the
 # nearest-looking wiring and would be wrong. Those claims are scraped under two jobs, so a dead
-# kubelet job still leaves the apiserver job answering for a subset — a PARTIAL blindness the
-# claim-count floor catches correctly and a job-keyed suppression would turn green. That is the
-# same mistake as the `node`-only entry that suppressed two hosts of three for host_temp, not a
-# fix for it.
+# kubelet job still leaves the apiserver job answering for 27 of the 43 claims — a PARTIAL
+# blindness PVC_MIN_CLAIMS is sized to page on, and a job-keyed suppression would turn that page
+# green. Same mistake as the `node`-only entry that suppressed two hosts of three for host_temp,
+# not a fix for it.
 CLUSTER_DEPENDENT = frozenset({"k8s_workloads", "cluster_targets", "pvc_fullness"})
 
 # Reach-out checks that poll a live app dependency (n8n/sonarr/radarr/prowlarr/scrutiny/the Pi
