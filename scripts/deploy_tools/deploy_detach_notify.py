@@ -9,9 +9,10 @@ CI gate rejections, rollbacks). An operator watching that channel is the one thi
 for; it does not invent a second alert path.
 
 Degrades to a log-only note, never a crash, when:
-  - a tag isn't a k8s Deployment/DaemonSet OR a Pi Docker container (a block tag like
-    `config`/`deploy`/`cron`, or a name that matches neither) -- skipped from the verdict
-    rather than counted as a failure
+  - a tag isn't a k8s workload OR a Pi Docker container (a block tag like
+    `config`/`deploy`/`cron`, a name that matches neither, or a role whose manifests declare no
+    workload at all -- netpol-baseline, media-volume) -- skipped from the verdict rather than
+    counted as a failure
   - the gitops-deploy webhook config isn't present on this host -- deploy.sh normally runs on
     daniel-box, where it is; anywhere else this just prints and returns
 

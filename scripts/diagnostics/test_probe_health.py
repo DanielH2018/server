@@ -498,7 +498,93 @@ def test_statefulset_is_resolvable_and_lookupable():
     )
 
 
-def test_declared_on_pi_reads_the_inventory():
+#
+# The pod query behind the restart half of the gate. A selector matching NO pods yields
+# restarts=0 and an empty recent-restart list — byte-identical to a genuinely quiet workload —
+# so a wrong selector makes that half silently inert rather than failing.
+#
+
+
+def _workload(name, selector):
+    return {"metadata": {"name": name}, "spec": {"selector": {"matchLabels": selector}}}
+
+
+def test_pod_selector_matches_a_workloads_own_labels():
+    assert (
+        probe_health.pod_selector(_workload("grafana", {"app": "grafana"}))
+        == "app=grafana"
+    )
+
+
+def test_pod_selector_is_flagged_when_it_would_differ_from_the_name():
+    """pihole-2's Deployment selects `app: pihole`. `app=pihole-2` matched no pods at all,
+    and `app=pihole` matched BOTH piholes' — confirmed live 2026-09-01."""
+    selector = probe_health.pod_selector(_workload("pihole-2", {"app": "pihole"}))
+    assert selector == "app=pihole"
+    assert selector != "app=pihole-2"
+
+
+def test_pod_selector_falls_back_rather_than_matching_every_pod():
+    """A workload with no selector is rejected by the k8s API, so this is unreachable — but an
+    empty `-l` would query the whole namespace, which is worse than the old guess."""
+    assert probe_health.pod_selector({}) == ""
+    assert "app=pihole-2" in probe_health.k8s_pods_argv("pihole-2", "homelab", "")
+
+
+def test_pods_argv_prefers_an_explicit_selector():
+    argv = probe_health.k8s_pods_argv("pihole-2", "homelab", "app=pihole")
+    assert "app=pihole" in argv and "app=pihole-2" not in argv
+
+
+def _rendered_workloads():
+    """(role, workload doc) for every Deployment/DaemonSet/StatefulSet in the tree."""
+    validator, base, entries = probe_health._render_context()
+    for role_dir in sorted(d for d in validator.K8S_ROLES.iterdir() if d.is_dir()):
+        role = role_dir.name
+        if role in validator.SKIP_ROLES or role not in entries:
+            continue
+        ctx = {
+            **base,
+            **validator.role_defaults(role, base),
+            "container_item": entries[role],
+        }
+        for tpl in sorted(
+            p
+            for p in (role_dir / "templates").glob("*.j2")
+            if validator.is_manifest_template(p)
+        ):
+            err, docs = validator.check_template(role, tpl, ctx)
+            assert not err, f"{role}/{tpl.name}: {err}"
+            for doc in docs:
+                if (
+                    isinstance(doc, dict)
+                    and doc.get("kind") in probe_health.WORKLOAD_KINDS
+                ):
+                    yield role, doc
+
+
+def test_every_rendered_workload_yields_a_usable_pod_selector():
+    """The tree-wide pin. Nothing else connects a manifest's selector to the query the gate
+    runs, and a selector matching nothing reads as a healthy quiet workload. An empty result
+    here would send `kubectl get pods -l ''` at the whole namespace."""
+    workloads = list(_rendered_workloads())
+    assert len(workloads) > 50, len(workloads)
+    for role, doc in workloads:
+        name = (doc.get("metadata") or {}).get("name")
+        assert probe_health.pod_selector(doc), f"{role}/{name} declares no matchLabels"
+
+
+def test_a_workload_selecting_labels_other_than_its_own_name_still_exists():
+    """The reject half. `app=<name>` was the assumption until 2026-09-01, and it is right for
+    every workload but one — so a test asserting only that the selector is non-empty would pass
+    just as well with the assumption back in place. This names the counter-example."""
+    divergent = {
+        (role, (doc.get("metadata") or {}).get("name"))
+        for role, doc in _rendered_workloads()
+        if probe_health.pod_selector(doc)
+        != f"app={(doc.get('metadata') or {}).get('name')}"
+    }
+    assert ("pihole", "pihole-2") in divergent, divergent
     assert probe_health.declared_on_pi("wg-easy") is True
     assert probe_health.declared_on_pi("definitely-not-a-service") is False
 

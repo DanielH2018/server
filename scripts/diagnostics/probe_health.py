@@ -151,7 +151,9 @@ def k8s_deploy_argv(service, namespace, kind="deploy"):
     ]
 
 
-def k8s_pods_argv(service, namespace):
+def k8s_pods_argv(service, namespace, selector=None):
+    """kubectl argv for a workload's pods. `selector` overrides the `app=<service>` guess —
+    pass `pod_selector(workload)` whenever the workload document is in hand."""
     return [
         "k3s",
         "kubectl",
@@ -160,10 +162,34 @@ def k8s_pods_argv(service, namespace):
         "get",
         "pods",
         "-l",
-        f"app={service}",
+        selector or f"app={service}",
         "-o",
         "json",
     ]
+
+
+def pod_selector(workload):
+    """The `-l` expression matching a workload's OWN pods, read from its spec.selector.
+
+    Not `app=<name>`. pihole-2's Deployment selects `app: pihole`, so `app=pihole-2` matched
+    no pods at all while `app=pihole` matched both piholes' — and a pod query that matches
+    nothing yields `restarts=0` with an empty recent-restart list, which is byte-identical to a
+    genuinely quiet workload. That would leave the restart half of this gate silently inert,
+    the half that caught a crashlooping kube-state-metrics on 2026-08-07.
+
+    64 of the 65 rendered workloads do use `app=<name>`, and a rule that is right 64 times and
+    quietly wrong the 65th is the wrong rule for a gate. Falls back to the guess only for a
+    workload carrying no selector at all, which the k8s API rejects — querying every pod in the
+    namespace instead would be worse than the guess.
+
+    Both pihole Deployments select `app: pihole`, so each now reads the union of the two's
+    pods and a restart in either fails both. That over-reports rather than under-reports, which
+    is the direction a gate may err in; the overlapping selectors themselves are a pihole role
+    question, not this function's.
+    """
+    labels = ((workload or {}).get("spec") or {}).get("selector") or {}
+    matched = labels.get("matchLabels") or {}
+    return ",".join(f"{key}={value}" for key, value in sorted(matched.items()))
 
 
 def _seconds_since(timestamp, now):
@@ -387,11 +413,15 @@ def role_workload_targets(role, default_namespace):
     Raises on a render failure rather than returning None. Fail closed: a role whose templates
     stopped rendering must not degrade to the guess-the-name path, where a miss reads as a skip.
     """
+    # Checked before the render context is built, so a block tag (`config`, `deploy`, `cron`)
+    # costs a directory stat rather than 0.44s of ansible + kubernetes_validate imports, and a
+    # broken renderer environment cannot fail a tag that was never a role.
+    role_dir = REPO / "ansible" / "roles" / "k8s" / role
+    if not role_dir.is_dir():
+        return None
+
     validator, base, entries = _render_context()
     if role in validator.SKIP_ROLES or role not in entries:
-        return None
-    role_dir = validator.K8S_ROLES / role
-    if not role_dir.is_dir():
         return None
 
     templates = sorted(
@@ -471,7 +501,8 @@ def _fetch_workload(name, namespace):
     for kind in WORKLOAD_KINDS.values():
         workload = _json_or_none(k8s_deploy_argv(name, namespace, kind=kind))
         if workload:
-            return workload, _json_or_none(k8s_pods_argv(name, namespace))
+            pods = _json_or_none(k8s_pods_argv(name, namespace, pod_selector(workload)))
+            return workload, pods
     return None, None
 
 
