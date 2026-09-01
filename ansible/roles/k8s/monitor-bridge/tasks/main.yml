@@ -66,7 +66,7 @@
 # applied them before the switch; without it the first server-side apply is rejected.
 # Server-side apply prints the same line whether or not anything changed, so the changed
 # signal is the staged files, the same register the render task uses.
-# ENFORCED by ansible/tests/test_monitor_bridge_configmap_apply.py.
+# ENFORCED by ansible/tests/test_script_configmaps_apply_server_side.py.
 - name: Apply the script ConfigMap
   tags: [deploy]
   ansible.builtin.command:

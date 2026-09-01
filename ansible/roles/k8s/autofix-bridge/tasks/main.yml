@@ -55,13 +55,22 @@
   become: true
   changed_when: autofix_bridge_script is changed
 
+# Server-side, like monitor-bridge's: client-side apply re-stores the whole object in an
+# annotation capped at 262144 bytes, which the bridge crossed on 2026-09-01. This script is far
+# smaller, but one apply form across the four script ConfigMaps is one thing to get right.
+# --force-conflicts takes the data keys from the client-side field manager that applied them
+# before the switch. Server-side apply prints the same line whether or not anything changed,
+# so the changed signal is the staged file. ENFORCED by
+# ansible/tests/test_script_configmaps_apply_server_side.py.
 - name: Apply the script ConfigMap
   tags: [deploy]
   ansible.builtin.command:
-    cmd: k3s kubectl apply -f /etc/rancher/k3s/autofix-bridge/configmap.yaml
+    cmd: >-
+      k3s kubectl apply --server-side --force-conflicts
+      -f /etc/rancher/k3s/autofix-bridge/configmap.yaml
   become: true
   register: autofix_bridge_cm_apply
-  changed_when: "'configured' in autofix_bridge_cm_apply.stdout or 'created' in autofix_bridge_cm_apply.stdout"
+  changed_when: autofix_bridge_script is changed
 
 - name: Deploy autofix-bridge to the cluster
   ansible.builtin.include_role:
