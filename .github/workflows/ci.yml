@@ -45,8 +45,18 @@ jobs:
   # first run and each open PR branch pays it once too. Don't read either as the steady state.
   #
   # If ansible-lint ever goes back to running unscoped on PRs, re-read that math before re-sharding.
-  prek:
-    name: prek (lint + validate + tests + secrets)
+  hooks:
+    # Re-read 2026-09-01, and re-sharded on a different axis: tests | everything else. Two of
+    # the premises above have gone. "Nothing waits on master's CI" stopped being true on
+    # 2026-08-29, when land.sh started waiting on the merge commit's verdict and the deployer's
+    # CI gate started refusing to deploy without one — every landing now sits behind the master
+    # sweep. And that sweep is no longer 77s: 225s on the runner (`Run hooks (full sweep)`, run
+    # 33551106067), 102s on daniel-box, of which pytest alone is 63s and ansible-lint 28s. The
+    # pytest hook also runs UNSCOPED on every PR by design (prek.toml explains why its `files`
+    # regex was removed), so the scoped PR path is pytest-bound too. Splitting tests out lets
+    # the ~60s of fixed setup overlap something worth overlapping. The `prek` gate job below
+    # carries the required-context name so nothing outside this file changes.
+    name: hooks (lint + validate + secrets + docs)
     runs-on: ubuntu-latest
     timeout-minutes: 20  # cap a wedged network hook (ansible-galaxy install) so it can't burn to the 6h default
     steps:
@@ -208,7 +218,8 @@ jobs:
             echo "No ansible YAML changed in this PR — nothing for ansible-lint to do."
           fi
           echo "::group::all other hooks"
-          prek run --skip ansible-lint --color always --files "${changed[@]}" || rc=1
+          # --skip pytest: the suite runs in the `pytest` job beside this one.
+          prek run --skip ansible-lint --skip pytest --color always --files "${changed[@]}" || rc=1
           echo "::endgroup::"
           exit "$rc"
 
@@ -221,7 +232,8 @@ jobs:
       # rather than never: a deliberate trade of post-merge detection for PR latency.
       - name: Run hooks (full sweep)
         if: github.event_name != 'pull_request' || steps.changed.outputs.mode == 'full'
-        run: prek run --all-files --color always
+        # --skip pytest: the suite runs in the `pytest` job beside this one.
+        run: prek run --all-files --skip pytest --color always
 
       # `mkdocs build --strict` ran nowhere except the twice-daily docs-refresh cron, so a
       # broken internal link reached master and the cron discovered it — build_site() bails
@@ -233,6 +245,57 @@ jobs:
       # which is the widening prek.toml:347 forbids in writing — it would wedge the cron.
       - name: Build the docs site (mkdocs --strict)
         run: uv run mkdocs build --strict --site-dir "$RUNNER_TEMP/docs-site"
+
+  # The whole pytest suite, unscoped on PRs and pushes alike — the same suite the prek `pytest`
+  # hook runs, invoked the same way (`uv run python -m pytest`, addopts from pyproject.toml), so
+  # a local `prek run --all-files` and this job cannot disagree about what a test run is.
+  pytest:
+    name: pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0  # several tests read git history and worktree state
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.14"
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
+        with:
+          enable-cache: true
+      # The suite ran after the ansible-lint hook in the single-job layout, so it has always
+      # had the Galaxy collections on disk; several ansible/tests read them. Same cache key as
+      # the hooks job, so the two share one entry.
+      - name: Cache Ansible collections
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ansible/collections
+          key: galaxy-${{ runner.os }}-${{ hashFiles('ansible/requirements.yml') }}
+      - name: Install Ansible collections
+        run: uv run ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections
+      - name: Run the test suite
+        run: uv run python -m pytest --color yes
+
+  # The required status context. Branch protection, the deployer's CI_CONTEXTS, await_ci.py
+  # and the ruleset-drift cron all name "prek (lint + validate + tests + secrets)", so that name
+  # lives on this gate rather than on either half above. `if: always()` because a job with
+  # `needs` is otherwise SKIPPED when a dependency fails, and GitHub counts a skipped required
+  # check as passing — the gate has to run and fail explicitly. A cancelled run cancels this job
+  # too, which is the "no verdict" every reader already handles.
+  prek:
+    name: prek (lint + validate + tests + secrets)
+    runs-on: ubuntu-latest
+    needs: [hooks, pytest]
+    if: always()
+    steps:
+      - name: Require both halves to have succeeded
+        env:
+          HOOKS: ${{ needs.hooks.result }}
+          PYTEST: ${{ needs.pytest.result }}
+        run: |
+          echo "hooks=$HOOKS pytest=$PYTEST"
+          [ "$HOOKS" = success ] && [ "$PYTEST" = success ]
 
   renovate-config:
     name: renovate config validator
