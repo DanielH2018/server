@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -40,12 +41,7 @@ spec:
         - name: autofix-bridge
           image: {{ autofix_bridge_k8s_image }}
           command: ["python", "/app/autofix.py"]
-          securityContext:
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
+{{ hardened_security_context(read_only=true) }}
           envFrom:
             - secretRef:
                 name: autofix-bridge-env

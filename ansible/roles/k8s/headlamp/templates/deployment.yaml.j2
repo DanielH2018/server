@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 ---
 apiVersion: apps/v1
@@ -51,12 +52,7 @@ spec:
             - "-unsafe-use-service-account-token"
           ports:
             - containerPort: {{ container_item.port }}
-          securityContext:
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
+{{ hardened_security_context(read_only=true) }}
           volumeMounts:
             # Headlamp writes the kubeconfig it generates from the SA token ("main") under
             # its XDG config dir, which readOnlyRootFilesystem otherwise makes EROFS.

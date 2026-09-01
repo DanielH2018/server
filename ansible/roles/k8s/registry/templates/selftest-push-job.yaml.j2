@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 # Proves the PUSH half of the registry: a pod reaching the registry over its Service.
 #
@@ -58,11 +59,7 @@ spec:
             # node (hostPort on {{ k8s_registry_host_ip }}). That stops being true at slice 7.
             - {{ k8s_registry_push_host }}/{{ registry_k8s_probe_repo }}:probe
             - --insecure
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
+{{ hardened_security_context() }}
           resources:
             limits:
               cpu: "1"

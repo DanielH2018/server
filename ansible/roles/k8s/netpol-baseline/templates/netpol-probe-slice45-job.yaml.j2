@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 # Slice 4.5 fences the 27 workloads no earlier slice owned — every remaining app, the
 # sub-workloads inside a parent role, the three DaemonSets, and the LAN-facing game and VPN
@@ -113,10 +114,7 @@ spec:
                 exit 1
               fi
               echo "open port ok: terraria:7777 reachable from an unlisted caller, as designed"
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: ["ALL"]
+{{ hardened_security_context() }}
           resources:
             requests:
               cpu: 10m

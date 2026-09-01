@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 # Proves the baseline is ENFORCED, not merely applied. Four assertions, because the obvious
 # single one is not sufficient for this slice: these six apps have no in-cluster caller, so
@@ -126,10 +127,7 @@ spec:
                 exit 1
               fi
               echo "isolated: littlelink:3000 unreachable except through traefik"
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: ["ALL"]
+{{ hardened_security_context() }}
           resources:
             requests:
               cpu: 10m

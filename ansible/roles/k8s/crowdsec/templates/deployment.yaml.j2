@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -36,11 +37,7 @@ spec:
               install -m 644 /seed/whitelist.yaml /seed/trusted-remote-whitelist.yaml
               /etc/crowdsec/parsers/s02-enrich/ &&
               install -m 600 /seed/discord.yaml /etc/crowdsec/notifications/
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
+{{ hardened_security_context() }}
           volumeMounts:
             - name: crowdsec-seed
               mountPath: /seed
@@ -78,16 +75,7 @@ spec:
           # drops it to 'nobody' (SETUID/SETGID); CHOWN+DAC_OVERRIDE cover first-touch
           # ownership of the PVC-backed DB dir. No host log mounts here, so the Docker
           # copy's broad DAC_OVERRIDE rationale shrinks to that.
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-              add:
-                - CHOWN
-                - DAC_OVERRIDE
-                - SETUID
-                - SETGID
+{{ hardened_security_context(add=['CHOWN', 'DAC_OVERRIDE', 'SETUID', 'SETGID']) }}
           volumeMounts:
             - name: crowdsec-etc
               mountPath: /etc/crowdsec

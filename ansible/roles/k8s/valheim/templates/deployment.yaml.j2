@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -65,28 +66,21 @@ spec:
                 secretKeyRef:
                   name: valheim-env
                   key: SERVER_PASS
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-              add:
-                # Steam's threading layer raises its own thread priority at startup. Without
-                # it the server still runs but logs a failed-priority warning every boot —
-                # the archived compose carried the same cap_add for the same reason.
-                - SYS_NICE
-                # The container runs its own cron — that is what drives the hourly world
-                # backup and the Steam update check. cron calls initgroups() before every
-                # job, which is setgroups(), which needs this even when the target user is
-                # already root. Without it every tick dies with
-                #   (CRON) error (do_command:initgroups(0) failed: Operation not permitted)
-                # and the log otherwise looks healthy — observed on the first boot here, so
-                # the backups would have silently never run.
-                - SETGID
-                # No DAC_OVERRIDE, unlike terraria: PUID/PGID default to 0, the seed pod
-                # restores the source's uid 0 with `tar -p --numeric-owner`, and root
-                # writing root-owned files needs no override. Add it only if a world save
-                # ever fails on the backup step.
+          # Steam's threading layer raises its own thread priority at startup. Without
+          # it the server still runs but logs a failed-priority warning every boot —
+          # the archived compose carried the same cap_add for the same reason.
+          # The container runs its own cron — that is what drives the hourly world
+          # backup and the Steam update check. cron calls initgroups() before every
+          # job, which is setgroups(), which needs this even when the target user is
+          # already root. Without it every tick dies with
+          #   (CRON) error (do_command:initgroups(0) failed: Operation not permitted)
+          # and the log otherwise looks healthy — observed on the first boot here, so
+          # the backups would have silently never run.
+          # No DAC_OVERRIDE, unlike terraria: PUID/PGID default to 0, the seed pod
+          # restores the source's uid 0 with `tar -p --numeric-owner`, and root
+          # writing root-owned files needs no override. Add it only if a world save
+          # ever fails on the backup step.
+{{ hardened_security_context(add=['SYS_NICE', 'SETGID']) }}
           volumeMounts:
             - name: valheim-config
               mountPath: /config

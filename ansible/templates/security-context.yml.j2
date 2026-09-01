@@ -1,0 +1,65 @@
+{#
+  Container-level `securityContext` for a hardened k8s container — the
+  `allowPrivilegeEscalation: false` + `capabilities.drop: [ALL]` body that ~100 container specs
+  across the fleet share, varying only in which of four optional keys they set and which
+  capabilities they add back.
+
+  A container-level securityContext is a DIFFERENT object from a pod-level one, and only the
+  container-level one governs capabilities — see ansible/tests/test_container_security_context.py
+  for why that distinction has already cost a fleet-wide audit once. This macro emits the
+  container-level block only; a pod-level `securityContext` (fsGroup, supplementalGroups,
+  sysctls) stays written out at its call site.
+
+  Indentation is fixed at 10 spaces, which is the container-list depth in a Deployment,
+  DaemonSet, StatefulSet or CronJob pod template here (100 of the fleet's 102 blocks). The two
+  that sit deeper — a CronJob's `jobTemplate` nests one level further — are deliberately NOT
+  converted rather than given an indent argument, because a macro that can emit at two depths
+  is one that can emit at the wrong one.
+
+  NOT FOR `runAsUser: 0`. ansible/tests/test_root_needs_dac_capability.py is a tree-wide guard
+  that scans raw template TEXT for a `runAsUser: 0` block that drops ALL and adds no DAC
+  capability — root that cannot read another uid's files is weaker than the pod's own uid, not
+  stronger. It does not render Jinja, so a root securityContext built through this macro is
+  invisible to it. The guard has zero violations today and its own docstring records that a rule
+  matching nothing passes identically to a rule that works, so silently removing its three real
+  accept cases would be indistinguishable from breaking it. code-server's deployment.yaml.j2 and
+  loki-homelab's promtail-daemonset.yaml.j2 are the two `runAsUser: 0` sites in this family and
+  stay written out in full. See "Textual guard checks break on an indirection" in project memory.
+
+  Arguments:
+    read_only      emit `readOnlyRootFilesystem: true`.
+    non_root       emit `runAsNonRoot: true`.
+    run_as_user    emit `runAsUser: <value>`; omitted when none. Never pass 0 — see above.
+    run_as_group   emit `runAsGroup: <value>`; omitted when none.
+    add            capabilities to add back, as a list. Written literally at the call site so a
+                   grep for a capability name still finds every container that is granted it.
+
+  A key this macro is not asked for is OMITTED, never defaulted — an absent `runAsNonRoot` and
+  an explicit `runAsNonRoot: false` are different admission outcomes, and roughly half the fleet
+  legitimately leaves it absent.
+#}
+{% macro hardened_security_context(read_only=false, non_root=false, run_as_user=none, run_as_group=none, add=[]) %}
+          securityContext:
+            allowPrivilegeEscalation: false
+{% if read_only %}
+            readOnlyRootFilesystem: true
+{% endif %}
+{% if non_root %}
+            runAsNonRoot: true
+{% endif %}
+{% if run_as_user is not none %}
+            runAsUser: {{ run_as_user }}
+{% endif %}
+{% if run_as_group is not none %}
+            runAsGroup: {{ run_as_group }}
+{% endif %}
+            capabilities:
+{% if add %}
+              add:
+{% for cap in add %}
+                - {{ cap }}
+{% endfor %}
+{% endif %}
+              drop:
+                - ALL
+{%- endmacro %}

@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 # Slice 1's probe (netpol-probe-job.yaml.j2) asks "is a workload with no in-cluster caller
 # unreachable" — that's the whole question for the six apps in that slice. Slice 2's workloads
@@ -139,10 +140,7 @@ spec:
                 exit 1
               fi
               echo "isolated: qbittorrent unreachable from an unlisted caller"
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: ["ALL"]
+{{ hardened_security_context() }}
           resources:
             requests:
               cpu: 10m

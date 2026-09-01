@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -94,18 +95,11 @@ spec:
         - name: otel-collector
           image: {{ claude_otel_collector_image }}
           args: ["--config=/conf/config.yaml"]
-          securityContext:
-            allowPrivilegeEscalation: false
-            # uid pinned with the assertion: `runAsNonRoot` alone does not pin one, and the
-            # kubelet refuses a container whose image names its user instead of numbering it.
-            # PID 1 measured at uid 10001 on both nodes (cgroup-traced, not a `ps` name grep),
-            # with `NSpid: <pid> 1` confirming no earlier root phase behind the capability drop.
-            runAsNonRoot: true
-            runAsUser: 10001
-            capabilities:
-              drop:
-                - ALL
-            readOnlyRootFilesystem: true
+          # uid pinned with the assertion: `runAsNonRoot` alone does not pin one, and the
+          # kubelet refuses a container whose image names its user instead of numbering it.
+          # PID 1 measured at uid 10001 on both nodes (cgroup-traced, not a `ps` name grep),
+          # with `NSpid: <pid> 1` confirming no earlier root phase behind the capability drop.
+{{ hardened_security_context(read_only=true, non_root=true, run_as_user=10001) }}
           ports:
             # hostPort + hostIP is what puts this on the NODE's loopback, which is where
             # Claude Code (a host process, not a container) exports to. A ClusterIP Service

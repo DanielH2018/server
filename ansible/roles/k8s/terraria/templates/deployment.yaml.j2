@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -56,21 +57,17 @@ spec:
           tty: true
           ports:
             - containerPort: 7777
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              # Empty, and the pod-level uid above plus the chowned image is what earns that.
-              # This carried DAC_OVERRIDE until 2026-08-31, because PID 1 ran as root in a
-              # uid-1000-owned /config where root cannot create or unlink without it. Running as
-              # the owner removed the need rather than the symptom.
-              #
-              # WHAT TO WATCH IF THIS REGRESSES: the failure lands on the world-save backup step,
-              # not at startup, so a Running pod proves nothing — that is how the Docker-era
-              # version of this bug survived 39 restarts over 11 days. The signal is a complete
-              # `Saving world data … Validating world save … Backing up world file` cycle in the
-              # log, which fires every 1-2 min, plus new .wld.bak files owned by 1000.
-              drop:
-                - ALL
+          # Empty, and the pod-level uid above plus the chowned image is what earns that.
+          # This carried DAC_OVERRIDE until 2026-08-31, because PID 1 ran as root in a
+          # uid-1000-owned /config where root cannot create or unlink without it. Running as
+          # the owner removed the need rather than the symptom.
+          #
+          # WHAT TO WATCH IF THIS REGRESSES: the failure lands on the world-save backup step,
+          # not at startup, so a Running pod proves nothing — that is how the Docker-era
+          # version of this bug survived 39 restarts over 11 days. The signal is a complete
+          # `Saving world data … Validating world save … Backing up world file` cycle in the
+          # log, which fires every 1-2 min, plus new .wld.bak files owned by 1000.
+{{ hardened_security_context() }}
           volumeMounts:
             - name: terraria-config
               mountPath: /config

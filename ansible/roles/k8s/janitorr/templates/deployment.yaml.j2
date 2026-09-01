@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -34,11 +35,7 @@ spec:
           env:
             - name: TZ
               value: "{{ tz }}"
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: [ALL]
+{{ hardened_security_context(read_only=true) }}
           volumeMounts:
             - name: janitorr-config
               mountPath: /config/application.yml

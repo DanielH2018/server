@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -102,11 +103,7 @@ spec:
         - name: tempo
           image: {{ claude_otel_tempo_image }}
           args: ["-config.file=/etc/tempo/config.yaml"]
-          securityContext:
-            allowPrivilegeEscalation: false
-            runAsNonRoot: true
-            capabilities:
-              drop: [ALL]
+{{ hardened_security_context(non_root=true) }}
           ports:
             - name: http
               containerPort: 3200

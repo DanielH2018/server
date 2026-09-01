@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 # The negative test for networkpolicy.yaml.j2: a pod that is NOT the runners must not reach the
 # task-runner broker. It carries no app=n8n-runners label, which is the only thing the policy
@@ -49,11 +50,7 @@ spec:
                 exit 1
               fi
               echo "isolated: broker port {{ n8n_k8s_broker_port }} refused, as intended"
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
+{{ hardened_security_context() }}
           resources:
             limits:
               cpu: "200m"

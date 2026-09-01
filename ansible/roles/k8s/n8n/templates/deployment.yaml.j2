@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 ---
 apiVersion: apps/v1
@@ -45,21 +46,15 @@ spec:
           ports:
             - containerPort: {{ container_item.port }}
             - containerPort: {{ n8n_k8s_broker_port }}
-          securityContext:
-            allowPrivilegeEscalation: false
-            # Pins what the comment below already relies on. `USER node` is an image property
-            # that a rebuild can move silently; asserted here, a move fails admission instead.
-            # The uid is explicit because `runAsNonRoot` alone pins nothing, and the kubelet
-            # refuses a container whose image names its user rather than numbering it — `node`
-            # is a name. PID 1 (`tini`) measured at uid 1000 on 2026-08-31, so this is a no-op.
-            runAsNonRoot: true
-            runAsUser: 1000
-            capabilities:
-              # The compose template's cap_drop: ALL with no cap_add. The image runs as `node`
-              # (uid 1000) and the seeded tree is uid 1000 too — tar restored it with
-              # --numeric-owner — so nothing here needs CHOWN or DAC_OVERRIDE.
-              drop:
-                - ALL
+          # Pins what the comment below already relies on. `USER node` is an image property
+          # that a rebuild can move silently; asserted here, a move fails admission instead.
+          # The uid is explicit because `runAsNonRoot` alone pins nothing, and the kubelet
+          # refuses a container whose image names its user rather than numbering it — `node`
+          # is a name. PID 1 (`tini`) measured at uid 1000 on 2026-08-31, so this is a no-op.
+          # The compose template's cap_drop: ALL with no cap_add. The image runs as `node`
+          # (uid 1000) and the seeded tree is uid 1000 too — tar restored it with
+          # --numeric-owner — so nothing here needs CHOWN or DAC_OVERRIDE.
+{{ hardened_security_context(non_root=true, run_as_user=1000) }}
           env:
             - name: TZ
               value: "{{ tz }}"

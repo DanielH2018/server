@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 ---
 apiVersion: apps/v1
@@ -45,10 +46,7 @@ spec:
                       break
                   except OSError:
                       time.sleep(5)
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: [ALL]
+{{ hardened_security_context() }}
           resources:
             limits:
               cpu: 250m
@@ -83,14 +81,10 @@ spec:
               sleep 900;
               done
           workingDir: /work
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              # No DAC_OVERRIDE, unlike the compose template. That cap existed only because the
-              # uv cache was a bind mount owned by uid 1000 while the container ran as root; an
-              # emptyDir is created root-owned, so the reason is gone with the bind mount.
-              drop:
-                - ALL
+          # No DAC_OVERRIDE, unlike the compose template. That cap existed only because the
+          # uv cache was a bind mount owned by uid 1000 while the container ran as root; an
+          # emptyDir is created root-owned, so the reason is gone with the bind mount.
+{{ hardened_security_context() }}
           env:
             # This container was the homelab's single largest Loki emitter — 22,786 lines per 30
             # minutes measured 2026-08-29 — and every INFO line was written THREE times, byte- and

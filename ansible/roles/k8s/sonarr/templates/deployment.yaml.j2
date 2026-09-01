@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'exportarr.yml.j2' import exportarr with context %}
 ---
 apiVersion: apps/v1
@@ -33,19 +34,9 @@ spec:
           image: {{ sonarr_k8s_image }}
           ports:
             - containerPort: {{ container_item.port }}
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              # The compose template's cap_drop/cap_add pair — the s6 privilege-drop set. No
-              # NET_BIND_SERVICE: sonarr listens on 8989, which needs no privilege.
-              drop:
-                - ALL
-              add:
-                - CHOWN
-                - SETUID
-                - SETGID
-                - FOWNER
-                - DAC_OVERRIDE
+          # The compose template's cap_drop/cap_add pair — the s6 privilege-drop set. No
+          # NET_BIND_SERVICE: sonarr listens on 8989, which needs no privilege.
+{{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID', 'FOWNER', 'DAC_OVERRIDE']) }}
           env:
             - name: PUID
               value: "{{ puid }}"

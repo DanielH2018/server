@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -143,11 +144,7 @@ spec:
       containers:
         - name: grafana
           image: {{ claude_otel_grafana_image }}
-          securityContext:
-            allowPrivilegeEscalation: false
-            runAsNonRoot: true
-            capabilities:
-              drop: [ALL]
+{{ hardened_security_context(non_root=true) }}
           env:
             - name: GF_SECURITY_ADMIN_PASSWORD
               valueFrom:

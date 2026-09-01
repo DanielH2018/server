@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 ---
 apiVersion: apps/v1
@@ -36,12 +37,7 @@ spec:
         - name: seed-config
           image: {{ homepage_k8s_init_image }}
           command: ["sh", "-c", "cp -L /config-secret/* /config/"]
-          securityContext:
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
+{{ hardened_security_context(read_only=true) }}
           volumeMounts:
             - name: homepage-config
               mountPath: /config-secret
@@ -64,19 +60,11 @@ spec:
           image: {{ homepage_k8s_image }}
           ports:
             - containerPort: {{ container_item.port }}
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              # The compose template's cap_drop/cap_add pair: docker-entrypoint.sh chowns
-              # /app/config and /app/config/logs to PUID/PGID (best-effort — it warns and
-              # continues on failure, which is what happens against the read-only Secret mount
-              # below) before su-exec'ing down to that uid.
-              drop:
-                - ALL
-              add:
-                - CHOWN
-                - SETUID
-                - SETGID
+          # The compose template's cap_drop/cap_add pair: docker-entrypoint.sh chowns
+          # /app/config and /app/config/logs to PUID/PGID (best-effort — it warns and
+          # continues on failure, which is what happens against the read-only Secret mount
+          # below) before su-exec'ing down to that uid.
+{{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID']) }}
           env:
             - name: PUID
               value: "{{ puid }}"

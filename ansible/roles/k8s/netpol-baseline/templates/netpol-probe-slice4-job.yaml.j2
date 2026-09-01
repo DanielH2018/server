@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 # Slice 4 fences the infra tier: traefik, authelia, crowdsec, pihole, mosquitto, nut and
 # jellyfin all carry `netpol-baseline: enforced` (Task 7), each behind its own per-workload
@@ -124,10 +125,7 @@ spec:
                 exit 1
               fi
               echo "dns ok: pihole answered daniel-pi.lan, so :53 is reachable through the fence"
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: ["ALL"]
+{{ hardened_security_context() }}
           resources:
             requests:
               cpu: 10m

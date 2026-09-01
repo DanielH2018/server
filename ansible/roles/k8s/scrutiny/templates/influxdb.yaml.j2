@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 ---
 # Time-series store for SMART history. ClusterIP only — nothing outside the namespace
@@ -32,19 +33,9 @@ spec:
       containers:
         - name: influxdb
           image: {{ scrutiny_k8s_influxdb_image }}
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-              add:
-                # Entrypoint chowns the data dir then drops root via gosu before starting
-                # influxd — the same add-backs the Docker copy carries.
-                - CHOWN
-                - SETUID
-                - SETGID
-                - DAC_OVERRIDE
-                - FOWNER
+          # Entrypoint chowns the data dir then drops root via gosu before starting
+          # influxd — the same add-backs the Docker copy carries.
+{{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID', 'DAC_OVERRIDE', 'FOWNER']) }}
           env:
             - name: DOCKER_INFLUXDB_INIT_MODE
               value: setup

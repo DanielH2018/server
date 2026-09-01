@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 ---
 apiVersion: apps/v1
@@ -34,13 +35,7 @@ spec:
           image: {{ bento_pdf_k8s_image }}
           ports:
             - containerPort: {{ container_item.port }}
-          securityContext:
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            runAsNonRoot: true
-            capabilities:
-              drop:
-                - ALL
+{{ hardened_security_context(read_only=true, non_root=true) }}
           volumeMounts:
             # The compose template's tmpfs entries. Everything else the image writes is
             # either cosmetic in-place /etc/nginx edits that fail soft, or nothing — it is a

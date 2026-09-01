@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -59,13 +60,7 @@ spec:
             - -R
             - "0:0"
             - /etc/wireguard
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-              add:
-                - CHOWN
+{{ hardened_security_context(add=['CHOWN']) }}
           volumeMounts:
             - name: wg-easy-config
               mountPath: /etc/wireguard
@@ -118,14 +113,7 @@ spec:
           # drop once v15 is proven running — verified removal, not a same-commit guess.
           # No SYS_MODULE — the wireguard module is loaded on the host, and /lib/modules is
           # mounted read-only below.
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-              add:
-                - NET_ADMIN
-                - NET_RAW
+{{ hardened_security_context(add=['NET_ADMIN', 'NET_RAW']) }}
           volumeMounts:
             - name: wg-easy-config
               mountPath: /etc/wireguard

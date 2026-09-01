@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 {#
   Histogram-bucket trim for the two control-plane jobs, invoked at COLUMN 0 (it carries its own
   8-space indent, matching `relabel_configs:` in the job blocks below).
@@ -652,11 +653,7 @@ spec:
       containers:
         - name: prometheus
           image: {{ claude_otel_prometheus_image }}
-          securityContext:
-            allowPrivilegeEscalation: false
-            runAsNonRoot: true
-            capabilities:
-              drop: [ALL]
+{{ hardened_security_context(non_root=true) }}
           args:
             - --config.file=/etc/prometheus/prometheus.yml
             - --storage.tsdb.path=/prometheus

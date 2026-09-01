@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -47,13 +48,7 @@ spec:
             # would create one via the default umask.
             - install -m 444 /secret/mosquitto.conf /config/ &&
               install -m 400 /secret/passwordfile /config/
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            runAsNonRoot: true
-            capabilities:
-              drop:
-                - ALL
+{{ hardened_security_context(read_only=true, non_root=true) }}
           volumeMounts:
             - name: mosquitto-config-secret
               mountPath: /secret
@@ -74,13 +69,7 @@ spec:
           image: {{ mosquitto_k8s_image }}
           ports:
             - containerPort: 1883
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            runAsNonRoot: true
-            capabilities:
-              drop:
-                - ALL
+{{ hardened_security_context(read_only=true, non_root=true) }}
           env:
             - name: TZ
               value: "{{ tz }}"

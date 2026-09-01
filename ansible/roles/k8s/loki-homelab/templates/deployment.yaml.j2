@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 ---
 apiVersion: apps/v1
@@ -36,11 +37,7 @@ spec:
           args: ["-config.file=/etc/loki/loki.yaml"]
           # No readOnlyRootFilesystem: Loki writes its WAL and compactor scratch outside the
           # /loki mount, and the fleet-standard pair is what actually closes the gap here.
-          securityContext:
-            allowPrivilegeEscalation: false
-            runAsNonRoot: true
-            capabilities:
-              drop: [ALL]
+{{ hardened_security_context(non_root=true) }}
           ports:
             - name: http
               containerPort: 3100

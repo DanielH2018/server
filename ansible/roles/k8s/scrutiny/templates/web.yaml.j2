@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 ---
 # Web UI + API. The Service is named `scrutiny` (not scrutiny-web) because the shared
@@ -39,15 +40,9 @@ spec:
             - /bin/sh
             - -c
             - 'export SCRUTINY_WEB_INFLUXDB_TOKEN="$(cat /etc/scrutiny-secrets/influxdb_token)"; exec /opt/scrutiny/bin/scrutiny start'
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-              add:
-                # Runs as root writing its SQLite config DB + WAL in the PVC mount; the
-                # Docker copy leaned on the default cap set for the same reason.
-                - DAC_OVERRIDE
+          # Runs as root writing its SQLite config DB + WAL in the PVC mount; the
+          # Docker copy leaned on the default cap set for the same reason.
+{{ hardened_security_context(add=['DAC_OVERRIDE']) }}
           env:
             - name: SCRUTINY_WEB_INFLUXDB_HOST
               value: scrutiny-influxdb

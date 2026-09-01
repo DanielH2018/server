@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -33,21 +34,11 @@ spec:
           image: {{ tdarr_k8s_image }}
           ports:
             - containerPort: {{ tdarr_k8s_webui_port }}
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              # The compose template's cap_drop/cap_add pair, unchanged. FOWNER and DAC_OVERRIDE
-              # stay here, unlike jellyfin where they were dropped with the Intel mod: this image
-              # chowns its own mounts on startup before dropping to PUID/PGID, and the compose
-              # comment records that they were established by watching it fail without them.
-              drop:
-                - ALL
-              add:
-                - CHOWN
-                - SETUID
-                - SETGID
-                - FOWNER
-                - DAC_OVERRIDE
+          # The compose template's cap_drop/cap_add pair, unchanged. FOWNER and DAC_OVERRIDE
+          # stay here, unlike jellyfin where they were dropped with the Intel mod: this image
+          # chowns its own mounts on startup before dropping to PUID/PGID, and the compose
+          # comment records that they were established by watching it fail without them.
+{{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID', 'FOWNER', 'DAC_OVERRIDE']) }}
           env:
             - name: PUID
               value: "{{ puid }}"

@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 ---
 apiVersion: apps/v1
@@ -40,12 +41,7 @@ spec:
           # zigbee2mqtt and home-assistant use.
           image: {{ peanut_k8s_init_image }}
           command: ["cp", "/config-seed/settings.yml", "/config/settings.yml"]
-          securityContext:
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
+{{ hardened_security_context(read_only=true) }}
           volumeMounts:
             - name: peanut-settings
               mountPath: /config-seed
@@ -69,12 +65,7 @@ spec:
           image: {{ peanut_k8s_image }}
           ports:
             - containerPort: {{ container_item.port }}
-          securityContext:
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
+{{ hardened_security_context(read_only=true) }}
           env:
             - name: TZ
               value: "{{ tz }}"

@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 ---
 apiVersion: apps/v1
@@ -31,13 +32,9 @@ spec:
           image: {{ karakeep_k8s_meili_image }}
           ports:
             - containerPort: 7700
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              # The compose template's cap_drop: ALL — a Rust binary on a high port whose data
-              # is its own volume.
-              drop:
-                - ALL
+          # The compose template's cap_drop: ALL — a Rust binary on a high port whose data
+          # is its own volume.
+{{ hardened_security_context() }}
           env:
             - name: MEILI_NO_ANALYTICS
               value: "true"

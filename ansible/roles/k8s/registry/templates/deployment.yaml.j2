@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -47,13 +48,7 @@ spec:
               # plain-HTTP registry becomes writable by anything on the LAN.
               hostIP: {{ k8s_registry_host_ip }}
               hostPort: {{ k8s_registry_port }}
-          securityContext:
-            runAsNonRoot: true
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
+{{ hardened_security_context(read_only=true, non_root=true) }}
           env:
             # registry:3.1.1 ships `debug` as its baked-in default, so leaving this unset does not
             # mean "the image's sensible default" — it means a full OTEL span JSON blob and an

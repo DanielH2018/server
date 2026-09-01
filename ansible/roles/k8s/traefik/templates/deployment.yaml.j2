@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -63,13 +64,7 @@ spec:
             - /bin/sh
             - -c
             - touch /data/acme.json && chmod 600 /data/acme.json
-          securityContext:
-            runAsNonRoot: true
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
+{{ hardened_security_context(read_only=true, non_root=true) }}
           volumeMounts:
             - name: traefik-acme
               mountPath: /data
@@ -100,12 +95,7 @@ spec:
           # and root-with-ALL-caps-dropped cannot chown it back (measured on the authelia
           # pod). Creating the file as that user sidesteps the capability; the agent reads
           # it as root regardless.
-          securityContext:
-            runAsNonRoot: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
+{{ hardened_security_context(non_root=true) }}
           volumeMounts:
             - name: crowdsec-secret
               mountPath: /seed
@@ -150,13 +140,7 @@ spec:
             - name: CF_DNS_API_TOKEN_FILE
               value: /secrets/cf_dns_token
 {% endif %}
-          securityContext:
-            runAsNonRoot: true
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
+{{ hardened_security_context(read_only=true, non_root=true) }}
           volumeMounts:
             - name: traefik-config
               mountPath: /config
@@ -248,12 +232,7 @@ spec:
                   key: AGENT_PASSWORD
             - name: COLLECTIONS
               value: "{{ traefik_k8s_agent_collections }}"
-          securityContext:
-            runAsNonRoot: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
+{{ hardened_security_context(non_root=true) }}
           volumeMounts:
             - name: crowdsec-etc
               mountPath: /etc/crowdsec
@@ -387,12 +366,7 @@ spec:
                   fi
                 fi
               done
-          securityContext:
-            runAsNonRoot: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
+{{ hardened_security_context(non_root=true) }}
           volumeMounts:
             - name: traefik-logs
               mountPath: /var/log/traefik

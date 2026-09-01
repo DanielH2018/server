@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 # The negative test for networkpolicy.yaml.j2: a pod carrying neither `netpol-role:
 # image-builder` nor an admitted selftest label must be refused on {{ k8s_registry_port }}.
@@ -57,11 +58,7 @@ spec:
                 exit 1
               fi
               echo "isolated: registry:{{ k8s_registry_port }} refused, as intended"
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
+{{ hardened_security_context() }}
           resources:
             limits:
               cpu: "200m"

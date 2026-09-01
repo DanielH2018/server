@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 ---
 apiVersion: apps/v1
@@ -38,13 +39,7 @@ spec:
             - sh
             - -c
             - install -m 640 /secret/configuration.yaml /data/configuration.yaml
-          securityContext:
-            runAsNonRoot: true
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop:
-                - ALL
+{{ hardened_security_context(read_only=true, non_root=true) }}
           volumeMounts:
             - name: zigbee2mqtt-config-secret
               mountPath: /secret
@@ -70,13 +65,7 @@ spec:
             - containerPort: 8080
           # The compose template's posture: non-root uid owning its data, no caps, immutable
           # rootfs (verified there — every persisted path resolves under the data mount).
-          securityContext:
-            runAsNonRoot: true
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop:
-                - ALL
+{{ hardened_security_context(read_only=true, non_root=true) }}
           env:
             - name: TZ
               value: "{{ tz }}"

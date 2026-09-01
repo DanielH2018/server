@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -52,13 +53,8 @@ spec:
               value: "1"
             - name: TZ
               value: {{ tz }}
-          securityContext:
-            # The server writes nothing: the index is in memory and every mount is read-only.
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
+          # The server writes nothing: the index is in memory and every mount is read-only.
+{{ hardened_security_context(read_only=true) }}
           ports:
             - containerPort: {{ container_item.port }}
           readinessProbe:

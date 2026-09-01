@@ -1,3 +1,4 @@
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 ---
 apiVersion: apps/v1
@@ -44,10 +45,7 @@ spec:
               mountPath: /config
             - name: livesync-local-d
               mountPath: /opt/couchdb/etc/local.d
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: [ALL]
+{{ hardened_security_context() }}
           resources:
             limits:
               cpu: 250m
@@ -65,34 +63,24 @@ spec:
           image: {{ livesync_k8s_image }}
           ports:
             - containerPort: {{ container_item.port }}
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              # The compose template's cap_drop/cap_add pair: CouchDB's entrypoint chowns
-              # /opt/couchdb/data and then drops to the couchdb user via setpriv.
-              #
-              # FOWNER is the one addition, and it is required HERE and not in Docker because
-              # the volume is an ext4 Longhorn PVC rather than a bind mount, so it carries a
-              # lost+found at mode 0700. The entrypoint's second pass is
-              #   find /opt/couchdb/data -type d ! -perm 0755 -exec chmod -f 0755 {} +
-              # which on daniel-server matches nothing (that tree is already all 0755). Here it
-              # matches lost+found — which the entrypoint's PRECEDING chown pass has just handed
-              # to couchdb, so root is no longer its owner, and chmod on a file you do not own
-              # needs FOWNER. Without it the chmod fails with EPERM, `-f` suppresses the message
-              # but NOT the exit status, find propagates it, and `set -e` kills the entrypoint.
-              #
-              # The failure mode is worth recording because it is invisible: the container exits
-              # 1 having logged absolutely nothing, which reads like a crashed image rather than
-              # a permission error. Found with `bash -x` on the entrypoint. The compose template
-              # predicted it — "Add FOWNER if it complains".
-              drop:
-                - ALL
-              add:
-                - CHOWN
-                - SETUID
-                - SETGID
-                - DAC_OVERRIDE
-                - FOWNER
+          # The compose template's cap_drop/cap_add pair: CouchDB's entrypoint chowns
+          # /opt/couchdb/data and then drops to the couchdb user via setpriv.
+          #
+          # FOWNER is the one addition, and it is required HERE and not in Docker because
+          # the volume is an ext4 Longhorn PVC rather than a bind mount, so it carries a
+          # lost+found at mode 0700. The entrypoint's second pass is
+          #   find /opt/couchdb/data -type d ! -perm 0755 -exec chmod -f 0755 {} +
+          # which on daniel-server matches nothing (that tree is already all 0755). Here it
+          # matches lost+found — which the entrypoint's PRECEDING chown pass has just handed
+          # to couchdb, so root is no longer its owner, and chmod on a file you do not own
+          # needs FOWNER. Without it the chmod fails with EPERM, `-f` suppresses the message
+          # but NOT the exit status, find propagates it, and `set -e` kills the entrypoint.
+          #
+          # The failure mode is worth recording because it is invisible: the container exits
+          # 1 having logged absolutely nothing, which reads like a crashed image rather than
+          # a permission error. Found with `bash -x` on the entrypoint. The compose template
+          # predicted it — "Add FOWNER if it complains".
+{{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID', 'DAC_OVERRIDE', 'FOWNER']) }}
           env:
             - name: COUCHDB_USER
               value: admin
