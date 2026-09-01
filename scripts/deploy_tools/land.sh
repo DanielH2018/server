@@ -9,6 +9,12 @@
 # session is re-invoked when it exits, instead of hand-polling CI for five to fifteen
 # minutes — 835 polls across 213 wait episodes before this existed.
 #
+# ALWAYS REDIRECT STDOUT AND STDERR TO A FILE. A backgrounded Bash call hands this script a
+# non-blocking pipe, and Ansible refuses to start on one ("Ansible requires blocking IO on
+# stdin/stdout/stderr. Non-blocking file handles detected: <stdout>, <stderr>"), so the deploy
+# phase fails with nothing deployed and a VERDICT: deploy-failed that names Ansible rather
+# than the harness. `> "$CLAUDE_JOB_DIR/tmp/land<n>.log" 2>&1` is the whole fix.
+#
 # WHAT THIS SCRIPT DOES NOT DO. It holds no check of its own: no health logic, no tag
 # validation, no staleness logic. deploy.sh owns the lock and the refusals, gitops_tick.sh
 # owns the tick, deploy_detach_notify.py owns the health verdict, await_ci.py owns the CI

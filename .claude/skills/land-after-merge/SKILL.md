@@ -10,14 +10,27 @@ through without asking, and the *When to wait* list. This skill owns the mechani
 
 ## The procedure
 
-Record the pre-merge master SHA, arm the merge, then hand everything else to ONE backgrounded
-command:
+Record the pre-merge master SHA, arm the merge, then hand everything else to ONE `land.sh`
+command with its output redirected to a file:
 
 ```bash
 git rev-parse origin/master          # keep this; land.sh needs it for the fallback
 gh pr merge --squash --auto          # merges when the PR's checks are green
-./scripts/deploy_tools/land.sh --pr <n> --since <pre-merge-sha> --await-merge
+./scripts/deploy_tools/land.sh --pr <n> --since <pre-merge-sha> --await-merge \
+  > "$CLAUDE_JOB_DIR/tmp/land<n>.log" 2>&1
 ```
+
+**The redirect is load-bearing.** A backgrounded Bash call hands the script a non-blocking
+pipe for stdout and stderr, and Ansible refuses to start on one:
+
+```
+ERROR: Ansible requires blocking IO on stdin/stdout/stderr. Non-blocking file handles detected: <stdout>, <stderr>
+```
+
+`land.sh` then prints `VERDICT: deploy-failed` with nothing deployed, and the error names
+Ansible rather than the harness, so it reads as a playbook bug. Redirecting to a file gives
+the deploy a blocking handle whether or not the call is backgrounded. Session transcripts on this
+host record the error at least ten times before the redirect became the rule.
 
 `--await-merge` polls the PR's state every 30s until it is merged and only then starts the
 landing. It reads the state, never the checks, so it is not the hand-polling this skill
@@ -25,8 +38,8 @@ forbids. Without it the session has to notice the merge itself and start `land.s
 which every landing on 2026-09-01 did with a hand-written `until MERGED` loop. A PR still
 open after 45 minutes exits 75: it is not being merged, and the reason is on the PR.
 
-Run `land.sh` with `run_in_background` and let the session be re-invoked when it exits. It
-waits for master CI on the merge commit, ticks, deploys what the tick deferred, and prints a
+Run that command with `run_in_background` and let the session be re-invoked when it exits;
+the `VERDICT:` line is the last line of the logfile. `land.sh` waits for master CI on the merge commit, ticks, deploys what the tick deferred, and prints a
 `VERDICT:` line — `settled`, `unhealthy`, `deploy-failed`, `nothing-to-deploy`, `blocked`,
 `needs-manual-apply` or `deferred`.
 
