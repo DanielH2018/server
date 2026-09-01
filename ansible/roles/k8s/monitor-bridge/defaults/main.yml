@@ -20,6 +20,7 @@ monitor_bridge_modules:
   - checks_logs.py
   - checks_storage.py
   - checks_host.py
+  - checks_cluster.py
   - bridge_common.py
   - bridge_parsing.py
   - verdicts_cluster.py

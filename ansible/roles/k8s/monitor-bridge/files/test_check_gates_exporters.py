@@ -14,6 +14,7 @@ import pytest
 
 import bridge_config
 import bridge_io
+import checks_cluster
 import check
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -232,7 +233,7 @@ def test_check_restarts_names_the_looping_pod(monkeypatch):
             ]
         },
     )
-    ok, msg = check.check_restarts()
+    ok, msg = checks_cluster.check_restarts()
     assert not ok and "n8n-abc" in msg
 
 
@@ -240,7 +241,7 @@ def test_check_restarts_quiet_is_up(monkeypatch):
     _fake_vectors(
         monkeypatch, {"container_start_time_seconds": [({"pod": "quiet"}, 1.0)]}
     )
-    ok, _ = check.check_restarts()
+    ok, _ = checks_cluster.check_restarts()
     assert ok
 
 
@@ -248,14 +249,14 @@ def test_check_oom_names_the_killed_pod(monkeypatch):
     _fake_vectors(
         monkeypatch, {"container_oom_events_total": [({"pod": "karakeep-x"}, 2.0)]}
     )
-    ok, msg = check.check_oom()
+    ok, msg = checks_cluster.check_oom()
     assert not ok and "karakeep-x" in msg
 
 
 def test_check_cpu_throttle_needs_both_gates_and_streak(monkeypatch):
     # 90% throttled AND real cores lost — but only pages on the CPU_CONSECUTIVE-th
     # consecutive breaching cycle.
-    check._cpu_breach_streak = 0
+    checks_cluster._cpu_breach_streak = 0
     _fake_vectors(
         monkeypatch,
         {
@@ -264,16 +265,16 @@ def test_check_cpu_throttle_needs_both_gates_and_streak(monkeypatch):
         },
     )
     for _ in range(bridge_config.CPU_CONSECUTIVE - 1):
-        ok, msg = check.check_cpu_throttle()
+        ok, msg = checks_cluster.check_cpu_throttle()
         assert ok and "tdarr-y" in msg  # named but not paging yet
-    ok, msg = check.check_cpu_throttle()
+    ok, msg = checks_cluster.check_cpu_throttle()
     assert not ok and "tdarr-y" in msg
-    check._cpu_breach_streak = 0
+    checks_cluster._cpu_breach_streak = 0
 
 
 def test_check_cpu_throttle_tiny_loss_stays_up(monkeypatch):
     # High ratio but negligible absolute cores lost — the volume floor gates it out.
-    check._cpu_breach_streak = 0
+    checks_cluster._cpu_breach_streak = 0
     _fake_vectors(
         monkeypatch,
         {
@@ -281,7 +282,7 @@ def test_check_cpu_throttle_tiny_loss_stays_up(monkeypatch):
             "container_cpu_cfs_throttled_seconds_total": [({"pod": "sidecar"}, 0.0001)],
         },
     )
-    ok, _ = check.check_cpu_throttle()
+    ok, _ = checks_cluster.check_cpu_throttle()
     assert ok
 
 

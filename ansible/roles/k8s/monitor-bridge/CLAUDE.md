@@ -842,7 +842,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
 
 ## Module layout — and the one rule that governs it
 
-`files/` holds twelve runtime modules. `check.py` is the entrypoint the Deployment runs and owns
+`files/` holds thirteen runtime modules. `check.py` is the entrypoint the Deployment runs and owns
 the `CHECKS` registry and the run loop; `bridge_config.py` owns the env-derived config;
 `bridge_io.py` owns fetching and the Kuma push; the `checks_*` modules own one domain of
 `check_*` bodies each, mirroring the test file for that domain; the rest hold pure logic that
@@ -854,6 +854,7 @@ module are still in `check.py`. The design and the remaining slices are in
 |---|---|
 | `check.py` | the `check_*` bodies not yet moved, `CHECKS`, the gate sets, the run loop |
 | `checks_logs.py` | `check_loki_ingestion`, `check_promtail_dropped`, `check_loki_reachable`, `with_log_errors` (the Loki arm `check_k8s_workloads` folds in) |
+| `checks_cluster.py` | the cAdvisor trio `check_restarts` / `check_oom` / `check_cpu_throttle` with `_cadvisor_blind`, `_cadvisor_streaks` and `_cpu_breach_streak`; `check_prometheus`, `check_targets_down`, `check_traefik_5xx`, `check_traefik_latency`, `check_k8s_workloads`, `check_cluster_targets`, `check_cluster_prometheus` |
 | `checks_host.py` | `check_disk`, `check_cert`, `check_mem` and the `_host_origin_shortfall` floor with `_host_origin_streaks`; `check_host_temp`, `check_scrutiny`, `check_ups`, `check_pi_pressure` with `with_pi_ports`, `check_speedtest` with `speedtest_verdict` |
 | `checks_storage.py` | the `b2_*` family and `check_b2_reachable` / `check_b2_storage`, the `r2_*` family and `check_r2_usage`, `check_longhorn_volumes`, `check_pvc_fullness`, and the probe caches `_b2_probe` / `_b2_storage` / `_r2_probe` |
 | `bridge_config.py` | every `_env(...)` constant — thresholds, URLs, credentials, windows — with the commentary that justifies each value. Read as `cfg.X`, never from-imported |

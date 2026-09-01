@@ -11,6 +11,7 @@ from pathlib import Path
 
 import bridge_config
 import bridge_io
+import checks_cluster
 import check
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -26,15 +27,15 @@ _REPO = Path(__file__).resolve().parents[5]
 def _reset_cadvisor(monkeypatch, min_pods=20, consecutive=2):
     monkeypatch.setattr(bridge_config, "CADVISOR_PODS_MIN", min_pods)
     monkeypatch.setattr(bridge_config, "CADVISOR_CONSECUTIVE", consecutive)
-    monkeypatch.setattr(check, "_cadvisor_streaks", {})
+    monkeypatch.setattr(checks_cluster, "_cadvisor_streaks", {})
 
 
 def test_cadvisor_coverage_above_the_floor_is_clean():
-    assert check.cadvisor_coverage_shortfall(20, 20, "OOM kills") is None
+    assert checks_cluster.cadvisor_coverage_shortfall(20, 20, "OOM kills") is None
 
 
 def test_cadvisor_coverage_below_the_floor_is_flagged():
-    msg = check.cadvisor_coverage_shortfall(19, 20, "OOM kills")
+    msg = checks_cluster.cadvisor_coverage_shortfall(19, 20, "OOM kills")
     assert msg is not None
     assert "UNKNOWN" in msg
     assert "below the floor of 20" in msg
@@ -42,7 +43,7 @@ def test_cadvisor_coverage_below_the_floor_is_flagged():
 
 def test_cadvisor_empty_vector_is_flagged():
     # The 2026-08-24 shape exactly: an origin-pinned selector matched nothing.
-    msg = check.cadvisor_coverage_shortfall(0, 20, "CPU throttling")
+    msg = checks_cluster.cadvisor_coverage_shortfall(0, 20, "CPU throttling")
     assert msg is not None
     assert "matching nothing" in msg
 
@@ -56,7 +57,7 @@ def test_a_covered_vector_with_zero_offenders_still_reads_clean(monkeypatch):
         "prom_vector",
         lambda *a, **k: [({"pod": "p%d" % i}, 0.0) for i in range(40)],
     )
-    ok, msg = check.check_oom()
+    ok, msg = checks_cluster.check_oom()
     assert ok is True
     assert "no OOM kills" in msg
 
@@ -64,7 +65,7 @@ def test_a_covered_vector_with_zero_offenders_still_reads_clean(monkeypatch):
 def test_check_oom_reads_unknown_not_green_when_blind(monkeypatch):
     _reset_cadvisor(monkeypatch, consecutive=1)
     monkeypatch.setattr(bridge_io, "prom_vector", lambda *a, **k: [])
-    ok, msg = check.check_oom()
+    ok, msg = checks_cluster.check_oom()
     assert ok is False
     assert "UNKNOWN" in msg
 
@@ -72,7 +73,7 @@ def test_check_oom_reads_unknown_not_green_when_blind(monkeypatch):
 def test_check_restarts_reads_unknown_not_green_when_blind(monkeypatch):
     _reset_cadvisor(monkeypatch, consecutive=1)
     monkeypatch.setattr(bridge_io, "prom_vector", lambda *a, **k: [])
-    ok, msg = check.check_restarts()
+    ok, msg = checks_cluster.check_restarts()
     assert ok is False
     assert "UNKNOWN" in msg
 
@@ -80,7 +81,7 @@ def test_check_restarts_reads_unknown_not_green_when_blind(monkeypatch):
 def test_check_cpu_throttle_reads_unknown_not_green_when_blind(monkeypatch):
     _reset_cadvisor(monkeypatch, consecutive=1)
     monkeypatch.setattr(bridge_io, "prom_vector", lambda *a, **k: [])
-    ok, msg = check.check_cpu_throttle()
+    ok, msg = checks_cluster.check_cpu_throttle()
     assert ok is False
     assert "UNKNOWN" in msg
 
@@ -90,10 +91,10 @@ def test_the_floor_holds_up_for_one_cycle_before_paging(monkeypatch):
     # transient is the storm the gates exist to prevent.
     _reset_cadvisor(monkeypatch, consecutive=2)
     monkeypatch.setattr(bridge_io, "prom_vector", lambda *a, **k: [])
-    ok, msg = check.check_oom()
+    ok, msg = checks_cluster.check_oom()
     assert ok is True
     assert "cAdvisor coverage shortfall 1/2" in msg
-    ok, _ = check.check_oom()
+    ok, _ = checks_cluster.check_oom()
     assert ok is False
 
 
@@ -102,23 +103,23 @@ def test_each_check_ages_its_shortfall_independently(monkeypatch):
     # same run_once pass — and blow through CADVISOR_CONSECUTIVE inside the first one.
     _reset_cadvisor(monkeypatch, consecutive=2)
     monkeypatch.setattr(bridge_io, "prom_vector", lambda *a, **k: [])
-    assert check.check_oom()[0] is True
-    assert check.check_restarts()[0] is True
-    assert check.check_cpu_throttle()[0] is True
-    assert check._cadvisor_streaks == {"oom": 1, "restarts": 1, "cpu": 1}
+    assert checks_cluster.check_oom()[0] is True
+    assert checks_cluster.check_restarts()[0] is True
+    assert checks_cluster.check_cpu_throttle()[0] is True
+    assert checks_cluster._cadvisor_streaks == {"oom": 1, "restarts": 1, "cpu": 1}
 
 
 def test_a_covered_cycle_resets_the_streak(monkeypatch):
     _reset_cadvisor(monkeypatch, consecutive=2)
     monkeypatch.setattr(bridge_io, "prom_vector", lambda *a, **k: [])
-    check.check_oom()
+    checks_cluster.check_oom()
     monkeypatch.setattr(
         bridge_io,
         "prom_vector",
         lambda *a, **k: [({"pod": "p%d" % i}, 0.0) for i in range(40)],
     )
-    assert check.check_oom()[0] is True
-    assert check._cadvisor_streaks["oom"] == 0
+    assert checks_cluster.check_oom()[0] is True
+    assert checks_cluster._cadvisor_streaks["oom"] == 0
 
 
 def test_cadvisor_floor_is_overridable_from_the_env_secret():
