@@ -245,6 +245,11 @@ history, the `homelab-ui` DNS/auth/secrecy triad and its `-m ui` suite, per-file
     readiness flips a Deployment to Available before a bad liveness probe starts killing it, so
     a rollout check alone reports green on a crashlooping pod. `--docker` inspects the Pi's
     container over ssh instead, and is the only mode that touches Docker at all.
+    **The argument is a deploy TAG, not a workload name.** It renders the role's manifests to
+    find every Deployment/DaemonSet/StatefulSet they declare, with each object's own namespace,
+    and gates on all of them — `health claude-otel` checks six workloads in `observability`,
+    none of them named claude-otel. A workload the manifests declare and the cluster lacks is a
+    FAILURE, not a skip; only a tag naming no workload anywhere is skipped.
   - `ha …` reads live Home Assistant state (authed with the SOPS `claude_ha_token`); `ha
     automation <id-or-alias>` resolves the alias-slug≠id trap. See the home-assistant role's
     CLAUDE.md.
