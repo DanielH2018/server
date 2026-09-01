@@ -666,6 +666,7 @@
     common_resolver_nameservers: "{{ optimize_pi_dns_servers }}"
     common_resolver_options: "{{ optimize_pi_dns_options }}"
     common_resolver_timeout: "{{ optimize_pi_dns_timeout }}"
+  register: optimize_pi_resolv_file
 
 # resolved owns /etc/resolv.conf whenever it runs, so it has to go for the file above to
 # survive. Disabling it also removes the LINK scope, which is the half a drop-in could not
@@ -687,3 +688,35 @@
     path: /etc/systemd/resolved.conf.d/50-homelab-dns.conf
     state: absent
   become: true
+
+# DOCKER PINS ITS UPSTREAM RESOLVERS AT CONTAINER START, so changing the host's resolv.conf
+# leaves every running container forwarding to whatever was there before. Measured on the
+# 2026-09-01 cutover: after resolved was disabled, all seven containers still carried
+# `ExtServers: [host(127.0.0.53)]` — the stub that had just been stopped — and `getent hosts
+# github.com` inside promtail returned nothing. Nothing went unhealthy and no monitor fired;
+# promtail simply stopped resolving its Loki push URL. A restart is enough, verified the same
+# day: Docker rewrites a container's /etc/resolv.conf from the host's on start, so this needs
+# no recreate.
+- name: List the Pi's running containers # noqa no-handler
+  tags: [pi-dns]
+  community.docker.docker_host_info:
+    containers: true
+  become: true
+  register: optimize_pi_running_containers
+  when: optimize_pi_resolv_file.changed
+
+- name: Restart them so Docker re-reads the host's resolvers # noqa no-handler
+  tags: [pi-dns]
+  # Not a handler: handlers run at the end of the play, and this role's later tasks — plus the
+  # health crons they install — resolve names. Leaving containers on a dead stub until the end
+  # of the run is the failure this task exists to close.
+  community.docker.docker_container:
+    name: "{{ item }}"
+    restart: true
+    state: started
+  loop: >-
+    {{ optimize_pi_running_containers.containers
+       | map(attribute='Names') | flatten
+       | map('regex_replace', '^/', '') | list }}
+  become: true
+  when: optimize_pi_resolv_file.changed

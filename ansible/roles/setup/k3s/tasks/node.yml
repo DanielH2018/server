@@ -55,6 +55,16 @@
     common_resolver_options: "{{ k3s_node_dns_options }}"
     common_resolver_timeout: "{{ k3s_node_dns_timeout }}"
 
+# EXISTING PODS KEEP THE OLD FILE. kubelet copies the node's resolv.conf into a pod at
+# CREATION, so the Default-dnsPolicy pods already running here — metallb-system/speaker and
+# homelab/node-exporter, both hostNetwork — still carry whatever was there when they started,
+# and after this change that is a `nameserver 127.0.0.53` pointing at a stub nothing serves.
+# DELIBERATELY NOT RESTARTED. Neither resolves names in normal operation (both reach the
+# apiserver by IP), all 70 Prometheus targets stayed up across the 2026-09-01 cutover, and
+# restarting the speaker is what blacks out the ETP-Local VIPs it announces. They pick the new
+# file up on their next restart for any other reason. The Pi has the same problem with Docker
+# and DOES need the fix, because its containers genuinely resolve — see optimize_pi.
+#
 # systemd-resolved owns /etc/resolv.conf whenever it runs, so it has to go for the file above
 # to survive. It is DISABLED rather than masked, matching daniel-server, which has run without
 # it since 2026-08-10. With it gone, k3s reads /etc/resolv.conf directly for the pod template,

@@ -151,9 +151,14 @@ See repo-root `CLAUDE.md` for conventions.
     unprompted. Disabling resolved also removes the LINK scope a drop-in could not reach —
     `resolvectl status` still listed 75.75.75.75, 75.75.76.76 and two Comcast v6 addresses
     under Link 2, with their own `Current DNS Server`.
-    **It also moves the Pi's containers.** Docker's embedded resolver forwards to the host's
-    nameservers, so all seven follow — promtail's `loki-homelab.local.<domain>` push URL
-    included.
+    **It also moves the Pi's containers, but only after a restart.** Docker's embedded
+    resolver pins its upstreams at container START, so changing the host's resolv.conf leaves
+    every running container forwarding to whatever was there before. On the 2026-09-01
+    cutover all seven still carried `ExtServers: [host(127.0.0.53)]` — the stub that had just
+    been stopped — and `getent hosts github.com` inside promtail returned nothing. **Nothing
+    went unhealthy and no monitor fired**; promtail simply stopped resolving its Loki push
+    URL. The role now restarts the running containers whenever it rewrites resolv.conf; a
+    restart is enough, since Docker regenerates the container's file from the host's on start.
     **The cost:** one 2s timeout per lookup while Pi-hole is down (`attempts` counts rounds
     over the whole list, not retries per server), and no DNS cache, since resolved's is gone
     and nothing else on this host caches.
