@@ -1,6 +1,6 @@
 {# DREO tower fan (DR-HTF024S): percentage <-> discrete-level conversion. The SINGLE source of
    truth for the fan's level math — imported by BOTH bedroom_apply_fan (files/scripts.yaml) and
-   bedroom_fan_manual_detect (files/automations.yaml) so the round-trip can never drift between them.
+   bedroom_fan_manual_detect (files/automations/fan-and-air.yaml) so the round-trip can never drift between them.
    The fan exposes FAN_LEVELS discrete speeds; the DREO integration math.ceil()s a requested % up to
    the next level, so to land ON a level we send the midpoint of its % range.
    HA loads custom_templates/*.jinja at startup; this deploy recreates the container (full restart),

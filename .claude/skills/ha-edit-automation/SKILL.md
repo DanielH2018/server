@@ -20,7 +20,7 @@ All under `ansible/roles/k8s/home-assistant/`:
 
 | Change | File (deployed by `copy`, verbatim) |
 |---|---|
-| Automation | `files/automations.yaml` |
+| Automation | `files/automations/<topic>.yaml` (lighting, wake-and-sleep, fan-and-air, alerts, presence, display, system); a NEW file also goes in `home_assistant_automation_files` in `defaults/main.yml` |
 | Scene | `files/scenes.yaml` |
 | Script | `files/scripts.yaml` |
 | Template sensor / binary_sensor | `files/templates.yaml` |

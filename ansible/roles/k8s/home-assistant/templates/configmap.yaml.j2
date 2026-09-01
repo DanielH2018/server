@@ -21,8 +21,6 @@ data:
 {{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/templates/config/customize.yaml.j2') | indent(4, true) }}
   ui-lovelace.yaml: |
 {{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/templates/config/ui-lovelace.yaml.j2') | indent(4, true) }}
-  automations.yaml: |
-{{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/files/automations.yaml') | indent(4, true) }}
   scenes.yaml: |
 {{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/files/scenes.yaml') | indent(4, true) }}
   scripts.yaml: |
@@ -31,6 +29,21 @@ data:
 {{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/files/templates.yaml') | indent(4, true) }}
   rest.yaml: |
 {{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/files/rest.yaml') | indent(4, true) }}
+---
+# automations/ as its own map, laid down as a directory and merged by
+# `automation: !include_dir_merge_list automations/`. The file list is
+# `home_assistant_automation_files` in defaults/main.yml, shared with the init container's
+# install line; the validator checks it against the directory.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: home-assistant-automations
+  namespace: {{ k8s_namespace }}
+data:
+{% for name in home_assistant_automation_files %}
+  {{ name }}: |
+{{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/files/automations/' + name) | indent(4, true) }}
+{% endfor %}
 ---
 # custom_templates/ as its own map so the init container can lay it down as a directory.
 # Files enumerated explicitly rather than fileglob'd: the Jinja macros are load-bearing

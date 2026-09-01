@@ -7,7 +7,7 @@ that reports rather than actuates.
 - **Threshold alerts — unified engine (since 2026-06-18).** `configuration.yaml` defines sixteen
   built-in `threshold` binary-sensors; the platform's native hysteresis (on past bound±hyst) IS the
   "alert once + recovery, no bounce" lifecycle. ALL feed ONE automation `bedroom_threshold_alert`
-  (files/automations.yaml) in four **categories** — air quality (CO2/PM2.5/VOC/NOx, `upper`),
+  (files/automations/alerts.yaml) in four **categories** — air quality (CO2/PM2.5/VOC/NOx, `upper`),
   **air quality SEVERE** (same 4 at a higher cutoff), battery (FP300/Tap Dial, `lower`), humidity
   (high `upper` + low `lower`). The category is encoded in each trigger `id` (`<cat>_bad`/`<cat>_ok`);
   everything else (label/value/unit, message, coalescing `tag`) is derived generically from the
@@ -112,7 +112,7 @@ that reports rather than actuates.
   Edge-triggered so a GPS glitch while you're physically present can't fire it (presence already on);
   the >5-min guard filters brief away-glitches; the fan is off while away (no airflow false-positive).
   Pure logic over two trusted sensors — pairs with the home/away work.
-- **Sensor-offline alerts (since 2026-06-18).** `bedroom_sensor_offline_alert` (files/automations.yaml,
+- **Sensor-offline alerts (since 2026-06-18).** `bedroom_sensor_offline_alert` (files/automations/alerts.yaml,
   a structural twin of the threshold engine) fires when a
   bedroom-automation dependency goes `unavailable` for 5 min, with a coalescing-tag recovery notice.
   Routed through `script.bedroom_notify` (offline: `watch:true` — wrist buzz, but routine for DND, so

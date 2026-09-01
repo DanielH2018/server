@@ -372,7 +372,7 @@ def test_override_writer_errors_clean_when_match():
 
 
 # The real bedroom_threshold_alert groups each category's sensors into ONE bad + ONE ok trigger
-# with a LIST entity_id (verified against files/automations.yaml), so the tests model lists.
+# with a LIST entity_id (verified against files/automations/), so the tests model lists.
 def _threshold_config(declared, triggers, cfg=None):
     # cfg=None -> no variables/cfg block (action: []), so the cfg-coverage check is skipped and the
     # pre-existing pairing tests are unaffected. Pass a string to exercise threshold_cfg_coverage_errors.

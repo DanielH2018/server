@@ -37,10 +37,12 @@ frontend:
       state-icon-color: "#c4c8cc"
       paper-item-icon-color: "#c4c8cc"
 
-# Automations + scenes are Ansible-managed static files (role files/automations.yaml,
-# files/scenes.yaml), copied to ./config and version-controlled. The HA UI editors still
-# open, but edits are NOT persistent — git is the source of truth; redeploy to change.
-automation: !include automations.yaml
+# Automations + scenes are Ansible-managed static files (role files/automations/*.yaml,
+# files/scenes.yaml), copied to ./config and version-controlled. Automations are one file per
+# topic, merged into a single list by the directory include; the HA UI shows them read-only
+# (a directory include has no file for the editor to write to). Scenes still open in the UI
+# editor, but edits are NOT persistent — git is the source of truth; redeploy to change.
+automation: !include_dir_merge_list automations/
 scene: !include scenes.yaml
 # Reusable scripts: bedroom_apply_natural (the "natural lighting state" dispatcher used by
 # Tap Dial button 4 + the morning reset) and its bedroom_set_natural_brightness helper.
@@ -110,7 +112,7 @@ input_number:
     unit_of_measurement: K
     mode: box
 
-# Heartbeat helper — the `ha_heartbeat` automation (files/automations.yaml) stamps this with now()
+# Heartbeat helper — the `ha_heartbeat` automation (files/automations/system.yaml) stamps this with now()
 # every minute, so its last_changed is fresh ONLY while the automation scheduler is executing.
 # monitor-bridge polls it over the apps net (check_ha_heartbeat) and pushes a Kuma monitor down when
 # it goes stale — catching a wedged-but-running HA the container healthcheck (HTTP :8123) can't see.
@@ -165,7 +167,7 @@ adaptive_lighting:
 
 # Air-quality thresholds — built-in `threshold` binary-sensors give native hysteresis (on above
 # upper+hysteresis, off below upper-hysteresis), which IS the "alert once + recovery, no bounce"
-# lifecycle consumed by the bedroom_threshold_alert automation (files/automations.yaml).
+# lifecycle consumed by the bedroom_threshold_alert automation (files/automations/alerts.yaml).
 # Source = the bedroom AirGradient ONE. Thresholds are STARTING POINTS — tune to the observed
 # baseline, especially the VOC/NOx *index* sensors (Sensirion indices drift per environment).
 # Adding a pollutant = one more block here + add its binary_sensor to the automation trigger list.
@@ -221,7 +223,7 @@ binary_sensor:
   # Low-battery thresholds — the LOWER-bound mirror of the air-quality ones above. A `lower`
   # threshold is `on` (low) when value <= lower-hysteresis and `off` (recovered) when >= lower+
   # hysteresis. Battery drain is monotonic (only jumps up on replacement), so flapping is a
-  # non-issue. Consumed by the bedroom_threshold_alert automation (files/automations.yaml).
+  # non-issue. Consumed by the bedroom_threshold_alert automation (files/automations/alerts.yaml).
   # Starting points — tune per device. Adding a battery = one block here + add it to the automation.
   - platform: threshold
     name: "Bedroom FP300 battery low"     # -> binary_sensor.bedroom_fp300_battery_low
@@ -304,7 +306,7 @@ sensor:
 
 # Outdoor air quality (Open-Meteo, no key) — git-managed REST sensor. Copy'd (files/rest.yaml),
 # not inline, because its value_templates use value_json / state_attr that Ansible would mangle.
-# Feeds the outdoor PM2.5 threshold alerts (below) and the window advisor (files/automations.yaml).
+# Feeds the outdoor PM2.5 threshold alerts (below) and the window advisor (files/automations/fan-and-air.yaml).
 rest: !include rest.yaml
 
 # Recorder hygiene: default_config enables the recorder with defaults (SQLite, keep 10 days, record
@@ -347,7 +349,7 @@ recorder:
 
 # Fire `system_log_event` on the event bus for every WARNING+ log record. default_config enables
 # system_log WITHOUT this, so the event never fires by default — and `automation.ha_runtime_error_alert`
-# (files/automations.yaml) triggers on system_log_event, so without fire_event it is silently DEAD
+# (files/automations/system.yaml) triggers on system_log_event, so without fire_event it is silently DEAD
 # (trigger never matches). Required for that automation. Spec:
 # docs/superpowers/specs/2026-06-22-ha-runtime-error-alert-design.md.
 system_log:

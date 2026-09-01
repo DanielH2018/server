@@ -24,6 +24,21 @@ k8s_autodeploy_snapshot_pvcs: [home-assistant-config]  # noqa var-naming[no-role
 # Same init image peanut and zigbee2mqtt use.
 home_assistant_k8s_init_image: alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 
+# files/automations/*.yaml, one file per topic, merged into the `automation:` list by
+# `!include_dir_merge_list automations/` in configuration.yaml. Listed here rather than
+# globbed because two templates consume it — the ConfigMap that carries the files and the
+# init container that installs them — and a glob that shipped nothing would surface only as
+# missing automations at runtime. A new file is added here and nowhere else;
+# `validate_ha_config.py` fails the prek hook when this list and the directory disagree.
+home_assistant_automation_files:
+  - alerts.yaml
+  - display.yaml
+  - fan-and-air.yaml
+  - lighting.yaml
+  - presence.yaml
+  - system.yaml
+  - wake-and-sleep.yaml
+
 # Mirrors resources('1.0', '1536M', '0.10', '256M') in the compose template, except the memory
 # limit. Raised 1536Mi -> 2Gi on 2026-08-16: over the preceding week and 9 pod generations the
 # working set ran 949Mi-1414Mi, i.e. 62-92% of the old limit, with the then-current pod peaking

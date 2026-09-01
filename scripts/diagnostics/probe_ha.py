@@ -5,6 +5,7 @@ Backs the `ha` and `ha-state` subcommands. The alias-slug-vs-id trap lives here
 reading automation traces.
 """
 
+import glob
 import json
 import os
 import re
@@ -29,20 +30,35 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 # Git-managed automation source (repo-root relative to this file) — the "expected" set for
-# the verify-automations post-deploy gate. The deployed config is copied from here verbatim.
+# the verify-automations post-deploy gate. The deployed config is copied from here verbatim,
+# one file per topic, merged by `!include_dir_merge_list` in configuration.yaml.
 # `k8s`, not `containers`: HA moved at the slice-5 B3 cutover and this constant did not follow,
 # so the gate raised FileNotFoundError from the cutover until the 2026-08-16 review. The old
 # test only asserted argparse wiring and never opened the file — test_verify_automations_path_exists
 # now pins the path itself.
-AUTOMATIONS_YAML = os.path.join(
+AUTOMATIONS_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
     "ansible",
     "roles",
     "k8s",
     "home-assistant",
     "files",
-    "automations.yaml",
+    "automations",
 )
+
+
+def automations_source_text(directory: str = AUTOMATIONS_DIR) -> str:
+    """Every *.yaml under the automations directory, concatenated. An empty directory is an
+    error rather than an empty expected set: a gate that expects nothing passes on anything."""
+    paths = sorted(glob.glob(os.path.join(directory, "*.yaml")))
+    if not paths:
+        raise FileNotFoundError(f"no *.yaml under {directory}")
+    parts = []
+    for path in paths:
+        with open(path, encoding="utf-8") as f:
+            parts.append(f.read())
+    return "\n".join(parts)
+
 
 # Top-level automation list items only: `- id: <slug>` anchored at column 0. A trigger/condition
 # `id:` is always indented, so it can never be mistaken for an automation id.
@@ -177,7 +193,7 @@ def format_trace(trace) -> str:
 
 
 def expected_automation_ids(text: str) -> set[str]:
-    """The `id:` of every top-level automation in automations.yaml text. Regex over the raw
+    """The `id:` of every top-level automation in the automations/ source text. Regex over the raw
     text (no YAML parse) — robust to the HA Jinja inside the file; ids are simple slugs."""
     return set(_AUTOMATION_ID_RE.findall(text))
 
@@ -203,7 +219,7 @@ def vanished_snapshot_entities(snapshot_ids, live_entity_ids):
 
 
 def automation_load_errors(expected_ids, live_automations):
-    """expected_ids = ids from automations.yaml; live_automations = the automation.* entries
+    """expected_ids = ids from files/automations/*.yaml; live_automations = the automation.* entries
     from /api/states. A defined id with no live automation carrying that attributes.id did NOT
     load (dropped). A defined id whose live automation is `unavailable` errored at load. A
     disabled automation (state 'off') is fine. Live ids not in the file (UI/.storage cruft) are
@@ -218,7 +234,7 @@ def automation_load_errors(expected_ids, live_automations):
         live = by_id.get(aid)
         if live is None:
             errs.append(
-                f"automation {aid} is defined in automations.yaml but did not load"
+                f"automation {aid} is defined in files/automations/ but did not load"
             )
         elif live.get("state") == "unavailable":
             errs.append(
@@ -427,15 +443,14 @@ def run_ha(ns):
         if ns.dry_run:
             print(
                 " ".join(ha_curl_argv(ha_get_url("<ha-ip>", "states")))
-                + f"   # + Bearer; compare attributes.id against ids in {AUTOMATIONS_YAML}"
+                + f"   # + Bearer; compare attributes.id against ids in {AUTOMATIONS_DIR}/*.yaml"
             )
             return 0
         states = json.loads(
             ha_get(ha_get_url(ha_base(), "states"), ha_token(), resolve=ha_resolve())
         )
         live = [s for s in states if s.get("entity_id", "").startswith("automation.")]
-        with open(AUTOMATIONS_YAML, encoding="utf-8") as f:
-            expected = expected_automation_ids(f.read())
+        expected = expected_automation_ids(automations_source_text())
         errs = automation_load_errors(expected, live)
         if errs:
             for e in errs:

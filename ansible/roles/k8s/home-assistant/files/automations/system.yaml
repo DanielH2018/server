@@ -1,0 +1,240 @@
+---
+# Managed by Ansible (roles/k8s/home-assistant/files/automations/system.yaml).
+# Source of truth — copied to /config/automations/ and overwritten on deploy. HA UI automation
+# edits are NOT persistent (the UI shows these as read-only). To change, edit this file and run:
+#   ./scripts/deploy.sh --tags home-assistant
+#
+# Every file in this directory is merged into one `automation:` list by
+# `!include_dir_merge_list automations/` in configuration.yaml.
+#
+# HA and infrastructure health: heartbeat, runtime errors, UPS, Zigbee bridge, update digest.
+
+# Update-available digest: weekly (Sunday 10:00) roundup of pending device/integration updates that
+# Renovate doesn't cover — Zigbee/sensor firmware + HACS integrations. Generic over ALL update.*
+# entities (a newly paired device joins automatically). NOTIFY-ONLY — never auto-flashes firmware.
+# Homelab-wide (no bedroom_ prefix) but routes through the shared bedroom_notify layer (routine).
+- id: update_available_digest
+  alias: Update available digest
+  description: Sunday 10:00 — notify a digest of any device/integration updates available (notify-only).
+  mode: single
+  trigger:
+    - platform: time
+      at: "10:00:00"
+  condition:
+    # Sunday only (Mon=0 .. Sun=6), and only if at least one update is actually pending.
+    - condition: template
+      value_template: "{{ now().weekday() == 6 }}"
+    - condition: template
+      value_template: "{{ states.update | selectattr('state', 'eq', 'on') | list | count > 0 }}"
+  action:
+    - variables:
+        # One bullet per pending update: "• <name> (<installed> → <latest>)". Zigbee versions are
+        # opaque build integers / IEEE names until devices are renamed in Z2M — still informative.
+        #
+        # The selectattr runs INSIDE each expression rather than being hoisted into its own
+        # `pending` variable. A State object does not survive being stored in one `variables:` entry
+        # and read from the next — it arrives as a plain string, so `u.name` / `u.entity_id` raised
+        # "'str object' has no attribute 'entity_id'" and the automation aborted during variable
+        # rendering, BEFORE the notify step. That failed silently every Sunday from 2026-06-18 until
+        # the 2026-08-16 review found it: the digest never once delivered. Read the versions off
+        # `u.attributes` for the same reason — no second lookup by entity_id.
+        count: "{{ states.update | selectattr('state', 'eq', 'on') | list | count }}"
+        lines: >-
+          {% for u in states.update | selectattr('state', 'eq', 'on') %}{{ '\n• ' ~ u.name ~ ' (' ~ (u.attributes.installed_version | string) ~ ' → ' ~ (u.attributes.latest_version | string) ~ ')' }}{% endfor %}
+    - service: script.bedroom_notify
+      data:
+        title: "📦 {{ count }} update(s) available"
+        message: "{{ lines }}"
+        tag: update_digest
+
+# UPS power-event alert: nothing else watches the UPS. Driven off the RAW NUT status flags
+# (sensor.apc_ups_status_data: "OL"=online, "OB"=on battery, "LB"=low battery, "CHRG"=charging) —
+# more reliable than the friendly status string. Triggers on every status_data change and derives the
+# edge from from_state/to_state, requiring BOTH sides valid (not unavailable) so the unavailable->OL
+# reconnect on every HA restart can't fire a spurious "Power restored" (the same startup-spam trap the
+# sensor-offline recovery hit). Three edges: newly on battery (outage), newly low battery (server may
+# shut down — pierce DND), and recovered (was on battery, mains back). One coalescing tag so the
+# lifecycle outage -> low battery -> restored replaces in place. Homelab-wide (no bedroom_ prefix) but
+# routes through the shared bedroom_notify layer, like the update digest.
+- id: ups_power_event
+  alias: UPS power event
+  description: Notify when the UPS goes on battery (outage), warn on low battery, and recover when mains returns.
+  mode: queued
+  max: 10
+  trigger:
+    - platform: state
+      entity_id: sensor.apc_ups_status_data
+  condition:
+    # Ignore unavailable<->value reconnect noise: only act on transitions between two real flag values.
+    - condition: template
+      value_template: >-
+        {{ trigger.to_state is not none and trigger.to_state.state not in ['unavailable', 'unknown']
+           and trigger.from_state is not none and trigger.from_state.state not in ['unavailable', 'unknown'] }}
+  action:
+    - variables:
+        prev: "{{ trigger.from_state.state }}"
+        cur: "{{ trigger.to_state.state }}"
+        was_ob: "{{ 'OB' in prev }}"
+        is_ob: "{{ 'OB' in cur }}"
+        was_lb: "{{ 'LB' in prev }}"
+        is_lb: "{{ 'LB' in cur }}"
+        was_rb: "{{ 'RB' in prev }}"
+        is_rb: "{{ 'RB' in cur }}"
+        charge: "{{ states('sensor.apc_ups_battery_charge') }}"
+        runtime_min: "{{ (states('sensor.apc_ups_battery_runtime') | float(0) / 60) | round }}"
+    - choose:
+        # Newly low battery FIRST — the can't-miss tier. `choose:` is first-match-wins, so a sudden
+        # OL->"OB LB" transition (battery already weak when mains drops, both flags set in one step)
+        # must hit this pierce branch and not be shadowed by the routine outage branch below. The
+        # normal OL->OB->"OB LB" sequence is unaffected: on the OL->OB step is_lb is false, so the
+        # outage branch still fires, then this one fires on the later OB->"OB LB" step.
+        - conditions: "{{ is_lb and not was_lb }}"
+          sequence:
+            - service: script.bedroom_notify
+              data:
+                title: "🪫 UPS low battery"
+                message: "Battery critical ({{ charge }}%) — server may shut down. ~{{ runtime_min }} min left."
+                tag: ups_power
+                watch: true
+                pierce: true
+        # Newly on battery — a routine outage. Watch buzz; routine for DND (a brief blip shouldn't wake
+        # you; the low-battery escalation above is the can't-miss one).
+        - conditions: "{{ is_ob and not was_ob }}"
+          sequence:
+            - service: script.bedroom_notify
+              data:
+                title: "🔌 Power outage"
+                message: "UPS on battery ({{ charge }}% · ~{{ runtime_min }} min runtime)."
+                tag: ups_power
+                watch: true
+        # Newly Replace-Battery — the UPS's own periodic self-test failed (NUT set RB). Independent of
+        # the mains/charge state (RB can trip while OL and charge/runtime still read fine), so it's the
+        # earliest replace-the-battery signal. Maintenance-class: watch buzz, but NOT pierce (not an
+        # imminent power cut). Same coalescing ups_power tag.
+        - conditions: "{{ is_rb and not was_rb }}"
+          sequence:
+            - service: script.bedroom_notify
+              data:
+                title: "🔋 UPS replace battery"
+                message: "UPS battery needs replacing — self-test flagged RB."
+                tag: ups_power
+                watch: true
+        # Recovered — was on battery, mains is back (can only be a genuine OB->OL runtime transition,
+        # never the startup reconnect, because from_state must be a valid OB flag, not unavailable).
+        - conditions: "{{ was_ob and not is_ob }}"
+          sequence:
+            - service: script.bedroom_notify
+              data:
+                title: "✅ Power restored"
+                message: "Mains power back; UPS online ({{ charge }}%)."
+                tag: ups_power
+                recovery: true
+        # Replace-Battery cleared — the RB flag dropped (battery replaced or a later self-test passed).
+        # Routine recovery, same convention as the UPS-restored recovery above (recovery: true).
+        - conditions: "{{ was_rb and not is_rb }}"
+          sequence:
+            - service: script.bedroom_notify
+              data:
+                title: "✅ UPS battery OK"
+                message: "UPS Replace-Battery flag cleared."
+                tag: ups_power
+                recovery: true
+
+# Zigbee bridge offline alert: binary_sensor.zigbee2mqtt_bridge_connection_state (HA auto-discovers it
+# from Z2M; on=online / off=offline, fed by the zigbee2mqtt/bridge/state topic) going `off` means the
+# WHOLE Zigbee mesh is down — coordinator unreachable, Z2M crashed, or MQTT dropped. Because Mosquitto
+# publishes Z2M's MQTT Last-Will 'offline' if Z2M disconnects, this fires even on a hard Z2M crash as
+# long as Mosquitto + HA are up — ONE fast root-cause signal vs. waiting on the per-device
+# bedroom_sensor_offline_alert (5 min × each device). The 2-min `for:` rides out the brief
+# offline/online flap on a Z2M restart/redeploy (and HA's own restart, where the sensor is briefly
+# unknown). Routine + watch — same severity model as the per-device offline alert (glanceable, silent
+# in DND/sleep, and a mesh outage often self-heals). Homelab-wide (no bedroom_ prefix), shared notify.
+- id: zigbee_bridge_offline
+  alias: Zigbee bridge offline alert
+  description: Notify when the Zigbee2MQTT bridge goes offline (whole mesh down); recovery when it returns.
+  mode: queued
+  max: 10
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.zigbee2mqtt_bridge_connection_state
+      to: "off"
+      for: "00:02:00"
+      id: offline
+    - platform: state
+      entity_id: binary_sensor.zigbee2mqtt_bridge_connection_state
+      from: "off"
+      to: "on"
+      id: recovery
+  action:
+    - choose:
+        - conditions: "{{ trigger.id == 'offline' }}"
+          sequence:
+            - service: script.bedroom_notify
+              data:
+                title: "🛑 Zigbee bridge offline"
+                message: "Zigbee2MQTT / the coordinator is down — all Zigbee devices are unavailable."
+                tag: zigbee_bridge
+                watch: true
+      # from:"off" -> "on" recovery edge only (the remaining default case). Same tag replaces the alert.
+      default:
+        - service: script.bedroom_notify
+          data:
+            title: "✅ Zigbee bridge online"
+            message: "Zigbee2MQTT is back; devices are reconnecting."
+            tag: zigbee_bridge
+            recovery: true
+
+# HA automation-engine heartbeat: stamp input_datetime.ha_heartbeat with now() every minute so its
+# last_changed stays fresh ONLY while the automation scheduler is executing. monitor-bridge polls it
+# (check_ha_heartbeat) over the apps net and pushes the "Home Assistant Automations" Kuma monitor down
+# when it goes stale — detecting a wedged-but-running HA the container healthcheck (HTTP :8123) can't
+# see. No conditions (must tick unconditionally); homelab-wide (no bedroom_ prefix); does NOT route
+# through bedroom_notify. Excluded from the recorder (see configuration.yaml). Spec:
+# docs/superpowers/specs/2026-06-19-ha-automation-heartbeat-watchdog-design.md.
+- id: ha_heartbeat
+  alias: HA heartbeat
+  description: Stamp input_datetime.ha_heartbeat every minute so monitor-bridge can detect a wedged automation engine.
+  mode: single
+  trigger:
+    - platform: time_pattern
+      minutes: "/1"
+  action:
+    - service: input_datetime.set_datetime
+      target:
+        entity_id: input_datetime.ha_heartbeat
+      data:
+        timestamp: "{{ now().timestamp() }}"
+
+# HA runtime-error alert (homelab-wide, no bedroom_ prefix). Actively notifies when OUR code
+# (automations/scripts/template sensors/template helpers) logs an ERROR/CRITICAL at runtime — the
+# runtime complement to the static validation (a macro that throws on an edge case, a template that
+# errors at render). Scope is the pure, tested error_in_scope(level, logger) macro
+# (custom_templates/diagnostics.jinja); third-party/HACS chatter and WARNINGs are excluded there.
+# Routine via bedroom_notify (silent while DND/sleep, held-then-digested while away). The per-source
+# tag coalesces a repeating error into one updating notification. Loop-guard: this automation must
+# not re-trigger on an ERROR it (directly or indirectly) caused — so the condition excludes BOTH its
+# own logger AND the notify script's. A failing notify path (e.g. a lapsed FCM token raising
+# service_not_found, logged under homeassistant.components.script.bedroom_notify) would otherwise
+# re-fire this alert -> call bedroom_notify -> error again: a self-sustaining loop exactly when
+# notifications are already broken. Spec: docs/superpowers/specs/2026-06-22-ha-runtime-error-alert-design.md.
+- id: ha_runtime_error_alert
+  alias: HA runtime error alert
+  description: Notify when one of our automations/scripts/templates logs an ERROR/CRITICAL at runtime.
+  mode: queued
+  max: 10
+  trigger:
+    - platform: event
+      event_type: system_log_event
+  condition:
+    - condition: template
+      value_template: >-
+        {% from 'diagnostics.jinja' import error_in_scope %}
+        {{ (error_in_scope(trigger.event.data.level, trigger.event.data.name) | bool)
+           and trigger.event.data.name != 'homeassistant.components.automation.ha_runtime_error_alert'
+           and not (trigger.event.data.name | string).startswith('homeassistant.components.script.bedroom_notify') }}
+  action:
+    - service: script.bedroom_notify
+      data:
+        title: "⚠️ HA error: {{ trigger.event.data.name.split('.')[-1] }}"
+        message: "{{ (trigger.event.data.message | join(' '))[:200] }}"
+        tag: "ha_error_{{ trigger.event.data.name | replace('.', '_') }}"

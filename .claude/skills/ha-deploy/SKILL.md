@@ -45,7 +45,7 @@ rollout restart). A restart is ~60-120s.
 5. **Prove it loaded** (this is the step the generic `deploy` skill can't do). Use
    `ha-verify-state`:
    - **Assert ALL automations loaded** (not just one): `uv run python scripts/diagnostics/probe.py ha
-     verify-automations` — exit 0 = every automation in `files/automations.yaml` is present in
+     verify-automations` — exit 0 = every automation in `files/automations/*.yaml` is present in
      the live instance and not `unavailable`. A non-zero exit lists the dropped/errored ids
      (a schema error HA silently skipped at load). File-driven, so live `.storage`/UI cruft is
      ignored.

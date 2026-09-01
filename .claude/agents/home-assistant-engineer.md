@@ -43,7 +43,7 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
   any `{{` or `{% %}` in them (`scripts/home_assistant/validate_ha_config.py:133`). So: no Ansible vars *and*
   no HA Jinja inline here. `secrets.yaml.j2` is the one genuinely Ansible-templated file — it
   goes through `lookup('template')` in `secret.yaml.j2` and carries the SOPS values.
-- **`files/` — HA's own `{{ }}` Jinja lives here, also shipped verbatim.** `automations.yaml`,
+- **`files/` — HA's own `{{ }}` Jinja lives here, also shipped verbatim.** `automations/<topic>.yaml`,
   `scenes.yaml`, `scripts.yaml`, `templates.yaml`, `rest.yaml`, and `custom_templates/*.jinja`.
   **The single most important rule: HA Jinja goes in `files/`, never inline in
   `configuration.yaml.j2`** — `template: !include templates.yaml` is how it gets pulled in.
@@ -83,7 +83,7 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
   - `probe.py ha get <api-path>` — raw GET, e.g. `ha get error_log` for the live error log.
   - `probe.py ha trace <id-or-alias>` (alias `why`) — the per-condition WS trace of why an
     automation last ran or no-op'd. Reach for this before guessing at a non-firing automation.
-  - `probe.py ha verify-automations` — asserts every automation in `automations.yaml` actually
+  - `probe.py ha verify-automations` — asserts every automation in `automations/*.yaml` actually
     loaded; exit 0 = all loaded. **This is the post-deploy load gate.**
   - `probe.py ha-state [--inventory]` — live view of the derived state model (cells, actuators,
     writers), i.e. `state/STATE.md` checked against reality.

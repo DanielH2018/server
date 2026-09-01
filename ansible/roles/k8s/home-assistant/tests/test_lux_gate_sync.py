@@ -3,7 +3,7 @@
 The dusk lux threshold is duplicated as a literal in two places that MUST stay equal:
   - the `auto_light_allowed` macro (custom_templates/lighting.jinja) — `lux < N`, the gate used by
     binary_sensor.bedroom_auto_light_allowed; and
-  - bedroom_presence_on's illuminance `numeric_state` trigger (files/automations.yaml) — `below: N`
+  - bedroom_presence_on's illuminance `numeric_state` trigger (files/automations/lighting.yaml) — `below: N`
     (a numeric_state trigger can't call a macro, so the value is inlined).
 
 If they drift, the dusk trigger fires at one threshold while light_decision no-ops at another (a
@@ -31,7 +31,7 @@ def _macro_lux_threshold() -> int:
 
 
 def _presence_on_trigger_threshold() -> int:
-    autos = yaml.safe_load((FILES / "automations.yaml").read_text())
+    autos = yaml.safe_load((FILES / "automations" / "lighting.yaml").read_text())
     presence_on = next(a for a in autos if a.get("id") == "bedroom_presence_on")
     illum = next(
         t
