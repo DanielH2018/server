@@ -1,3 +1,4 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: apps/v1
@@ -83,26 +84,20 @@ spec:
           volumeMounts:
             - name: jellyfin-config
               mountPath: /config
-          resources:
-            limits:
-              cpu: "500m"
-              memory: 128Mi
-            requests:
-              cpu: "10m"
-              memory: 32Mi
-        # ── jellyfin-ani-sync (D: AniList watch-status sync) ─────────────────────────────────
-        # Installs the plugin from its published release instead of leaving it to a click in the
-        # admin dashboard, so a config PVC restored from nothing comes back with it. The
-        # plugin's SETTINGS are deliberately not managed here: the AniList OAuth token is
-        # account-specific, is written to /config/plugins/configurations/, and nothing below
-        # touches that directory.
-        #
-        # python:3.14-alpine rather than the alpine:3.24 the container above uses, and not
-        # because Python reads better. The release is a .zip and /config is owned by uid
-        # {{ puid }} — a plain alpine container would have to `apk add unzip` as root, and root
-        # here holds no DAC_OVERRIDE (see the comment above), so it could not then write the
-        # files it had just unpacked. urllib, hashlib and zipfile are stdlib, so the whole
-        # install runs as the owning uid and installs nothing at runtime.
+          # ── jellyfin-ani-sync (D: AniList watch-status sync) ─────────────────────────────────
+          # Installs the plugin from its published release instead of leaving it to a click in the
+          # admin dashboard, so a config PVC restored from nothing comes back with it. The
+          # plugin's SETTINGS are deliberately not managed here: the AniList OAuth token is
+          # account-specific, is written to /config/plugins/configurations/, and nothing below
+          # touches that directory.
+          #
+          # python:3.14-alpine rather than the alpine:3.24 the container above uses, and not
+          # because Python reads better. The release is a .zip and /config is owned by uid
+          # {{ puid }} — a plain alpine container would have to `apk add unzip` as root, and root
+          # here holds no DAC_OVERRIDE (see the comment above), so it could not then write the
+          # files it had just unpacked. urllib, hashlib and zipfile are stdlib, so the whole
+          # install runs as the owning uid and installs nothing at runtime.
+{{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
         - name: install-ani-sync
           image: {{ jellyfin_k8s_anisync_init_image }}
           command:
@@ -196,13 +191,7 @@ spec:
           volumeMounts:
             - name: jellyfin-config
               mountPath: /config
-          resources:
-            limits:
-              cpu: "500m"
-              memory: 128Mi
-            requests:
-              cpu: "10m"
-              memory: 32Mi
+{{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
       automountServiceAccountToken: false
       priorityClassName: homelab-standard
       containers:
@@ -290,17 +279,9 @@ spec:
               port: {{ container_item.port }}
             initialDelaySeconds: 90
             periodSeconds: 30
-          resources:
-            limits:
-              cpu: "{{ jellyfin_k8s_cpu_limit }}"
-              memory: {{ jellyfin_k8s_mem_limit }}
-              {{ jellyfin_k8s_dri_resource }}: 1
-            requests:
-              cpu: "{{ jellyfin_k8s_cpu_request }}"
-              memory: {{ jellyfin_k8s_mem_request }}
-              # Extended resources must request exactly what they limit — Kubernetes rejects a
-              # mismatch, and omitting the request entirely defaults it to the limit anyway.
-              {{ jellyfin_k8s_dri_resource }}: 1
+          # Extended resources must request exactly what they limit — Kubernetes rejects a
+          # mismatch, and omitting the request entirely defaults it to the limit anyway.
+{{ container_resources(cpu_limit=jellyfin_k8s_cpu_limit, mem_limit=jellyfin_k8s_mem_limit, cpu_request=jellyfin_k8s_cpu_request, mem_request=jellyfin_k8s_mem_request, extra=jellyfin_k8s_dri_resource) }}
       volumes:
         - name: jellyfin-config
           persistentVolumeClaim:

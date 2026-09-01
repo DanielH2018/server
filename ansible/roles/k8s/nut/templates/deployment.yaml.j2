@@ -1,3 +1,4 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -75,13 +76,7 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 10
             failureThreshold: 3
-          resources:
-            limits:
-              cpu: {{ nut_k8s_cpu_limit }}
-              memory: {{ nut_k8s_mem_limit }}
-            requests:
-              cpu: {{ nut_k8s_cpu_request }}
-              memory: {{ nut_k8s_mem_request }}
+{{ container_resources(cpu_limit=nut_k8s_cpu_limit, mem_limit=nut_k8s_mem_limit, cpu_request=nut_k8s_cpu_request, mem_request=nut_k8s_mem_request) }}
       volumes:
         - name: nut-config
           secret:

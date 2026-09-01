@@ -1,3 +1,4 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 ---
@@ -58,13 +59,7 @@ spec:
               port: 3100
             initialDelaySeconds: 60
             periodSeconds: 30
-          resources:
-            limits:
-              cpu: "{{ loki_homelab_cpu_limit }}"
-              memory: {{ loki_homelab_mem_limit }}
-            requests:
-              cpu: "{{ loki_homelab_cpu_request }}"
-              memory: {{ loki_homelab_mem_request }}
+{{ container_resources(cpu_limit=loki_homelab_cpu_limit, mem_limit=loki_homelab_mem_limit, cpu_request=loki_homelab_cpu_request, mem_request=loki_homelab_mem_request) }}
       volumes:
         - name: loki-homelab-config
           configMap:

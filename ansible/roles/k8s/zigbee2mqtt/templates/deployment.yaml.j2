@@ -1,3 +1,4 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 ---
@@ -46,13 +47,7 @@ spec:
               readOnly: true
             - name: zigbee2mqtt-data
               mountPath: /data
-          resources:
-            limits:
-              cpu: 250m
-              memory: 128Mi
-            requests:
-              cpu: 10m
-              memory: 16Mi
+{{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
       automountServiceAccountToken: false
       priorityClassName: homelab-automation
       # Preference, never a pin: its MQTT broker (mosquitto) is VIP-pinned here; splitting the Zigbee chain across nodes adds a hop to every device message.
@@ -89,13 +84,7 @@ spec:
               port: 8080
             initialDelaySeconds: 60
             periodSeconds: 30
-          resources:
-            limits:
-              cpu: "{{ zigbee2mqtt_k8s_cpu_limit }}"
-              memory: {{ zigbee2mqtt_k8s_mem_limit }}
-            requests:
-              cpu: "{{ zigbee2mqtt_k8s_cpu_request }}"
-              memory: {{ zigbee2mqtt_k8s_mem_request }}
+{{ container_resources(cpu_limit=zigbee2mqtt_k8s_cpu_limit, mem_limit=zigbee2mqtt_k8s_mem_limit, cpu_request=zigbee2mqtt_k8s_cpu_request, mem_request=zigbee2mqtt_k8s_mem_request) }}
       volumes:
         - name: zigbee2mqtt-config-secret
           secret:

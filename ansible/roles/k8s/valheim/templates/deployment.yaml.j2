@@ -1,3 +1,4 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: apps/v1
@@ -108,16 +109,10 @@ spec:
               command: ["sh", "-c", "grep -q ':0998 ' /proc/net/udp /proc/net/udp6"]
             periodSeconds: 30
             failureThreshold: 4
-          resources:
-            limits:
-              cpu: "{{ valheim_k8s_cpu_limit }}"
-              memory: {{ valheim_k8s_mem_limit }}
-            requests:
-              cpu: "{{ valheim_k8s_cpu_request }}"
-              memory: {{ valheim_k8s_mem_request }}
           # Parity with the archived compose's stop_grace_period: 2m. A dedicated server
           # wants room to finish its shutdown save rather than be SIGKILLed at the default
           # 30s; the exact shutdown behaviour of this image has not been observed here.
+{{ container_resources(cpu_limit=valheim_k8s_cpu_limit, mem_limit=valheim_k8s_mem_limit, cpu_request=valheim_k8s_cpu_request, mem_request=valheim_k8s_mem_request) }}
       terminationGracePeriodSeconds: 120
       volumes:
         - name: valheim-config

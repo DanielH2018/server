@@ -1,3 +1,4 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 # The negative test for networkpolicy.yaml.j2: a pod that is not prowlarr must not reach
@@ -71,10 +72,4 @@ spec:
               fi
               echo "isolated: flaresolverr:{{ prowlarr_k8s_flaresolverr_port }} unreachable except from prowlarr"
 {{ hardened_security_context() }}
-          resources:
-            requests:
-              cpu: 10m
-              memory: 16Mi
-            limits:
-              cpu: 200m
-              memory: 64Mi
+{{ container_resources(cpu_limit='200m', mem_limit='64Mi', cpu_request='10m', mem_request='16Mi') }}

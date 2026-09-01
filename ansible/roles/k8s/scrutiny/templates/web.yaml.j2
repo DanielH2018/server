@@ -1,3 +1,4 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 ---
@@ -76,13 +77,7 @@ spec:
               port: 8080
             initialDelaySeconds: 60
             periodSeconds: 30
-          resources:
-            limits:
-              cpu: "500m"
-              memory: 512Mi
-            requests:
-              cpu: "50m"
-              memory: 64Mi
+{{ container_resources(cpu_limit='500m', mem_limit='512Mi', cpu_request='50m', mem_request='64Mi') }}
       volumes:
         - name: scrutiny-web-config
           persistentVolumeClaim:

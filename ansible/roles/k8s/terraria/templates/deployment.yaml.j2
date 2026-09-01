@@ -1,3 +1,4 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: apps/v1
@@ -85,13 +86,7 @@ spec:
             exec:
               command: ["bash", "-c", "grep -q ':1E61 [0-9A-F]*:0000 0A ' /proc/net/tcp"]
             periodSeconds: 30
-          resources:
-            limits:
-              cpu: "{{ terraria_k8s_cpu_limit }}"
-              memory: {{ terraria_k8s_mem_limit }}
-            requests:
-              cpu: "{{ terraria_k8s_cpu_request }}"
-              memory: {{ terraria_k8s_mem_request }}
+{{ container_resources(cpu_limit=terraria_k8s_cpu_limit, mem_limit=terraria_k8s_mem_limit, cpu_request=terraria_k8s_cpu_request, mem_request=terraria_k8s_mem_request) }}
       volumes:
         - name: terraria-config
           persistentVolumeClaim:

@@ -1,3 +1,4 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: apps/v1
@@ -68,13 +69,7 @@ spec:
           volumeMounts:
             - name: traefik-acme
               mountPath: /data
-          resources:
-            limits:
-              cpu: 250m
-              memory: 128Mi
-            requests:
-              cpu: 10m
-              memory: 16Mi
+{{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
 {% endif %}
 {% if traefik_k8s_manage_crowdsec %}
         # Seeds the agent sidecar's /etc/crowdsec before its entrypoint fills in defaults —
@@ -109,13 +104,7 @@ spec:
             # on its first rollout; the authelia pod lost it outright.
             - name: traefik-logs
               mountPath: /var/log/traefik
-          resources:
-            limits:
-              cpu: 250m
-              memory: 128Mi
-            requests:
-              cpu: 10m
-              memory: 16Mi
+{{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
 {% endif %}
       containers:
         - name: traefik
@@ -195,13 +184,7 @@ spec:
               port: ping
             initialDelaySeconds: 15
             periodSeconds: 30
-          resources:
-            limits:
-              cpu: "{{ traefik_k8s_cpu_limit }}"
-              memory: {{ traefik_k8s_mem_limit }}
-            requests:
-              cpu: "{{ traefik_k8s_cpu_request }}"
-              memory: {{ traefik_k8s_mem_request }}
+{{ container_resources(cpu_limit=traefik_k8s_cpu_limit, mem_limit=traefik_k8s_mem_limit, cpu_request=traefik_k8s_cpu_request, mem_request=traefik_k8s_mem_request) }}
 {% if traefik_k8s_manage_crowdsec %}
         # Slice-6 B1 (D1/D2): log-parsing agent, LAPI-less — it tails this pod's access log
         # and ships signals to the in-cluster engine. Runs as the pod's uid (65532), NOT
@@ -254,13 +237,7 @@ spec:
             initialDelaySeconds: 120
             periodSeconds: 60
             timeoutSeconds: 10
-          resources:
-            limits:
-              cpu: "{{ traefik_k8s_agent_cpu_limit }}"
-              memory: {{ traefik_k8s_agent_mem_limit }}
-            requests:
-              cpu: "{{ traefik_k8s_agent_cpu_request }}"
-              memory: {{ traefik_k8s_agent_mem_request }}
+{{ container_resources(cpu_limit=traefik_k8s_agent_cpu_limit, mem_limit=traefik_k8s_agent_mem_limit, cpu_request=traefik_k8s_agent_cpu_request, mem_request=traefik_k8s_agent_mem_request) }}
 {% endif %}
         # Ships the access log to Loki (tails it to stdout, which promtail's k8s-pods job
         # auto-discovers by container name — no scrape-config change needed) and keeps the
@@ -370,13 +347,7 @@ spec:
           volumeMounts:
             - name: traefik-logs
               mountPath: /var/log/traefik
-          resources:
-            limits:
-              cpu: "{{ traefik_k8s_logrotate_cpu_limit }}"
-              memory: {{ traefik_k8s_logrotate_mem_limit }}
-            requests:
-              cpu: "{{ traefik_k8s_logrotate_cpu_request }}"
-              memory: {{ traefik_k8s_logrotate_mem_request }}
+{{ container_resources(cpu_limit=traefik_k8s_logrotate_cpu_limit, mem_limit=traefik_k8s_logrotate_mem_limit, cpu_request=traefik_k8s_logrotate_cpu_request, mem_request=traefik_k8s_logrotate_mem_request) }}
       volumes:
         - name: traefik-config
           configMap:

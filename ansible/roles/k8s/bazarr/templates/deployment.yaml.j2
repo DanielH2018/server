@@ -1,3 +1,4 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: apps/v1
@@ -67,13 +68,7 @@ spec:
               port: {{ container_item.port }}
             initialDelaySeconds: 60
             periodSeconds: 30
-          resources:
-            limits:
-              cpu: "{{ bazarr_k8s_cpu_limit }}"
-              memory: {{ bazarr_k8s_mem_limit }}
-            requests:
-              cpu: "{{ bazarr_k8s_cpu_request }}"
-              memory: {{ bazarr_k8s_mem_request }}
+{{ container_resources(cpu_limit=bazarr_k8s_cpu_limit, mem_limit=bazarr_k8s_mem_limit, cpu_request=bazarr_k8s_cpu_request, mem_request=bazarr_k8s_mem_request) }}
       volumes:
         - name: bazarr-config
           persistentVolumeClaim:

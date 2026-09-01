@@ -1,3 +1,4 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: apps/v1
@@ -119,24 +120,18 @@ spec:
             - name: node-exporter-textfile
               mountPath: /textfile
               readOnly: true
-          resources:
-            requests:
-              cpu: 20m
-              memory: 32Mi
-            limits:
-              # 1 core, not 200m. This exporter renders ~320 metric families per request and was
-              # throttled on 42.4% of CFS periods (daniel-box) / 31.7% (daniel-server), measured
-              # 2026-08-29. On its own that ratio is close to an artifact — absolute throttled
-              # time is ~1.6% of wall-clock — but here it has a second, real consequence: the
-              # kubelet's own liveness and readiness probes GET /metrics and close after reading a
-              # bounded prefix, and a slower render leaves more of the response unwritten when
-              # they do. node_exporter then logs one "connection reset by peer" line per unwritten
-              # family. Hit rate tracks throttle: 94% of probe ticks produce a burst on daniel-box
-              # against 41% on daniel-server. That flood was 97% of all k8s-namespace Loki ingest.
-              # Raising the ceiling shrinks it; the probe path is the actual cause and is
-              # unchanged here.
-              cpu: "1"
-              memory: 128Mi
+          # 1 core, not 200m. This exporter renders ~320 metric families per request and was
+          # throttled on 42.4% of CFS periods (daniel-box) / 31.7% (daniel-server), measured
+          # 2026-08-29. On its own that ratio is close to an artifact — absolute throttled
+          # time is ~1.6% of wall-clock — but here it has a second, real consequence: the
+          # kubelet's own liveness and readiness probes GET /metrics and close after reading a
+          # bounded prefix, and a slower render leaves more of the response unwritten when
+          # they do. node_exporter then logs one "connection reset by peer" line per unwritten
+          # family. Hit rate tracks throttle: 94% of probe ticks produce a burst on daniel-box
+          # against 41% on daniel-server. That flood was 97% of all k8s-namespace Loki ingest.
+          # Raising the ceiling shrinks it; the probe path is the actual cause and is
+          # unchanged here.
+{{ container_resources(cpu_limit='1', mem_limit='128Mi', cpu_request='20m', mem_request='32Mi') }}
       volumes:
         - name: node-exporter-proc
           hostPath:

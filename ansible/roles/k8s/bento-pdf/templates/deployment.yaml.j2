@@ -1,3 +1,4 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 ---
@@ -56,13 +57,7 @@ spec:
               port: {{ container_item.port }}
             initialDelaySeconds: 15
             periodSeconds: 30
-          resources:
-            limits:
-              cpu: "{{ bento_pdf_k8s_cpu_limit }}"
-              memory: {{ bento_pdf_k8s_mem_limit }}
-            requests:
-              cpu: "{{ bento_pdf_k8s_cpu_request }}"
-              memory: {{ bento_pdf_k8s_mem_request }}
+{{ container_resources(cpu_limit=bento_pdf_k8s_cpu_limit, mem_limit=bento_pdf_k8s_mem_limit, cpu_request=bento_pdf_k8s_cpu_request, mem_request=bento_pdf_k8s_mem_request) }}
       volumes:
         - name: nginx-cache
           emptyDir: {}

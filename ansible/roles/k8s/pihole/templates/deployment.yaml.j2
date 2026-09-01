@@ -1,3 +1,4 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 {% for inst in [{'name': 'pihole', 'claim': pihole_k8s_claim},
@@ -107,13 +108,7 @@ spec:
               port: 53
             periodSeconds: 10
             failureThreshold: 60
-          resources:
-            limits:
-              cpu: "{{ pihole_k8s_cpu_limit }}"
-              memory: {{ pihole_k8s_mem_limit }}
-            requests:
-              cpu: "{{ pihole_k8s_cpu_request }}"
-              memory: {{ pihole_k8s_mem_request }}
+{{ container_resources(cpu_limit=pihole_k8s_cpu_limit, mem_limit=pihole_k8s_mem_limit, cpu_request=pihole_k8s_cpu_request, mem_request=pihole_k8s_mem_request) }}
         - name: unbound
           image: {{ pihole_k8s_unbound_image }}
           # Starts as root to read its config, then drops to the unbound user — SETUID/SETGID
@@ -139,13 +134,7 @@ spec:
             periodSeconds: 60
             timeoutSeconds: 30
             failureThreshold: 3
-          resources:
-            limits:
-              cpu: "{{ pihole_k8s_unbound_cpu_limit }}"
-              memory: {{ pihole_k8s_unbound_mem_limit }}
-            requests:
-              cpu: "{{ pihole_k8s_unbound_cpu_request }}"
-              memory: {{ pihole_k8s_unbound_mem_request }}
+{{ container_resources(cpu_limit=pihole_k8s_unbound_cpu_limit, mem_limit=pihole_k8s_unbound_mem_limit, cpu_request=pihole_k8s_unbound_cpu_request, mem_request=pihole_k8s_unbound_mem_request) }}
       volumes:
         - name: etc-pihole
           persistentVolumeClaim:

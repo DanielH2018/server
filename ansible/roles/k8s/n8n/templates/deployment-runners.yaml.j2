@@ -1,3 +1,4 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 ---
@@ -35,13 +36,7 @@ spec:
             - -c
             - until nc -z n8n {{ n8n_k8s_broker_port }}; do sleep 5; done
 {{ hardened_security_context() }}
-          resources:
-            limits:
-              cpu: 250m
-              memory: 128Mi
-            requests:
-              cpu: 10m
-              memory: 16Mi
+{{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
       automountServiceAccountToken: false
       priorityClassName: homelab-best-effort
       # Preference, never a pin: CPU-bound workflow execution — daniel-box has 16 threads to daniel-server's 8.
@@ -80,10 +75,4 @@ spec:
                 - task-runner-launcher
             initialDelaySeconds: 30
             periodSeconds: 30
-          resources:
-            limits:
-              cpu: "{{ n8n_k8s_cpu_limit }}"
-              memory: {{ n8n_k8s_mem_limit }}
-            requests:
-              cpu: "{{ n8n_k8s_cpu_request }}"
-              memory: {{ n8n_k8s_mem_request }}
+{{ container_resources(cpu_limit=n8n_k8s_cpu_limit, mem_limit=n8n_k8s_mem_limit, cpu_request=n8n_k8s_cpu_request, mem_request=n8n_k8s_mem_request) }}
