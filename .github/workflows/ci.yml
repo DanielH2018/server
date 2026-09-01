@@ -115,10 +115,15 @@ jobs:
       #
       # `vale sync` fetches the Google package into styles/, which .gitignore excludes on
       # purpose — see the entry there. It has to run before the hooks, not inside them.
+      #
+      # `curl -f` is load-bearing. Without it a 404 (a Renovate bump that rewrote only part of
+      # the pinned URL, an upstream asset rename) exits 0 and writes the error body to
+      # /tmp/vale.tar.gz, so the step dies two lines down at `tar xzf` with "not in gzip
+      # format" — naming the tarball instead of the URL that was never fetched.
       - name: Install Vale
         run: |
           set -euo pipefail
-          curl -sSL -o /tmp/vale.tar.gz \
+          curl -fsSL -o /tmp/vale.tar.gz \
             https://github.com/vale-cli/vale/releases/download/v3.18.0/vale_3.18.0_Linux_64-bit.tar.gz
           tar xzf /tmp/vale.tar.gz -C /usr/local/bin vale
           vale --version
