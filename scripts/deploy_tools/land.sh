@@ -66,6 +66,38 @@ die() {
 }
 say() { printf '  %s\n' "$1"; }
 
+# One logfmt line per landing into syslog, which promtail already ships to Loki — the same
+# path deploy.sh's `deploy-annotation` takes, read by the Landings dashboard. This is the
+# only record of where a landing's time goes: how long the merge took to arrive, how long
+# master CI took after it, the tick, the deploy. Every earlier number here was one PR timed
+# by hand. Emitted from an EXIT trap so every verdict and every `die` is counted, including
+# the ones that end in exit 75 with nothing deployed. Fire-and-forget by construction: a
+# landing that succeeded must never report failure because logging it did not.
+T_START=$SECONDS
+T_MERGED=''
+T_CI=''
+T_TICK=''
+T_DEPLOY=''
+LAND_VERDICT=''
+MERGE_SHA=''
+TAGS_LABEL=''
+# shellcheck disable=SC2317,SC2329  # both are reached through the EXIT trap below
+phase() { # seconds between two stamps, or empty when the later one was never reached
+  [ -n "$2" ] && [ -n "$1" ] && echo $(($2 - $1))
+}
+# shellcheck disable=SC2317,SC2329
+emit_landing_annotation() {
+  local rc=$?
+  local verdict="${LAND_VERDICT:-aborted}"
+  logger -t landing-annotation \
+    "event=landing pr=${PR:-unknown} sha=${MERGE_SHA:0:8} verdict=${verdict} exit=${rc}" \
+    "wait_merge=$(phase "$T_START" "$T_MERGED") wait_ci=$(phase "$T_MERGED" "$T_CI")" \
+    "tick=$(phase "$T_CI" "$T_TICK") deploy=$(phase "$T_TICK" "$T_DEPLOY")" \
+    "total=$((SECONDS - T_START)) tags=${TAGS_LABEL:-none}" \
+    2>/dev/null || true
+}
+trap emit_landing_annotation EXIT
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --pr)
@@ -122,6 +154,7 @@ if [ "$AWAIT_MERGE" -eq 1 ]; then
   say "merged after ${waited}s"
 fi
 
+T_MERGED=$SECONDS
 echo "== 1/6  resolving PR #$PR"
 MERGE_SHA=$(gh pr view "$PR" --json mergeCommit --jq '.mergeCommit.oid') ||
   die "could not read PR #$PR" 1
@@ -141,6 +174,7 @@ pf_rc=$?
 case "$pf_rc" in
   0) say "nothing in the way" ;;
   3)
+    LAND_VERDICT=blocked
     echo "VERDICT: blocked (PR #$PR — an incoming change needs a hand; see above)"
     exit 1
     ;;
@@ -157,6 +191,7 @@ case "$ci_rc" in
   *) die "await_ci failed (exit $ci_rc) — nothing deployed" 1 ;;
 esac
 
+T_CI=$SECONDS
 echo "== 4/6  GitOps tick (fetch, ff-merge, deploy what is eligible)"
 tick_rc=0
 attempt=1
@@ -202,6 +237,7 @@ tick_state() {
   fi
 }
 
+T_TICK=$SECONDS
 echo "== 5/6  deploying what the tick deferred"
 PLANE=''
 SELF_APPLIED=''
@@ -247,10 +283,12 @@ fi
 if [ -z "$TAGS" ]; then
   if [ -n "$PLANE" ]; then
     echo "  it needs applying by hand: $PLANE"
+    LAND_VERDICT=needs-manual-apply
     echo "VERDICT: needs-manual-apply (PR #$PR reaches no service tag, but is not done)"
     exit 1
   fi
   if [ -z "$SELF_APPLIED" ]; then
+    LAND_VERDICT=nothing-to-deploy
     echo "VERDICT: nothing-to-deploy (PR #$PR touched no service)"
     exit 0
   fi
@@ -260,20 +298,24 @@ if [ -z "$TAGS" ]; then
   case "$(tick_state)" in
     held)
       echo "  the deployer is holding $(cat "$DEPLOYER_STATE/hold_sha"): its apply failed — see hold_plane and the gitops-deploy journal"
+      LAND_VERDICT=deploy-failed
       echo "VERDICT: deploy-failed (PR #$PR — the tick's own apply failed and is held)"
       exit 1
       ;;
     behind)
       echo "  the tick did not fast-forward to origin (parked since: $(cat "$DEPLOYER_STATE/behind_since"))"
       echo "  Usually a newer merge whose CI is still running; the next tick crosses it. Nothing is wrong with this PR."
+      LAND_VERDICT=deferred
       echo "VERDICT: deferred (PR #$PR — landed, not yet applied by the tick)"
       exit 75
       ;;
   esac
+  LAND_VERDICT=settled
   echo "VERDICT: settled (PR #$PR, $MERGE_SHA — no service tag; the tick applied it and converged with origin)"
   exit 0
 fi
 
+TAGS_LABEL=$TAGS
 deploy_rc=0
 attempt=1
 while [ "$attempt" -le "$LOCK_RETRIES" ]; do
@@ -300,6 +342,7 @@ if [ "$deploy_rc" -eq 4 ]; then
   uv run python scripts/deploy_tools/deploy_tags.py blockers "origin/$BRANCH"
   retry_pf_rc=$?
   if [ "$retry_pf_rc" -eq 3 ]; then
+    LAND_VERDICT=blocked
     echo "VERDICT: blocked (PR #$PR — a change needing a hand landed during the wait; see above)"
     exit 1
   fi
@@ -316,16 +359,19 @@ case "$deploy_rc" in
     # and exit 0 until 2026-08-29, which is how PR #617 left 22 digest pins undeployed behind
     # a green verdict. The derivation is fixed upstream; this stays as the backstop, because
     # a tag list deploy.sh will not accept is a defect and never a finished landing.
+    LAND_VERDICT=deploy-failed
     echo "VERDICT: deploy-failed (PR #$PR — a derived tag matched no service, so nothing deployed; tags: $TAGS)"
     exit 1
     ;;
   75) die "deploy lock stayed busy after $LOCK_RETRIES attempts — nothing deployed" 75 ;;
   *)
+    LAND_VERDICT=deploy-failed
     echo "VERDICT: deploy-failed (PR #$PR, exit $deploy_rc)"
     exit 1
     ;;
 esac
 
+T_DEPLOY=$SECONDS
 echo "== 6/6  health verdict"
 # --status 0 because the deploy above already succeeded; this call is here for the health
 # gate, which is the half `ansible-playbook` exiting 0 cannot speak to. --no-post keeps the
@@ -341,6 +387,7 @@ fi
 
 if [ "$verdict_rc" -eq 0 ]; then
   if [ -n "$PLANE" ]; then
+    LAND_VERDICT=needs-manual-apply
     echo "VERDICT: needs-manual-apply (PR #$PR, $MERGE_SHA — services deployed, the plane above not)"
     exit 1
   fi
@@ -350,17 +397,21 @@ if [ "$verdict_rc" -eq 0 ]; then
   [ -n "$SELF_APPLIED" ] && case "$(tick_state)" in
     held)
       echo "  services deployed, but the deployer is holding $(cat "$DEPLOYER_STATE/hold_sha"): its own apply failed — see hold_plane"
+      LAND_VERDICT=deploy-failed
       echo "VERDICT: deploy-failed (PR #$PR, $MERGE_SHA — services deployed, the tick's apply is held)"
       exit 1
       ;;
     behind)
       echo "  services deployed, but the tick has not fast-forwarded to origin (parked since: $(cat "$DEPLOYER_STATE/behind_since"))"
+      LAND_VERDICT=deferred
       echo "VERDICT: deferred (PR #$PR, $MERGE_SHA, tags: $TAGS — services deployed, the tick's half not yet)"
       exit 75
       ;;
   esac
+  LAND_VERDICT=settled
   echo "VERDICT: settled (PR #$PR, $MERGE_SHA, tags: $TAGS)"
   exit 0
 fi
+LAND_VERDICT=unhealthy
 echo "VERDICT: unhealthy (PR #$PR, $MERGE_SHA, tags: $TAGS)"
 exit 1

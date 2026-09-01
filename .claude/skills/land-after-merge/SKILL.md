@@ -30,6 +30,13 @@ waits for master CI on the merge commit, ticks, deploys what the tick deferred, 
 `VERDICT:` line — `settled`, `unhealthy`, `deploy-failed`, `nothing-to-deploy`, `blocked`,
 `needs-manual-apply` or `deferred`.
 
+Every run also writes one logfmt line to syslog on exit (`logger -t landing-annotation`):
+the PR, the merge SHA, the verdict, and seconds spent in each phase — `wait_merge`,
+`wait_ci`, `tick`, `deploy`, `total`. Promtail ships it to Loki and the **Landings** Grafana
+board (Infrastructure folder) plots it, so "sessions wait too long" is answered by the
+phase medians there rather than by memory. CLI: `uv run python
+scripts/diagnostics/probe.py loki-query '{job="syslog"} |= "event=landing" | logfmt'`.
+
 `deferred` (exit 75) means the tick applies this PR itself — a setup role `initial_setup.yml`
 includes, or the deploy plane — and has not crossed origin yet, almost always because a newer
 merge's CI is still running. The next tick does it; nothing is wrong with the PR. `land.sh`
