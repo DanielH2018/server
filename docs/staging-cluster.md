@@ -283,7 +283,7 @@ Two mechanics of editing this file, both of which cost a session time to redisco
   until it grew a tasks-file scan.
 - **`email` is in the file because the guard cannot see that it is missing any other way.** It
   is not a credential and prod keeps it in `secrets.yml`, which is why staging had no source
-  for it at all. `BASE_CONTEXT` in `scripts/lib/_render_guard.py` carries a stand-in so the
+  for it at all. `BASE_CONTEXT` in `scripts/lib/render_guard.py` carries a stand-in so the
   structural validator never aborts, and the guard read that stand-in as staging supplying the
   name — so the check passed and the deploy failed one task later with `'email' is undefined`.
   The guard now builds its supplied set from the real sources and never from `BASE_CONTEXT`.

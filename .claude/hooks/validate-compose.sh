@@ -54,7 +54,7 @@ case "$file_path" in
 esac
 
 # Validate the checkout that owns the edited file, not always the primary one. The
-# validators resolve the repo they render from their own __file__ (scripts/lib/_render_guard.py),
+# validators resolve the repo they render from their own __file__ (scripts/lib/render_guard.py),
 # so passing an absolute path into a .claude/worktrees/<name>/ checkout is what redirects
 # them — the working directory does not. Running them relatively rendered the primary
 # checkout's templates and reported a pass for a file it never read.

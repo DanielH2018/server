@@ -7,7 +7,7 @@ import shutil
 
 import pytest
 import validate_shell_templates as v
-from lib._render_guard import ALL_VARS, BASE_CONTEXT, load_yaml
+from lib.render_guard import ALL_VARS, BASE_CONTEXT, load_yaml
 
 BACKUP_HEALTH = v.ROLES / "setup" / "k3s" / "templates" / "longhorn-backup-health.sh.j2"
 

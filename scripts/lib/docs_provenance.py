@@ -27,9 +27,12 @@ from __future__ import annotations
 import datetime as dt
 import os
 import subprocess
+import sys
+from collections.abc import Callable, Sized
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.repo_paths import REPO  # noqa: E402
 
 # git reads these from the environment in preference to its working directory, so a `cwd=`
 # alone does not scope a git call. Inside a git hook they are both set and point at the repo
@@ -129,3 +132,32 @@ def write_if_body_changed(path: Path, content: str) -> bool:
         return False
     path.write_text(content)
     return True
+
+
+def md_cell(value: str) -> str:
+    """A Markdown table cell that cannot split its own row.
+
+    A literal pipe in a value adds a column silently -- the table still renders, just wrong,
+    which is worse than failing. Several generators derive cell text from template text or
+    docstrings, so nothing upstream stops one appearing.
+    """
+    return value.replace("|", "\\|")
+
+
+def finish_generator(
+    name: str,
+    out: Path,
+    rows: Sized,
+    render: Callable[[Sized], str],
+    noun: str,
+) -> int:
+    """The tail every reference-page generator shares: render, write if changed, report.
+
+    Five ``gen_reference_*`` scripts carried this verbatim before it moved here. The argparse
+    front half stays in each script because their arguments differ; only the part that has
+    to stay identical -- the write policy and the one-line report the docs-refresh cron log
+    is read through -- is shared.
+    """
+    wrote = write_if_body_changed(out, render(rows))
+    print(f"{name}: {len(rows)} {noun}(s), {'wrote' if wrote else 'unchanged'} {out}")
+    return 0

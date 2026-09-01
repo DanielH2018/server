@@ -12,11 +12,12 @@ being hand-copied.
 The inventory readers at the bottom (``host_files``, ``containers_entries``) serve a wider set:
 ``deploy_tags.py`` and ``service_catalog.py`` both walked ``host_vars/`` and parsed
 ``containers_list`` themselves, and each carried its own copy of the ``_``-prefix exclusion.
-Six scripts anchored their own path to ``inventory/`` before this; the anchors below are the
-one definition.
+The path anchors come from ``repo_paths.py`` and are re-exported here for the callers that
+already import them from this module; a script that wants only a path imports
+``repo_paths`` directly and skips the ``jinja2`` import this module costs.
 
-Imported as ``from _render_guard import ...`` — ``scripts/`` is ``sys.path[0]`` when a validator is
-run directly and is on ``sys.path`` under pytest (rootdir insertion, no ``__init__.py``).
+Imported as ``from lib.render_guard import ...`` after the caller's own ``sys.path``
+bootstrap puts ``scripts/`` on the path (repo-root CLAUDE.md, *Directory Structure*).
 """
 
 from __future__ import annotations
@@ -27,14 +28,32 @@ from pathlib import Path
 import yaml
 from jinja2 import ChainableUndefined, Environment, FileSystemLoader
 
-REPO = Path(__file__).resolve().parents[2]
-ANSIBLE = REPO / "ansible"
-SHARED_TPL = (
-    ANSIBLE / "templates"
-)  # shared macros (and the labels-macro traefik.yml.j2)
-INVENTORY = ANSIBLE / "inventory"
-ALL_VARS = INVENTORY / "group_vars" / "all.yml"
-HOST_VARS = INVENTORY / "host_vars"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.repo_paths import (  # noqa: E402
+    ALL_VARS,
+    ANSIBLE,
+    HOST_VARS,
+    INVENTORY,
+    REPO,
+    SHARED_TPL,
+)
+
+__all__ = [
+    "ALL_VARS",
+    "ANSIBLE",
+    "BASE_CONTEXT",
+    "HOST_VARS",
+    "INVENTORY",
+    "REPO",
+    "SHARED_TPL",
+    "StubUndefined",
+    "containers_entries",
+    "dump_numbered",
+    "host_files",
+    "load_yaml",
+    "make_env",
+    "render_or_error",
+]
 
 # Non-secret fallbacks for host facts not in the plaintext inventory. Anything still missing
 # (SOPS secrets, role vars) renders via StubUndefined — fine for a STRUCTURAL parse/lint check.
@@ -73,9 +92,15 @@ class StubUndefined(ChainableUndefined):
 
 
 def load_yaml(path: Path) -> dict:
-    if not path.exists():
+    """A YAML mapping, or ``{}`` for a missing, empty or non-mapping file.
+
+    Every caller indexes the result as a dict, so a file whose top level is a list or a
+    scalar returns ``{}`` rather than leaking through to a ``TypeError`` several calls later.
+    """
+    if not path.is_file():
         return {}
-    return yaml.safe_load(path.read_text()) or {}
+    loaded = yaml.safe_load(path.read_text())
+    return loaded if isinstance(loaded, dict) else {}
 
 
 def dump_numbered(text: str) -> None:
