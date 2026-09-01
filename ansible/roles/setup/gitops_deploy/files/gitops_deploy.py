@@ -36,6 +36,8 @@ from deploy_logic import (  # noqa: E402
     behind_marker,
     broad_remediation,
     ci_verdict,
+    github_auth_headers,
+    github_token,
     setup_tags_for,
     containers_to_gate,
     declared_denylist,
@@ -368,8 +370,9 @@ if REQUIRE_CI and not (CI_CONTEXTS and CI_REPO):
 def fetch_ci_verdict(sha: str) -> str:
     """`pass` / `pending` / `fail` for `sha`, from GitHub's check-runs API.
 
-    The repo is public, so this is an unauthenticated GET — no token to provision or rotate. The
-    rate limit is 60/hour per IP against one call per 30-min tick.
+    Authenticated through `gh auth token` when the CLI is logged in (deploy_logic.github_token
+    says why: the anonymous 60/hour limit is per source IP and shared with every landing's
+    `await_ci.py` poll, and two landings exhaust it), anonymous otherwise.
 
     An unreachable or malformed API reads as `pending`, never `pass`: the gate has to fail closed
     or it is not a gate. That defers the tick and retries in 30 minutes, and because the tick still
@@ -387,6 +390,7 @@ def fetch_ci_verdict(sha: str) -> str:
         headers={
             "Accept": "application/vnd.github+json",
             "User-Agent": "gitops-deploy",
+            **github_auth_headers(github_token(os.environ, subprocess.run)),
         },
     )
     try:
@@ -1069,7 +1073,7 @@ def main() -> int:
     )
     # Only spend the GitHub call on a tick that would otherwise deploy. These conditions mirror
     # next_action's own short-circuits above it, so a noop/dirty/held tick costs no API request —
-    # which keeps the unauthenticated 60/hour rate limit irrelevant at one tick per 30 min.
+    # which keeps the gate's share of the GitHub rate limit at one request per 30 min.
     ci = "pass"
     if not dirty and origin_ahead and origin != local and origin != hold:
         ci = fetch_ci_verdict(origin)

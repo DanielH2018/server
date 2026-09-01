@@ -1,9 +1,9 @@
 """`deploy_tags.py blockers` must refuse a range the tick will never cross, and only that.
 
-The deployer refuses to fast-forward past a `_BROAD_MANUAL_PREFIXES` change, because applying
-its own role restarts the unit running the tick. Anything deployed after that tick is then
-refused as stale (deploy.sh exit 4). That outcome is decided the moment the commit is pushed,
-so it is checkable BEFORE waiting on CI -- which is the whole point of the subcommand.
+The deployer refuses to fast-forward past a `_BROAD_MANUAL_PREFIXES` change -- the bring-up
+playbooks, which only run by hand. Anything deployed after that tick is then refused as stale
+(deploy.sh exit 4). That outcome is decided the moment the commit is pushed, so it is
+checkable BEFORE waiting on CI -- which is the whole point of the subcommand.
 
 Both halves matter. A checker that flagged every range would stop every landing; one that
 flagged none would restore the six wasted minutes it exists to save.
@@ -32,10 +32,12 @@ def _run(paths, monkeypatch) -> int:
     return deploy_tags._cmd_blockers(Args())
 
 
-def test_a_deployer_change_blocks(monkeypatch):
-    """The real #570 blocker: another session's edit to gitops_deploy.py."""
+def test_a_deployer_change_no_longer_blocks(monkeypatch):
+    """The #570 blocker was another session's edit to gitops_deploy.py. Since 2026-09-01 the
+    deployer applies its own role like any other setup role, so the tick crosses it and a
+    landing behind it must NOT be told to stop -- three landings were, that day alone."""
     rc = _run(["ansible/roles/setup/gitops_deploy/files/gitops_deploy.py"], monkeypatch)
-    assert rc == 3
+    assert rc == 0
 
 
 def test_the_bringup_playbooks_block(monkeypatch):
@@ -70,10 +72,10 @@ def test_the_culprit_is_named(monkeypatch, capsys):
     _run(
         [
             "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2",
-            "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py",
+            "ansible/bootstrap.yml",
         ],
         monkeypatch,
     )
     err = capsys.readouterr().err
-    assert "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py" in err
+    assert "ansible/bootstrap.yml" in err
     assert "ansible/roles/k8s/sonarr" not in err, "named a path that is not a blocker"

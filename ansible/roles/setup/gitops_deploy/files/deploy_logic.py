@@ -161,19 +161,30 @@ _BROAD_SETUP_PREFIXES = (
 # Broad paths the deployer must NEVER apply itself, even though every other broad path now
 # fast-forwards and applies.
 #
-# roles/setup/gitops_deploy/ is this deployer's own role. Applying it runs a playbook whose
-# handler restarts the unit currently executing the tick — the run is SIGTERMed partway and
-# the state it leaves is undefined. That is a self-modification defect, not a risk
-# trade-off, so no budget or timeout makes it safe.
-#
 # The bring-up playbooks are hand-run by construction (see broad_remediation), and
 # initial_setup.yml unqualified is a whole-host reprovision rather than a scoped apply.
 #
 # These keep the OLD behaviour in full: defer, alert, and do not fast-forward. Staying
 # parked is what keeps `behind_since` set, and that marker is the only durable signal that
 # an unapplied plane exists.
+#
+# DECIDED: roles/setup/gitops_deploy/ — the deployer's own role — is NOT here, and applies
+# itself like any other setup role. It sat here until 2026-09-01 on the claim that applying
+# it "runs a playbook whose handler restarts the unit executing the tick", so the run would be
+# SIGTERMed partway. The handler does not restart anything: `Run gitops-deploy once` is
+# `ansible.builtin.systemd: state: started`, and Ansible's systemd module treats an
+# `activating` unit as already running (`is_running_service` accepts `active` and
+# `activating`), so from inside a tick it is a no-op. The only other handler is a
+# daemon-reload, which a running oneshot unit survives. What the park DID do, three times on
+# 2026-09-01 alone (#707, #712, #714): stop every other session's landing until an
+# operator hand-ran `initial_setup.yml --tags gitops_deploy` in the primary checkout and
+# ff-merged, because `deploy.sh` refuses a tree behind origin and the tick would not move it.
+# A self-apply that fails takes the broad-apply failure path — hold_sha, hold_plane, alert —
+# which is the same containment every other setup role gets, and the code it installs has
+# passed master CI, which is the same gate every other role gets. The unit's own state
+# (`config.env`, `/opt/gitops-deploy/*.py`) is read at the START of a tick and a mid-tick
+# overwrite reaches only the next one, which is the tick that should run the new code anyway.
 _BROAD_MANUAL_PREFIXES = (
-    "ansible/roles/setup/gitops_deploy/",
     "ansible/bootstrap.yml",
     "ansible/k3s-bringup.yml",
     "ansible/initial_setup.yml",
@@ -315,8 +326,8 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
             cs.secrets = True
             continue
         # Tested FIRST, and it does not `continue` past the plane flags below: the manual
-        # set overlaps _BROAD_SETUP_PREFIXES (roles/setup/gitops_deploy/ is under
-        # roles/setup/), and the alert still needs to name the right remediation playbook.
+        # set overlaps _BROAD_SETUP_PREFIXES (the bring-up playbooks sit in both), and the
+        # alert still needs to name the right remediation playbook.
         if any(p.startswith(prefix) for prefix in _BROAD_MANUAL_PREFIXES):
             cs.broad = True
             cs.broad_manual = True
@@ -602,6 +613,44 @@ _CI_PASS_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
 _CI_NO_VERDICT_CONCLUSIONS = frozenset(
     {"cancelled", "stale", "skipped_by_concurrency", None}
 )
+
+
+def github_token(environ: dict[str, str], run: Callable) -> str | None:
+    """A GitHub token for the check-runs gate, or None to query anonymously.
+
+    `GH_TOKEN` / `GITHUB_TOKEN` in the environment win, then `gh auth token` — the gh CLI on
+    daniel-box is logged in as the repo owner, and the deployer runs as that same user. The
+    lookup is best-effort: a missing gh, an expired login, or a slow keyring all return None,
+    and the caller queries anonymously exactly as it did before this existed.
+
+    Why authenticate a read of a public repo. The anonymous limit is 60 requests/hour PER
+    SOURCE IP, and every GitHub call from this host shares it: the tick's gate, `await_ci.py`
+    polling every 20s for up to 900s during a landing (45 requests per run), renovate_notify,
+    the ruleset-drift cron. Two `land.sh` runs in an hour exhaust it, after which the tick's
+    gate reads `HTTP Error 403: rate limit exceeded` and defers as `CI not finished` — which
+    is correct fail-closed behaviour and also a deploy outage nobody asked for. Measured
+    2026-09-01: two landings and a manual tick, three 403 deferrals. Authenticated, the
+    limit is 5000/hour per token.
+    """
+    for name in ("GH_TOKEN", "GITHUB_TOKEN"):
+        value = environ.get(name, "").strip()
+        if value:
+            return value
+    try:
+        proc = run(["gh", "auth", "token"], capture_output=True, text=True, timeout=10)
+    except Exception:  # noqa: BLE001 — absent binary, timeout, anything: anonymous is fine
+        return None
+    if proc.returncode != 0:
+        return None
+    token = (proc.stdout or "").strip()
+    return token or None
+
+
+def github_auth_headers(token: str | None) -> dict[str, str]:
+    """The `Authorization` header for `token`, or nothing for an anonymous request."""
+    if not token:
+        return {}
+    return {"Authorization": f"Bearer {token}"}
 
 
 def ci_verdict(check_runs: list[dict], required: frozenset[str] | set[str]) -> str:

@@ -89,6 +89,11 @@ if [[ "$(show ActiveState)" == "activating" ]]; then
   echo "A tick is already in flight (started $(show ExecMainStartTimestamp)); watching it"
   echo "instead of starting a second one — systemd coalesces the request either way."
   since="$(show ExecMainStartTimestamp | cut -d' ' -f2-3)"
+  # The stamp read above IS the joined run's, so the wait loop's "a new activation
+  # happened" test could never pass for it and the loop ran to its deadline however early
+  # the run finished — land.sh sat out the full 540s on a broad tick another session's
+  # merge had started (2026-09-01). For a joined run the state check alone decides.
+  started_before="joined"
 else
   echo "Triggering $UNIT on $(hostname)..."
   if ! systemctl start --no-block "$UNIT"; then

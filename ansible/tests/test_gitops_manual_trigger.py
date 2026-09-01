@@ -162,3 +162,23 @@ def test_lock_contention_exit_code_is_one_contract_across_all_three_readers():
         f"ExecStopPost line, so the wrapper greps for a phrase the unit never emits. The two "
         f"strings are one contract — change them together."
     )
+
+
+def test_wrapper_stops_watching_a_joined_run_when_it_ends():
+    """A tick already in flight is JOINED, not duplicated. The wait loop then needs a way to
+    notice that run ending: it breaks on `ExecMainStartTimestampMonotonic != started_before`,
+    and for a joined run `started_before` IS that run's stamp, so the loop could only exit at
+    its deadline. land.sh sat through the full 540s watch cap on 2026-09-01 for a broad tick
+    another session's merge had started, and read the timeout as a failure. Joining must
+    reset the stamp so the state check alone ends the wait."""
+    wrapper = _WRAPPER.read_text()
+    join = re.search(
+        r'if \[\[ "\$\(show ActiveState\)" == "activating" \]\]; then(.*?)\nelse',
+        wrapper,
+        re.DOTALL,
+    )
+    assert join, f"{_WRAPPER} no longer has a join branch for a run already in flight."
+    assert re.search(r"^\s*started_before=", join.group(1), re.MULTILINE), (
+        f"{_WRAPPER}'s join branch leaves started_before at the in-flight run's own stamp, "
+        "so the wait loop cannot see that run finish and always runs to its deadline."
+    )

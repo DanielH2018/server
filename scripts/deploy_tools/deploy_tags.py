@@ -250,12 +250,13 @@ def _incoming_paths(ref: str, cwd: Path = REPO) -> list[str]:
 def _cmd_blockers(args: argparse.Namespace) -> int:
     """Exit 3 if a `_BROAD_MANUAL_PREFIXES` path sits between HEAD and `ref`.
 
-    The deployer never fast-forwards past one — applying the deployer's own role restarts the
-    unit running the tick — so a deploy after that tick is guaranteed to hit deploy.sh's
-    staleness refusal (exit 4). This is checkable in milliseconds and BEFORE any CI wait.
-    Landing PR #570 on 2026-08-29 waited about six minutes for CI, ticked, and only then failed
-    at exit 4, with the blocker (another session's gitops_deploy.py change) already visible in
-    the range the whole time.
+    The deployer never fast-forwards past one — the bring-up playbooks run by hand by
+    construction — so a deploy after that tick is guaranteed to hit deploy.sh's staleness
+    refusal (exit 4). This is checkable in milliseconds and BEFORE any CI wait. Landing PR
+    #570 on 2026-08-29 waited about six minutes for CI, ticked, and only then failed at exit 4,
+    with the blocker already visible in the range the whole time. (That blocker was another
+    session's gitops_deploy.py change; the deployer's own role left the manual set on
+    2026-09-01 and applies itself now, so the same range no longer blocks.)
     """
     services_from_changed_paths, broad_remediation, _, _ = _load_deploy_logic()
     try:

@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -38,6 +39,8 @@ sys.path.insert(
 from deploy_logic import (  # noqa: E402 — needs the path insert above
     _CI_NO_VERDICT_CONCLUSIONS,
     ci_verdict,
+    github_auth_headers,
+    github_token,
 )
 
 CI_REPO = "DanielH2018/server"
@@ -73,13 +76,24 @@ def required_contexts() -> frozenset[str]:
 
 
 def fetch_check_runs(sha: str) -> list[dict]:
-    """Check-runs for one SHA. Unauthenticated -- the repo is public."""
+    """Check-runs for one SHA.
+
+    Authenticated through `gh auth token` when the CLI is logged in, anonymous otherwise.
+    The anonymous limit is 60/hour per source IP and this poll shares it with the deployer's
+    own gate on the same host: at one request per 20s for up to 900s, one landing costs 45 of
+    those 60, so the second landing in an hour starved the tick's gate into deferring on a
+    403 (2026-09-01). deploy_logic.github_token carries the numbers.
+    """
     url = (
         f"https://api.github.com/repos/{CI_REPO}/commits/{sha}/check-runs?per_page=100"
     )
     req = urllib.request.Request(
         url,
-        headers={"Accept": "application/vnd.github+json", "User-Agent": "await-ci"},
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "await-ci",
+            **github_auth_headers(github_token(os.environ, subprocess.run)),
+        },
     )
     with urllib.request.urlopen(req, timeout=15) as resp:
         return json.load(resp).get("check_runs", [])

@@ -71,15 +71,20 @@ them three ways, by which playbook applies them and whether it may run that play
 |---|---|---|
 | Setup, scoped | `ansible/roles/setup/<name>/`, `ansible/requirements.yml` (`_BROAD_SETUP_PREFIXES`) | fast-forwards, then runs `initial_setup.yml --tags <name>` |
 | Deploy plane | `ansible/templates/`, `ansible/inventory/`, `ansible/roles/containers/common/`, `ansible/deploy.yml`, `ansible/filter_plugins/`, `ansible.cfg` (`_BROAD_DEPLOY_PREFIXES`) | fast-forwards, then runs a full `ansible/deploy.yml` |
-| Never applied here | `ansible/roles/setup/gitops_deploy/`, `ansible/bootstrap.yml`, `ansible/k3s-bringup.yml`, `ansible/initial_setup.yml` (`_BROAD_MANUAL_PREFIXES`) | alerts and returns **without fast-forwarding** |
+| Never applied here | `ansible/bootstrap.yml`, `ansible/k3s-bringup.yml`, `ansible/initial_setup.yml` (`_BROAD_MANUAL_PREFIXES`) | alerts and returns **without fast-forwarding** |
 
 The setup/deploy split exists because `deploy.yml` is a `containers_list` loop and renders
 nothing for the setup plane, so pointing an operator at it for a `roles/setup/` change is a
 no-op that leaves the change unapplied.
 
-The third class is not caution. Applying `roles/setup/gitops_deploy/` runs a playbook whose
-handler restarts the systemd unit executing the tick, so the run is killed partway and the
-state it leaves is undefined. The bring-up playbooks run by hand by construction.
+The third class is the bring-up playbooks, which run by hand by construction. The deployer's
+own role, `roles/setup/gitops_deploy/`, sat there until 2026-09-01 on the claim that applying
+it restarts the unit executing the tick. It does not: the role's handler is `state: started`,
+which Ansible skips for an `activating` unit, so a self-apply from inside a tick is a no-op on
+the unit and the new code runs from the next tick. The park it imposed was real, though — every
+other session's landing stopped behind it until an operator hand-ran the role and ff-merged,
+three times that day. The role now applies itself as `initial_setup.yml --tags gitops_deploy`;
+the `DECIDED:` marker above `_BROAD_MANUAL_PREFIXES` in `deploy_logic.py` carries the evidence.
 
 ### Both apply arms are forward-only
 
