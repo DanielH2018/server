@@ -99,7 +99,7 @@
     },
     {
       "customType": "regex",
-      "description": "Pinned Vale binary in the CI workflow. TWO matchStrings on purpose: the download URL carries the version TWICE (the tag `v3.18.0` and the asset name `vale_3.18.0_Linux_64-bit.tar.gz`), and a manager that rewrites only the tag produces a 404 URL. `curl -sSL` has no `-f`, so it would write the error body and fail at `tar xzf` instead of at the download. Asset naming is stable across releases.",
+      "description": "Pinned Vale binary in the CI workflow. TWO matchStrings on purpose: the download URL carries the version TWICE (the tag `v3.18.0` and the asset name `vale_3.18.0_Linux_64-bit.tar.gz`), and a manager that rewrites only the tag produces a 404 URL. That 404 used to surface two lines later as `tar xzf`'s \"not in gzip format\", because the curl carried no `-f`; the workflow now runs `curl -fsSL`, so a partial rewrite fails at the download naming the URL. The two matchStrings are still the fix — failing loudly is not the same as not breaking. Asset naming is stable across releases.",
       "managerFilePatterns": [
         "/(^|/)\\.github/workflows/ci\\.yml$/"
       ],
@@ -216,6 +216,22 @@
         "(?<depName>[A-Za-z0-9._-]+)==(?<currentValue>[0-9][^\\s\"']*)"
       ],
       "datasourceTemplate": "pypi"
+    },
+    {
+      "customType": "regex",
+      "description": "jellyfin-ani-sync plugin release pin in k8s/jellyfin/defaults/main.yml (2026-09-01 review). The only manager reaching that file is the k8s-images one below, whose matchStrings key on `_image:` — so the plugin release, its download URL and its MD5 were invisible to every manager and aged with no signal, the same silent-drift class as the crowdsec bouncer plugin above. THREE matchStrings, because the pin carries its version three times: the release tag (`/download/v4.1/`), the asset name (`ani-sync_4.1.0.0.zip`) and the paired `jellyfin_k8s_anisync_version` var the init container reads. Rewriting only the tag produces a 404 URL (the Vale manager above records that failure mode). Upstream tags are two-part (`v4.1`) while the plugin version is four-part (`4.1.0.0`), so each matchString captures the SAME two-part `major.minor` and Renovate rewrites all three occurrences in step. extractVersionTemplate strips the tag's `v` so the datasource's version space matches what the matchStrings capture; versioningTemplate makes a two-part version orderable (plain `semver` rejects `4.1` outright, which would leave this manager inert) and maps the `b` suffix on beta tags (`v4.3b`, `v4.2b`) to a prerelease, so betas are never offered against a stable pin. NEVER automerged (packageRule below): the asset name also embeds the JELLYFIN targetAbi (`10.11.6.-.`), which no datasource can supply, and the paired `jellyfin_k8s_anisync_md5` can't be computed by a regex manager. The PR is a SIGNAL — the operator finishes the targetAbi segment and the MD5, and the file's own header requires raising `jellyfin_k8s_image` alongside it. Same manual-finish class as the SOPS pin above, which tracks despite an uncomputable paired sha256 rather than going untracked.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/k8s/jellyfin/defaults/main\\.yml$/"
+      ],
+      "matchStrings": [
+        "jellyfin-ani-sync/releases/download/v(?<currentValue>\\d+\\.\\d+)/",
+        "ani-sync_(?<currentValue>\\d+\\.\\d+)\\.0\\.0\\.zip",
+        "jellyfin_k8s_anisync_version:\\s*\"(?<currentValue>\\d+\\.\\d+)\\.0\\.0\""
+      ],
+      "depNameTemplate": "vosmiic/jellyfin-ani-sync",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$",
+      "versioningTemplate": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)(?:\\.(?<patch>\\d+))?(?<prerelease>b)?$"
     },
     {
       "customType": "regex",
@@ -401,6 +417,17 @@
         "n8nio/runners"
       ],
       "groupName": "n8n (lockstep: app + task runners)",
+      "automerge": false
+    },
+    {
+      "description": "jellyfin-ani-sync (2026-09-01 review). NO automerge, and the position of this rule is load-bearing: it must stay AFTER the two k8s-plane rules near the top of this array. The pin lives in ansible/roles/k8s/jellyfin/defaults/main.yml, so the `custom.regex` + minor/patch rule already sets automerge: true for it and the `ansible/roles/k8s/**` rule only renames the group — later rules win, so an ani-sync bump would otherwise merge itself into the `k8s image jellyfin` group. The SOPS pin escapes the same rule only because its path is under roles/setup/. Two things Renovate cannot compute make this a manual finish: the download URL embeds the JELLYFIN server targetAbi (`10.11.6.-.`) beside the plugin version, and jellyfin_k8s_anisync_md5 has to come from the release's manifest.json. On top of that the role's defaults require raising jellyfin_k8s_image in the same change — the plugin's targetAbi must not exceed the server's, which is why the pin sits a release behind on purpose. Tracked for the signal, finished by the operator; same class as the sops / crowdsec-plugin / k3s rules above.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "vosmiic/jellyfin-ani-sync"
+      ],
+      "groupName": "jellyfin-ani-sync (manual — finish the targetAbi + MD5, raise jellyfin with it)",
       "automerge": false
     }
   ]
