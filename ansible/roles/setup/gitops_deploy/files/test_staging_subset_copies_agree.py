@@ -32,7 +32,7 @@ _GATE_SCRIPT = _REPO / "scripts" / "deploy_tools" / "staging_gate.py"
 
 # gitops_deploy.py reads /etc/gitops-deploy/config.env at import time (`C = cfg()`), which does
 # not exist in CI. Stub host_lib.parse_env_file with canned values before the only import, the
-# same way test_deploy_logic.py does, so the import behaves identically in CI and on a host —
+# same way test_gitops_deploy_subprocess.py does, so the import behaves identically in CI and on a host —
 # and so this suite never reads the real config.env, which carries the Discord webhook.
 def _import_gitops_deploy():
     import host_lib

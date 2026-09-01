@@ -39,7 +39,7 @@ def broad_budget_ok(
     numbers FIT (2904 against 3600). This predicate has no production caller, so nothing changed
     behaviour; the arm is forward-only in gitops_deploy.py's code. Arming a broad rollback needs
     its own evidence — a re-measured deploy.yml on today's tree — not a ceiling raised for an
-    unrelated feature. Pinned by test_deploy_logic.py::
+    unrelated feature. Pinned by test_deploy_remediation.py::
     test_the_budget_predicate_tracks_the_units_real_timeout, which carries the re-derivation.
     """
     return flock_s + forward_s + rollback_s + BROAD_BUDGET_MARGIN_S <= timeout_s

@@ -1,6 +1,6 @@
 """Slice 3's staging gate must be advisory, and must not be able to break a prod deploy.
 
-Source-level guards, matching test_gitops_discord_contract.py: gitops_deploy.py cannot be
+Source-level guards, matching test_gitops_deploy_main_guards.py: gitops_deploy.py cannot be
 imported in CI (module-level `C = cfg()` reads /etc config that does not exist there — the
 accepted design, see the role CLAUDE.md), so these invariants are asserted against the AST.
 

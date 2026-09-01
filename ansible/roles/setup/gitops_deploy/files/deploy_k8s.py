@@ -128,7 +128,7 @@ def declares_snapshot_claims(text: str | None) -> bool:
 
     Absent, empty (`[]`), multi-line, or unparseable all read as False. What keeps the second
     consumer honest is not this function but
-    test_deploy_logic.py::test_declares_snapshot_claims_agrees_with_yaml_for_every_k8s_role,
+    test_deploy_k8s_declarations.py::test_declares_snapshot_claims_agrees_with_yaml_for_every_k8s_role,
     which pins this regex against `yaml.safe_load` for every k8s role — so a reformat to block
     style fails CI instead of silently widening the cap. Neither consumer is the authority on
     the revert itself: roles/k8s/manifests decides that from real YAML.
@@ -305,7 +305,7 @@ def split_k8s_auto_deploy(
     # reads each role's defaults at the PINNED origin SHA. It resolves False for a declaration the
     # regex cannot parse, which for ALERT WORDING was the safe direction and for GATING is not —
     # a multi-line declaration would read as claim-free and batch. What holds that closed is
-    # test_deploy_logic.py::test_declares_snapshot_claims_agrees_with_yaml_for_every_k8s_role,
+    # test_deploy_k8s_declarations.py::test_declares_snapshot_claims_agrees_with_yaml_for_every_k8s_role,
     # which pins the regex verdict against yaml.safe_load for every k8s role, so a reformat fails
     # CI rather than silently widening this cap.
     if declares_claims is not None and max_claim_services_per_tick > 0:
