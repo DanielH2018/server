@@ -1,47 +1,18 @@
 """Reading the inventory: which services are declared, on which platform, and what is stale.
 
 `containers_list` is the source of truth for both planes, so parsing it wrong routes a k8s
-workload down the Docker path. The behind-origin marker is the watchdog for a tick that keeps
-running while never catching up.
+workload down the Docker path.
 """
 
-# ansible/roles/setup/gitops_deploy/files/test_deploy_logic.py
+# ansible/roles/setup/gitops_deploy/files/test_deploy_inventory.py
 
 from deploy_changes import ChangeSet, services_from_changed_paths
-from deploy_git import behind_marker
 from deploy_inventory import (
     declared_k8s_services,
     declared_services,
     reroute_k8s_services,
     stale_rendered_services,
 )
-
-
-# behind_marker: the "host is parked on an old tree" signal. Its whole value is the timestamp —
-# presence alone is normal (a push is behind for one tick), so these pin the clock semantics.
-
-
-def test_behind_marker_cleared_when_caught_up():
-    assert behind_marker(False, "originX", "originW 100.0", now=200.0) is None
-
-
-def test_behind_marker_stamps_now_on_first_tick_behind():
-    assert behind_marker(True, "originX", None, now=200.0) == "originX 200.0"
-
-
-def test_behind_marker_keeps_first_seen_across_ticks():
-    # Still behind 10 min later: the age must keep growing, not reset.
-    assert behind_marker(True, "originX", "originX 200.0", now=800.0) == "originX 200.0"
-
-
-def test_behind_marker_keeps_first_seen_when_origin_advances():
-    # A new push while still stuck refreshes the SHA but must NOT restart the clock — otherwise a
-    # steady trickle of pushes to a permanently-stuck host never trips the age threshold.
-    assert behind_marker(True, "originZ", "originX 200.0", now=800.0) == "originZ 200.0"
-
-
-def test_behind_marker_restamps_when_marker_unparseable():
-    assert behind_marker(True, "originX", "garbage", now=200.0) == "originX 200.0"
 
 
 def test_declared_services_parses_containers_list_names():

@@ -74,7 +74,7 @@ system bus. `systemctl show claude-rc-alert -p ExecStart` printed the whole webh
 local user with no sudo, while `cat` on the same file was `Permission denied` — verified live
 in the 2026-08-24 review (M-1). The sibling roles were moved off that shape 79 minutes before
 this role landed, and this role's header comment cited them as justification for keeping it.
-`ansible/roles/setup/gitops_deploy/files/test_gitops_discord_contract.py` now walks every
+`ansible/roles/setup/gitops_deploy/files/test_systemd_unit_secrets.py` now walks every
 `*.service.j2` in the repo rather than naming units, so the next role cannot inherit it.
 
 The **webhook task** carries `no_log: true` because it renders the secret; the unit task no

@@ -20,7 +20,7 @@ flagging** (silence ≠ unhandled — most "gaps" already have a guard).
 - **GitOps:** `ansible/roles/setup/gitops_deploy/` installs a 30-min systemd timer that fetches
   origin/master, maps changed `roles/containers/<svc>/…` → service tags, ff-merges, deploys each,
   then health-gates and rolls back on failure (writes a hold-marker SHA). Pure decision logic is in
-  `files/deploy_logic.py` (unit-tested in `files/test_deploy_logic.py`); broad changes (shared
+  `files/deploy_logic.py` (unit-tested in `files/test_deploy_*.py`); broad changes (shared
   templates / inventory / common / deploy.yml) defer to a manual full deploy.
   **Important post-migration nuance:** this pipeline **never auto-applies a k8s role change**. A
   change under `ansible/roles/k8s/<role>/` matches `_ACTIVE_K8S` and always *defers and alerts*

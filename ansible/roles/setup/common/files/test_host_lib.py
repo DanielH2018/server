@@ -2,7 +2,7 @@
 
 host_lib is importable (stdlib only, no module-level config read), so its invariants are tested here
 directly. This is the behavioural home of the Discord User-Agent + 2xx-only contract that gitops's
-un-importable discord() previously pinned via AST guards (test_gitops_discord_contract.py).
+un-importable discord() previously pinned via AST guards (test_gitops_deploy_alert_delivery.py).
 """
 
 import json

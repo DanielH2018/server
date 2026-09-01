@@ -376,13 +376,23 @@ place and a `deploy_logic.<name>` citation in any doc stays true.
 | `deploy_k8s` | k8s auto-deploy eligibility, the denylist, the rollback's revert note |
 | `deploy_staging` | the staging subset and its verdict summary |
 
-`files/test_deploy_logic*.py` covers them, split by which decision each group is about: `_diff`
-(path→service mapping and the remediation text), `_git` (the next-action decision, divergence,
-and `container_names()` — the health gate inspects every `container_name:` in the changed
-service's rendered compose, since a role often runs several containers and the bumped image's
-container is usually not the role-named one), `_health` (health gating and the Discord queue),
-`_inventory` (declared services and platform routing), and `test_deploy_logic.py` itself
-(auto-deploy eligibility, the CI gate, rollback). Run via the repo pytest hook
+One test file per module, named for it: `files/test_deploy_<module>.py`, with a second
+file where one module answers two separable questions — `test_deploy_changes_services.py`
+(path→service mapping) beside `test_deploy_changes_planes.py` (broad / setup / test-only
+planes), `test_deploy_git.py` (next-action, divergence, the dirty and behind markers) beside
+`test_deploy_git_ci.py` (the CI gate), and `test_deploy_k8s_eligibility.py` (the auto-deploy
+split and its caps) beside `test_deploy_k8s_declarations.py` (the denylist and snapshot-claim
+readers). `test_deploy_health.py` also holds `container_names()` — the health gate inspects
+every `container_name:` in the changed service's rendered compose, since a role often runs
+several containers and the bumped image's container is usually not the role-named one.
+
+`gitops_deploy.py` itself is covered by the `files/test_gitops_deploy_*.py` family, mostly as
+AST source guards because the module cannot be imported in CI (see *Traps* below):
+`_subprocess` (the one file that imports it — `deploy_k8s()`'s argv, the rollback call site,
+`run()`'s process-group kill), `_main_guards` (merge target, hold-before-reset, the diverged
+marker), `_alert_delivery` (discord routing, queue-first delivery, the queue cap),
+`_fetch_skip`, `_timeout_budgets` (the cross-file timeout sums) and `_staging_timeouts`.
+`test_systemd_unit_secrets.py` is the tree-wide ExecStart guard. Run via the repo pytest hook
 (`uv run pytest ansible/roles/setup/gitops_deploy/files`).
 
 **Tests import and patch the module that defines the name, never the facade.** A
@@ -479,9 +489,9 @@ A set difference tells you what diverged, never why, so a remediation inferred f
 direction is a guess. On a pull-based host origin is the source of truth, so the re-render is
 the right lead in both directions and the push case belongs as a secondary check. Fixed in
 `7f5f629b`. The alert-direction logic lives in `gitops_deploy.py`'s `main()`, which no test
-imports — the `test_deploy_logic*.py` family covers only `deploy_logic.py`.
+imports — the `test_deploy_*.py` family covers only the decision modules.
 
-`test_deploy_logic.py` itself also covers `deploy_k8s()` and its two call sites inside `main()`.
+`test_gitops_deploy_subprocess.py` covers `deploy_k8s()` and its two call sites inside `main()`.
 `gitops_deploy.py` can't be imported the normal way in CI (`C = cfg()` reads
 `/etc/gitops-deploy/config.env` at module level, which doesn't exist there) — it stubs
 `host_lib.parse_env_file` with canned values before the one import, so it works the same in CI
@@ -549,7 +559,7 @@ fix used as *the* ceiling, because they are the only roles with a non-default ro
 and so the most visible case. `tdarr` (2 claims, default 300s rollout) is actually worse:
 2x480 + 300 + 60 = **1320s**. `K8S_ROLLBACK_TIMEOUT_S` is set to 1320 to cover the true worst
 case among currently-promoted services, not the loudest one.
-`ansible/roles/setup/gitops_deploy/files/test_gitops_discord_contract.py::test_k8s_rollback_budget_covers_the_worst_single_promoted_service`
+`ansible/roles/setup/gitops_deploy/files/test_gitops_deploy_timeout_budgets.py::test_k8s_rollback_budget_covers_the_worst_single_promoted_service`
 computes this from role sources rather than pinning a number, so a future rollout-timeout bump
 or a new promoted claim-declaring role fails it instead of silently under-sizing the budget.
 
@@ -642,7 +652,7 @@ matters: the cron gave up mid-incident and skipped that week's rotation, with no
 next weekly tick.
 
 Both 3000s waits are derived from the same four timeouts and are machine-pinned against them —
-`files/test_gitops_discord_contract.py`, `test_secret_rotate_lock_wait_clears_the_deployers_worst_case_hold`
+`files/test_gitops_deploy_timeout_budgets.py`, `test_secret_rotate_lock_wait_clears_the_deployers_worst_case_hold`
 and `test_deploy_sh_lock_wait_clears_the_deployers_worst_case_hold`, which share one
 `_worst_lock_hold()` derivation so the two waits cannot disagree. Raising any of
 `gitops_deploy_k8s_timeout_s`, `gitops_deploy_k8s_rollback_timeout_s`,

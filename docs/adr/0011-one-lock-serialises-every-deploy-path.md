@@ -46,7 +46,8 @@ because `flock` died before the deployer started.
 **Raising the timeout cannot fix that**, which is why the exit code had to change instead.
 The unit's own worst case is 2220 seconds against a 2700-second `TimeoutStartSec`, so the
 largest legal `-w` is 480 seconds — still far short of a routine 20-minute deploy.
-`test_gitops_discord_contract.py:458` asserts that bound and goes red if someone tries.
+`test_gitops_deploy_timeout_budgets.py::test_k8s_deploy_timeout_budget_survives_max_flock_contention`
+asserts that bound and goes red if someone tries.
 
 **Contention is not silent starvation.** The `flock` path never writes `last_run`, so
 contention outlasting `GITOPS_MAX_AGE_S` still pages through the GitOps-Alive monitor.

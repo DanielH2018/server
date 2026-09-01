@@ -314,7 +314,7 @@ STAGING_EXPECT_SCRIPT = os.path.join(
 # defaults/main.yml, which carries the measurement and the unit-budget arithmetic. These
 # fallbacks MUST equal the Ansible defaults, because config.env.j2 renders both and a host
 # whose config predates that render falls back to exactly these literals. Pinned by
-# test_gitops_discord_contract.py::test_staging_timeout_fallbacks_match_the_ansible_defaults.
+# test_gitops_deploy_staging_timeouts.py::test_staging_timeout_fallbacks_match_the_ansible_defaults.
 # A timeout here is NO VERDICT, never a rejection.
 STAGING_GATE_TIMEOUT_S = int(C.get("STAGING_GATE_TIMEOUT_S", "600"))
 STAGING_EXPECT_TIMEOUT_S = int(C.get("STAGING_EXPECT_TIMEOUT_S", "120"))
