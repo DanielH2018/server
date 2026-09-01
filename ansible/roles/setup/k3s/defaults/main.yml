@@ -799,9 +799,18 @@ k3s_longhorn_nobackup_volumes:
 # name-resolution failures in the following 10 minutes, because a warm containerd store
 # resolves no registry names at boot. A REBUILT node with an empty image store is the real
 # case, and that runs k3s-bringup.yml by hand anyway.
+# SUPERSEDED BY THE HOST FORWARDER (2026-09-01). This list was the node's own preference
+# order until CoreDNS took that job; the ordering argument above still explains why glibc is
+# the right tool for a two-entry list, and it is still exactly what daniel-pi runs. Here the
+# preference moved into k3s_host_dns_upstreams below, and this file now names one thing.
+#
+# DELIBERATELY NO FALLBACK ENTRY. Adding `1.1.1.1` behind the forwarder would make a dead
+# CoreDNS silently degrade to unfiltered DNS — the same shape as PR #693's drop-in, which
+# read as working while resolving through Cloudflare half the time. A dead forwarder here
+# takes the node's DNS with it, which is loud. `Restart=always` on the unit covers a crash,
+# and tasks/node.yml proves CoreDNS answers BEFORE it points this file at it.
 k3s_node_dns_upstreams:
-  - "{{ dns_k8s_vip }}"
-  - 1.1.1.1
+  - 127.0.0.1
 
 # Seconds to wait for each nameserver, and how many rounds over the WHOLE list to make before
 # returning an error — `attempts` is rounds, not per-server retries (resolv.conf(5)). One
@@ -810,6 +819,85 @@ k3s_node_dns_upstreams:
 k3s_node_dns_timeout: 2
 k3s_node_dns_attempts: 1
 k3s_node_dns_options: "timeout:{{ k3s_node_dns_timeout }} attempts:{{ k3s_node_dns_attempts }}"
+
+# ---------------------------------------------------------------------------
+# The host forwarder (Option C, 2026-09-01)
+#
+# glibc picks a nameserver per query and cannot ask "is Pi-hole up?" — it only learns an
+# entry is dead by spending a timeout on it, per process, with no memory. A local CoreDNS
+# CAN ask: `health_check` probes each upstream out of band, so a dead Pi-hole is skipped
+# BEFORE a query is sent to it rather than after one has already stalled.
+#
+# It also makes the answer observable. VERIFIED AGAINST THE PINNED BUILD, because the obvious
+# guess is wrong: 1.14.7 exports no `coredns_forward_requests_total`. The per-upstream series
+# is `coredns_proxy_request_duration_seconds_count{proxy_name="forward",to="10.0.0.243:53"}`,
+# and it says what
+# fraction of this node's queries actually reached Pi-hole, which is the question every
+# earlier arrangement in this file could only be answered by hand with a marked lookup.
+k3s_host_coredns_enabled: true
+k3s_host_coredns_version: "1.14.7"
+
+# amd64 only — daniel-box is the sole consumer, and node.yml is a server-node play. The
+# checksum is PINNED IN-REPO rather than fetched from the release's .sha256 sidecar: a
+# sidecar fetched over the same connection as the tarball is authenticated by the same
+# thing the tarball is, so it verifies transport integrity and nothing else. Pinning it
+# here means a changed artifact fails the deploy and shows up as a diff. Same reasoning
+# and same shape as roles/setup/sops_setup — and, as there, a Renovate version bump is a
+# MANUAL FINISH: the hash below is not derivable from the tag, so `automerge: false`.
+k3s_host_coredns_sha256: "9a09356438c6d9591cb80011a2a7a52f87fc3a113f6690e41f243f98b98faac9"
+
+# WHERE THE PREFERENCE NOW LIVES. This is the ordered forward list, and `policy sequential`
+# below is what makes it an order rather than a load-balance — CoreDNS's forward plugin
+# defaults to `random`, which would reproduce exactly the coin-flip that systemd-resolved
+# gave us. Two public entries, not one, because a forwarder with a single fallback has the
+# same single point of failure the fallback exists to remove.
+k3s_host_dns_upstreams:
+  - "{{ dns_k8s_vip }}"
+  - 1.1.1.1
+  - 1.0.0.1
+
+# A health check is "a recursive DNS query (. IN NS)" against each upstream. While an
+# upstream reports unhealthy CoreDNS re-probes it every 0.5s regardless of this interval and
+# stops probing once it is healthy again, so this value bounds how long a NEWLY dead Pi-hole
+# keeps receiving queries, not how fast a recovered one is picked back up.
+#
+# max_fails 2, not 1: a single lost UDP packet must not evict Pi-hole. And not 0 — that
+# value means "never mark this upstream down and never health check it", which would turn
+# the whole mechanism off while still reading like it was configured.
+k3s_host_dns_health_check: 5s
+k3s_host_dns_max_fails: 2
+
+# Answers served from cache never reach an upstream, so this bounds how stale a Pi-hole
+# blocklist change can be on this node. 30s is short enough that a blocklist edit takes
+# effect within one Kuma poll and long enough to absorb a boot's worth of repeat lookups.
+k3s_host_dns_cache_ttl: 30
+
+# Metrics bind to the node's LAN address, NOT 127.0.0.1. Prometheus scrapes from inside a
+# pod, where 127.0.0.1 is the pod's own loopback and reaches nothing on the host. The UFW
+# allow in tasks/node.yml is the other half — pod-to-host traffic terminates in a host
+# process, which is the one class that meets UFW's default-deny INPUT.
+k3s_host_dns_metrics_port: 9253
+
+# Installed outside /usr/local/bin deliberately: this binary is version-pinned by Ansible and
+# a bare `coredns` on PATH would be ambiguous with anything a future package installs.
+# Two paths, deliberately. The versioned one is what `creates:` keys on, so a Renovate bump
+# actually reinstalls; a single unversioned path would make the pin INERT after the first
+# install — the file would say 1.15.0 and the node would keep running 1.14.7 forever, with
+# every check green. The stable path is a symlink and is what the unit executes, so the unit
+# file does not churn on every bump.
+k3s_host_coredns_dir: /usr/local/lib/coredns
+k3s_host_coredns_versioned_bin: "{{ k3s_host_coredns_dir }}/{{ k3s_host_coredns_version }}/coredns"
+k3s_host_coredns_bin: "{{ k3s_host_coredns_dir }}/coredns"
+k3s_host_coredns_conf: /etc/coredns/Corefile
+k3s_host_coredns_url: >-
+  https://github.com/coredns/coredns/releases/download/v{{ k3s_host_coredns_version }}/coredns_{{ k3s_host_coredns_version }}_linux_amd64.tgz
+
+# DELIBERATELY A PUBLIC NAME, not `pi.hole`. This gate protects the resolv.conf switch, so
+# what it must establish is "the forwarder answers", not "Pi-hole is up". Probing pi.hole
+# would fail the deploy whenever Pi-hole is down — precisely the case the fallback exists to
+# survive. Which upstream actually served the answer is the metric's job, not the gate's.
+k3s_host_dns_probe_name: github.com
+
 
 # Links whose DHCP lease must not contribute resolvers. The drop-in above pins the node's
 # DNS, but it does not stop systemd-resolved from ALSO listing the lease's servers per link

@@ -148,6 +148,19 @@
     },
     {
       "customType": "regex",
+      "description": "CoreDNS host-forwarder binary pin in roles/setup/k3s/defaults/main.yml. This is the resolver every DNS lookup on daniel-box passes through, installed from a GitHub release tarball rather than a package, so nothing else in this repo would notice it aging (silence != up-to-date, same failure mode as the SOPS pin above). extractVersionTemplate strips the tag's `v`, because the var holds a bare `1.14.7` while upstream tags are `v1.14.7` — without it the datasource's version space never matches what the matchString captures and the manager is inert. NO automerge (packageRule below): the paired k3s_host_coredns_sha256 is not derivable from the tag, so the PR is a SIGNAL and the operator finishes the hash from the release's coredns_<ver>_linux_amd64.tgz.sha256. Same manual-finish class as SOPS.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/setup/k3s/defaults/main\\.yml$/"
+      ],
+      "matchStrings": [
+        "k3s_host_coredns_version:\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "coredns/coredns",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
       "description": "k3s control-plane pin in roles/setup/k3s/defaults/main.yml. The k8s-images manager one directory over (roles/k8s/*/defaults) matches `_image:` keys only, so this file was invisible to every manager AND to the coverage tests — the same one-directory-short escape crowdsec_k8s_image made from group_vars (2026-08-15 review H5). This is the highest-stakes untracked pin in the tree: it is the Kubernetes version itself, where staleness means unpatched CVEs. NOTE the `+k3sN` suffix is semver build metadata and is IGNORED when comparing, so an upstream-version bump (v1.36.2 -> v1.37.0) is offered but a same-version k3s re-tag (+k3s1 -> +k3s2) is not; that is the axis worth having, and stating it beats shipping a manager whose blind spot is undocumented (the shellcheck-py failure mode recorded above).",
       "managerFilePatterns": [
         "/(^|/)ansible/roles/setup/k3s/defaults/main\\.yml$/"
@@ -393,6 +406,17 @@
         "longhorn/longhorn"
       ],
       "groupName": "k3s control plane (manual \u2014 plan the upgrade, mind Longhorn's version skips)",
+      "automerge": false
+    },
+    {
+      "description": "CoreDNS host forwarder (coredns/coredns) \u2014 daniel-box's own resolver, and the process /etc/resolv.conf names instead of an upstream. Its paired k3s_host_coredns_sha256 needs a manual bump from the release's .sha256 sidecar, so NO automerge (same manual-finish class as the SOPS binary). Own group, so it overrides the custom.regex non-major automerge rule above. A bad bump here costs the node all DNS at once, which is loud rather than silent \u2014 but it is still not something CI can prove.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "coredns/coredns"
+      ],
+      "groupName": "coredns host forwarder (manual \u2014 finish the sha256 from the release sidecar)",
       "automerge": false
     },
     {
