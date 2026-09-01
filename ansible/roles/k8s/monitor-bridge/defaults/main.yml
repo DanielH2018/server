@@ -21,6 +21,8 @@ monitor_bridge_modules:
   - checks_storage.py
   - checks_host.py
   - checks_cluster.py
+  - checks_service.py
+  - checks_notify.py
   - bridge_common.py
   - bridge_parsing.py
   - verdicts_cluster.py

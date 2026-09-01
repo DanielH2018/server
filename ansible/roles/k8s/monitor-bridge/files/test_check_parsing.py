@@ -12,7 +12,7 @@ import bridge_common
 import bridge_parsing
 import bridge_config
 import bridge_io
-import check
+import checks_service
 
 
 def test_env_file_reads_from_file_and_strips(monkeypatch, tmp_path):
@@ -110,7 +110,7 @@ def test_arr_queue_msg_is_sanitized(monkeypatch):
         ]
     }
     monkeypatch.setattr(bridge_io, "_get_json", lambda *a, **k: queue)
-    ok, msg = check.check_arr_queue()
+    ok, msg = checks_service.check_arr_queue()
     assert ok is False
     assert "@everyone" not in msg
     assert "(at)everyone" in msg

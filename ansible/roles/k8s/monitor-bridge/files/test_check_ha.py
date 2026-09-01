@@ -12,7 +12,7 @@ import pytest
 
 import bridge_config
 import bridge_io
-import check
+import checks_service
 
 _REPO = Path(__file__).resolve().parents[5]
 
@@ -51,7 +51,7 @@ def _ha_state(last_changed, state="2026-06-06 11:59:00"):
     ],
 )
 def test_ha_heartbeat_fresh(state, ok, must_contain):
-    result_ok, msg = check.ha_heartbeat_fresh(state, 300, now=HB_NOW)
+    result_ok, msg = checks_service.ha_heartbeat_fresh(state, 300, now=HB_NOW)
     assert result_ok is ok
     for s in must_contain:
         assert s in msg
@@ -83,7 +83,7 @@ def _ha_cycle(monkeypatch, age_s=600, raises=False, banned=0):
         monkeypatch.setattr(bridge_io, "_get_json", boom)
     else:
         monkeypatch.setattr(bridge_io, "_get_json", lambda *a, **k: _ha_payload(age_s))
-    return check.check_ha_heartbeat()
+    return checks_service.check_ha_heartbeat()
 
 
 def test_ha_heartbeat_single_stale_cycle_is_suppressed(monkeypatch):
@@ -122,7 +122,7 @@ def test_ha_heartbeat_unreachable_api_rides_grace(monkeypatch):
 
 
 def test_ha_ban_no_events_is_ok():
-    ok, msg = check.ha_ban_verdict(0, "1h")
+    ok, msg = checks_service.ha_ban_verdict(0, "1h")
     assert ok
     assert "no ip_ban events" in msg
 
@@ -131,12 +131,12 @@ def test_ha_ban_none_series_is_ok():
     # None and 0 are the same healthy answer: HA logs nothing when it bans nobody, so an empty
     # vector is what a healthy cluster looks like — unlike loki_ingestion_fresh, where silence
     # IS the fault.
-    ok, _ = check.ha_ban_verdict(None, "1h")
+    ok, _ = checks_service.ha_ban_verdict(None, "1h")
     assert ok
 
 
 def test_ha_ban_event_is_down():
-    ok, msg = check.ha_ban_verdict(1, "1h")
+    ok, msg = checks_service.ha_ban_verdict(1, "1h")
     assert not ok
     assert "ip_ban fired 1 time(s)" in msg
     assert "ip_bans.yaml" in msg
@@ -170,7 +170,7 @@ def test_ha_ban_arm_fails_open_when_loki_errors(monkeypatch):
     monkeypatch.setattr(bridge_config, "HA_URL", "http://home-assistant:8123")
     monkeypatch.setattr(bridge_config, "HA_TOKEN", "tok")
     monkeypatch.setattr(bridge_io, "_get_json", lambda *a, **k: _ha_payload(60))
-    ok, msg = check.check_ha_heartbeat()
+    ok, msg = checks_service.check_ha_heartbeat()
     assert ok
     assert "ip_ban arm unavailable" in msg
 
@@ -178,7 +178,7 @@ def test_ha_ban_arm_fails_open_when_loki_errors(monkeypatch):
 def test_ha_heartbeat_disabled_when_no_url_token(monkeypatch):
     monkeypatch.setattr(bridge_config, "HA_URL", "")
     monkeypatch.setattr(bridge_config, "HA_TOKEN", "")
-    ok, msg = check.check_ha_heartbeat()
+    ok, msg = checks_service.check_ha_heartbeat()
     assert ok
     assert "disabled" in msg
 
