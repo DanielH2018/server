@@ -842,17 +842,19 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
 
 ## Module layout — and the one rule that governs it
 
-`files/` holds thirteen runtime modules. `check.py` is the entrypoint the Deployment runs and owns
-the `CHECKS` registry and the run loop; `bridge_config.py` owns the env-derived config;
-`bridge_io.py` owns fetching and the Kuma push; the `checks_*` modules own one domain of
-`check_*` bodies each, mirroring the test file for that domain; the rest hold pure logic that
-takes its inputs as arguments. The split is in progress — check bodies not yet in a `checks_*`
-module are still in `check.py`. The design and the remaining slices are in
-`docs/superpowers/specs/2026-09-01-monitor-bridge-check-split-design.md`.
+`files/` holds fifteen runtime modules. `check.py` is the entrypoint the Deployment runs and owns
+the `CHECKS` registry, the gate sets and the run loop — nothing else. `bridge_config.py` owns
+the env-derived config; `bridge_io.py` owns fetching and the Kuma push; each `checks_*` module
+owns one domain of `check_*` bodies, mirroring the test file for that domain; the rest hold
+pure logic that takes its inputs as arguments. Design and history of the split:
+`docs/superpowers/specs/2026-09-01-monitor-bridge-check-split-design.md` (seven slices, all
+landed 2026-09-01, `check.py` from 3,732 lines to ~510).
 
 | module | holds |
 |---|---|
-| `check.py` | the `check_*` bodies not yet moved, `CHECKS`, the gate sets, the run loop |
+| `check.py` | `CHECKS`, the `*_DEPENDENT` gate sets, `STARTUP_GRACE`, `check_enabled`, `apply_startup_grace`, `_gate`, `run_once`, `main` |
+| `checks_service.py` | `check_n8n` with `_n8n_streaks`, `check_arr_queue`, `check_bazarr` with `bazarr_problems`, `check_prowlarr_indexers`, the gitops pair with `gitops_status` and `_parse_behind`, `check_etcd_restore_drill`, `check_ha_heartbeat` with `with_ha_ban` |
+| `checks_notify.py` | `check_discord` with `_discord_webhooks`, `email_backstop` with `_smtp_login_ok` and `_email_probe` |
 | `checks_logs.py` | `check_loki_ingestion`, `check_promtail_dropped`, `check_loki_reachable`, `with_log_errors` (the Loki arm `check_k8s_workloads` folds in) |
 | `checks_cluster.py` | the cAdvisor trio `check_restarts` / `check_oom` / `check_cpu_throttle` with `_cadvisor_blind`, `_cadvisor_streaks` and `_cpu_breach_streak`; `check_prometheus`, `check_targets_down`, `check_traefik_5xx`, `check_traefik_latency`, `check_k8s_workloads`, `check_cluster_targets`, `check_cluster_prometheus` |
 | `checks_host.py` | `check_disk`, `check_cert`, `check_mem` and the `_host_origin_shortfall` floor with `_host_origin_streaks`; `check_host_temp`, `check_scrutiny`, `check_ups`, `check_pi_pressure` with `with_pi_ports`, `check_speedtest` with `speedtest_verdict` |
@@ -866,10 +868,10 @@ module are still in `check.py`. The design and the remaining slices are in
 | `verdicts_host.py` | `ups_health`, the `scrutiny_*` family, `pi_pressure` |
 | `verdicts_service.py` | n8n streaks, `queue_warnings`, `indexers_down`, `gitops_alive`, the HA/Loki/Discord verdicts |
 
-`gitops_status` is the one verdict that stays in `check.py`, because it reads
-`GITOPS_BEHIND_MAX_S`; `gitops_alive` takes its threshold as an argument and moved. Its private
-helper `_parse_behind` sits beside `gitops_status` rather than with the other verdicts, so the
-only caller and the helper stay together.
+`gitops_status` is the one verdict that lives in a `checks_*` module rather than in
+`verdicts_service.py`, because it reads `cfg.GITOPS_BEHIND_MAX_S` itself; `gitops_alive` takes
+its threshold as an argument. Its private helper `_parse_behind` sits beside it, so the only
+caller and the helper stay together.
 
 **A test patches the module that READS the name, and a module reads a patched name qualified.**
 A function reads its globals from the module it is DEFINED in. So a test that stubs a threshold

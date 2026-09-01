@@ -15,6 +15,7 @@ import pytest
 import yaml
 
 import bridge_config
+import checks_service
 import check
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -44,7 +45,7 @@ def _stamp_body(age_days, mode="list-only"):
 
 def test_etcd_drill_passes_on_a_recent_stamp(tmp_path, monkeypatch):
     _stamp(tmp_path, monkeypatch, _stamp_body(1))
-    ok, msg = check.check_etcd_restore_drill()
+    ok, msg = checks_service.check_etcd_restore_drill()
     assert ok is True
     assert "1.0 days ago" in msg
 
@@ -52,7 +53,7 @@ def test_etcd_drill_passes_on_a_recent_stamp(tmp_path, monkeypatch):
 def test_etcd_drill_fails_when_it_has_never_run(tmp_path, monkeypatch):
     """The state most worth reporting, and the one `[[ -f $STAMP ]] && check_age` reports green."""
     monkeypatch.setattr(bridge_config, "ETCD_DRILL_STATE_DIR", str(tmp_path))
-    ok, msg = check.check_etcd_restore_drill()
+    ok, msg = checks_service.check_etcd_restore_drill()
     assert ok is False
     assert "has ever passed" in msg
 
@@ -64,21 +65,21 @@ def test_etcd_drill_fails_when_the_stamp_is_unreadable(tmp_path, monkeypatch):
     if os.geteuid() == 0:
         pytest.skip("root ignores the mode bits this asserts")
     _stamp(tmp_path, monkeypatch, _stamp_body(1), mode=0o000)
-    ok, msg = check.check_etcd_restore_drill()
+    ok, msg = checks_service.check_etcd_restore_drill()
     assert ok is False
     assert "unreadable" in msg
 
 
 def test_etcd_drill_fails_on_a_stale_stamp(tmp_path, monkeypatch):
     _stamp(tmp_path, monkeypatch, _stamp_body(9))
-    ok, msg = check.check_etcd_restore_drill()
+    ok, msg = checks_service.check_etcd_restore_drill()
     assert ok is False
     assert "9.0 days ago" in msg
 
 
 def test_etcd_drill_fails_on_an_unparseable_stamp(tmp_path, monkeypatch):
     _stamp(tmp_path, monkeypatch, "mode=list-only\nsnapshot=x.zip\n")
-    ok, msg = check.check_etcd_restore_drill()
+    ok, msg = checks_service.check_etcd_restore_drill()
     assert ok is False
     assert "epoch" in msg
 
@@ -88,7 +89,7 @@ def test_etcd_drill_never_accepts_the_full_stamp_as_coverage(tmp_path, monkeypat
     object-graph restore as proven when nothing on this host has ever proven it — the
     'one tier hiding behind another tier's evidence' shape."""
     _stamp(tmp_path, monkeypatch, _stamp_body(1, mode="full"), name="last-success-full")
-    ok, msg = check.check_etcd_restore_drill()
+    ok, msg = checks_service.check_etcd_restore_drill()
     assert ok is False, "a full-mode stamp must not satisfy the list-only reader"
     assert "has ever passed" in msg
 

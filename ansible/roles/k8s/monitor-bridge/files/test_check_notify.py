@@ -13,17 +13,17 @@ import pytest
 import bridge_config
 import bridge_io
 import bridge_parsing
-import check
+import checks_notify
 
 
 def test_discord_webhook_ok_200_is_up():
-    ok, msg = check.discord_webhook_ok(200, "Homelab Alerts")
+    ok, msg = checks_notify.discord_webhook_ok(200, "Homelab Alerts")
     assert ok
     assert "Homelab Alerts" in msg
 
 
 def test_discord_webhook_404_is_down():
-    ok, msg = check.discord_webhook_ok(404)
+    ok, msg = checks_notify.discord_webhook_ok(404)
     assert not ok
     assert "404" in msg
 
@@ -48,7 +48,7 @@ def _discord_cycle(monkeypatch, status=200, raises=None):
             raise urllib.error.HTTPError("u", status, "err", {}, None)
 
         monkeypatch.setattr(bridge_io, "_get_json", http_err)
-    return check.check_discord()
+    return checks_notify.check_discord()
 
 
 def test_discord_single_failure_is_suppressed(monkeypatch):
@@ -86,7 +86,7 @@ def test_discord_disabled_without_url(monkeypatch):
     monkeypatch.setattr(bridge_config, "DISCORD_WEBHOOK_URL", "")
     monkeypatch.setattr(bridge_config, "DISCORD_CROWDSEC_WEBHOOK_URL", "")
     monkeypatch.setattr(bridge_config, "DISCORD_GITOPS_WEBHOOK_URL", "")
-    ok, msg = check.check_discord()
+    ok, msg = checks_notify.check_discord()
     assert ok
     assert "disabled" in msg
 
@@ -109,7 +109,7 @@ def test_discord_verifies_all_configured_webhooks(monkeypatch):
     monkeypatch.setattr(
         bridge_io, "_get_json", lambda *a, **k: {"name": "Homelab Alerts"}
     )
-    ok, msg = check.check_discord()
+    ok, msg = checks_notify.check_discord()
     assert ok
     assert "Kuma" in msg and "CrowdSec" in msg and "GitOps/Renovate" in msg
 
@@ -134,8 +134,8 @@ def test_discord_gitops_webhook_failure_pages(monkeypatch):
         return {"name": "Homelab Alerts"}
 
     monkeypatch.setattr(bridge_io, "_get_json", get)
-    assert check.check_discord()[0]  # streak 1, suppressed
-    ok, msg = check.check_discord()  # streak 2, pages
+    assert checks_notify.check_discord()[0]  # streak 1, suppressed
+    ok, msg = checks_notify.check_discord()  # streak 2, pages
     assert not ok
     assert "GitOps/Renovate" in msg and "404" in msg
 
@@ -158,8 +158,8 @@ def test_discord_crowdsec_webhook_failure_pages(monkeypatch):
         return {"name": "Homelab Alerts"}
 
     monkeypatch.setattr(bridge_io, "_get_json", get)
-    assert check.check_discord()[0]  # streak 1, suppressed
-    ok, msg = check.check_discord()  # streak 2, pages
+    assert checks_notify.check_discord()[0]  # streak 1, suppressed
+    ok, msg = checks_notify.check_discord()  # streak 2, pages
     assert not ok
     assert "CrowdSec" in msg and "404" in msg
 
@@ -182,15 +182,15 @@ def test_discord_healthchecks_webhook_failure_pages(monkeypatch):
         return {"name": "Homelab Alerts"}
 
     monkeypatch.setattr(bridge_io, "_get_json", get)
-    assert check.check_discord()[0]  # streak 1, suppressed
-    ok, msg = check.check_discord()  # streak 2, pages
+    assert checks_notify.check_discord()[0]  # streak 1, suppressed
+    ok, msg = checks_notify.check_discord()  # streak 2, pages
     assert not ok
     assert "Healthchecks" in msg and "404" in msg
 
 
 def test_email_backstop_disabled_without_password(monkeypatch):
     monkeypatch.setattr(bridge_config, "SMTP_PASSWORD", "")
-    ok, msg = check.email_backstop()
+    ok, msg = checks_notify.email_backstop()
     assert ok
     assert "disabled" in msg
 
@@ -198,18 +198,20 @@ def test_email_backstop_disabled_without_password(monkeypatch):
 def test_email_backstop_caches_success_within_interval(monkeypatch):
     monkeypatch.setattr(bridge_config, "SMTP_PASSWORD", "app-pw")
     monkeypatch.setattr(bridge_config, "EMAIL_PROBE_INTERVAL_S", 3600)
-    monkeypatch.setattr(check, "_email_probe", {"ts": 0.0, "ok": True, "msg": ""})
+    monkeypatch.setattr(
+        checks_notify, "_email_probe", {"ts": 0.0, "ok": True, "msg": ""}
+    )
     calls = []
 
     def probe():
         calls.append(1)
         return True, "SMTP login ok"
 
-    monkeypatch.setattr(check, "_smtp_login_ok", probe)
-    assert check.email_backstop(now=10000.0)[0]  # stale ts -> probes
-    ok, msg = check.email_backstop(now=11800.0)  # +1800 < interval -> cached
+    monkeypatch.setattr(checks_notify, "_smtp_login_ok", probe)
+    assert checks_notify.email_backstop(now=10000.0)[0]  # stale ts -> probes
+    ok, msg = checks_notify.email_backstop(now=11800.0)  # +1800 < interval -> cached
     assert ok and len(calls) == 1 and "verified" in msg
-    check.email_backstop(now=13601.0)  # +3601 > interval -> re-probes
+    checks_notify.email_backstop(now=13601.0)  # +3601 > interval -> re-probes
     assert len(calls) == 2
 
 
@@ -217,17 +219,19 @@ def test_email_backstop_failure_reprobes_every_cycle(monkeypatch):
     # a failure is NOT cached (unlike a success), so recovery is caught next cycle, not 6h later
     monkeypatch.setattr(bridge_config, "SMTP_PASSWORD", "app-pw")
     monkeypatch.setattr(bridge_config, "EMAIL_PROBE_INTERVAL_S", 3600)
-    monkeypatch.setattr(check, "_email_probe", {"ts": 0.0, "ok": True, "msg": ""})
+    monkeypatch.setattr(
+        checks_notify, "_email_probe", {"ts": 0.0, "ok": True, "msg": ""}
+    )
     calls = []
 
     def boom():
         calls.append(1)
         raise RuntimeError("auth refused")
 
-    monkeypatch.setattr(check, "_smtp_login_ok", boom)
-    ok, msg = check.email_backstop(now=10000.0)
+    monkeypatch.setattr(checks_notify, "_smtp_login_ok", boom)
+    ok, msg = checks_notify.email_backstop(now=10000.0)
     assert not ok and "FAILED" in msg
-    ok, _ = check.email_backstop(
+    ok, _ = checks_notify.email_backstop(
         now=10001.0
     )  # 1s later, well within interval -> still re-probes
     assert not ok and len(calls) == 2
@@ -243,7 +247,9 @@ def test_check_discord_email_backstop_failure_pages(monkeypatch):
     monkeypatch.setattr(bridge_config, "DISCORD_ARR_WEBHOOK_URL", "")
     monkeypatch.setattr(bridge_config, "DISCORD_HEALTHCHECKS_WEBHOOK_URL", "")
     monkeypatch.setattr(bridge_config, "SMTP_PASSWORD", "app-pw")
-    monkeypatch.setattr(check, "_email_probe", {"ts": 0.0, "ok": True, "msg": ""})
+    monkeypatch.setattr(
+        checks_notify, "_email_probe", {"ts": 0.0, "ok": True, "msg": ""}
+    )
     monkeypatch.setattr(
         bridge_io, "_get_json", lambda *a, **k: {"name": "Homelab Alerts"}
     )
@@ -251,9 +257,9 @@ def test_check_discord_email_backstop_failure_pages(monkeypatch):
     def boom():
         raise RuntimeError("auth refused")
 
-    monkeypatch.setattr(check, "_smtp_login_ok", boom)
-    assert check.check_discord()[0]  # streak 1, suppressed
-    ok, msg = check.check_discord()  # streak 2, pages
+    monkeypatch.setattr(checks_notify, "_smtp_login_ok", boom)
+    assert checks_notify.check_discord()[0]  # streak 1, suppressed
+    ok, msg = checks_notify.check_discord()  # streak 2, pages
     assert not ok
     assert "email backstop" in msg
 
@@ -338,7 +344,7 @@ def test_get_json_attaches_the_error_body_to_httperror(monkeypatch):
             "http://kopia:51515/api/v1/sources", 403, "Forbidden", {}, io.BytesIO(body)
         )
 
-    monkeypatch.setattr(check.urllib.request, "urlopen", boom)
+    monkeypatch.setattr(urllib.request, "urlopen", boom)
     with pytest.raises(urllib.error.HTTPError) as ei:
         bridge_io._get_json("http://kopia:51515/api/v1/sources")
     # Same type, and .code intact: check_discord branches on it to tell a revoked webhook
@@ -352,7 +358,7 @@ def test_get_json_wraps_non_http_errors_without_leaking_the_url(monkeypatch):
     def boom(*_a, **_k):
         raise TimeoutError("timed out")
 
-    monkeypatch.setattr(check.urllib.request, "urlopen", boom)
+    monkeypatch.setattr(urllib.request, "urlopen", boom)
     url = "https://discord.com/api/webhooks/123/s3cr3t-token"
     with pytest.raises(RuntimeError) as ei:
         bridge_io._get_json(url)
