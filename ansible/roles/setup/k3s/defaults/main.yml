@@ -785,14 +785,31 @@ k3s_longhorn_nobackup_volumes:
   # backed up. Not a class change, because storageClassName is immutable once bound.
   - homelab/code-server-config
 
-# Slice-6 D8/A1: upstream resolvers the k3s node is pinned to. The node must NEVER resolve
-# through the in-cluster Pi-hole VIP — a cold cluster start needs DNS (image pulls, Longhorn,
-# MetalLB election) before that VIP exists. Before A1 the node happened to use the ISP's
-# DHCP-supplied resolvers, which was cold-boot-safe by accident; the resolved drop-in below
-# makes it configuration a router or lease change cannot quietly undo.
+# The nameserver lines this node's /etc/resolv.conf carries, IN ORDER. First entry wins on
+# every query; the rest are fallbacks. See templates/resolv.conf.j2 for why the order alone
+# is the whole mechanism.
+#
+# REVERSES SLICE-6 D8/A1 (2026-09-01). That change pinned the node to public resolvers only,
+# on the grounds that "the node must NEVER resolve through the in-cluster Pi-hole VIP — a cold
+# cluster start needs DNS before that VIP exists." The premise was right and the conclusion
+# was too strong: a fallback entry covers the cold start, and glibc re-tries the first server
+# on every query, so the node prefers Pi-hole without ever depending on it. Measured on
+# daniel-box's 2026-08-30 boot, the window the pin existed to protect is nearly empty — k3s
+# was active 20s in (ActiveEnterTimestamp=07:40:08), and there were ZERO image pulls and zero
+# name-resolution failures in the following 10 minutes, because a warm containerd store
+# resolves no registry names at boot. A REBUILT node with an empty image store is the real
+# case, and that runs k3s-bringup.yml by hand anyway.
 k3s_node_dns_upstreams:
+  - "{{ dns_k8s_vip }}"
   - 1.1.1.1
-  - 1.0.0.1
+
+# Seconds to wait for each nameserver, and how many rounds over the WHOLE list to make before
+# returning an error — `attempts` is rounds, not per-server retries (resolv.conf(5)). One
+# round at 2s is what daniel-server has shipped since 2026-08-10: a dead Pi-hole costs one
+# 2s timeout per lookup and then answers, rather than failing.
+k3s_node_dns_timeout: 2
+k3s_node_dns_attempts: 1
+k3s_node_dns_options: "timeout:{{ k3s_node_dns_timeout }} attempts:{{ k3s_node_dns_attempts }}"
 
 # Links whose DHCP lease must not contribute resolvers. The drop-in above pins the node's
 # DNS, but it does not stop systemd-resolved from ALSO listing the lease's servers per link
