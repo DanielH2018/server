@@ -1,28 +1,8 @@
+{% from 'pvc.yml.j2' import pvc with context %}
 ---
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: {{ pihole_k8s_claim }}
-  namespace: {{ k8s_namespace }}
-spec:
+{% call pvc(pihole_k8s_claim, pihole_k8s_storage_class, pihole_k8s_size) %}
   # Not seeded from the Docker copy — blocklist state is declared in the role defaults and
   # reconciled by tasks/main.yml; everything else in /etc/pihole regenerates (see defaults).
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: {{ pihole_k8s_storage_class }}
-  resources:
-    requests:
-      storage: {{ pihole_k8s_size }}
+{% endcall %}
 ---
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: {{ pihole_k8s_claim_2 }}
-  namespace: {{ k8s_namespace }}
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: {{ pihole_k8s_storage_class }}
-  resources:
-    requests:
-      storage: {{ pihole_k8s_size }}
+{{ pvc(pihole_k8s_claim_2, pihole_k8s_storage_class, pihole_k8s_size) }}

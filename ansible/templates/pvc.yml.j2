@@ -1,9 +1,21 @@
 {#
-  PersistentVolumeClaim for a k8s-hosted service — the plain RWO/longhorn-family body 4 roles'
-  pvc.yaml.j2 share (authelia, crowdsec, karakeep, loki-homelab). Each carries its own WHY for
-  the storage class / backup posture it picked, which stays at the call site (via `{% call %}`)
-  rather than being swallowed here — the whole point of these comments is that they differ role
-  to role.
+  PersistentVolumeClaim for a k8s-hosted service — the plain RWO/longhorn-family body that
+  authelia, crowdsec, loki-homelab, mosquitto, pihole (both claims), registry, valheim-stats and
+  wg-easy share. Each carries its own WHY for the storage class / backup posture it picked,
+  which stays at the call site (via `{% call %}`) rather than being swallowed here — the whole
+  point of these comments is that they differ role to role.
+
+  THE CALLER SLOT SITS BETWEEN `spec:` AND `accessModes:`, and that is what decides whether a
+  role can adopt this at all. pi-peer-backup and valheim are deliberately NOT converted: each
+  attaches a load-bearing comment to `storageClassName` — "Plain `longhorn` ON PURPOSE (not
+  -nobackup)" and "nobackup: every byte here is re-downloadable from Steam" — and this macro
+  can only place a comment above `accessModes:`. Converting them would move the reasoning off
+  the line that makes the trade-off, which is the one place it is worth having.
+
+  freshrss and zigbee2mqtt are excluded for the same reason as code-server below, and were
+  checked rather than assumed: each declares a claim in `k8s_autodeploy_snapshot_pvcs`
+  (freshrss-config, zigbee2mqtt-data) AND renders that claim in its own template, so each is a
+  role the textual guard actually checks. Converting either would leave it checking nothing.
 
   code-server's pvc-workspace.yaml.j2 has the identical body but is deliberately NOT converted:
   ansible/tests/_autodeploy.py's `_rendered_pvc_claims` (consumed by

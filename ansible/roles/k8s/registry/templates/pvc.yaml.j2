@@ -1,13 +1,3 @@
+{% from 'pvc.yml.j2' import pvc with context %}
 ---
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: {{ registry_k8s_claim }}
-  namespace: {{ k8s_namespace }}
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: {{ registry_k8s_storage_class }}
-  resources:
-    requests:
-      storage: {{ registry_k8s_size }}
+{{ pvc(registry_k8s_claim, registry_k8s_storage_class, registry_k8s_size) }}
