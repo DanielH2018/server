@@ -1,5 +1,5 @@
 ---
-# The SteamCMD install only. The config claim is created by k8s/seed-volume, which must own
+# The SteamCMD install only. The config claim is created by k8s/volume-claim, which must own
 # it — it renders and applies that PVC itself before the workload exists, so declaring it
 # here too would give two roles the same object.
 apiVersion: v1

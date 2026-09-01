@@ -9,7 +9,7 @@ unattended deploy.
 The direction of failure is the whole design. A role absent from the returned list is
 auto-deployable, so anything this filter cannot read with certainty must raise rather
 than quietly drop out. That is the defect the CSV this replaces was prone to: absence
-meant eligible, and two roles (seed-volume, image-builder) were eligible for months
+meant eligible, and two roles (volume-claim, image-builder) were eligible for months
 purely because nobody had typed them into the list.
 """
 
@@ -30,7 +30,7 @@ REASON = "k8s_autodeploy_reason"
 #
 # The invariant that makes this list safe: no role named here may pin an `_image:` var,
 # because pinning one is what makes a role Renovate-visible and therefore auto-deployable
-# at all. seed-volume is the near miss: it is included by other roles the same way, and until
+# at all. volume-claim is the near miss: it is included by other roles the same way, and until
 # 2026-09-01 it pinned seed_volume_image for the seed pod it rendered, which settled the
 # question outright. That pin went with the seeding. It still does NOT belong here, for the
 # other half of the rule above — it carries a defaults/main.yml and declares a stance, where a
@@ -43,7 +43,7 @@ def _check_shared_roles(roles_dir):
 
     A typo'd or stale member would otherwise exclude nothing (silently — sorted() over
     os.listdir() never notices a name that isn't there) and no test would catch it, which
-    is exactly the class of gap that left seed-volume and image-builder auto-deployable
+    is exactly the class of gap that left volume-claim and image-builder auto-deployable
     for months under the CSV this replaces. This checks defaults/main.yml only, because
     that is where this repo's Renovate manager reads image pins from.
     """

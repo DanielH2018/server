@@ -15,12 +15,12 @@
 - name: Create the terraria config volume claim
   tags: [deploy]
   ansible.builtin.include_role:
-    name: k8s/seed-volume
+    name: k8s/volume-claim
   vars:
-    seed_volume_service: terraria
-    seed_volume_claim: "{{ terraria_k8s_claim }}"
-    seed_volume_storage_class: "{{ terraria_k8s_storage_class }}"
-    seed_volume_size: "{{ terraria_k8s_size }}"
+    volume_claim_service: terraria
+    volume_claim_name: "{{ terraria_k8s_claim }}"
+    volume_claim_storage_class: "{{ terraria_k8s_storage_class }}"
+    volume_claim_size: "{{ terraria_k8s_size }}"
 
 - name: Deploy terraria to the cluster
   ansible.builtin.include_role:

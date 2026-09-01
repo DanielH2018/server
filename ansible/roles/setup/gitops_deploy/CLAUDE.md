@@ -272,7 +272,7 @@ stay).
     failed rollback, and the next deploy's seed pod mounts the same RWO claim.** If
     `k8s/volume-revert` stops partway (a wait exhausts, an API call fails) the volume can be left
     attached with `disableFrontend: true` and the workload at zero replicas — see
-    `k8s/volume-revert/CLAUDE.md`'s manual-recovery steps. `k8s/seed-volume` runs ahead of
+    `k8s/volume-revert/CLAUDE.md`'s manual-recovery steps. `k8s/volume-claim` runs ahead of
     `k8s/manifests` on every one of the 13 opted-in roles' NEXT deploy and mounts the same claim
     to seed it; whether that mount succeeds, hangs, or fails against a volume already attached in
     maintenance mode by a different (non-pod) attachment is untested — nothing in this repo

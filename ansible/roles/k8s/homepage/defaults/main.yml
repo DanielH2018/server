@@ -9,7 +9,7 @@ homepage_k8s_init_image: alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0b
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Stateless: RollingUpdate Deployment, no PVC — unlike freshrss/speedtest/zigbee2mqtt it carries
-# no seed-volume step, since all its state (services/widgets/bookmarks/CSS) is rendered
+# no volume-claim step, since all its state (services/widgets/bookmarks/CSS) is rendered
 # templates, not runtime data. readinessProbe present, image digest-pinned.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC (config is rendered templates, not runtime state), readinessProbe, digest-pinned image"  # noqa var-naming[no-role-prefix]

@@ -134,7 +134,7 @@ if [ -z "$TAGS" ]; then
   pr_json=$(gh pr view "$PR" --json files,changedFiles) || die "could not read PR files" 1
   # What a deploy tag cannot reach. deploy.yml is a containers_list loop, so a setup-plane
   # change needs initial_setup.yml and derives no tag at all — which land.sh used to report
-  # as nothing-to-deploy. A shared k8s role (manifests, seed-volume, …) has no entry in that
+  # as nothing-to-deploy. A shared k8s role (manifests, volume-claim, …) has no entry in that
   # list either, so it needs a full deploy. Computed whether or not tags were derived: a PR
   # can touch a deployable role AND one of those planes, and then the deploy succeeds while
   # half the change is unapplied, under a `settled` verdict.

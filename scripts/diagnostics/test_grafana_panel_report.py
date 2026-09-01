@@ -3,7 +3,7 @@
 
 Every rule gets one payload it must ACCEPT and one it must REJECT — a classifier that fired
 on everything and one that fired on nothing are indistinguishable from the passing side
-alone, which is how `seed-volume` shipped behind 16 green tests and then matched 0 of 25
+alone, which is how `volume-claim` shipped behind 16 green tests and then matched 0 of 25
 claims. These run in CI: they carry no `ui` marker and start no browser.
 
 The payloads are the real ones, sampled on 2026-08-30 through `ui_mcp.sh` against the live

@@ -4,12 +4,12 @@
 - name: Create the livesync data volume claim
   tags: [deploy]
   ansible.builtin.include_role:
-    name: k8s/seed-volume
+    name: k8s/volume-claim
   vars:
-    seed_volume_service: livesync
-    seed_volume_claim: "{{ livesync_k8s_claim }}"
-    seed_volume_storage_class: "{{ livesync_k8s_storage_class }}"
-    seed_volume_size: "{{ livesync_k8s_size }}"
+    volume_claim_service: livesync
+    volume_claim_name: "{{ livesync_k8s_claim }}"
+    volume_claim_storage_class: "{{ livesync_k8s_storage_class }}"
+    volume_claim_size: "{{ livesync_k8s_size }}"
 
 - name: Deploy livesync to the cluster
   ansible.builtin.include_role:

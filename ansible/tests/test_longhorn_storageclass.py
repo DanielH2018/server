@@ -180,7 +180,7 @@ def _declared_pvcs() -> set[str]:
     """Every `namespace/name` a k8s role gets a PersistentVolumeClaim for.
 
     Two sources, and both are needed. A few roles render their own PVC manifest, but most get
-    theirs from the shared `seed-volume` role via a `*_claim` var in their defaults — so a
+    theirs from the shared `volume-claim` role via a `*_claim` var in their defaults — so a
     collector that only reads rendered manifests finds 20 of the 29 routed volumes and its
     "missing" list is mostly noise.
 
@@ -202,12 +202,12 @@ def _declared_pvcs() -> set[str]:
             for key, value in values.items()
             if key.endswith("_claim") and isinstance(value, str) and "{{" not in value
         }
-    # A few roles pass the claim name to seed-volume as a literal rather than through a
+    # A few roles pass the claim name to volume-claim as a literal rather than through a
     # defaults var (terraria-stats), so the defaults sweep alone misses them.
     for tasks_file in K8S_ROLES.glob("*/tasks/*.yml"):
         for line in tasks_file.read_text().splitlines():
             stripped = line.strip()
-            if stripped.startswith("seed_volume_claim:") and "{{" not in stripped:
+            if stripped.startswith("volume_claim_name:") and "{{" not in stripped:
                 names.add(stripped.split(":", 1)[1].strip().strip("\"'"))
     return {f"{namespace}/{name}" for name in names}
 

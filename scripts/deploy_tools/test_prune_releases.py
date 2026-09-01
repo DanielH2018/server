@@ -4,7 +4,7 @@ The failure this protects against is total and silent: prune the directory `curr
 every /usr/local/bin symlink dangles at once, and the health crons that would have gone red are
 themselves the scripts that vanished. So every rule here is a `..._is_kept` / `..._is_pruned`
 pair. A guard observed only from the passing side is indistinguishable from one that fires on
-nothing, which this repo has paid for twice (seed-volume's short-circuit, image-smoke's bare-boot
+nothing, which this repo has paid for twice (volume-claim's short-circuit, image-smoke's bare-boot
 rule).
 
 Run: uv run pytest scripts/deploy_tools/test_prune_releases.py

@@ -2,7 +2,7 @@
 
 Every rule here is a `..._is_clean` / `..._is_flagged` pair. A check observed only from the
 passing side is indistinguishable from one that fires on nothing, and this repo has paid for
-that twice (seed-volume's short-circuit, image-smoke's bare-boot rule).
+that twice (volume-claim's short-circuit, image-smoke's bare-boot rule).
 
 Run: uv run pytest scripts/diagnostics/test_probe_releases.py
 """

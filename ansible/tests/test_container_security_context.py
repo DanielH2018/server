@@ -50,7 +50,7 @@ _PRIVILEGED = {
 # THE BLIND SPOT THIS PINS (2026-08-23): rendered_docs() filters on
 # validate_k8s_manifests.SKIP_ROLES — a list maintained for a DIFFERENT purpose, namely what the
 # manifest validator can render standalone. Coverage of this security guard was therefore a side
-# effect of someone else's list. seed-volume is on it, and seed-pod.yaml.j2 runs `runAsUser: 0`
+# effect of someone else's list. volume-claim is on it, and seed-pod.yaml.j2 runs `runAsUser: 0`
 # with no container securityContext at all, so every assertion in this file passed while that pod
 # was never examined. Pinning the exempt set turns a role joining it into a failure here instead
 # of a silent contraction; anything added below needs a justification and, if it renders a pod
@@ -60,7 +60,7 @@ _UNCOVERED_ROLES = {
     "manifests",
     # Per-deploy state, not a service manifest set. seed-pod.yaml.j2 IS a pod spec and is
     # deliberately not covered here; test_seed_pod_security_context.py owns it.
-    "seed-volume",
+    "volume-claim",
     # Builds images in-cluster; its Job carries reasoned Unconfined seccomp/AppArmor for
     # rootless BuildKit (build-job.yaml.j2). That reason covers only the two profiles, where
     # exemption here also waives uid, privileged, capabilities.add, hostPath and host

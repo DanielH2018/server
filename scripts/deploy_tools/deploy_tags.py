@@ -114,13 +114,13 @@ def split_shared_roles(
 
     A path-to-tag derivation reads a role DIRECTORY name, but only a role with a
     `containers_list` entry has a deploy tag. Eight roles under ansible/roles/k8s/ have no
-    entry — manifests, rollout-drain, seed-volume, volume-snapshot, volume-revert,
+    entry — manifests, rollout-drain, volume-claim, volume-snapshot, volume-revert,
     image-builder, longhorn-api, cronjob-gate — because other roles include them by literal
     name. Handing one to `--tags` poisons the WHOLE list: deploy.sh validates every tag and
     exits 2 on the first unknown one, so the valid services beside it are refused too.
 
     That is not hypothetical. PR #617 (2026-08-29) bumped digest pins in 22 deployable roles
-    alongside `roles/k8s/manifests/` and `roles/k8s/seed-volume/`; land.sh derived all 24
+    alongside `roles/k8s/manifests/` and `roles/k8s/volume-claim/`; land.sh derived all 24
     names, deploy.sh refused the list, and 22 services sat undeployed behind a green master.
 
     `deploy_logic.k8s_remediation` turns the shared half into an instruction that works.

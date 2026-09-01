@@ -6,11 +6,11 @@
 - name: Create the bazarr config volume claim
   tags: [deploy]
   ansible.builtin.include_role:
-    name: k8s/seed-volume
+    name: k8s/volume-claim
   vars:
-    seed_volume_service: bazarr
-    seed_volume_claim: "{{ bazarr_k8s_claim }}"
-    seed_volume_storage_class: "{{ bazarr_k8s_storage_class }}"
+    volume_claim_service: bazarr
+    volume_claim_name: "{{ bazarr_k8s_claim }}"
+    volume_claim_storage_class: "{{ bazarr_k8s_storage_class }}"
 
 - name: Deploy bazarr to the cluster
   ansible.builtin.include_role:

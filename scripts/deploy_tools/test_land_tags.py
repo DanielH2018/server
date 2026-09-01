@@ -235,7 +235,7 @@ def test_land_reports_a_setup_plane_pr_as_unfinished():
 
 
 # PR #617's real 32-path file list, read from `gh pr view 617 --json files` on 2026-08-29.
-# 22 of its role directories have a containers_list entry; `manifests` and `seed-volume` do
+# 22 of its role directories have a containers_list entry; `manifests` and `volume-claim` do
 # not, and naming either in --tags makes deploy.sh refuse the whole list.
 _PR_617_FILES = [
     "ansible/roles/k8s/artifacts/defaults/main.yml",
@@ -258,7 +258,7 @@ _PR_617_FILES = [
     "ansible/roles/k8s/qbittorrent/defaults/main.yml",
     "ansible/roles/k8s/registry/defaults/main.yml",
     "ansible/roles/k8s/scrutiny/defaults/main.yml",
-    "ansible/roles/k8s/seed-volume/defaults/main.yml",
+    "ansible/roles/k8s/volume-claim/defaults/main.yml",
     "ansible/roles/k8s/sonarr/defaults/main.yml",
     "ansible/roles/k8s/terraria-stats/defaults/main.yml",
     "ansible/roles/k8s/traefik/defaults/main.yml",
@@ -274,13 +274,13 @@ _PR_617_FILES = [
 
 
 def test_pr_617_derives_its_services_and_not_the_shared_roles():
-    """The measured failure. `manifests` and `seed-volume` have no containers_list entry, so
+    """The measured failure. `manifests` and `volume-claim` have no containers_list entry, so
     including them made deploy.sh exit 2 and refuse the 22 valid services beside them --
     land.sh printed nothing-to-deploy and 22 digest pins sat undeployed (2026-08-29)."""
     tags, source = land_tags.derive(_PR_617_FILES, changed_files=len(_PR_617_FILES))
     assert source == "pr"
     assert "manifests" not in tags
-    assert "seed-volume" not in tags
+    assert "volume-claim" not in tags
     assert len(tags) == 22
     assert {"sonarr", "jellyfin", "traefik", "n8n"} <= set(tags)
 
@@ -290,7 +290,7 @@ def test_pr_617_reports_the_shared_roles_as_owed_work():
     the setup-plane silence again: landed, unapplied, and nothing says so."""
     note = land_tags.plane_note(_PR_617_FILES)
     assert "manifests" in note
-    assert "seed-volume" in note
+    assert "volume-claim" in note
     assert "ansible/deploy.yml" in note, (
         "a full deploy is the only thing that applies them"
     )
@@ -325,7 +325,7 @@ def test_the_shared_roles_are_still_undeclared(monkeypatch):
     monkeypatch.undo()
     declared = land_tags.declared_tags()
     assert "manifests" not in declared
-    assert "seed-volume" not in declared
+    assert "volume-claim" not in declared
     assert "sonarr" in declared, (
         "the reject half: a lookup returning nothing would pass"
     )

@@ -24,7 +24,7 @@ spec:
         netpol-baseline: enforced
     spec:
       enableServiceLinks: false
-      # No fsGroup: seed-volume restores ownership with `tar -p --numeric-owner`, the LSIO image
+      # No fsGroup: volume-claim restores ownership with `tar -p --numeric-owner`, the LSIO image
       # chowns /config itself on startup, and an fsGroup here would make the kubelet recursively
       # chown the 19 G media volume on every mount.
       automountServiceAccountToken: false

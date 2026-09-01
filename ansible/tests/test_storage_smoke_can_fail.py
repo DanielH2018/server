@@ -10,7 +10,7 @@ Drop the `until` and the task passes on a Pending PVC. Drop the assert and an ex
 difference between "Longhorn cannot provision" and "the PVC never appeared". Either edit
 reads as a tidy-up.
 
-This repo has paid for a check that was only ever observed passing twice — seed-volume's
+This repo has paid for a check that was only ever observed passing twice — volume-claim's
 short-circuit fired for 0 of 25 claims behind 16 green tests, and image-smoke's bare-boot rule
 caught nothing across 11 failures. So the rule is that a new check ships with a proof it can
 go red. For an Ansible task file against a live cluster the red-proof cannot be a unit test of

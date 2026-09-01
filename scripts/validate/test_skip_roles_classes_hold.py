@@ -4,7 +4,7 @@
 A role in SKIP_ROLES is never rendered and never parsed as YAML by the manifest validator, so
 an entry whose stated reason has stopped being true is an unvalidated role that reads as a
 deliberate decision. The set was a single literal list until 2026-08-29, and by then two of its
-eight entries — seed-volume and image-builder — carried manifest templates while sitting beside
+eight entries — volume-claim and image-builder — carried manifest templates while sitting beside
 six that carried none, with nothing distinguishing the two cases mechanically.
 
 The classes rot in OPPOSITE directions, which is why each gets its own assertion:

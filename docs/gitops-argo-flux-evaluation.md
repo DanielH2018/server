@@ -61,7 +61,7 @@ prize — it's most of the plane:
   after, and queues a rollout when a mutable tag's digest moved. A controller reconciling a
   Deployment whose spec did not change has no way to notice a rebuilt image. Roles that build
   rather than pull (n8n, n8n-runners, code-server) stay on the Ansible path.
-- `roles/k8s/seed-volume` — it mutates PVC contents, not API objects.
+- `roles/k8s/volume-claim` — it mutates PVC contents, not API objects.
 
 ---
 
@@ -76,7 +76,7 @@ Ordered by what you'd actually gain first.
 | `kubectl apply -f dir/` leaves orphaned live objects; `manifest-prune-check.sh` cron flags them by hand | `prune: true` — inventory-based GC | The retirement becomes complete. Removing a manifest deletes the object. Retires the cron and the recorded claude-otel-ingest resurrection class. |
 | Stale Secret keys survive an apply; `verify_secret_keys.yml` reconciles them explicitly | Same inventory GC | Retires a task written against a `kubectl apply` limitation that Flux does not share. |
 | 59-minute full deploy, 83% of it fixed pauses and serial rollout waits | Independent controllers reconciling in parallel, each `Kustomization` on its own interval | The 1561s of `pause` and the batched rollout queue exist because Ansible is serial. Flux is not. |
-| Order enforced by hand-position in `containers_list` (no toposort; traefik CRDs before IngressRoutes, seed-volume before its 25 dependents) | `dependsOn` between Kustomizations | Declared, not positional. A misordered list entry stops being a silent failure mode. |
+| Order enforced by hand-position in `containers_list` (no toposort; traefik CRDs before IngressRoutes, volume-claim before its 25 dependents) | `dependsOn` between Kustomizations | Declared, not positional. A misordered list entry stops being a silent failure mode. |
 | Per-role auto-deploy opt-out: `k8s_autodeploy` declarations, a derived denylist, a stale-denylist cross-check, and a disarm path (`filter_plugins/k8s_autodeploy.py`, 170 lines, plus its half of `deploy_logic.py`) | `spec.suspend: true` on that service's Kustomization | The whole "config on the host is behind origin" hazard disappears, because there is no rendered config on the host to be behind. |
 | Nothing detects live drift between deploys | Continuous drift detection and correction | New capability. Today a hand-run `kubectl patch` survives until the next deploy of that role. |
 | `REQUIRE_CI` gate: an unauthenticated check-runs poll, fail-closed handling, per-SHA alert throttling | CI *is* the renderer — a red run produces no new commit on the deploy branch | The gate becomes structural instead of a poll. This is the cleanest single retirement in the list. |
@@ -155,7 +155,7 @@ watch what happens — that is the rollback question answered empirically rather
 one gate that has caught a real fault the controller cannot see.
 
 **Slice 5 — ordering.** A service with a real dependency (an IngressRoute behind traefik's
-CRDs, or something behind seed-volume) expressed as `dependsOn`. This is where you find out
+CRDs, or something behind volume-claim) expressed as `dependsOn`. This is where you find out
 whether the graph is expressible.
 
 **Slice 6 — widen, or stop.** Decide from slices 3-5 whether the remaining ~35 eligible
@@ -226,7 +226,7 @@ Derived from the templates themselves — conditionals, loops, lookups, and whet
 |---|---|---|---|
 | **A — port now** | 14 | `autofix-bridge` `cloudflare-ddns` `dri-device-plugin` `media-volume` `monitor-bridge` `mosquitto` `n8n-images` `node-exporter` `nut` `registry` `terraria` `terraria-stats` `valheim` `valheim-stats` | Pure `{{ var }}`, and the inventory entry carries neither `hostname` nor `port`. No second source of truth is created. |
 | **B — port, accepting one duplicate** | 18 | `bazarr` `bento-pdf` `code-server` `homelab-mcp` `ical-proxy` `jellyfin` `littlelink` `longhorn-ui` `n8n` `peanut` `prowlarr` `qbittorrent` `radarr` `scrutiny` `sonarr` `speedtest` `tdarr` `wg-easy` | Also pure substitution, but the port or hostname now lives in two places. Needs a CI check asserting the manifest agrees with `containers_list`. |
-| **C — needs Kustomize features** | 11 | `authelia` `claude-otel` `freshrss` `headlamp` `healthchecks` `karakeep` `loki-homelab` `pi-peer-backup` `pihole` `seed-volume` `traefik` | Conditionals, loops, or `lookup('file')`. The file lookups map cleanly onto `configMapGenerator`; the loops over static lists get unrolled. Judge one before committing to the tier. |
+| **C — needs Kustomize features** | 11 | `authelia` `claude-otel` `freshrss` `headlamp` `healthchecks` `karakeep` `loki-homelab` `pi-peer-backup` `pihole` `volume-claim` `traefik` | Conditionals, loops, or `lookup('file')`. The file lookups map cleanly onto `configMapGenerator`; the loops over static lists get unrolled. Judge one before committing to the tier. |
 | **D — stays Jinja** | 11 | `artifacts` `configarr` `crowdsec` `home-assistant` `homepage` `image-builder` `janitorr` `livesync` `netpol-baseline` `uptime-kuma` `zigbee2mqtt` | Generators and templated app config. `netpol-baseline` holds 26 of the repo's 38 conditionals and 50 of its 121 filters across 29 files; `uptime-kuma` holds 131 substitutions of two variables. These are programs that emit manifests, not manifests. They should never be ported. |
 
 Tier D is a third of the roles and most of the complexity, and naming it as permanent is what

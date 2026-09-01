@@ -1,6 +1,6 @@
 ---
-# Only rendered when `freshrss_k8s_manage_seed` is false. On a cluster that seeds, the PVC is
-# created by k8s/seed-volume from its own pvc.yaml.j2 — the shape below deliberately matches
+# Only rendered when `freshrss_k8s_manage_claim` is false. On a cluster that seeds, the PVC is
+# created by k8s/volume-claim from its own pvc.yaml.j2 — the shape below deliberately matches
 # it, because the two are the SAME claim under the same name and a mismatch in storage class
 # or size would be a silent difference between clusters rather than an error.
 #

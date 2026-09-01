@@ -6,11 +6,11 @@
 
 - name: Seed the stats DB from the Docker copy
   ansible.builtin.include_role:
-    name: k8s/seed-volume
+    name: k8s/volume-claim
   vars:
-    seed_volume_service: terraria-stats
-    seed_volume_claim: terraria-stats-data
-    seed_volume_size: "{{ terraria_stats_k8s_pvc_size }}"
+    volume_claim_service: terraria-stats
+    volume_claim_name: terraria-stats-data
+    volume_claim_size: "{{ terraria_stats_k8s_pvc_size }}"
 
 - name: Create the staging directory
   tags: [config]

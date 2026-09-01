@@ -27,7 +27,7 @@ _K8S_ROLES = _REPO / "ansible/roles/k8s"
 # Not a workload role — the shared include every other role calls. The invariant: no role in
 # _SHARED may pin an `_image:` var, because that's what makes a role Renovate-visible and
 # therefore auto-deployable in the first place. Both here have no defaults/main.yml at all, so
-# neither pins one — that's the supporting fact, not the rule. seed-volume pins
+# neither pins one — that's the supporting fact, not the rule. volume-claim pins
 # seed_volume_image and does NOT belong here; it's denylisted instead and evaluated by every
 # guard below like any other role.
 _SHARED = {"manifests", "rollout-drain"}
@@ -765,15 +765,15 @@ def _declares_autodeploy(role: Path) -> bool:
 # (`grep -rl PersistentVolumeClaim ansible/roles/k8s/{home-assistant,sonarr,radarr,jellyfin,
 # qbittorrent,bazarr,prowlarr,freshrss,livesync,speedtest,tdarr,code-server}`): only
 # code-server/templates/pvc-workspace.yaml.j2 matches. Eleven of the thirteen roles delegate PVC
-# creation entirely to the shared `k8s/seed-volume` role (`include_role: k8s/seed-volume`,
-# `vars: seed_volume_claim: "{{ <role>_k8s_claim }}"`) and render no PersistentVolumeClaim
+# creation entirely to the shared `k8s/volume-claim` role (`include_role: k8s/volume-claim`,
+# `vars: volume_claim_name: "{{ <role>_k8s_claim }}"`) and render no PersistentVolumeClaim
 # document of their own at all. The literal recipe would find an empty rendered set for those
 # eleven and fail every one of their correct declarations — not vacuous, wrong. And the two
 # roles that DO render their own PVC (zigbee2mqtt, code-server's workspace claim) still write
 # `metadata.name: {{ <role>_k8s_claim }}`, a Jinja reference, not a literal — so even those two
 # need the same resolution step. `_rendered_pvc_claims` below is the adapted version: it reads
-# both sources (a role's own PVC template AND a `seed_volume_claim` var on a live
-# `k8s/seed-volume` include) and resolves the single-var-reference shape both use through the
+# both sources (a role's own PVC template AND a `volume_claim_name` var on a live
+# `k8s/volume-claim` include) and resolves the single-var-reference shape both use through the
 # role's own defaults/main.yml. This is a finding about the brief, not about any role's claim
 # name — every claim in the table was independently verified against `kubectl -n homelab get
 # pvc` on 2026-08-21 and all fourteen are live.
@@ -865,7 +865,7 @@ def _rendered_pvc_claims(role: Path) -> tuple[set[str], list[str]]:
 
     1. A `kind: PersistentVolumeClaim` document in the role's own `templates/*.j2` —
        zigbee2mqtt's data claim and code-server's workspace claim are the only two.
-    2. A `vars: seed_volume_claim: ...` on a task that includes `k8s/seed-volume` — how the
+    2. A `vars: volume_claim_name: ...` on a task that includes `k8s/volume-claim` — how the
        other twelve claims are actually created. Read through `_live_tasks`, the same walker
        `_batch_gated_names` uses, so a commented-out or `when: false`-gated include credits
        nothing, the same "argument-against read as the thing itself" trap this file's other
@@ -885,8 +885,8 @@ def _rendered_pvc_claims(role: Path) -> tuple[set[str], list[str]]:
 
     for task in _live_tasks(role):
         include = task.get("ansible.builtin.include_role")
-        if isinstance(include, dict) and include.get("name") == "k8s/seed-volume":
-            claim = (task.get("vars") or {}).get("seed_volume_claim")
+        if isinstance(include, dict) and include.get("name") == "k8s/volume-claim":
+            claim = (task.get("vars") or {}).get("volume_claim_name")
             if isinstance(claim, str):
                 raw.append(claim)
 
@@ -942,7 +942,7 @@ def _migrating_state(role: Path) -> bool:
     is non-empty, so the guard bites instead of matching an empty loop.
 
     Almost every PVC `_rendered_pvc_claims` can find in this repo hardcodes
-    `accessModes: [ReadWriteOnce]` (both direct templates and k8s/seed-volume's shared one), so a
+    `accessModes: [ReadWriteOnce]` (both direct templates and k8s/volume-claim's shared one), so a
     rendered claim existing at all is normally sufficient without a separate accessModes read.
     The one exception: `k8s/media-volume`'s own `pvc.yaml.j2` is `ReadWriteMany`. It does not
     corrupt this predicate today — `media-volume` itself renders no Recreate Deployment, so
@@ -961,7 +961,7 @@ def _migrating_state(role: Path) -> bool:
 # therefore cannot revert.
 #
 # `_rendered_pvc_claims` reads only what a role CAUSES to exist — a PVC document in its own
-# templates, or a `k8s/seed-volume` include. `media-data` is rendered by `k8s/media-volume`, so
+# templates, or a `k8s/volume-claim` include. `media-data` is rendered by `k8s/media-volume`, so
 # every *arr role mounting it is invisible to that reader. tdarr's promotion was caught by a
 # human audit on 2026-08-22, not by a test; sonarr/radarr/bazarr/jellyfin were weighed and kept.
 # The gap this closes is the NEXT role added with such a mount, promoted with nobody asked.

@@ -24,7 +24,7 @@ spec:
         netpol-baseline: enforced
     spec:
       enableServiceLinks: false
-      # No fsGroup: seed-volume restores the source's ownership with `tar -p --numeric-owner`,
+      # No fsGroup: volume-claim restores the source's ownership with `tar -p --numeric-owner`,
       # and this LSIO image chowns /config to PUID/PGID itself on startup.
       automountServiceAccountToken: false
       priorityClassName: homelab-standard

@@ -10,22 +10,22 @@
 - name: Seed the tdarr server database
   tags: [deploy]
   ansible.builtin.include_role:
-    name: k8s/seed-volume
+    name: k8s/volume-claim
   vars:
-    seed_volume_service: tdarr
-    seed_volume_claim: "{{ tdarr_k8s_server_claim }}"
-    seed_volume_storage_class: "{{ tdarr_k8s_storage_class }}"
-    seed_volume_size: "{{ tdarr_k8s_server_size }}"
+    volume_claim_service: tdarr
+    volume_claim_name: "{{ tdarr_k8s_server_claim }}"
+    volume_claim_storage_class: "{{ tdarr_k8s_storage_class }}"
+    volume_claim_size: "{{ tdarr_k8s_server_size }}"
 
 - name: Seed the tdarr flow and plugin configs
   tags: [deploy]
   ansible.builtin.include_role:
-    name: k8s/seed-volume
+    name: k8s/volume-claim
   vars:
-    seed_volume_service: tdarr
-    seed_volume_claim: "{{ tdarr_k8s_configs_claim }}"
-    seed_volume_storage_class: "{{ tdarr_k8s_storage_class }}"
-    seed_volume_size: "{{ tdarr_k8s_configs_size }}"
+    volume_claim_service: tdarr
+    volume_claim_name: "{{ tdarr_k8s_configs_claim }}"
+    volume_claim_storage_class: "{{ tdarr_k8s_storage_class }}"
+    volume_claim_size: "{{ tdarr_k8s_configs_size }}"
 
 - name: Deploy tdarr to the cluster
   ansible.builtin.include_role:

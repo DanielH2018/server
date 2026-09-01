@@ -241,7 +241,7 @@ drill got a `500` reverting a plainly detached volume for the same reason.
 **Ruling from slice 7a task 2: a detached claim does not fail the deploy.** Two realistic ways a
 `Recreate` + RWO volume is detached at snapshot time, and failing the deploy would block a
 legitimate action in both: an operator deliberately scaled the service to zero, or this is the
-service's first-ever deploy (all 13 roles run `k8s/seed-volume` first, which deletes its seed pod
+service's first-ever deploy (all 13 roles run `k8s/volume-claim` first, which deletes its seed pod
 with `--wait=false`, and no Deployment has ever attached the volume yet — so a brand-new empty
 volume is legitimately detached).
 
@@ -290,8 +290,8 @@ Measured by the task-6 drill, 2026-08-21, on `speedtest` / `speedtest-config` (1
 `longhorn-nobackup`, Longhorn v1.12.1). Two independent reasons, either of which alone is
 enough:
 
-**1. `k8s/seed-volume` attaches the volume first.** All 13 roles that declare
-`k8s_autodeploy_snapshot_pvcs` also include `k8s/seed-volume`, which runs before `k8s/manifests`
+**1. `k8s/volume-claim` attaches the volume first.** All 13 roles that declare
+`k8s_autodeploy_snapshot_pvcs` also include `k8s/volume-claim`, which runs before `k8s/manifests`
 and therefore before this role. It starts a seed pod that MOUNTS the claim, and mounting attaches
 the Longhorn volume. The drill scaled `speedtest` to zero, confirmed the volume reached
 `detached`, then ran a real deploy — and this role still took the ordinary attached path,
@@ -299,7 +299,7 @@ because the seed pod had attached the volume 11s earlier. So on the deploy path 
 actually runs on, the volume is never detached when it looks.
 
 **2. Longhorn snapshotted the detached volume anyway.** Invoked directly against a genuinely
-detached volume — the same include `k8s/manifests` makes, only without seed-volume ahead of it —
+detached volume — the same include `k8s/manifests` makes, only without volume-claim ahead of it —
 the ordinary `apply` + wait path SUCCEEDED in 10.8s. `volume_snapshot_detached` came out
 `false`, so the maintenance-mode attach never fired. The resulting Snapshot CR is a real
 recovery point, not an empty marker: `size=10436608`, `children={"volume-head":true}`, no error,
@@ -361,7 +361,7 @@ because the one call site that exists already keeps this role from starting unde
 
 This role is **not** in `k8s_dry_run_unsupported`, and should not be added. That refusal keys on
 `ansible_run_tags`, so it only reaches roles an operator names on the command line — a role
-reached as a dependency is invisible to it. `seed-volume`, `image-builder` and `cronjob-gate` are
+reached as a dependency is invisible to it. `volume-claim`, `image-builder` and `cronjob-gate` are
 all in the same position and are guarded internally instead.
 
 ## Reverting: automated via k8s/volume-revert

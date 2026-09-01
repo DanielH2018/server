@@ -335,7 +335,7 @@ k8s_no_mutate: "{{ ansible_check_mode or (k8s_dry_run | bool) }}"
 # Roles that mutate the cluster OUTSIDE roles/k8s/manifests and are therefore not covered by
 # the flag — sidecar ConfigMaps built with `kubectl create`, netpol-probe Jobs deleted and
 # recreated, `exec -i` piping config into a live pod, image builds pushed to the registry,
-# seed-volume scaling Deployments to zero. Dry-running these would half-apply: the manifest
+# volume-claim scaling Deployments to zero. Dry-running these would half-apply: the manifest
 # apply is suppressed while the side-car mutation still fires.
 #
 # deploy.yml asserts against this list and REFUSES the run rather than half-applying.
@@ -345,7 +345,7 @@ k8s_no_mutate: "{{ ansible_check_mode or (k8s_dry_run | bool) }}"
 # The refusal keys on `ansible_run_tags`, so it only reaches roles the operator NAMES. That
 # is sound for every role below because none is reachable as a dependency — verified by
 # test_k8s_dry_run.py, since the k8s roles carry no meta/main.yml and include one another
-# only by literal name. `seed-volume`, `image-builder` and `cronjob-gate` ARE reachable that
+# only by literal name. `volume-claim`, `image-builder` and `cronjob-gate` ARE reachable that
 # way, which is why they are guarded internally on k8s_no_mutate instead of listed here.
 k8s_dry_run_unsupported:
   - autofix-bridge

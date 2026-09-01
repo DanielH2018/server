@@ -20,7 +20,7 @@ turning a comment into an executable check.
 
 A fourth then slipped past THIS FILE, because the check was one character class too narrow.
 shlex strips backslashes as readily as it strips double quotes, and `\.` is how a jsonpath
-escapes a dot that belongs to an annotation KEY. k8s/seed-volume's short-circuit shipped with
+escapes a dot that belongs to an annotation KEY. k8s/volume-claim's short-circuit shipped with
 a bare one, read empty on every claim across two full deploys, and cost nothing but the saving
 it was written to deliver. The double-quote form at least fails loudly; the backslash form
 returns empty with rc 0 and looks exactly like "the annotation is not set".
@@ -125,7 +125,7 @@ def test_no_unquoted_double_quoted_jsonpath():
 def test_no_unquoted_backslash_escaped_jsonpath():
     """The silent half of the same trap — no error, just an empty result forever.
 
-    Caught in production rather than by this file: k8s/seed-volume's short-circuit read a
+    Caught in production rather than by this file: k8s/volume-claim's short-circuit read a
     `homelab.daniel-hunter.com/seeded` annotation through a bare `\\.`-escaped jsonpath, and
     read empty on all 25 claims across two full deploys while the annotation was present on
     every PVC. The whole optimisation was inert and every check stayed green.

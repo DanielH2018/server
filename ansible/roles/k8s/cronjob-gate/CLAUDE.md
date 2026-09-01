@@ -158,7 +158,7 @@ timeout budget and then failed.
 
 That list makes `deploy.yml` refuse a dry run rather than half-apply, but the refusal keys on
 `ansible_run_tags` — so it only ever reaches roles the operator NAMES on the command line. A
-shared role reached as a dependency is invisible to it. `seed-volume` and `image-builder` are in
+shared role reached as a dependency is invisible to it. `volume-claim` and `image-builder` are in
 exactly this position and are guarded internally on `k8s_no_mutate` instead of listed; this role
 is the same shape.
 

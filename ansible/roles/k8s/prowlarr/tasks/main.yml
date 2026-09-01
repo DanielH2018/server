@@ -5,12 +5,12 @@
 - name: Create the prowlarr config volume claim
   tags: [deploy]
   ansible.builtin.include_role:
-    name: k8s/seed-volume
+    name: k8s/volume-claim
   vars:
-    seed_volume_service: prowlarr
-    seed_volume_claim: "{{ prowlarr_k8s_claim }}"
-    seed_volume_storage_class: "{{ prowlarr_k8s_storage_class }}"
-    seed_volume_size: "{{ prowlarr_k8s_size }}"
+    volume_claim_service: prowlarr
+    volume_claim_name: "{{ prowlarr_k8s_claim }}"
+    volume_claim_storage_class: "{{ prowlarr_k8s_storage_class }}"
+    volume_claim_size: "{{ prowlarr_k8s_size }}"
 
 # flaresolverr's volume is NOT seeded. It is a browser profile cache that regenerates on first
 # use, which is also why its class is longhorn-nobackup — copying it would spend a migration

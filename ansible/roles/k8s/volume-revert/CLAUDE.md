@@ -84,9 +84,9 @@ Per claim, in this order:
 7. **`POST ?action=snapshotRevert {name}`**, demanding HTTP 200.
 8. **`POST ?action=detach {}`, then wait for `detached`.**
 There was a ninth step until 2026-09-01: stripping the PVC's
-`homelab.daniel-hunter.com/seeded` annotation. It existed to reverse `k8s/seed-volume`'s
+`homelab.daniel-hunter.com/seeded` annotation. It existed to reverse `k8s/volume-claim`'s
 short-circuit, which skipped the seed pod cycle whenever that key was present — a claim about
-the volume's contents that step 7 replaces wholesale. `k8s/seed-volume` stopped seeding when
+the volume's contents that step 7 replaces wholesale. `k8s/volume-claim` stopped seeding when
 Docker's bind-mount sources ceased to exist, so nothing sets or reads that key any more and the
 reversal had nothing left to reverse. Removed with the forward state rather than left behind:
 a reverse-state task for a mechanism that no longer exists reads as a live invariant.
@@ -182,7 +182,7 @@ moved on is not what the operator thinks they are doing.
 
 It mutates outside `roles/k8s/manifests`, which is normally what puts a role on that list. The
 list keys on `ansible_run_tags`, so it only reaches roles an operator names on the command line
-— a role reached as a dependency is invisible to it. `seed-volume`, `image-builder`,
+— a role reached as a dependency is invisible to it. `volume-claim`, `image-builder`,
 `cronjob-gate` and `volume-snapshot` are all in the same position and guard themselves
 internally instead. This role does the same: every mutating task and every wait carries
 `when: not (k8s_no_mutate | bool)`, which is `ansible_check_mode or (k8s_dry_run | bool)`.

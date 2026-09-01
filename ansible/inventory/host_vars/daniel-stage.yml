@@ -216,8 +216,8 @@ traefik_k8s_watched_namespaces:
 # No seeding: `freshrss_k8s_source_path` is a path on daniel-server that Docker's removal
 # took with it, so a fresh PVC here would fail the copy. FreshRSS runs its own first-boot
 # setup against the empty volume instead, and freshrss/templates/pvc.yaml.j2 creates the
-# claim that seed-volume would otherwise have created.
-freshrss_k8s_manage_seed: false
+# claim that volume-claim would otherwise have created.
+freshrss_k8s_manage_claim: false
 
 # No pre-apply Longhorn snapshots on this cluster. HOST-WIDE, not per role: k8s/manifests
 # gates the k8s/volume-snapshot include on this list being non-empty, and an empty list here

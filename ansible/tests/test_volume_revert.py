@@ -448,7 +448,7 @@ def test_every_mutation_is_guarded_on_k8s_no_mutate() -> None:
 
       * seven by this census — the scale-down, the three waits and the three API calls. It was
         eight until 2026-09-01, when the seeded-annotation strip went: it paired with
-        k8s/seed-volume's short-circuit, and that short-circuit no longer exists;
+        k8s/volume-claim's short-circuit, and that short-circuit no longer exists;
       * one by `test_nothing_unguarded_reads_a_guarded_tasks_output` — the frontend assert,
         caught through its read of `volume_revert_attached` rather than as a mutation;
       * one by two dedicated tests — `Fail when no snapshot matches this deploy`, which is a
@@ -601,7 +601,7 @@ def test_the_validator_skips_a_role_with_no_manifests() -> None:
 def test_the_role_is_absent_from_the_dry_run_refusal_list() -> None:
     """`k8s_dry_run_unsupported` keys on `ansible_run_tags` and cannot see a dependency-reached
     role, so listing this one would buy nothing. It guards itself on `k8s_no_mutate` instead —
-    the choice seed-volume, image-builder, cronjob-gate and volume-snapshot all make."""
+    the choice volume-claim, image-builder, cronjob-gate and volume-snapshot all make."""
     listed = yaml.safe_load(
         (_REPO / "ansible/inventory/group_vars/all.yml").read_text()
     )["k8s_dry_run_unsupported"]

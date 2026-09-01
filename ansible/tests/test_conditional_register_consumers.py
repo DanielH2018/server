@@ -104,7 +104,7 @@ def _lazily_guarded(
     and this consumer are reachable under exactly the same condition.
 
     Without this, the check demands a `| default()` on the else branch. That is not a tidier
-    spelling of the same thing: k8s/seed-volume measured it, and defaulting there renders the
+    spelling of the same thing: k8s/volume-claim measured it, and defaulting there renders the
     whole expression True and would tar a long-gone source over all 25 live volumes. The
     absence of a default in that branch is load-bearing, so the check has to understand the
     laziness rather than ask for it to be papered over.
@@ -236,7 +236,7 @@ def test_the_check_finds_the_claude_otel_shape(tmp_path: Path) -> None:
 
 
 def test_the_check_accepts_a_lazy_conditional_guard(tmp_path: Path) -> None:
-    """k8s/seed-volume's shape: the deref sits behind `if <same gate> else`.
+    """k8s/volume-claim's shape: the deref sits behind `if <same gate> else`.
 
     Jinja's conditional expression is lazy, so `seed_volume_marker.rc` is never evaluated on
     the run where its producer was skipped. Demanding a `| default()` here is not a tidier

@@ -325,12 +325,12 @@ _INCLUDED_FILE = re.compile(r"(?:import_tasks|include_tasks):\s*[\"']?([\w.-]+\.
 def _guard_covered_files(role: Path) -> set[str]:
     """Task files every one of whose tasks inherits a no-mutation guard from its caller.
 
-    seed-volume is the shape this exists for: main.yml is a single
+    volume-claim is the shape this exists for: main.yml is a single
     `import_tasks: seed.yml` under `when: not k8s_no_mutate`, and the import propagates that
     `when` to every task in seed.yml — and on to copy.yml, which seed.yml includes. Nothing in
     either file names the guard, so a per-task rule alone would call the role unguarded and
     demand it be added to k8s_dry_run_unsupported, where it would do nothing (the refusal reads
-    --tags, and seed-volume is reached as a dependency of 25 roles).
+    --tags, and volume-claim is reached as a dependency of 25 roles).
 
     Only main.yml is scanned for the guarded include; from there the closure is transitive and
     unconditional, because a file whose caller is guarded is guarded whatever it does next.
@@ -453,7 +453,7 @@ def test_no_role_hides_a_dependency_the_tag_refusal_cannot_see() -> None:
     """The play-level refusal keys on --tags, so a dependency slips straight past it.
 
     This is not hypothetical: `--tags freshrss` names no unsupported role and still ran
-    seed-volume, which started and removed a pod against freshrss's live Longhorn PVC. Any role
+    volume-claim, which started and removed a pod against freshrss's live Longhorn PVC. Any role
     reachable as a dependency must therefore guard itself, not rely on the refusal.
     """
     assert not list(_K8S_ROLES.glob("*/meta/main.yml")), (
@@ -528,7 +528,7 @@ def test_a_guard_named_only_in_a_comment_does_not_excuse_a_mutating_task(
 
 
 def test_a_guarded_import_covers_the_file_it_pulls_in(tmp_path: Path) -> None:
-    """seed-volume's shape: the guard is on the import, not on the tasks that write.
+    """volume-claim's shape: the guard is on the import, not on the tasks that write.
 
     Transitive, because seed.yml includes copy.yml and copy.yml writes too. An unguarded import
     covers nothing — that is the direction that would silently excuse a real mutation.

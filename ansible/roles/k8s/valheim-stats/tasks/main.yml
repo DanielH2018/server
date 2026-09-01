@@ -4,7 +4,7 @@
 # serves Prometheus metrics on :9420. Sibling of terraria-stats; the scrape job lives in
 # claude-otel's prometheus.yaml.j2 (job_name: valheim-stats).
 #
-# No seed-volume include, unlike terraria-stats: there is no Docker predecessor to import
+# No volume-claim include, unlike terraria-stats: there is no Docker predecessor to import
 # from. The PVC is declared in templates/pvc.yaml.j2 and starts empty.
 
 - name: Create the staging directory

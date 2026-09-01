@@ -864,7 +864,7 @@ def test_the_k8s_autodeploy_branch_alerts_on_a_bundled_secrets_change():
 # ── contract 3: deliver() actually bounds the pending queue ────────────────────────────────────
 #
 # cap_pending() has its own behavioural tests in test_deploy_logic_health.py, but a pure function
-# nobody calls is inert — the failure mode this repo has already paid for twice (seed-volume's
+# nobody calls is inert — the failure mode this repo has already paid for twice (volume-claim's
 # short-circuit fired for 0 of 25 claims behind 16 passing tests). These assert the CALL SITE,
 # which is the half those tests structurally cannot see.
 

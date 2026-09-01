@@ -10,6 +10,6 @@
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "renders only a PVC, so there is no workload for rollout status to gate; shared PVC path for 16 caller roles, so a stray auto-deploy has outsized blast radius; not a containers_list entry, so a promoted bump matches no play and deploys nothing while reporting success"  # noqa var-naming[no-role-prefix]
 
-# PVC. seed_volume_claim defaults to <service>-data in the calling role.
-seed_volume_size: 1Gi
-seed_volume_storage_class: longhorn
+# PVC. volume_claim_name defaults to <service>-data in the calling role.
+volume_claim_size: 1Gi
+volume_claim_storage_class: longhorn

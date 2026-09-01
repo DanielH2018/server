@@ -14,12 +14,12 @@
   # ONE volume for both containers, matching the Compose file — wireguard's wg0.conf and
   # qbittorrent's settings live in the same tree.
   ansible.builtin.include_role:
-    name: k8s/seed-volume
+    name: k8s/volume-claim
   vars:
-    seed_volume_service: qbittorrent
-    seed_volume_claim: "{{ qbittorrent_k8s_claim }}"
-    seed_volume_storage_class: "{{ qbittorrent_k8s_storage_class }}"
-    seed_volume_size: "{{ qbittorrent_k8s_size }}"
+    volume_claim_service: qbittorrent
+    volume_claim_name: "{{ qbittorrent_k8s_claim }}"
+    volume_claim_storage_class: "{{ qbittorrent_k8s_storage_class }}"
+    volume_claim_size: "{{ qbittorrent_k8s_size }}"
 
 - name: Deploy qbittorrent to the cluster
   ansible.builtin.include_role:

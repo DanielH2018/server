@@ -149,7 +149,7 @@
     # k8s_dry_run suppresses mutation inside roles/k8s/manifests, which is where 35 of the 54
     # k8s roles do all of theirs. The other 19 also mutate from their OWN tasks — sidecar
     # ConfigMaps built with `kubectl create`, netpol-probe Jobs deleted and recreated, `exec -i`
-    # piping config into a live pod, image builds pushed to the registry, seed-volume scaling
+    # piping config into a live pod, image builds pushed to the registry, volume-claim scaling
     # Deployments to zero. Dry-running one of those half-applies: the manifest apply is
     # suppressed while the side-car mutation fires anyway, which is worse than either doing it
     # or not. Refuse instead, and name what to do about it.

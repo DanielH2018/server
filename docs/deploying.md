@@ -55,7 +55,7 @@ Nothing is staged, applied, patched or rolled.
 shared manifests path — sidecar ConfigMaps built with `kubectl create`, probe Jobs, `exec -i`
 into a live pod — so they would half-apply. The playbook fails fast and names them.
 
-**A brand-new service is only half-checked.** `seed-volume` is skipped because it is a
+**A brand-new service is only half-checked.** `volume-claim` is skipped because it is a
 dependency of many roles and mutates, and nothing at admission verifies that a referenced PVC
 exists. So the Deployment validates while the volume is never proven provisionable.
 

@@ -25,7 +25,7 @@ spec:
         netpol-baseline: enforced
     spec:
       enableServiceLinks: false
-      # No fsGroup: seed-volume restores ownership with `tar -p --numeric-owner` and the LSIO
+      # No fsGroup: volume-claim restores ownership with `tar -p --numeric-owner` and the LSIO
       # image chowns /config itself on startup.
       #
       # NO MEDIA MOUNT AT ALL. prowlarr is an indexer proxy — it moves search results between the
