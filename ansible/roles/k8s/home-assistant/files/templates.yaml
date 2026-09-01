@@ -96,10 +96,13 @@
         {{ 'RB' in (states('sensor.apc_ups_status_data') or '').split() }}
 
 # Auto-light gate: the SINGLE source of truth for "is it dark enough (or the morning wake window) to
-# put the bedroom lights on automatically" — illuminance < 75 OR inside the wake window
+# put the bedroom lights on automatically" — T1 illuminance < 90 OR inside the wake window
 # [wake_start, +45min] (inherited from in_wake_window). Referenced by bedroom_presence_on (its darkness condition),
 # bedroom_apply_natural_gated, and the Tap Dial Button-4 sleep-exit (which checks it `off` to suppress
-# Adaptive Lighting's self-on in a bright room). Tune the 75-lux threshold / window here, in ONE place.
+# Adaptive Lighting's self-on in a bright room). Tune the 90-lux threshold / window here, in ONE place.
+# Reads sensor.aqara_t1_illuminance, NOT the FP300: the bulbs swing the FP300 13x (48 <-> 640) and only
+# 1.6x the T1, so the old gate was largely reading its own output. sun.sun is passed as the
+# dark_fallback because the T1 reports only on change and parks at `unknown` after an HA restart.
 - binary_sensor:
     - name: "Bedroom auto-light allowed"
       unique_id: bedroom_auto_light_allowed
@@ -107,7 +110,7 @@
         {% set ws = states('sensor.bedroom_wake_start') %}
         {% from 'lighting.jinja' import in_wake_window, auto_light_allowed %}
         {% set in_window = in_wake_window((now() - as_datetime(ws)).total_seconds() / 60 if ws not in ['unknown', 'unavailable'] else -1) | bool %}
-        {{ auto_light_allowed(in_window, states('sensor.aqara_fp300_illuminance')) }}
+        {{ auto_light_allowed(in_window, states('sensor.aqara_t1_illuminance'), is_state('sun.sun', 'below_horizon')) }}
 
 # Air-purifier overnight HOLD: "on" from bedtime through the END of the morning wake ramp, so the
 # air-purifier plug (automation.bedroom_air_purifier_presence) is NOT cut by the FP300 dropping a

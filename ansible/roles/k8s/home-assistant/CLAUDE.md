@@ -92,24 +92,31 @@ every task in this directory whether or not it is needed.
   `brightness_step_*` no-ops. Presence
   (FP300) + an `input_boolean` manual-off override + an alarm-driven morning reset live in the
   same file; `bedroom_presence_on` and the morning reset BOTH call `script.bedroom_apply_natural`.
-  The lux gate is window-aware (`in morning window OR illuminance < 75` — wake regardless of ambient
+  The lux gate is window-aware (`in morning window OR T1 illuminance < 90` — wake regardless of ambient
   light during the 15-min window, gate on darkness afterwards) and lives in ONE place:
   `binary_sensor.bedroom_auto_light_allowed` (templates.yaml). `bedroom_presence_on` (its darkness
-  condition) and `bedroom_apply_natural_gated` reference that sensor — tune the 75-lux threshold / window
+  condition) and `bedroom_apply_natural_gated` reference that sensor — tune the 90-lux threshold / window
   there, once. The window reads `sensor.bedroom_wake_start` (the shared dynamic-wake source — see below),
   the SAME sensor the dispatcher's morning exception uses, so the two are inherently in sync (no duplicated
-  formula). **Feedback-loop caveat (tuning):** `sensor.aqara_fp300_illuminance` is dominated by the
-  bedroom lights themselves (~640 lux with them on, ~48 off), so the gate is partly circular — turning the
-  lights off makes the room read "dark," which can have `presence_on` re-light it ~30 s later. The 75-lux
-  threshold sits ABOVE this room's lights-off ambient (~48), so with the lights off the room always reads
-  "dark" at night and the gate is effectively always-allow then; pick a value clearly
-  below the lights-off daytime ambient if you want to stop daytime auto-lighting (this is why the fan
-  button stays out of light control entirely). The illuminance also **LAGS** (sleepy battery sensor on
-  `light_sampling: low`, ~100 s to reflect a lights-off drop) — see the sun-aware button-1 HOLD note below.
-  **Before tuning that 75-lux threshold, know that a clean ambient sensor now exists:**
-  `sensor.aqara_t1_illuminance` (Aqara T1, added 2026-08-31) sees 23× less bulb bleed and nothing reads
-  it yet. Measurements, the 49-79 band a moved threshold must clear, and the Z2M runtime settings are in
+  formula).
+  **The gate reads `sensor.aqara_t1_illuminance`, not the FP300** (moved 2026-09-01). The FP300 is
+  dominated by the bedroom lights themselves (~640 lux with them on, ~48 off), so the old gate was largely
+  reading its own output — turning the lights off made the room read "dark," which could have
+  `presence_on` re-light it ~30 s later. The T1 is a dedicated ambient sensor clear of the bulbs' cones
+  and moves only ~30 lux across a light switch, so that circularity is now small rather than dominant.
+  **Tuning constraints, both load-bearing:** the threshold must stay clear of the 49-79 band the bulbs
+  alone span on the T1, or the gate becomes self-referential again in miniature; and it must be picked
+  from T1 samples taken while `light.bedroom_lights` was OFF, because any sample with the lights on
+  carries the bleed you are trying to exclude. 90 was picked that way, but from only 23 h of history
+  (43 uncontaminated samples) — it is a first cut, expected to be retuned against a longer window.
+  Derivation, the measurements, and the Z2M runtime settings are in
   [`docs/lighting-and-presence.md`](docs/lighting-and-presence.md).
+  Two consumers deliberately still read the FP300 on its own scale and must NOT be resynced to 90: the
+  `natural_brightness` ambient-fill curve (`lux / 75`) and the Hub cast/dismiss pair (60/50).
+  FP300 illuminance also **LAGS** (sleepy battery sensor on `light_sampling: low`, ~100 s to reflect a
+  lights-off drop); the T1 reports on change with a ~5 s detection period, but parks at `unknown` after
+  an HA restart or a Z2M rename — `auto_light_allowed`'s `dark_fallback` argument takes sun-below-horizon
+  for exactly that case. See the sun-aware button-1 HOLD note below.
 
 ## Testing
 - **Bedroom Jinja math is unit-tested** (`tests/`, run via `uv run pytest` / the prek `pytest`

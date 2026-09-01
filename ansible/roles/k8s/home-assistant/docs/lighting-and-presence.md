@@ -12,8 +12,8 @@ and the bedtime/wake routines that drive them.
   auto-light, it calls `script.bedroom_blip` (off -> 15% warm 2700K ~1s -> off) so you get an
   acknowledgement instead of silence. `bedroom_blip` is the inverse of `bedroom_alert_pulse` — it
   needs NO `scene.create` snapshot because it only runs with the lights already off, so a plain
-  `turn_off` restores the known state. No feedback loop: it fires only at illuminance >= 75 (bright
-  ambient), and a ~1s blip can't satisfy `presence_on`'s `below: 75 for: 30s`. No cooldown initially;
+  `turn_off` restores the known state. No feedback loop: it fires only at T1 illuminance >= 90 (bright
+  ambient), and a ~1s blip can't satisfy `presence_on`'s `below: 90 for: 30s`. No cooldown initially;
   add a trigger `for:` debounce if presence flapping makes it chatty.
   **Tap Dial button-1 HOLD blips too (since 2026-06-20).** The "reset to auto" branch in
   `bedroom_tap_dial_control` calls the SAME `script.bedroom_blip` when its lux-gated apply
@@ -133,8 +133,8 @@ and the bedtime/wake routines that drive them.
 - **Aqara T1 ambient light sensor (added 2026-08-31), `sensor.aqara_t1_illuminance`.** A dedicated
   illuminance sensor mounted near the desk, clear of the bedroom bulbs' cones, to give the room a
   reading the lights cannot contaminate — the defect the FP300 feedback-loop caveat above describes.
-  **Nothing reads it yet.** The lux gate still runs on `sensor.aqara_fp300_illuminance`; this entry
-  records the hardware and the measurements so a future swap has real numbers to pick a threshold from.
+  **The lux gate runs on it as of 2026-09-01, at `< 90` lux** — see *Picking the 90-lux threshold*
+  below. This entry records the hardware and the install-day measurements.
   Measured live on install day with the sensor stationary: switching `light.bedroom_lights` moved the
   T1 by 17-30 lx (49 dark ↔ 79 lit) while it moved the FP300 by ~550 lx (9 dark ↔ 561 lit) — a 23:1
   reduction in bulb bleed. True ambient with both the bulbs and the desk lamp off read 57 lx at 08:11
@@ -144,13 +144,41 @@ and the bedtime/wake routines that drive them.
   moment it is evaluated — the FP300's failure mode with occupancy as the trigger instead of the bulbs.
   Daylight drift over the same window bounds the magnitude rather than pinning it, so the claim is "not
   a dominant source", not "exactly zero".
+- **Picking the 90-lux threshold (2026-09-01).** The gate moved from `sensor.aqara_fp300_illuminance < 75`
+  to `sensor.aqara_t1_illuminance < 90`, in `auto_light_allowed` (lighting.jinja), the
+  `bedroom_auto_light_allowed` template sensor, and `bedroom_presence_on`'s dusk trigger.
+  **The method matters more than the number, because the obvious method is wrong.** Scoring candidate
+  thresholds by how well they agree with the OLD gate reproduces the defect: `FP300 >= 75` is mostly
+  "the lights are on", not "the room is bright", so agreement with it rewards bulb contamination. Scored
+  that way, agreement peaked at 40 lux and fell monotonically upward — an artifact of the contaminated
+  reference, not a calibration.
+  The uncontaminated method is to pair the T1 series against `light.bedroom_lights` history and keep only
+  the samples taken while the lights were OFF. Over 2026-08-31 13:01 UTC to 2026-09-01 12:09 UTC that
+  left **43 of 278** samples. On that subset, evening and night ambient read 1-33 lux (hours 15, 18, 01
+  local) while midday read 134-264 (hours 10-11), leaving a wide empty gap. 90 sits in that gap, and
+  clears the 49-79 bulb-bleed band the entry above requires.
+  **The number is a first cut and the sample is thin** — 23 h, one weather pattern, and only one
+  lights-off night sample. Expect to retune it once the sensor has a few days of recorder history;
+  re-run the same lights-off filter rather than eyeballing the raw distribution.
+- **Two FP300 consumers were deliberately left alone**, because they are on the FP300's scale and
+  resyncing them to 90 would be wrong. `natural_brightness` (lighting.jinja) dims the auto-on brightness
+  across `lux / 75` — moving it to the T1 needs its 0.8 slope recalculated, a separate change. The Hub
+  cast/dismiss automations (`bedroom_display_cast` / `bedroom_display_dismiss`) trigger at FP300 60 and
+  50 — a different feature with its own thresholds.
+- **`auto_light_allowed` takes a `dark_fallback` argument (added with the swap).** The T1 reports only on
+  change, so it parks at `unknown` after an HA restart or a Z2M rename. The macro's old
+  `| float(9999)` treated that as "bright" and shut the gate, which on the FP300 was harmless (it stays
+  alive on temp/humidity/PIR traffic) but on the T1 would silently disable auto-lighting for a whole
+  night in a stable dark room. The caller now passes `is_state('sun.sun', 'below_horizon')`, the same
+  deterministic fallback `script.bedroom_apply_natural_gated` already uses for a stale read.
 - **The T1 shrinks the circularity, it does not remove it.** The FP300 swings 13× across a light switch
   (48 ↔ 640); the T1 swings 1.6× (49 ↔ 79). So a gate threshold moved onto the T1 must sit clearly
   ABOVE 79 or clearly BELOW 49, never between — a value inside that band reintroduces the same
   self-referential gate in miniature. Real daylight runs into the hundreds, so a threshold picked from
-  a few days of the sensor's own recorder history will land well above 79. **Pick it from data, not by
-  scaling the current 75** — that number was chosen against a lights-contaminated scale and means
-  nothing here.
+  the sensor's own recorder history lands well above 79 — the 90 in force does. **Pick it from data, not
+  by scaling the old 75** — that number was chosen against a lights-contaminated scale and means nothing
+  on this sensor. The two constraints are independent: clearing the band is necessary but not
+  sufficient, and *Picking the 90-lux threshold* above covers the part the band rule does not.
 - **Z2M runtime state on the T1 (NOT in git — a re-pair wipes it).** `detection_period: 5` s, the
   factory default, left as-is: it is already the fast end and reports landed 2-9 s after a light
   switch. It is also the aggressive end for the CR2450, so revisit once the battery sensor reports

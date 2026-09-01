@@ -18,8 +18,10 @@ def _brightness(elapsed):
     return int(render_macro(LIGHT, "wake_brightness", elapsed))
 
 
-def _allowed(in_window, illuminance):
-    return render_macro(LIGHT, "auto_light_allowed", in_window, illuminance)
+def _allowed(in_window, illuminance, dark_fallback=False):
+    return render_macro(
+        LIGHT, "auto_light_allowed", in_window, illuminance, dark_fallback
+    )
 
 
 def test_in_wake_window_boundaries():
@@ -82,9 +84,27 @@ def test_wake_brightness_takes_only_elapsed():
 def test_auto_light_allowed_truth_table():
     assert _allowed(True, 1000) == "True"  # in-window wakes regardless of brightness
     assert _allowed(False, 40) == "True"  # dark enough
-    assert _allowed(False, 74) == "True"
-    assert _allowed(False, 75) == "False"  # strict < 75
-    assert _allowed(False, 80) == "False"
+    assert _allowed(False, 89) == "True"
+    assert _allowed(False, 90) == "False"  # strict < 90
+    assert _allowed(False, 200) == "False"
+
+
+def test_auto_light_allowed_threshold_clears_the_bulb_bleed_band():
+    """The bulbs move the T1 between 49 (dark) and 79 (lit), so a threshold inside 49..79 would
+    make the gate read its own output. Both ends of that band must land on the same verdict."""
+    assert _allowed(False, 49) == _allowed(False, 79) == "True"
+
+
+def test_auto_light_allowed_unknown_falls_back_to_the_sun():
+    """The T1 reports only on change and parks at `unknown` after an HA restart or a Z2M rename.
+
+    A non-numeric reading must defer to dark_fallback (the caller passes sun-below-horizon), NOT
+    silently shut the gate — that would disable auto-lighting for a whole night.
+    """
+    assert _allowed(False, "unknown", True) == "True"  # night: still allowed
+    assert _allowed(False, "unavailable", True) == "True"
+    assert _allowed(False, "unknown", False) == "False"  # day: stays shut
+    assert _allowed(True, "unknown", False) == "True"  # the wake window still wins
 
 
 def _natural(hour, illuminance):
@@ -98,8 +118,8 @@ def test_natural_brightness_time_bands_dark_room():
 
 
 def test_natural_brightness_dims_with_ambient():
-    assert _natural(12, 75) == 9  # at the gate ceiling: 45 * 0.2
-    assert _natural(12, 750) == 9  # above the gate: factor clamps at 0.2
+    assert _natural(12, 75) == 9  # at this curve's own FP300 ceiling: 45 * 0.2
+    assert _natural(12, 750) == 9  # above it: factor clamps at 0.2
     assert _natural(20, 0) > _natural(20, 70)  # brighter room -> dimmer output
 
 
