@@ -21,12 +21,20 @@ gh pr merge --squash
 
 Run `land.sh` with `run_in_background` and let the session be re-invoked when it exits. It
 waits for master CI on the merge commit, ticks, deploys what the tick deferred, and prints a
-`VERDICT:` line — `settled`, `unhealthy`, `deploy-failed`, `nothing-to-deploy`, `blocked` or
-`needs-manual-apply`.
+`VERDICT:` line — `settled`, `unhealthy`, `deploy-failed`, `nothing-to-deploy`, `blocked`,
+`needs-manual-apply` or `deferred`.
 
-`needs-manual-apply` means the PR reaches something no deploy tag covers, and the line names the
-command that does apply it. Three things are in that position. The setup plane needs
-`initial_setup.yml`, because `deploy.yml` is a `containers_list` loop. A **shared k8s role** —
+`deferred` (exit 75) means the tick applies this PR itself — a setup role `initial_setup.yml`
+includes, or the deploy plane — and has not crossed origin yet, almost always because a newer
+merge's CI is still running. The next tick does it; nothing is wrong with the PR. `land.sh`
+reads that from the deployer's own `behind_since` and `hold_sha` markers, since a PR with no
+service tag leaves no other evidence of being applied. A held `hold_sha` is `deploy-failed`.
+
+`needs-manual-apply` means the PR reaches something neither a deploy tag nor the tick covers,
+and the line names the command that does apply it. Three things are in that position. A
+**setup role `initial_setup.yml` does not include** (`k3s` is in `k3s-bringup.yml`, `common` in
+no playbook) or a bring-up playbook, because the tick applies every other setup role itself
+and `deploy.yml` is a `containers_list` loop. A **shared k8s role** —
 `manifests`, `volume-claim`, `rollout-drain`, `volume-snapshot`, `volume-revert`,
 `image-builder`, `longhorn-api`, `cronjob-gate` — has no `containers_list` entry at all, so
 `--tags manifests` matches nothing and only a full `ansible/deploy.yml` applies it. A **rotated
