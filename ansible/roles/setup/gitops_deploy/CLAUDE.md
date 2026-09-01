@@ -361,15 +361,37 @@ stay).
 (a Unix-timestamp file) on every non-crashing completion; `monitor-bridge` reads this file
 to drive the GitOps-Alive Uptime-Kuma monitor — no Kuma pushing from the deployer.
 
-## Logic tests
-`files/test_deploy_logic*.py` covers `deploy_logic.py`, split by which decision each group is
-about: `_diff` (path→service mapping), `_git` (the next-action decision, divergence, and
-`container_names()` — the health gate inspects every `container_name:` in the changed service's
-rendered compose, since a role often runs several containers and the bumped image's container is
-usually not the role-named one), `_health` (health gating and the Discord queue), `_inventory`
-(declared services and platform routing), and `test_deploy_logic.py` itself (auto-deploy
-eligibility, the CI gate, rollback). Run via the repo pytest hook
+## Decision modules and their tests
+The pure decision logic is split by the question each module answers. `deploy_logic.py` is the
+index: it defines nothing and re-exports every name, so `gitops_deploy.py` imports from one
+place and a `deploy_logic.<name>` citation in any doc stays true.
+
+| module | decides |
+|---|---|
+| `deploy_changes` | which services and planes a pushed path list reaches (`ChangeSet`, `setup_tags_for`) |
+| `deploy_remediation` | the text a deferred change's alert prescribes (`broad_remediation`, `k8s_remediation`) |
+| `deploy_git` | what a tick does given the two HEADs, the hold and the CI verdict (`next_action`, `ci_verdict`) |
+| `deploy_health` | the Docker health gate and the Discord delivery queue |
+| `deploy_inventory` | what this host declares, parsed from host_vars text |
+| `deploy_k8s` | k8s auto-deploy eligibility, the denylist, the rollback's revert note |
+| `deploy_staging` | the staging subset and its verdict summary |
+
+`files/test_deploy_logic*.py` covers them, split by which decision each group is about: `_diff`
+(path→service mapping and the remediation text), `_git` (the next-action decision, divergence,
+and `container_names()` — the health gate inspects every `container_name:` in the changed
+service's rendered compose, since a role often runs several containers and the bumped image's
+container is usually not the role-named one), `_health` (health gating and the Discord queue),
+`_inventory` (declared services and platform routing), and `test_deploy_logic.py` itself
+(auto-deploy eligibility, the CI gate, rollback). Run via the repo pytest hook
 (`uv run pytest ansible/roles/setup/gitops_deploy/files`).
+
+**Tests import and patch the module that defines the name, never the facade.** A
+`monkeypatch` on `deploy_logic.<name>` rebinds a re-export no function reads, so the test passes
+against unpatched code; and a runtime module that from-imports a name a test patches elsewhere
+holds its own reference from import time. Both are the holes monitor-bridge's check.py split
+hit. ENFORCED by `ansible/tests/test_gitops_deploy_patch_boundary.py`, which requires every
+patched name to be *defined* (not merely imported) on the module it is patched on — the
+monitor-bridge guard counts an import as bound, which a facade defeats.
 
 ## Traps
 

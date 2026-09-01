@@ -18,7 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from deploy_logic import staging_scope, staging_verdict_summary  # noqa: E402
+from deploy_staging import staging_scope, staging_verdict_summary  # noqa: E402
 
 SUBSET = {"traefik", "authelia", "freshrss", "node-exporter", "registry", "ical-proxy"}
 

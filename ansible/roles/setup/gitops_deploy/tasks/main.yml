@@ -24,6 +24,13 @@
   loop:
     - gitops_deploy.py
     - deploy_logic.py
+    - deploy_changes.py
+    - deploy_remediation.py
+    - deploy_git.py
+    - deploy_health.py
+    - deploy_inventory.py
+    - deploy_k8s.py
+    - deploy_staging.py
   become: true
   notify: Run gitops-deploy once
 
@@ -175,6 +182,20 @@
         src: ansible/roles/setup/gitops_deploy/files/gitops_deploy.py
       - live: /opt/gitops-deploy/deploy_logic.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_logic.py
+      - live: /opt/gitops-deploy/deploy_changes.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_changes.py
+      - live: /opt/gitops-deploy/deploy_remediation.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_remediation.py
+      - live: /opt/gitops-deploy/deploy_git.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_git.py
+      - live: /opt/gitops-deploy/deploy_health.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_health.py
+      - live: /opt/gitops-deploy/deploy_inventory.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_inventory.py
+      - live: /opt/gitops-deploy/deploy_k8s.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_k8s.py
+      - live: /opt/gitops-deploy/deploy_staging.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_staging.py
       - live: /opt/gitops-deploy/host_lib.py
         src: ansible/roles/setup/common/files/host_lib.py
 

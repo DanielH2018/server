@@ -8,12 +8,8 @@ an archived path must name nothing at all.
 
 # ansible/roles/setup/gitops_deploy/files/test_deploy_logic.py
 
-from deploy_logic import (
-    services_from_changed_paths,
-    broad_remediation,
-    deferred_service_alerts,
-    setup_tags_for,
-)
+from deploy_changes import services_from_changed_paths, setup_tags_for
+from deploy_remediation import broad_remediation, deferred_service_alerts
 
 
 def test_single_service_template():
