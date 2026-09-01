@@ -1,0 +1,40 @@
+[Unit]
+Description=Alert when the staging-gate backfill ratchet fails
+
+[Service]
+Type=oneshot
+# A SIBLING of gitops-deploy-alert.service rather than a reuse of it, and the payload is the
+# whole reason. That unit's message names gitops-deploy and tells the operator to read
+# `journalctl -u gitops-deploy` — a journal that looks perfectly healthy when it is the BACKFILL
+# that failed. A page naming the wrong unit and pointing at a clean journal gets dismissed as a
+# false alarm, which is worse than no page: it teaches the operator to ignore the next one too.
+# So the two units differ in exactly one thing, the text, and share everything else.
+#
+# Same webhook file as the sibling, deliberately: same host, same role, same Discord channel. A
+# second env file would mean a second render task and a second secret reference for no gain.
+#
+# The webhook is NOT embedded here, for the reason gitops-deploy-alert.service.j2 documents at
+# length: systemd serves unit content over the system bus, so `systemctl show
+# staging-backfill-alert -p ExecStart` would print the value to any local user with no sudo,
+# whatever the file mode. Referencing "${ALERT_WEBHOOK}" makes that command print the literal
+# variable name instead. systemd's own EnvironmentFile parser runs no application code, so the
+# indirection costs nothing.
+#
+# No User=: this runs as root, which is what lets systemd read the 0600 webhook file.
+EnvironmentFile=/etc/gitops-deploy/alert-webhook.env
+ExecStart=/usr/bin/curl -fsS -m 10 -H "Content-Type: application/json" \
+  -d '{"content":"🚨 staging-backfill unit failed on {{ inventory_hostname }} — the staging-gate ratchet stopped. Check `journalctl -u staging-backfill`, NOT gitops-deploy."}' \
+  "${ALERT_WEBHOOK}"
+# Both directives are required and neither is sufficient alone, exactly as on the sibling unit.
+# SyslogLevel= governs only this unit's own stdout, never PID 1's lifecycle messages, so without
+# the echo a delivered page stores nothing (journald caps at notice here, and Starting/Finished
+# are info) and `journalctl -u staging-backfill-alert` reads `-- No entries --` against a real
+# failure — indistinguishable from "the alert unit never fired". Without SyslogLevel the echo
+# itself lands at info and is dropped. ExecStartPost runs only when ExecStart succeeded, so the
+# line means "delivered", not "attempted"; a FAILED curl already logs at err, above the cap.
+#
+# The text names the backfill unit rather than being copied verbatim from the sibling. An
+# on-host record naming the wrong unit is the same wrong-unit trap as the payload above, just
+# discovered later.
+SyslogLevel=notice
+ExecStartPost=/bin/echo staging-backfill failure alert delivered
