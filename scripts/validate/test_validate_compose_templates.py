@@ -213,3 +213,50 @@ def test_no_new_privileges_walks_all_services():
         }
     ]
     assert vct.find_missing_no_new_privileges(docs) == ["b"]
+
+
+# ── image digest pinning ────────────────────────────────────────────────────────────────────
+# Paired ..._is_clean / ..._is_flagged, per CLAUDE.md: a guard seen only from the passing side
+# is indistinguishable from one that fires on nothing.
+
+
+def test_digest_pinned_image_is_clean():
+    docs = _docs({"image": "nicolargo/glances:latest@sha256:" + "8e" * 32})
+    assert vct.find_undigested_images(docs) == []
+
+
+def test_versioned_tag_without_digest_is_flagged():
+    # A real version tag is still a moving name, and still records nothing about which bytes
+    # ran. Being versioned is not being pinned — this is the case a laxer rule would miss.
+    docs = _docs({"image": "quay.io/prometheus/node-exporter:v1.12.1"})
+    assert vct.find_undigested_images(docs) == [
+        ("svc", "quay.io/prometheus/node-exporter:v1.12.1")
+    ]
+
+
+def test_bare_latest_is_flagged():
+    docs = _docs({"image": "willfarrell/autoheal:latest"})
+    assert vct.find_undigested_images(docs) == [("svc", "willfarrell/autoheal:latest")]
+
+
+def test_service_without_an_image_key_is_clean():
+    # A `build:`-only service has no upstream digest to pin.
+    docs = _docs({"build": {"context": "."}})
+    assert vct.find_undigested_images(docs) == []
+
+
+def test_digest_exempt_service_is_skipped():
+    docs = _docs({"image": "willfarrell/autoheal:latest"})
+    assert vct.find_undigested_images(docs, exempt={"svc"}) == []
+
+
+def test_digest_check_walks_all_services():
+    docs = [
+        {
+            "services": {
+                "a": {"image": "x:1@sha256:" + "ab" * 32},
+                "b": {"image": "y:latest"},
+            }
+        }
+    ]
+    assert vct.find_undigested_images(docs) == [("b", "y:latest")]
