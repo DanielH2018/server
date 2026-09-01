@@ -14,6 +14,7 @@ import importlib.util
 import io
 import os
 import subprocess
+import sys
 import types
 
 _HOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "session-health.py")
@@ -386,3 +387,52 @@ def test_stale_worktree_lines_swallows_a_timeout(monkeypatch):
 
     monkeypatch.setattr(_mod, "_run", boom)
     assert _mod.stale_worktree_lines() == []
+
+
+# `other_live_sessions` imports prune_worktrees off a hand-built sys.path. That path pointed at
+# scripts/ while the module lived in scripts/dev/ from the #443 regrouping until 2026-09-01, and
+# nothing failed: the except returned [], which reads identically to "no other sessions are
+# running". These two pin the import and the fail-loud, because a silent [] is what hid the bug.
+def test_the_hook_can_import_prune_worktrees_when_run_as_a_subprocess():
+    """Accept case, and it MUST be a subprocess with a clean PYTHONPATH.
+
+    Calling `other_live_sessions()` in-process proves nothing here: pyproject's pytest
+    `pythonpath` lists `scripts/dev`, so `prune_worktrees` imports under the suite no matter
+    what path the hook inserts. An in-process version of this test passed with the original bug
+    reintroduced — verified, not assumed. SessionStart runs this file as a plain script with no
+    such path, which is the only condition under which the insert is load-bearing. This is the
+    repo rule about verifying a moved entry point by RUNNING it rather than by running the suite.
+    """
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    proc = subprocess.run(
+        [sys.executable, _HOOK],
+        input='{"cwd": "%s"}' % _mod.REPO,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env=env,
+        check=False,
+    )
+    assert "detection is broken" not in proc.stdout, (
+        "session-health.py could not import prune_worktrees from the path it inserts — the "
+        "module moved and the insert did not follow it. Fix the path in other_live_sessions.\n"
+        + proc.stdout
+    )
+
+
+def test_a_broken_import_is_reported_rather_than_read_as_no_sessions(monkeypatch):
+    """Reject case: when the import fails the banner says so instead of going quiet.
+
+    `sys.modules[name] = None` is what makes `from name import ...` raise ImportError even
+    after the accept case above has imported it for real — pointing REPO at a missing
+    directory is not enough on its own, because the module stays cached.
+    """
+    import sys
+
+    monkeypatch.setitem(sys.modules, "prune_worktrees", None)
+    monkeypatch.setattr(_mod, "REPO", "/nonexistent-repo-root")
+    lines = _mod.other_live_sessions("/nonexistent-repo-root")
+    assert lines, (
+        "a failed import returned no lines — indistinguishable from 'no other sessions'"
+    )
+    assert "other-session detection is broken" in lines[0]
