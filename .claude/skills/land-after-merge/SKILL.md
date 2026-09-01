@@ -27,7 +27,7 @@ waits for master CI on the merge commit, ticks, deploys what the tick deferred, 
 `needs-manual-apply` means the PR reaches something no deploy tag covers, and the line names the
 command that does apply it. Three things are in that position. The setup plane needs
 `initial_setup.yml`, because `deploy.yml` is a `containers_list` loop. A **shared k8s role** —
-`manifests`, `seed-volume`, `rollout-drain`, `volume-snapshot`, `volume-revert`,
+`manifests`, `volume-claim`, `rollout-drain`, `volume-snapshot`, `volume-revert`,
 `image-builder`, `longhorn-api`, `cronjob-gate` — has no `containers_list` entry at all, so
 `--tags manifests` matches nothing and only a full `ansible/deploy.yml` applies it. A **rotated
 secret** is the third and has no path to match at all: a secret's value lives in no role's

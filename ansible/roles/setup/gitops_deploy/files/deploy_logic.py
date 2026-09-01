@@ -528,7 +528,7 @@ def k8s_remediation(
     never applied. `scripts/deploy_tools/deploy_tags.py` catches it downstream with exit 2, but the alert
     itself was pointing at a command that cannot work.
 
-    Eight roles are in that position today (manifests, rollout-drain, seed-volume,
+    Eight roles are in that position today (manifests, rollout-drain, volume-claim,
     volume-snapshot, volume-revert, image-builder, longhorn-api, cronjob-gate) and they are the
     shared plane: `manifests` is the apply+rollout path for EVERY workload and `volume-revert` is
     the auto-deploy rollback path. They are not rare, either — 46 commits since 2026-06-01 touch

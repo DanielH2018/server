@@ -14,7 +14,7 @@ gate:
     an undeclared Deployment does — matching is by name, not by count. prowlarr and freshrss
     were the original instances and now declare their extras correctly, so they are gated —
     but both still declare k8s_autodeploy: false regardless, for migrating-state reasons
-    (Recreate + an RWO seed-volume PVC) that gatedness never touched. Don't read "gated" as
+    (Recreate + an RWO volume-claim PVC) that gatedness never touched. Don't read "gated" as
     "eligible";
   * a role passing `manifests_rollout: ''`, which skips the rollout wait AND the stability soak
     outright. For a role rendering a Deployment or DaemonSet that is a real defect. For a
@@ -242,10 +242,10 @@ def test_no_kubectl_invocation_spells_the_daemonset_kind_by_alias() -> None:
 def test_a_commented_out_seed_volume_include_does_not_credit_a_claim(
     tmp_path: Path,
 ) -> None:
-    """A `k8s/seed-volume` include disabled by a `#` must not credit its claim.
+    """A `k8s/volume-claim` include disabled by a `#` must not credit its claim.
 
     The same trap this file's other matchers are written against, in a new shape: a text
-    matcher would see `seed_volume_claim: "{{ widget_k8s_claim }}"` inside the comment block
+    matcher would see `volume_claim_name: "{{ widget_k8s_claim }}"` inside the comment block
     and credit it. Parsing through `_live_tasks` closes it — a commented-out task never parses
     as a task at all.
     """
@@ -255,9 +255,9 @@ def test_a_commented_out_seed_volume_include_does_not_credit_a_claim(
     (role / "tasks" / "main.yml").write_text(
         "# - name: Seed the widget volume\n"
         "#   ansible.builtin.include_role:\n"
-        "#     name: k8s/seed-volume\n"
+        "#     name: k8s/volume-claim\n"
         "#   vars:\n"
-        '#     seed_volume_claim: "{{ widget_k8s_claim }}"\n'
+        '#     volume_claim_name: "{{ widget_k8s_claim }}"\n'
     )
     (role / "defaults" / "main.yml").write_text("widget_k8s_claim: widget-config\n")
     resolved, unresolved = _rendered_pvc_claims(role)
@@ -278,9 +278,9 @@ def test_an_unresolvable_claim_var_is_reported_not_dropped(tmp_path: Path) -> No
     (role / "tasks" / "main.yml").write_text(
         "- name: Seed the widget volume\n"
         "  ansible.builtin.include_role:\n"
-        "    name: k8s/seed-volume\n"
+        "    name: k8s/volume-claim\n"
         "  vars:\n"
-        '    seed_volume_claim: "{{ widget_missing_claim }}"\n'
+        '    volume_claim_name: "{{ widget_missing_claim }}"\n'
     )
     (role / "defaults" / "main.yml").write_text("widget_k8s_claim: widget-config\n")
     resolved, unresolved = _rendered_pvc_claims(role)

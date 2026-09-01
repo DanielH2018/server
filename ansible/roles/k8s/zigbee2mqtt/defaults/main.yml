@@ -5,7 +5,7 @@ zigbee2mqtt_k8s_image: ghcr.io/koenkk/zigbee2mqtt:2.12.0
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # DENIED — state coupling, not missing recovery. Slice 7b task 7 promoted this role
-# (2026-08-21) on deploy mechanics alone: Recreate + RWO seed-volume PVC, now protected by
+# (2026-08-21) on deploy mechanics alone: Recreate + RWO volume-claim PVC, now protected by
 # the pre-apply Longhorn snapshot and revert. The scope decision the same day held it back,
 # because the volume's state is coupled to something the snapshot cannot capture: the
 # SLZB-06M coordinator's own NVRAM keeps the network key and frame counters. A revert puts

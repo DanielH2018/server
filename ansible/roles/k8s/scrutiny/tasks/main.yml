@@ -7,22 +7,22 @@
 - name: Create the influxdb history volume claim
   tags: [deploy]
   ansible.builtin.include_role:
-    name: k8s/seed-volume
+    name: k8s/volume-claim
   vars:
-    seed_volume_service: scrutiny
-    seed_volume_claim: "{{ scrutiny_k8s_influxdb_claim }}"
-    seed_volume_storage_class: "{{ scrutiny_k8s_influxdb_storage_class }}"
-    seed_volume_size: "{{ scrutiny_k8s_influxdb_size }}"
+    volume_claim_service: scrutiny
+    volume_claim_name: "{{ scrutiny_k8s_influxdb_claim }}"
+    volume_claim_storage_class: "{{ scrutiny_k8s_influxdb_storage_class }}"
+    volume_claim_size: "{{ scrutiny_k8s_influxdb_size }}"
 
 - name: Create the web config volume claim
   tags: [deploy]
   ansible.builtin.include_role:
-    name: k8s/seed-volume
+    name: k8s/volume-claim
   vars:
-    seed_volume_service: scrutiny
-    seed_volume_claim: "{{ scrutiny_k8s_config_claim }}"
-    seed_volume_storage_class: "{{ scrutiny_k8s_config_storage_class }}"
-    seed_volume_size: "{{ scrutiny_k8s_config_size }}"
+    volume_claim_service: scrutiny
+    volume_claim_name: "{{ scrutiny_k8s_config_claim }}"
+    volume_claim_storage_class: "{{ scrutiny_k8s_config_storage_class }}"
+    volume_claim_size: "{{ scrutiny_k8s_config_size }}"
 
 - name: Deploy scrutiny to the cluster
   ansible.builtin.include_role:

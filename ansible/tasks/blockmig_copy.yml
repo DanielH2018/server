@@ -65,7 +65,7 @@
 # `cp -a` rather than a tar pipe: both claims are mounted in this one pod, so there is no stream
 # to build, and busybox tar's support for --numeric-owner is not worth relying on. -a preserves
 # ownership and modes, which matters because these files belong to uid 1000. The .seeded marker
-# the seed-volume role checks for is an ordinary file and travels with the rest.
+# the volume-claim role checks for is an ordinary file and travels with the rest.
 - name: Copy the tree
   ansible.builtin.command:
     argv: [k3s, kubectl, -n, "{{ mig_namespace }}", exec, "{{ mig_pod }}", "--",

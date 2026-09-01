@@ -185,16 +185,16 @@ def real_tree_run():
 
 def test_real_tree_has_no_unresolved_claim_name(real_tree_run):
     # The actual regression guard: every claimName across the real k8s roles must resolve
-    # against a rendered PVC (or a seed-volume-backed one) — a brand-new service naming a PVC
+    # against a rendered PVC (or a volume-claim-backed one) — a brand-new service naming a PVC
     # that was never wired up must show here, since nothing else in the tree checks this.
     rc, err = real_tree_run
     assert rc == 0
     assert "matches no rendered PersistentVolumeClaim" not in err
 
 
-def test_seed_volume_pvc_names_resolves_a_real_seed_backed_role():
-    # tdarr's config PVC is created by seed-volume's own pvc.yaml.j2 (never rendered under
-    # seed-volume's own role — it's in SKIP_ROLES), using vars tdarr's include_role task passes.
+def test_volume_claim_pvc_names_resolves_a_real_claim_backed_role():
+    # tdarr's config PVC is created by volume-claim's own pvc.yaml.j2 (never rendered under
+    # volume-claim's own role — it's in SKIP_ROLES), using vars tdarr's include_role task passes.
     # tdarr's deployment.yaml.j2 references the SAME value directly as a claimName, so without
     # this resolving, tdarr's config claim would show as unresolved on every real run.
     base = {
@@ -204,7 +204,7 @@ def test_seed_volume_pvc_names_resolves_a_real_seed_backed_role():
     }
     base = vkm.resolve_vars(base, base)
     ctx = {**base, **vkm.role_defaults("tdarr", base)}
-    names = vkm.seed_volume_pvc_names("tdarr", ctx)
+    names = vkm.volume_claim_pvc_names("tdarr", ctx)
     assert ctx["tdarr_k8s_configs_claim"] in names
 
 

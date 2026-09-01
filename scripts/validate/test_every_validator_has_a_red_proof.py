@@ -3,7 +3,7 @@
 
 CLAUDE.md requires this of any new validator, guard, health check or probe: one input it must
 accept, and one it must reject. Until now the rule lived only in prose, and the repo has paid
-for that twice — `seed-volume`'s short-circuit shipped behind 16 passing tests and a mutation
+for that twice — `volume-claim`'s short-circuit shipped behind 16 passing tests and a mutation
 test, then fired for 0 of 25 claims across two full deploys; `image-smoke`'s bare-boot rule
 never caught a real image problem across 11 failures. Both read green throughout. A check is
 only ever observed passing, so without the rejecting half there is no evidence it can fail.

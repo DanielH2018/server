@@ -1,8 +1,8 @@
 """`freshrss-config` must have exactly one creator on every host.
 
-Two paths can create the claim, and which one runs is `freshrss_k8s_manage_seed`:
+Two paths can create the claim, and which one runs is `freshrss_k8s_manage_claim`:
 
-- true  — `k8s/seed-volume` creates it, from that role's own `pvc.yaml.j2`, and copies the
+- true  — `k8s/volume-claim` creates it, from that role's own `pvc.yaml.j2`, and copies the
           pre-migration Docker tree into it.
 - false — `k8s/manifests` applies `freshrss/templates/pvc.yaml.j2`, and the volume starts empty.
 
@@ -15,7 +15,7 @@ Pending long after the deploy reports green.
 
 Why the flag exists at all: `freshrss_k8s_source_path` is a path on `seed_volume_source_host`
 (daniel-server) that Docker's removal on 2026-08-14 took with it. Prod never notices — its PV
-already carries the seed label, so seed-volume short-circuits and never reads the source. A
+already carries the seed label, so volume-claim short-circuits and never reads the source. A
 cluster with a fresh PVC has no label, the copy decision resolves to true, and the deploy fails
 trying to tar a directory that is gone.
 """
@@ -68,12 +68,12 @@ def _include(task: dict) -> dict:
 
 
 def seed_runs(host: str) -> bool:
-    """Whether the k8s/seed-volume include's `when:` holds for this host."""
+    """Whether the k8s/volume-claim include's `when:` holds for this host."""
     ctx = _context(host)
     env = Environment(undefined=StrictUndefined)
     register_ansible_filters(env)
     for task in _tasks():
-        if _include(task).get("name") != "k8s/seed-volume":
+        if _include(task).get("name") != "k8s/volume-claim":
             continue
         when = task.get("when")
         if when is None:
@@ -101,7 +101,7 @@ def creators(host: str) -> list[str]:
     """Every path that would create the claim on this host."""
     out = []
     if seed_runs(host):
-        out.append("k8s/seed-volume")
+        out.append("k8s/volume-claim")
     if "pvc.yaml" in manifest_files(host):
         out.append("freshrss/templates/pvc.yaml.j2")
     return out
@@ -132,7 +132,7 @@ def test_the_claim_has_exactly_one_creator(host: str) -> None:
 def test_prod_seeds_and_staging_does_not() -> None:
     """Pins which creator each host gets, so a flipped default is not silently absorbed by
     the count check above — one creator is one creator either way round."""
-    assert creators("daniel-box") == ["k8s/seed-volume"]
+    assert creators("daniel-box") == ["k8s/volume-claim"]
     assert creators("daniel-stage") == ["freshrss/templates/pvc.yaml.j2"]
 
 
@@ -143,11 +143,11 @@ def test_the_two_creators_agree_on_the_claim(host: str) -> None:
     roles, and only one renders per host."""
     ctx = _context(host)
     seed_pvc = yaml.safe_load(
-        (K8S_ROLES / "seed-volume" / "templates" / "pvc.yaml.j2")
+        (K8S_ROLES / "volume-claim" / "templates" / "pvc.yaml.j2")
         .read_text()
-        .replace("{{ seed_volume_claim }}", ctx["freshrss_k8s_claim"])
-        .replace("{{ seed_volume_storage_class }}", ctx["freshrss_k8s_storage_class"])
-        .replace("{{ seed_volume_size }}", ctx["freshrss_k8s_size"])
+        .replace("{{ volume_claim_name }}", ctx["freshrss_k8s_claim"])
+        .replace("{{ volume_claim_storage_class }}", ctx["freshrss_k8s_storage_class"])
+        .replace("{{ volume_claim_size }}", ctx["freshrss_k8s_size"])
         .replace("{{ k8s_namespace }}", ctx["k8s_namespace"])
     )
     env = Environment(undefined=StrictUndefined)
@@ -182,7 +182,7 @@ def test_the_deployment_references_the_claim_the_flag_creates() -> None:
 @pytest.mark.parametrize(
     ("found", "expect"),
     [
-        (["k8s/seed-volume", "pvc.yaml"], "the second silently wins"),
+        (["k8s/volume-claim", "pvc.yaml"], "the second silently wins"),
         ([], "The pod sits Pending"),
     ],
 )
@@ -200,4 +200,4 @@ def test_the_verdict_rejects_both_broken_combinations(
 
 def test_the_verdict_accepts_one_creator() -> None:
     """The accepting half, so a verdict that flagged everything would fail here."""
-    assert creator_problem(["k8s/seed-volume"]) == ""
+    assert creator_problem(["k8s/volume-claim"]) == ""

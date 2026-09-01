@@ -9,12 +9,12 @@
 - name: Create the valheim config volume claim
   tags: [deploy]
   ansible.builtin.include_role:
-    name: k8s/seed-volume
+    name: k8s/volume-claim
   vars:
-    seed_volume_service: valheim
-    seed_volume_claim: "{{ valheim_k8s_claim }}"
-    seed_volume_storage_class: "{{ valheim_k8s_storage_class }}"
-    seed_volume_size: "{{ valheim_k8s_size }}"
+    volume_claim_service: valheim
+    volume_claim_name: "{{ valheim_k8s_claim }}"
+    volume_claim_storage_class: "{{ valheim_k8s_storage_class }}"
+    volume_claim_size: "{{ valheim_k8s_size }}"
 
 - name: Deploy valheim to the cluster
   ansible.builtin.include_role:

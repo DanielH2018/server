@@ -4,12 +4,12 @@
 - name: Create the speedtest config volume claim
   tags: [deploy]
   ansible.builtin.include_role:
-    name: k8s/seed-volume
+    name: k8s/volume-claim
   vars:
-    seed_volume_service: speedtest
-    seed_volume_claim: "{{ speedtest_k8s_claim }}"
-    seed_volume_storage_class: "{{ speedtest_k8s_storage_class }}"
-    seed_volume_size: "{{ speedtest_k8s_size }}"
+    volume_claim_service: speedtest
+    volume_claim_name: "{{ speedtest_k8s_claim }}"
+    volume_claim_storage_class: "{{ speedtest_k8s_storage_class }}"
+    volume_claim_size: "{{ speedtest_k8s_size }}"
 
 - name: Deploy speedtest to the cluster
   ansible.builtin.include_role:

@@ -5,12 +5,12 @@
 - name: Create the home-assistant config volume claim
   tags: [deploy]
   ansible.builtin.include_role:
-    name: k8s/seed-volume
+    name: k8s/volume-claim
   vars:
-    seed_volume_service: home-assistant
-    seed_volume_claim: "{{ home_assistant_k8s_claim }}"
-    seed_volume_storage_class: "{{ home_assistant_k8s_storage_class }}"
-    seed_volume_size: "{{ home_assistant_k8s_size }}"
+    volume_claim_service: home-assistant
+    volume_claim_name: "{{ home_assistant_k8s_claim }}"
+    volume_claim_storage_class: "{{ home_assistant_k8s_storage_class }}"
+    volume_claim_size: "{{ home_assistant_k8s_size }}"
 
 - name: Deploy home-assistant to the cluster
   ansible.builtin.include_role:

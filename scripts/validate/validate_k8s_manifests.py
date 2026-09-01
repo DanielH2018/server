@@ -117,13 +117,13 @@ NO_MANIFEST_ROLES = {
 # Dockerfile, which claim — and this validator reads role defaults and inventory, not task-level
 # `vars:` overrides. Rendering them standalone produces STUB-filled manifests that prove nothing.
 #
-# That exemption is a coverage gap, not a clean bill: four manifests (seed-volume's pvc and
+# That exemption is a coverage gap, not a clean bill: four manifests (volume-claim's pvc and
 # seed-pod, image-builder's build-job and context-configmap) are parsed as YAML nowhere, and are
 # covered only by one securityContext property each in test_seed_pod_security_context.py and
 # test_image_builder_security_context.py. Closing it means rendering them against a fixture of
 # the caller vars; until then this names the gap where someone will look for it.
 CALLER_RENDERED_ROLES = {
-    "seed-volume",
+    "volume-claim",
     "image-builder",
 }
 
@@ -265,14 +265,14 @@ def find_claim_name_refs(node) -> list[str]:
     return refs
 
 
-def seed_volume_pvc_names(role: str, ctx: dict) -> list[str]:
-    """PVC names seed-volume creates on this role's behalf.
+def volume_claim_pvc_names(role: str, ctx: dict) -> list[str]:
+    """PVC names volume-claim creates on this role's behalf.
 
-    seed-volume is in SKIP_ROLES and never rendered under its own role — its templates/pvc.yaml.j2
-    (metadata.name: `{{ seed_volume_claim }}`) only ever renders with vars a CALLING role passes
-    on the `include_role` task (e.g. tdarr's `seed_volume_claim: "{{ tdarr_k8s_configs_claim }}"`),
+    volume-claim is in SKIP_ROLES and never rendered under its own role — its templates/pvc.yaml.j2
+    (metadata.name: `{{ volume_claim_name }}`) only ever renders with vars a CALLING role passes
+    on the `include_role` task (e.g. tdarr's `volume_claim_name: "{{ tdarr_k8s_configs_claim }}"`),
     which is otherwise invisible to this validator — it reads role defaults/templates, not
-    task-level `vars:` overrides. Without this, every seed-volume-backed claimName (tdarr,
+    task-level `vars:` overrides. Without this, every volume-claim-backed claimName (tdarr,
     freshrss, ...) would show as unresolved. Best-effort: only handles a plain string `vars:`
     value, which is the only form any current caller uses.
     """
@@ -292,9 +292,9 @@ def seed_volume_pvc_names(role: str, ctx: dict) -> list[str]:
             if not isinstance(task, dict):
                 continue
             inc = task.get("ansible.builtin.include_role")
-            if not isinstance(inc, dict) or inc.get("name") != "k8s/seed-volume":
+            if not isinstance(inc, dict) or inc.get("name") != "k8s/volume-claim":
                 continue
-            claim = (task.get("vars") or {}).get("seed_volume_claim")
+            claim = (task.get("vars") or {}).get("volume_claim_name")
             if not isinstance(claim, str):
                 continue
             try:
@@ -750,8 +750,8 @@ def main() -> int:
     )
     checked = failures = 0
     # Built up alongside the existing per-template loop below (one render pass, not two): every
-    # declared PVC name (from a rendered PersistentVolumeClaim, or from a seed-volume include —
-    # see seed_volume_pvc_names), and every (rel, docs) this run successfully parsed. The
+    # declared PVC name (from a rendered PersistentVolumeClaim, or from a volume-claim include —
+    # see volume_claim_pvc_names), and every (rel, docs) this run successfully parsed. The
     # claimName cross-reference check runs once, after the loop, once the PVC index is complete
     # — a reference in role A can legitimately name a PVC role B declares (media_volume_claim,
     # ~7 consumers), so it can't be checked role-by-role as the loop goes.
@@ -813,7 +813,7 @@ def main() -> int:
         # fix a collision that does not exist. Full reasoning in that function's docstring.
         # Contradict it with a case where the guard passes and the render is still wrong.
         ctx = {**base, **role_vars, "container_item": entries[role]}
-        pvc_names.update(seed_volume_pvc_names(role, ctx))
+        pvc_names.update(volume_claim_pvc_names(role, ctx))
         for tpl in templates:
             checked += 1
             err, docs = check_template(role, tpl, ctx)

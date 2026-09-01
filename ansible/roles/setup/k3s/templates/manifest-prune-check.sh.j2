@@ -221,7 +221,7 @@ check_kind() {
 #   secret     — the read-only ServiceAccount this runs as is Forbidden on Secrets entirely
 #                ("get list watch" does not cover them), so the query returns an error, not a
 #                list, and every Secret would read as absent-from-live rather than orphaned.
-#   pvc        — 43 unowned claims whose staging path (k8s/seed-volume creates some of them
+#   pvc        — 43 unowned claims whose staging path (k8s/volume-claim creates some of them
 #                outside the owning role's manifests_files) has not been audited. A false red on
 #                the storage plane is the most expensive kind here; add it after the audit, not
 #                before.

@@ -449,7 +449,7 @@ uv run pytest scripts         # just one suite
 - **A new check ships with a proof it can go RED.** Any validator, guard, health check or probe
   lands with a paired test: one input it must accept, and one input it must reject. A check is only
   ever observed passing, so without the rejecting half there is no evidence it can fail — and this
-  repo has paid for that twice. `seed-volume`'s short-circuit shipped behind 16 passing tests and a
+  repo has paid for that twice. `volume-claim`'s short-circuit shipped behind 16 passing tests and a
   mutation test, then fired for 0 of 25 claims across two full deploys. `image-smoke`'s bare-boot
   rule never caught a real image problem across 11 failures. Both read green throughout.
   `scripts/validate/test_validate_compose_templates.py` is the worked example: every rule there is

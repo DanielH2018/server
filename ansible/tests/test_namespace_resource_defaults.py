@@ -165,7 +165,7 @@ def test_the_roles_outside_the_render_walk_are_accounted_for() -> None:
     stop working, and it would surface hours later as a failed image build rather than here.
     """
     excluded = {}
-    for role in ("image-builder", "seed-volume"):
+    for role in ("image-builder", "volume-claim"):
         for tpl in sorted(
             (_REPO / "ansible/roles/k8s" / role / "templates").glob("*.j2")
         ):

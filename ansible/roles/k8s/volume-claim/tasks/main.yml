@@ -2,9 +2,9 @@
 # Create the PersistentVolumeClaim for a k8s-hosted service.
 #
 # Callers set:
-#   seed_volume_service                 service name (labels the manifest directory)
-#   seed_volume_claim                   PVC name
-#   seed_volume_size / _storage_class   as needed
+#   volume_claim_service                 service name (labels the manifest directory)
+#   volume_claim_name                   PVC name
+#   volume_claim_size / _storage_class   as needed
 #
 # WHY THIS ROLE EXISTS AT ALL, given k8s/manifests renders a role's manifests: 16 of the caller
 # roles ship no pvc.yaml.j2 of their own, and this is the only thing that creates their claim.
@@ -18,10 +18,13 @@
 # pod, the quiesce/restore cycle, the `.seeded` marker and its PVC annotation short-circuit.
 # The PVC creation is all that was still doing work, and it is all that is left.
 #
-# The name is now wrong and is deliberately left alone in this change: `seed-volume` is
-# referenced by gitops_deploy's deploy_logic.py, land_tags.py, validate_k8s_manifests.SKIP_ROLES
-# and two skills, and renaming the deployer's own plumbing belongs in its own reviewable change
-# rather than riding along with a 900-line deletion.
+# THE ROLE WAS CALLED `seed-volume` UNTIL 2026-09-01, and git history before that name change
+# is under that path. The rename came one change after the seeding was deleted, deliberately:
+# the name is read by gitops_deploy's deploy_logic.py, land_tags.py,
+# validate_k8s_manifests.SKIP_ROLES, group_vars' dry-run-unsupported list and two skills, so
+# moving it belonged in a reviewable change of its own rather than riding along with a
+# 1,100-line deletion. `seed` is still the right word elsewhere in this tree — see
+# ansible/seed_volume_backup.yml, which really does seed a claim, from a Longhorn backup.
 #
 # The k8s_no_mutate gate stays where it is. It has to live HERE rather than at the 24 call
 # sites, because that is what the earlier tag-based refusal in deploy.yml got wrong: it

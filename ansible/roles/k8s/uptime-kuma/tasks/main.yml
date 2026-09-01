@@ -5,22 +5,22 @@
 - name: Create the Kuma data volume claim
   tags: [deploy]
   ansible.builtin.include_role:
-    name: k8s/seed-volume
+    name: k8s/volume-claim
   vars:
-    seed_volume_service: uptime-kuma
-    seed_volume_claim: "{{ uptime_kuma_k8s_claim }}"
-    seed_volume_storage_class: "{{ uptime_kuma_k8s_storage_class }}"
-    seed_volume_size: "{{ uptime_kuma_k8s_size }}"
+    volume_claim_service: uptime-kuma
+    volume_claim_name: "{{ uptime_kuma_k8s_claim }}"
+    volume_claim_storage_class: "{{ uptime_kuma_k8s_storage_class }}"
+    volume_claim_size: "{{ uptime_kuma_k8s_size }}"
 
 - name: Create the AutoKuma entity-map volume claim
   tags: [deploy]
   ansible.builtin.include_role:
-    name: k8s/seed-volume
+    name: k8s/volume-claim
   vars:
-    seed_volume_service: autokuma
-    seed_volume_claim: "{{ uptime_kuma_k8s_autokuma_claim }}"
-    seed_volume_storage_class: "{{ uptime_kuma_k8s_storage_class }}"
-    seed_volume_size: "{{ uptime_kuma_k8s_autokuma_size }}"
+    volume_claim_service: autokuma
+    volume_claim_name: "{{ uptime_kuma_k8s_autokuma_claim }}"
+    volume_claim_storage_class: "{{ uptime_kuma_k8s_storage_class }}"
+    volume_claim_size: "{{ uptime_kuma_k8s_autokuma_size }}"
 
 - name: Deploy uptime-kuma to the cluster
   ansible.builtin.include_role:

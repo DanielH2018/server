@@ -97,7 +97,7 @@ gitops_deploy_k8s_autodeploy_max_claim_services_per_tick: 1
 #
 # The filter fails closed: a role that declares nothing, declares a non-boolean, or cannot
 # be parsed raises rather than dropping out of this list. Absence from the denylist means
-# auto-deployable, which is how seed-volume and image-builder went months as eligible.
+# auto-deployable, which is how volume-claim and image-builder went months as eligible.
 #
 # An empty denylist still disarms the feature in gitops_deploy.py rather than allowing
 # everything — but the filter refuses to render an empty one, so that guard is now a

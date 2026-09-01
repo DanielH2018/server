@@ -2,12 +2,12 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ seed_volume_claim }}
+  name: {{ volume_claim_name }}
   namespace: {{ k8s_namespace }}
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: {{ seed_volume_storage_class }}
+  storageClassName: {{ volume_claim_storage_class }}
   resources:
     requests:
-      storage: {{ seed_volume_size }}
+      storage: {{ volume_claim_size }}

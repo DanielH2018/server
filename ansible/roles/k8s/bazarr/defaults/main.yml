@@ -4,7 +4,7 @@ bazarr_k8s_image: lscr.io/linuxserver/bazarr:v1.5.6-ls350
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Migrating state — strategy is Recreate and the config volume is seeded through
-# k8s/seed-volume (hardcoded ReadWriteOnce), so a bad image swap can migrate the database
+# k8s/volume-claim (hardcoded ReadWriteOnce), so a bad image swap can migrate the database
 # holding subtitle-path state before the gate observes a fault. Same class as sonarr/radarr;
 # the linuxserver -lsNN scheme hides a breaking bump as a routine patch bump.
 # Promoted in slice 7b (2026-08-21): k8s/manifests now takes a pre-apply Longhorn snapshot of
@@ -12,7 +12,7 @@ bazarr_k8s_image: lscr.io/linuxserver/bazarr:v1.5.6-ls350
 # used to be denylisted for is now covered. -lsNN still hides a breaking bump as a patch bump,
 # but a bad swap reverts to the snapshot instead of stranding a live deploy against migrated data.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC, now protected by the pre-apply Longhorn snapshot and revert; -lsNN versioning still hides a breaking bump as a patch bump. WEIGHED: bazarr also mounts media-data (shared RWX, not reverted); a revert forgets subtitle files it already wrote there, largely self-healing since bazarr checks existence before re-downloading"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "migrating state — Recreate + RWO volume-claim PVC, now protected by the pre-apply Longhorn snapshot and revert; -lsNN versioning still hides a breaking bump as a patch bump. WEIGHED: bazarr also mounts media-data (shared RWX, not reverted); a revert forgets subtitle files it already wrote there, largely self-healing since bazarr checks existence before re-downloading"  # noqa var-naming[no-role-prefix]
 # Slice 7a task 3 — the pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
 # Declared regardless of k8s_autodeploy — protects a manual deploy too, and slice 7b's revert
 # is what this role's auto-deploy now depends on.

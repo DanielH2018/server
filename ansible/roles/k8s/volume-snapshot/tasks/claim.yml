@@ -530,7 +530,7 @@
 # realistic ways the attach itself fails, and failing the deploy over either would block a
 # legitimate action: no longhorn-manager pod on this node, or the attach/wait/retake sequence
 # timing out. An operator's own workload scaled to zero, and a brand-new service's first deploy
-# (k8s/seed-volume leaves the volume detached, no Deployment has ever attached it), both now GET
+# (k8s/volume-claim leaves the volume detached, no Deployment has ever attached it), both now GET
 # a real snapshot through the attach above rather than reaching this warning — see CLAUDE.md.
 #
 # The gap this leaves is real and must stay visible rather than glossed: the apply below may

@@ -60,7 +60,7 @@ pihole_k8s_unbound_mem_request: 32Mi
 
 # Desired blocklist state, reconciled into gravity.db by tasks/main.yml (idempotent
 # INSERT/UPDATE, then a gravity rebuild only when something changed). DECLARED rather than
-# volume-seeded — resolving the plan's "seed vs regenerate" open item: seed-volume verifies
+# volume-seeded — resolving the plan's "seed vs regenerate" open item: volume-claim verifies
 # against a quiescent source, and pihole-FTL.db moves on every DNS query, so a coexistence
 # seed can never pass verification. This list is the complete durable state the Docker
 # copy's gravity.db held on 2026-08-09 (plus two regexes below; the only client row was a

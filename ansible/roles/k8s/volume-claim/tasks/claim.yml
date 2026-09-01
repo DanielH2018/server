@@ -2,21 +2,21 @@
 # k8s/manifests creates this directory too, but this role deliberately runs BEFORE it — the
 # workload must not start against a claim that does not exist — so it cannot rely on that.
 # Both are idempotent.
-- name: Create the manifest directory for {{ seed_volume_service }}
+- name: Create the manifest directory for {{ volume_claim_service }}
   tags: [config]
   ansible.builtin.file:
-    path: "/etc/rancher/k3s/manifests/{{ seed_volume_service }}"
+    path: "/etc/rancher/k3s/manifests/{{ volume_claim_service }}"
     state: directory
     mode: "0700"
     owner: root
     group: root
   become: true
 
-- name: Render the volume claim for {{ seed_volume_service }}
+- name: Render the volume claim for {{ volume_claim_service }}
   tags: [config]
   ansible.builtin.template:
     src: pvc.yaml.j2
-    dest: "/etc/rancher/k3s/manifests/{{ seed_volume_service }}/pvc.yaml"
+    dest: "/etc/rancher/k3s/manifests/{{ volume_claim_service }}/pvc.yaml"
     mode: "0644"
     owner: root
     group: root
@@ -24,10 +24,10 @@
 
 # `changed_when` on 'created' rather than on rc: apply is idempotent and reports "unchanged"
 # for a claim that already exists, which is the steady state on every deploy.
-- name: Create the PVC for {{ seed_volume_claim }}
+- name: Create the PVC for {{ volume_claim_name }}
   tags: [deploy]
   ansible.builtin.command:
-    cmd: "k3s kubectl apply -f /etc/rancher/k3s/manifests/{{ seed_volume_service }}/pvc.yaml"
-  register: seed_volume_pvc
+    cmd: "k3s kubectl apply -f /etc/rancher/k3s/manifests/{{ volume_claim_service }}/pvc.yaml"
+  register: volume_claim_pvc
   become: true
-  changed_when: "'created' in seed_volume_pvc.stdout"
+  changed_when: "'created' in volume_claim_pvc.stdout"

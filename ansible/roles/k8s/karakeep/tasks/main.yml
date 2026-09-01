@@ -3,12 +3,12 @@
 - name: Create the karakeep data volume claim
   tags: [deploy]
   ansible.builtin.include_role:
-    name: k8s/seed-volume
+    name: k8s/volume-claim
   vars:
-    seed_volume_service: karakeep
-    seed_volume_claim: "{{ karakeep_k8s_claim }}"
-    seed_volume_storage_class: "{{ karakeep_k8s_storage_class }}"
-    seed_volume_size: "{{ karakeep_k8s_size }}"
+    volume_claim_service: karakeep
+    volume_claim_name: "{{ karakeep_k8s_claim }}"
+    volume_claim_storage_class: "{{ karakeep_k8s_storage_class }}"
+    volume_claim_size: "{{ karakeep_k8s_size }}"
 
 - name: Deploy karakeep to the cluster
   ansible.builtin.include_role:

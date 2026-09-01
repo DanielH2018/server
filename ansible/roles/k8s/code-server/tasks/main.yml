@@ -26,12 +26,12 @@
 
 - name: Create the code-server config volume claim
   ansible.builtin.include_role:
-    name: k8s/seed-volume
+    name: k8s/volume-claim
   vars:
-    seed_volume_service: code-server
-    seed_volume_claim: "{{ code_server_k8s_claim }}"
-    seed_volume_storage_class: "{{ code_server_k8s_storage_class }}"
-    seed_volume_size: "{{ code_server_k8s_size }}"
+    volume_claim_service: code-server
+    volume_claim_name: "{{ code_server_k8s_claim }}"
+    volume_claim_storage_class: "{{ code_server_k8s_storage_class }}"
+    volume_claim_size: "{{ code_server_k8s_size }}"
 
 - name: Deploy code-server to the cluster
   ansible.builtin.include_role:

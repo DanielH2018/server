@@ -135,7 +135,7 @@
   # `failed_when: false` here and there must never be one.
   #
   # Two ways to reach this legitimately, and both mean the rollback cannot help: the service's
-  # first deploy took no snapshot (k8s/seed-volume leaves the volume detached, and a detached
+  # first deploy took no snapshot (k8s/volume-claim leaves the volume detached, and a detached
   # volume cannot be snapshotted), or a retention pass deleted the recovery point.
   #
   # Guarded on `k8s_no_mutate` like every other decision that stops the play, and REPORTS the

@@ -53,7 +53,7 @@ in `_UNRESOLVED_TARGETS` with the reason, and that set is checked for staleness 
 
 WHAT IT DOES NOT COVER, deliberately:
 
-  * Roles that render no Deployment/DaemonSet/StatefulSet (seed-volume, netpol-baseline,
+  * Roles that render no Deployment/DaemonSet/StatefulSet (volume-claim, netpol-baseline,
     rollout-drain, media-volume, ...). They have no rollout of their own to gate on, and every
     pod they touch belongs to someone else.
   * `logs job/<name>` and other Job targets. A Job has no rollout for `rollout status` to gate.

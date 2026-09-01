@@ -479,7 +479,7 @@ def test_resolver_returns_none_for_a_tag_that_is_not_a_k8s_role():
 
 
 def test_resolver_respects_the_validators_skip_roles():
-    """seed-volume and image-builder render only with vars a CALLING role passes, so rendering
+    """volume-claim and image-builder render only with vars a CALLING role passes, so rendering
     them standalone produces stub-filled manifests. Widening past that boundary would invent
     workload names and report them MISSING."""
     import validate_k8s_manifests as validator

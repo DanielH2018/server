@@ -13,7 +13,7 @@ accept cases rather than synthetic ones:
   * `code-server/templates/deployment.yaml.j2` adds CHOWN + DAC_OVERRIDE + FOWNER — a fresh
     claim's root is root:root while the files being copied belong to the pod uid.
 
-There was a third `runAsUser: 0` site until 2026-09-01: `seed-volume/templates/seed-pod.yaml.j2`,
+There was a third `runAsUser: 0` site until 2026-09-01: `volume-claim/templates/seed-pod.yaml.j2`,
 which dropped nothing, so root kept its default capability set. It was clean, and it went with
 the rest of the seeding when that role stopped seeding. Its point stands for the two that
 remain — the hazard is the COMBINATION, never root by itself.

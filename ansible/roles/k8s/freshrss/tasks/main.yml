@@ -1,14 +1,14 @@
 ---
 - name: Create the freshrss config volume claim
   tags: [deploy]
-  when: freshrss_k8s_manage_seed | bool
+  when: freshrss_k8s_manage_claim | bool
   ansible.builtin.include_role:
-    name: k8s/seed-volume
+    name: k8s/volume-claim
   vars:
-    seed_volume_service: freshrss
-    seed_volume_claim: "{{ freshrss_k8s_claim }}"
-    seed_volume_storage_class: "{{ freshrss_k8s_storage_class }}"
-    seed_volume_size: "{{ freshrss_k8s_size }}"
+    volume_claim_service: freshrss
+    volume_claim_name: "{{ freshrss_k8s_claim }}"
+    volume_claim_storage_class: "{{ freshrss_k8s_storage_class }}"
+    volume_claim_size: "{{ freshrss_k8s_size }}"
 
 - name: Deploy freshrss to the cluster
   ansible.builtin.include_role:
@@ -20,9 +20,9 @@
     # tells nginx: an edited cache config applies, reports changed, and never takes effect.
     manifests_extra_rollouts:
       - name: freshrss-feed-cache
-    # pvc.yaml only when nothing seeds this cluster — seed-volume creates the claim itself,
+    # pvc.yaml only when nothing seeds this cluster — volume-claim creates the claim itself,
     # so rendering both would give one claim two creators.
     manifests_files: >-
-      {{ ([] if freshrss_k8s_manage_seed | bool else ['pvc.yaml'])
+      {{ ([] if freshrss_k8s_manage_claim | bool else ['pvc.yaml'])
          + ['configmap.yaml', 'deployment.yaml', 'deployment-feed-cache.yaml',
             'service.yaml', 'ingressroute.yaml'] }}

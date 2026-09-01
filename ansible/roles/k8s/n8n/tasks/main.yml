@@ -8,12 +8,12 @@
 - name: Create the n8n data volume claim
   tags: [deploy]
   ansible.builtin.include_role:
-    name: k8s/seed-volume
+    name: k8s/volume-claim
   vars:
-    seed_volume_service: n8n
-    seed_volume_claim: "{{ n8n_k8s_claim }}"
-    seed_volume_storage_class: "{{ n8n_k8s_storage_class }}"
-    seed_volume_size: "{{ n8n_k8s_size }}"
+    volume_claim_service: n8n
+    volume_claim_name: "{{ n8n_k8s_claim }}"
+    volume_claim_storage_class: "{{ n8n_k8s_storage_class }}"
+    volume_claim_size: "{{ n8n_k8s_size }}"
     # n8n itself is the only writer of this claim; the runners hold no volume. The claim
     # is created empty on first cluster deployment.
 

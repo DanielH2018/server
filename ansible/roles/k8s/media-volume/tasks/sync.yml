@@ -6,11 +6,11 @@
 # AFTER cutover would delete everything qbittorrent has downloaded since and restore whatever
 # the stale source still holds. Before cutover it is safe to run as often as you like.
 #
-# NOT roles/k8s/seed-volume, which is the repo's normal way to fill a PVC. That role tars the
+# NOT roles/k8s/volume-claim, which is the repo's normal way to fill a PVC. That role tars the
 # whole tree through `kubectl exec` and sha256s both ends on every run — right for a 640 M
 # config directory, wrong for 19 G that needs to be re-run several times and resumed after an
 # interruption. rsync gives delta transfer; the checksum verification below keeps what
-# seed-volume's assert was protecting.
+# volume-claim's assert was protecting.
 #
 # Runs as {{ sys_user }}, NOT root: the SSH trust to {{ media_volume_source_host }} belongs to
 # that user, and root has no key there. The destination is owned by {{ puid }}:{{ pgid }} by

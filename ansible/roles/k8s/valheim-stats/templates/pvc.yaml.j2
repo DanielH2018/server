@@ -1,6 +1,6 @@
 {% from 'pvc.yml.j2' import pvc with context %}
 ---
-# Declared here rather than by k8s/seed-volume (which is what creates terraria-stats'
+# Declared here rather than by k8s/volume-claim (which is what creates terraria-stats'
 # claim): that role exists to copy an existing Docker directory in, and there is nothing
 # to copy — this service has no predecessor.
 {{ pvc(valheim_stats_k8s_claim, valheim_stats_k8s_storage_class, valheim_stats_k8s_pvc_size) }}

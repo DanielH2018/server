@@ -110,7 +110,7 @@ def shared_roles(files, declared: set[str] | None = None) -> list[str]:
     """The changed role directories that have no `containers_list` entry.
 
     These are the shared k3s plane — `manifests` is the apply-and-roll path every workload
-    includes, `seed-volume` and `volume-revert` are storage paths several include. Naming one
+    includes, `volume-claim` and `volume-revert` are storage paths several include. Naming one
     in `--tags` makes deploy.sh refuse the ENTIRE list (exit 2), so they must be split off the
     tags and reported as work a human still owes. PR #617 is the measured case.
     """

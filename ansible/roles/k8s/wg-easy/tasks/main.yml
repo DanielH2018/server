@@ -2,7 +2,7 @@
 # Slice-6 B5, pulled forward from slice 7 (2026-08-09): the router's forwards — 51820/udp
 # included — moved to daniel-box, so this move restored remote access.
 #
-# The k8s/seed-volume include this role used to open was dropped at the v15 upgrade
+# The k8s/volume-claim include this role used to open was dropped at the v15 upgrade
 # (2026-08-23). It copied the Docker copy's bind mount from daniel-server, a host that has
 # had no Docker since 2026-08-14, and it short-circuits on the claim's own seeded annotation
 # anyway — so on the live PVC it had already been a no-op for every deploy since the cutover.

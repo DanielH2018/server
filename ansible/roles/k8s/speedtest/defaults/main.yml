@@ -7,14 +7,14 @@ speedtest_k8s_image: lscr.io/linuxserver/speedtest-tracker:latest@sha256:e095f60
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Promoted in slice 7b (2026-08-21): strategy is Recreate and speedtest_k8s_claim below is
-# seeded through k8s/seed-volume, which hardcodes ReadWriteOnce — the same migrating-state
+# seeded through k8s/volume-claim, which hardcodes ReadWriteOnce — the same migrating-state
 # shape (Recreate + RWO PVC) that kept sonarr/radarr/prowlarr off the list. k8s/manifests now
 # takes a pre-apply Longhorn snapshot of that claim and reverts it if the deploy fails. Data
 # lost this way was already regenerable speed-test history (see the storage-class comment
 # below), which is why speedtest was the original slice-1 pilot; the snapshot and revert close
 # the gap the pilot was paused for.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "migrating state — Recreate + an RWO seed-volume PVC, now protected by the pre-apply Longhorn snapshot and revert added in slice 7b. Same shape as sonarr/prowlarr; the data at risk was already regenerable speed-test history"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "migrating state — Recreate + an RWO volume-claim PVC, now protected by the pre-apply Longhorn snapshot and revert added in slice 7b. Same shape as sonarr/prowlarr; the data at risk was already regenerable speed-test history"  # noqa var-naming[no-role-prefix]
 # Slice 7a task 3 — the pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
 # Declared regardless of k8s_autodeploy — protects a manual deploy too, and slice 7b's revert
 # is what this role's auto-deploy now depends on.

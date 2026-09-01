@@ -48,7 +48,7 @@ Two limits worth knowing before you trust a green dry run:
   outside `roles/k8s/manifests` (sidecar ConfigMaps built with `kubectl create`, netpol-probe
   Jobs, `exec -i` into a live pod) would half-apply, so `deploy.yml` fails fast and names them.
   `ansible/tests/test_k8s_dry_run.py` re-derives the list from the role sources so it cannot drift.
-- **A brand-new service is only half-checked.** `seed-volume` is skipped (it is a dependency of
+- **A brand-new service is only half-checked.** `volume-claim` is skipped (it is a dependency of
   25 roles and mutates), and nothing at admission verifies that a referenced PVC exists — so
   the Deployment validates while the volume is never proven provisionable.
 

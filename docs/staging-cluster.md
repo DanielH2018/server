@@ -387,7 +387,7 @@ staging cluster turns pieces **off** in its own `host_vars` rather than prod tur
 `traefik_k8s_manage_cloudflare_drift_check` (#523), `traefik_k8s_manage_crowdsec` and
 `authelia_k8s_manage_crowdsec` (#525), `traefik_k8s_manage_livesync_gate` (#526), and
 `traefik_k8s_watched_namespaces` (#528). Traefik itself reached staging in #527, `freshrss` in
-#529 behind `freshrss_k8s_manage_seed`, and #530 turned off the pre-apply Longhorn snapshots.
+#529 behind `freshrss_k8s_manage_claim`, and #530 turned off the pre-apply Longhorn snapshots.
 
 **Staging serves Traefik's built-in default certificate**, which is also the discriminator for
 which cluster answered: `secrets-staging.yml` carries the same `domain` as prod, so staging's
@@ -405,20 +405,20 @@ Each would fire on a staging deploy if inherited unchanged. The first is closed,
 closed, and the second is closed by construction but not yet exercised — `ical-proxy` is still
 slice 6.
 
-**`seed_volume_source_host: daniel-server`** — `seed-volume` copies a source directory from that
-host into a PVC. A staging deploy inheriting this default reads **prod's bind-mount data** over
-ssh. Closed by skipping seeding rather than pointing it elsewhere:
-`freshrss_k8s_manage_seed: false` on staging (#529), with the role rendering its own PVC in place
-of the one `seed-volume` creates.
+**`seed_volume_source_host: daniel-server`** — the role then called `seed-volume` copied a source
+directory from that host into a PVC. A staging deploy inheriting this default reads **prod's
+bind-mount data** over ssh. Closed by skipping seeding rather than pointing it elsewhere:
+`freshrss_k8s_manage_claim: false` on staging (#529), with the role rendering its own PVC in place
+of the one that role creates.
 Skipping is the right shape because seeding is a one-shot migration mechanism and staging has
 nothing to migrate.
 
-That hazard is structurally gone as of 2026-09-01: `seed-volume` no longer seeds, and
+That hazard is structurally gone as of 2026-09-01: `volume-claim` no longer seeds, and
 `seed_volume_source_host` no longer exists. Every source path pointed into
 `/home/ubuntu/server/containers/<svc>/` on daniel-server, a tree that stopped existing when
 Docker was uninstalled there on 2026-08-14, so the copy could no longer have a source. The role
-now only creates the PVC. `freshrss_k8s_manage_seed` remains live and still selects which role
-creates the claim — seed-volume when true, freshrss's own `pvc.yaml.j2` when false, as staging
+now only creates the PVC. `freshrss_k8s_manage_claim` remains live and still selects which role
+creates the claim — volume-claim when true, freshrss's own `pvc.yaml.j2` when false, as staging
 sets it — so the staging arrangement is unchanged. Only the flag's name is now misleading.
 
 **`k8s_registry_node`** — the in-cluster registry is pinned to one node, so staging's 7 built

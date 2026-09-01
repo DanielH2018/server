@@ -26,7 +26,7 @@ spec:
       # No legacy Docker-link env vars for every Service in the namespace. Harmless clutter
       # here, fatal for Authelia — see that role's deployment for the failure it causes.
       enableServiceLinks: false
-      # No fsGroup on purpose. seed-volume restores the source's ownership with
+      # No fsGroup on purpose. volume-claim restores the source's ownership with
       # `tar -p --numeric-owner`, and this LSIO image starts as root and chowns /config to
       # PUID/PGID itself. An fsGroup would recursively rewrite group ownership at mount time,
       # fighting both.

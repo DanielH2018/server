@@ -14,10 +14,10 @@ valheim_k8s_image: ghcr.io/community-valheim-tools/valheim-server:1.1.0
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Two independent reasons, added 2026-08-16 with the pilot clearing: (1) probe-less — the
 # Deployment renders no readinessProbe at all, same shape as terraria; (2) migrating state —
-# strategy is Recreate and valheim-config is seeded through k8s/seed-volume (hardcoded
+# strategy is Recreate and valheim-config is seeded through k8s/volume-claim (hardcoded
 # ReadWriteOnce), holding worlds/lists/prefs. Either alone would justify the denylist entry.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "two reasons: (1) probe-less — no readinessProbe at all; (2) migrating state — Recreate + RWO seed-volume PVC holding worlds"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "two reasons: (1) probe-less — no readinessProbe at all; (2) migrating state — Recreate + RWO volume-claim PVC holding worlds"  # noqa var-naming[no-role-prefix]
 
 # ── two volumes, deliberately on different backup postures ──────────────────────────────
 # /config is the irreplaceable half: worlds_local (the Dedicated world, ~7 M live plus the

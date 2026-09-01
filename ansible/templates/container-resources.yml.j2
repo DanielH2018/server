@@ -14,7 +14,7 @@
   nested deeper (a CronJob's `jobTemplate`) stay inline, for the same reason the securityContext
   macro leaves its two: a macro that can emit at two depths can emit at the wrong one.
 
-  NOT FOR image-builder OR seed-volume. Both are in validate_k8s_manifests.SKIP_ROLES and
+  NOT FOR image-builder OR volume-claim. Both are in validate_k8s_manifests.SKIP_ROLES and
   cannot be rendered standalone, so test_namespace_resource_defaults.py's
   `test_the_roles_outside_the_render_walk_are_accounted_for` checks their pod specs by grepping
   raw template text for `requests:` and `limits:`. It asserts the two appear together, because

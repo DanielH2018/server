@@ -10,7 +10,7 @@ freshrss_k8s_cache_image: nginx:alpine@sha256:4a73073bd557c65b759505da037898b61f
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Migrating state — strategy is Recreate and the config volume is seeded through
-# k8s/seed-volume (hardcoded ReadWriteOnce). Briefly removed from the denylist under an
+# k8s/volume-claim (hardcoded ReadWriteOnce). Briefly removed from the denylist under an
 # "ungated sub-deployment" reason that turned out to be stale, then restored (2026-08-20) once
 # review found the real, unrelated reason: this role tracks :latest by digest, so it rides
 # whatever image lands after Renovate's digest soak with no version-scheme signal at all —
@@ -19,7 +19,7 @@ freshrss_k8s_cache_image: nginx:alpine@sha256:4a73073bd557c65b759505da037898b61f
 # the claim below and reverts it if the deploy fails, so a bad digest swap reverts instead of
 # migrating the config volume with no version signal to have even warned about it.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC, now protected by the pre-apply Longhorn snapshot and revert; still tracks :latest by digest with no version signal to misread"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "migrating state — Recreate + RWO volume-claim PVC, now protected by the pre-apply Longhorn snapshot and revert; still tracks :latest by digest with no version signal to misread"  # noqa var-naming[no-role-prefix]
 # Slice 7a task 3 — the pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
 # Declared regardless of k8s_autodeploy — protects a manual deploy too, and slice 7b's revert
 # is what this role's auto-deploy now depends on.
@@ -41,13 +41,13 @@ freshrss_k8s_claim: freshrss-config
 freshrss_k8s_storage_class: longhorn
 freshrss_k8s_size: 2Gi
 
-# Whether this cluster creates the config volume via k8s/seed-volume role.
+# Whether this cluster creates the config volume via k8s/volume-claim role.
 #
 # DECIDED 2026-08-28: per-cluster. Until 2026-08-14 the seed mechanism could populate the
 # PVC from the pre-migration Docker tree on daniel-server. Docker was uninstalled there
 # on 2026-08-14, so that source no longer exists. Prod clusters already have PVCs populated
 # from before the removal, so they skip seeding based on existing volume state. A cluster
-# with a fresh PVC has no such marker, so a deploy with this true will call k8s/seed-volume
+# with a fresh PVC has no such marker, so a deploy with this true will call k8s/volume-claim
 # (which creates an empty claim) while a staging cluster could set this false and render
 # `pvc.yaml` directly instead, letting the app run first-boot setup against an empty volume.
-freshrss_k8s_manage_seed: true
+freshrss_k8s_manage_claim: true

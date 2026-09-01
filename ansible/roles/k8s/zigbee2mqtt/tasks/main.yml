@@ -1,5 +1,5 @@
 ---
-# The k8s/seed-volume include this role used to open was dropped on 2026-09-01, when that role
+# The k8s/volume-claim include this role used to open was dropped on 2026-09-01, when that role
 # stopped seeding and became PVC creation alone. It named the SAME claim this role's own
 # pvc.yaml.j2 renders, so the two created one claim twice. wg-easy dropped its include for the
 # same reason at the v15 upgrade (2026-08-23); see the note at the top of its tasks/main.yml.

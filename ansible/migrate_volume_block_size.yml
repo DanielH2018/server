@@ -11,7 +11,7 @@
 # restore needed ~139% of a daily cap and could not complete in one day. At 16 MiB the same data
 # is ~434 blocks.
 #
-# WHY NOT JUST REDEPLOY THE SERVICE. Every one of these volumes was created by k8s/seed-volume,
+# WHY NOT JUST REDEPLOY THE SERVICE. Every one of these volumes was created by k8s/volume-claim,
 # which copies from a Docker source path under /home/ubuntu/server/containers. Docker was removed
 # from both cluster nodes on 2026-08-14 and those paths are gone. A fresh PVC has no .seeded
 # marker, so the role decides it must copy, then fails on the missing source. It fails loudly and

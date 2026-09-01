@@ -11,12 +11,12 @@
 - name: Create the sonarr config volume claim
   tags: [deploy]
   ansible.builtin.include_role:
-    name: k8s/seed-volume
+    name: k8s/volume-claim
   vars:
-    seed_volume_service: sonarr
-    seed_volume_claim: "{{ sonarr_k8s_claim }}"
-    seed_volume_storage_class: "{{ sonarr_k8s_storage_class }}"
-    seed_volume_size: "{{ sonarr_k8s_size }}"
+    volume_claim_service: sonarr
+    volume_claim_name: "{{ sonarr_k8s_claim }}"
+    volume_claim_storage_class: "{{ sonarr_k8s_storage_class }}"
+    volume_claim_size: "{{ sonarr_k8s_size }}"
 
 - name: Deploy sonarr to the cluster
   ansible.builtin.include_role:

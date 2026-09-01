@@ -3,7 +3,7 @@ prowlarr_k8s_image: lscr.io/linuxserver/prowlarr:2.4.0.5397-ls150
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Migrating state — strategy is Recreate and the config volume (indexer definitions + API keys)
-# is seeded through k8s/seed-volume (hardcoded ReadWriteOnce). This role renders TWO
+# is seeded through k8s/volume-claim (hardcoded ReadWriteOnce). This role renders TWO
 # Deployments (prowlarr + flaresolverr) and gates both correctly via manifests_extra_rollouts —
 # briefly removed from the denylist under an "ungated sub-deployment" reason that turned out to
 # be stale, then restored (2026-08-20) once review found the real, unrelated reason below.
@@ -13,7 +13,7 @@ prowlarr_k8s_image: lscr.io/linuxserver/prowlarr:2.4.0.5397-ls150
 # the claim below and reverts it if the deploy fails, so a bad swap reverts to the snapshot
 # instead of leaving the indexer definitions and API keys unreadable by the old image.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "migrating state — Recreate + RWO seed-volume PVC, now protected by the pre-apply Longhorn snapshot and revert; -lsNN versioning still hides a breaking bump. NOT about gatedness: both rendered Deployments (prowlarr + flaresolverr) gate correctly. WEIGHED: prowlarr pushes indexer config to the *arr apps, which store Prowlarr-assigned indexer IDs back; a revert desyncs those IDs until the next reconciliation or a manual re-sync. UNATTENDED RECOVERY DOES NOT APPLY HERE: sonarr, radarr, bazarr and jellyfin all self-heal a revert (rescan / re-download / existence check), so an operator reading the rollback alert for prowlarr should expect to re-sync indexers by hand"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "migrating state — Recreate + RWO volume-claim PVC, now protected by the pre-apply Longhorn snapshot and revert; -lsNN versioning still hides a breaking bump. NOT about gatedness: both rendered Deployments (prowlarr + flaresolverr) gate correctly. WEIGHED: prowlarr pushes indexer config to the *arr apps, which store Prowlarr-assigned indexer IDs back; a revert desyncs those IDs until the next reconciliation or a manual re-sync. UNATTENDED RECOVERY DOES NOT APPLY HERE: sonarr, radarr, bazarr and jellyfin all self-heal a revert (rescan / re-download / existence check), so an operator reading the rollback alert for prowlarr should expect to re-sync indexers by hand"  # noqa var-naming[no-role-prefix]
 # Slice 7a task 3 — the pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
 # Only the seeded config claim, not prowlarr_k8s_flaresolverr_claim — flaresolverr's PVC holds
 # nothing but a disposable browser profile, not migrating state. Declared regardless of
