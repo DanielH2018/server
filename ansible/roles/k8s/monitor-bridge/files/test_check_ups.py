@@ -10,7 +10,7 @@ import pytest
 import bridge_config
 import bridge_streaks
 import bridge_io
-import check
+import checks_host
 
 
 @pytest.mark.parametrize(
@@ -72,7 +72,7 @@ import check
     ],
 )
 def test_ups_health(charge, runtime, replace, ok, must_contain, must_not_contain):
-    result_ok, msg = check.ups_health(charge, runtime, replace, 50, 300)
+    result_ok, msg = checks_host.ups_health(charge, runtime, replace, 50, 300)
     assert result_ok is ok
     for s in must_contain:
         assert s in msg
@@ -97,14 +97,14 @@ def _ups_scalars(monkeypatch, charge, runtime, replace=0.0, ha_up=None):
 
 def test_check_ups_healthy_is_up(monkeypatch):
     _ups_scalars(monkeypatch, 100, 900)
-    ok, msg = check.check_ups()
+    ok, msg = checks_host.check_ups()
     assert ok and "battery 100%" in msg and "self-test ok" in msg
 
 
 def test_check_ups_absent_data_defers_to_scrape_targets(monkeypatch):
     # HA scrape down (ha_up None via the fake) -> all arms absent defers to Scrape Targets.
     _ups_scalars(monkeypatch, None, None, replace=None)
-    ok, msg = check.check_ups()
+    ok, msg = checks_host.check_ups()
     assert ok and "no UPS data" in msg
 
 
@@ -113,9 +113,9 @@ def test_check_ups_all_absent_but_ha_scraping_pages(monkeypatch):
     # Scrape Targets can't see it, so the old all-absent defer silently unmonitored the UPS. Now it
     # pages through the streak (naming the missing arms) instead of deferring.
     _ups_scalars(monkeypatch, None, None, replace=None, ha_up=1.0)
-    ok1, msg1 = check.check_ups()
+    ok1, msg1 = checks_host.check_ups()
     assert ok1 and "streak 1/2" in msg1
-    ok2, msg2 = check.check_ups()
+    ok2, msg2 = checks_host.check_ups()
     assert not ok2 and "absent" in msg2
     assert bridge_streaks._down_streaks.get("ups", 0) == 2
 
@@ -124,7 +124,7 @@ def test_check_ups_all_absent_ha_down_still_defers(monkeypatch):
     # HA scrape affirmatively down (up==0) with all arms absent -> still defer (Scrape Targets owns
     # the HA-source outage); the up-gate only flips the all-absent case to a page when HA is UP.
     _ups_scalars(monkeypatch, None, None, replace=None, ha_up=0.0)
-    ok, msg = check.check_ups()
+    ok, msg = checks_host.check_ups()
     assert ok and "no UPS data" in msg
 
 
@@ -135,7 +135,7 @@ def test_check_ups_nut_server_down_defers_not_double_pages(monkeypatch):
     # entity rename, so check_ups must DEFER (up) — not partial-absence page with a misdirecting
     # "entity renamed?" msg (the 2026-07-14 review M1 double-page bug).
     _ups_scalars(monkeypatch, None, None, replace=0.0)
-    ok, msg = check.check_ups()
+    ok, msg = checks_host.check_ups()
     assert ok and "NUT numeric arms" in msg
     assert bridge_streaks._down_streaks.get("ups", 0) == 0
 
@@ -143,9 +143,9 @@ def test_check_ups_nut_server_down_defers_not_double_pages(monkeypatch):
 def test_check_ups_replace_battery_pages(monkeypatch):
     # RB verdict from the self-test -> down after the streak even with a full charge / good runtime.
     _ups_scalars(monkeypatch, 100, 900, replace=1.0)
-    ok1, _ = check.check_ups()
+    ok1, _ = checks_host.check_ups()
     assert ok1  # streak grace on the first cycle
-    ok2, msg2 = check.check_ups()
+    ok2, msg2 = checks_host.check_ups()
     assert not ok2 and "replace-battery" in msg2
 
 
@@ -153,25 +153,25 @@ def test_check_ups_partial_absence_pages_not_silently_survives(monkeypatch):
     # charge+runtime present but the replace arm vanished (entity rename) -> flag, don't monitor the
     # survivor silently. Goes through the streak (HA-restart grace) then pages, naming the missing arm.
     _ups_scalars(monkeypatch, 100, 900, replace=None)
-    ok1, msg1 = check.check_ups()
+    ok1, msg1 = checks_host.check_ups()
     assert ok1 and "streak 1/2" in msg1
-    ok2, msg2 = check.check_ups()
+    ok2, msg2 = checks_host.check_ups()
     assert not ok2 and "absent" in msg2 and "replace-battery" in msg2
 
 
 def test_check_ups_single_low_runtime_is_suppressed_then_pages(monkeypatch):
     _ups_scalars(monkeypatch, 100, 60)  # runtime 1m < 5m floor
-    ok1, msg1 = check.check_ups()
+    ok1, msg1 = checks_host.check_ups()
     assert ok1 and "streak 1/2" in msg1  # UPS_CONSECUTIVE default 2
-    ok2, msg2 = check.check_ups()
+    ok2, msg2 = checks_host.check_ups()
     assert not ok2 and "runtime" in msg2
 
 
 def test_check_ups_recovery_resets_streak(monkeypatch):
     _ups_scalars(monkeypatch, 100, 60)
-    check.check_ups()  # streak advances to 1
+    checks_host.check_ups()  # streak advances to 1
     _ups_scalars(monkeypatch, 100, 900)  # healthy again
-    ok, _ = check.check_ups()
+    ok, _ = checks_host.check_ups()
     assert ok
     assert bridge_streaks._down_streaks.get("ups", 0) == 0
 
@@ -180,7 +180,7 @@ def test_check_ups_disabled_when_no_queries(monkeypatch):
     monkeypatch.setattr(bridge_config, "UPS_CHARGE_QUERY", "")
     monkeypatch.setattr(bridge_config, "UPS_RUNTIME_QUERY", "")
     monkeypatch.setattr(bridge_config, "UPS_REPLACE_QUERY", "")
-    ok, msg = check.check_ups()
+    ok, msg = checks_host.check_ups()
     assert ok and "disabled" in msg
 
 
