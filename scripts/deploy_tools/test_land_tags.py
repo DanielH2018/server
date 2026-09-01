@@ -197,16 +197,53 @@ def test_land_never_bypasses_the_staleness_guard():
 
 def test_a_setup_plane_pr_is_not_nothing_to_deploy():
     """PR #587's real shape: no k8s or containers role, so zero deploy tags — but it changed
-    the deployer and needed `initial_setup.yml --tags gitops_deploy` by hand. land.sh reported
-    `nothing-to-deploy` and exited 0 (2026-08-29)."""
+    the deployer and land.sh reported `nothing-to-deploy` and exited 0 (2026-08-29). The
+    deployer applies its own role itself since #719, so the note is empty now and the
+    landing is instead verified against the deployer's state (`self_applied` below); what
+    still needs a hand is a setup role initial_setup.yml does not include."""
     files = [
-        "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
+        "ansible/roles/setup/k3s/defaults/main.yml",
         "scripts/deploy_tools/land.sh",
         "mkdocs.yml",
     ]
     tags, _ = land_tags.derive(files, changed_files=3)
     assert tags == [], "no service tag should be derived from these paths"
-    assert "initial_setup.yml" in land_tags.plane_note(files)
+    assert "k3s-bringup.yml" in land_tags.plane_note(files)
+
+
+def test_a_self_applied_setup_role_is_not_owed_to_a_hand():
+    """#723 changed gitops_deploy and renovate_notify — both applied by the tick — and land.sh
+    exited 1 with `needs-manual-apply` naming the two playbook runs the next tick was about
+    to perform itself (2026-09-01)."""
+    files = [
+        "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
+        "ansible/roles/setup/renovate_notify/files/renovate_notify.py",
+    ]
+    assert land_tags.plane_note(files) == ""
+    assert land_tags.self_applied(files) is True
+
+
+def test_a_deploy_plane_change_is_the_ticks_to_apply():
+    files = ["ansible/templates/traefik.yml.j2"]
+    assert land_tags.plane_note(files) == ""
+    assert land_tags.self_applied(files) is True
+
+
+def test_a_bringup_playbook_is_still_owed_to_a_hand():
+    """The reject half of `self_applied`: the tick parks on these outright, so the deployer's
+    state can never say they were applied."""
+    files = ["ansible/bootstrap.yml"]
+    assert land_tags.plane_note(files) != ""
+    assert land_tags.self_applied(files) is False
+
+
+def test_docs_and_ordinary_services_are_not_self_applied():
+    for files in (
+        ["docs/gitops-pipeline.md"],
+        ["ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"],
+        ["ansible/roles/setup/k3s/defaults/main.yml"],
+    ):
+        assert land_tags.self_applied(files) is False, files
 
 
 def test_an_ordinary_service_pr_needs_no_manual_apply():
@@ -220,10 +257,10 @@ def test_an_ordinary_service_pr_needs_no_manual_apply():
 
 def test_a_mixed_pr_reports_both_a_tag_and_a_manual_apply():
     """The harder silence: the deploy genuinely succeeds and half the change is unapplied, so
-    a tag-carrying PR must still surface the setup-plane half."""
+    a tag-carrying PR must still surface the half a hand owes."""
     files = [
         "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2",
-        "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
+        "ansible/roles/setup/k3s/defaults/main.yml",
     ]
     tags, _ = land_tags.derive(files, changed_files=2)
     assert tags == ["sonarr"]
@@ -232,6 +269,25 @@ def test_a_mixed_pr_reports_both_a_tag_and_a_manual_apply():
 
 def test_land_reports_a_setup_plane_pr_as_unfinished():
     assert "needs-manual-apply" in _LAND_SH
+
+
+def test_land_reads_the_deployers_state_for_a_self_applied_pr():
+    """A self-applied PR has no service tag, so nothing but the deployer's own markers can say
+    whether the tick applied it. Both must be read: `behind_since` for "not yet", `hold_sha`
+    for "tried and failed"."""
+    assert "--self-applied" in _LAND_SH
+    assert "behind_since" in _LAND_SH and "hold_sha" in _LAND_SH
+    assert "VERDICT: deferred" in _LAND_SH
+
+
+def test_land_retries_a_tick_skipped_for_lock_contention():
+    """gitops_tick.sh exit 3 means the unit's own flock gave up and NOTHING fast-forwarded.
+    #723's landing carried on from there and every later reading said "the tick deferred"
+    (2026-09-01). The retry loop must wrap the tick, not just the deploy."""
+    tick = _LAND_SH.index("gitops_tick.sh")
+    loop = _LAND_SH.rfind('while [ "$attempt" -le "$LOCK_RETRIES" ]', 0, tick)
+    assert loop != -1, "the first gitops_tick.sh call is not inside a retry loop"
+    assert '"$tick_rc" -ne 3' in _LAND_SH
 
 
 # PR #617's real 32-path file list, read from `gh pr view 617 --json files` on 2026-08-29.

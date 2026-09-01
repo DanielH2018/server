@@ -23,14 +23,18 @@
 #   0   deployed and settled, or there was nothing to deploy
 #   1   CI red, blocked by a change needing a hand, deploy failed, or the health gate failed
 #   2   bad arguments
-#   75  gave up waiting — the CI budget elapsed, or the deploy lock stayed busy
+#   75  gave up waiting — the CI budget elapsed, the deploy lock stayed busy, the tick was
+#       skipped for lock contention every time, or the tick has not yet crossed origin
 #
 # Verdicts printed on stdout: settled | unhealthy | deploy-failed | nothing-to-deploy |
-# blocked | needs-manual-apply. `blocked` is not a failure of this PR — something else in the
-# incoming range needs an operator, and nothing was deployed. `needs-manual-apply` means this
-# PR reaches something no deploy tag covers — the setup plane, a shared k8s role with no
+# blocked | needs-manual-apply | deferred. `blocked` is not a failure of this PR — something
+# else in the incoming range needs an operator, and nothing was deployed. `needs-manual-apply`
+# means this PR reaches something neither a deploy tag nor the tick covers — a bring-up
+# playbook, a setup role initial_setup.yml does not include, a shared k8s role with no
 # `containers_list` entry, or a rotated secret, whose value lives in no role's template at all
-# — so it is landed but not live.
+# — so it is landed but not live. `deferred` means the tick applies this PR itself (a setup
+# role or the deploy plane) and has not crossed origin yet, usually because a newer merge's
+# CI is still running; the next tick does it, and nothing is wrong with this PR.
 set -uo pipefail
 
 PR=''
@@ -118,18 +122,53 @@ case "$ci_rc" in
 esac
 
 echo "== 4/6  GitOps tick (fetch, ff-merge, deploy what is eligible)"
-./scripts/deploy_tools/gitops_tick.sh
-tick_rc=$?
-# 3 = lock contention, 75 = the wrapper stopped watching a run still in flight. Neither is
-# a failure of the tick, and both leave the ff-merge either done or retryable next tick, so
-# carry on to the scoped deploy rather than aborting the landing.
+tick_rc=0
+attempt=1
+while [ "$attempt" -le "$LOCK_RETRIES" ]; do
+  ./scripts/deploy_tools/gitops_tick.sh
+  tick_rc=$?
+  # 3 = lock contention: the unit's own `flock -w 180` gave up, so the tick fast-forwarded
+  # NOTHING. Another session's deploy can hold the tree lock for twenty minutes, and a
+  # landing that carried on from here left the primary checkout behind origin with every
+  # later step reading that as "the tick deferred" (#723, 2026-09-01). Retried the way the
+  # scoped deploy below retries its own exit 75; each attempt already waits 180s inside
+  # the unit, so five of them cover the long deploy this was measured against.
+  if [ "$tick_rc" -ne 3 ]; then
+    break
+  fi
+  say "tick skipped for lock contention (attempt $attempt/$LOCK_RETRIES); retrying in ${LOCK_BACKOFF}s"
+  sleep "$LOCK_BACKOFF"
+  attempt=$((attempt + 1))
+done
+# 75 = the wrapper stopped watching a run still in flight. Not a failure of the tick, and it
+# leaves the ff-merge either done or retryable next tick, so carry on to the scoped deploy.
 case "$tick_rc" in
-  0 | 3 | 75) say "tick exit $tick_rc" ;;
+  0 | 75) say "tick exit $tick_rc" ;;
+  3) die "tick skipped for lock contention $LOCK_RETRIES times — nothing fast-forwarded" 75 ;;
   *) die "gitops tick failed (exit $tick_rc)" 1 ;;
 esac
 
+# What the deployer itself did with this landing, read from its own state rather than
+# inferred from the PR's paths. A setup-plane or deploy-plane change is applied BY THE TICK
+# since 2026-08-29 (the deployer's own role since #719), so for a PR with no service tag the
+# tick's apply IS the deploy — and the only evidence of it is the deployer's markers.
+# `behind_since` non-empty means the tick did not cross origin (a newer merge whose CI is
+# still running, most often); `hold_sha` non-empty means an apply failed and the tick is
+# holding. Both files are written by the deployer after main() returns.
+DEPLOYER_STATE=/var/lib/gitops-deploy
+tick_state() {
+  if [ -s "$DEPLOYER_STATE/hold_sha" ]; then
+    echo held
+  elif [ -s "$DEPLOYER_STATE/behind_since" ]; then
+    echo behind
+  else
+    echo converged
+  fi
+}
+
 echo "== 5/6  deploying what the tick deferred"
 PLANE=''
+SELF_APPLIED=''
 if [ -z "$TAGS" ]; then
   pr_json=$(gh pr view "$PR" --json files,changedFiles) || die "could not read PR files" 1
   # What a deploy tag cannot reach. deploy.yml is a containers_list loop, so a setup-plane
@@ -140,6 +179,12 @@ if [ -z "$TAGS" ]; then
   # half the change is unapplied, under a `settled` verdict.
   PLANE=$(uv run python scripts/deploy_tools/land_tags.py --plane --json "$pr_json") ||
     die "plane classification failed" 1
+  # `yes` when the tick applies part of this PR itself (a setup role initial_setup.yml
+  # includes, or the deploy plane). Only then does the deployer's state after the tick
+  # speak to THIS landing — for an ordinary service PR, `behind_since` is somebody else's
+  # pending merge and says nothing about the services deploy.sh just rolled out.
+  SELF_APPLIED=$(uv run python scripts/deploy_tools/land_tags.py --self-applied --json "$pr_json") ||
+    die "self-applied classification failed" 1
   derived=$(uv run python scripts/deploy_tools/land_tags.py --json "$pr_json") ||
     die "tag derivation failed" 1
   source_kind=${derived%% *}
@@ -169,7 +214,27 @@ if [ -z "$TAGS" ]; then
     echo "VERDICT: needs-manual-apply (PR #$PR reaches no service tag, but is not done)"
     exit 1
   fi
-  echo "VERDICT: nothing-to-deploy (PR #$PR touched no service)"
+  if [ -z "$SELF_APPLIED" ]; then
+    echo "VERDICT: nothing-to-deploy (PR #$PR touched no service)"
+    exit 0
+  fi
+  # No service tag, nothing owed to a hand, and the tick applies this PR itself (a setup
+  # role initial_setup.yml includes, or the deploy plane). The deployer's own state is the
+  # only evidence of whether it did.
+  case "$(tick_state)" in
+    held)
+      echo "  the deployer is holding $(cat "$DEPLOYER_STATE/hold_sha"): its apply failed — see hold_plane and the gitops-deploy journal"
+      echo "VERDICT: deploy-failed (PR #$PR — the tick's own apply failed and is held)"
+      exit 1
+      ;;
+    behind)
+      echo "  the tick did not fast-forward to origin (parked since: $(cat "$DEPLOYER_STATE/behind_since"))"
+      echo "  Usually a newer merge whose CI is still running; the next tick crosses it. Nothing is wrong with this PR."
+      echo "VERDICT: deferred (PR #$PR — landed, not yet applied by the tick)"
+      exit 75
+      ;;
+  esac
+  echo "VERDICT: settled (PR #$PR, $MERGE_SHA — no service tag; the tick applied it and converged with origin)"
   exit 0
 fi
 
@@ -243,6 +308,21 @@ if [ "$verdict_rc" -eq 0 ]; then
     echo "VERDICT: needs-manual-apply (PR #$PR, $MERGE_SHA — services deployed, the plane above not)"
     exit 1
   fi
+  # The services are deployed and healthy. When the same PR also carries a half the tick
+  # applies itself, only the deployer's state says whether it did; for an ordinary service
+  # PR that state is somebody else's business and is not consulted.
+  [ -n "$SELF_APPLIED" ] && case "$(tick_state)" in
+    held)
+      echo "  services deployed, but the deployer is holding $(cat "$DEPLOYER_STATE/hold_sha"): its own apply failed — see hold_plane"
+      echo "VERDICT: deploy-failed (PR #$PR, $MERGE_SHA — services deployed, the tick's apply is held)"
+      exit 1
+      ;;
+    behind)
+      echo "  services deployed, but the tick has not fast-forwarded to origin (parked since: $(cat "$DEPLOYER_STATE/behind_since"))"
+      echo "VERDICT: deferred (PR #$PR, $MERGE_SHA, tags: $TAGS — services deployed, the tick's half not yet)"
+      exit 75
+      ;;
+  esac
   echo "VERDICT: settled (PR #$PR, $MERGE_SHA, tags: $TAGS)"
   exit 0
 fi

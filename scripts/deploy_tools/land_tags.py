@@ -44,10 +44,12 @@ sys.path.insert(
 )
 
 from deploy_logic import (  # noqa: E402 — needs the path insert above
+    _BROAD_MANUAL_PREFIXES,
     broad_remediation,
     expand_build_couplings,
     k8s_remediation,
     services_from_changed_paths,
+    setup_role_playbook,
 )
 
 # Same directory, so a direct invocation already has it on sys.path. `service_tags` is the
@@ -158,8 +160,24 @@ def plane_note(files, declared: set[str] | None = None) -> str:
         # any deployable role it is given, and land.sh has already deployed those itself.
         notes.append(k8s_remediation(set(shared), declared))
     cs = services_from_changed_paths(files)
-    if cs.broad_setup or cs.broad_deploy:
-        notes.append(broad_remediation(cs.broad_deploy, cs.broad_setup, cs.setup_roles))
+    # Only the broad changes the deployer will NOT apply itself are owed to a human. Since
+    # 2026-08-29 the tick fast-forwards and applies a deploy-plane change as a full deploy.yml
+    # and a setup-plane change as `initial_setup.yml --tags <role>`; since #719 that includes
+    # the deployer's own role. What is left for a hand: the bring-up playbooks
+    # (`_BROAD_MANUAL_PREFIXES`, which park the tick outright), and a setup role that
+    # initial_setup.yml does not include (k3s lives in k3s-bringup.yml, common in no playbook),
+    # for which `setup_tags_for` derives nothing and the tick defers. Reporting the self-applied
+    # roles here made land.sh exit 1 with `needs-manual-apply` for #723 while the next tick was
+    # applying exactly those roles (2026-09-01). land.sh reads the deployer's own state for
+    # that case instead.
+    manual = [p for p in files if any(p.startswith(x) for x in _BROAD_MANUAL_PREFIXES)]
+    unroutable = {
+        r
+        for r in cs.setup_roles
+        if setup_role_playbook(r) != "ansible/initial_setup.yml"
+    }
+    if manual or unroutable:
+        notes.append(broad_remediation(False, True, unroutable))
     if cs.secrets:
         # DECIDED: fire on ANY change to secrets.yml, and never try to name which keys moved.
         # Naming them means decrypting both revisions, and no plaintext may reach a terminal, a
@@ -182,6 +200,24 @@ def plane_note(files, declared: set[str] | None = None) -> str:
         # deploys. Both are correctly outside it.
         notes.append(_SECRETS_NOTE)
     return " ".join(notes)
+
+
+def self_applied(files) -> bool:
+    """Whether the PR carries a broad change the TICK applies — so the landing is not done
+    until the deployer's own state says it converged.
+
+    True for a deploy-plane change (a full deploy.yml) and for a setup role initial_setup.yml
+    includes (`--tags <role>`). False for docs, for an ordinary service (deploy.sh's job), and
+    for what `plane_note` already hands to a human. land.sh uses it to decide whether
+    `behind_since` after the tick means "this PR is not applied yet" or is merely somebody
+    else's pending merge.
+    """
+    cs = services_from_changed_paths(list(files))
+    if cs.broad_deploy:
+        return True
+    return any(
+        setup_role_playbook(r) == "ansible/initial_setup.yml" for r in cs.setup_roles
+    )
 
 
 def derive(
@@ -217,10 +253,19 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="print what still needs a manual apply (empty if nothing), not the tags",
     )
+    parser.add_argument(
+        "--self-applied",
+        action="store_true",
+        help="print `yes` if the tick applies part of this PR itself (empty otherwise)",
+    )
     ns = parser.parse_args(argv)
     payload = json.loads(ns.json)
+    paths = [f["path"] for f in payload.get("files", [])]
     if ns.plane:
-        print(plane_note([f["path"] for f in payload.get("files", [])]))
+        print(plane_note(paths))
+        return 0
+    if ns.self_applied:
+        print("yes" if self_applied(paths) else "")
         return 0
     tags, source = derive(
         [f["path"] for f in payload.get("files", [])],
