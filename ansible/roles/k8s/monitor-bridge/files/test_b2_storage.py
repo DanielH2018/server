@@ -8,7 +8,7 @@ operator smoke-test that proves B2 accepts the query.
 
 import bridge_config
 import bridge_io
-import checks_storage
+import checks_b2
 import check
 
 
@@ -19,25 +19,25 @@ def test_sum_versions_counts_every_version_including_hidden():
         {"files": [{"contentLength": 1000}, {"contentLength": 2000, "action": "hide"}]},
         {"files": [{"contentLength": 3000, "action": "start"}]},
     ]
-    total, count = checks_storage.b2_sum_versions(pages)
+    total, count = checks_b2.b2_sum_versions(pages)
     assert total == 6000
     assert count == 3
 
 
 def test_sum_versions_tolerates_the_size_field_and_missing_lengths():
-    total, count = checks_storage.b2_sum_versions([{"files": [{"size": 500}, {}]}])
+    total, count = checks_b2.b2_sum_versions([{"files": [{"size": 500}, {}]}])
     assert total == 500
     assert count == 2
 
 
 def test_verdict_ok_under_threshold():
-    ok, msg = checks_storage.b2_storage_verdict(1e9, 10, False, cap=10e9, max_pct=80)
+    ok, msg = checks_b2.b2_storage_verdict(1e9, 10, False, cap=10e9, max_pct=80)
     assert ok
     assert "10%" in msg
 
 
 def test_verdict_down_over_threshold():
-    ok, msg = checks_storage.b2_storage_verdict(9e9, 10, False, cap=10e9, max_pct=80)
+    ok, msg = checks_b2.b2_storage_verdict(9e9, 10, False, cap=10e9, max_pct=80)
     assert not ok
     assert "90%" in msg
 
@@ -45,7 +45,7 @@ def test_verdict_down_over_threshold():
 def test_verdict_treats_a_truncated_walk_as_failure():
     """Under-reporting is the dangerous direction: a partial sum looks like headroom we do not
     have, so a truncated listing must page rather than report a smaller number confidently."""
-    ok, msg = checks_storage.b2_storage_verdict(1e9, 50000, True, cap=10e9, max_pct=80)
+    ok, msg = checks_b2.b2_storage_verdict(1e9, 50000, True, cap=10e9, max_pct=80)
     assert not ok
     assert "FLOOR" in msg
 
@@ -55,7 +55,7 @@ def test_storage_api_reads_the_v3_shape():
         "authorizationToken": "tok",
         "apiInfo": {"storageApi": {"apiUrl": "https://api", "bucketId": "b1"}},
     }
-    assert checks_storage.b2_storage_api(auth) == ("https://api", "tok", "b1")
+    assert checks_b2.b2_storage_api(auth) == ("https://api", "tok", "b1")
 
 
 def test_storage_api_reads_the_older_top_level_shape():
@@ -64,12 +64,12 @@ def test_storage_api_reads_the_older_top_level_shape():
         "apiUrl": "https://api",
         "allowed": {"bucketId": "b1"},
     }
-    assert checks_storage.b2_storage_api(auth) == ("https://api", "tok", "b1")
+    assert checks_b2.b2_storage_api(auth) == ("https://api", "tok", "b1")
 
 
 def test_storage_disabled_without_credentials(monkeypatch):
     monkeypatch.setattr(bridge_config, "B2_PROBE_KEY_ID", "")
-    ok, msg = checks_storage.b2_storage_usage()
+    ok, msg = checks_b2.b2_storage_usage()
     assert ok
     assert "disabled" in msg
 
@@ -113,7 +113,7 @@ def test_the_cursor_is_threaded_into_the_next_request(monkeypatch):
         ]
     )
     monkeypatch.setattr(bridge_io, "_post_json", fake)
-    pages, truncated = checks_storage.b2_list_versions("https://api", "tok", "bkt")
+    pages, truncated = checks_b2.b2_list_versions("https://api", "tok", "bkt")
     assert len(pages) == 2
     assert truncated is False
     assert sent[1]["startFileName"] == "b.txt", "second request must carry nextFileName"
@@ -123,7 +123,7 @@ def test_the_cursor_is_threaded_into_the_next_request(monkeypatch):
 def test_a_page_with_no_cursor_ends_the_walk(monkeypatch):
     fake, sent = _paging_stub([{"files": [{"contentLength": 1}]}])
     monkeypatch.setattr(bridge_io, "_post_json", fake)
-    pages, truncated = checks_storage.b2_list_versions("https://api", "tok", "bkt")
+    pages, truncated = checks_b2.b2_list_versions("https://api", "tok", "bkt")
     assert len(pages) == 1
     assert truncated is False
     assert "startFileName" not in sent[0] and "startFileId" not in sent[0]
@@ -137,7 +137,7 @@ def test_a_cursor_that_never_clears_reports_truncated(monkeypatch):
         * bridge_config.B2_STORAGE_MAX_PAGES
     )
     monkeypatch.setattr(bridge_io, "_post_json", fake)
-    pages, truncated = checks_storage.b2_list_versions("https://api", "tok", "bkt")
+    pages, truncated = checks_b2.b2_list_versions("https://api", "tok", "bkt")
     assert len(pages) == bridge_config.B2_STORAGE_MAX_PAGES
     assert truncated is True
 
@@ -147,7 +147,7 @@ def test_a_name_only_cursor_still_paginates(monkeypatch):
     under-count — the silent direction."""
     fake, sent = _paging_stub([{"files": [], "nextFileName": "b.txt"}, {"files": []}])
     monkeypatch.setattr(bridge_io, "_post_json", fake)
-    pages, truncated = checks_storage.b2_list_versions("https://api", "tok", "bkt")
+    pages, truncated = checks_b2.b2_list_versions("https://api", "tok", "bkt")
     assert len(pages) == 2
     assert truncated is False
     assert sent[1]["startFileName"] == "b.txt"

@@ -842,7 +842,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
 
 ## Module layout — and the one rule that governs it
 
-`files/` holds fifteen runtime modules. `check.py` is the entrypoint the Deployment runs and owns
+`files/` holds seventeen runtime modules. `check.py` is the entrypoint the Deployment runs and owns
 the `CHECKS` registry, the gate sets and the run loop — nothing else. `bridge_config.py` owns
 the env-derived config; `bridge_io.py` owns fetching and the Kuma push; each `checks_*` module
 owns one domain of `check_*` bodies, mirroring the test file for that domain; the rest hold
@@ -858,7 +858,9 @@ landed 2026-09-01, `check.py` from 3,732 lines to ~510).
 | `checks_logs.py` | `check_loki_ingestion`, `check_promtail_dropped`, `check_loki_reachable`, `with_log_errors` (the Loki arm `check_k8s_workloads` folds in) |
 | `checks_cluster.py` | the cAdvisor trio `check_restarts` / `check_oom` / `check_cpu_throttle` with `_cadvisor_blind`, `_cadvisor_streaks` and `_cpu_breach_streak`; `check_prometheus`, `check_targets_down`, `check_traefik_5xx`, `check_traefik_latency`, `check_k8s_workloads`, `check_cluster_targets`, `check_cluster_prometheus` |
 | `checks_host.py` | `check_disk`, `check_cert`, `check_mem` and the `_host_origin_shortfall` floor with `_host_origin_streaks`; `check_host_temp`, `check_scrutiny`, `check_ups`, `check_pi_pressure` with `with_pi_ports`, `check_speedtest` with `speedtest_verdict` |
-| `checks_storage.py` | the `b2_*` family and `check_b2_reachable` / `check_b2_storage`, the `r2_*` family and `check_r2_usage`, `check_longhorn_volumes`, `check_pvc_fullness`, and the probe caches `_b2_probe` / `_b2_storage` / `_r2_probe` |
+| `checks_b2.py` | the `b2_*` family with `check_b2_reachable` (the `B2_DEPENDENT` gate) and `check_b2_storage`, and the probe caches `_b2_probe` / `_b2_storage` |
+| `checks_r2.py` | the `r2_*` family with `check_r2_usage`, `R2_QUERY`, and `_r2_probe` |
+| `checks_storage.py` | `check_longhorn_volumes`, `check_pvc_fullness` — the cluster storage layer |
 | `bridge_config.py` | every `_env(...)` constant — thresholds, URLs, credentials, windows — with the commentary that justifies each value. Read as `cfg.X`, never from-imported |
 | `bridge_io.py` | `_get_json`, `_post_json`, `prom_scalar`, `prom_vector`, the `loki_*` queries, `push`, and the selector builders (`origin_sel`, `cadvisor_sel`, `host_metric_sel`). Read as `bridge_io.X`; the tests stub the fetch layer here |
 | `bridge_streaks.py` | `_down_streaks` and `down_streak` — the consecutive-down counter four domains share. `conftest.py` clears it here |

@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 
 
-import checks_storage
+import checks_b2
 
 _REPO = Path(__file__).resolve().parents[5]
 
@@ -51,7 +51,7 @@ def _dashboard_b2_regex() -> str:
 
 def test_the_b2_storage_line_still_matches_the_dashboard_regex():
     """The rejecting half is the message drifting: this fails the moment the wording changes."""
-    ok, msg = checks_storage.b2_storage_verdict(
+    ok, msg = checks_b2.b2_storage_verdict(
         used_bytes=5_100_000_000,
         versions=1110,
         truncated=False,

@@ -63,12 +63,14 @@ from checks_host import (
     check_speedtest,
     check_ups,
 )
-from checks_storage import (
+from checks_b2 import (
     check_b2_reachable,
     check_b2_storage,
+)
+from checks_r2 import check_r2_usage
+from checks_storage import (
     check_longhorn_volumes,
     check_pvc_fullness,
-    check_r2_usage,
 )
 from checks_logs import (
     check_loki_ingestion,
