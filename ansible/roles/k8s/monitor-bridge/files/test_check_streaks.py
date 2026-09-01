@@ -12,6 +12,7 @@ import pytest
 import bridge_config
 import bridge_streaks
 import bridge_io
+import checks_logs
 import check
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -230,7 +231,7 @@ def test_run_once_graced_check_recovers_without_paging(monkeypatch):
     ],
 )
 def test_promtail_dropped(count, ok, must_contain):
-    result_ok, msg = check.promtail_dropped(count, "1h", 1000)
+    result_ok, msg = checks_logs.promtail_dropped(count, "1h", 1000)
     assert result_ok is ok
     for s in must_contain:
         assert s in msg
@@ -244,7 +245,7 @@ def test_check_promtail_dropped_uses_increase(monkeypatch):
         return 5000.0
 
     monkeypatch.setattr(bridge_io, "prom_scalar", fake_scalar)
-    ok, _ = check.check_promtail_dropped()
+    ok, _ = checks_logs.check_promtail_dropped()
     assert not ok
     # No reason filter — sums drops across ALL reasons (rate_limited/stream_limited/... too, M2).
     assert any(
