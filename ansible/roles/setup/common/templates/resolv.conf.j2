@@ -1,6 +1,13 @@
-# Ansible-managed (setup/k3s, tasks/node.yml). Do not edit by hand.
+# Ansible-managed. Do not edit by hand.
 #
-# This node resolves through the in-cluster Pi-hole, with a public resolver behind it, and
+# SHARED BY EVERY HOST THAT RESOLVES THROUGH PI-HOLE — rendered by roles/setup/k3s
+# (daniel-box) and roles/setup/optimize_pi (daniel-pi), each passing its own
+# `common_resolver_nameservers`. It lives in setup/common rather than in either caller
+# because what drifts is the REASONING below, not the four lines of config at the bottom.
+# Templates resolve against the calling role's own templates/ directory, so both callers
+# name this file by absolute path.
+#
+# This host resolves through the in-cluster Pi-hole, with a public resolver behind it, and
 # switches between them per query in BOTH directions with no daemon watching anything.
 #
 # WHY A STATIC FILE RATHER THAN A systemd-resolved DROP-IN. resolved is stateful and sticky.
@@ -11,26 +18,28 @@
 # zones they serve". Pi-hole and Cloudflare are NOT equivalent — one blocks and answers the
 # local zone, the other does neither — so a resolved DNS= list yields a coin flip rather than
 # a preference. Measured on daniel-pi 2026-09-01, 45 minutes after exactly that config was
-# applied: `Current DNS Server` read 1.1.1.1 at 15:12 and 10.0.0.243 at 15:14, unprompted.
+# applied by PR #693: `Current DNS Server` read 1.1.1.1 at 15:12 and 10.0.0.243 at 15:14,
+# unprompted. PR #697 replaced it with this file.
 #
 # glibc has no such state. resolv.conf(5): "the resolver library queries them in the order
 # listed", and the `rotate` option — which this file deliberately does NOT set — is documented
 # as spreading load "rather than having all clients try the first listed server first every
 # time". Not setting it is what makes the first server the preferred one on EVERY query. So:
-#   - cluster down at boot -> Pi-hole times out, the query falls through, the node resolves
+#   - cluster down at boot -> Pi-hole times out, the query falls through, the host resolves
 #   - Pi-hole comes up     -> the very next query tries it first again, with no probe or reload
 #   - Pi-hole dies later   -> the next query falls through again
 # Automatic in both directions, by construction rather than by health check.
 #
-# THE COST is {{ k3s_node_dns_options }}: `attempts` counts rounds over the WHOLE list, not
-# retries per server, so one round is Pi-hole (up to {{ k3s_node_dns_timeout }}s) then the
+# THE COST is {{ common_resolver_options }}: `attempts` counts rounds over the WHOLE list, not
+# retries per server, so one round is Pi-hole (up to {{ common_resolver_timeout }}s) then the
 # fallback, then an error. While Pi-hole is down every lookup on this host pays that timeout
-# once. That is the trade against running a health-checking forwarder here; a single dropped
-# UDP packet also falls through with no retry.
+# once, and a single dropped UDP packet falls through with no retry. Disabling resolved also
+# gives up its DNS cache — nothing else on these hosts caches, so every lookup goes over the
+# wire. That is the trade against running a health-checking forwarder here.
 #
 # daniel-server has run exactly this file since 2026-08-10 and is the in-fleet evidence that
-# the end state is stable on a k3s node.
-{% for server in k3s_node_dns_upstreams %}
+# the end state is stable, on a k3s node and with Docker containers forwarding to it.
+{% for server in common_resolver_nameservers %}
 nameserver {{ server }}
 {% endfor %}
-options {{ k3s_node_dns_options }}
+options {{ common_resolver_options }}
