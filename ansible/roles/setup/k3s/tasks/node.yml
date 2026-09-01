@@ -17,6 +17,142 @@
   loop: "{{ k3s_agent_node_ips | product(k3s_join_server_ports) | list }}"
   become: true
 
+# ── The host forwarder ──────────────────────────────────────────────────────────────────
+# EVERY TASK HERE RUNS BEFORE THE resolv.conf BLOCK BELOW, and that is the safety property.
+# resolv.conf ends up naming 127.0.0.1 and nothing else, so a run that installed CoreDNS
+# after switching the file would leave a window — or, on failure, a permanent state — with
+# the node pointed at a port nothing is listening on. The verify task at the end of this
+# block is the gate: it fails the play before the switch rather than after it.
+
+- name: Allow Prometheus pods to scrape the host forwarder
+  tags: [node-dns]
+  # Pod-to-host traffic terminates in a host process, so unlike a Service port it genuinely
+  # meets UFW's default-deny INPUT. Same class as the agent-join allows above.
+  community.general.ufw:
+    rule: allow
+    from_ip: "{{ k3s_pod_cidr }}"
+    port: "{{ k3s_host_dns_metrics_port }}"
+    proto: tcp
+  become: true
+  when: k3s_host_coredns_enabled
+
+- name: Create the host forwarder's directories
+  tags: [node-dns]
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  loop:
+    - "{{ k3s_host_coredns_versioned_bin | dirname }}"
+    - "{{ k3s_host_coredns_conf | dirname }}"
+  become: true
+  when: k3s_host_coredns_enabled
+
+- name: Install the pinned CoreDNS release
+  tags: [node-dns]
+  # checksum: is the whole security argument. The release's own .sha256 sidecar travels over
+  # the same connection as the tarball and is signed by nothing, so fetching it would verify
+  # transport integrity twice and authenticity never. The pin lives in defaults/main.yml and
+  # a changed artifact fails here. Same shape as roles/setup/sops_setup.
+  ansible.builtin.unarchive:
+    src: "{{ k3s_host_coredns_url }}"
+    dest: "{{ k3s_host_coredns_versioned_bin | dirname }}"
+    remote_src: true
+    include: [coredns]
+    mode: "0755"
+    owner: root
+    group: root
+    # Keyed on the VERSIONED path. An unversioned `creates:` would make the pin inert after
+    # the first install: a Renovate bump would edit defaults/main.yml, pass CI, deploy green,
+    # and leave the old binary running with nothing reporting the mismatch.
+    creates: "{{ k3s_host_coredns_versioned_bin }}"
+  become: true
+  when: k3s_host_coredns_enabled
+
+# The unit executes this symlink, so a version bump swaps the target without rewriting the
+# unit file — which keeps `k3s_host_coredns_unit.changed` meaning "the unit changed" rather
+# than "the version changed", and lets each of them pick restart-vs-reload on its own.
+- name: Point the stable path at the installed version
+  tags: [node-dns]
+  ansible.builtin.file:
+    src: "{{ k3s_host_coredns_versioned_bin }}"
+    dest: "{{ k3s_host_coredns_bin }}"
+    state: link
+  become: true
+  register: k3s_host_coredns_link
+  when: k3s_host_coredns_enabled
+
+- name: Write the host forwarder's Corefile
+  tags: [node-dns]
+  ansible.builtin.template:
+    src: host-corefile.j2
+    dest: "{{ k3s_host_coredns_conf }}"
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+  register: k3s_host_coredns_corefile
+  when: k3s_host_coredns_enabled
+
+- name: Install the host forwarder's unit
+  tags: [node-dns]
+  ansible.builtin.template:
+    src: coredns-host.service.j2
+    dest: /etc/systemd/system/coredns-host.service
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+  register: k3s_host_coredns_unit
+  when: k3s_host_coredns_enabled
+
+- name: Start and enable the host forwarder
+  tags: [node-dns]
+  ansible.builtin.systemd:
+    name: coredns-host
+    # A new binary needs an exec, which only a restart gives; SIGUSR1 re-reads config only.
+    state: "{{ 'restarted' if (k3s_host_coredns_unit.changed or k3s_host_coredns_link.changed) else 'started' }}"
+    enabled: true
+    daemon_reload: true
+  become: true
+  when: k3s_host_coredns_enabled
+
+# SIGUSR1, not a restart. CoreDNS re-reads the Corefile in place, and once resolv.conf names
+# only 127.0.0.1 the seconds of a restart are seconds with no DNS on this node at all. Skipped
+# when the unit itself changed, because that task already restarted the process.
+- name: Reload the host forwarder after a Corefile change # noqa no-handler
+  tags: [node-dns]
+  ansible.builtin.systemd:
+    name: coredns-host
+    state: reloaded
+  become: true
+  when:
+    - k3s_host_coredns_enabled
+    - k3s_host_coredns_corefile.changed
+    - not k3s_host_coredns_unit.changed
+    - not k3s_host_coredns_link.changed
+
+# THE GATE. `systemctl start` returning is not evidence that DNS works — CoreDNS exits
+# non-zero on a bad Corefile, but a forward list pointing somewhere unreachable starts
+# cleanly and answers nothing. Prove it by behaviour, the same way tasks/coredns.yml proves
+# the cluster forward, and prove it BEFORE resolv.conf depends on it.
+- name: Prove the host forwarder answers before pointing the node at it
+  tags: [node-dns]
+  ansible.builtin.command:
+    cmd: dig +short +time=2 +tries=1 @127.0.0.1 {{ k3s_host_dns_probe_name }}
+  changed_when: false
+  register: k3s_host_coredns_probe
+  # Same shape as the cluster probe in tasks/coredns.yml: `until` owns the verdict, so a dig
+  # that exits non-zero is retried rather than failing on its first attempt — and the task
+  # still fails when the condition is never met, which is the outcome worth reporting.
+  failed_when: false
+  until: k3s_host_coredns_probe.stdout | trim | length > 0
+  retries: "{{ k3s_coredns_probe_retries | int }}"
+  delay: 2
+  when: k3s_host_coredns_enabled
+
 # TASK ORDER IS THE SAFETY PROPERTY HERE. The real file is written BEFORE systemd-resolved is
 # stopped, so a run that dies midway leaves a working resolv.conf rather than a symlink to a
 # stub nothing is serving. Never reorder these three.

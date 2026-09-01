@@ -1,0 +1,39 @@
+# {{ ansible_managed }}
+[Unit]
+Description=CoreDNS host forwarder (Pi-hole first, public fallback)
+Documentation=https://coredns.io/plugins/forward/
+# Ordered before the k3s server, not required by it. k3s reaches its own components by IP,
+# so it does not need this to start; the ordering just means a normal boot brings DNS up
+# before the thing most likely to want it.
+Before=k3s.service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Unprivileged and unable to gain privilege, holding exactly one capability: the right to
+# bind 53. DynamicUser gives it a per-boot uid with no home, no shell and no presence in
+# /etc/passwd, so there is no account here to reuse for anything else.
+DynamicUser=yes
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+# AF_UNIX is here for the Go runtime and journald, not for anything CoreDNS serves;
+# omitting it risks a startup failure whose only symptom would be no DNS on this node.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_NETLINK AF_UNIX
+
+ExecStart={{ k3s_host_coredns_bin }} -conf {{ k3s_host_coredns_conf }}
+# SIGUSR1 makes CoreDNS re-read the Corefile in place. A Corefile change therefore costs no
+# gap in service, which matters more here than anywhere else in this repo: resolv.conf names
+# this process and nothing else, so the seconds of a restart are seconds with no DNS at all.
+ExecReload=/bin/kill -USR1 $MAINPID
+
+# Restart=always, not on-failure. A clean exit is still an outage — see above.
+Restart=always
+RestartSec=1s
+
+[Install]
+WantedBy=multi-user.target
