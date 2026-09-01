@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from _helpers import REPO
 
-REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(
     0, str(REPO / "ansible" / "roles" / "setup" / "gitops_deploy" / "files")
 )

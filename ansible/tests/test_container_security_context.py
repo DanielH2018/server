@@ -21,6 +21,7 @@ this cannot drift from what that validator considers a renderable manifest.
 
 from __future__ import annotations
 
+from _helpers import K8S_ROLES
 from _k8s_render import rendered_docs
 
 _POD_KINDS = {"Deployment", "DaemonSet", "StatefulSet", "Job", "CronJob"}
@@ -148,13 +149,7 @@ def test_every_container_drops_all_capabilities():
 
 def test_the_corpus_covers_every_role_except_a_named_set():
     """Coverage is asserted, not assumed — see _UNCOVERED_ROLES."""
-    from pathlib import Path
-
-    repo = Path(__file__).resolve().parents[2]
-    all_roles = {
-        p.parent.parent.name
-        for p in (repo / "ansible/roles/k8s").glob("*/tasks/main.yml")
-    }
+    all_roles = {p.parent.parent.name for p in K8S_ROLES.glob("*/tasks/main.yml")}
     covered = {role for role, _, _ in rendered_docs()}
     unexpected = (all_roles - covered) - _UNCOVERED_ROLES
     assert not unexpected, (

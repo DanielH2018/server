@@ -30,11 +30,12 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from _helpers import K8S_ROLES
 from _helpers import REPO as _REPO_ROOT
 from _helpers import load_tasks as _tasks
 from _helpers import task_named
 
-_ROLE = Path(__file__).resolve().parents[2] / "ansible/roles/k8s/longhorn-api"
+_ROLE = K8S_ROLES / "longhorn-api"
 _RESOLVE = _ROLE / "tasks/resolve.yml"
 
 

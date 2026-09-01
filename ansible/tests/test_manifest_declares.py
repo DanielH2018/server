@@ -21,8 +21,9 @@ import sys
 from pathlib import Path
 
 import yaml
+from _helpers import REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+_REPO = REPO
 sys.path.insert(0, str(_REPO / "ansible/roles/setup/k3s/files"))
 
 from _k8s_render import rendered_docs, rendered_texts  # noqa: E402

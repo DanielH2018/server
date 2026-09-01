@@ -20,13 +20,14 @@ Run: uv run pytest ansible/tests/test_metric_drop_regexes.py
 
 import re
 import sys as _sys
-from pathlib import Path as _Path
 
 import pytest
 import yaml
+from _helpers import ANSIBLE as _ANSIBLE
+from _helpers import REPO as _REPO
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "tests"))
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "scripts" / "validate"))
+_sys.path.insert(0, str(_ANSIBLE / "tests"))
+_sys.path.insert(0, str(_REPO / "scripts" / "validate"))
 
 from _k8s_render import rendered_docs  # noqa: E402 — needs the path inserts above
 

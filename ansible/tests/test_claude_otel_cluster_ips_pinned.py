@@ -21,8 +21,9 @@ import re
 
 import pytest
 import yaml
+from _helpers import ALL_VARS, K8S_ROLES
 
-ROLE = pathlib.Path(__file__).resolve().parents[1] / "roles" / "k8s" / "claude-otel"
+ROLE = K8S_ROLES / "claude-otel"
 DEFAULTS = ROLE / "defaults" / "main.yml"
 
 # Service name -> the defaults variable its manifest must interpolate.
@@ -32,9 +33,7 @@ PINNED = {
     "tempo": "claude_otel_tempo_cluster_ip",
 }
 
-ALL_VARS_FILE = (
-    pathlib.Path(__file__).resolve().parents[1] / "inventory" / "group_vars" / "all.yml"
-)
+ALL_VARS_FILE = ALL_VARS
 
 # Every pinned ClusterIP in the repo, with the file that owns it. The distinctness check below
 # is only meaningful over the whole set: it used to read this role's three and pass while the

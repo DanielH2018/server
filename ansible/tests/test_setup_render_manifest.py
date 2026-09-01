@@ -29,8 +29,9 @@ import re
 from pathlib import Path
 
 import yaml
+from _helpers import REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+_REPO = REPO
 _ROLE = _REPO / "ansible/roles/setup/k3s"
 _TEMPLATES = _ROLE / "templates"
 _HEALTH_CRONS = _ROLE / "tasks/health-crons.yml"

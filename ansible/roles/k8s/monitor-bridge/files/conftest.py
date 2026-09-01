@@ -15,3 +15,22 @@ def _reset_down_streaks():
     resets with one reset applied to every test.
     """
     check._down_streaks.clear()
+
+
+@pytest.fixture
+def seq():
+    """Factory for a callable yielding each value on successive calls, like mock side_effect.
+
+    A fixture rather than an importable function: three suites stub `check._get_json` this way,
+    and `from conftest import seq` resolves to whichever conftest.py sys.path reached first once
+    the whole repo suite runs. pytest resolves a fixture by directory, so it cannot collide.
+
+    conftest.py is also the one file here exempt from the ConfigMap ship list
+    (`monitor_bridge_modules`), so a shared test helper can live here without reaching the pod.
+    """
+
+    def _seq(*values):
+        it = iter(values)
+        return lambda *a, **k: next(it)
+
+    return _seq

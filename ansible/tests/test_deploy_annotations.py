@@ -17,11 +17,11 @@ promtail does not emit and reported "no ip_ban events" through a window containi
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import yaml
+from _helpers import REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+_REPO = REPO
 _DEFAULTS = _REPO / "ansible/roles/k8s/claude-otel/defaults/main.yml"
 _GRAFANA = _REPO / "ansible/roles/k8s/claude-otel/templates/grafana.yaml.j2"
 _DASHBOARDS_TASKS = _REPO / "ansible/roles/k8s/claude-otel/tasks/dashboards.yml"

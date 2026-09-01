@@ -33,11 +33,10 @@ Run: uv run pytest ansible/tests/test_base_images_digest_pinned.py
 """
 
 import re
-from pathlib import Path
 
 import pytest
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
 
 # Every file the Renovate k8s-defaults manager reads, so a pin this test covers is a pin
 # Renovate can bump. Keeping the two sets identical is the point: a pin outside the manager's

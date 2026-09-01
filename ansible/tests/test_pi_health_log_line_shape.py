@@ -20,11 +20,12 @@ Run: uv run pytest ansible/tests/test_pi_health_log_line_shape.py
 """
 
 import sys
-from pathlib import Path
+
 import pytest
+from _helpers import REPO
 from _pi_health import run
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "diagnostics"))
+sys.path.insert(0, str(REPO / "scripts" / "diagnostics"))
 from probe_alerts import parse_syslog_down_line  # noqa: E402
 
 

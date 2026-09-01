@@ -16,7 +16,7 @@ instead.
 This is the last slice of the docs-UI programme; the four that preceded it shipped in
 PRs #416, #417 and #418. Nothing depends on it, which is why it is last. The rest of that
 plan is archived at
-[`docs/archive/docs-ui-and-adrs-plan-2.md`](docs-ui-and-adrs-plan-2.md).
+[`docs/archive/docs-ui-and-adrs/plan-2.md`](plan-2.md).
 
 **Cost to be aware of before starting:** D2 is a second binary. It needs installing on the
 host and pinning in CI, the way Vale was in Task 4 of the archived plan.

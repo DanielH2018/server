@@ -26,12 +26,12 @@ Neither is something a render can see on its own, which is the point of checking
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
 import pytest
 import yaml
+from _helpers import REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+_REPO = REPO
 sys.path.insert(0, str(_REPO / "scripts"))
 
 from validate_k8s_manifests import (  # noqa: E402 — needs the path insert above

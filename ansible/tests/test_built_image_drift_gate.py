@@ -26,11 +26,11 @@ failure. Hence a test rather than a comment.
 """
 
 import re
-from pathlib import Path
 
 import yaml
+from _helpers import ANSIBLE
 
-_ANSIBLE = Path(__file__).resolve().parents[1]
+_ANSIBLE = ANSIBLE
 _GATE = _ANSIBLE / "post_tasks" / "k8s_image_drift_gate.yml"
 _DEPLOY = _ANSIBLE / "deploy.yml"
 _BUILDER = _ANSIBLE / "roles" / "k8s" / "image-builder" / "tasks" / "main.yml"

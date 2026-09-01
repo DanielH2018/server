@@ -25,8 +25,8 @@ from pathlib import Path
 
 import pytest
 import yaml
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
 K8S_ROLES = ANSIBLE / "roles" / "k8s"
 K3S_DEFAULTS = ANSIBLE / "roles" / "setup" / "k3s" / "defaults" / "main.yml"
 

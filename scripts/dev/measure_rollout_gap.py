@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Measure real downtime across a rollout by polling a service while it restarts.
 
-Every zero-downtime claim in docs/archive/zero-downtime-deploys-design.md is graded by this and
+Every zero-downtime claim in docs/archive/zero-downtime/design.md is graded by this and
 not by a manifest: `strategy: RollingUpdate` in a template says what was configured, and
 this says what happened. A single-replica RollingUpdate only avoids a gap because maxSurge
 rounds up to 1 — that is a scheduler behaviour, not a guarantee, and it fails silently if

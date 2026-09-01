@@ -8,7 +8,7 @@
 
 **Tech Stack:** k3s, Ansible, Jinja2-templated manifests, pytest.
 
-**Spec:** `docs/archive/zero-downtime-deploys-design.md` (slice 1 follow-up)
+**Spec:** `docs/archive/zero-downtime/design.md` (slice 1 follow-up)
 
 ## This plan is much smaller than the spec implied — read why first
 
@@ -322,10 +322,10 @@ kubectl -n homelab get endpoints <service>            # expect a non-empty addre
 
 - [ ] **Step 4: Record the outcome**
 
-Append to `docs/archive/zero-downtime-baseline.md` under *What the numbers implicate*, noting which of the three gained a probe and confirming each still has endpoints after deploy.
+Append to `docs/archive/zero-downtime/baseline.md` under *What the numbers implicate*, noting which of the three gained a probe and confirming each still has endpoints after deploy.
 
 ```bash
-git add docs/archive/zero-downtime-baseline.md
+git add docs/archive/zero-downtime/baseline.md
 git commit -m "Record the readiness-probe outcome"
 ```
 

@@ -8,9 +8,9 @@
 
 **Tech Stack:** Python 3.14 + uv, pytest, MkDocs Material, prek.
 
-**Spec:** `docs/archive/docs-ui-and-adrs-design.md`
+**Spec:** `docs/archive/docs-ui-and-adrs/design.md`
 
-**Prerequisite:** `docs/archive/docs-ui-and-adrs-plan-1.md` must be merged. This plan adds pages and one generator to the site plan 1 builds and serves. It is independent of plan 2 and can land before or after it.
+**Prerequisite:** `docs/archive/docs-ui-and-adrs/plan-1.md` must be merged. This plan adds pages and one generator to the site plan 1 builds and serves. It is independent of plan 2 and can land before or after it.
 
 ## Global Constraints
 

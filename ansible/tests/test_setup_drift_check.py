@@ -18,8 +18,9 @@ import subprocess
 from pathlib import Path
 
 import yaml
+from _helpers import REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+_REPO = REPO
 _LIB = _REPO / "ansible/roles/setup/initial_setup/files/setup-drift-lib.sh"
 _CHECK = _REPO / "ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2"
 _CRONS = _REPO / "ansible/roles/setup/initial_setup/tasks/crons.yml"

@@ -40,13 +40,14 @@ from pathlib import Path
 
 import pytest
 import yaml
+from _helpers import K8S_ROLES
 from _helpers import load_tasks as _tasks
 from _helpers import render_expr as _render
 from _helpers import task_named
 from _volume_ops import assert_every_api_call_pins_a_single_status_code
 from _volume_ops import assert_the_role_declares_an_autodeploy_stance
 
-_ROLE = Path(__file__).resolve().parents[2] / "ansible/roles/k8s/volume-snapshot"
+_ROLE = K8S_ROLES / "volume-snapshot"
 _CLAIM = _ROLE / "tasks/claim.yml"
 _MAIN = _ROLE / "tasks/main.yml"
 _DEFAULTS = _ROLE / "defaults/main.yml"

@@ -73,8 +73,9 @@ from pathlib import Path
 
 import yaml
 from _k8s_render import rendered_docs
+from _helpers import REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+_REPO = REPO
 _K8S_ROLES = _REPO / "ansible/roles/k8s"
 
 # role -> the workload its own tasks talk to after the manifests include.

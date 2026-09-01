@@ -26,11 +26,9 @@ exist - the same shape as the readonly-SA rollout restart that prints "successfu
 Run: uv run pytest ansible/tests/test_seed_volume_backup.py
 """
 
-from pathlib import Path
-
 import yaml
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
 PLAYBOOK = ANSIBLE / "seed_volume_backup.yml"
 TEXT = PLAYBOOK.read_text()
 PLAY = yaml.safe_load(TEXT)[0]

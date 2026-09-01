@@ -20,12 +20,12 @@ command runs, which is only visible in the task's own keywords.
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
 import pytest
 import yaml
+from _helpers import REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+_REPO = REPO
 sys.path.insert(0, str(_REPO / "ansible" / "tests"))
 
 _ROLE = _REPO / "ansible" / "roles" / "k8s" / "volume-snapshot"

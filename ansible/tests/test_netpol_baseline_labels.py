@@ -14,9 +14,9 @@ Run: uv run pytest ansible/tests/test_netpol_baseline_labels.py
 
 from __future__ import annotations
 
-from pathlib import Path
 
 from _k8s_render import rendered_docs
+from _helpers import K8S_ROLES
 
 # Slice 1 of the rollout: the six traefik-only leaf apps (docs/networkpolicy-default-deny.md).
 # Adding a role here without labelling it — or labelling one without listing it — fails below.
@@ -409,7 +409,7 @@ def test_no_workload_is_both_labelled_and_exempt() -> None:
 # stayed green through the ~16h slice-4.5 drift, because the drift was in the cluster. So this
 # asserts the existence of the runtime gate rather than duplicating its logic.
 
-_ROLE = Path(__file__).resolve().parents[1] / "roles" / "k8s" / "netpol-baseline"
+_ROLE = K8S_ROLES / "netpol-baseline"
 TASKS = (_ROLE / "tasks" / "main.yml").read_text()
 
 

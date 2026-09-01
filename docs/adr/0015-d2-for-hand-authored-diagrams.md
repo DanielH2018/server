@@ -58,7 +58,7 @@ record rather than in a gate. Until the pipeline exists, this ADR is the only th
 no.
 
 The unexecuted steps are kept at
-[`archive/diagrams-plan.md`](../archive/diagrams-plan.md).
+[`archive/docs-ui-and-adrs/diagrams-plan.md`](../archive/docs-ui-and-adrs/diagrams-plan.md).
 
 ## Governs
 

@@ -27,9 +27,8 @@ check 3's own comment records as the thing that stops being read.
 Run: uv run pytest ansible/tests/test_longhorn_backup_grace_visibility.py
 """
 
-from pathlib import Path
+from _helpers import ANSIBLE
 
-ANSIBLE = Path(__file__).resolve().parents[1]
 HEALTH = (
     ANSIBLE / "roles" / "setup" / "k3s" / "templates" / "longhorn-backup-health.sh.j2"
 )
