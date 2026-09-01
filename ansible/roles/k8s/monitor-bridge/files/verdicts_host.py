@@ -301,8 +301,60 @@ def hwmon_included_series(temps, exclude_chip):
     ]
 
 
+# How many hot sensors the message names before collapsing the rest to a count. The message lands
+# in a Kuma tile and a Discord line, so an estate-wide thermal event must not be a wall of text —
+# but the tail is counted rather than dropped.
+_HWMON_MAX_LISTED = 5
+
+
+def hwmon_name_maps(chip_names, sensor_labels):
+    """Pure: the two lookups that turn a sysfs path into the name an operator reads.
+
+    node-exporter publishes them as separate metrics — `node_hwmon_chip_names` carries
+    `chip_name` per (instance, chip), `node_hwmon_sensor_label` carries `label` per sensor — so
+    `daniel-box/pci0000:00_0000:00:18_3/temp1` is really `daniel-box k10temp/Tctl`.
+
+    Returns (chip_name_by_pair, sensor_label_by_triple). Both are PARTIAL: measured live
+    2026-09-01, 10 of 21 series carry a sensor label and a chip with no `chip_name` row is
+    normal, so every caller degrades to the raw sysfs component.
+    """
+    chips = {}
+    for labels, _value in chip_names or []:
+        name = labels.get("chip_name")
+        if name:
+            chips[(labels.get("instance", "?"), labels.get("chip", "?"))] = name
+    sensors = {}
+    for labels, _value in sensor_labels or []:
+        label = labels.get("label")
+        if label:
+            sensors[_hwmon_sensor_key(labels)] = label
+    return chips, sensors
+
+
+def hwmon_display_name(key, names):
+    """Pure: "<host> <chip>/<sensor>" for one sensor triple, each half named where it can be.
+
+    Degrades PER COMPONENT — a chip with a name whose sensor has none still reads
+    "daniel-box acpitz/temp0" — so a missing name costs readability, never identity.
+    """
+    instance, chip, sensor = key
+    chips, sensors = names or ({}, {})
+    return "%s %s/%s" % (
+        instance,
+        chips.get((instance, chip)) or chip,
+        sensors.get(key) or sensor,
+    )
+
+
 def hwmon_temp_limits(
-    temps, maxes, ratio, fallback_c, min_plausible, max_plausible, exclude_chip
+    temps,
+    maxes,
+    ratio,
+    fallback_c,
+    min_plausible,
+    max_plausible,
+    exclude_chip,
+    names=None,
 ):
     """Pure: assign every scraped sensor a temperature limit. Returns a list of
     (label, temp, limit, basis) with basis "declared" or "fallback".
@@ -313,6 +365,8 @@ def hwmon_temp_limits(
 
     A declared max outside (min_plausible, max_plausible] is treated as ABSENT, not as a limit.
     Some NVMe controllers report 65261.85 for "no max declared" and a ratio of that never fires.
+
+    `names` is the hwmon_name_maps pair; omitting it labels sensors by their raw sysfs path.
     """
     declared = {}
     for labels, value in maxes or []:
@@ -321,7 +375,7 @@ def hwmon_temp_limits(
     out = []
     for labels, temp in hwmon_included_series(temps, exclude_chip):
         key = _hwmon_sensor_key(labels)
-        label = "%s/%s/%s" % key
+        label = hwmon_display_name(key, names)
         cap = declared.get(key)
         if cap is None:
             out.append((label, temp, fallback_c, "fallback"))
@@ -335,19 +389,37 @@ def hwmon_temp_verdict(limits):
 
     An EMPTY list is not ok. Zero sensors means the hwmon collector stopped scraping, which is
     exactly the state in which a "nothing is too hot" verdict would be a lie.
+
+    The breach leads the message and the coverage tally trails it. Until 2026-09-01 the tally
+    sat INSIDE the breach sentence — "1 of 16 sensor(s): 5 by declared max, 11 by fallback OVER
+    limit: ..." — so the reader crossed two counts that say nothing about the hot sensor before
+    reaching the one that does. Each hot sensor also names the arm that set its limit, because
+    the two want different responses: a declared breach is the hardware calling itself too hot,
+    while a fallback breach can mean only that this chip declares no max and 85C does not suit
+    it — which is what daniel-box's k10temp Tctl does on every boost spike.
     """
     if not limits:
         return False, "no hwmon temperature sensors scraped (collector blind?)"
-    hot = [(la, t, li) for la, t, li, _b in limits if t >= li]
+    hot = [(la, t, li, b) for la, t, li, b in limits if t >= li]
     n_declared = sum(1 for _la, _t, _li, b in limits if b == "declared")
     n_fallback = len(limits) - n_declared
-    coverage = "%d sensor(s): %d by declared max, %d by fallback" % (
+    coverage = "%d sensors checked, %d by declared max, %d by fallback" % (
         len(limits),
         n_declared,
         n_fallback,
     )
     if not hot:
-        return True, "%s, all below limit" % coverage
+        return True, "all below limit; %s" % coverage
     hot.sort(key=lambda x: x[1] - x[2], reverse=True)
-    desc = ", ".join("%s %.1fC (limit %.1fC)" % (la, t, li) for la, t, li in hot[:5])
-    return False, "%d of %s OVER limit: %s" % (len(hot), coverage, desc)
+    shown = hot[:_HWMON_MAX_LISTED]
+    desc = ", ".join(
+        "%s %.1fC over its %.1fC %s limit" % (la, t, li, b) for la, t, li, b in shown
+    )
+    if len(hot) > len(shown):
+        desc += ", +%d more" % (len(hot) - len(shown))
+    return False, "%d of %d sensors over limit: %s; %s" % (
+        len(hot),
+        len(limits),
+        desc,
+        coverage,
+    )

@@ -318,6 +318,14 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     An EMPTY sensor vector is `down`, not `up` — zero readings means EVERY collector went blind,
     and "nothing is too hot" from no data is a lie. `HWMON_TEMP_CONSECUTIVE` (3) rides out a
     transcode spike.
+    **The message names hardware, not sysfs paths** (2026-09-01): two extra instant queries
+    (`node_hwmon_chip_names`, `node_hwmon_sensor_label`) turn
+    `daniel-box/pci0000:00_0000:00:18_3/temp1` into `daniel-box k10temp/Tctl`. Both lookups are
+    partial — 10 of 21 series carry a sensor label — so each half of the name degrades to its
+    raw sysfs component independently, and an empty answer costs readability rather than the
+    verdict. Each hot sensor also names the arm that set its limit, because a `declared` breach
+    is the hardware calling itself too hot while a `fallback` breach may only mean the flat 85 °C
+    does not suit that chip.
     **A PARTIAL blindness is a separate arm** (`HWMON_TEMP_ORIGINS_MIN`, added 2026-08-29 for
     review M-9): the empty-vector branch fires only when ALL hosts go quiet, so until this arm
     existed one host's hwmon collector could die while the other two answered "all below limit"
