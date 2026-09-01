@@ -48,6 +48,7 @@ from verdicts_cluster import (
 )
 from verdicts_host import (
     hwmon_included_series,
+    hwmon_name_maps,
     hwmon_temp_limits,
     hwmon_temp_verdict,
     pi_ports_verdict,
@@ -1881,6 +1882,15 @@ def check_host_temp():
     while the coverage shortfall carries its own hysteresis inside _host_origin_shortfall.
     """
     temps = prom_vector("node_hwmon_temp_celsius")
+    # node-exporter keeps the readable names in two side metrics rather than on the reading, so
+    # naming the hot sensor `daniel-box k10temp/Tctl` instead of
+    # `daniel-box/pci0000:00_0000:00:18_3/temp1` costs two more instant queries. Both are tiny
+    # (11 and 16 series live on 2026-09-01) and neither can fail the check: an empty answer just
+    # falls back to the sysfs path.
+    names = hwmon_name_maps(
+        prom_vector("node_hwmon_chip_names"),
+        prom_vector("node_hwmon_sensor_label"),
+    )
     limits = hwmon_temp_limits(
         temps,
         prom_vector("node_hwmon_temp_max_celsius"),
@@ -1889,6 +1899,7 @@ def check_host_temp():
         HWMON_TEMP_MIN_PLAUSIBLE_C,
         HWMON_TEMP_MAX_PLAUSIBLE_C,
         HWMON_TEMP_EXCLUDE_CHIP,
+        names,
     )
     # Counted over the series that survive exclusion, via the same predicate hwmon_temp_limits
     # uses — a host whose only sensors are excluded is not a host this check covers.

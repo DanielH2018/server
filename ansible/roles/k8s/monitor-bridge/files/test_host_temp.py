@@ -22,12 +22,16 @@ def _temp(instance, chip, sensor, value):
 HWMON_ARGS = (0.90, 85.0, 20.0, 150.0, "nvme_")
 
 
-def _stub_prom(monkeypatch, temps, maxes=()):
+def _stub_prom(monkeypatch, temps, maxes=(), chip_names=(), sensor_labels=()):
     def fake(query, *args, **kwargs):
         if query == "node_hwmon_temp_celsius":
             return list(temps)
         if query == "node_hwmon_temp_max_celsius":
             return list(maxes)
+        if query == "node_hwmon_chip_names":
+            return list(chip_names)
+        if query == "node_hwmon_sensor_label":
+            return list(sensor_labels)
         return []
 
     monkeypatch.setattr(check, "prom_vector", fake)
@@ -40,7 +44,7 @@ def test_declared_max_is_clean_below_the_ratio():
         *HWMON_ARGS,
     )
     assert limits == [
-        ("daniel-server/platform_coretemp_0/temp1", 63.0, 90.0, "declared")
+        ("daniel-server platform_coretemp_0/temp1", 63.0, 90.0, "declared")
     ]
     ok, msg = check.hwmon_temp_verdict(limits)
     assert ok, msg
@@ -55,7 +59,10 @@ def test_declared_max_is_flagged_above_the_ratio():
     )
     ok, msg = check.hwmon_temp_verdict(limits)
     assert not ok
-    assert "91.0C (limit 90.0C)" in msg
+    assert "91.0C over its 90.0C declared limit" in msg
+    assert msg.startswith("1 of 1 sensors over limit:"), (
+        "the breach leads; the coverage tally must not sit inside the sentence naming it"
+    )
 
 
 def test_fallback_is_clean_below_the_ceiling():
@@ -74,7 +81,11 @@ def test_fallback_is_flagged_above_the_ceiling():
     )
     ok, msg = check.hwmon_temp_verdict(limits)
     assert not ok
-    assert "daniel-pi/thermal_thermal_zone0/temp0" in msg
+    assert "daniel-pi thermal_thermal_zone0/temp0" in msg
+    assert "fallback limit" in msg, (
+        "a fallback breach reads differently from a declared one — the flat ceiling may simply "
+        "not suit a chip that declares no max, so the message must say which arm set the limit"
+    )
 
 
 def test_the_sentinel_max_is_treated_as_undeclared():
@@ -117,10 +128,76 @@ def test_drive_chips_are_left_to_scrutiny():
         *HWMON_ARGS,
     )
     labels = [la for la, _t, _li, _b in limits]
-    assert labels == ["daniel-box/platform_coretemp_0/temp1"], (
+    assert labels == ["daniel-box platform_coretemp_0/temp1"], (
         "drive temperature belongs to check_scrutiny, whose device_status folds the SMART "
         "temperature attribute; reading it here double-pages one condition"
     )
+
+
+def _chip_name(instance, chip, name):
+    return ({"instance": instance, "chip": chip, "chip_name": name}, 1.0)
+
+
+def _sensor_label(instance, chip, sensor, label):
+    return (
+        {"instance": instance, "chip": chip, "sensor": sensor, "label": label},
+        1.0,
+    )
+
+
+def test_a_named_sensor_reads_as_its_hardware_name():
+    """`daniel-box/pci0000:00_0000:00:18_3/temp1` is the sysfs path for k10temp's Tctl."""
+    names = check.hwmon_name_maps(
+        [_chip_name("daniel-box", "pci0000:00_0000:00:18_3", "k10temp")],
+        [_sensor_label("daniel-box", "pci0000:00_0000:00:18_3", "temp1", "Tctl")],
+    )
+    limits = check.hwmon_temp_limits(
+        [_temp("daniel-box", "pci0000:00_0000:00:18_3", "temp1", 92.6)],
+        [],
+        *HWMON_ARGS,
+        names,
+    )
+    assert limits[0][0] == "daniel-box k10temp/Tctl"
+
+
+def test_an_unnamed_sensor_keeps_its_sysfs_identity():
+    """The rejecting half: a partial name map must cost readability, never identity.
+
+    Only 10 of the 21 live series carry a sensor label, so a chip whose name resolves and whose
+    sensor does not is the common case, not an edge one — and the raw component is what a
+    Prometheus query is written against.
+    """
+    names = check.hwmon_name_maps(
+        [_chip_name("daniel-box", "thermal_thermal_zone0", "acpitz")], []
+    )
+    limits = check.hwmon_temp_limits(
+        [_temp("daniel-box", "thermal_thermal_zone0", "temp0", 20.0)],
+        [],
+        *HWMON_ARGS,
+        names,
+    )
+    assert limits[0][0] == "daniel-box acpitz/temp0"
+
+    unnamed = check.hwmon_temp_limits(
+        [_temp("daniel-box", "thermal_thermal_zone0", "temp0", 20.0)],
+        [],
+        *HWMON_ARGS,
+        check.hwmon_name_maps([], []),
+    )
+    assert unnamed[0][0] == "daniel-box thermal_thermal_zone0/temp0"
+
+
+def test_an_estate_wide_breach_counts_the_sensors_it_does_not_list():
+    """A truncated list must say so — a dropped tail reads as a smaller fault than it is."""
+    limits = check.hwmon_temp_limits(
+        [_temp("daniel-box", "chip%d" % i, "temp0", 99.0) for i in range(8)],
+        [],
+        *HWMON_ARGS,
+    )
+    ok, msg = check.hwmon_temp_verdict(limits)
+    assert not ok
+    assert msg.startswith("8 of 8 sensors over limit:")
+    assert "+3 more" in msg, msg
 
 
 def test_covers_every_sensor_it_does_not_deliberately_exclude():
@@ -171,6 +248,29 @@ def test_a_single_spike_is_held_and_sustained_heat_pages(monkeypatch):
         "a one-cycle thermal spike must not page"
     )
     assert not results[-1][0], "sustained heat must page on the Nth consecutive cycle"
+
+
+def test_the_check_fetches_the_names_it_reports(monkeypatch):
+    """The pure tests are handed a name map; only this one proves check_host_temp builds one.
+
+    The two name metrics are separate queries, so a wiring that forgets them still passes every
+    verdict test above and ships the sysfs path to the Kuma tile.
+    """
+    check._down_streaks.pop("host_temp", None)
+    _stub_prom(
+        monkeypatch,
+        [_temp("daniel-box", "pci0000:00_0000:00:18_3", "temp1", 92.6)],
+        chip_names=[_chip_name("daniel-box", "pci0000:00_0000:00:18_3", "k10temp")],
+        sensor_labels=[
+            _sensor_label("daniel-box", "pci0000:00_0000:00:18_3", "temp1", "Tctl")
+        ],
+    )
+    for _ in range(check.HWMON_TEMP_CONSECUTIVE):
+        _ok, msg = check.check_host_temp()
+    assert "daniel-box k10temp/Tctl" in msg, msg
+    # A single-host estate also advances the module-global coverage-shortfall streak, which
+    # would otherwise make a later test's clean cycle page.
+    check._host_origin_streaks.clear()
 
 
 def test_a_clean_cycle_clears_the_streak(monkeypatch):
@@ -310,7 +410,7 @@ def test_a_hot_sensor_outranks_a_coverage_shortfall(monkeypatch):
     for _ in range(check.HWMON_TEMP_CONSECUTIVE):
         ok, msg = check.check_host_temp()
     assert not ok
-    assert "OVER limit" in msg, msg
+    assert "over limit" in msg, msg
     assert "hosts reporting" not in msg, (
         "the breach message must not be replaced by the coverage complaint"
     )
