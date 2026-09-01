@@ -229,7 +229,8 @@ def test_setup_tags_for_maps_a_renamed_tag():
 
 
 def test_setup_roles_are_recorded_for_both_broad_setup_arms():
-    """gitops_deploy/ is in the MANUAL subset, and its remediation still needs the role name."""
+    """k3s/ routes to k3s-bringup.yml (never applied here) and gitops_deploy/ applies itself;
+    both remediations still need the role name."""
     cs = services_from_changed_paths(
         [
             "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
@@ -606,11 +607,10 @@ def test_config_change_with_compose_change_dedupes_to_one_service():
 #
 # `broad` used to mean one thing: defer and alert. It now splits into what the deployer
 # applies itself and what it must never touch, so every case below states which side it
-# lands on. The manual set is the load-bearing half -- applying this deployer's OWN role
-# runs a playbook whose handler restarts the unit executing the tick.
+# lands on. The manual set is the bring-up playbooks alone.
 
 BROAD_AUTO_SETUP = ["ansible/roles/setup/renovate_notify/tasks/main.yml"]
-BROAD_MANUAL_SELF = ["ansible/roles/setup/gitops_deploy/files/gitops_deploy.py"]
+BROAD_AUTO_SELF = ["ansible/roles/setup/gitops_deploy/files/gitops_deploy.py"]
 BROAD_MANUAL_BRINGUP = ["ansible/k3s-bringup.yml"]
 BROAD_AUTO_DEPLOY = ["ansible/templates/traefik.yml.j2"]
 
@@ -622,12 +622,16 @@ def test_ordinary_setup_role_is_clean_for_auto_apply():
     assert setup_tags_for(BROAD_AUTO_SETUP) == {"renovate_notify"}
 
 
-def test_the_deployers_own_role_is_flagged_manual():
-    """Applying roles/setup/gitops_deploy/ runs a playbook whose handler restarts the unit
-    currently executing the tick. That is a self-modification defect, not a risk
-    trade-off: the run is SIGTERMed partway and the state it leaves is undefined."""
-    cs = services_from_changed_paths(BROAD_MANUAL_SELF)
-    assert cs.broad and cs.broad_manual
+def test_the_deployers_own_role_applies_itself():
+    """roles/setup/gitops_deploy/ sat in the manual set until 2026-09-01 on the claim that its
+    handler restarts the unit running the tick. It does not: the handler is `state: started`,
+    which Ansible's systemd module skips for an `activating` unit. Parking it instead stopped
+    every other session's landing three times that day (#707, #712, #714). The DECIDED marker
+    above `_BROAD_MANUAL_PREFIXES` carries the evidence."""
+    cs = services_from_changed_paths(BROAD_AUTO_SELF)
+    assert cs.broad and cs.broad_setup
+    assert not cs.broad_manual
+    assert setup_tags_for(BROAD_AUTO_SELF) == {"gitops_deploy"}
 
 
 def test_bringup_playbooks_are_flagged_manual():
@@ -643,7 +647,7 @@ def test_shared_template_is_clean_for_auto_apply():
 
 def test_a_manual_path_bundled_with_an_auto_one_stays_manual():
     """Mixed pushes must not half-apply: the manual arm wins over the whole tick."""
-    cs = services_from_changed_paths(BROAD_AUTO_SETUP + BROAD_MANUAL_SELF)
+    cs = services_from_changed_paths(BROAD_AUTO_SETUP + BROAD_MANUAL_BRINGUP)
     assert cs.broad_manual
 
 
@@ -659,14 +663,14 @@ def test_requirements_yml_derives_the_collections_tag():
 
 
 def test_setup_tag_derivation_skips_the_manual_set():
-    assert setup_tags_for(BROAD_MANUAL_SELF) == set()
+    assert setup_tags_for(BROAD_MANUAL_BRINGUP) == set()
 
 
 def test_broad_stays_true_for_every_split_arm():
     """`broad` keeps its old meaning so every existing consumer is unchanged."""
     for paths in (
         BROAD_AUTO_SETUP,
-        BROAD_MANUAL_SELF,
+        BROAD_AUTO_SELF,
         BROAD_MANUAL_BRINGUP,
         BROAD_AUTO_DEPLOY,
     ):
@@ -711,24 +715,27 @@ def test_a_test_only_push_is_clean():
 
 def test_the_deployers_own_module_is_still_flagged():
     """The rejecting half. deploy_logic.py sits in the same directory as the test above and
-    must keep parking the tick — applying this role restarts the unit running it."""
+    must still read as a setup-plane change the tick applies — not as the empty ChangeSet a
+    test-only push produces, which would ff-merge it and leave the host on the old code."""
     cs = services_from_changed_paths(
         ["ansible/roles/setup/gitops_deploy/files/deploy_logic.py"]
     )
-    assert cs.broad_manual is True
+    assert cs.broad is True and cs.broad_setup is True
+    assert cs.setup_roles == {"gitops_deploy"}
 
 
 def test_a_test_file_does_not_disarm_a_real_change_beside_it():
-    """The case an over-broad predicate breaks. `broad_manual` is ORed across the push, so one
-    exempt path must not clear the flag a sibling set — a half-applied broad change is exactly
-    what the manual arm exists to prevent."""
+    """The case an over-broad predicate breaks. The plane flags are ORed across the push, so
+    one exempt path must not clear the flag a sibling set — a half-applied broad change is
+    exactly what the arm exists to prevent."""
     cs = services_from_changed_paths(
         [
             "ansible/roles/setup/gitops_deploy/files/test_deploy_logic_health.py",
             "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
         ]
     )
-    assert cs.broad_manual is True
+    assert cs.broad_setup is True
+    assert cs.setup_roles == {"gitops_deploy"}
 
 
 def test_a_k8s_service_change_is_still_flagged_beside_its_test():

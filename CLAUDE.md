@@ -181,11 +181,13 @@ Say which of these applies, then stop:
 - Master CI is red. (Pending is no longer a reason to stop — `land.sh` waits on it for you.)
 - The host holds a non-empty `hold_sha` — a previous SHA already failed its health gate, or a
   broad apply failed. `hold_plane` names the playbook when it was the latter.
-- A change in `_BROAD_MANUAL_PREFIXES` — `roles/setup/gitops_deploy/`, `bootstrap.yml`,
-  `k3s-bringup.yml`, `initial_setup.yml` — sits in the `local..origin` range. The deployer applies
-  every other broad change itself, but not these: applying the deployer's own role restarts the
-  unit running the tick. If it is another session's, clearing it means applying their change; name
-  it and stop.
+- A change in `_BROAD_MANUAL_PREFIXES` — `bootstrap.yml`, `k3s-bringup.yml`,
+  `initial_setup.yml` — sits in the `local..origin` range. The deployer applies every other broad
+  change itself, but not the bring-up playbooks: those run by hand by construction. If it is
+  another session's, clearing it means applying their change; name it and stop. (The deployer's
+  own role, `roles/setup/gitops_deploy/`, was in this list until 2026-09-01 and parked three
+  landings that day; it now applies itself — the `DECIDED:` marker above the list in
+  `deploy_logic.py` has the evidence.)
 - `deploy.sh` exits 3: the change is broad (shared templates, inventory, the setup plane) and
   maps to no single service.
 - The change is docs- or `tasks/`-only — the deployer skips those deliberately, and so do you.

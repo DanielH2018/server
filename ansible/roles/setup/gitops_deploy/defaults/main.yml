@@ -21,7 +21,9 @@ gitops_deploy_require_ci: true
 gitops_deploy_ci_contexts:
   - prek (lint + validate + tests + secrets)
 
-# Queried unauthenticated (public repo), one GET per tick that would otherwise deploy.
+# One GET per tick that would otherwise deploy, authenticated through `gh auth token` when the
+# CLI is logged in (deploy_logic.github_token) — anonymous is 60/hour per source IP, shared with
+# every landing's await_ci.py poll.
 gitops_deploy_github_repo: DanielH2018/server
 
 # --- The MERGE gate, which is a different thing from gitops_deploy_ci_contexts above ---

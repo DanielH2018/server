@@ -49,9 +49,13 @@ stay).
 - **CI gate — the tip must be green before anything is merged or deployed** (`REQUIRE_CI`,
   `deploy_logic.ci_verdict`). Before this the deployer applied whatever landed on master: nothing
   in the pull path consulted a workflow result, so a red commit reached the homelab on the next
-  tick. It queries GitHub's check-runs API **unauthenticated** (public repo) for `origin/master`,
-  and only on a tick that would otherwise deploy — a noop/dirty/held tick spends no request, which
-  keeps the 60/hour anonymous limit irrelevant at one tick per 30 min.
+  tick. It queries GitHub's check-runs API for `origin/master`, **authenticated through `gh auth
+  token`** when the CLI is logged in (`deploy_logic.github_token`; `GH_TOKEN`/`GITHUB_TOKEN` in
+  the environment win, and a logged-out gh degrades to anonymous), and only on a tick that would
+  otherwise deploy. Anonymous, the limit is 60/hour per source IP, shared with every landing's
+  `await_ci.py` poll on the same host (45 requests per 900s wait) — two landings exhausted it on
+  2026-09-01 and three ticks deferred on `HTTP Error 403: rate limit exceeded`, which reads as
+  "CI not finished". Authenticated it is 5000/hour per token.
   - `fail` → `next_action` returns **`ci_failed`**: no ff-merge, no deploy, and a Discord alert
     throttled once per SHA (`ci_alerted_sha`).
   - `pending` → **`ci_pending`**: silent deferral. Unfinished CI is the normal state for the first
@@ -132,12 +136,20 @@ stay).
     leaves the tree fast-forwarded. It deliberately does not `git reset` — resetting without
     redeploying would leave the tree claiming the old commit while live state is half-new.
   - **`_BROAD_MANUAL_PREFIXES` keeps the old defer-and-alert with no ff-merge**:
-    `roles/setup/gitops_deploy/`, `bootstrap.yml`, `k3s-bringup.yml`, `initial_setup.yml`.
-    Applying this role runs a playbook whose handler restarts the unit executing the tick — a
-    self-modification defect no timeout makes safe. Staying parked is also what keeps
-    `behind_since` set, which is the only durable signal that an unapplied plane exists. A
-    setup-plane change whose tag cannot be derived joins them, since the only automatic
-    alternative is an unscoped `initial_setup.yml` (a whole-host reprovision).
+    `bootstrap.yml`, `k3s-bringup.yml`, `initial_setup.yml` — the bring-up playbooks, which run
+    by hand by construction. Staying parked is what keeps `behind_since` set, which is the only
+    durable signal that an unapplied plane exists. A setup-plane change whose tag cannot be
+    derived joins them, since the only automatic alternative is an unscoped `initial_setup.yml`
+    (a whole-host reprovision).
+  - **This role applies itself.** It was in the manual set until 2026-09-01 on the claim that
+    applying it "restarts the unit executing the tick". The handler is `Run gitops-deploy once`,
+    `ansible.builtin.systemd: state: started`, and Ansible's module treats an `activating` unit
+    as already running, so from inside a tick it does nothing; the other handler is a
+    daemon-reload. Meanwhile the park stopped every other session's landing (#707, #712, #714
+    on one day) until someone hand-ran `initial_setup.yml --tags gitops_deploy` in the primary
+    checkout and ff-merged. A self-apply that fails takes the same hold + `hold_plane` + alert
+    path as any setup role. The `DECIDED:` marker above `_BROAD_MANUAL_PREFIXES` in
+    `deploy_logic.py` is the long form.
   - `BROAD_DEPLOY_TIMEOUT_S` (1800, `gitops_deploy_broad_timeout_s`) bounds one apply. Without it
     a wedged run is SIGTERMed at `TimeoutStartSec` with no hold written and no alert sent.
 - **Behind-origin watchdog** (`deploy_logic.behind_marker`): every deferral above leaves the host
