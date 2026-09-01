@@ -842,16 +842,18 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
 
 ## Module layout — and the one rule that governs it
 
-`files/` holds seven runtime modules. `check.py` is the entrypoint the Deployment runs and still
-owns the I/O and the `CHECKS` registry; `bridge_config.py` owns the env-derived config; the
-others hold pure logic that takes its inputs as arguments. The split is in progress — the design
-and the remaining slices are in
+`files/` holds nine runtime modules. `check.py` is the entrypoint the Deployment runs and still
+owns every `check_*` and the `CHECKS` registry; `bridge_config.py` owns the env-derived config;
+`bridge_io.py` owns fetching and the Kuma push; the others hold pure logic that takes its inputs
+as arguments. The split is in progress — the design and the remaining slices are in
 `docs/superpowers/specs/2026-09-01-monitor-bridge-check-split-design.md`.
 
 | module | holds |
 |---|---|
-| `check.py` | HTTP/PromQL fetching, every `check_*`, `CHECKS`, the run loop |
+| `check.py` | every `check_*`, `CHECKS`, the gate sets, the run loop |
 | `bridge_config.py` | every `_env(...)` constant — thresholds, URLs, credentials, windows — with the commentary that justifies each value. Read as `cfg.X`, never from-imported |
+| `bridge_io.py` | `_get_json`, `_post_json`, `prom_scalar`, `prom_vector`, the `loki_*` queries, `push`, and the selector builders (`origin_sel`, `cadvisor_sel`, `host_metric_sel`). Read as `bridge_io.X`; the tests stub the fetch layer here |
+| `bridge_streaks.py` | `_down_streaks` and `down_streak` — the consecutive-down counter four domains share. `conftest.py` clears it here |
 | `bridge_common.py` | `_env`, `sanitize` — the two helpers shared verbatim with autofix-bridge's `autofix.py`, staged into that role's ConfigMap too (see its CLAUDE.md) |
 | `bridge_parsing.py` | duration/timestamp parsing, `endpoint_label`, `describe_fetch_failure` |
 | `verdicts_cluster.py` | `k8s_workloads_verdict`, `extended_resource_verdict`, `ksm_resource_label`, `targets_verdict` |
@@ -889,8 +891,9 @@ helpers that clear both bars — see `bridge_common.py`'s own header for the ful
 was considered and rejected (`log`, `push`, `touch_heartbeat`, the urllib wrapper, each file's
 `main()`).
 
-Mutable per-check state (`_n8n_streaks`, `_cadvisor_streaks`, `_host_origin_streaks`,
-`_down_streaks`) stays with the code that mutates it, not with the thresholds it pairs with.
+Mutable per-check state (`_n8n_streaks`, `_cadvisor_streaks`, `_host_origin_streaks`) stays
+with the code that mutates it, not with the thresholds it pairs with. `_down_streaks` is the
+exception only because four domains mutate it, so it has a module of its own.
 
 **Adding a module means adding it to `monitor_bridge_modules`** in `defaults/main.yml` — the
 ConfigMap ships exactly that list, and a module missing from it kills the pod at import with

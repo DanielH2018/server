@@ -12,6 +12,8 @@ from pathlib import Path
 
 import bridge_common
 import bridge_config
+import bridge_streaks
+import bridge_io
 import check
 
 
@@ -147,7 +149,7 @@ def test_run_once_with_only_filter_touches_no_gate(monkeypatch):
         check, "_evaluate", lambda name, fn: (evaluated.append(name), (True, "ok"))[1]
     )
     pushed = []
-    monkeypatch.setattr(check, "push", lambda token, ok, msg: pushed.append(msg))
+    monkeypatch.setattr(bridge_io, "push", lambda token, ok, msg: pushed.append(msg))
     check.run_once()
     assert set(evaluated) == SUBSET_ONLY
     assert len(pushed) == len(SUBSET_ONLY)
@@ -170,8 +172,8 @@ def _arm_pvc(monkeypatch, vector, claims=43.0):
     monkeypatch.setattr(bridge_config, "PVC_MIN_CLAIMS", 32)
     monkeypatch.setattr(bridge_config, "PVC_CLAIMS_CONSECUTIVE", 3)
     monkeypatch.setattr(bridge_config, "PVC_EXCLUDE", ["media-data"])
-    monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: claims)
-    monkeypatch.setattr(check, "prom_vector", lambda *a, **k: vector)
+    monkeypatch.setattr(bridge_io, "prom_scalar", lambda *a, **k: claims)
+    monkeypatch.setattr(bridge_io, "prom_vector", lambda *a, **k: vector)
 
 
 def test_pvc_under_threshold_is_clean(monkeypatch):
@@ -272,7 +274,7 @@ def test_pvc_recovery_resets_the_census_streak(monkeypatch):
     check.check_pvc_fullness()
     _arm_pvc(monkeypatch, [_pvc_series("uptime-kuma-data", 38.6)])
     assert check.check_pvc_fullness()[0]
-    assert check._down_streaks.get("pvc_fullness", 0) == 0
+    assert bridge_streaks._down_streaks.get("pvc_fullness", 0) == 0
 
 
 def test_pvc_fullness_is_gated_by_the_cluster_prometheus():

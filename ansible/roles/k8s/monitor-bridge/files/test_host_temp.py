@@ -10,6 +10,8 @@ matters most: it is the only test that can fail when a future edit narrows cover
 from pathlib import Path
 
 import bridge_config
+import bridge_streaks
+import bridge_io
 import check
 import pytest
 
@@ -35,7 +37,7 @@ def _stub_prom(monkeypatch, temps, maxes=(), chip_names=(), sensor_labels=()):
             return list(sensor_labels)
         return []
 
-    monkeypatch.setattr(check, "prom_vector", fake)
+    monkeypatch.setattr(bridge_io, "prom_vector", fake)
 
 
 def test_declared_max_is_clean_below_the_ratio():
@@ -240,7 +242,7 @@ def test_no_sensors_scraped_pages_rather_than_passing():
 
 def test_a_single_spike_is_held_and_sustained_heat_pages(monkeypatch):
     """Hysteresis, both halves: one hot cycle must not page, the Nth must."""
-    check._down_streaks.pop("host_temp", None)
+    bridge_streaks._down_streaks.pop("host_temp", None)
     _stub_prom(
         monkeypatch, [_temp("daniel-pi", "thermal_thermal_zone0", "temp0", 99.0)]
     )
@@ -259,7 +261,7 @@ def test_the_check_fetches_the_names_it_reports(monkeypatch):
     The two name metrics are separate queries, so a wiring that forgets them still passes every
     verdict test above and ships the sysfs path to the Kuma tile.
     """
-    check._down_streaks.pop("host_temp", None)
+    bridge_streaks._down_streaks.pop("host_temp", None)
     _stub_prom(
         monkeypatch,
         [_temp("daniel-box", "pci0000:00_0000:00:18_3", "temp1", 92.6)],
@@ -277,13 +279,13 @@ def test_the_check_fetches_the_names_it_reports(monkeypatch):
 
 
 def test_a_clean_cycle_clears_the_streak(monkeypatch):
-    check._down_streaks["host_temp"] = 2
+    bridge_streaks._down_streaks["host_temp"] = 2
     _stub_prom(
         monkeypatch, [_temp("daniel-pi", "thermal_thermal_zone0", "temp0", 40.0)]
     )
     ok, _msg = check.check_host_temp()
     assert ok
-    assert check._down_streaks["host_temp"] == 0, (
+    assert bridge_streaks._down_streaks["host_temp"] == 0, (
         "a clean cycle must reset the hysteresis"
     )
 
@@ -350,7 +352,7 @@ def _cool_estate(origins):
 
 def _reset():
     check._host_origin_streaks.clear()
-    check._down_streaks.pop("host_temp", None)
+    bridge_streaks._down_streaks.pop("host_temp", None)
 
 
 def test_full_coverage_is_clean(monkeypatch):

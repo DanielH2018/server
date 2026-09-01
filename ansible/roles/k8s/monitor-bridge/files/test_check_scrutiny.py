@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 
 import bridge_config
+import bridge_io
 import check
 
 
@@ -209,7 +210,7 @@ def test_scrutiny_wear_devices_skips_archived_and_labels_by_model(monkeypatch):
         fetched.append(url)
         return _details(attrs=_attr(7))
 
-    monkeypatch.setattr(check, "_get_json", fake_get_json)
+    monkeypatch.setattr(bridge_io, "_get_json", fake_get_json)
     monkeypatch.setattr(bridge_config, "SCRUTINY_URL", "http://scrutiny:8080")
     summary = {
         "w1": {"device": {"device_name": "nvme0", "model_name": "SHPP41-500GM"}},

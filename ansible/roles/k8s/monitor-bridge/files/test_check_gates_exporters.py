@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 import bridge_config
+import bridge_io
 import check
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -165,9 +166,11 @@ def test_a_job_whose_origins_are_all_excluded_suppresses_no_host_metric_check():
 def _wire_run_once_prom_up(monkeypatch, up_vector, checks, prom_dependent):
     """Drive run_once with Prometheus UP and a stubbed `up` vector; capture what ran + pushed."""
     ran, pushes = [], []
-    monkeypatch.setattr(check, "push", lambda t, ok, m: pushes.append((t, ok, m)))
+    monkeypatch.setattr(bridge_io, "push", lambda t, ok, m: pushes.append((t, ok, m)))
     monkeypatch.setattr(check, "check_prometheus", lambda: (True, "prom ok"))
-    monkeypatch.setattr(check, "prom_vector", lambda q: up_vector if q == "up" else [])
+    monkeypatch.setattr(
+        bridge_io, "prom_vector", lambda q: up_vector if q == "up" else []
+    )
     monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset(prom_dependent))
     monkeypatch.setattr(check, "check_loki_reachable", lambda: (True, "loki ok"))
 
@@ -216,7 +219,7 @@ def _fake_vectors(monkeypatch, by_query):
                 return vec
         raise AssertionError("unexpected query: %s" % promql)
 
-    monkeypatch.setattr(check, "prom_vector", fake)
+    monkeypatch.setattr(bridge_io, "prom_vector", fake)
 
 
 def test_check_restarts_names_the_looping_pod(monkeypatch):
@@ -309,9 +312,9 @@ def test_run_once_up_probe_failure_does_not_suppress(monkeypatch):
         raise RuntimeError("prom hiccup")
 
     ran, pushes = [], []
-    monkeypatch.setattr(check, "push", lambda t, ok, m: pushes.append((t, ok, m)))
+    monkeypatch.setattr(bridge_io, "push", lambda t, ok, m: pushes.append((t, ok, m)))
     monkeypatch.setattr(check, "check_prometheus", lambda: (True, "prom ok"))
-    monkeypatch.setattr(check, "prom_vector", boom)
+    monkeypatch.setattr(bridge_io, "prom_vector", boom)
     monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset({"disk"}))
     monkeypatch.setattr(check, "check_loki_reachable", lambda: (True, "loki ok"))
 

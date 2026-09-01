@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 import bridge_config
+import bridge_io
 import check
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -141,7 +142,7 @@ def test_n8n_check_down_after_consecutive_failures(monkeypatch, seq):
                 {"id": eid, "workflowId": "1", "status": "error", "stoppedAt": now_iso}
             ]
         }
-        monkeypatch.setattr(check, "_get_json", seq(wf, ex))
+        monkeypatch.setattr(bridge_io, "_get_json", seq(wf, ex))
         return check.check_n8n()
 
     assert cycle("e1")[0]  # streak 1 -> up
@@ -155,7 +156,7 @@ def test_n8n_check_ok_when_no_failures(monkeypatch, seq):
     monkeypatch.setattr(bridge_config, "N8N_API_KEY", "x")
     wf = {"data": [{"id": "1", "name": "Prod Flow", "active": True}]}
     ex = {"data": []}
-    monkeypatch.setattr(check, "_get_json", seq(wf, ex))
+    monkeypatch.setattr(bridge_io, "_get_json", seq(wf, ex))
     ok, msg = check.check_n8n()
     assert ok
     assert "no active-workflow failures" in msg
@@ -172,7 +173,7 @@ def test_n8n_check_single_failure_does_not_page(monkeypatch, seq):
             {"id": "e1", "workflowId": "1", "status": "error", "stoppedAt": now_iso}
         ]
     }
-    monkeypatch.setattr(check, "_get_json", seq(wf, ex))
+    monkeypatch.setattr(bridge_io, "_get_json", seq(wf, ex))
     ok, _ = check.check_n8n()
     assert ok
 
@@ -330,7 +331,7 @@ def test_arr_queue_down_on_sonarr_warning(monkeypatch):
             "statusMessages": [{"title": "x", "messages": ["Found executable file"]}],
         }
     )
-    monkeypatch.setattr(check, "_get_json", lambda *a, **k: q)
+    monkeypatch.setattr(bridge_io, "_get_json", lambda *a, **k: q)
     ok, msg = check.check_arr_queue()
     assert not ok
     assert "Sonarr" in msg
@@ -346,7 +347,7 @@ def test_arr_queue_down_on_radarr_warning(monkeypatch):
             "trackedDownloadState": "importPending",
         }
     )
-    monkeypatch.setattr(check, "_get_json", lambda *a, **k: q)
+    monkeypatch.setattr(bridge_io, "_get_json", lambda *a, **k: q)
     ok, msg = check.check_arr_queue()
     assert not ok
     assert "Radarr" in msg
@@ -356,7 +357,7 @@ def test_arr_queue_down_on_radarr_warning(monkeypatch):
 def test_arr_queue_ok_when_both_clean(monkeypatch):
     monkeypatch.setattr(bridge_config, "SONARR_API_KEY", "x")
     monkeypatch.setattr(bridge_config, "RADARR_API_KEY", "x")
-    monkeypatch.setattr(check, "_get_json", lambda *a, **k: _queue())
+    monkeypatch.setattr(bridge_io, "_get_json", lambda *a, **k: _queue())
     ok, msg = check.check_arr_queue()
     assert ok
     assert "Sonarr" in msg and "Radarr" in msg
@@ -374,7 +375,7 @@ def test_arr_queue_urls_include_unknown_items_flags(monkeypatch):
         calls.append(url)
         return _queue()
 
-    monkeypatch.setattr(check, "_get_json", fake_get_json)
+    monkeypatch.setattr(bridge_io, "_get_json", fake_get_json)
     ok, _ = check.check_arr_queue()
     assert ok
     sonarr_url = next(u for u in calls if "sonarr" in u)
@@ -392,7 +393,7 @@ def test_arr_queue_only_checks_configured_app(monkeypatch):
         calls.append(url)
         return _queue()
 
-    monkeypatch.setattr(check, "_get_json", fake_get_json)
+    monkeypatch.setattr(bridge_io, "_get_json", fake_get_json)
     ok, msg = check.check_arr_queue()
     assert ok
     assert len(calls) == 1
@@ -487,7 +488,7 @@ def test_prowlarr_indexers_down_on_sustained(monkeypatch, seq):
     )  # ancient -> definitely over threshold
     indexers = [{"id": 1, "name": "EZTV"}]
     monkeypatch.setattr(
-        check, "_get_json", seq(status, indexers)
+        bridge_io, "_get_json", seq(status, indexers)
     )  # status, then indexer list
     ok, msg = check.check_prowlarr_indexers()
     assert ok is False
@@ -496,7 +497,7 @@ def test_prowlarr_indexers_down_on_sustained(monkeypatch, seq):
 
 def test_prowlarr_indexers_up_when_none_failing(monkeypatch, seq):
     monkeypatch.setattr(bridge_config, "PROWLARR_API_KEY", "k")
-    monkeypatch.setattr(check, "_get_json", seq([], [{"id": 1, "name": "EZTV"}]))
+    monkeypatch.setattr(bridge_io, "_get_json", seq([], [{"id": 1, "name": "EZTV"}]))
     ok, msg = check.check_prowlarr_indexers()
     assert ok is True
     assert "ok" in msg
@@ -507,7 +508,7 @@ def test_prowlarr_indexers_ignore_list_suppresses_page(monkeypatch, seq):
     monkeypatch.setattr(bridge_config, "PROWLARR_INDEXER_IGNORE", "The Pirate Bay")
     status = _status((1, "2000-01-01T00:00:00Z"))  # ancient -> over threshold
     indexers = [{"id": 1, "name": "The Pirate Bay"}]
-    monkeypatch.setattr(check, "_get_json", seq(status, indexers))
+    monkeypatch.setattr(bridge_io, "_get_json", seq(status, indexers))
     ok, msg = check.check_prowlarr_indexers()
     assert ok is True
     assert "ok" in msg

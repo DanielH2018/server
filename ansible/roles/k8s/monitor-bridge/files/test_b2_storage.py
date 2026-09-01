@@ -7,6 +7,7 @@ operator smoke-test that proves B2 accepts the query.
 """
 
 import bridge_config
+import bridge_io
 import check
 
 
@@ -110,7 +111,7 @@ def test_the_cursor_is_threaded_into_the_next_request(monkeypatch):
             {"files": []},
         ]
     )
-    monkeypatch.setattr(check, "_post_json", fake)
+    monkeypatch.setattr(bridge_io, "_post_json", fake)
     pages, truncated = check.b2_list_versions("https://api", "tok", "bkt")
     assert len(pages) == 2
     assert truncated is False
@@ -120,7 +121,7 @@ def test_the_cursor_is_threaded_into_the_next_request(monkeypatch):
 
 def test_a_page_with_no_cursor_ends_the_walk(monkeypatch):
     fake, sent = _paging_stub([{"files": [{"contentLength": 1}]}])
-    monkeypatch.setattr(check, "_post_json", fake)
+    monkeypatch.setattr(bridge_io, "_post_json", fake)
     pages, truncated = check.b2_list_versions("https://api", "tok", "bkt")
     assert len(pages) == 1
     assert truncated is False
@@ -134,7 +135,7 @@ def test_a_cursor_that_never_clears_reports_truncated(monkeypatch):
         [{"files": [], "nextFileName": "n", "nextFileId": "i"}]
         * bridge_config.B2_STORAGE_MAX_PAGES
     )
-    monkeypatch.setattr(check, "_post_json", fake)
+    monkeypatch.setattr(bridge_io, "_post_json", fake)
     pages, truncated = check.b2_list_versions("https://api", "tok", "bkt")
     assert len(pages) == bridge_config.B2_STORAGE_MAX_PAGES
     assert truncated is True
@@ -144,7 +145,7 @@ def test_a_name_only_cursor_still_paginates(monkeypatch):
     """B2 can return nextFileName without nextFileId. Requiring both would end the walk early and
     under-count — the silent direction."""
     fake, sent = _paging_stub([{"files": [], "nextFileName": "b.txt"}, {"files": []}])
-    monkeypatch.setattr(check, "_post_json", fake)
+    monkeypatch.setattr(bridge_io, "_post_json", fake)
     pages, truncated = check.b2_list_versions("https://api", "tok", "bkt")
     assert len(pages) == 2
     assert truncated is False

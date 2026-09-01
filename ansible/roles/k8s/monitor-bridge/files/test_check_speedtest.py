@@ -10,6 +10,7 @@ from pathlib import Path
 
 
 import bridge_config
+import bridge_io
 import check
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -152,12 +153,12 @@ def test_speedtest_fetch_failure_rides_the_streak_but_a_bad_row_does_not(monkeyp
     def _boom(*a, **k):
         raise RuntimeError("connection refused")
 
-    monkeypatch.setattr(check, "_get_json", _boom)
+    monkeypatch.setattr(bridge_io, "_get_json", _boom)
     assert check.check_speedtest()[0]  # first failure is held by the streak
     assert not check.check_speedtest()[0]  # second pages
 
     monkeypatch.setattr(
-        check,
+        bridge_io,
         "_get_json",
         lambda *a, **k: {"data": [_st_row(download_bits=13_800_312)]},
     )
@@ -176,7 +177,7 @@ def test_speedtest_requests_the_newest_row_not_the_oldest(monkeypatch):
         seen["headers"] = headers
         return {"data": [_st_row()]}
 
-    monkeypatch.setattr(check, "_get_json", _capture)
+    monkeypatch.setattr(bridge_io, "_get_json", _capture)
     check.check_speedtest()
     assert "sort=-created_at" in seen["url"]
     assert seen["headers"]["Authorization"] == "Bearer t"

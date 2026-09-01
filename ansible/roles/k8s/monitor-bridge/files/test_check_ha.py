@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 import bridge_config
+import bridge_io
 import check
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -73,15 +74,15 @@ def _ha_cycle(monkeypatch, age_s=600, raises=False, banned=0):
     # The ip_ban arm queries Loki via loki_count. Patch it explicitly rather than letting it fall
     # through the _get_json stub below: that stub returns an HA state payload, so the arm would
     # take its fail-open path for an accidental reason and stop testing the hysteresis cleanly.
-    monkeypatch.setattr(check, "loki_count", lambda *a, **k: banned)
+    monkeypatch.setattr(bridge_io, "loki_count", lambda *a, **k: banned)
     if raises:
 
         def boom(*a, **k):
             raise OSError("connection refused")
 
-        monkeypatch.setattr(check, "_get_json", boom)
+        monkeypatch.setattr(bridge_io, "_get_json", boom)
     else:
-        monkeypatch.setattr(check, "_get_json", lambda *a, **k: _ha_payload(age_s))
+        monkeypatch.setattr(bridge_io, "_get_json", lambda *a, **k: _ha_payload(age_s))
     return check.check_ha_heartbeat()
 
 
@@ -165,10 +166,10 @@ def test_ha_ban_arm_fails_open_when_loki_errors(monkeypatch):
     def boom(*a, **k):
         raise OSError("loki unreachable")
 
-    monkeypatch.setattr(check, "loki_count", boom)
+    monkeypatch.setattr(bridge_io, "loki_count", boom)
     monkeypatch.setattr(bridge_config, "HA_URL", "http://home-assistant:8123")
     monkeypatch.setattr(bridge_config, "HA_TOKEN", "tok")
-    monkeypatch.setattr(check, "_get_json", lambda *a, **k: _ha_payload(60))
+    monkeypatch.setattr(bridge_io, "_get_json", lambda *a, **k: _ha_payload(60))
     ok, msg = check.check_ha_heartbeat()
     assert ok
     assert "ip_ban arm unavailable" in msg

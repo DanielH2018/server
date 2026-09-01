@@ -35,8 +35,6 @@ import bridge_common
 from bridge_common import HTTP_TIMEOUT, _env, sanitize
 from bridge_parsing import (
     FETCH_BODY_MAX,
-    describe_fetch_failure,
-    endpoint_label,
     parse_duration,
 )
 from verdicts_cluster import (
@@ -75,6 +73,8 @@ from verdicts_service import (
 
 
 import bridge_config as cfg
+import bridge_io
+import bridge_streaks
 
 
 # Per-check mutable state. The thresholds these pair with moved to bridge_config.py; the
@@ -84,172 +84,6 @@ _n8n_streaks = {}
 # in the same cycle, so a single counter would take three increments per cycle and blow through
 # CADVISOR_CONSECUTIVE inside the first one — hysteresis that silently does nothing.
 _cadvisor_streaks: dict[str, int] = {}
-
-
-def origin_sel(*matchers):
-    """A `{...}` label-matcher block: the given matchers plus the origin pin, when one applies.
-
-    Returns "" when there is nothing to select on, so `"up%s" % origin_sel()` is a bare `up`
-    against the Docker Prometheus and `up{origin="daniel-server"}` against the cluster copy.
-    """
-    parts = [m for m in matchers if m]
-    if cfg.PROM_ORIGIN:
-        parts.append(cfg.PROM_ORIGIN)
-    return "{%s}" % ", ".join(parts) if parts else ""
-
-
-def cadvisor_sel(*matchers):
-    """A `{...}` block for cAdvisor series, which carry NO origin label — so no origin pin.
-
-    DECIDED: cAdvisor metrics must NOT go through origin_sel(). `origin` is applied by exactly
-    one relabel rule, on the `node` job (claude-otel/templates/prometheus.yaml.j2:202); the
-    kubernetes-cadvisor job has none. PromQL does not match an absent label, so an origin-pinned
-    cAdvisor query selects the empty vector and every check built on it reports green forever.
-
-    That is not hypothetical — it is what check_restarts, check_oom and check_cpu did from the
-    Phase G retarget until 2026-08-24. Live at the time of the fix: the unpinned selector matched
-    110 cAdvisor series and the pinned form returned `no data`, while the bridge logged
-    "OK restarts / OK oom / OK cpu" off empty vectors on every cycle. OOM kills and sustained CFS
-    throttling had no other alert path, so both were unmonitored outright.
-
-    The Docker cAdvisor these checks once shared with the cluster copy retired 2026-08-14, so
-    there is no longer a second estate for a pin to disambiguate. Use origin_sel() for series
-    that genuinely carry the label — `up`, and the node-exporter families behind check_disk and
-    check_mem — and this for anything cAdvisor emits.
-    """
-    parts = [m for m in matchers if m]
-    return "{%s}" % ", ".join(parts) if parts else ""
-
-
-def host_metric_sel(*matchers):
-    """A `{...}` block for the HOST-level node_* checks, minus origins owned by another check.
-
-    node_* is estate-wide the moment a host runs node-exporter, so check_disk and check_mem
-    scan whatever reports. daniel-pi joined that set when its exporter landed — and
-    check_pi_pressure already owns Pi disk and memory, with thresholds written for a 456 MB
-    box rather than the 90% that suits the two x86 hosts. Without this exclusion the Pi's
-    ordinary working state pages twice for one fact, which is exactly the duplication
-    check_mem avoids elsewhere by naming check_oom the single source of truth.
-
-    A regex matcher, so HOST_METRIC_ORIGIN_EXCLUDE can carry a `a|b` list. Series with no
-    `origin` label at all are KEPT: Prometheus reads a missing label as "", which `!~` on a
-    named host does not match.
-
-    DECIDED: an EXCLUDE, never origin_sel(). cadvisor_sel's note points at "the node-exporter
-    families behind check_disk and check_mem" as series that genuinely carry `origin`, which
-    reads like an invitation to pin them with origin_sel() — do not. PROM_ORIGIN resolves to
-    `origin="daniel-server"` whenever PROM_URL equals CLUSTER_PROM_URL, which the deployed
-    env-secret makes true. Pinning these two checks to one host would hide daniel-box's disk
-    and memory behind two green tiles, which is precisely the fault HOST_ORIGINS_MIN was added
-    for on 2026-08-23. Naming who is OUT keeps every other host in by default.
-    """
-    parts = [m for m in matchers if m]
-    if cfg.HOST_METRIC_ORIGIN_EXCLUDE:
-        parts.append('origin!~"%s"' % cfg.HOST_METRIC_ORIGIN_EXCLUDE)
-    return "{%s}" % ", ".join(parts) if parts else ""
-
-
-def _origin_name(labels):
-    """The host a per-origin series belongs to, for naming an offender in an alert message.
-
-    The Docker Prometheus has no `origin` label at all (external_labels are applied on
-    remote-write, never to local queries), so an empty one means "the only host there is".
-    """
-    return labels.get("origin") or "host"
-
-
-# HTTP / parsing helpers (pure-ish, unit-tested)
-
-
-def _get_json(url, headers=None):
-    hdrs = {"User-Agent": "monitor-bridge"}
-    if headers is not None:
-        hdrs.update(headers)
-    req = urllib.request.Request(url, headers=hdrs)
-    try:
-        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:  # noqa: S310 (internal URLs)
-            return json.load(resp)
-    except urllib.error.HTTPError as e:
-        # Re-raise the SAME type: check_discord branches on `e.code`, so wrapping this would
-        # silently turn a decisive 404 (webhook revoked) into a generic "unreachable" that
-        # rides the retry streak instead of paging.
-        try:
-            body = e.read().decode("utf-8", "replace")
-        except Exception:
-            body = ""
-        # str(HTTPError) already leads with "HTTP Error <code>:", so this contributes the
-        # endpoint and the server's own explanation, not the status again.
-        detail = " ".join((body or "").split())[:FETCH_BODY_MAX]
-        e.msg = "%s: %s" % (endpoint_label(url), detail or e.msg)
-        raise
-    except Exception as e:
-        raise RuntimeError(describe_fetch_failure(url, e)) from e
-
-
-def _post_json(url, payload, headers=None):
-    """POST a JSON body and return the parsed JSON response. Same failure contract as _get_json.
-
-    Only the Cloudflare GraphQL endpoint needs this — every other source here is a GET.
-    """
-    hdrs = {"User-Agent": "monitor-bridge", "Content-Type": "application/json"}
-    if headers is not None:
-        hdrs.update(headers)
-    body = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=body, headers=hdrs, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:  # noqa: S310
-            return json.load(resp)
-    except urllib.error.HTTPError as e:
-        try:
-            detail = " ".join(e.read().decode("utf-8", "replace").split())
-        except Exception:
-            detail = ""
-        e.msg = "%s: %s" % (endpoint_label(url), detail[:FETCH_BODY_MAX] or e.msg)
-        raise
-    except Exception as e:
-        raise RuntimeError(describe_fetch_failure(url, e)) from e
-
-
-def _instant_query(base_url, path, query, source):
-    """Run an instant query against `base_url + path` (Prometheus or Loki — same
-    /query?query= shape and {status, data.result} envelope); return the result list.
-    Raises RuntimeError if the endpoint reports a non-success status. `source` labels
-    the error ('prometheus'/'loki')."""
-    url = base_url + path + "?" + urllib.parse.urlencode({"query": query})
-    data = _get_json(url)
-    if data.get("status") != "success":
-        raise RuntimeError("%s query status=%s" % (source, data.get("status")))
-    return data.get("data", {}).get("result", [])
-
-
-def prom_scalar(promql, base=None, source="prometheus"):
-    """Run an instant query; return the first result's value as float, or None if empty.
-
-    `base` selects which Prometheus. PROM_URL is the default and is what every PROM_DEPENDENT
-    check reads; CLUSTER_PROM_URL is what the CLUSTER_DEPENDENT ones read, under a reachability
-    gate of their own — see check_k8s_workloads. Since the Docker plane retired (2026-08-14)
-    both env vars render to the same cluster Service URL, so the two gates watch one instance;
-    the split is kept so a second Prometheus can be reintroduced without moving every caller.
-    Pick the base by which gate is meant to watch the check, not by which host answers.
-    """
-    result = _instant_query(base or cfg.PROM_URL, "/api/v1/query", promql, source)
-    if not result:
-        return None
-    return float(result[0]["value"][1])
-
-
-def prom_vector(promql, base=None, source="prometheus"):
-    """Run an instant query; return [(labels: dict, value: float), ...] (empty if none).
-
-    Unlike prom_scalar this keeps each series' labels, so checks can name *which*
-    container / target / route is failing.
-    """
-    return [
-        (series.get("metric", {}), float(series["value"][1]))
-        for series in _instant_query(
-            base or cfg.PROM_URL, "/api/v1/query", promql, source
-        )
-    ]
 
 
 _host_origin_streaks: dict[str, int] = {}
@@ -271,7 +105,7 @@ def _host_origin_shortfall(key, vec, what, min_origins=None, consecutive=None):
     """
     floor = cfg.HOST_ORIGINS_MIN if min_origins is None else min_origins
     grace = cfg.HOST_ORIGINS_CONSECUTIVE if consecutive is None else consecutive
-    origins = {_origin_name(labels) for labels, _ in vec}
+    origins = {bridge_io._origin_name(labels) for labels, _ in vec}
     if len(origins) >= floor:
         _host_origin_streaks[key] = 0
         return None
@@ -315,8 +149,8 @@ def check_disk():
     breaching = []
     shortfalls = []
     for mp in cfg.DISK_MOUNTPOINTS:
-        sel = host_metric_sel('mountpoint="%s"' % mp)
-        vec = prom_vector(
+        sel = bridge_io.host_metric_sel('mountpoint="%s"' % mp)
+        vec = bridge_io.prom_vector(
             "max by (origin) (100 * (1 - node_filesystem_avail_bytes%s"
             " / node_filesystem_size_bytes%s))" % (sel, sel)
         )
@@ -329,7 +163,9 @@ def check_disk():
             shortfalls.append(short)
         for labels, used_pct in vec:
             if used_pct > cfg.DISK_MAX_PCT:
-                breaching.append("%s %s %.0f%%" % (_origin_name(labels), mp, used_pct))
+                breaching.append(
+                    "%s %s %.0f%%" % (bridge_io._origin_name(labels), mp, used_pct)
+                )
     if breaching:
         return False, "disk over %.0f%%: %s" % (cfg.DISK_MAX_PCT, ", ".join(breaching))
     failed = [s for s in shortfalls if not s[0]]
@@ -341,7 +177,7 @@ def check_disk():
 
 
 def check_cert():
-    days = prom_scalar("(min(traefik_tls_certs_not_after) - time()) / 86400")
+    days = bridge_io.prom_scalar("(min(traefik_tls_certs_not_after) - time()) / 86400")
     if days is None:
         return False, "cert metric unavailable"
     if days < cfg.CERT_MIN_DAYS:
@@ -356,8 +192,8 @@ def check_mem():
     # Per-origin for the same reason as check_disk: the bare prom_scalar form took result[0],
     # so which host it reported was an ordering artifact of Prometheus's response once both
     # estates emitted node_memory_*. The division pairs each host's avail with its own total.
-    sel = host_metric_sel()
-    vec = prom_vector(
+    sel = bridge_io.host_metric_sel()
+    vec = bridge_io.prom_vector(
         "100 * (1 - node_memory_MemAvailable_bytes%s / node_memory_MemTotal_bytes%s)"
         % (sel, sel)
     )
@@ -370,7 +206,7 @@ def check_mem():
     # review L9); what is deferred is the return, not the evaluation.
     short = _host_origin_shortfall("mem", vec, "memory")
     breaching = [
-        "%s %.0f%%" % (_origin_name(labels), pct)
+        "%s %.0f%%" % (bridge_io._origin_name(labels), pct)
         for labels, pct in vec
         if pct > cfg.MEM_MAX_PCT
     ]
@@ -400,7 +236,7 @@ def _cadvisor_blind(key, vec, what):
     if msg is None:
         _cadvisor_streaks[key] = 0
         return None
-    _cadvisor_streaks[key], ok, out = down_streak(
+    _cadvisor_streaks[key], ok, out = bridge_streaks.down_streak(
         _cadvisor_streaks.get(key, 0),
         cfg.CADVISOR_CONSECUTIVE,
         msg,
@@ -415,9 +251,12 @@ def check_restarts():
 
     Catches crash-loops that an intermittent up-check can miss.
     """
-    vec = prom_vector(
+    vec = bridge_io.prom_vector(
         "sum by (pod) (changes(container_start_time_seconds%s[%s]))"
-        % (cadvisor_sel('container!=""', 'container!="POD"'), cfg.RESTART_WINDOW)
+        % (
+            bridge_io.cadvisor_sel('container!=""', 'container!="POD"'),
+            cfg.RESTART_WINDOW,
+        )
     )
     blind = _cadvisor_blind("restarts", vec, "restart loops")
     if blind is not None:
@@ -441,9 +280,9 @@ def check_oom():
     read as green here, which is how OOM kills went unmonitored for the whole Phase G window;
     _cadvisor_blind now reports that as UNKNOWN.
     """
-    vec = prom_vector(
+    vec = bridge_io.prom_vector(
         "sum(increase(container_oom_events_total%s[%s])) by (pod)"
-        % (cadvisor_sel('container!=""', 'container!="POD"'), cfg.OOM_WINDOW)
+        % (bridge_io.cadvisor_sel('container!=""', 'container!="POD"'), cfg.OOM_WINDOW)
     )
     blind = _cadvisor_blind("oom", vec, "OOM kills")
     if blind is not None:
@@ -494,8 +333,8 @@ def check_cpu_throttle():
     the evidence stays in the bridge log without paging. A clean cycle resets the streak.
     """
     global _cpu_breach_streak
-    sel = cadvisor_sel('container!=""', 'container!="POD"')
-    ratio_vec = prom_vector(
+    sel = bridge_io.cadvisor_sel('container!=""', 'container!="POD"')
+    ratio_vec = bridge_io.prom_vector(
         "sum(rate(container_cpu_cfs_throttled_periods_total%s[%s])) by (pod) "
         "/ sum(rate(container_cpu_cfs_periods_total%s[%s])) by (pod)"
         % (sel, cfg.CPU_WINDOW, sel, cfg.CPU_WINDOW)
@@ -506,7 +345,7 @@ def check_cpu_throttle():
         return blind
     lost_cores = dict(
         (m.get("pod", "?"), v)
-        for m, v in prom_vector(
+        for m, v in bridge_io.prom_vector(
             "sum(rate(container_cpu_cfs_throttled_seconds_total%s[%s])) by (pod)"
             % (sel, cfg.CPU_WINDOW)
         )
@@ -556,7 +395,7 @@ def check_prometheus():
     monitor alerts. A single scrape target being down (Prometheus up, one exporter gone) still
     surfaces separately on the Scrape Targets monitor — a distinct condition from this one.
     """
-    val = prom_scalar("vector(1)")
+    val = bridge_io.prom_scalar("vector(1)")
     if val is None:
         return False, "Prometheus answered but returned no data for vector(1)"
     return True, "Prometheus reachable"
@@ -564,7 +403,9 @@ def check_prometheus():
 
 def check_targets_down():
     """Any Prometheus scrape target reporting up==0 (monitoring going blind)."""
-    return targets_verdict(prom_vector("up%s" % origin_sel()), cfg.TARGETS_MIN)
+    return targets_verdict(
+        bridge_io.prom_vector("up%s" % bridge_io.origin_sel()), cfg.TARGETS_MIN
+    )
 
 
 def check_traefik_5xx():
@@ -575,12 +416,12 @@ def check_traefik_5xx():
     healthy high-traffic ones. The TRAEFIK_MIN_RPS floor is per-service too — same idea
     as before, a single error on a near-idle route is not a 100%-error-ratio alarm.
     """
-    total_vec = prom_vector(
+    total_vec = bridge_io.prom_vector(
         "sum(rate(traefik_service_requests_total[5m])) by (service)"
     )
     err_rps = dict(
         (m.get("service", "?"), v)
-        for m, v in prom_vector(
+        for m, v in bridge_io.prom_vector(
             'sum(rate(traefik_service_requests_total{code=~"5.."}[5m])) by (service)'
         )
     )
@@ -633,13 +474,13 @@ def check_traefik_latency():
     """
     total = dict(
         (m.get("service", "?"), v)
-        for m, v in prom_vector(
+        for m, v in bridge_io.prom_vector(
             "sum(rate(traefik_service_request_duration_seconds_count[5m])) by (service)"
         )
     )
     under = dict(
         (m.get("service", "?"), v)
-        for m, v in prom_vector(
+        for m, v in bridge_io.prom_vector(
             'sum(rate(traefik_service_request_duration_seconds_bucket{le="%s"}[5m])) '
             "by (service)" % cfg.TRAEFIK_SLOW_BUCKET
         )
@@ -776,10 +617,10 @@ def check_n8n():
     if not cfg.N8N_API_KEY:
         return True, "n8n monitoring disabled (no API key)"
     headers = {"X-N8N-API-KEY": cfg.N8N_API_KEY}
-    workflows = _get_json(
+    workflows = bridge_io._get_json(
         cfg.N8N_URL + "/api/v1/workflows?active=true&limit=250", headers=headers
     )
-    executions = _get_json(
+    executions = bridge_io._get_json(
         cfg.N8N_URL + "/api/v1/executions?status=error&limit=100", headers=headers
     )
     streaks = n8n_update_streaks(
@@ -825,7 +666,7 @@ def check_arr_queue():
         return True, "arr queue monitoring disabled (no API keys)"
     offenders = []
     for app_name, url, api_key in configured:
-        data = _get_json(url, headers={"X-Api-Key": api_key})
+        data = bridge_io._get_json(url, headers={"X-Api-Key": api_key})
         offenders.extend(queue_warnings(data, app_name))
     if offenders:
         desc = "; ".join(
@@ -892,8 +733,8 @@ def check_bazarr():
     if not cfg.BAZARR_API_KEY:
         return True, "bazarr monitoring disabled (no API key)"
     headers = {"X-API-KEY": cfg.BAZARR_API_KEY}
-    status = _get_json(cfg.BAZARR_URL + "/api/system/status", headers=headers)
-    health = _get_json(cfg.BAZARR_URL + "/api/system/health", headers=headers)
+    status = bridge_io._get_json(cfg.BAZARR_URL + "/api/system/status", headers=headers)
+    health = bridge_io._get_json(cfg.BAZARR_URL + "/api/system/health", headers=headers)
     problems = bazarr_problems(status, health)
     if problems:
         return False, "; ".join(problems[:5])
@@ -918,8 +759,12 @@ def check_prowlarr_indexers():
     if not cfg.PROWLARR_API_KEY:
         return True, "prowlarr indexer monitoring disabled (no API key)"
     headers = {"X-Api-Key": cfg.PROWLARR_API_KEY}
-    status = _get_json(cfg.PROWLARR_URL + "/api/v1/indexerstatus", headers=headers)
-    indexers = _get_json(cfg.PROWLARR_URL + "/api/v1/indexer", headers=headers)
+    status = bridge_io._get_json(
+        cfg.PROWLARR_URL + "/api/v1/indexerstatus", headers=headers
+    )
+    indexers = bridge_io._get_json(
+        cfg.PROWLARR_URL + "/api/v1/indexer", headers=headers
+    )
     name_by_id = {i.get("id"): i.get("name") for i in indexers}
     offenders = indexers_down(
         status,
@@ -1046,13 +891,15 @@ def scrutiny_wear_devices(summary):
         name = dev.get("device_name") or wwn
         model = dev.get("model_name")
         label = "%s (%s)" % (name, model) if model else name
-        details = _get_json("%s/api/device/%s/details" % (cfg.SCRUTINY_URL, wwn))
+        details = bridge_io._get_json(
+            "%s/api/device/%s/details" % (cfg.SCRUTINY_URL, wwn)
+        )
         devices.append((label, scrutiny_device_wear(details)))
     return devices
 
 
 def check_scrutiny():
-    data = _get_json(cfg.SCRUTINY_URL + "/api/summary")
+    data = bridge_io._get_json(cfg.SCRUTINY_URL + "/api/summary")
     summary = (data.get("data") or {}).get("summary")
     fresh_ok, fresh_msg = scrutiny_freshness(summary, cfg.SCRUTINY_MAX_AGE_H)
     if not fresh_ok:
@@ -1098,19 +945,19 @@ def check_host_temp():
     compounded — down_streak is the thermal-spike grace and applies only to the hot-sensor path,
     while the coverage shortfall carries its own hysteresis inside _host_origin_shortfall.
     """
-    temps = prom_vector("node_hwmon_temp_celsius")
+    temps = bridge_io.prom_vector("node_hwmon_temp_celsius")
     # node-exporter keeps the readable names in two side metrics rather than on the reading, so
     # naming the hot sensor `daniel-box k10temp/Tctl` instead of
     # `daniel-box/pci0000:00_0000:00:18_3/temp1` costs two more instant queries. Both are tiny
     # (11 and 16 series live on 2026-09-01) and neither can fail the check: an empty answer just
     # falls back to the sysfs path.
     names = hwmon_name_maps(
-        prom_vector("node_hwmon_chip_names"),
-        prom_vector("node_hwmon_sensor_label"),
+        bridge_io.prom_vector("node_hwmon_chip_names"),
+        bridge_io.prom_vector("node_hwmon_sensor_label"),
     )
     limits = hwmon_temp_limits(
         temps,
-        prom_vector("node_hwmon_temp_max_celsius"),
+        bridge_io.prom_vector("node_hwmon_temp_max_celsius"),
         cfg.HWMON_TEMP_RATIO,
         cfg.HWMON_TEMP_FALLBACK_C,
         cfg.HWMON_TEMP_MIN_PLAUSIBLE_C,
@@ -1129,26 +976,17 @@ def check_host_temp():
     )
     ok, msg = hwmon_temp_verdict(limits)
     if not ok:
-        _down_streaks["host_temp"], ok, msg = down_streak(
-            _down_streaks.get("host_temp", 0),
+        bridge_streaks._down_streaks["host_temp"], ok, msg = bridge_streaks.down_streak(
+            bridge_streaks._down_streaks.get("host_temp", 0),
             cfg.HWMON_TEMP_CONSECUTIVE,
             msg,
             "thermal spike grace",
         )
         return ok, msg
-    _down_streaks["host_temp"] = 0
+    bridge_streaks._down_streaks["host_temp"] = 0
     if short is not None:
         return short
     return True, msg
-
-
-# Per-check consecutive-down count (check_ups/check_ha_heartbeat/check_discord/
-# check_longhorn_volumes), keyed by check name, mutated via down_streak(). Reset to 0 on an
-# `ok` result by each check itself, and cleared between tests by conftest.py's autouse
-# fixture. Distinct from _grace_streaks below, which is apply_startup_grace's per-name
-# state for the reach-out checks' post-reboot startup grace, a different mechanism keyed
-# by a disjoint set of names.
-_down_streaks: dict[str, int] = {}
 
 
 def check_ups():
@@ -1183,7 +1021,7 @@ def check_ups():
     ]
     if not configured:
         return True, "UPS monitoring disabled (no query)"
-    values = {name: prom_scalar(q) for name, q in configured}
+    values = {name: bridge_io.prom_scalar(q) for name, q in configured}
     if all(v is None for v in values.values()):
         # All arms gone. Usually HA's whole Prometheus scrape is down (the numeric AND the template
         # sensors vanish together) — Scrape Targets owns that, so defer. But if HA is scraping fine and
@@ -1193,9 +1031,11 @@ def check_ups():
         # outage means a real NUT-server outage is never all-absent, so this can't misfire on one).
         # An unqueryable/absent gate keeps the safe defer (never page over a source outage another
         # monitor owns).
-        ha_up = prom_scalar(cfg.UPS_HA_UP_QUERY) if cfg.UPS_HA_UP_QUERY else None
+        ha_up = (
+            bridge_io.prom_scalar(cfg.UPS_HA_UP_QUERY) if cfg.UPS_HA_UP_QUERY else None
+        )
         if not (ha_up is not None and ha_up > 0.5 and "replace-battery" in values):
-            _down_streaks["ups"] = 0
+            bridge_streaks._down_streaks["ups"] = 0
             return (
                 True,
                 "no UPS data in Prometheus (HA scrape down? Scrape Targets owns source liveness)",
@@ -1215,7 +1055,7 @@ def check_ups():
         # the all-absent branch above. The nut pod liveness probe owns NUT-server death, so defer
         # rather than double-paging it through the partial-absence path below with a misdirecting
         # "entity renamed?" msg. A single numeric arm gone (charge XOR runtime) is still a real rename.
-        _down_streaks["ups"] = 0
+        bridge_streaks._down_streaks["ups"] = 0
         return (
             True,
             "NUT numeric arms (charge, runtime) absent — NUT server/integration down; "
@@ -1240,10 +1080,10 @@ def check_ups():
             cfg.UPS_RUNTIME_MIN_S,
         )
     if ok:
-        _down_streaks["ups"] = 0
+        bridge_streaks._down_streaks["ups"] = 0
         return True, msg
-    _down_streaks["ups"], ok, msg = down_streak(
-        _down_streaks.get("ups", 0), cfg.UPS_CONSECUTIVE, msg, "grace"
+    bridge_streaks._down_streaks["ups"], ok, msg = bridge_streaks.down_streak(
+        bridge_streaks._down_streaks.get("ups", 0), cfg.UPS_CONSECUTIVE, msg, "grace"
     )
     return ok, msg
 
@@ -1256,9 +1096,9 @@ def check_pi_pressure():
     """
     if not cfg.PI_GLANCES_URL:
         return True, "pi monitoring disabled (no glances URL)"
-    load = _get_json(cfg.PI_GLANCES_URL + "/api/4/load")
-    mem = _get_json(cfg.PI_GLANCES_URL + "/api/4/mem")
-    fs = _get_json(cfg.PI_GLANCES_URL + "/api/4/fs")
+    load = bridge_io._get_json(cfg.PI_GLANCES_URL + "/api/4/load")
+    mem = bridge_io._get_json(cfg.PI_GLANCES_URL + "/api/4/mem")
+    fs = bridge_io._get_json(cfg.PI_GLANCES_URL + "/api/4/fs")
     ok, msg = pi_pressure(
         load, mem, fs, cfg.PI_LOAD_MAX, cfg.PI_MEM_MIN_MB, cfg.PI_DISK_MAX_PCT
     )
@@ -1311,18 +1151,20 @@ def with_pi_ports(ok, msg):
     containers = None
     if dead:
         try:
-            containers = _get_json(cfg.PI_GLANCES_URL + "/api/4/containers")
+            containers = bridge_io._get_json(cfg.PI_GLANCES_URL + "/api/4/containers")
         except Exception:
             containers = None
     arm_ok, arm_msg = pi_ports_verdict(dead, len(cfg.PI_PUBLISHED_PORTS), containers)
     if arm_ok:
-        _down_streaks["pi_ports"] = 0
+        bridge_streaks._down_streaks["pi_ports"] = 0
         return ok, "%s, %s" % (msg, arm_msg)
-    _down_streaks["pi_ports"], arm_ok, arm_msg = down_streak(
-        _down_streaks.get("pi_ports", 0),
-        cfg.PI_PORTS_CONSECUTIVE,
-        arm_msg,
-        "deploy grace",
+    bridge_streaks._down_streaks["pi_ports"], arm_ok, arm_msg = (
+        bridge_streaks.down_streak(
+            bridge_streaks._down_streaks.get("pi_ports", 0),
+            cfg.PI_PORTS_CONSECUTIVE,
+            arm_msg,
+            "deploy grace",
+        )
     )
     if arm_ok:
         return ok, "%s, %s" % (msg, arm_msg)
@@ -1346,7 +1188,7 @@ def with_ha_ban(ok, msg):
     # /config/ip_bans.yaml. See the HA_BAN_WINDOW comment for why that is the only signal available.
     """
     try:
-        banned = loki_count(cfg.HA_BAN_SELECTOR, cfg.HA_BAN_WINDOW)
+        banned = bridge_io.loki_count(cfg.HA_BAN_SELECTOR, cfg.HA_BAN_WINDOW)
     except Exception as e:
         return ok, "%s, ip_ban arm unavailable (%s)" % (msg, e)
     ban_ok, ban_msg = ha_ban_verdict(banned, cfg.HA_BAN_WINDOW)
@@ -1372,7 +1214,7 @@ def check_ha_heartbeat():
     if not cfg.HA_URL or not cfg.HA_TOKEN:
         return True, "HA heartbeat monitoring disabled (no URL/token)"
     try:
-        state = _get_json(
+        state = bridge_io._get_json(
             cfg.HA_URL + "/api/states/" + cfg.HA_HEARTBEAT_ENTITY,
             headers={"Authorization": "Bearer " + cfg.HA_TOKEN},
         )
@@ -1382,10 +1224,13 @@ def check_ha_heartbeat():
     ) as e:  # unreachable/auth -> route through the streak, don't page yet
         ok, msg = False, "HA API unreachable: %s" % e
     if ok:
-        _down_streaks["ha"] = 0
+        bridge_streaks._down_streaks["ha"] = 0
         return with_ha_ban(True, msg)
-    _down_streaks["ha"], ok, msg = down_streak(
-        _down_streaks.get("ha", 0), cfg.HA_CONSECUTIVE, msg, "deploy/restart grace"
+    bridge_streaks._down_streaks["ha"], ok, msg = bridge_streaks.down_streak(
+        bridge_streaks._down_streaks.get("ha", 0),
+        cfg.HA_CONSECUTIVE,
+        msg,
+        "deploy/restart grace",
     )
     return with_ha_ban(ok, msg)
 
@@ -1475,7 +1320,7 @@ def check_speedtest():
     try:
         # sort=-created_at, because the default order is ASCENDING and would hand back the
         # OLDEST row in the 30-day window — a stale-forever reading that looks like a verdict.
-        payload = _get_json(
+        payload = bridge_io._get_json(
             cfg.SPEEDTEST_URL + "/api/v1/results?sort=-created_at&page%5Bsize%5D=1",
             headers={
                 "Authorization": "Bearer " + cfg.SPEEDTEST_TOKEN,
@@ -1483,63 +1328,20 @@ def check_speedtest():
             },
         )
     except Exception as e:
-        _down_streaks["speedtest"], ok, msg = down_streak(
-            _down_streaks.get("speedtest", 0),
+        bridge_streaks._down_streaks["speedtest"], ok, msg = bridge_streaks.down_streak(
+            bridge_streaks._down_streaks.get("speedtest", 0),
             cfg.SPEEDTEST_CONSECUTIVE,
             "speedtest API unreachable: %s" % e,
             "deploy/restart grace",
         )
         return ok, msg
-    _down_streaks["speedtest"] = 0
+    bridge_streaks._down_streaks["speedtest"] = 0
     rows = payload.get("data") or []
     return speedtest_verdict(
         rows[0] if rows else None,
         cfg.SPEEDTEST_DOWNLOAD_MIN_MBPS,
         cfg.SPEEDTEST_MAX_AGE_H,
     )
-
-
-def loki_count(selector, window):
-    """Instant LogQL query: total log lines for `selector` over `window`. None if no series.
-
-    Loki's instant-query endpoint evaluates a metric query — here
-    sum(count_over_time(SELECTOR[WINDOW])) — and returns a vector with the same
-    [ts, value] shape prom_scalar parses, so we read result[0].value[1].
-    """
-    query = "sum(count_over_time(%s[%s]))" % (selector, window)
-    result = _instant_query(cfg.LOKI_URL, "/loki/api/v1/query", query, "loki")
-    if not result:
-        return None
-    return float(result[0]["value"][1])
-
-
-def loki_vector(query):
-    """Instant LogQL query keeping each series' labels — the loki_count peer of prom_vector.
-
-    Not prom_vector(base=LOKI_URL): Loki's instant endpoint is /loki/api/v1/query, and
-    prom_vector hardcodes /api/v1/query. Same envelope, different path.
-    """
-    return [
-        (series.get("metric", {}), float(series["value"][1]))
-        for series in _instant_query(cfg.LOKI_URL, "/loki/api/v1/query", query, "loki")
-    ]
-
-
-def log_error_counts(selector, pattern, window, by_label="container"):
-    """(matches, total) — per-container counts of `pattern`, and the selector's total volume.
-
-    `total` is what keeps this arm honest. The whole arm fails OPEN (see with_log_errors), so a
-    selector that matches no stream returns no matches and reads exactly like a healthy estate
-    — the trap that shipped HA_BAN_SELECTOR with an `app` label promtail does not emit, and
-    pushed "no ip_ban events" through a window containing a real ban. Counting the selector's
-    own volume separates "nothing is wrong" from "I asked the wrong question".
-    """
-    matches = loki_vector(
-        "sum by (%s) (count_over_time(%s |~ `%s` [%s]))"
-        % (by_label, selector, pattern, window)
-    )
-    total = loki_count(selector, window)
-    return matches, total
 
 
 def check_loki_ingestion():
@@ -1551,19 +1353,20 @@ def check_loki_ingestion():
     # include it (else a healthy docker stream masks a dead file-tail pipeline) — hence the
     # separate selector + wider window (LOKI_FILETAIL_WINDOW).
     ok_all, msg_all = loki_ingestion_fresh(
-        loki_count(cfg.LOKI_STREAM, cfg.LOKI_FILETAIL_WINDOW), cfg.LOKI_FILETAIL_WINDOW
+        bridge_io.loki_count(cfg.LOKI_STREAM, cfg.LOKI_FILETAIL_WINDOW),
+        cfg.LOKI_FILETAIL_WINDOW,
     )
     if not ok_all:
         return False, "file-tail streams silent — " + msg_all
     ok_docker, msg_docker = loki_ingestion_fresh(
-        loki_count(cfg.LOKI_DOCKER_STREAM, cfg.LOKI_WINDOW), cfg.LOKI_WINDOW
+        bridge_io.loki_count(cfg.LOKI_DOCKER_STREAM, cfg.LOKI_WINDOW), cfg.LOKI_WINDOW
     )
     if not ok_docker:
         return False, "container log stream silent — " + msg_docker
     # Arm 3: the Pi ships its own logs and neither arm above counts them, so its promtail
     # dying is invisible while the cluster keeps talking.
     ok_pi, msg_pi = loki_ingestion_fresh(
-        loki_count(cfg.LOKI_PI_STREAM, cfg.LOKI_FILETAIL_WINDOW),
+        bridge_io.loki_count(cfg.LOKI_PI_STREAM, cfg.LOKI_FILETAIL_WINDOW),
         cfg.LOKI_FILETAIL_WINDOW,
     )
     if not ok_pi:
@@ -1573,7 +1376,7 @@ def check_loki_ingestion():
 
 def check_promtail_dropped():
     """Prometheus-based promtail partial-loss watchdog (see promtail_dropped). Prom-dependent."""
-    count = prom_scalar(
+    count = bridge_io.prom_scalar(
         "sum(increase(%s[%s]))"
         % (cfg.PROMTAIL_DROPPED_SELECTOR, cfg.PROMTAIL_DROPPED_WINDOW)
     )
@@ -1582,22 +1385,8 @@ def check_promtail_dropped():
     )
 
 
-def loki_reachable():
-    """Is Loki itself reachable and answering queries? (the LOKI_DEPENDENT gate).
-
-    Hits the labels endpoint — a fixed, ingestion-independent query that returns status=success
-    whenever Loki is up — so 'Loki is down' (one root cause, one page: Loki Reachable) is separated
-    from 'Loki is up but promtail stopped shipping' (Loki Log Ingestion, which still evaluates
-    whenever Loki is reachable). Raising -> _evaluate renders the Loki Reachable monitor down.
-    """
-    data = _get_json(cfg.LOKI_URL + "/loki/api/v1/labels")
-    if data.get("status") != "success":
-        raise RuntimeError("loki labels status=%s" % data.get("status"))
-    return True
-
-
 def check_loki_reachable():
-    loki_reachable()
+    bridge_io.loki_reachable()
     return True, "Loki reachable"
 
 
@@ -1617,7 +1406,9 @@ def b2_authorize_data():
     token = base64.b64encode(
         ("%s:%s" % (cfg.B2_PROBE_KEY_ID, cfg.B2_PROBE_APPLICATION_KEY)).encode()
     ).decode()
-    return _get_json(cfg.B2_PROBE_URL, headers={"Authorization": "Basic %s" % token})
+    return bridge_io._get_json(
+        cfg.B2_PROBE_URL, headers={"Authorization": "Basic %s" % token}
+    )
 
 
 def b2_storage_api(auth):
@@ -1732,7 +1523,7 @@ def b2_list_versions(api_url, token, bucket_id):
             payload["startFileName"] = start_name
         if start_id:
             payload["startFileId"] = start_id
-        page = _post_json(
+        page = bridge_io._post_json(
             "%s/b2api/v3/b2_list_file_versions" % api_url.rstrip("/"),
             payload,
             headers={"Authorization": token},
@@ -1760,7 +1551,9 @@ def b2_authorize():
     token = base64.b64encode(
         ("%s:%s" % (cfg.B2_PROBE_KEY_ID, cfg.B2_PROBE_APPLICATION_KEY)).encode()
     ).decode()
-    data = _get_json(cfg.B2_PROBE_URL, headers={"Authorization": "Basic %s" % token})
+    data = bridge_io._get_json(
+        cfg.B2_PROBE_URL, headers={"Authorization": "Basic %s" % token}
+    )
     # A 200 from something that isn't B2 must not read as healthy. Accept EITHER field rather than
     # pinning the response shape: Backblaze publishes a body example for v4 (accountId top-level)
     # but not for v3, whose documented change was to group endpoint info under `apiInfo`. Both
@@ -1975,7 +1768,7 @@ def r2_query_usage(now):
             )
         ),
     }
-    data = _post_json(
+    data = bridge_io._post_json(
         cfg.CF_GRAPHQL_URL,
         {"query": query},
         headers={"Authorization": "Bearer %s" % cfg.CF_ANALYTICS_TOKEN},
@@ -2056,12 +1849,12 @@ def check_k8s_workloads():
     """
     if not cfg.CLUSTER_PROM_URL:
         return True, "k8s workload check disabled (no CLUSTER_PROMETHEUS_URL)"
-    total = prom_scalar(
+    total = bridge_io.prom_scalar(
         "count(kube_deployment_status_replicas_unavailable)",
         base=cfg.CLUSTER_PROM_URL,
         source="cluster prometheus",
     )
-    offenders = prom_vector(
+    offenders = bridge_io.prom_vector(
         "kube_deployment_status_replicas_unavailable > 0",
         base=cfg.CLUSTER_PROM_URL,
         source="cluster prometheus",
@@ -2070,19 +1863,19 @@ def check_k8s_workloads():
     # pod from holding the tile red for the rest of the 1h evidence window. `and` is a vector
     # match on the full label set, so it filters the first clause's series rather than
     # replacing them — the offender labels reaching the verdict are unchanged.
-    restart_offenders = prom_vector(
+    restart_offenders = bridge_io.prom_vector(
         "increase(kube_pod_container_status_restarts_total[%s]) > %d"
         " and increase(kube_pod_container_status_restarts_total[%s]) > 0"
         % (cfg.K8S_RESTART_WINDOW, cfg.K8S_RESTART_MAX, cfg.K8S_RESTART_RECENT_WINDOW),
         base=cfg.CLUSTER_PROM_URL,
         source="cluster prometheus",
     )
-    ds_total = prom_scalar(
+    ds_total = bridge_io.prom_scalar(
         "count(kube_daemonset_status_number_unavailable)",
         base=cfg.CLUSTER_PROM_URL,
         source="cluster prometheus",
     )
-    ds_offenders = prom_vector(
+    ds_offenders = bridge_io.prom_vector(
         "kube_daemonset_status_number_unavailable > 0",
         base=cfg.CLUSTER_PROM_URL,
         source="cluster prometheus",
@@ -2102,7 +1895,7 @@ def check_k8s_workloads():
     advertised = {}
     for resource in cfg.K8S_EXTENDED_RESOURCES:
         advertised[resource] = len(
-            prom_vector(
+            bridge_io.prom_vector(
                 'kube_node_status_allocatable{resource="%s"} > 0'
                 % ksm_resource_label(resource),
                 base=cfg.CLUSTER_PROM_URL,
@@ -2112,7 +1905,7 @@ def check_k8s_workloads():
     res_ok, res_msg = extended_resource_verdict(
         cfg.K8S_EXTENDED_RESOURCES,
         advertised,
-        prom_scalar(
+        bridge_io.prom_scalar(
             "count(kube_node_status_allocatable)",
             base=cfg.CLUSTER_PROM_URL,
             source="cluster prometheus",
@@ -2143,7 +1936,7 @@ def with_log_errors(ok, msg):
         return ok, msg
     ignore = {n.strip().lower() for n in cfg.LOG_ERROR_IGNORE.split(",") if n.strip()}
     try:
-        matches, total = log_error_counts(
+        matches, total = bridge_io.log_error_counts(
             cfg.LOG_ERROR_SELECTOR, cfg.LOG_ERROR_PATTERN, cfg.LOG_ERROR_WINDOW
         )
     except Exception as e:
@@ -2177,7 +1970,7 @@ def check_cluster_targets():
     """
     if not cfg.CLUSTER_PROM_URL:
         return True, "cluster target check disabled (no CLUSTER_PROMETHEUS_URL)"
-    vec = prom_vector(
+    vec = bridge_io.prom_vector(
         'up{origin!="daniel-server"}',
         base=cfg.CLUSTER_PROM_URL,
         source="cluster prometheus",
@@ -2195,7 +1988,7 @@ def check_cluster_prometheus():
     """
     if not cfg.CLUSTER_PROM_URL:
         return True, "cluster Prometheus check disabled (no CLUSTER_PROMETHEUS_URL)"
-    value = prom_scalar(
+    value = bridge_io.prom_scalar(
         "vector(1)", base=cfg.CLUSTER_PROM_URL, source="cluster prometheus"
     )
     if value is None:
@@ -2293,7 +2086,7 @@ def check_discord():
     ok, msg, valid = True, "", []
     for label, url in webhooks:
         try:
-            data = _get_json(url)
+            data = bridge_io._get_json(url)
             w_ok, w_msg = discord_webhook_ok(200, (data or {}).get("name"))
         except urllib.error.HTTPError as e:
             w_ok, w_msg = discord_webhook_ok(e.code)
@@ -2312,10 +2105,13 @@ def check_discord():
         else:
             ok, msg = False, e_msg
     if ok:
-        _down_streaks["discord"] = 0
+        bridge_streaks._down_streaks["discord"] = 0
         return True, "delivery channels valid (%s)" % ", ".join(valid)
-    _down_streaks["discord"], ok, msg = down_streak(
-        _down_streaks.get("discord", 0), cfg.DISCORD_CONSECUTIVE, msg, "transient grace"
+    bridge_streaks._down_streaks["discord"], ok, msg = bridge_streaks.down_streak(
+        bridge_streaks._down_streaks.get("discord", 0),
+        cfg.DISCORD_CONSECUTIVE,
+        msg,
+        "transient grace",
     )
     return ok, msg
 
@@ -2346,10 +2142,12 @@ def check_longhorn_volumes():
     reaper's unpopulated owner map). The volume count doubles as that input assertion: the
     one-hot shape guarantees a `state="healthy"` series per volume even when its value is 0.
     """
-    volumes = prom_scalar('count(longhorn_volume_robustness{state="healthy"})')
+    volumes = bridge_io.prom_scalar(
+        'count(longhorn_volume_robustness{state="healthy"})'
+    )
     if not volumes:
-        _down_streaks["longhorn"], ok, msg = down_streak(
-            _down_streaks.get("longhorn", 0),
+        bridge_streaks._down_streaks["longhorn"], ok, msg = bridge_streaks.down_streak(
+            bridge_streaks._down_streaks.get("longhorn", 0),
             cfg.LONGHORN_CONSECUTIVE,
             "no longhorn_volume_robustness series — replica redundancy is UNMONITORED "
             "(job=longhorn scrape down?), which is not the same as healthy",
@@ -2357,7 +2155,7 @@ def check_longhorn_volumes():
         )
         return ok, msg
     worst = {}
-    for labels, _value in prom_vector(
+    for labels, _value in bridge_io.prom_vector(
         'longhorn_volume_robustness{state=~"degraded|faulted"} == 1'
     ):
         name = labels.get("pvc") or labels.get("volume", "?")
@@ -2366,7 +2164,7 @@ def check_longhorn_volumes():
         if worst.get(name) != "faulted":
             worst[name] = state
     if not worst:
-        _down_streaks["longhorn"] = 0
+        bridge_streaks._down_streaks["longhorn"] = 0
         return True, "%d volume(s) redundant, none degraded or faulted" % int(volumes)
     faulted = sorted(n for n, s in worst.items() if s == "faulted")
     degraded = sorted(n for n, s in worst.items() if s != "faulted")
@@ -2377,8 +2175,8 @@ def check_longhorn_volumes():
         parts.append(
             "%d degraded, single-copy (%s)" % (len(degraded), ", ".join(degraded[:5]))
         )
-    _down_streaks["longhorn"], ok, msg = down_streak(
-        _down_streaks.get("longhorn", 0),
+    bridge_streaks._down_streaks["longhorn"], ok, msg = bridge_streaks.down_streak(
+        bridge_streaks._down_streaks.get("longhorn", 0),
         cfg.LONGHORN_CONSECUTIVE,
         "of %d volume(s): %s" % (int(volumes), "; ".join(parts)),
         "drain/reboot grace",
@@ -2409,13 +2207,13 @@ def check_pvc_fullness():
     """
     if not cfg.CLUSTER_PROM_URL:
         return True, "PVC fullness check disabled (no CLUSTER_PROMETHEUS_URL)"
-    claims = prom_scalar(
+    claims = bridge_io.prom_scalar(
         "count(count by (namespace, persistentvolumeclaim)"
         " (kubelet_volume_stats_capacity_bytes))",
         base=cfg.CLUSTER_PROM_URL,
         source="cluster prometheus",
     )
-    vec = prom_vector(
+    vec = bridge_io.prom_vector(
         "max by (namespace, persistentvolumeclaim) (100 *"
         " (1 - kubelet_volume_stats_available_bytes"
         " / kubelet_volume_stats_capacity_bytes))",
@@ -2431,11 +2229,13 @@ def check_pvc_fullness():
         # A DIFFERENT fault from a thin claim census below, and it must not reach the `worst`
         # report: the ratio query returned nothing at all, which looks exactly like "no claim is
         # full" and is not the same fact.
-        _down_streaks["pvc_fullness"], ok, msg = down_streak(
-            _down_streaks.get("pvc_fullness", 0),
-            cfg.PVC_CLAIMS_CONSECUTIVE,
-            "no PVC reported a fullness ratio — PVC fullness is UNKNOWN, not OK",
-            "kubelet scrape gap grace",
+        bridge_streaks._down_streaks["pvc_fullness"], ok, msg = (
+            bridge_streaks.down_streak(
+                bridge_streaks._down_streaks.get("pvc_fullness", 0),
+                cfg.PVC_CLAIMS_CONSECUTIVE,
+                "no PVC reported a fullness ratio — PVC fullness is UNKNOWN, not OK",
+                "kubelet scrape gap grace",
+            )
         )
         return ok, msg
     # Fullest first, so a truncated message names the claims closest to failing.
@@ -2450,16 +2250,18 @@ def check_pvc_fullness():
     shortfall = None
     if claims is None or claims < cfg.PVC_MIN_CLAIMS:
         seen = "no" if claims is None else "only %d" % int(claims)
-        _down_streaks["pvc_fullness"], short_ok, short_msg = down_streak(
-            _down_streaks.get("pvc_fullness", 0),
-            cfg.PVC_CLAIMS_CONSECUTIVE,
-            "%s kubelet_volume_stats claims visible, below the floor of %d — PVC fullness is "
-            "UNKNOWN, not OK" % (seen, cfg.PVC_MIN_CLAIMS),
-            "kubelet scrape gap grace",
+        bridge_streaks._down_streaks["pvc_fullness"], short_ok, short_msg = (
+            bridge_streaks.down_streak(
+                bridge_streaks._down_streaks.get("pvc_fullness", 0),
+                cfg.PVC_CLAIMS_CONSECUTIVE,
+                "%s kubelet_volume_stats claims visible, below the floor of %d — PVC fullness is "
+                "UNKNOWN, not OK" % (seen, cfg.PVC_MIN_CLAIMS),
+                "kubelet scrape gap grace",
+            )
         )
         shortfall = (short_ok, short_msg)
     else:
-        _down_streaks["pvc_fullness"] = 0
+        bridge_streaks._down_streaks["pvc_fullness"] = 0
     # A claim that IS reporting and IS full outranks a complaint about the ones that are not —
     # same ordering as check_disk, and for the same reason.
     if breaching:
@@ -2734,24 +2536,6 @@ def validate_check_filter(only, skip, checks):
     return problems
 
 
-def down_streak(count, threshold, msg, grace_note, held_label="down streak"):
-    """Pure consecutive-down hysteresis step shared by every per-check grace (check_ha_heartbeat/
-    check_ups/check_discord) and apply_startup_grace. Call on a DOWN result — the caller resets its
-    own counter to 0 on `ok`. Increments `count` and returns (new_count, hold_ok, out_msg): while
-    under `threshold` it holds `up` with a "<held_label> n/N (<grace_note>): msg" note; the
-    `threshold`'th straight down pages with "msg (n cycles)". (check_cpu_throttle keeps its own down
-    branch — its page message embeds the throttle thresholds, so it can't use the generic format.)
-    """
-    count += 1
-    if count < threshold:
-        return (
-            count,
-            True,
-            "%s %d/%d (%s): %s" % (held_label, count, threshold, grace_note, msg),
-        )
-    return count, False, "%s (%d cycles)" % (msg, count)
-
-
 def apply_startup_grace(name, ok, msg, threshold, streaks):
     """Pure: hold a reach-out check `up` through the first `threshold`-1 consecutive down cycles.
 
@@ -2762,7 +2546,7 @@ def apply_startup_grace(name, ok, msg, threshold, streaks):
     if ok:
         streaks[name] = 0
         return ok, msg
-    streaks[name], ok, msg = down_streak(
+    streaks[name], ok, msg = bridge_streaks.down_streak(
         streaks.get(name, 0), threshold, msg, "startup/redeploy grace"
     )
     return ok, msg
@@ -2776,17 +2560,6 @@ def down_exporters(up_vector):
     """
     down_jobs = {m.get("job") for m, v in up_vector if v == 0}
     return {job for job in EXPORTER_DEPENDENT if job in down_jobs}
-
-
-def push(token, ok, msg):
-    if not token:
-        bridge_common.log("WARN: no push token set; skipping push:", msg)
-        return
-    qs = urllib.parse.urlencode({"status": "up" if ok else "down", "msg": msg})
-    try:
-        _get_json("%s/api/push/%s?%s" % (cfg.KUMA_URL, token, qs))
-    except Exception as e:  # best-effort heartbeat; never crash the loop
-        bridge_common.log("push failed (%s):" % msg, e)
 
 
 def _evaluate(name, fn):
@@ -2809,7 +2582,7 @@ def _gate(name, fn, push_env):
         return True, "disabled by check filter"
     ok, msg = _evaluate(name, fn)
     bridge_common.log("OK  " if ok else "DOWN", name, "-", msg)
-    push(_env(push_env, ""), ok, msg)
+    bridge_io.push(_env(push_env, ""), ok, msg)
     return ok, msg
 
 
@@ -2828,7 +2601,9 @@ def run_once():
     suppressed = set()
     if prom_ok and check_enabled("prometheus"):
         try:
-            for job in down_exporters(prom_vector("up%s" % origin_sel())):
+            for job in down_exporters(
+                bridge_io.prom_vector("up%s" % bridge_io.origin_sel())
+            ):
                 suppressed |= EXPORTER_DEPENDENT[job]
         except Exception as e:
             bridge_common.log("WARN: exporter-health probe failed:", e)
@@ -2881,7 +2656,9 @@ def run_once():
         bridge_common.log(
             "OK  " if cluster_ok else "DOWN", "cluster_prometheus", "-", cluster_msg
         )
-        push(_env("KUMA_PUSH_CLUSTER_PROMETHEUS", ""), cluster_ok, cluster_msg)
+        bridge_io.push(
+            _env("KUMA_PUSH_CLUSTER_PROMETHEUS", ""), cluster_ok, cluster_msg
+        )
 
     for name, token, fn in CHECKS:
         if not check_enabled(name):
@@ -2911,7 +2688,7 @@ def run_once():
                     name, ok, msg, cfg.GRACE_CYCLES, _grace_streaks
                 )
             bridge_common.log("OK  " if ok else "DOWN", name, "-", msg)
-        push(token, ok, msg)
+        bridge_io.push(token, ok, msg)
 
 
 def main():
