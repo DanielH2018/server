@@ -30,12 +30,22 @@ HOST_LIB_PATH = Path("/opt/gitops-deploy/host_lib.py")
 CONFIG_ENV_PATH = Path("/etc/gitops-deploy/config.env")
 PROBE_TIMEOUT_S = 30
 
-# Emitted by probe.py's health command when a tag names neither a k8s workload nor (with
-# --docker) a Pi container -- i.e. the tag isn't a health-checkable service at all (a block
-# tag like config/deploy/cron, or a typo --skip-tag-check let through).
+# Emitted by probe.py's health command when a tag names nothing health-checkable -- a block tag
+# like config/deploy/cron, a typo --skip-tag-check let through, or a role (netpol-baseline,
+# media-volume) whose manifests declare no workload at all.
+#
+# THESE MUST STAY UNAMBIGUOUS. "not found (not created" used to be on this list, and probe.py
+# emitted it for BOTH "this tag names no container" and "the container that should exist is
+# absent" -- so a failed deploy reported `skipped` and the verdict stayed `settled`. That is
+# how PR #685's claude-otel health gate never ran while land.sh printed VERDICT: settled.
+# probe.py now says which of the two happened, and its docstring records the rule: a name
+# GUESSED from the tag may skip when absent, a name RESOLVED from the role's own manifests may
+# not. `test_deploy_detach_notify.py` asserts every message probe.py emits for an absent
+# workload matches none of these, so a rewording cannot quietly reopen the hole.
 NOT_APPLICABLE_MARKERS = (
     "no Deployment or DaemonSet",
-    "not found (not created",
+    "declares no rollout-checkable workload",
+    "not a declared service on any host",
 )
 
 

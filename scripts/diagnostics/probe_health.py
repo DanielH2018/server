@@ -4,16 +4,44 @@ Split out of probe.py, which had grown to 1349 lines across thirteen subcommands
 
 The gate exits 0 only when the workload is fully rolled out AND nothing restarted recently.
 Both halves are load-bearing, and the reasoning for each sits with the function it governs.
+
+WHAT "NOT FOUND" IS ALLOWED TO MEAN. `deploy_detach_notify.py` turns some of this command's
+failures into a `skipped` that does not fail the deploy verdict, matched by substring against
+its `NOT_APPLICABLE_MARKERS`. Which failures may carry such a marker is positional, not a
+property of any one message:
+
+  - a name GUESSED from the deploy tag, absent from the cluster, may skip: the guess only ever
+    meant "maybe this tag names a workload", and a miss lets the `--docker` fallback try the Pi.
+  - a name RESOLVED from the role's own rendered manifests, absent from the cluster, must NOT
+    skip: the manifests say that object should exist, so its absence is a failed deploy.
+
+Every message below is written to that rule, and `test_probe_health.py` asserts each one lands
+on the intended side of it. PR #685 is the reason: `land.sh` printed `VERDICT: settled` for a
+claude-otel deploy whose health gate never ran.
 """
 
 import json
 import subprocess
 from datetime import datetime, timezone
+from pathlib import Path
 
 # `core.<name>` for anything the tests monkeypatch — binding those into this module's
 # globals with a `from probe_core import ...` would take a snapshot the patch never reaches.
 import probe_core as core
 from probe_core import PI_HOST
+
+REPO = Path(__file__).resolve().parents[2]
+PI_HOST_VARS = REPO / "ansible" / "inventory" / "host_vars" / "daniel-pi.yml"
+
+# The kinds a rollout gate can actually check, and kubectl's spelling for each. Deployment
+# first because the fleet is overwhelmingly Deployments. StatefulSet is here with no live
+# instance today on purpose: resolving a kind the lookup below cannot ask for would make the
+# first StatefulSet added to this repo read as MISSING.
+WORKLOAD_KINDS = {
+    "Deployment": "deploy",
+    "DaemonSet": "daemonset",
+    "StatefulSet": "statefulset",
+}
 
 
 def inspect_ip_argv(container):
@@ -55,16 +83,29 @@ def k8s_service_ip_argv(service, namespace):
     ]
 
 
-def format_health(data, container):
+def format_health(data, container, declared=False):
     """Summarize a container's state + healthcheck from `docker inspect` output.
 
     Pure: takes the parsed JSON list and returns (text, exit_code). exit_code is 0
     only when the container is running and (has no healthcheck, or is healthy) — so
     `probe.py health <svc>` is usable as a post-deploy gate.
+
+    `declared` says whether daniel-pi's inventory lists a Docker service by this name;
+    `run_health` resolves it. It splits the two situations an absent container can mean, which
+    a single "not found" message conflated: a declared service that is missing is a deploy that
+    failed and must fail the gate, while an undeclared name is a block tag or a typo and is the
+    only one the notifier may skip.
     """
     if not data:
+        if declared:
+            return (
+                f"{container}: MISSING — daniel-pi's inventory declares this service and the "
+                "host has no such container, so the deploy did not create it",
+                1,
+            )
         return (
-            f"{container}: not found (not created — wrong name, or deploy failed?)",
+            f"{container}: not found, and not a declared service on any host "
+            "(nothing to health-check)",
             1,
         )
     state = data[0].get("State") or {}
@@ -266,8 +307,176 @@ def _json_or_none(argv):
         return None
 
 
+def declared_on_pi(container):
+    """Does daniel-pi's inventory declare a Docker service by this name?
+
+    The Pi is the only Docker host left, so its `containers_list` is the whole population an
+    absent container can be measured against.
+    """
+    import yaml
+
+    try:
+        entries = (yaml.safe_load(PI_HOST_VARS.read_text()) or {}).get(
+            "containers_list"
+        ) or []
+    except OSError, yaml.YAMLError:
+        # Fail closed: an unreadable inventory must not turn a missing container into a skip.
+        return True
+    return container in {
+        entry.get("name") for entry in entries if isinstance(entry, dict)
+    }
+
+
+_RENDER_CONTEXT = None
+
+
+def _render_context():
+    """(validator module, base var context, containers_list entries), built once per process.
+
+    The import is deferred because it pulls in ansible-core, PyYAML and kubernetes_validate,
+    and twelve of probe.py's thirteen subcommands never need any of it. Measured on daniel-box:
+    0.41s to import, 0.03s to build the context, 0.02s median to render one role and 0.22s for
+    the slowest (home-assistant) — against the 30s `PROBE_TIMEOUT_S` the notifier allows.
+    """
+    global _RENDER_CONTEXT
+    if _RENDER_CONTEXT is None:
+        import sys as _sys
+
+        # A directly-invoked script gets only its own directory on sys.path, and pyproject's
+        # `pythonpath` is a pytest setting — so the cron and the notifier need this insert.
+        # Inserting the validate/ directory itself (rather than scripts/) keeps the module
+        # under the same name pytest imports it as, so there is one module object, not two.
+        _sys.path.insert(0, str(REPO / "scripts" / "validate"))
+        import validate_k8s_manifests as validator
+
+        base = {
+            **validator.BASE_CONTEXT,
+            **validator.load_yaml(validator.ALL_VARS),
+            **validator.load_yaml(validator.HOST_VARS),
+            "playbook_dir": str(validator.ANSIBLE),
+        }
+        _RENDER_CONTEXT = (
+            validator,
+            validator.resolve_vars(base, base),
+            validator.k8s_entries(),
+        )
+    return _RENDER_CONTEXT
+
+
+def role_workload_targets(role, default_namespace):
+    """[(namespace, kind, name)] every workload `role`'s rendered manifests declare.
+
+    None when `role` is not a k8s role this can resolve — then the caller falls back to
+    probing the tag name itself, which is what lets `--docker` pick up a Pi service.
+
+    A deploy tag is a role name, NOT a workload name, and for four roles today it names no
+    workload at all: claude-otel deploys grafana/loki/prometheus/tempo/otel-collector/
+    kube-state-metrics, scrutiny deploys scrutiny-{web,influxdb,collector}, cloudflare-ddns
+    deploys cloudflare-ddns-{direct,proxied}, and dri-device-plugin's DaemonSet lives in
+    kube-system rather than the default namespace. All four made `probe.py health <tag>` report
+    "no Deployment or DaemonSet", which the deploy notifier skipped — so the gate silently did
+    not run. Seven more roles (crowdsec, freshrss, karakeep, loki-homelab, n8n, pihole,
+    prowlarr) deploy a workload named after the tag PLUS siblings that went unchecked.
+
+    The rendered manifests are the only source that cannot drift from what a deploy applies, so
+    this reuses validate_k8s_manifests' own render machinery rather than a second renderer or a
+    hand-written role->workload table. `namespace` comes from each object's own metadata,
+    falling back to `default_namespace` for the majority that omit it — the same rule
+    `kubectl apply -f` follows.
+
+    Raises on a render failure rather than returning None. Fail closed: a role whose templates
+    stopped rendering must not degrade to the guess-the-name path, where a miss reads as a skip.
+    """
+    validator, base, entries = _render_context()
+    if role in validator.SKIP_ROLES or role not in entries:
+        return None
+    role_dir = validator.K8S_ROLES / role
+    if not role_dir.is_dir():
+        return None
+
+    templates = sorted(
+        p
+        for p in (role_dir / "templates").glob("*.j2")
+        if validator.is_manifest_template(p)
+    )
+    ctx = {
+        **base,
+        **validator.role_defaults(role, base),
+        "container_item": entries[role],
+    }
+    targets = set()
+    for tpl in templates:
+        err, docs = validator.check_template(role, tpl, ctx)
+        if err:
+            raise RuntimeError(f"{role}/{tpl.name} failed to render: {err}")
+        for doc in docs:
+            if not isinstance(doc, dict) or doc.get("kind") not in WORKLOAD_KINDS:
+                continue
+            meta = doc.get("metadata") or {}
+            targets.add(
+                (
+                    meta.get("namespace") or default_namespace,
+                    doc["kind"],
+                    meta.get("name"),
+                )
+            )
+    return sorted(targets)
+
+
+def format_role_health(role, checked, now):
+    """(text, exit code) for a role whose manifests declare at least one workload.
+
+    `checked` is [(namespace, kind, name, workload doc or None, pods doc or None)]. A None
+    workload doc is the safety-critical case this function exists for: the role's manifests
+    declare that object and the cluster does not have it, which is a failed deploy. Its message
+    deliberately carries none of the notifier's NOT_APPLICABLE_MARKERS — asserted directly in
+    test_deploy_detach_notify.py, because a rewording that happened to contain one would put a
+    failed deploy back on the skip path with every test still green.
+
+    Only the first line reaches the Discord verdict (the notifier reads `splitlines()[0]`), so
+    it carries the whole result and the per-workload detail follows it.
+    """
+    missing, unhealthy, lines = [], [], []
+    for namespace, kind, name, workload, pods in checked:
+        if workload is None:
+            missing.append(f"{kind} {namespace}/{name}")
+            lines.append(
+                f"  {namespace}/{name}: MISSING — the role's manifests declare this {kind} "
+                "and the cluster does not have it (deploy failed?)"
+            )
+            continue
+        text, code = format_k8s_health(workload, pods, f"{namespace}/{name}", now)
+        lines.append(f"  {text}")
+        if code:
+            unhealthy.append(f"{namespace}/{name}")
+
+    failed = missing + unhealthy
+    if failed:
+        head = (
+            f"{role}: {len(failed)} of {len(checked)} workloads FAILED the gate — "
+            + ", ".join(failed)
+        )
+        return "\n".join([head, *lines]), 1
+    noun = "workload" if len(checked) == 1 else "workloads"
+    head = f"{role}: all {len(checked)} {noun} healthy"
+    return "\n".join([head, *lines]), 0
+
+
+def _fetch_workload(name, namespace):
+    """(workload doc or None, pods doc or None) for one name, tried across WORKLOAD_KINDS.
+
+    Asking for the wrong kind just returns non-zero, so the fallback costs one extra call only
+    for the DaemonSets and for a name that matches nothing.
+    """
+    for kind in WORKLOAD_KINDS.values():
+        workload = _json_or_none(k8s_deploy_argv(name, namespace, kind=kind))
+        if workload:
+            return workload, _json_or_none(k8s_pods_argv(name, namespace))
+    return None, None
+
+
 def run_health(container, docker=False):
-    """k8s Deployment health by default, the Pi's Docker container with --docker.
+    """k8s workload health by default, the Pi's Docker container with --docker.
 
     k8s first because that is where ~50 of the ~55 services live since the 2026-08-14 Docker
     retirement. Before that this command ran `docker inspect` unconditionally and had been
@@ -284,19 +493,43 @@ def run_health(container, docker=False):
             data = json.loads(out.stdout) if out.returncode == 0 else []
         except json.JSONDecodeError:
             data = []
-        text, code = format_health(data, container)
+        text, code = format_health(data, container, declared=declared_on_pi(container))
         print(text)
         return code
 
     ns = core.k8s_namespace()
-    # Deployment first, DaemonSet second — the fleet is overwhelmingly Deployments, and asking
-    # for the wrong kind just returns non-zero, so the fallback costs one extra call only for
-    # the six DaemonSets and for a name that matches neither.
-    deploy = _json_or_none(k8s_deploy_argv(container, ns)) or _json_or_none(
-        k8s_deploy_argv(container, ns, kind="daemonset")
-    )
-    pods = _json_or_none(k8s_pods_argv(container, ns)) if deploy else None
-    text, code = format_k8s_health(deploy, pods, container, datetime.now(timezone.utc))
+    try:
+        targets = role_workload_targets(container, ns)
+    except Exception as exc:
+        print(
+            f"{container}: could not resolve which workloads this role deploys ({exc}) — "
+            "reporting a failure rather than a gate that did not run"
+        )
+        return 1
+
+    if targets is None:
+        # Not a k8s role, so the tag is the only name available. A miss here means "this tag
+        # is not a k8s workload name", which is exactly what lets --docker take over.
+        workload, pods = _fetch_workload(container, ns)
+        text, code = format_k8s_health(
+            workload, pods, container, datetime.now(timezone.utc)
+        )
+        print(text)
+        return code
+
+    if not targets:
+        print(
+            f"{container}: the role declares no rollout-checkable workload "
+            "(no Deployment, DaemonSet or StatefulSet in its manifests)"
+        )
+        return 1
+
+    now = datetime.now(timezone.utc)
+    checked = [
+        (namespace, kind, name, *_fetch_workload(name, namespace))
+        for namespace, kind, name in targets
+    ]
+    text, code = format_role_health(container, checked, now)
     print(text)
     return code
 
