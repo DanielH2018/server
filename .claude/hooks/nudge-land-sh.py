@@ -59,8 +59,9 @@ _COUNTER_TTL_S = 24 * 3600
 
 _LAND = (
     "Use ./scripts/deploy_tools/land.sh --pr <n> --since <pre-merge-sha> instead, as ONE "
-    "backgrounded command. It waits for master CI on the merge commit, ticks, deploys what "
-    "the tick deferred, and prints a VERDICT: line. See the land-after-merge skill."
+    "backgrounded command with stdout and stderr redirected to a file (Ansible refuses the "
+    "harness's non-blocking pipe). It waits for master CI on the merge commit, ticks, deploys "
+    "what the tick deferred, and prints a VERDICT: line. See the land-after-merge skill."
 )
 
 

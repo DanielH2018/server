@@ -145,7 +145,9 @@ refuses outright — and then say which command and why.
 
 Arm the merge with `gh pr merge --squash --auto`, then hand the follow-through to
 `./scripts/deploy_tools/land.sh --pr <n> --since <pre-merge-sha> --await-merge` as ONE
-backgrounded command. It waits for the merge (polling the PR's state, not its checks), then
+backgrounded command **with stdout and stderr redirected to a file** — a backgrounded call
+hands Ansible a non-blocking pipe, which it refuses, and the failure reads as a playbook
+error. It waits for the merge (polling the PR's state, not its checks), then
 for master CI on the merge commit, ticks, deploys what the tick deferred, and prints a
 `VERDICT:` line. **Do not hand-poll CI and
 do not hand-merge** — hand-polling cost 835 polls across 213 wait episodes before `land.sh`
