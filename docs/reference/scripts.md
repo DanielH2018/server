@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/gen_reference_scripts.py
-generated_at: 2026-08-30 06:17 UTC
-generated_sha: 6958cef9
+generated_at: 2026-09-01 18:17 UTC
+generated_sha: 35ae83f3
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 6958cef9
 
 # Scripts
 
-73 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
+74 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
 
 The sections below split them by **how each one is run**, which is derived from the tree rather than declared: a cron `job:`, a `prek.toml` entry, a workflow step, a Claude hook, an Ansible task, or an import edge. The *Reached by* column is the evidence, so a wrong answer is a wrong answer about a real file.
 
@@ -20,7 +20,7 @@ The sections below split them by **how each one is run**, which is derived from 
     Whether a script is safe to run. The summary is whatever its author wrote, and nothing here judges blast radius. For the ones that run unattended, and which of those change state, see [Scheduled jobs](crons.md).
 
 
-**1 of the 31 scripts that run unattended have no test; 11 of all 73 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
+**1 of the 31 scripts that run unattended have no test; 12 of all 74 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
 
 !!! note "Where the Tests column looks"
     First for a `scripts/test_<name>.py`. Failing that, for any test in `scripts/` or `ansible/tests/` that names the script — `gitops_tick.sh` has five, in `test_gitops_manual_trigger.py`, and the naming convention alone called it untested. Those show as *(indirect)*, which means a test exercises it, not that the test is about it.
@@ -102,7 +102,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Run by hand
 
-23 script(s) — a person runs it.
+24 script(s) — a person runs it.
 
 | Script | What it does | Reached by | Tests |
 |---|---|---|---|
@@ -120,6 +120,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/dev/memory_survey.py` | Survey the project's Claude memory store and report what it costs and what nothing reads. | no automated caller in the tree | `test_memory_survey.py` |
 | `scripts/availability_bots/osteria-francescana-bot.py` | Watch Osteria Francescana (via CoverManager) for a table on the target dates. | no automated caller in the tree | `test_availability_bots.py` *(indirect)* |
 | `scripts/diagnostics/postflight.py` | Verify the post-deploy setup that Ansible can't do (ansible/README.md §9). | playbook: ansible/bring-up.sh | `test_postflight.py` |
+| `scripts/validate/refresh_crd_schemas.py` | Re-download the vendored CRD JSON schemas that validate_k8s_manifests.py checks against. | no automated caller in the tree | — |
 | `scripts/dev/register_audit.py` | Report which rows of the homelab-review recurring-open register look closed. | no automated caller in the tree | `test_register_audit.py` |
 | `scripts/lib/release_bin_groups.py` | Resolve which source files a `release_bin.yml` group deploys. | no automated caller in the tree | — |
 | `scripts/dev/run_as_cron.sh` | run a command in the environment cron actually gives it. | no automated caller in the tree | `test_run_as_cron.py` |
