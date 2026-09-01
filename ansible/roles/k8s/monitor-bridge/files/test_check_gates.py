@@ -219,11 +219,14 @@ def test_b2_dependent_set_matches_real_checks():
     assert check.B2_DEPENDENT <= names
 
 
-def test_b2_dependent_excludes_backup():
-    # `backup` polls Kopia live and correctly paged through the 2026-08-02 cap breach — it is the
-    # one true signal, so the gate must not suppress it. It is also in STARTUP_GRACE, which has to
-    # stay disjoint from every skip set (see test_startup_grace_disjoint_from_run_once_skip_sets).
-    assert "backup" not in check.B2_DEPENDENT
+# `test_b2_dependent_excludes_backup` was deleted here on 2026-09-01. It asserted `"backup" not
+# in check.B2_DEPENDENT` to keep the B2 gate from suppressing the one check that polled B2's real
+# state — sound while it was written, dead since Kopia retired on 2026-08-13 (ADR-0014) and backup
+# moved to Longhorn. No check named `backup` exists in CHECKS or STARTUP_GRACE any more, so the
+# assertion could not fail, and its comment described two behaviours that had stopped being true.
+# Both invariants it pointed at are still enforced, by name: `B2_DEPENDENT <= names` directly
+# above, and the STARTUP_GRACE disjointness in
+# test_check_streaks.py::test_startup_grace_disjoint_from_run_once_skip_sets.
 
 
 def test_cluster_dependent_set_matches_real_checks():

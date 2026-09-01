@@ -409,9 +409,15 @@ verified 2026-08-20 19:22, `ok=10 changed=0 failed=0` with no smoke-run task in 
 So a missing smoke-run step is evidence that nothing needed re-rendering, not evidence of a
 broken or incomplete run.
 
-Separately, the deployer's broad-change alert says to run the remediation playbook and *then*
-`git merge --ff-only`. That order renders from the pre-merge tree and deploys nothing.
-Fast-forward first, then run the playbook.
+Separately, **the ff-merge comes before the playbook**, and the reason is that Ansible renders
+from the working tree: a playbook run on the pre-merge tree copies the OLD files and recaps
+`changed=0`, which is indistinguishable from a clean idempotent run. `broad_remediation()` now
+emits the pair in that order, so every message quoting it — the deployer's Discord alert,
+`deploy_tags.py`, `land_tags.py` — prescribes the working sequence. Until 2026-09-01 they all
+printed the reverse, this paragraph documented it as a trap to remember rather than a defect to
+fix, and an operator following the printed order shipped the previous `deploy_logic.py` and only
+caught it by grepping `/opt/gitops-deploy` afterwards.
+`test_broad_remediation_puts_the_ff_merge_before_the_playbook` pins the order.
 
 ### Moving a config source changes which remediation the alert prescribes
 `/etc/gitops-deploy/config.env` is rendered only by

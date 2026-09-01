@@ -195,6 +195,10 @@ _BROAD_MANUAL_PREFIXES = (
 # _BROAD_PREFIXES on purpose: the /add-secret flow ships secrets.yml WITH the consuming
 # template, and that should stay a scoped single-service deploy, not a manual full deploy.
 _SECRETS_FILE = "ansible/vars/secrets.yml"
+# The branch `broad_remediation` names when a caller does not say. gitops_deploy.py reads the
+# real one from config.env and passes it; the repo-side callers (deploy_tags, land_tags) run
+# against this repo, where it is master.
+BRANCH_DEFAULT = "master"
 
 
 def _is_test_only_path(path: str) -> bool:
@@ -482,9 +486,12 @@ def broad_budget_ok(
 
 
 def broad_remediation(
-    broad_deploy: bool, broad_setup: bool, setup_roles: set[str] | None = None
+    broad_deploy: bool,
+    broad_setup: bool,
+    setup_roles: set[str] | None = None,
+    branch: str = BRANCH_DEFAULT,
 ) -> str:
-    """The manual command(s) a broad (defer-and-alert) change needs, by which plane it hit.
+    """The manual command(s) a broad (defer-and-alert) change needs, in the order they work.
 
     deploy.yml runs only container roles, so a setup-plane change (roles/setup/, requirements.yml,
     the bring-up playbooks) needs `initial_setup.yml --tags <role>`; naming deploy.yml there is a
@@ -496,13 +503,22 @@ def broad_remediation(
     and exists because the placeholder's *playbook* was wrong for some roles rather than merely
     vague — see `_SETUP_ROLES_OUTSIDE_INITIAL_SETUP`. Omitting it keeps the old generic text,
     which is what every caller with no path list still gets.
+
+    THE FF-MERGE COMES FIRST, and that is the half this returned string exists to carry.
+    Ansible renders from the working tree, so a playbook run before the merge copies the
+    PRE-merge files and reports `changed=0` — a clean, idempotent-looking recap over the old
+    code. This role's own CLAUDE.md has documented that as a trap since 2026-07; the callers
+    went on printing the reverse order anyway, and on 2026-09-01 an operator following the
+    printed order shipped the previous `deploy_logic.py` and only caught it by grepping
+    /opt/gitops-deploy afterwards. Ordering the pair here rather than at each call site is
+    what stops the four of them drifting apart again.
     """
     cmds: list[str] = []
     if broad_deploy:
         cmds.append("`ansible-playbook ansible/deploy.yml`")
     if broad_setup:
         cmds.extend(_setup_commands(setup_roles))
-    return " and ".join(cmds)
+    return f"`git merge --ff-only origin/{branch}` FIRST, then " + " and ".join(cmds)
 
 
 def _setup_commands(setup_roles: set[str] | None) -> list[str]:

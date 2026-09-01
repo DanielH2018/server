@@ -240,6 +240,21 @@ def test_setup_roles_are_recorded_for_both_broad_setup_arms():
     assert cs.setup_roles == {"gitops_deploy", "k3s"}
 
 
+def test_broad_remediation_puts_the_ff_merge_before_the_playbook():
+    """Ansible renders from the working tree, so a playbook run before the merge copies the
+    PRE-merge files and recaps `changed=0` — a clean-looking run over the old code. An operator
+    following the reverse order shipped the previous deploy_logic.py on 2026-09-01."""
+    cmd = broad_remediation(False, True)
+    assert cmd.index("git merge --ff-only") < cmd.index("ansible-playbook"), cmd
+
+
+def test_broad_remediation_names_the_branch_it_is_given():
+    """gitops_deploy.py reads BRANCH from config.env; a hardcoded `master` would print a
+    command that does nothing on a host tracking anything else."""
+    assert "origin/release" in broad_remediation(False, True, branch="release")
+    assert "origin/master" in broad_remediation(False, True)
+
+
 def test_unrelated_path_ignored():
     paths = ["docs/superpowers/specs/x.md", "README.md"]
     cs = services_from_changed_paths(paths)
