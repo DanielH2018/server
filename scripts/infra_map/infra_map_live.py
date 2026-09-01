@@ -138,8 +138,20 @@ def collect_docker(host: str, local_hostname: str) -> tuple[bool, dict[str, dict
     return True, parse_docker_ps(out), ""
 
 
-def parse_kubectl_deployments(payload: str) -> dict[tuple[str, str], dict]:
-    """Parse ``kubectl get deployments -A -o json`` into ``{(ns, name): info}``."""
+# The three long-running workload kinds. A DaemonSet has no spec.replicas: its
+# desired count is how many nodes the scheduler picked, which only the status
+# carries. Reading spec.replicas for every kind is how DaemonSet-backed roles
+# (node-exporter, dri-device-plugin) read as "missing" behind 2/2 ready pods.
+WORKLOAD_KINDS = ("deployments", "daemonsets", "statefulsets")
+
+
+def parse_kubectl_workloads(payload: str) -> dict[tuple[str, str], dict]:
+    """Parse ``kubectl get deployments,daemonsets,statefulsets -A -o json``.
+
+    Returns ``{(ns, name): info}``. Each item carries its own ``kind`` because
+    a multi-resource ``get`` returns a ``List`` of typed objects; a payload from
+    a plain ``get deployments`` omits it, and is read as Deployments.
+    """
     try:
         data = json.loads(payload)
     except json.JSONDecodeError:
@@ -152,8 +164,13 @@ def parse_kubectl_deployments(payload: str) -> dict[tuple[str, str], dict]:
             continue
         status = item.get("status", {})
         spec = item.get("spec", {})
-        desired = spec.get("replicas", 0)
-        ready = status.get("readyReplicas", 0) or 0
+        kind = item.get("kind", "Deployment")
+        if kind == "DaemonSet":
+            desired = status.get("desiredNumberScheduled", 0) or 0
+            ready = status.get("numberReady", 0) or 0
+        else:
+            desired = spec.get("replicas", 0)
+            ready = status.get("readyReplicas", 0) or 0
         containers = (
             item.get("spec", {})
             .get("template", {})
@@ -161,6 +178,7 @@ def parse_kubectl_deployments(payload: str) -> dict[tuple[str, str], dict]:
             .get("containers", [])
         )
         workloads[(namespace, name)] = {
+            "kind": kind,
             "ready": ready,
             "desired": desired,
             "image": containers[0].get("image", "") if containers else "",
@@ -169,7 +187,7 @@ def parse_kubectl_deployments(payload: str) -> dict[tuple[str, str], dict]:
 
 
 def collect_k8s(host: str, local_hostname: str) -> tuple[bool, dict, str]:
-    """Collect Deployment state from the cluster (local kubectl only)."""
+    """Collect long-running workload state from the cluster (local kubectl only)."""
     if host != local_hostname:
         return False, {}, f"kubectl only queried locally; run this on {host}"
     kubectl = find_tool("kubectl")
@@ -186,7 +204,7 @@ def collect_k8s(host: str, local_hostname: str) -> tuple[bool, dict, str]:
             "--kubeconfig",
             str(kubeconfig),
             "get",
-            "deployments",
+            ",".join(WORKLOAD_KINDS),
             "-A",
             "-o",
             "json",
@@ -195,7 +213,7 @@ def collect_k8s(host: str, local_hostname: str) -> tuple[bool, dict, str]:
     )
     if not ok:
         return False, {}, out
-    return True, parse_kubectl_deployments(out), ""
+    return True, parse_kubectl_workloads(out), ""
 
 
 # Pod placement comes from a column projection rather than `-o json`: the whole

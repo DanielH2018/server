@@ -131,7 +131,7 @@ STATUS_LABELS = {
     "degraded": "Degraded",
     "down": "Down",
     "missing": "Missing",
-    "job": "Scheduled job",
+    "job": "No workload",
     "companion": "Role companion",
     "undeclared": "Undeclared",
     "unknown": "Unknown",
@@ -519,8 +519,8 @@ def _diagram_view(model: dict) -> str:
     # Storage and the backup chain. Tinted by whether the volumes could be read,
     # not by the longhorn-ui service: that entry declares only an IngressRoute,
     # its Deployment belongs to the Longhorn chart in longhorn-system, and the
-    # name lookup in ns/homelab therefore misses it and reports "missing". A
-    # healthy storage plane must not read as red because a route lookup missed.
+    # inventory classifies it as a role with no workload of its own. A healthy
+    # storage plane must not read as anything but what the volumes say.
     parts.append(
         _svg_box(
             40,
