@@ -44,7 +44,7 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
   no HA Jinja inline here. `secrets.yaml.j2` is the one genuinely Ansible-templated file — it
   goes through `lookup('template')` in `secret.yaml.j2` and carries the SOPS values.
 - **`files/` — HA's own `{{ }}` Jinja lives here, also shipped verbatim.** `automations/<topic>.yaml`,
-  `scenes.yaml`, `scripts.yaml`, `templates.yaml`, `rest.yaml`, and `custom_templates/*.jinja`.
+  `scenes.yaml`, `scripts/<topic>.yaml`, `templates.yaml`, `rest.yaml`, and `custom_templates/*.jinja`.
   **The single most important rule: HA Jinja goes in `files/`, never inline in
   `configuration.yaml.j2`** — `template: !include templates.yaml` is how it gets pulled in.
 - **A new file ships nothing until `configmap.yaml.j2` names it.** Each config file is embedded

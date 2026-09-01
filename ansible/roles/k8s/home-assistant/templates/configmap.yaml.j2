@@ -23,8 +23,6 @@ data:
 {{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/templates/config/ui-lovelace.yaml.j2') | indent(4, true) }}
   scenes.yaml: |
 {{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/files/scenes.yaml') | indent(4, true) }}
-  scripts.yaml: |
-{{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/files/scripts.yaml') | indent(4, true) }}
   templates.yaml: |
 {{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/files/templates.yaml') | indent(4, true) }}
   rest.yaml: |
@@ -43,6 +41,19 @@ data:
 {% for name in home_assistant_automation_files %}
   {{ name }}: |
 {{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/files/automations/' + name) | indent(4, true) }}
+{% endfor %}
+---
+# scripts/ likewise, merged by `script: !include_dir_merge_named scripts/`; the list is
+# `home_assistant_script_files`.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: home-assistant-scripts
+  namespace: {{ k8s_namespace }}
+data:
+{% for name in home_assistant_script_files %}
+  {{ name }}: |
+{{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/files/scripts/' + name) | indent(4, true) }}
 {% endfor %}
 ---
 # custom_templates/ as its own map so the init container can lay it down as a directory.

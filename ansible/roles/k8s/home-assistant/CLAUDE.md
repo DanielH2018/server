@@ -38,7 +38,7 @@ every task in this directory whether or not it is needed.
 
 ## The one convention that breaks edits
 - **Automations + scenes + scripts + template sensors + shared Jinja macros ARE copy'd (since 2026-06-18).**
-  `files/automations/*.yaml` (one file per topic, merged by `!include_dir_merge_list`; a new file is also listed in `home_assistant_automation_files` in `defaults/main.yml` — the validator checks the two agree), `files/scenes.yaml`, `files/scripts.yaml`, `files/templates.yaml`,
+  `files/automations/*.yaml` (one file per topic, merged by `!include_dir_merge_list`; a new file is also listed in `home_assistant_automation_files` in `defaults/main.yml` — the validator checks the two agree), `files/scenes.yaml`, `files/scripts/*.yaml` (same shape, merged by `!include_dir_merge_named`, listed in `home_assistant_script_files`), `files/templates.yaml`,
   `files/rest.yaml`, and `files/custom_templates/*.jinja` (whole-dir copy —
   fan/lighting/ventilation/diagnostics)
   are shipped verbatim — `configmap.yaml.j2` carries each one with `lookup('file')`, NOT

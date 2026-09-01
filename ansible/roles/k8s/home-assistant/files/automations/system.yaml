@@ -1,13 +1,5 @@
 ---
-# Managed by Ansible (roles/k8s/home-assistant/files/automations/system.yaml).
-# Source of truth — copied to /config/automations/ and overwritten on deploy. HA UI automation
-# edits are NOT persistent (the UI shows these as read-only). To change, edit this file and run:
-#   ./scripts/deploy.sh --tags home-assistant
-#
-# Every file in this directory is merged into one `automation:` list by
-# `!include_dir_merge_list automations/` in configuration.yaml.
-#
-# HA and infrastructure health: heartbeat, runtime errors, UPS, Zigbee bridge, update digest.
+# HA and infrastructure health: heartbeat, runtime errors, UPS, Zigbee bridge, update digest. Conventions: see README.md in this directory.
 
 # Update-available digest: weekly (Sunday 10:00) roundup of pending device/integration updates that
 # Renovate doesn't cover — Zigbee/sensor firmware + HACS integrations. Generic over ALL update.*

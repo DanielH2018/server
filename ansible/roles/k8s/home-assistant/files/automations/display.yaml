@@ -1,13 +1,5 @@
 ---
-# Managed by Ansible (roles/k8s/home-assistant/files/automations/display.yaml).
-# Source of truth — copied to /config/automations/ and overwritten on deploy. HA UI automation
-# edits are NOT persistent (the UI shows these as read-only). To change, edit this file and run:
-#   ./scripts/deploy.sh --tags home-assistant
-#
-# Every file in this directory is merged into one `automation:` list by
-# `!include_dir_merge_list automations/` in configuration.yaml.
-#
-# The bedroom display's dashboard/ambient switching.
+# The bedroom display's dashboard/ambient switching. Conventions: see README.md in this directory.
 
 # ── Nest Hub Max dashboard (cast to media_player.bedroom_display) ─────────────────────────────────
 # Keep the Bedroom Lovelace view up on the Hub while the room is lit + awake; let it fall back to the

@@ -128,7 +128,7 @@ def test_sleep_missing_outdoor_falls_back_to_winter_band():
 # branch intentionally diverges from the old flat L2 cap (seasonal floor/ceiling — covered by the
 # dedicated tests above), so it is excluded here.
 def _inline_target(t, cur_level, is_night):
-    # The pre-extraction non-sleep formula, transcribed from scripts.yaml's bedroom_apply_fan.
+    # The pre-extraction non-sleep formula, transcribed from scripts/fan.yaml's bedroom_apply_fan.
     ideal = (t - 71) / 1.3 if t >= 0 else 0
     cap = 4 if is_night else 9
     if t < 0 or ideal < 0.3:

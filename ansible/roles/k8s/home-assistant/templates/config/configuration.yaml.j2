@@ -44,9 +44,10 @@ frontend:
 # editor, but edits are NOT persistent — git is the source of truth; redeploy to change.
 automation: !include_dir_merge_list automations/
 scene: !include scenes.yaml
-# Reusable scripts: bedroom_apply_natural (the "natural lighting state" dispatcher used by
+# Reusable scripts, one file per topic under scripts/ (same read-only-in-the-UI contract as
+# automations): bedroom_apply_natural (the "natural lighting state" dispatcher used by
 # Tap Dial button 4 + the morning reset) and its bedroom_set_natural_brightness helper.
-script: !include scripts.yaml
+script: !include_dir_merge_named scripts/
 
 # Helper: manual-off override. When on, presence will NOT auto-turn-on the bedroom lights.
 # Set by the Tap Dial when you turn the lights off; cleared on manual-on or the morning reset.

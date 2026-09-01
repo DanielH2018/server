@@ -1,13 +1,5 @@
 ---
-# Managed by Ansible (roles/k8s/home-assistant/files/automations/presence.yaml).
-# Source of truth — copied to /config/automations/ and overwritten on deploy. HA UI automation
-# edits are NOT persistent (the UI shows these as read-only). To change, edit this file and run:
-#   ./scripts/deploy.sh --tags home-assistant
-#
-# Every file in this directory is merged into one `automation:` list by
-# `!include_dir_merge_list automations/` in configuration.yaml.
-#
-# Away and arrive-home transitions.
+# Away and arrive-home transitions. Conventions: see README.md in this directory.
 
 # Home/away: turn the bedroom off when you leave the HOUSE (person.daniel) — a different layer than
 # the FP300's ROOM presence. Two stages absorb GPS jitter: 'leave' at 10 min away, a 'failsafe'
