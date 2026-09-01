@@ -8,13 +8,14 @@ import pytest
 
 import bridge_parsing
 import bridge_config
+import bridge_io
 import check
 
 
 def test_disk_under_threshold_is_ok(monkeypatch):
     monkeypatch.setattr(bridge_config, "DISK_MOUNTPOINTS", ["/"])
     monkeypatch.setattr(
-        check,
+        bridge_io,
         "prom_vector",
         lambda q: [
             ({"origin": "daniel-box"}, 50.0),
@@ -29,7 +30,7 @@ def test_disk_under_threshold_is_ok(monkeypatch):
 def test_disk_over_threshold_names_mount(monkeypatch):
     monkeypatch.setattr(bridge_config, "DISK_MOUNTPOINTS", ["/"])
     monkeypatch.setattr(
-        check,
+        bridge_io,
         "prom_vector",
         lambda q: [
             ({"origin": "daniel-box"}, 95.0),
@@ -49,7 +50,7 @@ def test_disk_names_the_breaching_host_not_the_healthy_one(monkeypatch):
     and the alert has to name WHICH host is full to be actionable."""
     monkeypatch.setattr(bridge_config, "DISK_MOUNTPOINTS", ["/"])
     monkeypatch.setattr(
-        check,
+        bridge_io,
         "prom_vector",
         lambda q: [
             ({"origin": "daniel-server"}, 96.0),
@@ -70,7 +71,7 @@ def test_disk_groups_by_origin_so_neither_host_is_unwatched(monkeypatch):
         seen["q"] = promql
         return [({"origin": "daniel-box"}, 10.0)]
 
-    monkeypatch.setattr(check, "prom_vector", fake_vector)
+    monkeypatch.setattr(bridge_io, "prom_vector", fake_vector)
     check.check_disk()
     assert "by (origin)" in seen["q"]
     # The division must be inside the query, so the two series are paired by Prometheus on all
@@ -81,7 +82,7 @@ def test_disk_groups_by_origin_so_neither_host_is_unwatched(monkeypatch):
 
 def test_disk_metric_unavailable_alerts(monkeypatch):
     monkeypatch.setattr(bridge_config, "DISK_MOUNTPOINTS", ["/"])
-    monkeypatch.setattr(check, "prom_vector", lambda q: [])
+    monkeypatch.setattr(bridge_io, "prom_vector", lambda q: [])
     ok, msg = check.check_disk()
     assert not ok
     assert "unavailable" in msg
@@ -89,7 +90,7 @@ def test_disk_metric_unavailable_alerts(monkeypatch):
 
 def test_mem_names_the_breaching_host(monkeypatch):
     monkeypatch.setattr(
-        check,
+        bridge_io,
         "prom_vector",
         lambda q: [
             ({"origin": "daniel-server"}, 92.0),
@@ -103,7 +104,7 @@ def test_mem_names_the_breaching_host(monkeypatch):
 
 def test_mem_reports_the_worst_host_when_all_are_healthy(monkeypatch):
     monkeypatch.setattr(
-        check,
+        bridge_io,
         "prom_vector",
         lambda q: [
             ({"origin": "daniel-server"}, 41.0),
@@ -116,7 +117,7 @@ def test_mem_reports_the_worst_host_when_all_are_healthy(monkeypatch):
 
 
 def test_mem_metric_unavailable_alerts(monkeypatch):
-    monkeypatch.setattr(check, "prom_vector", lambda q: [])
+    monkeypatch.setattr(bridge_io, "prom_vector", lambda q: [])
     ok, msg = check.check_mem()
     assert not ok
     assert "unavailable" in msg
@@ -131,7 +132,7 @@ def test_mem_metric_unavailable_alerts(monkeypatch):
     ],
 )
 def test_cert(monkeypatch, days_left, ok, expect):
-    monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: days_left)
+    monkeypatch.setattr(bridge_io, "prom_scalar", lambda *a, **k: days_left)
     result_ok, msg = check.check_cert()
     assert result_ok is ok
     assert expect in msg
@@ -148,7 +149,7 @@ def test_mem_pages_when_a_host_stops_reporting(monkeypatch):
     _reset_origin_streaks()
     monkeypatch.setattr(bridge_config, "HOST_ORIGINS_CONSECUTIVE", 1)
     monkeypatch.setattr(
-        check, "prom_vector", lambda q: [({"origin": "daniel-server"}, 21.0)]
+        bridge_io, "prom_vector", lambda q: [({"origin": "daniel-server"}, 21.0)]
     )
     ok, msg = check.check_mem()
     assert not ok
@@ -161,7 +162,7 @@ def test_disk_pages_when_a_host_stops_reporting(monkeypatch):
     monkeypatch.setattr(bridge_config, "DISK_MOUNTPOINTS", ["/"])
     monkeypatch.setattr(bridge_config, "HOST_ORIGINS_CONSECUTIVE", 1)
     monkeypatch.setattr(
-        check, "prom_vector", lambda q: [({"origin": "daniel-server"}, 30.0)]
+        bridge_io, "prom_vector", lambda q: [({"origin": "daniel-server"}, 30.0)]
     )
     ok, msg = check.check_disk()
     assert not ok
@@ -174,7 +175,7 @@ def test_a_reboot_length_shortfall_does_not_page(monkeypatch):
     _reset_origin_streaks()
     monkeypatch.setattr(bridge_config, "HOST_ORIGINS_CONSECUTIVE", 3)
     monkeypatch.setattr(
-        check, "prom_vector", lambda q: [({"origin": "daniel-server"}, 21.0)]
+        bridge_io, "prom_vector", lambda q: [({"origin": "daniel-server"}, 21.0)]
     )
     assert check.check_mem()[0] is True
     assert check.check_mem()[0] is True
@@ -186,11 +187,11 @@ def test_full_coverage_resets_the_shortfall_streak(monkeypatch):
     monkeypatch.setattr(bridge_config, "HOST_ORIGINS_CONSECUTIVE", 2)
     one = [({"origin": "daniel-server"}, 21.0)]
     both = [({"origin": "daniel-server"}, 21.0), ({"origin": "daniel-box"}, 30.0)]
-    monkeypatch.setattr(check, "prom_vector", lambda q: one)
+    monkeypatch.setattr(bridge_io, "prom_vector", lambda q: one)
     assert check.check_mem()[0] is True
-    monkeypatch.setattr(check, "prom_vector", lambda q: both)
+    monkeypatch.setattr(bridge_io, "prom_vector", lambda q: both)
     assert check.check_mem()[0] is True
-    monkeypatch.setattr(check, "prom_vector", lambda q: one)
+    monkeypatch.setattr(bridge_io, "prom_vector", lambda q: one)
     assert check.check_mem()[0] is True
 
 
@@ -201,7 +202,7 @@ def test_a_breaching_present_host_outranks_the_coverage_complaint(monkeypatch):
     monkeypatch.setattr(bridge_config, "DISK_MOUNTPOINTS", ["/"])
     monkeypatch.setattr(bridge_config, "HOST_ORIGINS_CONSECUTIVE", 1)
     monkeypatch.setattr(
-        check, "prom_vector", lambda q: [({"origin": "daniel-server"}, 97.0)]
+        bridge_io, "prom_vector", lambda q: [({"origin": "daniel-server"}, 97.0)]
     )
     ok, msg = check.check_disk()
     assert not ok
@@ -209,7 +210,7 @@ def test_a_breaching_present_host_outranks_the_coverage_complaint(monkeypatch):
 
     _reset_origin_streaks()
     monkeypatch.setattr(
-        check, "prom_vector", lambda q: [({"origin": "daniel-server"}, 99.0)]
+        bridge_io, "prom_vector", lambda q: [({"origin": "daniel-server"}, 99.0)]
     )
     ok, msg = check.check_mem()
     assert not ok
@@ -233,8 +234,8 @@ def test_crash_loop_arm_gates_on_a_recent_restart_not_just_the_hour_window(monke
         return []
 
     monkeypatch.setattr(bridge_config, "CLUSTER_PROM_URL", "http://cluster-prom:9090")
-    monkeypatch.setattr(check, "prom_vector", record)
-    monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: 66.0)
+    monkeypatch.setattr(bridge_io, "prom_vector", record)
+    monkeypatch.setattr(bridge_io, "prom_scalar", lambda *a, **k: 66.0)
     check.check_k8s_workloads()
 
     restart_queries = [q for q in queries if "status_restarts_total" in q]
@@ -313,7 +314,7 @@ def test_disk_query_excludes_the_pi_origin(monkeypatch):
     seen = []
     monkeypatch.setattr(bridge_config, "DISK_MOUNTPOINTS", ["/"])
     monkeypatch.setattr(
-        check,
+        bridge_io,
         "prom_vector",
         lambda q: (seen.append(q), [({"origin": "daniel-box"}, 10.0)])[1],
     )
@@ -329,7 +330,7 @@ def test_disk_query_excludes_the_pi_origin(monkeypatch):
 def test_mem_query_excludes_the_pi_origin(monkeypatch):
     seen = []
     monkeypatch.setattr(
-        check,
+        bridge_io,
         "prom_vector",
         lambda q: (seen.append(q), [({"origin": "daniel-box"}, 10.0)])[1],
     )
@@ -352,7 +353,7 @@ def test_the_exclusion_keeps_series_that_carry_no_origin_label():
     `origin=~"daniel-box|daniel-server"` allowlist, silently drops them instead, and the
     difference only shows up on a Prometheus that applies no origin label at all.
     """
-    sel = check.host_metric_sel()
+    sel = bridge_io.host_metric_sel()
 
     assert sel.startswith("{") and sel.endswith("}")
     assert "!~" in sel, "must be a negative match, not an origin allowlist"
@@ -384,9 +385,9 @@ def test_the_exclusion_is_overridable_without_editing_the_file(monkeypatch):
     monkeypatch.setattr(
         bridge_config, "HOST_METRIC_ORIGIN_EXCLUDE", "daniel-pi|daniel-spare"
     )
-    assert 'origin!~"daniel-pi|daniel-spare"' in check.host_metric_sel()
+    assert 'origin!~"daniel-pi|daniel-spare"' in bridge_io.host_metric_sel()
 
     monkeypatch.setattr(bridge_config, "HOST_METRIC_ORIGIN_EXCLUDE", "")
-    assert check.host_metric_sel() == "", (
+    assert bridge_io.host_metric_sel() == "", (
         "cleared, the selector must vanish entirely rather than render an empty matcher"
     )

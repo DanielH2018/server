@@ -6,6 +6,8 @@ kube-state-metrics is not reporting at all.
 """
 
 import bridge_config
+import bridge_io
+import bridge_streaks
 import check
 
 
@@ -15,8 +17,8 @@ def _longhorn_series(pvc, state, pod="longhorn-manager-a"):
 
 def _arm_longhorn(monkeypatch, vector, volumes=43.0, consecutive=3):
     monkeypatch.setattr(bridge_config, "LONGHORN_CONSECUTIVE", consecutive)
-    monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: volumes)
-    monkeypatch.setattr(check, "prom_vector", lambda *a, **k: vector)
+    monkeypatch.setattr(bridge_io, "prom_scalar", lambda *a, **k: volumes)
+    monkeypatch.setattr(bridge_io, "prom_vector", lambda *a, **k: vector)
 
 
 def test_longhorn_all_redundant_is_up_and_reports_the_volume_count(monkeypatch):
@@ -43,9 +45,9 @@ def test_longhorn_degraded_holds_up_until_the_threshold_then_pages(monkeypatch):
 def test_longhorn_recovery_resets_the_streak(monkeypatch):
     _arm_longhorn(monkeypatch, [_longhorn_series("freshrss-config", "degraded")])
     check.check_longhorn_volumes()
-    monkeypatch.setattr(check, "prom_vector", lambda *a, **k: [])
+    monkeypatch.setattr(bridge_io, "prom_vector", lambda *a, **k: [])
     assert check.check_longhorn_volumes()[0]
-    assert check._down_streaks.get("longhorn", 0) == 0
+    assert bridge_streaks._down_streaks.get("longhorn", 0) == 0
 
 
 def test_longhorn_absent_metric_is_not_green(monkeypatch):
@@ -103,13 +105,13 @@ def test_longhorn_selects_on_the_state_label_not_a_value_ordinal():
         queries.append(promql)
         return []
 
-    saved_vector, saved_scalar = check.prom_vector, check.prom_scalar
+    saved_vector, saved_scalar = bridge_io.prom_vector, bridge_io.prom_scalar
     try:
-        check.prom_vector = record
-        check.prom_scalar = lambda *a, **k: 43.0
+        bridge_io.prom_vector = record
+        bridge_io.prom_scalar = lambda *a, **k: 43.0
         check.check_longhorn_volumes()
     finally:
-        check.prom_vector, check.prom_scalar = saved_vector, saved_scalar
+        bridge_io.prom_vector, bridge_io.prom_scalar = saved_vector, saved_scalar
     assert len(queries) == 1
     assert 'state=~"degraded|faulted"' in queries[0]
     assert "== 2" not in queries[0]

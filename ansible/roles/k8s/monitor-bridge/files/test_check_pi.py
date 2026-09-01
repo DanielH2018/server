@@ -9,6 +9,8 @@ and a failed attribution fetch downgrades the diagnosis rather than the verdict.
 import pytest
 
 import bridge_config
+import bridge_streaks
+import bridge_io
 import check
 
 MB = 1048576
@@ -123,7 +125,7 @@ def test_pi_check_disabled_without_url():
 def test_pi_check_down_on_pressure(monkeypatch, seq):
     monkeypatch.setattr(bridge_config, "PI_GLANCES_URL", "http://pi:61208")
     monkeypatch.setattr(
-        check, "_get_json", seq({"min5": 7.2, "cpucore": 4}, MEM_OK, FS_OK)
+        bridge_io, "_get_json", seq({"min5": 7.2, "cpucore": 4}, MEM_OK, FS_OK)
     )
     ok, msg = check.check_pi_pressure()
     assert not ok
@@ -133,7 +135,7 @@ def test_pi_check_down_on_pressure(monkeypatch, seq):
 def test_pi_check_up_when_quiet(monkeypatch, seq):
     monkeypatch.setattr(bridge_config, "PI_GLANCES_URL", "http://pi:61208")
     monkeypatch.setattr(
-        check, "_get_json", seq({"min5": 0.4, "cpucore": 4}, MEM_OK, FS_OK)
+        bridge_io, "_get_json", seq({"min5": 0.4, "cpucore": 4}, MEM_OK, FS_OK)
     )
     ok, _ = check.check_pi_pressure()
     assert ok
@@ -246,7 +248,7 @@ def test_pi_check_arm_disabled_when_no_ports_configured(monkeypatch, seq):
     monkeypatch.setattr(bridge_config, "PI_GLANCES_URL", "http://pi:61208")
     monkeypatch.setattr(bridge_config, "PI_PUBLISHED_PORTS", ())
     monkeypatch.setattr(
-        check, "_get_json", seq({"min5": 0.4, "cpucore": 4}, MEM_OK, FS_OK)
+        bridge_io, "_get_json", seq({"min5": 0.4, "cpucore": 4}, MEM_OK, FS_OK)
     )
     ok, msg = check.check_pi_pressure()
     assert ok
@@ -257,7 +259,7 @@ def _arm_ports(monkeypatch, open_ports, containers=None, streak=0):
     monkeypatch.setattr(bridge_config, "PI_GLANCES_URL", "http://10.0.0.139:61208")
     monkeypatch.setattr(bridge_config, "PI_PUBLISHED_PORTS", PUBLISHED)
     monkeypatch.setattr(bridge_config, "PI_PORTS_CONSECUTIVE", 2)
-    check._down_streaks["pi_ports"] = streak
+    bridge_streaks._down_streaks["pi_ports"] = streak
     monkeypatch.setattr(check, "_tcp_open", lambda h, p, t: p in open_ports)
     fetched = []
 
@@ -273,7 +275,7 @@ def _arm_ports(monkeypatch, open_ports, containers=None, streak=0):
             "/api/4/fs": FS_OK,
         }[url[len("http://10.0.0.139:61208") :]]
 
-    monkeypatch.setattr(check, "_get_json", _get)
+    monkeypatch.setattr(bridge_io, "_get_json", _get)
     return fetched
 
 
@@ -322,7 +324,7 @@ def test_pi_check_resets_the_streak_once_ports_return(monkeypatch):
     _arm_ports(monkeypatch, all_ports, streak=1)
     ok, _ = check.check_pi_pressure()
     assert ok
-    assert check._down_streaks["pi_ports"] == 0
+    assert bridge_streaks._down_streaks["pi_ports"] == 0
 
 
 # check_longhorn_volumes — replica redundancy on the storage layer

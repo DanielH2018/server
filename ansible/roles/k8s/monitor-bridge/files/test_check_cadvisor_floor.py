@@ -10,6 +10,7 @@ from pathlib import Path
 
 
 import bridge_config
+import bridge_io
 import check
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -51,7 +52,7 @@ def test_a_covered_vector_with_zero_offenders_still_reads_clean(monkeypatch):
     # must stay green. Without this the floor would page on every healthy cycle.
     _reset_cadvisor(monkeypatch)
     monkeypatch.setattr(
-        check,
+        bridge_io,
         "prom_vector",
         lambda *a, **k: [({"pod": "p%d" % i}, 0.0) for i in range(40)],
     )
@@ -62,7 +63,7 @@ def test_a_covered_vector_with_zero_offenders_still_reads_clean(monkeypatch):
 
 def test_check_oom_reads_unknown_not_green_when_blind(monkeypatch):
     _reset_cadvisor(monkeypatch, consecutive=1)
-    monkeypatch.setattr(check, "prom_vector", lambda *a, **k: [])
+    monkeypatch.setattr(bridge_io, "prom_vector", lambda *a, **k: [])
     ok, msg = check.check_oom()
     assert ok is False
     assert "UNKNOWN" in msg
@@ -70,7 +71,7 @@ def test_check_oom_reads_unknown_not_green_when_blind(monkeypatch):
 
 def test_check_restarts_reads_unknown_not_green_when_blind(monkeypatch):
     _reset_cadvisor(monkeypatch, consecutive=1)
-    monkeypatch.setattr(check, "prom_vector", lambda *a, **k: [])
+    monkeypatch.setattr(bridge_io, "prom_vector", lambda *a, **k: [])
     ok, msg = check.check_restarts()
     assert ok is False
     assert "UNKNOWN" in msg
@@ -78,7 +79,7 @@ def test_check_restarts_reads_unknown_not_green_when_blind(monkeypatch):
 
 def test_check_cpu_throttle_reads_unknown_not_green_when_blind(monkeypatch):
     _reset_cadvisor(monkeypatch, consecutive=1)
-    monkeypatch.setattr(check, "prom_vector", lambda *a, **k: [])
+    monkeypatch.setattr(bridge_io, "prom_vector", lambda *a, **k: [])
     ok, msg = check.check_cpu_throttle()
     assert ok is False
     assert "UNKNOWN" in msg
@@ -88,7 +89,7 @@ def test_the_floor_holds_up_for_one_cycle_before_paging(monkeypatch):
     # A kubelet restart briefly empties cAdvisor; three monitors going red together on one
     # transient is the storm the gates exist to prevent.
     _reset_cadvisor(monkeypatch, consecutive=2)
-    monkeypatch.setattr(check, "prom_vector", lambda *a, **k: [])
+    monkeypatch.setattr(bridge_io, "prom_vector", lambda *a, **k: [])
     ok, msg = check.check_oom()
     assert ok is True
     assert "cAdvisor coverage shortfall 1/2" in msg
@@ -100,7 +101,7 @@ def test_each_check_ages_its_shortfall_independently(monkeypatch):
     # A single shared counter would take three increments per cycle — all three checks run in the
     # same run_once pass — and blow through CADVISOR_CONSECUTIVE inside the first one.
     _reset_cadvisor(monkeypatch, consecutive=2)
-    monkeypatch.setattr(check, "prom_vector", lambda *a, **k: [])
+    monkeypatch.setattr(bridge_io, "prom_vector", lambda *a, **k: [])
     assert check.check_oom()[0] is True
     assert check.check_restarts()[0] is True
     assert check.check_cpu_throttle()[0] is True
@@ -109,10 +110,10 @@ def test_each_check_ages_its_shortfall_independently(monkeypatch):
 
 def test_a_covered_cycle_resets_the_streak(monkeypatch):
     _reset_cadvisor(monkeypatch, consecutive=2)
-    monkeypatch.setattr(check, "prom_vector", lambda *a, **k: [])
+    monkeypatch.setattr(bridge_io, "prom_vector", lambda *a, **k: [])
     check.check_oom()
     monkeypatch.setattr(
-        check,
+        bridge_io,
         "prom_vector",
         lambda *a, **k: [({"pod": "p%d" % i}, 0.0) for i in range(40)],
     )
@@ -130,8 +131,25 @@ def test_cadvisor_floor_is_overridable_from_the_env_secret():
     )
 
 
+def _runtime_module_sources():
+    """Every runtime module beside check.py, not just the entrypoint.
+
+    The checks are moving out of check.py by domain (the 2026-09-01 split), so a walk pinned to
+    `check.__file__` would stop seeing a cAdvisor check the day it moved — the guard-scope class
+    this test was written to close, recreated one level up.
+    """
+    files = Path(check.__file__).resolve().parent
+    return [
+        p.read_text()
+        for p in sorted(files.glob("*.py"))
+        if not p.name.startswith("test_") and p.name != "conftest.py"
+    ]
+
+
 def _functions_calling(name):
-    """Every top-level function in check.py whose body calls `name`, by AST rather than by text.
+    """Every top-level function in the runtime modules whose body calls `name`, by AST rather
+    than by text. Matches both the bare `name(...)` form and the qualified `mod.name(...)` form,
+    since the split moved `cadvisor_sel` behind `bridge_io.`.
 
     Derived, not enumerated. `_CADVISOR_METRICS` above is a literal tuple and the assertion it
     drives is about origin-pinning, not about the empty-vector floor — so before this, a FOURTH
@@ -141,14 +159,20 @@ def _functions_calling(name):
     """
     import ast
 
-    tree = ast.parse(Path(check.__file__).read_text())
     out = set()
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        for call in ast.walk(node):
-            if isinstance(call, ast.Call) and getattr(call.func, "id", None) == name:
-                out.add(node.name)
+    for source in _runtime_module_sources():
+        for node in ast.walk(ast.parse(source)):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for call in ast.walk(node):
+                if not isinstance(call, ast.Call):
+                    continue
+                fn = call.func
+                called = (
+                    fn.id if isinstance(fn, ast.Name) else getattr(fn, "attr", None)
+                )
+                if called == name:
+                    out.add(node.name)
     return out
 
 

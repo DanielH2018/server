@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 import bridge_common
 import bridge_parsing
 import bridge_config
+import bridge_io
 import check
 
 
@@ -108,7 +109,7 @@ def test_arr_queue_msg_is_sanitized(monkeypatch):
             {"title": "@everyone Free.Movie", "trackedDownloadStatus": "warning"}
         ]
     }
-    monkeypatch.setattr(check, "_get_json", lambda *a, **k: queue)
+    monkeypatch.setattr(bridge_io, "_get_json", lambda *a, **k: queue)
     ok, msg = check.check_arr_queue()
     assert ok is False
     assert "@everyone" not in msg

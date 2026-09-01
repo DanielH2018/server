@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 import bridge_config
+import bridge_io
 import check
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -110,12 +111,12 @@ def test_r2_query_parses_storage_and_operations(monkeypatch):
         storage=[{"max": {"payloadSize": 900, "metadataSize": 100, "uploadCount": 3}}],
         operations=_ops(PutObject=2, GetObject=8),
     )
-    monkeypatch.setattr(check, "_post_json", lambda *a, **k: payload)
+    monkeypatch.setattr(bridge_io, "_post_json", lambda *a, **k: payload)
     assert check.r2_query_usage(time.time()) == (1000, 3, 2, 8, [])
 
 
 def test_r2_query_treats_an_empty_bucket_as_zero_not_a_fault(monkeypatch):
-    monkeypatch.setattr(check, "_post_json", lambda *a, **k: _r2_payload())
+    monkeypatch.setattr(bridge_io, "_post_json", lambda *a, **k: _r2_payload())
     assert check.r2_query_usage(time.time()) == (0, 0, 0, 0, [])
 
 
@@ -123,7 +124,7 @@ def test_r2_query_raises_on_graphql_errors(monkeypatch):
     # A 200 carrying `errors` is how an under-scoped token arrives. Unchecked it would parse as a
     # zero-usage bucket — green while blind.
     monkeypatch.setattr(
-        check,
+        bridge_io,
         "_post_json",
         lambda *a, **k: {"data": None, "errors": [{"message": "unauthorized"}]},
     )
@@ -133,7 +134,7 @@ def test_r2_query_raises_on_graphql_errors(monkeypatch):
 
 def test_r2_query_raises_when_no_account_matches(monkeypatch):
     monkeypatch.setattr(
-        check, "_post_json", lambda *a, **k: {"data": {"viewer": {"accounts": []}}}
+        bridge_io, "_post_json", lambda *a, **k: {"data": {"viewer": {"accounts": []}}}
     )
     with pytest.raises(RuntimeError, match="CF_ACCOUNT_ID"):
         check.r2_query_usage(time.time())

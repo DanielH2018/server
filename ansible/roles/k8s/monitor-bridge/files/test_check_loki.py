@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 import bridge_config
+import bridge_io
 import check
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -256,7 +257,7 @@ def test_log_error_burst_wins_the_message_over_healthy_workloads(monkeypatch):
     monkeypatch.setattr(bridge_config, "LOG_ERROR_SELECTOR", '{job=~"k8s|pi"}')
     monkeypatch.setattr(bridge_config, "LOG_ERROR_IGNORE", "")
     monkeypatch.setattr(
-        check,
+        bridge_io,
         "log_error_counts",
         lambda *a, **k: ([({"container": "grafana"}, 91.0)], 5000),
     )
@@ -281,7 +282,7 @@ def test_log_error_arm_fails_open_on_a_loki_outage(monkeypatch):
     def boom(*a, **k):
         raise RuntimeError("loki query status=error")
 
-    monkeypatch.setattr(check, "log_error_counts", boom)
+    monkeypatch.setattr(bridge_io, "log_error_counts", boom)
 
     ok, msg = check.with_log_errors(False, "2 workloads unavailable")
 
@@ -322,29 +323,29 @@ def test_loki_ingestion_no_series_is_down():
 
 
 def test_loki_count_parses_value(monkeypatch):
-    monkeypatch.setattr(check, "_get_json", lambda *a, **k: _loki_scalar(42))
-    assert check.loki_count('{job="syslog"}', "10m") == 42.0
+    monkeypatch.setattr(bridge_io, "_get_json", lambda *a, **k: _loki_scalar(42))
+    assert bridge_io.loki_count('{job="syslog"}', "10m") == 42.0
 
 
 def test_loki_count_empty_result_is_none(monkeypatch):
-    monkeypatch.setattr(check, "_get_json", lambda *a, **k: _loki_scalar(None))
-    assert check.loki_count('{job="syslog"}', "10m") is None
+    monkeypatch.setattr(bridge_io, "_get_json", lambda *a, **k: _loki_scalar(None))
+    assert bridge_io.loki_count('{job="syslog"}', "10m") is None
 
 
 def test_loki_count_non_success_raises(monkeypatch):
-    monkeypatch.setattr(check, "_get_json", lambda *a, **k: {"status": "error"})
+    monkeypatch.setattr(bridge_io, "_get_json", lambda *a, **k: {"status": "error"})
     with pytest.raises(RuntimeError):
-        check.loki_count('{job="syslog"}', "10m")
+        bridge_io.loki_count('{job="syslog"}', "10m")
 
 
 def test_check_loki_ingestion_fresh_is_up(monkeypatch):
-    monkeypatch.setattr(check, "loki_count", lambda *a, **k: 500)
+    monkeypatch.setattr(bridge_io, "loki_count", lambda *a, **k: 500)
     ok, _ = check.check_loki_ingestion()
     assert ok
 
 
 def test_check_loki_ingestion_silent_is_down(monkeypatch):
-    monkeypatch.setattr(check, "loki_count", lambda *a, **k: 0)
+    monkeypatch.setattr(bridge_io, "loki_count", lambda *a, **k: 0)
     ok, msg = check.check_loki_ingestion()
     assert not ok
 
@@ -356,7 +357,7 @@ def test_check_loki_ingestion_docker_stream_silent_is_down(monkeypatch):
     def fake_count(selector, window):
         return 0 if "container" in selector else 500
 
-    monkeypatch.setattr(check, "loki_count", fake_count)
+    monkeypatch.setattr(bridge_io, "loki_count", fake_count)
     ok, msg = check.check_loki_ingestion()
     assert not ok
     assert "container" in msg
@@ -370,7 +371,7 @@ def test_check_loki_ingestion_filetail_silent_is_down(monkeypatch):
     def fake_count(selector, window):
         return 500 if "container" in selector else 0
 
-    monkeypatch.setattr(check, "loki_count", fake_count)
+    monkeypatch.setattr(bridge_io, "loki_count", fake_count)
     ok, msg = check.check_loki_ingestion()
     assert not ok
     assert "file-tail" in msg

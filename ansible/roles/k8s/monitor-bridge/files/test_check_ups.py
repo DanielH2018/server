@@ -8,6 +8,8 @@ paging twice — except when HA is scraping and the series is still absent, whic
 import pytest
 
 import bridge_config
+import bridge_streaks
+import bridge_io
 import check
 
 
@@ -90,7 +92,7 @@ def _ups_scalars(monkeypatch, charge, runtime, replace=0.0, ha_up=None):
             return ha_up
         return None
 
-    monkeypatch.setattr(check, "prom_scalar", fake)
+    monkeypatch.setattr(bridge_io, "prom_scalar", fake)
 
 
 def test_check_ups_healthy_is_up(monkeypatch):
@@ -115,7 +117,7 @@ def test_check_ups_all_absent_but_ha_scraping_pages(monkeypatch):
     assert ok1 and "streak 1/2" in msg1
     ok2, msg2 = check.check_ups()
     assert not ok2 and "absent" in msg2
-    assert check._down_streaks.get("ups", 0) == 2
+    assert bridge_streaks._down_streaks.get("ups", 0) == 2
 
 
 def test_check_ups_all_absent_ha_down_still_defers(monkeypatch):
@@ -135,7 +137,7 @@ def test_check_ups_nut_server_down_defers_not_double_pages(monkeypatch):
     _ups_scalars(monkeypatch, None, None, replace=0.0)
     ok, msg = check.check_ups()
     assert ok and "NUT numeric arms" in msg
-    assert check._down_streaks.get("ups", 0) == 0
+    assert bridge_streaks._down_streaks.get("ups", 0) == 0
 
 
 def test_check_ups_replace_battery_pages(monkeypatch):
@@ -171,7 +173,7 @@ def test_check_ups_recovery_resets_streak(monkeypatch):
     _ups_scalars(monkeypatch, 100, 900)  # healthy again
     ok, _ = check.check_ups()
     assert ok
-    assert check._down_streaks.get("ups", 0) == 0
+    assert bridge_streaks._down_streaks.get("ups", 0) == 0
 
 
 def test_check_ups_disabled_when_no_queries(monkeypatch):
