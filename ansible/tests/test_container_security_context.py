@@ -287,7 +287,6 @@ _UID_PIN_DECLINED = {
 # Unclassified rather than cleared: the census could not observe them, and guessing from an image
 # name is the error that produced the finding this list came from.
 _UNMEASURED_SHORT_LIVED = {
-    ("claude-otel", "otel-collector"),
     ("crowdsec", "config-install"),
     # Added by the LAPI startup gate that landed in #675, one PR before this guard. Neither PR
     # could see the other: PR CI is scoped to changed files, so both were green and master was
@@ -392,6 +391,46 @@ def test_every_container_asserts_non_root_or_is_allowlisted():
     assert not offenders, (
         "these containers neither assert runAsNonRoot nor appear in _ROOT_ALLOWED, so nothing "
         "records whether they run as root deliberately: " + ", ".join(sorted(offenders))
+    )
+
+
+def _missing_uid_pin(rows):
+    """Containers that assert runAsNonRoot but pin no uid. Pure, for the same reason
+    _root_offenders is: a guard over the live fleet is only ever observed passing.
+
+    `runAsNonRoot` alone does not pin a uid — see the comment above
+    `_NON_ROOT_BY_IMAGE_DEFAULT` — so a container that asserts it while relying on the
+    image's own USER still passes admission under a different uid after a tag bump.
+    """
+    return [
+        f"{role}/{tpl}:{name}"
+        for role, tpl, name, sc, pod_sc in rows
+        if _asserts_non_root(sc, pod_sc)
+        and sc.get("runAsUser", pod_sc.get("runAsUser")) is None
+    ]
+
+
+def test_an_assertion_with_no_uid_pin_is_flagged():
+    """The rejecting half."""
+    rows = [("a", "t.j2", "x", {"runAsNonRoot": True}, {})]
+    assert _missing_uid_pin(rows) == ["a/t.j2:x"]
+
+
+def test_an_assertion_with_a_pinned_uid_is_clean():
+    """The accepting half, both ways a uid can be pinned: at the container or via the pod."""
+    rows = [
+        ("a", "t.j2", "x", {"runAsNonRoot": True, "runAsUser": 1000}, {}),
+        ("b", "t.j2", "y", {"runAsNonRoot": True}, {"runAsUser": 1000}),
+    ]
+    assert _missing_uid_pin(rows) == []
+
+
+def test_every_asserting_container_pins_a_uid():
+    offenders = _missing_uid_pin(_containers_with_pod())
+    assert not offenders, (
+        "these containers assert runAsNonRoot but pin no runAsUser, so a tag bump that moves "
+        "the image's named user to a different uid still passes admission silently: "
+        + ", ".join(sorted(offenders))
     )
 
 
