@@ -629,3 +629,37 @@
     job: "/usr/local/bin/pi-recovery-health.sh"
     user: "{{ sys_user }}"
   become: true
+
+- name: Create the systemd-resolved drop-in directory
+  tags: [pi-dns]
+  ansible.builtin.file:
+    path: /etc/systemd/resolved.conf.d
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Point the Pi's DNS at the cluster Pi-hole with a public fallback
+  tags: [pi-dns]
+  # Ordering, not exclusivity — see the template's own header for why the fallback is
+  # load-bearing on this host and why resolved's failover is slower than daniel-server's.
+  ansible.builtin.template:
+    src: pi-dns.conf.j2
+    dest: /etc/systemd/resolved.conf.d/50-homelab-dns.conf
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+  register: optimize_pi_dns_dropin
+
+- name: Restart systemd-resolved to apply the drop-in # noqa no-handler
+  tags: [pi-dns]
+  # Not a handler: a handler runs at the end of the play, and the Pi's own package and
+  # container tasks resolve names in between. Applying it here keeps the rest of the run on
+  # one resolver set rather than two.
+  ansible.builtin.systemd:
+    name: systemd-resolved
+    state: restarted
+  become: true
+  when: optimize_pi_dns_dropin.changed

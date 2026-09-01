@@ -1,0 +1,10 @@
+---
+# Resolvers this host uses, in order, written into the systemd-resolved drop-in by
+# templates/pi-dns.conf.j2. The cluster Pi-hole first so the Pi's internal lookups stay on
+# the private path; a public resolver behind it so the Pi never DEPENDS on the cluster for
+# DNS. That ordering is the point — this is the break-glass host, and its wg-easy tunnel is
+# the documented way in when the cluster's own is unreachable
+# (roles/containers/wg-easy/CLAUDE.md).
+optimize_pi_dns_servers:
+  - "{{ dns_k8s_vip }}"
+  - 1.1.1.1
