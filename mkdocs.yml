@@ -140,6 +140,10 @@ nav:
       - Background:
           - "Longhorn backup tiering (ADR-0007)": longhorn-backup-tiering.md
           - "NetworkPolicy default-deny (ADR-0009)": networkpolicy-default-deny.md
+          # The per-slice record, split out of the page above when it reached 778 lines. It is
+          # the answers each deploy settled by observation, and slice 5's four decisions govern
+          # how the baseline selects pods — live content, not archive material.
+          - "NetworkPolicy — what each slice settled": networkpolicy-slice-answers.md
           - "Argo and Flux evaluation (ADR-0010)": gitops-argo-flux-evaluation.md
   # Runbooks and Operations were separate sections split on whether a procedure drives the
   # system or recovers it. The split leaked in both directions — an upgrade is both, and a
