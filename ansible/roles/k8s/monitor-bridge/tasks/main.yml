@@ -57,13 +57,25 @@
   become: true
   changed_when: monitor_bridge_script is changed
 
+# Server-side apply, because the client-side form stores the WHOLE object again in the
+# `last-applied-configuration` annotation, and annotations are capped at 262144 bytes. The
+# nine modules total ~255 KB of source; JSON-escaped into that annotation they crossed the cap
+# on 2026-09-01 and `kubectl apply` refused the ConfigMap ("metadata.annotations: Too long")
+# while the pod kept running the previous code. Server-side apply writes no such annotation.
+# `--force-conflicts` takes ownership of the data keys from the client-side field manager that
+# applied them before the switch; without it the first server-side apply is rejected.
+# Server-side apply prints the same line whether or not anything changed, so the changed
+# signal is the staged files, the same register the render task uses.
+# ENFORCED by ansible/tests/test_monitor_bridge_configmap_apply.py.
 - name: Apply the script ConfigMap
   tags: [deploy]
   ansible.builtin.command:
-    cmd: k3s kubectl apply -f /etc/rancher/k3s/monitor-bridge/configmap.yaml
+    cmd: >-
+      k3s kubectl apply --server-side --force-conflicts
+      -f /etc/rancher/k3s/monitor-bridge/configmap.yaml
   become: true
   register: monitor_bridge_cm_apply
-  changed_when: "'configured' in monitor_bridge_cm_apply.stdout or 'created' in monitor_bridge_cm_apply.stdout"
+  changed_when: monitor_bridge_script is changed
 
 - name: Deploy monitor-bridge to the cluster
   ansible.builtin.include_role:
