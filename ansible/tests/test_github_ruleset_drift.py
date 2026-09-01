@@ -118,6 +118,14 @@ def _run(tmp_path, curl_body=None, curl_rc=0):
     )
     curl.chmod(0o755)
 
+    # sudo stub: the script's token lookup is `sudo -n -u <user> -H gh auth token`, and on the
+    # box these tests run on the real sudo is passwordless and the real gh is logged in — so
+    # without this stub a unit test reached out to a live credential. The stub fails the way
+    # a host with no gh login does, which is the anonymous path every case here exercises.
+    sudo = binstub / "sudo"
+    sudo.write_text("#!/usr/bin/env bash\nexit 1\n")
+    sudo.chmod(0o755)
+
     out = tmp_path / "push.out"
     env = {
         **os.environ,

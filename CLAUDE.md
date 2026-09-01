@@ -143,9 +143,11 @@ refuses outright — and then say which command and why.
 
 ### The procedure
 
-Merge, then hand the follow-through to `./scripts/deploy_tools/land.sh --pr <n> --since
-<pre-merge-sha>` as ONE backgrounded command. It waits for master CI on the merge commit,
-ticks, deploys what the tick deferred, and prints a `VERDICT:` line. **Do not hand-poll CI and
+Arm the merge with `gh pr merge --squash --auto`, then hand the follow-through to
+`./scripts/deploy_tools/land.sh --pr <n> --since <pre-merge-sha> --await-merge` as ONE
+backgrounded command. It waits for the merge (polling the PR's state, not its checks), then
+for master CI on the merge commit, ticks, deploys what the tick deferred, and prints a
+`VERDICT:` line. **Do not hand-poll CI and
 do not hand-merge** — hand-polling cost 835 polls across 213 wait episodes before `land.sh`
 existed. The exact commands, the `VERDICT:` values and the reason `--since` is needed are in
 the **`land-after-merge` skill**.
