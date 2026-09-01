@@ -252,15 +252,28 @@ def test_a_wrong_type_is_rejected():
     assert "spec.replicas" in err
 
 
-def test_a_crd_reports_no_schema_rather_than_failing():
+def test_a_crd_falls_through_to_its_vendored_schema():
     # Traefik's IngressRoute and friends define their shape in the cluster, not in the upstream
-    # spec. Reported as skipped and counted, never as a pass — 57 objects in this tree are
-    # unvalidated for this reason and the run says so.
+    # spec, so kubernetes_validate raises SchemaNotFoundError for every one. This used to be
+    # reported as skipped and counted — honest, but 60 objects went unvalidated. They now fall
+    # through to the vendored catalog schema, so a well-formed one PASSES rather than skips.
     crd = {
         "apiVersion": "traefik.io/v1alpha1",
         "kind": "IngressRoute",
         "metadata": {"name": "example"},
         "spec": {"routes": []},
+    }
+    assert vkm.schema_error(crd) is None
+
+
+def test_a_crd_with_no_vendored_schema_still_reports_no_schema():
+    # The skip path is not gone, only narrowed: a CRD group nothing has vendored is still
+    # counted and named rather than silently passed.
+    crd = {
+        "apiVersion": "cert-manager.io/v1",
+        "kind": "Certificate",
+        "metadata": {"name": "example"},
+        "spec": {},
     }
     assert vkm.schema_error(crd) is vkm.NO_SCHEMA
 
@@ -515,3 +528,122 @@ def test_an_empty_pod_selector_is_clean():
 def test_the_real_tree_has_no_netpol_port_mismatch(real_tree_run):
     _rc, err = real_tree_run
     assert "is a Service's published port" not in err
+
+
+# ── CRD schema validation ───────────────────────────────────────────────────────────────────
+# kubernetes_validate has no schema for a CRD — a CRD's schema lives in the cluster, not in the
+# upstream OpenAPI spec — so every Traefik object in this tree used to be counted as skipped and
+# checked by nothing: 46 IngressRoute, 11 Middleware, 3 TLSOption. They now validate against the
+# schemas vendored under scripts/validate/schemas/.
+
+
+def _ingressroute(spec):
+    return {
+        "apiVersion": "traefik.io/v1alpha1",
+        "kind": "IngressRoute",
+        "metadata": {"name": "r"},
+        "spec": spec,
+    }
+
+
+_ROUTE = {
+    "match": "Host(`x.example.com`)",
+    "kind": "Rule",
+    "services": [{"name": "svc", "port": 80}],
+}
+
+
+def test_crd_schema_path_follows_the_catalog_layout():
+    path = vkm.crd_schema_path(_ingressroute({"routes": [_ROUTE]}))
+    assert path is not None
+    assert path.parent.name == "traefik.io"
+    assert path.name == "ingressroute_v1alpha1.json"
+
+
+def test_a_core_object_has_no_crd_schema_path():
+    # apiVersion "v1" carries no group, so there is nothing to look up — kubernetes_validate
+    # owns core objects and must not be shadowed by a vendored file.
+    assert vkm.crd_schema_path({"apiVersion": "v1", "kind": "Service"}) is None
+
+
+def test_a_valid_ingressroute_is_clean():
+    assert vkm.crd_schema_error(_ingressroute({"routes": [_ROUTE]})) is None
+
+
+def test_a_misspelled_spec_key_is_flagged():
+    # `entrypoints` for `entryPoints`. The API server ignores an unknown field, so the object
+    # applies clean and the route simply never binds to the entrypoint — the silent class.
+    err = vkm.crd_schema_error(
+        _ingressroute({"entrypoints": ["https"], "routes": [_ROUTE]})
+    )
+    assert isinstance(err, str) and "entrypoints" in err
+
+
+def test_a_misspelled_route_key_is_flagged():
+    # `middleware` for `middlewares`, one level deeper than the spec.
+    route = dict(_ROUTE, middleware=[{"name": "m"}])
+    err = vkm.crd_schema_error(_ingressroute({"routes": [route]}))
+    assert isinstance(err, str) and "middleware" in err
+
+
+def test_a_route_without_match_is_flagged():
+    err = vkm.crd_schema_error(_ingressroute({"routes": [{"kind": "Rule"}]}))
+    assert isinstance(err, str) and "match" in err
+
+
+def test_an_unknown_crd_kind_reports_no_schema():
+    unknown = {"apiVersion": "example.com/v1", "kind": "Widget", "spec": {}}
+    assert vkm.crd_schema_error(unknown) is vkm.NO_SCHEMA
+
+
+def test_the_schema_does_not_catch_a_missing_tls_block():
+    """The limit of structural validation, asserted so nobody claims coverage it lacks.
+
+    `tls` is optional in the IngressRoute CRD — plain-HTTP routes are legal — so an https route
+    with no `spec.tls` is a valid document and passes here, while silently never matching.
+    `https_route_without_tls` is what catches that, and this test fails if someone ever removes
+    it believing the schema had taken over.
+    """
+    doc = _ingressroute({"entryPoints": ["https"], "routes": [_ROUTE]})
+    assert vkm.crd_schema_error(doc) is None
+    assert vkm.https_route_without_tls(doc) is not None
+
+
+@pytest.fixture(scope="module")
+def real_tree_stdout():
+    """main()'s stdout over the real tree — the coverage tail is printed there, not to stderr."""
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
+        rc = vkm.main()
+    return rc, buf.getvalue()
+
+
+_UNCOVERED = "matched neither the v"
+
+
+def test_the_real_tree_leaves_no_object_unchecked(real_tree_stdout):
+    """Coverage, enforced rather than observed.
+
+    This is the staleness answer for the vendored schemas: a new CRD kind — or a rename that
+    stops an existing schema matching — makes the validator report the object as uncovered, and
+    this fails. Refresh or add one with scripts/validate/refresh_crd_schemas.py.
+    """
+    rc, out = real_tree_stdout
+    assert rc == 0
+    assert _UNCOVERED not in out, out[out.find(_UNCOVERED) - 80 :][:400]
+
+
+def test_the_uncovered_guard_can_fire(monkeypatch, tmp_path):
+    """The rejecting half of the test above: with no vendored schemas, the tail must appear.
+
+    Without this, a guard asserting the ABSENCE of a phrase would pass identically if the
+    phrase were never printable — the failure mode test_every_validator_has_a_red_proof exists
+    for, applied to a coverage claim instead of a validation one.
+    """
+    monkeypatch.setattr(vkm, "CRD_SCHEMA_DIR", tmp_path)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
+        vkm.main()
+    out = buf.getvalue()
+    assert _UNCOVERED in out
+    assert "traefik.io/v1alpha1/IngressRoute" in out
