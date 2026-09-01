@@ -31,7 +31,6 @@ prowlarr_k8s_claim: prowlarr-config
 # rather than assumed, with B2 Reachable as the readout. docs/b2-transaction-cap-monitoring-gaps.md.
 prowlarr_k8s_storage_class: longhorn
 prowlarr_k8s_size: 2Gi
-prowlarr_k8s_source_path: /home/ubuntu/server/containers/prowlarr/config
 
 # ── flaresolverr ────────────────────────────────────────────────────────────────────────────
 # Solves Cloudflare challenges for the indexers, which means it RENDERS ATTACKER-SUPPLIED PAGES

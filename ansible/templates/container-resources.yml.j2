@@ -1,0 +1,53 @@
+{#
+  Container `resources:` requests and limits — the four-quantity block ~100 container specs
+  across the k8s roles share, differing only in the values and in whether `limits` or
+  `requests` was typed first (69 templates one way, 23 the other, for no reason beyond which
+  sibling each role was copied from).
+
+  NOT the same key as two other `resources:` in this tree, and this macro is for neither:
+  a PersistentVolumeClaim's `spec.resources.requests.storage` (see pvc.yml.j2), and an RBAC
+  Role's `rules[].resources`, which is a list of API resource names. Both sit at a different
+  depth and neither has cpu/memory under it.
+
+  Indentation is fixed at 10 spaces, the container-list depth in a Deployment, DaemonSet,
+  StatefulSet or CronJob pod template here — 106 of the fleet's 108 container blocks. The two
+  nested deeper (a CronJob's `jobTemplate`) stay inline, for the same reason the securityContext
+  macro leaves its two: a macro that can emit at two depths can emit at the wrong one.
+
+  NOT FOR image-builder OR seed-volume. Both are in validate_k8s_manifests.SKIP_ROLES and
+  cannot be rendered standalone, so test_namespace_resource_defaults.py's
+  `test_the_roles_outside_the_render_walk_are_accounted_for` checks their pod specs by grepping
+  raw template text for `requests:` and `limits:`. It asserts the two appear together, because
+  a request with no limit takes the namespace default and is REFUSED at admission if the
+  request is higher — surfacing hours later as a failed image build. Behind this macro that
+  check compares False to False and passes on nothing. build-job.yaml.j2 was converted during
+  this macro's own rollout and caught exactly that way; the guard now asserts its own coverage.
+
+  QUANTITIES ARE EMITTED QUOTED. Every value in this family is a Kubernetes quantity string —
+  `250m`, `128Mi`, `1` — so quoting is a no-op to the parsed YAML while making the emitted form
+  uniform. That is checked, not assumed: rendering the fleet before and after this macro landed
+  produced identical parsed YAML for all 281 manifests.
+
+  Arguments:
+    cpu_limit, mem_limit, cpu_request, mem_request
+        the four quantities, as values not as pre-quoted text.
+    extra   an extended-resource NAME (jellyfin's and tdarr's `*_k8s_dri_resource`) to request
+            and limit at 1. Kubernetes REJECTS an extended resource whose request and limit
+            differ, so it is deliberately one argument emitting both rather than two that could
+            drift apart.
+#}
+{% macro container_resources(cpu_limit, mem_limit, cpu_request, mem_request, extra=none) %}
+          resources:
+            limits:
+              cpu: "{{ cpu_limit }}"
+              memory: "{{ mem_limit }}"
+{% if extra %}
+              {{ extra }}: 1
+{% endif %}
+            requests:
+              cpu: "{{ cpu_request }}"
+              memory: "{{ mem_request }}"
+{% if extra %}
+              {{ extra }}: 1
+{% endif %}
+{%- endmacro %}

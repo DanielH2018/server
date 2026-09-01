@@ -1,3 +1,4 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
 ---
 # KL3: the cluster pod-log shipper. A DaemonSet (not a Deployment) so the Phase F join adds
 # daniel-server's pod logs automatically when it becomes a node.
@@ -112,17 +113,11 @@ spec:
               mountPath: {{ k3s_audit_log_dir }}
               readOnly: true
 {% endif %}
-          resources:
-            limits:
-              # 1 core, not 250m: promtail's work arrives in bursts as log lines do, and a quota
-              # clipped them for no benefit on a node running ~1.5 of 24 cores. Throttled seconds
-              # measured 0.0076/s on 2026-08-29 — small, but the ceiling bought nothing against
-              # it. The request (50m) is what reserves capacity under contention and is unchanged.
-              cpu: "1"
-              memory: 256Mi
-            requests:
-              cpu: "50m"
-              memory: 64Mi
+          # 1 core, not 250m: promtail's work arrives in bursts as log lines do, and a quota
+          # clipped them for no benefit on a node running ~1.5 of 24 cores. Throttled seconds
+          # measured 0.0076/s on 2026-08-29 — small, but the ceiling bought nothing against
+          # it. The request (50m) is what reserves capacity under contention and is unchanged.
+{{ container_resources(cpu_limit='1', mem_limit='256Mi', cpu_request='50m', mem_request='64Mi') }}
       volumes:
         - name: promtail-config
           configMap:

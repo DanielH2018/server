@@ -1,18 +1,10 @@
 ---
-# Cutover seed: run with -e seed_volume_force=true AFTER stopping the Docker z2m — the source
-# must hold still (seed-volume rejects a moving source under force), and the SLZB accepts one
-# client, so the stop is required on both counts.
-- name: Seed the zigbee2mqtt data volume
-  tags: [deploy]
-  ansible.builtin.include_role:
-    name: k8s/seed-volume
-  vars:
-    seed_volume_service: zigbee2mqtt
-    seed_volume_claim: "{{ zigbee2mqtt_k8s_claim }}"
-    seed_volume_source_path: "{{ zigbee2mqtt_k8s_source_path }}"
-    seed_volume_storage_class: "{{ zigbee2mqtt_k8s_storage_class }}"
-    seed_volume_size: "{{ zigbee2mqtt_k8s_size }}"
-
+# The k8s/seed-volume include this role used to open was dropped on 2026-09-01, when that role
+# stopped seeding and became PVC creation alone. It named the SAME claim this role's own
+# pvc.yaml.j2 renders, so the two created one claim twice. wg-easy dropped its include for the
+# same reason at the v15 upgrade (2026-08-23); see the note at the top of its tasks/main.yml.
+# The PVC is created by the manifests role below, from pvc.yaml.j2, which is already first in
+# manifests_files.
 - name: Deploy zigbee2mqtt to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests

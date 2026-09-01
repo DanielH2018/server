@@ -1,3 +1,5 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 {#
   Histogram-bucket trim for the two control-plane jobs, invoked at COLUMN 0 (it carries its own
   8-space indent, matching `relabel_configs:` in the job blocks below).
@@ -652,11 +654,7 @@ spec:
       containers:
         - name: prometheus
           image: {{ claude_otel_prometheus_image }}
-          securityContext:
-            allowPrivilegeEscalation: false
-            runAsNonRoot: true
-            capabilities:
-              drop: [ALL]
+{{ hardened_security_context(non_root=true) }}
           args:
             - --config.file=/etc/prometheus/prometheus.yml
             - --storage.tsdb.path=/prometheus
@@ -699,22 +697,16 @@ spec:
               port: 9090
             initialDelaySeconds: 15
             periodSeconds: 10
-          resources:
-            requests:
-              cpu: 50m
-              # 512Mi, not 128Mi, and the REQUEST is the half that matters. The kubelet ranks
-              # eviction by usage-above-request, so a 128Mi request against a measured 893.6MiB
-              # peak working set (2026-08-29) put Prometheus in the worst bucket on a node
-              # already at 151% memory-limit overcommit — i.e. the workload every other check
-              # here reads from was among the first to be evicted under node pressure.
-              memory: 512Mi
-            limits:
-              cpu: "1"
-              # 2Gi against that same 893.6MiB peak: 94.5% of the old 1Gi ceiling, never
-              # OOMKilled, but 57MiB of headroom on a TSDB is not headroom — an OOMKill loses
-              # the unflushed head block. Cheap insurance; a limit is a ceiling, not a
-              # reservation, so it costs nothing if the scrape-interval cut above reclaims it.
-              memory: 2Gi
+          # 512Mi, not 128Mi, and the REQUEST is the half that matters. The kubelet ranks
+          # eviction by usage-above-request, so a 128Mi request against a measured 893.6MiB
+          # peak working set (2026-08-29) put Prometheus in the worst bucket on a node
+          # already at 151% memory-limit overcommit — i.e. the workload every other check
+          # here reads from was among the first to be evicted under node pressure.
+          # 2Gi against that same 893.6MiB peak: 94.5% of the old 1Gi ceiling, never
+          # OOMKilled, but 57MiB of headroom on a TSDB is not headroom — an OOMKill loses
+          # the unflushed head block. Cheap insurance; a limit is a ceiling, not a
+          # reservation, so it costs nothing if the scrape-interval cut above reclaims it.
+{{ container_resources(cpu_limit='1', mem_limit='2Gi', cpu_request='50m', mem_request='512Mi') }}
       volumes:
         - name: prometheus-config
           configMap:

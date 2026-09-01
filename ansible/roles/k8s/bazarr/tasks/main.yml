@@ -3,19 +3,14 @@
 #
 
 
-# Seeded BEFORE the workload, so the app never runs its first-boot setup against an empty /config
-# that is about to be overwritten. The Docker copy is still writing, so a coexistence seed is torn
-- name: Seed the bazarr config volume
+- name: Create the bazarr config volume claim
   tags: [deploy]
   ansible.builtin.include_role:
     name: k8s/seed-volume
   vars:
     seed_volume_service: bazarr
     seed_volume_claim: "{{ bazarr_k8s_claim }}"
-    seed_volume_source_path: "{{ bazarr_k8s_source_path }}"
     seed_volume_storage_class: "{{ bazarr_k8s_storage_class }}"
-    seed_volume_quiesce:
-      - bazarr
 
 - name: Deploy bazarr to the cluster
   ansible.builtin.include_role:

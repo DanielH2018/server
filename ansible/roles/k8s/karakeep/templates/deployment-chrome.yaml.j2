@@ -1,3 +1,5 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 ---
 apiVersion: apps/v1
@@ -33,31 +35,39 @@ spec:
       containers:
         - name: chrome
           image: {{ karakeep_k8s_chrome_image }}
+          # These are APPENDED to what the image's own entrypoint already passes, not a full
+          # command line. /headless-shell/run.sh runs headless-shell on 127.0.0.1:9223 with
+          # --no-sandbox, --use-gl=angle, --use-angle=swiftshader and
+          # --remote-debugging-address=0.0.0.0, then socat-forwards 9222 -> 9223.
+          #
+          # So the three flags this list used to carry are now absent deliberately, and one of
+          # them was load-bearing to remove: a trailing --remote-debugging-port=9222 wins over
+          # the entrypoint's 9223, which would put headless-shell and socat on the same port.
+          # --no-sandbox and --remote-debugging-address would merely have been duplicates.
+          #
+          # What remains is upstream's compose list minus two. karakeep also passes
+          # --disable-blink-features=AutomationControlled and --window-size=1440,900; both are
+          # adoptable, but the window size changes the dimensions of every newly captured
+          # screenshot, so taking them is a rendering change and belongs in its own commit.
           args:
-            - --no-sandbox
             - --disable-gpu
             - --disable-dev-shm-usage
-            - --remote-debugging-address=0.0.0.0
-            - --remote-debugging-port=9222
             - --hide-scrollbars
           ports:
             - containerPort: 9222
-          securityContext:
-            allowPrivilegeEscalation: false
-            # The image already starts chromium as uid 1000 (verified on the live pod, 2026-08-31);
-            # asserting it here is what makes that an API-server guarantee rather than an image
-            # default a future tag bump could drop silently. runAsNonRoot alone would not do it —
-            # the kubelet only rejects a numeric root uid, so the uid is the load-bearing half.
-            # Safe for THIS container specifically because it mounts no volumes and binds 9222,
-            # an unprivileged port. Do not copy it to the sibling karakeep deployments without
-            # checking each one: karakeep's own /data seed tree and time-tagger's /root/.cache/uv
-            # are root-owned, so the same three lines would break them (2026-08-31 review).
-            runAsNonRoot: true
-            runAsUser: 1000
-            capabilities:
-              # Chrome already runs with --no-sandbox, so it needs no SYS_ADMIN or sandbox caps.
-              drop:
-                - ALL
+          # 65534, not 1000: karakeep-chrome's Dockerfile ends `USER 65534:65534`, where
+          # zenika/alpine-chrome started chromium as uid 1000. The uid here must MATCH the
+          # image's own — asserting it is what makes it an API-server guarantee rather than an
+          # image default a future tag bump could drop silently, and runAsNonRoot alone would
+          # not do it, because the kubelet only rejects a numeric root uid.
+          # Safe for THIS container specifically because it mounts no volumes and binds 9222,
+          # an unprivileged port; chromium's profile goes to a temp dir under world-writable
+          # /tmp, and no root-owned path in the image is written. Do not copy it to the sibling
+          # karakeep deployments without checking each one: karakeep's own /data seed tree and
+          # time-tagger's /root/.cache/uv are root-owned, so the same three lines would break
+          # them (2026-08-31 review). The entrypoint runs chromium with --no-sandbox, so it
+          # needs no SYS_ADMIN or sandbox caps.
+{{ hardened_security_context(non_root=true, run_as_user=65534) }}
           readinessProbe:
             httpGet:
               path: /json/version
@@ -70,10 +80,4 @@ spec:
               port: 9222
             initialDelaySeconds: 60
             periodSeconds: 30
-          resources:
-            limits:
-              cpu: "{{ karakeep_k8s_chrome_cpu_limit }}"
-              memory: {{ karakeep_k8s_chrome_mem_limit }}
-            requests:
-              cpu: "{{ karakeep_k8s_chrome_cpu_request }}"
-              memory: {{ karakeep_k8s_chrome_mem_request }}
+{{ container_resources(cpu_limit=karakeep_k8s_chrome_cpu_limit, mem_limit=karakeep_k8s_chrome_mem_limit, cpu_request=karakeep_k8s_chrome_cpu_request, mem_request=karakeep_k8s_chrome_mem_request) }}

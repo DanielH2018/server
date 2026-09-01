@@ -1,3 +1,5 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 ---
 apiVersion: apps/v1
@@ -31,13 +33,9 @@ spec:
           image: {{ karakeep_k8s_meili_image }}
           ports:
             - containerPort: 7700
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              # The compose template's cap_drop: ALL — a Rust binary on a high port whose data
-              # is its own volume.
-              drop:
-                - ALL
+          # The compose template's cap_drop: ALL — a Rust binary on a high port whose data
+          # is its own volume.
+{{ hardened_security_context() }}
           env:
             - name: MEILI_NO_ANALYTICS
               value: "true"
@@ -75,13 +73,7 @@ spec:
               port: 7700
             initialDelaySeconds: 60
             periodSeconds: 30
-          resources:
-            limits:
-              cpu: "{{ karakeep_k8s_meili_cpu_limit }}"
-              memory: {{ karakeep_k8s_meili_mem_limit }}
-            requests:
-              cpu: "{{ karakeep_k8s_meili_cpu_request }}"
-              memory: {{ karakeep_k8s_meili_mem_request }}
+{{ container_resources(cpu_limit=karakeep_k8s_meili_cpu_limit, mem_limit=karakeep_k8s_meili_mem_limit, cpu_request=karakeep_k8s_meili_cpu_request, mem_request=karakeep_k8s_meili_mem_request) }}
       volumes:
         # Starts EMPTY and is never seeded — see the role defaults. The index is derived from
         # karakeep's db.db, so it is rebuilt with "Reindex All Bookmarks" rather than copied.

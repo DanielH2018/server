@@ -20,6 +20,11 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   "actionlint-py",                  # workflow lint gate (prek hook); ships the actionlint binary as a wheel
   "pytest-xdist",                   # -n auto in addopts below; pytest was 13.5s of CI's hook budget
   "kubernetes-validate==1.36.0",
+  "jsonschema",                     # validate_k8s_manifests checks CRDs against the vendored
+                                    # schemas in scripts/validate/schemas/. Declared rather than
+                                    # left transitive: it arrives today only as a dependency of
+                                    # kubernetes-validate, so an import that works by accident
+                                    # would break the moment that pin moves.
   "mkdocs-material>=9.5",           # the docs site; `uv run mkdocs build` renders docs/ into site/
 ]
 
@@ -106,6 +111,13 @@ extend-exclude = ["ansible/collections", "*.md"]
 
 [tool.ruff.lint]
 # Bug-catching rules only — pyflakes F (unused imports, undefined names, f-string bugs),
-# syntax errors E9, bare-except E722, and ==None/==True comparisons E711/E712. Stylistic
-# checks (E7 one-liners, ambiguous names) stay OFF — formatting is owned by `ruff format`.
-select = ["F", "E9", "E711", "E712", "E722"]
+# syntax errors E9, bare-except E722, ==None/==True comparisons E711/E712, and flake8-bugbear
+# B. Stylistic checks (E7 one-liners, ambiguous names) stay OFF — formatting is owned by
+# `ruff format`.
+#
+# B earns its place on the same "real bugs only" test as the rest: it is the ruleset for
+# constructs that are legal, silent and wrong. The 16 findings it opened on enabling were led
+# by B023 (a closure over a loop variable in await_ci's CI poller) and B905 (six `zip()` calls,
+# four of which had an equal-length invariant nothing asserted). Both classes fail by producing
+# a plausible wrong answer rather than an error, which is the block-footguns criterion.
+select = ["F", "E9", "E711", "E712", "E722", "B"]

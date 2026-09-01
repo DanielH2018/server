@@ -6,9 +6,7 @@
 # is the one media service where a wrong mount does lasting damage rather than a failed request.
 
 
-# Two claims, two seeds. Both BEFORE the workload, so tdarr never runs its first-boot setup
-# against an empty /app/server that is about to be overwritten. Only a force=true seed against a
-# STOPPED source is authoritative.
+# Two claims, created BEFORE the workload so the pod has PVCs to mount when it starts.
 - name: Seed the tdarr server database
   tags: [deploy]
   ansible.builtin.include_role:
@@ -16,11 +14,8 @@
   vars:
     seed_volume_service: tdarr
     seed_volume_claim: "{{ tdarr_k8s_server_claim }}"
-    seed_volume_source_path: "{{ tdarr_k8s_server_source_path }}"
     seed_volume_storage_class: "{{ tdarr_k8s_storage_class }}"
     seed_volume_size: "{{ tdarr_k8s_server_size }}"
-    seed_volume_quiesce:
-      - tdarr
 
 - name: Seed the tdarr flow and plugin configs
   tags: [deploy]
@@ -29,11 +24,8 @@
   vars:
     seed_volume_service: tdarr
     seed_volume_claim: "{{ tdarr_k8s_configs_claim }}"
-    seed_volume_source_path: "{{ tdarr_k8s_configs_source_path }}"
     seed_volume_storage_class: "{{ tdarr_k8s_storage_class }}"
     seed_volume_size: "{{ tdarr_k8s_configs_size }}"
-    seed_volume_quiesce:
-      - tdarr
 
 - name: Deploy tdarr to the cluster
   ansible.builtin.include_role:

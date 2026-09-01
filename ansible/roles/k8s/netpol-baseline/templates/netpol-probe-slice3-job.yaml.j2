@@ -1,3 +1,5 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 # Slice 3 fences the observability namespace, and its question is again different from slices 1
 # and 2: prometheus and loki each admit a named set of cross-namespace callers, both sets drawn
@@ -110,14 +112,5 @@ spec:
                 exit 1
               fi
               echo "isolated: loki.{{ k8s_observability_namespace }}:3100 unreachable from an unlisted caller"
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: ["ALL"]
-          resources:
-            requests:
-              cpu: 10m
-              memory: 16Mi
-            limits:
-              cpu: 200m
-              memory: 64Mi
+{{ hardened_security_context() }}
+{{ container_resources(cpu_limit='200m', mem_limit='64Mi', cpu_request='10m', mem_request='16Mi') }}

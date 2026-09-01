@@ -1,3 +1,5 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 # kube-state-metrics — the ONLY source of workload-readiness metrics in this cluster.
 #
@@ -99,16 +101,12 @@ spec:
               containerPort: 8080
             - name: telemetry
               containerPort: 8081
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: [ALL]
           # The two probes deliberately hit DIFFERENT ports, matching upstream: /livez is served
           # by the main metrics server on 8080 and /readyz by the self-telemetry server on 8081.
           # Neither path exists on the other port — pointing liveness at 8081 returns 404, which
           # the kubelet reads as a failed probe and restarts the container ~35s after every
           # start, producing a CrashLoopBackOff with a completely clean application log.
+{{ hardened_security_context(read_only=true) }}
           readinessProbe:
             httpGet:
               path: /readyz
@@ -121,13 +119,7 @@ spec:
               port: 8080
             initialDelaySeconds: 5
             periodSeconds: 10
-          resources:
-            requests:
-              cpu: 10m
-              memory: 32Mi
-            limits:
-              cpu: 200m
-              memory: 192Mi
+{{ container_resources(cpu_limit='200m', mem_limit='192Mi', cpu_request='10m', mem_request='32Mi') }}
 ---
 apiVersion: v1
 kind: Service

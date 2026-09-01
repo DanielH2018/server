@@ -26,9 +26,11 @@ MACROS = REPO / "ansible" / "templates"
 
 DOCS = discover_docs()
 
-# A floor, not the real count -- catches the walk silently shrinking (a renamed root, a
-# tightened exclude) without hardcoding a number that drifts every time a doc is added.
-_MIN_DOCS = 50
+# THE CORPUS FLOOR LIVES IN test_documented_paths_exist.py, not here.
+# `discover_docs()` is shared, and that module's `test_the_corpus_covers_the_whole_doc_tree`
+# floors it at 100 (131 today). This module carried an identical assertion floored at 50, which
+# could only fire in a run where the stronger one already had -- so it added no coverage and
+# two floors on one corpus invited them to drift apart. One corpus, one floor.
 
 # A `<name>.yml.j2`, whether bare (a `{% from %}` line or an inline bullet mention) or with
 # one directory level in front of it -- widening DOCS to every CLAUDE.md pulled in role-local
@@ -37,15 +39,6 @@ _MIN_DOCS = 50
 # lets the loop below tell those apart from a shared-macro reference, which this repo's docs
 # always give bare or as `templates/<macro>.yml.j2` -- never `templates/config/...`.
 NAMED = re.compile(r"\b((?:[a-z0-9_-]+/)?[a-z0-9_-]+\.yml\.j2)\b")
-
-
-def test_the_corpus_covers_the_whole_doc_tree():
-    """Coverage is asserted, not assumed -- a two-file DOCS list already let one leak."""
-    assert len(DOCS) >= _MIN_DOCS, (
-        f"only found {len(DOCS)} docs, expected at least {_MIN_DOCS} -- the walk shrank. "
-        "A floor far below the real count cannot tell 'the walk broke' from 'docs were "
-        "deleted'."
-    )
 
 
 def test_every_macro_named_in_the_docs_exists():

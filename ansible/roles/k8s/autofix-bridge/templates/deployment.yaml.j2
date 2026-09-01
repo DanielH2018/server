@@ -1,3 +1,5 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -40,12 +42,7 @@ spec:
         - name: autofix-bridge
           image: {{ autofix_bridge_k8s_image }}
           command: ["python", "/app/autofix.py"]
-          securityContext:
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
+{{ hardened_security_context(read_only=true) }}
           envFrom:
             - secretRef:
                 name: autofix-bridge-env
@@ -66,19 +63,13 @@ spec:
               readOnly: true
             - name: autofix-bridge-tmp
               mountPath: /tmp
-          resources:
-            requests:
-              cpu: 20m
-              memory: 32Mi
-            limits:
-              # 1 core, not 100m: a periodic poller wakes, bursts, and sleeps, so a 100m quota —
-              # 10ms of every 100ms period — is exhausted by a sub-second burst while the minute
-              # average reads near zero. Throttled on 45.8% of CFS periods, measured 2026-08-29,
-              # against p95 usage of 0.0015 cores. On a cluster burning ~1.5 of 24 cores the
-              # request is what earns this pod CPU under contention; the limit only clipped
-              # bursts. Requests and the memory limit are unchanged.
-              cpu: "1"
-              memory: 64Mi
+          # 1 core, not 100m: a periodic poller wakes, bursts, and sleeps, so a 100m quota —
+          # 10ms of every 100ms period — is exhausted by a sub-second burst while the minute
+          # average reads near zero. Throttled on 45.8% of CFS periods, measured 2026-08-29,
+          # against p95 usage of 0.0015 cores. On a cluster burning ~1.5 of 24 cores the
+          # request is what earns this pod CPU under contention; the limit only clipped
+          # bursts. Requests and the memory limit are unchanged.
+{{ container_resources(cpu_limit='1', mem_limit='64Mi', cpu_request='20m', mem_request='32Mi') }}
       volumes:
         - name: autofix-bridge-script
           configMap:

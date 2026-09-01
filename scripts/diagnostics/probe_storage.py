@@ -225,7 +225,10 @@ def b2_curl(config_body, timeout=DEFAULT_TIMEOUT):
     except json.JSONDecodeError:
         # B2 reports a refused transaction cap as a JSON error, so a non-JSON body here
         # is a different problem (proxy, DNS, truncation) and is worth showing verbatim.
-        raise SystemExit("B2 returned a non-JSON body: " + out.stdout.strip()[:200])
+        # `from None`: the decode error's offset says nothing the body above doesn't.
+        raise SystemExit(
+            "B2 returned a non-JSON body: " + out.stdout.strip()[:200]
+        ) from None
 
 
 def b2_authorize_config(key_id, app_key):

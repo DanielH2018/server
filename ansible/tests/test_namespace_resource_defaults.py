@@ -178,6 +178,20 @@ def test_the_roles_outside_the_render_walk_are_accounted_for() -> None:
             )
 
     assert excluded, "neither role ships a pod template any more; drop this guard"
+    # This check reads raw template TEXT, so a pod spec that moved its resources behind
+    # container_resources() would leave it comparing False to False — passing, with its whole
+    # point gone. Both roles are in validate_k8s_manifests.SKIP_ROLES and cannot be rendered
+    # standalone, so grepping is the only option here and the coverage has to be asserted
+    # rather than assumed. ansible/templates/container-resources.yml.j2 records that these two
+    # roles are deliberately not converted.
+    assert any(
+        has_requests or has_limits for has_requests, has_limits in excluded.values()
+    ), (
+        "no excluded pod template states a request or a limit in its raw text any more. If one "
+        "moved to container_resources(), revert it — this guard cannot see through a macro, "
+        "and silently compares False to False. If the pod spec genuinely dropped both, remove "
+        "it from the loop above rather than leaving this passing on nothing."
+    )
     for where, (has_requests, has_limits) in excluded.items():
         # Either both or neither. Both means the LimitRange never touches it; neither means it
         # takes the defaults, which is the control doing its job. Requests-only is the one

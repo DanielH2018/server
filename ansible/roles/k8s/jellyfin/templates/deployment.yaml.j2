@@ -1,3 +1,5 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -71,44 +73,31 @@ spec:
                 "$f"
               grep -q '<HardwareAccelerationType>vaapi</HardwareAccelerationType>' "$f"
               echo "converted encoding.xml: qsv -> vaapi, VppTonemapping off"
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-            # As the OWNER of /config, not as root. The LSIO image's default user is root, and
-            # `sed -i` writes a temp file in the target directory — with every capability
-            # dropped, a root process has no DAC_OVERRIDE and cannot write into a directory
-            # owned by uid {{ puid }}. It failed with
-            #     sed: couldn't open temporary file /config/sedUo9qXt: Permission denied
-            # which reads like a read-only mount and is not one. Running as the owner needs no
-            # capability at all.
-            runAsUser: {{ puid }}
-            runAsGroup: {{ pgid }}
-            runAsNonRoot: true
+          # As the OWNER of /config, not as root. The LSIO image's default user is root, and
+          # `sed -i` writes a temp file in the target directory — with every capability
+          # dropped, a root process has no DAC_OVERRIDE and cannot write into a directory
+          # owned by uid {{ puid }}. It failed with
+          #     sed: couldn't open temporary file /config/sedUo9qXt: Permission denied
+          # which reads like a read-only mount and is not one. Running as the owner needs no
+          # capability at all.
+{{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
           volumeMounts:
             - name: jellyfin-config
               mountPath: /config
-          resources:
-            limits:
-              cpu: "500m"
-              memory: 128Mi
-            requests:
-              cpu: "10m"
-              memory: 32Mi
-        # ── jellyfin-ani-sync (D: AniList watch-status sync) ─────────────────────────────────
-        # Installs the plugin from its published release instead of leaving it to a click in the
-        # admin dashboard, so a config PVC restored from nothing comes back with it. The
-        # plugin's SETTINGS are deliberately not managed here: the AniList OAuth token is
-        # account-specific, is written to /config/plugins/configurations/, and nothing below
-        # touches that directory.
-        #
-        # python:3.14-alpine rather than the alpine:3.24 the container above uses, and not
-        # because Python reads better. The release is a .zip and /config is owned by uid
-        # {{ puid }} — a plain alpine container would have to `apk add unzip` as root, and root
-        # here holds no DAC_OVERRIDE (see the comment above), so it could not then write the
-        # files it had just unpacked. urllib, hashlib and zipfile are stdlib, so the whole
-        # install runs as the owning uid and installs nothing at runtime.
+          # ── jellyfin-ani-sync (D: AniList watch-status sync) ─────────────────────────────────
+          # Installs the plugin from its published release instead of leaving it to a click in the
+          # admin dashboard, so a config PVC restored from nothing comes back with it. The
+          # plugin's SETTINGS are deliberately not managed here: the AniList OAuth token is
+          # account-specific, is written to /config/plugins/configurations/, and nothing below
+          # touches that directory.
+          #
+          # python:3.14-alpine rather than the alpine:3.24 the container above uses, and not
+          # because Python reads better. The release is a .zip and /config is owned by uid
+          # {{ puid }} — a plain alpine container would have to `apk add unzip` as root, and root
+          # here holds no DAC_OVERRIDE (see the comment above), so it could not then write the
+          # files it had just unpacked. urllib, hashlib and zipfile are stdlib, so the whole
+          # install runs as the owning uid and installs nothing at runtime.
+{{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
         - name: install-ani-sync
           image: {{ jellyfin_k8s_anisync_init_image }}
           command:
@@ -198,24 +187,11 @@ spec:
                   print("removing " + str(legacy) + " (never scanned; installed there in error)")
                   shutil.rmtree(legacy)
               print("installed ani-sync " + VERSION)
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-            runAsUser: {{ puid }}
-            runAsGroup: {{ pgid }}
-            runAsNonRoot: true
+{{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
           volumeMounts:
             - name: jellyfin-config
               mountPath: /config
-          resources:
-            limits:
-              cpu: "500m"
-              memory: 128Mi
-            requests:
-              cpu: "10m"
-              memory: 32Mi
+{{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
       automountServiceAccountToken: false
       priorityClassName: homelab-standard
       containers:
@@ -223,19 +199,11 @@ spec:
           image: {{ jellyfin_k8s_image }}
           ports:
             - containerPort: {{ container_item.port }}
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              # The compose template's cap_drop/cap_add pair MINUS FOWNER and DAC_OVERRIDE.
-              # Those two existed only so the opencl-intel DOCKER_MODS installer's root dpkg
-              # unpack could chmod files it did not own. That mod is gone (D8), so the caps go
-              # with it rather than being carried over out of habit.
-              drop:
-                - ALL
-              add:
-                - CHOWN
-                - SETUID
-                - SETGID
+          # The compose template's cap_drop/cap_add pair MINUS FOWNER and DAC_OVERRIDE.
+          # Those two existed only so the opencl-intel DOCKER_MODS installer's root dpkg
+          # unpack could chmod files it did not own. That mod is gone (D8), so the caps go
+          # with it rather than being carried over out of habit.
+{{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID']) }}
           env:
             - name: PUID
               value: "{{ puid }}"
@@ -311,17 +279,9 @@ spec:
               port: {{ container_item.port }}
             initialDelaySeconds: 90
             periodSeconds: 30
-          resources:
-            limits:
-              cpu: "{{ jellyfin_k8s_cpu_limit }}"
-              memory: {{ jellyfin_k8s_mem_limit }}
-              {{ jellyfin_k8s_dri_resource }}: 1
-            requests:
-              cpu: "{{ jellyfin_k8s_cpu_request }}"
-              memory: {{ jellyfin_k8s_mem_request }}
-              # Extended resources must request exactly what they limit — Kubernetes rejects a
-              # mismatch, and omitting the request entirely defaults it to the limit anyway.
-              {{ jellyfin_k8s_dri_resource }}: 1
+          # Extended resources must request exactly what they limit — Kubernetes rejects a
+          # mismatch, and omitting the request entirely defaults it to the limit anyway.
+{{ container_resources(cpu_limit=jellyfin_k8s_cpu_limit, mem_limit=jellyfin_k8s_mem_limit, cpu_request=jellyfin_k8s_cpu_request, mem_request=jellyfin_k8s_mem_request, extra=jellyfin_k8s_dri_resource) }}
       volumes:
         - name: jellyfin-config
           persistentVolumeClaim:

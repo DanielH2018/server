@@ -1,0 +1,35 @@
+# {{ ansible_managed }}
+#
+# The node's own resolver. /etc/resolv.conf names 127.0.0.1 and nothing else, so every
+# host-level lookup on this machine — and every lookup in a pod that inherits the node's
+# file — arrives here first.
+#
+# WHY THIS EXISTS AT ALL. glibc reads a flat nameserver list and learns an entry is dead
+# only by spending a timeout on it, once per process, with no memory between lookups. That
+# is a correct fallback and a poor preference: every process pays the timeout again. CoreDNS
+# asks out of band instead, so a dead Pi-hole is skipped before a query is sent to it.
+.:53 {
+    # Loopback only. This is the node's private resolver, not a service — anything else on
+    # the LAN wanting Pi-hole uses the VIP directly.
+    bind 127.0.0.1
+
+    forward . {% for upstream in k3s_host_dns_upstreams %}{{ upstream }} {% endfor %}{
+        # THE WHOLE POINT. forward defaults to `random`, which treats the list as peers and
+        # would reproduce the coin-flip this replaces. `sequential` makes it a preference:
+        # first healthy entry, always.
+        policy sequential
+        health_check {{ k3s_host_dns_health_check }}
+        max_fails {{ k3s_host_dns_max_fails }}
+    }
+
+    cache {{ k3s_host_dns_cache_ttl }}
+
+    # Bound to the node's LAN address because Prometheus scrapes from a pod, where
+    # 127.0.0.1 is the pod's own loopback. The series that answers "what fraction of this
+    # node's DNS actually reached Pi-hole" is
+    # coredns_proxy_request_duration_seconds_count{proxy_name="forward",to="..."} — NOT
+    # coredns_forward_requests_total, which this build does not export.
+    prometheus {{ server_ip }}:{{ k3s_host_dns_metrics_port }}
+
+    errors
+}

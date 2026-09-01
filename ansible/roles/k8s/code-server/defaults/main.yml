@@ -41,10 +41,9 @@ code_server_k8s_workspace_storage_class: longhorn
 # 1 Gi is the floor worth paying. The `longhorn` StorageClass has allowVolumeExpansion, so a
 # workspace that outgrows this expands in place; it does not need buying up front.
 code_server_k8s_workspace_size: 1Gi
-# Overridden at the cutover seed: .npm and friends are root-owned (written by the image's
-# root init), so the unprivileged ssh|tar pipeline can't read them in place — a one-shot
-# play stages a sudo copy into an ubuntu-owned dir first (the wg-easy pattern).
-code_server_k8s_source_path: /home/ubuntu/server/containers/code-server/config
+# Note: .npm and friends are root-owned (written by the image's root init), so they are not
+# backed up with the workspace. The workspace claim holds only user-owned state that the image
+# can write to without `sudo`.
 
 # Mirrors resources('4.0', '4096M', '0.10', '256M') — a dev env that runs builds.
 code_server_k8s_cpu_limit: "4"

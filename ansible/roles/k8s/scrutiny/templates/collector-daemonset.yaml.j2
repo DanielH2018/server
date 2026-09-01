@@ -1,3 +1,4 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
 ---
 # SC3: the collector runs on every node — today daniel-box only, which ADDS its
 # never-monitored NVMe; the Phase F join extends it to daniel-server automatically and
@@ -54,13 +55,7 @@ spec:
               mountPath: /dev/nvme0
             - name: scrutiny-collector-config
               mountPath: /opt/scrutiny/config
-          resources:
-            limits:
-              cpu: "500m"
-              memory: 256Mi
-            requests:
-              cpu: "50m"
-              memory: 32Mi
+{{ container_resources(cpu_limit='500m', mem_limit='256Mi', cpu_request='50m', mem_request='32Mi') }}
       volumes:
         - name: scrutiny-collector-udev
           hostPath:

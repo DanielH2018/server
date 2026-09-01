@@ -36,7 +36,6 @@ sonarr_k8s_claim: sonarr-config
 # rather than assumed, with B2 Reachable as the readout. docs/b2-transaction-cap-monitoring-gaps.md.
 sonarr_k8s_storage_class: longhorn
 sonarr_k8s_size: 2Gi
-sonarr_k8s_source_path: /home/ubuntu/server/containers/sonarr/config
 
 # The B2 volume, mounted at /data — byte-for-byte the Docker path contract (D4). Getting this
 # wrong does not fail at startup; it fails as a library that looks intact until an import.

@@ -37,6 +37,7 @@ import re
 import sys
 from pathlib import Path
 
+import jsonschema
 import kubernetes_validate
 import yaml
 
@@ -464,17 +465,74 @@ def normalise_octal(node):
     return node
 
 
+CRD_SCHEMA_DIR = Path(__file__).resolve().parent / "schemas"
+
+
+def crd_schema_path(doc: dict) -> Path | None:
+    """Where a vendored JSON Schema for this object's apiVersion/kind would live, or None.
+
+    Mirrors datreeio/CRDs-catalog's layout — ``<group>/<lowercase kind>_<version>.json`` — so
+    refresh_crd_schemas.py can pull straight from it with no per-kind mapping. A core object
+    (apiVersion ``v1``, no group) has no slash and returns None; kubernetes_validate owns those.
+    """
+    api_version = doc.get("apiVersion")
+    kind = doc.get("kind")
+    if not isinstance(api_version, str) or not isinstance(kind, str):
+        return None
+    if "/" not in api_version:
+        return None
+    group, _, version = api_version.partition("/")
+    return CRD_SCHEMA_DIR / group / f"{kind.lower()}_{version}.json"
+
+
+def crd_schema_error(doc: dict) -> str | None | object:
+    """Validate one CRD object against its vendored JSON Schema, or NO_SCHEMA if none exists.
+
+    WHAT THIS CATCHES, precisely — it is narrower than it looks and the difference matters.
+    The catalog's schemas set ``additionalProperties: false`` on the spec and on each route, so
+    a misspelled key is rejected: ``entrypoints`` for ``entryPoints``, ``middleware`` for
+    ``middlewares``. They also require ``spec.routes`` and each route's ``match``, and they
+    type-check values. That is the same silent class the core check's ``strict=True`` covers —
+    the API server ignores an unknown field, so the object applies clean and the setting simply
+    never takes effect.
+
+    WHAT IT DOES NOT CATCH: anything semantic. An https IngressRoute with no ``spec.tls`` is a
+    valid document and passes here — ``tls`` is optional in the CRD, because plain-HTTP routes
+    are legal. That bug class is `https_route_without_tls` below, and it stays the thing that
+    catches it. Verified against the vendored schema rather than assumed.
+    """
+    path = crd_schema_path(doc)
+    if path is None or not path.is_file():
+        return NO_SCHEMA
+    try:
+        schema = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        return f"vendored schema {path.name} is unreadable: {exc}"
+    try:
+        jsonschema.validate(normalise_octal(doc), schema)
+    except jsonschema.ValidationError as exc:
+        where = ".".join(str(p) for p in exc.absolute_path) or "<root>"
+        return f"{where}: {exc.message}"
+    except jsonschema.SchemaError as exc:
+        return f"vendored schema {path.name} is invalid: {exc.message}"
+    return None
+
+
 def schema_error(doc: dict) -> str | None | object:
     """Validate one rendered object against the Kubernetes schema for K8S_SCHEMA_VERSION.
 
-    Returns None when the object validates, NO_SCHEMA when no schema exists for its
-    apiVersion/kind (every CRD in this fleet — Traefik's IngressRoute/Middleware/TLSOption —
-    since a CRD's schema lives in the cluster, not in the upstream OpenAPI spec), and an error
-    string otherwise.
+    Returns None when the object validates, NO_SCHEMA when nothing can check its
+    apiVersion/kind, and an error string otherwise.
 
     ``strict=True`` rejects fields the schema does not define, which is the half that catches
     typos: a misspelled ``readinessProb`` is silently ignored by the API server, so the
     Deployment applies clean and the probe simply never runs.
+
+    A CRD has no schema in the upstream OpenAPI spec — it lives in the cluster — so
+    kubernetes_validate raises SchemaNotFoundError for every one. Rather than pass, those fall
+    through to `crd_schema_error` and the vendored catalog schemas. Before that existed, 60 of
+    this tree's objects (46 IngressRoute, 11 Middleware, 3 TLSOption) were counted as skipped
+    and checked by nothing.
 
     This is the check ``--dry-run`` performs against the live API server, done offline and
     without a cluster — so it also covers the roles k8s_dry_run_unsupported refuses.
@@ -484,7 +542,7 @@ def schema_error(doc: dict) -> str | None | object:
             normalise_octal(doc), K8S_SCHEMA_VERSION, strict=True
         )
     except kubernetes_validate.SchemaNotFoundError:
-        return NO_SCHEMA
+        return crd_schema_error(doc)
     except kubernetes_validate.ValidationError as exc:
         path = ".".join(str(p) for p in getattr(exc, "path", []) or [])
         detail = str(exc).split("\n")[0]
@@ -846,13 +904,16 @@ def main() -> int:
 
     # Printed rather than silent: an unschema'd kind is unvalidated, and the only honest way to
     # report coverage is to name what was not covered. A CRD count that jumps means a new
-    # custom resource arrived with nothing checking its shape.
+    # custom resource arrived with nothing checking its shape. This should read 0 — a CRD kind
+    # reaching here means no vendored schema matched it, which
+    # test_every_rendered_crd_kind_has_a_vendored_schema fails on.
     if skipped_kinds:
         total = sum(skipped_kinds.values())
         detail = ", ".join(f"{k} x{v}" for k, v in sorted(skipped_kinds.items()))
         print(
-            f"\n{total} object(s) had no v{K8S_SCHEMA_VERSION} schema and were NOT "
-            f"schema-checked: {detail}"
+            f"\n{total} object(s) matched neither the v{K8S_SCHEMA_VERSION} core schema nor a "
+            f"vendored CRD schema, and were NOT schema-checked: {detail}\n"
+            "Vendor one with scripts/validate/refresh_crd_schemas.py."
         )
 
     print(f"\n{checked} k8s manifest template(s) checked, {failures} failure(s).")

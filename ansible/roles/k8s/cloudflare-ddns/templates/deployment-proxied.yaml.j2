@@ -1,3 +1,5 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 ---
 apiVersion: apps/v1
@@ -26,15 +28,8 @@ spec:
       containers:
         - name: cloudflare-ddns
           image: {{ cloudflare_ddns_k8s_image }}
-          securityContext:
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            # Same image and same measurement as the direct deployment beside this one.
-            runAsNonRoot: true
-            runAsUser: 1000
-            capabilities:
-              drop:
-                - ALL
+          # Same image and same measurement as the direct deployment beside this one.
+{{ hardened_security_context(read_only=true, non_root=true, run_as_user=1000) }}
           env:
             - name: CLOUDFLARE_API_TOKEN_FILE
               value: /etc/ddns-secrets/cf_dns_token
@@ -65,13 +60,7 @@ spec:
             - name: cloudflare-ddns-token
               mountPath: /etc/ddns-secrets
               readOnly: true
-          resources:
-            limits:
-              cpu: "{{ cloudflare_ddns_k8s_cpu_limit }}"
-              memory: {{ cloudflare_ddns_k8s_mem_limit }}
-            requests:
-              cpu: "{{ cloudflare_ddns_k8s_cpu_request }}"
-              memory: {{ cloudflare_ddns_k8s_mem_request }}
+{{ container_resources(cpu_limit=cloudflare_ddns_k8s_cpu_limit, mem_limit=cloudflare_ddns_k8s_mem_limit, cpu_request=cloudflare_ddns_k8s_cpu_request, mem_request=cloudflare_ddns_k8s_mem_request) }}
       volumes:
         - name: cloudflare-ddns-token
           secret:

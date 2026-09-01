@@ -32,7 +32,6 @@ radarr_k8s_claim: radarr-config
 # rather than assumed, with B2 Reachable as the readout. docs/b2-transaction-cap-monitoring-gaps.md.
 radarr_k8s_storage_class: longhorn
 radarr_k8s_size: 2Gi
-radarr_k8s_source_path: /home/ubuntu/server/containers/radarr/config
 
 # The WHOLE data tree at /data, exactly as sonarr mounts it — radarr imports by hardlink from
 # /data/torrents into /data/media, and that link() only works if one mount spans both.

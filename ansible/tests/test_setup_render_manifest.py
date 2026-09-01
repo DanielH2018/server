@@ -428,7 +428,7 @@ def test_the_tag_scoping_actually_selects_one_stamp_per_family():
     env = dict(os.environ)
     env["ANSIBLE_PYTHON_INTERPRETER"] = sys.executable
     playbook = _REPO / "ansible/k3s-bringup.yml"
-    for name, tag in sorted(_GROUP_TAGS.items()):
+    for _name, tag in sorted(_GROUP_TAGS.items()):
         result = subprocess.run(
             ["ansible-playbook", str(playbook), "--tags", tag, "--list-tasks"],
             cwd=_REPO,

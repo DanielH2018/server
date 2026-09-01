@@ -1,3 +1,5 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -38,24 +40,12 @@ spec:
         - name: wireguard
           image: {{ qbittorrent_k8s_wireguard_image }}
           restartPolicy: Always
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-              add:
-                # NET_ADMIN for the tunnel interface and its routing/fwmark rules; NET_RAW
-                # because the Mullvad mod's kill-switch initialises the iptables `raw` table,
-                # which fails with "unable to initialize table 'raw'" without it. Plus the LSIO
-                # s6 set to chown /config and drop privileges. NOT privileged, and no
-                # SYS_MODULE — the wireguard module is loaded on the host.
-                - NET_ADMIN
-                - NET_RAW
-                - CHOWN
-                - SETUID
-                - SETGID
-                - FOWNER
-                - DAC_OVERRIDE
+          # NET_ADMIN for the tunnel interface and its routing/fwmark rules; NET_RAW
+          # because the Mullvad mod's kill-switch initialises the iptables `raw` table,
+          # which fails with "unable to initialize table 'raw'" without it. Plus the LSIO
+          # s6 set to chown /config and drop privileges. NOT privileged, and no
+          # SYS_MODULE — the wireguard module is loaded on the host.
+{{ hardened_security_context(add=['NET_ADMIN', 'NET_RAW', 'CHOWN', 'SETUID', 'SETGID', 'FOWNER', 'DAC_OVERRIDE']) }}
           env:
             - name: PUID
               value: "{{ puid }}"
@@ -117,13 +107,7 @@ spec:
             periodSeconds: 60
             timeoutSeconds: 15
             failureThreshold: 6
-          resources:
-            limits:
-              cpu: "{{ qbittorrent_k8s_wg_cpu_limit }}"
-              memory: {{ qbittorrent_k8s_wg_mem_limit }}
-            requests:
-              cpu: "{{ qbittorrent_k8s_wg_cpu_request }}"
-              memory: {{ qbittorrent_k8s_wg_mem_request }}
+{{ container_resources(cpu_limit=qbittorrent_k8s_wg_cpu_limit, mem_limit=qbittorrent_k8s_wg_mem_limit, cpu_request=qbittorrent_k8s_wg_cpu_request, mem_request=qbittorrent_k8s_wg_mem_request) }}
       automountServiceAccountToken: false
       priorityClassName: homelab-standard
       containers:
@@ -137,19 +121,9 @@ spec:
               name: webui
             - containerPort: {{ qbittorrent_k8s_torrenting_port }}
               name: torrent
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              # No NET_ADMIN. Networking belongs to the sidecar; this container only needs the
-              # LSIO s6 set to chown /config and /data and drop to PUID/PGID.
-              drop:
-                - ALL
-              add:
-                - CHOWN
-                - SETUID
-                - SETGID
-                - FOWNER
-                - DAC_OVERRIDE
+          # No NET_ADMIN. Networking belongs to the sidecar; this container only needs the
+          # LSIO s6 set to chown /config and /data and drop to PUID/PGID.
+{{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID', 'FOWNER', 'DAC_OVERRIDE']) }}
           env:
             - name: PUID
               value: "{{ puid }}"
@@ -198,13 +172,7 @@ spec:
             periodSeconds: 60
             timeoutSeconds: 15
             failureThreshold: 10
-          resources:
-            limits:
-              cpu: "{{ qbittorrent_k8s_cpu_limit }}"
-              memory: {{ qbittorrent_k8s_mem_limit }}
-            requests:
-              cpu: "{{ qbittorrent_k8s_cpu_request }}"
-              memory: {{ qbittorrent_k8s_mem_request }}
+{{ container_resources(cpu_limit=qbittorrent_k8s_cpu_limit, mem_limit=qbittorrent_k8s_mem_limit, cpu_request=qbittorrent_k8s_cpu_request, mem_request=qbittorrent_k8s_mem_request) }}
       volumes:
         - name: qbittorrent-config
           persistentVolumeClaim:

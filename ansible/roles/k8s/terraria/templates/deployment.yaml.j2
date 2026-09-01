@@ -1,3 +1,5 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -56,21 +58,17 @@ spec:
           tty: true
           ports:
             - containerPort: 7777
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              # Empty, and the pod-level uid above plus the chowned image is what earns that.
-              # This carried DAC_OVERRIDE until 2026-08-31, because PID 1 ran as root in a
-              # uid-1000-owned /config where root cannot create or unlink without it. Running as
-              # the owner removed the need rather than the symptom.
-              #
-              # WHAT TO WATCH IF THIS REGRESSES: the failure lands on the world-save backup step,
-              # not at startup, so a Running pod proves nothing — that is how the Docker-era
-              # version of this bug survived 39 restarts over 11 days. The signal is a complete
-              # `Saving world data … Validating world save … Backing up world file` cycle in the
-              # log, which fires every 1-2 min, plus new .wld.bak files owned by 1000.
-              drop:
-                - ALL
+          # Empty, and the pod-level uid above plus the chowned image is what earns that.
+          # This carried DAC_OVERRIDE until 2026-08-31, because PID 1 ran as root in a
+          # uid-1000-owned /config where root cannot create or unlink without it. Running as
+          # the owner removed the need rather than the symptom.
+          #
+          # WHAT TO WATCH IF THIS REGRESSES: the failure lands on the world-save backup step,
+          # not at startup, so a Running pod proves nothing — that is how the Docker-era
+          # version of this bug survived 39 restarts over 11 days. The signal is a complete
+          # `Saving world data … Validating world save … Backing up world file` cycle in the
+          # log, which fires every 1-2 min, plus new .wld.bak files owned by 1000.
+{{ hardened_security_context() }}
           volumeMounts:
             - name: terraria-config
               mountPath: /config
@@ -88,13 +86,7 @@ spec:
             exec:
               command: ["bash", "-c", "grep -q ':1E61 [0-9A-F]*:0000 0A ' /proc/net/tcp"]
             periodSeconds: 30
-          resources:
-            limits:
-              cpu: "{{ terraria_k8s_cpu_limit }}"
-              memory: {{ terraria_k8s_mem_limit }}
-            requests:
-              cpu: "{{ terraria_k8s_cpu_request }}"
-              memory: {{ terraria_k8s_mem_request }}
+{{ container_resources(cpu_limit=terraria_k8s_cpu_limit, mem_limit=terraria_k8s_mem_limit, cpu_request=terraria_k8s_cpu_request, mem_request=terraria_k8s_mem_request) }}
       volumes:
         - name: terraria-config
           persistentVolumeClaim:
