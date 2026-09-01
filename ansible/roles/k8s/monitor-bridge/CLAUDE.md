@@ -842,7 +842,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
 
 ## Module layout — and the one rule that governs it
 
-`files/` holds ten runtime modules. `check.py` is the entrypoint the Deployment runs and owns
+`files/` holds eleven runtime modules. `check.py` is the entrypoint the Deployment runs and owns
 the `CHECKS` registry and the run loop; `bridge_config.py` owns the env-derived config;
 `bridge_io.py` owns fetching and the Kuma push; the `checks_*` modules own one domain of
 `check_*` bodies each, mirroring the test file for that domain; the rest hold pure logic that
@@ -854,6 +854,7 @@ module are still in `check.py`. The design and the remaining slices are in
 |---|---|
 | `check.py` | the `check_*` bodies not yet moved, `CHECKS`, the gate sets, the run loop |
 | `checks_logs.py` | `check_loki_ingestion`, `check_promtail_dropped`, `check_loki_reachable`, `with_log_errors` (the Loki arm `check_k8s_workloads` folds in) |
+| `checks_storage.py` | the `b2_*` family and `check_b2_reachable` / `check_b2_storage`, the `r2_*` family and `check_r2_usage`, `check_longhorn_volumes`, `check_pvc_fullness`, and the probe caches `_b2_probe` / `_b2_storage` / `_r2_probe` |
 | `bridge_config.py` | every `_env(...)` constant — thresholds, URLs, credentials, windows — with the commentary that justifies each value. Read as `cfg.X`, never from-imported |
 | `bridge_io.py` | `_get_json`, `_post_json`, `prom_scalar`, `prom_vector`, the `loki_*` queries, `push`, and the selector builders (`origin_sel`, `cadvisor_sel`, `host_metric_sel`). Read as `bridge_io.X`; the tests stub the fetch layer here |
 | `bridge_streaks.py` | `_down_streaks` and `down_streak` — the consecutive-down counter four domains share. `conftest.py` clears it here |
