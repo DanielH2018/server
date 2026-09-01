@@ -58,7 +58,7 @@ CI_REPO = "DanielH2018/server"
 # can go red, and the deployer deliberately excludes it because a red renovate.json changes
 # nothing a deploy renders. Requiring it here would have parked every landing behind a
 # dependency-management fault.
-# ansible/tests/test_ci_contexts_match_workflows.py pins both directions.
+# ansible/tests/repo/test_ci_contexts_match_workflows.py pins both directions.
 REQUIRED_CONTEXTS = frozenset({"prek (lint + validate + tests + secrets)"})
 
 

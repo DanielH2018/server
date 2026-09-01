@@ -12,7 +12,7 @@
 #
 # This does not narrow the RBAC, which is the other half of the exposure and is deliberately
 # read-only: the SA holds no secrets, no pods/exec and no write verbs (rbac.yaml.j2, enforced by
-# ansible/tests/test_k8s_manifests.py).
+# ansible/tests/k8s/test_k8s_manifests.py).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

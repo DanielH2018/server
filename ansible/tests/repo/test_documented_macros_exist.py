@@ -17,11 +17,9 @@ describe code that no longer runs.
 """
 
 import re
-from pathlib import Path
 
-from _helpers import discover_docs
+from _helpers import REPO, discover_docs
 
-REPO = Path(__file__).resolve().parent.parent.parent
 MACROS = REPO / "ansible" / "templates"
 
 DOCS = discover_docs()

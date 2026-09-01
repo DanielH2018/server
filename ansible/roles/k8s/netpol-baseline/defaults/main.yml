@@ -22,7 +22,7 @@ netpol_baseline_scope: namespace
 #
 # Read as an exact set, in both directions, by the live gate in tasks/main.yml — a name missing
 # from the cluster is a widening about to happen, and a name in the cluster but not here is a pod
-# fenced by nothing at all. `ansible/tests/test_netpol_baseline_labels.py` pins the same set
+# fenced by nothing at all. `ansible/tests/k8s/test_netpol_baseline_labels.py` pins the same set
 # against the rendered templates; the gate exists because the templates and the cluster can
 # disagree, and did for ~16 hours during slice 4.5.
 netpol_baseline_exempt_workloads:

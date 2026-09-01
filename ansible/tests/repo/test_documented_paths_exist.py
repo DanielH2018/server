@@ -26,6 +26,10 @@ now, which is exactly the claim that rots silently on a rename.
 That is why there is no allowlist here. Every exclusion a bare-path version needed was a
 narrowing someone would later have to defend, and an allowlist is where a real finding goes
 to hide. The pattern earns the zero-entry list.
+
+One path family is checked bare as well: `ansible/tests/...py`. The reasoning is at
+`_CITED_TEST` below -- that directory exists nowhere but this tree, so a bare citation of it
+is still a claim about this tree now.
 """
 
 import re
@@ -33,9 +37,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from _helpers import discover_docs
+from _helpers import REPO, discover_docs
 
-REPO = Path(__file__).resolve().parent.parent.parent
 
 # A floor, not the real count -- catches the walk silently shrinking (a renamed root, a
 # tightened exclude) without hardcoding a number that drifts every time a doc is added.
@@ -120,6 +123,25 @@ def cited_paths(line: str) -> list[str]:
         for path, _line_no in _CITED.findall(line)
         if Path(path).suffix.lstrip(".") in _REPO_EXTENSIONS
     ]
+
+
+# A bare `ansible/tests/<file>.py` citation is the ONE exception to the line-number rule. Every
+# such path is a claim about this tree: nothing else has a directory by that name, and a
+# `pytest <path>` line or an `ENFORCED by <path>` note is an instruction someone runs. The
+# 2026-09-01 move of the guards into subdirectories rewrote 305 of these, and the line-number
+# rule would have watched none of them go stale. A trailing `::node_id` is allowed and dropped.
+_CITED_TEST = re.compile(
+    r"`(ansible/tests/[\w./-]+\.py)(?::\d+(?:-\d+)?|::[\w\[\]:.-]+)?`"
+)
+
+# Archived plans describe the tree at the moment they were executed, so a test they name may
+# since have been retired with the work it guarded. Live docs are read as instructions.
+_ARCHIVE = "docs/archive/"
+
+
+def cited_test_paths(line: str) -> list[str]:
+    """Every `ansible/tests/...py` cited in one line of prose, with or without a line number."""
+    return _CITED_TEST.findall(line)
 
 
 # --- the extractor's own paired tests -------------------------------------------------
@@ -236,6 +258,66 @@ def test_every_line_numbered_path_cited_in_the_docs_exists():
         "the docs cite a repo path that does not exist; an agent following one of these "
         "opens nothing and then guesses:\n  " + "\n  ".join(missing)
     )
+
+
+@pytest.mark.parametrize(
+    "line,expected",
+    [
+        (
+            "run `ansible/tests/repo/test_helpers.py` first",
+            ["ansible/tests/repo/test_helpers.py"],
+        ),
+        (
+            "pinned by `ansible/tests/k8s/test_x.py::test_the_thing`",
+            ["ansible/tests/k8s/test_x.py"],
+        ),
+        ("ENFORCED: `ansible/tests/_helpers.py:27`", ["ansible/tests/_helpers.py"]),
+    ],
+)
+def test_a_bare_test_citation_is_extracted(line, expected):
+    assert cited_test_paths(line) == expected
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "the guards live under `ansible/tests/`",
+        "see `scripts/deploy.sh` for the wrapper",
+        "a role's own `tests/test_macros.py`",
+        "ansible/tests/repo/test_helpers.py with no code span",
+    ],
+)
+def test_a_non_test_citation_is_not_extracted(line):
+    assert cited_test_paths(line) == []
+
+
+def test_every_test_path_cited_in_the_live_docs_exists():
+    missing = []
+    for doc in DOCS:
+        rel = doc.relative_to(REPO)
+        if not doc.is_file() or str(rel).startswith(_ARCHIVE):
+            continue
+        for line_no, line in enumerate(doc.read_text().splitlines(), 1):
+            for cited in cited_test_paths(line):
+                if cited in REPO_FILES:
+                    continue
+                missing.append(f"{rel}:{line_no} cites {cited}")
+
+    assert not missing, (
+        "the docs cite a test file that does not exist at that path; `pytest <path>` on any "
+        "of these collects nothing:\n  " + "\n  ".join(missing)
+    )
+
+
+def test_the_test_citation_walk_finds_citations_to_check():
+    """The move that motivated this check touched 118 live citations; a shrunken walk is a bug."""
+    found = sum(
+        len(cited_test_paths(line))
+        for doc in DOCS
+        if doc.is_file() and not str(doc.relative_to(REPO)).startswith(_ARCHIVE)
+        for line in doc.read_text().splitlines()
+    )
+    assert found >= 50, found
 
 
 def test_the_walk_ignores_other_worktrees_on_disk():

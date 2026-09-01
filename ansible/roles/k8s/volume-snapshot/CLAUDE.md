@@ -418,7 +418,7 @@ one, never by assuming the match is unique.
   nodes to `ansible_connection=local`. `daniel-stage` is the first genuinely remote target in
   this repo; it has no checkout, and the task failed there with "Unable to change directory
   before execution" for all thirteen callers. ENFORCED by
-  `ansible/tests/test_volume_snapshot_reads_the_controller_checkout.py`, whose rejecting half is
+  `ansible/tests/longhorn/test_volume_snapshot_reads_the_controller_checkout.py`, whose rejecting half is
   the pre-fix task verbatim.
 - Ansible role-defaults precedence for a same-named variable across an `include_role` chain: the
   innermost (most recently loaded) role's own default wins over an ancestor's, confirmed

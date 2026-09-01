@@ -35,7 +35,7 @@ rather than host paths, and Longhorn's own backup target ships those volumes off
 ## Consequences
 
 **A volume's size must be a multiple of its block size.** Longhorn refuses anything else.
-Enforced across the tree by `ansible/tests/test_pvc_sizes_match_block_size.py`, because it is
+Enforced across the tree by `ansible/tests/longhorn/test_pvc_sizes_match_block_size.py`, because it is
 a deploy-time rejection that is trivially avoidable at authoring time.
 
 **`actualSize` is not filesystem usage.** A successful cleanup inside a volume can leave

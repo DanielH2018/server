@@ -93,7 +93,7 @@ SuccessExitStatus=75
 # fetch, which is what makes the pin a pin. Here the loud failure would be the deploy pipeline
 # refusing to start — removing the machine that would ship the correction — so this one keeps uv's
 # self-healing download. The asymmetry is intentional and is pinned by
-# ansible/tests/test_host_python_invocations.py; do not "fix" it for consistency.
+# ansible/tests/setup/test_host_python_invocations.py; do not "fix" it for consistency.
 ExecStart=/usr/bin/flock -w 180 -E 75 /var/lock/server-git-tree.lock /usr/local/bin/uv run --no-project --python {{ host_python_version }} /opt/gitops-deploy/gitops_deploy.py
 # SOPS age key is already in the user's home; filter plugins auto-load next to
 # ansible/deploy.yml, so no ANSIBLE_CONFIG is needed.

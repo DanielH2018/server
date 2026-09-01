@@ -208,7 +208,7 @@ same shape as pihole's `:53` rule — and fences nothing else:
 
 ### Task 8: Extend the label guard
 
-**Files:** `ansible/tests/test_netpol_baseline_labels.py`
+**Files:** `ansible/tests/k8s/test_netpol_baseline_labels.py`
 
 - [ ] **Step 1:** Add `SLICE_45_WORKLOADS` — every (role, workload) pair this plan labels — and
       `SLICE_45_ROLES`, and add both to the two existing assertions. The slice-4 review caught
@@ -216,7 +216,7 @@ same shape as pihole's `:53` rule — and fences nothing else:
       workload name (`karakeep-chrome` under `karakeep`, `scrutiny-web` under `scrutiny`,
       `promtail` under `loki-homelab`).
 - [ ] **Step 2:** Prove the guard: delete one label, run
-      `uv run pytest ansible/tests/test_netpol_baseline_labels.py`, confirm it FAILS naming that
+      `uv run pytest ansible/tests/k8s/test_netpol_baseline_labels.py`, confirm it FAILS naming that
       workload, restore, confirm it PASSES.
 - [ ] **Step 3:** Commit.
 

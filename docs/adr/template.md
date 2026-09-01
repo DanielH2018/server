@@ -35,7 +35,7 @@ cost in practice, and a specific cost is worth more here than a general caution.
 
 Where this decision is enforced in the tree. Each entry is a `file:line` anchor whose line
 carries a `# DECIDED:` marker referencing this record. The `governs:` frontmatter list must
-match, and `ansible/tests/test_adr_links.py` checks both directions.
+match, and `ansible/tests/repo/test_adr_links.py` checks both directions.
 
 **The marker keeps `# DECIDED:` literal and puts the reference after it**, like this:
 

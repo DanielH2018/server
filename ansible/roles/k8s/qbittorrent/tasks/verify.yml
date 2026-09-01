@@ -23,7 +23,7 @@
 #
 # `rollout status` and not `wait --for=condition=Available`: Available flips on the OLD
 # ReplicaSet and returns instantly, so it would reintroduce exactly this bug. See
-# ansible/tests/test_inline_rollout_gates.py.
+# ansible/tests/deploy/test_inline_rollout_gates.py.
 #
 # This is one inline wait for one role, not a reversal of the batch drain. It is warranted here
 # because this file's assertions are pod-identity-sensitive; the drain still owns the batch. The

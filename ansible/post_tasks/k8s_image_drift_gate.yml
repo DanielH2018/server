@@ -26,7 +26,7 @@
 # IMAGE NAME IS NOT WORKLOAD NAME. n8n-images builds `n8n-runners`; the n8n role deploys it. So
 # candidates are found by matching the imageID against the registry pull host and image name, never
 # by assuming a workload called after the image. That is the same trap
-# ansible/tests/test_inline_rollout_gates.py records for rollout gates.
+# ansible/tests/deploy/test_inline_rollout_gates.py records for rollout gates.
 #
 # WHAT THIS GATE DELIBERATELY DOES NOT CATCH. All three are the lenient direction on purpose: a gate
 # that fails on a state nobody can act on gets bypassed, and then it protects nothing.
@@ -40,7 +40,7 @@
 #     which is this estate's most recurrent failure shape. Nothing at RUNTIME can distinguish "no
 #     images built" from "the accumulator broke", because the only witness to a build is the
 #     accumulator itself. That is why the producer is pinned STRUCTURALLY instead, by
-#     ansible/tests/test_built_image_drift_gate.py.
+#     ansible/tests/deploy/test_built_image_drift_gate.py.
 #
 # ASSUMPTION: single-architecture images, so the registry's manifest digest and the pod's imageID
 # digest are the same object. Verified 2026-08-27 — nut's pod reported the registry digest exactly.

@@ -44,7 +44,7 @@ WAIT_S=540
 # Emitted by the unit's ExecStopPost when `flock -E 75` fired. Must stay identical to the
 # phrase in roles/setup/gitops_deploy/templates/gitops-deploy.service.j2 — the exit code is
 # unreadable after a oneshot unit goes inactive, so this string is the whole signal.
-# ansible/tests/test_gitops_manual_trigger.py asserts the two match.
+# ansible/tests/deploy/test_gitops_manual_trigger.py asserts the two match.
 CONTENTION_MARKER="tick skipped (lock contention)"
 
 while [[ $# -gt 0 ]]; do

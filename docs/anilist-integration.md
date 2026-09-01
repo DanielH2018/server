@@ -52,7 +52,7 @@ declares `targetAbi` 10.11.11.0, which the loader rejects on an older server. Ve
 declares 10.11.6.0 and installs. The pin is therefore 4.1.0.0 until Jellyfin moves to 10.11.11
 or later.
 
-`ansible/tests/test_anisync_pin_matches_server.py` enforces this rather than leaving it to
+`ansible/tests/services/test_anisync_pin_matches_server.py` enforces this rather than leaving it to
 memory. The release asset's filename leads with the `targetAbi` it was built for and the image
 tag leads with the server version, so the comparison needs no network call. The test also
 refuses a version bump that misses the URL, which would otherwise install the old build into

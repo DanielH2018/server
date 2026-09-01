@@ -11,7 +11,7 @@ Wants=network-online.target
 # A SIBLING unit, not gitops-deploy-alert.service. That one's payload names gitops-deploy and
 # sends the operator to a journal that is healthy in exactly this case, so the page gets
 # dismissed as a false alarm. systemd does not validate this target at load, so a typo here is
-# silent — ansible/tests/test_staging_backfill_unit.py asserts the named unit exists and is
+# silent — ansible/tests/staging/test_staging_backfill_unit.py asserts the named unit exists and is
 # installed.
 OnFailure=staging-backfill-alert.service
 
@@ -41,7 +41,7 @@ TimeoutStartSec=25min
 # --no-python-downloads unlike the deployer beside it. That unit omits it because a loud failure
 # there would stop the machine that ships the correction; this one is a measurement, so a missing
 # pinned interpreter should fail rather than be silently fetched. Pinned by
-# ansible/tests/test_host_python_invocations.py.
+# ansible/tests/setup/test_host_python_invocations.py.
 ExecStart=/home/{{ sys_user }}/.local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
   scripts/deploy_tools/backfill_staging_gate.py \
   --since-ledger \

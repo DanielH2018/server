@@ -45,5 +45,5 @@ ExecStart=/usr/local/bin/uv run --no-project --no-python-downloads --python {{ h
 #
 # `/bin/sh` is dash here, so this stays inline rather than sourcing the bash-shaped
 # /usr/local/lib/kuma-push-lib.sh — see the exemption note in
-# ansible/tests/test_cron_scripts_publish_via_pr.py.
+# ansible/tests/setup/test_cron_scripts_publish_via_pr.py.
 ExecStartPost=/bin/sh -c '. /etc/renovate-notify/config.env && printf "url = \"%%s\"\n" "$KUMA_PUSH_URL" | curl -fsS -m 15 -K - --get --data-urlencode "msg=notifier ran" >/dev/null'

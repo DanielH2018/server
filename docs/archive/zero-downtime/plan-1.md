@@ -319,11 +319,11 @@ Read-only, so it runs under the homelab-readonly service account."
 
 ### Task 2: Deploy-strategy guard
 
-41 templates carry a hand-written rationale comment for `strategy: Recreate`. Comments are not enforced: the next service added gets whatever its author copied. This converts the convention into a test, following the allowlist idiom already used by `ansible/tests/test_container_security_context.py` — a new `Recreate` fails until someone adds it with a reason, which is the decision worth forcing.
+41 templates carry a hand-written rationale comment for `strategy: Recreate`. Comments are not enforced: the next service added gets whatever its author copied. This converts the convention into a test, following the allowlist idiom already used by `ansible/tests/k8s/test_container_security_context.py` — a new `Recreate` fails until someone adds it with a reason, which is the decision worth forcing.
 
 **Files:**
-- Create: `ansible/tests/test_deploy_strategy.py`
-- Read (do not modify): `ansible/tests/_k8s_render.py`, `ansible/tests/test_container_security_context.py`
+- Create: `ansible/tests/k8s/test_deploy_strategy.py`
+- Read (do not modify): `ansible/tests/_k8s_render.py`, `ansible/tests/k8s/test_container_security_context.py`
 
 **Interfaces:**
 - Consumes: `rendered_docs()` from `ansible/tests/_k8s_render.py`, yielding `(role, template_name, parsed_doc)` for every renderable manifest.
@@ -331,7 +331,7 @@ Read-only, so it runs under the homelab-readonly service account."
 
 - [ ] **Step 1: Write the failing test**
 
-Create `ansible/tests/test_deploy_strategy.py`:
+Create `ansible/tests/k8s/test_deploy_strategy.py`:
 
 ```python
 """Every Deployment's update strategy is a decision on the record, not a copied default.
@@ -501,7 +501,7 @@ def test_rolling_deployments_behind_a_service_have_a_readiness_probe():
 
 - [ ] **Step 2: Run the test to see the real fleet state**
 
-Run: `uv run pytest ansible/tests/test_deploy_strategy.py -v -n0`
+Run: `uv run pytest ansible/tests/k8s/test_deploy_strategy.py -v -n0`
 Expected: PASS for all four tests.
 
 If `test_every_recreate_deployment_is_allowlisted_with_a_reason` fails, the failure message lists roles missing from `_RECREATE` — the allowlist above was written from a triage of the tree and a role may have been added since. Add each with a real reason taken from the rationale comment already in its template. Do not add a reason you cannot source from the template or the app's behaviour.
@@ -517,7 +517,7 @@ Temporarily change `ansible/roles/k8s/littlelink/templates/deployment.yaml.j2` b
     type: Recreate
 ```
 
-Run: `uv run pytest ansible/tests/test_deploy_strategy.py::test_every_recreate_deployment_is_allowlisted_with_a_reason -v -n0`
+Run: `uv run pytest ansible/tests/k8s/test_deploy_strategy.py::test_every_recreate_deployment_is_allowlisted_with_a_reason -v -n0`
 Expected: FAIL, naming `littlelink/deployment.yaml.j2`.
 
 Revert the edit:
@@ -526,7 +526,7 @@ Revert the edit:
 git checkout ansible/roles/k8s/littlelink/templates/deployment.yaml.j2
 ```
 
-Run: `uv run pytest ansible/tests/test_deploy_strategy.py -v -n0`
+Run: `uv run pytest ansible/tests/k8s/test_deploy_strategy.py -v -n0`
 Expected: PASS again.
 
 - [ ] **Step 4: Run the full suite to confirm nothing else broke**
@@ -537,7 +537,7 @@ Expected: all pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add ansible/tests/test_deploy_strategy.py
+git add ansible/tests/k8s/test_deploy_strategy.py
 git commit -m "Enforce the deploy-strategy policy instead of documenting it
 
 41 templates carry a hand-written rationale for strategy: Recreate. A comment
@@ -562,7 +562,7 @@ it mid-rollout and requests drop."
 - Delete: `ansible/roles/k8s/prowlarr/templates/pvc-flaresolverr.yaml.j2`
 - Modify: `ansible/roles/k8s/prowlarr/tasks/main.yml`
 - Modify: `ansible/roles/k8s/prowlarr/defaults/main.yml`
-- Modify: `ansible/tests/test_deploy_strategy.py`
+- Modify: `ansible/tests/k8s/test_deploy_strategy.py`
 
 **Interfaces:**
 - Consumes: `_RECREATE` from Task 2; `scripts/dev/measure_rollout_gap.py` from Task 1.
@@ -570,7 +570,7 @@ it mid-rollout and requests drop."
 
 - [ ] **Step 1: Remove the allowlist entry so the guard fails first**
 
-In `ansible/tests/test_deploy_strategy.py`, delete this entry. `ruff format` wraps it across
+In `ansible/tests/k8s/test_deploy_strategy.py`, delete this entry. `ruff format` wraps it across
 four lines because the key plus reason exceeds the 88-column default, so delete all four:
 
 ```python
@@ -584,7 +584,7 @@ Leave the rest of `_RECREATE` untouched, and do not reflow the other entries.
 
 - [ ] **Step 2: Run the guard to verify it fails**
 
-Run: `uv run pytest ansible/tests/test_deploy_strategy.py -v -n0`
+Run: `uv run pytest ansible/tests/k8s/test_deploy_strategy.py -v -n0`
 Expected: FAIL on `test_every_recreate_deployment_is_allowlisted_with_a_reason`, naming `prowlarr/deployment-flaresolverr.yaml.j2`.
 
 - [ ] **Step 3: Switch the Deployment to RollingUpdate**
@@ -635,7 +635,7 @@ Expected: exit 0, no render or YAML errors.
 
 - [ ] **Step 6: Run the guard to verify it passes**
 
-Run: `uv run pytest ansible/tests/test_deploy_strategy.py -v -n0`
+Run: `uv run pytest ansible/tests/k8s/test_deploy_strategy.py -v -n0`
 Expected: PASS. `test_rolling_deployments_behind_a_service_have_a_readiness_probe` covers the new rolling Deployment — flaresolverr is behind `service-flaresolverr.yaml` and already has a `readinessProbe`, so this should pass without further change. If it fails, add a readinessProbe rather than exempting it.
 
 - [ ] **Step 7: Stop staging the PVC**
@@ -695,7 +695,7 @@ Expected: all hooks pass.
 - [ ] **Step 11: Commit**
 
 ```bash
-git add ansible/roles/k8s/prowlarr ansible/tests/test_deploy_strategy.py
+git add ansible/roles/k8s/prowlarr ansible/tests/k8s/test_deploy_strategy.py
 git commit -m "Roll flaresolverr instead of recreating it
 
 flaresolverr is a headless-browser captcha solver with no authoritative

@@ -328,7 +328,7 @@ def test_every_reference_generator_is_reached_from_the_docs_cron():
 
 
 def test_a_test_that_names_the_path_counts_as_indirect_coverage(tmp_path):
-    """gitops_tick.sh's five tests live in ansible/tests/test_gitops_manual_trigger.py."""
+    """gitops_tick.sh's five tests live in ansible/tests/deploy/test_gitops_manual_trigger.py."""
     repo, scripts = _repo(tmp_path)
     _write(scripts / "run.sh", "#!/bin/sh\n# Summary.\n")
     _write(

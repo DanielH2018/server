@@ -76,7 +76,7 @@ by roughly an order of magnitude.
 kubelet marks them Ready the instant the container starts. Their ~0s here is an absent
 measurement, not a fast one. For a `Recreate` workload that mostly costs honesty in dashboards;
 it becomes a correctness problem the moment any of them is converted to rolling, which is why
-`ansible/tests/test_deploy_strategy.py` already fails a rolling Deployment behind a Service that
+`ansible/tests/k8s/test_deploy_strategy.py` already fails a rolling Deployment behind a Service that
 lacks one.
 
 ## Recommendation

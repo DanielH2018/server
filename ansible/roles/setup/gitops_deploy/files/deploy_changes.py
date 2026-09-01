@@ -204,7 +204,7 @@ def _is_test_only_path(path: str) -> bool:
     monitor-bridge has one, and its ship list already excludes it by name.
 
     The invariant this rests on: nothing under `ansible/` copies a test file to a host.
-    `ansible/tests/test_no_role_ships_a_test_file.py` is the tree-wide guard, so a role that
+    `ansible/tests/repo/test_no_role_ships_a_test_file.py` is the tree-wide guard, so a role that
     starts shipping one fails there rather than silently widening this predicate into a hole.
     """
     if path.startswith("ansible/tests/"):

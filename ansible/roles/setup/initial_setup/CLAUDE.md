@@ -45,7 +45,7 @@ invariant when adding tasks, or tag-scoped runs die on undefined variables.
     form and is rewritten to `o=X,a=Y`, so it only matches a repo publishing a `Suite:` field.
     The gh repo has none (`origin='gh', archive='', codename='stable'`), so `gh:stable` matched
     nothing while `apt-config dump` listed it. ENFORCED by
-    `ansible/tests/test_unattended_origins_pattern.py`.
+    `ansible/tests/setup/test_unattended_origins_pattern.py`.
   - **Use the `::` append syntax.** A `{ ... }` block reads as a replacement, and a replacement
     drops the `-security` and ESM pockets.
 
@@ -77,7 +77,7 @@ invariant when adding tasks, or tag-scoped runs die on undefined variables.
   **The LAN allow must sort above the limit rule, and the task declares `insert: 0` /
   `insert_relative_to: first-ipv4` to make sure of it.** ufw takes the first matching rule, so
   an allow appended below the limiter is inert — the same present-but-does-nothing shape #508
-  cost this role. `ansible/tests/test_ssh_rate_limit_lan_exempt.py` pins both the exemption and
+  cost this role. `ansible/tests/setup/test_ssh_rate_limit_lan_exempt.py` pins both the exemption and
   its ordering.
 
   The exemption exists because `limit` REJECTs a source IP at 6 connections in 30 seconds on a
@@ -147,15 +147,15 @@ while daniel-server renders the entire UPS shutdown chain ([[nut_host]]). Confir
   read the checkout" on every run. It did: the tile was DOWN from the arm's first cron run
   (2026-08-30 07:50) until this fix. The 2026-08-29 hand-run that verified the arm ran as
   `ubuntu` and passed, which is the whole shape of the miss — **verify a cron arm as the user
-  cron runs it, not as yourself.** `ansible/tests/test_setup_drift_check.py` now forces the
+  cron runs it, not as yourself.** `ansible/tests/deploy/test_setup_drift_check.py` now forces the
   refusal with `GIT_TEST_ASSUME_DIFFERENT_OWNER=1`, and carries a control asserting a bare read
   still fails under it, so the accept half cannot pass because the simulation went inert.
 - Pushes the "Setup Plane Drift (agent hosts)" Kuma tile. Its token is in
   `CROSS_HOST_PUSH_TOKENS`: the cron is on daniel-server and the tile deploys from daniel-box, so
   no single `rotate --deploy` can move both halves.
 
-Guarded by `ansible/tests/test_setup_drift_check.py`, which EXECUTES the library against a
-fixture rather than grepping it, and by `ansible/tests/test_setup_render_manifest.py`, whose
+Guarded by `ansible/tests/deploy/test_setup_drift_check.py`, which EXECUTES the library against a
+fixture rather than grepping it, and by `ansible/tests/deploy/test_setup_render_manifest.py`, whose
 guards now point at the library plus one that both consumers still source it.
 
 ## Notable
@@ -166,12 +166,12 @@ guards now point at the library plus one that both consumers still source it.
   new `notify:` here needs a matching handler added to that playbook.
   **`Restart rsyslog` is defined ABOVE `Restart systemd-journald` on purpose** — handlers fire
   in definition order, not notify order, and journald begins forwarding at info the moment it
-  restarts. ENFORCED by `ansible/tests/test_journald_syslog_forwarding.py`.
+  restarts. ENFORCED by `ansible/tests/setup/test_journald_syslog_forwarding.py`.
 - **`journald` tag: the two files are one change.** `50-homelab.conf` caps the journal
   (`SystemMaxUse=1G`, `MaxLevelStore=notice`) and sets `MaxLevelSyslog=info`;
   `/etc/rsyslog.d/49-homelab-info-filter.conf` then discards info for every facility that
   reaches rsyslog *through* journald. Deploying either alone is a defect, so
-  `ansible/tests/test_journald_syslog_forwarding.py` pins them together.
+  `ansible/tests/setup/test_journald_syslog_forwarding.py` pins them together.
 
   **Why they differ.** journald owns `/dev/log`, so rsyslog only ever sees what journald
   forwards, and `Store` and `Syslog` are applied to their sinks independently. `MaxLevelSyslog`

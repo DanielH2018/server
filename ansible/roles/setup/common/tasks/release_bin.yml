@@ -39,7 +39,7 @@
 # problem, not the render: keeping five releases of those would leave five copies of a rotated
 # token on disk, turning a rollback convenience into a credential archive. Scripts that SOURCE a
 # token from a separate env file (the kuma-push pattern) are fine and are what these groups hold.
-# ENFORCED by ansible/tests/test_release_bin_groups_have_no_secrets.py.
+# ENFORCED by ansible/tests/setup/test_release_bin_groups_have_no_secrets.py.
 #
 # Callers pass:
 #   release_bin_group      a filename-safe group id, unique across roles (e.g. k3s-backup-health)
@@ -196,7 +196,7 @@
     # Through uv on a pinned interpreter, never /usr/bin/python3: the hosts' system Python is
     # Ubuntu 24.04's 3.12 and this repo is on 3.14, so reaching for the system one puts a script
     # back under the old floor with nothing left to notice. ENFORCED by
-    # ansible/tests/test_host_python_invocations.py, which caught exactly that here.
+    # ansible/tests/setup/test_host_python_invocations.py, which caught exactly that here.
     # `--no-project` because the prune script is stdlib-only and must not drag in the repo venv.
     argv:
       - /usr/local/bin/uv

@@ -139,7 +139,7 @@ slice 4.5 rather than letting the slice plan keep reading as complete coverage.
 | `roles/k8s/netpol-baseline/templates/networkpolicy-jellyfin.yaml.j2` | jellyfin: traefik + LAN VIP |
 | `roles/k8s/netpol-baseline/templates/netpol-probe-slice4-job.yaml.j2` | the slice-4 probe |
 | `roles/k8s/{traefik,authelia,crowdsec,pihole,mosquitto,nut,jellyfin,headlamp,n8n,registry}/templates/*.yaml.j2` | add the pod-template label |
-| `ansible/tests/test_netpol_baseline_labels.py` | extend the guard to slice 4 |
+| `ansible/tests/k8s/test_netpol_baseline_labels.py` | extend the guard to slice 4 |
 | `docs/networkpolicy-default-deny.md` | slice 4 answers + slice 4.5 definition |
 
 **Policies live in `netpol-baseline`, not in each workload's role.** Slice 3 established this
@@ -151,7 +151,7 @@ the enforcement flag, so the flag would stop being a true rollback.
 ## Task 1: Extend the label guard, and label the three already-fenced workloads
 
 **Files:**
-- Modify: `ansible/tests/test_netpol_baseline_labels.py`
+- Modify: `ansible/tests/k8s/test_netpol_baseline_labels.py`
 - Modify: `ansible/roles/k8s/headlamp/templates/deployment.yaml.j2`
 - Modify: `ansible/roles/k8s/n8n/templates/deployment.yaml.j2`
 - Modify: `ansible/roles/k8s/registry/templates/deployment.yaml.j2`
@@ -197,13 +197,13 @@ with `claude-otel`, which is why the guard is workload-granular.
 
 Add `SLICE_4_ROLES` to the union in `test_exactly_the_fenced_roles_carry_the_baseline_label`.
 
-Run: `uv run pytest ansible/tests/test_netpol_baseline_labels.py -q`
+Run: `uv run pytest ansible/tests/k8s/test_netpol_baseline_labels.py -q`
 Expected: FAIL, listing the slice-4 roles as `missing` — they are not labelled yet.
 
 - [ ] **Step 4: Commit the failing guard**
 
 ```bash
-git add ansible/tests/test_netpol_baseline_labels.py
+git add ansible/tests/k8s/test_netpol_baseline_labels.py
 git commit -m "netpol slice 4: extend the label guard before labelling anything"
 ```
 
@@ -646,7 +646,7 @@ Deployment's selector is immutable and changing it makes the apply fail.
 
 - [ ] **Step 2: Run the guard — it must now be green**
 
-Run: `uv run pytest ansible/tests/test_netpol_baseline_labels.py -q`
+Run: `uv run pytest ansible/tests/k8s/test_netpol_baseline_labels.py -q`
 Expected: PASS. Task 1 committed this red; this is where it goes green.
 
 - [ ] **Step 3: Run the whole suite and commit**

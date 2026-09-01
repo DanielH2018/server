@@ -702,7 +702,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   The two are interchangeable as tolerance and are not interchangeable as alerts: a wider
   window costs only detection latency, while a retry parks the push in PENDING and hands the
   Discord message back to the watchdog. `test_push_monitors_never_retry` in
-  `ansible/tests/test_kuma_static_monitors.py` is the guard.
+  `ansible/tests/services/test_kuma_static_monitors.py` is the guard.
 - **Startup/redeploy grace for the reach-out checks (`STARTUP_GRACE`, 2026-07-12):** the six
   checks that poll a live app dependency with **no reachability gate and no per-check hysteresis**
   — **n8n Prod Workflows** (n8n), **Arr Queue Warnings**, **Bazarr Health** (bazarr)
@@ -884,9 +884,9 @@ and the patch would change nothing that runs. The same holds for every runtime m
 it. Getting this wrong is silent — the setattr succeeds, creating an attribute nothing reads,
 and the test passes against unpatched production code — which is why two tests enforce it:
 
-- `ansible/tests/test_monitor_bridge_modules.py` re-derives every `(module, name)` pair the
+- `ansible/tests/services/test_monitor_bridge_modules.py` re-derives every `(module, name)` pair the
   suite patches, by AST, and fails when the module does not bind that name at its top level.
-- `ansible/tests/test_bridge_patch_boundary.py` fails when any runtime module from-imports a
+- `ansible/tests/services/test_bridge_patch_boundary.py` fails when any runtime module from-imports a
   name some test patches on its source module.
 
 Until 2026-09-01 the rule was the inverse — a function could leave `check.py` only if nothing
@@ -909,7 +909,7 @@ exception only because four domains mutate it, so it has a module of its own.
 ConfigMap ships exactly that list, and a module missing from it kills the pod at import with
 `ModuleNotFoundError` on its next roll, on the one workload that cannot page about its own
 failure. pytest cannot catch that: it imports from `files/` on disk and never reads the list.
-`ansible/tests/test_monitor_bridge_modules.py` is what does.
+`ansible/tests/services/test_monitor_bridge_modules.py` is what does.
 
 ## Editing & testing
 - Manifests: `templates/deployment.yaml.j2`, `templates/env-secret.yaml.j2` · Logic:
@@ -922,7 +922,7 @@ failure. pytest cannot catch that: it imports from `files/` on disk and never re
   `test_check_{gates,gates_exporters,streaks,host,service,notify,parsing}.py`. Put a new test
   with the domain it exercises rather than in whichever file is open.
 - **A shared test helper goes in `conftest.py`, never in a new module beside `check.py`.**
-  `_runtime_modules()` in `ansible/tests/test_monitor_bridge_modules.py` treats every non-test
+  `_runtime_modules()` in `ansible/tests/services/test_monitor_bridge_modules.py` treats every non-test
   `.py` here as production code, so a `_fixtures.py` either fails that guard or — if someone
   adds it to `monitor_bridge_modules` to make the failure go away — ships test code into the
   pod's ConfigMap. `conftest.py` is the one file the guard exempts, which is where the `seq`

@@ -166,7 +166,7 @@ the ~35 monitors whose label home is the retiring uptime-kuma compose; the rest 
 fleet's declarations stay as inert labels on their own compose files, protected by `keep`,
 and transcribe into the Secret as each Docker role retires. `on_delete` flips back to
 `delete` when the last one lands — reconciliation restored, no big-bang transcription
-before the move. Guards: `ansible/tests/test_kuma_static_monitors.py` (every monitor
+before the move. Guards: `ansible/tests/services/test_kuma_static_monitors.py` (every monitor
 linked to discord, push retries 0, both notifications defined, ids unique by construction).
 
 ## Steps 4 + 5 — EXECUTED 2026-08-10

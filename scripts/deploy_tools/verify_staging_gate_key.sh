@@ -38,7 +38,7 @@ HOST=${STAGING_GATE_HOST:-daniel-server}
 # presence proves OUR key reached OUR forced command.
 MARKER="staging-gate: refused"
 
-# Kept as a function over (rc, stderr) so ansible/tests/test_verify_staging_gate_key.py can drive
+# Kept as a function over (rc, stderr) so ansible/tests/staging/test_verify_staging_gate_key.py can drive
 # the same verdict logic without a network, and so each failure mode has a distinct name.
 classify_negative() {
   local rc="$1" err="$2"

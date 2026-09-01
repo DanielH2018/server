@@ -57,7 +57,7 @@ refuse() {
 # anywhere in this script and no field is ever interpolated into a shell string.
 #
 # Takes its argument explicitly rather than reading the environment so that
-# ansible/tests/test_staging_gate_dispatch.py can source this file and drive the same validator
+# ansible/tests/staging/test_staging_gate_dispatch.py can source this file and drive the same validator
 # the live path drives. That is what the BASH_SOURCE guard at the bottom is for.
 validate_request() {
   local request="${1-}"
@@ -71,7 +71,7 @@ validate_request() {
   # an object id in the login directory, `*` expands to exactly one field and the split yields
   # three, whose second is 40 hex characters. Driven against this validator with `set -f`
   # removed, that request is ACCEPTED — rc=0, with the FILENAME handed onward as the SHA under
-  # test. `ansible/tests/test_staging_gate_dispatch.py::
+  # test. `ansible/tests/staging/test_staging_gate_dispatch.py::
   # test_a_glob_cannot_smuggle_a_filename_in_as_the_sha` is that exact case, and it goes red
   # without the two lines below.
   set -f

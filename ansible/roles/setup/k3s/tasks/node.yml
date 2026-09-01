@@ -231,7 +231,7 @@
 # role writes and that warning cannot recur. The override stays because it is what stops the
 # lease contributing resolvers again the moment anything re-enables resolved — an apt upgrade,
 # a re-image, or a future decision to reverse the task above. Removing it would make that
-# reversal silently wrong. ENFORCED by ansible/tests/test_netplan_dns_overrides.py.
+# reversal silently wrong. ENFORCED by ansible/tests/setup/test_netplan_dns_overrides.py.
 - name: Drop the DHCP-supplied resolvers from the node's DNS set
   tags: [node-dns]
   ansible.builtin.template:

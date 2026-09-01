@@ -10,7 +10,7 @@ reasoning stays where it is, as a `# DECIDED:` comment at the code line it gover
 what a reviewer trips over before they spend an hour re-deriving it.
 
 An ADR is the long-form why; the marker is the pointer. Where both exist they reference each
-other, and `ansible/tests/test_adr_links.py` fails if either direction breaks.
+other, and `ansible/tests/repo/test_adr_links.py` fails if either direction breaks.
 
 The marker keeps `# DECIDED:` literal and carries the reference after it —
 `# DECIDED: … (ADR-0011)`, never `# DECIDED (ADR-0011):`. The reviewer brief greps the

@@ -172,7 +172,7 @@ def find_undigested_images(docs, exempt=frozenset()) -> list[tuple[str, str]]:
     Renovate NO update axis, so five of the Pi's six images sat on a bare ``latest`` that no
     manager could ever raise a PR against, and nothing in the repo recorded which bytes were
     running. ``tag@sha256:`` fixes both — it is reproducible on a cold pull, and it is the shape
-    the k8s plane already uses (see ansible/tests/test_base_images_digest_pinned.py, whose globs
+    the k8s plane already uses (see ansible/tests/k8s/test_base_images_digest_pinned.py, whose globs
     reach roles/k8s and roles/setup but never roles/containers; this is that gate's Pi half).
     """
     missing: list[tuple[str, str]] = []

@@ -73,7 +73,7 @@ qbittorrent_k8s_lan_networks: "192.168.0.0/24,{{ lan_subnet }},172.16.0.0/12,10.
 # NOT /run/secrets, which is the Compose convention and does not survive the port:
 # /var/run/secrets is where Kubernetes projects the ServiceAccount token, and a read-only
 # Secret volume over it leaves runc unable to create the mountpoint. There is a guard test for
-# exactly this (ansible/tests/test_k8s_manifests.py).
+# exactly this (ansible/tests/k8s/test_k8s_manifests.py).
 qbittorrent_k8s_secret_mount: /mullvad
 
 qbittorrent_k8s_wg_cpu_limit: "1"

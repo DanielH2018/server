@@ -12,7 +12,7 @@
 #      metrics API behind the CPU/memory columns, and this homelab's CRD groups.
 #
 # No `secrets`, no `pods/exec`/`attach`/`portforward`: the UI is a window, and writes go
-# through Ansible (repo CLAUDE.md). ansible/tests/test_k8s_manifests.py enforces both.
+# through Ansible (repo CLAUDE.md). ansible/tests/k8s/test_k8s_manifests.py enforces both.
 apiVersion: v1
 kind: ServiceAccount
 metadata:

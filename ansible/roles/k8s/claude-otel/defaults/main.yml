@@ -119,7 +119,7 @@ claude_otel_dashboard_folders:
 #
 # The uid MUST equal the `loki-homelab` datasource uid in templates/grafana.yaml.j2. A wrong one
 # does not error: Grafana renders the annotation query against nothing and the board shows no
-# deploy markers, silently. ansible/tests/test_deploy_annotations.py holds the two in lockstep.
+# deploy markers, silently. ansible/tests/deploy/test_deploy_annotations.py holds the two in lockstep.
 claude_otel_loki_homelab_uid: bf4q19tuivta8e
 # `|= "event=deploy"` before `| logfmt`, in that order: the line filter runs first and is far
 # cheaper than parsing every syslog line in the window.
@@ -171,7 +171,7 @@ claude_otel_health_cron_minute: "*/10"
 # A variable rather than a third inline copy of the list: tasks/main.yml already spells it out
 # twice (the restart loop and the wait loop), and the stabilisation tasks that consume it must
 # iterate the SAME set or the gate silently watches fewer workloads than rolled.
-# ansible/tests/test_claude_otel_stabilise_coverage.py holds the three in step.
+# ansible/tests/services/test_claude_otel_stabilise_coverage.py holds the three in step.
 claude_otel_stabilise_workloads:
   - { kind: deploy, name: loki }
   - { kind: deploy, name: prometheus }

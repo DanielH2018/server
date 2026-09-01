@@ -12,7 +12,7 @@ suites patch directly may still live here, PROVIDED every caller reaches it *qua
 `bridge_common.log(...)`, never `from bridge_common import log` — since `monkeypatch.setattr`
 rebinds the attribute on this module object, and only a qualified lookup re-reads that attribute
 at call time. A from-import binds its own reference at import time and never sees the patch. This
-is enforced by `ansible/tests/test_bridge_patch_boundary.py`, which AST-walks every test suite for
+is enforced by `ansible/tests/services/test_bridge_patch_boundary.py`, which AST-walks every test suite for
 `setattr(bridge_common, "X", ...)` and asserts no non-test module reaches `X` via a from-import.
 Likewise a helper that reads a module-level constant either suite patches (e.g. `HEARTBEAT_FILE`)
 may live here if the constant is taken as an **argument** rather than read as a global — the
@@ -31,9 +31,9 @@ drifted signatures (`check.push(token, ok, msg)` vs `autofix.push(ok, msg)`) and
 patch sites apiece. See bridge_parsing.py's header for the full argument on why a patched name
 can't just move without qualification or argument-passing.
 
-ENFORCED by ansible/tests/test_monitor_bridge_modules.py, which checks that every name a test
+ENFORCED by ansible/tests/services/test_monitor_bridge_modules.py, which checks that every name a test
 patches is bound in the module it is patched on, and by
-ansible/tests/test_bridge_patch_boundary.py for the qualified-access rule across both bridges.
+ansible/tests/services/test_bridge_patch_boundary.py for the qualified-access rule across both bridges.
 
 Ship path: this file is monitor-bridge's canonical copy. autofix-bridge stages a copy of it onto
 the node from here (`{{ playbook_dir }}/roles/k8s/monitor-bridge/files/bridge_common.py`), the

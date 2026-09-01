@@ -20,8 +20,8 @@ import time
 # `monkeypatch.setattr(bridge_config, "X", ...)` would change nothing this file reads and
 # the test would pass against the real value. The check_* entries below ARE from-imported,
 # because run_once reads them from this module's globals and the gates tests patch them
-# HERE, on `check`. Enforced by ansible/tests/test_bridge_patch_boundary.py; the census of
-# what is patched where is ansible/tests/test_monitor_bridge_modules.py.
+# HERE, on `check`. Enforced by ansible/tests/services/test_bridge_patch_boundary.py; the census of
+# what is patched where is ansible/tests/services/test_monitor_bridge_modules.py.
 import bridge_common
 from bridge_common import _env
 

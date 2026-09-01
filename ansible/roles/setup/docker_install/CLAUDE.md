@@ -69,7 +69,7 @@ services. Install without uninstall is a one-way door; this is the way back out.
   at the cache refresh, one task before Docker would have installed (daniel-box, 2026-08-01).
   Existing hosts never showed it: their keyring predates the umask change and a `creates:`
   guard stopped it being rewritten, so the bug was invisible until the next fresh host.
-  `ansible/tests/test_apt_keyring_permissions.py` is the regression guard.
+  `ansible/tests/setup/test_apt_keyring_permissions.py` is the regression guard.
 - **deb822 migration** (commit `fee21f9`) is shared with [[optimize_pi]]'s Log2Ram repo —
   both need `python3-debian` and both clean up the legacy `.list`. optimize_pi already used
   the correct idiom (`get_url` with an explicit `mode:`); this role now matches it.

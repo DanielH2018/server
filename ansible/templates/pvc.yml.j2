@@ -18,7 +18,7 @@
   role the textual guard actually checks. Converting either would leave it checking nothing.
 
   code-server's pvc-workspace.yaml.j2 has the identical body but is deliberately NOT converted:
-  ansible/tests/_autodeploy.py's `_rendered_pvc_claims` (consumed by
+  ansible/tests/deploy/_autodeploy.py's `_rendered_pvc_claims` (consumed by
   test_k8s_autodeploy_guard.py::test_snapshot_pvc_declarations_match_rendered_claims) greps a
   role's own `templates/*.j2` text for a literal `kind: PersistentVolumeClaim` block — it does
   not render Jinja, so a claim built via this macro is invisible to it. code-server is the only

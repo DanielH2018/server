@@ -95,7 +95,7 @@ HOST_VARS = HOST_VARS_DIR / "daniel-box.yml"
 # create job --from=cronjob/<name>`, so the pod spec it runs is the caller's rendered manifest.
 # volume-snapshot applies one Longhorn Snapshot CR per claim, built inline and piped to `kubectl
 # apply -f -` — per-deploy state rather than part of a service's manifest set, and
-# `ansible/tests/test_volume_snapshot.py` is what checks its shape instead.
+# `ansible/tests/longhorn/test_volume_snapshot.py` is what checks its shape instead.
 #
 # Split into the two classes the comment above already distinguishes, because they rot in
 # opposite directions and a single set cannot be checked either way. NO_MANIFEST_ROLES makes a

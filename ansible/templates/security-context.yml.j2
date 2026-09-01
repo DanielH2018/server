@@ -5,7 +5,7 @@
   capabilities they add back.
 
   A container-level securityContext is a DIFFERENT object from a pod-level one, and only the
-  container-level one governs capabilities — see ansible/tests/test_container_security_context.py
+  container-level one governs capabilities — see ansible/tests/k8s/test_container_security_context.py
   for why that distinction has already cost a fleet-wide audit once. This macro emits the
   container-level block only; a pod-level `securityContext` (fsGroup, supplementalGroups,
   sysctls) stays written out at its call site.
@@ -16,7 +16,7 @@
   converted rather than given an indent argument, because a macro that can emit at two depths
   is one that can emit at the wrong one.
 
-  NOT FOR `runAsUser: 0`. ansible/tests/test_root_needs_dac_capability.py is a tree-wide guard
+  NOT FOR `runAsUser: 0`. ansible/tests/k8s/test_root_needs_dac_capability.py is a tree-wide guard
   that scans raw template TEXT for a `runAsUser: 0` block that drops ALL and adds no DAC
   capability — root that cannot read another uid's files is weaker than the pod's own uid, not
   stronger. It does not render Jinja, so a root securityContext built through this macro is

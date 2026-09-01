@@ -134,7 +134,7 @@ its own flag, so it gets its own scope variable rather than sharing `homelab`'s.
 - `ansible/roles/k8s/headlamp/templates/deployment.yaml.j2`
 - `ansible/roles/k8s/n8n/templates/deployment.yaml.j2`
 - `ansible/roles/k8s/registry/templates/deployment.yaml.j2`
-- `ansible/tests/test_netpol_baseline_labels.py`
+- `ansible/tests/k8s/test_netpol_baseline_labels.py`
 
 Add `netpol-baseline-exempt: "true"` beside each pod template's existing `app:` label, with a
 one-line comment naming the bespoke policy it protects. Extend the guard with two assertions: each

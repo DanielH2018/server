@@ -12,7 +12,7 @@
 # For a service that deletes real media, "I proved the old pod was dry" is precisely the wrong
 # claim: the assertion has to hold for the pod the deploy just created. Only `rollout status`
 # gates on the new ReplicaSet. Found on qbittorrent 2026-08-27; see
-# ansible/tests/test_inline_rollout_gates.py.
+# ansible/tests/deploy/test_inline_rollout_gates.py.
 - name: Wait for the janitorr rollout to finish before verifying it
   tags: [deploy]
   ansible.builtin.command:

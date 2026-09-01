@@ -14,7 +14,7 @@
 > The `UV_PYTHON_DOWNLOADS` open item was **decided and applied**: enforcement on every group
 > except gitops-deploy, which keeps uv's self-healing download because a hard failure there stops
 > the machine that ships the fix. Both halves are pinned by
-> `ansible/tests/test_host_python_invocations.py`.
+> `ansible/tests/setup/test_host_python_invocations.py`.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -93,14 +93,14 @@ Enumerated by `ansible/tests/test_host_scripts_py312.py`, grouped by invoker. **
 **Files:**
 - Modify: `ansible/inventory/group_vars/all.yml` — the `initial_setup` role has no `defaults/` or `vars/` directory (only `tasks/` and `templates/`), and this repo puts global vars in `group_vars/all.yml`
 - Modify: `ansible/roles/setup/initial_setup/tasks/host-basics.yml`
-- Test: `ansible/tests/test_host_python_pin.py`
+- Test: `ansible/tests/setup/test_host_python_pin.py`
 
 **Interfaces:**
 - Produces: `host_python_version` (exact patch, e.g. `3.14.6`); `/usr/local/bin/uv` on **daniel-box**, which every Ansible-managed invocation in Tasks 2–6 names; and the pinned interpreter present on **daniel-server** too, which only the Task 4 hooks need. Later invocations take the form `/usr/local/bin/uv run --no-project --python {{ host_python_version }} <script>`.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `ansible/tests/test_host_python_pin.py`:
+Create `ansible/tests/setup/test_host_python_pin.py`:
 
 ```python
 """The host Python pin is exact, and tracks the repo's minor.
@@ -155,7 +155,7 @@ def test_host_python_pin_tracks_the_repo_minor():
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `uv run pytest ansible/tests/test_host_python_pin.py -v -n0`
+Run: `uv run pytest ansible/tests/setup/test_host_python_pin.py -v -n0`
 Expected: FAIL — `KeyError: 'host_python_version'`.
 
 - [ ] **Step 3: Add the pin**
@@ -166,13 +166,13 @@ In `ansible/inventory/group_vars/all.yml`, add:
 # Exact patch, not `3.14`. uv resolves a bare minor to whatever it already has, which is how the
 # two hosts ended up on 3.14.6 and 3.14.5 with nothing asking for either. Eighteen host scripts
 # run on this, and they must be the same interpreter on both machines. The minor must track
-# .python-version — ansible/tests/test_host_python_pin.py enforces both halves.
+# .python-version — ansible/tests/setup/test_host_python_pin.py enforces both halves.
 host_python_version: "3.14.6"
 ```
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `uv run pytest ansible/tests/test_host_python_pin.py -v -n0`
+Run: `uv run pytest ansible/tests/setup/test_host_python_pin.py -v -n0`
 Expected: PASS, 2 tests. If `test_host_python_pin_tracks_the_repo_minor` fails, `.python-version` has moved — change `host_python_version` to match its minor, never the other way round.
 
 - [ ] **Step 5: Install the interpreter and publish uv**
@@ -249,7 +249,7 @@ exactly the drift this pin exists to prevent.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add ansible/inventory/group_vars/all.yml ansible/roles/setup/initial_setup ansible/tests/test_host_python_pin.py
+git add ansible/inventory/group_vars/all.yml ansible/roles/setup/initial_setup ansible/tests/setup/test_host_python_pin.py
 git commit -m "Pin a host Python 3.14 and publish uv for systemd and cron
 
 Ubuntu 24.04 ships only 3.12 and apt depends on it, and ansible.cfg's
@@ -628,7 +628,7 @@ Only after every group is verified on **both** hosts. The 3.12 guard is currentl
 
 **Files:**
 - Delete: `ansible/tests/test_host_scripts_py312.py`
-- Create: `ansible/tests/test_host_python_invocations.py`
+- Create: `ansible/tests/setup/test_host_python_invocations.py`
 
 - [ ] **Step 1: Confirm the migration is actually complete**
 
@@ -637,7 +637,7 @@ Expected: no hits outside container contexts (Dockerfiles and compose healthchec
 
 - [ ] **Step 2: Write the replacement guard**
 
-Create `ansible/tests/test_host_python_invocations.py`:
+Create `ansible/tests/setup/test_host_python_invocations.py`:
 
 ```python
 """Host Python runs through uv, and only through uv.
@@ -799,14 +799,14 @@ def test_hook_wrappers_pin_the_same_version_as_ansible():
 
 - [ ] **Step 3: Run it, and prove each guard bites**
 
-Run: `uv run pytest ansible/tests/test_host_python_invocations.py -v -n0`
+Run: `uv run pytest ansible/tests/setup/test_host_python_invocations.py -v -n0`
 Expected: PASS, 4 tests.
 
 Then prove the first two catch a regression, reverting after each:
 
 ```bash
 sed -i 's|/usr/local/bin/uv run --no-project --python {{ host_python_version }} /opt/janitorr-health|/usr/bin/python3 /opt/janitorr-health|' ansible/roles/k8s/janitorr/templates/janitorr-health.sh.j2
-uv run pytest ansible/tests/test_host_python_invocations.py -q -n0   # expect FAIL naming janitorr
+uv run pytest ansible/tests/setup/test_host_python_invocations.py -q -n0   # expect FAIL naming janitorr
 git checkout ansible/roles/k8s/janitorr/templates/janitorr-health.sh.j2
 ```
 
@@ -814,7 +814,7 @@ Then the third, on the `--no-project` guard:
 
 ```bash
 sed -i 's|uv run --no-project --python|uv run --python|' ansible/roles/setup/fake_remux/tasks/main.yml
-uv run pytest ansible/tests/test_host_python_invocations.py -q -n0   # expect FAIL naming fake_remux
+uv run pytest ansible/tests/setup/test_host_python_invocations.py -q -n0   # expect FAIL naming fake_remux
 git checkout ansible/roles/setup/fake_remux/tasks/main.yml
 ```
 

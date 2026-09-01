@@ -27,7 +27,7 @@ cloudflare_ips:
 # Exact patch, not `3.14`. uv resolves a bare minor to whatever it already has, which is how
 # the two hosts ended up on 3.14.6 and 3.14.5 with nothing asking for either. Eighteen host
 # scripts run on this and must be the same interpreter on both machines. The minor must track
-# .python-version — ansible/tests/test_host_python_pin.py enforces both halves.
+# .python-version — ansible/tests/setup/test_host_python_pin.py enforces both halves.
 host_python_version: "3.14.6"
 
 # Linux Vars
@@ -47,7 +47,7 @@ pgid: 1000
 # 2026-08-24 via python-apt, its package file reads origin='gh', archive='', codename='stable'.
 # `gh:stable` therefore matched nothing and upgraded nothing while reading as configured — it
 # shipped that way in 2fc0b537 and this is the fix. ENFORCED by
-# ansible/tests/test_unattended_origins_pattern.py.
+# ansible/tests/setup/test_unattended_origins_pattern.py.
 #
 # `origin=Ubuntu,archive=<codename>-updates` is the non-security pocket the login MOTD counts
 # as "N updates can be applied immediately". Security-only was the policy until 2026-08-24;
@@ -166,7 +166,7 @@ k8s_primary_node: daniel-box
 # would give one node two control planes.
 #
 # An allowlist rather than a denylist, so a host nobody thought about is refused rather than
-# admitted. ENFORCED by ansible/tests/test_k3s_server_hosts.py.
+# admitted. ENFORCED by ansible/tests/setup/test_k3s_server_hosts.py.
 k3s_server_hosts:
   - daniel-box
   - daniel-stage
@@ -184,7 +184,7 @@ k3s_server_hosts:
 # reader, while forgetting one leaves it unwatched. Redundancy is the safe direction, so a host
 # in doubt belongs here. daniel-pi is deliberately absent — it renders setup templates
 # (optimize_pi) but stamps none, so a reader there would report only that it is unarmed.
-# ENFORCED by ansible/tests/test_setup_drift_check.py.
+# ENFORCED by ansible/tests/deploy/test_setup_drift_check.py.
 setup_drift_check_hosts:
   - daniel-server
 
@@ -204,7 +204,7 @@ setup_drift_tree_max_days: 14
 # credential in the play's variable scope, and "no role happens to reference it" is a much
 # weaker promise than the one docs/staging-cluster.md Decision 5 makes.
 #
-# Resolved relative to ansible/vars/. ENFORCED by ansible/tests/test_load_secrets_by_host.py,
+# Resolved relative to ansible/vars/. ENFORCED by ansible/tests/deploy/test_load_secrets_by_host.py,
 # which also checks every file named by any host actually exists.
 secrets_file: secrets.yml
 
@@ -395,7 +395,7 @@ k8s_public_route: true
 # never a candidate for an HTTPS request at all. That failure is invisible from the object —
 # it applies cleanly, `kubectl get` shows it, Traefik logs nothing — and it cost most of
 # 2026-08-07. See the header of monitoring_route in ansible/templates/ingressroute.yml.j2.
-# ENFORCED by ansible/tests/test_k8s_manifests.py, which fails any rendered IngressRoute
+# ENFORCED by ansible/tests/k8s/test_k8s_manifests.py, which fails any rendered IngressRoute
 # serving the https entrypoint without a tls block.
 #
 # `domains:` goes with the resolver, not with TLS. It is the SAN set ACME is instructed to
@@ -429,7 +429,7 @@ k8s_node_client_ip: 10.0.0.215
 # `k3s_host_dns_metrics_port` in roles/setup/k3s/defaults/main.yml, deliberately: role
 # defaults are only in scope while that role runs, and the k8s play never includes it, so a
 # reference across the boundary is undefined rather than shared. The two are kept equal by
-# ansible/tests/test_coredns_metrics_port_agrees.py — a drift would leave this job scraping
+# ansible/tests/setup/test_coredns_metrics_port_agrees.py — a drift would leave this job scraping
 # a closed port, which surfaces as a permanently down target rather than as anything subtle.
 k8s_node_dns_metrics_port: 9253
 # In-cluster image registry. Two addresses for the same registry, and both are needed

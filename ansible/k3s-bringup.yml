@@ -37,7 +37,7 @@
       # DECIDED: an allowlist, not `inventory_hostname not in k3s_agent_hosts`. Inverting it
       # would admit every host nobody remembered to deny, which is the same shape as the
       # accident this assert exists to prevent. A new server node is a deliberate edit to
-      # k3s_server_hosts; ansible/tests/test_k3s_server_hosts.py keeps it that way.
+      # k3s_server_hosts; ansible/tests/setup/test_k3s_server_hosts.py keeps it that way.
       ansible.builtin.assert:
         that: inventory_hostname in k3s_server_hosts
         fail_msg: >-

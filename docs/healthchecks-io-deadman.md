@@ -48,7 +48,7 @@ dead cron would sit undetected through three slots.
 
 That bound is what keeps the boot grace itself under 600 seconds. A boot grace longer than the
 cron interval could skip two consecutive slots, widening the legitimate gap to 30 minutes and
-making this table wrong. `ansible/tests/test_health_cron_boot_grace.py` enforces the relation
+making this table wrong. `ansible/tests/setup/test_health_cron_boot_grace.py` enforces the relation
 rather than either number.
 
 **A `/fail` ping ignores all of this.** Grace bounds *silence*; a `/fail` is an explicit failure
@@ -157,7 +157,7 @@ call site skips its block, leaving the hosts exactly as they were. To turn it on
 
    Create them manually rather than letting the URL auto-provision them. Auto-provisioning
    turns a typo'd slug into a second, unwatched check that reads green forever because
-   something is pinging it. `ansible/tests/test_healthchecks_pings.py` fails the build if a
+   something is pinging it. `ansible/tests/services/test_healthchecks_pings.py` fails the build if a
    call site ever adds the auto-provisioning parameter.
 
 2. **Add the project ping key** (Settings → Ping key, *not* an API key):

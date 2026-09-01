@@ -77,7 +77,7 @@ curl -s "http://$IP:8080/" | grep -o "<title>[^<]*</title>"
 ## Born fenced
 
 The pod template carries `netpol-baseline: enforced`, and `docs` is listed in
-`BORN_FENCED_ROLES` in `ansible/tests/test_netpol_baseline_labels.py`. Traefik is its only
+`BORN_FENCED_ROLES` in `ansible/tests/k8s/test_netpol_baseline_labels.py`. Traefik is its only
 caller and the pod dials nothing at all — the site is built on the host, so the container never
 fetches, clones or resolves. Adding the label without listing it there fails that test, and
 `docs/networkpolicy-default-deny.md` records the same set in prose.

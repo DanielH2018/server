@@ -67,7 +67,7 @@ k3s_server_args: >-
 # its own installed form, so the comparison reports a missing argument on every play and
 # reinstalls k3s each time, restarting the control plane. None of these values contains a
 # space, so none of them needs quoting. Keep it that way.
-# `ansible/tests/test_k3s_control_plane_hardening.py` fails if a quote reappears.
+# `ansible/tests/setup/test_k3s_control_plane_hardening.py` fails if a quote reappears.
 
 # ── secrets encryption at rest (G1) ─────────────────────────────────────────────────────
 # Off is k3s's default, which leaves every Secret stored in etcd as plaintext — and
@@ -227,7 +227,7 @@ k3s_longhorn_backup_detached_volumes: "true"
 # Longhorn accepts 2 or 16 and nothing between. Governed by the SETTING rather than the
 # StorageClass on purpose: a StorageClass parameter beats the setting and its parameters are
 # immutable, which is the trap `numberOfReplicas` sprang on 2026-08-01 (see
-# files/longhorn-storageclass.yaml and ansible/tests/test_longhorn_storageclass.py).
+# files/longhorn-storageclass.yaml and ansible/tests/longhorn/test_longhorn_storageclass.py).
 k3s_longhorn_backup_block_size: 16
 
 # Restore drill — proves the backups come BACK, which nothing else here checks. The heartbeat
@@ -634,7 +634,7 @@ k3s_disk_health_cron_minute: "*/10"
 #            keep a grace of period + one slot instead of an open-ended one.
 # 420 < 600 satisfies the upper bound with 3 minutes of margin, and clears the lower by 102s.
 # Raising this past 599 breaks the arithmetic in docs/healthchecks-io-deadman.md — the guard test
-# in ansible/tests/test_health_cron_boot_grace.py enforces the bound rather than the number.
+# in ansible/tests/setup/test_health_cron_boot_grace.py enforces the bound rather than the number.
 #
 # NOT applied to the daily crons (manifest-prune 05:15, etcd-snapshot-offbox 02:45). For them a
 # skipped slot is a skipped DAY, which is a worse trade than the rare boot landing inside their
@@ -969,7 +969,7 @@ k3s_agent_args: >-
 # loop over all eight, before any template: task ran — so a tag-scoped run declared all eight
 # current while rendering one, and the seven it never touched read as fresh forever
 # (2026-08-23b review M6). Keep each group's membership identical to the tags on the
-# `template:` task that renders it; ansible/tests/test_setup_render_manifest.py asserts that.
+# `template:` task that renders it; ansible/tests/deploy/test_setup_render_manifest.py asserts that.
 #
 # Paths are relative to the REPO ROOT, not to templates/, because the manifest is now shared with
 # four other setup-plane roles — the check joins nothing onto a hardcoded directory any more.
@@ -1058,7 +1058,7 @@ k3s_release_file_groups:
 #   10250/tcp both directions   kubelet API (logs/exec/metrics-server)
 #   9100/tcp  both directions   node-exporter scrape (see the two rules below)
 # The two lists below are mirrors apart from 6443, which is server-only because agents dial the
-# API and the server never dials theirs. ansible/tests/test_k3s_join_port_symmetry.py enforces
+# API and the server never dials theirs. ansible/tests/setup/test_k3s_join_port_symmetry.py enforces
 # that; until 2026-08-23b the invariant was prose with no reader.
 #
 # NOT a complete inventory of what this cluster needs open. A port missing from BOTH lists is
@@ -1109,7 +1109,7 @@ k3s_agent_node_ips: []
 # Which of the role's topic files run. Every flag here defaults TRUE, so prod's behaviour is
 # the behaviour of the role with nothing overridden — a staging cluster turns pieces OFF in
 # its own host_vars rather than prod turning them on. ENFORCED by
-# ansible/tests/test_k3s_stage_gates.py, because a gate that defaults false silently stops
+# ansible/tests/setup/test_k3s_stage_gates.py, because a gate that defaults false silently stops
 # doing prod's work and every repo-side check still reads green.
 #
 # DECIDED: `when:` on the existing `import_tasks`, not a switch to `include_tasks`. An import

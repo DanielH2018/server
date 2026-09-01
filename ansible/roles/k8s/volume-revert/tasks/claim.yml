@@ -77,7 +77,7 @@
     # It exists because Longhorn 1.12's delete webhook caps a snapshot name at 63 bytes; see
     # that task for the full reasoning. If the two drift, this prefix matches nothing and the
     # revert reports "no snapshot for this deploy" instead of failing — so
-    # `ansible/tests/test_snapshot_name_length.py` compares them directly.
+    # `ansible/tests/longhorn/test_snapshot_name_length.py` compares them directly.
     volume_revert_prefix: >-
       autodeploy-{{ volume_revert_service }}-{{ volume_revert_sha }}-{{ volume_revert_claim | regex_replace('^' ~ (volume_revert_service | regex_escape) ~ '-', '') | default(volume_revert_claim, true) }}-
 

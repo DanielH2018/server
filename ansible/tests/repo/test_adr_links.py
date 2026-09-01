@@ -26,8 +26,8 @@ from pathlib import Path
 
 import pytest
 import yaml
+from _helpers import REPO
 
-REPO = Path(__file__).resolve().parent.parent.parent
 ADR_DIR = REPO / "docs" / "adr"
 MKDOCS = REPO / "mkdocs.yml"
 

@@ -119,7 +119,7 @@ Those two ranges are also **staging's own**, since both clusters run k3s's defau
 is safe only while staging is a single node: its pod and Service traffic is delivered on the
 guest's internal `cni0` and by its own kube-proxy rules, and never crosses the tap device the
 filter attaches to. A second staging node would put pod-to-pod traffic on the wire, where the `/16`
-drop would break it. `ansible/tests/test_staging_egress_fence.py` ties that assumption to
+drop would break it. `ansible/tests/staging/test_staging_egress_fence.py` ties that assumption to
 `k3s_agent_node_ips` so it fails when it stops holding.
 
 **The first attempt was a UFW `route deny`, and it was inert.** It deployed cleanly and
@@ -208,7 +208,7 @@ for an HTTPS request. It applies cleanly, `kubectl get` shows it, Traefik logs n
 most of 2026-08-07. Wrapping the whole block in the conditional is the obvious implementation and
 reintroduces that failure on staging only, where nobody is looking. So an empty resolver drops
 `certResolver` and `domains` and keeps the key. ENFORCED by
-`ansible/tests/test_tls_cert_resolver_optional.py`, which renders both branches — the existing
+`ansible/tests/k8s/test_tls_cert_resolver_optional.py`, which renders both branches — the existing
 manifest guard renders prod's variables only, and never reaches the branch where the mistake lives.
 
 `domains:` goes with the resolver rather than with TLS: it is the SAN set ACME is instructed to
@@ -372,7 +372,7 @@ Three literals survive and are correct where they are, so don't "finish" them:
   blocker, and it was not a pin problem: the Job proves a SECOND node's containerd reaches the
   registry, so on one node it is unschedulable and the role's `kubectl wait` stalls for its full
   180s timeout. It now renders only when `k3s_agent_node_ips` is non-empty, and the wait task
-  gates on the same variable. ENFORCED by `ansible/tests/test_registry_selftest_single_node.py`.
+  gates on the same variable. ENFORCED by `ansible/tests/setup/test_registry_selftest_single_node.py`.
 
 **Decision 4 was the remaining gate on the first staging service, and it landed on 2026-08-28.**
 It was unimplemented as this spec was first written: `roles/k8s/traefik` templated a

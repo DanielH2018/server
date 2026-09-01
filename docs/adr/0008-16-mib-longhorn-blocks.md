@@ -45,7 +45,7 @@ outside its tier's RecurringJob.
 
 **PVC sizes must be multiples of the block size**, which is a deploy-time rejection rather
 than a warning. Enforced tree-wide by
-`ansible/tests/test_pvc_sizes_match_block_size.py` — the guard exists because the two block
+`ansible/tests/longhorn/test_pvc_sizes_match_block_size.py` — the guard exists because the two block
 sizes now coexist and the correct multiple depends on which one a volume has.
 
 ## Governs

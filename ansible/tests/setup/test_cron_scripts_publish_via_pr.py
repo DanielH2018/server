@@ -25,7 +25,8 @@ from pathlib import Path
 
 import pytest
 
-REPO = Path(__file__).resolve().parent.parent.parent
+from _helpers import REPO
+
 TEMPLATES = REPO / "ansible/roles/setup/initial_setup/templates"
 
 DOCS_REFRESH = TEMPLATES / "docs-refresh.sh.j2"

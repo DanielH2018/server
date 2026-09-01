@@ -448,7 +448,7 @@ re-issue, not data — so it is backed up for tidiness, and a failure there is n
 
 ---
 
-## Tests to add (`ansible/tests/test_k8s_manifests.py`)
+## Tests to add (`ansible/tests/k8s/test_k8s_manifests.py`)
 
 Per the repo's escalation ladder — a check a machine enforces beats a paragraph an agent has to
 remember:

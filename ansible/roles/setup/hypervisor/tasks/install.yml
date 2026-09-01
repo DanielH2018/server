@@ -182,7 +182,7 @@
   #
   # A forced command does NOT stop ssh forwarding stdin, which is the trap that makes the naive
   # version of this useless. The dispatcher closes stdin itself; see the header there and
-  # ansible/tests/test_staging_gate_dispatch.py, which drives that property.
+  # ansible/tests/staging/test_staging_gate_dispatch.py, which drives that property.
   #
   # This ADDS a key. It deliberately does not touch the operator's own key, and `exclusive` is
   # left false: removing the only other way into this host in the same change that adds an
