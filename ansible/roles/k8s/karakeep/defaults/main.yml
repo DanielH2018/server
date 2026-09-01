@@ -7,7 +7,15 @@
 # repo:tag@sha256 form so Renovate's docker manager still tracks them; see the compose template for
 # why the tag must be kept alongside the digest.
 karakeep_k8s_image: ghcr.io/karakeep-app/karakeep:release@sha256:64d6a9bbf2d37b5c808cf06b5d87f1f1c7846fdd3844724145a9741aeb06fd31
-karakeep_k8s_chrome_image: zenika/alpine-chrome:124@sha256:47da877e5622528039625218d15d7e1ccae4e426c6cc7671d165837ea98aacc8  # moved off gcr.io/zenika-hub/alpine-chrome
+# karakeep's own headless-shell build, taken 2026-09-01. It replaces zenika/alpine-chrome:124,
+# which this pin had already been moved off gcr.io/zenika-hub once and whose upstream last saw a
+# commit on 2025-11-15. karakeep now publishes the sidecar its app is tested against
+# (docker/chrome/Dockerfile: chromedp/headless-shell pinned by digest, plus USER 65534:65534), so
+# the browser tracks the app's release cadence instead of a third party's.
+#
+# `release` is a moving tag behind a digest, the same shape as karakeep_k8s_image above, so the
+# k8s-defaults manager's `matchUpdateTypes: [digest]` rule bumps it after its soak.
+karakeep_k8s_chrome_image: ghcr.io/karakeep-app/karakeep-chrome:release@sha256:5b19bbb160e9ff60681a3abd97e1c4ec9f64212301410de658c3900ab7ef31e7
 # (2026-08-13): permanent Renovate lookup failure there ("Repository Problems" on the dashboard) —
 # switched to the Docker Hub mirror, verified to carry the same :124 tag before the swap. No digest
 # pin: a registry mirror doesn't guarantee an identical index digest to the gcr.io original.
