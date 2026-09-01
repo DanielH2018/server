@@ -339,3 +339,59 @@ def test_land_still_has_a_nothing_to_deploy_path():
     """The reject half of the verdict change: a docs-only PR really is finished, and must not
     be reported as needing a human."""
     assert "nothing-to-deploy" in _LAND_SH
+
+
+def test_a_secrets_rotation_is_flagged():
+    """PR #695's real shape: it rotated `ruleset_drift_push_token` and touched no role at all,
+    so it derived zero tags and land.sh reported `nothing-to-deploy` and exited 0. Both
+    consumers -- the uptime-kuma tile and the gitops_deploy pusher cron -- kept rendering the
+    old value (2026-09-01). A secret's value lives in no role's template, so changed-file tag
+    scoping is structurally blind to a rotation and the note is the only signal."""
+    files = [
+        "ansible/secret_rotation.yml",
+        "ansible/vars/secrets.yml",
+        "prek.toml",
+        "scripts/secrets_mgmt/secret_rotation.py",
+        "scripts/secrets_mgmt/test_secret_rotation.py",
+    ]
+    tags, source = land_tags.derive(files, changed_files=5)
+    assert (tags, source) == ([], "pr"), (
+        "a rotation maps to no service tag by construction"
+    )
+    note = land_tags.plane_note(files)
+    assert note != "", "a rotation must not read as nothing-to-deploy"
+    assert "secret_rotation.py consumers" in note, (
+        "the note must name the RUNNABLE resolver, like both sibling notes do, not just say a "
+        "secret changed -- an operator who cannot resolve the consumers is where PR #695 was "
+        "already left. `consumers ruleset_drift_push_token` prints that PR's two missing "
+        "deploys, one per plane"
+    )
+    assert "consumer_tags()" in note and "CROSS_HOST_PUSH_TOKENS" in note, (
+        "and the name-routing table behind it, whose MANUAL members each carry a written reason"
+    )
+
+
+def test_a_pr_without_secrets_is_clean():
+    """The reject half. A rule that fired on every landing would make `needs-manual-apply` the
+    normal verdict and train the operator to ignore it. The registry is the near miss worth
+    pinning: `ansible/secret_rotation.yml` carries names, dates and tiers but no values, so a
+    registry-only change deploys nothing and needs nothing."""
+    files = [
+        "ansible/secret_rotation.yml",
+        "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2",
+    ]
+    assert land_tags.plane_note(files) == ""
+
+
+def test_a_secrets_rotation_beside_a_service_is_flagged():
+    """The harder silence, the same shape as the setup-plane mixed case: sonarr really deploys,
+    so the verdict would otherwise read `settled`. A PR shipping secrets.yml WITH one consuming
+    template still cannot show the secret's OTHER consumers, so the note must survive a
+    non-empty tag list."""
+    files = [
+        "ansible/vars/secrets.yml",
+        "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2",
+    ]
+    tags, _ = land_tags.derive(files, changed_files=2)
+    assert tags == ["sonarr"]
+    assert land_tags.plane_note(files) != ""
