@@ -154,7 +154,7 @@ def test_run_once_with_only_filter_touches_no_gate(monkeypatch):
 
 # ── check_pvc_fullness ──────────────────────────────────────────────────────
 #
-# These live here rather than beside check_longhorn_volumes in test_check_host.py only because
+# These live here rather than beside check_longhorn_volumes in test_check_longhorn.py only because
 # this file was the one in scope when the check landed. conftest.py's autouse _down_streaks reset
 # is directory-wide, so the fixtures behave identically either way.
 

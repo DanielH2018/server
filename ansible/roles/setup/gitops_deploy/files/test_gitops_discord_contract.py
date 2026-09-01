@@ -434,7 +434,7 @@ def test_rollback_return_is_gated_on_delivered_post():
 
 
 # The pure is_diverged() (test_deploy_logic_git.py) and the read side (check_gitops_status,
-# test_check_service.py) are covered, but the WRITE — that main() emits the diverged-SHA marker every tick,
+# test_check_gitops.py) are covered, but the WRITE — that main() emits the diverged-SHA marker every tick,
 # gated on is_diverged, ahead of the action short-circuits — lives only in the un-importable main().
 # A refactor dropping it or stranding it behind an early `return` would silently lose the watchdog
 # (a diverged tree noops forever while origin's commits never deploy, both other GitOps signals

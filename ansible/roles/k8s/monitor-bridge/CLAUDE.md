@@ -395,7 +395,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     **If you add a third node-exporter host, decide explicitly whether it belongs in the
     estate-wide Memory/Root Disk checks or in a check of its own** — that choice is what this
     bullet exists to force. Since 2026-08-29 a test forces it for ONE of the two ways a host
-    arrives: `test_every_node_exporter_job_is_mapped_in_exporter_dependent` (test_check_gates.py)
+    arrives: `test_every_node_exporter_job_is_mapped_in_exporter_dependent` (test_check_gates_exporters.py)
     derives the node-exporter scrape jobs from the Prometheus config and fails until each has an
     `EXPORTER_DEPENDENT` entry, and its sibling fails if a job whose origins are all excluded by
     `HOST_METRIC_ORIGIN_EXCLUDE` suppresses `disk`/`memory` anyway. That covers a host under a
@@ -895,6 +895,18 @@ failure. pytest cannot catch that: it imports from `files/` on disk and never re
 - Unit tests (parsing + every check's decision logic):
   `uv run pytest ansible/roles/k8s/monitor-bridge/files`.
   Also run automatically by the `pytest` prek hook (`prek run pytest --all-files`).
+- **The suite is split by subject, one file per domain** — `test_check_{ha,loki,gitops,r2,
+  speedtest,scrutiny,ups,pi,longhorn,etcd_drill,cadvisor_floor,b2_dashboard}.py` beside
+  `test_check_{gates,gates_exporters,streaks,host,service,notify,parsing}.py`. Put a new test
+  with the domain it exercises rather than in whichever file is open.
+- **A shared test helper goes in `conftest.py`, never in a new module beside `check.py`.**
+  `_runtime_modules()` in `ansible/tests/test_monitor_bridge_modules.py` treats every non-test
+  `.py` here as production code, so a `_fixtures.py` either fails that guard or — if someone
+  adds it to `monitor_bridge_modules` to make the failure go away — ships test code into the
+  pod's ConfigMap. `conftest.py` is the one file the guard exempts, which is where the `seq`
+  fixture lives. Share it as a **fixture**, not as `from conftest import ...` — that import
+  resolves to whichever `conftest.py` sys.path reached first once the whole repo suite runs, so
+  it passes on this directory alone and fails under a bare `uv run pytest`.
 - Smoke test one pass:
   `sudo k3s kubectl -n homelab exec deploy/monitor-bridge -- python /app/check.py --once`
   (the readonly SA plain `kubectl` uses holds no exec verb)
@@ -943,7 +955,7 @@ nothing about the selector. What caught it was running the selector against live
 window containing a KNOWN event, which is the only check that distinguishes "nothing happened"
 from "nothing matched". Do that before trusting any new log- or metric-backed arm; a green first
 cycle is not evidence. `LOKI_STREAM_LABELS` +
-`test_loki_selectors_use_real_stream_labels` in `test_check_service.py` now pin the vocabulary
+`test_loki_selectors_use_real_stream_labels` in `test_check_loki.py` now pin the vocabulary
 for all three Loki selectors.
 
 ### The bracketed log timestamps are Central time, not UTC
