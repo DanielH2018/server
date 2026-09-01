@@ -121,6 +121,29 @@ def test_loader_include_dir_merge_list_rejects_missing_dir(tmp_path):
         _load(tmp_path / "a.yaml")
 
 
+def test_loader_include_dir_merge_named_is_clean(tmp_path):
+    _write(tmp_path / "a.yaml", "items: !include_dir_merge_named parts/\n")
+    _write(tmp_path / "parts/b.yaml", "two:\n  x: 2\n")
+    _write(tmp_path / "parts/a.yaml", "one:\n  x: 1\n")
+    assert _load(tmp_path / "a.yaml")["items"] == {"one": {"x": 1}, "two": {"x": 2}}
+
+
+def test_loader_include_dir_merge_named_rejects_list_file(tmp_path):
+    _write(tmp_path / "a.yaml", "items: !include_dir_merge_named parts/\n")
+    _write(tmp_path / "parts/bad.yaml", "- one\n")
+    with pytest.raises(HAConfigError, match="must hold a YAML dict"):
+        _load(tmp_path / "a.yaml")
+
+
+def test_loader_include_dir_merge_named_rejects_key_in_two_files(tmp_path):
+    # HA would let b.yaml's copy silently shadow a.yaml's; the validator refuses it.
+    _write(tmp_path / "a.yaml", "items: !include_dir_merge_named parts/\n")
+    _write(tmp_path / "parts/a.yaml", "dup:\n  x: 1\n")
+    _write(tmp_path / "parts/b.yaml", "dup:\n  x: 2\n")
+    with pytest.raises(HAConfigError, match="'dup' is defined in both"):
+        _load(tmp_path / "a.yaml")
+
+
 def test_loader_include_dir_merge_list_detects_duplicate_inside_file(tmp_path):
     _write(tmp_path / "a.yaml", "items: !include_dir_merge_list parts/\n")
     _write(tmp_path / "parts/dup.yaml", "- id: x\n  alias: a\n  alias: b\n")
@@ -181,52 +204,72 @@ def test_validate_reports_structural_error(tmp_path):
     _write(role / "templates/config/ui-lovelace.yaml.j2", "{}\n")
     for s in (
         "scenes.yaml",
-        "scripts.yaml",
         "templates.yaml",
         "rest.yaml",
     ):
         _write(role / "files" / s, "[]\n")
     (role / "files/custom_templates").mkdir(parents=True)
     (role / "files/automations").mkdir(parents=True)
+    (role / "files/scripts").mkdir(parents=True)
     errors = validate(role)
     assert any("duplicate key" in e for e in errors)
 
 
-def _role_with_automation_list(tmp_path, listed, on_disk):
-    from validate_ha_config import automation_file_list_errors
+def _role_with_shipped_list(
+    tmp_path,
+    listed,
+    on_disk,
+    subdir="automations",
+    var="home_assistant_automation_files",
+):
+    from validate_ha_config import shipped_dir_list_errors
 
     role = tmp_path / "role"
     _write(
         role / "defaults/main.yml",
-        yaml.safe_dump({"home_assistant_automation_files": listed}),
+        yaml.safe_dump({var: listed}),
     )
     for name in on_disk:
-        _write(role / "files/automations" / name, "[]\n")
-    return automation_file_list_errors(role)
+        _write(role / "files" / subdir / name, "[]\n")
+    return shipped_dir_list_errors(role)
 
 
 def test_automation_file_list_is_clean_when_it_matches_the_directory(tmp_path):
     assert (
-        _role_with_automation_list(tmp_path, ["a.yaml", "b.yaml"], ["b.yaml", "a.yaml"])
+        _role_with_shipped_list(tmp_path, ["a.yaml", "b.yaml"], ["b.yaml", "a.yaml"])
         == []
     )
 
 
 def test_automation_file_list_flags_unlisted_file(tmp_path):
     # The file HA would merge but the ConfigMap would never carry.
-    errors = _role_with_automation_list(tmp_path, ["a.yaml"], ["a.yaml", "new.yaml"])
+    errors = _role_with_shipped_list(tmp_path, ["a.yaml"], ["a.yaml", "new.yaml"])
     assert errors and "new.yaml is not in home_assistant_automation_files" in errors[0]
 
 
+def test_script_file_list_flags_unlisted_file(tmp_path):
+    errors = _role_with_shipped_list(
+        tmp_path,
+        ["a.yaml"],
+        ["a.yaml", "new.yaml"],
+        subdir="scripts",
+        var="home_assistant_script_files",
+    )
+    assert (
+        errors
+        and "files/scripts/new.yaml is not in home_assistant_script_files" in errors[0]
+    )
+
+
 def test_automation_file_list_flags_missing_file(tmp_path):
-    errors = _role_with_automation_list(tmp_path, ["a.yaml", "gone.yaml"], ["a.yaml"])
+    errors = _role_with_shipped_list(tmp_path, ["a.yaml", "gone.yaml"], ["a.yaml"])
     assert errors and "names gone.yaml" in errors[0]
 
 
 def test_real_role_automation_file_list_matches_directory():
-    from validate_ha_config import automation_file_list_errors
+    from validate_ha_config import shipped_dir_list_errors
 
-    assert automation_file_list_errors(ROLE_DIR) == []
+    assert shipped_dir_list_errors(ROLE_DIR) == []
 
 
 def test_uncoerced_macro_bool_uses_truth_table():

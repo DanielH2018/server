@@ -50,13 +50,13 @@ _TEMPLATE_FILES = ["configuration.yaml.j2", "customize.yaml.j2", "ui-lovelace.ya
 # files/* copied as-is into the config dir root.
 _STATIC_FILES = [
     "scenes.yaml",
-    "scripts.yaml",
     "templates.yaml",
     "rest.yaml",
 ]
 # files/<dir>/ copied as-is as a directory. automations/ is pulled in by
-# `automation: !include_dir_merge_list automations/`; custom_templates/ holds the Jinja macros.
-_STATIC_DIRS = ["automations", "custom_templates"]
+# `automation: !include_dir_merge_list automations/`, scripts/ by
+# `script: !include_dir_merge_named scripts/`; custom_templates/ holds the Jinja macros.
+_STATIC_DIRS = ["automations", "scripts", "custom_templates"]
 _ANSIBLE_MARKERS = ("{{", "{%")
 # Entry files to structurally load. configuration.yaml pulls in customize/automations/scenes/
 # scripts/templates/rest via !include; ui-lovelace.yaml is referenced by filename (not !include),
@@ -124,27 +124,27 @@ def _construct_include(loader: HAConfigLoader, node: yaml.Node):
         _INCLUDE_STACK.discard(target)
 
 
-def _construct_include_dir_merge_list(loader: HAConfigLoader, node: yaml.Node):
-    """`!include_dir_merge_list dir/`: every *.yaml under dir (recursive, sorted, dotfiles
-    skipped — HA's `_find_files` order) loaded and concatenated into one list.
+def _include_dir_files(loader: HAConfigLoader, node: yaml.Node, expected: type):
+    """The (path, loaded) pairs behind an `!include_dir_*` tag: every *.yaml under the
+    directory (recursive, sorted, dotfiles skipped — HA's `_find_files` order).
 
     Stricter than HA on one point, on purpose: HA silently SKIPS a file whose top level is not
-    a list, so an automation file accidentally written as a mapping would ship nothing and
-    surface only as a missing automation at runtime. Here it is an error."""
+    the expected shape, so an automation file accidentally written as a mapping (or a script
+    file written as a list) would ship nothing and surface only as a missing entity at
+    runtime. Here it is an error."""
+    tag = node.tag
     target = (loader._root / loader.construct_scalar(node)).resolve()
     mark = node.start_mark
     if not target.is_dir():
         raise HAConfigError(
-            f"!include_dir_merge_list target is not a directory: {target} "
-            f"(at {mark.name}:{mark.line + 1})"
+            f"{tag} target is not a directory: {target} (at {mark.name}:{mark.line + 1})"
         )
-    merged: list = []
     for path in sorted(target.rglob("*.yaml")):
         if path.name.startswith("."):
             continue
         if path in _INCLUDE_STACK:
             raise HAConfigError(
-                f"circular !include_dir_merge_list: {path} (at {mark.name}:{mark.line + 1})"
+                f"circular {tag}: {path} (at {mark.name}:{mark.line + 1})"
             )
         _INCLUDE_STACK.add(path)
         try:
@@ -152,12 +152,39 @@ def _construct_include_dir_merge_list(loader: HAConfigLoader, node: yaml.Node):
                 loaded = yaml.load(f, Loader=HAConfigLoader)
         finally:
             _INCLUDE_STACK.discard(path)
-        if not isinstance(loaded, list):
+        if not isinstance(loaded, expected):
             raise HAConfigError(
-                f"!include_dir_merge_list file {path} must hold a YAML list at its top level, "
+                f"{tag} file {path} must hold a YAML {expected.__name__} at its top level, "
                 f"got {type(loaded).__name__} (at {mark.name}:{mark.line + 1})"
             )
+        yield path, loaded
+
+
+def _construct_include_dir_merge_list(loader: HAConfigLoader, node: yaml.Node):
+    """`!include_dir_merge_list dir/`: the files' lists concatenated into one list."""
+    merged: list = []
+    for _, loaded in _include_dir_files(loader, node, list):
         merged.extend(loaded)
+    return merged
+
+
+def _construct_include_dir_merge_named(loader: HAConfigLoader, node: yaml.Node):
+    """`!include_dir_merge_named dir/`: the files' mappings merged into one mapping.
+
+    HA lets a later file silently override a key an earlier file defined; here a key that
+    appears in two files is an error, so a script cannot be shadowed by a same-named copy."""
+    merged: dict = {}
+    owner: dict = {}
+    mark = node.start_mark
+    for path, loaded in _include_dir_files(loader, node, dict):
+        for key in loaded:
+            if key in merged:
+                raise HAConfigError(
+                    f"{node.tag}: {key!r} is defined in both {owner[key]} and {path} "
+                    f"(at {mark.name}:{mark.line + 1})"
+                )
+            owner[key] = path
+        merged.update(loaded)
     return merged
 
 
@@ -169,6 +196,9 @@ def _construct_placeholder(loader: HAConfigLoader, node: yaml.Node):
 HAConfigLoader.add_constructor("!include", _construct_include)
 HAConfigLoader.add_constructor(
     "!include_dir_merge_list", _construct_include_dir_merge_list
+)
+HAConfigLoader.add_constructor(
+    "!include_dir_merge_named", _construct_include_dir_merge_named
 )
 HAConfigLoader.add_constructor("!secret", _construct_placeholder)
 HAConfigLoader.add_constructor("!env_var", _construct_placeholder)
@@ -321,31 +351,39 @@ def macro_bool_coercion_errors(trees: list, custom_templates_dir: Path) -> list[
     return errs
 
 
-def automation_file_list_errors(role_dir: Path) -> list[str]:
-    """`home_assistant_automation_files` in defaults/main.yml must name exactly the *.yaml
-    files under files/automations/. HA merges whatever is in the directory, but the ConfigMap
-    and the init container ship only what the list names, so a file in the directory and not
-    the list validates clean here and never reaches the pod."""
+# files/<dir> -> the defaults/main.yml variable listing the files the ConfigMap and the init
+# container ship from it. HA merges whatever is in the directory, but the pod sees only what
+# the list names, so a file in the directory and not the list validates clean and never
+# reaches the pod. The check below makes that disagreement an error.
+_SHIPPED_DIR_LISTS = {
+    "automations": "home_assistant_automation_files",
+    "scripts": "home_assistant_script_files",
+}
+
+
+def shipped_dir_list_errors(role_dir: Path) -> list[str]:
+    """Each list in _SHIPPED_DIR_LISTS must name exactly the *.yaml files under its
+    directory, in both directions."""
     defaults = role_dir / "defaults" / "main.yml"
     if not defaults.is_file():
         return []
-    listed = yaml.safe_load(defaults.read_text()).get("home_assistant_automation_files")
-    if listed is None:
-        return []
-    on_disk = sorted(
-        p.name for p in (role_dir / "files" / "automations").glob("*.yaml")
-    )
+    values = yaml.safe_load(defaults.read_text()) or {}
     errors = []
-    for name in sorted(set(on_disk) - set(listed)):
-        errors.append(
-            f"files/automations/{name} is not in home_assistant_automation_files "
-            "(defaults/main.yml): the ConfigMap would not carry it"
-        )
-    for name in sorted(set(listed) - set(on_disk)):
-        errors.append(
-            f"home_assistant_automation_files names {name} but files/automations/ has no "
-            "such file: the ConfigMap lookup would fail the deploy"
-        )
+    for subdir, var in _SHIPPED_DIR_LISTS.items():
+        listed = values.get(var)
+        if listed is None:
+            continue
+        on_disk = sorted(p.name for p in (role_dir / "files" / subdir).glob("*.yaml"))
+        for name in sorted(set(on_disk) - set(listed)):
+            errors.append(
+                f"files/{subdir}/{name} is not in {var} (defaults/main.yml): "
+                "the ConfigMap would not carry it"
+            )
+        for name in sorted(set(listed) - set(on_disk)):
+            errors.append(
+                f"{var} names {name} but files/{subdir}/ has no such file: "
+                "the ConfigMap lookup would fail the deploy"
+            )
     return errors
 
 
@@ -359,7 +397,7 @@ def validate(role_dir: Path = ROLE_DIR) -> list[str]:
         except HAConfigError as exc:
             return [str(exc)]
         errors, trees = load_config(dest)
-        errors += automation_file_list_errors(role_dir)
+        errors += shipped_dir_list_errors(role_dir)
         # Jinja-check whatever loaded (a structural failure drops that tree but the macro files
         # are checked independently).
         errors += jinja_errors(trees, dest / "custom_templates")

@@ -40,11 +40,11 @@ templates.yaml:41-44 comment drift: winddown still says "Same ... guard as bedro
 needs no grace) but undocumented, inviting a future "fix" in either direction.
 
 Follow-up run (same day, post-128015a6) added: (Low) the 2h grace also shifts
-`bedroom_fallback_wake`'s date-compare defer (automations.yaml ~:604) — a today-dated FIRED alarm now
+`bedroom_fallback_wake`'s date-compare defer (`bedroom_fallback_wake` in files/automations/wake-and-sleep.yaml) — a today-dated FIRED alarm now
 stays available until alarm+2h, so an 04:00–06:00 alarm that rang while away suppresses the 06:00
 fallback for someone who arrived home after it; pre-grace the fallback fired. Narrow + arguably the
 better behavior — reported Low, likely accept. (Low) SETUP.md count/time drift: "31 automations"
-(actual 33), bedtime prompt described as fixed "22:00" (SETUP.md §7 + automations.yaml:1405 comment)
+(actual 33), bedtime prompt described as fixed "22:00" (SETUP.md §7 + the `bedroom_bedtime_prompt` comment in files/automations/wake-and-sleep.yaml)
 vs the winddown-anchored trigger. Tomorrow's wake is armed (wake_start 2026-07-03T10:45Z) — the
 end-to-end [45,90) AL-release proof is still pending that morning.
 

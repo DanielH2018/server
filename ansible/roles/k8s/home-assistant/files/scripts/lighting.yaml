@@ -1,0 +1,252 @@
+---
+# The bedroom lights' natural-state dispatcher and its helpers. Conventions: see README.md in this directory.
+
+# These scripts define the bedroom lights' "natural" state: what they would be with no manual
+# intervention. Adaptive Lighting (AL) is the default governor (sun-curve color + brightness);
+# time-based EXCEPTIONS override brightness only inside their window. Button 1 (press -> on) on
+# the Tap Dial and the morning reset both call bedroom_apply_natural, so the ramp math lives in
+# one place.
+
+# Helper: turn the lights on at a caller-chosen brightness + AL's CURRENT natural color, in ONE
+# light.turn_on (no adaptive_lighting.apply, so no turn-on flash), then arm the color tracker
+# (input_number.bedroom_light_expected_color_temp). Every exception/default calls this so the
+# color-read + tracker wiring lives in one place — a new exception never repeats it.
+bedroom_set_natural_brightness:
+  alias: "Bedroom — set brightness with natural color"
+  description: >-
+    Turn the bedroom lights on at a caller-supplied brightness and Adaptive Lighting's CURRENT
+    natural color temperature, in a single light.turn_on (no AL turn-on flash). Arms the color
+    tracker (input_number.bedroom_light_expected_color_temp) so bedroom_color_track treats this
+    color as "auto". The explicit brightness marks the group manually controlled (AL take_over).
+  mode: restart
+  fields:
+    brightness_pct:
+      description: Target brightness percent (0-100).
+      required: true
+      example: 24
+    transition:
+      description: Fade duration in seconds.
+      required: true
+      example: 2
+  sequence:
+    # AL keeps COMPUTING its sun-curve color even while taken over, so its color_temp_kelvin
+    # attribute is the right "time of day" color to apply. Fallback 2700K if unavailable.
+    - variables:
+        al_ct: "{{ state_attr('switch.bedroom_adaptive_lighting_bedroom', 'color_temp_kelvin') | int(2700) }}"
+    - service: light.turn_on
+      target:
+        entity_id: light.bedroom_lights
+      data:
+        brightness_pct: "{{ brightness_pct | int }}"
+        color_temp_kelvin: "{{ al_ct }}"
+        transition: "{{ transition | int }}"
+    # Arm the color tracker: record the color we just set so bedroom_color_track recognizes it as auto.
+    - service: input_number.set_value
+      target:
+        entity_id: input_number.bedroom_light_expected_color_temp
+      data:
+        value: "{{ al_ct }}"
+
+# Phase-2 mediator: THE single sanctioned writer for the bedroom lights' HELD state. AUTO callers
+# pass a `reason`; light_decision (lighting.jinja) applies the gate for that reason and this
+# delegates to the existing primitive. The manual Tap Dial is exempt (it writes the lights directly
+# by design). Reasons: presence (gated: manual_off/sleep/home/presence/lux/light-off), natural &
+# wake (ungated — the caller pre-gated), off.
+bedroom_lights_set:
+  alias: "Bedroom — lights mediator (single guarded writer)"
+  description: >-
+    Single sanctioned writer for the bedroom lights' held state. Applies the per-reason gate via the
+    light_decision macro, then delegates to apply_natural / apply_wake / light.turn_off.
+  mode: restart
+  fields:
+    reason:
+      description: "presence | natural | wake | wake_fallback | off"
+      required: true
+      example: presence
+    brightness_pct:
+      description: "wake_fallback only: the ramp-frame brightness for THIS minute (the caller computes it from the wake_brightness curve)"
+      required: false
+      example: 12
+  sequence:
+    - variables:
+        action: >-
+          {% from 'lighting.jinja' import light_decision %}{{ light_decision(reason,
+            is_state('input_boolean.bedroom_manual_off', 'on'),
+            is_state('input_boolean.bedroom_sleep_mode', 'on'),
+            is_state('person.daniel', 'home'),
+            is_state('binary_sensor.aqara_fp300_presence', 'on'),
+            is_state('binary_sensor.bedroom_auto_light_allowed', 'on'),
+            is_state('light.bedroom_lights', 'on')) }}
+    - choose:
+        - conditions: "{{ action == 'natural' }}"
+          sequence:
+            - service: script.bedroom_apply_natural
+        - conditions: "{{ action == 'wake' }}"
+          sequence:
+            - service: script.bedroom_apply_wake
+        # Fallback wake frame: the real wake ramp (apply_wake) reads sensor.bedroom_wake_start, which
+        # is unavailable when no watch alarm fired — so the fallback passes the precomputed frame
+        # brightness (same wake_brightness curve) directly. Warm 2200K like apply_wake.
+        - conditions: "{{ action == 'wake_fallback' }}"
+          sequence:
+            - service: light.turn_on
+              target:
+                entity_id: light.bedroom_lights
+              data:
+                brightness_pct: "{{ brightness_pct | int }}"
+                color_temp_kelvin: 2200
+                transition: 60
+        - conditions: "{{ action == 'off' }}"
+          sequence:
+            - service: light.turn_off
+              target:
+                entity_id: light.bedroom_lights
+
+# Dispatcher: set the bedroom lights to their natural state for RIGHT NOW. Ordered choose: of
+# time-based exceptions, with full Adaptive Lighting (color + brightness) as the default.
+# This is the single source of truth for "what is natural".
+#
+# To ADD a future exception, drop a block above `default:`:
+#   - conditions:
+#       - condition: template
+#         value_template: "{{ now() >= today_at('21:00') and now() < today_at('21:30') }}"
+#     sequence:
+#       - service: script.bedroom_set_natural_brightness
+#         data: {brightness_pct: 15, transition: 5}   # flat; a ramp computes these from now()
+bedroom_apply_natural:
+  alias: "Bedroom — apply natural lighting state"
+  description: >-
+    Set the bedroom lights to what they would be with no manual intervention: a time-based
+    exception's brightness on AL's natural color, or full Adaptive Lighting outside every window.
+  mode: restart
+  sequence:
+    # Pick the active exception ONCE via the tested natural_exception macro (nightlight vs wake vs
+    # default). in_window is computed here (entity reads stay in the caller) and passed in; the
+    # macro encodes the nightlight<->wake mutual exclusion (tested in test_lighting_macros.py).
+    - variables:
+        exception: >-
+          {% set ws = states('sensor.bedroom_wake_start') %}
+          {% from 'lighting.jinja' import in_wake_window, natural_exception %}
+          {% set in_window = in_wake_window((now() - as_datetime(ws)).total_seconds() / 60 if ws not in ['unknown', 'unavailable'] else -1) %}
+          {{ natural_exception(is_state('input_boolean.bedroom_sleep_mode', 'on'), now().hour, in_window) }}
+    - choose:
+        # Exception: night-time "got up" dim nightlight (sleep mode OR 00:00-05:00, yielding to the
+        # wake window) — a presence re-trigger gives the warm dim scene instead of full lighting.
+        - conditions: "{{ exception == 'nightlight' }}"
+          sequence:
+            - service: scene.turn_on
+              target:
+                entity_id: scene.bedroom_nightlight
+        # Exception: morning wake ramp (45-min window, alarm-15 to alarm+30). Delegated to
+        # script.bedroom_apply_wake (warm 2200K), driven per-minute by automation.bedroom_wake_ramp.
+        - conditions: "{{ exception == 'wake' }}"
+          sequence:
+            - service: script.bedroom_apply_wake
+      # Default: ambient-fill brightness (time of day + current ambient lux) on AL's natural color.
+      # Read illuminance while the lights are off -> true ambient. set_natural_brightness applies
+      # the color and arms the color tracker; bedroom_color_track then drifts color with the sun.
+      default:
+        - service: script.bedroom_set_natural_brightness
+          data:
+            brightness_pct: "{% from 'lighting.jinja' import natural_brightness %}{{ natural_brightness(now().hour, states('sensor.aqara_fp300_illuminance')) | int }}"
+            transition: 2
+
+# Gated dispatcher: apply the natural lighting state if the shared darkness gate allows
+# (binary_sensor.bedroom_auto_light_allowed = wake window OR T1 illuminance < 90, defined in
+# templates.yaml) OR the sun is below the horizon — otherwise turn the lights OFF, i.e. produce the
+# same outcome the automatic presence path would in a bright room. Used ONLY by the Tap Dial button-1
+# HOLD ("reset to auto"); the manual taps call the ungated bedroom_apply_natural directly.
+# The sun term is the deterministic fix for illuminance reporting lag (a sleepy battery sensor):
+# right after a manual/voice off the bulbs go dark but the gate's illuminance sensor still
+# reads the STALE lights-on value, so the pure lux gate refused to relight on the first HOLD (it only
+# blipped — you had to hold a second time once the sensor caught up). The gate now reads the T1
+# (reports on change, ~5s detection period) rather than the FP300 (~100s), so the lag is shorter, but
+# the sun term stays: it also covers the T1 parking at `unknown` after a restart, which is the same
+# fallback auto_light_allowed's `dark_fallback` argument takes. At night a stale-bright reading
+# is physically impossible, so sun-below-horizon guarantees the reset lights on the first press; by
+# day we still honor the live lux (a genuinely bright room stays off). Scoped to this HOLD path only —
+# the automatic presence gate (the binary_sensor, used by bedroom_presence_on / the Button-4 sleep-exit)
+# is unchanged. The button-1 HOLD blip condition is the exact complement of this `if` (keep them in sync).
+bedroom_apply_natural_gated:
+  alias: "Bedroom — apply natural lighting, lux-gated"
+  mode: restart
+  sequence:
+    - if: "{{ is_state('binary_sensor.bedroom_auto_light_allowed', 'on') or is_state('sun.sun', 'below_horizon') }}"
+      then:
+        - service: script.bedroom_apply_natural
+      else:
+        - service: light.turn_off
+          target:
+            entity_id: light.bedroom_lights
+
+# Exit sleep mode: release the night/sleep state — clear the sleep-mode flag AND Adaptive Lighting's
+# sleep mode (the bedtime routine sets BOTH). Called FIRST by every Tap Dial LIGHT action that is NOT
+# on the Sleep button (button 2 since the 2026-07-18 remap): touching the normal lights means you're
+# up, so sleep should release.
+# Running it FIRST matters — bedroom_apply_natural serves the nightlight exception while sleep_mode is
+# on, so clearing it beforehand is what lets a Button-1 tap give daytime light instead of amber. Mirrors
+# the morning reset's sleep-clearing hygiene (same two service calls, now a shared single source).
+bedroom_exit_sleep:
+  alias: "Bedroom — exit sleep mode"
+  mode: single
+  sequence:
+    - service: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.bedroom_sleep_mode
+    - service: switch.turn_off
+      target:
+        entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom
+
+# Clear every overnight override: the three coordination booleans (manual-off, fan-manual, sleep
+# mode) + Adaptive Lighting's sleep mode. SINGLE source of truth shared by
+# automation.bedroom_morning_reset (daily hygiene) and the test harness's `reset` scenario
+# (script.bedroom_run_scenario), so "return the room to a clean baseline" lives in ONE place. Does
+# NOT re-apply lights/fan — each caller does that itself (the morning reset relights only on the
+# alarm trigger; the test reset re-applies both).
+bedroom_clear_overrides:
+  alias: "Bedroom — clear overnight overrides"
+  description: >-
+    Turn off the three override booleans (bedroom_manual_off, bedroom_fan_manual, bedroom_sleep_mode)
+    and Adaptive Lighting's sleep mode. Shared by the morning reset and the test-harness reset.
+  mode: single
+  sequence:
+    - service: input_boolean.turn_off
+      target:
+        entity_id:
+          - input_boolean.bedroom_manual_off
+          - input_boolean.bedroom_fan_manual
+          - input_boolean.bedroom_sleep_mode
+    - service: switch.turn_off
+      target:
+        entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom
+
+# THE single "blip" primitive — ONE source of truth for the too-bright acknowledgement flash.
+# Both callers reference THIS script so the flash can never drift: (1) automation
+# bedroom_presence_blip (a too-bright arrival) and (2) the Tap Dial Button 1 HOLD "reset to auto"
+# branch in bedroom_tap_dial_control. Any new "the lights stayed off on purpose, acknowledge it"
+# feedback should call this script — do NOT re-roll an inline flash.
+bedroom_blip:
+  alias: "Bedroom — too-bright acknowledgement blip"
+  description: >-
+    THE single source of truth for the bedroom "blip": a soft warm flash (off -> 15% warm 2700K ->
+    off) that acknowledges the lights deliberately stayed OFF because the room is too bright for
+    auto-on (the lux gate binary_sensor.bedroom_auto_light_allowed is blocking). Referenced by BOTH
+    bedroom_presence_blip (too-bright arrival) and the Tap Dial Button 1 HOLD reset branch, so the
+    two are identical by construction. Inverse of bedroom_alert_pulse: it only runs when the lights
+    are already OFF (each caller enforces that), so no scene snapshot is needed — a plain turn_off
+    restores the known prior state.
+  mode: single
+  sequence:
+    - service: light.turn_on
+      target:
+        entity_id: light.bedroom_lights
+      data:
+        brightness_pct: 15
+        color_temp_kelvin: 2700
+        transition: 0.4
+    - delay: "00:00:01"
+    - service: light.turn_off
+      target:
+        entity_id: light.bedroom_lights
+      data:
+        transition: 0.6

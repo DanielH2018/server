@@ -12,9 +12,9 @@ All dashboard/customize/automation entity refs resolve live. All 10 config files
 common_config_changed (no deploy-wiring gap). Z2M availability on (offline-alert dep satisfied).
 
 **NEW Medium — away-recovery orphans the visibility-backstop persistent note.**
-`script.bedroom_notify` (scripts.yaml ~612-627). The away-hold recovery branch dismisses only
+`script.bedroom_notify` (files/scripts/alerts.yaml). The away-hold recovery branch dismisses only
 `hold_{tag}` then `stop`s — it never dismisses the bare `{tag}` note that the visibility-fallback
-(scripts.yaml ~668-680) creates for watch/pierce/critical_away tiers. So the sequence: elevated
+(`bedroom_notify` in files/scripts/alerts.yaml) creates for watch/pierce/critical_away tiers. So the sequence: elevated
 alert fires while HOME (bare `{tag}` note created) → you leave → condition recovers while AWAY →
 recovery routes to the held path → dismisses `hold_{tag}` (absent, no-op) and stops → bare `{tag}`
 note is left stranded in the HA UI showing a "bad" state that already cleared. Self-heals only on a
@@ -32,8 +32,8 @@ actual = 33 (SETUP.md:76 was corrected by 9eb6c2cc, :144 missed). Carry-over fro
 
 Carry-over Lows (cite only, all still open): bedtime prompt skipped when alarm set AFTER its own
 winddown time (future alarm, alarm−8h already past → winddown available-but-past → dynamic `at:`
-unfireable + 22:30 fallback suppressed; automations.yaml ~1436); fallback-wake while-loop dies on HA
-restart (~632); wake_fallback branch doesn't arm expected_color_temp (scripts.yaml ~93-100).
+unfireable + 22:30 fallback suppressed; `bedroom_bedtime_prompt` in files/automations/wake-and-sleep.yaml); fallback-wake while-loop dies on HA
+restart (`bedroom_notify`); wake_fallback branch doesn't arm expected_color_temp (`bedroom_lights_set` in files/scripts/lighting.yaml).
 
 Non-findings confirmed this run (don't re-flag): AL-stuck-manual on manual-off-during-wake (known,
 self-heals via away-sweep); recorder automation/script domain excludes don't break restore_state or

@@ -1,13 +1,5 @@
 ---
-# Managed by Ansible (roles/k8s/home-assistant/files/automations/alerts.yaml).
-# Source of truth — copied to /config/automations/ and overwritten on deploy. HA UI automation
-# edits are NOT persistent (the UI shows these as read-only). To change, edit this file and run:
-#   ./scripts/deploy.sh --tags home-assistant
-#
-# Every file in this directory is merged into one `automation:` list by
-# `!include_dir_merge_list automations/` in configuration.yaml.
-#
-# Threshold, sensor-offline and calibration alerts, and the notification action/hold plumbing.
+# Threshold, sensor-offline and calibration alerts, and the notification action/hold plumbing. Conventions: see README.md in this directory.
 
 # Unified threshold alert engine: ALL `threshold` binary-sensors in configuration.yaml.j2 (air
 # quality CO2/PM2.5/VOC/NOx + the SEVERE tier, battery FP300/Tap Dial, humidity high/low) feed this

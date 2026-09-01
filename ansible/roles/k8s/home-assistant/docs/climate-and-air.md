@@ -5,7 +5,7 @@ Fan control, the YAML dashboard and entity customization, and the outdoor-AQI wi
 advisor.
 
 - **Temperature → fan control (since 2026-06-18; smoothed 2026-06-18).** `script.bedroom_apply_fan`
-  (in `files/scripts.yaml`) drives `fan.tower_fan` (DREO, 9 levels) from
+  (in `files/scripts/fan.yaml`) drives `fan.tower_fan` (DREO, 9 levels) from
   `sensor.bedroom_airgradient_one_temperature` (°F) on a **smooth ~0.8-level-per-°F curve**: off below
   ~72°F, then `ideal = (t − 71)/1.3` → `round` clamped 1–9 (72→L1 … ~82→L9). A **~0.7-level hysteresis
   deadband** (`want` only steps when temp wants ≥0.7 level away from current; turning on jumps to the

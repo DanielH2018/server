@@ -22,7 +22,7 @@ All under `ansible/roles/k8s/home-assistant/`:
 |---|---|
 | Automation | `files/automations/<topic>.yaml` (lighting, wake-and-sleep, fan-and-air, alerts, presence, display, system); a NEW file also goes in `home_assistant_automation_files` in `defaults/main.yml` |
 | Scene | `files/scenes.yaml` |
-| Script | `files/scripts.yaml` |
+| Script | `files/scripts/<topic>.yaml` (lighting, wake-and-sleep, fan, alerts, test-harness); a NEW file also goes in `home_assistant_script_files` in `defaults/main.yml` |
 | Template sensor / binary_sensor | `files/templates.yaml` |
 | **Tunable math** (curve/threshold/ramp) | `files/custom_templates/*.jinja` macro **+ a test** |
 | HTTP/integrations/`threshold:`/`http:` etc. | `templates/config/configuration.yaml.j2` |

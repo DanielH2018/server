@@ -21,9 +21,9 @@ winddown_start's availability so a stale alarm makes it unavailable and the 22:3
 
 **2. (Low) The 06:00 fallback wake (`bedroom_fallback_wake`) is not protected from
 `bedroom_color_track` the way the real ramp is.** color_track's "not during wake ramp" guard
-(automations.yaml:696-700) keys off `sensor.bedroom_wake_start`, which is `unavailable` during the
+(`bedroom_color_track` in files/automations/lighting.yaml) keys off `sensor.bedroom_wake_start`, which is `unavailable` during the
 fallback (that's the whole trigger for the fallback), so `in_wake_window(-1)` = False → the guard
-doesn't block. Also the `wake_fallback` branch of bedroom_lights_set (scripts.yaml:93-100) sets
+doesn't block. Also the `wake_fallback` branch of bedroom_lights_set (files/scripts/lighting.yaml) sets
 2200K but never arms `input_number.bedroom_light_expected_color_temp`. So whether color_track drifts
 the fixed-warm fallback ramp toward AL's cool morning color depends nondeterministically on the last
 expected_color_temp value (color_track's "still auto" ±150K gate). Fix: arm expected_color_temp in

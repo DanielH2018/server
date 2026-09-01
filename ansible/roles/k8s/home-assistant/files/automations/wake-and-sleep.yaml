@@ -1,13 +1,5 @@
 ---
-# Managed by Ansible (roles/k8s/home-assistant/files/automations/wake-and-sleep.yaml).
-# Source of truth — copied to /config/automations/ and overwritten on deploy. HA UI automation
-# edits are NOT persistent (the UI shows these as read-only). To change, edit this file and run:
-#   ./scripts/deploy.sh --tags home-assistant
-#
-# Every file in this directory is merged into one `automation:` list by
-# `!include_dir_merge_list automations/` in configuration.yaml.
-#
-# The morning wake sequence and the bedtime prompt/sleep-mode entry.
+# The morning wake sequence and the bedtime prompt/sleep-mode entry. Conventions: see README.md in this directory.
 
 # Morning reset + gentle wake, driven by the REAL alarm. The `alarm` trigger fires at
 # sensor.bedroom_wake_start (watch alarm - 15 min, morning-only — see configuration.yaml); the

@@ -79,7 +79,7 @@ Everything below is carried into the cluster by `templates/configmap.yaml.j2` wi
 |---|---|
 | `templates/config/configuration.yaml.j2` | `default_config`, helpers, Adaptive Lighting, 16 `threshold` sensors, `template: !include`, `recorder:` excludes, http/trusted-proxy, Lovelace |
 | `files/automations/*.yaml` | the automations, one file per topic (lighting, wake-and-sleep, fan-and-air, alerts, presence, display, system), merged by `!include_dir_merge_list` |
-| `files/scripts.yaml` | the 16 scripts |
+| `files/scripts/*.yaml` | the scripts, one file per topic (lighting, wake-and-sleep, fan, alerts, test-harness), merged by `!include_dir_merge_named` |
 | `files/scenes.yaml` | `bedroom_bright` / `bedroom_nightlight` |
 | `files/templates.yaml` | `sensor.bedroom_wake_start` template sensor |
 | `files/rest.yaml` | Open-Meteo outdoor AQI sensors, pulled in via `rest: !include rest.yaml` |
@@ -234,10 +234,10 @@ All set per-category in `bedroom_threshold_alert`'s `cfg` map or per-call to `be
 | Want to change… | Where |
 |---|---|
 | Air-quality / humidity / battery / severe thresholds | the `threshold` sensors in `configuration.yaml.j2` (`upper`/`lower`/`hysteresis`) |
-| Fan curve (start temp / slope / caps) | `bedroom_apply_fan` in `scripts.yaml` (the `ideal`/`cap` lines) |
+| Fan curve (start temp / slope / caps) | `bedroom_apply_fan` in `scripts/fan.yaml` (the `ideal`/`cap` lines) |
 | Wake ramp curve (knees / final brightness / short-night softening) | `wake_brightness` macro in `custom_templates/lighting.jinja` (`mid`/`knee`/`full`); window length in `in_wake_window` |
 | Nightlight window | `bedroom_apply_natural` first exception (`sleep_mode` or 00:00–05:00) |
-| Bedtime fade length (30 min) | `transition:` on the `scene.turn_on` in `bedroom_bedtime` (`scripts.yaml`) |
+| Bedtime fade length (30 min) | `transition:` on the `scene.turn_on` in `bedroom_bedtime` (`scripts/wake-and-sleep.yaml`) |
 | Away timings (10 / 30 min) | `bedroom_away` trigger `for:` |
 | Bedtime prompt time (wind-down: alarm − 8h / 22:30 fallback) | `sensor.bedroom_winddown_start` (`templates.yaml`), consumed by `bedroom_bedtime_prompt` |
 | FP300 presence drop-out (desk-sitting) | Z2M **device settings** (not git): `motion_sensitivity`, `absence_delay_timer`, `presence_detection_options` — set via `mosquitto_pub -t 'zigbee2mqtt/Aqara FP300/set'` (current: mmwave / high / 60 s) |

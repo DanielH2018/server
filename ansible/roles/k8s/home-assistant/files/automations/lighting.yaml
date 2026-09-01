@@ -1,13 +1,5 @@
 ---
-# Managed by Ansible (roles/k8s/home-assistant/files/automations/lighting.yaml).
-# Source of truth — copied to /config/automations/ and overwritten on deploy. HA UI automation
-# edits are NOT persistent (the UI shows these as read-only). To change, edit this file and run:
-#   ./scripts/deploy.sh --tags home-assistant
-#
-# Every file in this directory is merged into one `automation:` list by
-# `!include_dir_merge_list automations/` in configuration.yaml.
-#
-# Bedroom light control: the Tap Dial, presence on/off, manual-override detection, colour tracking.
+# Bedroom light control: the Tap Dial, presence on/off, manual-override detection, colour tracking. Conventions: see README.md in this directory.
 
 # Trigger topic is the Hue Tap Dial's Z2M friendly_name — Z2M publishes one JSON blob per device on
 # zigbee2mqtt/<friendly_name> (default output: json), so we read .action from the payload. The dial

@@ -435,7 +435,7 @@ def service_resolution_errors(config: dict, known_services: set[str]) -> list[st
 # Valid `reason` vocabulary per actuator mediator. Declared here (NOT regex-derived from
 # light_decision's Jinja / bedroom_fan_set's choose:) — a drifted constant fails SAFE (a newly
 # added valid reason false-fails loudly until added here), never silently passes. Mirror any
-# change to lighting.jinja's light_decision / files/scripts.yaml's bedroom_fan_set.
+# change to lighting.jinja's light_decision / files/scripts/fan.yaml's bedroom_fan_set.
 MEDIATOR_REASONS = {
     "script.bedroom_lights_set": {
         "presence",

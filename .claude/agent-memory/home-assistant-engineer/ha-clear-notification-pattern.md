@@ -20,11 +20,11 @@ Clearing a bedroom alert has TWO surfaces, and they need TWO different calls:
   ```
   `clear_notification` is a no-op when nothing's showing (safe to fire unconditionally). Always add
   `continue_on_error: true` — a re-paired phone renames the `notify.mobile_app_*` slug → ServiceNotFound
-  would abort the rest of the automation (same rationale as `bedroom_notify`'s pushes, scripts.yaml ~636-640).
+  would abort the rest of the automation (same rationale as `bedroom_notify`'s pushes, files/scripts/alerts.yaml).
 
 **Repo state (2026-07-04):** this was the repo's FIRST `clear_notification` — grep found none before.
 `notify.mobile_app_pixel_9_pro` is the established phone notify service (used by `bedroom_notify`
-scripts.yaml:641 + flush_held automations.yaml:1362). `bedroom_notify` is NOT the right tool for a
+files/scripts/alerts.yaml + `bedroom_flush_held_notifications` in files/automations/alerts.yaml). `bedroom_notify` is NOT the right tool for a
 clear (it always sends a title/message push + runs away-hold logic) — call the notify service directly.
 
 **bedroom_away recovery, now closed:** the away "🏠 Left on" push (tag `bedroom_away`, `critical_away:

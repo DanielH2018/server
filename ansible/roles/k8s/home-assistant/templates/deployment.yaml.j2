@@ -30,11 +30,11 @@ spec:
         # comment). Only these named files are written; .storage/, the recorder DB, secrets
         # consumers, custom_components/ are PVC state this never touches.
         #
-        # automations/ and custom_templates/ are CLEARED before the install because `install`
+        # automations/, scripts/ and custom_templates/ are CLEARED before the install because `install`
         # only overwrites what it is given: a file dropped from the ConfigMap would otherwise
         # survive on the PVC and keep being loaded, green deploy and all, with the repo showing
         # it gone. Both directories are git-owned, so deleting them wholesale is safe. The
-        # `rm -f /config/automations.yaml` retires the pre-split single file for the same
+        # `rm -f /config/automations.yaml` retires the pre-split single files for the same
         # reason; it is harmless once nothing includes it, but a stale copy invites confusion.
         # The named files above are
         # each overwritten every start, so they can't go stale the same way — but REMOVING one
@@ -45,13 +45,16 @@ spec:
             - sh
             - -c
             - install -m 644 /cm/configuration.yaml /cm/customize.yaml /cm/ui-lovelace.yaml
-              /cm/scenes.yaml /cm/scripts.yaml /cm/templates.yaml
+              /cm/scenes.yaml /cm/templates.yaml
               /cm/rest.yaml /config/ &&
               install -m 600 /sec/secrets.yaml /config/secrets.yaml &&
-              rm -f /config/automations.yaml &&
+              rm -f /config/automations.yaml /config/scripts.yaml &&
               mkdir -p /config/automations &&
               find /config/automations -maxdepth 1 -name '*.yaml' -delete &&
               install -m 644 {% for name in home_assistant_automation_files %}/au/{{ name }} {% endfor %}/config/automations/ &&
+              mkdir -p /config/scripts &&
+              find /config/scripts -maxdepth 1 -name '*.yaml' -delete &&
+              install -m 644 {% for name in home_assistant_script_files %}/sc/{{ name }} {% endfor %}/config/scripts/ &&
               mkdir -p /config/custom_templates &&
               find /config/custom_templates -maxdepth 1 -name '*.jinja' -delete &&
               install -m 644 /ct/diagnostics.jinja /ct/fan.jinja /ct/lighting.jinja
@@ -68,6 +71,9 @@ spec:
           volumeMounts:
             - name: home-assistant-config-files
               mountPath: /cm
+              readOnly: true
+            - name: home-assistant-scripts
+              mountPath: /sc
               readOnly: true
             - name: home-assistant-automations
               mountPath: /au
@@ -138,6 +144,9 @@ spec:
         - name: home-assistant-config-files
           configMap:
             name: home-assistant-config
+        - name: home-assistant-scripts
+          configMap:
+            name: home-assistant-scripts
         - name: home-assistant-automations
           configMap:
             name: home-assistant-automations

@@ -1,0 +1,243 @@
+---
+# The on-demand scenario runner behind the dashboard's test card. Conventions: see README.md in this directory.
+
+# Test harness: run the selected scenario (input_select.bedroom_test_scenario) at the selected speed
+# (input_select.bedroom_test_speed = fast -> compressed ~30s + EPHEMERAL, real -> production timing + kept).
+# Drives the REAL scripts/automations so what you see is what fires for real — never a reimplementation.
+# FAST mode is a PREVIEW: it snapshots the room (sticky flags + light/fan via scene.create), runs the
+# scenario, then restores the exact prior state after an observe window — so e.g. bedtime's sleep_mode
+# doesn't stick. `reset` (the baseline) and real mode are NOT wrapped. Narrates as a persistent_notification
+# (id test_scenario, updates in place). Invoked by the dashboard Run button (ui-lovelace.yaml.j2). DIRECT
+# light write = the nightlight branch's scene.turn_on (sanctioned_writers light exemption); the restore
+# writes the 3 override booleans (declared in expected_override_writers.yml). The bedroom_pre_test
+# scene.turn_on restores the fan at runtime but is NOT a tracked write (runtime scene, not in scene_map).
+bedroom_run_scenario:
+  alias: "Bedroom — run test scenario"
+  description: >-
+    Exercise a bedroom scenario on demand (bedtime/wake/nightlight/away/arrive/reset) at compressed or
+    real speed, driving the real scripts/automations — for testing without waiting for night or
+    leaving home.
+  # CAVEAT (test-only tool): mode:restart + an in-sequence restore means pressing Run again DURING
+  # the observe window aborts the in-flight restore, leaving the snapshotted sticky flags
+  # (sleep_mode/manual_off/...) as the scenario set them. Recover with the `reset` scenario (or a
+  # Tap Dial reset). Acceptable for a manual test card; let one preview finish before starting the next.
+  mode: restart
+  sequence:
+    - variables:
+        scenario: "{{ states('input_select.bedroom_test_scenario') }}"
+        fast: "{{ is_state('input_select.bedroom_test_speed', 'fast') }}"
+        # Fast = ephemeral preview: snapshot the room, run the scenario, then restore the exact prior
+        # state. `reset` is the baseline (never wrapped); off/none never ran a scenario.
+        wrap: "{{ fast and scenario in ['bedtime', 'wake', 'nightlight', 'away', 'arrive'] }}"
+        # Observe window (s) before restore: bedtime's fade is async on the bulb (wait 30s);
+        # preview_wake already blocks ~30s while it sweeps (1s buffer); the instant ones get a few.
+        observe: "{{ 30 if scenario == 'bedtime' else (1 if scenario == 'wake' else 4) }}"
+    # Snapshot (fast preview only): capture the four sticky flags as sequence variables (in scope for
+    # the whole sequence) + the visible light/fan state via scene.create, so the restore below returns
+    # the room EXACTLY to its pre-test state. Same scene.create trick as bedroom_alert_pulse.
+    - if: "{{ wrap }}"
+      then:
+        - variables:
+            snap_sleep: "{{ states('input_boolean.bedroom_sleep_mode') }}"
+            snap_manual_off: "{{ states('input_boolean.bedroom_manual_off') }}"
+            snap_fan_manual: "{{ states('input_boolean.bedroom_fan_manual') }}"
+            snap_al_sleep: "{{ states('switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom') }}"
+            # AL pause state, by COUNT only (manual_control lists member BULBS, not the
+            # group — never test membership): the bedtime preview pauses AL via
+            # set_manual_control, which the scene/flag restores below don't touch.
+            snap_al_manual_empty: "{{ (state_attr('switch.bedroom_adaptive_lighting_bedroom', 'manual_control') or []) | count == 0 }}"
+        - service: scene.create
+          data:
+            scene_id: bedroom_pre_test
+            snapshot_entities:
+              - light.bedroom_lights
+              - fan.tower_fan
+    - choose:
+        # Bedtime fade — fast passes a 30s fade; real uses the production 30-min fade.
+        - conditions: "{{ scenario == 'bedtime' }}"
+          sequence:
+            - service: script.bedroom_bedtime
+              data:
+                fade: "{{ 30 if fast else 1800 }}"
+            - service: persistent_notification.create
+              data:
+                notification_id: test_scenario
+                title: "🧪 Scenario: bedtime ({{ 'fast' if fast else 'real' }})"
+                message: >-
+                  Engaged sleep mode + AL sleep; fading to amber 3% over
+                  {{ '30s' if fast else '30 min' }}; fan capped to Low. Run `reset` to clear.
+        # Wake ramp — fast sweeps the frames in ~30s; real applies the current frame only (the
+        # production per-minute ramp is alarm-driven — set a morning watch alarm to see it live).
+        - conditions: "{{ scenario == 'wake' }}"
+          sequence:
+            - if: "{{ fast }}"
+              then:
+                - service: script.bedroom_preview_wake
+              else:
+                - service: script.bedroom_apply_wake
+            - service: persistent_notification.create
+              data:
+                notification_id: test_scenario
+                title: "🧪 Scenario: wake ({{ 'fast' if fast else 'real' }})"
+                message: >-
+                  {{ 'Swept the wake ramp 1% to 12% to 40% to 100% in ~40s (warm 2200K).' if fast
+                     else 'Applied the current wake frame. The real ramp is alarm-driven — set a
+                     morning watch alarm to see it live.' }}
+        # Nightlight — the dim amber "got up overnight" scene, instantly.
+        - conditions: "{{ scenario == 'nightlight' }}"
+          sequence:
+            - service: scene.turn_on
+              target:
+                entity_id: scene.bedroom_nightlight
+            - service: persistent_notification.create
+              data:
+                notification_id: test_scenario
+                title: "🧪 Scenario: nightlight"
+                message: "Applied scene.bedroom_nightlight (amber 3%). Run `reset` to return to normal."
+        # Away — ensure the lights are on (so there's something to turn off), then trigger the REAL
+        # away automation (skip_condition: its 10-min person trigger can't be faked).
+        - conditions: "{{ scenario == 'away' }}"
+          sequence:
+            - if: "{{ is_state('light.bedroom_lights', 'off') }}"
+              then:
+                - service: script.bedroom_lights_set
+                  data:
+                    reason: "natural"
+                - delay: "00:00:02"
+            - service: automation.trigger
+              target:
+                entity_id: automation.bedroom_away
+              data:
+                skip_condition: true
+            - service: persistent_notification.create
+              data:
+                notification_id: test_scenario
+                title: "🧪 Scenario: away"
+                message: >-
+                  Triggered the away response: bedroom lights + fan off, "Left on" notification sent.
+                  (The away notification-HOLD path needs a real away state — set person.daniel to
+                  not_home in Developer Tools then Set State to test that.)
+        # Arrive home — trigger the real arrive automation (its inline conditions still run).
+        - conditions: "{{ scenario == 'arrive' }}"
+          sequence:
+            - service: automation.trigger
+              target:
+                entity_id: automation.bedroom_arrive_home
+              data:
+                skip_condition: true
+            - service: persistent_notification.create
+              data:
+                notification_id: test_scenario
+                title: "🧪 Scenario: arrive"
+                message: >-
+                  Triggered arrive-home: fan resumes per temperature; lights re-check only if FP300
+                  present, not manual-off, and currently off.
+        # Reset — clear every override and return to a clean daytime baseline.
+        - conditions: "{{ scenario == 'reset' }}"
+          sequence:
+            - service: script.bedroom_clear_overrides
+            - service: script.bedroom_lights_set
+              data:
+                reason: "natural"
+            - service: script.bedroom_fan_set
+              data:
+                reason: "auto"
+            - service: persistent_notification.create
+              data:
+                notification_id: test_scenario
+                title: "🧪 Scenario: reset"
+                message: "Cleared overrides + AL sleep; re-applied natural lighting + temperature fan."
+      default:
+        - service: persistent_notification.create
+          data:
+            notification_id: test_scenario
+            title: "🧪 Scenario: none"
+            message: "Pick a scenario (not 'off') in the picker, then press Run."
+    # Restore (fast preview only): after the observe window, put the room back EXACTLY as it was — the
+    # visible light/fan state (from the snapshot scene) + the four sticky flags. This is what makes fast
+    # mode ephemeral (e.g. bedtime's sleep_mode no longer sticks). Real mode skips this entirely.
+    - if: "{{ wrap }}"
+      then:
+        - delay: "{{ observe }}"
+        - service: scene.turn_on
+          target:
+            entity_id: scene.bedroom_pre_test
+          data:
+            transition: 1
+        - if: "{{ snap_sleep == 'on' }}"
+          then:
+            - service: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.bedroom_sleep_mode
+          else:
+            - service: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.bedroom_sleep_mode
+        - if: "{{ snap_manual_off == 'on' }}"
+          then:
+            - service: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.bedroom_manual_off
+          else:
+            - service: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.bedroom_manual_off
+        - if: "{{ snap_fan_manual == 'on' }}"
+          then:
+            - service: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.bedroom_fan_manual
+          else:
+            - service: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.bedroom_fan_manual
+        - if: "{{ snap_al_sleep == 'on' }}"
+          then:
+            - service: switch.turn_on
+              target:
+                entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom
+          else:
+            - service: switch.turn_off
+              target:
+                entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom
+        # Un-pause AL when the preview paused it: bedtime marks the bulbs manual_control
+        # (hands-off) and neither the snapshot scene nor the flags above clear that — without
+        # this, a fast bedtime preview left AL not adapting until the next wake release
+        # (2026-07-03 review). Only when the pre-test list was empty — a room that was
+        # genuinely paused before the test stays paused; the clear no-ops if already clear.
+        - if: "{{ snap_al_manual_empty }}"
+          then:
+            - service: adaptive_lighting.set_manual_control
+              data:
+                entity_id: switch.bedroom_adaptive_lighting_bedroom
+                manual_control: false
+        # The 'away' preview fires bedroom_away, which (person home during a test -> not held)
+        # pushes + leaves the "🏠 Left on" persistent note (id bedroom_away). Clear it so a fast
+        # preview cleans up after itself; a stray dismiss of an absent id no-ops for every other
+        # scenario, matching bedroom_arrive_home's own dismiss of this id.
+        - service: persistent_notification.dismiss
+          data:
+            notification_id: bedroom_away
+        - service: persistent_notification.create
+          data:
+            notification_id: test_scenario
+            title: "↩️ Preview restored"
+            message: "Fast preview complete — restored the room to its pre-test state."
+    # Re-arm the picker to its safe default (added 2026-08-16). OUTSIDE the `wrap` block on
+    # purpose: it must also run at `real` speed, which is the dangerous combination. The picker
+    # was found parked on bedtime/real, leaving the dashboard's Run button one tap from a
+    # production bedtime — sleep mode on, AL sleep on, a 30-min fade to amber 3%, fan capped.
+    # `off` being the first option is the whole reason this is an input_select rather than an
+    # input_boolean (only input_select has a creation default), so drifting off it forfeits that.
+    # No automation triggers on either picker, so writing them here cannot re-enter the script.
+    # mode:restart means a re-press mid-run aborts before this, same caveat as the restore above.
+    - service: input_select.select_option
+      target:
+        entity_id: input_select.bedroom_test_scenario
+      data:
+        option: "off"
+    - service: input_select.select_option
+      target:
+        entity_id: input_select.bedroom_test_speed
+      data:
+        option: fast

@@ -9,7 +9,7 @@ The APC UPS's periodic self-test "Replace Battery" verdict (NUT sets `RB` in `up
 `sensor.apc_ups_status_data`, a space-separated flag list) is covered on BOTH alert channels
 (homelab-review finding M2, done 2026-07-14).
 
-- **HA-mobile-push channel:** `automation.ups_power_event` (files/automations.yaml) gained `was_rb`/
+- **HA-mobile-push channel:** `automation.ups_power_event` (files/automations/system.yaml) gained `was_rb`/
   `is_rb` vars and two `choose:` branches mirroring the OB/LB pattern — RB newly present → watch buzz
   (NOT pierce; it's maintenance, not an imminent cut), RB cleared → routine `recovery: true`. Same
   `ups_power` coalescing tag.

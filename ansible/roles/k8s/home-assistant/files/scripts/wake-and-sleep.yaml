@@ -1,0 +1,99 @@
+---
+# The wake ramp, its test preview, and the bedtime fade. Conventions: see README.md in this directory.
+
+      # action == 'noop' (gated out, or unknown reason): do nothing.
+
+# Wake frame: set the lights to the current sunrise-ramp brightness for NOW (warm 2200K), computed
+# from sensor.bedroom_wake_start via the wake_brightness macro. bedroom_wake_ramp calls this every
+# minute through the 45-min window; bedroom_apply_natural's wake exception also calls it so a mid-ramp
+# resume (a presence re-trigger) recomputes the right frame. No-op when no morning alarm is set.
+bedroom_apply_wake:
+  alias: "Bedroom — apply wake ramp frame"
+  mode: restart
+  sequence:
+    - variables:
+        ws: "{{ states('sensor.bedroom_wake_start') }}"
+    - condition: template
+      value_template: "{{ ws not in ['unknown', 'unavailable'] }}"
+    - variables:
+        wake_elapsed_min: "{{ (now() - as_datetime(ws)).total_seconds() / 60 }}"
+        target: "{% from 'lighting.jinja' import wake_brightness %}{{ wake_brightness(wake_elapsed_min) | int }}"
+    - service: light.turn_on
+      target:
+        entity_id: light.bedroom_lights
+      data:
+        brightness_pct: "{{ target }}"
+        color_temp_kelvin: 2200
+        transition: 60
+
+# Test-only: preview the morning wake ramp on demand, COMPRESSED. Sweeps the 45-min window's frames
+# (elapsed 0 -> 15 -> 30 -> 45 = window start -> alarm -> alarm+15 -> alarm+30) using the SAME tested
+# wake_brightness macro the production ramp uses, applying each with a short fade so you watch
+# 1% -> ~12% -> 40% -> 100% in ~40s — without waiting for a real alarm or touching
+# automation.bedroom_wake_ramp. Warm 2200K, like bedroom_apply_wake. Driven only by
+# script.bedroom_run_scenario (the test harness).
+bedroom_preview_wake:
+  alias: "Bedroom — preview wake ramp (test, compressed)"
+  description: >-
+    Sweep the wake ramp's brightness frames in ~30s for testing, reusing the wake_brightness macro.
+    Not part of the production wake path; invoked by the scenario test harness only.
+  mode: restart
+  sequence:
+    - repeat:
+        for_each: [0, 7.5, 15, 22.5, 30, 37.5, 45]
+        sequence:
+          - variables:
+              target: "{% from 'lighting.jinja' import wake_brightness %}{{ wake_brightness(repeat.item) | int }}"
+          - service: light.turn_on
+            target:
+              entity_id: light.bedroom_lights
+            data:
+              brightness_pct: "{{ target }}"
+              color_temp_kelvin: 2200
+              transition: 5
+          - delay: "00:00:06"
+
+# Bedtime / sleep routine: the single "going to sleep" action, shared by the bedroom_bedtime
+# automation (phone Bedtime mode) and the Tap Dial button-2 (Sleep) hold. Engages sleep mode (which caps the
+# fan to Low via bedroom_apply_fan — quiet but still temperature-responsive, NOT frozen), flips
+# Adaptive Lighting into sleep mode (warm/dim), and fades to the warm nightlight scene over 30 min. The morning reset
+# unwinds sleep mode + AL sleep mode. NOT gated on presence (sets the room up for sleep even if you're
+# brushing teeth); the caller gates on person==home so it never runs while away.
+bedroom_bedtime:
+  alias: "Bedroom — bedtime / sleep routine"
+  description: >-
+    Engage sleep mode (quiet fan cap), Adaptive Lighting sleep mode, and fade to the warm nightlight
+    scene over 30 min. Keeps the fan temperature-responsive but quiet; does not freeze it.
+  mode: single
+  fields:
+    fade:
+      description: Nightlight fade duration in seconds (default 1800 = 30 min).
+      required: false
+      example: 1800
+  sequence:
+    - service: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.bedroom_sleep_mode
+    # Mark AL hands-off FIRST so enabling AL sleep mode below can't force a ~45s pre-dim to
+    # sleep_brightness before the fade — the fade must be the only brightness change.
+    - service: adaptive_lighting.set_manual_control
+      data:
+        entity_id: switch.bedroom_adaptive_lighting_bedroom
+        manual_control: true
+    # The ONLY brightness change: a smooth 30-min fade from the current level to amber 3%. The bulb
+    # ramps internally (single Zigbee command, ZCL caps ~6553s), so an HA/Z2M restart mid-fade
+    # doesn't abort it. Lengthened 900 -> 1800 (2026-06-23): the 15-min descent felt too fast.
+    - service: scene.turn_on
+      target:
+        entity_id: scene.bedroom_nightlight
+      data:
+        transition: "{{ fade | default(1800) | int }}"
+    # Set AL's sleep target (warm/dim) for after the morning reset releases control. Harmless now —
+    # AL is already hands-off, so this can't move the lights.
+    - service: switch.turn_on
+      target:
+        entity_id: switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom
+    # Re-apply the fan so the Low sleep cap takes effect now (gated on the manual-fan override).
+    - if: "{{ is_state('input_boolean.bedroom_fan_manual', 'off') }}"
+      then:
+        - service: script.bedroom_apply_fan

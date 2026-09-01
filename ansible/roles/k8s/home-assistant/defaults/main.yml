@@ -39,6 +39,16 @@ home_assistant_automation_files:
   - system.yaml
   - wake-and-sleep.yaml
 
+# files/scripts/*.yaml, the same shape for scripts: one file per topic, merged into the
+# `script:` mapping by `!include_dir_merge_named scripts/`. Same rule — a new file is added
+# here and the validator checks the list against the directory.
+home_assistant_script_files:
+  - alerts.yaml
+  - fan.yaml
+  - lighting.yaml
+  - test-harness.yaml
+  - wake-and-sleep.yaml
+
 # Mirrors resources('1.0', '1536M', '0.10', '256M') in the compose template, except the memory
 # limit. Raised 1536Mi -> 2Gi on 2026-08-16: over the preceding week and 9 pod generations the
 # working set ran 949Mi-1414Mi, i.e. 62-92% of the old limit, with the then-current pod peaking
