@@ -630,36 +630,60 @@
     user: "{{ sys_user }}"
   become: true
 
-- name: Create the systemd-resolved drop-in directory
+- name: Check whether /etc/resolv.conf is still the systemd-resolved stub symlink
   tags: [pi-dns]
-  ansible.builtin.file:
-    path: /etc/systemd/resolved.conf.d
-    state: directory
-    mode: "0755"
-    owner: root
-    group: root
+  ansible.builtin.stat:
+    path: /etc/resolv.conf
+    follow: false
+  register: optimize_pi_resolv_stat
   become: true
 
-- name: Point the Pi's DNS at the cluster Pi-hole with a public fallback
+# TASK ORDER IS THE SAFETY PROPERTY. The real file is written BEFORE systemd-resolved is
+# stopped, so a run that dies midway leaves this remote host with a working resolv.conf
+# rather than a symlink to a stub nothing is serving. Never reorder these three.
+#
+# Guarded on islnk so a rerun cannot delete the regular file the next task writes.
+- name: Remove the stub symlink so a regular /etc/resolv.conf can replace it
   tags: [pi-dns]
-  # Ordering, not exclusivity — see the template's own header for why the fallback is
-  # load-bearing on this host and why resolved's failover is slower than daniel-server's.
+  ansible.builtin.file:
+    path: /etc/resolv.conf
+    state: absent
+  become: true
+  when: optimize_pi_resolv_stat.stat.islnk | default(false)
+
+- name: Point the Pi at Pi-hole first with a public fallback
+  tags: [pi-dns]
+  # Absolute src: templates resolve against THIS role's templates/ directory, and the file is
+  # shared with setup/k3s (daniel-box runs the identical config). The reasoning lives there.
   ansible.builtin.template:
-    src: pi-dns.conf.j2
-    dest: /etc/systemd/resolved.conf.d/50-homelab-dns.conf
+    src: "{{ playbook_dir }}/roles/setup/common/templates/resolv.conf.j2"
+    dest: /etc/resolv.conf
     mode: "0644"
     owner: root
     group: root
   become: true
-  register: optimize_pi_dns_dropin
+  vars:
+    common_resolver_nameservers: "{{ optimize_pi_dns_servers }}"
+    common_resolver_options: "{{ optimize_pi_dns_options }}"
+    common_resolver_timeout: "{{ optimize_pi_dns_timeout }}"
 
-- name: Restart systemd-resolved to apply the drop-in # noqa no-handler
+# resolved owns /etc/resolv.conf whenever it runs, so it has to go for the file above to
+# survive. Disabling it also removes the LINK scope, which is the half a drop-in could not
+# reach: `resolvectl status` on this host listed 75.75.75.75, 75.75.76.76 and two Comcast v6
+# addresses under Link 2 with their own `Current DNS Server`, alongside the global config.
+- name: Stop and disable systemd-resolved
   tags: [pi-dns]
-  # Not a handler: a handler runs at the end of the play, and the Pi's own package and
-  # container tasks resolve names in between. Applying it here keeps the rest of the run on
-  # one resolver set rather than two.
   ansible.builtin.systemd:
     name: systemd-resolved
-    state: restarted
+    state: stopped
+    enabled: false
   become: true
-  when: optimize_pi_dns_dropin.changed
+
+# PR #693's drop-in is inert once resolved is disabled, and an inert config file that still
+# reads like the active mechanism is how the next reader gets it wrong.
+- name: Remove the retired systemd-resolved drop-in
+  tags: [pi-dns]
+  ansible.builtin.file:
+    path: /etc/systemd/resolved.conf.d/50-homelab-dns.conf
+    state: absent
+  become: true

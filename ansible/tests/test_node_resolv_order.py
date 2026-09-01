@@ -26,8 +26,23 @@ import re
 import yaml
 from _helpers import ROLES as _ROLES
 
-_DEFAULTS = _ROLES / "setup/k3s/defaults/main.yml"
-_TEMPLATE = _ROLES / "setup/k3s/templates/resolv.conf.j2"
+_TEMPLATE = _ROLES / "setup/common/templates/resolv.conf.j2"
+
+# Every host that renders the shared template, and the variable each one passes. Both are
+# checked: the template is shared, so a correct file plus one bad caller is still a host
+# resolving through Cloudflare.
+_CALLERS = {
+    "daniel-box": (
+        _ROLES / "setup/k3s/defaults/main.yml",
+        "k3s_node_dns_upstreams",
+        "k3s_node_dns_options",
+    ),
+    "daniel-pi": (
+        _ROLES / "setup/optimize_pi/defaults/main.yml",
+        "optimize_pi_dns_servers",
+        "optimize_pi_dns_options",
+    ),
+}
 
 # The variable the Pi-hole VIP reaches this role by. Asserted as the literal Jinja reference
 # rather than the address: pinning 10.0.0.243 here would pass while group_vars moved the VIP.
@@ -68,16 +83,32 @@ def order_problems(nameservers: list[str], options: str) -> list[str]:
 
 
 def test_the_live_defaults_and_template_keep_pihole_first() -> None:
-    upstreams = yaml.safe_load(_DEFAULTS.read_text())["k3s_node_dns_upstreams"]
-    rendered = _TEMPLATE.read_text().replace(
-        "{% for server in k3s_node_dns_upstreams %}\nnameserver {{ server }}\n{% endfor %}",
-        "".join(f"nameserver {s}\n" for s in upstreams),
+    template = _TEMPLATE.read_text()
+    loop = (
+        "{% for server in common_resolver_nameservers %}\n"
+        "nameserver {{ server }}\n{% endfor %}"
     )
-    problems = order_problems(nameserver_lines(rendered), options_line(rendered))
-    assert not problems, (
-        "The node's resolv.conf order is the whole failover mechanism (see "
-        f"{_TEMPLATE.name}). Problems: " + "; ".join(problems)
+    assert loop in template, (
+        f"{_TEMPLATE.name} no longer interpolates common_resolver_nameservers; this guard "
+        "would silently stop checking the live values"
     )
+    for host, (defaults, servers_var, options_var) in _CALLERS.items():
+        values = yaml.safe_load(defaults.read_text())
+        upstreams = values[servers_var]
+        rendered = template.replace(
+            loop, "".join(f"nameserver {s}\n" for s in upstreams)
+        )
+        # Substitute the options too. Reading the raw template here would leave the literal
+        # `{{ common_resolver_options }}`, and the `rotate` half of this guard would be inert
+        # against every caller — a check that can never fire.
+        rendered = rendered.replace(
+            "options {{ common_resolver_options }}", f"options {values[options_var]}"
+        )
+        problems = order_problems(nameserver_lines(rendered), options_line(rendered))
+        assert not problems, (
+            f"{host}'s resolv.conf order is the whole failover mechanism (see "
+            f"{_TEMPLATE.name}, {servers_var}). Problems: " + "; ".join(problems)
+        )
 
 
 def test_pihole_first_with_a_fallback_is_clean() -> None:

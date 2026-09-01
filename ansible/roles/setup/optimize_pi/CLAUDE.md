@@ -119,24 +119,6 @@ See repo-root `CLAUDE.md` for conventions.
     is a journal stub — verified: no `sd_journal_open`, no libsystemd, and a `journal:` dry
     run yields zero entries). A file plus a static scrape job needs no new daemon, and carries
     ~576 lines/day where the whole journal would be ~38k.
-12. **Resolver** — a systemd-resolved drop-in (`50-homelab-dns.conf`) sets
-    `DNS=<dns_k8s_vip> 1.1.1.1` with `Domains=~.`, so the Pi resolves through the cluster
-    Pi-hole and falls back to a public resolver. Before this the DHCP lease's ISP resolvers
-    answered everything, including every internal `*.local.<domain>` name — those resolve
-    publicly via the Cloudflare wildcard, so the private hostnames were leaving the LAN.
-    `Domains=~.` overrides the per-link lease servers without touching netplan, which is why
-    this role needs no equivalent of the k3s role's `netplan-dns.yaml.j2`.
-    **It also moves the Pi's containers.** Docker's embedded resolver forwards to the host
-    stub (`ExtServers: [host(127.0.0.53)]` in a container's `/etc/resolv.conf`), so all seven
-    follow — promtail's `loki-homelab.local.<domain>` push URL included.
-    **The fallback is load-bearing, and its cutover is slower than daniel-server's.** That
-    host gets 2 seconds from glibc's `timeout:2 attempts:1` in a static `/etc/resolv.conf`;
-    resolved retries a server over several seconds and caches its choice. Accepted because
-    the ordering is the point: the Pi's wg-easy tunnel is the documented way in when the
-    cluster's own is unreachable (`roles/containers/wg-easy/CLAUDE.md`), so this host must
-    prefer the cluster for DNS and never depend on it.
-    Verify with a marked query: the Pi is not a k3s node, so it has no flannel SNAT and must
-    appear in Pi-hole's client list as its LAN address, not a `10.42.x` one.
     **The timestamp format is load-bearing**: `_SYSLOG_LINE_RE` wants exactly two
     whitespace-free tokens before the tag, so the scripts emit `date -Is` (one token).
     Traditional syslog format is four tokens and parses as nothing.
@@ -151,6 +133,34 @@ See repo-root `CLAUDE.md` for conventions.
     push lib — see *Granular tags*), then redeploy `uptime-kuma`
     on the server so AutoKuma provisions the monitor — do both close together or the fresh push
     monitor false-DOWNs until the first heartbeat lands.
+
+12. **Resolver** — a static `/etc/resolv.conf` (rendered from the SHARED
+    `roles/setup/common/templates/resolv.conf.j2`, the same file daniel-box uses) lists the
+    cluster Pi-hole first and a public resolver behind it, and systemd-resolved is disabled.
+    Before this the DHCP lease's ISP resolvers answered everything, including every internal
+    `*.local.<domain>` name — those resolve publicly via the Cloudflare wildcard, so the
+    private hostnames were leaving the LAN.
+    **The order is the entire mechanism.** `resolv.conf(5)` queries nameservers "in the order
+    listed" and the `rotate` option — deliberately unset — is what would stop clients trying
+    "the first listed server first every time". So the Pi falls through to the public resolver
+    while Pi-hole is unreachable and returns to it on the very next query, automatically, in
+    both directions, with no daemon watching anything.
+    **This replaces PR #693's resolved drop-in, which did not work.** systemd-resolved is
+    sticky by design and treats its `DNS=` list as interchangeable peers; measured 45 minutes
+    after that deploy, `Current DNS Server` read 1.1.1.1 at 15:12 and 10.0.0.243 at 15:14,
+    unprompted. Disabling resolved also removes the LINK scope a drop-in could not reach —
+    `resolvectl status` still listed 75.75.75.75, 75.75.76.76 and two Comcast v6 addresses
+    under Link 2, with their own `Current DNS Server`.
+    **It also moves the Pi's containers.** Docker's embedded resolver forwards to the host's
+    nameservers, so all seven follow — promtail's `loki-homelab.local.<domain>` push URL
+    included.
+    **The cost:** one 2s timeout per lookup while Pi-hole is down (`attempts` counts rounds
+    over the whole list, not retries per server), and no DNS cache, since resolved's is gone
+    and nothing else on this host caches.
+    Verify with a marked query: the Pi is not a k3s node, so it has no flannel SNAT and must
+    appear in Pi-hole's client list as its LAN address, not a `10.42.x` one.
+    ENFORCED by `ansible/tests/test_node_resolv_order.py`, which checks both callers of the
+    shared template for order, a present fallback, and the absence of `rotate`.
 
 ## Notable
 - **Handlers live in the playbook, not this role:** `Reboot Pi`, `Restart ZRAM`,

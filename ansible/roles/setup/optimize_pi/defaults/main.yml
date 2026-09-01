@@ -1,10 +1,20 @@
 ---
-# Resolvers this host uses, in order, written into the systemd-resolved drop-in by
-# templates/pi-dns.conf.j2. The cluster Pi-hole first so the Pi's internal lookups stay on
-# the private path; a public resolver behind it so the Pi never DEPENDS on the cluster for
-# DNS. That ordering is the point — this is the break-glass host, and its wg-easy tunnel is
-# the documented way in when the cluster's own is unreachable
+# The nameserver lines this host's /etc/resolv.conf carries, IN ORDER. First entry wins on
+# every query; the rest are fallbacks. The cluster Pi-hole first so the Pi's internal lookups
+# stay on the private path; a public resolver behind it so the Pi never DEPENDS on the cluster
+# for DNS. That ordering is the point — this is the break-glass host, and its wg-easy tunnel
+# is the documented way in when the cluster's own is unreachable
 # (roles/containers/wg-easy/CLAUDE.md).
+#
+# Rendered by the SHARED roles/setup/common/templates/resolv.conf.j2, which carries the
+# reasoning and is the same file daniel-box uses. Read it before changing the order.
 optimize_pi_dns_servers:
   - "{{ dns_k8s_vip }}"
   - 1.1.1.1
+
+# Seconds to wait for each nameserver, and how many rounds over the WHOLE list to make before
+# returning an error — `attempts` is rounds, not per-server retries (resolv.conf(5)). Matches
+# daniel-box and daniel-server: a dead Pi-hole costs one 2s timeout per lookup, then answers.
+optimize_pi_dns_timeout: 2
+optimize_pi_dns_attempts: 1
+optimize_pi_dns_options: "timeout:{{ optimize_pi_dns_timeout }} attempts:{{ optimize_pi_dns_attempts }}"
