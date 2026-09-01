@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+import bridge_config
 import check
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -99,11 +100,11 @@ def _logql_selector_names():
     """
     return sorted(
         name
-        for name in dir(check)
+        for name in dir(bridge_config)
         if name.isupper()
-        and isinstance(getattr(check, name), str)
-        and getattr(check, name).startswith("{")
-        and "}" in getattr(check, name)
+        and isinstance(getattr(bridge_config, name), str)
+        and getattr(bridge_config, name).startswith("{")
+        and "}" in getattr(bridge_config, name)
     )
 
 
@@ -159,7 +160,7 @@ def test_the_selector_roster_covers_the_known_selectors():
 
 def test_loki_selectors_use_real_stream_labels():
     for name in _logql_selector_names():
-        selector = getattr(check, name)
+        selector = getattr(bridge_config, name)
         unknown = _selector_labels(selector) - LOKI_STREAM_LABELS
         assert not unknown, (
             "%s selects on %s, which promtail does not emit — the query matches no stream and "
@@ -252,8 +253,8 @@ def test_log_error_burst_wins_the_message_over_healthy_workloads(monkeypatch):
 
     That combination IS the finding: readiness asks whether the port is open.
     """
-    monkeypatch.setattr(check, "LOG_ERROR_SELECTOR", '{job=~"k8s|pi"}')
-    monkeypatch.setattr(check, "LOG_ERROR_IGNORE", "")
+    monkeypatch.setattr(bridge_config, "LOG_ERROR_SELECTOR", '{job=~"k8s|pi"}')
+    monkeypatch.setattr(bridge_config, "LOG_ERROR_IGNORE", "")
     monkeypatch.setattr(
         check,
         "log_error_counts",
@@ -275,7 +276,7 @@ def test_log_error_arm_fails_open_on_a_loki_outage(monkeypatch):
     This is why the check is NOT in LOKI_DEPENDENT: membership there suppresses the whole
     check, and Loki Reachable already owns that root cause.
     """
-    monkeypatch.setattr(check, "LOG_ERROR_SELECTOR", '{job=~"k8s|pi"}')
+    monkeypatch.setattr(bridge_config, "LOG_ERROR_SELECTOR", '{job=~"k8s|pi"}')
 
     def boom(*a, **k):
         raise RuntimeError("loki query status=error")

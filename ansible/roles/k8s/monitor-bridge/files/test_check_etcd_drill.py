@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+import bridge_config
 import check
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -32,7 +33,7 @@ def _stamp(tmp_path, monkeypatch, body, mode=0o644, name="last-success-list-only
     p = tmp_path / name
     p.write_text(body)
     p.chmod(mode)
-    monkeypatch.setattr(check, "ETCD_DRILL_STATE_DIR", str(tmp_path))
+    monkeypatch.setattr(bridge_config, "ETCD_DRILL_STATE_DIR", str(tmp_path))
     return p
 
 
@@ -50,7 +51,7 @@ def test_etcd_drill_passes_on_a_recent_stamp(tmp_path, monkeypatch):
 
 def test_etcd_drill_fails_when_it_has_never_run(tmp_path, monkeypatch):
     """The state most worth reporting, and the one `[[ -f $STAMP ]] && check_age` reports green."""
-    monkeypatch.setattr(check, "ETCD_DRILL_STATE_DIR", str(tmp_path))
+    monkeypatch.setattr(bridge_config, "ETCD_DRILL_STATE_DIR", str(tmp_path))
     ok, msg = check.check_etcd_restore_drill()
     assert ok is False
     assert "has ever passed" in msg
@@ -114,10 +115,10 @@ def test_etcd_drill_grace_is_derived_from_the_cron():
         "ETCD_DRILL_MAX_AGE_S has to move with it"
     )
     cadence_s = 7 * 86400
-    assert check.ETCD_DRILL_MAX_AGE_S > cadence_s, (
+    assert bridge_config.ETCD_DRILL_MAX_AGE_S > cadence_s, (
         "a window at or under the 7-day cadence flaps on every normal week"
     )
-    assert check.ETCD_DRILL_MAX_AGE_S < 2 * cadence_s, (
+    assert bridge_config.ETCD_DRILL_MAX_AGE_S < 2 * cadence_s, (
         "a window of two cadences tolerates a fully missed run, which is exactly what this "
         "check is for"
     )

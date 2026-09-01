@@ -10,6 +10,7 @@ import urllib.error
 
 import pytest
 
+import bridge_config
 import check
 
 
@@ -27,7 +28,7 @@ def test_discord_webhook_404_is_down():
 
 def _discord_cycle(monkeypatch, status=200, raises=None):
     monkeypatch.setattr(
-        check, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/abc"
+        bridge_config, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/abc"
     )
     if raises is not None:
 
@@ -80,9 +81,9 @@ def test_discord_unreachable_rides_grace(monkeypatch):
 
 
 def test_discord_disabled_without_url(monkeypatch):
-    monkeypatch.setattr(check, "DISCORD_WEBHOOK_URL", "")
-    monkeypatch.setattr(check, "DISCORD_CROWDSEC_WEBHOOK_URL", "")
-    monkeypatch.setattr(check, "DISCORD_GITOPS_WEBHOOK_URL", "")
+    monkeypatch.setattr(bridge_config, "DISCORD_WEBHOOK_URL", "")
+    monkeypatch.setattr(bridge_config, "DISCORD_CROWDSEC_WEBHOOK_URL", "")
+    monkeypatch.setattr(bridge_config, "DISCORD_GITOPS_WEBHOOK_URL", "")
     ok, msg = check.check_discord()
     assert ok
     assert "disabled" in msg
@@ -91,15 +92,15 @@ def test_discord_disabled_without_url(monkeypatch):
 def test_discord_verifies_all_configured_webhooks(monkeypatch):
     # All three webhooks valid -> up, naming each verified hop.
     monkeypatch.setattr(
-        check, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/kuma"
+        bridge_config, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/kuma"
     )
     monkeypatch.setattr(
-        check,
+        bridge_config,
         "DISCORD_CROWDSEC_WEBHOOK_URL",
         "https://discord.com/api/webhooks/2/crowdsec",
     )
     monkeypatch.setattr(
-        check,
+        bridge_config,
         "DISCORD_GITOPS_WEBHOOK_URL",
         "https://discord.com/api/webhooks/3/gitops",
     )
@@ -114,11 +115,11 @@ def test_discord_gitops_webhook_failure_pages(monkeypatch):
     # marker greens regardless of delivery — no Kuma backstop) pages, naming it, even though
     # Kuma's own webhook is fine.
     monkeypatch.setattr(
-        check, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/kuma"
+        bridge_config, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/kuma"
     )
-    monkeypatch.setattr(check, "DISCORD_CROWDSEC_WEBHOOK_URL", "")
+    monkeypatch.setattr(bridge_config, "DISCORD_CROWDSEC_WEBHOOK_URL", "")
     monkeypatch.setattr(
-        check,
+        bridge_config,
         "DISCORD_GITOPS_WEBHOOK_URL",
         "https://discord.com/api/webhooks/3/gitops",
     )
@@ -139,10 +140,10 @@ def test_discord_crowdsec_webhook_failure_pages(monkeypatch):
     # A revoked CrowdSec webhook (the one with no Kuma backstop) pages, naming it — even though
     # Kuma's own webhook is fine.
     monkeypatch.setattr(
-        check, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/kuma"
+        bridge_config, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/kuma"
     )
     monkeypatch.setattr(
-        check,
+        bridge_config,
         "DISCORD_CROWDSEC_WEBHOOK_URL",
         "https://discord.com/api/webhooks/2/crowdsec",
     )
@@ -163,10 +164,10 @@ def test_discord_healthchecks_webhook_failure_pages(monkeypatch):
     # A revoked healthchecks.io app webhook (its own check-down alerts, no Kuma backstop) pages,
     # naming it — even though Kuma's own webhook is fine.
     monkeypatch.setattr(
-        check, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/kuma"
+        bridge_config, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/kuma"
     )
     monkeypatch.setattr(
-        check,
+        bridge_config,
         "DISCORD_HEALTHCHECKS_WEBHOOK_URL",
         "https://discord.com/api/webhooks/5/hc",
     )
@@ -184,15 +185,15 @@ def test_discord_healthchecks_webhook_failure_pages(monkeypatch):
 
 
 def test_email_backstop_disabled_without_password(monkeypatch):
-    monkeypatch.setattr(check, "SMTP_PASSWORD", "")
+    monkeypatch.setattr(bridge_config, "SMTP_PASSWORD", "")
     ok, msg = check.email_backstop()
     assert ok
     assert "disabled" in msg
 
 
 def test_email_backstop_caches_success_within_interval(monkeypatch):
-    monkeypatch.setattr(check, "SMTP_PASSWORD", "app-pw")
-    monkeypatch.setattr(check, "EMAIL_PROBE_INTERVAL_S", 3600)
+    monkeypatch.setattr(bridge_config, "SMTP_PASSWORD", "app-pw")
+    monkeypatch.setattr(bridge_config, "EMAIL_PROBE_INTERVAL_S", 3600)
     monkeypatch.setattr(check, "_email_probe", {"ts": 0.0, "ok": True, "msg": ""})
     calls = []
 
@@ -210,8 +211,8 @@ def test_email_backstop_caches_success_within_interval(monkeypatch):
 
 def test_email_backstop_failure_reprobes_every_cycle(monkeypatch):
     # a failure is NOT cached (unlike a success), so recovery is caught next cycle, not 6h later
-    monkeypatch.setattr(check, "SMTP_PASSWORD", "app-pw")
-    monkeypatch.setattr(check, "EMAIL_PROBE_INTERVAL_S", 3600)
+    monkeypatch.setattr(bridge_config, "SMTP_PASSWORD", "app-pw")
+    monkeypatch.setattr(bridge_config, "EMAIL_PROBE_INTERVAL_S", 3600)
     monkeypatch.setattr(check, "_email_probe", {"ts": 0.0, "ok": True, "msg": ""})
     calls = []
 
@@ -231,13 +232,13 @@ def test_email_backstop_failure_reprobes_every_cycle(monkeypatch):
 def test_check_discord_email_backstop_failure_pages(monkeypatch):
     # webhooks fine but the email 2nd channel's SMTP login fails -> Discord Delivery pages after streak
     monkeypatch.setattr(
-        check, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/kuma"
+        bridge_config, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/kuma"
     )
-    monkeypatch.setattr(check, "DISCORD_CROWDSEC_WEBHOOK_URL", "")
-    monkeypatch.setattr(check, "DISCORD_GITOPS_WEBHOOK_URL", "")
-    monkeypatch.setattr(check, "DISCORD_ARR_WEBHOOK_URL", "")
-    monkeypatch.setattr(check, "DISCORD_HEALTHCHECKS_WEBHOOK_URL", "")
-    monkeypatch.setattr(check, "SMTP_PASSWORD", "app-pw")
+    monkeypatch.setattr(bridge_config, "DISCORD_CROWDSEC_WEBHOOK_URL", "")
+    monkeypatch.setattr(bridge_config, "DISCORD_GITOPS_WEBHOOK_URL", "")
+    monkeypatch.setattr(bridge_config, "DISCORD_ARR_WEBHOOK_URL", "")
+    monkeypatch.setattr(bridge_config, "DISCORD_HEALTHCHECKS_WEBHOOK_URL", "")
+    monkeypatch.setattr(bridge_config, "SMTP_PASSWORD", "app-pw")
     monkeypatch.setattr(check, "_email_probe", {"ts": 0.0, "ok": True, "msg": ""})
     monkeypatch.setattr(check, "_get_json", lambda *a, **k: {"name": "Homelab Alerts"})
 

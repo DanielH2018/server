@@ -5,6 +5,7 @@ metric is never green: the query returns nothing both when every volume is redun
 kube-state-metrics is not reporting at all.
 """
 
+import bridge_config
 import check
 
 
@@ -13,7 +14,7 @@ def _longhorn_series(pvc, state, pod="longhorn-manager-a"):
 
 
 def _arm_longhorn(monkeypatch, vector, volumes=43.0, consecutive=3):
-    monkeypatch.setattr(check, "LONGHORN_CONSECUTIVE", consecutive)
+    monkeypatch.setattr(bridge_config, "LONGHORN_CONSECUTIVE", consecutive)
     monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: volumes)
     monkeypatch.setattr(check, "prom_vector", lambda *a, **k: vector)
 

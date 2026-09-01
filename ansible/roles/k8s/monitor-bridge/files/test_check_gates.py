@@ -17,6 +17,7 @@ import pytest
 
 import bridge_common
 import bridge_parsing
+import bridge_config
 import check
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -326,13 +327,13 @@ def test_origin_sel_is_empty_without_a_pin(monkeypatch):
     # Against the Docker Prometheus there is no `origin` label at all — external_labels apply on
     # remote-write and never to local storage — so a pin there would select NOTHING and read as
     # healthy. Empty must stay empty.
-    monkeypatch.setattr(check, "PROM_ORIGIN", "")
+    monkeypatch.setattr(bridge_config, "PROM_ORIGIN", "")
     assert check.origin_sel() == ""
     assert check.origin_sel('name!=""') == '{name!=""}'
 
 
 def test_origin_sel_appends_the_pin(monkeypatch):
-    monkeypatch.setattr(check, "PROM_ORIGIN", 'origin="daniel-server"')
+    monkeypatch.setattr(bridge_config, "PROM_ORIGIN", 'origin="daniel-server"')
     assert check.origin_sel() == '{origin="daniel-server"}'
     assert check.origin_sel('name!=""') == '{name!="", origin="daniel-server"}'
 
@@ -344,24 +345,24 @@ def test_origin_pin_derives_from_the_prometheus_url(monkeypatch):
     monkeypatch.setenv("PROMETHEUS_URL", "https://prom-k8s.example")
     monkeypatch.setenv("CLUSTER_PROMETHEUS_URL", "https://prom-k8s.example")
     monkeypatch.delenv("PROM_ORIGIN", raising=False)
-    reloaded = importlib.reload(check)
+    reloaded = importlib.reload(bridge_config)
     try:
         assert reloaded.PROM_ORIGIN == 'origin="daniel-server"'
     finally:
         monkeypatch.undo()
-        importlib.reload(check)
+        importlib.reload(bridge_config)
 
 
 def test_origin_pin_absent_when_reading_the_docker_prometheus(monkeypatch):
     monkeypatch.setenv("PROMETHEUS_URL", "http://prometheus:9090")
     monkeypatch.setenv("CLUSTER_PROMETHEUS_URL", "https://prom-k8s.example")
     monkeypatch.delenv("PROM_ORIGIN", raising=False)
-    reloaded = importlib.reload(check)
+    reloaded = importlib.reload(bridge_config)
     try:
         assert reloaded.PROM_ORIGIN == ""
     finally:
         monkeypatch.undo()
-        importlib.reload(check)
+        importlib.reload(bridge_config)
 
 
 def test_cluster_targets_is_cluster_dependent_not_prom_dependent():
@@ -385,7 +386,7 @@ def test_cluster_targets_covers_everything_its_sibling_does_not(monkeypatch):
         seen["q"], seen["base"] = promql, base
         return [({"job": "j%d" % i}, 1.0) for i in range(5)]
 
-    monkeypatch.setattr(check, "CLUSTER_PROM_URL", "https://cluster")
+    monkeypatch.setattr(bridge_config, "CLUSTER_PROM_URL", "https://cluster")
     monkeypatch.setattr(check, "prom_vector", fake_vector)
     ok, _ = check.check_cluster_targets()
     assert ok is True
@@ -394,13 +395,13 @@ def test_cluster_targets_covers_everything_its_sibling_does_not(monkeypatch):
 
 
 def test_cluster_targets_empty_is_down():
-    ok, msg = check.targets_verdict([], check.CLUSTER_TARGETS_MIN)
+    ok, msg = check.targets_verdict([], bridge_config.CLUSTER_TARGETS_MIN)
     assert ok is False
     assert "UNKNOWN" in msg
 
 
 def test_cluster_targets_disabled_without_cluster_url(monkeypatch):
-    monkeypatch.setattr(check, "CLUSTER_PROM_URL", "")
+    monkeypatch.setattr(bridge_config, "CLUSTER_PROM_URL", "")
     ok, msg = check.check_cluster_targets()
     assert ok is True
     assert "disabled" in msg
@@ -468,19 +469,19 @@ def test_cadvisor_checks_never_pin_the_origin():
     # Guarded on PROM_ORIGIN being non-empty: under the test env PROM_URL is unset so the pin is
     # "", and `"" not in s` is False for every s — an unguarded assert fails on the empty case
     # while proving nothing about the real one.
-    if check.PROM_ORIGIN:
-        assert check.PROM_ORIGIN not in check.cadvisor_sel('container!=""'), (
+    if bridge_config.PROM_ORIGIN:
+        assert bridge_config.PROM_ORIGIN not in check.cadvisor_sel('container!=""'), (
             "cadvisor_sel() must not apply the origin pin — cAdvisor series carry no origin label"
         )
     # Independent of the environment: the pin can only enter through PROM_ORIGIN, so a
     # cadvisor_sel() built with a sentinel pin must still come back without it.
-    saved = check.PROM_ORIGIN
+    saved = bridge_config.PROM_ORIGIN
     try:
-        check.PROM_ORIGIN = 'origin="sentinel"'
+        bridge_config.PROM_ORIGIN = 'origin="sentinel"'
         assert "sentinel" not in check.cadvisor_sel('container!=""')
         assert "sentinel" in check.origin_sel('container!=""')
     finally:
-        check.PROM_ORIGIN = saved
+        bridge_config.PROM_ORIGIN = saved
 
 
 def test_up_still_pins_the_origin_where_the_label_exists():
@@ -488,8 +489,8 @@ def test_up_still_pins_the_origin_where_the_label_exists():
     # targets_verdict depends on the pin to scope its floor to one estate. Dropping it there would
     # make check_targets a duplicate of check_cluster_targets and orphan daniel-server's
     # node-exporter, which is why the fix deliberately left this call site alone.
-    if check.PROM_ORIGIN:
-        assert check.PROM_ORIGIN in check.origin_sel(), (
+    if bridge_config.PROM_ORIGIN:
+        assert bridge_config.PROM_ORIGIN in check.origin_sel(), (
             "origin_sel() must still apply the pin when PROM_ORIGIN is set"
         )
 
@@ -505,14 +506,14 @@ def test_duration_seconds_parses_prometheus_durations():
 
 
 def test_k8s_workloads_disabled_without_cluster_url(monkeypatch):
-    monkeypatch.setattr(check, "CLUSTER_PROM_URL", "")
+    monkeypatch.setattr(bridge_config, "CLUSTER_PROM_URL", "")
     ok, msg = check.check_k8s_workloads()
     assert ok is True
     assert "disabled" in msg
 
 
 def test_cluster_prometheus_gate_down_when_no_result(monkeypatch):
-    monkeypatch.setattr(check, "CLUSTER_PROM_URL", "https://prom-k8s.example")
+    monkeypatch.setattr(bridge_config, "CLUSTER_PROM_URL", "https://prom-k8s.example")
     monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: None)
     ok, msg = check.check_cluster_prometheus()
     assert ok is False
@@ -569,10 +570,10 @@ def _run_once_with_gates(monkeypatch, cluster_ok, checks, cluster_dependent):
 def _reset_b2_probe(
     monkeypatch, key_id="kid", app_key="akey", interval=1800, transport_retry=300
 ):
-    monkeypatch.setattr(check, "B2_PROBE_KEY_ID", key_id)
-    monkeypatch.setattr(check, "B2_PROBE_APPLICATION_KEY", app_key)
-    monkeypatch.setattr(check, "B2_PROBE_INTERVAL_S", interval)
-    monkeypatch.setattr(check, "B2_TRANSPORT_RETRY_S", transport_retry)
+    monkeypatch.setattr(bridge_config, "B2_PROBE_KEY_ID", key_id)
+    monkeypatch.setattr(bridge_config, "B2_PROBE_APPLICATION_KEY", app_key)
+    monkeypatch.setattr(bridge_config, "B2_PROBE_INTERVAL_S", interval)
+    monkeypatch.setattr(bridge_config, "B2_TRANSPORT_RETRY_S", transport_retry)
     monkeypatch.setattr(
         check,
         "_b2_probe",
@@ -589,7 +590,7 @@ def _cap_denial():
     path and prove the opposite of what it claims. These tests used to do that.
     """
     return urllib.error.HTTPError(
-        check.B2_PROBE_URL,
+        bridge_config.B2_PROBE_URL,
         403,
         "Forbidden: transaction_cap_exceeded",
         {},
@@ -623,8 +624,8 @@ def test_b2_reachable_disabled_without_credentials(monkeypatch):
     ],
 )
 def test_b2_authorize(monkeypatch, response, ok, must_contain):
-    monkeypatch.setattr(check, "B2_PROBE_KEY_ID", "kid")
-    monkeypatch.setattr(check, "B2_PROBE_APPLICATION_KEY", "akey")
+    monkeypatch.setattr(bridge_config, "B2_PROBE_KEY_ID", "kid")
+    monkeypatch.setattr(bridge_config, "B2_PROBE_APPLICATION_KEY", "akey")
     monkeypatch.setattr(check, "_get_json", lambda url, headers=None: response)
     result_ok, msg = check.b2_authorize()
     assert result_ok is ok
@@ -697,7 +698,7 @@ def test_b2_reachable_reprobes_a_transport_failure_next_cycle(monkeypatch):
 def test_b2_transport_retry_is_shorter_than_the_probe_interval():
     # The two TTLs must not converge: if the transport retry ever reached B2_PROBE_INTERVAL_S the
     # split above would be a no-op that still reads as implemented.
-    assert check.B2_TRANSPORT_RETRY_S < check.B2_PROBE_INTERVAL_S
+    assert bridge_config.B2_TRANSPORT_RETRY_S < bridge_config.B2_PROBE_INTERVAL_S
 
 
 def test_b2_reachable_reprobes_after_the_interval(monkeypatch):

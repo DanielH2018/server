@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+import bridge_config
 import check
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -129,7 +130,7 @@ def test_n8n_disabled_without_key():
 
 def test_n8n_check_down_after_consecutive_failures(monkeypatch, seq):
     # a workflow pages only once its streak reaches N8N_CONSECUTIVE_MAX (3) distinct failures
-    monkeypatch.setattr(check, "N8N_API_KEY", "x")
+    monkeypatch.setattr(bridge_config, "N8N_API_KEY", "x")
     monkeypatch.setattr(check, "_n8n_streaks", {})
     wf = {"data": [{"id": "1", "name": "Prod Flow", "active": True}]}
 
@@ -151,7 +152,7 @@ def test_n8n_check_down_after_consecutive_failures(monkeypatch, seq):
 
 
 def test_n8n_check_ok_when_no_failures(monkeypatch, seq):
-    monkeypatch.setattr(check, "N8N_API_KEY", "x")
+    monkeypatch.setattr(bridge_config, "N8N_API_KEY", "x")
     wf = {"data": [{"id": "1", "name": "Prod Flow", "active": True}]}
     ex = {"data": []}
     monkeypatch.setattr(check, "_get_json", seq(wf, ex))
@@ -162,7 +163,7 @@ def test_n8n_check_ok_when_no_failures(monkeypatch, seq):
 
 def test_n8n_check_single_failure_does_not_page(monkeypatch, seq):
     # one failure -> streak 1 < N8N_CONSECUTIVE_MAX -> stays up (the one-transient grace)
-    monkeypatch.setattr(check, "N8N_API_KEY", "x")
+    monkeypatch.setattr(bridge_config, "N8N_API_KEY", "x")
     monkeypatch.setattr(check, "_n8n_streaks", {})
     wf = {"data": [{"id": "1", "name": "Prod Flow", "active": True}]}
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -320,7 +321,7 @@ def test_arr_queue_disabled_without_keys():
 
 
 def test_arr_queue_down_on_sonarr_warning(monkeypatch):
-    monkeypatch.setattr(check, "SONARR_API_KEY", "x")
+    monkeypatch.setattr(bridge_config, "SONARR_API_KEY", "x")
     q = _queue(
         {
             "title": "Poisoned.Episode.S01E01.exe",
@@ -337,7 +338,7 @@ def test_arr_queue_down_on_sonarr_warning(monkeypatch):
 
 
 def test_arr_queue_down_on_radarr_warning(monkeypatch):
-    monkeypatch.setattr(check, "RADARR_API_KEY", "x")
+    monkeypatch.setattr(bridge_config, "RADARR_API_KEY", "x")
     q = _queue(
         {
             "title": "Bad.Movie.2026",
@@ -353,8 +354,8 @@ def test_arr_queue_down_on_radarr_warning(monkeypatch):
 
 
 def test_arr_queue_ok_when_both_clean(monkeypatch):
-    monkeypatch.setattr(check, "SONARR_API_KEY", "x")
-    monkeypatch.setattr(check, "RADARR_API_KEY", "x")
+    monkeypatch.setattr(bridge_config, "SONARR_API_KEY", "x")
+    monkeypatch.setattr(bridge_config, "RADARR_API_KEY", "x")
     monkeypatch.setattr(check, "_get_json", lambda *a, **k: _queue())
     ok, msg = check.check_arr_queue()
     assert ok
@@ -365,8 +366,8 @@ def test_arr_queue_urls_include_unknown_items_flags(monkeypatch):
     # Both flags default FALSE upstream, hiding exactly the unmapped/poisoned queue items
     # this check exists for. Sonarr got its flag on day one; Radarr's twin was missed
     # (2026-07-02 review M1) — pin BOTH spellings so neither regresses again.
-    monkeypatch.setattr(check, "SONARR_API_KEY", "x")
-    monkeypatch.setattr(check, "RADARR_API_KEY", "x")
+    monkeypatch.setattr(bridge_config, "SONARR_API_KEY", "x")
+    monkeypatch.setattr(bridge_config, "RADARR_API_KEY", "x")
     calls = []
 
     def fake_get_json(url, headers=None):
@@ -384,7 +385,7 @@ def test_arr_queue_urls_include_unknown_items_flags(monkeypatch):
 
 def test_arr_queue_only_checks_configured_app(monkeypatch):
     # Only Sonarr has a key; Radarr must not be queried at all.
-    monkeypatch.setattr(check, "SONARR_API_KEY", "x")
+    monkeypatch.setattr(bridge_config, "SONARR_API_KEY", "x")
     calls = []
 
     def fake_get_json(url, headers=None):
@@ -472,15 +473,15 @@ def test_indexers_down_ignore_only_named_indexer():
 
 
 def test_prowlarr_indexers_disabled_without_key(monkeypatch):
-    monkeypatch.setattr(check, "PROWLARR_API_KEY", "")
+    monkeypatch.setattr(bridge_config, "PROWLARR_API_KEY", "")
     ok, msg = check.check_prowlarr_indexers()
     assert ok is True
     assert "disabled" in msg
 
 
 def test_prowlarr_indexers_down_on_sustained(monkeypatch, seq):
-    monkeypatch.setattr(check, "PROWLARR_API_KEY", "k")
-    monkeypatch.setattr(check, "PROWLARR_INDEXER_MIN_DOWN_MIN", 30.0)
+    monkeypatch.setattr(bridge_config, "PROWLARR_API_KEY", "k")
+    monkeypatch.setattr(bridge_config, "PROWLARR_INDEXER_MIN_DOWN_MIN", 30.0)
     status = _status(
         (1, "2000-01-01T00:00:00Z")
     )  # ancient -> definitely over threshold
@@ -494,7 +495,7 @@ def test_prowlarr_indexers_down_on_sustained(monkeypatch, seq):
 
 
 def test_prowlarr_indexers_up_when_none_failing(monkeypatch, seq):
-    monkeypatch.setattr(check, "PROWLARR_API_KEY", "k")
+    monkeypatch.setattr(bridge_config, "PROWLARR_API_KEY", "k")
     monkeypatch.setattr(check, "_get_json", seq([], [{"id": 1, "name": "EZTV"}]))
     ok, msg = check.check_prowlarr_indexers()
     assert ok is True
@@ -502,8 +503,8 @@ def test_prowlarr_indexers_up_when_none_failing(monkeypatch, seq):
 
 
 def test_prowlarr_indexers_ignore_list_suppresses_page(monkeypatch, seq):
-    monkeypatch.setattr(check, "PROWLARR_API_KEY", "k")
-    monkeypatch.setattr(check, "PROWLARR_INDEXER_IGNORE", "The Pirate Bay")
+    monkeypatch.setattr(bridge_config, "PROWLARR_API_KEY", "k")
+    monkeypatch.setattr(bridge_config, "PROWLARR_INDEXER_IGNORE", "The Pirate Bay")
     status = _status((1, "2000-01-01T00:00:00Z"))  # ancient -> over threshold
     indexers = [{"id": 1, "name": "The Pirate Bay"}]
     monkeypatch.setattr(check, "_get_json", seq(status, indexers))
@@ -573,7 +574,7 @@ def test_bazarr_self_reported_health_issues_are_surfaced():
 
 def test_bazarr_check_is_disabled_without_an_api_key(monkeypatch):
     """No key means stay up, the check_n8n convention — not a permanently red monitor."""
-    monkeypatch.setattr(check, "BAZARR_API_KEY", "")
+    monkeypatch.setattr(bridge_config, "BAZARR_API_KEY", "")
 
     ok, msg = check.check_bazarr()
 

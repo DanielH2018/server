@@ -9,6 +9,7 @@ all three logging OK, found by reading the code rather than by an alert.
 from pathlib import Path
 
 
+import bridge_config
 import check
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -22,8 +23,8 @@ _REPO = Path(__file__).resolve().parents[5]
 
 
 def _reset_cadvisor(monkeypatch, min_pods=20, consecutive=2):
-    monkeypatch.setattr(check, "CADVISOR_PODS_MIN", min_pods)
-    monkeypatch.setattr(check, "CADVISOR_CONSECUTIVE", consecutive)
+    monkeypatch.setattr(bridge_config, "CADVISOR_PODS_MIN", min_pods)
+    monkeypatch.setattr(bridge_config, "CADVISOR_CONSECUTIVE", consecutive)
     monkeypatch.setattr(check, "_cadvisor_streaks", {})
 
 

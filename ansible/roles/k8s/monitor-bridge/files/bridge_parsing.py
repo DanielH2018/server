@@ -17,9 +17,11 @@ The rule that follows, and the only one that keeps this split honest:
   A function may live here only if it is never patched AND reads no patched
   module-level name. Everything it needs arrives as an argument.
 
-That is why these five are pure and take their inputs explicitly. Config constants and
-the I/O primitives (`_get_json`, `prom_scalar`, `push`, the `*_API_KEY` values) stay in
-check.py precisely because the suite patches them there.
+That is why these five are pure and take their inputs explicitly. The config constants
+moved to bridge_config.py on 2026-09-01 under a different rule — the tests now patch them
+THERE and check.py reads them as `cfg.X` at call time — and the I/O primitives
+(`_get_json`, `prom_scalar`, `push`) are next to move the same way. This module predates
+that rule and needs neither: nothing here reads a patched name.
 
 `sanitize` used to live here too; it moved to `bridge_common.py` because autofix-bridge's
 autofix.py carried a byte-identical copy — bridge_common.py is the module both check.py and

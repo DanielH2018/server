@@ -30,7 +30,7 @@ _CONSUMERS = {
 }
 
 _PLUGIN_DAEMONSET = K8S_ROLES / "dri-device-plugin" / "templates" / "daemonset.yaml.j2"
-_BRIDGE_CHECK = K8S_ROLES / "monitor-bridge" / "files" / "check.py"
+_BRIDGE_CHECK = K8S_ROLES / "monitor-bridge" / "files" / "bridge_config.py"
 
 
 def _consumer_names() -> dict[str, str]:
