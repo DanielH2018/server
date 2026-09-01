@@ -437,15 +437,50 @@ def shellcheck_check(path: Path, shellcheck_bin: str) -> str | None:
     return None
 
 
+def shellcheck_batch(paths: list[Path], shellcheck_bin: str) -> dict[Path, str]:
+    """Run shellcheck ONCE over every rendered script; {path: findings} for the ones it flags.
+
+    One process rather than one per file: shellcheck's start-up is ~0.26s on daniel-box, so
+    the 20-template sweep spent ~5s launching it and well under a second checking anything
+    (measured 2026-09-01). Same severities as `shellcheck_check` — the repo default, matching
+    the prek hook. `-f gcc` prints one `path:line:col: level: message [SCnnnn]` per finding, so
+    a batch verdict attributes cleanly to the file it belongs to; the default format groups by
+    `In <path> line N:` blocks, which would need parsing.
+    """
+    if not paths:
+        return {}
+    proc = subprocess.run(
+        [shellcheck_bin, "-f", "gcc", *map(str, paths)], capture_output=True, text=True
+    )
+    if proc.returncode == 0:
+        return {}
+    by_path: dict[Path, list[str]] = {}
+    for line in proc.stdout.splitlines():
+        for path in paths:
+            if line.startswith(f"{path}:"):
+                by_path.setdefault(path, []).append(line[len(str(path)) + 1 :])
+                break
+    if not by_path:
+        # Non-zero with nothing attributable (a bad flag, a crash): blame every file rather
+        # than none, so a broken shellcheck cannot read as a clean sweep.
+        msg = proc.stderr.strip() or f"shellcheck exited {proc.returncode}"
+        return {p: msg for p in paths}
+    return {p: "\n".join(lines) for p, lines in by_path.items()}
+
+
 def check_template(
     path: Path,
     ctx: dict,
     out_dir: Path,
-    shellcheck_bin: str,
+    shellcheck_bin: str | None,
     cron_map: dict[Path, Path],
 ) -> str | None:
     """Render one template, write it under out_dir preserving its relative path (minus the
-    trailing .j2), then lint the rendered file. Return an error string, or None on success."""
+    trailing .j2), then lint the rendered file. Return an error string, or None on success.
+
+    `shellcheck_bin=None` skips the per-file shellcheck step: main() passes None and runs
+    `shellcheck_batch` over every rendered file afterwards, which is the same check in one
+    process. A caller checking a single template passes the binary and gets it inline."""
     rel = path.relative_to(ANSIBLE)
     env = build_env(path.parent)
     rendered, err = render_or_error(env, path.name, ctx)
@@ -462,11 +497,12 @@ def check_template(
         dump_numbered(rendered)
         return f"bash -n: {err}"
 
-    err = shellcheck_check(out_path, shellcheck_bin)
-    if err:
-        print(f"\n----- rendered {rel} -----", file=sys.stderr)
-        dump_numbered(rendered)
-        return f"shellcheck: {err}"
+    if shellcheck_bin is not None:
+        err = shellcheck_check(out_path, shellcheck_bin)
+        if err:
+            print(f"\n----- rendered {rel} -----", file=sys.stderr)
+            dump_numbered(rendered)
+            return f"shellcheck: {err}"
 
     err = cron_path_error(path, rendered, cron_map)
     if err:
@@ -503,12 +539,27 @@ def main() -> int:
     failures = 0
     with tempfile.TemporaryDirectory(prefix="validate-shell-templates-") as tmp:
         out_dir = Path(tmp)
+        # Render + `bash -n` + the cron checks per template; shellcheck once over everything
+        # that got that far (see shellcheck_batch for why one process, not one per file).
+        rendered_ok: dict[Path, Path] = {}
         for path in templates:
             rel = path.relative_to(REPO)
-            err = check_template(path, ctx, out_dir, shellcheck_bin, cron_map)
+            err = check_template(path, ctx, out_dir, None, cron_map)
             if err:
                 failures += 1
                 print(f"  [FAIL] {rel}: {err}", file=sys.stderr)
+            else:
+                rendered_ok[out_dir / path.relative_to(ANSIBLE).with_suffix("")] = path
+        flagged = shellcheck_batch(list(rendered_ok), shellcheck_bin)
+        for out_path, path in rendered_ok.items():
+            rel = path.relative_to(REPO)
+            if out_path in flagged:
+                failures += 1
+                print(f"\n----- rendered {rel} -----", file=sys.stderr)
+                dump_numbered(out_path.read_text())
+                print(
+                    f"  [FAIL] {rel}: shellcheck: {flagged[out_path]}", file=sys.stderr
+                )
             else:
                 print(f"  [ok]   {rel}")
 
