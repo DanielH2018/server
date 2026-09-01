@@ -30,8 +30,11 @@ REASON = "k8s_autodeploy_reason"
 #
 # The invariant that makes this list safe: no role named here may pin an `_image:` var,
 # because pinning one is what makes a role Renovate-visible and therefore auto-deployable
-# at all. seed-volume pins seed_volume_image and so does NOT belong here — it declares
-# false like any other role.
+# at all. seed-volume is the near miss: it is included by other roles the same way, and until
+# 2026-09-01 it pinned seed_volume_image for the seed pod it rendered, which settled the
+# question outright. That pin went with the seeding. It still does NOT belong here, for the
+# other half of the rule above — it carries a defaults/main.yml and declares a stance, where a
+# role named here carries neither.
 SHARED_ROLES = frozenset({"manifests", "rollout-drain"})
 
 

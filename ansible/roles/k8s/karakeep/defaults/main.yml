@@ -59,7 +59,6 @@ karakeep_k8s_tagger_mem_request: 64Mi
 karakeep_k8s_claim: karakeep-data
 karakeep_k8s_storage_class: longhorn
 karakeep_k8s_size: 4Gi
-karakeep_k8s_source_path: /home/ubuntu/server/containers/karakeep/data
 
 # The Meilisearch index: 286M today, and deliberately NOT seeded and NOT backed up. It is a
 # derived artifact — the compose template calls it "rebuildable by reindexing from this data"

@@ -83,14 +83,13 @@ Per claim, in this order:
    already at zero, and the message names the wrong thing.
 7. **`POST ?action=snapshotRevert {name}`**, demanding HTTP 200.
 8. **`POST ?action=detach {}`, then wait for `detached`.**
-9. **Strip the PVC's `homelab.daniel-hunter.com/seeded` annotation.** `k8s/seed-volume` skips
-   its whole seed pod cycle on that key, and the key asserts something about the volume's
-   contents that step 7 has just replaced. In practice the two cannot disagree — every snapshot
-   this role can pick was taken during a deploy, long after the volume was seeded, so the
-   in-volume `.seeded` marker is in all of them. Stripping it removes the need for that to stay
-   true. Stripping it needlessly costs one seed pod cycle on the next deploy of this service,
-   which re-reads the marker and re-annotates; keeping it after a revert that did land pre-seed
-   would leave a volume permanently believed seeded when it is not.
+There was a ninth step until 2026-09-01: stripping the PVC's
+`homelab.daniel-hunter.com/seeded` annotation. It existed to reverse `k8s/seed-volume`'s
+short-circuit, which skipped the seed pod cycle whenever that key was present — a claim about
+the volume's contents that step 7 replaces wholesale. `k8s/seed-volume` stopped seeding when
+Docker's bind-mount sources ceased to exist, so nothing sets or reads that key any more and the
+reversal had nothing left to reverse. Removed with the forward state rather than left behind:
+a reverse-state task for a mechanism that no longer exists reads as a live invariant.
 
 Steps 1 and 2 are reads, and carry `check_mode: false` — but that only matters if this role
 starts at all. See "The guard is `k8s_no_mutate`, and neither `--check` nor `--dry-run` reaches

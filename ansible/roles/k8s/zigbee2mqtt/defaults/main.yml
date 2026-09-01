@@ -38,4 +38,3 @@ zigbee2mqtt_k8s_mqtt_broker: mosquitto
 zigbee2mqtt_k8s_claim: zigbee2mqtt-data
 zigbee2mqtt_k8s_storage_class: longhorn
 zigbee2mqtt_k8s_size: 2Gi
-zigbee2mqtt_k8s_source_path: /home/ubuntu/server/containers/zigbee2mqtt/data

@@ -4,29 +4,23 @@
 # daniel-box's never-monitored NVMe; daniel-server's Docker collector stays as a spoke
 # pushing to this web API until the Phase F join absorbs it.
 
-# Both seeds are cutover-style: influxdb writes its bolt DB continuously while running, so
-# the Docker trio must be STOPPED by the cutover play before seeding (the source-quiescence
-# contract in k8s/seed-volume). Two seeds from one host in quick succession can trip the
-# source's ssh rate limiter — re-run to resume, the completed claim's marker skips it.
-- name: Seed the influxdb history volume
+- name: Create the influxdb history volume claim
   tags: [deploy]
   ansible.builtin.include_role:
     name: k8s/seed-volume
   vars:
     seed_volume_service: scrutiny
     seed_volume_claim: "{{ scrutiny_k8s_influxdb_claim }}"
-    seed_volume_source_path: "{{ scrutiny_k8s_influxdb_source_path }}"
     seed_volume_storage_class: "{{ scrutiny_k8s_influxdb_storage_class }}"
     seed_volume_size: "{{ scrutiny_k8s_influxdb_size }}"
 
-- name: Seed the web config volume
+- name: Create the web config volume claim
   tags: [deploy]
   ansible.builtin.include_role:
     name: k8s/seed-volume
   vars:
     seed_volume_service: scrutiny
     seed_volume_claim: "{{ scrutiny_k8s_config_claim }}"
-    seed_volume_source_path: "{{ scrutiny_k8s_config_source_path }}"
     seed_volume_storage_class: "{{ scrutiny_k8s_config_storage_class }}"
     seed_volume_size: "{{ scrutiny_k8s_config_size }}"
 

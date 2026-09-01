@@ -24,4 +24,3 @@ healthchecks_k8s_mem_request: 64Mi
 healthchecks_k8s_claim: healthchecks-config
 healthchecks_k8s_storage_class: longhorn
 healthchecks_k8s_size: 1Gi
-healthchecks_k8s_source_path: /home/ubuntu/server/containers/healthchecks/config

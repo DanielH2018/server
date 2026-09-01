@@ -42,7 +42,6 @@ jellyfin_k8s_claim: jellyfin-config
 # rather than assumed, with B2 Reachable as the readout. docs/b2-transaction-cap-monitoring-gaps.md.
 jellyfin_k8s_storage_class: longhorn
 jellyfin_k8s_size: 3Gi
-jellyfin_k8s_source_path: /home/ubuntu/server/containers/jellyfin/config
 
 # READ-ONLY, and mounted TWICE — see the deployment template. Not a tidy-up target.
 jellyfin_k8s_media_claim: media-data

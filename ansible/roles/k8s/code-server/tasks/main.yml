@@ -24,16 +24,12 @@
     # lower this to is a measured one — leave it until a few cold builds have been timed.
     image_builder_timeout: 1800
 
-# Seeded BEFORE the workload so first boot never runs against an empty /config. The cutover
-# seed passes seed_volume_force=true against a STOPPED, staged source — quiescing is manual
-# here (a Docker container, not a Deployment, is the writer).
-- name: Seed the code-server config volume
+- name: Create the code-server config volume claim
   ansible.builtin.include_role:
     name: k8s/seed-volume
   vars:
     seed_volume_service: code-server
     seed_volume_claim: "{{ code_server_k8s_claim }}"
-    seed_volume_source_path: "{{ code_server_k8s_source_path }}"
     seed_volume_storage_class: "{{ code_server_k8s_storage_class }}"
     seed_volume_size: "{{ code_server_k8s_size }}"
 

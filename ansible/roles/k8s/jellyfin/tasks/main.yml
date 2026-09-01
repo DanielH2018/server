@@ -5,21 +5,16 @@
 # one-window cutover. What it does need is the GPU: this is the first workload to request the
 # `devic.es/dri` resource the B1 device plugin advertises.
 
-# Seeded BEFORE the workload, so Jellyfin never runs its first-boot setup against an empty
-# /config that is about to be overwritten. Only a force=true seed against a STOPPED Docker copy
-# is authoritative — the library database is SQLite and a running source is torn by construction.
-- name: Seed the jellyfin config volume
+# Create the config volume claim BEFORE deploying the workload, so the pod has a PVC to mount.
+- name: Create the jellyfin config volume claim
   tags: [deploy]
   ansible.builtin.include_role:
     name: k8s/seed-volume
   vars:
     seed_volume_service: jellyfin
     seed_volume_claim: "{{ jellyfin_k8s_claim }}"
-    seed_volume_source_path: "{{ jellyfin_k8s_source_path }}"
     seed_volume_storage_class: "{{ jellyfin_k8s_storage_class }}"
     seed_volume_size: "{{ jellyfin_k8s_size }}"
-    seed_volume_quiesce:
-      - jellyfin
 
 - name: Deploy jellyfin to the cluster
   ansible.builtin.include_role:

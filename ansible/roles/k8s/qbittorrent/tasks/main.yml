@@ -9,24 +9,17 @@
 # service the way there is for a read-mostly \*arr — which is D3's "one window", again.
 
 
-- name: Seed the qbittorrent config volume
+- name: Create the qbittorrent config volume claim
   tags: [deploy]
   # ONE volume for both containers, matching the Compose file — wireguard's wg0.conf and
   # qbittorrent's settings live in the same tree.
-  #
-  # qBittorrent writes its session state (torrent list, resume data) on a timer and at exit, so
-  # a coexistence seed is torn by construction. Only the cutover seed, force=true against a
-  # STOPPED source, is authoritative.
   ansible.builtin.include_role:
     name: k8s/seed-volume
   vars:
     seed_volume_service: qbittorrent
     seed_volume_claim: "{{ qbittorrent_k8s_claim }}"
-    seed_volume_source_path: "{{ qbittorrent_k8s_source_path }}"
     seed_volume_storage_class: "{{ qbittorrent_k8s_storage_class }}"
     seed_volume_size: "{{ qbittorrent_k8s_size }}"
-    seed_volume_quiesce:
-      - qbittorrent
 
 - name: Deploy qbittorrent to the cluster
   ansible.builtin.include_role:

@@ -34,7 +34,6 @@ valheim_k8s_storage_class: longhorn
 # The files are root-owned but world-readable (644/755), so unlike terraria's 600 worlds
 # this needs no sudo staging; the seed pod's `tar -p --numeric-owner` restores uid 0, which
 # is also the uid the server runs as (PUID/PGID default to 0).
-valheim_k8s_source_path: /home/ubuntu/server/containers/valheim/valheim/config
 
 # /opt/valheim is the SteamCMD install — a 1.8 G download that unpacks to 3.8 G on the
 # volume (both measured on the first boot), and entirely re-downloadable.

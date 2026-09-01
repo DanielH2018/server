@@ -35,4 +35,3 @@ livesync_k8s_mem_request: 128Mi
 livesync_k8s_claim: livesync-data
 livesync_k8s_storage_class: longhorn-nobackup
 livesync_k8s_size: 2Gi
-livesync_k8s_source_path: /home/ubuntu/server/containers/livesync/couchdb-data

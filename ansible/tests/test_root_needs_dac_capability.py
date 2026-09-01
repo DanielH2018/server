@@ -13,14 +13,18 @@ accept cases rather than synthetic ones:
   * `code-server/templates/deployment.yaml.j2` adds CHOWN + DAC_OVERRIDE + FOWNER — a fresh
     claim's root is root:root while the files being copied belong to the pod uid.
 
-`seed-volume/templates/seed-pod.yaml.j2` is the third `runAsUser: 0` site and drops nothing, so
-root keeps its default capability set. That is clean and must stay clean: the hazard is the
-COMBINATION, never root by itself.
+There was a third `runAsUser: 0` site until 2026-09-01: `seed-volume/templates/seed-pod.yaml.j2`,
+which dropped nothing, so root kept its default capability set. It was clean, and it went with
+the rest of the seeding when that role stopped seeding. Its point stands for the two that
+remain — the hazard is the COMBINATION, never root by itself.
 
 WHAT THE REAL-TREE ASSERTION IS WORTH HERE. Zero violations today, so the real-tree half passing
 is not by itself evidence the rule works — a rule matching nothing would pass identically. The
 synthetic reject cases below are that evidence. What the real tree does buy is genuine accept
-coverage: three production securityContexts exercise the clean paths.
+coverage: two production securityContexts exercise the clean paths. Both are pinned in place by
+test_hardened_macro_is_not_a_dac_bypass.py, which asserts they keep their literal `runAsUser: 0`
+blocks — this guard reads raw template text and cannot see one built through a Jinja macro, so
+without that pin the accept coverage could reach zero without a test turning red.
 """
 
 from __future__ import annotations

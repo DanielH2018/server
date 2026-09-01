@@ -2,16 +2,13 @@
 # Slice 5, B3 — built ahead of the cutover window, held by the enabled flag (see defaults).
 
 
-# Cutover seed: run with -e seed_volume_force=true AFTER stopping the Docker HA — the recorder
-# is SQLite and a running source is torn by construction.
-- name: Seed the home-assistant config volume
+- name: Create the home-assistant config volume claim
   tags: [deploy]
   ansible.builtin.include_role:
     name: k8s/seed-volume
   vars:
     seed_volume_service: home-assistant
     seed_volume_claim: "{{ home_assistant_k8s_claim }}"
-    seed_volume_source_path: "{{ home_assistant_k8s_source_path }}"
     seed_volume_storage_class: "{{ home_assistant_k8s_storage_class }}"
     seed_volume_size: "{{ home_assistant_k8s_size }}"
 

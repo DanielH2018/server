@@ -7,25 +7,16 @@
 # was never enforced, plus the probe jobs that tested it.
 
 # ── the config database ─────────────────────────────────────────────────────────────────────
-# Seeded BEFORE the workload, so sonarr never runs its first-boot setup against an empty /config
-# that is about to be overwritten.
-#
-# sonarr.db is SQLite in WAL mode and the Docker copy is still writing to it, so this snapshot is
-# torn by construction — seed-volume detects that and tolerates it while seed_volume_force is
-# false, which is exactly the coexistence case. B4 re-seeds with force=true against a STOPPED
-# source, and only that copy is authoritative.
-- name: Seed the sonarr config volume
+# Create the config volume claim BEFORE deploying the workload, so the pod has a PVC to mount.
+- name: Create the sonarr config volume claim
   tags: [deploy]
   ansible.builtin.include_role:
     name: k8s/seed-volume
   vars:
     seed_volume_service: sonarr
     seed_volume_claim: "{{ sonarr_k8s_claim }}"
-    seed_volume_source_path: "{{ sonarr_k8s_source_path }}"
     seed_volume_storage_class: "{{ sonarr_k8s_storage_class }}"
     seed_volume_size: "{{ sonarr_k8s_size }}"
-    seed_volume_quiesce:
-      - sonarr
 
 - name: Deploy sonarr to the cluster
   ansible.builtin.include_role:

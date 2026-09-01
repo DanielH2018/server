@@ -27,13 +27,11 @@ k8s_autodeploy_reason: "two reasons: (1) probe-less — no readinessProbe; (2) m
 terraria_k8s_claim: terraria-config
 terraria_k8s_size: 1Gi
 terraria_k8s_storage_class: longhorn
-# Overridden at the cutover seed. Describes the SOURCE on the pre-migration Docker host, where
-# the world files were root-owned 600 and the unprivileged ssh|tar pipeline could not read them in
-# place — a one-shot play staged a sudo copy first (the wg-easy pattern). It is NOT a description
-# of the live volume, which the seed landed uid-1000 and which measured 1000:1000 drwxr-xr-x on
-# 2026-08-31. The epoch is spelled out because reading this as live state is what kept a
-# DAC_OVERRIDE grant looking necessary for three weeks after it had stopped being so.
-terraria_k8s_source_path: /home/ubuntu/server/containers/terraria/config
+# Migration history (until 2026-08-14). The SOURCE on the pre-migration Docker host had world
+# files root-owned 600; the unprivileged copy required a sudo staging step. The live volume,
+# migrated via this role until 2026-09-01, holds uid-1000 and measured 1000:1000 drwxr-xr-x on
+# 2026-08-31. The epoch is spelled out because reading the old source state as live state is
+# what kept a DAC_OVERRIDE grant looking necessary for three weeks after it had stopped being so.
 
 # Mirrors resources('2.0', '2048M', '0.25', '512M').
 terraria_k8s_cpu_limit: "2"
