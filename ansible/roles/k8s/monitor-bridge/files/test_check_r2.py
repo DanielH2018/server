@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+import bridge_config
 import check
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -139,14 +140,14 @@ def test_r2_query_raises_when_no_account_matches(monkeypatch):
 
 
 def _arm_r2(monkeypatch):
-    monkeypatch.setattr(check, "CF_ACCOUNT_ID", "acct")
-    monkeypatch.setattr(check, "CF_ANALYTICS_TOKEN", "tok")
-    monkeypatch.setattr(check, "R2_BUCKET", "bucket")
+    monkeypatch.setattr(bridge_config, "CF_ACCOUNT_ID", "acct")
+    monkeypatch.setattr(bridge_config, "CF_ANALYTICS_TOKEN", "tok")
+    monkeypatch.setattr(bridge_config, "R2_BUCKET", "bucket")
     monkeypatch.setattr(check, "_r2_probe", {"ts": None, "ok": True, "msg": ""})
 
 
 def test_r2_usage_disabled_without_credentials(monkeypatch):
-    monkeypatch.setattr(check, "CF_ANALYTICS_TOKEN", "")
+    monkeypatch.setattr(bridge_config, "CF_ANALYTICS_TOKEN", "")
     ok, msg = check.r2_usage(now=1000.0)
     assert ok and "disabled" in msg
 
@@ -160,7 +161,7 @@ def test_r2_usage_caches_a_success(monkeypatch):
         lambda now: (calls.append(now), (0, 0, 0, 0, []))[1],
     )
     check.r2_usage(now=1000.0)
-    ok, msg = check.r2_usage(now=1000.0 + check.R2_PROBE_INTERVAL_S - 1)
+    ok, msg = check.r2_usage(now=1000.0 + bridge_config.R2_PROBE_INTERVAL_S - 1)
     assert ok
     assert len(calls) == 1
     assert "checked" in msg

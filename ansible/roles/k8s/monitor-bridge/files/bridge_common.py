@@ -31,8 +31,8 @@ drifted signatures (`check.push(token, ok, msg)` vs `autofix.push(ok, msg)`) and
 patch sites apiece. See bridge_parsing.py's header for the full argument on why a patched name
 can't just move without qualification or argument-passing.
 
-ENFORCED by ansible/tests/test_monitor_bridge_modules.py (bridge_common is in SPLIT_MODULES
-there, same as the verdicts_*/bridge_parsing modules) for the check.py side, and by
+ENFORCED by ansible/tests/test_monitor_bridge_modules.py, which checks that every name a test
+patches is bound in the module it is patched on, and by
 ansible/tests/test_bridge_patch_boundary.py for the qualified-access rule across both bridges.
 
 Ship path: this file is monitor-bridge's canonical copy. autofix-bridge stages a copy of it onto

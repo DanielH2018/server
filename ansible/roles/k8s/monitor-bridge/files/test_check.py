@@ -11,6 +11,7 @@ from pathlib import Path
 
 
 import bridge_common
+import bridge_config
 import check
 
 
@@ -19,19 +20,19 @@ import check
 
 def test_touch_heartbeat_writes_and_refreshes(tmp_path, monkeypatch):
     hb = tmp_path / "heartbeat"
-    monkeypatch.setattr(check, "HEARTBEAT_FILE", str(hb))
-    bridge_common.touch_heartbeat(check.HEARTBEAT_FILE)
+    monkeypatch.setattr(bridge_config, "HEARTBEAT_FILE", str(hb))
+    bridge_common.touch_heartbeat(bridge_config.HEARTBEAT_FILE)
     assert hb.exists()
     first = hb.stat().st_mtime
     os.utime(hb, (first - 100, first - 100))  # backdate, then refresh
-    bridge_common.touch_heartbeat(check.HEARTBEAT_FILE)
+    bridge_common.touch_heartbeat(bridge_config.HEARTBEAT_FILE)
     assert hb.stat().st_mtime > first - 100
 
 
 def test_touch_heartbeat_never_raises(monkeypatch):
     # Best-effort like push(): a heartbeat failure must not kill the loop.
-    monkeypatch.setattr(check, "HEARTBEAT_FILE", "/nonexistent-dir/heartbeat")
-    bridge_common.touch_heartbeat(check.HEARTBEAT_FILE)
+    monkeypatch.setattr(bridge_config, "HEARTBEAT_FILE", "/nonexistent-dir/heartbeat")
+    bridge_common.touch_heartbeat(bridge_config.HEARTBEAT_FILE)
 
 
 def _read_sibling(relpath):
@@ -164,11 +165,11 @@ def _pvc_series(pvc, pct, namespace="homelab"):
 
 
 def _arm_pvc(monkeypatch, vector, claims=43.0):
-    monkeypatch.setattr(check, "CLUSTER_PROM_URL", "http://prometheus:9090")
-    monkeypatch.setattr(check, "PVC_MAX_PCT", 85.0)
-    monkeypatch.setattr(check, "PVC_MIN_CLAIMS", 32)
-    monkeypatch.setattr(check, "PVC_CLAIMS_CONSECUTIVE", 3)
-    monkeypatch.setattr(check, "PVC_EXCLUDE", ["media-data"])
+    monkeypatch.setattr(bridge_config, "CLUSTER_PROM_URL", "http://prometheus:9090")
+    monkeypatch.setattr(bridge_config, "PVC_MAX_PCT", 85.0)
+    monkeypatch.setattr(bridge_config, "PVC_MIN_CLAIMS", 32)
+    monkeypatch.setattr(bridge_config, "PVC_CLAIMS_CONSECUTIVE", 3)
+    monkeypatch.setattr(bridge_config, "PVC_EXCLUDE", ["media-data"])
     monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: claims)
     monkeypatch.setattr(check, "prom_vector", lambda *a, **k: vector)
 
@@ -287,7 +288,7 @@ def test_pvc_fullness_is_gated_by_the_cluster_prometheus():
 
 
 def test_pvc_fullness_is_disabled_without_a_cluster_prometheus(monkeypatch):
-    monkeypatch.setattr(check, "CLUSTER_PROM_URL", "")
+    monkeypatch.setattr(bridge_config, "CLUSTER_PROM_URL", "")
     ok, msg = check.check_pvc_fullness()
     assert ok
     assert "disabled" in msg

@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+import bridge_config
 import check
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -143,7 +144,7 @@ def test_a_job_whose_origins_are_all_excluded_suppresses_no_host_metric_check():
     axis and not the other is exactly what shipped on 2026-08-29. Only statically-labelled jobs are
     readable here — `node` discovers its origins from k8s at scrape time — so this covers `node-pi`.
     """
-    excluded = re.compile(check.HOST_METRIC_ORIGIN_EXCLUDE)
+    excluded = re.compile(bridge_config.HOST_METRIC_ORIGIN_EXCLUDE)
     checked = 0
     for name, block in _scrape_job_blocks(_PROM_SCRAPE_CONFIG.read_text()):
         if name not in check.EXPORTER_DEPENDENT:
@@ -155,7 +156,7 @@ def test_a_job_whose_origins_are_all_excluded_suppresses_no_host_metric_check():
         leaked = check.EXPORTER_DEPENDENT[name] & {"disk", "memory"}
         assert not leaked, (
             f"job {name!r} declares only origins excluded by HOST_METRIC_ORIGIN_EXCLUDE "
-            f"({check.HOST_METRIC_ORIGIN_EXCLUDE!r}), so check_disk and check_mem never read them "
+            f"({bridge_config.HOST_METRIC_ORIGIN_EXCLUDE!r}), so check_disk and check_mem never read them "
             f"— suppressing {sorted(leaked)} there hides a real fault and reports nothing"
         )
     assert checked, "no excluded statically-labelled job found; this guard is inert"
@@ -207,7 +208,7 @@ def _fake_vectors(monkeypatch, by_query):
     every other test in the suite, which is the failure the floor itself exists to prevent. The
     floor's own tests stub prom_vector directly and never come through here.
     """
-    monkeypatch.setattr(check, "CADVISOR_PODS_MIN", 0)
+    monkeypatch.setattr(bridge_config, "CADVISOR_PODS_MIN", 0)
 
     def fake(promql):
         for key, vec in by_query.items():
@@ -259,7 +260,7 @@ def test_check_cpu_throttle_needs_both_gates_and_streak(monkeypatch):
             "container_cpu_cfs_throttled_seconds_total": [({"pod": "tdarr-y"}, 0.5)],
         },
     )
-    for _ in range(check.CPU_CONSECUTIVE - 1):
+    for _ in range(bridge_config.CPU_CONSECUTIVE - 1):
         ok, msg = check.check_cpu_throttle()
         assert ok and "tdarr-y" in msg  # named but not paging yet
     ok, msg = check.check_cpu_throttle()

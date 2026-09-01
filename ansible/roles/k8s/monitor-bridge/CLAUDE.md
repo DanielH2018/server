@@ -202,7 +202,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     `roles/k8s/crowdsec/templates/crowdsec-appsec-verify.sh.j2`.
   - **Disk Autoprune** — RETIRED at the Docker uninstall (2026-08-14), with no successor. The
     cron pruned daniel-server's Docker daemon, which no longer exists; containerd's own image GC
-    owns that concern now (`files/check.py:167-170`). Root Disk's threshold pager is what is
+    owns that concern now (`files/bridge_config.py`, the `disk_prune check REMOVED` comment). Root Disk's threshold pager is what is
     left on that axis — alerting without remediation, deliberately.
   - **Fake Remux Scan / Fake Remux Replace** — no longer bridge checks. The detector +
     reconciler crons moved to daniel-box with the media stack (2026-08-08, slice 4 B7c;
@@ -842,13 +842,16 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
 
 ## Module layout — and the one rule that governs it
 
-`files/` holds six runtime modules. `check.py` is the entrypoint the Deployment runs and still
-owns the I/O, the env-derived config and the `CHECKS` registry; the others hold pure logic that
-takes its inputs as arguments.
+`files/` holds seven runtime modules. `check.py` is the entrypoint the Deployment runs and still
+owns the I/O and the `CHECKS` registry; `bridge_config.py` owns the env-derived config; the
+others hold pure logic that takes its inputs as arguments. The split is in progress — the design
+and the remaining slices are in
+`docs/superpowers/specs/2026-09-01-monitor-bridge-check-split-design.md`.
 
 | module | holds |
 |---|---|
-| `check.py` | config constants, HTTP/PromQL fetching, every `check_*`, `CHECKS`, the run loop |
+| `check.py` | HTTP/PromQL fetching, every `check_*`, `CHECKS`, the run loop |
+| `bridge_config.py` | every `_env(...)` constant — thresholds, URLs, credentials, windows — with the commentary that justifies each value. Read as `cfg.X`, never from-imported |
 | `bridge_common.py` | `_env`, `sanitize` — the two helpers shared verbatim with autofix-bridge's `autofix.py`, staged into that role's ConfigMap too (see its CLAUDE.md) |
 | `bridge_parsing.py` | duration/timestamp parsing, `endpoint_label`, `describe_fetch_failure` |
 | `verdicts_cluster.py` | `k8s_workloads_verdict`, `extended_resource_verdict`, `ksm_resource_label`, `targets_verdict` |
@@ -860,12 +863,24 @@ takes its inputs as arguments.
 helper `_parse_behind` sits beside `gitops_status` rather than with the other verdicts, so the
 only caller and the helper stay together.
 
-**A function may move out of `check.py` only if it is never monkeypatched AND reads no patched
-module-level name.** The test suite patches 208 times, always against the `check` module object.
-A function reads globals from the module it is DEFINED in, so moving a patched function elsewhere
-leaves the test patching a name nothing reads — the test then passes against unpatched production
-code instead of failing. That is a silent loss of coverage, not a visible break, which is why the
-rule is written here rather than left to be rediscovered.
+**A test patches the module that READS the name, and a module reads a patched name qualified.**
+A function reads its globals from the module it is DEFINED in. So a test that stubs a threshold
+patches `bridge_config.X`, and the check that reads it does so as `cfg.X` at call time; a
+`from bridge_config import X` would copy the value into the importer's globals at import time
+and the patch would change nothing that runs. The same holds for every runtime module: patch
+`check.CHECKS` because `run_once` reads it there, patch a verdict on the module that from-imports
+it. Getting this wrong is silent — the setattr succeeds, creating an attribute nothing reads,
+and the test passes against unpatched production code — which is why two tests enforce it:
+
+- `ansible/tests/test_monitor_bridge_modules.py` re-derives every `(module, name)` pair the
+  suite patches, by AST, and fails when the module does not bind that name at its top level.
+- `ansible/tests/test_bridge_patch_boundary.py` fails when any runtime module from-imports a
+  name some test patches on its source module.
+
+Until 2026-09-01 the rule was the inverse — a function could leave `check.py` only if nothing
+patched it — and that capped `check.py` near 2,500 lines, because every `check_*` reads
+`_get_json` or a threshold. The two tests that `importlib.reload()` to re-derive `PROM_ORIGIN`
+from the environment now reload `bridge_config`, the module whose body derives it.
 
 `bridge_common.py` answers to the same rule twice over: it's imported by `check.py` like the
 other split modules, AND it's imported by autofix-bridge's `autofix.py`, whose own suite
@@ -874,14 +889,8 @@ helpers that clear both bars — see `bridge_common.py`'s own header for the ful
 was considered and rejected (`log`, `push`, `touch_heartbeat`, the urllib wrapper, each file's
 `main()`).
 
-Two consequences that look like arbitrary omissions and are not:
-
-- **Config constants stay in `check.py`.** Beyond the patching rule, two tests call
-  `importlib.reload(check)` to re-derive `PROM_ORIGIN` from the environment. `reload` does not
-  re-execute an imported module's body, so a constant moved to a config module would leave those
-  tests asserting a stale value.
-- **The B2/R2 verdicts stay too.** They read their threshold constants as `None` fallbacks, so
-  they are constant-coupled; splitting the storage domain would mean moving config with it.
+Mutable per-check state (`_n8n_streaks`, `_cadvisor_streaks`, `_host_origin_streaks`,
+`_down_streaks`) stays with the code that mutates it, not with the thresholds it pairs with.
 
 **Adding a module means adding it to `monitor_bridge_modules`** in `defaults/main.yml` — the
 ConfigMap ships exactly that list, and a module missing from it kills the pod at import with

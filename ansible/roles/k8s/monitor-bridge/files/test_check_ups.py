@@ -7,6 +7,7 @@ paging twice — except when HA is scraping and the series is still absent, whic
 
 import pytest
 
+import bridge_config
 import check
 
 
@@ -79,13 +80,13 @@ def test_ups_health(charge, runtime, replace, ok, must_contain, must_not_contain
 
 def _ups_scalars(monkeypatch, charge, runtime, replace=0.0, ha_up=None):
     def fake(q):
-        if q == check.UPS_CHARGE_QUERY:
+        if q == bridge_config.UPS_CHARGE_QUERY:
             return charge
-        if q == check.UPS_RUNTIME_QUERY:
+        if q == bridge_config.UPS_RUNTIME_QUERY:
             return runtime
-        if q == check.UPS_REPLACE_QUERY:
+        if q == bridge_config.UPS_REPLACE_QUERY:
             return replace
-        if q == check.UPS_HA_UP_QUERY:
+        if q == bridge_config.UPS_HA_UP_QUERY:
             return ha_up
         return None
 
@@ -174,9 +175,9 @@ def test_check_ups_recovery_resets_streak(monkeypatch):
 
 
 def test_check_ups_disabled_when_no_queries(monkeypatch):
-    monkeypatch.setattr(check, "UPS_CHARGE_QUERY", "")
-    monkeypatch.setattr(check, "UPS_RUNTIME_QUERY", "")
-    monkeypatch.setattr(check, "UPS_REPLACE_QUERY", "")
+    monkeypatch.setattr(bridge_config, "UPS_CHARGE_QUERY", "")
+    monkeypatch.setattr(bridge_config, "UPS_RUNTIME_QUERY", "")
+    monkeypatch.setattr(bridge_config, "UPS_REPLACE_QUERY", "")
     ok, msg = check.check_ups()
     assert ok and "disabled" in msg
 

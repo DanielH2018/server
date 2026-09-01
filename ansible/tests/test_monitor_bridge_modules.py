@@ -93,100 +93,135 @@ def test_every_module_check_py_imports_is_shipped():
 # --- The second invariant: a split module must not hold anything the suite patches ---
 #
 # check.py's test suite mutates the `check` module object ~65 distinct names deep. A function
-# reads globals from the module it is DEFINED in, so a function that moved out of check.py while
-# a test patches its name — or a name it reads — leaves the test patching something nothing
-# reads. check.py re-imports every moved name, so the patch still SUCCEEDS and simply has no
-# effect: the test passes against unpatched production code.
+# --- The second invariant: every patched name is bound in the module the test patches it on ---
 #
-# That is a silent loss of coverage, which no amount of green runs will surface. Hence a guard.
+# The suite patches the runtime modules ~210 times: `bridge_io._get_json`, `bridge_config.X`,
+# a verdict on the `checks_*` module that from-imports it, `check.CHECKS`. A function reads its
+# globals from the module it is DEFINED in, so a patch lands only if the module named in the
+# test is the module whose code reads the name. Patch `check.PROM_URL` after PROM_URL moved to
+# bridge_config and the setattr still SUCCEEDS — it creates a new attribute on `check` that
+# nothing reads — and the test passes against unpatched production code.
+#
+# That is a silent loss of coverage, which no amount of green runs will surface. Hence a guard:
+# every `(module, name)` pair the suite patches must be bound at that module's top level, by a
+# `def`, an assignment, or an import. The companion rule — a module must not from-import a name
+# some test patches on its source module — is ansible/tests/test_bridge_patch_boundary.py.
 #
 # The census must be an AST walk, not a grep. A line-oriented regex over
 # `monkeypatch.setattr(check, "X"` misses the wrapped form ruff format produces and misses plain
 # `check.X = ...` assignment entirely — that hole hid `_cpu_breach_streak`, `_down_streaks` and
-# `_evaluate` when this split was first measured.
-
-SPLIT_MODULES = [
-    "bridge_common",
-    "bridge_parsing",
-    "verdicts_cluster",
-    "verdicts_host",
-    "verdicts_service",
-]
+# `_evaluate` when the split was first measured.
 
 
-def _patched_names():
-    """Every attribute of `check` the test suite assigns, patches, or mutates in place."""
-    names = set()
-    for path in sorted(FILES.glob("*.py")):
-        if not (path.name.startswith("test_") or path.name == "conftest.py"):
-            continue
+def _runtime_module_names():
+    return {m[: -len(".py")] for m in _runtime_modules()}
+
+
+def _patched_pairs(test_files=None, module_names=None):
+    """{module: {name}} for every attribute of a runtime module the suite assigns, patches, or
+    mutates in place."""
+    module_names = module_names if module_names is not None else _runtime_module_names()
+    if test_files is None:
+        test_files = sorted(
+            p
+            for p in FILES.glob("*.py")
+            if p.name.startswith("test_") or p.name == "conftest.py"
+        )
+    pairs = {}
+
+    def _add(module, name):
+        if module in module_names:
+            pairs.setdefault(module, set()).add(name)
+
+    for path in test_files:
         for node in ast.walk(ast.parse(path.read_text())):
             if isinstance(node, ast.Call):
                 fn = node.func
                 is_setattr = (
-                    isinstance(fn, ast.Attribute) and fn.attr == "setattr"
-                ) or (isinstance(fn, ast.Name) and fn.id == "setattr")
+                    isinstance(fn, ast.Attribute) and fn.attr in ("setattr", "delattr")
+                ) or (isinstance(fn, ast.Name) and fn.id in ("setattr", "delattr"))
                 if is_setattr and len(node.args) >= 2:
                     target, attr = node.args[0], node.args[1]
                     if (
                         isinstance(target, ast.Name)
-                        and target.id == "check"
                         and isinstance(attr, ast.Constant)
                         and isinstance(attr.value, str)
                     ):
-                        names.add(attr.value)
-                # check.NAME.mutate(...) — conftest's check._down_streaks.clear()
+                        _add(target.id, attr.value)
+                # module.NAME.mutate(...) — conftest's check._down_streaks.clear()
                 if isinstance(fn, ast.Attribute):
                     inner = fn.value
-                    if (
-                        isinstance(inner, ast.Attribute)
-                        and isinstance(inner.value, ast.Name)
-                        and inner.value.id == "check"
+                    if isinstance(inner, ast.Attribute) and isinstance(
+                        inner.value, ast.Name
                     ):
-                        names.add(inner.attr)
+                        _add(inner.value.id, inner.attr)
             targets = []
             if isinstance(node, ast.Assign):
                 targets = node.targets
             elif isinstance(node, (ast.AugAssign, ast.AnnAssign)):
                 targets = [node.target]
             for t in targets:
-                if (
-                    isinstance(t, ast.Attribute)
-                    and isinstance(t.value, ast.Name)
-                    and t.value.id == "check"
-                ):
-                    names.add(t.attr)
-    return names
+                if isinstance(t, ast.Attribute) and isinstance(t.value, ast.Name):
+                    _add(t.value.id, t.attr)
+    return pairs
 
 
-def test_no_split_module_defines_a_name_the_suite_patches():
-    patched = _patched_names()
-    offenders = {}
-    for module in SPLIT_MODULES:
-        tree = ast.parse((FILES / f"{module}.py").read_text())
-        defined = {n.name for n in tree.body if isinstance(n, ast.FunctionDef)}
-        if defined & patched:
-            offenders[module] = sorted(defined & patched)
-    assert not offenders, (
-        f"moved out of check.py but still patched there: {offenders} — "
-        "the patch would bind a name nothing reads, so its tests pass against unpatched code"
+def _top_level_bindings(source):
+    """Every name a module binds at its top level: def, class, assignment, import."""
+    bound = set()
+    for node in ast.parse(source).body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            bound.add(node.name)
+        elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for t in targets:
+                if isinstance(t, ast.Name):
+                    bound.add(t.id)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                bound.add((alias.asname or alias.name).split(".")[0])
+    return bound
+
+
+def _unbound_patches(pairs, sources):
+    """[(module, name)] for every patched pair the module's source does not bind."""
+    return sorted(
+        (module, name)
+        for module, names in pairs.items()
+        for name in names
+        if name not in _top_level_bindings(sources[module])
     )
 
 
-def test_no_split_module_reads_a_name_the_suite_patches():
-    patched = _patched_names()
-    offenders = {}
-    for module in SPLIT_MODULES:
-        tree = ast.parse((FILES / f"{module}.py").read_text())
-        defined = {n.name for n in tree.body if isinstance(n, ast.FunctionDef)}
-        for node in tree.body:
-            if not isinstance(node, ast.FunctionDef):
-                continue
-            used = {d.id for d in ast.walk(node) if isinstance(d, ast.Name)}
-            hits = (used & patched) - defined
-            if hits:
-                offenders.setdefault(module, []).append((node.name, sorted(hits)))
-    assert not offenders, (
-        f"split-out code reads names patched on check: {offenders} — "
-        "patching them in a test cannot affect this module's globals"
+def test_the_patch_census_spans_more_than_the_entrypoint():
+    # Without this the assertion below passes vacuously if the AST walk stops matching, or if
+    # the suite quietly went back to patching everything on `check`.
+    pairs = _patched_pairs()
+    assert "check" in pairs and len(pairs) >= 2, sorted(pairs)
+
+
+def test_every_patched_name_is_bound_in_the_module_it_is_patched_on():
+    pairs = _patched_pairs()
+    sources = {m: (FILES / f"{m}.py").read_text() for m in pairs}
+    unbound = _unbound_patches(pairs, sources)
+    assert not unbound, (
+        f"patched on a module that does not bind the name: {unbound} — the setattr creates "
+        "an attribute nothing reads, so the test passes against unpatched code. Patch the "
+        "module whose code reads the name."
     )
+
+
+def test_unbound_patch_checker_fires_on_a_synthesized_bad_sample(tmp_path):
+    """Prove the checker can fail: a test patching `mod.gone` where mod never binds `gone`."""
+    bad_test = tmp_path / "test_bad.py"
+    bad_test.write_text(
+        "import mod\n\n"
+        "def test_x(monkeypatch):\n"
+        '    monkeypatch.setattr(mod, "gone", 1)\n'
+        '    monkeypatch.setattr(mod, "kept", 2)\n'
+        "    mod.also_gone = 3\n"
+    )
+    pairs = _patched_pairs([bad_test], {"mod"})
+    assert pairs == {"mod": {"gone", "kept", "also_gone"}}
+    unbound = _unbound_patches(pairs, {"mod": "from elsewhere import kept\n"})
+    assert unbound == [("mod", "also_gone"), ("mod", "gone")]

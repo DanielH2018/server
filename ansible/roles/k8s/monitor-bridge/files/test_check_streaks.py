@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+import bridge_config
 import check
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -175,7 +176,7 @@ def _wire_run_once_grace(monkeypatch, results):
     monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset())
     monkeypatch.setattr(check, "LOKI_DEPENDENT", frozenset())
     monkeypatch.setattr(check, "STARTUP_GRACE", frozenset({"n8n"}))
-    monkeypatch.setattr(check, "GRACE_CYCLES", 2)
+    monkeypatch.setattr(bridge_config, "GRACE_CYCLES", 2)
     monkeypatch.setattr(check, "_grace_streaks", {})
     seq = iter(results)
     monkeypatch.setattr(check, "CHECKS", [("n8n", "tok_n8n", lambda: next(seq))])

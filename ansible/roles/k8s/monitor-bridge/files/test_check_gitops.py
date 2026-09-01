@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+import bridge_config
 import check
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -84,7 +85,7 @@ def _gw(tmp_path, name, content):
     ],
 )
 def test_check_gitops_alive(tmp_path, monkeypatch, content_fn, ok, must_contain):
-    monkeypatch.setattr(check, "GITOPS_STATE_DIR", str(tmp_path))
+    monkeypatch.setattr(bridge_config, "GITOPS_STATE_DIR", str(tmp_path))
     if content_fn is not None:
         _gw(tmp_path, "last_run", content_fn())
     result_ok, msg = check.check_gitops_alive()
@@ -106,7 +107,7 @@ def test_check_gitops_alive(tmp_path, monkeypatch, content_fn, ok, must_contain)
 def test_check_gitops_status(
     tmp_path, monkeypatch, filename, content, ok, must_contain
 ):
-    monkeypatch.setattr(check, "GITOPS_STATE_DIR", str(tmp_path))
+    monkeypatch.setattr(bridge_config, "GITOPS_STATE_DIR", str(tmp_path))
     if filename is not None:
         _gw(tmp_path, filename, content)
     result_ok, msg = check.check_gitops_status()

@@ -6,6 +6,7 @@ pure summing and verdict logic, and `docs/b2-transaction-cap-monitoring-gaps.md`
 operator smoke-test that proves B2 accepts the query.
 """
 
+import bridge_config
 import check
 
 
@@ -65,7 +66,7 @@ def test_storage_api_reads_the_older_top_level_shape():
 
 
 def test_storage_disabled_without_credentials(monkeypatch):
-    monkeypatch.setattr(check, "B2_PROBE_KEY_ID", "")
+    monkeypatch.setattr(bridge_config, "B2_PROBE_KEY_ID", "")
     ok, msg = check.b2_storage_usage()
     assert ok
     assert "disabled" in msg
@@ -131,11 +132,11 @@ def test_a_cursor_that_never_clears_reports_truncated(monkeypatch):
     on this flag to refuse a verdict it cannot stand behind."""
     fake, _ = _paging_stub(
         [{"files": [], "nextFileName": "n", "nextFileId": "i"}]
-        * check.B2_STORAGE_MAX_PAGES
+        * bridge_config.B2_STORAGE_MAX_PAGES
     )
     monkeypatch.setattr(check, "_post_json", fake)
     pages, truncated = check.b2_list_versions("https://api", "tok", "bkt")
-    assert len(pages) == check.B2_STORAGE_MAX_PAGES
+    assert len(pages) == bridge_config.B2_STORAGE_MAX_PAGES
     assert truncated is True
 
 

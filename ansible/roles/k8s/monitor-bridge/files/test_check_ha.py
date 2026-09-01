@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+import bridge_config
 import check
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -67,8 +68,8 @@ def _ha_payload(age_s):
 
 
 def _ha_cycle(monkeypatch, age_s=600, raises=False, banned=0):
-    monkeypatch.setattr(check, "HA_URL", "http://home-assistant:8123")
-    monkeypatch.setattr(check, "HA_TOKEN", "tok")
+    monkeypatch.setattr(bridge_config, "HA_URL", "http://home-assistant:8123")
+    monkeypatch.setattr(bridge_config, "HA_TOKEN", "tok")
     # The ip_ban arm queries Loki via loki_count. Patch it explicitly rather than letting it fall
     # through the _get_json stub below: that stub returns an HA state payload, so the arm would
     # take its fail-open path for an accidental reason and stop testing the hysteresis cleanly.
@@ -165,8 +166,8 @@ def test_ha_ban_arm_fails_open_when_loki_errors(monkeypatch):
         raise OSError("loki unreachable")
 
     monkeypatch.setattr(check, "loki_count", boom)
-    monkeypatch.setattr(check, "HA_URL", "http://home-assistant:8123")
-    monkeypatch.setattr(check, "HA_TOKEN", "tok")
+    monkeypatch.setattr(bridge_config, "HA_URL", "http://home-assistant:8123")
+    monkeypatch.setattr(bridge_config, "HA_TOKEN", "tok")
     monkeypatch.setattr(check, "_get_json", lambda *a, **k: _ha_payload(60))
     ok, msg = check.check_ha_heartbeat()
     assert ok
@@ -174,8 +175,8 @@ def test_ha_ban_arm_fails_open_when_loki_errors(monkeypatch):
 
 
 def test_ha_heartbeat_disabled_when_no_url_token(monkeypatch):
-    monkeypatch.setattr(check, "HA_URL", "")
-    monkeypatch.setattr(check, "HA_TOKEN", "")
+    monkeypatch.setattr(bridge_config, "HA_URL", "")
+    monkeypatch.setattr(bridge_config, "HA_TOKEN", "")
     ok, msg = check.check_ha_heartbeat()
     assert ok
     assert "disabled" in msg

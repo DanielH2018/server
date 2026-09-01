@@ -7,11 +7,12 @@ live by `check.py --once` at deploy time, and the run-loop wiring is in test_che
 import pytest
 
 import bridge_parsing
+import bridge_config
 import check
 
 
 def test_disk_under_threshold_is_ok(monkeypatch):
-    monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
+    monkeypatch.setattr(bridge_config, "DISK_MOUNTPOINTS", ["/"])
     monkeypatch.setattr(
         check,
         "prom_vector",
@@ -26,7 +27,7 @@ def test_disk_under_threshold_is_ok(monkeypatch):
 
 
 def test_disk_over_threshold_names_mount(monkeypatch):
-    monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
+    monkeypatch.setattr(bridge_config, "DISK_MOUNTPOINTS", ["/"])
     monkeypatch.setattr(
         check,
         "prom_vector",
@@ -46,7 +47,7 @@ def test_disk_names_the_breaching_host_not_the_healthy_one(monkeypatch):
     both estates reported into one Prometheus a full disk on one host could be paired with the
     other's size. A per-origin percentage keeps each host's numerator with its own denominator,
     and the alert has to name WHICH host is full to be actionable."""
-    monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
+    monkeypatch.setattr(bridge_config, "DISK_MOUNTPOINTS", ["/"])
     monkeypatch.setattr(
         check,
         "prom_vector",
@@ -63,7 +64,7 @@ def test_disk_names_the_breaching_host_not_the_healthy_one(monkeypatch):
 
 def test_disk_groups_by_origin_so_neither_host_is_unwatched(monkeypatch):
     seen = {}
-    monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
+    monkeypatch.setattr(bridge_config, "DISK_MOUNTPOINTS", ["/"])
 
     def fake_vector(promql):
         seen["q"] = promql
@@ -79,7 +80,7 @@ def test_disk_groups_by_origin_so_neither_host_is_unwatched(monkeypatch):
 
 
 def test_disk_metric_unavailable_alerts(monkeypatch):
-    monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
+    monkeypatch.setattr(bridge_config, "DISK_MOUNTPOINTS", ["/"])
     monkeypatch.setattr(check, "prom_vector", lambda q: [])
     ok, msg = check.check_disk()
     assert not ok
@@ -145,7 +146,7 @@ def _reset_origin_streaks():
 
 def test_mem_pages_when_a_host_stops_reporting(monkeypatch):
     _reset_origin_streaks()
-    monkeypatch.setattr(check, "HOST_ORIGINS_CONSECUTIVE", 1)
+    monkeypatch.setattr(bridge_config, "HOST_ORIGINS_CONSECUTIVE", 1)
     monkeypatch.setattr(
         check, "prom_vector", lambda q: [({"origin": "daniel-server"}, 21.0)]
     )
@@ -157,8 +158,8 @@ def test_mem_pages_when_a_host_stops_reporting(monkeypatch):
 
 def test_disk_pages_when_a_host_stops_reporting(monkeypatch):
     _reset_origin_streaks()
-    monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
-    monkeypatch.setattr(check, "HOST_ORIGINS_CONSECUTIVE", 1)
+    monkeypatch.setattr(bridge_config, "DISK_MOUNTPOINTS", ["/"])
+    monkeypatch.setattr(bridge_config, "HOST_ORIGINS_CONSECUTIVE", 1)
     monkeypatch.setattr(
         check, "prom_vector", lambda q: [({"origin": "daniel-server"}, 30.0)]
     )
@@ -171,7 +172,7 @@ def test_a_reboot_length_shortfall_does_not_page(monkeypatch):
     """The weekly reboot removes a node's node-exporter for minutes against a 5m check loop, so a
     bare floor would page every Sunday. Only the HOST_ORIGINS_CONSECUTIVE'th cycle fails."""
     _reset_origin_streaks()
-    monkeypatch.setattr(check, "HOST_ORIGINS_CONSECUTIVE", 3)
+    monkeypatch.setattr(bridge_config, "HOST_ORIGINS_CONSECUTIVE", 3)
     monkeypatch.setattr(
         check, "prom_vector", lambda q: [({"origin": "daniel-server"}, 21.0)]
     )
@@ -182,7 +183,7 @@ def test_a_reboot_length_shortfall_does_not_page(monkeypatch):
 
 def test_full_coverage_resets_the_shortfall_streak(monkeypatch):
     _reset_origin_streaks()
-    monkeypatch.setattr(check, "HOST_ORIGINS_CONSECUTIVE", 2)
+    monkeypatch.setattr(bridge_config, "HOST_ORIGINS_CONSECUTIVE", 2)
     one = [({"origin": "daniel-server"}, 21.0)]
     both = [({"origin": "daniel-server"}, 21.0), ({"origin": "daniel-box"}, 30.0)]
     monkeypatch.setattr(check, "prom_vector", lambda q: one)
@@ -197,8 +198,8 @@ def test_a_breaching_present_host_outranks_the_coverage_complaint(monkeypatch):
     """A survivor that is genuinely full must still page as full. Ordering the floor ahead of the
     breach scan would have replaced a real disk-full alert with 'only 1 of 2 hosts reporting'."""
     _reset_origin_streaks()
-    monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
-    monkeypatch.setattr(check, "HOST_ORIGINS_CONSECUTIVE", 1)
+    monkeypatch.setattr(bridge_config, "DISK_MOUNTPOINTS", ["/"])
+    monkeypatch.setattr(bridge_config, "HOST_ORIGINS_CONSECUTIVE", 1)
     monkeypatch.setattr(
         check, "prom_vector", lambda q: [({"origin": "daniel-server"}, 97.0)]
     )
@@ -231,7 +232,7 @@ def test_crash_loop_arm_gates_on_a_recent_restart_not_just_the_hour_window(monke
         queries.append(promql)
         return []
 
-    monkeypatch.setattr(check, "CLUSTER_PROM_URL", "http://cluster-prom:9090")
+    monkeypatch.setattr(bridge_config, "CLUSTER_PROM_URL", "http://cluster-prom:9090")
     monkeypatch.setattr(check, "prom_vector", record)
     monkeypatch.setattr(check, "prom_scalar", lambda *a, **k: 66.0)
     check.check_k8s_workloads()
@@ -241,8 +242,8 @@ def test_crash_loop_arm_gates_on_a_recent_restart_not_just_the_hour_window(monke
     q = restart_queries[0]
     # Both windows present, and the recency one joined with `and` so it filters rather than
     # replaces — an `or` here would widen the arm instead of narrowing it.
-    assert "[%s]" % check.K8S_RESTART_WINDOW in q
-    assert "[%s]) > 0" % check.K8S_RESTART_RECENT_WINDOW in q
+    assert "[%s]" % bridge_config.K8S_RESTART_WINDOW in q
+    assert "[%s]) > 0" % bridge_config.K8S_RESTART_RECENT_WINDOW in q
     assert " and " in q
     assert " or " not in q
 
@@ -258,11 +259,14 @@ def test_the_recency_window_is_wider_than_the_worst_observed_restart_spacing():
     # 30m, not 20m: the observed spacing RANGE tops out at ~19 min, so a 20m floor sits at the
     # edge of the flapping band rather than outside it — and would let a later edit to 20m or
     # 25m pass the very test written to stop it.
-    assert bridge_parsing.duration_seconds(check.K8S_RESTART_RECENT_WINDOW) >= 30 * 60
+    assert (
+        bridge_parsing.duration_seconds(bridge_config.K8S_RESTART_RECENT_WINDOW)
+        >= 30 * 60
+    )
     # And it must still be shorter than the evidence window, or it gates nothing.
     assert bridge_parsing.duration_seconds(
-        check.K8S_RESTART_RECENT_WINDOW
-    ) < bridge_parsing.duration_seconds(check.K8S_RESTART_WINDOW)
+        bridge_config.K8S_RESTART_RECENT_WINDOW
+    ) < bridge_parsing.duration_seconds(bridge_config.K8S_RESTART_WINDOW)
 
 
 def test_host_origins_floor_defaults_to_both_nodes():
@@ -271,7 +275,7 @@ def test_host_origins_floor_defaults_to_both_nodes():
     precisely the 2026-08-23 outage it was added for, where daniel-box went unwatched for 5.4h
     behind two green tiles. Every other arm here monkeypatches the constant, so nothing pinned
     the shipped value (2026-08-23b review L3)."""
-    assert check.HOST_ORIGINS_MIN == 2, (
+    assert bridge_config.HOST_ORIGINS_MIN == 2, (
         "HOST_ORIGINS_MIN must default to 2 — one per node. Below that the host-coverage arm "
         "cannot fire and both host checks go back to monitoring whichever node still reports."
     )
@@ -307,7 +311,7 @@ def test_host_origins_floor_is_overridable_from_the_env_secret():
 
 def test_disk_query_excludes_the_pi_origin(monkeypatch):
     seen = []
-    monkeypatch.setattr(check, "DISK_MOUNTPOINTS", ["/"])
+    monkeypatch.setattr(bridge_config, "DISK_MOUNTPOINTS", ["/"])
     monkeypatch.setattr(
         check,
         "prom_vector",
@@ -377,10 +381,12 @@ def test_the_exclusion_is_rendered_in_the_env_secret():
 
 def test_the_exclusion_is_overridable_without_editing_the_file(monkeypatch):
     """An operator can widen or clear the exclusion from the env, like every other threshold."""
-    monkeypatch.setattr(check, "HOST_METRIC_ORIGIN_EXCLUDE", "daniel-pi|daniel-spare")
+    monkeypatch.setattr(
+        bridge_config, "HOST_METRIC_ORIGIN_EXCLUDE", "daniel-pi|daniel-spare"
+    )
     assert 'origin!~"daniel-pi|daniel-spare"' in check.host_metric_sel()
 
-    monkeypatch.setattr(check, "HOST_METRIC_ORIGIN_EXCLUDE", "")
+    monkeypatch.setattr(bridge_config, "HOST_METRIC_ORIGIN_EXCLUDE", "")
     assert check.host_metric_sel() == "", (
         "cleared, the selector must vanish entirely rather than render an empty matcher"
     )

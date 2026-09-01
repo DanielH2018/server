@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 
 import bridge_common
 import bridge_parsing
+import bridge_config
 import check
 
 
@@ -19,19 +20,19 @@ def test_env_file_reads_from_file_and_strips(monkeypatch, tmp_path):
     f.write_text("s3cret-token\n")
     monkeypatch.setenv("HA_TOKEN_FILE", str(f))
     monkeypatch.setenv("HA_TOKEN", "inline-should-be-ignored")
-    assert check._env_file("HA_TOKEN", "") == "s3cret-token"
+    assert bridge_config._env_file("HA_TOKEN", "") == "s3cret-token"
 
 
 def test_env_file_falls_back_to_plain_env(monkeypatch):
     monkeypatch.delenv("HA_TOKEN_FILE", raising=False)
     monkeypatch.setenv("HA_TOKEN", "inline-token")
-    assert check._env_file("HA_TOKEN", "") == "inline-token"
+    assert bridge_config._env_file("HA_TOKEN", "") == "inline-token"
 
 
 def test_env_file_default_when_neither_set(monkeypatch):
     monkeypatch.delenv("HA_TOKEN_FILE", raising=False)
     monkeypatch.delenv("HA_TOKEN", raising=False)
-    assert check._env_file("HA_TOKEN", "") == ""
+    assert bridge_config._env_file("HA_TOKEN", "") == ""
 
 
 def test_env_file_missing_file_falls_back_to_env(monkeypatch, tmp_path):
@@ -40,7 +41,7 @@ def test_env_file_missing_file_falls_back_to_env(monkeypatch, tmp_path):
     # monitor over one missing file (2026-07-15 review L1).
     monkeypatch.setenv("HA_TOKEN_FILE", str(tmp_path / "does-not-exist"))
     monkeypatch.setenv("HA_TOKEN", "inline-fallback")
-    assert check._env_file("HA_TOKEN", "") == "inline-fallback"
+    assert bridge_config._env_file("HA_TOKEN", "") == "inline-fallback"
 
 
 def test_env_file_directory_path_falls_back_to_env(monkeypatch, tmp_path):
@@ -48,7 +49,7 @@ def test_env_file_directory_path_falls_back_to_env(monkeypatch, tmp_path):
     # open() raises IsADirectoryError (an OSError subclass) — must still fall back to the env var.
     monkeypatch.setenv("HA_TOKEN_FILE", str(tmp_path))  # tmp_path is a directory
     monkeypatch.setenv("HA_TOKEN", "inline-fallback")
-    assert check._env_file("HA_TOKEN", "") == "inline-fallback"
+    assert bridge_config._env_file("HA_TOKEN", "") == "inline-fallback"
 
 
 def test_nanosecond_precision_with_z():
@@ -100,8 +101,8 @@ def test_sanitize_collapses_whitespace():
 
 def test_arr_queue_msg_is_sanitized(monkeypatch):
     # An @everyone-laden release title reaches the alert msg defused, not as a live ping.
-    monkeypatch.setattr(check, "SONARR_API_KEY", "k")
-    monkeypatch.setattr(check, "RADARR_API_KEY", "")
+    monkeypatch.setattr(bridge_config, "SONARR_API_KEY", "k")
+    monkeypatch.setattr(bridge_config, "RADARR_API_KEY", "")
     queue = {
         "records": [
             {"title": "@everyone Free.Movie", "trackedDownloadStatus": "warning"}

@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+import bridge_config
 import check
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -134,8 +135,8 @@ def test_speedtest_completed_row_without_a_download_figure_pages():
 
 
 def test_speedtest_disabled_without_url_or_token(monkeypatch):
-    monkeypatch.setattr(check, "SPEEDTEST_URL", "")
-    monkeypatch.setattr(check, "SPEEDTEST_TOKEN", "")
+    monkeypatch.setattr(bridge_config, "SPEEDTEST_URL", "")
+    monkeypatch.setattr(bridge_config, "SPEEDTEST_TOKEN", "")
     ok, msg = check.check_speedtest()
     assert ok
     assert "disabled" in msg
@@ -144,9 +145,9 @@ def test_speedtest_disabled_without_url_or_token(monkeypatch):
 def test_speedtest_fetch_failure_rides_the_streak_but_a_bad_row_does_not(monkeypatch):
     # The app runs every 6h and this loop every 5 min, so hysteresis on the VERDICT would
     # re-read one row up to 72 times. Only the fetch gets a streak.
-    monkeypatch.setattr(check, "SPEEDTEST_URL", "http://speedtest")
-    monkeypatch.setattr(check, "SPEEDTEST_TOKEN", "t")
-    monkeypatch.setattr(check, "SPEEDTEST_CONSECUTIVE", 2)
+    monkeypatch.setattr(bridge_config, "SPEEDTEST_URL", "http://speedtest")
+    monkeypatch.setattr(bridge_config, "SPEEDTEST_TOKEN", "t")
+    monkeypatch.setattr(bridge_config, "SPEEDTEST_CONSECUTIVE", 2)
 
     def _boom(*a, **k):
         raise RuntimeError("connection refused")
@@ -166,8 +167,8 @@ def test_speedtest_fetch_failure_rides_the_streak_but_a_bad_row_does_not(monkeyp
 def test_speedtest_requests_the_newest_row_not_the_oldest(monkeypatch):
     # The API defaults to ASCENDING order, so an unsorted request returns the oldest row in
     # the 30-day window — permanently stale, and stale in a way that looks like a real verdict.
-    monkeypatch.setattr(check, "SPEEDTEST_URL", "http://speedtest")
-    monkeypatch.setattr(check, "SPEEDTEST_TOKEN", "t")
+    monkeypatch.setattr(bridge_config, "SPEEDTEST_URL", "http://speedtest")
+    monkeypatch.setattr(bridge_config, "SPEEDTEST_TOKEN", "t")
     seen = {}
 
     def _capture(url, headers=None):

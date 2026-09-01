@@ -8,6 +8,7 @@ and a failed attribution fetch downgrades the diagnosis rather than the verdict.
 
 import pytest
 
+import bridge_config
 import check
 
 MB = 1048576
@@ -120,7 +121,7 @@ def test_pi_check_disabled_without_url():
 
 
 def test_pi_check_down_on_pressure(monkeypatch, seq):
-    monkeypatch.setattr(check, "PI_GLANCES_URL", "http://pi:61208")
+    monkeypatch.setattr(bridge_config, "PI_GLANCES_URL", "http://pi:61208")
     monkeypatch.setattr(
         check, "_get_json", seq({"min5": 7.2, "cpucore": 4}, MEM_OK, FS_OK)
     )
@@ -130,7 +131,7 @@ def test_pi_check_down_on_pressure(monkeypatch, seq):
 
 
 def test_pi_check_up_when_quiet(monkeypatch, seq):
-    monkeypatch.setattr(check, "PI_GLANCES_URL", "http://pi:61208")
+    monkeypatch.setattr(bridge_config, "PI_GLANCES_URL", "http://pi:61208")
     monkeypatch.setattr(
         check, "_get_json", seq({"min5": 0.4, "cpucore": 4}, MEM_OK, FS_OK)
     )
@@ -242,8 +243,8 @@ def test_non_publishing_containers_are_never_named():
 
 
 def test_pi_check_arm_disabled_when_no_ports_configured(monkeypatch, seq):
-    monkeypatch.setattr(check, "PI_GLANCES_URL", "http://pi:61208")
-    monkeypatch.setattr(check, "PI_PUBLISHED_PORTS", ())
+    monkeypatch.setattr(bridge_config, "PI_GLANCES_URL", "http://pi:61208")
+    monkeypatch.setattr(bridge_config, "PI_PUBLISHED_PORTS", ())
     monkeypatch.setattr(
         check, "_get_json", seq({"min5": 0.4, "cpucore": 4}, MEM_OK, FS_OK)
     )
@@ -253,9 +254,9 @@ def test_pi_check_arm_disabled_when_no_ports_configured(monkeypatch, seq):
 
 
 def _arm_ports(monkeypatch, open_ports, containers=None, streak=0):
-    monkeypatch.setattr(check, "PI_GLANCES_URL", "http://10.0.0.139:61208")
-    monkeypatch.setattr(check, "PI_PUBLISHED_PORTS", PUBLISHED)
-    monkeypatch.setattr(check, "PI_PORTS_CONSECUTIVE", 2)
+    monkeypatch.setattr(bridge_config, "PI_GLANCES_URL", "http://10.0.0.139:61208")
+    monkeypatch.setattr(bridge_config, "PI_PUBLISHED_PORTS", PUBLISHED)
+    monkeypatch.setattr(bridge_config, "PI_PORTS_CONSECUTIVE", 2)
     check._down_streaks["pi_ports"] = streak
     monkeypatch.setattr(check, "_tcp_open", lambda h, p, t: p in open_ports)
     fetched = []

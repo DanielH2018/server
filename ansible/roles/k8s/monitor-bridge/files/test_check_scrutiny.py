@@ -8,6 +8,7 @@ ships with thresh=100 so device_status will never warn on it.
 from datetime import datetime, timezone
 
 
+import bridge_config
 import check
 
 
@@ -209,7 +210,7 @@ def test_scrutiny_wear_devices_skips_archived_and_labels_by_model(monkeypatch):
         return _details(attrs=_attr(7))
 
     monkeypatch.setattr(check, "_get_json", fake_get_json)
-    monkeypatch.setattr(check, "SCRUTINY_URL", "http://scrutiny:8080")
+    monkeypatch.setattr(bridge_config, "SCRUTINY_URL", "http://scrutiny:8080")
     summary = {
         "w1": {"device": {"device_name": "nvme0", "model_name": "SHPP41-500GM"}},
         "w2": {"device": {"device_name": "sda", "archived": True}},
