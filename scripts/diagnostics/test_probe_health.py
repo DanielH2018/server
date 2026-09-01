@@ -6,6 +6,7 @@ killing it, so a rollout check alone reports green on a crashlooping pod. An unr
 time counts as recent, so the gate fails closed.
 """
 
+import functools
 from datetime import datetime, timezone
 
 import probe_health
@@ -408,8 +409,13 @@ _NON_DEFAULT_NAMESPACES = {
 _DEFAULT_NS = "homelab"
 
 
+@functools.cache
 def _resolved():
-    """{role: [(namespace, kind, name)]} for every k8s role the resolver handles."""
+    """{role: [(namespace, kind, name)]} for every k8s role the resolver handles.
+
+    Cached: this renders every role in the tree (~3s), six tests read it, and until 2026-09-01
+    each paid for its own render. The tree does not change under a test run.
+    """
     import validate_k8s_manifests as validator
 
     roles = sorted(d.name for d in validator.K8S_ROLES.iterdir() if d.is_dir())
@@ -536,8 +542,16 @@ def test_pods_argv_prefers_an_explicit_selector():
     assert "app=pihole" in argv and "app=pihole-2" not in argv
 
 
+@functools.cache
 def _rendered_workloads():
-    """(role, workload doc) for every Deployment/DaemonSet/StatefulSet in the tree."""
+    """[(role, workload doc)] for every Deployment/DaemonSet/StatefulSet in the tree.
+
+    Cached for the same reason as `_resolved`: one full render per worker, not one per test.
+    """
+    return list(_iter_rendered_workloads())
+
+
+def _iter_rendered_workloads():
     validator, base, entries = probe_health._render_context()
     for role_dir in sorted(d for d in validator.K8S_ROLES.iterdir() if d.is_dir()):
         role = role_dir.name

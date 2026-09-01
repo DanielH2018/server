@@ -98,6 +98,42 @@ def test_ansible_bool_filter_mirrors_ansible_semantics(value, expected: bool):
     assert v._ansible_bool(value) is expected
 
 
+def test_shellcheck_batch_attributes_findings_to_the_file_that_has_them(tmp_path):
+    """One shellcheck process over many files must blame only the dirty one. The accept half
+    is the clean file's absence from the result; the reject half is the dirty file's presence
+    with its own finding — a batch that flagged everything or nothing would pass a test that
+    only checked the return value's truthiness."""
+    shellcheck_bin = shutil.which("shellcheck")
+    assert shellcheck_bin
+    clean = tmp_path / "clean.sh"
+    clean.write_text('#!/bin/bash\nset -euo pipefail\necho "ok"\n')
+    dirty = tmp_path / "dirty.sh"
+    dirty.write_text(
+        "#!/bin/bash\nfoo=$(ls)\necho $foo\n"
+    )  # SC2086: unquoted expansion
+    flagged = v.shellcheck_batch([clean, dirty], shellcheck_bin)
+    assert clean not in flagged, flagged
+    assert dirty in flagged and "SC2086" in flagged[dirty], flagged
+
+
+def test_shellcheck_batch_of_clean_files_is_empty(tmp_path):
+    shellcheck_bin = shutil.which("shellcheck")
+    assert shellcheck_bin
+    a = tmp_path / "a.sh"
+    a.write_text('#!/bin/bash\necho "a"\n')
+    assert v.shellcheck_batch([a], shellcheck_bin) == {}
+    assert v.shellcheck_batch([], shellcheck_bin) == {}
+
+
+def test_shellcheck_batch_blames_every_file_when_it_cannot_attribute(tmp_path):
+    """A shellcheck that exits non-zero without a parseable finding (a bad flag, a crash) must
+    not read as a clean sweep."""
+    a = tmp_path / "a.sh"
+    a.write_text('#!/bin/bash\necho "a"\n')
+    flagged = v.shellcheck_batch([a], "false")  # `false`: exits 1, prints nothing
+    assert a in flagged
+
+
 def test_all_real_shell_templates_render_and_lint_clean():
     # The regression guard: every *.sh.j2 under ansible/roles/ must render with stubbed vars to
     # a script that passes both `bash -n` and shellcheck. Mirrors the sibling validators'

@@ -166,21 +166,31 @@ spec:
 
 
 @pytest.fixture(scope="module")
-def real_tree_run():
-    """Run the validator over the real tree once, and hand back its exit code and stderr.
+def real_tree():
+    """Run the validator over the real tree ONCE per worker: (exit code, stdout, stderr).
 
-    A full run renders every k8s role and costs ~3.8s. Two guards below assert on different
-    parts of the same run's stderr, and each used to pay for its own — the run is a pure
-    function of the repo tree, so one serves both.
+    A full run renders every k8s role and costs ~7s (2026-09-01; ~3.8s when this was written).
+    Six guards below assert on different parts of the same run's output, and until 2026-09-01
+    two fixtures each paid for their own run — one capturing stderr, one stdout — so every
+    worker rendered the tree twice. The run is a pure function of the repo tree, so one
+    capture of both streams serves all of them.
 
-    # DECIDED: redirect_stderr, not capsys. capsys is function-scoped and pytest refuses to
-    # inject it into a module-scoped fixture; main() writes with print(file=sys.stderr), which
-    # redirect_stderr captures because it rebinds sys.stderr at call time.
+    # DECIDED: redirect_stderr/redirect_stdout, not capsys. capsys is function-scoped and
+    # pytest refuses to inject it into a module-scoped fixture; main() writes with
+    # print(file=sys.stderr), which redirect_stderr captures because it rebinds sys.stderr at
+    # call time.
     """
-    buf = io.StringIO()
-    with contextlib.redirect_stderr(buf):
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
         rc = vkm.main()
-    return rc, buf.getvalue()
+    return rc, out.getvalue(), err.getvalue()
+
+
+@pytest.fixture(scope="module")
+def real_tree_run(real_tree):
+    """(exit code, stderr) of the shared run — the shape the stderr guards read."""
+    rc, _out, err = real_tree
+    return rc, err
 
 
 def test_real_tree_has_no_unresolved_claim_name(real_tree_run):
@@ -610,12 +620,10 @@ def test_the_schema_does_not_catch_a_missing_tls_block():
 
 
 @pytest.fixture(scope="module")
-def real_tree_stdout():
-    """main()'s stdout over the real tree — the coverage tail is printed there, not to stderr."""
-    buf = io.StringIO()
-    with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
-        rc = vkm.main()
-    return rc, buf.getvalue()
+def real_tree_stdout(real_tree):
+    """(exit code, stdout) of the shared run — the coverage tail is printed there, not stderr."""
+    rc, out, _err = real_tree
+    return rc, out
 
 
 _UNCOVERED = "matched neither the v"
