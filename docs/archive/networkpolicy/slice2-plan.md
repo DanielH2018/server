@@ -8,7 +8,7 @@
 
 **Tech Stack:** k3s + kube-router netpol controller, Ansible (`roles/k8s/manifests`), Jinja2 manifests, alpine probe Jobs.
 
-**Spec:** `docs/networkpolicy-default-deny.md` · **Prior slice:** `docs/networkpolicy-default-deny-plan.md`
+**Spec:** `docs/networkpolicy-default-deny.md` · **Prior slice:** `docs/archive/networkpolicy/default-deny-plan.md`
 
 ## Scope
 
