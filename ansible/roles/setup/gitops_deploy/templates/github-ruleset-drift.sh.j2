@@ -31,8 +31,9 @@
 # Rate limit: anonymous GitHub allows 60 req/hr per source IP, shared by EVERY caller on this
 # host (the deployer's gate, a landing's await_ci.py poll, renovate_notify). Authenticated it is
 # 5000/hr per token. Once a day is still the right cadence — rulesets change on a human clock.
-# The token never lands in argv: curl reads it from a config on stdin (`-K -`), the same way the
-# push library feeds the Kuma URL, because /proc is mounted without hidepid here.
+# The token never lands in argv: curl reads it from a config file handed over as a process
+# substitution (`-K <(...)`), for the same reason the push library feeds the Kuma URL on
+# stdin — /proc is mounted without hidepid here.
 #
 # set -uo (not -euo): a failed curl must be captured + reported, not swallowed by an early exit.
 set -uo pipefail
@@ -81,8 +82,12 @@ if [ -n "$TOKEN" ]; then
   AUTH_CONFIG=$(printf 'header = "Authorization: Bearer %s"\n' "$TOKEN")
 fi
 
-if ! BODY=$(printf '%s\n' "$AUTH_CONFIG" |
-  curl -sf --max-time 20 -K - -H "Accept: application/vnd.github+json" "$RULESET_URL"); then
+# Process substitution, not a pipe. Under `set -o pipefail` a `printf | curl -K -` pipeline
+# reports printf's EPIPE when curl exits before reading stdin — which the test harness's curl
+# stub does, so the drift tests failed intermittently with "failed to fetch" under xdist load
+# (2026-09-01). `<(...)` keeps the token off argv and out of the pipeline's exit status.
+if ! BODY=$(curl -sf --max-time 20 -K <(printf '%s\n' "$AUTH_CONFIG") \
+  -H "Accept: application/vnd.github+json" "$RULESET_URL"); then
   # Unreachable is NOT "no drift". A check whose source is down must say it could not look,
   # or it is a deadman reporting a pass.
   push down "failed to fetch ruleset {{ gitops_deploy_ruleset_id }} — branch protection UNVERIFIED"

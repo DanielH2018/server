@@ -2,6 +2,13 @@ name: CI
 
 on:
   pull_request:
+  # The merge queue's run. GitHub tests the squashed commit on a temporary queue branch and
+  # fast-forwards master to that exact commit, so the check-runs this event produces are the
+  # ones the deployer's CI gate and await_ci.py read on master. Every job below treats a
+  # merge_group event like a push: no PR scoping, the full sweep. Added ahead of the
+  # ruleset's merge_queue rule on purpose — a queue that finds no check for its required
+  # context times every entry out.
+  merge_group:
   push:
     branches: [master]
 
