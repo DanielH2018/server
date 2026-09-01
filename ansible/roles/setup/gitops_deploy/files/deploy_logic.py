@@ -186,6 +186,29 @@ _BROAD_MANUAL_PREFIXES = (
 _SECRETS_FILE = "ansible/vars/secrets.yml"
 
 
+def _is_test_only_path(path: str) -> bool:
+    """Whether a changed path is test-suite material that no role ever ships to a host.
+
+    Four shapes, and the first two are why this is a path check rather than a name check.
+    `ansible/tests/` holds the repo-wide guards plus `_helpers.py`, which matches no name
+    pattern at all. A role-local `tests/` directory (home-assistant's macro tests) is the same
+    case. The other two are name-shaped: a `test_*.py` beside the module it covers, the layout
+    every `roles/*/*/files/` suite uses, and the `conftest.py` that sits with it —
+    monitor-bridge has one, and its ship list already excludes it by name.
+
+    The invariant this rests on: nothing under `ansible/` copies a test file to a host.
+    `ansible/tests/test_no_role_ships_a_test_file.py` is the tree-wide guard, so a role that
+    starts shipping one fails there rather than silently widening this predicate into a hole.
+    """
+    if path.startswith("ansible/tests/"):
+        return True
+    parts = path.split("/")
+    if "tests" in parts[:-1]:
+        return True
+    name = parts[-1]
+    return name == "conftest.py" or (name.startswith("test_") and name.endswith(".py"))
+
+
 @dataclass
 class ChangeSet:
     services: set[str] = field(default_factory=set)
@@ -275,6 +298,16 @@ def shared_module_consumers(paths, repo_root) -> set[str]:
 def services_from_changed_paths(paths: list[str]) -> ChangeSet:
     cs = ChangeSet()
     for p in paths:
+        # Test-suite files reach no host, so they must not drive a deploy decision. Checked
+        # FIRST, before every prefix below, because the prefixes match on path alone: a test
+        # under roles/setup/gitops_deploy/ read as broad_manual and parked the whole tick,
+        # and one under roles/k8s/<svc>/files/ read as a k8s change and defer-alerted. PR #707
+        # was three test files and did both, costing two hand-run commands to clear (2026-09-01).
+        #
+        # An empty ChangeSet is the right outcome, not a hole: gitops_deploy.py takes the
+        # `if not cs.services` branch and fast-forwards, exactly as it does for a docs-only push.
+        if _is_test_only_path(p):
+            continue
         if p == _SECRETS_FILE:
             cs.secrets = True
             continue

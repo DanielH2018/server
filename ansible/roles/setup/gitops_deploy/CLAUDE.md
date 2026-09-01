@@ -83,6 +83,17 @@ stay).
   per slot — twice per America/Chicago day, on the first tick at/after 08:00 CT (morning) and
   at/after 20:00 CT (evening) — without it a long edit session would re-page every 30-min tick.
   State: `/var/lib/gitops-deploy/dirty_alerted_date` (holds the `YYYY-MM-DD:am|pm` slot key).
+- **Test-suite paths are skipped before every plane below** (`deploy_logic._is_test_only_path`):
+  `ansible/tests/`, any role-local `tests/` directory, and a `test_*.py`/`conftest.py` beside the
+  module it covers. Every prefix and regex here matches on path alone, so before this a test file
+  read as whatever plane it sat under — one under `roles/setup/gitops_deploy/` set `broad_manual`
+  and parked the tick for every session, one under `roles/k8s/<svc>/files/` set `ChangeSet.k8s`
+  and defer-alerted. PR #707 was three test files and did both, costing an operator a hand-run
+  playbook and an ff-merge (2026-09-01). A test-only push now produces an empty `ChangeSet` and
+  takes the `if not cs.services` ff-merge branch, exactly like a docs-only push. The invariant it
+  rests on — no role ships a test file to a host — is enforced tree-wide by
+  `ansible/tests/test_no_role_ships_a_test_file.py`, because a role that started shipping one
+  would turn this skip into a change to deployed code that never deploys.
 - **Broad changes split three ways** (`deploy_logic._BROAD_*_PREFIXES`). A setup-plane change
   under `roles/setup/<name>/` (or `requirements.yml`) fast-forwards and applies as
   `initial_setup.yml --tags <name>`, with the tag derived by `setup_tags_for` rather than left as
