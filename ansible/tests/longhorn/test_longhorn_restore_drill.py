@@ -95,7 +95,7 @@ def test_drill_rotates_over_the_declared_backup_set() -> None:
         "the drill is pinned to one volume — rotation is disabled and 24 volumes go unproven"
     )
     code = _code(DRILL)
-    assert "recurring-job-group.longhorn.io/" in code, (
+    assert re.search(r'startswith\("recurring-job-group\.longhorn\.io/"\)', code), (
         "eligibility must be selected by the recurring-job-group label"
     )
     assert 'select(. != "no-backup")' in code, (

@@ -81,7 +81,7 @@ def _roles_rendering_traefik_crds() -> set[str]:
     return {
         role
         for role, _tpl, doc in rendered_docs()
-        if doc and str(doc.get("apiVersion", "")).startswith("traefik.io/")
+        if doc and str(doc.get("apiVersion", "")).split("/")[0] == "traefik.io"
     }
 
 
