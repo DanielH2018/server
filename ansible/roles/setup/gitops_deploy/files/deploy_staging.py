@@ -66,3 +66,51 @@ def staging_verdict_summary(
             f"as declared{unchecked}"
         )
     return f"staging: PASS on {sorted(gated)}{unchecked}"
+
+
+# The verdict words `consult_staging` returns and `main()` branches on. Strings rather than an
+# enum because this module is imported under `uv run --no-project`, and because they are what a
+# journal line has to read as — a verdict an operator cannot name is one they cannot act on.
+STAGING_PASS = "pass"
+STAGING_REJECTED = "rejected"
+STAGING_NO_VERDICT = "no_verdict"
+# Nothing was asked: the gate is off, or the change touched nothing staging runs. Distinct from
+# NO_VERDICT, which means the gate WAS asked and could not answer — Decision 3's point is that a
+# silent skip and a silent pass look identical afterwards, and the same is true of a skip and a
+# failed consultation.
+STAGING_SKIPPED = "skipped"
+
+
+def staging_verdict(deploy_rc: int, expect_rc: int) -> str:
+    """The one word for a (deploy, expect) exit-code pair.
+
+    Kept in lockstep with `staging_verdict_summary` by
+    test_the_verdict_word_and_the_summary_never_disagree, which walks every pair either could
+    see. Splitting the branch order across two functions is exactly how a gate comes to block on
+    a verdict whose own log line says something else.
+    """
+    if deploy_rc == 2 or (deploy_rc == 0 and expect_rc == 2):
+        return STAGING_NO_VERDICT
+    if deploy_rc != 0 or expect_rc != 0:
+        return STAGING_REJECTED
+    return STAGING_PASS
+
+
+def staging_blocks(verdict: str | None, *, blocking: bool) -> bool:
+    """Whether this verdict stops the prod deploy. Slice 4 of docs/staging-phase-c.md.
+
+    Two decisions are pinned here rather than left to the call site.
+
+    ONLY A REJECTION BLOCKS. `NO_VERDICT` means the gate could not be asked, which is never the
+    change's fault, and blocking on it would park prod behind the availability of a single guest
+    on a NAT network that covers six services of fifty-four. The cost of passing through is that
+    a staging outage becomes a way past the gate — accepted, because that fallback is exactly the
+    behaviour prod had before the gate existed, while blocking a good change is a regression.
+    That is the same asymmetry the entry condition already uses to exclude a false-PASS rate.
+    A pass-through is loud: `consult_staging` alerts on every non-PASS, internal errors included.
+
+    NOTHING BLOCKS WHILE `blocking` IS FALSE, whatever the verdict. The gate stays advisory until
+    `STAGING_GATE_BLOCKING` is set, which is a separate switch from `STAGING_GATE` because the
+    entry condition can be met long after the code lands.
+    """
+    return blocking and verdict == STAGING_REJECTED

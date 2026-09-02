@@ -62,7 +62,10 @@ from deploy_logic import (
     should_alert_dirty,
     split_k8s_auto_deploy,
     stale_rendered_services,
+    STAGING_SKIPPED,
+    staging_blocks,
     staging_scope,
+    staging_verdict,
     staging_verdict_summary,
 )
 from host_lib import atomic_write, discord_post, parse_env_file
@@ -355,6 +358,22 @@ STAGING_GATE_TIMEOUT_S = int(C.get("STAGING_GATE_TIMEOUT_S", "600"))
 STAGING_EXPECT_TIMEOUT_S = int(C.get("STAGING_EXPECT_TIMEOUT_S", "120"))
 
 STAGING_ALERT_FILE = "/var/lib/gitops-deploy/staging_alerted_sha"
+
+# Slice 4. Whether a staging REJECTION stops the prod deploy, or is only logged and alerted.
+# A SEPARATE switch from STAGING_GATE, and off by default even where the gate is on: the entry
+# condition in docs/staging-phase-c.md is evidence rather than effort, so the code lands long
+# before the flip is justified. While this is false the deployer behaves exactly as slice 3 left
+# it. What blocking does and does not act on is `staging_blocks`, not this constant.
+STAGING_GATE_BLOCKING = C.get("STAGING_GATE_BLOCKING", "false").lower() == "true"
+
+# The operator's one-tick escape hatch, armed by creating the file and disarmed by removing it.
+# Decision 4: "Build the override before the gate. A gate with no escape hatch becomes a gate
+# somebody deletes at 2 AM, and nobody reviews the deletion."
+#
+# It is CONSUMED at the point the gate would block, never at the point it is read. Consuming on
+# entry would spend it on the first tick after arming — which is usually a tick with nothing to
+# gate — and leave the operator's actual push facing the block with the hatch already gone.
+STAGING_OVERRIDE_FILE = "/var/lib/gitops-deploy/staging_gate_override"
 
 # How much sooner each child times out than the subprocess.run wrapping it, so the CHILD wins
 # the race. Both children map their own timeout to NO VERDICT and say which stage wedged; the
@@ -880,28 +899,29 @@ def k8s_image_diff(local: str, origin: str, svc: str) -> str:
     )
 
 
-def consult_staging(services: set[str], origin: str) -> None:
-    """Ask the staging cluster about this commit, then deploy prod anyway.
+def consult_staging(services: set[str], origin: str) -> str:
+    """Ask the staging cluster about this commit, and return the one-word verdict.
 
-    SLICE 3 OF PHASE C, and ADVISORY BY CONSTRUCTION — this function returns None, so there is
-    no verdict for the caller to branch on even by accident. Blocking is slice 4, and it is a
-    separate change on purpose: the point of this slice is to collect a false-failure rate
-    against real merges before anything depends on the answer. A gate whose false-failure rate
-    is unknown gets overridden once and then by habit.
+    The verdict is `staging_verdict`'s vocabulary: pass, rejected, no_verdict, or skipped when
+    nothing was asked at all. Whether it stops the prod deploy is `staging_blocks`' decision, not
+    this function's — returning a word and acting on it are kept apart so the gate can stay
+    advisory (slice 3) while the verdict is already the thing being logged and measured.
 
-    NOTHING HERE MAY BREAK A PROD DEPLOY. Every failure path — a missing script, an ssh outage,
-    a wedged guest, a bug in this function — is caught and logged. The prod deploy that follows
-    is exactly the one that ran before this existed.
+    NOTHING HERE MAY BREAK A PROD DEPLOY, blocking or not. Every failure path — a missing script,
+    an ssh outage, a wedged guest, a bug in this function — is caught and reported as NO VERDICT,
+    which `staging_blocks` never blocks on. An internal error alerts on the same path as any
+    other non-PASS: a silent pass-through would make a bug here the one way past the gate that
+    nobody sees.
 
     Off by default (`STAGING_GATE` in the unit's env). Turning it on costs every k8s tick the
     staging deploy's wall-clock, which is why it is a switch rather than a given.
     """
     if not STAGING_GATE:
-        return
+        return STAGING_SKIPPED
     gated, ungated = staging_scope(services, STAGING_SUBSET)
     if not gated:
         log(staging_verdict_summary(gated, ungated, 0, 0))
-        return
+        return STAGING_SKIPPED
 
     deploy_rc = expect_rc = 2  # no verdict until proven otherwise
     try:
@@ -940,22 +960,56 @@ def consult_staging(services: set[str], origin: str) -> None:
                 check=False,
             ).returncode
     except Exception as exc:
+        # Reported as NO VERDICT rather than returned bare, so this path alerts like every other
+        # non-PASS below. Until slice 4 it returned here, which was harmless while nothing
+        # branched on the answer and is not once blocking passes NO VERDICT through: a bug in
+        # this function would then be a silent way past the gate, and the pass-through was only
+        # accepted on the strength of every NO VERDICT being loud.
         log(f"staging gate errored ({exc}); continuing to prod unchecked")
-        return
+        deploy_rc, expect_rc = 2, 2
 
     summary = staging_verdict_summary(gated, ungated, deploy_rc, expect_rc)
     log(summary)
-    # Alerted, not silent: a slice that only writes to the journal collects no operator
-    # judgement about whether a failure was staging's fault or the change's, which is the one
-    # thing this slice exists to learn.
+    # Alerted, not silent: a journal line alone collects no operator judgement about whether a
+    # failure was staging's fault or the change's, which is the one thing the entry condition's
+    # false-failure rate is made of.
     if deploy_rc != 0 or expect_rc != 0:
+        tail = (
+            "This gate BLOCKS — prod was not deployed unless the verdict was no_verdict."
+            if STAGING_GATE_BLOCKING
+            else "Prod deployed regardless — this gate does not block yet."
+        )
         alert_once(
             STAGING_ALERT_FILE,
             "staging",
             origin,
-            f"🧪 gitops-deploy (advisory): {summary} for `{origin[:8]}`. "
-            f"Prod deployed regardless — this gate does not block yet.",
+            f"🧪 gitops-deploy: {summary} for `{origin[:8]}`. {tail}",
         )
+    return staging_verdict(deploy_rc, expect_rc)
+
+
+def consume_staging_override() -> bool:
+    """Spend the operator's one-tick override, if it is armed. True when it was.
+
+    Armed by creating STAGING_OVERRIDE_FILE, disarmed by removing it, and spent here — at the
+    point the gate would block, never on entry, so arming it before a quiet tick does not burn it
+    on a tick that needed nothing.
+
+    One-shot by removal rather than by expiry: an override left armed is an override nobody
+    remembers turning off, and Decision 4 asks for one that is easy and VISIBLE to use rather
+    than hard. The visibility is the Discord post at the call site.
+    """
+    try:
+        os.remove(STAGING_OVERRIDE_FILE)
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        # A marker that cannot be removed must not become a permanent override.
+        log(
+            f"staging override at {STAGING_OVERRIDE_FILE} could not be consumed ({exc})"
+        )
+        return False
+    return True
 
 
 def deploy_k8s(
@@ -1407,8 +1461,41 @@ def main() -> int:
         # noop forever (the SHA is already merged, so nothing re-triggers), `last_run` keeps ticking,
         # and both Kuma tiles stay green over a permanently stranded deploy. Merging after the gate
         # makes the same death self-healing: local is still behind, so the next tick re-evaluates.
-        # The gate stays advisory either way — it returns no verdict and cannot block this deploy.
-        consult_staging(cs.k8s_deploy, origin)
+        # Whether the verdict blocks is staging_blocks' decision; while STAGING_GATE_BLOCKING is
+        # false it never does, and this branch is the slice-3 behaviour unchanged.
+        verdict = consult_staging(cs.k8s_deploy, origin)
+        if staging_blocks(verdict, blocking=STAGING_GATE_BLOCKING):
+            if consume_staging_override():
+                discord(
+                    f"🔓 gitops-deploy: **staging override used** on {HOSTNAME}. "
+                    f"Staging REJECTED `{origin[:8]}` and it was deployed to prod anyway, "
+                    f"because `{STAGING_OVERRIDE_FILE}` was armed.\n"
+                    f"The override is now spent — re-arm it with `touch` if the next tick "
+                    f"needs it too."
+                )
+                log(
+                    f"staging rejected {origin[:8]}; override armed, deploying prod anyway"
+                )
+            else:
+                # No reset and no volume revert: consult_staging runs BEFORE the ff-merge, so the
+                # tree is still on `local` and prod was never applied. That asymmetry is Phase C's
+                # main prize — a staging failure costs nothing to undo. Do not add a reset here
+                # without also moving the gate, or the two will disagree.
+                write_hold(origin)
+                posted = discord(
+                    f"🧪 gitops-deploy: **staging REJECTED** `{origin[:8]}` on {HOSTNAME} — "
+                    f"prod was NOT deployed and the tree stays on `{local[:8]}`.\n"
+                    f"`{', '.join(sorted(cs.k8s_deploy))}` failed on daniel-stage. Nothing was "
+                    f"applied here, so there is nothing to roll back and no volume was "
+                    f"reverted.\n"
+                    f"**Action:** fix forward on master, or — if staging itself is the "
+                    f"problem rather than the change — `touch {STAGING_OVERRIDE_FILE}` to let "
+                    f"the next tick through once.\n"
+                    f"The hold only skips THIS commit: `skip_hold` matches while "
+                    f"`origin_head == hold_sha`, so the next push past it is gated afresh."
+                )
+                log(f"staging rejected {origin[:8]}; holding, prod not deployed")
+                return 0 if posted else 1
         run(["git", "merge", "--ff-only", origin])
         try:
             deploy_k8s(cs.k8s_deploy, K8S_DEPLOY_TIMEOUT_S)

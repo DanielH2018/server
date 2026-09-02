@@ -192,6 +192,21 @@ gitops_deploy_broad_timeout_s: 1800
 # anything depends on the answer.
 gitops_deploy_staging_gate: false
 
+# Slice 4: whether a staging REJECTION stops the prod deploy. A second switch rather than a
+# widening of the one above, because the code and the evidence arrive at different times —
+# docs/staging-phase-c.md's entry condition is 20 clean gate runs plus two real gated ticks, and
+# the flip is justified by that measurement rather than by the code being written.
+#
+# Only a REJECTION blocks. NO VERDICT — a wedged guest, an ssh outage, a timeout, a bug in the
+# gate — deploys prod as before and alerts, because blocking there would park prod behind the
+# availability of one guest on a NAT network covering six services of fifty-four. `staging_blocks` carries
+# the full reasoning.
+#
+# The escape hatch is `touch /var/lib/gitops-deploy/staging_gate_override` on the deployer host:
+# it lets exactly one blocking tick through, posts to Discord when it is spent, and removes
+# itself. `rm` disarms it before it is used.
+gitops_deploy_staging_gate_blocking: false
+
 # How long one staging consultation may take. Both are rendered into config.env AND duplicated
 # as the `C.get(...)` fallbacks in gitops_deploy.py, because a host whose config predates the
 # render falls back to the literal — the two are pinned equal by

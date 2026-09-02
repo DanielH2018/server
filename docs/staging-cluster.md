@@ -512,7 +512,7 @@ templates read comes from `group_vars/all.yml` or the builder's own defaults. Le
 rather than a widening, on the same reasoning as the cron-PATH guard — don't extend a check
 on principle when the uncovered forms have been audited.
 
-Phase C (pipeline gating) has started. Slices 1-3 are built and the gate is ON in advisory
+Phase C (pipeline gating) has started. Slices 1-4 are built and the gate is ON in advisory
 mode on daniel-box. **Advisory mode is not, on its own, how the false-failure rate gets
 measured** — that was this spec's assumption and it did not survive contact: only about one
 tick a month can reach the gate, so the rate is now gathered by a deliberate backfill.
