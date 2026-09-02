@@ -390,6 +390,40 @@ def test_deploy_sh_is_credited_to_the_test_that_reads_it():
     assert rows["deploy.sh"]["indirect_tests"] == "test_deploy_annotations.py"
 
 
+def test_a_package_member_import_counts_as_coverage():
+    """`from infra_map import live` is an import, not a mention.
+
+    A module in a `scripts/` subdirectory whose basename is not unique across the tree can
+    only be reached that way. Matching `^\\s*(?:from|import)\\s+live\\b` alone reported
+    infra_map's `live` and `render` as untested the moment they dropped their prefix, which
+    is the page understating coverage rather than a real gap.
+    """
+    rows = {r["name"]: r for r in g.build_rows()}
+    for name in ("live.py", "render.py"):
+        assert rows[name]["indirect_via"] == "import", name
+        credited = rows[name]["indirect_tests"]
+        hit = next((g.SCRIPTS / "infra_map").rglob(credited))
+        assert re.search(
+            rf"^\s*from infra_map import {Path(name).stem}\b",
+            hit.read_text(),
+            re.MULTILINE,
+        )
+
+
+def test_a_bare_mention_of_a_package_member_is_not_coverage():
+    """The RED half of the pair above: the broadened pattern must still need an import.
+
+    Without this, a rule that matched any line containing the stem would read as working
+    while crediting prose.
+    """
+    text = "A note about live and render, naming neither import.\n"
+    assert not re.search(
+        r"^\s*(?:from|import)\s+live\b|^\s*from\s+[\w.]+\s+import\s+.*\blive\b",
+        text,
+        re.MULTILINE,
+    )
+
+
 def test_markdown_splits_the_scripts_by_how_they_run(tmp_path):
     repo, scripts = _repo(tmp_path)
     out = g.render_markdown(g.build_rows(scripts, repo))

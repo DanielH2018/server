@@ -18,7 +18,7 @@ import pytest
 import yaml
 
 import gen_infra_map as g
-import infra_map_live as live
+from infra_map import live
 
 from _infra_map import (
     REPO_ROOT,

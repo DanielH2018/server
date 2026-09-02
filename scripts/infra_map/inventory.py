@@ -1,19 +1,26 @@
 """Declared state: what ``containers_list`` and the role trees say should run.
 
-Reads the repo only — no cluster, no ssh. ``infra_map_live`` gathers what is
-actually running, and ``infra_map_model`` reconciles the two.
+Reads the repo only — no cluster, no ssh. ``infra_map.live`` gathers what is
+actually running, and ``infra_map.model`` reconciles the two.
 """
 
 from __future__ import annotations
 
 import re
+import sys as _sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from pathlib import Path as _Path
 from typing import Any
 
 import yaml
 
-from infra_map_common import (
+# `infra_map` is a namespace package under `scripts/`, so reaching a sibling by package
+# name needs `scripts/` on sys.path: a directly-invoked script gets only its own directory,
+# and pyproject's `pythonpath` is a pytest setting.
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
+from infra_map.constants import (
     _CONTAINER_NAME,
     _JINJA_VAR,
     _MANIFEST_KIND,
@@ -24,7 +31,7 @@ from infra_map_common import (
 
 
 # The kinds the live collector reads; a role declaring none of them is a batch
-# role. Kept in step with ``infra_map_live.WORKLOAD_KINDS`` by a test.
+# role. Kept in step with ``infra_map.live.WORKLOAD_KINDS`` by a test.
 LONG_RUNNING_KINDS = frozenset({"Deployment", "DaemonSet", "StatefulSet"})
 
 # A ``namespace:`` line whose value is a bare name. A Jinja value fails the

@@ -121,7 +121,7 @@ Three classes of diagram, three mechanisms. Mermaid serves none of them well eno
 
 **Data-driven diagrams** — the topology map, service relationships. The generators emit
 standalone `.svg` into `docs/assets/generated/`, and Markdown embeds them.
-`scripts/infra_map/infra_map_render.py:335` already hand-positions `<rect>` and `<polyline>` with
+`scripts/infra_map/render.py:335` already hand-positions `<rect>` and `<polyline>` with
 live-status tinting through CSS classes. The refactor changes the envelope from a wrapped HTML
 page to a standalone SVG; it does not change the drawing. Styles inline into the `<svg>` element
 so the status colours survive embedding.

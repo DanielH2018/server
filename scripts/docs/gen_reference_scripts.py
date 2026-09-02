@@ -421,7 +421,16 @@ def _indirect_test(name: str, test_files: list[Path], scripts: Path) -> tuple[st
     if not name.endswith(".py"):
         import_re = None
     elif Path(name).stem.isidentifier():
-        import_re = re.compile(rf"^\s*(?:from|import)\s+{stem}\b", re.MULTILINE)
+        # Two spellings reach the same module. `import live` and `from live import x` name
+        # it as a top-level module; `from infra_map import live` names it as a member of its
+        # package, which is how a module in a subdirectory that shares its basename with
+        # another one has to be imported. Matching only the first reported infra_map's `live`
+        # and `render` as untested the moment they took the package form.
+        import_re = re.compile(
+            rf"^\s*(?:from|import)\s+{stem}\b"
+            rf"|^\s*from\s+[\w.]+\s+import\s+.*\b{stem}\b",
+            re.MULTILINE,
+        )
     else:
         # A hyphenated filename is not a valid module name, so NO import statement can
         # name it — `glenstone-bot.py` is loadable only via spec_from_file_location. Its

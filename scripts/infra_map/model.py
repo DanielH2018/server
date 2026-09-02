@@ -1,15 +1,22 @@
 """Reconciliation: overlay live state onto the declared skeleton.
 
-Takes what ``infra_map_inventory`` read from the repo and what ``infra_map_live``
-found running, and produces the single model dict ``infra_map_render`` draws.
+Takes what ``infra_map.inventory`` read from the repo and what ``infra_map.live``
+found running, and produces the single model dict ``infra_map.render`` draws.
 Pure functions over both inputs — nothing here touches the cluster or the repo.
 """
 
 from __future__ import annotations
 
+import sys as _sys
+from pathlib import Path as _Path
 
-from infra_map_common import HOST_PLANE, HOST_ROLE, HOSTS, NAMESPACE_OWNERS
-from infra_map_inventory import RoleIndex, declared_services
+# `infra_map` is a namespace package under `scripts/`, so reaching a sibling by package
+# name needs `scripts/` on sys.path: a directly-invoked script gets only its own directory,
+# and pyproject's `pythonpath` is a pytest setting.
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
+from infra_map.constants import HOST_PLANE, HOST_ROLE, HOSTS, NAMESPACE_OWNERS
+from infra_map.inventory import RoleIndex, declared_services
 
 
 def match_k8s_workloads(

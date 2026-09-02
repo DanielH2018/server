@@ -1,6 +1,6 @@
 """Rendering: turn the reconciled model into one self-contained HTML page.
 
-Reads the model dict ``infra_map_model`` builds and nothing else — no repo, no
+Reads the model dict ``infra_map.model`` builds and nothing else — no repo, no
 cluster — so a page can be re-rendered from a saved model. All CSS and the SVG
 diagram are inlined, because the output has to open over ``file://``.
 """
@@ -8,9 +8,16 @@ diagram are inlined, because the output has to open over ``file://``.
 from __future__ import annotations
 
 import html
+import sys as _sys
+from pathlib import Path as _Path
 from typing import Any
 
-from infra_map_common import PAGE_REFRESH_SECONDS
+# `infra_map` is a namespace package under `scripts/`, so reaching a sibling by package
+# name needs `scripts/` on sys.path: a directly-invoked script gets only its own directory,
+# and pyproject's `pythonpath` is a pytest setting.
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
+from infra_map.constants import PAGE_REFRESH_SECONDS
 
 # Catppuccin Mocha, matching the terminal these pages are generated from.
 STYLE = """
