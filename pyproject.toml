@@ -46,7 +46,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   ".claude/tests",                 # audit-permissions report/suggester logic tests
   "scripts",                         # closes the smoke_extract CI gap
   "ansible/roles/setup/k3s/tests",             # live-object drift check comparison logic
-  "ansible/roles/setup/gitops_deploy/files",   # deploy_logic decision tests
+  "ansible/roles/setup/gitops_deploy/tests",   # deploy_* decision tests + gitops_deploy.py guards
   "ansible/roles/setup/renovate_notify/tests", # notifier decision tests
   "ansible/roles/setup/common/tests",          # shared host_lib helper tests
   "ansible/roles/k8s/home-assistant/tests", # HA Jinja macro logic tests

@@ -11,7 +11,7 @@ AST guards rather than behavioural ones: gitops_deploy.py cannot be imported in 
 (module-level `C = cfg()` reads /etc config that does not exist there).
 """
 
-# ansible/roles/setup/gitops_deploy/files/test_gitops_deploy_alert_delivery.py
+# ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_alert_delivery.py
 
 import ast
 

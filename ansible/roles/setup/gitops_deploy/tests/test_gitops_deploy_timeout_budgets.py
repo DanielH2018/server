@@ -9,7 +9,7 @@ value is read from its source rather than pinned, so a bump to any one of them f
 instead of silently reopening the gap.
 """
 
-# ansible/roles/setup/gitops_deploy/files/test_gitops_deploy_timeout_budgets.py
+# ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py
 
 import pathlib
 import re

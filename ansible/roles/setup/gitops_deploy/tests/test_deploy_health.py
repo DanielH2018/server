@@ -11,7 +11,7 @@ The Discord queue is the other half: an alert that fails to send has to survive 
 tick, and the queue has to stay bounded.
 """
 
-# ansible/roles/setup/gitops_deploy/files/test_deploy_health.py
+# ansible/roles/setup/gitops_deploy/tests/test_deploy_health.py
 
 from deploy_health import (
     PENDING_ALERTS_MAX,

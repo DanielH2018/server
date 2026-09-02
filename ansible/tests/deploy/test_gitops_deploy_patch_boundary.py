@@ -28,6 +28,7 @@ from _helpers import REPO
 
 
 FILES = REPO / "ansible" / "roles" / "setup" / "gitops_deploy" / "files"
+TESTS = FILES.parent / "tests"
 
 
 def _runtime_modules():
@@ -39,11 +40,9 @@ def _runtime_modules():
 
 
 def _test_files():
-    return sorted(
-        p
-        for p in FILES.glob("*.py")
-        if p.name.startswith("test_") or p.name == "conftest.py"
-    )
+    files = sorted(TESTS.glob("*.py"))
+    assert files, "the suite moved again — point TESTS at it"
+    return files
 
 
 def _patched_pairs(test_sources, module_names):

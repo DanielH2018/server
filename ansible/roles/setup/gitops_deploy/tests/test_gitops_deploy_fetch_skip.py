@@ -7,7 +7,7 @@ hides behind a green GitOps-Alive. gitops_deploy.py cannot be imported in CI (mo
 `if __name__ == "__main__"` is pinned at the AST. See RetryableFetchError.
 """
 
-# ansible/roles/setup/gitops_deploy/files/test_gitops_deploy_fetch_skip.py
+# ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_fetch_skip.py
 
 import ast
 

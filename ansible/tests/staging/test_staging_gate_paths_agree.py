@@ -17,7 +17,7 @@ rejection" and then deploys prod anyway. A gate that has stopped working looks e
 staging host that is down.
 
 Same shape as the timeout fallbacks pinned in
-gitops_deploy/files/test_gitops_deploy_staging_timeouts.py: when a value has to exist in two places,
+gitops_deploy/tests/test_gitops_deploy_staging_timeouts.py: when a value has to exist in two places,
 the test is what makes them one value.
 """
 

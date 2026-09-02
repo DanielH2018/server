@@ -24,7 +24,7 @@ import sys
 
 import yaml
 
-_FILES = pathlib.Path(__file__).resolve().parent
+_FILES = pathlib.Path(__file__).resolve().parents[1] / "files"
 _REPO = _FILES.parents[4]
 _INVENTORY = _REPO / "ansible" / "inventory" / "host_vars" / "daniel-stage.yml"
 _GATE_SCRIPT = _REPO / "scripts" / "deploy_tools" / "staging_gate.py"

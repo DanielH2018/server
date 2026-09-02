@@ -7,7 +7,7 @@ the AST to pass the FAILED commit's short SHA under its own timeout, and `run()`
 must kill the whole process group or a wedged ansible-playbook outlives the tick.
 """
 
-# ansible/roles/setup/gitops_deploy/files/test_gitops_deploy_subprocess.py
+# ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_subprocess.py
 
 import ast
 import os

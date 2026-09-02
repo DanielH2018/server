@@ -8,7 +8,7 @@ claim cap reads it. `rollback_volume_revert_note` is the one line of the rollbac
 says which services actually reverted.
 """
 
-# ansible/roles/setup/gitops_deploy/files/test_deploy_k8s_declarations.py
+# ansible/roles/setup/gitops_deploy/tests/test_deploy_k8s_declarations.py
 
 import pathlib
 

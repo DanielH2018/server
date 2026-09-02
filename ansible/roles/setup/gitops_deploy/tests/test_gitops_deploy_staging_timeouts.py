@@ -6,14 +6,14 @@ Until 2026-08-29 the render was missing entirely, so the FALLBACK was what produ
 and editing the defaults would have moved nothing. These pin all three together.
 """
 
-# ansible/roles/setup/gitops_deploy/files/test_gitops_deploy_staging_timeouts.py
+# ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_staging_timeouts.py
 
 import pathlib
 import re
 
 import yaml
 
-_SRC = pathlib.Path(__file__).with_name("gitops_deploy.py")
+_SRC = pathlib.Path(__file__).resolve().parents[1] / "files" / "gitops_deploy.py"
 _TEMPLATES = pathlib.Path(__file__).parents[1] / "templates"
 _DEFAULTS = pathlib.Path(__file__).parents[1] / "defaults" / "main.yml"
 

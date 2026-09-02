@@ -10,7 +10,7 @@ tick ahead of the action branching, and the k8s auto-deploy branch still reads c
 The sibling files cover fetch failures, alert delivery, the staging gate and the budgets.
 """
 
-# ansible/roles/setup/gitops_deploy/files/test_gitops_deploy_main_guards.py
+# ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_main_guards.py
 
 import ast
 

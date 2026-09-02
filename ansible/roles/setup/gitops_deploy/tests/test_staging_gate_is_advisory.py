@@ -23,7 +23,7 @@ from __future__ import annotations
 import ast
 import pathlib
 
-_SRC = pathlib.Path(__file__).with_name("gitops_deploy.py")
+_SRC = pathlib.Path(__file__).resolve().parents[1] / "files" / "gitops_deploy.py"
 _TREE = ast.parse(_SRC.read_text())
 
 

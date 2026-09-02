@@ -6,7 +6,7 @@ Each Docker role has separate channels (the compose or a config template deploys
 `meta/` defer-and-alert, docs stay silent), and a k8s role dir shares one channel.
 """
 
-# ansible/roles/setup/gitops_deploy/files/test_deploy_changes_services.py
+# ansible/roles/setup/gitops_deploy/tests/test_deploy_changes_services.py
 
 from deploy_changes import services_from_changed_paths
 
