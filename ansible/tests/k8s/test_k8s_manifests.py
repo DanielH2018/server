@@ -68,10 +68,12 @@ _DEPLOYMENT_STUBS = {
 
 
 def test_nothing_mounts_over_the_serviceaccount_token_path():
-    """`/run/secrets` is the Docker convention for file-mounted credentials and it does not
-    survive the port. `/var/run/secrets` symlinks to `/run/secrets`, which is where Kubernetes
-    projects the ServiceAccount token — a read-only Secret volume there leaves runc unable to
-    create the mountpoint and the container never starts (daniel-box, 2026-08-02):
+    """A Secret volume at `/run/secrets` stops the container starting at all.
+
+    `/run/secrets` is the Docker convention for file-mounted credentials and it does not survive
+    the port. `/var/run/secrets` symlinks to `/run/secrets`, which is where Kubernetes projects
+    the ServiceAccount token — a read-only Secret volume there leaves runc unable to create the
+    mountpoint and the container never starts (daniel-box, 2026-08-02):
 
         mkdirat .../rootfs/run/secrets/kubernetes.io: read-only file system
 
@@ -123,10 +125,11 @@ def test_no_template_names_a_mount_under_run_secrets():
 
 
 def test_every_deployment_disables_service_link_env_vars():
-    """Kubernetes injects legacy Docker-link env vars for every Service in the namespace —
-    <NAME>_SERVICE_HOST, <NAME>_PORT_<n>_TCP and so on. Any app that reads its own config from
-    <NAME>_* env vars then picks them up as configuration. Authelia did, and exited before
-    serving anything (daniel-box, 2026-08-02):
+    """Kubernetes' legacy Docker-link env vars are read as config by some apps.
+
+    It injects <NAME>_SERVICE_HOST, <NAME>_PORT_<n>_TCP and so on for every Service in the
+    namespace. Any app that reads its own config from <NAME>_* env vars then picks them up as
+    configuration. Authelia did, and exited before serving anything (daniel-box, 2026-08-02):
 
         error occurred performing deprecation mapping for keys 'server.host', 'server.port',
         and 'server.path' to new key server.address: the new key already exists with value
