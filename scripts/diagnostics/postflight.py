@@ -17,12 +17,20 @@ almost none of these.
 import json
 import subprocess
 import sys
+from pathlib import Path as _Path
+
+# `probe_lib` is a namespace package under `scripts/`, so reaching it by package name needs
+# `scripts/` on sys.path: a directly-invoked script — which is how this one runs — gets only
+# its own directory, and pyproject's `pythonpath` is a pytest setting. This has to sit ABOVE
+# the imports below. It used to be supplied as a side effect of `import probe` executing its
+# own insert first, which made the order of these four lines load-bearing and unremarked.
+sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import probe
-import probe_core as core
-import probe_arr
-import probe_health
-import probe_ha as probe_ha
+from diagnostics.probe_lib import core
+from diagnostics.probe_lib import arr
+from diagnostics.probe_lib import health
+from diagnostics.probe_lib import ha
 
 TIMEOUT = 10
 
@@ -73,7 +81,7 @@ def service_ip(name):
     was fixed for exactly this on 2026-08-07; postflight kept the old resolver.
     """
     try:
-        return probe_health.resolve_service_ip(name)
+        return health.resolve_service_ip(name)
     except SystemExit as exc:
         raise Skip(str(exc)) from exc
 
@@ -186,9 +194,7 @@ def check_arr_key(app):
     key, err = secret(f"{app}_api_key")
     if not key:
         return FAIL, err
-    status, body = get(
-        probe_arr.arr_url(ip, app, "system/status"), probe_arr.arr_curl_config(key)
-    )
+    status, body = get(arr.arr_url(ip, app, "system/status"), arr.arr_curl_config(key))
     if status == 200:
         return OK, f"{app}_api_key authenticates"
     if status == 0:
@@ -235,9 +241,7 @@ def check_ha_token(name):
     token, err = secret(name)
     if not token:
         return FAIL, err
-    status, _ = get(
-        probe_ha.ha_get_url(core.ha_base(), ""), probe_ha.ha_curl_config(token)
-    )
+    status, _ = get(ha.ha_get_url(core.ha_base(), ""), ha.ha_curl_config(token))
     if status == 200:
         return OK, "token accepted"
     return FAIL, f"HTTP {status} — re-mint under Profile → Security"

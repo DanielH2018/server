@@ -315,13 +315,13 @@ def test_no_post_still_reports_an_unhealthy_verdict(monkeypatch, tmp_path):
 #
 # The two modules below are joined by substring matching across a subprocess boundary, so
 # nothing but these tests connects probe.py's wording to the verdict it decides. The cases
-# above use hand-written strings; these take the REAL messages from probe_health and assert
+# above use hand-written strings; these take the REAL messages from health and assert
 # each lands on the side of NOT_APPLICABLE_MARKERS it is meant to. A reword that put a failed
 # deploy back on the skip path would leave every test above green.
 #
 from datetime import datetime, timezone  # noqa: E402
 
-import probe_health  # noqa: E402 — resolved by pyproject's pythonpath, alongside notify_mod
+from diagnostics.probe_lib import health  # noqa: E402 — resolved by pyproject's pythonpath, alongside notify_mod
 
 _NOW = datetime(2026, 9, 1, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -336,8 +336,8 @@ def test_probes_absent_workload_messages_carry_no_skip_marker():
     Both messages mean "the thing that should exist is gone", which must fail the verdict rather
     than skip it.
     """
-    docker_missing, _ = probe_health.format_health([], "wg-easy", declared=True)
-    k8s_missing, _ = probe_health.format_role_health(
+    docker_missing, _ = health.format_health([], "wg-easy", declared=True)
+    k8s_missing, _ = health.format_role_health(
         "claude-otel",
         [("observability", "Deployment", "grafana", None, None)],
         _NOW,
@@ -351,8 +351,8 @@ def test_probes_not_applicable_messages_do_carry_a_skip_marker():
 
     Otherwise every block tag in a --tags list turns an otherwise good deploy red.
     """
-    undeclared, _ = probe_health.format_health([], "config", declared=False)
-    no_workload, _ = probe_health.format_k8s_health(None, None, "config", _NOW)
+    undeclared, _ = health.format_health([], "config", declared=False)
+    no_workload, _ = health.format_k8s_health(None, None, "config", _NOW)
     for message in (undeclared, no_workload):
         assert _matches_a_marker(message), message
 
@@ -361,7 +361,7 @@ def test_the_role_declares_nothing_message_carries_a_skip_marker():
     """run_health builds this one inline rather than through a formatter, so it is asserted
     against the source text — the marker and the message must not drift apart."""
     source = (
-        probe_health.REPO / "scripts" / "diagnostics" / "probe_health.py"
+        health.REPO / "scripts" / "diagnostics" / "probe_lib/health.py"
     ).read_text()
     assert "the role declares no rollout-checkable workload" in source
     assert _matches_a_marker("x: the role declares no rollout-checkable workload (...)")

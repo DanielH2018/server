@@ -523,6 +523,18 @@ uv run pytest scripts         # just one suite
   a `..._is_clean` / `..._is_flagged` pair, so a rule that silently stopped matching fails its own
   test. Name the pair that way — a guard that fires on everything and one that fires on nothing are
   indistinguishable from the passing side alone.
+- **A check that finds its own subject by pattern ships with a named member it must find.** A
+  guard that globs for the files it checks (`validate_*.py`, a `gen_reference_` prefix, a
+  one-level `DIR.glob("*.py")`) returns an EMPTY set the moment those files are renamed or move
+  one directory down, and an `all(...)` over nothing passes. That is a second way to be green
+  while checking nothing, and unlike the red-proof pair above it survives the pair — both halves
+  still pass, because both still fire on the inputs the test hands them. Assert non-vacuity
+  against something concrete: `assert len(found) >= <n>`, or better a frozenset of names the
+  census must contain, so the failure message says which member went missing rather than that a
+  count moved. `KNOWN_CONSUMERS` in `scripts/diagnostics/tests/test_probe_boundaries.py` is the
+  worked example. Five guards broke this way in five consecutive PRs (#838, #846, #852, and two
+  in the probe_lib move); every one was caught solely by the non-vacuity assertion, and the
+  guards that lacked it had to be found by running the entry point instead.
 - **If the check reaches out over a network, measure the transport before you ship it.** The
   paired test above proves the *verdict* can go red; it says nothing about whether the fetch that
   feeds the verdict returns in time. A check whose source is slow or flaky fails open on every

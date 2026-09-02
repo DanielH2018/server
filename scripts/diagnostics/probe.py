@@ -59,13 +59,20 @@ monitor-bridge's TLS Cert Expiry monitor).
 import argparse
 import subprocess
 import sys
+from pathlib import Path as _Path
+
+# The subcommand modules live in `probe_lib`, a namespace package under `scripts/`, so
+# reaching them by package name needs `scripts/` on sys.path: a directly-invoked script —
+# which is the ONLY way this file runs in production — gets just its own directory, and
+# pyproject's `pythonpath` is a pytest setting. This has to sit ABOVE the imports below.
+sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 # `core.<name>` for anything the tests monkeypatch — fetch, k8s_namespace,
 # metallb_vip, sops_extract. Binding those into this module's globals with a
-# `from probe_core import ...` would take a snapshot the patch never reaches.
+# `from core import ...` would take a snapshot the patch never reaches.
 # Everything else is imported by name, since nothing patches it.
-import probe_core as core
-from probe_core import (
+from diagnostics.probe_lib import core
+from diagnostics.probe_lib.core import (
     PI_HOST,
     curl_argv,
     k8s_endpoint,
@@ -82,28 +89,28 @@ from probe_core import (
 # The per-subcommand modules. Each `run_*` is re-exported here rather than dispatched
 # through a registry, because `plan()` below is the one dispatch table and keeping the
 # names in this module's namespace is what lets it stay a flat mapping.
-from probe_alerts import run_alerts
-from probe_arr import ARR_PORTS, run_arr
-from probe_ha import run_ha, run_ha_state
-from probe_health import (
+from diagnostics.probe_lib.alerts import run_alerts
+from diagnostics.probe_lib.arr import ARR_PORTS, run_arr
+from diagnostics.probe_lib.ha import run_ha, run_ha_state
+from diagnostics.probe_lib.health import (
     inspect_argv,
     k8s_deploy_argv,
     k8s_pods_argv,
     resolve_ip,
     run_health,
 )
-from probe_metrics import run_query
-from probe_monitors import run_kuma_drift, run_monitors
-from probe_readonly_rbac import run_readonly_rbac
-from probe_releases import run_releases
-from probe_b2_ledger import run_b2_record, run_b2_spend
-from probe_longhorn import (
+from diagnostics.probe_lib.metrics import run_query
+from diagnostics.probe_lib.monitors import run_kuma_drift, run_monitors
+from diagnostics.probe_lib.readonly_rbac import run_readonly_rbac
+from diagnostics.probe_lib.releases import run_releases
+from diagnostics.probe_lib.b2_ledger import run_b2_record, run_b2_spend
+from diagnostics.probe_lib.longhorn import (
     LONGHORN_PREFIX,
     run_b2_budget,
     run_b2_longhorn,
     run_longhorn_blocks,
 )
-from probe_vip_placement import run_vip_placement
+from diagnostics.probe_lib.vip_placement import run_vip_placement
 
 
 def cert_stages(host, port, sni):

@@ -11,7 +11,7 @@ import json
 import re
 from pathlib import Path
 
-import probe_releases as pr
+from diagnostics.probe_lib import releases as pr
 
 REPO = Path(__file__).resolve().parents[3]
 

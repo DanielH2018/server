@@ -75,7 +75,7 @@ kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" pi-recove
 #
 # Kuma keeps only CURRENT state, so a DOWN that clears is gone. The server's health crons
 # survive that by logging their own verdict unconditionally (longhorn-backup-health,
-# manifest-prune-check), and `probe_alerts.py` reconstructs episodes from those lines.
+# manifest-prune-check), and `probe_lib/alerts.py` reconstructs episodes from those lines.
 # `kuma_push` calls `logger` ONLY when the push itself fails, so this cron recorded nothing
 # for a successful DOWN push — which is why the real 2026-08-29 autoheal outage read as "no
 # DOWN alerts in the last 7d" while the monitor was live-DOWN.

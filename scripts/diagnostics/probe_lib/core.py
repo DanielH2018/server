@@ -3,7 +3,7 @@
 Every domain module imports this one as ``core`` and calls through the module
 (``core.sops_extract(...)``) rather than binding the names locally. That is
 deliberate: several of these are monkeypatched in the tests, and a name bound
-into another module's globals by ``from probe_core import sops_extract`` would
+into another module's globals by ``from core import sops_extract`` would
 not see the patch. One module attribute, one place to patch.
 """
 
@@ -14,6 +14,16 @@ import subprocess
 from datetime import datetime
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
+
+# `lib.repo_paths` is a sibling package under `scripts/`: a directly-invoked script gets only
+# its own directory on sys.path, and pyproject's `pythonpath` is a pytest setting. This has to
+# sit ABOVE the import below, which is what needs it.
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
+from lib.repo_paths import REPO
 
 DEFAULT_TIMEOUT = 10
 
@@ -72,7 +82,7 @@ def loki_endpoint():
 
 # claude_ha_token lives in the SOPS-encrypted secrets file (repo-root relative).
 SECRETS_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    REPO,
     "ansible",
     "vars",
     "secrets.yml",
@@ -80,7 +90,7 @@ SECRETS_PATH = os.path.join(
 
 # Inventory group vars (plaintext) — source of the MetalLB ingress VIP.
 GROUP_VARS_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    REPO,
     "ansible",
     "inventory",
     "group_vars",
@@ -89,7 +99,7 @@ GROUP_VARS_PATH = os.path.join(
 
 # Inventory hosts file (plaintext) — source of daniel-pi's LAN IP.
 HOSTS_INI_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    REPO,
     "ansible",
     "inventory",
     "hosts.ini",

@@ -1,6 +1,6 @@
 """`probe.py readonly-rbac` — is the read-only ServiceAccount still read-only?
 
-Split out of probe_health.py, which carried three unrelated subcommands (health, readonly-rbac,
+Split out of probe_lib/health.py, which carried three unrelated subcommands (health, readonly-rbac,
 vip-placement) in one file. Ansible is meant to be the only write path to this cluster, and
 every agent session's kubectl authenticates as
 system:serviceaccount:kube-system:homelab-readonly — this is the check that notices if that
@@ -14,9 +14,17 @@ control-first pattern the netpol probe Jobs use.
 
 import subprocess
 
+# `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
+# needs `scripts/` on sys.path — a module gets only its importer's path otherwise, and
+# pyproject's `pythonpath` is a pytest setting. This has to sit ABOVE the imports below.
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
 # `core.<name>` for anything the tests monkeypatch — binding those into this module's
-# globals with a `from probe_core import ...` would take a snapshot the patch never reaches.
-import probe_core as core
+# globals with a `from core import ...` would take a snapshot the patch never reaches.
+from diagnostics.probe_lib import core
 
 # What plain `kubectl` must NEVER be able to do here. Ansible is the only write path to this
 # cluster, and every agent session's kubectl authenticates as

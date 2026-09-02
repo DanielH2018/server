@@ -60,7 +60,7 @@ from _helpers import REPO, load_yaml
 
 K3S_DEFAULTS = REPO / "ansible/roles/setup/k3s/defaults/main.yml"
 GITOPS_DEFAULTS = REPO / "ansible/roles/setup/gitops_deploy/defaults/main.yml"
-PROBE_HEALTH = REPO / "scripts/diagnostics/probe_health.py"
+PROBE_HEALTH = REPO / "scripts/diagnostics/probe_lib/health.py"
 SECRET_ROTATION = REPO / "scripts/secrets_mgmt/secret_rotation.py"
 
 
@@ -79,7 +79,7 @@ def _gitops_tick_minutes() -> str:
 
 
 def _python_constant(path: Path, name: str) -> Callable[[], str]:
-    # Read by regex rather than import: probe_health.py and secret_rotation.py bootstrap
+    # Read by regex rather than import: probe_lib/health.py and secret_rotation.py bootstrap
     # sys.path and read the environment on import, and a value guard has no business
     # running either.
     def read() -> str:
@@ -111,13 +111,13 @@ ROWS: list[Row] = [
     Row(
         "docs/deploying.md",
         r"a (\d+)-second restart window",
-        "probe_health.RECENT_RESTART_SECONDS",
+        "health.RECENT_RESTART_SECONDS",
         _python_constant(PROBE_HEALTH, "RECENT_RESTART_SECONDS"),
     ),
     Row(
         "docs/claude-tooling.md",
         r"restarted in the last (\d+)s\.",
-        "probe_health.RECENT_RESTART_SECONDS",
+        "health.RECENT_RESTART_SECONDS",
         _python_constant(PROBE_HEALTH, "RECENT_RESTART_SECONDS"),
     ),
     Row(

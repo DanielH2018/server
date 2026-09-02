@@ -96,7 +96,7 @@ The wrapper supplies all three.
 - **DNS.** This host's resolver bypasses the LAN DNS, so `.local.<domain>` does not resolve to
   the cluster edge from a shell. The wrapper passes Chromium `--host-resolver-rules` pinned to
   the MetalLB ingress VIP — the browser equivalent of the `curl --resolve` pin
-  `probe_core.k8s_endpoint` documents.
+  `probe_lib/core.py`'s `k8s_endpoint` documents.
 - **Auth.** Every `*.local.<domain>` route is Authelia `one_factor`, so the context loads a
   session cookie minted by `uv run python scripts/diagnostics/ui_login.py`. That login sets
   `keepMeLoggedIn`, which is load-bearing — the session config's `inactivity: '5m'` would

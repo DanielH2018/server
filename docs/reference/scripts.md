@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-09-02 16:56 UTC
-generated_sha: 28398a17
+generated_at: 2026-09-02 17:42 UTC
+generated_sha: 24c4bd31
 ---
 
 !!! warning "Generated file — do not edit"
@@ -76,44 +76,45 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Imported, never run on their own
 
-30 script(s) — imported by another script — not an entry point.
+31 script(s) — imported by another script — not an entry point.
 
 | Script | What it does | Reached by | Tests |
 |---|---|---|---|
+| `scripts/diagnostics/probe_lib/alerts.py` | `probe.py alerts` -- DOWN history reconstructed from Loki, since Kuma keeps only current state. | imported by probe.py | `test_probe_alerts.py` *(indirect)* |
+| `scripts/diagnostics/probe_lib/arr.py` | `probe.py arr <app> <api-path>` — read-only *arr API GETs against sonarr/radarr/prowlarr. | imported by postflight.py, probe.py | `test_probe.py` *(indirect)* |
+| `scripts/diagnostics/probe_lib/b2_ledger.py` | The B2 spend ledger: what maintenance tools spent, since B2 publishes no usage API. | imported by longhorn.py, probe.py | `test_probe_b2_ledger.py` *(indirect)* |
 | `scripts/availability_bots/common.py` | Shared helpers for the availability-watcher bots in this folder. | imported by glenstone-bot.py, osteria-francescana-bot.py | `test_availability_bots.py` *(indirect)* |
 | `scripts/infra_map/constants.py` | Constants shared by the infra-map inventory, live, model and render stages. | imported by gen_infra_map.py, inventory.py, live.py, model.py, render.py | — |
+| `scripts/diagnostics/probe_lib/core.py` | Shared plumbing for probe's subcommands: endpoints, secrets, HTTP, durations. | imported by alerts.py, arr.py, b2_ledger.py, ha.py, ha_state_model.py, health.py, longhorn.py, metrics.py, monitors.py, postflight.py, probe.py, readonly_rbac.py, releases.py, ui_login.py, vip_placement.py | `test_probe.py` *(indirect)* |
 | `scripts/lib/doc_freshness.py` | How old a hand-written doc is, and whether the files it names have moved under it. | imported by _mkdocs_freshness.py, freshness.py | `test_doc_freshness.py` |
 | `scripts/lib/docs_provenance.py` | The provenance banner every generated documentation page opens with. | imported by backlog.py, crons.py, freshness.py, gen_doc_fragments.py, gen_infra_map.py, hosts.py, networking.py, scripts.py, secrets.py, service_catalog.py | `test_docs_provenance.py` |
 | `scripts/dev/findings.py` | File, re-observe, escalate and close Claude's unfixed findings as GitHub Issues. | imported by backlog.py | `test_findings.py` |
 | `scripts/lib/gh.py` | One way to run the GitHub CLI from a script, with no prompt and no notifier. | imported by findings.py | `test_gh.py` |
 | `scripts/lib/git.py` | One way to run git from a script, with the repository chosen by ``cwd`` alone. | imported by await_ci.py, deploy_staleness.py, doc_freshness.py, docs_provenance.py, prune_worktrees.py, secret_rotation.py | `test_git.py` |
+| `scripts/diagnostics/probe_lib/ha.py` | Home Assistant: live state, automations, and the read-only WebSocket trace client. | imported by ha_state_model.py, postflight.py, probe.py | `test_probe_ha.py` *(indirect)* |
 | `scripts/home_assistant/ha_state_checks.py` | Guardrail checks over the HA state model built by `ha_state_model.py`. | imported by ha_state_model.py, validate_ha_config.py | `test_ha_state_checks.py` |
-| `scripts/home_assistant/ha_state_model.py` | Derived state model for the Home Assistant bedroom control plane. | imported by ha_state_checks.py | `test_ha_state_model.py` |
+| `scripts/home_assistant/ha_state_model.py` | Derived state model for the Home Assistant bedroom control plane. | imported by ha.py, ha_state_checks.py | `test_ha_state_model.py` |
+| `scripts/diagnostics/probe_lib/health.py` | `probe.py health <svc>` — the post-deploy gate, plus the argv builders it shares. | imported by arr.py, monitors.py, postflight.py, probe.py | `test_deploy_detach_notify.py` *(indirect)* |
 | `scripts/infra_map/inventory.py` | Declared state: what ``containers_list`` and the role trees say should run. | imported by gen_infra_map.py, model.py | — |
 | `scripts/lib/invocation_sites.py` | Where a `scripts/...` path can be executed from, read once for two different questions. | imported by scripts.py | `test_invocation_sites.py` |
 | `scripts/infra_map/live.py` | Live state: what the cluster and the Pi report is actually running. | imported by gen_infra_map.py | `test_infra_map_live.py` *(indirect)* |
+| `scripts/diagnostics/probe_lib/longhorn.py` | Longhorn's B2 backup objects: what the estate holds, what it costs, and what block size it's on. | imported by b2_ledger.py, probe.py | `test_probe_longhorn.py` *(indirect)* |
+| `scripts/diagnostics/probe_lib/metrics.py` | `probe.py metric` and `probe.py loki-query` -- Prometheus and Loki queries. | imported by probe.py | `test_probe.py` *(indirect)* |
 | `scripts/infra_map/model.py` | Reconciliation: overlay live state onto the declared skeleton. | imported by gen_infra_map.py | — |
-| `scripts/diagnostics/probe_alerts.py` | `probe.py alerts` -- DOWN history reconstructed from Loki, since Kuma keeps only current state. | imported by probe.py | `test_probe_alerts.py` |
-| `scripts/diagnostics/probe_arr.py` | `probe.py arr <app> <api-path>` — read-only *arr API GETs against sonarr/radarr/prowlarr. | imported by postflight.py, probe.py | `test_probe.py` *(indirect)* |
-| `scripts/diagnostics/probe_b2_ledger.py` | The B2 spend ledger: what maintenance tools spent, since B2 publishes no usage API. | imported by probe.py, probe_longhorn.py | `test_probe_b2_ledger.py` |
-| `scripts/diagnostics/probe_core.py` | Shared plumbing for probe's subcommands: endpoints, secrets, HTTP, durations. | imported by postflight.py, probe.py, probe_alerts.py, probe_arr.py, probe_b2_ledger.py, probe_ha.py, probe_health.py, probe_longhorn.py, probe_metrics.py, probe_monitors.py, probe_readonly_rbac.py, probe_releases.py, probe_vip_placement.py, ui_login.py | `test_probe.py` *(indirect)* |
-| `scripts/diagnostics/probe_ha.py` | Home Assistant: live state, automations, and the read-only WebSocket trace client. | imported by postflight.py, probe.py | `test_probe_ha.py` |
-| `scripts/diagnostics/probe_health.py` | `probe.py health <svc>` — the post-deploy gate, plus the argv builders it shares. | imported by postflight.py, probe.py, probe_arr.py, probe_monitors.py | `test_probe_health.py` |
-| `scripts/diagnostics/probe_longhorn.py` | Longhorn's B2 backup objects: what the estate holds, what it costs, and what block size it's on. | imported by probe.py, probe_b2_ledger.py | `test_probe_longhorn.py` |
-| `scripts/diagnostics/probe_metrics.py` | `probe.py metric` and `probe.py loki-query` -- Prometheus and Loki queries. | imported by probe.py | `test_probe.py` *(indirect)* |
-| `scripts/diagnostics/probe_monitors.py` | `probe.py monitors` and `probe.py kuma-drift` -- what is down, and what is missing. | imported by probe.py | `test_probe_monitors.py` |
-| `scripts/diagnostics/probe_readonly_rbac.py` | `probe.py readonly-rbac` — is the read-only ServiceAccount still read-only? | imported by probe.py | `test_probe_readonly_rbac.py` |
-| `scripts/diagnostics/probe_releases.py` | `probe.py releases` -- which commit produced the manifests each k8s service is running. | imported by probe.py | `test_probe_releases.py` |
-| `scripts/diagnostics/probe_vip_placement.py` | `probe.py vip-placement` — does every ETP=Local VIP have a Ready endpoint on an announcing node? | imported by probe.py | `test_probe_vip_placement.py` |
+| `scripts/diagnostics/probe_lib/monitors.py` | `probe.py monitors` and `probe.py kuma-drift` -- what is down, and what is missing. | imported by probe.py | `test_probe.py` *(indirect)* |
+| `scripts/diagnostics/probe_lib/readonly_rbac.py` | `probe.py readonly-rbac` — is the read-only ServiceAccount still read-only? | imported by probe.py | `test_probe_readonly_rbac.py` *(indirect)* |
+| `scripts/lib/release_bin_groups.py` | Resolve which source files a `release_bin.yml` group deploys. | imported by shell_templates.py | `test_release_bin_groups_have_no_secrets.py` *(indirect)* |
+| `scripts/diagnostics/probe_lib/releases.py` | `probe.py releases` -- which commit produced the manifests each k8s service is running. | imported by probe.py | `test_probe_releases.py` *(indirect)* |
 | `scripts/infra_map/render.py` | Rendering: turn the reconciled model into one self-contained HTML page. | imported by gen_infra_map.py | `test_infra_map_render.py` *(indirect)* |
 | `scripts/lib/render_guard.py` | Shared helpers for the render-guard scripts and other Ansible-inventory readers. | imported by compose_templates.py, config_templates.py, deploy_tags.py, hosts.py, k8s_manifests.py, networking.py, service_catalog.py, shell_templates.py | `test_render_guard.py` |
-| `scripts/lib/repo_paths.py` | The repo path anchors a script under ``scripts/`` reads the Ansible tree through. | imported by await_ci.py, build_docs.py, constants.py, crons.py, deploy_detach_notify.py, deploy_tags.py, docs_provenance.py, fact_cache_guard.py, freshness.py, gen_doc_fragments.py, gen_hosts_block.py, grafana_dashboards.py, hosts.py, invocation_sites.py, k8s_autodeploy_counts.py, land_tags.py, memory_survey.py, networking.py, probe_health.py, probe_releases.py, render_guard.py, route_facts.py, scripts.py, secret_bearing_host_paths.py, secrets.py, staging_egress_probe.py, staging_gate.py, validate_ha_config.py | `test_render_guard.py` *(indirect)* |
+| `scripts/lib/repo_paths.py` | The repo path anchors a script under ``scripts/`` reads the Ansible tree through. | imported by await_ci.py, build_docs.py, constants.py, core.py, crons.py, deploy_detach_notify.py, deploy_tags.py, docs_provenance.py, fact_cache_guard.py, freshness.py, gen_doc_fragments.py, gen_hosts_block.py, grafana_dashboards.py, ha.py, health.py, hosts.py, invocation_sites.py, k8s_autodeploy_counts.py, land_tags.py, memory_survey.py, monitors.py, networking.py, releases.py, render_guard.py, route_facts.py, scripts.py, secret_bearing_host_paths.py, secrets.py, staging_egress_probe.py, staging_gate.py, validate_ha_config.py | `test_render_guard.py` *(indirect)* |
 | `scripts/docs/route_facts.py` | Shared route facts for the reference generators. | imported by networking.py, service_catalog.py | `test_route_facts.py` |
 | `scripts/deploy_tools/staging_gate.py` | Ask the staging cluster whether it accepts a commit, from daniel-box. | imported by backfill_staging_gate.py | `test_staging_gate.py` |
+| `scripts/diagnostics/probe_lib/vip_placement.py` | `probe.py vip-placement` — does every ETP=Local VIP have a Ready endpoint on an announcing node? | imported by probe.py | `test_probe_vip_placement.py` *(indirect)* |
 
 ## Run by hand
 
-23 script(s) — a person runs it.
+22 script(s) — a person runs it.
 
 | Script | What it does | Reached by | Tests |
 |---|---|---|---|
@@ -131,7 +132,6 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/availability_bots/osteria-francescana-bot.py` | Watch Osteria Francescana (via CoverManager) for a table on the target dates. | no automated caller in the tree | `test_availability_bots.py` *(indirect)* |
 | `scripts/diagnostics/postflight.py` | Verify the post-deploy setup that Ansible can't do (ansible/README.md §9). | playbook: ansible/bring-up.sh | `test_postflight.py` |
 | `scripts/validate/refresh_crd_schemas.py` | Re-download the vendored CRD JSON schemas that validate/k8s_manifests.py checks against. | no automated caller in the tree | `test_validate_k8s_manifests.py` *(indirect)* |
-| `scripts/lib/release_bin_groups.py` | Resolve which source files a `release_bin.yml` group deploys. | no automated caller in the tree | `test_release_bin_groups_have_no_secrets.py` *(indirect)* |
 | `scripts/dev/run_as_cron.sh` | run a command in the environment cron actually gives it. | no automated caller in the tree | `test_run_as_cron.py` |
 | `scripts/secrets_mgmt/secret_bearing_host_paths.py` | Deployed host paths whose content embeds a credential, derived from the tree. | no automated caller in the tree | — |
 | `scripts/dev/split_module.py` | Split a large Python module along its seams: show the references, then move names by spec. | no automated caller in the tree | `test_split_module.py` |

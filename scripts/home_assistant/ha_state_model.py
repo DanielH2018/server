@@ -20,22 +20,24 @@ from pathlib import Path
 
 import yaml
 
-from validate_ha_config import ROLE_DIR, HAConfigLoader, assemble_config
-
 # Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting. This has to sit
+# ABOVE every import below, `home_assistant.validate_ha_config` included — that one read
+# `from validate_ha_config import ...` and sat above this insert, so it resolved from
+# sys.path[0] for a direct invocation and raised ModuleNotFoundError for `probe.py ha-state`,
+# which reaches this module as `from home_assistant import ha_state_model`.
 import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-# `scripts/` alone is not enough for `from diagnostics import probe_ha`. Every module in
-# scripts/diagnostics/ imports its siblings BARE (`import probe_core`), which resolves only
-# when that directory is itself on sys.path — true when probe.py is invoked directly, false
-# when we import it as a namespace-package member. Without this, `refresh` dies with
-# `ModuleNotFoundError: No module named 'probe_core'`. See cmd_refresh's docstring: this is
-# the THIRD time that one live path broke on an import, and the first two fixes both moved
-# the failing name rather than the sys.path that resolves it.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "diagnostics"))
+
+from home_assistant.validate_ha_config import ROLE_DIR, HAConfigLoader, assemble_config
+# One insert, not two. This carried a second one adding `scripts/diagnostics` itself, because
+# every module there imported its siblings BARE (`import probe_core`) and that resolves only
+# when the directory is sys.path[0] — true for a directly-invoked probe.py, false when we
+# import it as a namespace-package member, so `refresh` died with
+# `ModuleNotFoundError: No module named 'probe_core'`. Those modules are now the `probe_lib`
+# package and import each other by package name, so `scripts/` alone resolves them.
 
 _TEMPLATE_MARKERS = ("{{", "{%")
 
@@ -419,26 +421,24 @@ def cmd_refresh(get_states=None, get_services=None) -> int:
     used to call probe.resolve_ip(probe.HA_CONTAINER), a Docker-era container lookup that stopped
     existing when HA moved to k3s, so `refresh` died with AttributeError from that cutover until
     2026-08-16. It broke the same way a second time when probe.py was split up: the helpers now
-    live in probe_core (ha_base/ha_resolve) and probe_ha (ha_token/ha_get/ha_get_url), and a bare
+    live in core (ha_base/ha_resolve) and ha (ha_token/ha_get/ha_get_url), and a bare
     `probe.` prefix raised AttributeError again. It is the ONLY live path in this script, which is
     why a stale external_entities.yml silently outlived two removed sensors.
     """
     if get_states is None or get_services is None:
         import json
 
-        from diagnostics import probe_core
-        from diagnostics import probe_ha
+        from diagnostics.probe_lib import core
+        from diagnostics.probe_lib import ha
 
-        base = probe_core.ha_base()
-        resolve = probe_core.ha_resolve()
-        token = probe_ha.ha_token()
+        base = core.ha_base()
+        resolve = core.ha_resolve()
+        token = ha.ha_token()
     if get_states is None:
         live = [
             s["entity_id"]
             for s in json.loads(
-                probe_ha.ha_get(
-                    probe_ha.ha_get_url(base, "states"), token, resolve=resolve
-                )
+                ha.ha_get(ha.ha_get_url(base, "states"), token, resolve=resolve)
             )
         ]
     else:
@@ -446,9 +446,7 @@ def cmd_refresh(get_states=None, get_services=None) -> int:
     if get_services is None:
         services = parse_services(
             json.loads(
-                probe_ha.ha_get(
-                    probe_ha.ha_get_url(base, "services"), token, resolve=resolve
-                )
+                ha.ha_get(ha.ha_get_url(base, "services"), token, resolve=resolve)
             )
         )
     else:

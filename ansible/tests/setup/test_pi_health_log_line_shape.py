@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""What the Pi health crons WRITE is what probe_alerts.py can READ.
+"""What the Pi health crons WRITE is what probe_lib/alerts.py can READ.
 
 Two halves had to land together for a daniel-pi DOWN to become an episode: the crons had to
 emit a `status=` line at all (kuma-push-lib only calls `logger` when the PUSH fails), and the
@@ -26,7 +26,7 @@ from _helpers import REPO
 from _pi_health import run
 
 sys.path.insert(0, str(REPO / "scripts" / "diagnostics"))
-from probe_alerts import parse_syslog_down_line
+from diagnostics.probe_lib.alerts import parse_syslog_down_line
 
 
 BOTH = ["autoheal", "docker-proxy"]
@@ -44,7 +44,7 @@ def test_a_recovery_down_line_parses_into_an_episode(tmp_path):
     parsed = parse_syslog_down_line(_only_line(lines))
 
     assert parsed is not None, (
-        f"probe_alerts could not parse {_only_line(lines)!r} -- the Pi emits a shape the "
+        f"alerts could not parse {_only_line(lines)!r} -- the Pi emits a shape the "
         "reconstruction does not read, so its outages stay invisible"
     )
     tag, parsed_msg = parsed

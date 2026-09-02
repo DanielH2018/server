@@ -13,7 +13,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import probe_longhorn as ps
+from diagnostics.probe_lib import longhorn as ps
 
 _GROUP = "recurring-job-group.longhorn.io/"
 _16MiB = str(16 * 1024 * 1024)

@@ -7,8 +7,8 @@ memory after the fact.
 
 import pytest
 
-import probe_b2_ledger as ledger
-import probe_core as core
+from diagnostics.probe_lib import b2_ledger as ledger
+from diagnostics.probe_lib import core
 
 SPEND_LOG = [
     (

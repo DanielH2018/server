@@ -219,7 +219,7 @@ def page_title(report: str) -> str | None:
 
 @pytest.fixture(scope="module")
 def domain() -> str:
-    import probe_core as core
+    from diagnostics.probe_lib import core
 
     return core.sops_extract("domain")
 
@@ -328,7 +328,7 @@ def two_factor_browser(domain):
     The `--check` call survives as a cheap pre-filter only, to avoid starting Chromium when
     the session is plainly gone.
     """
-    # Through `uv run`, not the shebang: ui_login imports probe_core, which uses PEP 758
+    # Through `uv run`, not the shebang: ui_login imports core, which uses PEP 758
     # syntax that Ubuntu's 3.12 /usr/bin/python3 cannot parse.
     proc = subprocess.run(
         [
@@ -600,7 +600,7 @@ def grafana(domain):
     Module-scoped for the same reason `browser` is: one Chromium and one login for the
     whole tier.
     """
-    import probe_core as core
+    from diagnostics.probe_lib import core
 
     try:
         password = core.sops_extract("grafana_admin_password")

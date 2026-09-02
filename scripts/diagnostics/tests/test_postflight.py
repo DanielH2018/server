@@ -20,7 +20,7 @@ def stub_host(monkeypatch):
     """Every workload resolves, and every secret decrypts to a placeholder."""
     monkeypatch.setattr(postflight, "service_ip", lambda name: "10.0.0.1")
     monkeypatch.setattr(postflight, "secret", lambda name: (f"<{name}>", ""))
-    # check_ha_token reaches HA via probe_core.ha_base(), which decrypts the domain from
+    # check_ha_token reaches HA via core.ha_base(), which decrypts the domain from
     # SOPS — stub it so no test needs the age key (CI has none). Same for the cluster
     # prometheus route the Kuma checks query since the PG1 scrape port.
     monkeypatch.setattr(postflight.core, "ha_base", lambda: "https://ha.test")
@@ -115,19 +115,17 @@ def test_the_resolver_reads_a_clusterip_not_a_docker_bridge_ip(monkeypatch):
     until 2026-08-25, and reported the FileNotFoundError as the check's own result.
     """
     seen = []
-    monkeypatch.setattr(
-        postflight.probe_health.core, "k8s_namespace", lambda: "homelab"
-    )
+    monkeypatch.setattr(postflight.health.core, "k8s_namespace", lambda: "homelab")
 
     class Result:
         returncode, stdout, stderr = 0, "10.43.0.9\n", ""
 
     monkeypatch.setattr(
-        postflight.probe_health.subprocess,
+        postflight.health.subprocess,
         "run",
         lambda argv, **kw: (seen.append(argv), Result())[1],
     )
-    assert postflight.probe_health.resolve_service_ip("sonarr") == "10.43.0.9"
+    assert postflight.health.resolve_service_ip("sonarr") == "10.43.0.9"
     assert "docker" not in seen[0]
     assert "service" in seen[0]
 

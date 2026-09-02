@@ -23,15 +23,14 @@ import json
 import subprocess
 from pathlib import Path
 
-# `core.<name>` for anything the tests monkeypatch -- binding those into this module's globals
-# with a `from probe_core import ...` would take a snapshot the patch never reaches.
-import probe_core as core  # noqa: F401  (kept for the monkeypatch convention above)
-
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+# `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
+# needs `scripts/` on sys.path — a module gets only its importer's path otherwise, and
+# pyproject's `pythonpath` is a pytest setting. This has to sit ABOVE the imports below.
 import sys as _sys
+from pathlib import Path as _Path
 
-_sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
 
 # Mirrors manifests_release_dir in roles/k8s/manifests/defaults/main.yml. A mismatch makes this
 # reader silently report "no records", so scripts/diagnostics/tests/test_probe_releases.py asserts the

@@ -9,12 +9,12 @@ import re
 
 import pytest
 
-import probe_arr
-import probe_health
-import probe_metrics
-import probe_monitors
+from diagnostics.probe_lib import arr
+from diagnostics.probe_lib import health
+from diagnostics.probe_lib import metrics
+from diagnostics.probe_lib import monitors
 import probe
-import probe_core as core
+from diagnostics.probe_lib import core
 
 
 def test_prom_query_url_encodes_promql():
@@ -79,22 +79,22 @@ def test_curl_argv():
 
 
 def test_inspect_ip_argv_targets_the_container():
-    argv = probe_health.inspect_ip_argv("loki")
+    argv = health.inspect_ip_argv("loki")
     assert argv[:3] == ["docker", "inspect", "-f"]
     assert argv[-1] == "loki"
     assert ".IPAddress" in argv[3]
 
 
 def test_parse_ip_takes_first_nonempty_token():
-    assert probe_health.parse_ip("172.19.0.12 172.18.0.5 \n") == "172.19.0.12"
+    assert health.parse_ip("172.19.0.12 172.18.0.5 \n") == "172.19.0.12"
 
 
 def test_parse_ip_returns_none_when_no_ip():
-    assert probe_health.parse_ip("   \n") is None
+    assert health.parse_ip("   \n") is None
 
 
 def test_k8s_service_ip_argv_targets_the_service():
-    argv = probe_health.k8s_service_ip_argv("sonarr", "homelab")
+    argv = health.k8s_service_ip_argv("sonarr", "homelab")
     assert argv[:2] == ["k3s", "kubectl"]
     assert argv[-1] == "jsonpath={.spec.clusterIP}"
     assert "sonarr" in argv
@@ -226,7 +226,7 @@ def test_format_metric_vector_prints_labels_and_value_per_series():
             ],
         }
     }
-    out = probe_metrics.format_metric(data)
+    out = metrics.format_metric(data)
     assert "monitor_name=Pi = 1" in out
     assert "monitor_name=Loki = 0" in out
     # __name__ is dropped — it's the metric name, redundant here.
@@ -241,7 +241,7 @@ def test_format_metric_single_unlabeled_series_prints_bare_value():
             "result": [{"metric": {}, "value": [0, "6.47"]}],
         }
     }
-    assert probe_metrics.format_metric(data) == "6.47"
+    assert metrics.format_metric(data) == "6.47"
 
 
 def test_format_metric_matrix_uses_latest_point():
@@ -256,17 +256,17 @@ def test_format_metric_matrix_uses_latest_point():
             ],
         }
     }
-    assert probe_metrics.format_metric(data) == "mountpoint=/ = 15"
+    assert metrics.format_metric(data) == "mountpoint=/ = 15"
 
 
 def test_format_metric_scalar_result_prints_value():
     data = {"data": {"resultType": "scalar", "result": [1720000000, "42"]}}
-    assert probe_metrics.format_metric(data) == "42"
+    assert metrics.format_metric(data) == "42"
 
 
 def test_format_metric_empty_is_no_data():
     assert (
-        probe_metrics.format_metric({"data": {"resultType": "vector", "result": []}})
+        metrics.format_metric({"data": {"resultType": "vector", "result": []}})
         == "no data"
     )
 
@@ -281,7 +281,7 @@ def test_format_monitor_status_all_up():
             "result": [_monitor_series("sonarr", "1"), _monitor_series("radarr", "1")]
         }
     }
-    text, code = probe_monitors.format_monitor_status(data)
+    text, code = monitors.format_monitor_status(data)
     assert text == "2/2 monitors up"
     assert code == 0
 
@@ -295,7 +295,7 @@ def test_format_monitor_status_lists_down_monitors_and_fails():
             ]
         }
     }
-    text, code = probe_monitors.format_monitor_status(data)
+    text, code = monitors.format_monitor_status(data)
     assert text == "1/2 monitors up\n  terraria (game port): DOWN"
     assert code == 1
 
@@ -306,14 +306,14 @@ def test_format_monitor_status_labels_pending_and_maintenance_as_not_up():
             "result": [_monitor_series("a", "2"), _monitor_series("b", "3")],
         }
     }
-    text, code = probe_monitors.format_monitor_status(data)
+    text, code = monitors.format_monitor_status(data)
     assert "a: PENDING" in text
     assert "b: MAINTENANCE" in text
     assert code == 1
 
 
 def test_format_monitor_status_empty_result_fails():
-    text, code = probe_monitors.format_monitor_status({"data": {"result": []}})
+    text, code = monitors.format_monitor_status({"data": {"result": []}})
     assert code == 1
     assert "no monitor_status series" in text
 
@@ -338,11 +338,11 @@ def test_format_loki_prints_lines_oldest_first_across_streams():
         }
     }
     # Sorted by nanosecond timestamp so the newest line sits nearest the prompt.
-    assert probe_metrics.format_loki(data) == "oldest\nmiddle\nnewest"
+    assert metrics.format_loki(data) == "oldest\nmiddle\nnewest"
 
 
 def test_format_loki_empty_is_no_logs():
-    assert probe_metrics.format_loki({"data": {"result": []}}) == "no logs"
+    assert metrics.format_loki({"data": {"result": []}}) == "no logs"
 
 
 def test_metric_defaults_to_formatted_with_json_escape_hatch():
@@ -363,21 +363,21 @@ def test_loki_query_defaults_to_formatted_with_json_escape_hatch():
 
 def test_arr_url_sonarr_defaults_to_api_v3_and_port_8989():
     assert (
-        probe_arr.arr_url("10.0.0.5", "sonarr", "health")
+        arr.arr_url("10.0.0.5", "sonarr", "health")
         == "http://10.0.0.5:8989/api/v3/health"
     )
 
 
 def test_arr_url_radarr_port_7878_api_v3():
     assert (
-        probe_arr.arr_url("10.0.0.6", "radarr", "queue")
+        arr.arr_url("10.0.0.6", "radarr", "queue")
         == "http://10.0.0.6:7878/api/v3/queue"
     )
 
 
 def test_arr_url_prowlarr_port_9696_api_v1():
     assert (
-        probe_arr.arr_url("10.0.0.7", "prowlarr", "indexerstatus")
+        arr.arr_url("10.0.0.7", "prowlarr", "indexerstatus")
         == "http://10.0.0.7:9696/api/v1/indexerstatus"
     )
 
@@ -385,28 +385,28 @@ def test_arr_url_prowlarr_port_9696_api_v1():
 def test_arr_url_normalizes_leading_slash_api_and_version_prefix():
     # bare, /-prefixed, api/-prefixed, and version-prefixed all mean the same endpoint.
     for path in ("health", "/health", "api/v3/health", "v3/health", "/api/v3/health"):
-        assert probe_arr.arr_url("h", "sonarr", path) == "http://h:8989/api/v3/health"
+        assert arr.arr_url("h", "sonarr", path) == "http://h:8989/api/v3/health"
 
 
 def test_arr_url_keeps_multi_segment_path():
     assert (
-        probe_arr.arr_url("h", "prowlarr", "indexer/testall")
+        arr.arr_url("h", "prowlarr", "indexer/testall")
         == "http://h:9696/api/v1/indexer/testall"
     )
 
 
 def test_arr_curl_config_uses_x_api_key_header():
-    assert 'header = "X-Api-Key: SECRET_KEY"' in probe_arr.arr_curl_config("SECRET_KEY")
+    assert 'header = "X-Api-Key: SECRET_KEY"' in arr.arr_curl_config("SECRET_KEY")
 
 
 def test_arr_curl_config_is_not_bearer():
-    cfg = probe_arr.arr_curl_config("SECRET_KEY")
+    cfg = arr.arr_curl_config("SECRET_KEY")
     assert "Bearer" not in cfg and "Authorization" not in cfg
 
 
 def test_arr_request_never_puts_key_in_argv():
     # Regression guard mirroring the ha token: the key travels via stdin --config, never argv.
-    argv = core.ha_curl_argv(probe_arr.arr_url("h", "sonarr", "health"))
+    argv = core.ha_curl_argv(arr.arr_url("h", "sonarr", "health"))
     assert "--config" in argv
     assert not any("Api-Key" in a or "SECRET" in a for a in argv)
 
@@ -429,8 +429,8 @@ def test_resolve_arr_ip_uses_kubectl_not_docker(monkeypatch):
         return FakeResult()
 
     monkeypatch.setattr(probe.subprocess, "run", fake_run)
-    assert probe_arr.resolve_arr_ip("sonarr") == "10.43.114.186"
-    assert calls == [probe_health.k8s_service_ip_argv("sonarr", "homelab")]
+    assert arr.resolve_arr_ip("sonarr") == "10.43.114.186"
+    assert calls == [health.k8s_service_ip_argv("sonarr", "homelab")]
     assert "docker" not in calls[0]
 
 
@@ -444,7 +444,7 @@ def test_resolve_arr_ip_raises_on_kubectl_failure(monkeypatch):
 
     monkeypatch.setattr(probe.subprocess, "run", lambda argv, **kwargs: FakeResult())
     with pytest.raises(SystemExit) as excinfo:
-        probe_arr.resolve_arr_ip("sonarr")
+        arr.resolve_arr_ip("sonarr")
     assert "sonarr" in str(excinfo.value)
 
 
@@ -458,7 +458,7 @@ def test_resolve_arr_ip_raises_on_empty_cluster_ip(monkeypatch):
 
     monkeypatch.setattr(probe.subprocess, "run", lambda argv, **kwargs: FakeResult())
     with pytest.raises(SystemExit) as excinfo:
-        probe_arr.resolve_arr_ip("sonarr")
+        arr.resolve_arr_ip("sonarr")
     assert "ClusterIP" in str(excinfo.value)
 
 

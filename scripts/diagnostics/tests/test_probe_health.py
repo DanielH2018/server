@@ -10,7 +10,7 @@ import collections
 import functools
 from datetime import datetime, timezone
 
-import probe_health
+from diagnostics.probe_lib import health
 
 
 def _inspect(state, restarts=0):
@@ -18,7 +18,7 @@ def _inspect(state, restarts=0):
 
 
 def test_inspect_argv():
-    assert probe_health.inspect_argv("jellyfin") == ["docker", "inspect", "jellyfin"]
+    assert health.inspect_argv("jellyfin") == ["docker", "inspect", "jellyfin"]
 
 
 def test_health_running_and_healthy_exits_zero():
@@ -32,7 +32,7 @@ def test_health_running_and_healthy_exits_zero():
             },
         }
     )
-    text, code = probe_health.format_health(data, "jellyfin")
+    text, code = health.format_health(data, "jellyfin")
     assert code == 0
     assert "healthy" in text and "running" in text
 
@@ -48,26 +48,26 @@ def test_health_unhealthy_exits_one_and_shows_streak_and_last_log():
             },
         }
     )
-    text, code = probe_health.format_health(data, "qbittorrent")
+    text, code = health.format_health(data, "qbittorrent")
     assert code == 1
     assert "unhealthy" in text and "3" in text and "connection refused" in text
 
 
 def test_health_no_healthcheck_running_exits_zero():
-    text, code = probe_health.format_health(_inspect({"Status": "running"}), "valheim")
+    text, code = health.format_health(_inspect({"Status": "running"}), "valheim")
     assert code == 0
     assert "no healthcheck" in text
 
 
 def test_health_exited_exits_one():
-    text, code = probe_health.format_health(_inspect({"Status": "exited"}), "valheim")
+    text, code = health.format_health(_inspect({"Status": "exited"}), "valheim")
     assert code == 1
     assert "exited" in text
 
 
 def test_health_absent_and_undeclared_is_clean():
     """An undeclared name is a block tag or a typo — the one absence the notifier may skip."""
-    text, code = probe_health.format_health([], "nope", declared=False)
+    text, code = health.format_health([], "nope", declared=False)
     assert code == 1
     assert "not a declared service on any host" in text
 
@@ -79,7 +79,7 @@ def test_health_absent_but_declared_is_flagged():
     not create it — and until 2026-09-01 it shared the undeclared case's "not found (not created"
     message, which the notifier skipped.
     """
-    text, code = probe_health.format_health([], "wg-easy", declared=True)
+    text, code = health.format_health([], "wg-easy", declared=True)
     assert code == 1
     assert "MISSING" in text
     assert "not a declared service on any host" not in text
@@ -133,7 +133,7 @@ def _pods(*containers):
 
 
 def test_k8s_health_rolled_out_and_quiet_exits_zero():
-    text, code = probe_health.format_k8s_health(
+    text, code = health.format_k8s_health(
         _deploy(), _pods(("app", 0, None)), "freshrss", _NOW
     )
     assert code == 0
@@ -141,14 +141,14 @@ def test_k8s_health_rolled_out_and_quiet_exits_zero():
 
 
 def test_k8s_health_missing_deployment_exits_one():
-    text, code = probe_health.format_k8s_health(None, None, "nope", _NOW)
+    text, code = health.format_k8s_health(None, None, "nope", _NOW)
     assert code == 1
     assert "no Deployment" in text
 
 
 def test_k8s_health_stale_generation_exits_one():
     """The controller has not observed the spec change yet, so the OLD pod is what is ready."""
-    text, code = probe_health.format_k8s_health(
+    text, code = health.format_k8s_health(
         _deploy(generation=5, observed=4), _pods(("app", 0, None)), "freshrss", _NOW
     )
     assert code == 1
@@ -156,7 +156,7 @@ def test_k8s_health_stale_generation_exits_one():
 
 
 def test_k8s_health_incomplete_rollout_exits_one():
-    text, code = probe_health.format_k8s_health(
+    text, code = health.format_k8s_health(
         _deploy(replicas=2, updated=1, ready=1, available=1),
         _pods(("app", 0, None)),
         "freshrss",
@@ -173,7 +173,7 @@ def test_k8s_health_recent_restart_exits_one_despite_being_ready():
     getting killed. Every readiness-derived field reads healthy while the pod crashloops.
     """
     just_now = "2026-08-16T11:59:30Z"
-    text, code = probe_health.format_k8s_health(
+    text, code = health.format_k8s_health(
         _deploy(), _pods(("app", 3, just_now)), "kube-state-metrics", _NOW
     )
     assert code == 1
@@ -184,7 +184,7 @@ def test_k8s_health_old_restart_does_not_fail():
     """A pod that restarted last week and has been up since is healthy — restartCount alone
     would fail it forever."""
     last_week = "2026-08-09T12:00:00Z"
-    text, code = probe_health.format_k8s_health(
+    text, code = health.format_k8s_health(
         _deploy(), _pods(("app", 3, last_week)), "freshrss", _NOW
     )
     assert code == 0
@@ -197,10 +197,10 @@ def test_k8s_health_unparseable_restart_timestamp_does_not_fail_open():
     Treating unknown as old is the one direction a gate must never fail. Reachable whenever
     kubectl's timestamp format shifts — fractional seconds, for instance, parse as None.
     """
-    assert probe_health._seconds_since("not-a-timestamp", _NOW) is None
-    assert probe_health._seconds_since(None, _NOW) is None
+    assert health._seconds_since("not-a-timestamp", _NOW) is None
+    assert health._seconds_since(None, _NOW) is None
 
-    text, code = probe_health.format_k8s_health(
+    text, code = health.format_k8s_health(
         _deploy(), _pods(("app", 1, "2026-08-16T11:59:30.123456Z")), "freshrss", _NOW
     )
     assert code == 1
@@ -209,7 +209,7 @@ def test_k8s_health_unparseable_restart_timestamp_does_not_fail_open():
 
 def test_k8s_health_restart_with_no_laststate_fails_closed():
     """restartCount > 0 with no terminated state is still an unexplained restart."""
-    text, code = probe_health.format_k8s_health(
+    text, code = health.format_k8s_health(
         _deploy(), _pods(("app", 2, None)), "freshrss", _NOW
     )
     assert code == 1
@@ -219,7 +219,7 @@ def test_k8s_health_restart_with_no_laststate_fails_closed():
 def test_k8s_health_checks_every_container_in_the_pod():
     """A sidecar crashlooping while the main container is fine still fails the gate."""
     just_now = "2026-08-16T11:59:00Z"
-    text, code = probe_health.format_k8s_health(
+    text, code = health.format_k8s_health(
         _deploy(), _pods(("app", 0, None), ("sidecar", 9, just_now)), "n8n", _NOW
     )
     assert code == 1
@@ -245,7 +245,7 @@ def test_k8s_health_reads_a_daemonset():
 
     They carry the same four numbers under different status field names.
     """
-    text, code = probe_health.format_k8s_health(
+    text, code = health.format_k8s_health(
         _daemonset(), _pods(("app", 0, None)), "promtail", _NOW
     )
     assert code == 0
@@ -255,7 +255,7 @@ def test_k8s_health_reads_a_daemonset():
 def test_k8s_health_daemonset_missing_a_node_exits_one():
     """Scheduled on 2 nodes, ready on 1 — a Deployment's readyReplicas would read 0 here, so
     the field mapping has to be per-kind rather than a shared default."""
-    text, code = probe_health.format_k8s_health(
+    text, code = health.format_k8s_health(
         _daemonset(ready=1, available=1), _pods(("app", 0, None)), "promtail", _NOW
     )
     assert code == 1
@@ -263,19 +263,19 @@ def test_k8s_health_daemonset_missing_a_node_exits_one():
 
 
 def test_k8s_health_argv_can_ask_for_a_daemonset():
-    assert "daemonset" in probe_health.k8s_deploy_argv(
+    assert "daemonset" in health.k8s_deploy_argv(
         "promtail", "homelab", kind="daemonset"
     )
 
 
 def test_k8s_health_argv_targets_the_named_namespace():
-    assert probe_health.k8s_deploy_argv("freshrss", "homelab")[:4] == [
+    assert health.k8s_deploy_argv("freshrss", "homelab")[:4] == [
         "k3s",
         "kubectl",
         "-n",
         "homelab",
     ]
-    assert "app=freshrss" in probe_health.k8s_pods_argv("freshrss", "homelab")
+    assert "app=freshrss" in health.k8s_pods_argv("freshrss", "homelab")
 
 
 #
@@ -292,7 +292,7 @@ def _target(namespace, kind, name, workload, pods=None):
 
 
 def test_role_health_all_present_is_clean():
-    text, code = probe_health.format_role_health(
+    text, code = health.format_role_health(
         "claude-otel",
         [
             _target("observability", "Deployment", "grafana", _deploy(), _pods()),
@@ -311,7 +311,7 @@ def test_role_health_absent_workload_is_flagged():
     The role's manifests declare grafana; the cluster does not have it. That is a failed deploy, and
     it must NOT read as a skip.
     """
-    text, code = probe_health.format_role_health(
+    text, code = health.format_role_health(
         "claude-otel",
         [
             _target("observability", "Deployment", "grafana", None),
@@ -332,7 +332,7 @@ def test_role_health_unhealthy_sibling_is_flagged():
     karakeep-time-tagger crashlooping behind a healthy `karakeep` was invisible before the
     resolution step.
     """
-    text, code = probe_health.format_role_health(
+    text, code = health.format_role_health(
         "karakeep",
         [
             _target("homelab", "Deployment", "karakeep", _deploy(), _pods()),
@@ -353,7 +353,7 @@ def test_role_health_unhealthy_sibling_is_flagged():
 def test_role_health_verdict_rides_the_first_line():
     """deploy_detach_notify reads `splitlines()[0]`, so a failure buried in the per-workload
     detail would be reported as the summary line's verdict instead."""
-    text, _ = probe_health.format_role_health(
+    text, _ = health.format_role_health(
         "scrutiny",
         [
             _target("homelab", "Deployment", "scrutiny-web", None),
@@ -435,7 +435,7 @@ def _resolved():
     roles = sorted(d.name for d in validator.K8S_ROLES.iterdir() if d.is_dir())
     out = {}
     for role in roles:
-        targets = probe_health.role_workload_targets(role, _DEFAULT_NS)
+        targets = health.role_workload_targets(role, _DEFAULT_NS)
         if targets is not None:
             out[role] = targets
     return out
@@ -497,9 +497,9 @@ def test_resolver_returns_none_for_a_tag_that_is_not_a_k8s_role():
     Not wg-easy: it is a role on BOTH trees, and the resolver prefers the k8s one, matching
     run_health's own k8s-first ordering.
     """
-    assert probe_health.role_workload_targets("config", _DEFAULT_NS) is None
-    assert probe_health.role_workload_targets("glances", _DEFAULT_NS) is None
-    assert probe_health.role_workload_targets("autoheal", _DEFAULT_NS) is None
+    assert health.role_workload_targets("config", _DEFAULT_NS) is None
+    assert health.role_workload_targets("glances", _DEFAULT_NS) is None
+    assert health.role_workload_targets("autoheal", _DEFAULT_NS) is None
 
 
 def test_resolver_respects_the_validators_skip_roles():
@@ -509,7 +509,7 @@ def test_resolver_respects_the_validators_skip_roles():
     from validate import k8s_manifests as validator
 
     for role in sorted(validator.SKIP_ROLES):
-        assert probe_health.role_workload_targets(role, _DEFAULT_NS) is None, role
+        assert health.role_workload_targets(role, _DEFAULT_NS) is None, role
 
 
 def test_statefulset_is_resolvable_and_lookupable():
@@ -518,9 +518,9 @@ def test_statefulset_is_resolvable_and_lookupable():
     Resolving a kind the kubectl lookup cannot ask for would make the first StatefulSet added read
     as MISSING, so the two sets have to agree.
     """
-    assert "StatefulSet" in probe_health.WORKLOAD_KINDS
-    assert probe_health.WORKLOAD_KINDS["StatefulSet"] == "statefulset"
-    assert "statefulset" in probe_health.k8s_deploy_argv(
+    assert "StatefulSet" in health.WORKLOAD_KINDS
+    assert health.WORKLOAD_KINDS["StatefulSet"] == "statefulset"
+    assert "statefulset" in health.k8s_deploy_argv(
         "postgres", "homelab", kind="statefulset"
     )
 
@@ -541,8 +541,7 @@ def _workload(name, selector, template=None):
 
 def test_pod_selector_matches_a_workloads_own_labels():
     assert (
-        probe_health.pod_selector(_workload("grafana", {"app": "grafana"}))
-        == "app=grafana"
+        health.pod_selector(_workload("grafana", {"app": "grafana"})) == "app=grafana"
     )
 
 
@@ -552,7 +551,7 @@ def test_pod_selector_is_flagged_when_it_would_differ_from_the_name():
     pihole-2's Deployment selects `app: pihole`. `app=pihole-2` matched no pods at all, and
     `app=pihole` matched BOTH piholes' — confirmed live 2026-09-01.
     """
-    selector = probe_health.pod_selector(_workload("pihole-2", {"app": "pihole"}))
+    selector = health.pod_selector(_workload("pihole-2", {"app": "pihole"}))
     assert selector == "app=pihole"
     assert selector != "app=pihole-2"
 
@@ -565,10 +564,10 @@ def test_pod_selector_separates_two_instances_sharing_one_selector():
     reading the template is what makes each instance's query match only its own pods.
     """
     shared = {"app": "pihole"}
-    one = probe_health.pod_selector(
+    one = health.pod_selector(
         _workload("pihole", shared, {"app": "pihole", "instance": "pihole"})
     )
-    two = probe_health.pod_selector(
+    two = health.pod_selector(
         _workload("pihole-2", shared, {"app": "pihole", "instance": "pihole-2"})
     )
     assert one == "app=pihole,instance=pihole"
@@ -592,7 +591,7 @@ def test_pod_selector_is_flagged_when_it_reads_only_the_shared_selector():
         ",".join(f"{k}={v}" for k, v in sorted(shared.items())) for _ in templates
     }
     new_rule = {
-        probe_health.pod_selector(_workload("pihole", shared, template))
+        health.pod_selector(_workload("pihole", shared, template))
         for template in templates
     }
     assert len(old_rule) == 1
@@ -606,7 +605,7 @@ def test_pod_selector_is_never_wider_than_the_workloads_own_selector():
     template = {"app": "pihole", "instance": "pihole-2", "netpol-baseline": "enforced"}
     built = dict(
         pair.split("=", 1)
-        for pair in probe_health.pod_selector(
+        for pair in health.pod_selector(
             _workload("pihole-2", selector, template)
         ).split(",")
     )
@@ -616,12 +615,12 @@ def test_pod_selector_is_never_wider_than_the_workloads_own_selector():
 def test_pod_selector_falls_back_rather_than_matching_every_pod():
     """A workload with no selector is rejected by the k8s API, so this is unreachable — but an
     empty `-l` would query the whole namespace, which is worse than the old guess."""
-    assert probe_health.pod_selector({}) == ""
-    assert "app=pihole-2" in probe_health.k8s_pods_argv("pihole-2", "homelab", "")
+    assert health.pod_selector({}) == ""
+    assert "app=pihole-2" in health.k8s_pods_argv("pihole-2", "homelab", "")
 
 
 def test_pods_argv_prefers_an_explicit_selector():
-    argv = probe_health.k8s_pods_argv("pihole-2", "homelab", "app=pihole")
+    argv = health.k8s_pods_argv("pihole-2", "homelab", "app=pihole")
     assert "app=pihole" in argv and "app=pihole-2" not in argv
 
 
@@ -635,7 +634,7 @@ def _rendered_workloads():
 
 
 def _iter_rendered_workloads():
-    validator, base, entries = probe_health._render_context()
+    validator, base, entries = health._render_context()
     for role_dir in sorted(d for d in validator.K8S_ROLES.iterdir() if d.is_dir()):
         role = role_dir.name
         if role in validator.SKIP_ROLES or role not in entries:
@@ -653,10 +652,7 @@ def _iter_rendered_workloads():
             err, docs = validator.check_template(role, tpl, ctx)
             assert not err, f"{role}/{tpl.name}: {err}"
             for doc in docs:
-                if (
-                    isinstance(doc, dict)
-                    and doc.get("kind") in probe_health.WORKLOAD_KINDS
-                ):
+                if isinstance(doc, dict) and doc.get("kind") in health.WORKLOAD_KINDS:
                     yield role, doc
 
 
@@ -671,7 +667,7 @@ def test_every_rendered_workload_yields_a_usable_pod_selector():
     assert len(workloads) > 50, len(workloads)
     for role, doc in workloads:
         name = (doc.get("metadata") or {}).get("name")
-        assert probe_health.pod_selector(doc), f"{role}/{name} declares no matchLabels"
+        assert health.pod_selector(doc), f"{role}/{name} declares no matchLabels"
 
 
 def test_no_two_rendered_workloads_share_a_pod_selector():
@@ -684,7 +680,7 @@ def test_no_two_rendered_workloads_share_a_pod_selector():
     by_selector = collections.defaultdict(list)
     for role, doc in _rendered_workloads():
         name = (doc.get("metadata") or {}).get("name")
-        by_selector[probe_health.pod_selector(doc)].append(f"{role}/{name}")
+        by_selector[health.pod_selector(doc)].append(f"{role}/{name}")
     shared = {sel: names for sel, names in by_selector.items() if len(names) > 1}
     assert not shared, shared
 
@@ -699,15 +695,14 @@ def test_a_workload_selecting_labels_other_than_its_own_name_still_exists():
     divergent = {
         (role, (doc.get("metadata") or {}).get("name"))
         for role, doc in _rendered_workloads()
-        if probe_health.pod_selector(doc)
-        != f"app={(doc.get('metadata') or {}).get('name')}"
+        if health.pod_selector(doc) != f"app={(doc.get('metadata') or {}).get('name')}"
     }
     assert ("pihole", "pihole-2") in divergent, divergent
-    assert probe_health.declared_on_pi("wg-easy") is True
-    assert probe_health.declared_on_pi("definitely-not-a-service") is False
+    assert health.declared_on_pi("wg-easy") is True
+    assert health.declared_on_pi("definitely-not-a-service") is False
 
 
 def test_declared_on_pi_fails_closed_on_an_unreadable_inventory(monkeypatch, tmp_path):
     """Fail closed: an unreadable inventory must not turn a missing container into a skip."""
-    monkeypatch.setattr(probe_health, "PI_HOST_VARS", tmp_path / "gone.yml")
-    assert probe_health.declared_on_pi("wg-easy") is True
+    monkeypatch.setattr(health, "PI_HOST_VARS", tmp_path / "gone.yml")
+    assert health.declared_on_pi("wg-easy") is True

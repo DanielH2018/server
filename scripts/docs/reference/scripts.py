@@ -264,14 +264,22 @@ def _importers(scripts: Path) -> dict[str, set[str]]:
     `conftest` are not importers here.
     """
     stems = {p.stem for p in _all_py(scripts)}
-    # A cross-directory import is spelled `from lib.docs_provenance import ...` — the module
-    # sought is the SECOND segment. Reading only the first would see `lib`, match nothing, and
-    # report a module every generator imports as something nobody runs.
-    subdirs = {d.name for d in scripts.iterdir() if d.is_dir()}
 
     def _module(dotted: str) -> str:
-        head, _, rest = dotted.partition(".")
-        return rest.partition(".")[0] if head in subdirs and rest else head
+        """The module stem inside a dotted import path, or "" if it names only directories.
+
+        A cross-directory import is spelled `from lib.docs_provenance import ...` — the module
+        sought is not the first segment, which names a directory. Walk past EVERY leading
+        segment that is a real directory rather than assuming one: `diagnostics.probe_lib.core`
+        has two, and stopping at the second reported a module twelve scripts import as
+        something nobody runs.
+        """
+        parts = dotted.split(".")
+        here, i = scripts, 0
+        while i < len(parts) and (here / parts[i]).is_dir():
+            here /= parts[i]
+            i += 1
+        return parts[i] if i < len(parts) else ""
 
     importers: dict[str, set[str]] = {}
     for path in _all_py(scripts):
@@ -285,7 +293,13 @@ def _importers(scripts: Path) -> dict[str, set[str]]:
             if isinstance(node, ast.Import):
                 names = [_module(alias.name) for alias in node.names]
             elif isinstance(node, ast.ImportFrom):
-                names = [_module(node.module)] if node.module and not node.level else []
+                if node.level or not node.module:
+                    names = []
+                else:
+                    # `from diagnostics.probe_lib import core` names only directories in the
+                    # module part, so the modules imported are the aliases.
+                    head = _module(node.module)
+                    names = [head] if head else [alias.name for alias in node.names]
             else:
                 continue
             for name in names:
