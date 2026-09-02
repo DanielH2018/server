@@ -104,6 +104,7 @@ spec:
                 echo "isolated: $target unreachable from an unlisted caller"
               done
 
+{% if 'terraria' in netpol_baseline_slice45_targets %}
               # 3. OPEN-PORT. Must succeed. terraria's policy leaves 7777 open to every source
               #    because its LoadBalancer preserves each player's real address and those are
               #    not enumerable. This leg is the only thing in the repo that proves the rule is
@@ -115,5 +116,12 @@ spec:
                 exit 1
               fi
               echo "open port ok: terraria:7777 reachable from an unlisted caller, as designed"
+{% else %}
+              # 3. OPEN-PORT: NOT RUN. terraria is absent from netpol_baseline_slice45_targets
+              #    because it is scaled to zero (#836), so nothing listens on 7777 and this leg
+              #    would fail on the workload's state rather than on its policy. Restoring
+              #    terraria to that list brings the leg back with it.
+              echo "open port skipped: terraria is not a slice-4.5 target (scaled to zero)"
+{% endif %}
 {{ hardened_security_context() }}
 {{ container_resources(cpu_limit='200m', mem_limit='64Mi', cpu_request='10m', mem_request='16Mi') }}

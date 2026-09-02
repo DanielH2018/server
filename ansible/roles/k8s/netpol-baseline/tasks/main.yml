@@ -348,9 +348,22 @@
     - netpol_baseline_enforced | bool
     - not k8s_no_mutate
   ansible.builtin.command:
+    # `endpoints[*]`, NOT `endpoints[?(@.conditions.ready==true)]`. A Service with no ready
+    # pods keeps its EndpointSlice and sets `endpoints: null` rather than `[]`, and kubectl's
+    # jsonpath filter cannot filter nil: it exits 1 with `<nil> is not array or slice` and a
+    # 3 KB dump of the object. So the READ died before the assert below could name the target,
+    # and the operator got a Go template error instead of a diagnosis. Measured 2026-09-02
+    # against the live cluster: the filter form exits 1 on terraria (0 replicas) and 0 on
+    # freshrss, while this form exits 0 on both, empty and `true` respectively. All four slice
+    # gates carried it; all four are fixed together, because the next workload scaled to zero
+    # would have hit whichever one still had it.
+    #
+    # Readiness is still asserted — the path returns each endpoint's `conditions.ready`, and
+    # the assert requires an explicit `true`. Selecting `targetRef.name` under `[*]` would have
+    # been null-safe too, and would have counted a NOT-ready endpoint as present.
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} get endpointslice -l kubernetes.io/service-name={{ item }}
-      -o jsonpath={.items[*].endpoints[?(@.conditions.ready==true)].targetRef.name}
+      -o jsonpath={.items[*].endpoints[*].conditions.ready}
   become: true
   changed_when: false
   register: netpol_baseline_probe_slice2_targets
@@ -372,7 +385,7 @@
     - netpol_baseline_enforced | bool
     - not k8s_no_mutate
   ansible.builtin.assert:
-    that: item.stdout | trim | length > 0
+    that: "'true' in item.stdout.split()"
     fail_msg: >-
       {{ item.item }} has no ready endpoint, so the slice-2 probe was not run. Its assertions are
       inverted — a failed connection is the PASS case — so it cannot tell "fenced by the policy"
@@ -517,10 +530,12 @@
     - netpol_baseline_obs_enforced | bool
     - not k8s_no_mutate
   ansible.builtin.command:
+    # `endpoints[*]`, never a `[?(...)]` filter — see the slice-2 gate above for why a
+    # target with no ready pods makes the filter form exit 1 before the assert can run.
     cmd: >-
       k3s kubectl -n {{ k8s_observability_namespace }} get endpointslice
       -l kubernetes.io/service-name={{ item }}
-      -o jsonpath={.items[*].endpoints[?(@.conditions.ready==true)].targetRef.name}
+      -o jsonpath={.items[*].endpoints[*].conditions.ready}
   become: true
   changed_when: false
   register: netpol_baseline_probe_slice3_targets
@@ -543,7 +558,7 @@
     - netpol_baseline_obs_enforced | bool
     - not k8s_no_mutate
   ansible.builtin.assert:
-    that: item.stdout | trim | length > 0
+    that: "'true' in item.stdout.split()"
     fail_msg: >-
       {{ item.item }} has no ready endpoint in {{ k8s_observability_namespace }}, so the slice-3
       probe was not run. Its assertions are inverted — a failed connection is the PASS case — so
@@ -684,9 +699,11 @@
     - netpol_baseline_enforced | bool
     - not k8s_no_mutate
   ansible.builtin.command:
+    # `endpoints[*]`, never a `[?(...)]` filter — see the slice-2 gate above for why a
+    # target with no ready pods makes the filter form exit 1 before the assert can run.
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} get endpointslice -l kubernetes.io/service-name={{ item }}
-      -o jsonpath={.items[*].endpoints[?(@.conditions.ready==true)].targetRef.name}
+      -o jsonpath={.items[*].endpoints[*].conditions.ready}
   become: true
   changed_when: false
   register: netpol_baseline_probe_slice4_targets
@@ -709,7 +726,7 @@
     - netpol_baseline_enforced | bool
     - not k8s_no_mutate
   ansible.builtin.assert:
-    that: item.stdout | trim | length > 0
+    that: "'true' in item.stdout.split()"
     fail_msg: >-
       {{ item.item }} has no ready endpoint, so the slice-4 probe was not run. Its assertions are
       inverted — a failed connection is the PASS case — so it cannot tell "fenced by the policy"
@@ -834,12 +851,14 @@
     group: root
   become: true
 
-# Five of this probe's seven legs are INVERTED, so a crashlooping or scaled-to-zero target reads
+# Five of this probe's legs are INVERTED, so a crashlooping or scaled-to-zero target reads
 # identically to a correctly-fenced one. This gate proves the targets are up first — otherwise
 # "unreachable" could mean either "fenced" or "down".
 #
-# The two non-inverted legs are gated here too, for the opposite reason: speedtest and terraria
-# must SUCCEED, so a target that is down would fail the probe and read as a policy fault.
+# The non-inverted legs are gated here too, for the opposite reason: they must SUCCEED, so a
+# target that is down would fail the probe and read as a policy fault. speedtest is one.
+# terraria was the other until #836 scaled it to zero — it is out of
+# netpol_baseline_slice45_targets now, and its leg is rendered only while it is back in.
 #
 # NOTE the Service names, not the pod labels: `scrutiny` is scrutiny-web's Service. Querying
 # `scrutiny-web` here would find no EndpointSlice and fail the gate on a healthy workload.
@@ -849,23 +868,24 @@
     - netpol_baseline_enforced | bool
     - not k8s_no_mutate
   ansible.builtin.command:
+    # `endpoints[*]`, NOT `endpoints[?(@.conditions.ready==true)]`. A Service with no ready pods
+    # keeps its EndpointSlice and sets `endpoints: null` rather than `[]`, and kubectl's jsonpath
+    # filter cannot filter nil: it exits 1 with `<nil> is not array or slice` and a 3 KB dump of
+    # the object. So the READ died before the assert below could say which target was down, and
+    # the operator got a Go template error instead of a diagnosis. Measured 2026-09-02 against
+    # the live cluster: the filter form exits 1 on terraria (0 replicas) and 0 on freshrss, while
+    # this form exits 0 on both, empty and `true` respectively.
+    #
+    # Readiness is still asserted — the path returns each endpoint's `conditions.ready`, and the
+    # assert requires an explicit `true`. Selecting `targetRef.name` under `[*]` would have been
+    # null-safe too and would have counted a NOT-ready endpoint as present.
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} get endpointslice -l kubernetes.io/service-name={{ item }}
-      -o jsonpath={.items[*].endpoints[?(@.conditions.ready==true)].targetRef.name}
+      -o jsonpath={.items[*].endpoints[*].conditions.ready}
   become: true
   changed_when: false
   register: netpol_baseline_probe_slice45_targets
-  # One entry per target the probe asserts against. Adding an assertion to
-  # netpol-probe-slice45-job.yaml.j2 without adding its target here reopens the silent-green hole
-  # this gate exists to close.
-  loop:
-    - speedtest
-    - home-assistant
-    - uptime-kuma
-    - loki-homelab
-    - scrutiny
-    - karakeep-meilisearch
-    - terraria
+  loop: "{{ netpol_baseline_slice45_targets }}"
 
 - name: Fail if any slice-4.5 probe target has no ready endpoint
   tags: [deploy]
@@ -873,7 +893,10 @@
     - netpol_baseline_enforced | bool
     - not k8s_no_mutate
   ansible.builtin.assert:
-    that: item.stdout | trim | length > 0
+    # An explicit `true` among the endpoints' readiness flags. A non-empty stdout is not enough
+    # now that the query returns booleans: a target whose only endpoint is `false` would read as
+    # present, which is the state this gate exists to catch.
+    that: "'true' in item.stdout.split()"
     fail_msg: >-
       {{ item.item }} has no ready endpoint, so the slice-4.5 probe was not run. Most of its
       assertions are inverted — a failed connection is the PASS case — so it cannot tell "fenced
