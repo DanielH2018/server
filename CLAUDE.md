@@ -532,9 +532,10 @@ uv run pytest scripts         # just one suite
   against something concrete: `assert len(found) >= <n>`, or better a frozenset of names the
   census must contain, so the failure message says which member went missing rather than that a
   count moved. `KNOWN_CONSUMERS` in `scripts/diagnostics/tests/test_probe_boundaries.py` is the
-  worked example. Five guards broke this way in five consecutive PRs (#838, #846, #852, and two
-  in the probe_lib move); every one was caught solely by the non-vacuity assertion, and the
-  guards that lacked it had to be found by running the entry point instead.
+  worked example. Nine guards broke this way in six consecutive PRs (#838, #846, #852, two in
+  #858, four in the monitor-bridge package move); every one was caught solely by the
+  non-vacuity assertion, and the guards that lacked it had to be found by running the entry
+  point instead.
 - **If the check reaches out over a network, measure the transport before you ship it.** The
   paired test above proves the *verdict* can go red; it says nothing about whether the fetch that
   feeds the verdict returns in time. A check whose source is slow or flaky fails open on every

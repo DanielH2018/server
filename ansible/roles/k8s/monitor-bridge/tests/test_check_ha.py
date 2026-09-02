@@ -10,9 +10,9 @@ from pathlib import Path
 
 import pytest
 
-import bridge_config
-import bridge_io
-import checks_service
+import bridge.config
+import bridge.net
+import checks.service
 
 _REPO = Path(__file__).resolve().parents[5]
 
@@ -51,7 +51,7 @@ def _ha_state(last_changed, state="2026-06-06 11:59:00"):
     ],
 )
 def test_ha_heartbeat_fresh(state, ok, must_contain):
-    result_ok, msg = checks_service.ha_heartbeat_fresh(state, 300, now=HB_NOW)
+    result_ok, msg = checks.service.ha_heartbeat_fresh(state, 300, now=HB_NOW)
     assert result_ok is ok
     for s in must_contain:
         assert s in msg
@@ -69,21 +69,21 @@ def _ha_payload(age_s):
 
 
 def _ha_cycle(monkeypatch, age_s=600, raises=False, banned=0):
-    monkeypatch.setattr(bridge_config, "HA_URL", "http://home-assistant:8123")
-    monkeypatch.setattr(bridge_config, "HA_TOKEN", "tok")
+    monkeypatch.setattr(bridge.config, "HA_URL", "http://home-assistant:8123")
+    monkeypatch.setattr(bridge.config, "HA_TOKEN", "tok")
     # The ip_ban arm queries Loki via loki_count. Patch it explicitly rather than letting it fall
     # through the _get_json stub below: that stub returns an HA state payload, so the arm would
     # take its fail-open path for an accidental reason and stop testing the hysteresis cleanly.
-    monkeypatch.setattr(bridge_io, "loki_count", lambda *a, **k: banned)
+    monkeypatch.setattr(bridge.net, "loki_count", lambda *a, **k: banned)
     if raises:
 
         def boom(*a, **k):
             raise OSError("connection refused")
 
-        monkeypatch.setattr(bridge_io, "_get_json", boom)
+        monkeypatch.setattr(bridge.net, "_get_json", boom)
     else:
-        monkeypatch.setattr(bridge_io, "_get_json", lambda *a, **k: _ha_payload(age_s))
-    return checks_service.check_ha_heartbeat()
+        monkeypatch.setattr(bridge.net, "_get_json", lambda *a, **k: _ha_payload(age_s))
+    return checks.service.check_ha_heartbeat()
 
 
 def test_ha_heartbeat_single_stale_cycle_is_suppressed(monkeypatch):
@@ -122,7 +122,7 @@ def test_ha_heartbeat_unreachable_api_rides_grace(monkeypatch):
 
 
 def test_ha_ban_no_events_is_ok():
-    ok, msg = checks_service.ha_ban_verdict(0, "1h")
+    ok, msg = checks.service.ha_ban_verdict(0, "1h")
     assert ok
     assert "no ip_ban events" in msg
 
@@ -131,12 +131,12 @@ def test_ha_ban_none_series_is_ok():
     # None and 0 are the same healthy answer: HA logs nothing when it bans nobody, so an empty
     # vector is what a healthy cluster looks like — unlike loki_ingestion_fresh, where silence
     # IS the fault.
-    ok, _ = checks_service.ha_ban_verdict(None, "1h")
+    ok, _ = checks.service.ha_ban_verdict(None, "1h")
     assert ok
 
 
 def test_ha_ban_event_is_down():
-    ok, msg = checks_service.ha_ban_verdict(1, "1h")
+    ok, msg = checks.service.ha_ban_verdict(1, "1h")
     assert not ok
     assert "ip_ban fired 1 time(s)" in msg
     assert "ip_bans.yaml" in msg
@@ -166,19 +166,19 @@ def test_ha_ban_arm_fails_open_when_loki_errors(monkeypatch):
     def boom(*a, **k):
         raise OSError("loki unreachable")
 
-    monkeypatch.setattr(bridge_io, "loki_count", boom)
-    monkeypatch.setattr(bridge_config, "HA_URL", "http://home-assistant:8123")
-    monkeypatch.setattr(bridge_config, "HA_TOKEN", "tok")
-    monkeypatch.setattr(bridge_io, "_get_json", lambda *a, **k: _ha_payload(60))
-    ok, msg = checks_service.check_ha_heartbeat()
+    monkeypatch.setattr(bridge.net, "loki_count", boom)
+    monkeypatch.setattr(bridge.config, "HA_URL", "http://home-assistant:8123")
+    monkeypatch.setattr(bridge.config, "HA_TOKEN", "tok")
+    monkeypatch.setattr(bridge.net, "_get_json", lambda *a, **k: _ha_payload(60))
+    ok, msg = checks.service.check_ha_heartbeat()
     assert ok
     assert "ip_ban arm unavailable" in msg
 
 
 def test_ha_heartbeat_disabled_when_no_url_token(monkeypatch):
-    monkeypatch.setattr(bridge_config, "HA_URL", "")
-    monkeypatch.setattr(bridge_config, "HA_TOKEN", "")
-    ok, msg = checks_service.check_ha_heartbeat()
+    monkeypatch.setattr(bridge.config, "HA_URL", "")
+    monkeypatch.setattr(bridge.config, "HA_TOKEN", "")
+    ok, msg = checks.service.check_ha_heartbeat()
     assert ok
     assert "disabled" in msg
 

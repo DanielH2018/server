@@ -1,7 +1,7 @@
 """Hardware and host verdicts for check.py — the UPS, SMART/scrutiny, and the Pi.
 
 These decide; check.py fetches. Each takes its inputs as arguments and reads no module-level
-config, which is what makes it safe to live here — see bridge_parsing.py's header for the rule
+config, which is what makes it safe to live here — see bridge/parsing.py's header for the rule
 and why breaking it fails silently rather than loudly.
 
 The partial-absence handling in `ups_health` is the subtle part: a missing arm can mean the
@@ -11,7 +11,7 @@ should page here. The other two belong to monitors that own that fault.
 
 from datetime import datetime, timezone
 
-from bridge_parsing import parse_rfc3339
+from bridge.parsing import parse_rfc3339
 
 
 def scrutiny_freshness(summary, max_age_h, now=None):

@@ -3,8 +3,8 @@
 `_down_streaks` is mutated by checks in four domains (host, service, notify, storage) and
 cleared between tests by conftest.py's autouse fixture, so it lives in its own module rather
 than in whichever domain moved out of check.py first. Callers reach it as
-`bridge_streaks.down_streak(...)` / `bridge_streaks._down_streaks[...]`; the tests patch and
-clear it here. Rule and enforcement: bridge_config.py's header.
+`bridge.streaks.down_streak(...)` / `bridge.streaks._down_streaks[...]`; the tests patch and
+clear it here. Rule and enforcement: bridge/config.py's header.
 """
 
 # Per-check consecutive-down count (check_ups/check_ha_heartbeat/check_discord/

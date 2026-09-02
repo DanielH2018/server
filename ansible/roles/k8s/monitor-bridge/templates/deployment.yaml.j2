@@ -89,6 +89,15 @@ spec:
         - name: monitor-bridge-script
           configMap:
             name: monitor-bridge-script
+            # The keys are flat (a ConfigMap key cannot contain `/`); `items:` puts each one
+            # back at its path under /app, and Kubernetes creates the directories a path
+            # names. Derived from the same list the staging loop and --from-file read, so the
+            # three cannot disagree about where a module lives.
+            items:
+{% for module in monitor_bridge_modules %}
+              - key: {{ module | replace('/', '_') }}
+                path: {{ module }}
+{% endfor %}
         - name: monitor-bridge-credentials
           # Deliberately NOT monitor-bridge-env: that Secret is consumed by envFrom, which
           # injects every key it holds as an env var. See credentials-secret.yaml.j2.

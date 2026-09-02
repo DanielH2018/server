@@ -2,7 +2,7 @@
 """autofix-bridge's ConfigMap ship list must ship autofix.py, plus a real file for every
 cross-role module it names.
 
-autofix.py does `from bridge_common import _env, sanitize` — bridge_common.py is
+autofix.py does `from bridge.common import _env, sanitize` — bridge/common.py is
 monitor-bridge's file, staged into this role's ConfigMap rather than duplicated (the
 host_lib.py pattern from roles/setup/common). It is not a sibling file under this role's
 files/, so test_monitor_bridge_modules.py's "ship list == files on disk" check has no
@@ -64,11 +64,15 @@ def test_ship_list_excludes_the_test_suite():
 def test_autofix_py_cross_role_imports_are_shipped():
     """The direct check: a cross-role module autofix.py imports must travel with it.
 
-    Scoped to names known to be cross-role (bridge_common) rather than every ImportFrom target,
+    Scoped to names known to be cross-role (bridge.common) rather than every ImportFrom target,
     since a stdlib import (json, sys, ...) has no place in this ship list.
     """
+    # `path` is where the module lands under /app, so it is the import id (`bridge/common.py`
+    # -> `bridge.common`); `name` is the flat ConfigMap key and says nothing about imports.
     shipped = {
-        item["name"][:-3] for item in _ship_list() if item["name"].endswith(".py")
+        item.get("path", item["name"])[:-3].replace("/", ".")
+        for item in _ship_list()
+        if item["name"].endswith(".py")
     }
     tree = ast.parse((FILES / ENTRYPOINT).read_text())
     imported = {
@@ -76,7 +80,7 @@ def test_autofix_py_cross_role_imports_are_shipped():
         for node in ast.walk(tree)
         if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module
     }
-    known_cross_role = {"bridge_common"}
+    known_cross_role = {"bridge.common"}
     missing = (imported & known_cross_role) - shipped
     assert not missing, (
         f"autofix.py imports {sorted(missing)}, absent from autofix_bridge_modules"

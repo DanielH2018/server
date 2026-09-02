@@ -1,8 +1,8 @@
 """Env-derived configuration for monitor-bridge — every threshold, URL, credential and window.
 
-Read it through the module object (`import bridge_config as cfg` then `cfg.PROM_URL`), never
-by `from bridge_config import PROM_URL`. A from-import copies the value into the importer's
-globals at import time, so a test that patches `bridge_config.PROM_URL` afterwards would change
+Read it through the module object (`import bridge.config as cfg` then `cfg.PROM_URL`), never
+by `from bridge.config import PROM_URL`. A from-import copies the value into the importer's
+globals at import time, so a test that patches `bridge.config.PROM_URL` afterwards would change
 nothing the importer reads. Tests patch the constants HERE, on this module, and the checks that
 read them look them up at call time. ansible/tests/services/test_bridge_patch_boundary.py enforces the
 qualified read; ansible/tests/services/test_monitor_bridge_modules.py checks that every patched name is
@@ -18,7 +18,7 @@ Constants only. The mutable per-check state (`_n8n_streaks`, `_cadvisor_streaks`
 
 import os
 
-from bridge_common import _env
+from bridge.common import _env
 
 
 def _env_file(name, default=""):
@@ -397,7 +397,7 @@ TARGETS_MIN = int(_env("TARGETS_MIN", "2"))
 CLUSTER_TARGETS_MIN = int(_env("CLUSTER_TARGETS_MIN", "3"))
 # Coverage floor for the three cAdvisor checks (restarts/oom/cpu), which filter a per-pod vector
 # down to offenders and so cannot tell "quiet" from "gone". Reasoning and the measurements behind
-# the value: cadvisor_coverage_shortfall in verdicts_cluster.py.
+# the value: cadvisor_coverage_shortfall in verdicts/cluster.py.
 CADVISOR_PODS_MIN = int(_env("CADVISOR_PODS_MIN", "20"))
 # Hysteresis for the same reason HOST_ORIGINS_CONSECUTIVE exists: a kubelet restart takes a node's
 # cAdvisor away briefly, and three monitors going down together on one transient is the alert storm

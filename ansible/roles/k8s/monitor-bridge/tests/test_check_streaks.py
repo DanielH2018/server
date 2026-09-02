@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 
-import bridge_config
-import bridge_streaks
-import bridge_io
-import checks_logs
+import bridge.config
+import bridge.streaks
+import bridge.net
+import checks.logs
 import check
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -75,7 +75,7 @@ def test_down_streak(
     expected_ok,
     expected_msg,
 ):
-    new_count, ok, msg = bridge_streaks.down_streak(
+    new_count, ok, msg = bridge.streaks.down_streak(
         count, threshold, msg_in, note, held_label=held_label
     )
     assert (new_count, ok) == (expected_count, expected_ok)
@@ -174,17 +174,17 @@ def _wire_run_once_grace(monkeypatch, results):
     """Drive run_once with Prometheus+Loki UP and one STARTUP_GRACE check whose eval returns
     `results` in order across calls; capture the (ok, msg) pushed for it each cycle."""
     monkeypatch.setattr(check, "check_prometheus", lambda: (True, "prom ok"))
-    monkeypatch.setattr(bridge_io, "prom_vector", lambda q: [])
+    monkeypatch.setattr(bridge.net, "prom_vector", lambda q: [])
     monkeypatch.setattr(check, "check_loki_reachable", lambda: (True, "loki ok"))
     monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset())
     monkeypatch.setattr(check, "LOKI_DEPENDENT", frozenset())
     monkeypatch.setattr(check, "STARTUP_GRACE", frozenset({"n8n"}))
-    monkeypatch.setattr(bridge_config, "GRACE_CYCLES", 2)
+    monkeypatch.setattr(bridge.config, "GRACE_CYCLES", 2)
     monkeypatch.setattr(check, "_grace_streaks", {})
     seq = iter(results)
     monkeypatch.setattr(check, "CHECKS", [("n8n", "tok_n8n", lambda: next(seq))])
     pushes = []
-    monkeypatch.setattr(bridge_io, "push", lambda t, ok, m: pushes.append((t, ok, m)))
+    monkeypatch.setattr(bridge.net, "push", lambda t, ok, m: pushes.append((t, ok, m)))
     out = []
     for _ in range(len(results)):
         check.run_once()
@@ -231,7 +231,7 @@ def test_run_once_graced_check_recovers_without_paging(monkeypatch):
     ],
 )
 def test_promtail_dropped(count, ok, must_contain):
-    result_ok, msg = checks_logs.promtail_dropped(count, "1h", 1000)
+    result_ok, msg = checks.logs.promtail_dropped(count, "1h", 1000)
     assert result_ok is ok
     for s in must_contain:
         assert s in msg
@@ -244,8 +244,8 @@ def test_check_promtail_dropped_uses_increase(monkeypatch):
         queries.append(q)
         return 5000.0
 
-    monkeypatch.setattr(bridge_io, "prom_scalar", fake_scalar)
-    ok, _ = checks_logs.check_promtail_dropped()
+    monkeypatch.setattr(bridge.net, "prom_scalar", fake_scalar)
+    ok, _ = checks.logs.check_promtail_dropped()
     assert not ok
     # No reason filter — sums drops across ALL reasons (rate_limited/stream_limited/... too, M2).
     assert any(

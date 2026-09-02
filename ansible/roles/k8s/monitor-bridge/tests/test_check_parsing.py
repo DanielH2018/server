@@ -8,11 +8,11 @@ adversary-controlled alert text through reaches Discord verbatim.
 from datetime import datetime, timezone
 
 
-import bridge_common
-import bridge_parsing
-import bridge_config
-import bridge_io
-import checks_service
+import bridge.common
+import bridge.parsing
+import bridge.config
+import bridge.net
+import checks.service
 
 
 def test_env_file_reads_from_file_and_strips(monkeypatch, tmp_path):
@@ -21,19 +21,19 @@ def test_env_file_reads_from_file_and_strips(monkeypatch, tmp_path):
     f.write_text("s3cret-token\n")
     monkeypatch.setenv("HA_TOKEN_FILE", str(f))
     monkeypatch.setenv("HA_TOKEN", "inline-should-be-ignored")
-    assert bridge_config._env_file("HA_TOKEN", "") == "s3cret-token"
+    assert bridge.config._env_file("HA_TOKEN", "") == "s3cret-token"
 
 
 def test_env_file_falls_back_to_plain_env(monkeypatch):
     monkeypatch.delenv("HA_TOKEN_FILE", raising=False)
     monkeypatch.setenv("HA_TOKEN", "inline-token")
-    assert bridge_config._env_file("HA_TOKEN", "") == "inline-token"
+    assert bridge.config._env_file("HA_TOKEN", "") == "inline-token"
 
 
 def test_env_file_default_when_neither_set(monkeypatch):
     monkeypatch.delenv("HA_TOKEN_FILE", raising=False)
     monkeypatch.delenv("HA_TOKEN", raising=False)
-    assert bridge_config._env_file("HA_TOKEN", "") == ""
+    assert bridge.config._env_file("HA_TOKEN", "") == ""
 
 
 def test_env_file_missing_file_falls_back_to_env(monkeypatch, tmp_path):
@@ -42,7 +42,7 @@ def test_env_file_missing_file_falls_back_to_env(monkeypatch, tmp_path):
     # monitor over one missing file (2026-07-15 review L1).
     monkeypatch.setenv("HA_TOKEN_FILE", str(tmp_path / "does-not-exist"))
     monkeypatch.setenv("HA_TOKEN", "inline-fallback")
-    assert bridge_config._env_file("HA_TOKEN", "") == "inline-fallback"
+    assert bridge.config._env_file("HA_TOKEN", "") == "inline-fallback"
 
 
 def test_env_file_directory_path_falls_back_to_env(monkeypatch, tmp_path):
@@ -50,67 +50,67 @@ def test_env_file_directory_path_falls_back_to_env(monkeypatch, tmp_path):
     # open() raises IsADirectoryError (an OSError subclass) — must still fall back to the env var.
     monkeypatch.setenv("HA_TOKEN_FILE", str(tmp_path))  # tmp_path is a directory
     monkeypatch.setenv("HA_TOKEN", "inline-fallback")
-    assert bridge_config._env_file("HA_TOKEN", "") == "inline-fallback"
+    assert bridge.config._env_file("HA_TOKEN", "") == "inline-fallback"
 
 
 def test_nanosecond_precision_with_z():
     # Real Kopia value: 9 fractional digits + trailing Z
-    dt = bridge_parsing.parse_rfc3339("2026-06-06T00:00:00.011699074Z")
+    dt = bridge.parsing.parse_rfc3339("2026-06-06T00:00:00.011699074Z")
     assert dt.tzinfo == timezone.utc
     assert dt.year == 2026
     assert dt.microsecond == 11699  # truncated from .011699074
 
 
 def test_plain_z_no_fraction():
-    dt = bridge_parsing.parse_rfc3339("2026-06-06T00:00:00Z")
+    dt = bridge.parsing.parse_rfc3339("2026-06-06T00:00:00Z")
     assert dt == datetime(2026, 6, 6, tzinfo=timezone.utc)
 
 
 def test_offset_after_fraction():
-    dt = bridge_parsing.parse_rfc3339("2026-06-06T01:00:00.123456789+01:00")
+    dt = bridge.parsing.parse_rfc3339("2026-06-06T01:00:00.123456789+01:00")
     assert dt.utcoffset().total_seconds() == 3600
     assert dt.microsecond == 123456
 
 
 def test_parse_duration_units():
-    assert bridge_parsing.parse_duration("900s") == 900
-    assert bridge_parsing.parse_duration("15m") == 900
-    assert bridge_parsing.parse_duration("1h") == 3600
-    assert bridge_parsing.parse_duration("2d") == 172800
-    assert bridge_parsing.parse_duration("300") == 300  # bare number = seconds
+    assert bridge.parsing.parse_duration("900s") == 900
+    assert bridge.parsing.parse_duration("15m") == 900
+    assert bridge.parsing.parse_duration("1h") == 3600
+    assert bridge.parsing.parse_duration("2d") == 172800
+    assert bridge.parsing.parse_duration("300") == 300  # bare number = seconds
 
 
 def test_sanitize_defuses_discord_mentions_and_markdown():
     # A poisoned release title / indexer name must not ping the channel or break formatting.
-    out = bridge_common.sanitize("@everyone `rm -rf`\nsee @here")
+    out = bridge.common.sanitize("@everyone `rm -rf`\nsee @here")
     assert "@" not in out
     assert "`" not in out
     assert "\n" not in out
 
 
 def test_sanitize_caps_length():
-    assert len(bridge_common.sanitize("A" * 500)) <= 120
+    assert len(bridge.common.sanitize("A" * 500)) <= 120
 
 
 def test_sanitize_handles_none():
-    assert bridge_common.sanitize(None) == "?"
+    assert bridge.common.sanitize(None) == "?"
 
 
 def test_sanitize_collapses_whitespace():
-    assert bridge_common.sanitize("a\t b\n\nc") == "a b c"
+    assert bridge.common.sanitize("a\t b\n\nc") == "a b c"
 
 
 def test_arr_queue_msg_is_sanitized(monkeypatch):
     # An @everyone-laden release title reaches the alert msg defused, not as a live ping.
-    monkeypatch.setattr(bridge_config, "SONARR_API_KEY", "k")
-    monkeypatch.setattr(bridge_config, "RADARR_API_KEY", "")
+    monkeypatch.setattr(bridge.config, "SONARR_API_KEY", "k")
+    monkeypatch.setattr(bridge.config, "RADARR_API_KEY", "")
     queue = {
         "records": [
             {"title": "@everyone Free.Movie", "trackedDownloadStatus": "warning"}
         ]
     }
-    monkeypatch.setattr(bridge_io, "_get_json", lambda *a, **k: queue)
-    ok, msg = checks_service.check_arr_queue()
+    monkeypatch.setattr(bridge.net, "_get_json", lambda *a, **k: queue)
+    ok, msg = checks.service.check_arr_queue()
     assert ok is False
     assert "@everyone" not in msg
     assert "(at)everyone" in msg

@@ -3,23 +3,23 @@
 Covers n8n, the *arrs, Bazarr, Prowlarr, the GitOps pair, the etcd restore drill, and the
 Home Assistant heartbeat with its ip_ban arm.
 
-Slice 7 of the check.py split. Reads config as `cfg.X`, the fetch layer as `bridge_io.X` and
-the shared streak counter as `bridge_streaks.X`, so the tests' patches on those modules reach
-it; the verdicts it from-imports from verdicts_service are patched on THIS module, where they
+Slice 7 of the check.py split. Reads config as `cfg.X`, the fetch layer as `bridge.net.X` and
+the shared streak counter as `bridge.streaks.X`, so the tests' patches on those modules reach
+it; the verdicts it from-imports from verdicts.service are patched on THIS module, where they
 are bound. `_n8n_streaks` lives here beside `check_n8n`, the only code that mutates it. Rule
-and enforcement: bridge_config.py's header.
+and enforcement: bridge/config.py's header.
 """
 
 import os
 import time
 from datetime import datetime, timezone
 
-import bridge_config as cfg
-import bridge_io
-import bridge_streaks
-from bridge_common import sanitize
-from bridge_parsing import parse_duration
-from verdicts_service import (
+import bridge.config as cfg
+import bridge.net
+import bridge.streaks
+from bridge.common import sanitize
+from bridge.parsing import parse_duration
+from verdicts.service import (
     gitops_alive,
     ha_ban_verdict,
     ha_heartbeat_fresh,
@@ -31,7 +31,7 @@ from verdicts_service import (
 )
 
 
-# Per-check mutable state. The thresholds these pair with moved to bridge_config.py; the
+# Per-check mutable state. The thresholds these pair with moved to bridge/config.py; the
 # counters stay beside the code that mutates them.
 _n8n_streaks = {}
 
@@ -125,10 +125,10 @@ def check_n8n():
     if not cfg.N8N_API_KEY:
         return True, "n8n monitoring disabled (no API key)"
     headers = {"X-N8N-API-KEY": cfg.N8N_API_KEY}
-    workflows = bridge_io._get_json(
+    workflows = bridge.net._get_json(
         cfg.N8N_URL + "/api/v1/workflows?active=true&limit=250", headers=headers
     )
-    executions = bridge_io._get_json(
+    executions = bridge.net._get_json(
         cfg.N8N_URL + "/api/v1/executions?status=error&limit=100", headers=headers
     )
     streaks = n8n_update_streaks(
@@ -174,7 +174,7 @@ def check_arr_queue():
         return True, "arr queue monitoring disabled (no API keys)"
     offenders = []
     for app_name, url, api_key in configured:
-        data = bridge_io._get_json(url, headers={"X-Api-Key": api_key})
+        data = bridge.net._get_json(url, headers={"X-Api-Key": api_key})
         offenders.extend(queue_warnings(data, app_name))
     if offenders:
         desc = "; ".join(
@@ -241,8 +241,12 @@ def check_bazarr():
     if not cfg.BAZARR_API_KEY:
         return True, "bazarr monitoring disabled (no API key)"
     headers = {"X-API-KEY": cfg.BAZARR_API_KEY}
-    status = bridge_io._get_json(cfg.BAZARR_URL + "/api/system/status", headers=headers)
-    health = bridge_io._get_json(cfg.BAZARR_URL + "/api/system/health", headers=headers)
+    status = bridge.net._get_json(
+        cfg.BAZARR_URL + "/api/system/status", headers=headers
+    )
+    health = bridge.net._get_json(
+        cfg.BAZARR_URL + "/api/system/health", headers=headers
+    )
     problems = bazarr_problems(status, health)
     if problems:
         return False, "; ".join(problems[:5])
@@ -268,10 +272,10 @@ def check_prowlarr_indexers():
     if not cfg.PROWLARR_API_KEY:
         return True, "prowlarr indexer monitoring disabled (no API key)"
     headers = {"X-Api-Key": cfg.PROWLARR_API_KEY}
-    status = bridge_io._get_json(
+    status = bridge.net._get_json(
         cfg.PROWLARR_URL + "/api/v1/indexerstatus", headers=headers
     )
-    indexers = bridge_io._get_json(
+    indexers = bridge.net._get_json(
         cfg.PROWLARR_URL + "/api/v1/indexer", headers=headers
     )
     name_by_id = {i.get("id"): i.get("name") for i in indexers}
@@ -443,7 +447,7 @@ def with_ha_ban(ok, msg):
     # /config/ip_bans.yaml. See the HA_BAN_WINDOW comment for why that is the only signal available.
     """
     try:
-        banned = bridge_io.loki_count(cfg.HA_BAN_SELECTOR, cfg.HA_BAN_WINDOW)
+        banned = bridge.net.loki_count(cfg.HA_BAN_SELECTOR, cfg.HA_BAN_WINDOW)
     except Exception as e:
         return ok, "%s, ip_ban arm unavailable (%s)" % (msg, e)
     ban_ok, ban_msg = ha_ban_verdict(banned, cfg.HA_BAN_WINDOW)
@@ -469,7 +473,7 @@ def check_ha_heartbeat():
     if not cfg.HA_URL or not cfg.HA_TOKEN:
         return True, "HA heartbeat monitoring disabled (no URL/token)"
     try:
-        state = bridge_io._get_json(
+        state = bridge.net._get_json(
             cfg.HA_URL + "/api/states/" + cfg.HA_HEARTBEAT_ENTITY,
             headers={"Authorization": "Bearer " + cfg.HA_TOKEN},
         )
@@ -479,10 +483,10 @@ def check_ha_heartbeat():
     ) as e:  # unreachable/auth -> route through the streak, don't page yet
         ok, msg = False, "HA API unreachable: %s" % e
     if ok:
-        bridge_streaks._down_streaks["ha"] = 0
+        bridge.streaks._down_streaks["ha"] = 0
         return with_ha_ban(True, msg)
-    bridge_streaks._down_streaks["ha"], ok, msg = bridge_streaks.down_streak(
-        bridge_streaks._down_streaks.get("ha", 0),
+    bridge.streaks._down_streaks["ha"], ok, msg = bridge.streaks.down_streak(
+        bridge.streaks._down_streaks.get("ha", 0),
         cfg.HA_CONSECUTIVE,
         msg,
         "deploy/restart grace",

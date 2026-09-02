@@ -161,7 +161,7 @@ def test_the_heartbeat_path_is_the_one_the_reader_reads():
         "the unit hardcodes a path instead of rendering the variable the reader is pinned to"
     )
     reader = (
-        _REPO / "ansible/roles/k8s/monitor-bridge/files/checks_service.py"
+        _REPO / "ansible/roles/k8s/monitor-bridge/files/checks/service.py"
     ).read_text()
     heartbeat = defaults["gitops_deploy_staging_backfill_heartbeat"]
     assert '"%s"' % heartbeat.rsplit("/", 1)[1] in reader

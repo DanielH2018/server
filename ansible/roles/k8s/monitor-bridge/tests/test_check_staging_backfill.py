@@ -11,11 +11,11 @@ import re
 import time
 from pathlib import Path
 
-import bridge_config
+import bridge.config
 import check
-import checks_service
+import checks.service
 import yaml
-from verdicts_service import staging_backfill_alive
+from verdicts.service import staging_backfill_alive
 
 _REPO = Path(__file__).resolve().parents[5]
 _TIMER = _REPO / "ansible/roles/setup/gitops_deploy/templates/staging-backfill.timer.j2"
@@ -32,7 +32,7 @@ def _state(tmp_path, monkeypatch, armed=True, age_s=None):
         (tmp_path / "staging-backfill-last-run").write_text(
             "%d\n" % int(time.time() - age_s)
         )
-    monkeypatch.setattr(bridge_config, "GITOPS_STATE_DIR", str(tmp_path))
+    monkeypatch.setattr(bridge.config, "GITOPS_STATE_DIR", str(tmp_path))
     return tmp_path
 
 
@@ -76,14 +76,14 @@ def test_a_disarmed_ratchet_is_up_and_says_why():
 
 def test_reader_passes_on_a_recent_heartbeat(tmp_path, monkeypatch):
     _state(tmp_path, monkeypatch, armed=True, age_s=45 * 60)
-    ok, msg = checks_service.check_staging_backfill_alive()
+    ok, msg = checks.service.check_staging_backfill_alive()
     assert ok is True
     assert "45m ago" in msg
 
 
 def test_reader_fails_on_a_stale_heartbeat(tmp_path, monkeypatch):
     _state(tmp_path, monkeypatch, armed=True, age_s=5 * 3600)
-    ok, _msg = checks_service.check_staging_backfill_alive()
+    ok, _msg = checks.service.check_staging_backfill_alive()
     assert ok is False
 
 
@@ -91,7 +91,7 @@ def test_reader_fails_closed_on_an_unparseable_heartbeat(tmp_path, monkeypatch):
     """A heartbeat written by something that is not the unit is not evidence the unit ran."""
     _state(tmp_path, monkeypatch, armed=True)
     (tmp_path / "staging-backfill-last-run").write_text("recently\n")
-    ok, msg = checks_service.check_staging_backfill_alive()
+    ok, msg = checks.service.check_staging_backfill_alive()
     assert ok is False
     assert "unparseable" in msg
 
@@ -99,7 +99,7 @@ def test_reader_fails_closed_on_an_unparseable_heartbeat(tmp_path, monkeypatch):
 def test_reader_ignores_a_stale_heartbeat_once_disarmed(tmp_path, monkeypatch):
     """The marker is read FIRST. A disarm leaves the last heartbeat on disk, ageing forever."""
     _state(tmp_path, monkeypatch, armed=False, age_s=30 * 86400)
-    ok, msg = checks_service.check_staging_backfill_alive()
+    ok, msg = checks.service.check_staging_backfill_alive()
     assert ok is True
     assert "disarmed" in msg
 
@@ -152,9 +152,7 @@ def test_the_reader_and_the_unit_agree_on_the_file_names():
     defaults = yaml.safe_load(_ROLE_DEFAULTS.read_text())
     heartbeat = defaults["gitops_deploy_staging_backfill_heartbeat"]
     marker = defaults["gitops_deploy_staging_backfill_armed_marker"]
-    reader = (
-        Path(checks_service.__file__).resolve().parent / "checks_service.py"
-    ).read_text()
+    reader = Path(checks.service.__file__).resolve().read_text()
     assert heartbeat.endswith("/staging-backfill-last-run")
     assert marker.endswith("/staging-backfill-armed")
     assert '"staging-backfill-last-run"' in reader
@@ -181,10 +179,10 @@ def test_staging_backfill_window_is_derived_from_the_timer():
     )
     assert "TimeoutStartSec=25min" in _UNIT.read_text()
     worst_gap_s = (60 + 10 + 25) * 60
-    assert bridge_config.STAGING_BACKFILL_MAX_AGE_S > worst_gap_s, (
+    assert bridge.config.STAGING_BACKFILL_MAX_AGE_S > worst_gap_s, (
         "a window under the worst-case gap flaps on an ordinary late run"
     )
-    assert bridge_config.STAGING_BACKFILL_MAX_AGE_S < 2 * worst_gap_s, (
+    assert bridge.config.STAGING_BACKFILL_MAX_AGE_S < 2 * worst_gap_s, (
         "a window of two cadences tolerates a fully missed run, which is what this check is for"
     )
 
@@ -199,4 +197,4 @@ def test_the_rendered_window_matches_the_code_default():
         r'^\s*STAGING_BACKFILL_MAX_AGE_MIN: "(\d+)"$', env_secret, re.M
     )
     assert rendered, "the window is no longer rendered, so it is no longer tunable"
-    assert float(rendered.group(1)) * 60 == bridge_config.STAGING_BACKFILL_MAX_AGE_S
+    assert float(rendered.group(1)) * 60 == bridge.config.STAGING_BACKFILL_MAX_AGE_S

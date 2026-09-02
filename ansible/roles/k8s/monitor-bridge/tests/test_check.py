@@ -10,11 +10,11 @@ import re
 from pathlib import Path
 
 
-import bridge_common
-import bridge_config
-import bridge_streaks
-import bridge_io
-import checks_storage
+import bridge.common
+import bridge.config
+import bridge.streaks
+import bridge.net
+import checks.storage
 import check
 
 
@@ -23,19 +23,19 @@ import check
 
 def test_touch_heartbeat_writes_and_refreshes(tmp_path, monkeypatch):
     hb = tmp_path / "heartbeat"
-    monkeypatch.setattr(bridge_config, "HEARTBEAT_FILE", str(hb))
-    bridge_common.touch_heartbeat(bridge_config.HEARTBEAT_FILE)
+    monkeypatch.setattr(bridge.config, "HEARTBEAT_FILE", str(hb))
+    bridge.common.touch_heartbeat(bridge.config.HEARTBEAT_FILE)
     assert hb.exists()
     first = hb.stat().st_mtime
     os.utime(hb, (first - 100, first - 100))  # backdate, then refresh
-    bridge_common.touch_heartbeat(bridge_config.HEARTBEAT_FILE)
+    bridge.common.touch_heartbeat(bridge.config.HEARTBEAT_FILE)
     assert hb.stat().st_mtime > first - 100
 
 
 def test_touch_heartbeat_never_raises(monkeypatch):
     # Best-effort like push(): a heartbeat failure must not kill the loop.
-    monkeypatch.setattr(bridge_config, "HEARTBEAT_FILE", "/nonexistent-dir/heartbeat")
-    bridge_common.touch_heartbeat(bridge_config.HEARTBEAT_FILE)
+    monkeypatch.setattr(bridge.config, "HEARTBEAT_FILE", "/nonexistent-dir/heartbeat")
+    bridge.common.touch_heartbeat(bridge.config.HEARTBEAT_FILE)
 
 
 def _read_sibling(relpath):
@@ -152,7 +152,7 @@ def test_run_once_with_only_filter_touches_no_gate(monkeypatch):
         check, "_evaluate", lambda name, fn: (evaluated.append(name), (True, "ok"))[1]
     )
     pushed = []
-    monkeypatch.setattr(bridge_io, "push", lambda token, ok, msg: pushed.append(msg))
+    monkeypatch.setattr(bridge.net, "push", lambda token, ok, msg: pushed.append(msg))
     check.run_once()
     assert set(evaluated) == SUBSET_ONLY
     assert len(pushed) == len(SUBSET_ONLY)
@@ -170,13 +170,13 @@ def _pvc_series(pvc, pct, namespace="homelab"):
 
 
 def _arm_pvc(monkeypatch, vector, claims=43.0):
-    monkeypatch.setattr(bridge_config, "CLUSTER_PROM_URL", "http://prometheus:9090")
-    monkeypatch.setattr(bridge_config, "PVC_MAX_PCT", 85.0)
-    monkeypatch.setattr(bridge_config, "PVC_MIN_CLAIMS", 32)
-    monkeypatch.setattr(bridge_config, "PVC_CLAIMS_CONSECUTIVE", 3)
-    monkeypatch.setattr(bridge_config, "PVC_EXCLUDE", ["media-data"])
-    monkeypatch.setattr(bridge_io, "prom_scalar", lambda *a, **k: claims)
-    monkeypatch.setattr(bridge_io, "prom_vector", lambda *a, **k: vector)
+    monkeypatch.setattr(bridge.config, "CLUSTER_PROM_URL", "http://prometheus:9090")
+    monkeypatch.setattr(bridge.config, "PVC_MAX_PCT", 85.0)
+    monkeypatch.setattr(bridge.config, "PVC_MIN_CLAIMS", 32)
+    monkeypatch.setattr(bridge.config, "PVC_CLAIMS_CONSECUTIVE", 3)
+    monkeypatch.setattr(bridge.config, "PVC_EXCLUDE", ["media-data"])
+    monkeypatch.setattr(bridge.net, "prom_scalar", lambda *a, **k: claims)
+    monkeypatch.setattr(bridge.net, "prom_vector", lambda *a, **k: vector)
 
 
 def test_pvc_under_threshold_is_clean(monkeypatch):
@@ -185,7 +185,7 @@ def test_pvc_under_threshold_is_clean(monkeypatch):
         monkeypatch,
         [_pvc_series("uptime-kuma-data", 38.6), _pvc_series("valheim-server", 33.8)],
     )
-    ok, msg = checks_storage.check_pvc_fullness()
+    ok, msg = checks.storage.check_pvc_fullness()
     assert ok
     assert "2 claim(s) under 85%" in msg
     assert "uptime-kuma-data 39%" in msg
@@ -196,7 +196,7 @@ def test_pvc_over_threshold_is_flagged(monkeypatch):
         monkeypatch,
         [_pvc_series("uptime-kuma-data", 38.6), _pvc_series("valheim-config", 91.2)],
     )
-    ok, msg = checks_storage.check_pvc_fullness()
+    ok, msg = checks.storage.check_pvc_fullness()
     # No grace on a fullness breach: it is monotonic, so a second cycle proves nothing.
     assert not ok
     assert "homelab/valheim-config 91%" in msg
@@ -210,7 +210,7 @@ def test_pvc_excluded_claim_is_clean(monkeypatch):
         monkeypatch,
         [_pvc_series("media-data", 99.0), _pvc_series("uptime-kuma-data", 38.6)],
     )
-    ok, msg = checks_storage.check_pvc_fullness()
+    ok, msg = checks.storage.check_pvc_fullness()
     assert ok
     assert "1 claim(s) under 85%" in msg
 
@@ -221,11 +221,11 @@ def test_pvc_claim_floor_shortfall_is_flagged(monkeypatch):
     # the vector alone still reads healthy and the census is the only thing that separates
     # "nothing is full" from "I cannot see daniel-server's claims". Held for the grace, then paged.
     _arm_pvc(monkeypatch, [_pvc_series("uptime-kuma-data", 38.6)], claims=27.0)
-    ok1, msg1 = checks_storage.check_pvc_fullness()
+    ok1, msg1 = checks.storage.check_pvc_fullness()
     assert ok1
     assert "only 27 kubelet_volume_stats claims visible" in msg1
-    checks_storage.check_pvc_fullness()
-    ok3, msg3 = checks_storage.check_pvc_fullness()
+    checks.storage.check_pvc_fullness()
+    ok3, msg3 = checks.storage.check_pvc_fullness()
     assert not ok3
     assert "only 27 kubelet_volume_stats claims visible" in msg3
 
@@ -235,7 +235,7 @@ def test_pvc_full_kubelet_coverage_is_clean(monkeypatch):
     # kubelet job reports all 43 claims on its own. A floor that fired here would page on a
     # harmless scrape change.
     _arm_pvc(monkeypatch, [_pvc_series("uptime-kuma-data", 38.6)], claims=43.0)
-    ok, msg = checks_storage.check_pvc_fullness()
+    ok, msg = checks.storage.check_pvc_fullness()
     assert ok
     assert "claims visible" not in msg
 
@@ -245,9 +245,9 @@ def test_pvc_absent_census_is_flagged(monkeypatch):
     # reaches the census arm rather than the empty-vector one below — the two must not be
     # conflated, which is why each asserts its own wording.
     _arm_pvc(monkeypatch, [_pvc_series("uptime-kuma-data", 38.6)], claims=None)
-    checks_storage.check_pvc_fullness()
-    checks_storage.check_pvc_fullness()
-    ok, msg = checks_storage.check_pvc_fullness()
+    checks.storage.check_pvc_fullness()
+    checks.storage.check_pvc_fullness()
+    ok, msg = checks.storage.check_pvc_fullness()
     assert not ok
     assert "no kubelet_volume_stats claims visible" in msg
 
@@ -256,9 +256,9 @@ def test_pvc_empty_ratio_vector_is_flagged(monkeypatch):
     # The other blind shape: the census answers but no claim reports a ratio. An empty vector is
     # indistinguishable from "no claim is full", so it must page rather than report a worst.
     _arm_pvc(monkeypatch, [], claims=43.0)
-    checks_storage.check_pvc_fullness()
-    checks_storage.check_pvc_fullness()
-    ok, msg = checks_storage.check_pvc_fullness()
+    checks.storage.check_pvc_fullness()
+    checks.storage.check_pvc_fullness()
+    ok, msg = checks.storage.check_pvc_fullness()
     assert not ok
     assert "no PVC reported a fullness ratio" in msg
 
@@ -267,17 +267,17 @@ def test_pvc_breach_outranks_a_coverage_shortfall(monkeypatch):
     # Same ordering as check_disk: a claim that IS reporting and IS full outranks a complaint
     # about the ones that are not.
     _arm_pvc(monkeypatch, [_pvc_series("valheim-config", 91.2)], claims=27.0)
-    ok, msg = checks_storage.check_pvc_fullness()
+    ok, msg = checks.storage.check_pvc_fullness()
     assert not ok
     assert "PVC over 85%" in msg
 
 
 def test_pvc_recovery_resets_the_census_streak(monkeypatch):
     _arm_pvc(monkeypatch, [_pvc_series("uptime-kuma-data", 38.6)], claims=27.0)
-    checks_storage.check_pvc_fullness()
+    checks.storage.check_pvc_fullness()
     _arm_pvc(monkeypatch, [_pvc_series("uptime-kuma-data", 38.6)])
-    assert checks_storage.check_pvc_fullness()[0]
-    assert bridge_streaks._down_streaks.get("pvc_fullness", 0) == 0
+    assert checks.storage.check_pvc_fullness()[0]
+    assert bridge.streaks._down_streaks.get("pvc_fullness", 0) == 0
 
 
 def test_pvc_fullness_is_gated_by_the_cluster_prometheus():
@@ -293,7 +293,7 @@ def test_pvc_fullness_is_gated_by_the_cluster_prometheus():
 
 
 def test_pvc_fullness_is_disabled_without_a_cluster_prometheus(monkeypatch):
-    monkeypatch.setattr(bridge_config, "CLUSTER_PROM_URL", "")
-    ok, msg = checks_storage.check_pvc_fullness()
+    monkeypatch.setattr(bridge.config, "CLUSTER_PROM_URL", "")
+    ok, msg = checks.storage.check_pvc_fullness()
     assert ok
     assert "disabled" in msg

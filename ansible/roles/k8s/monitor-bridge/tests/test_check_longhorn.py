@@ -5,11 +5,11 @@ metric is never green: the query returns nothing both when every volume is redun
 kube-state-metrics is not reporting at all.
 """
 
-import bridge_config
-import bridge_io
-import bridge_streaks
-import checks_storage
-import checks_cluster
+import bridge.config
+import bridge.net
+import bridge.streaks
+import checks.storage
+import checks.cluster
 
 
 def _longhorn_series(pvc, state, pod="longhorn-manager-a"):
@@ -17,14 +17,14 @@ def _longhorn_series(pvc, state, pod="longhorn-manager-a"):
 
 
 def _arm_longhorn(monkeypatch, vector, volumes=43.0, consecutive=3):
-    monkeypatch.setattr(bridge_config, "LONGHORN_CONSECUTIVE", consecutive)
-    monkeypatch.setattr(bridge_io, "prom_scalar", lambda *a, **k: volumes)
-    monkeypatch.setattr(bridge_io, "prom_vector", lambda *a, **k: vector)
+    monkeypatch.setattr(bridge.config, "LONGHORN_CONSECUTIVE", consecutive)
+    monkeypatch.setattr(bridge.net, "prom_scalar", lambda *a, **k: volumes)
+    monkeypatch.setattr(bridge.net, "prom_vector", lambda *a, **k: vector)
 
 
 def test_longhorn_all_redundant_is_up_and_reports_the_volume_count(monkeypatch):
     _arm_longhorn(monkeypatch, [])
-    ok, msg = checks_storage.check_longhorn_volumes()
+    ok, msg = checks.storage.check_longhorn_volumes()
     assert ok
     assert "43 volume(s) redundant" in msg
 
@@ -33,9 +33,9 @@ def test_longhorn_degraded_holds_up_until_the_threshold_then_pages(monkeypatch):
     _arm_longhorn(monkeypatch, [_longhorn_series("freshrss-config", "degraded")])
     # A node drain degrades every volume on the departing node by design, so the first
     # cycles must hold `up` — otherwise this monitor pages every Sunday reboot.
-    ok1, msg1 = checks_storage.check_longhorn_volumes()
-    ok2, _ = checks_storage.check_longhorn_volumes()
-    ok3, msg3 = checks_storage.check_longhorn_volumes()
+    ok1, msg1 = checks.storage.check_longhorn_volumes()
+    ok2, _ = checks.storage.check_longhorn_volumes()
+    ok3, msg3 = checks.storage.check_longhorn_volumes()
     assert ok1 and ok2
     assert "1/3" in msg1
     assert not ok3
@@ -45,10 +45,10 @@ def test_longhorn_degraded_holds_up_until_the_threshold_then_pages(monkeypatch):
 
 def test_longhorn_recovery_resets_the_streak(monkeypatch):
     _arm_longhorn(monkeypatch, [_longhorn_series("freshrss-config", "degraded")])
-    checks_storage.check_longhorn_volumes()
-    monkeypatch.setattr(bridge_io, "prom_vector", lambda *a, **k: [])
-    assert checks_storage.check_longhorn_volumes()[0]
-    assert bridge_streaks._down_streaks.get("longhorn", 0) == 0
+    checks.storage.check_longhorn_volumes()
+    monkeypatch.setattr(bridge.net, "prom_vector", lambda *a, **k: [])
+    assert checks.storage.check_longhorn_volumes()[0]
+    assert bridge.streaks._down_streaks.get("longhorn", 0) == 0
 
 
 def test_longhorn_absent_metric_is_not_green(monkeypatch):
@@ -56,11 +56,11 @@ def test_longhorn_absent_metric_is_not_green(monkeypatch):
     # cluster is healthy or the longhorn scrape job is dead. The volume count is the input
     # assertion, so a missing family must fail closed rather than read as "none degraded".
     _arm_longhorn(monkeypatch, [], volumes=None)
-    ok1, msg1 = checks_storage.check_longhorn_volumes()
+    ok1, msg1 = checks.storage.check_longhorn_volumes()
     assert ok1  # first cycle rides the grace, but says why
     assert "UNMONITORED" in msg1
-    checks_storage.check_longhorn_volumes()
-    ok3, msg3 = checks_storage.check_longhorn_volumes()
+    checks.storage.check_longhorn_volumes()
+    ok3, msg3 = checks.storage.check_longhorn_volumes()
     assert not ok3
     assert "not the same as healthy" in msg3
 
@@ -76,7 +76,7 @@ def test_longhorn_dedupes_a_volume_reported_by_both_managers(monkeypatch):
         ],
         consecutive=1,
     )
-    ok, msg = checks_storage.check_longhorn_volumes()
+    ok, msg = checks.storage.check_longhorn_volumes()
     assert not ok
     assert "1 degraded" in msg
 
@@ -90,7 +90,7 @@ def test_longhorn_faulted_outranks_degraded_for_the_same_volume(monkeypatch):
         ],
         consecutive=1,
     )
-    ok, msg = checks_storage.check_longhorn_volumes()
+    ok, msg = checks.storage.check_longhorn_volumes()
     assert not ok
     assert "1 faulted" in msg
     assert "degraded" not in msg
@@ -106,13 +106,13 @@ def test_longhorn_selects_on_the_state_label_not_a_value_ordinal():
         queries.append(promql)
         return []
 
-    saved_vector, saved_scalar = bridge_io.prom_vector, bridge_io.prom_scalar
+    saved_vector, saved_scalar = bridge.net.prom_vector, bridge.net.prom_scalar
     try:
-        bridge_io.prom_vector = record
-        bridge_io.prom_scalar = lambda *a, **k: 43.0
-        checks_storage.check_longhorn_volumes()
+        bridge.net.prom_vector = record
+        bridge.net.prom_scalar = lambda *a, **k: 43.0
+        checks.storage.check_longhorn_volumes()
     finally:
-        bridge_io.prom_vector, bridge_io.prom_scalar = saved_vector, saved_scalar
+        bridge.net.prom_vector, bridge.net.prom_scalar = saved_vector, saved_scalar
     assert len(queries) == 1
     assert 'state=~"degraded|faulted"' in queries[0]
     assert "== 2" not in queries[0]
@@ -136,14 +136,14 @@ def test_the_query_uses_the_label_kube_state_metrics_actually_emits():
     stayed there until the sanitiser landed. The operator-facing name stays the one
     `kubectl describe node` prints; only the query is sanitised.
     """
-    assert checks_cluster.ksm_resource_label("devic.es/dri") == "devic_es_dri"
-    assert checks_cluster.ksm_resource_label("nvidia.com/gpu") == "nvidia_com_gpu"
-    assert checks_cluster.ksm_resource_label("cpu") == "cpu"
+    assert checks.cluster.ksm_resource_label("devic.es/dri") == "devic_es_dri"
+    assert checks.cluster.ksm_resource_label("nvidia.com/gpu") == "nvidia_com_gpu"
+    assert checks.cluster.ksm_resource_label("cpu") == "cpu"
 
 
 def test_missing_extended_resource_names_both_the_resource_and_its_label():
     """A false fault and a real one look identical unless the alert names the label it queried."""
-    ok, msg = checks_cluster.extended_resource_verdict(
+    ok, msg = checks.cluster.extended_resource_verdict(
         ["devic.es/dri"], {"devic.es/dri": 0}, 12
     )
     assert ok is False
@@ -153,12 +153,12 @@ def test_missing_extended_resource_names_both_the_resource_and_its_label():
 
 def test_resource_absent_from_the_map_is_a_fault():
     """An absent key and a zero count mean the same thing: nothing advertises it."""
-    ok, _ = checks_cluster.extended_resource_verdict(["devic.es/dri"], {}, 12)
+    ok, _ = checks.cluster.extended_resource_verdict(["devic.es/dri"], {}, 12)
     assert ok is False
 
 
 def test_advertised_resource_passes_and_reports_node_count():
-    ok, msg = checks_cluster.extended_resource_verdict(
+    ok, msg = checks.cluster.extended_resource_verdict(
         ["devic.es/dri"], {"devic.es/dri": 1}, 12
     )
     assert ok is True
@@ -172,7 +172,7 @@ def test_no_series_at_all_is_inert_not_green_and_not_red():
     failure this arm exists to fix. Failing would page for a kube-state-metrics config change
     nobody made. Naming it is the only honest option.
     """
-    ok, msg = checks_cluster.extended_resource_verdict(["devic.es/dri"], {}, 0)
+    ok, msg = checks.cluster.extended_resource_verdict(["devic.es/dri"], {}, 0)
     assert ok is True
     assert "INERT" in msg
     assert "devic.es/dri" in msg
@@ -185,13 +185,13 @@ def test_the_inert_arm_takes_prom_scalars_real_empty_value():
     fixture would stop matching the producer the moment that branch grew anything sharper than a
     truthiness test.
     """
-    ok, msg = checks_cluster.extended_resource_verdict(["devic.es/dri"], {}, None)
+    ok, msg = checks.cluster.extended_resource_verdict(["devic.es/dri"], {}, None)
     assert ok is True
     assert "INERT" in msg
 
 
 def test_several_resources_are_all_checked():
-    ok, msg = checks_cluster.extended_resource_verdict(
+    ok, msg = checks.cluster.extended_resource_verdict(
         ["devic.es/dri", "example.com/fpga"],
         {"devic.es/dri": 2, "example.com/fpga": 0},
         12,
@@ -201,7 +201,7 @@ def test_several_resources_are_all_checked():
 
 
 def test_nothing_expected_is_trivially_ok():
-    ok, _ = checks_cluster.extended_resource_verdict([], {}, 12)
+    ok, _ = checks.cluster.extended_resource_verdict([], {}, 12)
     assert ok is True
 
 

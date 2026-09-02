@@ -76,7 +76,7 @@ ran; it says nothing about whether Renovate is still producing updates. The stal
 what covers that, and it reaches you as a digest rather than as a monitor.
 
 The alive marker also greens regardless of Discord *delivery*, which is why monitor-bridge
-verifies the GitOps/Renovate webhook separately (`checks_notify.py`).
+verifies the GitOps/Renovate webhook separately (`checks/notify.py`).
 
 ## The unit is sandboxed, and two things about that surprise people
 

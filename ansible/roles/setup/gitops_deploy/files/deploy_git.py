@@ -166,7 +166,7 @@ def broad_hold_cleared_by(held: str, playbook: str, tags: list[str] | None) -> b
     throws away the fact it records: on 2026-09-02 a failed `ansible/deploy.yml` held
     `2d25ced3`, the next tick applied the setup plane, and both markers were gone within 30
     seconds while the deploy plane stayed unapplied (issue #878). Every consumer —
-    `checks_service.gitops_status`, `land.sh`, `renovate_agent.decide` — gates on `hold_sha`,
+    `checks.service.gitops_status`, `land.sh`, `renovate_agent.decide` — gates on `hold_sha`,
     so the erasure also turned **GitOps Deploy — Status** green over that unapplied plane.
 
     Coverage, not equality, and it runs both ways round. An untagged run applies the whole

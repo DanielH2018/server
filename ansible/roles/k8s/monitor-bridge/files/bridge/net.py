@@ -1,10 +1,10 @@
 """HTTP, PromQL and LogQL fetching for monitor-bridge, and the Kuma push.
 
-Every check body reaches these as `bridge_io.prom_vector(...)`, never by from-import, and the
-test suite stubs them HERE — `monkeypatch.setattr(bridge_io, "_get_json", ...)` — where the
+Every check body reaches these as `bridge.net.prom_vector(...)`, never by from-import, and the
+test suite stubs them HERE — `monkeypatch.setattr(bridge.net, "_get_json", ...)` — where the
 callers look them up at call time. A from-import would copy the function into the caller's
 globals at import time and the stub would change nothing that runs. The same rule, and the
-tests that enforce it, are described in bridge_config.py's header.
+tests that enforce it, are described in bridge/config.py's header.
 
 The selector builders (`origin_sel`, `cadvisor_sel`, `host_metric_sel`, `_origin_name`) live
 here rather than beside the checks because they are the query-building half of fetching, they
@@ -16,10 +16,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-import bridge_common
-import bridge_config as cfg
-from bridge_common import HTTP_TIMEOUT
-from bridge_parsing import FETCH_BODY_MAX, describe_fetch_failure, endpoint_label
+import bridge.common
+import bridge.config as cfg
+from bridge.common import HTTP_TIMEOUT
+from bridge.parsing import FETCH_BODY_MAX, describe_fetch_failure, endpoint_label
 
 
 def origin_sel(*matchers):
@@ -265,10 +265,10 @@ def push(token, ok, msg):
         msg: The status message to attach to the push.
     """
     if not token:
-        bridge_common.log("WARN: no push token set; skipping push:", msg)
+        bridge.common.log("WARN: no push token set; skipping push:", msg)
         return
     qs = urllib.parse.urlencode({"status": "up" if ok else "down", "msg": msg})
     try:
         _get_json("%s/api/push/%s?%s" % (cfg.KUMA_URL, token, qs))
     except Exception as e:  # best-effort heartbeat; never crash the loop
-        bridge_common.log("push failed (%s):" % msg, e)
+        bridge.common.log("push failed (%s):" % msg, e)

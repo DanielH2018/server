@@ -1,7 +1,7 @@
 """Service-health verdicts for check.py — n8n, the *arrs, Prowlarr, HA, Loki, GitOps, Discord.
 
 These decide; check.py fetches. Each takes its inputs as arguments and reads no module-level
-config, which is what makes it safe to live here — see bridge_parsing.py's header for the rule
+config, which is what makes it safe to live here — see bridge/parsing.py's header for the rule
 and why breaking it fails silently rather than loudly.
 
 `n8n_update_streaks` is the one carrying state across cycles rather than judging a snapshot:
@@ -12,8 +12,8 @@ live here.
 
 from datetime import datetime, timedelta, timezone
 
-from bridge_common import sanitize
-from bridge_parsing import parse_rfc3339
+from bridge.common import sanitize
+from bridge.parsing import parse_rfc3339
 
 
 def n8n_update_streaks(workflows_json, executions_json, state, now, window_s):

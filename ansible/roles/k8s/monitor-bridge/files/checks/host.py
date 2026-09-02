@@ -3,21 +3,21 @@
 Covers disk, memory, cert expiry, host temperature, SMART, the UPS, Pi pressure and
 published ports, and the speedtest.
 
-Slice 5 of the check.py split. Reads config as `cfg.X`, the fetch layer as `bridge_io.X` and
-the shared streak counter as `bridge_streaks.X`, so the tests' patches on those modules reach
-it; the verdicts it from-imports from verdicts_host are patched on THIS module, where they are
+Slice 5 of the check.py split. Reads config as `cfg.X`, the fetch layer as `bridge.net.X` and
+the shared streak counter as `bridge.streaks.X`, so the tests' patches on those modules reach
+it; the verdicts it from-imports from verdicts.host are patched on THIS module, where they are
 bound. `_host_origin_streaks` lives here beside `_host_origin_shortfall`, the only code that
-mutates it. Rule and enforcement: bridge_config.py's header.
+mutates it. Rule and enforcement: bridge/config.py's header.
 """
 
 import socket
 import urllib.parse
 from datetime import datetime, timezone
 
-import bridge_config as cfg
-import bridge_io
-import bridge_streaks
-from verdicts_host import (
+import bridge.config as cfg
+import bridge.net
+import bridge.streaks
+from verdicts.host import (
     hwmon_included_series,
     hwmon_name_maps,
     hwmon_temp_limits,
@@ -51,7 +51,7 @@ def _host_origin_shortfall(key, vec, what, min_origins=None, consecutive=None):
     """
     floor = cfg.HOST_ORIGINS_MIN if min_origins is None else min_origins
     grace = cfg.HOST_ORIGINS_CONSECUTIVE if consecutive is None else consecutive
-    origins = {bridge_io._origin_name(labels) for labels, _ in vec}
+    origins = {bridge.net._origin_name(labels) for labels, _ in vec}
     if len(origins) >= floor:
         _host_origin_streaks[key] = 0
         return None
@@ -98,8 +98,8 @@ def check_disk():
     breaching = []
     shortfalls = []
     for mp in cfg.DISK_MOUNTPOINTS:
-        sel = bridge_io.host_metric_sel('mountpoint="%s"' % mp)
-        vec = bridge_io.prom_vector(
+        sel = bridge.net.host_metric_sel('mountpoint="%s"' % mp)
+        vec = bridge.net.prom_vector(
             "max by (origin) (100 * (1 - node_filesystem_avail_bytes%s"
             " / node_filesystem_size_bytes%s))" % (sel, sel)
         )
@@ -113,7 +113,7 @@ def check_disk():
         for labels, used_pct in vec:
             if used_pct > cfg.DISK_MAX_PCT:
                 breaching.append(
-                    "%s %s %.0f%%" % (bridge_io._origin_name(labels), mp, used_pct)
+                    "%s %s %.0f%%" % (bridge.net._origin_name(labels), mp, used_pct)
                 )
     if breaching:
         return False, "disk over %.0f%%: %s" % (cfg.DISK_MAX_PCT, ", ".join(breaching))
@@ -126,7 +126,7 @@ def check_disk():
 
 
 def check_cert():
-    days = bridge_io.prom_scalar("(min(traefik_tls_certs_not_after) - time()) / 86400")
+    days = bridge.net.prom_scalar("(min(traefik_tls_certs_not_after) - time()) / 86400")
     if days is None:
         return False, "cert metric unavailable"
     if days < cfg.CERT_MIN_DAYS:
@@ -147,8 +147,8 @@ def check_mem():
     # Per-origin for the same reason as check_disk: the bare prom_scalar form took result[0],
     # so which host it reported was an ordering artifact of Prometheus's response once both
     # estates emitted node_memory_*. The division pairs each host's avail with its own total.
-    sel = bridge_io.host_metric_sel()
-    vec = bridge_io.prom_vector(
+    sel = bridge.net.host_metric_sel()
+    vec = bridge.net.prom_vector(
         "100 * (1 - node_memory_MemAvailable_bytes%s / node_memory_MemTotal_bytes%s)"
         % (sel, sel)
     )
@@ -161,7 +161,7 @@ def check_mem():
     # review L9); what is deferred is the return, not the evaluation.
     short = _host_origin_shortfall("mem", vec, "memory")
     breaching = [
-        "%s %.0f%%" % (bridge_io._origin_name(labels), pct)
+        "%s %.0f%%" % (bridge.net._origin_name(labels), pct)
         for labels, pct in vec
         if pct > cfg.MEM_MAX_PCT
     ]
@@ -189,7 +189,7 @@ def scrutiny_wear_devices(summary):
         name = dev.get("device_name") or wwn
         model = dev.get("model_name")
         label = "%s (%s)" % (name, model) if model else name
-        details = bridge_io._get_json(
+        details = bridge.net._get_json(
             "%s/api/device/%s/details" % (cfg.SCRUTINY_URL, wwn)
         )
         devices.append((label, scrutiny_device_wear(details)))
@@ -202,7 +202,7 @@ def check_scrutiny():
     Fetches /api/summary once; per-device wear details are fetched only when freshness and
     health both pass and cfg.SCRUTINY_WEAR_MAX is set. Returns (ok, msg).
     """
-    data = bridge_io._get_json(cfg.SCRUTINY_URL + "/api/summary")
+    data = bridge.net._get_json(cfg.SCRUTINY_URL + "/api/summary")
     summary = (data.get("data") or {}).get("summary")
     fresh_ok, fresh_msg = scrutiny_freshness(summary, cfg.SCRUTINY_MAX_AGE_H)
     if not fresh_ok:
@@ -235,7 +235,7 @@ def check_host_temp():
     Drives are NOT read here; see HWMON_TEMP_EXCLUDE_CHIP. Two arms assign every remaining
     sensor a limit — its own declared max where that max is plausible, a flat ceiling where it
     is not — so coverage is exhaustive rather than whatever the metric join happens to yield.
-    The limit selection is pure and lives in verdicts_host, which is what lets the red-proof
+    The limit selection is pure and lives in verdicts.host, which is what lets the red-proof
     tests drive it without a Prometheus.
 
     Empty vector pages rather than passing: no sensors means EVERY collector went blind, and a
@@ -248,19 +248,19 @@ def check_host_temp():
     compounded — down_streak is the thermal-spike grace and applies only to the hot-sensor path,
     while the coverage shortfall carries its own hysteresis inside _host_origin_shortfall.
     """
-    temps = bridge_io.prom_vector("node_hwmon_temp_celsius")
+    temps = bridge.net.prom_vector("node_hwmon_temp_celsius")
     # node-exporter keeps the readable names in two side metrics rather than on the reading, so
     # naming the hot sensor `daniel-box k10temp/Tctl` instead of
     # `daniel-box/pci0000:00_0000:00:18_3/temp1` costs two more instant queries. Both are tiny
     # (11 and 16 series live on 2026-09-01) and neither can fail the check: an empty answer just
     # falls back to the sysfs path.
     names = hwmon_name_maps(
-        bridge_io.prom_vector("node_hwmon_chip_names"),
-        bridge_io.prom_vector("node_hwmon_sensor_label"),
+        bridge.net.prom_vector("node_hwmon_chip_names"),
+        bridge.net.prom_vector("node_hwmon_sensor_label"),
     )
     limits = hwmon_temp_limits(
         temps,
-        bridge_io.prom_vector("node_hwmon_temp_max_celsius"),
+        bridge.net.prom_vector("node_hwmon_temp_max_celsius"),
         cfg.HWMON_TEMP_RATIO,
         cfg.HWMON_TEMP_FALLBACK_C,
         cfg.HWMON_TEMP_MIN_PLAUSIBLE_C,
@@ -279,14 +279,14 @@ def check_host_temp():
     )
     ok, msg = hwmon_temp_verdict(limits)
     if not ok:
-        bridge_streaks._down_streaks["host_temp"], ok, msg = bridge_streaks.down_streak(
-            bridge_streaks._down_streaks.get("host_temp", 0),
+        bridge.streaks._down_streaks["host_temp"], ok, msg = bridge.streaks.down_streak(
+            bridge.streaks._down_streaks.get("host_temp", 0),
             cfg.HWMON_TEMP_CONSECUTIVE,
             msg,
             "thermal spike grace",
         )
         return ok, msg
-    bridge_streaks._down_streaks["host_temp"] = 0
+    bridge.streaks._down_streaks["host_temp"] = 0
     if short is not None:
         return short
     return True, msg
@@ -324,7 +324,7 @@ def check_ups():
     ]
     if not configured:
         return True, "UPS monitoring disabled (no query)"
-    values = {name: bridge_io.prom_scalar(q) for name, q in configured}
+    values = {name: bridge.net.prom_scalar(q) for name, q in configured}
     if all(v is None for v in values.values()):
         # All arms gone. Usually HA's whole Prometheus scrape is down (the numeric AND the template
         # sensors vanish together) — Scrape Targets owns that, so defer. But if HA is scraping fine and
@@ -335,10 +335,10 @@ def check_ups():
         # An unqueryable/absent gate keeps the safe defer (never page over a source outage another
         # monitor owns).
         ha_up = (
-            bridge_io.prom_scalar(cfg.UPS_HA_UP_QUERY) if cfg.UPS_HA_UP_QUERY else None
+            bridge.net.prom_scalar(cfg.UPS_HA_UP_QUERY) if cfg.UPS_HA_UP_QUERY else None
         )
         if not (ha_up is not None and ha_up > 0.5 and "replace-battery" in values):
-            bridge_streaks._down_streaks["ups"] = 0
+            bridge.streaks._down_streaks["ups"] = 0
             return (
                 True,
                 "no UPS data in Prometheus (HA scrape down? Scrape Targets owns source liveness)",
@@ -358,7 +358,7 @@ def check_ups():
         # the all-absent branch above. The nut pod liveness probe owns NUT-server death, so defer
         # rather than double-paging it through the partial-absence path below with a misdirecting
         # "entity renamed?" msg. A single numeric arm gone (charge XOR runtime) is still a real rename.
-        bridge_streaks._down_streaks["ups"] = 0
+        bridge.streaks._down_streaks["ups"] = 0
         return (
             True,
             "NUT numeric arms (charge, runtime) absent — NUT server/integration down; "
@@ -383,10 +383,10 @@ def check_ups():
             cfg.UPS_RUNTIME_MIN_S,
         )
     if ok:
-        bridge_streaks._down_streaks["ups"] = 0
+        bridge.streaks._down_streaks["ups"] = 0
         return True, msg
-    bridge_streaks._down_streaks["ups"], ok, msg = bridge_streaks.down_streak(
-        bridge_streaks._down_streaks.get("ups", 0), cfg.UPS_CONSECUTIVE, msg, "grace"
+    bridge.streaks._down_streaks["ups"], ok, msg = bridge.streaks.down_streak(
+        bridge.streaks._down_streaks.get("ups", 0), cfg.UPS_CONSECUTIVE, msg, "grace"
     )
     return ok, msg
 
@@ -399,9 +399,9 @@ def check_pi_pressure():
     """
     if not cfg.PI_GLANCES_URL:
         return True, "pi monitoring disabled (no glances URL)"
-    load = bridge_io._get_json(cfg.PI_GLANCES_URL + "/api/4/load")
-    mem = bridge_io._get_json(cfg.PI_GLANCES_URL + "/api/4/mem")
-    fs = bridge_io._get_json(cfg.PI_GLANCES_URL + "/api/4/fs")
+    load = bridge.net._get_json(cfg.PI_GLANCES_URL + "/api/4/load")
+    mem = bridge.net._get_json(cfg.PI_GLANCES_URL + "/api/4/mem")
+    fs = bridge.net._get_json(cfg.PI_GLANCES_URL + "/api/4/fs")
     ok, msg = pi_pressure(
         load, mem, fs, cfg.PI_LOAD_MAX, cfg.PI_MEM_MIN_MB, cfg.PI_DISK_MAX_PCT
     )
@@ -454,16 +454,16 @@ def with_pi_ports(ok, msg):
     containers = None
     if dead:
         try:
-            containers = bridge_io._get_json(cfg.PI_GLANCES_URL + "/api/4/containers")
+            containers = bridge.net._get_json(cfg.PI_GLANCES_URL + "/api/4/containers")
         except Exception:
             containers = None
     arm_ok, arm_msg = pi_ports_verdict(dead, len(cfg.PI_PUBLISHED_PORTS), containers)
     if arm_ok:
-        bridge_streaks._down_streaks["pi_ports"] = 0
+        bridge.streaks._down_streaks["pi_ports"] = 0
         return ok, "%s, %s" % (msg, arm_msg)
-    bridge_streaks._down_streaks["pi_ports"], arm_ok, arm_msg = (
-        bridge_streaks.down_streak(
-            bridge_streaks._down_streaks.get("pi_ports", 0),
+    bridge.streaks._down_streaks["pi_ports"], arm_ok, arm_msg = (
+        bridge.streaks.down_streak(
+            bridge.streaks._down_streaks.get("pi_ports", 0),
             cfg.PI_PORTS_CONSECUTIVE,
             arm_msg,
             "deploy grace",
@@ -559,7 +559,7 @@ def check_speedtest():
     try:
         # sort=-created_at, because the default order is ASCENDING and would hand back the
         # OLDEST row in the 30-day window — a stale-forever reading that looks like a verdict.
-        payload = bridge_io._get_json(
+        payload = bridge.net._get_json(
             cfg.SPEEDTEST_URL + "/api/v1/results?sort=-created_at&page%5Bsize%5D=1",
             headers={
                 "Authorization": "Bearer " + cfg.SPEEDTEST_TOKEN,
@@ -567,14 +567,14 @@ def check_speedtest():
             },
         )
     except Exception as e:
-        bridge_streaks._down_streaks["speedtest"], ok, msg = bridge_streaks.down_streak(
-            bridge_streaks._down_streaks.get("speedtest", 0),
+        bridge.streaks._down_streaks["speedtest"], ok, msg = bridge.streaks.down_streak(
+            bridge.streaks._down_streaks.get("speedtest", 0),
             cfg.SPEEDTEST_CONSECUTIVE,
             "speedtest API unreachable: %s" % e,
             "deploy/restart grace",
         )
         return ok, msg
-    bridge_streaks._down_streaks["speedtest"] = 0
+    bridge.streaks._down_streaks["speedtest"] = 0
     rows = payload.get("data") or []
     return speedtest_verdict(
         rows[0] if rows else None,

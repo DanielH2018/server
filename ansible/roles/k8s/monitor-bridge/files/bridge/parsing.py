@@ -18,13 +18,13 @@ The rule that follows, and the only one that keeps this split honest:
   module-level name. Everything it needs arrives as an argument.
 
 That is why these five are pure and take their inputs explicitly. The config constants
-moved to bridge_config.py on 2026-09-01 under a different rule — the tests now patch them
+moved to bridge/config.py on 2026-09-01 under a different rule — the tests now patch them
 THERE and check.py reads them as `cfg.X` at call time — and the I/O primitives
-(`_get_json`, `prom_scalar`, `push`) followed into bridge_io.py the same way. This module
+(`_get_json`, `prom_scalar`, `push`) followed into bridge/net.py the same way. This module
 predates that rule and needs neither: nothing here reads a patched name.
 
-`sanitize` used to live here too; it moved to `bridge_common.py` because autofix-bridge's
-autofix.py carried a byte-identical copy — bridge_common.py is the module both check.py and
+`sanitize` used to live here too; it moved to `bridge/common.py` because autofix-bridge's
+autofix.py carried a byte-identical copy — bridge/common.py is the module both check.py and
 autofix.py import it from now. Its header states the same rule this one does, checked against
 both files' test suites rather than just this one's.
 

@@ -1,9 +1,9 @@
 """Backblaze B2 checks for monitor-bridge — reachability (the B2_DEPENDENT gate) and storage usage.
 
-Reads config as `cfg.X` and the fetch layer as `bridge_io.X`, so the tests' patches on those
+Reads config as `cfg.X` and the fetch layer as `bridge.net.X`, so the tests' patches on those
 modules reach it; `b2_reachable` and `b2_authorize` are patched on THIS module, where
 `check_b2_reachable` reads them. The probe caches `_b2_probe` / `_b2_storage` live beside the
-code that mutates them. Rule and enforcement: bridge_config.py's header.
+code that mutates them. Rule and enforcement: bridge/config.py's header.
 """
 
 import base64
@@ -11,8 +11,8 @@ import time
 import urllib.error
 import urllib.parse
 
-import bridge_config as cfg
-import bridge_io
+import bridge.config as cfg
+import bridge.net
 
 
 # `ttl` is how long THIS cached verdict is held, chosen per outcome by b2_reachable — a billed
@@ -31,7 +31,7 @@ def b2_authorize_data():
     token = base64.b64encode(
         ("%s:%s" % (cfg.B2_PROBE_KEY_ID, cfg.B2_PROBE_APPLICATION_KEY)).encode()
     ).decode()
-    return bridge_io._get_json(
+    return bridge.net._get_json(
         cfg.B2_PROBE_URL, headers={"Authorization": "Basic %s" % token}
     )
 
@@ -148,7 +148,7 @@ def b2_list_versions(api_url, token, bucket_id):
             payload["startFileName"] = start_name
         if start_id:
             payload["startFileId"] = start_id
-        page = bridge_io._post_json(
+        page = bridge.net._post_json(
             "%s/b2api/v3/b2_list_file_versions" % api_url.rstrip("/"),
             payload,
             headers={"Authorization": token},
@@ -176,7 +176,7 @@ def b2_authorize():
     token = base64.b64encode(
         ("%s:%s" % (cfg.B2_PROBE_KEY_ID, cfg.B2_PROBE_APPLICATION_KEY)).encode()
     ).decode()
-    data = bridge_io._get_json(
+    data = bridge.net._get_json(
         cfg.B2_PROBE_URL, headers={"Authorization": "Basic %s" % token}
     )
     # A 200 from something that isn't B2 must not read as healthy. Accept EITHER field rather than

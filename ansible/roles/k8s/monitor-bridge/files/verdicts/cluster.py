@@ -1,7 +1,7 @@
 """Cluster-health verdicts for check.py — what the k3s numbers mean, not how they are read.
 
 These decide; check.py fetches. Each takes its inputs as arguments and reads no module-level
-config, which is what makes it safe to live here — see bridge_parsing.py's header for the rule
+config, which is what makes it safe to live here — see bridge/parsing.py's header for the rule
 and why breaking it fails silently rather than loudly.
 
 `k8s_workloads_verdict`'s fail-closed reasoning is why this logic is worth isolating:

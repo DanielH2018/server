@@ -3,19 +3,19 @@
 Covers the cAdvisor trio (restarts, OOM, CPU throttle), the Prometheus gates, scrape
 targets, Traefik 5xx and latency, and k3s workload health.
 
-Slice 6 of the check.py split. Reads config as `cfg.X`, the fetch layer as `bridge_io.X`,
-the shared streak counter as `bridge_streaks.X` and the Loki arm as
-`checks_logs.with_log_errors`, so the tests' patches on those modules reach it; the verdicts
-it from-imports from verdicts_cluster are patched on THIS module, where they are bound.
+Slice 6 of the check.py split. Reads config as `cfg.X`, the fetch layer as `bridge.net.X`,
+the shared streak counter as `bridge.streaks.X` and the Loki arm as
+`checks.logs.with_log_errors`, so the tests' patches on those modules reach it; the verdicts
+it from-imports from verdicts.cluster are patched on THIS module, where they are bound.
 `_cadvisor_streaks` and `_cpu_breach_streak` live here beside the code that mutates them.
-Rule and enforcement: bridge_config.py's header.
+Rule and enforcement: bridge/config.py's header.
 """
 
-import bridge_config as cfg
-import bridge_io
-import bridge_streaks
-import checks_logs
-from verdicts_cluster import (
+import bridge.config as cfg
+import bridge.net
+import bridge.streaks
+import checks.logs
+from verdicts.cluster import (
     cadvisor_coverage_shortfall,
     extended_resource_verdict,
     k8s_workloads_verdict,
@@ -48,7 +48,7 @@ def _cadvisor_blind(key, vec, what):
     if msg is None:
         _cadvisor_streaks[key] = 0
         return None
-    _cadvisor_streaks[key], ok, out = bridge_streaks.down_streak(
+    _cadvisor_streaks[key], ok, out = bridge.streaks.down_streak(
         _cadvisor_streaks.get(key, 0),
         cfg.CADVISOR_CONSECUTIVE,
         msg,
@@ -63,10 +63,10 @@ def check_restarts():
 
     Catches crash-loops that an intermittent up-check can miss.
     """
-    vec = bridge_io.prom_vector(
+    vec = bridge.net.prom_vector(
         "sum by (pod) (changes(container_start_time_seconds%s[%s]))"
         % (
-            bridge_io.cadvisor_sel('container!=""', 'container!="POD"'),
+            bridge.net.cadvisor_sel('container!=""', 'container!="POD"'),
             cfg.RESTART_WINDOW,
         )
     )
@@ -92,9 +92,9 @@ def check_oom():
     read as green here, which is how OOM kills went unmonitored for the whole Phase G window;
     _cadvisor_blind now reports that as UNKNOWN.
     """
-    vec = bridge_io.prom_vector(
+    vec = bridge.net.prom_vector(
         "sum(increase(container_oom_events_total%s[%s])) by (pod)"
-        % (bridge_io.cadvisor_sel('container!=""', 'container!="POD"'), cfg.OOM_WINDOW)
+        % (bridge.net.cadvisor_sel('container!=""', 'container!="POD"'), cfg.OOM_WINDOW)
     )
     blind = _cadvisor_blind("oom", vec, "OOM kills")
     if blind is not None:
@@ -145,8 +145,8 @@ def check_cpu_throttle():
     the evidence stays in the bridge log without paging. A clean cycle resets the streak.
     """
     global _cpu_breach_streak
-    sel = bridge_io.cadvisor_sel('container!=""', 'container!="POD"')
-    ratio_vec = bridge_io.prom_vector(
+    sel = bridge.net.cadvisor_sel('container!=""', 'container!="POD"')
+    ratio_vec = bridge.net.prom_vector(
         "sum(rate(container_cpu_cfs_throttled_periods_total%s[%s])) by (pod) "
         "/ sum(rate(container_cpu_cfs_periods_total%s[%s])) by (pod)"
         % (sel, cfg.CPU_WINDOW, sel, cfg.CPU_WINDOW)
@@ -157,7 +157,7 @@ def check_cpu_throttle():
         return blind
     lost_cores = dict(
         (m.get("pod", "?"), v)
-        for m, v in bridge_io.prom_vector(
+        for m, v in bridge.net.prom_vector(
             "sum(rate(container_cpu_cfs_throttled_seconds_total%s[%s])) by (pod)"
             % (sel, cfg.CPU_WINDOW)
         )
@@ -207,7 +207,7 @@ def check_prometheus():
     monitor alerts. A single scrape target being down (Prometheus up, one exporter gone) still
     surfaces separately on the Scrape Targets monitor — a distinct condition from this one.
     """
-    val = bridge_io.prom_scalar("vector(1)")
+    val = bridge.net.prom_scalar("vector(1)")
     if val is None:
         return False, "Prometheus answered but returned no data for vector(1)"
     return True, "Prometheus reachable"
@@ -216,7 +216,7 @@ def check_prometheus():
 def check_targets_down():
     """Any Prometheus scrape target reporting up==0 (monitoring going blind)."""
     return targets_verdict(
-        bridge_io.prom_vector("up%s" % bridge_io.origin_sel()), cfg.TARGETS_MIN
+        bridge.net.prom_vector("up%s" % bridge.net.origin_sel()), cfg.TARGETS_MIN
     )
 
 
@@ -228,12 +228,12 @@ def check_traefik_5xx():
     healthy high-traffic ones. The TRAEFIK_MIN_RPS floor is per-service too — same idea
     as before, a single error on a near-idle route is not a 100%-error-ratio alarm.
     """
-    total_vec = bridge_io.prom_vector(
+    total_vec = bridge.net.prom_vector(
         "sum(rate(traefik_service_requests_total[5m])) by (service)"
     )
     err_rps = dict(
         (m.get("service", "?"), v)
-        for m, v in bridge_io.prom_vector(
+        for m, v in bridge.net.prom_vector(
             'sum(rate(traefik_service_requests_total{code=~"5.."}[5m])) by (service)'
         )
     )
@@ -286,13 +286,13 @@ def check_traefik_latency():
     """
     total = dict(
         (m.get("service", "?"), v)
-        for m, v in bridge_io.prom_vector(
+        for m, v in bridge.net.prom_vector(
             "sum(rate(traefik_service_request_duration_seconds_count[5m])) by (service)"
         )
     )
     under = dict(
         (m.get("service", "?"), v)
-        for m, v in bridge_io.prom_vector(
+        for m, v in bridge.net.prom_vector(
             'sum(rate(traefik_service_request_duration_seconds_bucket{le="%s"}[5m])) '
             "by (service)" % cfg.TRAEFIK_SLOW_BUCKET
         )
@@ -355,12 +355,12 @@ def check_k8s_workloads():
     """
     if not cfg.CLUSTER_PROM_URL:
         return True, "k8s workload check disabled (no CLUSTER_PROMETHEUS_URL)"
-    total = bridge_io.prom_scalar(
+    total = bridge.net.prom_scalar(
         "count(kube_deployment_status_replicas_unavailable)",
         base=cfg.CLUSTER_PROM_URL,
         source="cluster prometheus",
     )
-    offenders = bridge_io.prom_vector(
+    offenders = bridge.net.prom_vector(
         "kube_deployment_status_replicas_unavailable > 0",
         base=cfg.CLUSTER_PROM_URL,
         source="cluster prometheus",
@@ -369,19 +369,19 @@ def check_k8s_workloads():
     # pod from holding the tile red for the rest of the 1h evidence window. `and` is a vector
     # match on the full label set, so it filters the first clause's series rather than
     # replacing them — the offender labels reaching the verdict are unchanged.
-    restart_offenders = bridge_io.prom_vector(
+    restart_offenders = bridge.net.prom_vector(
         "increase(kube_pod_container_status_restarts_total[%s]) > %d"
         " and increase(kube_pod_container_status_restarts_total[%s]) > 0"
         % (cfg.K8S_RESTART_WINDOW, cfg.K8S_RESTART_MAX, cfg.K8S_RESTART_RECENT_WINDOW),
         base=cfg.CLUSTER_PROM_URL,
         source="cluster prometheus",
     )
-    ds_total = bridge_io.prom_scalar(
+    ds_total = bridge.net.prom_scalar(
         "count(kube_daemonset_status_number_unavailable)",
         base=cfg.CLUSTER_PROM_URL,
         source="cluster prometheus",
     )
-    ds_offenders = bridge_io.prom_vector(
+    ds_offenders = bridge.net.prom_vector(
         "kube_daemonset_status_number_unavailable > 0",
         base=cfg.CLUSTER_PROM_URL,
         source="cluster prometheus",
@@ -401,7 +401,7 @@ def check_k8s_workloads():
     advertised = {}
     for resource in cfg.K8S_EXTENDED_RESOURCES:
         advertised[resource] = len(
-            bridge_io.prom_vector(
+            bridge.net.prom_vector(
                 'kube_node_status_allocatable{resource="%s"} > 0'
                 % ksm_resource_label(resource),
                 base=cfg.CLUSTER_PROM_URL,
@@ -411,7 +411,7 @@ def check_k8s_workloads():
     res_ok, res_msg = extended_resource_verdict(
         cfg.K8S_EXTENDED_RESOURCES,
         advertised,
-        bridge_io.prom_scalar(
+        bridge.net.prom_scalar(
             "count(kube_node_status_allocatable)",
             base=cfg.CLUSTER_PROM_URL,
             source="cluster prometheus",
@@ -421,8 +421,8 @@ def check_k8s_workloads():
         # The resource fault wins the message: an unschedulable-by-design cluster is more urgent
         # than whatever the workload arm has to say, and the workload arm's own text is preserved
         # after it rather than dropped.
-        return checks_logs.with_log_errors(False, "%s | %s" % (res_msg, msg))
-    return checks_logs.with_log_errors(ok, "%s, %s" % (msg, res_msg))
+        return checks.logs.with_log_errors(False, "%s | %s" % (res_msg, msg))
+    return checks.logs.with_log_errors(ok, "%s, %s" % (msg, res_msg))
 
 
 def check_cluster_targets():
@@ -446,7 +446,7 @@ def check_cluster_targets():
     """
     if not cfg.CLUSTER_PROM_URL:
         return True, "cluster target check disabled (no CLUSTER_PROMETHEUS_URL)"
-    vec = bridge_io.prom_vector(
+    vec = bridge.net.prom_vector(
         'up{origin!="daniel-server"}',
         base=cfg.CLUSTER_PROM_URL,
         source="cluster prometheus",
@@ -464,7 +464,7 @@ def check_cluster_prometheus():
     """
     if not cfg.CLUSTER_PROM_URL:
         return True, "cluster Prometheus check disabled (no CLUSTER_PROMETHEUS_URL)"
-    value = bridge_io.prom_scalar(
+    value = bridge.net.prom_scalar(
         "vector(1)", base=cfg.CLUSTER_PROM_URL, source="cluster prometheus"
     )
     if value is None:

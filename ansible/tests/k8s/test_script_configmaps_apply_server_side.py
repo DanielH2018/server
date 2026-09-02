@@ -89,10 +89,15 @@ def test_monitor_bridge_still_needs_it():
     # lower bound on what client-side apply would store. Pin that it is within a factor of the
     # cap — if this ever fails, the source shrank and the comment in tasks/main.yml is stale.
     files = K8S / "monitor-bridge" / "files"
+    # `rglob`: the modules are packages under files/, and a one-level glob summed check.py
+    # alone — a seventh census that stopped seeing its subject on a move, caught here only
+    # because the sum then fell under the cap.
     total = sum(
         p.stat().st_size
-        for p in files.glob("*.py")
-        if not p.name.startswith("test_") and p.name != "conftest.py"
+        for p in files.rglob("*.py")
+        if "__pycache__" not in p.parts
+        and not p.name.startswith("test_")
+        and p.name != "conftest.py"
     )
     assert total > ANNOTATION_CAP // 2
 

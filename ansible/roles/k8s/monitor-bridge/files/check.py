@@ -15,23 +15,23 @@ import time
 
 # This file is the registry and the run loop; every check body lives in a checks_* module.
 # A name the test suite patches is read QUALIFIED from the module that binds it — `cfg.X`
-# for every threshold and URL, `bridge_io.push`, `bridge_common.log` — never from-imported.
+# for every threshold and URL, `bridge.net.push`, `bridge.common.log` — never from-imported.
 # A from-import copies the value into this module's globals at import time, so a later
-# `monkeypatch.setattr(bridge_config, "X", ...)` would change nothing this file reads and
+# `monkeypatch.setattr(bridge.config, "X", ...)` would change nothing this file reads and
 # the test would pass against the real value. The check_* entries below ARE from-imported,
 # because run_once reads them from this module's globals and the gates tests patch them
 # HERE, on `check`. Enforced by ansible/tests/services/test_bridge_patch_boundary.py; the census of
 # what is patched where is ansible/tests/services/test_monitor_bridge_modules.py.
-import bridge_common
-from bridge_common import _env
+import bridge.common
+from bridge.common import _env
 
-import bridge_config as cfg
-import bridge_io
-import bridge_streaks
-from checks_notify import (
+import bridge.config as cfg
+import bridge.net
+import bridge.streaks
+from checks.notify import (
     check_discord,
 )
-from checks_service import (
+from checks.service import (
     check_arr_queue,
     check_bazarr,
     check_etcd_restore_drill,
@@ -42,7 +42,7 @@ from checks_service import (
     check_n8n,
     check_prowlarr_indexers,
 )
-from checks_cluster import (
+from checks.cluster import (
     check_cluster_prometheus,
     check_cluster_targets,
     check_cpu_throttle,
@@ -54,7 +54,7 @@ from checks_cluster import (
     check_traefik_5xx,
     check_traefik_latency,
 )
-from checks_host import (
+from checks.host import (
     check_cert,
     check_disk,
     check_host_temp,
@@ -64,16 +64,16 @@ from checks_host import (
     check_speedtest,
     check_ups,
 )
-from checks_b2 import (
+from checks.b2 import (
     check_b2_reachable,
     check_b2_storage,
 )
-from checks_r2 import check_r2_usage
-from checks_storage import (
+from checks.r2 import check_r2_usage
+from checks.storage import (
     check_longhorn_volumes,
     check_pvc_fullness,
 )
-from checks_logs import (
+from checks.logs import (
     check_loki_ingestion,
     check_loki_reachable,
     check_promtail_dropped,
@@ -353,7 +353,7 @@ def apply_startup_grace(name, ok, msg, threshold, streaks):
     if ok:
         streaks[name] = 0
         return ok, msg
-    streaks[name], ok, msg = bridge_streaks.down_streak(
+    streaks[name], ok, msg = bridge.streaks.down_streak(
         streaks.get(name, 0), threshold, msg, "startup/redeploy grace"
     )
     return ok, msg
@@ -391,8 +391,8 @@ def _gate(name, fn, push_env):
     if not check_enabled(name):
         return True, "disabled by check filter"
     ok, msg = _evaluate(name, fn)
-    bridge_common.log("OK  " if ok else "DOWN", name, "-", msg)
-    bridge_io.push(_env(push_env, ""), ok, msg)
+    bridge.common.log("OK  " if ok else "DOWN", name, "-", msg)
+    bridge.net.push(_env(push_env, ""), ok, msg)
     return ok, msg
 
 
@@ -420,11 +420,11 @@ def run_once():
     if prom_ok and check_enabled("prometheus"):
         try:
             for job in down_exporters(
-                bridge_io.prom_vector("up%s" % bridge_io.origin_sel())
+                bridge.net.prom_vector("up%s" % bridge.net.origin_sel())
             ):
                 suppressed |= EXPORTER_DEPENDENT[job]
         except Exception as e:
-            bridge_common.log("WARN: exporter-health probe failed:", e)
+            bridge.common.log("WARN: exporter-health probe failed:", e)
 
     # Loki-reachability gate (peer of the Prometheus gate): probe Loki once so a single Loki outage
     # is one page (Loki Reachable), not a storm across every Loki-querying check (LOKI_DEPENDENT).
@@ -471,10 +471,10 @@ def run_once():
             cluster_ok, cluster_msg = _evaluate(
                 "cluster_prometheus", check_cluster_prometheus
             )
-        bridge_common.log(
+        bridge.common.log(
             "OK  " if cluster_ok else "DOWN", "cluster_prometheus", "-", cluster_msg
         )
-        bridge_io.push(
+        bridge.net.push(
             _env("KUMA_PUSH_CLUSTER_PROMETHEUS", ""), cluster_ok, cluster_msg
         )
 
@@ -483,30 +483,30 @@ def run_once():
             continue
         if not prom_ok and name in PROM_DEPENDENT:
             ok, msg = True, "skipped — Prometheus unreachable (see Prometheus monitor)"
-            bridge_common.log("SKIP", name, "-", msg)
+            bridge.common.log("SKIP", name, "-", msg)
         elif not loki_ok and name in LOKI_DEPENDENT:
             ok, msg = True, "skipped — Loki unreachable (see Loki Reachable monitor)"
-            bridge_common.log("SKIP", name, "-", msg)
+            bridge.common.log("SKIP", name, "-", msg)
         elif not b2_ok and name in B2_DEPENDENT:
             ok, msg = True, "skipped — B2 unreachable (see B2 Reachable monitor)"
-            bridge_common.log("SKIP", name, "-", msg)
+            bridge.common.log("SKIP", name, "-", msg)
         elif not cluster_ok and name in CLUSTER_DEPENDENT:
             ok, msg = (
                 True,
                 "skipped — cluster Prometheus unreachable (see Cluster Prometheus monitor)",
             )
-            bridge_common.log("SKIP", name, "-", msg)
+            bridge.common.log("SKIP", name, "-", msg)
         elif name in suppressed:
             ok, msg = True, "skipped — exporter down (see Scrape Targets)"
-            bridge_common.log("SKIP", name, "-", msg)
+            bridge.common.log("SKIP", name, "-", msg)
         else:
             ok, msg = _evaluate(name, fn)
             if name in STARTUP_GRACE:
                 ok, msg = apply_startup_grace(
                     name, ok, msg, cfg.GRACE_CYCLES, _grace_streaks
                 )
-            bridge_common.log("OK  " if ok else "DOWN", name, "-", msg)
-        bridge_io.push(token, ok, msg)
+            bridge.common.log("OK  " if ok else "DOWN", name, "-", msg)
+        bridge.net.push(token, ok, msg)
 
 
 def main():
@@ -520,16 +520,16 @@ def main():
     problems = validate_check_filter(CHECKS_ONLY, CHECKS_SKIP, CHECKS)
     if problems:
         for p in problems:
-            bridge_common.log("FATAL: bad CHECKS_ONLY/CHECKS_SKIP:", p)
+            bridge.common.log("FATAL: bad CHECKS_ONLY/CHECKS_SKIP:", p)
         sys.exit(2)
     enabled = [name for name, _, _ in CHECKS if check_enabled(name)]
-    bridge_common.log(
+    bridge.common.log(
         "monitor-bridge starting (interval=%ss, once=%s, checks=%d/%d)"
         % (cfg.INTERVAL, once, len(enabled), len(CHECKS))
     )
     while True:
         run_once()
-        bridge_common.touch_heartbeat(cfg.HEARTBEAT_FILE)
+        bridge.common.touch_heartbeat(cfg.HEARTBEAT_FILE)
         if once:
             break
         time.sleep(cfg.INTERVAL)
