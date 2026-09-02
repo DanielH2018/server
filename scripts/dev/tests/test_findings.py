@@ -177,3 +177,30 @@ def test_list_passes_the_state_filter_to_gh(monkeypatch):
     argv = list(seen["argv"])
     assert argv[argv.index("--state") + 1] == "closed"
     assert argv[argv.index("--label") + 1] == "claude"
+
+
+# --- --dry-run parses on either side of the subcommand -----------------------------------
+
+
+def test_dry_run_is_accepted_after_the_subcommand(monkeypatch):
+    monkeypatch.setattr(
+        findings, "gh_json", lambda *a, **k: [{"name": n} for n in findings.LABELS]
+    )
+    monkeypatch.setattr(
+        findings,
+        "gh",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("gh called")),
+    )
+    assert findings.main(["sync-labels", "--dry-run"]) == 0
+
+
+def test_dry_run_is_accepted_before_the_subcommand(monkeypatch):
+    monkeypatch.setattr(
+        findings, "gh_json", lambda *a, **k: [{"name": n} for n in findings.LABELS]
+    )
+    monkeypatch.setattr(
+        findings,
+        "gh",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("gh called")),
+    )
+    assert findings.main(["--dry-run", "sync-labels"]) == 0

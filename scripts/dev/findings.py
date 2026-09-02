@@ -253,16 +253,33 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def _add_dry_run(parser: argparse.ArgumentParser, *, suppress: bool) -> None:
+    """Add ``--dry-run`` to ``parser``.
+
+    Every subparser gets its own copy so the flag parses on either side of the
+    subcommand name — argparse only accepts a parent-parser optional before the
+    subcommand token. ``suppress=True`` (used on the subparsers) sets
+    ``default=argparse.SUPPRESS`` so an absent subparser flag leaves the top-level
+    parser's own default in place instead of overwriting it back to ``False``.
+    """
+    default = argparse.SUPPRESS if suppress else False
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=default,
+        help="print the gh commands, write nothing",
+    )
+
+
 def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[1])
-    p.add_argument(
-        "--dry-run", action="store_true", help="print the gh commands, write nothing"
-    )
+    _add_dry_run(p, suppress=False)
     sub = p.add_subparsers(dest="cmd", required=True)
 
     o = sub.add_parser(
         "open", help="file a finding, or touch/reopen the existing issue"
     )
+    _add_dry_run(o, suppress=True)
     o.add_argument("--title", required=True)
     o.add_argument("--body-file", required=True, type=Path)
     o.add_argument("--severity", required=True, choices=SEVERITIES)
@@ -278,10 +295,12 @@ def _parser() -> argparse.ArgumentParser:
     t = sub.add_parser(
         "touch", help="record a re-observation; the third adds escalated"
     )
+    _add_dry_run(t, suppress=True)
     t.add_argument("number", type=int)
     t.add_argument("--source", default="session")
 
     c = sub.add_parser("close", help="close as fixed or refuted")
+    _add_dry_run(c, suppress=True)
     c.add_argument("number", type=int)
     how = c.add_mutually_exclusive_group(required=True)
     how.add_argument("--fixed", action="store_true")
@@ -290,10 +309,12 @@ def _parser() -> argparse.ArgumentParser:
     c.add_argument("--reason", help="required with --refuted: what disproved it")
 
     ls = sub.add_parser("list", help="rows for the review skill and the docs generator")
+    _add_dry_run(ls, suppress=True)
     ls.add_argument("--state", default="open", choices=("open", "closed", "all"))
     ls.add_argument("--json", action="store_true")
 
-    sub.add_parser("sync-labels", help="create any missing label")
+    sl = sub.add_parser("sync-labels", help="create any missing label")
+    _add_dry_run(sl, suppress=True)
     return p
 
 
