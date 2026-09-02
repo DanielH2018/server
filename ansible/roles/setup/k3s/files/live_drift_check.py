@@ -36,8 +36,13 @@ The read-only SA is Forbidden on Secrets — `get list watch` reads as covering 
 not. The kinds below are what it can actually read, and the run prints the uncovered kind
 rather than quietly omitting it.
 
-Exit codes: 0 clean, 1 drift or a new object with no apply baseline, 2 the check itself
-failed.
+Server-side-applied objects are out of scope on both arms. SSA prunes removed fields by field
+ownership and writes no last-applied annotation, so neither "no baseline" nor a comparison
+against a leftover annotation says anything true about them. is_server_side_applied() reads
+that off managedFields rather than a list of names.
+
+Exit codes: 0 clean, 1 drift or a client-side-applied object with no apply baseline, 2 the
+check itself failed.
 """
 
 from __future__ import annotations
@@ -93,14 +98,10 @@ PATCH_MAINTAINED = {
     ),
 }
 
-# Objects that exist with no apply baseline at all. NOT an exemption list — a floor. `kubectl
-# apply` only prunes removed map keys on objects it has a baseline for, so an unannotated
-# object silently keeps keys forever after they leave the manifest. That is the class that bit
-# the static-monitors Secret (2026-08-10) and monitor-bridge-env twice (2026-08-14). The two
-# grafana-dashboards ConfigMaps are built with `kubectl create` — the same reason they sit in
-# k8s_dry_run_unsupported — and are counted here, not excused. A count above this floor means
-# a new object arrived with no baseline.
-UNANNOTATED_FLOOR = 2
+# The residue manager `kubectl` writes when it migrates a client-side-applied object to
+# server-side apply. It carries operation "Apply" but owns only the last-applied annotation,
+# so it does NOT mean the object is server-side managed.
+_MIGRATION_MANAGER = "kubectl-last-applied"
 
 _SUFFIXES = {
     "": 1.0,
@@ -206,10 +207,33 @@ def is_foreign(kind: str, namespace: str, name: str) -> str | None:
     return None
 
 
+def is_server_side_applied(meta: dict) -> bool:
+    """Whether this object is maintained by `kubectl apply --server-side`.
+
+    Server-side apply prunes removed fields by field ownership and writes no last-applied
+    annotation, so an SSA object is out of scope for this check on BOTH arms. Counting it as
+    "no apply baseline" reports a pruning risk that does not exist, and comparing it against a
+    leftover annotation compares it to a baseline nothing maintains — the frozen residue of
+    the last client-side apply before the switch.
+
+    The signal is managedFields, not a list of names: five roles apply script and dashboard
+    ConfigMaps server-side (roles/k8s/{monitor-bridge,autofix-bridge,terraria-stats,
+    valheim-stats,claude-otel}), and a sixth joins them without touching this file.
+    """
+    return any(
+        entry.get("operation") == "Apply" and entry.get("manager") != _MIGRATION_MANAGER
+        for entry in meta.get("managedFields") or []
+    )
+
+
 def fetch(kind: str) -> tuple[list[dict], str | None]:
-    """``kubectl get <kind> -A -o json``. Returns (items, error)."""
+    """``kubectl get <kind> -A -o json``. Returns (items, error).
+
+    `--show-managed-fields` because kubectl strips managedFields from `get` output by default,
+    and is_server_side_applied reads them. Without it every object looks client-side applied.
+    """
     proc = subprocess.run(
-        ["kubectl", "get", kind, "-A", "-o", "json"],
+        ["kubectl", "get", kind, "-A", "-o", "json", "--show-managed-fields"],
         capture_output=True,
         text=True,
         timeout=60,
@@ -224,11 +248,19 @@ def fetch(kind: str) -> tuple[list[dict], str | None]:
         return [], f"unparseable kubectl output: {exc}"
 
 
-def verdict(drifted: list, unannotated: list, errors: list) -> tuple[int, str]:
+def verdict(
+    drifted: list, unannotated: list, errors: list, server_side: int = 0
+) -> tuple[int, str]:
     """Exit code and the one-line message pushed to Kuma.
 
     A read failure is exit 2, NOT a clean run: a check that cannot read the cluster must not
     report the cluster as clean. Fail closed, the same shape as the CI gate in gitops_deploy.
+
+    `unannotated` names client-side-applied objects only, so every entry is a real pruning
+    risk and the message names them by identity. This replaced an `unannotated[FLOOR:]` slice
+    that excused the first two entries BY POSITION: on 2026-09-02 a third entry sorted ahead
+    of the two it meant to excuse, so the push named an innocent object
+    (grafana-dashboards-infrastructure) and hid the one that had actually arrived.
     """
     if errors:
         return 2, f"check failed: {'; '.join(errors[:2])}"
@@ -236,16 +268,15 @@ def verdict(drifted: list, unannotated: list, errors: list) -> tuple[int, str]:
     if drifted:
         shown = ", ".join(f"{kind} {ns}/{name}" for kind, ns, name, _ in drifted[:3])
         parts.append(f"{len(drifted)} object(s) drifted from last-applied: {shown}")
-    if len(unannotated) > UNANNOTATED_FLOOR:
-        extra = ", ".join(unannotated[UNANNOTATED_FLOOR:][:3])
+    if unannotated:
         parts.append(
-            f"{len(unannotated)} with no apply baseline (floor {UNANNOTATED_FLOOR}) — apply "
-            f"cannot prune removed keys on these: {extra}"
+            f"{len(unannotated)} with no apply baseline — apply cannot prune removed keys "
+            f"on these: {', '.join(unannotated[:3])}"
         )
     if parts:
         return 1, "; ".join(parts)
     return 0, (
-        f"no drift; {len(unannotated)} object(s) without an apply baseline (at floor); "
+        f"no drift; {server_side} object(s) skipped as server-side applied; "
         f"{', '.join(UNCOVERED_KINDS)} not covered (read-only SA is Forbidden)"
     )
 
@@ -295,6 +326,7 @@ def main() -> int:
     drifted: list[tuple[str, str, str, list]] = []
     unannotated: list[str] = []
     errors: list[str] = []
+    server_side: list[str] = []
     checked = 0
 
     for kind in KINDS:
@@ -306,6 +338,9 @@ def main() -> int:
             meta = obj.get("metadata", {})
             namespace, name = meta.get("namespace", ""), meta.get("name", "")
             if is_foreign(kind, namespace, name):
+                continue
+            if is_server_side_applied(meta):
+                server_side.append(f"{kind} {namespace}/{name}")
                 continue
             baseline = (meta.get("annotations") or {}).get(LAST_APPLIED)
             if not baseline:
@@ -321,7 +356,7 @@ def main() -> int:
             if diffs:
                 drifted.append((kind, namespace, name, diffs))
 
-    code, message = verdict(drifted, sorted(unannotated), errors)
+    code, message = verdict(drifted, sorted(unannotated), errors, len(server_side))
 
     for kind, namespace, name, diffs in drifted:
         print(f"[DRIFT] {kind} {namespace}/{name}", file=sys.stderr)
@@ -331,6 +366,8 @@ def main() -> int:
             )
     for entry in sorted(unannotated):
         print(f"[NO-BASELINE] {entry}", file=sys.stderr)
+    for entry in sorted(server_side):
+        print(f"[SERVER-SIDE] {entry}", file=sys.stderr)
     for error in errors:
         print(f"[ERROR] {error}", file=sys.stderr)
     print(
