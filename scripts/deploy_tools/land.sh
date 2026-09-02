@@ -205,9 +205,11 @@ if [ "$AWAIT_MERGE" -eq 1 ]; then
       MERGED) break ;;
       CLOSED) die "PR #$PR was closed without merging — nothing to land" 1 ;;
     esac
-    # A conflicting PR stays OPEN forever: `gh pr merge --auto` arms on it and returns
-    # success, so without this the landing sat out the whole 2700s budget and reported
-    # merge-timeout, which reads as "nobody merged it" rather than "it cannot be merged".
+    # A PR that goes CONFLICTING after `gh pr merge --auto` was armed never merges, and
+    # nothing on the PR says so — with several sessions landing at once, another merge moving
+    # master under an open PR is the ordinary way it happens. Without this the landing sat out
+    # the whole 2700s budget and reported merge-timeout, which reads as "nobody merged it"
+    # rather than "it cannot be merged".
     # Only CONFLICTING may bail — GitHub computes mergeability asynchronously and serves
     # UNKNOWN until it settles (PR #657 read UNKNOWN on a live open PR, 2026-09-02), so
     # bailing on anything-but-MERGEABLE would abort every landing that polled too early.
