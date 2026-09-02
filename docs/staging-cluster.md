@@ -333,21 +333,26 @@ a build failure would dominate the staging window (`n8n` + `n8n-runners`, `code-
 Growing the subset later is a config change, not a redesign — but each addition needs the same
 question asked: does this role mutate anything outside the VM?
 
-### 7. Node pinning — the 25 sites that name daniel-box
+### 7. Node pinning — the 25 sites that named daniel-box
 
-92 occurrences of `daniel-box` appear across the k8s templates, but most are comments. An
+**DONE.** This step landed, and every number below is a census taken while executing it, not a
+description of the tree now. Re-measuring any of them today returns something different and
+that is expected: the pins became variables, which is what the step did. The end state, and
+the three literals that survive on purpose, are at the foot of this section.
+
+92 occurrences of `daniel-box` appeared across the k8s templates, most of them comments. An
 earlier draft of this spec put the load-bearing ones at roughly 17. Measured on 2026-08-27
-while executing this step, the real count is **25**:
+while executing this step, the real count was **25**:
 
-| Kind | Count |
+| Kind | Count on 2026-08-27 |
 |---|---|
 | `kubernetes.io/hostname` nodeSelector pins, as rendered | 14 |
 | affinity list entries | 4 |
 | `hostvars[...].server_ip` lookups | 5 |
 | `hostvars[...].containers_list` lookups | 2 |
 
-Two things make the count harder to take than it looks, and both were why the earlier draft
-was low. **A literal grep finds 9 pins, not 14**, because four roles already read a variable
+Two things made the count harder to take than it looked, and both were why the earlier draft
+was low. **A literal grep found 9 pins, not 14**, because four roles already read a variable
 (`docs_k8s_node`, `artifacts_k8s_node` and their kin) rather than the hostname; and **pihole
 renders one template twice** through a Jinja `for` loop, so a rendered census
 counts it twice where a source census counts it once. Neither census alone is right — reconcile
@@ -358,8 +363,8 @@ and it is the change most likely to break prod while building staging — a mis-
 prod workload to the wrong node. It is therefore done **first**, on its own, verified against prod
 with `--dry-run` and a real deploy before staging is ever pointed at.
 
-**DONE — this decision describes work that has already landed, and the census above is history
-rather than a plan.** `k8s_primary_node` is declared in `group_vars/all.yml` and overridden to
+The end state, per the DONE note at the top of this section: `k8s_primary_node` is declared in
+`group_vars/all.yml` and overridden to
 `daniel-stage` in that host's vars; `k8s_registry_node`, `docs_k8s_node` and `artifacts_k8s_node`
 all derive from it, and `seed_volume_node` is resolved live from the volume's own attachment, so
 it was never cluster-specific. Re-censused 2026-08-28: no `kubernetes.io/hostname` pin outside an

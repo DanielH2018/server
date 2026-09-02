@@ -63,6 +63,7 @@ Route to the source of truth by what you're doing, before reading linearly:
 | Editing HA automations / lighting / fans | `ansible/roles/k8s/home-assistant/CLAUDE.md` (config and workload both live there; it routes to `docs/` for per-topic behaviour) · `/ha-edit-automation` |
 | Reviewing the homelab for gaps | `/homelab-review` skill (per-domain reviewer agents) |
 | Answering "what runs here / where / behind what" | `docs/reference/` — generated from the tree by the `docs-refresh` cron, browsable at `docs.local.<domain>`. Services, hosts, secret rotation, scheduled jobs, networking. **Never hand-edit a generated page**; a hook rejects it. Change the generator (`scripts/docs/build_docs.py` lists them). The hook decides by the `generated_from:` provenance banner rather than the path, so `reference/topology.md` — hand-written prose, the one page there nobody generates — stays editable. |
+| CI fails on `test_every_committed_fragment_matches_what_the_generator_writes_now` | You changed a tunable a docs fragment reads. Run `uv run python scripts/docs/gen_doc_fragments.py` and commit what it writes — see *Generated docs fragments* below for which tunables those are and why this one gate is not left to the cron. |
 | Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` + monitor-bridge `check.py` **first** — mature setup, most are handled |
 | Checking that a service's UI actually renders, not just that its pod is Ready | The `homelab-ui` MCP server — see `## Claude Tooling in This Repo` below, and `docs/claude-tooling.md` for the full reference. `probe.py health` cannot see a broken UI behind a healthy pod. |
 | A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment. The general mechanism is the central rollout-restart in `ansible/roles/k8s/manifests/CLAUDE.md`, which fires when a role's rendered manifests change. A role whose pod depends on a file the manifests *don't* carry adds its own `checksum/<thing>` pod annotation instead — e.g. `checksum/check-script` in `roles/k8s/monitor-bridge/templates/deployment.yaml.j2`. |
@@ -425,11 +426,38 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
 - Timezone: `America/Chicago`
 - Containers should have healthchecks defined where possible
 
+## Generated docs fragments
+
+The hand-written pages under `docs/` transclude their fact tables — a `--8<--` include pulling
+in a file `scripts/docs/gen_doc_fragments.py` writes under `docs/assets/generated/fragments/`.
+The prose stays hand-written; the tunables beside it are re-read from the tree.
+
+**Changing one of those tunables fails CI until you regenerate.** Run
+`uv run python scripts/docs/gen_doc_fragments.py` and commit what it writes, in the same PR.
+The generator reads the Longhorn tier defaults and the deadman cron variables in
+`roles/setup/k3s/defaults/main.yml`, `_BROAD_*_PREFIXES` in `deploy_changes.py`,
+`STAGING_SUBSET` in `gitops_deploy.py`, `TIER_DAYS` plus the registry in
+`secret_rotation.py`/`secret_rotation.yml`, the fail2ban jail template, and the MetalLB VIPs
+and wg-easy ports in `group_vars`/`host_vars`. `FRAGMENTS` in the generator is the current
+list; read it rather than trusting this one.
+
+**Why this one gate is not left to the cron**, when a stale `docs/reference/` page is. A
+reference page carries a `generated_at` banner, so a stale one announces itself on the page.
+A fragment is spliced into someone else's prose and carries no stamp a reader can see, so
+nothing but `test_every_committed_fragment_matches_what_the_generator_writes_now` would catch
+it drifting. The asymmetry is the point, not an oversight.
+
+Two paths are safe and stay safe: the weekly secret-rotate cron commits `--no-verify`, and a
+rotation moves `last_rotated` rather than a tier count, so the fragment does not move either
+way; the docs-refresh cron regenerates before it commits, so its own hooks pass.
+
 ## Pre-commit Hooks
 The repo uses [prek](https://prek.j178.dev) (config: `prek.toml`) with YAML linting, Ansible linting, and gitleaks (secret scanning).
 Run `prek run --all-files` to check before committing. The `pytest` and
 `validate-compose-templates` hooks shell out to `uv` (see **Python & Tests**), so uv must be
-installed for a full `prek run`.
+installed for a full `prek run`. `mkdocs-strict` builds the docs site the way the cron does
+and fails on a broken `--8<--` include or a dead internal link; its site directory is covered
+by `.gitignore`'s root deny, which is load-bearing — one untracked file parks the deployer.
 
 ## Python & Tests
 Dev/test tooling is managed by [uv](https://docs.astral.sh/uv/) (`pyproject.toml` + `uv.lock`).
