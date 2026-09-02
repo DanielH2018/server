@@ -15,6 +15,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "files"))
 
 import artifact_server as srv
+from typing import Any
 
 
 @pytest.fixture
@@ -313,7 +314,11 @@ class TestDeclaredMetadata:
 
 class TestApplyMetadata:
     def test_declared_beats_derived_and_is_marked_declared(self):
-        entry = {"title": "cost review", "text": "b2 spend cap", "slices": {"done": 1}}
+        entry: dict[str, Any] = {
+            "title": "cost review",
+            "text": "b2 spend cap",
+            "slices": {"done": 1},
+        }
         srv.apply_metadata(
             entry, '<meta name="artifact:category" content="security">', False, KNOWN
         )

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import inject_dashboard_annotations as inject
+from typing import Any
 
 UID = "bf4q19tuivta8e"
 EXPR = '{job="syslog"} |= "event=deploy" | logfmt'
@@ -27,7 +28,7 @@ def test_injects_into_a_board_with_an_empty_list():
 
 
 def test_injects_when_the_annotations_key_is_missing_entirely():
-    doc = {"panels": []}
+    doc: dict[str, Any] = {"panels": []}
 
     assert inject.inject(doc, _annotation()) is True
     assert doc["annotations"]["list"][0]["datasource"]["uid"] == UID

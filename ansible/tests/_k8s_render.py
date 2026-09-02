@@ -59,7 +59,7 @@ def _render_all():
             if tpl.name.endswith(".sh.j2") or tpl.name.startswith("Dockerfile"):
                 continue
             rendered, err = render_or_error(env, tpl.name, ctx)
-            if err:
+            if rendered is None:
                 raise AssertionError(f"{role}/{tpl.name} failed to render: {err}")
             _TEXTS.append((role, tpl.name, rendered))
             for doc in yaml.safe_load_all(rendered):

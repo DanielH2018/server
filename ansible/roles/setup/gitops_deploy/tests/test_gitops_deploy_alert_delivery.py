@@ -54,6 +54,7 @@ def test_discord_posts_to_the_configured_webhook_with_its_own_user_agent(
     # The webhook comes from the config, not a literal; the UA is the deployer's own.
     assert req.full_url == "https://discord.example/webhook"
     assert req.get_header("User-agent") == "gitops-deploy"
+    assert isinstance(req.data, bytes), "the alert POST carried no bytes body"
     assert json.loads(req.data)["content"] == "hello"
 
 

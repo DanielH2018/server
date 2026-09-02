@@ -352,7 +352,9 @@ def test_the_staging_cidr_agrees_with_the_network_the_hypervisor_builds():
 
 
 def _probe_url_host(url: str):
-    return ipaddress.ip_address(urlparse(url).hostname)
+    host = urlparse(url).hostname
+    assert host is not None, f"no host in {url}"
+    return ipaddress.ip_address(host)
 
 
 def test_the_probe_dials_the_service_cidr_it_now_fences():

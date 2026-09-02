@@ -7,6 +7,7 @@ _FILES = pathlib.Path(__file__).resolve().parents[1] / "files"
 _SPEC = importlib.util.spec_from_file_location(
     "fake_remux_logic", _FILES / "fake_remux_logic.py"
 )
+assert _SPEC and _SPEC.loader, "spec_from_file_location found no loader"
 frl = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(frl)
 

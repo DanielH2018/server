@@ -41,6 +41,7 @@ def _load_classifier():
     spec = importlib.util.spec_from_file_location(
         "auto_approve_readonly", HOOKS / "auto-approve-readonly.py"
     )
+    assert spec and spec.loader, "spec_from_file_location found no loader"
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module.classify

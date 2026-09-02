@@ -744,7 +744,7 @@ def check_template(role: str, tpl: Path, ctx: dict) -> tuple[str | None, list]:
     env.globals["lookup"] = make_lookup(ctx)
     register_ansible_filters(env)
     rendered, err = render_or_error(env, tpl.name, ctx)
-    if err:
+    if rendered is None:
         return err, []
 
     err = yaml_error(rendered)

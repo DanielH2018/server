@@ -110,7 +110,7 @@ def _display(path: Path) -> str:
         return path.name
 
 
-def duplicate_dashboard_uids(boards: dict[str, str]) -> list[str]:
+def duplicate_dashboard_uids(boards: dict[str, list[str]]) -> list[str]:
     """Error strings for every dashboard uid claimed by more than one file.
 
     Grafana does NOT resolve a duplicate uid by picking one. Its file provisioner detects the

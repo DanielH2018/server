@@ -46,6 +46,7 @@ import html
 import os
 import re
 from pathlib import Path
+from typing import Any
 
 SCRIPTS_PAGE = "reference/scripts.md"
 
@@ -189,7 +190,7 @@ def link_paths(page_html: str, resolve) -> str:
 
 # --- MkDocs events -------------------------------------------------------------------------
 
-_state: dict[str, object] = {}
+_state: dict[str, Any] = {}
 
 
 def on_files(files, config):

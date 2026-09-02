@@ -497,7 +497,7 @@ def check_template(
     rel = path.relative_to(ANSIBLE)
     env = build_env(path.parent)
     rendered, err = render_or_error(env, path.name, ctx)
-    if err:
+    if rendered is None:
         return err
 
     out_path = out_dir / rel.with_suffix("")  # drop the trailing .j2

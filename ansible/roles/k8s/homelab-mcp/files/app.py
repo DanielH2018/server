@@ -68,6 +68,15 @@ def _get_json(
     return r.json()
 
 
+def _get_json_list(
+    url: str, params: dict | None = None, headers: dict | None = None
+) -> list[dict]:
+    """The same read for an endpoint that answers a JSON array rather than an object."""
+    r = _client.get(url, params=params, headers=headers)
+    r.raise_for_status()
+    return r.json()
+
+
 def _docker_base() -> str:
     return safe_reads.docker_base_or_raise(DOCKER_PROXY)
 
@@ -179,7 +188,7 @@ def pod_logs(name: str, namespace: str = "homelab", tail: int = 100) -> str:
 @mcp.tool()
 def list_containers() -> list[dict]:
     """All containers with state/status/image (no secrets)."""
-    items = _get_json(f"{_docker_base()}/containers/json", {"all": "1"})
+    items = _get_json_list(f"{_docker_base()}/containers/json", {"all": "1"})
     return safe_reads.summarize_container_list(items)
 
 
@@ -251,7 +260,9 @@ def cert_expiry(host: str, port: int = 443) -> dict:
     with socket.create_connection((host, port), timeout=10) as sock:
         with ctx.wrap_socket(sock, server_hostname=host) as ss:
             cert = ss.getpeercert()
-    not_after = cert.get("notAfter")
+    not_after = cert.get("notAfter") if cert else None
+    if not isinstance(not_after, str):
+        raise ValueError(f"no notAfter date in the certificate for {host}")
     expires = datetime.strptime(not_after, "%b %d %H:%M:%S %Y %Z").replace(
         tzinfo=timezone.utc
     )

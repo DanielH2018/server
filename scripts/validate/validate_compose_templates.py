@@ -282,7 +282,7 @@ def check_container(host_ctx: dict, ci: dict) -> str | None:
     env = build_env(name)
     ctx = {**host_ctx, "container_item": ci}
     rendered, err = render_or_error(env, "docker-compose.yml.j2", ctx)
-    if err:
+    if rendered is None:
         return err
 
     try:

@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Set as AbstractSet
 from dataclasses import replace
 
 from deploy_changes import ChangeSet
@@ -69,7 +69,7 @@ _TRUE_VALUES = frozenset(
 )
 
 
-def declared_denylist(sources: dict[str, str | None]) -> frozenset[str]:
+def declared_denylist(sources: Mapping[str, str | None]) -> frozenset[str]:
     """Roles denied auto-deploy, read from each role's own `k8s_autodeploy` declaration.
 
     `sources` maps a role name to the text of its defaults/main.yml, or None when the role has
@@ -139,7 +139,9 @@ def declares_snapshot_claims(text: str | None) -> bool:
 
 
 def rollback_volume_revert_note(
-    services: set[str], reverting: set[str], rollback_failed: str | None
+    services: AbstractSet[str],
+    reverting: AbstractSet[str],
+    rollback_failed: str | None,
 ) -> str:
     """One line for gitops-deploy's rollback-failure Discord alert.
 

@@ -352,7 +352,7 @@ def survey(repo: str) -> list[tuple[str, Worktree, str]]:
     for tree in trees[1:]:
         verdict, reason = classify(
             tree,
-            merged=is_merged(repo, tree.head, tree.branch),
+            merged=is_merged(repo, tree.head, tree.branch or ""),
             dirty=is_dirty(tree.path),
         )
         out.append((verdict, tree, reason))
