@@ -172,33 +172,34 @@ def test_apply_entries_folds_and_counts_unmatched():
 
 def test_store_roundtrip_and_cursor(tmp_path):
     db = str(tmp_path / "stats.db")
-    store = stats.Store(db)
-    assert store.get_cursor() == 0
+    with stats.Store(db) as store:
+        assert store.get_cursor() == 0
 
-    st = stats.StatsState()
-    st.apply("join", "DBoy", 1000.0)
-    st.apply("leave", "DBoy", 1100.0)
-    store.save(
-        st,
-        cursor_ns=1_100_000_000_000,
-        events=[(1_100_000_000_000, "DBoy", "leave", "DBoy has left.")],
-    )
+        st = stats.StatsState()
+        st.apply("join", "DBoy", 1000.0)
+        st.apply("leave", "DBoy", 1100.0)
+        store.save(
+            st,
+            cursor_ns=1_100_000_000_000,
+            events=[(1_100_000_000_000, "DBoy", "leave", "DBoy has left.")],
+        )
 
     # Reopen: state + cursor survive (durable source of truth).
-    store2 = stats.Store(db)
-    assert store2.get_cursor() == 1_100_000_000_000
-    loaded = store2.load_state()
+    with stats.Store(db) as store2:
+        assert store2.get_cursor() == 1_100_000_000_000
+        loaded = store2.load_state()
     assert loaded.players["DBoy"]["total_playtime"] == 100.0
     assert loaded.players["DBoy"]["sessions"] == 1
 
 
 def test_store_preserves_open_session(tmp_path):
     db = str(tmp_path / "stats.db")
-    store = stats.Store(db)
-    st = stats.StatsState()
-    st.apply("join", "DBoy", 2000.0)  # still online
-    store.save(st, cursor_ns=2_000_000_000_000)
-    loaded = stats.Store(db).load_state()
+    with stats.Store(db) as store:
+        st = stats.StatsState()
+        st.apply("join", "DBoy", 2000.0)  # still online
+        store.save(st, cursor_ns=2_000_000_000_000)
+    with stats.Store(db) as store:
+        loaded = store.load_state()
     assert loaded.players["DBoy"]["open_start"] == 2000.0
     assert loaded.online_count() == 1
 
@@ -223,8 +224,10 @@ def test_run_cycle_end_to_end(tmp_path):
     )
     assert cursor == 4_000_000_000
     assert state.players["DBoy"]["total_playtime"] == 3.0
+    store.close()
     # persisted
-    assert stats.Store(db).get_cursor() == 4_000_000_000
+    with stats.Store(db) as reopened:
+        assert reopened.get_cursor() == 4_000_000_000
 
 
 def test_initial_cursor_bounds_first_run_and_backfill():

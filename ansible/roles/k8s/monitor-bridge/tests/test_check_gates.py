@@ -610,13 +610,17 @@ def _cap_denial():
     to pick a cache TTL, so a test that fakes a 403 as a RuntimeError would exercise the transport
     path and prove the opposite of what it claims. These tests used to do that.
     """
-    return urllib.error.HTTPError(
+    err = urllib.error.HTTPError(
         bridge_config.B2_PROBE_URL,
         403,
         "Forbidden: transaction_cap_exceeded",
         {},
         None,
     )
+    # Closed, as _get_json leaves a real one: an open HTTPError is a ResourceWarning at GC,
+    # which filterwarnings=error fails whichever test happens to be running then.
+    err.close()
+    return err
 
 
 def test_b2_reachable_disabled_without_credentials(monkeypatch):

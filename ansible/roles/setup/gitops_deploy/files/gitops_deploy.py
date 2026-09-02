@@ -216,27 +216,30 @@ def run(
         # own pid), which every process it forks inherits unless one of them calls setsid
         # itself. killpg on timeout then signals that whole group at once, so uv and
         # ansible-playbook die together instead of one outliving the other.
-        proc = subprocess.Popen(
+        # The `with` closes both pipes on the way out, timeout path included; without it the
+        # two read ends stay open until GC, which is a ResourceWarning under pytest's
+        # filterwarnings=error. CPython's subprocess.run() wraps its Popen the same way.
+        with subprocess.Popen(
             args,
             cwd=cwd,
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             start_new_session=True,
-        )
-        try:
-            stdout, stderr = proc.communicate(timeout=timeout)
-        except subprocess.TimeoutExpired:
+        ) as proc:
             try:
-                os.killpg(proc.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass  # the group is already gone
-            # wait(), not communicate(): if a descendant escaped the group by calling setsid
-            # itself, its end of the pipe stays open and communicate() would block on it
-            # forever. wait() only reaps the direct child's exit status and doesn't touch the
-            # pipes — CPython's own subprocess.run() does the same on this path.
-            proc.wait()
-            raise
+                stdout, stderr = proc.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass  # the group is already gone
+                # wait(), not communicate(): if a descendant escaped the group by calling
+                # setsid itself, its end of the pipe stays open and communicate() would block
+                # on it forever. wait() only reaps the direct child's exit status and doesn't
+                # touch the pipes — CPython's own subprocess.run() does the same on this path.
+                proc.wait()
+                raise
         r = subprocess.CompletedProcess(args, proc.returncode, stdout, stderr)
     if check and r.returncode != 0:
         raise RuntimeError(f"{' '.join(args)} -> {r.returncode}\n{r.stderr}")

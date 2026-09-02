@@ -113,6 +113,10 @@ def _get_json(url, headers=None):
             body = e.read().decode("utf-8", "replace")
         except Exception:
             body = ""
+        finally:
+            # The consumer reads .code and .msg only; an HTTPError left open holds the
+            # response until GC and warns when it gets there.
+            e.close()
         # str(HTTPError) already leads with "HTTP Error <code>:", so this contributes the
         # endpoint and the server's own explanation, not the status again.
         detail = " ".join((body or "").split())[:FETCH_BODY_MAX]
@@ -140,6 +144,8 @@ def _post_json(url, payload, headers=None):
             detail = " ".join(e.read().decode("utf-8", "replace").split())
         except Exception:
             detail = ""
+        finally:
+            e.close()  # same as _get_json: the body is consumed here, nowhere else
         e.msg = "%s: %s" % (endpoint_label(url), detail[:FETCH_BODY_MAX] or e.msg)
         raise
     except Exception as e:
