@@ -489,7 +489,7 @@ deprecation warning's origin as the only surviving detail (issue #871). That arm
 forward-only, so the alert it produced told an operator to fix forward with nothing to fix
 forward from, and the only route to the diagnosis was re-running a 20-minute `deploy.yml`.
 
-Both tails are capped at `RUN_ERROR_STDOUT_TAIL` / `RUN_ERROR_STDERR_TAIL` (4000 each), and
+Both halves are capped at `RUN_ERROR_STDOUT_CHARS` / `RUN_ERROR_STDERR_TAIL` (4000 each), and
 the three Discord failure posts trim further through `_alert_excerpt` (`ALERT_EXCERPT_CHARS`,
 700). That second cap is not belt-and-braces: `host_lib.discord_post` cuts a post at
 `message[:1900]` keeping the **head**, so an unbounded error string does not truncate itself —
@@ -497,8 +497,15 @@ it evicts the remediation prose that follows it. `broad_failure_alert()` is a fu
 than an inline f-string so `tests/test_gitops_deploy_failure_output.py` can assert the
 assembled post stays under 1900 characters with its `**Action:**` line intact.
 
-`_tail` keeps the END of the output. A head slice passes every short-output test and carries
-nothing on a real run, which is the shape of the bug this section documents.
+**The stdout half is not a positional tail.** `_failure_detail` finds the last task section
+with an un-ignored `fatal:`/`failed:` line, puts that task's header and failure lines first,
+drops profile_tasks' `TASKS RECAP` timing table, and spends what is left of the budget on the
+tail (the `PLAY RECAP`). `_alert_excerpt` runs the same finder over the error string, so the
+Discord post carries the task rather than the end of stderr. A plain tail was the #877 fix
+and it lasted one day: the 21:26 broad apply on 2026-09-02 failed one task in 1950, and the
+recap plus twenty timing rows filled the whole window (issue #907). stderr, and stdout with
+no `fatal:` line in it, still get `_tail` — what ansible prints last is the diagnostic part
+there, and a head slice would pass every short-output test and carry nothing on a real run.
 
 ## Traps
 
