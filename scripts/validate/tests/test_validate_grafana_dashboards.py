@@ -11,7 +11,7 @@ Run: uv run pytest scripts/validate/tests/test_validate_grafana_dashboards.py
 
 import json
 
-import validate_grafana_dashboards as vgd
+from validate import grafana_dashboards as vgd
 
 
 # ── duplicate dashboard uids ───────────────────────────────────────────────────────────────────

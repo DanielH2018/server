@@ -129,10 +129,10 @@ repo = "local"
 [[repos.hooks]]
 id = "validate-compose-templates"
 name = "Validate rendered docker-compose templates"
-entry = "uv run python scripts/validate/validate_compose_templates.py"
+entry = "uv run python scripts/validate/compose_templates.py"
 language = "system"
 pass_filenames = false
-files = "^(ansible/roles/containers/[^/]+/templates/docker-compose\\.yml\\.j2|ansible/templates/[^/]+\\.yml\\.j2|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/validate/validate_compose_templates\\.py)$"
+files = "^(ansible/roles/containers/[^/]+/templates/docker-compose\\.yml\\.j2|ansible/templates/[^/]+\\.yml\\.j2|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/validate/compose_templates\\.py)$"
 
 # Structurally validate the Home Assistant config (pure Python, no Docker): YAML syntax,
 # duplicate keys, broken !include targets, and a syntax parse-check of inline + custom_templates
@@ -152,10 +152,10 @@ files = "^(ansible/roles/k8s/home-assistant/(templates/config|files)/.*|scripts/
 [[repos.hooks]]
 id = "validate-grafana-dashboards"
 name = "Validate Grafana dashboard datasource uids"
-entry = "uv run python scripts/validate/validate_grafana_dashboards.py"
+entry = "uv run python scripts/validate/grafana_dashboards.py"
 language = "system"
 pass_filenames = false
-files = "^(ansible/roles/k8s/claude-otel/files/dashboards/.*\\.json|ansible/roles/k8s/claude-otel/templates/grafana\\.yaml\\.j2|scripts/validate/validate_grafana_dashboards\\.py)$"
+files = "^(ansible/roles/k8s/claude-otel/files/dashboards/.*\\.json|ansible/roles/k8s/claude-otel/templates/grafana\\.yaml\\.j2|scripts/validate/grafana_dashboards\\.py)$"
 
 # Render the high-value NON-compose YAML config templates with stubbed vars and assert each
 # parses — the render-then-parse guard the compose templates already get
@@ -168,12 +168,12 @@ files = "^(ansible/roles/k8s/claude-otel/files/dashboards/.*\\.json|ansible/role
 [[repos.hooks]]
 id = "validate-config-templates"
 name = "Validate rendered config templates"
-entry = "uv run python scripts/validate/validate_config_templates.py"
+entry = "uv run python scripts/validate/config_templates.py"
 language = "system"
 pass_filenames = false
 # group_vars/all.yml is in scope because the validator renders with it (ALL_VARS) — an
 # edit there can change what these templates render to, same as the compose hook's scope.
-files = "^(ansible/inventory/group_vars/all\\.yml|scripts/validate/validate_config_templates\\.py)$"
+files = "^(ansible/inventory/group_vars/all\\.yml|scripts/validate/config_templates\\.py)$"
 
 # Same render-then-parse guard as the two above, for the k8s manifests the k3s migration adds.
 # Also parses the YAML *embedded* in ConfigMap/Secret values — the manifest wrapping Traefik's
@@ -184,12 +184,12 @@ files = "^(ansible/inventory/group_vars/all\\.yml|scripts/validate/validate_conf
 [[repos.hooks]]
 id = "validate-k8s-manifests"
 name = "Validate rendered k8s manifest templates"
-entry = "uv run python scripts/validate/validate_k8s_manifests.py"
+entry = "uv run python scripts/validate/k8s_manifests.py"
 language = "system"
 pass_filenames = false
 # daniel-box's host_vars is in scope because the validator renders each role with that host's
 # real containers_list entry (port, hostname) rather than a stub.
-files = "^(ansible/roles/k8s/.*\\.j2|ansible/templates/ingressroute\\.yml\\.j2|ansible/inventory/(group_vars/all|host_vars/daniel-box)\\.yml|scripts/validate/validate_k8s_manifests\\.py)$"
+files = "^(ansible/roles/k8s/.*\\.j2|ansible/templates/ingressroute\\.yml\\.j2|ansible/inventory/(group_vars/all|host_vars/daniel-box)\\.yml|scripts/validate/k8s_manifests\\.py)$"
 
 # Render every Jinja-templated shell script (*.sh.j2) with stubbed vars and lint the OUTPUT
 # (bash -n + shellcheck) — the same render-then-lint pattern as validate-compose-templates /
@@ -201,12 +201,12 @@ files = "^(ansible/roles/k8s/.*\\.j2|ansible/templates/ingressroute\\.yml\\.j2|a
 [[repos.hooks]]
 id = "validate-shell-templates"
 name = "Validate rendered shell templates (bash -n + shellcheck)"
-entry = "uv run python scripts/validate/validate_shell_templates.py"
+entry = "uv run python scripts/validate/shell_templates.py"
 language = "system"
 pass_filenames = false
 # group_vars/all.yml is in scope because the validator renders with it (ALL_VARS) — an
 # edit there can change what the rendered scripts contain.
-files = "^(ansible/roles/.*\\.sh\\.j2|ansible/inventory/group_vars/all\\.yml|scripts/validate/validate_shell_templates\\.py)$"
+files = "^(ansible/roles/.*\\.sh\\.j2|ansible/inventory/group_vars/all\\.yml|scripts/validate/shell_templates\\.py)$"
 
 # Lint the GitHub Actions workflows themselves. `check-yaml` above only proves they PARSE —
 # nothing until now checked that a job's `needs:` names a job that exists, that a `${{ }}`

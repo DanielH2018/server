@@ -1,6 +1,6 @@
 """Guards on the artifacts ConfigMap, which carries an embedded Python program.
 
-validate_k8s_manifests.py asserts every manifest parses as YAML. That is not enough for this
+validate/k8s_manifests.py asserts every manifest parses as YAML. That is not enough for this
 one, and the gap put a crash-looping pod in the cluster: an indented Jinja comment between two
 keys pushed the second key inside the first's `|` block scalar, so the rendered ConfigMap held
 ONE key whose value was the script with `known_services.json: |` appended to it. That parses as

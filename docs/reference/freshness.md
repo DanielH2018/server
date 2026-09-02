@@ -19,7 +19,7 @@ generated_sha: 34840fd7
 | [b2-transaction-cap-monitoring-gaps.md](../b2-transaction-cap-monitoring-gaps.md) | 2026-08-24 | 8 | 8 | `ansible/roles/setup/k3s/defaults/main.yml` (2026-09-02) |
 | [networkpolicy-slice-answers.md](../networkpolicy-slice-answers.md) | 2026-09-01 | 18 | 7 | `ansible/roles/setup/k3s/tasks/agent.yml` (2026-09-02) |
 | [kopia-disaster-recovery.md](../kopia-disaster-recovery.md) | 2026-08-30 | 12 | 6 | `docs/longhorn-disaster-recovery.md` (2026-09-02) |
-| [gitops-argo-flux-evaluation.md](../gitops-argo-flux-evaluation.md) | 2026-09-01 | 13 | 5 | `scripts/validate/validate_k8s_manifests.py` (2026-09-02) |
+| [gitops-argo-flux-evaluation.md](../gitops-argo-flux-evaluation.md) | 2026-09-01 | 13 | 5 | `scripts/validate/k8s_manifests.py` (2026-09-02) |
 | [adr/0001-mkdocs-site-with-generated-reference.md](../adr/0001-mkdocs-site-with-generated-reference.md) | 2026-08-25 | 4 | 4 | `scripts/docs/service_catalog.py` (2026-09-02) |
 | [k3s-etcd-restore.md](../k3s-etcd-restore.md) | 2026-08-31 | 6 | 4 | `ansible/k3s-bringup.yml` (2026-09-02) |
 | [b2-api-drain-scoping.md](../b2-api-drain-scoping.md) | 2026-08-22 | 4 | 3 | `scripts/secrets_mgmt/secret_rotation.py` (2026-09-02) |

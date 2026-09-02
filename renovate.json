@@ -331,7 +331,7 @@
       "enabled": false
     },
     {
-      "description": "shellcheck-py is pinned TWICE by design \u2014 prek.toml rev (github-tags, hook env) and pyproject.toml `shellcheck-py==` (pypi, validate_shell_templates' uv env) \u2014 and the two must move in lockstep (scripts/tests/test_renovate_managers.py asserts it). One group = one PR touching both files, so neither PR is ever blocked by the lockstep test seeing half an update. Overrides the prek-hooks group above for this package.",
+      "description": "shellcheck-py is pinned TWICE by design \u2014 prek.toml rev (github-tags, hook env) and pyproject.toml `shellcheck-py==` (pypi, validate.shell_templates' uv env) \u2014 and the two must move in lockstep (scripts/tests/test_renovate_managers.py asserts it). One group = one PR touching both files, so neither PR is ever blocked by the lockstep test seeing half an update. Overrides the prek-hooks group above for this package.",
       "matchPackageNames": [
         "shellcheck-py/shellcheck-py",
         "shellcheck-py"

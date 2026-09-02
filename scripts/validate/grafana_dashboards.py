@@ -6,7 +6,7 @@ pointing at a wrong/empty datasource uid renders a silent "No data" with no erro
 exactly the stale-uid class the grafana role CLAUDE.md warns about (the lingering IH0jqv6nz
 uid). This guard is deterministic over all provisioned dashboards.
 
-Run directly (`python3 scripts/validate/validate_grafana_dashboards.py`) or via the
+Run directly (`python3 scripts/validate/grafana_dashboards.py`) or via the
 `validate-grafana-dashboards` prek hook. Exits non-zero on any unresolved datasource uid.
 """
 

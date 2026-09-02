@@ -21,7 +21,7 @@
 # THE ROLE WAS CALLED `seed-volume` UNTIL 2026-09-01, and git history before that name change
 # is under that path. The rename came one change after the seeding was deleted, deliberately:
 # the name is read by gitops_deploy's deploy_logic.py, land_tags.py,
-# validate_k8s_manifests.SKIP_ROLES, group_vars' dry-run-unsupported list and two skills, so
+# validate.k8s_manifests.SKIP_ROLES, group_vars' dry-run-unsupported list and two skills, so
 # moving it belonged in a reviewable change of its own rather than riding along with a
 # 1,100-line deletion. `seed` is still the right word elsewhere in this tree — see
 # ansible/seed_volume_backup.yml, which really does seed a claim, from a Longhorn backup.

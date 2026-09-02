@@ -227,7 +227,7 @@ def assemble_config(role_dir: Path, dest: Path) -> None:
     """
     dest.mkdir(parents=True, exist_ok=True)
     # templates/config/, not templates/: the role's templates/ root holds k8s manifests, and
-    # validate_k8s_manifests.py parses every .j2 it finds there as YAML.
+    # validate/k8s_manifests.py parses every .j2 it finds there as YAML.
     templates = role_dir / "templates" / "config"
     files = role_dir / "files"
     for tpl in _TEMPLATE_FILES:

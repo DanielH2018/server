@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Shared helpers for the render-guard scripts and other Ansible-inventory readers.
 
-Used by ``validate_compose_templates.py``, ``validate_config_templates.py``, and
-``validate_shell_templates.py``, plus the other scripts that read the same Ansible
+Used by ``validate/compose_templates.py``, ``validate/config_templates.py``, and
+``validate/shell_templates.py``, plus the other scripts that read the same Ansible
 inventory.
 
 Each render guard renders Jinja templates with stubbed variables and asserts the output is valid

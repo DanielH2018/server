@@ -6,7 +6,7 @@ with a full pod spec and got only the justification. Its exemption reads "reason
 seccomp/AppArmor for rootless BuildKit", and that reason is narrower than the gate it excuses —
 joining `_UNCOVERED_ROLES` also silently waives uid, `privileged`, `capabilities.add`, hostPath
 and host namespaces, none of which the sentence mentions (2026-08-23b review M17). The role is
-also in `validate_k8s_manifests.SKIP_ROLES`, so the manifest validator does not see it either.
+also in `validate.k8s_manifests.SKIP_ROLES`, so the manifest validator does not see it either.
 
 The manifest is sound today: uid 1000, not privileged, no added capabilities, no hostPath,
 `automountServiceAccountToken: false`. Every one of those is prose with no executable backing,
@@ -30,7 +30,7 @@ from _helpers import REPO
 _REPO = REPO
 sys.path.insert(0, str(_REPO / "scripts"))
 
-from validate_k8s_manifests import (  # noqa: E402 — needs the path insert above
+from validate.k8s_manifests import (  # noqa: E402 — needs the path insert above
     ALL_VARS,
     ANSIBLE,
     BASE_CONTEXT,

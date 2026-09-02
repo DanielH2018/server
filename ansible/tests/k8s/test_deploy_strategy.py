@@ -15,7 +15,7 @@ Two guards:
     serve — which turns a rolling update into a short outage while looking like the opposite.
     Recreate workloads are exempt: their gap is the point, and a probe does not close it.
 
-Rendering goes through validate_k8s_manifests' own machinery (via _k8s_render), so this
+Rendering goes through validate.k8s_manifests' own machinery (via _k8s_render), so this
 cannot drift from what that validator considers a renderable manifest.
 """
 

@@ -1,6 +1,6 @@
-"""Tests for validate_config_templates — the non-compose config-template render guard."""
+"""Tests for validate.config_templates — the non-compose config-template render guard."""
 
-import validate_config_templates as v
+from validate import config_templates as v
 
 
 def test_all_real_config_templates_render_to_valid_yaml():

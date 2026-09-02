@@ -5,9 +5,9 @@ normally — nothing on disk resolves that name until something loads it by path
 test file used to carry its own `importlib.util.spec_from_file_location` copy of that
 dance; this collapses it to one load per script, done here at collection time (pytest
 imports conftest.py before it collects any test module in this directory), and
-registers each into `sys.modules` so a plain `import probe` / `import postflight` /
-`import validate_k8s_manifests as vkm` in a test file resolves to this same object —
-standard `importlib` usage, not a special pytest hook.
+registers each into `sys.modules` so a plain `import probe` / `import postflight` in a
+test file resolves to this same object — standard `importlib` usage, not a special pytest
+hook.
 """
 
 import importlib.util
@@ -39,12 +39,12 @@ def _load_by_path(name, filename):
 probe = _load_by_path("probe", "diagnostics/probe.py")
 
 postflight = _load_by_path("postflight", "diagnostics/postflight.py")
-validate_compose_templates = _load_by_path(
-    "validate_compose_templates", "validate/validate_compose_templates.py"
-)
-validate_k8s_manifests = _load_by_path(
-    "validate_k8s_manifests", "validate/validate_k8s_manifests.py"
-)
+
+# The validators need no load here. `scripts/` is on pythonpath, `validate/` is a namespace
+# package under it, and `from validate.k8s_manifests import ...` is spelled the same way by
+# every caller — so normal import machinery caches one object under one sys.modules key.
+# They were loaded by path while the flat name `validate_k8s_manifests` was reachable from
+# two pythonpath entries, which is the second copy this replaced.
 
 
 # Fake resolver: maps container name -> a recognizable IP. A wrong container name

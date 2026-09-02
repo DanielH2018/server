@@ -14,7 +14,7 @@ All of it renders into one Secret (`config-secret.yaml.j2`), which mounts read-o
 
 - `templates/config/{settings,bookmarks,widgets}.yaml.j2` + `custom.css.j2` — moved here
   from the retired Docker role, which used to own them. They sit one level down because
-  `validate_k8s_manifests.py` parses every `templates/*.j2` as a manifest, and `custom.css`
+  `validate/k8s_manifests.py` parses every `templates/*.j2` as a manifest, and `custom.css`
   is not YAML.
 - `templates/services.yaml.j2`, `docker.yaml.j2`, `kubernetes.yaml.j2` — always this role's
   own. `services.yaml` is the tile list; edit it here and nowhere else.

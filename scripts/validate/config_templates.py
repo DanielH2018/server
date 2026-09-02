@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Render the high-value NON-compose YAML config templates (monitoring) and assert they parse.
 
-The container *compose* templates already have this guard (validate_compose_templates.py), but
+The container *compose* templates already have this guard (validate/compose_templates.py), but
 the bind-mounted *config* templates did not — yet they re-render on every deploy of the
 monitoring-critical services below. A Jinja indentation bug here is exactly the class
 ``check-yaml`` and ``ansible-lint`` miss (they don't render ``.j2``), so it would pass CI and
 only surface at deploy. The authelia/traefik entries this list once carried retired at E7
 (2026-08-13, the Docker edge's removal) — the k8s edge's manifests get the equivalent guard from
-``validate_k8s_manifests.py``.
+``validate/k8s_manifests.py``.
 
 Structural check only: secrets and host vars are stubbed (StubUndefined), so no SOPS access is
 needed. Run directly or via the ``validate-config-templates`` prek hook. Exits non-zero on any

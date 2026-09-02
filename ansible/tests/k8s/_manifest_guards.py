@@ -10,7 +10,7 @@ from pathlib import Path
 import yaml
 from jinja2 import Environment, FileSystemLoader
 
-from validate_k8s_manifests import ansible_bool
+from validate.k8s_manifests import ansible_bool
 from _helpers import ANSIBLE
 
 

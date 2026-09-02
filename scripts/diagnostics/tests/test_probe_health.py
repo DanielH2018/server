@@ -430,7 +430,7 @@ def _resolved():
     Cached: this renders every role in the tree (~3s), six tests read it, and until 2026-09-01
     each paid for its own render. The tree does not change under a test run.
     """
-    import validate_k8s_manifests as validator
+    from validate import k8s_manifests as validator
 
     roles = sorted(d.name for d in validator.K8S_ROLES.iterdir() if d.is_dir())
     out = {}
@@ -506,7 +506,7 @@ def test_resolver_respects_the_validators_skip_roles():
     """volume-claim and image-builder render only with vars a CALLING role passes, so rendering
     them standalone produces stub-filled manifests. Widening past that boundary would invent
     workload names and report them MISSING."""
-    import validate_k8s_manifests as validator
+    from validate import k8s_manifests as validator
 
     for role in sorted(validator.SKIP_ROLES):
         assert probe_health.role_workload_targets(role, _DEFAULT_NS) is None, role

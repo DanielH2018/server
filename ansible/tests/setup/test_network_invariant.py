@@ -8,7 +8,7 @@ Otherwise a service on a brand-new network deploys fine on an EXISTING host (the
 there) but fails only on a fresh-host bring-up — this catches it pre-deploy instead.
 Service-INTERNAL nets (pihole_internal, scrutiny_internal, crowdsec-db) are declared inside their
 own compose and never appear in host_vars, so they're correctly out of scope here. Mirrors
-validate_compose_templates' host_vars-driven model.
+validate.compose_templates' host_vars-driven model.
 
 E7 (2026-08-13) retired the Docker edge (traefik + authelia containers): the guards that used to
 check Traefik joined every routed service's network (`_traefik_networks`,

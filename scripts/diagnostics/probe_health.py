@@ -398,10 +398,10 @@ def _render_context():
 
         # A directly-invoked script gets only its own directory on sys.path, and pyproject's
         # `pythonpath` is a pytest setting — so the cron and the notifier need this insert.
-        # Inserting the validate/ directory itself (rather than scripts/) keeps the module
-        # under the same name pytest imports it as, so there is one module object, not two.
-        _sys.path.insert(0, str(REPO / "scripts" / "validate"))
-        import validate_k8s_manifests as validator
+        # `scripts/` rather than `scripts/validate/`: the package-qualified name is the same
+        # one pytest imports, so there is one module object however it is reached.
+        _sys.path.insert(0, str(REPO / "scripts"))
+        from validate import k8s_manifests as validator
 
         base = {
             **validator.BASE_CONTEXT,
@@ -433,7 +433,7 @@ def role_workload_targets(role, default_namespace):
     prowlarr) deploy a workload named after the tag PLUS siblings that went unchecked.
 
     The rendered manifests are the only source that cannot drift from what a deploy applies, so
-    this reuses validate_k8s_manifests' own render machinery rather than a second renderer or a
+    this reuses validate.k8s_manifests' own render machinery rather than a second renderer or a
     hand-written role->workload table. `namespace` comes from each object's own metadata,
     falling back to `default_namespace` for the majority that omit it — the same rule
     `kubectl apply -f` follows.

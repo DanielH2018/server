@@ -4,7 +4,7 @@
 #
 # ansible-lint does NOT catch the failure mode this guards: Jinja whitespace /
 # indentation corruption that renders to malformed YAML and silently fails to
-# recreate the container. scripts/validate/validate_compose_templates.py renders every
+# recreate the container. scripts/validate/compose_templates.py renders every
 # service's compose template (mirroring Ansible's trim/lstrip_blocks) and parses
 # the YAML — it is the only thing that catches those bugs before CI. This wires
 # it into the edit loop so the failure surfaces in-session, not on push.
@@ -45,7 +45,7 @@ case "$file_path" in
     */ansible/inventory/host_vars/*.yml) run_compose=1 ;;
     */ansible/inventory/group_vars/all.yml) run_compose=1 run_config=1 run_shell=1 ;;
     # The per-file config arm listed authelia, traefik, prometheus and grafana templates,
-    # every one of which retired with its Docker role. validate_config_templates.py's own
+    # every one of which retired with its Docker role. config_templates.py's own
     # CONFIG_TEMPLATES list is empty for the same reason and says so ("may be empty between
     # config-bearing eras"). group_vars/all.yml above still triggers the config render, so
     # re-adding a path here is all a future config-bearing template needs.
@@ -62,9 +62,9 @@ repo_root=$(git -C "$(dirname "$file_path")" rev-parse --show-toplevel 2>/dev/nu
 [[ -z "$repo_root" ]] && repo_root="$PRIMARY"
 
 ran=""
-for pair in "$run_compose:validate_compose_templates" \
-            "$run_config:validate_config_templates" \
-            "$run_shell:validate_shell_templates"; do
+for pair in "$run_compose:compose_templates" \
+            "$run_config:config_templates" \
+            "$run_shell:shell_templates"; do
     flag="${pair%%:*}" script="${pair#*:}"
     [[ "$flag" == "1" ]] || continue
     # scripts/validate/, not scripts/ — the validators moved there in #443 and this line kept the

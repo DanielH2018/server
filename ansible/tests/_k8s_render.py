@@ -4,7 +4,7 @@ Several guards can only be written against rendered manifests: a PVC's name and 
 securityContext are both Jinja expressions in the template, so a text scan sees `{{ ... }}` and
 silently matches nothing — which reads as "no findings" rather than "no coverage".
 
-Rendering goes through validate_k8s_manifests' own machinery rather than a second stub set, so
+Rendering goes through validate.k8s_manifests' own machinery rather than a second stub set, so
 what a test considers a manifest cannot drift from what that validator does.
 """
 
@@ -18,7 +18,7 @@ from _helpers import REPO
 _REPO = REPO
 sys.path.insert(0, str(_REPO / "scripts"))
 
-from validate_k8s_manifests import (  # noqa: E402 — needs the path insert above
+from validate.k8s_manifests import (  # noqa: E402 — needs the path insert above
     ALL_VARS,
     ANSIBLE,
     BASE_CONTEXT,

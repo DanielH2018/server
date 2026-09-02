@@ -16,8 +16,9 @@ import re
 
 import pytest
 
-import validate_k8s_manifests as vkm
 from typing import Any
+
+from validate import k8s_manifests as vkm
 
 
 POD_SPEC = """\
