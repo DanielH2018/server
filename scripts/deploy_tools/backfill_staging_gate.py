@@ -126,6 +126,76 @@ class Run:
     note: str
 
 
+@dataclass
+class TickRun:
+    """One REAL gated tick, as `gitops_deploy.record_staging_tick` writes it.
+
+    A separate record and a separate file from `Run`, because the two are not interchangeable.
+    A Run gates the services a commit CHANGED; a tick gates the narrower set the deployer
+    PROMOTED, and only when one arrives on its own schedule. Pooling them would put a
+    differently-scoped sample into the streak that decides entry-condition part 1, and would
+    break `--since-ledger`, which plans its next window from the newest row in its own file.
+
+    Attributes:
+        at: local ISO timestamp of the tick.
+        sha: the commit the gate was asked about.
+        tags: the promoted services it was asked about, comma-joined.
+        verdict: `staging_verdict`'s word — pass, rejected or no_verdict.
+        outcome: the same vocabulary `classify` returns, from `staging_tick_outcome`.
+    """
+
+    at: str
+    sha: str
+    tags: str
+    verdict: str
+    outcome: str
+
+
+def load_tick_ledger(path: Path) -> list[TickRun]:
+    """The tick records in `path`, oldest first. A missing file is an empty ledger.
+
+    A malformed line is skipped rather than fatal: this ledger is written by the deployer on a
+    path that may not break a prod deploy, so a half-written row is a possible end state and
+    must not take the report down with it.
+    """
+    if not path.exists():
+        return []
+    records = []
+    for line in path.read_text().splitlines():
+        if not line.strip():
+            continue
+        try:
+            records.append(TickRun(**json.loads(line)))
+        except json.JSONDecodeError, TypeError:
+            continue
+    return records
+
+
+def report_ticks(ticks: list[TickRun]) -> list[str]:
+    """The report lines for the tick ledger. Never affects the exit code.
+
+    Part 1's verdict is a property of the backfill alone, so these numbers are shown and not
+    judged. What they answer is the question that outlives the entry condition: how often the
+    ARMED gate stops a prod deploy, and how often it cannot be asked at all.
+    """
+    if not ticks:
+        return ["  no real gated tick recorded yet"]
+    counts = {
+        name: sum(1 for t in ticks if t.outcome == name)
+        for name in (OK, FALSE_FAILURE, NEEDS_TRIAGE)
+    }
+    lines = [f"  ticks={len(ticks)}  newest {ticks[-1].at}"]
+    lines += [
+        f"  {name:<14} {counts[name]}" for name in (OK, FALSE_FAILURE, NEEDS_TRIAGE)
+    ]
+    if counts[NEEDS_TRIAGE]:
+        lines.append(
+            f"  ! {counts[NEEDS_TRIAGE]} rejection(s) — each one held a prod deploy back and "
+            f"needs attributing to the gate or to the change"
+        )
+    return lines
+
+
 def run_git(*args: str) -> str:
     return subprocess.run(
         ["git", *args], capture_output=True, text=True, check=True
@@ -375,6 +445,13 @@ def main() -> int:
         "--jsonl", type=Path, help="append one JSON record per run to this file"
     )
     ap.add_argument(
+        "--tick-jsonl",
+        type=Path,
+        help="read (never write) the ledger the deployer records real gated ticks in, and "
+        "report it as a second section. Written by gitops_deploy.record_staging_tick; the "
+        "path is gitops_deploy_staging_tick_ledger in the role's defaults.",
+    )
+    ap.add_argument(
         "--dry-run",
         action="store_true",
         help="list the commits and tags that would be gated, and run nothing. Exits 0 for a runnable plan — that is not the entry condition, which only a real run evaluates",
@@ -482,6 +559,12 @@ def main() -> int:
         print(f"  {name:<14} {sum(1 for r in runs if r.outcome == name)}")
     for reason in reasons:
         print(f"  ! {reason}")
+
+    if args.tick_jsonl:
+        print("\nreal gated ticks (not part 1 evidence — different scope, own file):")
+        for line in report_ticks(load_tick_ledger(args.tick_jsonl)):
+            print(line)
+
     return CONDITION_MET if verdict == "MET" else CONDITION_NOT_MET
 
 

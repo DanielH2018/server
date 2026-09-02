@@ -68,6 +68,7 @@ from deploy_logic import (
     STAGING_SKIPPED,
     staging_blocks,
     staging_scope,
+    staging_tick_outcome,
     staging_verdict,
     staging_verdict_summary,
 )
@@ -512,6 +513,13 @@ STAGING_GATE_TIMEOUT_S = int(C.get("STAGING_GATE_TIMEOUT_S", "600"))
 STAGING_EXPECT_TIMEOUT_S = int(C.get("STAGING_EXPECT_TIMEOUT_S", "120"))
 
 STAGING_ALERT_FILE = "/var/lib/gitops-deploy/staging_alerted_sha"
+
+# Where a real gated tick's verdict is recorded. Deliberately NOT the backfill ledger: that file
+# is planned from — `backfill_staging_gate.py --since-ledger` reads its newest row to build the
+# next window — so a tick row in it would send the hourly ratchet to a window it cannot run.
+# `gitops_deploy_staging_tick_ledger` in the role's defaults is the same path, tied by
+# test_the_tick_ledger_constant_matches_the_ansible_default.
+STAGING_TICK_LEDGER = "/var/lib/gitops-deploy/staging-ticks.jsonl"
 
 # Slice 4. Whether a staging REJECTION stops the prod deploy, or is only logged and alerted.
 # A SEPARATE switch from STAGING_GATE, and off by default even where the gate is on: the entry
@@ -1086,6 +1094,38 @@ def k8s_image_diff(local: str, origin: str, svc: str) -> str:
     )
 
 
+def record_staging_tick(sha: str, gated: set[str], verdict: str) -> None:
+    """Append this tick's verdict to the tick ledger. Never raises.
+
+    Args:
+        sha: the commit the gate was asked about.
+        gated: the services it was asked about, which is the promoted set, not the changed set.
+        verdict: one of `staging_verdict`'s words, or STAGING_SKIPPED.
+
+    A tick that measured nothing writes nothing — `staging_tick_outcome` returns None for
+    SKIPPED, and the tick runs every ten minutes, so recording those would bury the real samples.
+
+    Every failure is swallowed. This runs inside `consult_staging`, which may not break a prod
+    deploy for any reason; a full disk or a bad permission on the ledger must cost the
+    measurement, never the deploy.
+    """
+    outcome = staging_tick_outcome(verdict)
+    if outcome is None:
+        return
+    record = {
+        "at": datetime.now(CHICAGO).isoformat(timespec="seconds"),
+        "sha": sha,
+        "tags": ",".join(sorted(gated)),
+        "verdict": verdict,
+        "outcome": outcome,
+    }
+    try:
+        with open(STAGING_TICK_LEDGER, "a") as handle:
+            handle.write(json.dumps(record) + "\n")
+    except OSError as exc:
+        log(f"could not record the staging tick in {STAGING_TICK_LEDGER}: {exc}")
+
+
 def consult_staging(services: set[str], origin: str) -> str:
     """Ask the staging cluster about this commit, and return the one-word verdict.
 
@@ -1172,7 +1212,9 @@ def consult_staging(services: set[str], origin: str) -> str:
             origin,
             f"🧪 gitops-deploy: {summary} for `{origin[:8]}`. {tail}",
         )
-    return staging_verdict(deploy_rc, expect_rc)
+    verdict = staging_verdict(deploy_rc, expect_rc)
+    record_staging_tick(origin, gated, verdict)
+    return verdict
 
 
 def consume_staging_override() -> bool:

@@ -493,6 +493,42 @@ outnumber true ones, and staging causes them rather than the change under test.
 
 ---
 
+## After the flip: the tick ledger
+
+The entry condition measured the gate before it was armed. This measures it after, and the two
+questions are different: part 1 asked whether the gate is trustworthy enough to block on, and
+this asks how often the armed gate actually stops a prod deploy.
+
+`consult_staging` appends one row per real gated tick to
+`gitops_deploy_staging_tick_ledger` (`/var/lib/gitops-deploy/staging-ticks.jsonl`), carrying the
+SHA, the promoted services, the verdict and the ledger outcome. `staging-backfill.service`
+passes that file to `backfill_staging_gate.py --tick-jsonl`, so the hourly ratchet's report ends
+with a second section counting it. Reading it is the only thing the backfill does with it — the
+file is written by the deployer and never by the harness.
+
+**It is a separate file from the backfill ledger, and must stay one.** Two reasons, either
+sufficient. `--since-ledger` plans its next window as `<newest recorded sha>..master`, so a tick
+row in that file would send the hourly ratchet to a window it cannot run. And the two measure
+runs of different scope — a backfill gates the services a commit *changed*, a tick gates the
+narrower set the deployer *promoted* — so pooling them would put the wrong kind of sample into
+the streak that decides part 1. `test_the_two_ledgers_are_different_files` holds the split.
+
+**A tick that measured nothing writes nothing.** `consult_staging` returns SKIPPED when the gate
+is off and when the tick touched no staging service, and it runs every ten minutes; recording
+those would bury the real samples. `staging_tick_outcome` returns None for SKIPPED, and
+`test_a_skipped_tick_appends_nothing` is the half of the pair that proves it.
+
+**A rejection is never attributed automatically.** `pass` records as `pass` and NO VERDICT as
+`false-failure` — the gate could not be asked, which is never a property of the change — but a
+rejection records as `needs-triage`, because it is either the gate misfiring or a real defect
+and only an operator can tell which. The report flags the count; nothing else acts on it.
+
+The recorder cannot break a prod deploy. It runs inside `consult_staging`, whose contract is
+that no failure path may stop the deploy, so a ledger it cannot write costs the measurement and
+nothing else.
+
+---
+
 ## Prerequisites this spec does not own
 
 - **`initial_setup.yml` does not work against `daniel-stage`** (`staging-cluster.md`, Sequencing).
