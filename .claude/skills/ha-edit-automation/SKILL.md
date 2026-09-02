@@ -42,7 +42,7 @@ Tunable formulas (fan curve, lux gate, wake ramp, hysteresis, caps) live in
 and time reads (`states()`, `now()`) stay in the YAML caller and are passed in as arguments.
 
 1. Add/extend the macro in `custom_templates/fan.jinja` / `lighting.jinja` (or a new `*.jinja` —
-   the whole `custom_templates/` dir is copied, so a new file ships automatically).
+   a new file also goes in `home_assistant_template_files` in `defaults/main.yml`; the validator fails until it does).
 2. Add a test in `tests/` (e.g. `test_fan_macros.py`, `test_lighting_macros.py`) via the
    `jinja_harness.py` env. **HA's `round` is banker's rounding** (`forgiving_round`, half-to-even)
    — the harness mirrors it and the fan curve hits `.5` midpoints by design, so test the midpoints.

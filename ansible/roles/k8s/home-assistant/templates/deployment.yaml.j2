@@ -57,8 +57,7 @@ spec:
               install -m 644 {% for name in home_assistant_script_files %}/sc/{{ name }} {% endfor %}/config/scripts/ &&
               mkdir -p /config/custom_templates &&
               find /config/custom_templates -maxdepth 1 -name '*.jinja' -delete &&
-              install -m 644 /ct/diagnostics.jinja /ct/fan.jinja /ct/lighting.jinja
-              /ct/ventilation.jinja /config/custom_templates/
+              install -m 644 {% for name in home_assistant_template_files %}/ct/{{ name }} {% endfor %}/config/custom_templates/
           # As PUID, not root: the seeded /config is uid-1000-owned and this container drops
           # ALL caps (no DAC_OVERRIDE), so only the owner can overwrite the previous copies.
           # Root-with-no-caps failed exactly there on first boot ("can't create: File
