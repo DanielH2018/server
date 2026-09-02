@@ -61,8 +61,12 @@ that no longer exists. `k8s/terraria` is the sibling this role copies.
 - **9001 (supervisord) is deliberately unpublished.** The archived compose exposed it; it is
   unauthenticated remote process control inside the container. `SUPERVISOR_HTTP` is off.
 - **2458 is unpublished too** — crossplay backend, only bound with `CROSSPLAY=true`.
-- The image prunes `/config/backups` at `BACKUPS_MAX_AGE=3` days, so the 385 M of 2025 zips
-  that came over in the seed age out on their own; the originals stay on daniel-server.
+- The image's hourly world zips go to `/opt/valheim/backups` on the nobackup claim
+  (`BACKUPS_DIRECTORY`), pruned at `BACKUPS_MAX_AGE=3` days. At the default `/config/backups`
+  they sat on the backed-up claim, and since a zip shares no bytes with the previous one every
+  weekly Longhorn backup re-uploaded the whole three-day rotation — 2.2 G a week, 5.0 G of a
+  7.6 G B2 bucket by 2026-09-02, which tripped the storage-cap alert. The 385 M of 2025 zips
+  that came over in the seed aged out under the same rule; the originals stay on daniel-server.
 - cloudflare-ddns publishes `valheim.<domain>` direct/unproxied (game traffic cannot ride
   Cloudflare's HTTP proxy) — in **both** the k8s role and the Docker rollback role.
 

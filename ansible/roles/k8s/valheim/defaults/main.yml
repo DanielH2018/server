@@ -27,9 +27,10 @@ valheim_k8s_claim: valheim-config
 valheim_k8s_size: 5Gi
 valheim_k8s_storage_class: longhorn
 # Seeded from the Docker copy that has sat idle on daniel-server since the world's last save
-# (2025-11-22). The whole directory goes over, config/backups included: the image's own
-# rotation (BACKUPS_MAX_AGE=3 days) prunes those 385 M of 2025 zips on its first cycle, so
-# the backed-up volume self-cleans rather than needing a filtered copy. Nothing is moved —
+# (2025-11-22). The whole directory came over, config/backups included; the image's own
+# rotation (BACKUPS_MAX_AGE=3 days) pruned those 385 M of 2025 zips on its first cycle.
+# The hourly zips now go to /opt/valheim/backups on the nobackup claim (BACKUPS_DIRECTORY in
+# the deployment), so this claim carries only the world and the lists. Nothing is moved —
 # the originals stay on daniel-server as the rollback.
 # The files are root-owned but world-readable (644/755), so unlike terraria's 600 worlds
 # this needs no sudo staging; the seed pod's `tar -p --numeric-owner` restores uid 0, which

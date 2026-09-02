@@ -1,0 +1,136 @@
+---
+# Retire the seed backups that seed_volume_backup.yml created, once the rotation covers them.
+#
+# WHY THEY NEED RETIRING. A seed carries no RecurringJob label, so no job's `retain` ever counts
+# it and no job ever prunes it — retention is per job, over that job's own backups. Every seed is
+# therefore stranded by construction, and the orphan reaper leaves it alone too: a backup with
+# no job label reads as the current tier's own. On 2026-09-02 the eleven seeds from the 16 MiB
+# migration held 5.4 G nominal against a 10 G B2 storage cap, valheim-config's alone 1.76 G.
+#
+# THE SAFETY CONDITION. A seed is the only copy a volume has until its weekday shard has run,
+# and one shard run is not coverage — the health check needs the rotation, not a point in time.
+# So a seed goes only when its volume holds at least `drop_seed_floor` Completed backups that DO
+# carry a RecurringJob label. The floor defaults to the shard jobs' retain (2), which is the
+# state the rotation reaches on its own; the seed is then surplus to what retain would keep.
+#
+# COST. Each Longhorn backup deletion walks the volume's whole block tree, about 1.28 B2 Class C
+# transactions per stored block (`probe.py b2-budget` prints the per-volume figure). The eleven
+# seeds above came to ~880 blocks, ~1,130 Class C, against a 2,500/day cap. Check the day's
+# headroom before applying; the dry run lists the volumes so the sum can be read off b2-budget.
+#
+# Usage:
+#   uv run ansible-playbook ansible/drop_seed_backups.yml -i ansible/inventory/hosts.ini
+#   uv run ansible-playbook ansible/drop_seed_backups.yml -i ansible/inventory/hosts.ini \
+#     -e drop_seed_apply=true [-e drop_seed_claim=valheim-config]
+#
+# Dry run by default: it prints what it would delete and exits. Pass drop_seed_claim to retire
+# one claim's seed, which is how the spend is paced when the whole set does not fit in a day.
+- name: Retire seed backups the rotation has superseded
+  hosts: daniel-box
+  connection: local
+  gather_facts: false
+  vars:
+    drop_seed_apply: false
+    drop_seed_floor: 2
+  pre_tasks:
+    - name: Load secrets for become
+      community.sops.load_vars:
+        file: "{{ playbook_dir }}/vars/secrets.yml"
+      delegate_to: localhost
+      no_log: true
+
+    - name: Set become password
+      ansible.builtin.set_fact:
+        ansible_become_password: "{{ become_password }}"
+      no_log: true
+
+  tasks:
+    - name: List every backup and the volume it belongs to
+      ansible.builtin.command:
+        argv: [k3s, kubectl, -n, longhorn-system, get, backups.longhorn.io, -o, json]
+      become: true
+      register: drop_seed_backups
+      changed_when: false
+
+    - name: List the volumes that still exist
+      ansible.builtin.command:
+        argv: [k3s, kubectl, -n, longhorn-system, get, volumes.longhorn.io,
+               -o, "custom-columns=NAME:.metadata.name", --no-headers]
+      become: true
+      register: drop_seed_live_volumes
+      changed_when: false
+
+    # A seed on a volume that no longer exists is the migration's old chain, which
+    # drop_migrated_backup_chain.yml owns. A seed here must belong to a live volume, and the
+    # list must be non-empty: an empty list reads as "no volume is live", which would make every
+    # seed look orphaned rather than superseded, and this play must not decide that.
+    - name: Refuse to run against an unusable volume list
+      ansible.builtin.assert:
+        that: >-
+          drop_seed_live_volumes.stdout_lines | map('trim') | reject('equalto', '')
+          | list | length > 0
+        fail_msg: the live-volume list is empty. Nothing has been deleted.
+
+    - name: Collect the Completed backups
+      ansible.builtin.set_fact:
+        drop_seed_completed: >-
+          {{ (drop_seed_backups.stdout | from_json)["items"]
+             | selectattr('status.volumeName', 'defined')
+             | selectattr('status.state', 'equalto', 'Completed')
+             | list }}
+
+    # A seed is a backup seed_volume_backup.yml made: named seed-<volume>, and carrying no
+    # RecurringJob label. Both are required — the name alone would match a hand-made object,
+    # and the missing label alone would match a backup-probe-* trigger.
+    - name: Narrow to seeds on volumes that still exist
+      ansible.builtin.set_fact:
+        drop_seed_candidates: >-
+          {{ drop_seed_completed
+             | selectattr('metadata.name', 'match', '^seed-')
+             | rejectattr('status.labels.RecurringJob', 'defined')
+             | selectattr('status.volumeName', 'in',
+                          drop_seed_live_volumes.stdout_lines | map('trim') | list)
+             | list }}
+
+    - name: Keep only the requested claim's seed
+      ansible.builtin.set_fact:
+        drop_seed_candidates: >-
+          {{ drop_seed_candidates
+             | selectattr('status.labels.KubernetesStatus', 'defined')
+             | selectattr('status.labels.KubernetesStatus', 'search',
+                          '"pvcName":"' ~ drop_seed_claim ~ '"')
+             | list }}
+      when: drop_seed_claim is defined
+
+    # The floor: the volume's own rotation must hold at least `drop_seed_floor` Completed
+    # backups carrying a RecurringJob label. A seed on a volume below that is still its coverage.
+    - name: Split the seeds into superseded and still-covering
+      ansible.builtin.set_fact:
+        drop_seed_superseded: >-
+          {{ drop_seed_superseded | default([]) + [item.metadata.name] }}
+      loop: "{{ drop_seed_candidates }}"
+      loop_control:
+        label: "{{ item.metadata.name }}"
+      when: >-
+        drop_seed_completed
+        | selectattr('status.volumeName', 'equalto', item.status.volumeName)
+        | selectattr('status.labels.RecurringJob', 'defined')
+        | list | length >= drop_seed_floor
+
+    - name: Report the plan
+      ansible.builtin.debug:
+        msg: >-
+          {{ drop_seed_candidates | length }} seed(s) on live volumes;
+          {{ drop_seed_superseded | default([]) | length }} superseded by at least
+          {{ drop_seed_floor }} rotation backup(s): {{ drop_seed_superseded | default([]) }}.
+          {{ 'Deleting.' if drop_seed_apply | bool
+             else 'Dry run — pass -e drop_seed_apply=true to delete.' }}
+
+    - name: Delete the superseded seeds
+      ansible.builtin.command:
+        argv: [k3s, kubectl, -n, longhorn-system, delete,
+               "backups.longhorn.io/{{ item }}", --ignore-not-found]
+      become: true
+      loop: "{{ drop_seed_superseded | default([]) }}"
+      changed_when: true
+      when: drop_seed_apply | bool
