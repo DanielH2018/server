@@ -4,8 +4,8 @@
 # them.
 #
 # Six callers beyond the baseline, each read from the caller's own template:
-#   promtail        — the DaemonSet that ships every pod's logs here (loki-homelab/templates/
-#                     promtail-daemonset.yaml.j2). Both nodes; a pod peer covers both.
+#   alloy           — the DaemonSet that ships every pod's logs here (loki-homelab/templates/
+#                     alloy-daemonset.yaml.j2). Both nodes; a pod peer covers both.
 #   homelab-mcp     — LOKI_URL (homelab-mcp/templates/deployment.yaml.j2)
 #   monitor-bridge  — LOKI_URL (monitor-bridge/templates/env-secret.yaml.j2)
 #   terraria-stats  — LOKI_URL (terraria-stats/templates/deployment.yaml.j2)
@@ -34,7 +34,7 @@ spec:
     - from:
         - podSelector:
             matchLabels:
-              app: promtail
+              app: alloy
         - podSelector:
             matchLabels:
               app: homelab-mcp

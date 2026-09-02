@@ -8,7 +8,7 @@ files owned by another uid, which is the only reason anyone reaches for root in 
 Both live sites record the lesson in a comment beside the fix, which is why this guard has real
 accept cases rather than synthetic ones:
 
-  * `loki-homelab/templates/promtail-daemonset.yaml.j2` adds DAC_READ_SEARCH — syslog/auth.log
+  * `loki-homelab/templates/alloy-daemonset.yaml.j2` adds DAC_READ_SEARCH — syslog/auth.log
     are owned by the `syslog` user at 640, so root without it cannot read them.
   * `code-server/templates/deployment.yaml.j2` adds CHOWN + DAC_OVERRIDE + FOWNER — a fresh
     claim's root is root:root while the files being copied belong to the pod uid.
@@ -123,7 +123,7 @@ def test_root_dropping_all_that_adds_dac_override_is_clean() -> None:
 
 
 def test_root_dropping_all_that_adds_only_read_search_is_clean() -> None:
-    """promtail's live shape: read-only is enough for a log tailer, so the narrower cap counts."""
+    """The Alloy shipper's live shape: read-only is enough for a log tailer, so the narrower cap counts."""
     doc = """
         securityContext:
           runAsUser: 0

@@ -9,8 +9,8 @@ data:
     auth_enabled: false
     # See the same block in roles/k8s/claude-otel/templates/loki.yaml.j2: the usage reporter
     # defaults to on, Pi-hole blocks stats.grafana.org, and each 4h cycle spends its full
-    # 5-retry budget on a name that never resolves. promtail.yaml below gets no such block --
-    # promtail has no analytics reporter, and it rejects the unknown field at startup.
+    # 5-retry budget on a name that never resolves. The Alloy shipper has the same reporter
+    # and turns it off with --disable-reporting in alloy-daemonset.yaml.j2.
     analytics:
       reporting_enabled: false
     server:
@@ -57,124 +57,8 @@ data:
         type: local
         local:
           directory: /loki/rules
-  promtail.yaml: |
-    server:
-      http_listen_port: 9080
-    positions:
-      filename: /positions/positions.yaml
-    clients:
-      - url: http://loki-homelab:3100/loki/api/v1/push
-    scrape_configs:
-      # Cluster pod logs (KL3) — the stream that un-darkens terraria-stats. `container=`
-      # matches the Docker promtail's label contract; `job=k8s` keeps the sources tellable
-      # apart; `machine=` mirrors the prometheus origin convention.
-      - job_name: k8s-pods
-        kubernetes_sd_configs:
-          - role: pod
-        # Strip containerd's per-line envelope ("<rfc3339> stdout F <message>") so what
-        # lands in Loki is the application's own line, which is the contract every
-        # consumer was written against. Without this the Docker-era promtail's clean
-        # output silently became prefixed at the Phase F cutover, and a START-ANCHORED
-        # parser keeps matching — it just captures the envelope as part of the payload.
-        # Measured 2026-08-13: terraria-stats' `^(?P<name>.+) has joined\.$` turned "Ben"
-        # into "2026-08-13T21:14:28.159801911Z stdout F Ben", and since the timestamp is
-        # unique per line EVERY join would have become a new player, fragmenting the
-        # leaderboard while its unmatched-lines drift metric stayed at 0 (the line did
-        # parse — just wrongly). Only unplayed games hid it. Fixing it here rather than in
-        # each parser keeps the one contract in one place.
-        # `- cri: {}`, NOT `- cri`: every promtail stage must be a YAML OBJECT. The bare
-        # scalar form parses as valid YAML and fails only inside promtail, which then
-        # refuses the whole config and crash-loops — taking all k8s pod-log ingestion with
-        # it — reporting: "make sure each stage of your pipeline is a YAML object (must end
-        # with a `:`), check stage `- cri`".
-        pipeline_stages:
-          - cri: {}
-          # Drop routine Traefik access lines. Measured 2026-08-29: 130 lines in 120s at 987
-          # bytes average — ~172 MB/day — of which 89 were 200, 38 were 304 and 4 were 204,
-          # against 4 401s and 4 404s. Homepage's own widget polling was 46 of the 130.
-          #
-          # THIS DOES NOT TOUCH CROWDSEC. Traefik's own accessLog must never gain a `filters`
-          # block, because the crowdsec agent sidecar tails /var/log/traefik/access.log DIRECTLY
-          # for ban detection (traefik/templates/crowdsec-secret.yaml.j2's acquis.yaml) and
-          # filtering the file would starve the WAF. Promtail reads a different stream: the
-          # access-log-rotate sidecar `tail -f`s the same inode to ITS OWN STDOUT, which this job
-          # discovers as a container log. Two tails, one file — so dropping here is invisible to
-          # crowdsec. Scope this to the sidecar's container name and nothing else.
-          #
-          # Nothing reads 2xx/3xx access lines out of Loki: every Traefik panel in
-          # claude-otel's dashboards is Prometheus (traefik_service_requests_total and the
-          # duration histogram), and monitor-bridge's check_traefik_5xx / check_traefik_latency
-          # read those same histograms. Request rate and latency percentiles are unaffected.
-          #
-          # 302 is deliberately KEPT — those are Authelia redirects, and they are the cheapest
-          # evidence of an auth loop. Errors and slow requests are kept for the same reason.
-          # The expression pairs a routine status with a sub-second Duration (nanoseconds, so
-          # under 1e9 is at most 9 digits); Traefik emits these fields alphabetically, which is
-          # what puts DownstreamStatus ahead of Duration on every line.
-          #
-          # The counter this bumps is logentry_dropped_lines_total, NOT the
-          # promtail_dropped_entries_total that monitor-bridge's Promtail Dropped Entries check
-          # watches at 1000/hour — different metric family, so a deliberate drop here cannot
-          # self-page as shipping loss.
-          - match:
-              selector: '{container="access-log-rotate"}'
-              stages:
-                - drop:
-                    expression: '"DownstreamStatus":(200|204|304),.*"Duration":[0-9]{1,9},'
-                    drop_counter_reason: traefik_routine_access_log
-        relabel_configs:
-          - source_labels: [__meta_kubernetes_pod_node_name]
-            target_label: __host__
-          - source_labels: [__meta_kubernetes_pod_container_name]
-            target_label: container
-          - source_labels: [__meta_kubernetes_pod_name]
-            target_label: pod
-          - source_labels: [__meta_kubernetes_namespace]
-            target_label: namespace
-          - target_label: job
-            replacement: k8s
-          # The node name, not a hardcoded host: since the drain unpinned the DaemonSet
-          # this config runs on both nodes ($HOSTNAME is the downward-API nodeName).
-          - target_label: machine
-            replacement: ${HOSTNAME}
-          - source_labels: [__meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
-            separator: /
-            target_label: __path__
-            replacement: /var/log/pods/*$1/*.log
-      # daniel-box host logs — NEW coverage (nothing shipped this host's files before):
-      # the operator's "both servers, full logs" bar, held in the strong sense. Same job
-      # labels as the daniel-server tails so monitor-bridge's freshness arm sees them.
-      - job_name: node-syslog
-        static_configs:
-          - targets: [localhost]
-            labels:
-              job: syslog
-              machine: ${HOSTNAME}
-              __path__: /var/log/syslog
-      - job_name: node-authlog
-        static_configs:
-          - targets: [localhost]
-            labels:
-              job: authlog
-              machine: ${HOSTNAME}
-              __path__: /var/log/auth.log
-{% if k3s_audit_log_enabled | default(false) %}
-      # The apiserver audit log. Only daniel-box writes one — the file lives under the k3s
-      # SERVER data directory and the agent node has no apiserver — but the job is declared
-      # on both because this is a DaemonSet with one config. On daniel-server the glob
-      # matches nothing and promtail simply reports no targets for it.
-      #
-      # Tailed off the host rather than read from the pod's own filesystem: the log is
-      # written by the apiserver, which on k3s is a process inside the k3s server, not a pod.
-      #
-      # JSON, one object per line. Left unparsed here on purpose — a `json` pipeline stage
-      # would index every audit field as a label and blow past Loki's series limits. Query it
-      # with `| json` at read time instead, which costs nothing until someone asks.
-      - job_name: k8s-audit
-        static_configs:
-          - targets: [localhost]
-            labels:
-              job: k8s-audit
-              machine: ${HOSTNAME}
-              __path__: {{ k3s_audit_log_path | default('/var/lib/rancher/k3s/server/logs/audit.log') }}
-{% endif %}
+  # The cluster shipper's config, River not YAML — so it lives in templates/config/ where
+  # validate/k8s_manifests.py does not try to parse it as a manifest, and lands here as a
+  # block scalar. Every label it emits is a contract; see the file's header.
+  config.alloy: |
+{{ lookup('template', playbook_dir + '/roles/k8s/loki-homelab/templates/config/config.alloy.j2') | indent(4, true) }}

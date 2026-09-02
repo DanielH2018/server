@@ -1,4 +1,4 @@
-"""The promtail drop rule for Traefik access logs, proved against real log lines.
+"""The Alloy drop rule for Traefik access logs, proved against real log lines.
 
 The rule discards routine, fast Traefik access lines before they reach Loki — ~172 MB/day
 of 200/204/304 measured 2026-08-29, dominated by homepage's own widget polling. It is a
@@ -16,51 +16,54 @@ So every assertion below is a pair: a line this MUST drop, and a line it MUST ke
 that stopped matching entirely would pass a keep-only suite while saving nothing, and a rule
 that matched everything would pass a drop-only suite while blinding the operator.
 
-What this does NOT cover, deliberately: promtail evaluates the expression with Go's RE2 and
+What this does NOT cover, deliberately: Alloy evaluates the expression with Go's RE2 and
 this file uses Python's `re`. The pattern is plain alternation plus a bounded digit class,
 which both engines read identically. Anything reaching for a backreference or a lookaround
-would need a live promtail to verify, and should not be written here in the first place.
+would need a live Alloy to verify, and should not be written here in the first place.
 """
 
 from __future__ import annotations
 
 import re
 
-import yaml
 from _helpers import REPO
 
 _REPO = REPO
-_CONFIGMAP = _REPO / "ansible/roles/k8s/loki-homelab/templates/configmap.yaml.j2"
+_ALLOY_CONFIG = (
+    _REPO / "ansible/roles/k8s/loki-homelab/templates/config/config.alloy.j2"
+)
 
 # The sidecar whose stdout carries the access log. CrowdSec tails the FILE instead, so this
-# label is what keeps the drop away from the WAF's input — see the configmap's own comment.
+# label is what keeps the drop away from the WAF's input — see the config's own comment.
 _SCOPED_CONTAINER = "access-log-rotate"
+
+# One `stage.match { selector = "…" stage.drop { … } }` block of the River config. The
+# selector and the drop's attributes are River strings, so their inner quotes are `\"`.
+_MATCH_BLOCK = re.compile(
+    r'stage\.match\s*\{\s*selector\s*=\s*"(?P<selector>(?:\\.|[^"\\])*)"'
+    r"(?P<body>.*?)\n  \}",
+    re.DOTALL,
+)
+_DROP_EXPRESSION = re.compile(r'expression\s*=\s*"(?P<expr>(?:\\.|[^"\\])*)"')
 
 
 def _drop_expression() -> str:
-    """Pull the drop stage's expression out of the rendered promtail config.
+    """Pull the drop stage's expression out of the Alloy config.
 
-    Read from the template text rather than a Jinja render: the k8s-pods job's pipeline has
-    no conditionals in it, and parsing the real file is what makes this test notice an edit
-    that moves or removes the stage rather than one that merely changes the pattern.
+    Read from the template text rather than a Jinja render: the pod pipeline has no
+    conditionals in it, and parsing the real file is what makes this test notice an edit that
+    moves or removes the stage rather than one that merely changes the pattern.
     """
-    text = _CONFIGMAP.read_text()
-    # The pipeline block is plain YAML inside the template — no Jinja between `pipeline_stages`
-    # and `relabel_configs` on the k8s-pods job — so it can be sliced out and parsed.
-    start = text.index("        pipeline_stages:\n")
-    end = text.index("        relabel_configs:\n", start)
-    block = yaml.safe_load(re.sub(r"^ {8}", "", text[start:end], flags=re.MULTILINE))
-
-    matches = [stage["match"] for stage in block["pipeline_stages"] if "match" in stage]
+    text = _ALLOY_CONFIG.read_text()
+    matches = list(_MATCH_BLOCK.finditer(text))
     scoped = [m for m in matches if _SCOPED_CONTAINER in m["selector"]]
-    assert scoped, (
-        f"no promtail match stage is scoped to container={_SCOPED_CONTAINER!r}"
-    )
+    assert scoped, f"no stage.match block is scoped to container={_SCOPED_CONTAINER!r}"
     assert len(scoped) == 1, "more than one drop stage claims the access-log sidecar"
 
-    drops = [s["drop"] for s in scoped[0]["stages"] if "drop" in s]
+    drops = _DROP_EXPRESSION.findall(scoped[0]["body"])
     assert len(drops) == 1, "the access-log match stage should hold exactly one drop"
-    return drops[0]["expression"]
+    # River string escapes: `\"` is a literal quote in the regex Alloy compiles.
+    return drops[0].replace('\\"', '"')
 
 
 def _line(
@@ -147,10 +150,12 @@ def test_the_drop_is_scoped_to_the_access_log_sidecar_only():
     The selector is also what keeps this away from CrowdSec: the agent reads the access-log
     FILE directly, and only the sidecar's stdout copy passes through this pipeline.
     """
-    text = _CONFIGMAP.read_text()
-    start = text.index("        pipeline_stages:\n")
-    end = text.index("        relabel_configs:\n", start)
-    block = yaml.safe_load(re.sub(r"^ {8}", "", text[start:end], flags=re.MULTILINE))
-
-    for stage in block["pipeline_stages"]:
-        assert "drop" not in stage, "a bare drop stage would apply to every k8s pod log"
+    text = _ALLOY_CONFIG.read_text()
+    # Every stage.drop must sit inside a stage.match: a drop at the loki.process level
+    # applies to every pod log the pipeline carries. Indentation is the nesting here — a
+    # top-level stage is indented two spaces, one inside stage.match four.
+    for line in text.splitlines():
+        if line.lstrip().startswith("stage.drop"):
+            assert line.startswith("    stage.drop"), (
+                "a stage.drop outside stage.match would apply to every k8s pod log"
+            )

@@ -352,7 +352,6 @@ k8s_dry_run_unsupported:
   - claude-otel
   - crowdsec
   - headlamp
-  - loki-homelab
   - media-volume
   - monitor-bridge
   - n8n

@@ -37,7 +37,7 @@ _REPO = Path(__file__).resolve().parents[5]
 # ip_ban events" forever. A fail-open arm cannot tell "nothing to report" from "wrong question",
 # so the selector label has to be checked by something other than the check's own verdict.
 # Transcribed from a live stream on 2026-08-23. Kept as a FLOOR rather than the whole answer:
-# `filename`, `stream` and `service_name` are added by promtail/Loki itself and appear in no
+# `filename`, `stream` and `service_name` are added by Alloy/Loki itself and appear in no
 # config, so deriving alone would under-count and reject a valid selector.
 _LOKI_STREAM_LABELS_OBSERVED = frozenset(
     {
@@ -53,8 +53,8 @@ _LOKI_STREAM_LABELS_OBSERVED = frozenset(
 )
 
 
-def _promtail_relabel_targets():
-    """`target_label:` values from the rendered promtail config — the labels it actually sets.
+def _alloy_relabel_targets():
+    """`target_label = "…"` values from the Alloy config — the labels it actually sets.
 
     Derived rather than transcribed because the transcription cannot follow a rename: renaming a
     relabel target leaves the frozenset above listing a label nothing emits, so a selector using
@@ -62,21 +62,21 @@ def _promtail_relabel_targets():
     opposite of the truth. Internal `__foo__` labels are dropped; they never reach a stream.
     """
     cfg = (
-        _REPO / "ansible/roles/k8s/loki-homelab/templates/configmap.yaml.j2"
+        _REPO / "ansible/roles/k8s/loki-homelab/templates/config/config.alloy.j2"
     ).read_text()
-    found = set(re.findall(r"target_label:\s*(\S+)", cfg))
+    found = set(re.findall(r'target_label\s*=\s*"([^"]+)"', cfg))
     return {label for label in found if not label.startswith("__")}
 
 
-LOKI_STREAM_LABELS = _LOKI_STREAM_LABELS_OBSERVED | _promtail_relabel_targets()
+LOKI_STREAM_LABELS = _LOKI_STREAM_LABELS_OBSERVED | _alloy_relabel_targets()
 
 
-def test_the_promtail_config_is_actually_readable():
-    """A path typo would make _promtail_relabel_targets() return an empty set, silently reducing
+def test_the_alloy_config_is_actually_readable():
+    """A path typo would make _alloy_relabel_targets() return an empty set, silently reducing
     the vocabulary to the transcribed floor and re-opening the gap this closes."""
-    assert _promtail_relabel_targets(), (
-        "no target_label values parsed from the promtail ConfigMap — the path or the config "
-        "shape changed, and the derived half of LOKI_STREAM_LABELS is now inert"
+    assert _alloy_relabel_targets() >= {"container", "pod", "namespace", "machine"}, (
+        "the expected target_label values did not parse from the Alloy config — the path or "
+        "the config shape changed, and the derived half of LOKI_STREAM_LABELS is now inert"
     )
 
 

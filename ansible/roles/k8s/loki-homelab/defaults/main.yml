@@ -2,11 +2,13 @@
 # Pinned like the claude-otel Loki (Renovate-tracked); the Docker copy ran :latest under
 # Watchtower, which retires with it.
 loki_homelab_image: grafana/loki:3.7.6
-loki_homelab_promtail_image: grafana/promtail:3.6.11
+# The cluster log shipper. Alloy since 2026-09-02: Promtail (last pin 3.6.11) reached end of
+# life on 2026-03-02.
+loki_homelab_alloy_image: grafana/alloy:v1.19.2
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Observability: the log store the Alert History reconstruction and every LogQL-backed
-# monitor-bridge check (Loki Log Ingestion, Promtail Dropped Entries) read from — a broken
+# monitor-bridge check (Loki Log Ingestion, the dropped-entries check) read from — a broken
 # deploy blinds those without paging about it. ALSO Recreate + a PVC (loki-homelab-data) on its
 # own state, which compounds the risk but isn't the primary reason.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
