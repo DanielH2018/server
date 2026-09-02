@@ -20,17 +20,6 @@ which is the point.
 from __future__ import annotations
 
 import ast
-import pathlib
-
-_SRC = pathlib.Path(__file__).resolve().parents[1] / "files" / "gitops_deploy.py"
-_TREE = ast.parse(_SRC.read_text())
-
-
-def _fn(name: str, tree: ast.AST = _TREE) -> ast.FunctionDef:
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name == name:
-            return node
-    raise AssertionError(f"{name}() is gone from gitops_deploy.py")
 
 
 def sys_executable_launches(fn: ast.FunctionDef) -> list[str]:
@@ -62,12 +51,12 @@ def sys_executable_launches(fn: ast.FunctionDef) -> list[str]:
     return launched
 
 
-def test_consult_staging_returns_no_verdict() -> None:
+def test_consult_staging_returns_no_verdict(gitops_fn) -> None:
     """A returned verdict is a verdict something can branch on. Advisory means there is nothing
     to branch on, enforced here rather than left to a reader's discretion."""
     returns = [
         node
-        for node in ast.walk(_fn("consult_staging"))
+        for node in ast.walk(gitops_fn("consult_staging"))
         if isinstance(node, ast.Return) and node.value is not None
     ]
     assert not returns, (
@@ -76,14 +65,14 @@ def test_consult_staging_returns_no_verdict() -> None:
     )
 
 
-def test_the_staging_subprocesses_cannot_escape() -> None:
+def test_the_staging_subprocesses_cannot_escape(gitops_fn) -> None:
     """Every subprocess call in the gate sits inside a try with a broad except.
 
     A missing script, an ssh outage or a wedged guest must not reach the prod deploy. This is
     the property that makes the gate safe to leave enabled while its false-failure rate is
     still unknown.
     """
-    fn = _fn("consult_staging")
+    fn = gitops_fn("consult_staging")
     guarded = set()
     for handler_parent in ast.walk(fn):
         if not isinstance(handler_parent, ast.Try):
@@ -115,13 +104,15 @@ def test_the_staging_subprocesses_cannot_escape() -> None:
     )
 
 
-def test_main_calls_the_gate_as_a_bare_statement_before_deploying_prod() -> None:
+def test_main_calls_the_gate_as_a_bare_statement_before_deploying_prod(
+    gitops_fn,
+) -> None:
     """Advisory by position as well as by return type.
 
     The call must be a bare expression — not assigned, not a condition — and it must come
     before `deploy_k8s`, since a gate consulted afterwards would have nothing left to gate.
     """
-    main = _fn("main")
+    main = gitops_fn("main")
     stmts = list(ast.walk(main))
 
     bare_calls = [
@@ -154,7 +145,7 @@ def test_main_calls_the_gate_as_a_bare_statement_before_deploying_prod() -> None
     )
 
 
-def test_the_staging_scripts_run_under_the_repos_pinned_env() -> None:
+def test_the_staging_scripts_run_under_the_repos_pinned_env(gitops_fn) -> None:
     """Both scripts import yaml and jinja2, so the interpreter has to carry the repo's deps.
 
     `sys.executable` does not, reliably: this unit's ExecStart is `uv run --no-project`, which
@@ -165,20 +156,20 @@ def test_the_staging_scripts_run_under_the_repos_pinned_env() -> None:
     reason that has nothing to do with the change, which is precisely the false-failure this
     slice is supposed to be measuring rather than manufacturing.
     """
-    offenders = sys_executable_launches(_fn("consult_staging"))
+    offenders = sys_executable_launches(gitops_fn("consult_staging"))
     assert not offenders, (
         f"consult_staging starts {offenders} with sys.executable — use _UV_PYTHON, the same "
         f"pinned env deploy_k8s runs ansible-playbook in."
     )
 
 
-def test_the_pinned_env_check_rejects_a_sys_executable_launch() -> None:
+def test_the_pinned_env_check_rejects_a_sys_executable_launch(gitops_fn) -> None:
     """The rejecting half: the pre-fix call shape, verbatim, must fail the check above."""
     before_the_fix = ast.parse(
         "def consult_staging(services, origin):\n"
         "    subprocess.run([sys.executable, STAGING_EXPECT_SCRIPT], check=False)\n"
     )
-    assert sys_executable_launches(_fn("consult_staging", before_the_fix)), (
+    assert sys_executable_launches(gitops_fn("consult_staging", before_the_fix)), (
         "the check no longer sees a sys.executable launch, so it would pass whatever "
         "consult_staging does — it has stopped being a check."
     )
@@ -200,7 +191,7 @@ def cwdless_launches(fn: ast.FunctionDef) -> list[str]:
     ]
 
 
-def test_the_staging_scripts_run_from_the_repo() -> None:
+def test_the_staging_scripts_run_from_the_repo(gitops_fn) -> None:
     """Pinning the interpreter is not enough on its own — `uv run` resolves by cwd.
 
     Observed 2026-08-28: with `_UV_PYTHON` already in place, driving consult_staging from a
@@ -208,20 +199,20 @@ def test_the_staging_scripts_run_from_the_repo() -> None:
     found no project there and fell back to a bare interpreter. That is the same exit 1 the
     interpreter fix was written to prevent, reached by the other half of the same mechanism.
     """
-    offenders = cwdless_launches(_fn("consult_staging"))
+    offenders = cwdless_launches(gitops_fn("consult_staging"))
     assert not offenders, (
         f"{offenders} in consult_staging inherit cwd, so `uv run` resolves whatever project "
         f"the caller was standing in. Pass cwd=REPO."
     )
 
 
-def test_the_cwd_check_rejects_an_inherited_cwd() -> None:
+def test_the_cwd_check_rejects_an_inherited_cwd(gitops_fn) -> None:
     """The rejecting half: the pre-fix call shape, verbatim, must fail the check above."""
     before_the_fix = ast.parse(
         "def consult_staging(services, origin):\n"
         "    subprocess.run([*_UV_PYTHON, STAGING_EXPECT_SCRIPT], check=False)\n"
     )
-    assert cwdless_launches(_fn("consult_staging", before_the_fix)), (
+    assert cwdless_launches(gitops_fn("consult_staging", before_the_fix)), (
         "the check no longer sees a cwd-less launch, so it has stopped being a check."
     )
 
@@ -259,7 +250,7 @@ def children_that_cannot_time_out_first(fn: ast.FunctionDef) -> list[str]:
     return offenders
 
 
-def test_each_staging_child_times_out_before_its_wrapper() -> None:
+def test_each_staging_child_times_out_before_its_wrapper(gitops_fn) -> None:
     """A slow staging must page, not just log.
 
     staging_gate.py and staging_expectations.py each catch their own TimeoutExpired and return
@@ -269,13 +260,13 @@ def test_each_staging_child_times_out_before_its_wrapper() -> None:
     argparse default of 1800s inside a 1200s wrapper: a race the child could not win, making its
     own NO_VERDICT path dead code from its only caller.
     """
-    offenders = children_that_cannot_time_out_first(_fn("consult_staging"))
+    offenders = children_that_cannot_time_out_first(gitops_fn("consult_staging"))
     assert not offenders, (
         f"a wedged staging would be logged and never alerted: {offenders}"
     )
 
 
-def test_the_inner_timeout_check_rejects_a_child_with_no_deadline() -> None:
+def test_the_inner_timeout_check_rejects_a_child_with_no_deadline(gitops_fn) -> None:
     """The rejecting half: the pre-fix call shape, verbatim, must fail the check above."""
     before_the_fix = ast.parse(
         "def consult_staging(services, origin):\n"
@@ -285,16 +276,16 @@ def test_the_inner_timeout_check_rejects_a_child_with_no_deadline() -> None:
         "    )\n"
     )
     offenders = children_that_cannot_time_out_first(
-        _fn("consult_staging", before_the_fix)
+        gitops_fn("consult_staging", before_the_fix)
     )
     assert offenders, "the check no longer sees a child that cannot time out first"
 
 
-def test_the_gate_is_off_by_default() -> None:
+def test_the_gate_is_off_by_default(gitops_deploy) -> None:
     """A slice that silently added wall-clock to every k8s tick on merge would be a behaviour
-    change nobody opted into. The default lives in the source, so it is checkable here."""
-    src = _SRC.read_text()
-    assert 'C.get("STAGING_GATE", "false")' in src, (
+    change nobody opted into. The canned config sets no STAGING_GATE, so the imported module
+    shows the default."""
+    assert gitops_deploy.STAGING_GATE is False, (
         "STAGING_GATE no longer defaults to false — enabling the gate for every host on merge "
         "is a deliberate decision, not a default."
     )
@@ -343,15 +334,15 @@ def merge_precedes_the_gate(fn: ast.FunctionDef) -> bool:
     return False
 
 
-def test_the_gate_is_consulted_before_the_ff_merge() -> None:
+def test_the_gate_is_consulted_before_the_ff_merge(gitops_fn) -> None:
     """The accepting half: main() consults the gate, THEN merges."""
-    assert not merge_precedes_the_gate(_fn("main")), (
+    assert not merge_precedes_the_gate(gitops_fn("main")), (
         "a `git merge --ff-only` runs before consult_staging() in main() — a death in the gate "
         "window then strands the promoted SHA as a permanent noop with every monitor green"
     )
 
 
-def test_a_merge_before_the_gate_is_flagged() -> None:
+def test_a_merge_before_the_gate_is_flagged(gitops_fn) -> None:
     """The rejecting half: the pre-fix ordering must come back True, or the check above is inert."""
     before_the_fix = ast.parse(
         "def main():\n"
@@ -360,6 +351,6 @@ def test_a_merge_before_the_gate_is_flagged() -> None:
         "        consult_staging(cs.k8s_deploy, origin)\n"
         "        deploy_k8s(cs.k8s_deploy, K8S_DEPLOY_TIMEOUT_S)\n"
     )
-    assert merge_precedes_the_gate(_fn("main", before_the_fix)), (
+    assert merge_precedes_the_gate(gitops_fn("main", before_the_fix)), (
         "the check no longer sees a merge that precedes the gate"
     )
