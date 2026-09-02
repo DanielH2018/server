@@ -471,9 +471,9 @@ has_gitops: true
 # → deploy → catch → hold → reset → redeploy → Discord) has never run.
 gitops_deploy_k8s_autodeploy_enabled: true
 gitops_deploy_k8s_autodeploy_pilot: []
-# The staging gate (Phase C slice 3, docs/staging-phase-c.md). ADVISORY: each tick that would
-# auto-deploy a k8s service first asks daniel-stage about the same commit, logs and alerts the
-# verdict, and deploys prod either way. Blocking is slice 4 and is a separate change.
+# The staging gate (Phase C, docs/staging-phase-c.md). Each tick that would auto-deploy a k8s
+# service first asks daniel-stage about the same commit, and BLOCKS on a rejection — see the
+# blocking switch below.
 #
 # True HERE and nowhere else: the gate shells to daniel-server over ssh, because daniel-stage
 # sits on a libvirt NAT network that host alone can reach, and daniel-box is the only host
@@ -481,6 +481,35 @@ gitops_deploy_k8s_autodeploy_pilot: []
 # wall-clock. That cost buys the false-failure rate slice 4's entry condition asks for, which
 # accrues only while the gate runs against real merges — building it collects nothing.
 gitops_deploy_staging_gate: true
+# Slice 4, armed 2026-09-02 once the entry condition in docs/staging-phase-c.md was met in
+# full: 20 consecutive clean gate runs (the ledger read 23/20 with zero needing triage at the
+# flip), two real gated ticks both PASS (freshrss 19:47, ical-proxy 20:16 — the second with
+# 2/2 expectations, the two-directional check ical-proxy's 404 made necessary), and the written
+# NO_VERDICT decision.
+#
+# What this changes: a staging REJECTION now holds the SHA and prod is not deployed. Nothing was
+# applied when the verdict arrives — consult_staging runs before the ff-merge — so there is
+# nothing to roll back and no volume is reverted. That asymmetry is the phase's whole prize.
+#
+# NO VERDICT still deploys prod. A wedged guest, an ssh outage, a timeout or a bug in the gate
+# is never the change's fault, and blocking there would park prod behind one guest on a NAT
+# network covering six services of fifty-four. `staging_blocks` carries the reasoning.
+#
+# The way out is one tick wide and it announces itself: `touch
+# /var/lib/gitops-deploy/staging_gate_override` on this host lets the next blocking tick
+# through, posts to Discord when it is spent, and removes itself. `rm` disarms it unused.
+# EDITING THIS LINE IS NOT ENOUGH ON ITS OWN, in either direction. It lives in host_vars, so
+# the deployer routes the change to `deploy.yml` — which runs no setup role and therefore never
+# re-renders /etc/gitops-deploy/config.env, where STAGING_GATE_BLOCKING actually lives. The tree
+# fast-forwards, the broad apply succeeds, every repo-side check reads green, and the host keeps
+# the old value. Follow any change here with
+# `uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy`. Same silent no-op
+# class the role's CLAUDE.md records under "Moving a config source changes which remediation
+# the alert prescribes".
+#
+# To disarm the blocking, set this false and re-render the same way — the gate returns to
+# advisory, not off. To turn the gate off entirely, that is the switch above.
+gitops_deploy_staging_gate_blocking: true
 # This is the k3s node — it must NOT have Docker. k3s brings its own containerd and its
 # flannel/kube-proxy iptables rules. A bare `initial_setup.yml` (no --tags) once installed
 # Docker here, which tripped the k3s role's fail-closed guard and blocked k3s-bringup.yml.

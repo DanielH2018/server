@@ -4,17 +4,21 @@ Makes `gitops-deploy` deploy a merged change to `daniel-stage` first, and touch 
 that succeeded. Phases A and B (`staging-cluster.md`) built a cluster and taught the repo to
 deploy to it. This is the phase where the cluster starts refusing things.
 
-**Status as of 2026-09-02: slices 1-4 are built, and the gate is ON in advisory mode on
-daniel-box.** It asks daniel-stage about every commit that would auto-deploy a k8s service,
-logs and alerts the verdict, and deploys prod either way. Slice 4's code has landed behind its
-own switch, `gitops_deploy_staging_gate_blocking`, which is **false everywhere** — so the
-deployer's behaviour is slice 3's until that switch is flipped.
+**Status as of 2026-09-02: slices 1-4 are built, and the gate BLOCKS on daniel-box.** It asks
+daniel-stage about every commit that would auto-deploy a k8s service, logs and alerts the
+verdict, and — since `gitops_deploy_staging_gate_blocking` was armed on 2026-09-02 — holds the
+SHA and skips prod on a REJECTION. NO VERDICT still deploys prod.
 
-**The flip is gated on evidence rather than effort** — see *Entry condition* at the end,
-**rescoped 2026-08-30** because the original version could not be satisfied: the gate is
-reachable by roughly one real tick a month, so the evidence is now gathered by a deliberate
-backfill rather than by waiting on merges. Part 1 reached 20/20 on 2026-09-02. Part 2 is the
-one still outstanding.
+**The entry condition below was met in full before the flip**, which is the whole reason it
+exists: 20 consecutive clean gate runs (the ledger read 23/20 with zero needing triage), two
+real gated ticks both PASS, and the written NO_VERDICT answer. It was **rescoped 2026-08-30**
+because the original version could not be satisfied — the gate is reachable by roughly one real
+tick a month, so part 1's evidence is gathered by a deliberate backfill rather than by waiting
+on merges.
+
+To return to advisory, set `gitops_deploy_staging_gate_blocking: false` and re-run
+`initial_setup.yml --tags gitops_deploy`. Editing the inventory alone does not reach the host: that
+change routes to `deploy.yml`, which runs no setup role and re-renders no deployer config.
 
 Set `gitops_deploy_staging_gate: false` and re-run `initial_setup.yml --tags gitops_deploy` to
 switch it back off, at which point the deployer behaves exactly as it did before any of this
@@ -217,11 +221,11 @@ Vertical slices; each leaves something exercisable, and the gate arrives last on
    condition* for why the organic sample rate is about one a month, and what replaced it. What
    slice 3 does supply is the two real gated ticks part 2 of that condition requires, and the
    live path a backfill would otherwise only simulate.
-4. **Enforcing mode, with the override.** — BUILT (`gitops_deploy_staging_gate_blocking`),
-   NOT FLIPPED. `consult_staging` returns a verdict, `staging_blocks` decides whether it stops
-   the prod deploy, and `main()` holds the SHA and skips prod on a rejection. The override
-   shipped in the same change, as Decision 4 asks. The switch stays false until the entry
-   condition is met — which is why it is a second switch rather than a widening of
+4. **Enforcing mode, with the override.** — DONE, armed on daniel-box 2026-09-02.
+   `consult_staging` returns a verdict, `staging_blocks` decides whether it stops the prod
+   deploy, and `main()` holds the SHA and skips prod on a rejection. The override shipped in the
+   same change, as Decision 4 asks. It stayed false for the hours between the code landing and
+   the entry condition being met, which is why it is a second switch rather than a widening of
    `gitops_deploy_staging_gate`: the code and the evidence arrive at different times.
 
 Slice 3 is the point. It is also the one most likely to be skipped, because by then everything
@@ -428,7 +432,14 @@ true-failure, 0 needs-triage. Read it from the script rather than by eye, and re
 immediately before flipping the switch: the hourly ratchet keeps appending, and one untriaged
 REJECTED drops the verdict back to NOT MET.
 
-**Part 2: NOT MET, 0 of 2 — and the first attempt to force a sample produced none.**
+**Part 2: MET 2026-09-02, 2 of 2.** `staging: PASS on ['freshrss']` at 19:47:52 (gate PASS for
+`5e06d859`, 1/1 expectations) and `staging: PASS on ['ical-proxy']` at 20:16:25 (gate PASS for
+`c5a1b6d4`, **2/2 expectations** — the two-directional check, `/calendar1.ics` 200 AND `/` 404,
+the one ical-proxy's own 404 made necessary). Both were real deployer ticks, not hand runs.
+
+The account below is kept because the failed first attempt is the reusable lesson.
+
+**How it stood before those two, and what the first attempt cost.**
 `journalctl -u gitops-deploy` carries no `staging:` line at all since the gate was switched on
 2026-08-30: not a rejection, not a pass, not even the `nothing to gate` skip. That is the
 one-a-month arrival rate showing up exactly as predicted.
