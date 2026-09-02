@@ -38,10 +38,19 @@ forbids. Without it the session has to notice the merge itself and start `land.s
 which every landing on 2026-09-01 did with a hand-written `until MERGED` loop. A PR still
 open after 45 minutes exits 75: it is not being merged, and the reason is on the PR.
 
+**A conflicting PR ends the wait at once**, exit 1 with `VERDICT: merge-conflict`, rather
+than sitting out the 45 minutes. `gh pr merge --squash --auto` arms on a conflicting PR and
+returns success, so the merge never arrives and nothing on the PR says so until someone
+looks. Rebase the branch onto master, re-arm the auto-merge, and re-run the same `land.sh`
+command. The wait tolerates a `mergeable` of `UNKNOWN` — GitHub computes the field
+asynchronously and serves `UNKNOWN` on a freshly opened PR — and bails only after two
+consecutive `CONFLICTING` polls, because the base moving under a PR flips it for one poll.
+
 Run that command with `run_in_background` and let the session be re-invoked when it exits;
 the `VERDICT:` line is the last line of the logfile. `land.sh` waits for master CI on the merge commit, ticks, deploys what the tick deferred, and prints a
 `VERDICT:` line — `settled`, `unhealthy`, `deploy-failed`, `nothing-to-deploy`, `blocked`,
-`needs-manual-apply`, `deferred`, or one of the four give-ups: `merge-timeout` (the PR was
+`needs-manual-apply`, `deferred`, `merge-conflict` (the PR cannot merge until it is
+rebased), or one of the four give-ups: `merge-timeout` (the PR was
 still open after the 2700s merge budget), `ci-red`, `ci-timeout` (no CI verdict inside the
 900s budget) and `lock-busy` (the tree lock stayed busy through every retry).
 
