@@ -39,6 +39,10 @@
     - { role: chezmoi_setup, tags: ["chezmoi"], when: has_chezmoi }
     - { role: claude_code, tags: ["claude_code"], when: has_claude_code }
     - { role: renovate_notify, tags: ["renovate_notify"], when: inventory_hostname == renovate_notify_host }
+    # After claude_code: the agent's ExecStart is the `claude` binary that role installs.
+    # The role installs on renovate_agent_host regardless of renovate_agent_enabled; that var
+    # decides only whether the timer is armed, so the rollback is a var flip and a re-run.
+    - { role: renovate_agent, tags: ["renovate_agent"], when: inventory_hostname == renovate_agent_host }
     # Host half of the UPS stack (udev rule + secondary upsmon that performs the real
     # poweroff); the primary is the k8s/nut pod pinned to ups_host.
     #

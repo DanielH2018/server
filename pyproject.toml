@@ -54,6 +54,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "ansible/roles/setup/k3s/tests",             # live-object drift check comparison logic
   "ansible/roles/setup/gitops_deploy/tests",   # deploy_* decision tests + gitops_deploy.py guards
   "ansible/roles/setup/renovate_notify/tests", # notifier decision tests
+  "ansible/roles/setup/renovate_agent/tests",  # unattended-agent gate + digest tests
   "ansible/roles/setup/common/tests",          # shared host_lib helper tests
   "ansible/roles/k8s/home-assistant/tests", # HA Jinja macro logic tests
   "evals",                                         # homelab eval-case schema validation
@@ -256,6 +257,7 @@ extra-paths = [
   "ansible/roles/k8s/artifacts/files",
   "ansible/roles/setup/k3s/files",
   "ansible/roles/setup/renovate_notify/files",
+  "ansible/roles/setup/renovate_agent/files",
   "ansible/roles/k8s/home-assistant/files",
 ]
 

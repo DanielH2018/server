@@ -1,0 +1,47 @@
+---
+# Ships STOPPED, like claude-rc did. The role installs the script, config and units on every
+# run; this var alone decides whether the timer is enabled and started. Setting it back to
+# false stops AND disables both, which is the rollback.
+#
+# It is false by default because the first arming is a decision with a spend attached and a
+# blast radius (the session merges PRs and deploys), not because the role is unfinished.
+renovate_agent_enabled: false
+
+# renovate_agent_host lives in inventory/group_vars/all.yml, not here: initial_setup.yml's
+# `when:` on the role entry is evaluated before this file is in scope.
+renovate_agent_repo: DanielH2018/server
+renovate_agent_repo_dir: "/home/{{ sys_user }}/server"
+
+# The session's worktree, recreated at origin/master on every tick. Named so
+# scripts/dev/prune_worktrees.py recognises the branch (`worktree-<name>`), and fixed rather
+# than dated so a daily timer cannot accumulate one tree per day.
+renovate_agent_worktree: renovate-auto
+renovate_agent_branch: worktree-renovate-auto
+
+# PRs per tick. The ceiling exists because the wall-clock budget below has to cover every
+# landing the session starts: each one is a CI wait plus a tick plus a deploy plus a health
+# gate. Three fits; the rest wait for tomorrow's tick.
+renovate_agent_max_prs: 3
+
+# `opus` rather than a pinned id so a model rename does not silently strand the timer.
+renovate_agent_model: opus
+renovate_agent_permission_mode: auto
+
+# A runaway backstop, NOT a planned stop. Stopping a session mid-landing leaves a
+# merged-but-undeployed change, which is exactly what CLAUDE.md's post-merge section forbids —
+# so this is set well above what three landings cost (a two-turn session with this repo's
+# CLAUDE.md is $0.32 before it does any work), and the PR cap is what actually bounds the run.
+renovate_agent_budget_usd: 25
+
+# Wall clock for the session itself. Worst case is renovate_agent_max_prs landings run
+# sequentially, each up to a ~15min CI wait plus a ~20min deploy — so this is deliberately
+# generous, and the unit's TimeoutStartSec sits above it as the backstop. The wrapper kills the
+# session at this figure and still posts a digest saying so; systemd's ceiling posts nothing but
+# the OnFailure alert, so this one should always trip first.
+renovate_agent_run_timeout_s: 5400
+renovate_agent_unit_timeout: 100min
+
+# 15:00 UTC — after Renovate's own "before 6am" cycle has opened the day's PRs, and after the
+# 13:00 renovate-notify digest has classified them. Late enough that the operator is awake to
+# read the result, which matters while this is new.
+renovate_agent_oncalendar: "*-*-* 15:00:00"

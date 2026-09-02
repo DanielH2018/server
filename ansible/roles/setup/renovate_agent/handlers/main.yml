@@ -1,0 +1,10 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
+
+# There is deliberately no "Run renovate-agent once" handler, where the sibling
+# renovate_notify role has one. Its run is a read-only API query; this one spends a Claude
+# session that merges PRs and deploys, so a config edit must not kick one as a side effect.
+# Start it by hand: `sudo systemctl start renovate-agent`.

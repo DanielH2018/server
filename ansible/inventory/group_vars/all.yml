@@ -495,6 +495,12 @@ nut_host_secondary_armed: false
 # host-local), so running it on more than one host would duplicate every notification.
 # Doesn't matter which host, but must be exactly one.
 renovate_notify_host: daniel-box
+# The one host that runs the unattended Renovate agent (see renovate_agent CLAUDE.md). Same
+# "exactly one host" reasoning as renovate_notify_host, and here for the same scope reason —
+# but with a harder constraint on WHICH host: the agent needs Claude Code installed and logged
+# in, a gh CLI logged in as the repo owner, and the primary checkout the landings deploy from.
+# Arming the timer is a separate switch, renovate_agent_enabled in the role's defaults.
+renovate_agent_host: daniel-box
 # Which host runs the fake-remux detector + reconciler — daniel-box, where the media stack
 # lives. Here rather than in the role's defaults because initial_setup.yml's `when:` on the
 # role entry is evaluated before that role's defaults are in scope, the same reason

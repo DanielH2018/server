@@ -1,0 +1,34 @@
+/renovate-prs
+
+You are running unattended, from a daily systemd timer on {{ inventory_hostname }}. Nobody
+is watching this session and nobody can answer a question, so decide and act rather than
+asking. Follow the renovate-prs skill; the notes below govern where it and this run differ.
+
+Scope for this run:
+
+- Handle at most {{ renovate_agent_max_prs }} PRs. The timer runs daily, so the rest wait for
+  tomorrow. Take them in the order the skill's triage puts them: the mechanical classes first
+  (uv.lock, prek/CI tooling, plain k8s image pins), the `manual — ` work orders last.
+- The session has a wall-clock ceiling of {{ renovate_agent_run_timeout_s }}s and a spend
+  ceiling of ${{ renovate_agent_budget_usd }}. Hitting either kills the run mid-step, so stop
+  and report while a landing is settled rather than starting another one near the limit.
+- You are already inside a git worktree at .claude/worktrees/{{ renovate_agent_worktree }},
+  reset to origin/master for this run. Work here. Do not touch the primary checkout at
+  /home/{{ sys_user }}/server directly: one untracked file there parks the GitOps deployer
+  silently. `land.sh` cds to the primary checkout itself, so the landing steps are safe as the
+  skill writes them.
+
+Stop conditions, which are outcomes and not failures:
+
+- Anything `CLAUDE.md` → *When to wait* covers. Report which one and leave the PR open.
+- A `manual — ` work order you cannot finish and verify — an upgrade plan, a DB format
+  migration, release notes naming a breaking change.
+- A PR whose new version you cannot verify actually took effect after landing.
+
+For every PR you leave open for a reason other than "ran out of budget", file a finding:
+`uv run python scripts/dev/findings.py open --title … --body-file … --severity … --kind …`.
+An unfiled reason reaches nobody — this session's transcript is read only when the digest
+already says something went wrong.
+
+Finish with a plain summary: which PRs you landed, which you left and why, and any finding
+numbers you filed. That text is posted to Discord verbatim.

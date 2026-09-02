@@ -1,0 +1,15 @@
+[Unit]
+Description=Alert when renovate-agent fails
+
+[Service]
+Type=oneshot
+# The webhook comes from a dedicated one-key file, NOT from /etc/renovate-agent/config.env:
+# config.env is exactly what can be broken or unreadable when the agent fails, and a hard
+# EnvironmentFile= on it would leave THIS alert unable to start → no page. It is also not
+# embedded in this unit, because `systemctl show <unit> -p ExecStart` serves unit content over
+# the system bus to any local user regardless of file mode (2026-08-23b review M5). Mirrors
+# gitops-deploy-alert.service and renovate-notify-alert.service.
+EnvironmentFile=/etc/renovate-agent/alert-webhook.env
+ExecStart=/usr/bin/curl -fsS -m 10 -H "Content-Type: application/json" \
+  -d '{"content":"🚨 renovate-agent unit failed on {{ inventory_hostname }} — check `journalctl -u renovate-agent` and /var/lib/renovate-agent/last_session.json."}' \
+  "${ALERT_WEBHOOK}"
