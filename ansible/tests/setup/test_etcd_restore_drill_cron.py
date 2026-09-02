@@ -165,7 +165,7 @@ def test_the_scripts_ordering_note_still_matches_reality() -> None:
     for stale in (
         "it is not yet written",
         "When the reader lands",
-        "the drill has no cron",
+        "has no cron",
     ):
         assert stale not in header, (
             f"the header still says {stale!r}. The reader shipped in PR #535 as "
