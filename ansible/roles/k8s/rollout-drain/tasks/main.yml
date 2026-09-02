@@ -87,21 +87,55 @@
   vars:
     _k8s_drain_watch: "{{ k8s_pending_rollouts | default([]) | selectattr('changed') | list }}"
 
+# A workload deliberately scaled to zero has no pods, and that is NOT the typo the assert below
+# exists to catch. Reading the desired count is what tells the two apart. A Deployment carries
+# `.spec.replicas` and a DaemonSet `.status.desiredNumberScheduled`; only one exists per kind, so
+# concatenating the two jsonpaths yields exactly one number either way.
+- name: Read the desired pod count for the workloads that changed
+  tags: [always]
+  when:
+    - _k8s_drain_watch | length > 0
+    - not ansible_check_mode
+  become: true
+  changed_when: false
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ item.namespace }} get {{ item.kind }} {{ item.name }}
+      -o jsonpath={.spec.replicas}{.status.desiredNumberScheduled}
+  loop: "{{ _k8s_drain_watch }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: _k8s_drain_desired
+  vars:
+    _k8s_drain_watch: "{{ k8s_pending_rollouts | default([]) | selectattr('changed') | list }}"
+
 # Same assertion the inline gate made, kept at the point the selector is read: a label that matches
 # nothing reports zero restarts and would sail through the comparison at the end of the play.
+#
+# Exempting a zero-replica workload does not weaken it. The typo this catches is a workload that
+# SHOULD have pods and whose label does not reach them, and that case still fails — the exemption
+# needs the cluster to agree the desired count is zero, which a mislabelled running workload never
+# reports. The end-of-play gate already handles a zero correctly on its own: an absent
+# readyReplicas defaults to 0 and equals a desired 0, and an empty restart snapshot sums to 0 on
+# both sides of `after <= before`.
 - name: Fail if a pod selector matched no pods
   tags: [always]
   when: not ansible_check_mode
   ansible.builtin.assert:
-    that: item.stdout | trim | length > 0
+    that: >-
+      item.0.stdout | trim | length > 0
+      or (item.1.stdout | trim | default('0', true) | int) == 0
     fail_msg: >-
-      No pods matched `-l app={{ item.item.name }}` in namespace {{ item.item.namespace }}, so the
-      stabilisation gate has nothing to watch. Either the workload sets a different pod label than
-      `app: {{ item.item.name }}`, or it has no pods at all.
+      No pods matched `-l app={{ item.0.item.name }}` in namespace {{ item.0.item.namespace }},
+      and the cluster wants {{ item.1.stdout | trim | default('0', true) }} of them, so the
+      stabilisation gate has nothing to watch. The workload sets a different pod label than
+      `app: {{ item.0.item.name }}`.
     quiet: true
-  loop: "{{ _k8s_drain_restarts.results | default([]) }}"
+  loop: >-
+    {{ (_k8s_drain_restarts.results | default([]))
+       | zip(_k8s_drain_desired.results | default([])) | list }}
   loop_control:
-    label: "{{ item.item.name }}"
+    label: "{{ item.0.item.name }}"
 
 - name: Carry the snapshot into the end-of-play stabilisation gate
   tags: [always]
