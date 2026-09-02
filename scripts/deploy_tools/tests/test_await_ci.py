@@ -146,3 +146,77 @@ def test_auth_header_is_bearer_or_absent():
     assert await_ci.github_auth_headers("tok") == {"Authorization": "Bearer tok"}
     assert await_ci.github_auth_headers(None) == {}
     assert await_ci.github_auth_headers("") == {}
+
+
+def _suite(status, conclusion, runs):
+    return {"status": status, "conclusion": conclusion, "latest_check_runs_count": runs}
+
+
+def test_a_workflow_cancelled_before_any_run_registered_is_no_verdict():
+    """#766 on 2026-09-02: the merge commit's CI suite read `completed cancelled` with zero
+    check-runs, so the required name never appeared and two waits sat out 2400s."""
+    suites = [_suite("completed", "success", 2), _suite("completed", "cancelled", 0)]
+    assert await_ci._cancelled_before_any_run_registered([], suites, REQUIRED)
+
+
+def test_a_freshly_pushed_sha_with_no_suites_keeps_waiting():
+    assert not await_ci._cancelled_before_any_run_registered([], [], REQUIRED)
+
+
+def test_a_suite_still_queued_keeps_waiting():
+    """A queued suite is a run that may yet register; chasing the tip here would report
+    somebody else's result as this commit's."""
+    suites = [_suite("queued", None, 0)]
+    assert not await_ci._cancelled_before_any_run_registered([], suites, REQUIRED)
+
+
+def test_a_registered_required_run_is_never_read_as_cancelled_before_registration():
+    runs = [_run("prek (lint + validate + tests + secrets)", "in_progress", None)]
+    suites = [_suite("completed", "cancelled", 0)]
+    assert not await_ci._cancelled_before_any_run_registered(runs, suites, REQUIRED)
+
+
+def test_wait_follows_the_tip_when_the_workflow_was_cancelled_before_registering(
+    monkeypatch,
+):
+    """End to end through wait(): the cancelled SHA has no runs, the tip is green."""
+    green = [_run("prek (lint + validate + tests + secrets)", "completed", "success")]
+    runs_by_sha = {"old": [], "tip": green}
+    suites_by_sha = {"old": [_suite("completed", "cancelled", 0)], "tip": []}
+    monkeypatch.setattr(
+        await_ci, "resolve_sha", lambda sha: "tip" if sha == "old" else sha
+    )
+    monkeypatch.setattr(await_ci, "required_contexts", lambda: REQUIRED)
+    code, msg = await_ci.wait(
+        "old",
+        60,
+        1,
+        sleep=lambda _s: None,
+        clock=lambda: 0,
+        fetch=lambda s: runs_by_sha[s],
+        fetch_suites=lambda s: suites_by_sha[s],
+    )
+    assert (code, msg) == (0, "tip: CI green")
+
+
+def test_wait_does_not_follow_the_tip_for_a_fresh_sha(monkeypatch):
+    """The reject half: no suites at all means the run has not registered; the wait must
+    stay on the SHA it was given and run out its budget rather than chase the tip."""
+    green = [_run("prek (lint + validate + tests + secrets)", "completed", "success")]
+    runs_by_sha = {"old": [], "tip": green}
+    ticks = iter([0, 0, 100])
+    monkeypatch.setattr(
+        await_ci, "resolve_sha", lambda sha: "tip" if sha == "old" else sha
+    )
+    monkeypatch.setattr(await_ci, "required_contexts", lambda: REQUIRED)
+    code, msg = await_ci.wait(
+        "old",
+        60,
+        1,
+        sleep=lambda _s: None,
+        clock=lambda: next(ticks),
+        fetch=lambda s: runs_by_sha[s],
+        fetch_suites=lambda s: [],
+    )
+    assert code == 75
+    assert msg.startswith("old:")

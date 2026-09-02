@@ -85,11 +85,21 @@ def fetch_check_runs(sha: str) -> list[dict]:
     those 60, so the second landing in an hour starved the tick's gate into deferring on a
     403 (2026-09-01). deploy_logic.github_token carries the numbers.
     """
-    url = (
-        f"https://api.github.com/repos/{CI_REPO}/commits/{sha}/check-runs?per_page=100"
+    return _github_get(f"commits/{sha}/check-runs?per_page=100").get("check_runs", [])
+
+
+def fetch_check_suites(sha: str) -> list[dict]:
+    """Check-suites for one SHA -- one per workflow run, present even when the run was
+    cancelled before any job registered a check-run. Fetched only when no required run
+    exists, so it costs nothing on the ordinary path."""
+    return _github_get(f"commits/{sha}/check-suites?per_page=100").get(
+        "check_suites", []
     )
+
+
+def _github_get(path: str) -> dict:
     req = urllib.request.Request(
-        url,
+        f"https://api.github.com/repos/{CI_REPO}/{path}",
         headers={
             "Accept": "application/vnd.github+json",
             "User-Agent": "await-ci",
@@ -97,7 +107,7 @@ def fetch_check_runs(sha: str) -> list[dict]:
         },
     )
     with urllib.request.urlopen(req, timeout=15) as resp:
-        return json.load(resp).get("check_runs", [])
+        return json.load(resp)
 
 
 def verdict_for(sha: str, fetch=fetch_check_runs, required=None) -> str:
@@ -174,6 +184,43 @@ def _has_only_no_verdict_conclusions(runs: list[dict], required) -> bool:
     )
 
 
+def _cancelled_before_any_run_registered(
+    runs: list[dict], suites: list[dict], required
+) -> bool:
+    """True when no required run exists AND a workflow suite for the SHA already finished
+    with no verdict and zero runs.
+
+    Two merges seconds apart cancel the first one's CI workflow before its `prek` job
+    registers a check-run, so the check-runs list never carries a required name. To
+    `_has_only_no_verdict_conclusions` that is indistinguishable from a freshly-pushed
+    SHA, and the wait sat out its whole budget twice on #766 (2026-09-02: 900s, then
+    1500s) with the tip green the entire time. The check-suite is the record that
+    survives: `completed cancelled` with `latest_check_runs_count == 0`. A suite still
+    `queued` or `in_progress` is a run that may yet register, and is left alone.
+    """
+    if any(r.get("name") in required for r in runs):
+        return False
+    return any(
+        s.get("status") == "completed"
+        and s.get("conclusion") in _CI_NO_VERDICT_CONCLUSIONS
+        and not s.get("latest_check_runs_count")
+        for s in suites
+    )
+
+
+def _no_verdict_will_ever_arrive(target: str, runs: list[dict], fetch_suites) -> bool:
+    required = required_contexts()
+    if _has_only_no_verdict_conclusions(runs, required):
+        return True
+    if any(r.get("name") in required for r in runs):
+        return False
+    try:
+        suites = fetch_suites(target)
+    except urllib.error.URLError, TimeoutError, ValueError, OSError:
+        return False
+    return _cancelled_before_any_run_registered(runs, suites, required)
+
+
 def wait(
     sha: str,
     timeout_s: int,
@@ -181,6 +228,7 @@ def wait(
     sleep=time.sleep,
     clock=time.monotonic,
     fetch=fetch_check_runs,
+    fetch_suites=fetch_check_suites,
 ) -> tuple[int, str]:
     """(exit code, message). Polls until pass/fail or the budget elapses."""
     deadline = clock() + timeout_s
@@ -198,7 +246,7 @@ def wait(
             return 0, f"{target[:8]}: CI green"
         if verdict == "fail":
             return 1, f"{target[:8]}: CI RED"
-        if _has_only_no_verdict_conclusions(runs, required_contexts()):
+        if _no_verdict_will_ever_arrive(target, runs, fetch_suites):
             moved = resolve_sha(target)
             if moved != target:
                 print(
