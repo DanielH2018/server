@@ -1,7 +1,5 @@
 """What gitops_deploy.py execs, and how it stops what it exec'd.
 
-The one file that IMPORTS gitops_deploy.py: it stubs host_lib.parse_env_file before the
-import so the module-level `C = cfg()` reads canned values in CI and on a host alike.
 `deploy_k8s()`'s argv is pinned byte-for-byte, the rollback call site in main() is pinned at
 the AST to pass the FAILED commit's short SHA under its own timeout, and `run()`'s timeout
 must kill the whole process group or a wedged ansible-playbook outlives the tick.
@@ -12,40 +10,13 @@ must kill the whole process group or a wedged ansible-playbook outlives the tick
 import ast
 import os
 import subprocess
-import sys
 import time
 
 import pytest
 
 
 # ── deploy_k8s ────────────────────────────────────────────────────────────────────────────────
-# gitops_deploy.py reads /etc/gitops-deploy/config.env at import time (`C = cfg()`), which
-# doesn't exist in CI — see test_gitops_deploy_main_guards.py's docstring, which is why every
-# other guard on that module is an AST source check rather than an import. Stub host_lib.parse_env_file
-# with canned values BEFORE the only import of gitops_deploy in this file, so the import behaves
-# identically in CI and on a host where the real config.env exists, and this suite never reads
-# the real secrets file (forbidden — it's SOPS-managed, see the role CLAUDE.md).
-def _import_gitops_deploy():
-    import host_lib
-
-    real_parse_env_file = host_lib.parse_env_file
-    host_lib.parse_env_file = lambda _path: {
-        "REPO_DIR": "/tmp/gitops-test-repo",
-        "HOSTNAME": "test-host",
-        "DISCORD_WEBHOOK": "https://discord.example/webhook",
-    }
-    try:
-        sys.modules.pop("gitops_deploy", None)
-        import gitops_deploy
-    finally:
-        host_lib.parse_env_file = real_parse_env_file
-    return gitops_deploy
-
-
-gitops_deploy = _import_gitops_deploy()
-
-
-def _capture_run(monkeypatch):
+def _capture_run(gitops_deploy, monkeypatch):
     """Patch gitops_deploy.run() to record every call instead of shelling out, and return the
     list it appends to."""
 
@@ -75,25 +46,29 @@ _FORWARD_ARGV = [
 ]
 
 
-def test_deploy_k8s_passes_no_extra_vars_by_default(monkeypatch) -> None:
+def test_deploy_k8s_passes_no_extra_vars_by_default(gitops_deploy, monkeypatch) -> None:
     """The ordinary deploy must be byte-identical to what it was before this slice. ~50
     services go through this call on every tick. Pins the full argv, not just -e's absence —
     a stray extra arg anywhere else in the list would pass a presence-only check."""
-    calls = _capture_run(monkeypatch)
+    calls = _capture_run(gitops_deploy, monkeypatch)
     gitops_deploy.deploy_k8s({"sonarr"}, 900.0)
     assert calls[0].argv == _FORWARD_ARGV
 
 
-def test_deploy_k8s_passes_the_restore_sha_when_given(monkeypatch) -> None:
-    calls = _capture_run(monkeypatch)
+def test_deploy_k8s_passes_the_restore_sha_when_given(
+    gitops_deploy, monkeypatch
+) -> None:
+    calls = _capture_run(gitops_deploy, monkeypatch)
     gitops_deploy.deploy_k8s({"sonarr"}, 900.0, restore_sha="deadbeef")
     assert calls[0].argv == _FORWARD_ARGV + ["-e", "k8s_restore_snapshot_sha=deadbeef"]
 
 
-def test_deploy_k8s_treats_a_whitespace_only_restore_sha_as_absent(monkeypatch) -> None:
+def test_deploy_k8s_treats_a_whitespace_only_restore_sha_as_absent(
+    gitops_deploy, monkeypatch
+) -> None:
     """restore_sha="" or all-whitespace must stay inert, matching the manifests role's own
     `| trim | length > 0` guard — a blank-but-truthy string must not add a broken `-e` arg."""
-    calls = _capture_run(monkeypatch)
+    calls = _capture_run(gitops_deploy, monkeypatch)
     gitops_deploy.deploy_k8s({"sonarr"}, 900.0, restore_sha="   ")
     assert calls[0].argv == _FORWARD_ARGV
 
@@ -179,7 +154,7 @@ def _pid_is_alive(pid: int) -> bool:
     return True
 
 
-def test_run_timeout_kills_the_whole_process_group(tmp_path) -> None:
+def test_run_timeout_kills_the_whole_process_group(gitops_deploy, tmp_path) -> None:
     pidfile = tmp_path / "grandchild.pid"
     script = tmp_path / "parent.sh"
     script.write_text(_GRANDCHILD_SHAPE.format(pidfile=pidfile))

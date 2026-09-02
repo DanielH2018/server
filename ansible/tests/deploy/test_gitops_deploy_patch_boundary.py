@@ -16,8 +16,9 @@ every name. That opens two silent holes, both the ones monitor-bridge's check.py
 
 The monitor-bridge guard counts an imported name as "bound", which a facade defeats: every
 name is bound there and none is defined. This one requires a def/class/assignment at the
-patched module's top level. Today the suite patches exactly one pair — `gitops_deploy.run`,
-which gitops_deploy defines — so the census sanity test pins that the walk still finds it.
+patched module's top level. The suite patches `gitops_deploy.run` (the argv tests) and the
+I/O around main() — `discord`, `main`, `drain_pending`, `_record_behind` — every one of
+which gitops_deploy defines; the census sanity test pins that the walk still finds them.
 
 Run: uv run pytest ansible/tests/deploy/test_gitops_deploy_patch_boundary.py
 """
@@ -142,10 +143,12 @@ def _live_pairs():
 # --- The live tree ---------------------------------------------------------------------------
 
 
-def test_the_census_still_finds_the_one_known_patch():
+def test_the_census_still_finds_the_known_patches():
     """Without this the assertions below pass vacuously if the AST walk stops matching."""
     pairs = _live_pairs()
-    assert "gitops_deploy" in pairs and "run" in pairs["gitops_deploy"], pairs
+    assert {"run", "discord", "main", "drain_pending"} <= pairs.get(
+        "gitops_deploy", set()
+    ), pairs
 
 
 def test_every_patched_name_is_defined_on_the_module_it_is_patched_on():

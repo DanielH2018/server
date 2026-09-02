@@ -386,13 +386,18 @@ readers). `test_deploy_health.py` also holds `container_names()` — the health 
 every `container_name:` in the changed service's rendered compose, since a role often runs
 several containers and the bumped image's container is usually not the role-named one.
 
-`gitops_deploy.py` itself is covered by the `tests/test_gitops_deploy_*.py` family, mostly as
-AST source guards because the module cannot be imported in CI (see *Traps* below):
-`_subprocess` (the one file that imports it — `deploy_k8s()`'s argv, the rollback call site,
-`run()`'s process-group kill), `_main_guards` (merge target, hold-before-reset, the diverged
-marker), `_alert_delivery` (discord routing, queue-first delivery, the queue cap),
-`_fetch_skip`, `_timeout_budgets` (the cross-file timeout sums) and `_staging_timeouts`.
-The parsed tree and the AST helpers they share are fixtures in `tests/conftest.py`. The
+`gitops_deploy.py` itself is covered by the `tests/test_gitops_deploy_*.py` family:
+`_subprocess` (`deploy_k8s()`'s argv, the rollback call site, `run()`'s process-group kill),
+`_fetch_skip` (`entrypoint()`'s handler chain and the two retryable git failures, by calling
+them), `_alert_delivery` (`discord()`, `deliver()` and `drain_pending()`, by calling them
+against a tmp state dir), `_main_guards` (merge target, hold-before-reset, the diverged
+marker, drain-before-return — the ordering inside `main()`, pinned at the AST because
+`main()` shells out to git and GitHub), `_timeout_budgets` (the cross-file timeout sums) and
+`_staging_timeouts`. The module imports in CI: `GITOPS_DEPLOY_CONFIG` names its config file
+and `tests/conftest.py` points it at the canned `tests/config.env` before any import, so no
+test opens the host's 0600 copy. The `gitops_deploy` fixture is that import and `state_dir`
+repoints every `/var/lib/gitops-deploy` marker at `tmp_path`. The parsed tree and the AST
+helpers the `main()` guards share are fixtures in the same conftest. The
 suite lives in `tests/` rather than beside the modules so that `files/` holds exactly what
 the copy loop ships; `pythonpath` in `pyproject.toml` keeps `files/` importable from it.
 `test_systemd_unit_secrets.py` is the tree-wide ExecStart guard. Run via the repo pytest hook
@@ -495,11 +500,7 @@ the right lead in both directions and the push case belongs as a secondary check
 imports — the `test_deploy_*.py` family covers only the decision modules.
 
 `test_gitops_deploy_subprocess.py` covers `deploy_k8s()` and its two call sites inside `main()`.
-`gitops_deploy.py` can't be imported the normal way in CI (`C = cfg()` reads
-`/etc/gitops-deploy/config.env` at module level, which doesn't exist there) — it stubs
-`host_lib.parse_env_file` with canned values before the one import, so it works the same in CI
-and on a host where the real config.env exists, and never reads the real file. The rollback call
-site itself (inside `main()`, not unit-testable without mocking git/CI/Discord/state-file I/O) is
+The rollback call site itself (inside `main()`, not unit-testable without mocking git/CI/Discord/state-file I/O) is
 covered by an AST source-check pinning that it passes `restore_sha=origin[:8]` EXACTLY (not a
 prefix check — the full 40-char `origin` also starts with `"origin"` and would match no snapshot,
 since volume-snapshot names with `git rev-parse --short=8`) and never `local`, and its own

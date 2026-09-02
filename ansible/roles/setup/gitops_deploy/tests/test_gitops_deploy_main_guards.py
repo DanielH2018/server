@@ -1,13 +1,13 @@
 """Source-level guards on main()'s ordering and targets.
 
 main() shells out to git, queries GitHub over HTTP, posts to Discord and touches state files
-under /var/lib/gitops-deploy, and gitops_deploy.py cannot be imported in CI at all
-(module-level `C = cfg()` reads /etc config that does not exist there -- the accepted design,
-see the role CLAUDE.md). So the invariants that only live in main() are pinned at the AST:
-every ff-merge lands the pinned `origin` SHA, write_hold precedes every rollback reset, each
-rollback path returns on whether its post was delivered, the diverged marker is written every
-tick ahead of the action branching, and the k8s auto-deploy branch still reads cs.secrets.
-The sibling files cover fetch failures, alert delivery, the staging gate and the budgets.
+under /var/lib/gitops-deploy, so the invariants that only live in main() are pinned at the
+AST rather than by running it: every ff-merge lands the pinned `origin` SHA, write_hold
+precedes every rollback reset, each rollback path returns on whether its post was delivered,
+the diverged marker is written every tick ahead of the action branching, drain_pending()
+runs ahead of every short-circuit return, and the k8s auto-deploy branch still reads
+cs.secrets. The functions around main() are importable and tested by calling them:
+entrypoint() in _fetch_skip, deliver()/drain_pending()/discord() in _alert_delivery.
 """
 
 # ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_main_guards.py
@@ -237,3 +237,26 @@ def test_the_k8s_autodeploy_branch_alerts_on_a_bundled_secrets_change(gitops_fn)
         )
         return
     raise AssertionError("main() no longer branches on cs.k8s_deploy")
+
+
+def test_drain_pending_runs_before_short_circuits(gitops_fn):
+    # The ff-merged secrets/tasks/meta/combined paths never re-reach their alert code on the next
+    # (noop) tick, so a transient webhook failure is only recoverable by draining the queue at the TOP
+    # of every tick — before the noop/hold/dirty returns. Guard that drain_pending() is called in
+    # main() ahead of its first `return`.
+    main = gitops_fn("main")
+    drain_line = next(
+        (
+            n.lineno
+            for n in ast.walk(main)
+            if isinstance(n, ast.Call)
+            and isinstance(n.func, ast.Name)
+            and n.func.id == "drain_pending"
+        ),
+        None,
+    )
+    assert drain_line is not None, "main() must call drain_pending()"
+    first_return = min(n.lineno for n in ast.walk(main) if isinstance(n, ast.Return))
+    assert drain_line < first_return, (
+        "drain_pending() must run before any short-circuit return in main()"
+    )
