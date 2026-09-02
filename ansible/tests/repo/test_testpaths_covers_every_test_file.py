@@ -1,11 +1,19 @@
-"""Guard: every tracked pytest file lies under some `testpaths` entry in pyproject.toml.
+"""Guards on where a test file lives: under a `testpaths` entry, and in a `tests/` directory.
 
 `testpaths` is hand-enumerated — 21 entries covering `ansible/tests`, `scripts`,
-`.claude/hooks`, `evals` and a dozen per-role `files/` directories. Nothing derives it, so a
-role that ships tests in a `files/` directory nobody added falls outside it silently. The tests
+`.claude/hooks`, `evals` and a dozen per-role `tests/` directories. Nothing derives it, so a
+role that ships tests in a directory nobody added falls outside it silently. The tests
 are written, reviewed and committed; they pass when invoked directly; and `uv run pytest` never
 collects them. There is no error to read, because the suite reports the count it always
 reported.
+
+The second guard keeps tests out of the directory holding the code they cover. #764 moved 160
+of them into sibling `tests/` directories, because a role's `files/` is what the role ships
+and a test there was kept off hosts only by per-file copy lists, and because the deployer's
+test-only path rule (`deploy_changes._is_test_only_path`) is a directory check. The layout
+drifted within the hour that PR was open: master added `scripts/lib/test_invocation_sites.py`
+beside its module. `ansible/tests/` satisfies the rule by name. `scripts/conftest.py` is the
+one deliberate exception, the shared conftest for the whole `scripts` testpath.
 
 This is the residual gap stated in `cef07465`, the commit that deleted
 `test_prek_pytest_files_cover_testpaths.py`: "this covers tests under testpaths only". That
@@ -104,3 +112,91 @@ def test_a_sibling_sharing_a_name_prefix_is_flagged() -> None:
 
 def test_a_test_file_under_a_testpath_is_clean() -> None:
     assert orphaned_test_files(["scripts/dev/test_a.py"], ["scripts"]) == []
+
+
+# Test-suite files that may sit outside a `tests/` directory, and why.
+_LAYOUT_EXCEPTIONS = {
+    # The shared conftest for the `scripts` testpath; pytest finds it by walking up from
+    # each collected file, so it has to sit at the root the subdirectories share.
+    "scripts/conftest.py",
+}
+# A suite mid-move. PR #760 moves gitops_deploy's tests into `tests/`; drop this when it lands.
+_LAYOUT_EXCEPTION_PREFIXES = ("ansible/roles/setup/gitops_deploy/files/",)
+
+
+def _tracked_suite_files() -> list[str]:
+    """The test files plus every `conftest.py`: a conftest beside shipped code is the same
+    hazard as a test beside it, and #764 moved two of them."""
+    return sorted(
+        set(_tracked_test_files())
+        | {
+            rel
+            for rel in subprocess.run(
+                ["git", "ls-files", "-z", "--", "**/conftest.py", "conftest.py"],
+                cwd=REPO,
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout.split("\0")
+            if rel
+        }
+    )
+
+
+def misplaced_suite_files(
+    suite_files, exceptions=(), exception_prefixes=()
+) -> list[str]:
+    """The suite files with no `tests` directory anywhere on their path."""
+    return [
+        path
+        for path in suite_files
+        if "tests" not in PurePosixPath(path).parts[:-1]
+        and path not in exceptions
+        and not path.startswith(tuple(exception_prefixes))
+    ]
+
+
+def test_every_suite_file_sits_in_a_tests_directory() -> None:
+    misplaced = misplaced_suite_files(
+        _tracked_suite_files(), _LAYOUT_EXCEPTIONS, _LAYOUT_EXCEPTION_PREFIXES
+    )
+    assert not misplaced, (
+        "these test files sit beside the code they cover; move each into a sibling `tests/` "
+        f"directory (a role's `files/` is what the role ships): {misplaced}"
+    )
+
+
+def test_a_test_beside_its_module_is_flagged() -> None:
+    # The RED proof: a test in a role's files/ and one at a scripts subdirectory root.
+    assert misplaced_suite_files(
+        [
+            "ansible/roles/k8s/thing/files/test_a.py",
+            "scripts/lib/test_b.py",
+            "scripts/lib/tests/test_c.py",
+        ]
+    ) == ["ansible/roles/k8s/thing/files/test_a.py", "scripts/lib/test_b.py"]
+
+
+def test_a_conftest_beside_shipped_code_is_flagged() -> None:
+    assert misplaced_suite_files(["ansible/roles/k8s/thing/files/conftest.py"]) == [
+        "ansible/roles/k8s/thing/files/conftest.py"
+    ]
+
+
+def test_a_file_named_tests_does_not_count_as_a_directory() -> None:
+    # Only a directory component satisfies the rule; `parts[:-1]` drops the filename.
+    assert misplaced_suite_files(["scripts/lib/tests.py"]) == ["scripts/lib/tests.py"]
+
+
+def test_the_named_exceptions_are_clean() -> None:
+    assert (
+        misplaced_suite_files(
+            [
+                "scripts/conftest.py",
+                "ansible/roles/setup/gitops_deploy/files/test_x.py",
+            ],
+            _LAYOUT_EXCEPTIONS,
+            _LAYOUT_EXCEPTION_PREFIXES,
+        )
+        == []
+    )
