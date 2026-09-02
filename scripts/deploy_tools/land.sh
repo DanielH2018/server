@@ -339,9 +339,7 @@ done
 
 # 4 = the tree is behind origin/master. CLAUDE.md classes this a resume point: pull again,
 # never --skip-staleness-check. It happens when someone merges during the CI wait, so the tick
-# at step 4 had a newer tip than the pre-flight checked. One more tick fetches and crosses it.
-# Bounded at a single retry on purpose — if the new tip carries a broad-manual change the tick
-# will never cross it, and re-ticking forever would hide that behind a stalled landing.
+# at step 4 had a newer tip than the pre-flight checked. Another tick fetches and crosses it.
 #
 # The tick crosses the new tip only once master CI is green ON THE TIP (the journal reads
 # `origin <tip>: CI not finished — deferring`). Step 3 waited on this PR's own merge commit,
@@ -351,8 +349,16 @@ done
 # first, after the blockers check — a landing that can never cross must not wait 15 minutes
 # before saying so. await_ci.py given the tip itself does not chase anything further unless
 # that tip's run is cancelled by yet another merge, which is the same rule step 3 relies on.
-if [ "$deploy_rc" -eq 4 ]; then
-  say "tree went stale mid-landing (someone merged during the wait); re-ticking once"
+#
+# Bounded at STALE_RETRIES on purpose. A single retry covered one merge landing during the
+# wait; a third merge landing during the tip wait moved the tip again and the retry's own
+# deploy exited 4. Each pass re-runs the blockers check, so a broad-manual change still ends
+# `blocked` on the pass that sees it rather than hiding behind a stalled landing.
+STALE_RETRIES=3
+stale_attempt=0
+while [ "$deploy_rc" -eq 4 ] && [ "$stale_attempt" -lt "$STALE_RETRIES" ]; do
+  stale_attempt=$((stale_attempt + 1))
+  say "tree went stale mid-landing (someone merged during the wait); re-ticking ($stale_attempt/$STALE_RETRIES)"
   git fetch -q origin "$BRANCH" || die "could not fetch origin/$BRANCH" 1
   uv run python scripts/deploy_tools/deploy_tags.py blockers "origin/$BRANCH"
   retry_pf_rc=$?
@@ -364,8 +370,16 @@ if [ "$deploy_rc" -eq 4 ]; then
   TIP_SHA=$(git rev-parse "origin/$BRANCH") || die "could not read origin/$BRANCH" 1
   if [ "$TIP_SHA" != "$MERGE_SHA" ]; then
     say "waiting for master CI on the new tip $TIP_SHA (the tick defers until it is green)"
+    t_tip_wait_start=$SECONDS
     uv run python scripts/deploy_tools/await_ci.py "$TIP_SHA" --timeout "$CI_TIMEOUT"
     tip_ci_rc=$?
+    # This wait is CI time, not deploy time, but it runs after the T_TICK stamp. Shifting
+    # T_CI and T_TICK forward by the seconds waited books it under wait_ci on the Landings
+    # board (wait_ci = T_CI - T_MERGED grows, tick = T_TICK - T_CI is unchanged, deploy =
+    # T_DEPLOY - T_TICK shrinks by the same amount) with no new field for the board to learn.
+    tip_waited=$((SECONDS - t_tip_wait_start))
+    T_CI=$((T_CI + tip_waited))
+    T_TICK=$((T_TICK + tip_waited))
     case "$tip_ci_rc" in
       0) ;;
       1) die "master CI is RED on the tip $TIP_SHA — the tick cannot cross it; nothing deployed" 1 ;;
@@ -376,7 +390,7 @@ if [ "$deploy_rc" -eq 4 ]; then
   ./scripts/deploy_tools/gitops_tick.sh
   ./scripts/deploy.sh --tags "$TAGS"
   deploy_rc=$?
-fi
+done
 
 case "$deploy_rc" in
   0) ;;

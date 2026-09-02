@@ -2,7 +2,7 @@
   "annotations": {
     "list": []
   },
-  "description": "Where a landing's time goes, one point per land.sh run. land.sh writes a logfmt line to syslog from its EXIT trap (`logger -t landing-annotation`), promtail ships it to Loki, and this board reads it. wait_merge is `--await-merge` polling until the PR merged; wait_ci is master CI on the merge commit; tick is the GitOps tick; deploy is the scoped deploy.sh run. Empty phases were never reached (a `blocked` landing has no wait_ci). CLI equivalent: `uv run python scripts/diagnostics/probe.py loki-query '{job=\"syslog\"} |= \"event=landing\" | logfmt'`.",
+  "description": "Where a landing's time goes, one point per land.sh run. land.sh writes a logfmt line to syslog from its EXIT trap (`logger -t landing-annotation`), promtail ships it to Loki, and this board reads it. wait_merge is `--await-merge` polling until the PR merged; wait_ci is master CI on the merge commit, plus any wait on a newer tip when another PR merged mid-landing; tick is the GitOps tick; deploy is the scoped deploy.sh run. Empty phases were never reached (a `blocked` landing has no wait_ci). CLI equivalent: `uv run python scripts/diagnostics/probe.py loki-query '{job=\"syslog\"} |= \"event=landing\" | logfmt'`.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
