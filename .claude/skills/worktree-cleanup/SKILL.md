@@ -42,6 +42,28 @@ can do from inside a worktree makes the pruner collect it.
 `git worktree remove` refuses outright while a worktree is locked, and unlocking is a separate
 step — without it the command reports success having removed nothing.
 
+## Deleting the branch afterwards
+
+**Try `git branch -d` first, whatever you expect it to say.** It refuses a branch not merged into
+HEAD **or its upstream**, and the upstream half is what makes it look inconsistent on a
+squash-merged branch. Observed both ways on 2026-08-21: `worktree-gitops-eval-doc`, squash-merged
+minutes earlier, deleted cleanly because the local `refs/remotes/origin/<branch>` had not been
+pruned yet and still carried the tip — even though GitHub had already deleted the remote branch.
+Four older squash-merged branches were refused, their tracking refs having since been pruned.
+
+So the window in which `-d` works closes at the next `git fetch --prune`, not at the merge. After
+that only `-D` does. A refusal is information: it tells you the tracking ref is gone, not that the
+work is unlanded.
+
+**`-D` is not reliably denied by the classifier.** It was approved twice on 2026-08-27
+(`worktree-pi-detached-container-arm`, `worktree-cron-kubeconfig-guard`), in both cases where the
+session had just merged the PR whose head was that branch tip. Treat the classifier as judging the
+situation rather than the flag — don't hand the operator a chore you can finish, and don't assume
+the call in advance either way.
+
+`prune_worktrees.py` uses `-d` deliberately, so git arbitrates, and it reports rather than reaps
+anything the ancestor test misses.
+
 ## The stash trap
 
 The stash stack and the index are **shared across every worktree** of this repo, and other

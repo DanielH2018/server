@@ -192,6 +192,20 @@ touch the finding. A finding already fixed on an open branch is REFUTED-as-live 
 Verdict per finding: **CONFIRMED** (refutation failed), **REFUTED** (cite the disproving
 evidence), or **UNCERTAIN**. Refuted findings drop to a one-line "refuted in verification"
 appendix; UNCERTAIN ones stay but are marked unverified. Lows skip verification.
+
+**Spot-check a REFUTED verdict's `file:line` against the file.** A refutation is a claim like any
+other, and this loop is armoured against false positives and not at all against false negatives:
+refuting is cheap and always defensible, confirming carries the risk this skill warns about, so
+uncertainty resolves downward and the downward path is one-way. It has produced an invented
+refutation. Asked to rule on "qbittorrent's main container has no livenessProbe", a skeptic
+announced it had read the real template rather than trust the prompt, then returned REFUTED citing
+"39 lines, an httpGet livenessProbe on the qbittorrent container at lines 24-30". The file is
+**183 lines**; its only `livenessProbe` is at `:91`, inside the **wireguard** container, while the
+qbittorrent container at `:116` has a `readinessProbe` at `:160` and no liveness check. The finding
+was live and the refutation was fabricated, and one `grep` settled it. "The decisive check wasn't
+run" is a reason to run it, not a verdict — and when reading a past ledger, treat its refuted list
+as the least-reviewed part of it.
+
 **Manifest the candidates first:** list every High/Medium finding, then give each its own verdict row —
 a candidate with no row was *skipped*, not cleared (a verification miss, not an implicit pass). A verdict
 that rests on a comment, a name, or a "by design" claim is not done until it is re-checked against the
