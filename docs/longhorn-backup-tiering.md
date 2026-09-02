@@ -136,7 +136,7 @@ not evidence of the end state.
 
 **Run `uv run python scripts/diagnostics/probe.py b2-budget` after adding a volume or changing a shard.** It
 re-derives the projection from one listing of the live bucket (~10 Class C) and exits non-zero if
-a shard is over budget. Nothing else will announce the drift, because the cost grows quietly with
+a shard is over budget. Nothing else announces the drift, because the cost grows quietly with
 stored blocks rather than with anything a deploy touches.
 
 ## Deliberate deviations from kopiaignore (all in the cheap direction)

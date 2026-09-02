@@ -135,7 +135,7 @@ Check `Ready` for the actual health signal; the other conditions are advisory.
 
 Renovate tracks the pin (`renovate.json`, manager for
 `ansible/roles/setup/k3s/defaults/main.yml`) with `automerge: false`. While the ladder is being
-walked it will offer the newest release — several minors ahead and therefore **not** directly
+walked it offers the newest release — several minors ahead and therefore **not** directly
 mergeable. Treat those PRs as a signal to take the next hop, not as the hop itself.
 
 Once current, you are at most one minor behind at any time and the no-skip rule stops binding, so

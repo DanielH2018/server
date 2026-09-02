@@ -262,7 +262,7 @@ the plugin never got it.
 
 Workaround: `LOKI_URL=http://10.43.99.158:3100`. Durable fix: apply the ClusterIP-fallback pattern
 in the `daniel-tools` marketplace repo, which is where the plugin lives — an operator searching
-under `ansible/` will not find it (2026-08-23b review M11).
+under `ansible/` does not find it (2026-08-23b review M11).
 
 Do **not** pin the workloads to a node; `roles/setup/k3s/defaults/main.yml:893-896` pre-rejects
 that — fix the firewall, not the placement. In-cluster consumers (Grafana datasources,

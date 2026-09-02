@@ -29,7 +29,7 @@ Files checked: 147       Suspect files: 0
 Rootkits checked: 497    Possible rootkits: 0
 ```
 
-**False positives:** rkhunter is noisy after package upgrades — it will warn about changed binary hashes. **Routine upgrades are already handled:** `initial_setup` sets `APT_AUTOGEN=true` in `/etc/default/rkhunter`, so `--propupd` runs from the package-manager hook after every apt install/upgrade, including unattended-upgrades. That's the point — the only file-property changes the weekly scan flags are ones *not* explained by a trusted package event.
+**False positives:** rkhunter is noisy after package upgrades — it warns about changed binary hashes. **Routine upgrades are already handled:** `initial_setup` sets `APT_AUTOGEN=true` in `/etc/default/rkhunter`, so `--propupd` runs from the package-manager hook after every apt install/upgrade, including unattended-upgrades. That's the point — the only file-property changes the weekly scan flags are ones *not* explained by a trusted package event.
 
 So don't reflexively run this after an upgrade. Reset the baseline by hand only after an intentional change apt didn't make (a manually installed binary, a hand-edited config in a watched path), and only once you've confirmed the warning is yours:
 
@@ -74,7 +74,7 @@ Changed entries:
 
 The letters on the left indicate what changed: `p` = permissions, `u` = user/owner, `s` = size, `sha256` = content hash, etc.
 
-**Updating the baseline:** After any intentional system change (package update, config edit, re-running `initial_setup.yml`), update the baseline or AIDE will keep reporting those changes:
+**Updating the baseline:** After any intentional system change (package update, config edit, re-running `initial_setup.yml`), update the baseline or AIDE keeps reporting those changes:
 
 ```bash
 sudo aide --update

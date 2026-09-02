@@ -7,7 +7,7 @@ outside the house, which is the one thing neither of the others can do.
 **Nothing here is managed by Ansible.** There is no provisioning task, no Terraform, no API key in
 SOPS — every monitor was created in the console by hand, and this file is the only record of what
 they are set to. That is a real gap and it is stated here rather than hidden: a monitor deleted or
-reconfigured in the console leaves no trace in git, and the repo will keep reading as though it exists.
+reconfigured in the console leaves no trace in git, and the repo keeps reading as though it exists.
 The vendored `community.general.uptimerobot` module is not a way out; it speaks the retired v1 API
 and no playbook uses it.
 
