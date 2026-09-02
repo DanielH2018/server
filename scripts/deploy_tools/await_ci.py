@@ -32,6 +32,7 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.git import git_stdout  # noqa: E402
 from lib.repo_paths import GITOPS_DEPLOY_FILES  # noqa: E402
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -114,9 +115,7 @@ def verdict_for(sha: str, fetch=fetch_check_runs, required=None) -> str:
 
 
 def _git(*args: str) -> str:
-    return subprocess.run(
-        ["git", *args], capture_output=True, text=True, check=True
-    ).stdout.strip()
+    return git_stdout(*args)
 
 
 def _fetch_tip() -> str:

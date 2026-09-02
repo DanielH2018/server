@@ -37,6 +37,12 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+# Reach the sibling package directories: a directly-invoked script gets only its own
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.git import git_stdout  # noqa: E402
+
 REMOVABLE = "removable"
 KEEP = "keep"
 ORPHAN = "orphan"
@@ -135,10 +141,7 @@ def classify(tree: Worktree, merged: bool, dirty: bool) -> tuple[str, str]:
 
 
 def _git(args: list[str], cwd: str | None = None) -> str:
-    result = subprocess.run(
-        ["git", *args], cwd=cwd, capture_output=True, text=True, check=False
-    )
-    return result.stdout.strip()
+    return git_stdout(*args, cwd=cwd, check=False)
 
 
 def cherry_says_merged(cherry_output: str) -> bool:

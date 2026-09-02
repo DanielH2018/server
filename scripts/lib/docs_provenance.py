@@ -25,21 +25,14 @@ to write the result.
 from __future__ import annotations
 
 import datetime as dt
-import os
 import subprocess
 import sys
 from collections.abc import Callable, Sized
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.git import git  # noqa: E402
 from lib.repo_paths import REPO  # noqa: E402
-
-# git reads these from the environment in preference to its working directory, so a `cwd=`
-# alone does not scope a git call. Inside a git hook they are both set and point at the repo
-# running the hook, which made head_sha() report that repo's SHA for any path it was handed.
-# Stripped rather than overridden: the caller's `repo` argument is the only thing that should
-# decide which tree is read.
-_GIT_ENV_OVERRIDES = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR")
 
 # A generated page names the hook that protects it, because a reader of the rendered
 # page cannot see prek.toml.
@@ -58,16 +51,9 @@ def head_sha(repo: Path | None = None) -> str:
     is missing or the directory is not a repo is a worse outcome than a page whose
     provenance line reads "unknown".
     """
-    env = {k: v for k, v in os.environ.items() if k not in _GIT_ENV_OVERRIDES}
     try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            cwd=repo or REPO,
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
+        result = git(
+            "rev-parse", "--short", "HEAD", cwd=repo or REPO, check=False, timeout=10
         )
     except OSError, subprocess.SubprocessError:
         return "unknown"

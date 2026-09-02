@@ -27,9 +27,15 @@ Used by scripts/deploy.sh, which maps a non-zero exit here to its own refusal.
 """
 
 import argparse
-import os
 import subprocess
 import sys
+from pathlib import Path
+
+# Reach the sibling package directories: a directly-invoked script gets only its own
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.git import git  # noqa: E402
 
 # Distinct from deploy.sh's other refusals: 2 = tag matched nothing, 3 = broad --changed,
 # 75 = lock busy.
@@ -41,20 +47,13 @@ FETCH_TIMEOUT_S = 20
 def _git(
     repo: str, *args: str, timeout: float | None = None
 ) -> subprocess.CompletedProcess:
-    """Run git in `repo` with inherited GIT_* variables removed.
+    """Run git in `repo`, never raising on a non-zero exit.
 
     `git -C` does not override GIT_DIR, so an inherited one (a pre-commit hook, a
-    rebase in progress) would silently redirect these reads at another repository.
+    rebase in progress) would silently redirect these reads at another repository;
+    lib.git strips it.
     """
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    return subprocess.run(
-        ["git", "-C", repo, *args],
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=timeout,
-    )
+    return git(*args, cwd=repo, check=False, timeout=timeout)
 
 
 def behind_ahead(repo, ref: str = "origin/master") -> tuple[int, int]:
