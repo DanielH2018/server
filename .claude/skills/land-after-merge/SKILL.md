@@ -85,8 +85,13 @@ It also owns the rule that used to live in `CLAUDE.md`: `cancelled`, `stale` and
 `skipped_by_concurrency` mean *no verdict for this SHA*, never *this SHA is bad* —
 `_CI_NO_VERDICT_CONCLUSIONS` in `deploy_logic.py` is the list, and a commit whose merge was
 immediately followed by another reads `cancelled` permanently. `await_ci.py` follows the tip in
-that case, but only once your commit is an ancestor of it. If you ever check by hand, check
-that way.
+that case, but only once your commit is an ancestor of it. The log line is
+`<sha> has no verdict (cancelled/stale) — following the tip <tip>`, and it is normal, not a
+fault. It also fires when the cancellation came before the `prek` job registered a check-run
+at all: the check-runs list then never carries the required name, and `await_ci.py` reads the
+SHA's check-suites (a `completed cancelled` suite with zero runs) to tell that from a fresh
+push. Before PR #775 that case waited out the whole budget and exited 75. If you ever check
+by hand, check that way.
 
 `land.sh` runs from the primary checkout wherever you invoke it, because `deploy.sh` renders
 from its working directory and a worktree is behind master after a squash merge.
