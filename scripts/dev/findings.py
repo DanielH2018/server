@@ -83,7 +83,7 @@ for _d in DOMAINS:
 # call, so no second write and no item id. It needs the `project` token scope.
 PROJECT_TITLE = "Claude findings"
 
-_LIST_FIELDS = "number,title,state,labels,body,createdAt,url,comments"
+_LIST_FIELDS = "number,title,state,labels,body,createdAt,closedAt,url,comments"
 _FP_RE = re.compile(r"^Fingerprint: `([0-9a-f]{12})`$", re.M)
 _LINE_SUFFIX = re.compile(r":\d+(?:-\d+)?$")
 _REOBSERVED = "Re-observed"
@@ -209,8 +209,96 @@ def run(plans: list[list[str]], dry_run: bool) -> None:
 # --- commands ---------------------------------------------------------------------------------
 
 
-def cmd_open(args):  # replaced in Task 3
-    raise NotImplementedError
+def plan_touch(issue: dict, source: str) -> list[list[str]]:
+    """A re-observation is a comment; the third one adds `escalated`."""
+    n = str(issue["number"])
+    seen = reobservations(issue) + 1
+    plans = [
+        [
+            "issue",
+            "comment",
+            n,
+            "--body",
+            f"{_REOBSERVED} by {source} (sighting {seen + 1}).",
+        ]
+    ]
+    if seen >= 2 and "escalated" not in label_names(issue):
+        plans.append(["issue", "edit", n, "--add-label", "escalated"])
+    return plans
+
+
+def plan_open(
+    existing: dict | None,
+    *,
+    title: str,
+    body: str,
+    labels: list[str],
+    fp: str,
+    source: str,
+) -> tuple[str, int, list[list[str]]]:
+    if existing is None:
+        argv = [
+            "issue",
+            "create",
+            "--title",
+            title,
+            "--body",
+            body + trailer(fp, source),
+        ]
+        for lab in labels:
+            argv += ["--label", lab]
+        argv += ["--project", PROJECT_TITLE]
+        return "created", 0, [argv]
+    n = str(existing["number"])
+    names = label_names(existing)
+    if existing.get("state") == "CLOSED" and "refuted" in names:
+        return "refuted", 3, []
+    if existing.get("state") == "CLOSED":
+        return (
+            "reopened",
+            0,
+            [
+                ["issue", "reopen", n],
+                [
+                    "issue",
+                    "comment",
+                    n,
+                    "--body",
+                    f"{_REOBSERVED} by {source} after it was closed as fixed: treat as a regression.",
+                ],
+            ],
+        )
+    return "touched", 0, plan_touch(existing, source)
+
+
+def cmd_open(args: argparse.Namespace) -> int:
+    body = args.body_file.read_text()
+    fp = fingerprint(args.title, args.file)
+    labels = ["claude", f"severity/{args.severity}", f"kind/{args.kind}"]
+    if args.domain:
+        labels.append(f"domain/{args.domain}")
+    if args.no_vetted_remediation:
+        labels.append("no-vetted-remediation")
+    existing = find_by_fingerprint(load_issues("all"), fp)
+    outcome, code, plans = plan_open(
+        existing, title=args.title, body=body, labels=labels, fp=fp, source=args.source
+    )
+    if outcome == "refuted":
+        print(
+            f"#{existing['number']} refuted: closed on {existing.get('closedAt', '?')[:10]}; not reopened"
+        )
+        return code
+    if outcome == "created":
+        if args.dry_run:
+            run(plans, True)
+            print(f"(dry-run) would create; fingerprint {fp}")
+            return 0
+        url = gh(*plans[0]).stdout.strip()
+        print(f"#{url.rsplit('/', 1)[-1]} created  {url}")
+        return 0
+    run(plans, args.dry_run)
+    print(f"#{existing['number']} {outcome}  {existing.get('url', '')}")
+    return 0
 
 
 def cmd_touch(args):  # replaced in Task 4

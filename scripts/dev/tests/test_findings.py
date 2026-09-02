@@ -204,3 +204,137 @@ def test_dry_run_is_accepted_before_the_subcommand(monkeypatch):
         lambda *a, **k: (_ for _ in ()).throw(AssertionError("gh called")),
     )
     assert findings.main(["--dry-run", "sync-labels"]) == 0
+
+
+# --- open ----------------------------------------------------------------------------------
+
+_LABELS = ["claude", "severity/high", "kind/gap"]
+
+
+def test_open_with_no_match_plans_a_create_with_every_label():
+    outcome, code, plans = findings.plan_open(
+        None, title="T", body="B", labels=_LABELS, fp="f" * 12, source="s"
+    )
+    assert (outcome, code) == ("created", 0)
+    (argv,) = plans
+    assert argv[:3] == ["issue", "create", "--title"]
+    for lab in _LABELS:
+        assert argv[argv.index("--label", argv.index(lab) - 1) + 1] == lab
+    body = argv[argv.index("--body") + 1]
+    assert (
+        body.startswith("B")
+        and "Fingerprint: `" + "f" * 12 + "`" in body
+        and "Source: s" in body
+    )
+    assert argv[argv.index("--project") + 1] == findings.PROJECT_TITLE
+
+
+def test_open_touch_and_reopen_never_pass_project():
+    for existing in (_issue(3, fp="f" * 12), _issue(3, state="CLOSED", fp="f" * 12)):
+        _, _, plans = findings.plan_open(
+            existing, title="T", body="B", labels=_LABELS, fp="f" * 12, source="s"
+        )
+        assert all("--project" not in argv for argv in plans)
+
+
+def test_open_with_an_open_match_touches_instead_of_creating():
+    existing = _issue(3, fp="f" * 12)
+    outcome, code, plans = findings.plan_open(
+        existing, title="T", body="B", labels=_LABELS, fp="f" * 12, source="s"
+    )
+    assert (outcome, code) == ("touched", 0)
+    assert all(argv[:2] != ["issue", "create"] for argv in plans)
+    assert plans[0][:3] == ["issue", "comment", "3"]
+
+
+def test_open_with_a_refuted_match_refuses_and_plans_nothing():
+    existing = _issue(3, state="CLOSED", labels=("refuted",), fp="f" * 12)
+    outcome, code, plans = findings.plan_open(
+        existing, title="T", body="B", labels=_LABELS, fp="f" * 12, source="s"
+    )
+    assert (outcome, code, plans) == ("refuted", 3, [])
+
+
+def test_open_with_a_fixed_match_reopens_then_comments():
+    existing = _issue(3, state="CLOSED", fp="f" * 12)
+    outcome, code, plans = findings.plan_open(
+        existing, title="T", body="B", labels=_LABELS, fp="f" * 12, source="s"
+    )
+    assert (outcome, code) == ("reopened", 0)
+    assert plans[0][:3] == ["issue", "reopen", "3"]
+    assert plans[1][:3] == ["issue", "comment", "3"]
+    assert "regression" in plans[1][plans[1].index("--body") + 1].lower()
+
+
+def test_open_cli_exits_3_on_refuted(monkeypatch, tmp_path):
+    body = tmp_path / "b.md"
+    body.write_text("B")
+    fp = findings.fingerprint("T", "a.py:1")
+    monkeypatch.setattr(
+        findings,
+        "load_issues",
+        lambda state="all": [_issue(3, state="CLOSED", labels=("refuted",), fp=fp)],
+    )
+    monkeypatch.setattr(
+        findings,
+        "gh",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("gh called")),
+    )
+    assert (
+        findings.main(
+            [
+                "open",
+                "--title",
+                "T",
+                "--body-file",
+                str(body),
+                "--severity",
+                "low",
+                "--kind",
+                "gap",
+                "--file",
+                "a.py:1",
+            ]
+        )
+        == 3
+    )
+
+
+def test_open_cli_prints_the_created_number(monkeypatch, tmp_path, capsys):
+    body = tmp_path / "b.md"
+    body.write_text("B")
+    monkeypatch.setattr(findings, "load_issues", lambda state="all": [])
+
+    class _P:
+        stdout = "https://github.com/o/r/issues/42\n"
+
+    monkeypatch.setattr(findings, "gh", lambda *a, **k: _P())
+    assert (
+        findings.main(
+            [
+                "open",
+                "--title",
+                "T",
+                "--body-file",
+                str(body),
+                "--severity",
+                "low",
+                "--kind",
+                "gap",
+            ]
+        )
+        == 0
+    )
+    assert "#42 created" in capsys.readouterr().out
+
+
+def test_open_adds_no_vetted_remediation_and_domain_labels():
+    outcome, _, plans = findings.plan_open(
+        None,
+        title="T",
+        body="B",
+        labels=_LABELS + ["domain/network", "no-vetted-remediation"],
+        fp="f" * 12,
+        source="s",
+    )
+    assert "no-vetted-remediation" in plans[0] and "domain/network" in plans[0]
