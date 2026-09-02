@@ -188,6 +188,23 @@ def write_state(path: str, fp: str) -> None:
     atomic_write(path, fp)  # torn-write-safe temp+rename, see host_lib
 
 
+DISCORD_LIMIT = 1950  # Discord rejects a message over 2000 characters.
+
+
+def clamp_for_discord(content: str) -> str:
+    """Bound the whole message, after the individual renderers have bounded their own parts.
+
+    Each renderer truncates independently, so a run reporting a stale dashboard AND repository
+    problems AND stuck-pending items AND a PR backlog can still concatenate past the cap. A
+    rejected post returns False from discord(), which leaves the dedupe fingerprint unadvanced
+    and re-posts the same oversized message every day — so the last resort is a hard trim rather
+    than a failed delivery.
+    """
+    if len(content) <= DISCORD_LIMIT:
+        return content
+    return content[: DISCORD_LIMIT - 20].rstrip() + "\n…(truncated)"
+
+
 def read_pending_seen(path: str) -> dict[str, float]:
     """The {branch: first-seen epoch} map for pending dashboard items.
 
@@ -306,6 +323,7 @@ def main() -> int:
             content = CLEARED_MSG
         else:
             content = render_digest(items)
+        content = clamp_for_discord(content)
         if dry:
             log("--- DRY RUN, would post ---\n%s" % content)
         else:

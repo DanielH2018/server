@@ -458,6 +458,10 @@ def item_soak_days(description: str) -> int:
     Renovate writes "Docker digest to <sha>" for a digest bump and "... tag to vX" / "dependency
     X to vY" for a version bump, and renovate.json soaks those for 3 and 7 days respectively.
     Anything unrecognised gets the LONGER soak: a misread must delay the alert, never invent one.
+
+    The 1-day `vulnerabilityAlerts` soak is deliberately not modelled: nothing in the item text
+    distinguishes a CVE-driven bump, and those are scheduled "at any time" so they should never
+    linger here. A CVE bump that does get stuck waits the 7+7 version allowance like any other.
     """
     return (
         DIGEST_SOAK_DAYS
@@ -523,12 +527,35 @@ DASHBOARD_UNPARSEABLE_MSG = (
 )
 
 
-def render_pending(items: list[tuple[str, str, int]]) -> str:
-    lines = [PENDING_HEADER_MSG]
+PENDING_REMEDY = (
+    "   Tick its box on the Dependency Dashboard to force the PR: the update is "
+    "detected but Renovate is not raising it."
+)
+
+
+def render_pending(items: list[tuple[str, str, int]], limit: int = 1500) -> str:
+    """Render the stuck-pending list into a Discord message, truncated to `limit` characters.
+
+    Bounded for the same reason `render_digest` is, and more urgently: this section held 22
+    items on 2026-09-02, and one line runs to ~145 characters, so an unbounded render of a
+    fully stuck section is ~3,200 — past Discord's 2,000-character cap. An over-long post is
+    rejected, `discord()` returns False, the dedupe fingerprint is never advanced, and the run
+    re-posts the same oversized message every day. The check would fail to deliver in exactly
+    the state it exists to report.
+
+    `limit` is lower than render_digest's 1900 because both can be joined into one message.
+    `stale_pending` sorts worst-offender-first, so the item that matters most survives the trim.
+    """
+    out = [PENDING_HEADER_MSG]
+    shown = 0
     for branch, desc, days in items:
-        lines.append(" • %s — pending %d days (%s)" % (desc or branch, days, branch))
-    lines.append(
-        "   Tick its box on the Dependency Dashboard to force the PR: the branch is "
-        "detected but Renovate is not raising it."
-    )
-    return "\n".join(lines)
+        line = " • %s — pending %d days (%s)" % (desc or branch, days, branch)
+        # Leave room for the "…and N more" tail and the remedy line.
+        if len("\n".join(out + [line, PENDING_REMEDY])) > limit - 30:
+            break
+        out.append(line)
+        shown += 1
+    if shown < len(items):
+        out.append("…and %d more" % (len(items) - shown))
+    out.append(PENDING_REMEDY)
+    return "\n".join(out)

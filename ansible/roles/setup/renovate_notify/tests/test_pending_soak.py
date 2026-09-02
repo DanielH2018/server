@@ -190,3 +190,39 @@ def test_render_pending_names_the_item_the_dwell_and_the_remedy():
     assert "111 days" in msg
     assert "renovate/k8s-image-grafanapromtail" in msg
     assert "Tick its box" in msg
+
+
+def test_render_pending_stays_under_discords_cap_with_the_whole_section_stuck():
+    """The state this check exists to report is also the one that overflows Discord.
+
+    Every item in the captured dashboard, stuck at once: ~22 lines of ~145 characters is past
+    the 2000-character cap, and an over-long post is REJECTED — which leaves the fingerprint
+    unadvanced and re-posts the same oversized message daily.
+    """
+    now = 1_000_000.0
+    current = nl.parse_pending(FIXTURE)
+    seen = {branch: now - 40 * DAY for branch in current}
+    items = nl.stale_pending(seen, current, now)
+    assert len(items) == len(current), (
+        "the whole section must be stuck for this test to bite"
+    )
+    msg = nl.render_pending(items)
+    assert len(msg) <= 1500
+    assert "…and" in msg, "a truncated render must say how many it dropped"
+    assert nl.PENDING_REMEDY in msg, "the remedy line must survive truncation"
+
+
+def test_render_pending_keeps_the_worst_offender_when_it_truncates():
+    now = 1_000_000.0
+    current = nl.parse_pending(FIXTURE)
+    seen = {branch: now - 40 * DAY for branch in current}
+    worst = "renovate/k8s-image-grafanagrafana"
+    seen[worst] = now - 400 * DAY
+    msg = nl.render_pending(nl.stale_pending(seen, current, now))
+    assert worst in msg
+    assert "400 days" in msg
+
+
+def test_render_pending_does_not_truncate_a_short_list():
+    msg = nl.render_pending([("renovate/x", "Update foo to v2", 20)])
+    assert "…and" not in msg
