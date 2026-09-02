@@ -41,7 +41,15 @@ open after 45 minutes exits 75: it is not being merged, and the reason is on the
 Run that command with `run_in_background` and let the session be re-invoked when it exits;
 the `VERDICT:` line is the last line of the logfile. `land.sh` waits for master CI on the merge commit, ticks, deploys what the tick deferred, and prints a
 `VERDICT:` line — `settled`, `unhealthy`, `deploy-failed`, `nothing-to-deploy`, `blocked`,
-`needs-manual-apply` or `deferred`.
+`needs-manual-apply`, `deferred`, or one of the four give-ups: `merge-timeout` (the PR was
+still open after the 2700s merge budget), `ci-red`, `ci-timeout` (no CI verdict inside the
+900s budget) and `lock-busy` (the tree lock stayed busy through every retry).
+
+`nothing-to-deploy` is decided from the PR's file list right after the merge, before any CI
+wait: a PR that reaches no service tag, no plane a hand applies and nothing the tick applies
+itself has nothing for `land.sh` to wait on, and the deployer's own tick fast-forwards it.
+The one exception is a file list GitHub truncated, which is derived from the diff after the
+tick as before.
 
 If another PR merges during that CI wait, the first `deploy.sh` exits 4 (the tree is behind
 origin) and `land.sh` retries, up to three times: each pass re-runs the blockers check, waits
@@ -52,7 +60,9 @@ deployed, three landings in one day.
 
 Every run also writes one logfmt line to syslog on exit (`logger -t landing-annotation`):
 the PR, the merge SHA, the verdict, and seconds spent in each phase — `wait_merge`,
-`wait_ci`, `tick`, `deploy`, `total`. Promtail ships it to Loki and the **Landings** Grafana
+`wait_ci`, `tick`, `deploy`, `total` — plus `lock`, the seconds spent in tick or deploy
+attempts that lost the tree lock (a sub-part of `tick` and `deploy`, not a fifth phase),
+and `holder`, the command that held it when the first attempt lost. Promtail ships it to Loki and the **Landings** Grafana
 board (Infrastructure folder) plots it, so "sessions wait too long" is answered by the
 phase medians there rather than by memory. CLI: `uv run python
 scripts/diagnostics/probe.py loki-query '{job="syslog"} |= "event=landing" | logfmt'`.

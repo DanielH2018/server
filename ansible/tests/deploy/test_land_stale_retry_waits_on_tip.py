@@ -67,7 +67,7 @@ def test_the_tip_wait_maps_red_and_no_verdict_like_step_three():
     """Same exit-code contract as step 3: 1 = red, 75 = no verdict inside the budget."""
     block = _stale_retry_block(_LAND_SH.read_text())
     assert re.search(r"^\s*1\) die .*RED", block, re.MULTILINE)
-    assert re.search(r"^\s*75\) die .* 75 ;;", block, re.MULTILINE)
+    assert re.search(r"^\s*75\) die .* 75 ci-timeout ;;", block, re.MULTILINE)
 
 
 def _retry_bound(text: str) -> int:
