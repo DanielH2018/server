@@ -55,8 +55,9 @@ set -u
 # the command text a session types — so the restore is repeated here. O_NONBLOCK lives on
 # the open file description that fork/exec shares, so clearing it from this child clears
 # it for the ansible run below; on a terminal or under systemd the flag is already clear
-# and this is a no-op.
-python3 -c 'import os; [os.set_blocking(f, True) for f in (0, 1, 2)]' 2>/dev/null || true
+# and this is a no-op. `3>&2` hands the child the real stderr past the `2>/dev/null` that
+# keeps it quiet — without it the flag would be cleared on /dev/null instead.
+python3 -c 'import os; [os.set_blocking(f, True) for f in (0, 1, 3)]' 3>&2 2>/dev/null || true
 
 LOCK=/var/lock/server-git-tree.lock
 # Covers gitops-deploy's worst-case hold of 2940s (STAGING_GATE_TIMEOUT_S 600 +

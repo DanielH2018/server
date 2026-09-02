@@ -39,7 +39,7 @@ HOOK_TEXT = HOOK.read_text(encoding="utf-8")
 # The prefix the hook puts in front of an ansible command. Kept verbatim rather than
 # re-derived: a change to what the hook prepends should fail here and be read, since the
 # ansible CLIs refuse to start when it is missing.
-STDIO_FIXUP = "python3 -c 'import os; [os.set_blocking(f, True) for f in (0, 1, 2)]' 2>/dev/null; "
+STDIO_FIXUP = "python3 -c 'import os; [os.set_blocking(f, True) for f in (0, 1, 3)]' 3>&2 2>/dev/null; "
 
 _runnable = pytest.mark.skipif(
     not (shutil.which("bash") and shutil.which("jq")),
@@ -206,9 +206,9 @@ def test_an_unterminated_quote_leaves_the_command_alone():
 # --- the blocking-stdio fixup -------------------------------------------------------------
 #
 # Claude Code's Bash tool hands its child stdout and stderr with O_NONBLOCK set, and every
-# ansible CLI calls check_blocking_io() at import time and exits rather than run. The pair
-# below is what a rule needs to be trusted: commands that must carry the fixup, and
-# commands that must not.
+# ansible CLI calls check_blocking_io() at import time and exits rather than run. The hook
+# prepends a restore to the commands that name one. Below: commands that must carry it,
+# commands that must not, and a functional check with its own control.
 
 
 @_runnable
@@ -216,11 +216,12 @@ def test_an_unterminated_quote_leaves_the_command_alone():
     "command",
     [
         "ansible-playbook ansible/deploy.yml --tags jellyfin",
-        # Already `uv run`, so the rewrite above changes nothing and only the fixup fires.
-        "uv run ansible-playbook ansible/bootstrap.yml",
         "ansible --version",
-        "uv run ansible-vault view ansible/vars/secrets.yml",
         "ansible-inventory --list",
+        # Already `uv run`, so nothing is rewritten and only the fixup fires.
+        "uv run ansible-playbook ansible/bootstrap.yml",
+        "uv run ansible-vault view ansible/vars/secrets.yml",
+        "uv run --frozen ansible-playbook ansible/deploy.yml",
         # Not the first segment: the flag is shared, so one clear at the front covers it.
         'cd "$HOME/server" && ansible-playbook ansible/deploy.yml',
     ],
@@ -235,12 +236,16 @@ def test_ansible_commands_carry_the_stdio_fixup(command):
 @pytest.mark.parametrize(
     "command",
     [
+        # Routed for the interpreter, but naming no ansible CLI: the fixup would only add
+        # text for the classifier to read.
         "pytest ansible/tests",
-        "uv run python scripts/diagnostics/probe.py targets",
         "./scripts/diagnostics/probe.py health jellyfin",
+        "uv run pytest",
+        "ls -la",
         # Arguments and prose, not programs.
         "grep -rn ansible-playbook scripts",
         "echo 'run ansible-playbook by hand'",
+        "which ansible-playbook",
     ],
 )
 def test_non_ansible_commands_do_not_carry_the_stdio_fixup(command):
@@ -256,43 +261,56 @@ def test_the_fixup_is_applied_once():
 
 
 @_runnable
-def test_the_fixup_actually_restores_blocking_stdio(tmp_path):
-    """The functional half: run the fixup with O_NONBLOCK set, and read the flag back.
+def test_the_fixup_restores_blocking_on_both_stdout_and_stderr(tmp_path):
+    """The functional half: run the fixup with O_NONBLOCK set, and read the flags back.
 
     A textual assertion that the hook prepends *something* cannot see whether that
     something works. This reproduces the harness's own shape — a regular file opened
-    non-blocking — and asserts the flag is clear by the next command in the same shell.
+    non-blocking — and asserts both flags are clear by the next command in the same shell.
+
+    stdout and stderr are separate files here on purpose. The Bash tool gives them one
+    shared open file description, so a fixup that only ever reached stdout would pass a
+    single-file test while leaving the stderr half to luck.
     """
-    out = tmp_path / "out"
-    fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_NONBLOCK)
+    out, err = tmp_path / "out", tmp_path / "err"
+    out_fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_NONBLOCK)
+    err_fd = os.open(err, os.O_WRONLY | os.O_CREAT | os.O_NONBLOCK)
     try:
-        assert not os.get_blocking(fd)
-        probe = "python3 -c 'import os; print(os.get_blocking(1))'"
+        assert not os.get_blocking(out_fd) and not os.get_blocking(err_fd)
+        probe = "python3 -c 'import os; print(os.get_blocking(1), os.get_blocking(2))'"
         subprocess.run(
             ["bash", "-c", STDIO_FIXUP + probe],
-            stdout=fd,
-            stderr=subprocess.DEVNULL,
+            stdout=out_fd,
+            stderr=err_fd,
             check=True,
             timeout=60,
         )
     finally:
-        os.close(fd)
-    assert out.read_text(encoding="utf-8").strip() == "True"
+        os.close(out_fd)
+        os.close(err_fd)
+    assert out.read_text(encoding="utf-8").strip() == "True True"
 
 
+@_runnable
 def test_the_fixup_is_needed_because_a_non_blocking_child_reads_non_blocking(tmp_path):
-    """The control: without the fixup the same shell sees O_NONBLOCK, so the test above
-    is measuring the fixup rather than a default."""
-    out = tmp_path / "out"
-    fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_NONBLOCK)
+    """The control: without the fixup the same shell sees O_NONBLOCK on both, so the test
+    above is measuring the fixup rather than a default."""
+    out, err = tmp_path / "out", tmp_path / "err"
+    out_fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_NONBLOCK)
+    err_fd = os.open(err, os.O_WRONLY | os.O_CREAT | os.O_NONBLOCK)
     try:
         subprocess.run(
-            ["bash", "-c", "python3 -c 'import os; print(os.get_blocking(1))'"],
-            stdout=fd,
-            stderr=subprocess.DEVNULL,
+            [
+                "bash",
+                "-c",
+                "python3 -c 'import os; print(os.get_blocking(1), os.get_blocking(2))'",
+            ],
+            stdout=out_fd,
+            stderr=err_fd,
             check=True,
             timeout=60,
         )
     finally:
-        os.close(fd)
-    assert out.read_text(encoding="utf-8").strip() == "False"
+        os.close(out_fd)
+        os.close(err_fd)
+    assert out.read_text(encoding="utf-8").strip() == "False False"

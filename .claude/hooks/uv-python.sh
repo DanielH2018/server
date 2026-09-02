@@ -31,26 +31,36 @@ cmd=$(printf '%s' "$input" | jq -r '
 ' 2>/dev/null) || exit 0
 [[ -z "$cmd" ]] && exit 0
 
+# The ansible CLIs. They belong in PROGS for the same reason python does — the uv-tool
+# shim lacks the `requests`/`docker` deps the repo pins — and they are named separately
+# because the stdio fixup below keys on them too.
+ANSIBLE_PROGS='ansible(-playbook|-vault|-galaxy|-console|-doc|-config|-inventory|-pull)?'
+
 # The programs that must not run on the system interpreter. `*.py` covers a script
 # invoked by its shebang (`./scripts/diagnostics/probe.py`), which names no interpreter at all and so
 # would otherwise slip past every python-named pattern here.
-PROGS='(python3?|pytest|py\.test|ansible-playbook|[^[:space:]]*\.py)'
+PROGS="(python3?|pytest|py\.test|$ANSIBLE_PROGS|[^[:space:]]*\.py)"
 
-# The ansible CLIs, which refuse to start at all on a non-blocking stdout or stderr:
+# Every ansible CLI refuses to start on a non-blocking stdout or stderr:
 # `ansible/cli/__init__.py` calls check_blocking_io() at import time and exits with
 # "ERROR: Ansible requires blocking IO on stdin/stdout/stderr". Claude Code's Bash tool
 # hands its child a regular file with O_NONBLOCK set (verified: st_mode 0o100660,
 # O_NONBLOCK on fds 1 and 2), so every ansible run from a session died on that check while
 # the same command from a terminal worked. O_NONBLOCK has no effect on writes to a regular
 # file, so clearing it changes nothing about how the output is captured.
-ANSIBLE_PROGS='ansible(-playbook|-vault|-galaxy|-console|-doc|-config|-inventory|-pull)?'
-
+#
 # Clearing the flag in the shell itself, rather than reopening the fds, because
 # O_NONBLOCK lives on the open file description that fork/exec shares — one clear fixes
 # the shell and every later child, and leaves a single description so nothing has to
 # reason about interleaved appends. The system python3 is right here: this touches no repo
 # file, so the 3.14 requirement above does not apply, and `uv run` would cost a resolve.
-STDIO_FIXUP="python3 -c 'import os; [os.set_blocking(f, True) for f in (0, 1, 2)]' 2>/dev/null; "
+#
+# `3>&2` is what makes the stderr half real. Without it the `2>/dev/null` that keeps this
+# quiet would hand the child /dev/null as fd 2, and it would clear the flag on that
+# instead. The Bash tool happens to give fds 1 and 2 one shared description today, so
+# stderr came right as a side effect of fixing stdout — a detail this must not depend on,
+# since it is exactly the kind of harness detail that changed here in the first place.
+STDIO_FIXUP="python3 -c 'import os; [os.set_blocking(f, True) for f in (0, 1, 3)]' 3>&2 2>/dev/null; "
 
 # Fast reject before any scanning. Measured on this repo's traffic the overwhelming
 # majority of Bash calls name none of these, and they should pay a single regex rather
@@ -114,13 +124,21 @@ for ((k = ${#starts[@]} - 1; k >= 0; k--)); do
     updated="${updated:0:ins}uv run ${updated:ins}"
 done
 
-# The fixup is prepended to the whole command rather than to each ansible segment: the
-# flag it clears is shared, so one clear at the front covers every segment after it.
+# The fixup goes in front of the whole command rather than each segment: the flag it
+# clears is shared, so one clear at the front covers everything after it.
+#
+# Only the ansible CLIs get it, rather than everything this hook routes. The fixup is
+# harmless anywhere, but it changes the command text the auto-mode classifier reads, and
+# an ansible command already prompts where a `pytest` does not. A script that spawns
+# ansible without naming it — `secret_rotation.py rotate --deploy` — restores the flag
+# itself instead; nothing in its command text could have told this hook to.
+#
 # Matched against $cmd, whose offsets the walk computed and the splices above invalidated,
-# and past an optional `uv run` so it fires whether or not the rewrite added one.
+# and past an optional `uv run` with its own flags, so it fires whether or not the rewrite
+# added one and whether or not the session typed `--frozen`.
 for p in "${starts[@]}"; do
     rest=${cmd:p}
-    if [[ "$rest" =~ ^[[:space:]]*(uv[[:space:]]+run[[:space:]]+)?$ANSIBLE_PROGS([[:space:];\&|\)]|$) ]]; then
+    if [[ "$rest" =~ ^[[:space:]]*(uv[[:space:]]+run[[:space:]]+(--[^[:space:]]+[[:space:]]+)*)?$ANSIBLE_PROGS([[:space:];\&|\)]|$) ]]; then
         [[ "$updated" == *"os.set_blocking"* ]] || updated="$STDIO_FIXUP$updated"
         break
     fi
