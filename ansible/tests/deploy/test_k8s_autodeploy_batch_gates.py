@@ -19,11 +19,13 @@ from _autodeploy import (
     _GATING_SHARED_ROLES,
     _K8S_ROLES,
     _auto_deployable,
-    _batch_gated_names,
     _batch_templates,
+    _roles,
+)
+from _autodeploy_batch import (
+    _batch_gated_names,
     _has_completion_gate,
     _has_failure_escalation,
-    _roles,
 )
 
 

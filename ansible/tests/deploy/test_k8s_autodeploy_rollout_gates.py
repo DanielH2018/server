@@ -18,17 +18,19 @@ from pathlib import Path
 
 from _autodeploy import (
     _K8S_ROLES,
-    _MANIFEST_KIND_TO_ROLLOUT_KIND,
     _auto_deployable,
     _declares_autodeploy,
-    _deployment_name,
     _deployment_templates,
+    _roles,
+)
+from _autodeploy_rollout import (
+    _MANIFEST_KIND_TO_ROLLOUT_KIND,
+    _deployment_name,
     _deployments_missing_readiness_probe,
     _extra_rollouts,
     _gated_names,
     _primary_rollout_kind,
     _primary_rollout_name,
-    _roles,
     _rollout_gate_offender,
     _sets_empty_rollout,
     _ungated_deployment_count,
