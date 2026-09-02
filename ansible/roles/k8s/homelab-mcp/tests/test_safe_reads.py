@@ -22,6 +22,7 @@ from safe_reads import (
     resolve_within_jail,
     strip_container_fields,
     summarize_container_list,
+    tls_context,
 )
 
 
@@ -345,3 +346,11 @@ def test_docker_base_passes_through_when_configured():
     assert (
         docker_base_or_raise("http://docker-proxy:2375") == "http://docker-proxy:2375"
     )
+
+
+def test_tls_context_states_the_protocol_floor():
+    # The floor is stated rather than inherited, so a platform whose default drops below 1.2
+    # cannot weaken this client silently. See ADR-0016.
+    import ssl
+
+    assert tls_context().minimum_version == ssl.TLSVersion.TLSv1_2

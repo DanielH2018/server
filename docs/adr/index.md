@@ -41,6 +41,7 @@ wrong is worth more than the record of one that did not.
 | [0013](0013-daniel-pi-stays-on-docker.md) | daniel-pi stays on Docker and out of the cluster | Accepted | 2026-08-01 |
 | [0014](0014-kopia-retired-longhorn-owns-the-b2-credentials.md) | Kopia is retired and Longhorn owns the B2 credentials | Accepted | 2026-08-14 |
 | [0015](0015-d2-for-hand-authored-diagrams.md) | A hand-drawn diagram is D2 source in the repo, not Mermaid in the page | Accepted | 2026-08-24 |
+| [0016](0016-code-scanning-stays-on-default-setup.md) | Code scanning stays on default setup, and false positives are removed in code | Accepted | 2026-09-02 |
 
 ## The long-form behind a record
 
