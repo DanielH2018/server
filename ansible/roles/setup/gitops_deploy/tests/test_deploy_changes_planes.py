@@ -15,7 +15,13 @@ import pathlib
 import pytest
 import yaml
 
-from deploy_changes import ChangeSet, services_from_changed_paths, setup_tags_for
+from deploy_changes import (
+    ChangeSet,
+    _content_lines,
+    comment_only_manual_changes,
+    services_from_changed_paths,
+    setup_tags_for,
+)
 
 
 def test_shared_template_is_broad():
@@ -340,3 +346,119 @@ def test_every_task_file_deploy_yml_imports_is_visible_to_the_classifier():
         "them, so a push touching one silently ff-merges with no alert and no deploy: %s"
         % invisible
     )
+
+
+# --- comment-only edits to the manual set --------------------------------------------------
+#
+# The classifier decides by path alone, so PR #746's one-line comment edit to k3s-bringup.yml
+# parked every session's landing on 2026-09-02. comment_only_manual_changes reads both sides
+# and names the paths a caller may drop. The deployer is stdlib-only, so this compares content
+# lines rather than parsed YAML; every reject case below is a change that MUST stay broad.
+
+_PLAYBOOK = """\
+- name: Bring up k3s
+  hosts: k3s
+  tasks:
+    - name: Assert one server
+      # k3s_server_hosts; ansible/tests/test_k3s_server_hosts.py keeps it that way.
+      ansible.builtin.assert:
+        that: k3s_server_hosts | length == 1
+        fail_msg: >-
+          exactly one server
+          # not a comment: this line is part of the message
+"""
+
+
+def _show_from(texts: dict[tuple[str, str], str]):
+    def show(ref: str, path: str) -> str:
+        try:
+            return texts[(ref, path)]
+        except KeyError as exc:
+            raise RuntimeError(f"git show {ref}:{path} -> 128") from exc
+
+    return show
+
+
+def _quiet(
+    before: str | None, after: str | None, path: str = "ansible/k3s-bringup.yml"
+):
+    texts = {}
+    if before is not None:
+        texts[("old", path)] = before
+    if after is not None:
+        texts[("new", path)] = after
+    return comment_only_manual_changes([path], "old", "new", _show_from(texts))
+
+
+def test_a_comment_only_edit_to_a_bringup_playbook_is_not_broad():
+    """PR #746's actual diff: one full-line comment reworded."""
+    after = _PLAYBOOK.replace(
+        "ansible/tests/test_k3s_server_hosts.py",
+        "ansible/tests/setup/test_k3s_server_hosts.py",
+    )
+    assert _quiet(_PLAYBOOK, after) == {"ansible/k3s-bringup.yml"}
+    remaining = [p for p in BROAD_MANUAL_BRINGUP if p not in _quiet(_PLAYBOOK, after)]
+    assert not services_from_changed_paths(remaining).broad_manual
+
+
+def test_added_or_removed_comment_lines_and_blank_lines_are_not_broad():
+    after = _PLAYBOOK.replace("  hosts: k3s\n", "\n  # every server\n  hosts: k3s\n\n")
+    assert _quiet(_PLAYBOOK, after) == {"ansible/k3s-bringup.yml"}
+
+
+def test_a_task_level_edit_to_a_bringup_playbook_stays_broad():
+    after = _PLAYBOOK.replace("| length == 1", "| length >= 1")
+    assert _quiet(_PLAYBOOK, after) == set()
+    assert services_from_changed_paths(BROAD_MANUAL_BRINGUP).broad_manual
+
+
+def test_a_trailing_comment_edit_stays_broad():
+    """`#` after a value needs a parser to tell from a `#` inside a quoted string; the
+    deployer has none, so the safe reading is that the line changed."""
+    after = _PLAYBOOK.replace("  hosts: k3s\n", "  hosts: k3s  # all of them\n")
+    assert _quiet(_PLAYBOOK, after) == set()
+
+
+def test_a_hash_line_inside_a_block_scalar_is_content_and_stays_broad():
+    after = _PLAYBOOK.replace(
+        "          # not a comment: this line is part of the message\n",
+        "          # not a comment: this line is part of the message, reworded\n",
+    )
+    assert _quiet(_PLAYBOOK, after) == set()
+
+
+def test_a_blank_line_inside_a_block_scalar_is_content_and_stays_broad():
+    after = _PLAYBOOK.replace(
+        "          exactly one server\n", "          exactly one server\n\n"
+    )
+    assert _quiet(_PLAYBOOK, after) == set()
+
+
+def test_a_playbook_added_or_deleted_in_the_range_stays_broad():
+    assert _quiet(None, _PLAYBOOK) == set()
+    assert _quiet(_PLAYBOOK, None) == set()
+
+
+def test_a_comment_only_edit_outside_the_manual_set_is_not_reported():
+    """Only the manual set is read: the other planes have their own arms and this function
+    must not widen what the tick fast-forwards past."""
+    texts = {
+        ("old", "ansible/templates/x.j2"): "# a\nb\n",
+        ("new", "ansible/templates/x.j2"): "# c\nb\n",
+    }
+    assert (
+        comment_only_manual_changes(
+            ["ansible/templates/x.j2"], "old", "new", _show_from(texts)
+        )
+        == set()
+    )
+
+
+def test_content_lines_reads_a_real_bringup_playbook_without_losing_tasks():
+    """The block-scalar tracker must not swallow the rest of the file: every `- name:` in the
+    live playbook survives, and the file contains the `>-` scalars the tracker exists for."""
+    text = (_REPO_ROOT / "ansible" / "k3s-bringup.yml").read_text()
+    assert ">-" in text
+    kept = "\n".join(_content_lines(text))
+    assert kept.count("- name:") == text.count("- name:")
+    assert "# k3s_server_hosts" not in kept

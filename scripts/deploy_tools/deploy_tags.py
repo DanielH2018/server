@@ -273,6 +273,16 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
         print(f"deploy blockers: nothing incoming from {args.ref}.", file=sys.stderr)
         return 0
 
+    # Same read the tick makes, so a comment-only edit to a bring-up playbook that the tick
+    # will cross is not reported here as a blocker.
+    quiet = _comment_only_manual_changes(paths, "HEAD", args.ref)
+    if quiet:
+        print(
+            f"deploy blockers: comment-only change in {', '.join(sorted(quiet))} — the "
+            "tick crosses it.",
+            file=sys.stderr,
+        )
+        paths = [p for p in paths if p not in quiet]
     cs = services_from_changed_paths(paths)
     if not cs.broad_manual:
         print(
@@ -303,6 +313,24 @@ def _is_broad_manual(path: str) -> bool:
     from deploy_logic import _BROAD_MANUAL_PREFIXES  # noqa: E402
 
     return any(path.startswith(prefix) for prefix in _BROAD_MANUAL_PREFIXES)
+
+
+def _comment_only_manual_changes(
+    paths: list[str], old_ref: str, new_ref: str
+) -> set[str]:
+    sys.path.insert(0, str(DEPLOY_LOGIC_DIR))
+    from deploy_logic import comment_only_manual_changes  # noqa: E402
+
+    def show(ref: str, path: str) -> str:
+        return subprocess.run(
+            ["git", "show", f"{ref}:{path}"],
+            cwd=REPO,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+
+    return comment_only_manual_changes(paths, old_ref, new_ref, show)
 
 
 def _cmd_changed(args: argparse.Namespace) -> int:
