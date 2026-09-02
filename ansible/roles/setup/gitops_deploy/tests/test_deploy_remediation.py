@@ -245,6 +245,80 @@ def test_a_consumer_this_host_does_not_declare_is_not_escalated():
     )
 
 
+def _k8s_tree(tmp_path, files):
+    """A fake repo holding `ansible/roles/k8s/<role>/files/<path>` -> source pairs."""
+    for rel, source in files.items():
+        p = tmp_path / "ansible" / "roles" / "k8s" / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(source)
+    return tmp_path
+
+
+def test_a_shared_module_inside_a_package_is_still_seen(tmp_path):
+    """The detector sees `files/bridge/common.py`, in every spelling a consumer can use.
+
+    The first version matched one level (`files/<name>.py`) and a bare `import bridge_common`.
+    Moving the shared module into a package would have made it invisible to the one check that
+    exists for it, and the deployer would have gone back to emitting `--tags monitor-bridge`
+    alone -- the M-2 silence, reintroduced by a rename. The live-tree test above cannot be this
+    red-proof while the tree is flat; this one exercises depth on both sides, the owner's and
+    the consumer's.
+    """
+    repo = _k8s_tree(
+        tmp_path,
+        {
+            "alpha/files/bridge/common.py": "def log(*a): pass\n",
+            "beta/files/autofix.py": "from bridge import common\ncommon.log()\n",
+            "gamma/files/sub/deep.py": "import bridge.common as bc\nbc.log()\n",
+            "delta/files/y.py": "from bridge.common import log\nlog()\n",
+            "theta/files/t.py": "from bridge import config, common as c\nc.log()\n",
+            # Mentions only: a comment, a module sharing the prefix, a string. None of these
+            # bind the module, so none may count.
+            "epsilon/files/z.py": (
+                "# from bridge import common\n"
+                "import bridge.commonality\n"
+                "x = 'from bridge import common'\n"
+            ),
+        },
+    )
+    consumers = shared_module_consumers(
+        ["ansible/roles/k8s/alpha/files/bridge/common.py"], repo
+    )
+    assert consumers == {"beta", "gamma", "delta", "theta"}, sorted(consumers)
+
+
+def test_a_flat_shared_module_matches_on_its_whole_name(tmp_path):
+    """`import flat_lib_extra` is not an import of `flat_lib`."""
+    repo = _k8s_tree(
+        tmp_path,
+        {
+            "alpha/files/flat_lib.py": "X = 1\n",
+            "zeta/files/w.py": "import flat_lib\n",
+            "eta/files/v.py": "import flat_lib_extra\nfrom flat_lib_extra import X\n",
+        },
+    )
+    consumers = shared_module_consumers(
+        ["ansible/roles/k8s/alpha/files/flat_lib.py"], repo
+    )
+    assert consumers == {"zeta"}, sorted(consumers)
+
+
+def test_the_owning_role_is_never_reported_as_its_own_consumer(tmp_path):
+    repo = _k8s_tree(
+        tmp_path,
+        {
+            "alpha/files/bridge/common.py": "X = 1\n",
+            "alpha/files/check.py": "from bridge import common\n",
+        },
+    )
+    assert (
+        shared_module_consumers(
+            ["ansible/roles/k8s/alpha/files/bridge/common.py"], repo
+        )
+        == set()
+    )
+
+
 # --- broad apply budget ------------------------------------------------------------------
 #
 # The reason the deploy-plane arm is forward-only, written as a predicate rather than as a

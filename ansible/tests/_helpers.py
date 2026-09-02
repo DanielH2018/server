@@ -13,6 +13,7 @@ way.
 
 from __future__ import annotations
 
+import ast
 import subprocess
 from pathlib import Path
 from typing import Iterator
@@ -185,3 +186,101 @@ def discover_docs() -> list[Path]:
             continue
         docs.append(path)
     return sorted(set(docs))
+
+
+# --- Python modules under a role's files/ ----------------------------------------------------
+#
+# A role's runtime modules can sit at any depth under files/ — `files/bridge/common.py` is the
+# module `bridge.common` — and a guard that reads them must not assume one level. A one-level
+# glob returns an EMPTY set the moment the modules move down a directory, and every `all(...)`
+# over it passes; repo-root CLAUDE.md's "a check that finds its own subject by pattern" rule
+# records five guards that broke exactly that way. These readers identify a module by its
+# dotted path under the root, so a flat `bridge_config.py` and a nested `bridge/config.py`
+# are each one id, and resolve an import to that id in every spelling Python allows.
+
+
+def is_test_file(path: Path) -> bool:
+    return path.name.startswith("test_") or path.name == "conftest.py"
+
+
+def module_id(path: Path, root: Path) -> str:
+    """`root/bridge/common.py` -> "bridge.common"; `root/check.py` -> "check"."""
+    return path.relative_to(root).with_suffix("").as_posix().replace("/", ".")
+
+
+def python_modules(root: Path) -> dict[str, Path]:
+    """Dotted id -> file for every runtime module under `root`, at any depth.
+
+    Test files and `__pycache__` are excluded; a test suite belongs in the sibling `tests/`
+    directory, and the name filter is the belt-and-braces check against one landing here.
+    """
+    return {
+        module_id(p, root): p
+        for p in sorted(root.rglob("*.py"))
+        if "__pycache__" not in p.parts and not is_test_file(p)
+    }
+
+
+def imported_module_ids(tree: ast.AST, ids) -> set[str]:
+    """The ids in `ids` that `tree` imports, in any form.
+
+    `import a`, `import p.q [as r]`, `from p.q import X` and `from p import q` all count as an
+    import of the module they name; a `from p.q import X` counts for `p.q`, not for `X`.
+    """
+    found = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            found |= {alias.name for alias in node.names if alias.name in ids}
+        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+            if node.module in ids:
+                found.add(node.module)
+            found |= {
+                f"{node.module}.{alias.name}"
+                for alias in node.names
+                if f"{node.module}.{alias.name}" in ids
+            }
+    return found
+
+
+def import_bindings(tree: ast.AST, ids) -> dict[str, str]:
+    """Local name -> dotted prefix, for every import in `tree` that can reach one of `ids`.
+
+    `import a` binds `a`; `import a as b` binds `b` to `a`; `import p.q` binds the package
+    `p`, so `p.q.X` resolves through it; `import p.q as r` binds `r` to `p.q`; `from p import
+    q [as r]` binds `q` (or `r`) to `p.q` when that is a module in `ids`. A `from p.q import X`
+    binds a plain name, not a module, and is not recorded.
+    """
+    bound = {}
+    packages = {i.rsplit(".", 1)[0] for i in ids if "." in i}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.asname:
+                    if alias.name in ids:
+                        bound[alias.asname] = alias.name
+                    continue
+                head = alias.name.split(".")[0]
+                if (
+                    head in ids
+                    or head in packages
+                    or any(p.startswith(head + ".") for p in packages)
+                ):
+                    bound[head] = head
+        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+            for alias in node.names:
+                dotted = f"{node.module}.{alias.name}"
+                if dotted in ids:
+                    bound[alias.asname or alias.name] = dotted
+    return bound
+
+
+def module_of(node: ast.AST, bound: dict[str, str], ids) -> str | None:
+    """The module id a `Name` or `a.b.c` attribute chain refers to, through `bound`, or None."""
+    parts = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name) or node.id not in bound:
+        return None
+    dotted = ".".join([bound[node.id], *reversed(parts)])
+    return dotted if dotted in ids else None
