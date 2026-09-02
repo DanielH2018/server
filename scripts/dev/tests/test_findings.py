@@ -338,3 +338,70 @@ def test_open_adds_no_vetted_remediation_and_domain_labels():
         source="s",
     )
     assert "no-vetted-remediation" in plans[0] and "domain/network" in plans[0]
+
+
+# --- touch -----------------------------------------------------------------------------------
+
+
+def test_touch_second_sighting_does_not_escalate():
+    plans = findings.plan_touch(_issue(1, comments=()), "review-2026-09-02")
+    assert [p[:2] for p in plans] == [["issue", "comment"]]
+    assert "sighting 2" in plans[0][-1]
+
+
+def test_touch_third_sighting_escalates():
+    plans = findings.plan_touch(_issue(1, comments=("Re-observed by a",)), "b")
+    assert [p[:2] for p in plans] == [["issue", "comment"], ["issue", "edit"]]
+    assert plans[1][-1] == "escalated"
+
+
+def test_touch_already_escalated_does_not_add_the_label_again():
+    plans = findings.plan_touch(
+        _issue(
+            1, labels=("escalated",), comments=("Re-observed by a", "Re-observed by b")
+        ),
+        "c",
+    )
+    assert [p[:2] for p in plans] == [["issue", "comment"]]
+
+
+def test_touch_cli_loads_the_issue_by_number(monkeypatch, capsys):
+    monkeypatch.setattr(findings, "gh_json", lambda *a, **k: _issue(12))
+    calls = []
+    monkeypatch.setattr(findings, "gh", lambda *a, **k: calls.append(list(a)))
+    assert findings.main(["touch", "12", "--source", "review-2026-09-02"]) == 0
+    assert calls[0][:3] == ["issue", "comment", "12"]
+    assert "#12 touched" in capsys.readouterr().out
+
+
+# --- close -----------------------------------------------------------------------------------
+
+
+def test_close_fixed_with_pr_names_the_pr():
+    plans = findings.plan_close(5, fixed=True, pr=700, reason=None)
+    (argv,) = plans
+    assert (
+        argv[:3] == ["issue", "close", "5"]
+        and "#700" in argv[argv.index("--comment") + 1]
+    )
+    assert "refuted" not in argv
+
+
+def test_close_refuted_adds_the_label_then_closes_with_the_reason():
+    plans = findings.plan_close(
+        5, fixed=False, pr=None, reason="the timer is disabled by design"
+    )
+    assert plans[0] == ["issue", "edit", "5", "--add-label", "refuted"]
+    assert plans[1][:3] == ["issue", "close", "5"]
+    assert (
+        "the timer is disabled by design" in plans[1][plans[1].index("--comment") + 1]
+    )
+
+
+def test_close_refuted_without_a_reason_is_rejected_before_any_write(monkeypatch):
+    monkeypatch.setattr(
+        findings,
+        "gh",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("gh called")),
+    )
+    assert findings.main(["close", "5", "--refuted"]) == 2

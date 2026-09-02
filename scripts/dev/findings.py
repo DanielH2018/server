@@ -301,12 +301,54 @@ def cmd_open(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_touch(args):  # replaced in Task 4
-    raise NotImplementedError
+def plan_close(
+    number: int, *, fixed: bool, pr: int | None, reason: str | None
+) -> list[list[str]]:
+    n = str(number)
+    if fixed:
+        by = f" by PR #{pr}" if pr else ""
+        return [
+            ["issue", "close", n, "--reason", "completed", "--comment", f"Fixed{by}."]
+        ]
+    return [
+        ["issue", "edit", n, "--add-label", "refuted"],
+        [
+            "issue",
+            "close",
+            n,
+            "--reason",
+            "not planned",
+            "--comment",
+            f"Refuted: {reason}",
+        ],
+    ]
 
 
-def cmd_close(args):  # replaced in Task 4
-    raise NotImplementedError
+def _load_issue(number: int) -> dict:
+    return gh_json("issue", "view", str(number), "--json", _LIST_FIELDS)
+
+
+def cmd_touch(args: argparse.Namespace) -> int:
+    issue = _load_issue(args.number)
+    plans = plan_touch(issue, args.source)
+    run(plans, args.dry_run)
+    escalated = any(p[:2] == ["issue", "edit"] for p in plans)
+    print(f"#{args.number} touched{' and escalated' if escalated else ''}")
+    return 0
+
+
+def cmd_close(args: argparse.Namespace) -> int:
+    if args.refuted and not args.reason:
+        sys.stderr.write(
+            "close --refuted needs --reason: a bare refutation teaches the next run nothing\n"
+        )
+        return 2
+    run(
+        plan_close(args.number, fixed=args.fixed, pr=args.pr, reason=args.reason),
+        args.dry_run,
+    )
+    print(f"#{args.number} closed as {'fixed' if args.fixed else 'refuted'}")
+    return 0
 
 
 def cmd_sync_labels(args: argparse.Namespace) -> int:
