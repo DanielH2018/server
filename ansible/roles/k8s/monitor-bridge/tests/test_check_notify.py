@@ -6,6 +6,7 @@ is its own defect — an operator reading "down" for what was really "unreachabl
 wrong system.
 """
 
+import io
 import urllib.error
 
 import pytest
@@ -14,6 +15,17 @@ import bridge_config
 import bridge_io
 import bridge_parsing
 import checks_notify
+
+
+def _http_error(url, status, msg):
+    """An HTTPError as a consumer sees it once bridge_io has read and closed the body.
+
+    These fakes bypass _get_json, which is what closes a real response, and an HTTPError
+    left open is a ResourceWarning at GC that filterwarnings=error fails some later test on.
+    """
+    err = urllib.error.HTTPError(url, status, msg, {}, None)
+    err.close()
+    return err
 
 
 def test_discord_webhook_ok_200_is_up():
@@ -45,7 +57,7 @@ def _discord_cycle(monkeypatch, status=200, raises=None):
     else:
 
         def http_err(*a, **k):
-            raise urllib.error.HTTPError("u", status, "err", {}, None)
+            raise _http_error("u", status, "err")
 
         monkeypatch.setattr(bridge_io, "_get_json", http_err)
     return checks_notify.check_discord()
@@ -130,7 +142,7 @@ def test_discord_gitops_webhook_failure_pages(monkeypatch):
 
     def get(url, *a, **k):
         if "gitops" in url:
-            raise urllib.error.HTTPError(url, 404, "gone", {}, None)
+            raise _http_error(url, 404, "gone")
         return {"name": "Homelab Alerts"}
 
     monkeypatch.setattr(bridge_io, "_get_json", get)
@@ -154,7 +166,7 @@ def test_discord_crowdsec_webhook_failure_pages(monkeypatch):
 
     def get(url, *a, **k):
         if "crowdsec" in url:
-            raise urllib.error.HTTPError(url, 404, "gone", {}, None)
+            raise _http_error(url, 404, "gone")
         return {"name": "Homelab Alerts"}
 
     monkeypatch.setattr(bridge_io, "_get_json", get)
@@ -178,7 +190,7 @@ def test_discord_healthchecks_webhook_failure_pages(monkeypatch):
 
     def get(url, *a, **k):
         if "/5/hc" in url:
-            raise urllib.error.HTTPError(url, 404, "gone", {}, None)
+            raise _http_error(url, 404, "gone")
         return {"name": "Homelab Alerts"}
 
     monkeypatch.setattr(bridge_io, "_get_json", get)
@@ -335,7 +347,6 @@ def test_get_json_attaches_the_error_body_to_httperror(monkeypatch):
     urllib exposes it as a one-shot file object that nothing reads by default, so the
     server's own explanation is discarded and the alert says only "HTTP Error 403".
     """
-    import io
 
     body = b'{"error":"AccessDenied: Transaction cap exceeded, see Caps & Alerts"}'
 

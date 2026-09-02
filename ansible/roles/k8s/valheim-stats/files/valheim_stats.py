@@ -311,6 +311,15 @@ class Store:
         self.conn.execute("PRAGMA journal_mode=WAL")
         self._init_schema()
 
+    def close(self):
+        self.conn.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
     def _init_schema(self):
         c = self.conn
         c.execute("""CREATE TABLE IF NOT EXISTS players(

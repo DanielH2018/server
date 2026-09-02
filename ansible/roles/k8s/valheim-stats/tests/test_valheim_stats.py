@@ -224,28 +224,30 @@ def test_extract_entries_sorts_ascending():
 
 def test_store_round_trips_deaths_and_the_steamid_map(tmp_path):
     db = str(tmp_path / "s.db")
-    store = stats.Store(db)
-    st = stats.StatsState()
-    _connected(st, "76561198108936133", "Bob", 100.0)
-    st.apply("death", "Bob", 110.0)
-    store.save(st, 12345)
+    with stats.Store(db) as store:
+        st = stats.StatsState()
+        _connected(st, "76561198108936133", "Bob", 100.0)
+        st.apply("death", "Bob", 110.0)
+        store.save(st, 12345)
 
-    reloaded = stats.Store(db).load_state()
-    assert reloaded.players["Bob"]["deaths"] == 1
-    assert reloaded.players["Bob"]["open_start"] == 100.0
-    assert reloaded.steam_to_name["76561198108936133"] == "Bob"
-    assert stats.Store(db).get_cursor() == 12345
+    with stats.Store(db) as store:
+        reloaded = store.load_state()
+        assert reloaded.players["Bob"]["deaths"] == 1
+        assert reloaded.players["Bob"]["open_start"] == 100.0
+        assert reloaded.steam_to_name["76561198108936133"] == "Bob"
+        assert store.get_cursor() == 12345
 
 
 def test_a_disconnect_after_a_restart_of_this_service_still_resolves(tmp_path):
     """The steam->name map is persisted precisely so a mid-session restart is safe."""
     db = str(tmp_path / "s.db")
-    store = stats.Store(db)
-    st = stats.StatsState()
-    _connected(st, "111", "Bob", 100.0)
-    store.save(st, 1)
+    with stats.Store(db) as store:
+        st = stats.StatsState()
+        _connected(st, "111", "Bob", 100.0)
+        store.save(st, 1)
 
-    revived = stats.Store(db).load_state()
+    with stats.Store(db) as store:
+        revived = store.load_state()
     revived.apply("disconnect", "111", 200.0)
     assert revived.players["Bob"]["sessions"] == 1
     assert revived.players["Bob"]["total_playtime"] == 100.0

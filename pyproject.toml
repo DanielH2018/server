@@ -60,6 +60,12 @@ testpaths = [                        # single source of truth for WHAT runs; exc
 # --strict-markers turns a misspelled marker into a collection error instead of a silently
 # unregistered one; --strict-config does the same for an unknown key in this table.
 addopts = "-q -n auto -m 'not ui' --strict-markers --strict-config"
+# Every warning is a failure. Measured before enabling (2026-09-02): the only classes that
+# fired were ResourceWarnings, each a real leak — HTTPError test doubles built on a tempfile
+# nothing closed, an sqlite connection the Valheim store never closed, and the deployer's
+# subprocess pipes left open on the timeout path. A DeprecationWarning from a dependency
+# bump surfaces here too, on the PR that bumps it rather than on the day the API goes away.
+filterwarnings = ["error"]
 # `ui` is registered here so it stays a marker rather than becoming a typo nobody notices,
 # and so `--markers` documents it. The deselection lives in addopts above: these tests drive
 # a real browser against live LAN routes and read SOPS, none of which a GitHub runner has.
