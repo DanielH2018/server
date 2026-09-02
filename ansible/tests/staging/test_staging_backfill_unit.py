@@ -167,6 +167,22 @@ def test_the_heartbeat_path_is_the_one_the_reader_reads():
     assert '"%s"' % heartbeat.rsplit("/", 1)[1] in reader
 
 
+def test_the_heartbeat_writer_escapes_systemds_specifiers():
+    """systemd expands `%` specifiers before /bin/sh sees the line, and `%s` is the USER SHELL.
+
+    Unescaped, `date +%s` runs `date +/bin/bash`, the heartbeat holds `/bin/bash`, and the reader
+    calls it unparseable — DOWN forever against a healthy ratchet, and green through every gate
+    here, since the template text is what these tests read.
+    """
+    writer = re.search(r"^ExecStopPost=.*$", _UNIT.read_text(), re.M)
+    assert writer, "the ratchet writes no heartbeat"
+    unescaped = re.sub(r"%%", "", writer.group(0))
+    assert "%" not in unescaped, (
+        "a lone percent in a unit command line is a systemd specifier, not a literal — "
+        "double it"
+    )
+
+
 def test_a_missing_heartbeat_writer_is_flagged():
     """The rejecting half — the real tree can only ever be observed passing."""
     assert heartbeat_writer("[Service]\nExecStart=/bin/true\n") is None

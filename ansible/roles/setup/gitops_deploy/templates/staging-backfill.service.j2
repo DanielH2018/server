@@ -58,4 +58,10 @@ ExecStart=/home/{{ sys_user }}/.local/bin/uv run --no-project --no-python-downlo
 # a file rather than an empty file read by mtime, matching both siblings the reader follows
 # (gitops-deploy's `last_run`, the etcd drill's `epoch=` stamp) — mtime survives a `cp -p` or a
 # restore that a written epoch does not.
-ExecStopPost=/bin/sh -c 'date +%s > {{ gitops_deploy_staging_backfill_heartbeat }}'
+#
+# `%%s`, NOT `%s`. systemd expands specifiers in a command line before /bin/sh ever sees it, and
+# `%s` is the USER SHELL specifier (systemd.unit(5), systemd 255 on this host) — so `date +%s`
+# would run `date +/bin/bash`, write `/bin/bash` to the heartbeat, and the reader would call it
+# unparseable and page DOWN forever against a perfectly healthy ratchet. `%%` is the literal
+# percent. ENFORCED by test_the_heartbeat_writer_escapes_systemds_specifiers.
+ExecStopPost=/bin/sh -c 'date +%%s > {{ gitops_deploy_staging_backfill_heartbeat }}'
