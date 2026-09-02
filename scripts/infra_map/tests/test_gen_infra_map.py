@@ -11,57 +11,30 @@ not look like a bug — it looks like news. Two directions matter:
 * A missed alarm (a stopped container rendered as healthy, or an unreachable
   host silently showing stale declared state as if it were live).
 
-Every test below builds its own inventory and live-state dicts, so nothing here
-needs an age key, a cluster, or ssh.
+Every test builds its inventory and live-state dicts from the record builders in
+`_infra_map.py`, so nothing here needs an age key, a cluster, or ssh. This file covers
+the declared model and its reconciliation with live state; the parsers and collectors
+are in `test_infra_map_live.py`, and the HTML page, diagram and SVG in
+`test_infra_map_render.py`.
 
 Run: uv run pytest scripts/infra_map/tests/test_gen_infra_map.py
 """
 
-import json
-from pathlib import Path
-
 import pytest
-import yaml
 
 import gen_infra_map as g
-import infra_map_live as live
-import infra_map_render as render
 
-REPO_ROOT = g.REPO_ROOT
-
-GLOBALS = {
-    "k8s_hostname_suffix": "-k8s",
-    "k8s_namespace": "homelab",
-    "k8s_observability_namespace": "observability",
-}
-
-ROLES = g.RoleIndex(
-    container_owners={
-        "node-exporter": "prometheus",
-        "cadvisor": "prometheus",
-        "prometheus": "prometheus",
-        "unbound": "pihole",
-    },
-    batch_roles=frozenset({"configarr", "n8n-images"}),
+from _infra_map import (
+    GLOBALS,
+    PODS,
+    ROLES,
+    WORKLOADS,
+    container,
+    docker_host,
+    live_ok,
+    model_for,
+    service,
 )
-
-
-def docker_host(containers_list):
-    return {"server_ip": "10.0.0.161", "containers_list": containers_list}
-
-
-def live_ok(data):
-    return {"ok": True, "data": data, "error": ""}
-
-
-def container(state="running", status="Up 2 days (healthy)", image="img:1"):
-    return {
-        "state": state,
-        "status": status,
-        "image": image,
-        "healthy": "(healthy)" in status,
-        "unhealthy": "(unhealthy)" in status,
-    }
 
 
 def test_resolve_vars_substitutes_known_names():
@@ -135,103 +108,6 @@ def test_declared_services_skips_entries_without_a_name():
     assert [s["name"] for s in g.declared_services("h", hv, GLOBALS)] == ["real"]
 
 
-def test_parse_docker_ps_reads_health_from_the_status_string():
-    out = "a\trunning\tUp 2 days (healthy)\timg:1\nb\trunning\tUp 1 day (unhealthy)\timg:2\n"
-    parsed = g.parse_docker_ps(out)
-    assert parsed["a"]["healthy"] is True
-    assert parsed["b"]["unhealthy"] is True
-
-
-def test_parse_docker_ps_ignores_malformed_and_blank_lines():
-    assert g.parse_docker_ps("garbage\n\n\tx\t\t\n") == {}
-
-
-def deployment(name, ns="homelab", ready=1, desired=1, image="img:1"):
-    status = {"readyReplicas": ready} if ready else {}
-    return {
-        "metadata": {"name": name, "namespace": ns},
-        "spec": {
-            "replicas": desired,
-            "template": {"spec": {"containers": [{"image": image}]}},
-        },
-        "status": status,
-    }
-
-
-def test_parse_kubectl_workloads_extracts_replica_counts():
-    payload = json.dumps({"items": [deployment("traefik", ready=1, desired=2)]})
-    parsed = g.parse_kubectl_workloads(payload)
-    assert parsed[("homelab", "traefik")]["ready"] == 1
-    assert parsed[("homelab", "traefik")]["desired"] == 2
-
-
-def test_parse_kubectl_workloads_treats_absent_ready_replicas_as_zero():
-    """kubectl omits readyReplicas entirely at zero — None would break the sum."""
-    payload = json.dumps({"items": [deployment("down", ready=0)]})
-    assert g.parse_kubectl_workloads(payload)[("homelab", "down")]["ready"] == 0
-
-
-def test_parse_kubectl_workloads_returns_empty_on_bad_json():
-    assert g.parse_kubectl_workloads("not json") == {}
-
-
-def daemonset(name, ns="homelab", ready=2, desired=2, image="img:1"):
-    """A DaemonSet carries no spec.replicas; its counts live only in status."""
-    return {
-        "kind": "DaemonSet",
-        "metadata": {"name": name, "namespace": ns},
-        "spec": {"template": {"spec": {"containers": [{"image": image}]}}},
-        "status": {"desiredNumberScheduled": desired, "numberReady": ready},
-    }
-
-
-def test_parse_kubectl_workloads_reads_a_daemonset_from_its_status_counts():
-    """node-exporter and dri-device-plugin read as missing while the map fetched
-    Deployments alone; a DaemonSet's desired count is what the scheduler placed."""
-    payload = json.dumps({"items": [daemonset("node-exporter", ready=1, desired=2)]})
-    parsed = g.parse_kubectl_workloads(payload)
-    assert parsed[("homelab", "node-exporter")] == {
-        "kind": "DaemonSet",
-        "ready": 1,
-        "desired": 2,
-        "image": "img:1",
-    }
-
-
-def test_parse_kubectl_workloads_reads_a_statefulset_like_a_deployment():
-    item = {**deployment("db", ready=1, desired=1), "kind": "StatefulSet"}
-    parsed = g.parse_kubectl_workloads(json.dumps({"items": [item]}))
-    assert parsed[("homelab", "db")]["kind"] == "StatefulSet"
-    assert parsed[("homelab", "db")]["ready"] == 1
-
-
-def test_collect_k8s_asks_for_every_long_running_kind(monkeypatch):
-    """The inventory excuses a role that declares none of these kinds, so the
-    collector must fetch all of them or a declared kind becomes a false Missing."""
-    seen = []
-
-    def fake_run(argv, timeout):
-        seen.append(argv)
-        return True, json.dumps({"items": []})
-
-    monkeypatch.setattr(live, "find_tool", lambda name: "/usr/bin/kubectl")
-    monkeypatch.setattr(live, "find_kubeconfig", lambda: Path("/tmp/kubeconfig"))
-    monkeypatch.setattr(live, "_run", fake_run)
-    ok, workloads, err = live.collect_k8s("box", "box")
-    assert ok and workloads == {} and err == ""
-    requested = set(seen[0][seen[0].index("get") + 1].split(","))
-    assert requested == {k.lower() + "s" for k in g.LONG_RUNNING_KINDS}
-
-
-WORKLOADS = {
-    ("homelab", "n8n"): {"ready": 1, "desired": 1, "image": "n8n:1"},
-    ("homelab", "n8n-runners"): {"ready": 1, "desired": 1, "image": "n8n:1"},
-    ("homelab", "n8nother"): {"ready": 1, "desired": 1, "image": "x:1"},
-    ("observability", "loki"): {"ready": 1, "desired": 1, "image": "loki:1"},
-    ("observability", "tempo"): {"ready": 1, "desired": 1, "image": "tempo:1"},
-}
-
-
 def test_match_k8s_workloads_takes_the_service_and_its_helpers():
     service = {"name": "n8n", "namespace": "homelab"}
     assert [w["name"] for w in g.match_k8s_workloads(service, WORKLOADS)] == [
@@ -259,24 +135,6 @@ def test_match_k8s_workloads_gives_a_namespace_owner_everything_in_it():
 def test_match_k8s_workloads_does_not_cross_namespaces():
     service = {"name": "loki", "namespace": "homelab"}
     assert g.match_k8s_workloads(service, WORKLOADS) == []
-
-
-def service(name="sonarr", **overrides):
-    base = {
-        "name": name,
-        "platform": "docker",
-        "hostname": None,
-        "port": None,
-        "authelia": False,
-        "networks": [],
-        "namespace": None,
-        "declared": True,
-        "status": "unknown",
-        "detail": "",
-        "image": "",
-        "replicas": None,
-    }
-    return {**base, **overrides}
 
 
 def test_reconcile_docker_marks_a_running_healthy_container_healthy():
@@ -409,19 +267,6 @@ def test_services_on_host_keeps_an_unplaced_service_with_its_declaring_host():
     ]
 
 
-def model_for(live, cluster=None):
-    host_vars = {
-        "daniel-box": docker_host(
-            [{"name": "traefik", "platform": "k8s", "port": 8080}]
-        ),
-        "daniel-server": docker_host([]),
-        "daniel-pi": docker_host([{"name": "sonarr", "port": 8989}]),
-    }
-    return g.build_model(
-        GLOBALS, host_vars, live, "2026-08-07 03:00 CDT", ROLES, cluster
-    )
-
-
 def test_build_model_overlays_live_state_onto_declared_services():
     model = model_for(
         {
@@ -470,84 +315,11 @@ def test_build_model_counts_routed_and_sso_gated_services():
     assert server["authelia_count"] == 1
 
 
-def rendered():
-    return g.render_html(
-        model_for(
-            {
-                "daniel-box": live_ok(
-                    {("homelab", "traefik"): {"ready": 1, "desired": 1, "image": "t:1"}}
-                ),
-                "daniel-pi": live_ok({"sonarr": container()}),
-            }
-        )
-    )
-
-
-def test_render_html_is_self_contained():
-    """It is opened over file://, so any external asset is a broken page."""
-    page = rendered()
-    for marker in ("http://", "https://", "<script", "src="):
-        assert marker not in page, f"page must not reference {marker}"
-
-
-def test_render_html_includes_both_hosts_and_their_services():
-    page = rendered()
-    for expected in ("daniel-box", "daniel-server", "sonarr", "traefik"):
-        assert expected in page
-
-
-def test_render_html_escapes_values_from_the_inventory():
-    host_vars = {
-        "daniel-box": docker_host([]),
-        "daniel-server": docker_host([{"name": "<script>evil</script>", "port": 1}]),
-    }
-    page = g.render_html(g.build_model(GLOBALS, host_vars, {}, "now", ROLES))
-    assert "<script>evil" not in page
-    assert "&lt;script&gt;evil" in page
-
-
-def test_render_html_names_an_unreachable_host_in_the_page():
-    model = model_for(
-        {
-            "daniel-box": {"ok": False, "data": {}, "error": "ssh timed out"},
-            "daniel-pi": live_ok({"sonarr": container()}),
-        }
-    )
-    assert "ssh timed out" in g.render_html(model)
-
-
 #
 # These guard a bug that already happened once: cron runs with PATH=/usr/bin:/bin,
 # which omits /usr/local/bin where kubectl lives. The run still exited 0 and wrote
 # a page — it just quietly reported declared-only for every k8s service while the
 # Docker half kept working. A healthy-looking, half-blind page that alerts nobody.
-
-
-def test_find_tool_looks_beyond_an_impoverished_path(monkeypatch):
-    """The cron-PATH case: /usr/local/bin must be searched even when PATH omits it."""
-    kubectl = Path("/usr/local/bin/kubectl")
-    if not kubectl.exists():
-        pytest.skip("kubectl not installed at the path this guards")
-    monkeypatch.setenv("PATH", "/nonexistent")
-    assert g.find_tool("kubectl") == str(kubectl)
-
-
-def test_find_tool_returns_none_for_a_genuinely_absent_binary(monkeypatch):
-    monkeypatch.setenv("PATH", "/nonexistent")
-    assert g.find_tool("definitely-not-a-real-binary") is None
-
-
-def test_collect_k8s_raises_rather_than_reporting_a_clean_empty_result(monkeypatch):
-    """A missing binary is a broken setup, not 'the cluster has no deployments'."""
-    monkeypatch.setattr(live, "find_tool", lambda name: None)
-    with pytest.raises(g.MissingToolError):
-        g.collect_k8s("box", "box")
-
-
-def test_collect_docker_raises_when_ssh_is_absent(monkeypatch):
-    monkeypatch.setattr(live, "find_tool", lambda name: None)
-    with pytest.raises(g.MissingToolError):
-        g.collect_docker("daniel-server", "daniel-box")
 
 
 def test_main_leaves_the_previous_page_untouched_when_a_tool_is_missing(
@@ -563,88 +335,6 @@ def test_main_leaves_the_previous_page_untouched_when_a_tool_is_missing(
     )
     assert g.main(["-o", str(page)]) == 2
     assert page.read_text() == "PREVIOUS RENDER"
-
-
-def test_find_kubeconfig_prefers_an_explicit_kubeconfig_env(monkeypatch, tmp_path):
-    explicit = tmp_path / "explicit.yaml"
-    explicit.write_text("cfg")
-    monkeypatch.setenv("KUBECONFIG", str(explicit))
-    assert g.find_kubeconfig() == explicit
-
-
-def test_find_kubeconfig_reads_kubeconfig_as_a_path_list(monkeypatch, tmp_path):
-    """KUBECONFIG is a colon-separated list; a bare Path() of it opens nothing."""
-    first, second = tmp_path / "a.yaml", tmp_path / "b.yaml"
-    second.write_text("cfg")
-    monkeypatch.setenv("KUBECONFIG", f"{first}:{second}")
-    assert g.find_kubeconfig() == second
-
-
-def test_find_kubeconfig_skips_an_unreadable_candidate(monkeypatch, tmp_path):
-    """The actual cron failure: the k3s default exists but is root-only 0640."""
-    unreadable = tmp_path / "root-only.yaml"
-    unreadable.write_text("cfg")
-    unreadable.chmod(0o000)
-    readable = tmp_path / "mine.yaml"
-    readable.write_text("cfg")
-    monkeypatch.setenv("KUBECONFIG", f"{unreadable}:{readable}")
-    assert g.find_kubeconfig() == readable
-
-
-def test_collect_k8s_raises_when_no_kubeconfig_is_readable(monkeypatch):
-    """Must not degrade to 'declared only' — that renders as a healthy page."""
-    monkeypatch.setattr(live, "find_tool", lambda name: "/usr/local/bin/kubectl")
-    monkeypatch.setattr(live, "find_kubeconfig", lambda: None)
-    with pytest.raises(g.MissingToolError):
-        g.collect_k8s("box", "box")
-
-
-def test_collect_k8s_passes_the_resolved_kubeconfig_to_kubectl(monkeypatch, tmp_path):
-    """Explicit --kubeconfig is the point: kubectl's own lookup varies by caller."""
-    cfg = tmp_path / "kube.yaml"
-    cfg.write_text("cfg")
-    seen = {}
-
-    def fake_run(cmd, timeout):
-        seen["cmd"] = cmd
-        return True, json.dumps({"items": []})
-
-    monkeypatch.setattr(live, "find_tool", lambda name: "/usr/local/bin/kubectl")
-    monkeypatch.setattr(live, "find_kubeconfig", lambda: cfg)
-    monkeypatch.setattr(live, "_run", fake_run)
-    g.collect_k8s("box", "box")
-    assert "--kubeconfig" in seen["cmd"]
-    assert str(cfg) in seen["cmd"]
-
-
-def test_refresh_cron_sets_kubeconfig():
-    """Second layer, same as PATH: pin it where the regression actually happened."""
-    job = _refresh_cron_job()
-    assert "KUBECONFIG=" in job, "kubectl would fall back to the root-only k3s config"
-
-
-def _refresh_cron_job():
-    # main.yml became a list of import_tasks in the 2026-08-15 split, so scan every task
-    # file in the directory — the cron now lives in crons.yml, not the entry point.
-    task_dir = REPO_ROOT / "ansible/roles/setup/initial_setup/tasks"
-    if not task_dir.is_dir():
-        pytest.skip("ansible role tree not present")
-    loaded = []
-    for path in sorted(task_dir.glob("*.yml")):
-        loaded += yaml.safe_load(path.read_text()) or []
-    jobs = [
-        t["ansible.builtin.cron"]["job"]
-        for t in loaded
-        if isinstance(t, dict) and "infra-map" in (t.get("tags") or [])
-    ]
-    assert jobs, "the infra-map refresh cron has gone missing"
-    return jobs[0]
-
-
-def test_refresh_cron_puts_usr_local_bin_on_the_path():
-    """Second layer of the same guard, pinned where the regression happened."""
-    job = _refresh_cron_job()
-    assert "/usr/local/bin" in job, "kubectl would not resolve under cron's PATH"
 
 
 def test_load_roles_derives_ownership_from_the_role_trees():
@@ -709,109 +399,6 @@ def test_load_roles_records_only_literal_manifest_namespaces(tmp_path):
     )
     roles = g.load_roles(tmp_path)
     assert roles.manifest_namespaces == {"plugin": frozenset({"kube-system"})}
-
-
-def node(name, ready=True, roles=(), ip="10.0.0.1"):
-    return {
-        "metadata": {
-            "name": name,
-            "labels": {f"node-role.kubernetes.io/{r}": "true" for r in roles},
-        },
-        "spec": {},
-        "status": {
-            "conditions": [{"type": "Ready", "status": "True" if ready else "False"}],
-            "addresses": [{"type": "InternalIP", "address": ip}],
-            "nodeInfo": {"kubeletVersion": "v1.36.2+k3s1"},
-        },
-    }
-
-
-def test_parse_kubectl_nodes_reads_readiness_roles_and_address():
-    payload = json.dumps(
-        {"items": [node("daniel-box", roles=("control-plane", "etcd"))]}
-    )
-    parsed = g.parse_kubectl_nodes(payload)
-    assert parsed["daniel-box"]["ready"] is True
-    assert parsed["daniel-box"]["roles"] == ["control-plane", "etcd"]
-    assert parsed["daniel-box"]["ip"] == "10.0.0.1"
-
-
-def test_parse_kubectl_nodes_marks_a_not_ready_node():
-    """A NotReady node reading as healthy is the miss this collection exists to catch."""
-    payload = json.dumps({"items": [node("daniel-server", ready=False)]})
-    assert g.parse_kubectl_nodes(payload)["daniel-server"]["ready"] is False
-
-
-def test_parse_kubectl_nodes_returns_empty_on_bad_json():
-    assert g.parse_kubectl_nodes("not json") == {}
-
-
-def test_parse_pod_placement_blanks_an_unscheduled_pod():
-    """kubectl prints <none> for a pod with no node; that is not a node name."""
-    out = "homelab traefik-abc daniel-box Running\nhomelab pending-x <none> Pending\n"
-    parsed = g.parse_pod_placement(out)
-    assert parsed[0]["node"] == "daniel-box"
-    assert parsed[1]["node"] == ""
-
-
-def test_parse_pod_placement_ignores_short_lines():
-    assert g.parse_pod_placement("garbage\n\n") == []
-
-
-def backup_target(name, url="s3://b@r/p", available=True):
-    return {
-        "metadata": {"name": name},
-        "spec": {"backupTargetURL": url},
-        "status": {"available": available},
-    }
-
-
-def test_parse_backup_targets_separates_disarmed_from_unavailable():
-    """A blank URL is how this repo disarms a target, not how one breaks."""
-    payload = json.dumps(
-        {
-            "items": [
-                backup_target("default", url=""),
-                backup_target("r2", available=False),
-            ]
-        }
-    )
-    parsed = {t["name"]: t for t in g.parse_backup_targets(payload)}
-    assert parsed["default"]["armed"] is False
-    assert parsed["r2"]["armed"] is True
-    assert parsed["r2"]["available"] is False
-
-
-def test_parse_backup_targets_returns_empty_on_bad_json():
-    assert g.parse_backup_targets("not json") == []
-
-
-PODS = [
-    {
-        "namespace": "homelab",
-        "name": "sonarr-7d9-a",
-        "node": "daniel-server",
-        "phase": "Running",
-    },
-    {
-        "namespace": "homelab",
-        "name": "sonarr-7d9-b",
-        "node": "daniel-box",
-        "phase": "Running",
-    },
-    {
-        "namespace": "observability",
-        "name": "sonarr-7d9-c",
-        "node": "daniel-box",
-        "phase": "Running",
-    },
-    {
-        "namespace": "homelab",
-        "name": "other-1-d",
-        "node": "daniel-box",
-        "phase": "Running",
-    },
-]
 
 
 def test_place_on_nodes_collects_every_node_a_services_pods_landed_on():
@@ -894,161 +481,4 @@ def test_group_services_covers_every_service_exactly_once():
     assert sorted(grouped) == sorted(declared)
 
 
-def test_the_diagram_is_well_formed_svg():
-    """Hand-authored markup — one stray tag would break the whole page."""
-    from xml.etree import ElementTree
-
-    figure = render._diagram_view(model_for({}))
-    fragment = figure[figure.index("<svg") : figure.index("</svg>") + len("</svg>")]
-    ElementTree.fromstring(fragment)
-
-
-def test_the_diagram_labels_edges_with_addresses_from_the_inventory():
-    """The reason it is generated: renaming a VIP must move the label."""
-    global_vars = {
-        **GLOBALS,
-        "k3s_metallb_ingress_vip": "10.9.9.9",
-        "domain": "example.test",
-    }
-    model = g.build_model(
-        global_vars, {"daniel-box": docker_host([])}, {}, "now", ROLES
-    )
-    diagram = render._diagram_view(model)
-    assert "10.9.9.9" in diagram
-    assert "example.test" in diagram
-
-
-def test_the_diagram_reports_a_disarmed_backup_target():
-    """A target with no URL rendering as healthy is the miss worth guarding."""
-    cluster = {
-        "ok": True,
-        "error": "",
-        "nodes": {},
-        "pods": [],
-        "volumes": 0,
-        "backup_targets": [
-            {"name": "r2", "url": "", "armed": False, "available": False}
-        ],
-    }
-    assert "disarmed" in render._diagram_view(model_for({}, cluster))
-
-
-def test_an_uncollected_cluster_does_not_claim_the_backups_are_disarmed():
-    """Disarmed is a deliberate state here — a failed query must not announce it."""
-    diagram = render._diagram_view(model_for({}))
-    assert "disarmed" not in diagram
-    assert "not collected" in diagram
-
-
-def test_an_uncollected_cluster_does_not_paint_its_nodes_down():
-    """Same false alarm on the nodes: unknown is not NotReady."""
-    diagram = render._diagram_view(model_for({}))
-    assert "s-down" not in diagram
-    assert "s-unknown" in diagram
-
-
-def test_the_storage_plane_is_not_reddened_by_a_route_only_service():
-    """longhorn-ui declares an IngressRoute; its Deployment is the chart's, in
-    another namespace, so the name lookup reports it missing. The storage plane
-    must not inherit that — it is read from the volumes."""
-    cluster = {
-        "ok": True,
-        "error": "",
-        "nodes": {},
-        "pods": [],
-        "volumes": 42,
-        "backup_targets": [],
-    }
-    diagram = render._diagram_view(model_for({}, cluster))
-    longhorn = diagram[diagram.index('y="706"') - 60 : diagram.index('y="706"')]
-    assert "s-missing" not in longhorn
-
-
-def test_a_services_node_placement_reaches_the_page():
-    """Placement is collected for a reason; an untagged service hides it."""
-    service = {
-        "name": "sonarr",
-        "status": "healthy",
-        "hostname": None,
-        "port": None,
-        "authelia": False,
-        "networks": [],
-        "namespace": "homelab",
-        "declared": True,
-        "detail": "",
-        "nodes": ["daniel-server"],
-    }
-    assert "daniel-server" in render._service_row(service)
-
-
 # ── standalone SVG (docs/assets/generated/infra-map.svg) ───────────────────────────────
-
-
-def _svg():
-    return g.render_svg(
-        model_for(
-            {
-                "daniel-box": live_ok(
-                    {("homelab", "traefik"): {"ready": 1, "desired": 1, "image": "t:1"}}
-                ),
-                "daniel-pi": live_ok({"sonarr": container()}),
-            }
-        )
-    )
-
-
-def test_svg_is_a_standalone_document():
-    out = _svg()
-    assert out.lstrip().startswith("<svg")
-    assert out.rstrip().endswith("</svg>")
-    assert "<figure" not in out
-    assert "<html" not in out.lower()
-
-
-def test_svg_carries_its_own_styles():
-    """The whole point of the task.
-
-    _diagram_view's colours come from the page-level STYLE block. Embedded in
-    Markdown there is no page, so an SVG without an inline <style> renders as
-    unstyled black boxes -- which looks like a broken diagram, not a missing
-    stylesheet.
-    """
-    out = _svg()
-    assert "<style" in out
-    style_block = out.split("<style")[1].split("</style>")[0]
-    assert ".box" in style_block
-    assert ".edge" in style_block
-
-
-def test_svg_declares_the_xml_namespace():
-    """A bare <svg> works inside HTML; a .svg served on its own is parsed as XML."""
-    assert 'xmlns="http://www.w3.org/2000/svg"' in _svg()
-
-
-def test_svg_declares_a_viewbox():
-    """Without a viewBox an embedded SVG does not scale to its container."""
-    assert 'viewBox="' in _svg()
-
-
-def test_svg_keeps_the_status_tinting():
-    """Live status is the reason this diagram beats a static one."""
-    assert "s-" in _svg(), "no status classes on any node"
-
-
-def test_svg_parses_as_xml():
-    """An SVG that does not parse renders as nothing, with no error anywhere."""
-    import xml.etree.ElementTree as ET
-
-    ET.fromstring(_svg())
-
-
-def test_svg_ends_with_exactly_one_newline():
-    """A file the end-of-file-fixer prek hook rewrites breaks the docs-refresh cron.
-
-    That cron commits generated files with hooks running, so a hook that modifies
-    one aborts the commit on every run until the generator is fixed. Canonical
-    output at the source is what stops that.
-    """
-    out = _svg()
-    assert out.endswith("\n")
-    assert not out.endswith("\n\n")
