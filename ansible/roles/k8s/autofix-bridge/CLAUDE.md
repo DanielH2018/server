@@ -158,6 +158,6 @@ elsewhere in this doc; this is the governed summary a change here must satisfy.
   `FAKE_REMUX_REPLACE_MODE=shadow SONARR_API_KEY=… LEDGER_FILE=/tmp/l.json
   REPLACE_STATE_FILE=/tmp/rs.json OUTCOMES_FILE=/tmp/o.jsonl
   PYTHONPATH=ansible/roles/setup/common/files /usr/local/bin/uv run --no-project --python 3.14.6 files/fake_remux_replace.py`.
-- Unit tests: `uv run pytest ansible/roles/k8s/autofix-bridge/files` (`test_autofix.py`) and
+- Unit tests: `uv run pytest ansible/roles/k8s/autofix-bridge/tests` (`test_autofix.py`) and
   `uv run pytest ansible/roles/setup/fake_remux/files` (the two fake-remux logic suites).
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "autofix-bridge"`

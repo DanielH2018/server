@@ -113,7 +113,7 @@ def test_the_scan_finds_at_least_one_pin():
 
 # ── red proofs: the rule must reject as well as accept ───────────────────────────────────────
 # Named `..._is_clean` / `..._is_flagged` in pairs, following
-# scripts/validate/test_validate_compose_templates.py. A guard observed only from the passing
+# scripts/validate/tests/test_validate_compose_templates.py. A guard observed only from the passing
 # side is indistinguishable from one that fires on nothing.
 
 

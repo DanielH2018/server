@@ -2,7 +2,7 @@
 
 Moving a document is what breaks these, and nothing else here catches it.
 `test_adr_links.py` checks the ADR cross-reference graph, `test_documented_paths_exist.py`
-checks repo paths named in prose, and `scripts/test_mkdocs_config.py` checks the nav — an
+checks repo paths named in prose, and `scripts/tests/test_mkdocs_config.py` checks the nav — an
 inline `[text](../thing.md)` inside a page falls through all three. A dead one renders as a
 link that 404s on the built site, with nothing red anywhere.
 

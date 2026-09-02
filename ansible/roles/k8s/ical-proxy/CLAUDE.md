@@ -17,5 +17,5 @@ calendar widget. See repo-root `CLAUDE.md` for shared conventions.
   — update via redeploy.
 
 ## Editing
-- App: `files/app.py` (tests beside it in `files/test_app.py`) · Image: `templates/Dockerfile.j2`
+- App: `files/app.py` (tests in `tests/test_app.py`) · Image: `templates/Dockerfile.j2`
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "ical-proxy"`

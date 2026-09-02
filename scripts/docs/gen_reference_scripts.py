@@ -384,10 +384,16 @@ def _usage(doc: str) -> str:
 
 
 def _test_files(repo: Path, scripts: Path) -> list[Path]:
-    """Every pytest file that could be about a script, in either of the two test roots."""
+    """Every pytest file that could be about a script, in any of the test roots.
+
+    A subdirectory's tests live either beside its modules (`scripts/<dir>/test_*.py`, not
+    yet split) or in its own `tests/` sibling (`scripts/<dir>/tests/test_*.py`, the split
+    layout) — both are covered so a mid-migration tree and a finished one both scan clean.
+    """
     return (
         sorted(scripts.glob("test_*.py"))
         + sorted(scripts.glob("*/test_*.py"))
+        + sorted(scripts.glob("*/tests/test_*.py"))
         + sorted((repo / "ansible" / "tests").rglob("test_*.py"))
     )
 
@@ -495,7 +501,10 @@ def build_rows(scripts: Path = SCRIPTS, repo: Path = REPO) -> list[dict[str, str
             summary = re.sub(rf"^{re.escape(path.name)}\s+[—-]\s*", "", summary)
             usage = _usage(doc)
 
-        direct = path.parent / f"test_{path.stem}.py"
+        # The split layout keeps a script's test in a sibling `tests/`; the flat one beside it.
+        direct = path.parent / "tests" / f"test_{path.stem}.py"
+        if not direct.is_file():
+            direct = path.parent / f"test_{path.stem}.py"
         if direct.is_file():
             test, indirect, via = direct.name, "", ""
         else:

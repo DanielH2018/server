@@ -28,7 +28,7 @@ from pathlib import Path
 import probe_core as core  # noqa: F401  (kept for the monkeypatch convention above)
 
 # Mirrors manifests_release_dir in roles/k8s/manifests/defaults/main.yml. A mismatch makes this
-# reader silently report "no records", so scripts/diagnostics/test_probe_releases.py asserts the
+# reader silently report "no records", so scripts/diagnostics/tests/test_probe_releases.py asserts the
 # two agree rather than trusting the comment.
 RELEASE_DIR = Path("/var/lib/homelab/k8s-releases.d")
 

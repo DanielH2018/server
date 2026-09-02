@@ -40,7 +40,7 @@ read-only commands to fit it. Anything that writes or executes still prompts —
   subshells `(…)`, backgrounding `&`. (Note: `awk` programs containing `>` — even as a
   numeric comparison — are conservatively rejected; use a different test or accept the prompt.)
 
-Source of truth + tests: `.claude/hooks/auto-approve-readonly.py`, `.claude/hooks/test_auto_approve_readonly.py`.
+Source of truth + tests: `.claude/hooks/auto-approve-readonly.py`, `.claude/hooks/tests/test_auto_approve_readonly.py`.
 The ssh case is wired separately, via `auto-approve-remote-ssh.sh` on **PermissionRequest**, because
 Claude Code evaluates `ask` rules whatever a PreToolUse hook returns, so a PreToolUse decision alone
 would never reach an ask-listed command. Registered in the *user-level* settings (chezmoi

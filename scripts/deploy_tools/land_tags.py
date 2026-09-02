@@ -18,7 +18,7 @@ merged -- and every downstream check reads green over it. When the returned coun
 with the PR's own `changedFiles`, this reports `fallback` and the caller widens to
 `deploy.sh --changed <since>`: wider than the truth is recoverable, narrower is not.
 
-Run: uv run pytest scripts/deploy_tools/test_land_tags.py
+Run: uv run pytest scripts/deploy_tools/tests/test_land_tags.py
 """
 
 from __future__ import annotations

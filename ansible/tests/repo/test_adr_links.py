@@ -227,7 +227,7 @@ def test_the_index_links_every_adr(adr):
 
 @pytest.mark.parametrize("adr", _adr_files(), ids=lambda p: p.name)
 def test_the_nav_lists_every_adr(adr):
-    """scripts/test_mkdocs_config.py only covers docs/*.md, so subdirectories need this."""
+    """scripts/tests/test_mkdocs_config.py only covers docs/*.md, so subdirectories need this."""
     assert f"adr/{adr.name}" in MKDOCS.read_text(), (
         f"{adr.name} is not in the mkdocs.yml nav"
     )

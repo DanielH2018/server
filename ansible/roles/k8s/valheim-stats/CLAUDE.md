@@ -67,5 +67,5 @@ Two things exist to make a mismatch visible rather than silent:
   built with `kubectl create --from-file`, never a template — as in terraria-stats.
 
 ## Editing
-- Logic: `files/valheim_stats.py` · Tests: `files/test_valheim_stats.py` (`uv run pytest ansible/roles/k8s/valheim-stats/files`)
+- Logic: `files/valheim_stats.py` · Tests: `tests/test_valheim_stats.py` (`uv run pytest ansible/roles/k8s/valheim-stats/tests`)
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "valheim-stats" -e target=daniel-box`

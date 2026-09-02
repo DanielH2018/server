@@ -16,7 +16,7 @@ Degrades to a log-only note, never a crash, when:
   - the gitops-deploy webhook config isn't present on this host -- deploy.sh normally runs on
     daniel-box, where it is; anywhere else this just prints and returns
 
-Run: uv run pytest scripts/deploy_tools/test_deploy_detach_notify.py
+Run: uv run pytest scripts/deploy_tools/tests/test_deploy_detach_notify.py
 """
 
 from __future__ import annotations

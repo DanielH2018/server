@@ -71,7 +71,7 @@ additional_dependencies = ["ansible-core>=2.18,<3.0", "jmespath"]
 # their comments, which name the worktree and styles/ trees). Excluding paths is a chase:
 # every new untracked directory is another entry. Not walking is the fix.
 #
-# ENFORCED by scripts/test_ansible_lint_hook.py.
+# ENFORCED by scripts/tests/test_ansible_lint_hook.py.
 entry = "bash -c 'if [ \"$#\" -eq 0 ]; then exit 0; fi; ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections && ansible-lint -c .ansible-lint \"$@\"' --"
 pass_filenames = true
 # REQUIRED, not a tuning knob. Without it prek shards the filenames across parallel
@@ -343,7 +343,7 @@ types = ["shell"]
 # Markdown file would read green while checking nothing outside the two configured paths —
 # and would ALSO hand it docs/reference/, whose commits come from the docs-refresh cron.
 #
-# The duplication is safe only because scripts/test_vale_scope.py asserts this regex covers
+# The duplication is safe only because scripts/tests/test_vale_scope.py asserts this regex covers
 # every .vale.ini section. It did not, for two commits: docs/deploying.md and
 # docs/gitops-pipeline.md entered .vale.ini in PR #418 and never entered this regex, so the
 # hook reported "no files to check" and both pages went ungated while reading green. Adding

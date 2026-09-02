@@ -1,6 +1,6 @@
 """A patched helper must be reached qualified, never from-imported.
 
-Precedent: `scripts/diagnostics/test_probe_boundaries.py` solves the identical problem for the probe
+Precedent: `scripts/diagnostics/tests/test_probe_boundaries.py` solves the identical problem for the probe
 family, and this guard is a close port of it onto monitor-bridge + autofix-bridge.
 `monkeypatch.setattr(bridge_config, "PROM_URL", ...)` rebinds the attribute on the
 bridge_config module object. A caller that did `from bridge_config import PROM_URL` holds its
@@ -58,11 +58,18 @@ def _is_test_file(path):
 def _test_and_conftest_files():
     """Every test module + conftest.py under a role that imports bridge_common — the suites
     this rule binds. Every consumer's non-test modules are checked against the union of what
-    any of those suites patches, since bridge_common is shared between them."""
+    any of those suites patches, since bridge_common is shared between them.
+
+    Tests live in `tests/`, a sibling of the `files/` roots `_consumer_roots()` returns, not
+    inside `files/` itself.
+    """
     files = []
     for root in _consumer_roots():
-        files += sorted(root.glob("test_*.py"))
-        conftest = root / "conftest.py"
+        tests_dir = root.parent / "tests"
+        if not tests_dir.is_dir():
+            continue
+        files += sorted(tests_dir.glob("test_*.py"))
+        conftest = tests_dir / "conftest.py"
         if conftest.exists():
             files.append(conftest)
     return files

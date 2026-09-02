@@ -50,7 +50,7 @@ FIELD NOTES (what is genuinely undecidable from the repo alone, and why):
     mid-edit should not crash report generation the way it correctly crashes a deploy.
 
 Run: uv run python scripts/docs/service_catalog.py --out /tmp/service_catalog.html
-Tests: uv run pytest scripts/docs/test_service_catalog.py
+Tests: uv run pytest scripts/docs/tests/test_service_catalog.py
 """
 
 from __future__ import annotations

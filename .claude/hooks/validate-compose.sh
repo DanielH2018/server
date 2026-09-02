@@ -69,7 +69,7 @@ for pair in "$run_compose:validate_compose_templates" \
     [[ "$flag" == "1" ]] || continue
     # scripts/validate/, not scripts/ — the validators moved there in #443 and this line kept the
     # old path for weeks. The path is composed from $script, so no literal `scripts/<name>.py`
-    # token exists for a text guard to resolve; scripts/test_invoker_paths_resolve.py therefore
+    # token exists for a text guard to resolve; scripts/tests/test_invoker_paths_resolve.py therefore
     # checks this loop's composed candidates specifically.
     script_path="$repo_root/scripts/validate/${script}.py"
     if [[ ! -f "$script_path" ]]; then

@@ -186,7 +186,7 @@ services:
     # re-pulls a present tag, so without a digest it aged silently with no update signal. Pinning
     # repo:tag@sha256 KEEPS the tag, so Renovate's docker manager matches it and opens tracked
     # digest-bump PRs (like the karakeep app image above). NOTE — tdarr/janitorr are the OPPOSITE:
-    # bare repo@sha256 with NO tag, so they're DIGEST_PINNED_EXEMPT in scripts/test_renovate_managers.py
+    # bare repo@sha256 with NO tag, so they're DIGEST_PINNED_EXEMPT in scripts/tests/test_renovate_managers.py
     # and get ZERO Renovate tracking (100% manual pull-digest-redeploy). The watchtower opt-out (labels
     # below) keeps the stack's updates manual + reviewed.
     image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58

@@ -450,8 +450,13 @@ uv run pytest scripts         # just one suite
 - **Suites:** read `testpaths` in `pyproject.toml` — it names every one, with a comment saying
   what each covers. Four shapes recur: repo-wide guards in `ansible/tests/` (deploy ordering,
   the auto-deploy gates, the documented-path and macro checks), a role's own cluster-side logic
-  under `ansible/roles/<plane>/<role>/files/`, the Bash classifier in `.claude/hooks/`, and
-  `scripts/`. A role that ships a `files/*.py` with logic adds itself to `testpaths`.
+  under `ansible/roles/<plane>/<role>/tests/` (the code it covers stays in `files/`, which is
+  what the role ships), the Bash classifier in `.claude/hooks/tests/`, and `scripts/<dir>/tests/`.
+  Tests never sit beside the code they cover: a `tests/` sibling keeps them out of every
+  `files/` ship list and lets the deployer's test-only path rule stay a directory check. A test
+  in a `tests/` directory reaches its module through a `sys.path` bootstrap pointing at the
+  sibling `files/`, or through `pythonpath` where the module is shared across roles. A role
+  that ships a `files/*.py` with logic adds its `tests/` directory to `testpaths`.
   `ansible/tests/` is grouped by what a guard reads: `deploy/` (the deploy play, gitops_deploy
   and the rollout gates), `k8s/` (manifest render and workload hygiene across roles),
   `longhorn/` (backup, snapshot, revert), `setup/` (the host plane: k3s install, crons, DNS,
@@ -466,7 +471,7 @@ uv run pytest scripts         # just one suite
   repo has paid for that twice. `volume-claim`'s short-circuit shipped behind 16 passing tests and a
   mutation test, then fired for 0 of 25 claims across two full deploys. `image-smoke`'s bare-boot
   rule never caught a real image problem across 11 failures. Both read green throughout.
-  `scripts/validate/test_validate_compose_templates.py` is the worked example: every rule there is
+  `scripts/validate/tests/test_validate_compose_templates.py` is the worked example: every rule there is
   a `..._is_clean` / `..._is_flagged` pair, so a rule that silently stopped matching fails its own
   test. Name the pair that way — a guard that fires on everything and one that fires on nothing are
   indistinguishable from the passing side alone.

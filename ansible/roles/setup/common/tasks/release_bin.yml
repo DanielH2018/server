@@ -188,7 +188,7 @@
 
 - name: Prune superseded releases for {{ release_bin_group }}
   # The guard that matters lives in the script, with its red proofs in
-  # scripts/deploy_tools/test_prune_releases.py: pruning whatever `current` resolves to would
+  # scripts/deploy_tools/tests/test_prune_releases.py: pruning whatever `current` resolves to would
   # dangle every symlink above at once, and the crons that would report it are the scripts that
   # just vanished. `changed_when` reads the script's own report rather than its exit code, which
   # is 0 both when it removed something and when it had nothing to remove.

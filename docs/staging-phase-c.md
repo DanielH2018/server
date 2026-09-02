@@ -165,7 +165,7 @@ they agree by construction, whatever master does meanwhile.
 stale templates and reverts live config while every repo-side check reads green. On the staging
 checkout, being behind origin is the *intended* state. The remote script therefore passes
 `--skip-staleness-check`, with the reasoning at the line, pinned by
-`scripts/deploy_tools/test_staging_gate.py::test_the_staging_deploy_does_not_refuse_a_tree_behind_the_tip`
+`scripts/deploy_tools/tests/test_staging_gate.py::test_the_staging_deploy_does_not_refuse_a_tree_behind_the_tip`
 and its red proof.
 
 **This removes a slice-4 requirement rather than satisfying one.** The earlier draft of this
