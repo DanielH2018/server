@@ -10,7 +10,7 @@
 
 **Spec:** `docs/archive/docs-ui-and-adrs/design.md`
 
-**Follow-on plan:** `docs/archive/docs-ui-and-adrs/plan-2.md` covers ADRs, Vale, and D2. Do not start it until this plan is merged.
+**Follow-on plan:** `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md` covers ADRs, Vale, and D2. Do not start it until this plan is merged.
 
 ## Global Constraints
 
