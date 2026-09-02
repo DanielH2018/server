@@ -40,7 +40,6 @@ import ast
 import re
 from pathlib import Path
 
-import yaml
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -50,6 +49,12 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib.docs_provenance import md_cell as _md_cell  # noqa: E402
+from lib.invocation_sites import (  # noqa: E402
+    claude_hook_files as _claude_hook_files,
+    cron_jobs as _shared_cron_jobs,
+    sh_j2_templates as _sh_j2_templates,
+    workflow_files as _workflow_files,
+)
 from lib.repo_paths import REPO, SCRIPTS  # noqa: E402
 
 # Not documentation about the tree: a test, a pytest fixture module, or a private helper
@@ -180,35 +185,18 @@ def _invoked_by(path: Path, scripts: Path) -> set[str]:
 
 
 def _cron_jobs(repo: Path) -> list[tuple[str, str]]:
-    """(cron name, command) for every present `ansible.builtin.cron` task in the tree."""
-    jobs = []
-    for path in sorted((repo / "ansible").rglob("tasks/*.yml")):
-        if "/archive/" in path.as_posix():
-            continue
-        try:
-            loaded = yaml.safe_load(path.read_text())
-        except OSError, yaml.YAMLError:
-            continue
-        if not isinstance(loaded, list):
-            continue
-        for task in loaded:
-            if not isinstance(task, dict) or "ansible.builtin.cron" not in task:
-                continue
-            spec = task["ansible.builtin.cron"] or {}
-            if str(spec.get("state", "present")) == "absent":
-                continue
-            jobs.append((str(spec.get("name", "unnamed")), str(spec.get("job", ""))))
-    return jobs
+    """(cron name, command) for every present `ansible.builtin.cron` task in the tree.
+
+    File discovery and field extraction live in `lib.invocation_sites`, shared with
+    `scripts/test_invoker_paths_resolve.py` — both need the same "which files, which
+    field" answer for a cron `job:`.
+    """
+    return [(job.name, job.job) for job in _shared_cron_jobs(repo)]
 
 
 def _wrapper_templates(repo: Path) -> dict[str, Path]:
     """Shell-wrapper basename -> the template that renders it."""
-    found = {}
-    for path in sorted((repo / "ansible").rglob("templates/*.sh.j2")):
-        if "/archive/" in path.as_posix():
-            continue
-        found[path.name[: -len(".j2")]] = path
-    return found
+    return {path.name[: -len(".j2")]: path for path in _sh_j2_templates(repo)}
 
 
 def _scheduled(repo: Path) -> dict[str, str]:
@@ -239,12 +227,11 @@ def _invocation_sites(repo: Path) -> list[tuple[Path, str, str]]:
     if prek.is_file():
         sites.append((prek, "gate", "prek hook (every commit)"))
 
-    for path in sorted((repo / ".github" / "workflows").glob("*.yml")):
+    for path in _workflow_files(repo):
         sites.append((path, "gate", f"CI: {path.name}"))
 
-    for path in sorted((repo / ".claude" / "hooks").glob("*")):
-        if path.is_file() and not path.name.startswith("test_"):
-            sites.append((path, "gate", f"Claude hook: {path.name}"))
+    for path in _claude_hook_files(repo):
+        sites.append((path, "gate", f"Claude hook: {path.name}"))
 
     # deploy.sh is the interactive deploy path: what it runs, every deploy runs.
     deploy = repo / "scripts" / "deploy.sh"
