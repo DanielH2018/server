@@ -79,9 +79,11 @@ validator fails when a list and its directory disagree.
 
 | File | What it holds |
 |---|---|
-| `files/configuration.yaml` | `default_config`, helpers, Adaptive Lighting, 16 `threshold` sensors, `template: !include`, `recorder:` excludes, http/trusted-proxy, Lovelace |
+| `files/configuration.yaml` | `default_config`, Adaptive Lighting, the `!include` lines for everything below, `recorder:` excludes, http/trusted-proxy, Lovelace |
 | `files/automations/*.yaml` | the automations, one file per topic (lighting, wake-and-sleep, fan-and-air, alerts, presence, display, system), merged by `!include_dir_merge_list` |
 | `files/scripts/*.yaml` | the scripts, one file per topic (lighting, wake-and-sleep, fan, alerts, test-harness), merged by `!include_dir_merge_named` |
+| `files/input_boolean.yaml`, `input_select.yaml`, `input_number.yaml`, `input_datetime.yaml`, `timer.yaml` | the helpers, one file per domain (`input_boolean: !include input_boolean.yaml` and so on) |
+| `files/thresholds.yaml` | the 16 `threshold` binary sensors (`binary_sensor: !include thresholds.yaml`) |
 | `files/scenes.yaml` | `bedroom_bright` / `bedroom_nightlight` |
 | `files/templates.yaml` | `sensor.bedroom_wake_start` template sensor |
 | `files/rest.yaml` | Open-Meteo outdoor AQI sensors, pulled in via `rest: !include rest.yaml` |
@@ -102,7 +104,7 @@ config file, rendered with `lookup('template')` into the role's Secret (see §11
 
 ## 5. Helpers & sensors
 
-**Helpers** (`configuration.yaml`):
+**Helpers** (`files/input_boolean.yaml`, `input_select.yaml`, `input_number.yaml`, `input_datetime.yaml`, `timer.yaml` — one file per domain, each behind an `!include`):
 - `input_boolean.bedroom_manual_off` — set when you turn lights off via the dial; suppresses
   presence auto-on. Cleared on manual-on or the morning reset.
 - `input_boolean.bedroom_fan_manual` — set when the fan is changed by hand/remote; suppresses
@@ -116,7 +118,7 @@ config file, rendered with `lookup('template')` into the role's Secret (see §11
 - `sensor.bedroom_wake_start` — the watch alarm minus 15 min, available only for *morning* alarms
   (03:00–11:00). The single source of truth for the wake-ramp window.
 
-**`threshold` binary-sensors** (`configuration.yaml`) — native hysteresis = "alert once +
+**`threshold` binary-sensors** (`files/thresholds.yaml`) — native hysteresis = "alert once +
 recovery, no bounce". Sixteen, feeding `bedroom_threshold_alert`:
 - Air quality indoor (moderate): `bedroom_{co2,pm2_5,voc,nox}_high`
 - Air quality indoor (severe, pierces DND): `bedroom_{co2,pm2_5,voc,nox}_severe`
@@ -236,7 +238,7 @@ All set per-category in `bedroom_threshold_alert`'s `cfg` map or per-call to `be
 
 | Want to change… | Where |
 |---|---|
-| Air-quality / humidity / battery / severe thresholds | the `threshold` sensors in `configuration.yaml` (`upper`/`lower`/`hysteresis`) |
+| Air-quality / humidity / battery / severe thresholds | the `threshold` sensors in `files/thresholds.yaml` (`upper`/`lower`/`hysteresis`) |
 | Fan curve (start temp / slope / caps) | `bedroom_apply_fan` in `scripts/fan.yaml` (the `ideal`/`cap` lines) |
 | Wake ramp curve (knees / final brightness / short-night softening) | `wake_brightness` macro in `custom_templates/lighting.jinja` (`mid`/`knee`/`full`); window length in `in_wake_window` |
 | Nightlight window | `bedroom_apply_natural` first exception (`sleep_mode` or 00:00–05:00) |

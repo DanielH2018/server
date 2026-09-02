@@ -25,7 +25,9 @@ All under `ansible/roles/k8s/home-assistant/`:
 | Script | `files/scripts/<topic>.yaml` (lighting, wake-and-sleep, fan, alerts, test-harness); a NEW file also goes in `home_assistant_script_files` in `defaults/main.yml` |
 | Template sensor / binary_sensor | `files/templates.yaml` |
 | **Tunable math** (curve/threshold/ramp) | `files/custom_templates/*.jinja` macro **+ a test** |
-| HTTP/integrations/`threshold:`/`http:` etc. | `files/configuration.yaml` |
+| A `threshold` sensor | `files/thresholds.yaml` |
+| A helper (`input_*`, `timer`) | `files/<domain>.yaml` (`input_boolean.yaml`, `input_number.yaml`, …) |
+| HTTP/integrations/`http:`/recorder etc. | `files/configuration.yaml` |
 | Dashboard / entity friendly-names | `files/ui-lovelace.yaml` / `files/customize.yaml` |
 | A NEW root file behind a fresh `!include` | also goes in `home_assistant_root_files` in `defaults/main.yml` |
 

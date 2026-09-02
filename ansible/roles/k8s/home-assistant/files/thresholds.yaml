@@ -1,0 +1,112 @@
+# `binary_sensor:` for configuration.yaml, pulled in by `binary_sensor: !include thresholds.yaml`.
+# Air-quality thresholds — built-in `threshold` binary-sensors give native hysteresis (on above
+# upper+hysteresis, off below upper-hysteresis), which IS the "alert once + recovery, no bounce"
+# lifecycle consumed by the bedroom_threshold_alert automation (files/automations/alerts.yaml).
+# Source = the bedroom AirGradient ONE. Thresholds are STARTING POINTS — tune to the observed
+# baseline, especially the VOC/NOx *index* sensors (Sensirion indices drift per environment).
+# Adding a pollutant = one more block here + add its binary_sensor to the automation trigger list.
+- platform: threshold
+  name: "Bedroom CO2 high"          # -> binary_sensor.bedroom_co2_high
+  entity_id: sensor.bedroom_airgradient_one_carbon_dioxide
+  upper: 1000                        # alerts >= 1100 ppm, clears <= 900 ppm
+  hysteresis: 100
+- platform: threshold
+  name: "Bedroom PM2.5 high"        # -> binary_sensor.bedroom_pm2_5_high
+  entity_id: sensor.bedroom_airgradient_one_pm2_5
+  upper: 35                          # alerts >= 40 ug/m3, clears <= 30 ug/m3
+  hysteresis: 5
+- platform: threshold
+  name: "Bedroom VOC high"          # -> binary_sensor.bedroom_voc_high
+  entity_id: sensor.bedroom_airgradient_one_voc_index
+  # Tuned 2026-06-27 to this room's observed baseline (7-day recorder: median 124,
+  # p95 171, spikes ~290). upper 250 only caught near-max events; 200 sits just above
+  # the room's normal band so a genuine VOC elevation alerts. Severe (400) unchanged.
+  upper: 200                         # alerts >= 225, clears <= 175 (index)
+  hysteresis: 25
+- platform: threshold
+  name: "Bedroom NOx high"          # -> binary_sensor.bedroom_nox_high
+  entity_id: sensor.bedroom_airgradient_one_nox_index
+  upper: 50                          # alerts >= 60, clears <= 40 (index)
+  hysteresis: 10
+# SEVERE air-quality tier — a higher cutoff per pollutant that fires its OWN edge when air gets
+# genuinely unhealthy. Feeds the `airqualitysevere` category of bedroom_threshold_alert, the only
+# alerts that PIERCE DND/sleep with sound (the moderate ones above are routine). Escalation-aware:
+# a gradual CO2 climb trips the moderate sensor first (routine nudge), then these (critical wake).
+# Cutoffs are STARTING POINTS (join the ~2026-06-25 tuning pass).
+- platform: threshold
+  name: "Bedroom CO2 severe"        # -> binary_sensor.bedroom_co2_severe
+  entity_id: sensor.bedroom_airgradient_one_carbon_dioxide
+  upper: 2000                        # alerts >= 2100 ppm, clears <= 1900 ppm
+  hysteresis: 100
+- platform: threshold
+  name: "Bedroom PM2.5 severe"      # -> binary_sensor.bedroom_pm2_5_severe
+  entity_id: sensor.bedroom_airgradient_one_pm2_5
+  upper: 100                         # alerts >= 105 ug/m3, clears <= 95
+  hysteresis: 5
+- platform: threshold
+  name: "Bedroom VOC severe"        # -> binary_sensor.bedroom_voc_severe
+  entity_id: sensor.bedroom_airgradient_one_voc_index
+  upper: 400                         # alerts >= 425, clears <= 375 (index)
+  hysteresis: 25
+- platform: threshold
+  name: "Bedroom NOx severe"        # -> binary_sensor.bedroom_nox_severe
+  entity_id: sensor.bedroom_airgradient_one_nox_index
+  upper: 200                         # alerts >= 210, clears <= 190 (index)
+  hysteresis: 10
+# Low-battery thresholds — the LOWER-bound mirror of the air-quality ones above. A `lower`
+# threshold is `on` (low) when value <= lower-hysteresis and `off` (recovered) when >= lower+
+# hysteresis. Battery drain is monotonic (only jumps up on replacement), so flapping is a
+# non-issue. Consumed by the bedroom_threshold_alert automation (files/automations/alerts.yaml).
+# Starting points — tune per device. Adding a battery = one block here + add it to the automation.
+- platform: threshold
+  name: "Bedroom FP300 battery low"     # -> binary_sensor.bedroom_fp300_battery_low
+  entity_id: sensor.aqara_fp300_battery
+  lower: 20                             # alerts <= 15%, clears >= 25%
+  hysteresis: 5
+- platform: threshold
+  name: "Bedroom Tap Dial battery low"  # -> binary_sensor.bedroom_tap_dial_battery_low
+  entity_id: sensor.0x001788010f0ccda4_battery
+  lower: 20                             # alerts <= 15%, clears >= 25%
+  hysteresis: 5
+# Humidity comfort — two-sided, so TWO one-sided sensors (high = mold risk, low = winter-dry).
+# Both feed the humidity category of bedroom_threshold_alert. Starting points — tune with the
+# air-quality thresholds (~2026-06-25 baseline pass).
+- platform: threshold
+  name: "Bedroom humidity high"     # -> binary_sensor.bedroom_humidity_high
+  entity_id: sensor.bedroom_airgradient_one_humidity
+  upper: 60                          # alerts >= 63%, clears <= 57% (mold)
+  hysteresis: 3
+- platform: threshold
+  name: "Bedroom humidity low"      # -> binary_sensor.bedroom_humidity_low
+  entity_id: sensor.bedroom_airgradient_one_humidity
+  lower: 30                          # alerts <= 27%, clears >= 33% (winter-dry)
+  hysteresis: 3
+# Indoor temperature extremes — a safety net for when nobody's home to notice. Both the fan
+# curve and the window advisor go SILENT while away (the fan is off; the advisor is gated on
+# person home), so an AC/HVAC failure or heatwave (high) — or a heating failure / freeze risk
+# (low) — would otherwise raise no alert at all. Two-sided, so two one-sided sensors; feed the
+# `temperature` category of bedroom_threshold_alert. Starting points — tune in the ~2026-06-25 pass.
+- platform: threshold
+  name: "Bedroom temp high"         # -> binary_sensor.bedroom_temp_high
+  entity_id: sensor.bedroom_airgradient_one_temperature
+  upper: 86                          # alerts >= 88 °F, clears <= 84 (AC/HVAC failure, heatwave)
+  hysteresis: 2
+- platform: threshold
+  name: "Bedroom temp low"          # -> binary_sensor.bedroom_temp_low
+  entity_id: sensor.bedroom_airgradient_one_temperature
+  lower: 50                          # alerts <= 48 °F, clears >= 52 (heating failure / freeze risk)
+  hysteresis: 2
+# Outdoor air quality (source = Open-Meteo sensor.outdoor_pm2_5, files/rest.yaml). Two tiers like
+# the indoor air-quality sensors: moderate (high) and the wildfire/"unhealthy" cutoff (severe).
+# Feed the airqualityoutdoor / airqualityoutdoorsevere categories of bedroom_threshold_alert AND
+# the smoke guard in the window advisor. Starting points — tune with the indoor ones (~2026-06-25).
+- platform: threshold
+  name: "Outdoor PM2.5 high"        # -> binary_sensor.outdoor_pm2_5_high
+  entity_id: sensor.outdoor_pm2_5
+  upper: 35                          # alerts >= 40, clears <= 30 µg/m³ (US AQI "moderate"+)
+  hysteresis: 5
+- platform: threshold
+  name: "Outdoor PM2.5 severe"      # -> binary_sensor.outdoor_pm2_5_severe
+  entity_id: sensor.outdoor_pm2_5
+  upper: 100                         # alerts >= 105, clears <= 95 µg/m³ (wildfire / "unhealthy")
+  hysteresis: 5

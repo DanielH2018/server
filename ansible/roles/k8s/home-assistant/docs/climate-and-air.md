@@ -72,7 +72,7 @@ advisor.
   `sensor.outdoor_ozone` — pulled via `files/rest.yaml` (copy'd, not templated; **no API key**;
   a `resource_template` reads `zone.home` lat/lon so the coordinates never enter git;
   `scan_interval: 1800` = poll every 30 min, the API being hourly). Two outdoor threshold
-  `binary_sensor`s (inline in `configuration.yaml`) wire into the existing **threshold-alert
+  `binary_sensor`s (in `files/thresholds.yaml`) wire into the existing **threshold-alert
   engine** as their own categories: `airqualityoutdoor` (`binary_sensor.outdoor_pm2_5_high`,
   `upper: 35` → alerts ≥ 40, moderate → `watch`) and `airqualityoutdoorsevere`
   (`binary_sensor.outdoor_pm2_5_severe`, `upper: 100` → alerts ≥ 105, wildfire tier →

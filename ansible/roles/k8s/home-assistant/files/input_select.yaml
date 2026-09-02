@@ -1,0 +1,23 @@
+# `input_select:` for configuration.yaml, pulled in by `input_select: !include input_select.yaml`.
+# Test-harness scenario picker (script.bedroom_run_scenario): pick a scenario, then press the
+# dashboard Run button. `reset` returns the room to a clean daytime baseline. `off` does nothing.
+bedroom_test_scenario:
+  name: Bedroom test scenario
+  icon: mdi:test-tube
+  options:
+    - "off"
+    - bedtime
+    - wake
+    - nightlight
+    - away
+    - arrive
+    - reset
+# Test-harness speed (script.bedroom_run_scenario): `fast` (~30s, the first option = default) or
+# `real` (production timing). An input_select's first option is its creation default, so this
+# realizes the "fast by default" intent that an input_boolean (no `initial:` field) cannot.
+bedroom_test_speed:
+  name: Bedroom test speed
+  icon: mdi:fast-forward
+  options:
+    - fast
+    - real
