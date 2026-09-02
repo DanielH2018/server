@@ -15,7 +15,7 @@ import textwrap
 from pathlib import Path
 
 import pytest
-from split_module import main, references, split
+from split_module import Target, main, references, split
 
 SOURCE = textwrap.dedent(
     '''\
@@ -93,7 +93,7 @@ def test_split_keeps_source_order_within_a_target():
 
 
 def test_split_refuses_a_name_claimed_twice():
-    spec = {
+    spec: dict[str, Target] = {
         "a.py": {"header": "", "names": ["_helper"]},
         "b.py": {"header": "", "names": ["_helper"]},
     }
@@ -138,7 +138,7 @@ def test_split_refuses_a_name_the_source_lacks():
 
 def test_split_refuses_one_statement_bound_for_two_targets():
     source = "A, B = 1, 2\n"
-    spec = {
+    spec: dict[str, Target] = {
         "a.py": {"header": "", "names": ["A"]},
         "b.py": {"header": "", "names": ["B"]},
     }

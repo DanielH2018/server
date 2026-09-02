@@ -16,6 +16,7 @@ import bridge_config
 import bridge_io
 import bridge_parsing
 import checks_notify
+import email.message
 
 
 def _http_error(url, status, msg):
@@ -24,7 +25,7 @@ def _http_error(url, status, msg):
     These fakes bypass _get_json, which is what closes a real response, and an HTTPError
     left open is a ResourceWarning at GC that filterwarnings=error fails some later test on.
     """
-    err = urllib.error.HTTPError(url, status, msg, {}, None)
+    err = urllib.error.HTTPError(url, status, msg, email.message.Message(), None)
     err.close()
     return err
 
@@ -353,7 +354,11 @@ def test_get_json_attaches_the_error_body_to_httperror(monkeypatch):
 
     def boom(*_a, **_k):
         raise urllib.error.HTTPError(
-            "http://kopia:51515/api/v1/sources", 403, "Forbidden", {}, io.BytesIO(body)
+            "http://kopia:51515/api/v1/sources",
+            403,
+            "Forbidden",
+            email.message.Message(),
+            io.BytesIO(body),
         )
 
     monkeypatch.setattr(urllib.request, "urlopen", boom)

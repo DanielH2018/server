@@ -24,6 +24,7 @@ def _load_by_path(name, filename):
     sys.modules so every subsequent `import <name>` (from any test file) reuses this
     exact object instead of re-executing the script."""
     spec = importlib.util.spec_from_file_location(name, os.path.join(_HERE, filename))
+    assert spec and spec.loader, "spec_from_file_location found no loader"
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
     spec.loader.exec_module(module)

@@ -552,7 +552,7 @@ def _diagram_view(model: dict) -> str:
         elif not target["armed"]:
             state, detail = "missing", "disarmed — no backup target URL"
         elif target["available"]:
-            state, detail = "healthy", target["url"]
+            state, detail = "healthy", str(target["url"])
         else:
             state, detail = "down", f"unavailable — {target['url']}"
         parts.append(

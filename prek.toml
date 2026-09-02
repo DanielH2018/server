@@ -338,12 +338,16 @@ files = "\\.py$"
 # value that crosses a function boundary as the wrong type is invisible to it.
 #
 # WHAT THIS GATE ACTUALLY CATCHES, since a check is worth exactly its true coverage. It catches a
-# `str | None` reaching a `-> str` RETURN, an unnarrowed regex match subscripted, a non-iterable
-# iterated, an override whose signature does not match its base, and a submodule reached through
-# a parent import. It does NOT catch a `str | None` reaching a CALL ARGUMENT — the more common
-# shape of the same mistake — because `invalid-argument-type` is one of the four rules turned off
-# in pyproject [tool.ty.rules], with its measured count and the reason. Two call sites in the
-# tree still pass `str | None` into a `str` parameter and this gate reads green on both.
+# `str | None` reaching a `-> str` RETURN and reaching a CALL ARGUMENT, an argument whose
+# container type is merely invariant-incompatible (a `frozenset` for a `set`, a `dict[str, str]`
+# for a `dict[str, str | None]`), an unnarrowed regex match subscripted, a non-iterable iterated,
+# an override whose signature does not match its base, and a submodule reached through a parent
+# import. No file is exempt from `invalid-argument-type`.
+#
+# It does NOT catch an attribute read off an unnarrowed Optional, a wrongly typed assignment, or
+# an operator applied to a union — `unresolved-attribute`, `invalid-assignment` and
+# `unsupported-operator` are the three rules still off in pyproject [tool.ty.rules], each with
+# its measured count and the reason.
 #
 # `pass_filenames = false` because ty resolves imports across the whole project, and a per-file
 # run would report first-party imports as unresolved. `files` covers the config as well as the

@@ -55,12 +55,11 @@ def test_seed_never_immediately_overdue_and_within_window():
         "cloudflare_dns_token",
     ):
         tier = sr.classify(name)
-        seed = dt.date.fromisoformat(sr.seed_last_rotated(name, tier, today))
-        due = seed + dt.timedelta(days=sr.TIER_DAYS[tier])
+        seeded, cadence = sr.seed_last_rotated(name, tier, today), sr.TIER_DAYS[tier]
+        assert seeded is not None and cadence is not None, f"{name} has no cadence"
+        due = dt.date.fromisoformat(seeded) + dt.timedelta(days=cadence)
         assert due > today  # not overdue at registration
-        assert due <= today + dt.timedelta(
-            days=sr.TIER_DAYS[tier]
-        )  # within one cadence
+        assert due <= today + dt.timedelta(days=cadence)  # within one cadence
 
 
 def test_ignore_and_no_date_tiers_have_no_seed():
@@ -71,9 +70,12 @@ def test_seeds_spread_due_dates_no_single_day_pileup():
     today = dt.date(2026, 6, 11)
     names = ["mb_%d_push_token" % i for i in range(20)]
     due = []
+    cadence = sr.TIER_DAYS["auto"]
+    assert cadence is not None
     for n in names:
-        seed = dt.date.fromisoformat(sr.seed_last_rotated(n, "auto", today))
-        due.append(seed + dt.timedelta(days=sr.TIER_DAYS["auto"]))
+        seeded = sr.seed_last_rotated(n, "auto", today)
+        assert seeded is not None
+        due.append(dt.date.fromisoformat(seeded) + dt.timedelta(days=cadence))
     # 20 auto secrets must not all fall on the same day — expect many distinct due dates.
     assert len(set(due)) >= 12
 

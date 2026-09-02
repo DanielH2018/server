@@ -19,6 +19,7 @@ from __future__ import annotations
 import posixpath
 import sys
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -33,7 +34,7 @@ TABLE = (
     "reference/freshness.md"  # src_uri of the page gen_reference_freshness.py writes
 )
 
-_state: dict[str, object] = {}
+_state: dict[str, Any] = {}
 
 
 def footer(fresh, table_link: str) -> str:

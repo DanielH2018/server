@@ -25,6 +25,7 @@ sys.path.insert(
     0, os.path.dirname(_HOOK)
 )  # block-protected-edits.py imports _hook_common
 _spec = importlib.util.spec_from_file_location("block_protected_edits", _HOOK)
+assert _spec and _spec.loader, "spec_from_file_location found no loader"
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 classify = _mod.classify

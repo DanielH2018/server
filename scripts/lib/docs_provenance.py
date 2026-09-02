@@ -130,11 +130,11 @@ def md_cell(value: str) -> str:
     return value.replace("|", "\\|")
 
 
-def finish_generator(
+def finish_generator[R: Sized](
     name: str,
     out: Path,
-    rows: Sized,
-    render: Callable[[Sized], str],
+    rows: R,
+    render: Callable[[R], str],
     noun: str,
 ) -> int:
     """The tail every reference-page generator shares: render, write if changed, report.

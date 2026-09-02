@@ -3,8 +3,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Set as AbstractSet
 
-def staging_scope(services: set[str], subset: set[str]) -> tuple[set[str], set[str]]:
+
+def staging_scope(
+    services: AbstractSet[str], subset: AbstractSet[str]
+) -> tuple[set[str], set[str]]:
     """Split a deploy into the half staging can speak for and the half it cannot.
 
     Decision 3 of docs/staging-phase-c.md. Staging runs six services of roughly fifty-four, and
@@ -19,7 +23,7 @@ def staging_scope(services: set[str], subset: set[str]) -> tuple[set[str], set[s
     An empty `gated` is the ordinary case, not an error — most deploys touch nothing staging
     runs.
     """
-    return services & subset, services - subset
+    return set(services & subset), set(services - subset)
 
 
 def staging_verdict_summary(

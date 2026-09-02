@@ -17,6 +17,7 @@ import re
 import pytest
 
 import validate_k8s_manifests as vkm
+from typing import Any
 
 
 POD_SPEC = """\
@@ -224,7 +225,7 @@ def test_volume_claim_pvc_names_resolves_a_real_claim_backed_role():
 # k8s_dry_run_unsupported refuses. These tests pin the two ways that check goes wrong: a false
 # positive from PyYAML's octal parsing, and a schema version that drifts from the cluster.
 
-VALID_DEPLOYMENT = {
+VALID_DEPLOYMENT: dict[str, Any] = {
     "apiVersion": "apps/v1",
     "kind": "Deployment",
     "metadata": {"name": "example"},

@@ -74,7 +74,7 @@ def test_autofix_py_cross_role_imports_are_shipped():
     imported = {
         node.module
         for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom) and node.level == 0
+        if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module
     }
     known_cross_role = {"bridge_common"}
     missing = (imported & known_cross_role) - shipped

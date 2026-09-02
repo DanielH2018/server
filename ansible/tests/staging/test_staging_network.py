@@ -100,20 +100,30 @@ def test_the_staging_subnet_does_not_overlap_something_in_use(reserved):
     )
 
 
+def _attr_ip(root: ET.Element, path: str, attr: str):
+    """The IP in `path`'s `attr`, failing with the missing name rather than a NoneType error.
+
+    `find` and `get` both answer None for anything absent, which reaches `ip_address` as a
+    TypeError naming neither the element nor the attribute that was not there.
+    """
+    el = root.find(path)
+    assert el is not None, f"no {path} element in the rendered network"
+    value = el.get(attr)
+    assert value is not None, f"{path} has no {attr} attribute"
+    return ipaddress.ip_address(value)
+
+
 def test_the_guest_reservation_is_inside_the_subnet():
     root = ET.fromstring(_rendered())
-    host = root.find("./ip/dhcp/host")
-    assert host is not None, "no DHCP host reservation for the guest"
-    assert ipaddress.ip_address(host.get("ip")) in _network()
+    assert _attr_ip(root, "./ip/dhcp/host", "ip") in _network()
 
 
 def test_the_guest_reservation_is_outside_the_dynamic_range():
     """A reservation inside the pool can be handed to something else first."""
     root = ET.fromstring(_rendered())
-    reserved_ip = ipaddress.ip_address(root.find("./ip/dhcp/host").get("ip"))
-    dhcp = root.find("./ip/dhcp/range")
-    low = ipaddress.ip_address(dhcp.get("start"))
-    high = ipaddress.ip_address(dhcp.get("end"))
+    reserved_ip = _attr_ip(root, "./ip/dhcp/host", "ip")
+    low = _attr_ip(root, "./ip/dhcp/range", "start")
+    high = _attr_ip(root, "./ip/dhcp/range", "end")
     assert not (low <= reserved_ip <= high), (
         f"the guest reservation {reserved_ip} sits inside the dynamic range "
         f"{low}-{high}; move it outside so the lease cannot be taken first"

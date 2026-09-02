@@ -13,6 +13,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_deploy_tags_blockers.py
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -33,10 +34,7 @@ def _run(paths, monkeypatch, comment_only=frozenset()) -> int:
         lambda paths, old, new: set(comment_only),
     )
 
-    class Args:
-        ref = "origin/master"
-
-    return deploy_tags._cmd_blockers(Args())
+    return deploy_tags._cmd_blockers(argparse.Namespace(ref="origin/master"))
 
 
 def test_a_comment_only_bringup_edit_does_not_block(monkeypatch):

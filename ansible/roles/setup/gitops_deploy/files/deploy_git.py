@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 # ── CI gate ───────────────────────────────────────────────────────────────────────────────────
 # A GitHub check-run conclusion that counts as "this commit is good". `skipped` and `neutral` are
@@ -24,7 +24,7 @@ _CI_NO_VERDICT_CONCLUSIONS = frozenset(
 )
 
 
-def github_token(environ: dict[str, str], run: Callable) -> str | None:
+def github_token(environ: Mapping[str, str], run: Callable) -> str | None:
     """A GitHub token for the check-runs gate, or None to query anonymously.
 
     `GH_TOKEN` / `GITHUB_TOKEN` in the environment win, then `gh auth token` — the gh CLI on

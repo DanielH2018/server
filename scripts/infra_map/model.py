@@ -17,6 +17,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from infra_map.constants import HOST_PLANE, HOST_ROLE, HOSTS, NAMESPACE_OWNERS
 from infra_map.inventory import RoleIndex, declared_services
+from typing import Any
 
 
 def match_k8s_workloads(
@@ -223,7 +224,7 @@ def build_model(
     for pod in cluster["pods"]:
         if pod["node"]:
             pods_by_node[pod["node"]] = pods_by_node.get(pod["node"], 0) + 1
-    hosts = []
+    hosts: list[dict[str, Any]] = []
     per_host_services: dict[str, list[dict]] = {}
 
     for host in HOSTS:

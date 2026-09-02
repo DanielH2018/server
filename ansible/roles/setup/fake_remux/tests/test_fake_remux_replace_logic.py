@@ -10,6 +10,7 @@ _SPEC = importlib.util.spec_from_file_location(
     "fake_remux_replace_logic",
     _FILES / "fake_remux_replace_logic.py",
 )
+assert _SPEC and _SPEC.loader, "spec_from_file_location found no loader"
 rl = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(rl)
 

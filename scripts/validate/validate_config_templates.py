@@ -97,7 +97,7 @@ def check_template(rel: str, ctx: dict) -> str | None:
 
     env = build_env(role)
     rendered, err = render_or_error(env, name, ctx)
-    if err:
+    if rendered is None:
         return err
 
     err = yaml_error(rendered)

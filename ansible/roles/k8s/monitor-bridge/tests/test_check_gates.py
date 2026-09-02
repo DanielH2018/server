@@ -9,6 +9,7 @@ These are the tests that drive `run_once()` end to end with the transport stubbe
 the ones that fail when the wiring changes rather than the logic.
 """
 
+import email.message
 import importlib
 import urllib.error
 from pathlib import Path
@@ -614,7 +615,7 @@ def _cap_denial():
         bridge_config.B2_PROBE_URL,
         403,
         "Forbidden: transaction_cap_exceeded",
-        {},
+        email.message.Message(),
         None,
     )
     # Closed, as _get_json leaves a real one: an open HTTPError is a ResourceWarning at GC,

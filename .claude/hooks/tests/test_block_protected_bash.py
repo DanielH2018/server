@@ -26,6 +26,7 @@ def _load(name):
     spec = importlib.util.spec_from_file_location(
         name.replace("-", "_"), os.path.join(_HERE, f"{name}.py")
     )
+    assert spec and spec.loader, "spec_from_file_location found no loader"
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

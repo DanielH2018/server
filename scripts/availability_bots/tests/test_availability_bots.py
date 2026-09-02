@@ -27,6 +27,7 @@ _BOT_PATH = os.path.join(
     "osteria-francescana-bot.py",
 )
 _spec = importlib.util.spec_from_file_location("osteria_bot", _BOT_PATH)
+assert _spec and _spec.loader, "spec_from_file_location found no loader"
 osteria = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(osteria)
 
@@ -38,6 +39,7 @@ _GLENSTONE_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "glenstone-bot.py"
 )
 _gspec = importlib.util.spec_from_file_location("glenstone_bot", _GLENSTONE_PATH)
+assert _gspec and _gspec.loader, "spec_from_file_location found no loader"
 glenstone = importlib.util.module_from_spec(_gspec)
 _gspec.loader.exec_module(glenstone)
 

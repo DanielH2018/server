@@ -166,6 +166,7 @@ def test_the_rollout_is_sequenced_per_instance():
     ]
     assert included, "no per-instance roll_one.yml include — restarts are not sequenced"
     looped = included[0].get("loop")
+    assert looped is not None, "the roll_one.yml include has no loop"
     assert set(looped) == INSTANCES, (
         f"roll_one.yml must cover both instances, got {looped}"
     )

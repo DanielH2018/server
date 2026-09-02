@@ -288,34 +288,47 @@ include = [
 exclude = ["ansible/collections", "site", ".claude/worktrees"]
 
 [tool.ty.rules]
-# Four rules are OFF, each with the count that was measured against the tree before the gate
-# landed (2026-09-02, ty 0.0.77, 228 diagnostics total). They are off because the diagnostics are
-# annotation debt rather than bugs, not because they are hard — turning one on is a PR of its own
-# with its own measurement, which is the point of recording the number here.
+# Three rules are OFF, each with the count measured when this line was written. They are off
+# because the diagnostics are annotation debt rather than bugs, not because they are hard —
+# turning one on is a PR of its own with its own measurement, which is the point of recording
+# the number here.
 #
-# invalid-argument-type (94: 54 in tests, 40 in production). The test half is almost entirely
-#   monkeypatch doubles — a plain function assigned where a bound method is annotated — which ty
-#   flags structurally and which no runtime path can reach. The production half is real narrowing
-#   debt in the validators, and worth its own pass.
-# unresolved-attribute (68: 51 in tests, 17 in production). 45 of these are one idiom:
-#   `importlib.util.spec_from_file_location` returns `ModuleSpec | None`, and the loader dance
-#   that follows never narrows it. It appears in .claude/hooks and nine hook test files.
-# invalid-assignment (10). The same monkeypatch idiom as above, plus three production sites.
+# unresolved-attribute (32, measured 2026-09-02 after the invalid-argument-type pass below).
+#   That pass took it from 66 without touching it: 34 of the 66 were the
+#   `spec_from_file_location` loader dance, and asserting the spec and its loader are present
+#   narrows both rules at once.
+# invalid-assignment (10). Monkeypatch doubles, plus three production sites.
 # unsupported-operator (14). Eight are arithmetic on monitor-bridge's `_env` helper, which is
 #   annotated to return a union including `str`; retyping that one helper is the whole fix.
 #
-# HOW 228 RECONCILES, because the parts do not obviously add up and a reader who cannot reproduce
-# the baseline cannot argue with it: 186 ignored by the four rules above, 31 fixed in the gated
-# rules, and 11 `unresolved-import` in the two files the [[tool.ty.overrides]] block below
-# exempts. Those 11 are the term that is easy to miss — a per-file `ignore` beats a CLI
-# `--error`, so re-measuring them needs the overrides block removed as well as the rule flipped.
+# A per-file `ignore` beats a CLI `--error`, so re-measuring any of these needs the
+# [[tool.ty.overrides]] block below removed as well as the rule flipped. There is no per-file
+# exemption for invalid-argument-type — every file in the source roots is gated on it.
 #
-# The per-rule numbers above are as measured BEFORE the 31 fixes. Re-running today reports 91 /
-# 66 / 14 / 10 rather than 94 / 68 / 14 / 10: three of the fixes were local annotations that
-# incidentally narrowed a value these rules were also complaining about. Both figures are correct
-# for their moment; the pre-fix ones are kept because they are the baseline a "turn this rule on"
-# PR would be measured against.
-invalid-argument-type = "ignore"
+# invalid-argument-type went from a measured 91 to zero on 2026-09-02. Three root causes carried
+# 50 of the 91, which is why the count was misleading as a size estimate: four function
+# signatures taking `set`/`dict`/`Callable[[Sized], str]` when they only READ the argument, so
+# wanting AbstractSet / Mapping / a type variable (24 sites); the loader dance above (15); and
+# `render_or_error` returning `tuple[str | None, str | None]`, whose correlation a destructuring
+# loses, so `if err:` narrowed the wrong name at four call sites (11).
+#
+# The issue that proposed this rule recorded its test half as "almost entirely the monkeypatch
+# idiom" and floated a per-file exemption on that basis. That was wrong: not one of the 91 was a
+# monkeypatch, and the dominant test-half cluster was the same unnarrowed Optional as the
+# production half.
+#
+# Eleven of the 91 were closed by WIDENING rather than narrowing: six annotations that say
+# `Any` where the value really is heterogeneous — `_state` in the two mkdocs plugins, `hosts` in
+# infra_map, and three dict literals in tests whose bare inference produced a value union that
+# then read as indexing a str. Those make ty stop asking; they do not make anything safer, and
+# each is a place a real type would be better if the shape were ever pinned down.
+#
+# It also found one live annotation bug. `duplicate_dashboard_uids` declared
+# `boards: dict[str, str]` while its body ran `len(paths) > 1` and `", ".join(paths)` — a test
+# that is true for any two-character uid if the value really were a str. Every caller had always
+# passed `dict[str, list[str]]`, so nothing misbehaved; the declared contract said the opposite
+# of what the code required.
+invalid-argument-type = "error"
 unresolved-attribute = "ignore"
 invalid-assignment = "ignore"
 unsupported-operator = "ignore"
