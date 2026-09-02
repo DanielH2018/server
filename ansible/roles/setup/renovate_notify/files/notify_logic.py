@@ -350,3 +350,185 @@ def render_digest(items: list[tuple[PR, str]], limit: int = 1900) -> str:
     if truncated and shown < total:
         msg += "\n…and %d more" % (total - shown)
     return msg
+
+
+# --- Pending Status Checks: updates that soak forever and never get a PR ---------------
+#
+# The dashboard's "Pending Status Checks" section lists updates Renovate has detected but
+# is holding back until their `minimumReleaseAge` soak elapses. An item is supposed to leave
+# that section within its soak, as a branch and a PR. Measured 2026-09-02 (issue #886), seven
+# items had sat there far past it — grafana/promtail 3.3.0 -> 3.6.11 for 111 days, against a
+# 7-day soak — with no PR ever raised, and the ONLY signal was a checkbox in an issue nobody
+# reads line by line. That is the same "silence != up-to-date" shape the `lockFileMaintenance`
+# and galaxy-collection notes in renovate.json already name.
+#
+# The mechanism is undetermined: Renovate runs here as the Mend hosted app, whose debug log is
+# on developer.mend.io and unreadable from this host. So this measures the SYMPTOM — an item's
+# continuous dwell in the section — rather than the cause.
+PENDING_HEADER = "## Pending Status Checks"
+
+# Every top-level section Renovate renders on the dashboard. Used only for the fail-loud check
+# below: an absent PENDING_HEADER is ambiguous between "nothing is pending" (the healthy, common
+# case) and "Renovate renamed the section", which would make this whole check silently inert. A
+# body carrying NONE of these is the second case.
+KNOWN_DASHBOARD_HEADERS = (
+    PENDING_HEADER,
+    "## Awaiting Schedule",
+    "## Detected Dependencies",
+    "## Open",
+    "## Pending Approval",
+    "## Rate-Limited",
+    "## Edited/Blocked",
+    "## Errored",
+    "## Ignored or Blocked",
+    REPOSITORY_PROBLEMS_HEADER,
+)
+
+# The two `minimumReleaseAge` values renovate.json actually sets for the non-vulnerability
+# updates that land in this section: 3 days for the k8s-plane digest bumps (a re-push of the
+# same mutable tag, so the wait only lets a poisoned push be noticed) and 7 days for everything
+# else non-major. `test_soak_constants_match_renovate_json` asserts both against renovate.json,
+# so a soak change there fails rather than leaving these to drift.
+DIGEST_SOAK_DAYS = 3
+VERSION_SOAK_DAYS = 7
+
+# Grace added on top of an item's own soak before it counts as stuck. It covers the two
+# legitimate reasons an item outlives its soak by a little: the top-level `before 6am` schedule
+# means Renovate only acts once a day, and `prHourlyLimit: 4` can defer a PR across several of
+# those daily windows when a backlog exists. Seven days is at least seven such windows and 28
+# PR slots — far past any honest backlog, and still less than half of promtail's 111 days.
+# Deliberately NOT a flat threshold: a digest item at 3+7=10 days and a version item at 7+7=14
+# each get an allowance derived from the soak that actually applies to it.
+PENDING_GRACE_DAYS = 7
+
+
+def dashboard_headers_unrecognized(body: str) -> bool:
+    """True when a non-empty dashboard body carries none of `KNOWN_DASHBOARD_HEADERS`.
+
+    `parse_pending` finds its subject by matching a section header, which is the shape that
+    returns an empty set after an upstream rename and reads as all-clear forever. This is the
+    non-vacuity check at runtime: an unparseable dashboard is reported, not read as healthy.
+    """
+    if not (body or "").strip():
+        return True
+    return not any(h in body for h in KNOWN_DASHBOARD_HEADERS)
+
+
+def dashboard_body(issues: list[dict]) -> str | None:
+    """The dashboard issue's raw body, or None when no dashboard issue exists.
+
+    Distinct from `""`: an existing dashboard with an empty body is a parse problem, while an
+    absent dashboard is already reported by `dashboard_stale`.
+    """
+    issue = _find_dashboard_issue(issues)
+    return None if issue is None else (issue.get("body") or "")
+
+
+def parse_pending(body: str) -> dict[str, str]:
+    """Parse the dashboard's Pending Status Checks section into {branch: item description}.
+
+    Each item is rendered as ` - [ ] <!-- approvePr-branch=<branch> -->Update foo to v1.2.3`.
+    Keyed on the BRANCH rather than the description on purpose: the branch is stable across
+    target-version changes, while the description carries the target. Nine of the 22 items live
+    on 2026-09-02 were `:latest`/`:release` Docker DIGEST bumps, whose description changes every
+    time upstream re-pushes — keying on description would reset their clock forever and leave the
+    check structurally unable to fire on the fastest-churning half of the section.
+
+    Absent section -> empty dict, which is the healthy common case (see
+    `dashboard_headers_unrecognized` for the ambiguity that covers).
+    """
+    if PENDING_HEADER not in (body or ""):
+        return {}
+    section = body.split(PENDING_HEADER, 1)[1].split("\n## ", 1)[0]
+    out: dict[str, str] = {}
+    for line in section.splitlines():
+        line = line.strip()
+        if "approvePr-branch=" not in line:
+            continue
+        branch = line.split("approvePr-branch=", 1)[1].split("-->", 1)[0].strip()
+        desc = line.split("-->", 1)[1].strip() if "-->" in line else ""
+        if branch:
+            out[branch] = desc
+    return out
+
+
+def item_soak_days(description: str) -> int:
+    """The `minimumReleaseAge` that applies to one pending item, read from its description.
+
+    Renovate writes "Docker digest to <sha>" for a digest bump and "... tag to vX" / "dependency
+    X to vY" for a version bump, and renovate.json soaks those for 3 and 7 days respectively.
+    Anything unrecognised gets the LONGER soak: a misread must delay the alert, never invent one.
+    """
+    return (
+        DIGEST_SOAK_DAYS
+        if "digest to" in (description or "").lower()
+        else VERSION_SOAK_DAYS
+    )
+
+
+def update_pending_seen(
+    prev: dict[str, float], current: dict[str, str], now_epoch: float
+) -> dict[str, float]:
+    """Carry each still-pending item's first-seen epoch forward; stamp new ones; drop departed ones.
+
+    Pruning is what makes the dwell continuous rather than cumulative: an item that leaves the
+    section (its PR was finally raised, or the update stopped being offered) and comes back later
+    starts a fresh clock, so a resolved stall cannot re-page off its old timestamp.
+    """
+    return {branch: prev.get(branch, now_epoch) for branch in current}
+
+
+def stale_pending(
+    seen: dict[str, float],
+    current: dict[str, str],
+    now_epoch: float,
+    grace_days: int = PENDING_GRACE_DAYS,
+) -> list[tuple[str, str, int]]:
+    """(branch, description, whole days pending) for every item past its soak + `grace_days`.
+
+    Sorted longest-pending first, so the digest names the worst offender before any truncation.
+    An item with no first-seen entry is treated as first seen now (dwell 0) rather than as
+    infinitely old — the first run after this ships has an empty state file, and seeding it must
+    not page for all 22 items at once.
+    """
+    out = []
+    for branch, desc in current.items():
+        days = (now_epoch - seen.get(branch, now_epoch)) / 86400
+        if days > item_soak_days(desc) + grace_days:
+            out.append((branch, desc, int(days)))
+    return sorted(out, key=lambda item: (-item[2], item[0]))
+
+
+def pending_fingerprint(items: list[tuple[str, str, int]]) -> str:
+    """Dedupe key for the stuck-pending set.
+
+    Carries each item's whole-week dwell so a still-stuck item re-pages weekly instead of once,
+    the same escalation `_stuck_age_bucket` gives a stuck PR. Keyed on branch, not description,
+    for the reason `parse_pending` is.
+    """
+    return ",".join(
+        sorted("%s:%dw" % (branch, days // 7) for branch, _desc, days in items)
+    )
+
+
+PENDING_HEADER_MSG = (
+    "\U0001f6d1 Renovate — update(s) stuck in Pending Status Checks (soaked, no PR):"
+)
+
+DASHBOARD_UNPARSEABLE_MSG = (
+    "⚠️ Renovate — the Dependency Dashboard body matched none of the section headers "
+    "this notifier parses. Renovate may have renamed them, which would leave the "
+    "Repository-Problems and stuck-pending checks silently inert. Check "
+    "https://github.com/%s/issues/3"
+)
+
+
+def render_pending(items: list[tuple[str, str, int]]) -> str:
+    lines = [PENDING_HEADER_MSG]
+    for branch, desc, days in items:
+        lines.append(" • %s — pending %d days (%s)" % (desc or branch, days, branch))
+    lines.append(
+        "   Tick its box on the Dependency Dashboard to force the PR: the branch is "
+        "detected but Renovate is not raising it."
+    )
+    return "\n".join(lines)

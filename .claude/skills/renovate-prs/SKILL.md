@@ -13,6 +13,28 @@ such a PR on green CI ships half a bump.
 The rest is ordinary: triage by class, finish what needs finishing, then land each one through
 `land-after-merge`.
 
+## 0. An update with no PR is still an update
+
+`gh pr list` cannot see an update Renovate detected but never raised. Those sit in the
+Dependency Dashboard's **Pending Status Checks** section (issue #3), and they are supposed to
+leave it within their `minimumReleaseAge` — 3 days for a digest bump, 7 for a version one.
+Measured 2026-09-02, seven had not: grafana/promtail sat there for 111 days against a 7-day
+soak, so the homelab ran promtail 3.3.0 that whole time (issue #886).
+
+`renovate-notify` now measures each item's continuous dwell in that section and posts a Discord
+digest naming any that passes its soak plus a 7-day grace. **The remedy is to tick the item's
+checkbox on issue #3** — that forces the branch and the PR within a couple of minutes, after
+which the update becomes an ordinary PR and the triage below applies. To see the section
+without waiting for the digest:
+
+```bash
+gh issue view 3 --json body -q .body | sed -n '/## Pending Status Checks/,/^## /p'
+```
+
+The underlying reason Renovate holds these is undetermined — it runs here as the Mend hosted
+app, whose run log lives on developer.mend.io and is not readable from a session. The check
+surfaces the symptom; it does not fix the cause.
+
 ## 1. Triage
 
 ```bash
