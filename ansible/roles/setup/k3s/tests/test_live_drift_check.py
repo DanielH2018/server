@@ -177,9 +177,10 @@ def test_the_patch_maintained_exemption_names_its_mechanism():
 
 
 def test_a_clean_run_is_zero():
-    code, message = ldc.verdict([], ["a", "b"], [])
+    code, message = ldc.verdict([], [], [], server_side=2)
     assert code == 0
     assert "no drift" in message
+    assert "2 object(s) skipped as server-side applied" in message
 
 
 def test_drift_is_a_failure_naming_the_objects():
@@ -188,15 +189,63 @@ def test_drift_is_a_failure_naming_the_objects():
     assert "deployment homelab/sonarr" in message
 
 
-def test_a_new_unannotated_object_is_a_failure():
-    # At the floor it is silent; one above it is not. `kubectl apply` cannot prune removed
-    # keys on an object with no baseline, which is the class that bit the static-monitors
-    # Secret and monitor-bridge-env twice.
-    at_floor = ["a"] * ldc.UNANNOTATED_FLOOR
-    assert ldc.verdict([], at_floor, [])[0] == 0
-    code, message = ldc.verdict([], at_floor + ["configmap homelab/new"], [])
+def test_an_unannotated_object_is_a_failure_naming_it():
+    # `kubectl apply` cannot prune removed keys on a client-side-applied object with no
+    # baseline, which is the class that bit the static-monitors Secret and monitor-bridge-env
+    # twice. Every entry reaching verdict() is one of those, so all of them are named.
+    code, message = ldc.verdict([], ["configmap homelab/new"], [])
     assert code == 1
     assert "configmap homelab/new" in message
+
+
+def test_the_first_unannotated_entries_are_not_excused_by_position():
+    # The bug this replaced: `unannotated[UNANNOTATED_FLOOR:]` excused the first two entries
+    # BY POSITION, so on 2026-09-02 a third entry sorting ahead of them pushed an innocent
+    # object into the message and hid the arrival. Every entry must be named.
+    entries = ["configmap homelab/arrived", "configmap observability/known"]
+    code, message = ldc.verdict([], entries, [])
+    assert code == 1
+    assert "configmap homelab/arrived" in message
+
+
+# ── server-side apply ────────────────────────────────────────────────────────────────────
+
+
+def _meta(*managers) -> dict:
+    return {"managedFields": [{"manager": m, "operation": o} for m, o in managers]}
+
+
+def test_a_server_side_applied_object_is_skipped():
+    # ACCEPT half. Server-side apply prunes by field ownership and writes no last-applied
+    # annotation, so its absence is not a pruning risk.
+    assert ldc.is_server_side_applied(_meta(("kubectl", "Apply")))
+
+
+def test_a_client_side_applied_object_is_not_skipped():
+    # REJECT half. Without this the exclusion could swallow the whole check and still read
+    # green, because a check is only ever observed passing.
+    assert not ldc.is_server_side_applied(
+        _meta(("kubectl-client-side-apply", "Update"))
+    )
+    assert not ldc.is_server_side_applied({})
+
+
+def test_the_migration_residue_manager_does_not_count_as_server_side():
+    # `kubectl-last-applied` carries operation "Apply" but owns only the annotation kubectl
+    # migrated. Treating it as server-side would exempt every object that was ever
+    # client-side applied — 7 of them live, all still client-side managed for pruning.
+    assert not ldc.is_server_side_applied(_meta(("kubectl-last-applied", "Apply")))
+    assert ldc.is_server_side_applied(
+        _meta(("kubectl-last-applied", "Apply"), ("kubectl", "Apply"))
+    )
+
+
+def test_fetch_asks_kubectl_for_managed_fields():
+    # kubectl strips managedFields from `get` output by default, so without the flag every
+    # object reads as client-side applied and the exclusion is silently inert.
+    import inspect
+
+    assert "--show-managed-fields" in inspect.getsource(ldc.fetch)
 
 
 def test_a_read_failure_is_not_a_clean_run():
