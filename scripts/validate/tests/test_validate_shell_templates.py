@@ -304,7 +304,10 @@ def test_cron_job_scripts_resolves_a_dest_rename(cron_map):
 
 
 def test_cron_job_scripts_excludes_archive(cron_map):
-    assert not any("archive" in str(t) for t in cron_map)
+    # Match relative to the roles root: an absolute-path substring check also matches every
+    # path in a checkout that happens to sit under a directory named "archive", which is how
+    # this guard failed in a worktree called `archive-slice-prefix-decision`.
+    assert not any("archive" in t.relative_to(v.ROLES).parts for t in cron_map)
 
 
 def test_cron_job_scripts_excludes_the_deliberately_unscheduled_reaper(cron_map):
