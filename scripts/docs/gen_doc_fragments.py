@@ -50,8 +50,8 @@ import yaml
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from lib.docs_provenance import write_if_body_changed  # noqa: E402
-from lib.repo_paths import REPO  # noqa: E402
+from lib.docs_provenance import write_if_body_changed
+from lib.repo_paths import REPO
 
 SELF = "scripts/docs/gen_doc_fragments.py"
 DEFAULT_OUT_DIR = "docs/assets/generated/fragments"
