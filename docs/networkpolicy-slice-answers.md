@@ -193,7 +193,7 @@ also be asked for probe and verify **control** legs, and for `kubectl run` / `ku
 `janitorr/tasks/verify.yml` failed once on its cleanup step: it exec'd a pod name captured before
 the label change rolled the Deployment, and by then that pod was gone
 (`cannot exec into a container in a completed pod`). Its substantive checks had all passed. A
-re-run was clean. This is a latent race in that verify — it will recur on any change that rolls
+re-run was clean. This is a latent race in that verify — it recurs on any change that rolls
 janitorr — and is worth fixing independently of this work.
 
 ## Answers from slice 3

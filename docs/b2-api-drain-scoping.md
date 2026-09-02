@@ -175,7 +175,7 @@ the daily cap.
 - **New code, unsupervised, against the only offsite copy.** The guards belong in tests before
   the first real run, matching the pattern already used for the migration playbooks.
 - **Deleting underneath Longhorn leaves dangling CRs** until the sync runs. Cosmetic, but it
-  will make monitoring read wrong in the interim.
+  makes monitoring read wrong in the interim.
 
 ## Suggested first target
 

@@ -134,7 +134,7 @@ the per-volume map and each exclusion's rationale:
 3. **Wait for the backupstore sync** — `kubectl -n longhorn-system get backuptarget`
    `AVAILABLE true`, then Backup CRs appear. **The poll interval is `0`** — polling is
    OFF (`k3s_longhorn_backupstore_poll_interval`, set to 0 on 2026-08-15 because even the
-   1h setting exhausted B2's Class-B cap by 11:00), so the sync will not happen on its
+   1h setting exhausted B2's Class-B cap by 11:00), so the sync does not happen on its
    own: force it in the Longhorn UI with Backup → Sync.
 
    Mind the B2 transaction caps: a full-restore day is exactly when the cap can bite
@@ -150,7 +150,7 @@ the per-volume map and each exclusion's rationale:
 4. **Restore volumes BEFORE any `deploy.yml`** — deploying first would provision fresh
    empty PVCs under the same names. Restore from the target that holds each volume (the
    table above); in the Longhorn UI the backups are listed per target, so the four R2
-   volumes will not appear under `default`. In the UI (or per-backup `Volume` CRs with
+   volumes do not appear under `default`. In the UI (or per-backup `Volume` CRs with
    `spec.fromBackup`): restore each backed-up volume under its original PV name, then use
    Longhorn's **Create PV/PVC** with the original namespace/PVC names
    (`homelab/<pvc-name>` — the names in `longhorn-backup-tiering.md`'s table).

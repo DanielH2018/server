@@ -134,13 +134,13 @@ services having rendered and started. Whatever the log says on a skip is the mai
 `write_hold` + `git reset --hard local` path. No volume revert — prod was never applied.
 
 **The alert must distinguish two things the operator treats differently:** staging rejected the
-change, versus staging itself is broken. A guest that will not boot, a VM host out of disk, an
+change, versus staging itself is broken. A guest that does not boot, a VM host out of disk, an
 expired ssh key and a genuine bad manifest all surface as the same message: the staging deploy failed.
 The first three are not caused by the change, and an operator who cannot tell them apart quickly
 learns to override on reflex.
 
 **Build the override before the gate.** A gate with no escape hatch becomes a gate somebody
-deletes at 2 AM, and the deletion will not be reviewed. An extra-var or a marker file that skips
+deletes at 2 AM, and nobody reviews the deletion. An extra-var or a marker file that skips
 the staging step for one tick, alerting loudly that it was used, is sufficient — the requirement
 is that using it is easy and *visible*, not that it is hard.
 
@@ -223,8 +223,8 @@ works and enforcing is one flag away.
 ## Entry condition, and why it is not "when the code is ready"
 
 The number matters because it decides whether the gate can be trusted, and trust is the whole
-mechanism. A gate whose false-failure rate is unknown will block a good deploy, get overridden
-once, and then get overridden by habit — at which point it costs 20 minutes a tick and prevents
+mechanism. A gate whose false-failure rate is unknown blocks a good deploy, gets overridden
+once, and then gets overridden by habit — at which point it costs 20 minutes a tick and prevents
 nothing. That reasoning is unchanged. What changed is how the number is obtained.
 
 ### The original condition could not be met, and waiting was never going to fix it
@@ -251,7 +251,7 @@ Half the subset is structurally unreachable by a tick, and no image-pin bump lan
 the preceding three weeks — the bumps that did land were Traefik, Prometheus and the OpenTelemetry
 collector, none of them in that set. The organic rate is on the order of **one sample a month**,
 so a *rate* is not reachable by waiting at all. An entry condition that cannot be met is not a
-high bar; it is a condition that will eventually be waived under pressure, which is worse than a
+high bar; it is a condition that gets waived under pressure sooner or later, which is worse than a
 lower one honestly stated.
 
 ### The rescoped condition (2026-08-30)
@@ -374,7 +374,7 @@ staging's opinion, which is the reason the count starts from #599 rather than fr
 One honest input to that rate, from the day the subset landed: staging's own tooling produced
 three wrong verdicts (two guard bugs in the variable sentinel, one stand-in value read as
 supplied) against one genuine misconfiguration it caught. Early false failures are likely to
-outnumber true ones, and they will be caused by staging rather than by the change under test.
+outnumber true ones, and staging causes them rather than the change under test.
 
 ---
 

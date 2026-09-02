@@ -256,7 +256,7 @@ exclusion was the right call under a live cap, but it is a standing gap, not a r
 
 The obvious question — would re-adding them cost what the first run cost? — has no measurable
 answer here. Longhorn's first backup of a volume is a full and later ones ship changed blocks only,
-so the 08-08 spike was plausibly a one-time migration cost that will not recur. But nothing exposed
+so the 08-08 spike was plausibly a one-time migration cost that does not recur. But nothing exposed
 by the cluster measures it: `Backup.status.size` is the backup's LOGICAL volume size, not blocks
 uploaded (traefik-acme reports 35 → 48 MB across daily backups of a 25 MB volume), and B2 publishes
 no cap-headroom endpoint — which is gap G2's whole premise. Treat "incrementals are cheap" as

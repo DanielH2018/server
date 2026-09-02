@@ -16,8 +16,10 @@ unchanged since.
 ## Context
 
 The k3s migration covered `daniel-box` and `daniel-server`. `daniel-pi` was named explicitly
+<!-- vale Google.Will = NO -->
 out of scope at design time rather than left undecided, because "we will get to the Pi
 later" is how a two-platform homelab becomes permanent by accident instead of by choice.
+<!-- vale Google.Will = YES -->
 
 The Pi runs a small set of LAN-only utilities: WireGuard, a Docker socket proxy, a metrics
 viewer, an autoheal watchdog, and the node-exporter and promtail agents that feed the

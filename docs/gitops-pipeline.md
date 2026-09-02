@@ -55,7 +55,7 @@ tick fired seconds after a merge therefore pulls nothing, because
 GitHub has not finished creating the run yet. An empty or incomplete check-run list is
 pending, never green.
 
-**A held SHA.** `hold_sha` is set, so the deployer will not move forward until it is cleared.
+**A held SHA.** `hold_sha` is set, so the deployer does not move forward until it is cleared.
 
 **The tree is dirty.** Someone left uncommitted changes in the primary checkout.
 

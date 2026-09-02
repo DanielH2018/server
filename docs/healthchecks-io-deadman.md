@@ -173,7 +173,7 @@ call site skips its block, leaving the hosts exactly as they were. To turn it on
 3. **Deploy** the five call sites:
 
    The three k3s-setup host heartbeats live in the k3s setup role, which `k3s-bringup.yml` runs —
-   `scripts/deploy.sh` is hardcoded to `deploy.yml` and will not reach them, so take the
+   `scripts/deploy.sh` is hardcoded to `deploy.yml` and does not reach them, so take the
    git-tree lock by hand for that one:
 
    ```bash
@@ -209,7 +209,7 @@ so do not loop it.
 
 Forcing `registry-gc` is not free: it takes the registry offline while the GC job runs, so
 nothing in the cluster can pull a locally built image until it scales back up. Run it when no
-build is in flight (it will skip and report `up` if one is), or just wait for Sunday.
+build is in flight (it skips and reports `up` if one is), or just wait for Sunday.
 
 A failed ping is logged locally (`logger -t <script>`, or the job's stderr) and nowhere else,
 which is deliberate — a ping that cannot leave the house is precisely the case Healthchecks.io

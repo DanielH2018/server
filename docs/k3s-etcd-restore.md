@@ -192,7 +192,7 @@ sudo rm -rf /var/lib/rancher/k3s/agent/client-*.crt /var/lib/rancher/k3s/agent/c
 sudo systemctl start k3s-agent
 ```
 
-If it will not rejoin, re-run the documented join:
+If it does not rejoin, re-run the documented join:
 `uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=daniel-server`.
 
 ## After the restore
