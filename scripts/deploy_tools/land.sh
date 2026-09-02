@@ -342,6 +342,15 @@ done
 # at step 4 had a newer tip than the pre-flight checked. One more tick fetches and crosses it.
 # Bounded at a single retry on purpose — if the new tip carries a broad-manual change the tick
 # will never cross it, and re-ticking forever would hide that behind a stalled landing.
+#
+# The tick crosses the new tip only once master CI is green ON THE TIP (the journal reads
+# `origin <tip>: CI not finished — deferring`). Step 3 waited on this PR's own merge commit,
+# so an immediate re-tick defers again and the second deploy.sh exits 4 again. Three landings
+# on 2026-09-02 (#747, #754 and one between) each ended `deploy-failed (exit 4)` that way and
+# were settled by hand with `await_ci.py <tip>` then a second land.sh. So: wait on the tip
+# first, after the blockers check — a landing that can never cross must not wait 15 minutes
+# before saying so. await_ci.py given the tip itself does not chase anything further unless
+# that tip's run is cancelled by yet another merge, which is the same rule step 3 relies on.
 if [ "$deploy_rc" -eq 4 ]; then
   say "tree went stale mid-landing (someone merged during the wait); re-ticking once"
   git fetch -q origin "$BRANCH" || die "could not fetch origin/$BRANCH" 1
@@ -351,6 +360,18 @@ if [ "$deploy_rc" -eq 4 ]; then
     LAND_VERDICT=blocked
     echo "VERDICT: blocked (PR #$PR — a change needing a hand landed during the wait; see above)"
     exit 1
+  fi
+  TIP_SHA=$(git rev-parse "origin/$BRANCH") || die "could not read origin/$BRANCH" 1
+  if [ "$TIP_SHA" != "$MERGE_SHA" ]; then
+    say "waiting for master CI on the new tip $TIP_SHA (the tick defers until it is green)"
+    uv run python scripts/deploy_tools/await_ci.py "$TIP_SHA" --timeout "$CI_TIMEOUT"
+    tip_ci_rc=$?
+    case "$tip_ci_rc" in
+      0) ;;
+      1) die "master CI is RED on the tip $TIP_SHA — the tick cannot cross it; nothing deployed" 1 ;;
+      75) die "no CI verdict on the tip $TIP_SHA inside ${CI_TIMEOUT}s — nothing deployed" 75 ;;
+      *) die "await_ci failed on the tip (exit $tip_ci_rc) — nothing deployed" 1 ;;
+    esac
   fi
   ./scripts/deploy_tools/gitops_tick.sh
   ./scripts/deploy.sh --tags "$TAGS"

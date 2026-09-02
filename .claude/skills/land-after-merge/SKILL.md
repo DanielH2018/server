@@ -43,6 +43,12 @@ the `VERDICT:` line is the last line of the logfile. `land.sh` waits for master 
 `VERDICT:` line — `settled`, `unhealthy`, `deploy-failed`, `nothing-to-deploy`, `blocked`,
 `needs-manual-apply` or `deferred`.
 
+If another PR merges during that CI wait, the first `deploy.sh` exits 4 (the tree is behind
+origin) and `land.sh` retries once: it re-runs the blockers check, waits for master CI on the
+new tip (the tick defers until the TIP is green, not just your commit), then ticks and deploys.
+Before 2026-09-02 that retry skipped the wait and ended `deploy-failed (exit 4)` with nothing
+deployed, three landings in one day.
+
 Every run also writes one logfmt line to syslog on exit (`logger -t landing-annotation`):
 the PR, the merge SHA, the verdict, and seconds spent in each phase — `wait_merge`,
 `wait_ci`, `tick`, `deploy`, `total`. Promtail ships it to Loki and the **Landings** Grafana
