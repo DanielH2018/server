@@ -32,7 +32,7 @@ def _load_by_path(name, filename):
 
 # probe.py must load first, by path — its own top-level `import probe_core as core`
 # is a normal import, and every test file's later `import probe_core as core` (or
-# `import probe_ha as ha` / `import probe_storage as storage`) is what reuses that
+# `import probe_ha as ha` / `import probe_longhorn as longhorn`) is what reuses that
 # same cached module rather than importing a second copy. Loading probe.py after
 # would still work, but this is the order the test suites were written against.
 probe = _load_by_path("probe", "diagnostics/probe.py")

@@ -94,12 +94,11 @@ from probe_metrics import run_query
 from probe_monitors import run_kuma_drift, run_monitors
 from probe_readonly_rbac import run_readonly_rbac
 from probe_releases import run_releases
-from probe_storage import (
+from probe_b2_ledger import run_b2_record, run_b2_spend
+from probe_longhorn import (
     LONGHORN_PREFIX,
     run_b2_budget,
     run_b2_longhorn,
-    run_b2_record,
-    run_b2_spend,
     run_longhorn_blocks,
 )
 from probe_vip_placement import run_vip_placement

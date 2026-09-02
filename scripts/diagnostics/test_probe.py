@@ -482,3 +482,29 @@ def test_arr_subcommand_rejects_unknown_app():
 
     with pytest.raises(SystemExit):
         probe._build_parser().parse_args(["arr", "lidarr", "health"])
+
+
+def test_no_cluster_route_carries_the_retired_k8s_suffix(
+    fake_resolve, fake_k8s_endpoint
+):
+    """The `-k8s` suffix retired 2026-08-15 (870723e8), but probe.py kept building it for
+    another five hours: every cluster subcommand 404'd against Traefik's no-Host-match while
+    the fixtures below asserted the stale name, so CI ratified the break. Assert on the
+    hostnames plan() actually asks for, so a reintroduced suffix fails here first."""
+    asked = []
+
+    def record(hostname):
+        asked.append(hostname)
+        return fake_k8s_endpoint(hostname)
+
+    for argv in (
+        ["metric", "up"],
+        ["targets"],
+        ["loki-labels"],
+        ["loki-query", '{job="x"}'],
+        ["scrutiny"],
+    ):
+        probe.plan(argv, fake_resolve, record)
+
+    assert asked, "expected plan() to route these subcommands through k8s_endpoint"
+    assert not [h for h in asked if h.endswith("-k8s")]
