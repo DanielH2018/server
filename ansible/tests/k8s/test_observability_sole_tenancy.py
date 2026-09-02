@@ -12,7 +12,7 @@ of docs/networkpolicy-default-deny.md and the comment above `podSelector: {}` in
 networkpolicy-observability.yaml.j2) — per this repo's own escalate-on-recurrence rule, a third
 occurrence becomes a check, not another paragraph.
 
-Run: uv run pytest ansible/tests/test_observability_sole_tenancy.py
+Run: uv run pytest ansible/tests/k8s/test_observability_sole_tenancy.py
 """
 
 from __future__ import annotations

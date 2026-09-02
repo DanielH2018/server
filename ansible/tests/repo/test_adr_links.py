@@ -16,7 +16,7 @@ ADR template, the ADR index, the plan, `CLAUDE.md` and the reviewer skill all qu
 Scanning Markdown would read those examples as real markers and demand ADRs for them. The
 deliberate cost: a marker added to a role's `CLAUDE.md` is not checked here.
 
-Run: uv run pytest ansible/tests/test_adr_links.py
+Run: uv run pytest ansible/tests/repo/test_adr_links.py
 """
 
 from __future__ import annotations

@@ -19,7 +19,7 @@ read a recent rollout is not load-bearing.
 The scan is textual rather than a YAML parse: these are Jinja templates, and rendering them
 needs the full inventory (see the sibling test_volume_names_descriptive.py for the same call).
 
-Run: uv run pytest ansible/tests/test_deployment_revision_history_limit.py
+Run: uv run pytest ansible/tests/k8s/test_deployment_revision_history_limit.py
 """
 
 import pytest

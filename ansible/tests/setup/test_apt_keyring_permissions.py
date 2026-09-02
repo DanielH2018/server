@@ -18,7 +18,7 @@ their keyring was already 0644 and a `creates:` guard stopped it being rewritten
 Both rules below are about the same thing — a keyring's mode must be stated, not
 inherited from whatever the ambient umask happens to be.
 
-Run: uv run pytest ansible/tests/test_apt_keyring_permissions.py
+Run: uv run pytest ansible/tests/setup/test_apt_keyring_permissions.py
 """
 
 import pytest

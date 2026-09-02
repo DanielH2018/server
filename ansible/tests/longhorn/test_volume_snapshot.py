@@ -271,7 +271,7 @@ def test_the_full_name_has_the_sha_claim_string_as_a_strict_prefix() -> None:
     THE CLAIM SEGMENT DROPS A LEADING `<service>-`, so `widget-config` contributes `config`.
     That is not cosmetic: Longhorn's delete webhook caps a snapshot name at 63 bytes, and
     spending the service name twice put four real claims over it. See
-    ansible/tests/test_snapshot_name_length.py. volume-revert applies the same transformation
+    ansible/tests/longhorn/test_snapshot_name_length.py. volume-revert applies the same transformation
     when it reconstructs this prefix.
     """
     facts = _named(_CLAIM, "Name the pre-deploy snapshot")["ansible.builtin.set_fact"]

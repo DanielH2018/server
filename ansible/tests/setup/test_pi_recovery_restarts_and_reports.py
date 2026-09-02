@@ -12,7 +12,7 @@ just as hard as the restart half: a self-healing cron that pushes `up` after a s
 restart makes a container crashing every 5 minutes read green forever. So a cycle that had
 to intervene pushes DOWN, and only a clean cycle pushes `up`.
 
-Run: uv run pytest ansible/tests/test_pi_recovery_restarts_and_reports.py
+Run: uv run pytest ansible/tests/setup/test_pi_recovery_restarts_and_reports.py
 """
 
 import pytest

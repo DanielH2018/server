@@ -17,7 +17,7 @@ The rule began as bridge_common-only. It widened to every runtime module when ch
 by domain: the tests now patch `bridge_config.X` and `bridge_io._get_json` rather than
 `check.X`, so a from-import of any patched name from any module is the same defect.
 
-Run: uv run pytest ansible/tests/test_bridge_patch_boundary.py
+Run: uv run pytest ansible/tests/services/test_bridge_patch_boundary.py
 """
 
 import ast
@@ -83,7 +83,7 @@ def _patched_names_by_module(test_files=None, module_names=None):
 
     AST walk, not a regex — a line-oriented regex over `monkeypatch.setattr(bridge_common, "X"`
     misses the wrapped form ruff format produces and misses plain `bridge_common.X = ...`
-    assignment entirely. `ansible/tests/test_monitor_bridge_modules.py`'s census hit exactly
+    assignment entirely. `ansible/tests/services/test_monitor_bridge_modules.py`'s census hit exactly
     that hole when first measured; this mirrors its AST shape rather than repeating the mistake.
     """
     test_files = _test_and_conftest_files() if test_files is None else test_files

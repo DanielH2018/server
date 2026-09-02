@@ -15,7 +15,7 @@ signal that monitor-bridge reads (check.py:377) and it sits one prefix away from
 `container_memory_failures_total`, which this config drops. Any `container_memory_fail.*`
 spelling would take both.
 
-Run: uv run pytest ansible/tests/test_metric_drop_regexes.py
+Run: uv run pytest ansible/tests/services/test_metric_drop_regexes.py
 """
 
 import re

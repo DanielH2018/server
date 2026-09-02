@@ -18,7 +18,7 @@ So the pattern below accepts any target that is not a URL, a fragment or an abso
 
 Clean/flagged pairs below, per the repo rule that a new check ships with a proof it can go RED.
 
-Run: uv run pytest ansible/tests/test_docs_relative_links_resolve.py
+Run: uv run pytest ansible/tests/repo/test_docs_relative_links_resolve.py
 """
 
 from __future__ import annotations

@@ -28,7 +28,7 @@ returns empty with rc 0 and looks exactly like "the annotation is not set".
 So there are two checks below, one per character class. If a third form of shlex damage turns
 up, add a third rather than widening one regex until nobody can read it.
 
-Run: uv run pytest ansible/tests/test_jsonpath_quoting.py
+Run: uv run pytest ansible/tests/k8s/test_jsonpath_quoting.py
 """
 
 from __future__ import annotations

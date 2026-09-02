@@ -32,7 +32,7 @@ Two narrowings, both because the source is a template and not YAML:
 it also asserts the embedded script still parses as Python, which is the symptom absorption
 produced there and is not generalisable.
 
-Run: uv run pytest ansible/tests/test_configmap_keys_not_absorbed.py
+Run: uv run pytest ansible/tests/k8s/test_configmap_keys_not_absorbed.py
 """
 
 from __future__ import annotations

@@ -17,7 +17,7 @@ because the scheduler happened to place them correctly.
 A comment cannot catch the next one. This can: add a `type: LoadBalancer` service with
 ETP Local and no pin, and the suite fails.
 
-Run: uv run pytest ansible/tests/test_vip_pins.py
+Run: uv run pytest ansible/tests/k8s/test_vip_pins.py
 """
 
 import re

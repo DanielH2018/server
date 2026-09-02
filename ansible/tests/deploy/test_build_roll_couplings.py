@@ -10,7 +10,7 @@ from the role sources, so adding a second split build role fails here instead of
 inheriting the bug. That is the whole point: the risk is not that the current entry is wrong,
 it is that a future role joins the class unnoticed.
 
-Run: uv run pytest ansible/tests/test_build_roll_couplings.py
+Run: uv run pytest ansible/tests/deploy/test_build_roll_couplings.py
 """
 
 from __future__ import annotations

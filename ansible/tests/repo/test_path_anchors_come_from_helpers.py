@@ -13,7 +13,7 @@ K8S_ROLES, SETUP_ROLES and CONTAINER_ROLES for everyone else to import.
 
 Clean/flagged pairs below, per the repo rule that a new check ships with a proof it can go RED.
 
-Run: uv run pytest ansible/tests/test_path_anchors_come_from_helpers.py
+Run: uv run pytest ansible/tests/repo/test_path_anchors_come_from_helpers.py
 """
 
 from __future__ import annotations

@@ -23,7 +23,7 @@ expression would then read an undefined variable, prune nothing, and this file w
 green on its fixtures. That is the same failure shape as the inert prune itself, one level up, so
 the names the expressions read are asserted against the names the `find:` tasks actually set.
 
-Run: uv run pytest ansible/tests/test_dashboard_prune.py
+Run: uv run pytest ansible/tests/services/test_dashboard_prune.py
 """
 
 from pathlib import Path

@@ -9,7 +9,7 @@ Asserted against the RENDERED manifests, not a text scan, because the failure th
 the label sitting in `spec.selector.matchLabels` only — a file-level grep for the string passes
 on exactly that broken shape, and a NetworkPolicy does not look at a Deployment's selector.
 
-Run: uv run pytest ansible/tests/test_netpol_baseline_labels.py
+Run: uv run pytest ansible/tests/k8s/test_netpol_baseline_labels.py
 """
 
 from __future__ import annotations

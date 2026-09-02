@@ -17,7 +17,7 @@ ansible_env.HOME to /root. That is exactly what happened on daniel-box
 The roles that manage a user's home use /home/{{ sys_user }} instead, matching
 config_files, which hardcodes the same path for the same reason.
 
-Run: uv run pytest ansible/tests/test_per_user_home_resolution.py
+Run: uv run pytest ansible/tests/setup/test_per_user_home_resolution.py
 """
 
 import pytest

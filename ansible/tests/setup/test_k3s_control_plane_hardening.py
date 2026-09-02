@@ -22,7 +22,7 @@ Each test here encodes a way one of them fails while every surface still reads g
     create — so an enforcing label lands green and then refuses the next rollout of a
     privileged workload, hours or days later.
 
-Run: uv run pytest ansible/tests/test_k3s_control_plane_hardening.py
+Run: uv run pytest ansible/tests/setup/test_k3s_control_plane_hardening.py
 """
 
 import re

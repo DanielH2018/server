@@ -18,7 +18,7 @@ sitting green forever while nothing is actually watched:
 Both produce a monitor that is green for the wrong reason, which is the one outcome this
 whole mechanism is meant to prevent. A comment cannot catch the next one; this can.
 
-Run: uv run pytest ansible/tests/test_healthchecks_pings.py
+Run: uv run pytest ansible/tests/services/test_healthchecks_pings.py
 """
 
 import re

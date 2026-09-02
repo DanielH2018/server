@@ -11,7 +11,7 @@ repo-side check.
 `test_monitor_bridge_modules.py` already pins the one role that could plausibly ship one; this
 is the tree-wide version.
 
-Run: uv run pytest ansible/tests/test_no_role_ships_a_test_file.py
+Run: uv run pytest ansible/tests/repo/test_no_role_ships_a_test_file.py
 """
 
 import re

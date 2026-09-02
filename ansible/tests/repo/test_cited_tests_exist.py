@@ -12,7 +12,7 @@ runtime modules cite from a docstring or a comment with none. The pattern accept
 the file half resolves the way `test_documented_paths_exist.resolves` does, so a citation
 from context (`test_check_streaks.py::...` inside the same directory) is found by suffix.
 
-Run: uv run pytest ansible/tests/test_cited_tests_exist.py
+Run: uv run pytest ansible/tests/repo/test_cited_tests_exist.py
 """
 
 import re
@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 from _helpers import discover_docs
 
-REPO = Path(__file__).resolve().parent.parent.parent
+from _helpers import REPO
 
 # `<path>.py::test_<name>`, backticked or bare. The path half must end in `.py`, which is
 # what keeps `host:port` and `key::value` prose out; the test half must start with `test_`,

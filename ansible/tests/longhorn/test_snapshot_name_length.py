@@ -31,7 +31,7 @@ Three properties, and the second is the one that rots quietly:
    deleted at all, so the prune has to survive them; but a blanket ignore would also swallow a
    down webhook or an RBAC denial, turning "no recovery point was taken" into a green deploy.
 
-Run: uv run pytest ansible/tests/test_snapshot_name_length.py
+Run: uv run pytest ansible/tests/longhorn/test_snapshot_name_length.py
 """
 
 import re

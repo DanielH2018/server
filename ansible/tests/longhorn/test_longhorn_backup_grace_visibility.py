@@ -24,7 +24,7 @@ NAMED. The volumes are listed, not just totalled. A graced volume has no offsite
 "3 volume(s) awaiting" tells an operator nothing they can act on — and an unactionable red is what
 check 3's own comment records as the thing that stops being read.
 
-Run: uv run pytest ansible/tests/test_longhorn_backup_grace_visibility.py
+Run: uv run pytest ansible/tests/longhorn/test_longhorn_backup_grace_visibility.py
 """
 
 from _helpers import ANSIBLE

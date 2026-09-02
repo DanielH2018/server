@@ -25,7 +25,7 @@ from deploy_changes import services_from_changed_paths
 
 TEST_ONLY_PATHS = [
     # The repo-wide guards, plus the two support modules there that match no name pattern.
-    "ansible/tests/test_k8s_manifests.py",
+    "ansible/tests/k8s/test_k8s_manifests.py",
     "ansible/tests/_helpers.py",
     "ansible/tests/conftest.py",
     # A test beside the module it covers — the layout every roles/*/*/files/ suite uses.

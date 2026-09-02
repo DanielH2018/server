@@ -15,7 +15,7 @@ modes this suite guards are now:
   * a reverse-bridge host losing one of its two name forms -> the LAN wildcard sends
     `.local` traffic to a router that isn't there (or SNI != Host and the Docker edge 421s)
 
-Run: uv run pytest ansible/tests/test_strangler_bridge.py
+Run: uv run pytest ansible/tests/services/test_strangler_bridge.py
 """
 
 import yaml

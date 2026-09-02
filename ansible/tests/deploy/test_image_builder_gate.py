@@ -24,7 +24,7 @@ Three properties have to hold:
    Ansible short-circuits a `when` list, and a skipped task still registers a dict with no
    `stdout`, so the ordering is what keeps `image_builder_result.stdout` from being read.
 
-Run: uv run pytest ansible/tests/test_image_builder_gate.py
+Run: uv run pytest ansible/tests/deploy/test_image_builder_gate.py
 """
 
 import re
@@ -178,7 +178,7 @@ def test_the_gate_does_not_absorb_the_dry_run_guard():
     """The two clauses stay separate, and this is the test that keeps them that way.
 
     Folding `not k8s_no_mutate` into the gate is correct and tempting — one fact instead of two
-    clauses per task. It is still wrong, because `ansible/tests/test_k8s_dry_run.py` reads that
+    clauses per task. It is still wrong, because `ansible/tests/deploy/test_k8s_dry_run.py` reads that
     guard textually at each mutating task, and a guard behind an indirection is one that check
     cannot see. Keeping them separate is what leaves the dry-run protection legible.
     """

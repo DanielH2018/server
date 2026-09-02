@@ -15,7 +15,7 @@ guard covered was the one that never had Docker.
 A guard on one of two symmetric paths is not a guard. This asserts both paths carry it,
 so removing either one fails the suite instead of quietly halving the coverage.
 
-Run: uv run pytest ansible/tests/test_k3s_docker_guard.py
+Run: uv run pytest ansible/tests/setup/test_k3s_docker_guard.py
 """
 
 import re

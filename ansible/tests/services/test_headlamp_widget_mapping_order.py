@@ -15,7 +15,7 @@ returns HTTP 200, and `probe.py health homepage` reports a healthy pod. Only a h
 This is the executable form of the `# DECIDED:` marker in services.yaml.j2, which accepts
 positional pairing so the tile matches every other widget on the dashboard.
 
-Run: uv run pytest ansible/tests/test_headlamp_widget_mapping_order.py
+Run: uv run pytest ansible/tests/services/test_headlamp_widget_mapping_order.py
 """
 
 import re

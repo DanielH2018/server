@@ -26,7 +26,7 @@ assertions — or on any failure path — a drill that restores an empty volume 
 FAIL CLOSED. `[[ -f $STAMP ]] && check_age` reports green when the drill has never run once,
 which is the state most in need of reporting. Missing and unparseable stamps must both page.
 
-Run: uv run pytest ansible/tests/test_longhorn_restore_drill.py
+Run: uv run pytest ansible/tests/longhorn/test_longhorn_restore_drill.py
 """
 
 import re

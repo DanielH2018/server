@@ -7,7 +7,7 @@ consequence shows up later as a moved VIP, a corrupted session, an ungated servi
 unprotected edge. A rendered-YAML check cannot catch any of them (the manifests stay valid
 either way) — hence a separate suite from scripts/validate/validate_k8s_manifests.py.
 
-Run: uv run pytest ansible/tests/test_k8s_manifests.py
+Run: uv run pytest ansible/tests/k8s/test_k8s_manifests.py
 """
 
 import re

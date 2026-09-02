@@ -11,7 +11,7 @@ be the same string. If they drift, the guest still boots and still gets an addre
 dynamic one -- and the inventory entry that names staging_vm_ip in a later slice points at
 nothing. That failure is silent at every layer except the one that tries to ssh in.
 
-Run: uv run pytest ansible/tests/test_staging_vm.py
+Run: uv run pytest ansible/tests/staging/test_staging_vm.py
 """
 
 import xml.etree.ElementTree as ET

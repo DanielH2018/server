@@ -23,7 +23,7 @@ ERROR IS NOT SUCCESS. `kubectl apply` succeeds the moment the CR is accepted; th
 still fail minutes later. A play that ends after the apply reports a recovery point that does not
 exist - the same shape as the readonly-SA rollout restart that prints "successfully rolled out".
 
-Run: uv run pytest ansible/tests/test_seed_volume_backup.py
+Run: uv run pytest ansible/tests/longhorn/test_seed_volume_backup.py
 """
 
 import yaml

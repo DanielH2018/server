@@ -14,7 +14,7 @@ to check Traefik joined every routed service's network (`_traefik_networks`,
 to route anything, so the invariant became vacuous. What remains below still verifies
 something real regardless of which host runs an edge.
 
-Run: uv run pytest ansible/tests/test_network_invariant.py
+Run: uv run pytest ansible/tests/setup/test_network_invariant.py
 """
 
 import yaml

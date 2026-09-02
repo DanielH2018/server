@@ -21,7 +21,7 @@ hours after creation. Dating the failure by `creationTimestamp` puts a created-y
 failed-this-morning run outside the window at the moment it should page, so the condition's
 `lastTransitionTime` has to win.
 
-Run: uv run pytest ansible/tests/test_longhorn_backup_job_failure_check.py
+Run: uv run pytest ansible/tests/longhorn/test_longhorn_backup_job_failure_check.py
 """
 
 import re

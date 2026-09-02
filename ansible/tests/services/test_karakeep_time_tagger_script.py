@@ -14,7 +14,7 @@ The Docker role was archived on 2026-08-09 (karakeep runs only in k8s now), but 
 reference: its get_url task is the sole record of the pinned commit URL + sha256 the vendored
 bytes were taken from, so the guard reads it from the archive.
 
-Run: uv run pytest ansible/tests/test_karakeep_time_tagger_script.py
+Run: uv run pytest ansible/tests/services/test_karakeep_time_tagger_script.py
 """
 
 import hashlib

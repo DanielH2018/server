@@ -22,7 +22,7 @@ The scan is deliberately textual, not a YAML parse: these are Jinja templates, a
 them needs the full inventory. Volume names never contain Jinja except where the name is keyed
 on a node (`artifacts-{{ artifacts_k8s_node }}`), which is descriptive by construction.
 
-Run: uv run pytest ansible/tests/test_volume_names_descriptive.py
+Run: uv run pytest ansible/tests/k8s/test_volume_names_descriptive.py
 """
 
 import re

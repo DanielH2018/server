@@ -11,7 +11,7 @@ await_ci rests on. A name await_ci requires and the deployer does not parks a la
 deployer would have deployed; the reverse lets a session deploy past a gate the tick would
 have held. So the two sets must be EQUAL, not merely overlapping.
 
-Run: uv run pytest ansible/tests/test_ci_contexts_match_workflows.py
+Run: uv run pytest ansible/tests/repo/test_ci_contexts_match_workflows.py
 """
 
 from __future__ import annotations

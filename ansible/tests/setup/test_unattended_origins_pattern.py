@@ -20,7 +20,7 @@ nothing else in the repo can see. It shipped that way in 2fc0b537.
 The distro's own 50unattended-upgrades still uses Allowed-Origins for the security pockets and
 is not ours to change; this covers only the extras we add.
 
-Run: uv run pytest ansible/tests/test_unattended_origins_pattern.py
+Run: uv run pytest ansible/tests/setup/test_unattended_origins_pattern.py
 """
 
 import re

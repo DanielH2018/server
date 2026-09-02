@@ -28,7 +28,7 @@ a host that has it — the failure reads as a broken cluster rather than a broke
 BOTH DIRECTIONS. A drill that can be armed must be disarmable, or turning it off means deleting
 the task. `state:` must follow the armed flag rather than being hardcoded `present`.
 
-Run: uv run pytest ansible/tests/test_etcd_restore_drill_cron.py
+Run: uv run pytest ansible/tests/setup/test_etcd_restore_drill_cron.py
 """
 
 from pathlib import Path

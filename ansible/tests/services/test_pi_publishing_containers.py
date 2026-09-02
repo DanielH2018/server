@@ -14,7 +14,7 @@ to or removed from the Pi changes the expected set here in the same commit that 
 inventory — that edit is the review point, which is exactly what an unpinned derivation
 does not give you.
 
-Run: uv run pytest ansible/tests/test_pi_publishing_containers.py
+Run: uv run pytest ansible/tests/services/test_pi_publishing_containers.py
 """
 
 import yaml

@@ -20,7 +20,7 @@ split, which is exactly when a new module appears here.
 `host_lib.py` is installed by its own task from `roles/setup/common/files/` and is not in this
 role's files/, so it is outside the set this test derives. Its stamp pair is asserted directly.
 
-Run: uv run pytest ansible/tests/test_gitops_deploy_ship_list.py
+Run: uv run pytest ansible/tests/deploy/test_gitops_deploy_ship_list.py
 """
 
 import ast

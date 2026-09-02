@@ -25,7 +25,7 @@ coverage from 21 declared sizes to 31. The floor assertion below is what surface
 roles adopted the macro, resolution fell to 14, and the floor failed instead of the suite
 quietly checking less. Keep the floor above the real count for that reason.
 
-Run: uv run pytest ansible/tests/test_pvc_sizes_match_block_size.py
+Run: uv run pytest ansible/tests/longhorn/test_pvc_sizes_match_block_size.py
 """
 
 import re

@@ -17,7 +17,7 @@ importable:
     ModuleNotFoundError the next time it rolls, on a workload that fixes *arr issues with no
     page of its own if it silently stops.
 
-Run: uv run pytest ansible/tests/test_autofix_bridge_modules.py
+Run: uv run pytest ansible/tests/services/test_autofix_bridge_modules.py
 """
 
 import ast

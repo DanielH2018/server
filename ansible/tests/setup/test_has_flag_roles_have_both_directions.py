@@ -16,7 +16,7 @@ teardown half. This asserts the shape stays that way: a tasks/main.yml that incl
 file `when: <flag>` must also include one `when: not <flag>`. Roles gated in a playbook
 rather than internally are not matched -- the pattern here is specifically the dispatcher.
 
-Run: uv run pytest ansible/tests/test_has_flag_roles_have_both_directions.py
+Run: uv run pytest ansible/tests/setup/test_has_flag_roles_have_both_directions.py
 """
 
 import re

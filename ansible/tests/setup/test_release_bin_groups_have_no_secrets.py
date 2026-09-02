@@ -19,7 +19,7 @@ names, dates and tiers, never values — so this guard needs no SOPS key and run
 Reading `vars/secrets.yml` would need a decrypt, and a guard that cannot run in CI is a guard
 that runs nowhere.
 
-Run: uv run pytest ansible/tests/test_release_bin_groups_have_no_secrets.py
+Run: uv run pytest ansible/tests/setup/test_release_bin_groups_have_no_secrets.py
 """
 
 import re

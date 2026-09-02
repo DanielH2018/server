@@ -16,7 +16,7 @@ The collision assertions are the other half. The subnet was chosen against a cen
 daniel-server actually routes; this pins that choice so a later edit cannot quietly move it
 onto the LAN, the k3s ranges, or the bridges the retired Docker install left behind.
 
-Run: uv run pytest ansible/tests/test_staging_network.py
+Run: uv run pytest ansible/tests/staging/test_staging_network.py
 """
 
 import ipaddress

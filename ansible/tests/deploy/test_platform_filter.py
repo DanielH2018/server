@@ -10,7 +10,7 @@ Lives in ansible/tests/ (not under filter_plugins/) so Ansible's filter-plugin
 loader doesn't import it as a plugin; the `pythonpath` setting in pyproject.toml
 puts filter_plugins/ on sys.path so `import toposort` resolves.
 
-Run: uv run pytest ansible/tests/test_platform_filter.py
+Run: uv run pytest ansible/tests/deploy/test_platform_filter.py
 """
 
 from toposort import filter_by_platform

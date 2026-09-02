@@ -17,7 +17,7 @@ applies the ConfigMap. A companion assertion pins the reason for monitor-bridge 
 modules ever shrink well below the cap the comment in its tasks/main.yml is the thing to
 revisit, not this guard.
 
-Run: uv run pytest ansible/tests/test_script_configmaps_apply_server_side.py
+Run: uv run pytest ansible/tests/k8s/test_script_configmaps_apply_server_side.py
 """
 
 import pytest

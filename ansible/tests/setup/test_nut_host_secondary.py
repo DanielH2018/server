@@ -20,7 +20,7 @@ THE ENDPOINT IS PROVEN, NOT ASSUMED. The nut Service does not pin its clusterIP,
 secondary's endpoint is a deploy-time snapshot. An unreachable endpoint installs a shutdown chain
 that never fires — indistinguishable from a working one until the power cut it exists for.
 
-Run: uv run pytest ansible/tests/test_nut_host_secondary.py
+Run: uv run pytest ansible/tests/setup/test_nut_host_secondary.py
 """
 
 import yaml

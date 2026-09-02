@@ -19,7 +19,7 @@ name is bound there and none is defined. This one requires a def/class/assignmen
 patched module's top level. Today the suite patches exactly one pair — `gitops_deploy.run`,
 which gitops_deploy defines — so the census sanity test pins that the walk still finds it.
 
-Run: uv run pytest ansible/tests/test_gitops_deploy_patch_boundary.py
+Run: uv run pytest ansible/tests/deploy/test_gitops_deploy_patch_boundary.py
 """
 
 import ast

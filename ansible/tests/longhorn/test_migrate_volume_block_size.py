@@ -16,7 +16,7 @@ Three orders carry the weight:
   RESTORE IN `always`. The play scales the workload to zero. A failure anywhere in between must
   still bring it back, or a failed migration is also a silent outage.
 
-Run: uv run pytest ansible/tests/test_migrate_volume_block_size.py
+Run: uv run pytest ansible/tests/longhorn/test_migrate_volume_block_size.py
 """
 
 import yaml

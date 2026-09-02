@@ -10,7 +10,7 @@ valid YAML — there is nothing malformed about it — and the pod died on
 So these assert on content: that both keys survive the render, and that the embedded script is
 still a parseable Python program. A YAML-only check cannot see either failure.
 
-Run: uv run pytest ansible/tests/test_artifacts_configmap.py
+Run: uv run pytest ansible/tests/services/test_artifacts_configmap.py
 """
 
 from __future__ import annotations

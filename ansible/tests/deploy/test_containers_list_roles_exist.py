@@ -11,7 +11,7 @@ Docker entries need ansible/roles/containers/<name>/ with a compose template;
 k8s entries need ansible/roles/k8s/<name>/. archive/ is not on roles_path, so a
 role that only survives there is unreachable and counts as missing.
 
-Run: uv run pytest ansible/tests/test_containers_list_roles_exist.py
+Run: uv run pytest ansible/tests/deploy/test_containers_list_roles_exist.py
 """
 
 import pytest

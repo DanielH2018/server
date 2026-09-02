@@ -23,7 +23,7 @@ converging — and no symmetry test could have found it. It is in both lists now
 nothing about the blind spot. This guards one shape of firewall defect, not firewall
 completeness; only a live probe from the node that needs a port can establish that.
 
-Run: uv run pytest ansible/tests/test_k3s_join_port_symmetry.py
+Run: uv run pytest ansible/tests/setup/test_k3s_join_port_symmetry.py
 """
 
 from _helpers import SETUP_ROLES, load_yaml

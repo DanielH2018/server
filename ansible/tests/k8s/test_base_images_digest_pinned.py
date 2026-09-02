@@ -29,7 +29,7 @@ shape and it is load-bearing for Renovate: its k8s-defaults custom manager captu
 freeze the pin with no update signal. See renovate.json's k8s-defaults manager and the
 `matchUpdateTypes: [digest]` rule that auto-merges these after a 3-day soak.
 
-Run: uv run pytest ansible/tests/test_base_images_digest_pinned.py
+Run: uv run pytest ansible/tests/k8s/test_base_images_digest_pinned.py
 """
 
 import re

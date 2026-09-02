@@ -18,7 +18,7 @@ csi-provisioner could not create a single volume and every PVC sat Pending. It s
 invisible for hours because `k3s kubectl` from the host talks to 127.0.0.1:6443 and
 went on working the whole time.
 
-Run: uv run pytest ansible/tests/test_k3s_node_ip_pinned.py
+Run: uv run pytest ansible/tests/setup/test_k3s_node_ip_pinned.py
 """
 
 import re

@@ -16,7 +16,7 @@ is indistinguishable from the Pi being healthy.
 So the assertion runs the REAL rendered scripts and feeds their actual output through the
 REAL parser. Nothing here matches on source text.
 
-Run: uv run pytest ansible/tests/test_pi_health_log_line_shape.py
+Run: uv run pytest ansible/tests/setup/test_pi_health_log_line_shape.py
 """
 
 import sys

@@ -26,7 +26,7 @@ carries a crowdsec agent sidecar that logs into the engine's LAPI, and the machi
 credential is registered by a post-deploy task in the crowdsec role, so the engine must
 exist before a traefik rollout starts that sidecar.
 
-Run: uv run pytest ansible/tests/test_containers_list_ordering.py
+Run: uv run pytest ansible/tests/deploy/test_containers_list_ordering.py
 """
 
 from __future__ import annotations

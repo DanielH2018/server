@@ -10,7 +10,7 @@ been explicitly migrated, using the inventory files as they actually are.
 They stay correct as services migrate: an entry only leaves the docker set by
 gaining `platform: k8s`, which is exactly what the assertions check for.
 
-Run: uv run pytest ansible/tests/test_platform_filter_real_inventory.py
+Run: uv run pytest ansible/tests/deploy/test_platform_filter_real_inventory.py
 """
 
 import pytest

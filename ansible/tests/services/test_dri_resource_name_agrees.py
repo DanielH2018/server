@@ -16,7 +16,7 @@ Rename it in a consumer only, and monitor-bridge keeps watching the old name —
 extended-resource arm reads as "advertised by no node", the fail-closed page recorded in that
 role's CLAUDE.md as the 2026-08-20 false alarm.
 
-Run: uv run pytest ansible/tests/test_dri_resource_name_agrees.py
+Run: uv run pytest ansible/tests/services/test_dri_resource_name_agrees.py
 """
 
 import re

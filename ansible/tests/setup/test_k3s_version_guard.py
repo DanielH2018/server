@@ -26,7 +26,7 @@ Each test here encodes a way the fix regresses while everything still reads gree
     reading says nothing about it; sharing one register across the two would leave the agent
     a version behind its server, which k3s does not support.
 
-Run: uv run pytest ansible/tests/test_k3s_version_guard.py
+Run: uv run pytest ansible/tests/setup/test_k3s_version_guard.py
 """
 
 from _helpers import ANSIBLE

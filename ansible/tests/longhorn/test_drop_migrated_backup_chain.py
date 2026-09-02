@@ -15,7 +15,7 @@ that looks like a simplification.
   KubernetesStatus label, a JSON string — so the selection has to reach into that, and reaching
   into it with a bare substring would let `n8n-data` also select `n8n-data-something`.
 
-Run: uv run pytest ansible/tests/test_drop_migrated_backup_chain.py
+Run: uv run pytest ansible/tests/longhorn/test_drop_migrated_backup_chain.py
 """
 
 from _helpers import ANSIBLE

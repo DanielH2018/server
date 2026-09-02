@@ -23,7 +23,7 @@ directions are deliberately asymmetric and the safe one was chosen on evidence:
     That one was actually observed (the otel collector kept serving a stale config), and is the
     reason these rollout tasks exist at all.
 
-Run: uv run pytest ansible/tests/test_manifests_apply_guarded.py
+Run: uv run pytest ansible/tests/deploy/test_manifests_apply_guarded.py
 """
 
 import re

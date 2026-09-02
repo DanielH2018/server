@@ -22,7 +22,7 @@ repo escalates from a comment into a check.
 whole cgroup, so one runaway session would take the OOM kill for the host and every other
 session with it.
 
-Run: uv run pytest ansible/tests/test_claude_rc_unit.py
+Run: uv run pytest ansible/tests/setup/test_claude_rc_unit.py
 """
 
 import re

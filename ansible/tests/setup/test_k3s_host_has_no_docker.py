@@ -21,7 +21,7 @@ already on the host. `has_docker` is the half that stops it landing in the first
 place — the original note said to remember `--tags`, and relying on that is exactly
 what let it happen.
 
-Run: uv run pytest ansible/tests/test_k3s_host_has_no_docker.py
+Run: uv run pytest ansible/tests/setup/test_k3s_host_has_no_docker.py
 """
 
 from pathlib import Path

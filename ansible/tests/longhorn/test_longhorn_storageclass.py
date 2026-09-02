@@ -20,7 +20,7 @@ The fix replaces upstream's class with files/longhorn-storageclass.yaml, which o
 the parameter so the setting governs. The risk now is re-syncing that file from a
 newer upstream and pasting the parameter back in, which is what these tests catch.
 
-Run: uv run pytest ansible/tests/test_longhorn_storageclass.py
+Run: uv run pytest ansible/tests/longhorn/test_longhorn_storageclass.py
 """
 
 import yaml

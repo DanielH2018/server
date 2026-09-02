@@ -11,7 +11,7 @@ one `deploy.sh` structurally cannot reach.
 make it trustworthy, each with the input it must accept AND the input it must reject — a
 census that finds everything and one that finds nothing look identical from the passing side.
 
-Run: uv run pytest ansible/tests/test_secret_consumer_census.py
+Run: uv run pytest ansible/tests/k8s/test_secret_consumer_census.py
 """
 
 import sys as _sys

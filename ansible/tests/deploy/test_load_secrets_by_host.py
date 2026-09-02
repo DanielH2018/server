@@ -55,7 +55,7 @@ def test_a_mixed_play_is_refused_before_anything_is_loaded():
     """Without this, `run_once` silently applies one host's file to hosts that chose another."""
     tasks = _tasks()
     # Selected by CONTENT, not position. The preamble carries a second, unrelated assert (the
-    # wrong-machine guard, ansible/tests/test_local_connection_target.py), and this test used to
+    # wrong-machine guard, ansible/tests/deploy/test_local_connection_target.py), and this test used to
     # take the first assert in the file — which silently became that one when it landed.
     mine = [
         i

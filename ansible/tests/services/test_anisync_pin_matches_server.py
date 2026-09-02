@@ -18,7 +18,7 @@ was built for (`10.11.6.-.ani-sync_4.1.0.0.zip`), and the image tag leads with t
 version (`10.11.10ubu2404-ls35`), so the comparison needs no network call and no manifest
 fetch.
 
-Run: uv run pytest ansible/tests/test_anisync_pin_matches_server.py
+Run: uv run pytest ansible/tests/services/test_anisync_pin_matches_server.py
 """
 
 import re

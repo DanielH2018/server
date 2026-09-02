@@ -15,7 +15,7 @@ RecurringJob label, so a single hand-triggered probe backup counts as proof the 
 tier is producing backups, and FLOOR 1 (which fires only at a count of zero) stands down. On
 wg-easy-config that would have deleted 3 of its 5 backups while its tier had produced none.
 
-Run: uv run pytest ansible/tests/test_longhorn_reap_guard.py
+Run: uv run pytest ansible/tests/longhorn/test_longhorn_reap_guard.py
 """
 
 import re

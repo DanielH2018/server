@@ -17,7 +17,7 @@ The list is deliberately explicit rather than a `files/*.py` glob, because files
 the pytest suite and conftest.py, which must not reach the image. This test is what keeps the
 explicit list honest.
 
-Run: uv run pytest ansible/tests/test_monitor_bridge_modules.py
+Run: uv run pytest ansible/tests/services/test_monitor_bridge_modules.py
 """
 
 import ast
@@ -105,7 +105,7 @@ def test_every_module_check_py_imports_is_shipped():
 # That is a silent loss of coverage, which no amount of green runs will surface. Hence a guard:
 # every `(module, name)` pair the suite patches must be bound at that module's top level, by a
 # `def`, an assignment, or an import. The companion rule — a module must not from-import a name
-# some test patches on its source module — is ansible/tests/test_bridge_patch_boundary.py.
+# some test patches on its source module — is ansible/tests/services/test_bridge_patch_boundary.py.
 #
 # The census must be an AST walk, not a grep. A line-oriented regex over
 # `monkeypatch.setattr(check, "X"` misses the wrapped form ruff format produces and misses plain
