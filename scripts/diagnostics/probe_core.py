@@ -219,6 +219,20 @@ def fetch_json(url, resolve=None):
         return None, 1
 
 
+def json_or_none(argv):
+    """Run `argv` and return its stdout parsed as JSON, or None on a non-zero exit or
+    unparseable output. The kubectl-argv analog of fetch_json: callers that need to tell
+    "ran but returned nothing" from "found nothing" use this rather than raising, since a
+    missing workload/Service/EndpointSlice is an expected result, not a failure."""
+    out = subprocess.run(argv, capture_output=True, text=True)
+    if out.returncode != 0:
+        return None
+    try:
+        return json.loads(out.stdout)
+    except json.JSONDecodeError:
+        return None
+
+
 def k8s_namespace():
     """The workload namespace, read from inventory (plaintext, not a secret)."""
     with open(GROUP_VARS_PATH) as f:

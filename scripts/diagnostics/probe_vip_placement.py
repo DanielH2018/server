@@ -14,7 +14,9 @@ LAN DNS down). Both times a host-originated probe read green, because kube-proxy
 node-local clients the cluster-policy path. Nothing else in the fleet notices.
 """
 
-from probe_health import _json_or_none
+# `core.<name>` for anything the tests monkeypatch — binding those into this module's
+# globals with a `from probe_core import ...` would take a snapshot the patch never reaches.
+import probe_core as core
 
 ETP_LOCAL = "Local"
 
@@ -154,7 +156,7 @@ def run_vip_placement(ns):
         return 0
 
     def items(argv):
-        data = _json_or_none(argv)
+        data = core.json_or_none(argv)
         return (data or {}).get("items") or []
 
     services, slices, adverts, nodes = (items(argv) for argv in calls)

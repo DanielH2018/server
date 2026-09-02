@@ -333,16 +333,6 @@ def resolve_ip(container):
     return ip
 
 
-def _json_or_none(argv):
-    out = subprocess.run(argv, capture_output=True, text=True)
-    if out.returncode != 0:
-        return None
-    try:
-        return json.loads(out.stdout)
-    except json.JSONDecodeError:
-        return None
-
-
 def declared_on_pi(container):
     """Does daniel-pi's inventory declare a Docker service by this name?
 
@@ -509,9 +499,11 @@ def _fetch_workload(name, namespace):
     for the DaemonSets and for a name that matches nothing.
     """
     for kind in WORKLOAD_KINDS.values():
-        workload = _json_or_none(k8s_deploy_argv(name, namespace, kind=kind))
+        workload = core.json_or_none(k8s_deploy_argv(name, namespace, kind=kind))
         if workload:
-            pods = _json_or_none(k8s_pods_argv(name, namespace, pod_selector(workload)))
+            pods = core.json_or_none(
+                k8s_pods_argv(name, namespace, pod_selector(workload))
+            )
             return workload, pods
     return None, None
 
