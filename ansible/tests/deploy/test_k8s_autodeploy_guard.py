@@ -69,15 +69,17 @@ from _autodeploy import (
     _K8S_ROLES,
     _REPO,
     _auto_deployable,
-    _claim_name_refs,
     _daemonset_alias_matches,
     _declares_autodeploy,
     _denylist,
     _kubectl_consumer_paths,
-    _migrating_state,
-    _rendered_pvc_claims,
     _role_defaults,
     _roles,
+)
+from _autodeploy_claims import (
+    _claim_name_refs,
+    _migrating_state,
+    _rendered_pvc_claims,
 )
 
 
