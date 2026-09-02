@@ -19,8 +19,17 @@
       memory: true
       showLabel: true
 
+# Kagi. `custom` because homepage ships no built-in kagi provider - the set is
+# google/duckduckgo/bing/baidu/brave/custom. The URL carries no session token on purpose:
+# the search widget is a client-side navigation, so homepage serves this URL to every
+# browser that loads the dashboard and the query string lands in that browser's history.
+# A Kagi session token there is full-account access held in plaintext by every viewer.
+# Tokenless, Kagi answers from the browser's own session cookie and prompts for a login
+# when there is none. No suggestionUrl: Kagi publishes no unauthenticated autocomplete
+# endpoint, so `showSearchSuggestions` has nothing to read.
 - search:
-    provider: google
+    provider: custom
+    url: https://kagi.com/search?q=
     target: _blank
 
 - openmeteo:
