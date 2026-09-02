@@ -130,6 +130,22 @@ def test_every_deploy_resume_point_is_decoded(code, marker):
     assert "NOTHING was deployed" in note
 
 
+def test_a_playbook_failure_is_decoded_as_changes_being_live():
+    """The inverse of the four above, and the reason exit 20 exists (issue #840).
+
+    deploy.sh returned ansible-playbook's own status until 2026-09-02, so a play that applied
+    its manifests and then failed exited 2 and was decoded as the tag miss -- telling an
+    operator nothing was deployed when everything before the failing task had been. The note
+    must carry the opposite claim, in the words the wrapper and CLAUDE.md use.
+    """
+    note = _mod.deploy_exit_note(failure(error="Exit code 20\nsome output"))
+    assert note is not None
+    assert "exit 20" in note
+    assert "changes ARE live" in note
+    # The claim that must never reach an operator on this path.
+    assert "NOTHING was deployed" not in note
+
+
 @pytest.mark.parametrize(
     "payload",
     [

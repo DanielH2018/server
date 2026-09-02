@@ -45,6 +45,11 @@
 #     webhook, gated on `probe.py health <svc>` for every deployed tag that supports it.
 #     Meaningless combined with --check or --dry-run (both already return immediately without
 #     touching the lock) — refused with a nonzero exit rather than silently ignored.
+#
+# Exit codes. 0 is a finished deploy; 75, 4, 3 and 2 each mean NOTHING was deployed and each is
+# a resume point (see the table in the repo CLAUDE.md); 20 means the playbook RAN and a task
+# failed, so whatever applied before it is live. Nothing else is returned — ansible-playbook's
+# own status collides with 2/3/4 and is collapsed onto 20, see PLAYBOOK_FAILED below.
 
 set -u
 
@@ -70,6 +75,19 @@ LOCK=/var/lock/server-git-tree.lock
 # the four fails that test rather than silently shortening this wait again.
 LOCK_WAIT=3000
 LOCK_BUSY=75
+# The playbook ran and a task failed. Distinct from every code above because those all mean
+# NOTHING was deployed, while this one means the opposite: a play that reaches PLAY RECAP with
+# failed=1 has already applied whatever ran before the failing task.
+#
+# It exists because ansible-playbook's own exit codes COLLIDE with this wrapper's. Ansible
+# returns 2 for "one or more hosts failed", 3 for "hosts unreachable" and 4 for a parse error;
+# this script reserves 2 for a tag miss, 3 for a broad change and 4 for a stale tree. Until
+# 2026-09-02 the final `exit "$status"` handed ansible's number straight out, so a play that
+# failed on a post-apply assert exited 2 and every consumer read it as the tag miss. That is
+# issue #840: land.sh printed `deploy-failed (... a derived tag matched no service, so nothing
+# deployed; tags: terraria,uptime-kuma)` for a run whose manifests both applied and which failed
+# in k8s/rollout-drain. 20 is outside {0,1,2,3,4,64,75}, so the two can never be confused again.
+PLAYBOOK_FAILED=20
 
 # Record a successful deploy where Grafana can draw it as a dashboard annotation.
 #
@@ -360,6 +378,16 @@ if [[ "$status" == "$LOCK_BUSY" ]]; then
     echo "  A deploy is already running. Likely holders: gitops-deploy.service" >&2
     echo "  (systemctl status gitops-deploy.service), the weekly secret-rotate cron," >&2
     echo "  or another Claude session (uv run python scripts/dev/prune_worktrees.py)." >&2
+    exit "$status"
 fi
 
-exit "$status"
+if [[ "$status" != 0 ]]; then
+    # See PLAYBOOK_FAILED above: ansible's number is reported here, never returned, because
+    # 2/3/4 mean something else to every consumer of this wrapper.
+    echo "deploy: the playbook ran and failed (ansible-playbook exit $status) -- changes that" >&2
+    echo "  applied before the failing task ARE live. Read the PLAY RECAP and the failing" >&2
+    echo "  TASK above; this is not a tag, staleness or lock refusal." >&2
+    exit "$PLAYBOOK_FAILED"
+fi
+
+exit 0

@@ -9,10 +9,11 @@ to widen anything: `retry: true` tells it the call may be reissued, and the clas
 reissue exactly as it judged the first. Two retries per session cap it, so a command the
 classifier means to refuse still stops.
 
-`PostToolUseFailure` — decodes the deploy wrapper's resume-point exit codes. 75, 4, 3 and 2 all
-mean NOTHING WAS DEPLOYED, and each is a different next step, but they reach Claude as a bare
-`Exit code N` line that reads like a playbook failure. CLAUDE.md says so in prose; this says it
-at the moment it happens, which is the difference between reading the runbook and being told.
+`PostToolUseFailure` — decodes the deploy wrapper's exit codes. 75, 4, 3 and 2 all mean NOTHING
+WAS DEPLOYED, and each is a different next step, but they reach Claude as a bare `Exit code N`
+line that reads like a playbook failure. 20 is the inverse case, added 2026-09-02 for issue #840:
+the playbook ran and failed, so changes ARE live. CLAUDE.md says so in prose; this says it at the
+moment it happens, which is the difference between reading the runbook and being told.
 
 `classifierContext` is deliberately not used here. It is a PostToolUse field, and every fact
 worth sending the classifier from this repo is either a failure (which lands on
@@ -48,8 +49,9 @@ _NO_VERDICT_PREFIXES = (
 
 MAX_RETRIES_PER_SESSION = 2
 
-# Every one of these means the deploy refused BEFORE touching anything. The text is the wrapper's
-# own contract, kept in the same words CLAUDE.md uses so the two don't drift into two stories.
+# 75, 4, 3 and 2 each mean the deploy refused BEFORE touching anything; 20 is the opposite and
+# says so in its own words. The text is the wrapper's own contract, kept in the same words
+# CLAUDE.md uses so the two don't drift into two stories.
 _DEPLOY_EXITS = {
     75: (
         "deploy.sh exit 75: the /var/lock/server-git-tree.lock stayed busy, so NOTHING was "
@@ -68,6 +70,12 @@ _DEPLOY_EXITS = {
     2: (
         "deploy.sh exit 2: a --tags value matched no service in containers_list, so NOTHING was "
         "deployed. --list-services prints every valid value."
+    ),
+    20: (
+        "deploy.sh exit 20: the playbook RAN and a task failed, so this is the one deploy exit "
+        "where changes ARE live — everything applied before the failing task took effect. Read "
+        "the PLAY RECAP and the failing TASK; do not treat it as a tag, staleness or lock "
+        "refusal, and do not assume a re-run is safe."
     ),
 }
 

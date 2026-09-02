@@ -528,6 +528,18 @@ case "$deploy_rc" in
     exit 1
     ;;
   75) die "deploy lock stayed busy after $LOCK_RETRIES attempts — nothing deployed" 75 lock-busy ;;
+  20)
+    # The playbook RAN and a task failed, so this is the one deploy-failed verdict that must
+    # NOT say nothing deployed: everything applied before the failing task is live. It reads
+    # as a separate arm because until 2026-09-02 deploy.sh returned ansible-playbook's own
+    # status, and ansible exits 2 on a failed host — the same number as the tag miss above.
+    # Issue #840: a run whose terraria and uptime-kuma manifests both applied, then failed in
+    # k8s/rollout-drain, was reported as "a derived tag matched no service, so nothing
+    # deployed". The verdict is not a resume point; re-running it is not automatically safe.
+    LAND_VERDICT=deploy-failed
+    echo "VERDICT: deploy-failed (PR #$PR — a playbook task failed AFTER applying; some changes are live; tags: $TAGS)"
+    exit 1
+    ;;
   *)
     LAND_VERDICT=deploy-failed
     echo "VERDICT: deploy-failed (PR #$PR, exit $deploy_rc)"
