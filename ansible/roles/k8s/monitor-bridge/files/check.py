@@ -37,6 +37,7 @@ from checks_service import (
     check_etcd_restore_drill,
     check_gitops_alive,
     check_gitops_status,
+    check_staging_backfill_alive,
     check_ha_heartbeat,
     check_n8n,
     check_prowlarr_indexers,
@@ -108,6 +109,14 @@ CHECKS = [
     ),
     ("gitops_alive", _env("KUMA_PUSH_GITOPS_ALIVE", ""), check_gitops_alive),
     ("gitops_status", _env("KUMA_PUSH_GITOPS_STATUS", ""), check_gitops_status),
+    # The staging-gate backfill ratchet's run-recency arm. Same shape and same hostPath as the
+    # gitops pair above — it reads the unit's heartbeat out of /var/lib/gitops-deploy. Its
+    # sibling `OnFailure=` unit pages when a run FAILS; this pages when runs stop happening.
+    (
+        "staging_backfill",
+        _env("KUMA_PUSH_STAGING_BACKFILL", ""),
+        check_staging_backfill_alive,
+    ),
     # Reads a stamp the drill writes weekly rather than a live source, so it is the same shape
     # as the gitops pair above: a hostPath the pod is pinned to, read fail-closed. Its token was
     # minted 2026-08-28, which is what let it be registered — test_checks_and_env_secret_push

@@ -332,6 +332,14 @@ stringData:
     {"type": "push", "name": "GitOps Deploy — Alive", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_gitops_alive_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   gitops-deploy-status.json: |
     {"type": "push", "name": "GitOps Deploy — Status", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_gitops_status_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # Pushed every bridge cycle like its neighbours, so the standard interval applies — the
+  # RATCHET is hourly, but the CHECK reading its heartbeat runs every cycle, and it is the check
+  # that beats. The staleness window lives in bridge_config.py (STAGING_BACKFILL_MAX_AGE_S, 150
+  # minutes derived from the timer); this interval is only the heartbeat that says the bridge is
+  # still evaluating it. Green while the gate is disarmed, with the reason in the message — the
+  # ratchet's timer is stopped then, so no heartbeat is expected.
+  staging-backfill-ratchet.json: |
+    {"type": "push", "name": "Staging Backfill Ratchet", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_staging_backfill_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Pushed every bridge cycle like its neighbours, so the standard 600s interval applies — the
   # DRILL is weekly, but the CHECK reading its stamp runs every cycle, and it is the check that
   # beats. The staleness window lives in check.py (ETCD_DRILL_MAX_AGE_S, 8 days derived from the

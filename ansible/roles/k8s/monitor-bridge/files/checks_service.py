@@ -27,6 +27,7 @@ from verdicts_service import (
     n8n_update_streaks,
     n8n_verdict,
     queue_warnings,
+    staging_backfill_alive,
 )
 
 
@@ -324,6 +325,43 @@ def check_gitops_status():
         _read_gitops_marker("behind_since"),
         hold_plane=_read_gitops_marker("hold_plane"),
     )
+
+
+def check_staging_backfill_alive():
+    """Is the staging-gate backfill ratchet still running at all?
+
+    `OnFailure=staging-backfill-alert.service` covers "ran and failed" and nothing else. A timer
+    that is stopped — by the gate switch, by a failed daemon-reload, by an operator — produces no
+    failures, so it pages nothing and reads exactly like a quiet week. This is the arm that sees
+    that, and it reads the unit's own ExecStopPost= heartbeat, which fires on every invocation
+    including the tolerated not-met exit.
+
+    NOT the ledger's mtime, which was refuted during the 2026-09-01 review: a run with no
+    gateable commit appends nothing, and docs/staging-phase-c.md measures about 2.5 gateable
+    commits per week, so ledger mtime would go red on an ordinary quiet week.
+
+    Reads the armed marker FIRST. A disarmed ratchet is heartbeat-free by construction, and a
+    monitor that goes permanently red on a deliberate switch teaches an operator to ignore it.
+    Fails closed on an unreadable or unparseable heartbeat: both are indistinguishable from a
+    stopped ratchet from here, and both need somebody to look.
+    """
+    armed = os.path.exists(os.path.join(cfg.GITOPS_STATE_DIR, "staging-backfill-armed"))
+    age_s = None
+    if armed:
+        path = os.path.join(cfg.GITOPS_STATE_DIR, "staging-backfill-last-run")
+        try:
+            with open(path) as fh:
+                age_s = time.time() - float(fh.read().strip())
+        except FileNotFoundError:
+            age_s = None
+        except PermissionError:
+            return (
+                False,
+                "staging-backfill heartbeat is unreadable by this uid (needs 0644)",
+            )
+        except OSError, ValueError:
+            return False, "staging-backfill heartbeat unparseable"
+    return staging_backfill_alive(armed, age_s, cfg.STAGING_BACKFILL_MAX_AGE_S)
 
 
 def check_etcd_restore_drill():

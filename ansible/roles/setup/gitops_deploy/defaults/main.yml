@@ -239,3 +239,16 @@ gitops_deploy_staging_backfill_ledger: /var/lib/gitops-deploy/staging-backfill.j
 gitops_deploy_staging_backfill_count: 2
 # Matches gitops_deploy_staging_gate_timeout_s: the same deploy, so the same budget.
 gitops_deploy_staging_backfill_timeout_s: 600
+
+# Run-recency heartbeat, written by the unit's ExecStopPost= on EVERY invocation — the not-met
+# exit, the failed exit and the timeout alike. `OnFailure=` covers "ran and failed"; nothing
+# covered "is not running at all", which is the state a stopped timer produces silently.
+# NOT the ledger's mtime: a run with no gateable commit appends nothing, and the gateable rate
+# is about 2.5 commits per week (docs/staging-phase-c.md), so ledger mtime measures commit
+# arrival rather than ratchet liveness.
+gitops_deploy_staging_backfill_heartbeat: /var/lib/gitops-deploy/staging-backfill-last-run
+# Present exactly when the ratchet is armed, so the reader can tell a deliberately stopped timer
+# from a broken one. Both are heartbeat-free; only one is a fault. Written next to the timer's
+# own enable/stop task, in both directions — a marker only ever created would make the monitor
+# permanently red on the disarm it exists to explain.
+gitops_deploy_staging_backfill_armed_marker: /var/lib/gitops-deploy/staging-backfill-armed

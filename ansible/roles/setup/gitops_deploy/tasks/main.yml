@@ -146,6 +146,25 @@
     daemon_reload: true
   become: true
 
+- name: Match the staging-backfill armed marker to whether the gate is armed
+  # The half of the disarm that monitoring can see. Stopping the timer makes the ratchet
+  # heartbeat-free by construction, which is indistinguishable from a ratchet that broke — so
+  # this marker says which, and check_staging_backfill_alive reads it before it reads the age.
+  # Both directions in one task for the same reason as the timer task above: a marker that is
+  # only ever created leaves the monitor permanently red on the disarm.
+  ansible.builtin.file:
+    path: "{{ gitops_deploy_staging_backfill_armed_marker }}"
+    state: "{{ 'touch' if gitops_deploy_staging_gate else 'absent' }}"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0644"
+    # `touch` is idempotent for content but not for mtime, and nothing reads this file's mtime —
+    # the heartbeat carries the time. access_time/modification_time preserve keeps the task from
+    # reporting changed on every run.
+    access_time: preserve
+    modification_time: preserve
+  become: true
+
 # Render provenance for manifest-prune-check.sh's stale-script arm. Until 2026-08-23b that arm
 # hardcoded the k3s role's template directory, so these units were watched by nothing at all —
 # and the exit-75 fix sat merged-but-undeployed on this host for exactly that reason (review H1).

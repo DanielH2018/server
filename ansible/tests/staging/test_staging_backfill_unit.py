@@ -8,6 +8,8 @@ means anything. A missing flag makes the run a no-op that still exits 0.
 """
 
 import re
+
+import yaml
 from _helpers import REPO
 
 _REPO = REPO
@@ -125,6 +127,60 @@ def test_a_typo_in_the_onfailure_target_is_flagged():
     assert onfailure_target(f"[Unit]\nOnFailure={typo}\n") == typo
     assert typo not in installed_units(_TASKS.read_text())
     assert onfailure_target("[Unit]\nDescription=no alerting here\n") is None
+
+
+def heartbeat_writer(unit_text: str) -> str | None:
+    """The path the unit's `ExecStopPost=` writes, or None. Pure, for the rejecting half."""
+    match = re.search(r"^ExecStopPost=.*?> (.+?)'$", unit_text, re.M)
+    return match.group(1) if match else None
+
+
+def test_the_unit_writes_a_heartbeat_on_every_invocation():
+    """`OnFailure=` covers "ran and failed"; nothing covered "is not running at all".
+
+    ExecStopPost= runs whatever the outcome — the tolerated exit 1, a COULD_NOT_RUN 2, a
+    TimeoutStartSec kill — which is the property this needs. ExecStartPost would fire only on
+    the paths that reached the end successfully, leaving the heartbeat stale on exactly the runs
+    that already page.
+    """
+    unit = _UNIT.read_text()
+    assert heartbeat_writer(unit), (
+        "the ratchet writes no heartbeat; a stopped timer is silent"
+    )
+    assert "ExecStartPost=" not in unit, (
+        "ExecStartPost only fires when ExecStart succeeded, so it cannot answer 'did it run'"
+    )
+
+
+def test_the_heartbeat_path_is_the_one_the_reader_reads():
+    """systemd validates no path here and the reader hardcodes a basename, so a rename on either
+    side is silent: the check would report a ratchet that has never run, forever."""
+    defaults = yaml.safe_load((_UNIT.parents[1] / "defaults" / "main.yml").read_text())
+    written = heartbeat_writer(_UNIT.read_text())
+    assert written == "{{ gitops_deploy_staging_backfill_heartbeat }}", (
+        "the unit hardcodes a path instead of rendering the variable the reader is pinned to"
+    )
+    reader = (
+        _REPO / "ansible/roles/k8s/monitor-bridge/files/checks_service.py"
+    ).read_text()
+    heartbeat = defaults["gitops_deploy_staging_backfill_heartbeat"]
+    assert '"%s"' % heartbeat.rsplit("/", 1)[1] in reader
+
+
+def test_a_missing_heartbeat_writer_is_flagged():
+    """The rejecting half — the real tree can only ever be observed passing."""
+    assert heartbeat_writer("[Service]\nExecStart=/bin/true\n") is None
+
+
+def test_the_armed_marker_moves_in_both_directions():
+    """A disarmed ratchet is heartbeat-free by construction, so the reader needs to tell that
+    from a broken one. A marker only ever created leaves the monitor permanently red on the
+    disarm it exists to explain — the shape the timer task above already avoids."""
+    tasks = _TASKS.read_text()
+    assert "gitops_deploy_staging_backfill_armed_marker" in tasks
+    assert (
+        "state: \"{{ 'touch' if gitops_deploy_staging_gate else 'absent' }}\"" in tasks
+    ), "the armed marker does not track the gate in both directions"
 
 
 def test_the_alert_unit_names_the_backfill_rather_than_the_deployer():

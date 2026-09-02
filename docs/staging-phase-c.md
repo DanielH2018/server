@@ -296,6 +296,17 @@ that is the whole reason the ratchet is a different shape from the backfill. It 
 `gitops_deploy_staging_gate`: the role stops and disables the timer when the gate is off, because
 a ratchet running then would deploy to staging hourly for a measurement nobody is collecting.
 
+**Two things watch the ratchet, and they answer different questions.**
+`OnFailure=staging-backfill-alert.service` pages when a run fails. The Kuma monitor "Staging
+Backfill Ratchet" pages when runs stop happening at all, which the first cannot see: a stopped
+timer produces no failures. The unit's `ExecStopPost=` writes an epoch to
+`/var/lib/gitops-deploy/staging-backfill-last-run` on every invocation, including the tolerated
+not-met exit, and monitor-bridge's `check_staging_backfill_alive` reads it against a 150-minute
+window derived from the timer's own cadence. Ansible writes an armed marker beside it in both
+directions, so disarming the gate reports up with the reason rather than red forever. The
+ledger's `mtime` is deliberately NOT the liveness signal: a run with no gateable commit appends
+nothing, so at the arrival rate below it would read red on an ordinary quiet week.
+
 **Measured 2026-08-30, the arrival rate is about 2.5 gateable commits a week, and it is lumpy.**
 Over 592 master commits in the preceding fortnight, five were gateable — and none at all in the
 last thirty merged PRs. So the remaining fifteen samples are roughly six weeks away rather than
