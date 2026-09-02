@@ -71,7 +71,8 @@ def test_path_carries_the_user_local_bin(unit: str) -> None:
     envs = directive(unit, "Environment")
     paths = [e for e in envs if e.startswith("PATH=")]
     assert paths, "the unit sets no PATH"
-    assert ".local/bin" in paths[0]
+    # systemd's last assignment of a variable wins, so the effective PATH is paths[-1].
+    assert ".local/bin" in paths[-1]
 
 
 def test_onfailure_pages(unit: str) -> None:

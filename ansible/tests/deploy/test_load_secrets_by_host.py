@@ -67,17 +67,25 @@ def test_a_mixed_play_is_refused_before_anything_is_loaded():
         f"`run_once: true`, so a play spanning a staging host and a production one loads ONE "
         f"of their files for both. Read this file's docstring before removing the guard."
     )
+    # Selecting by content narrowed the subject; it did not make it unique. A second assert
+    # mentioning `secrets_file` would land here silently and this test would go on checking
+    # whichever came first. Say out loud that there is one.
+    assert len(mine) == 1, (
+        f"{PREAMBLE} has {len(mine)} asserts mentioning {VAR_NAME}, at task indices {mine}. "
+        f"This test checks exactly one of them, so a second one is unchecked. Decide which is "
+        f"the mixed-play guard and split this test rather than letting it pick."
+    )
     load = next(i for i, t in enumerate(tasks) if "community.sops.load_vars" in t)
-    assert min(mine) < load, (
+    assert mine[0] < load, (
         f"the assert in {PREAMBLE} runs AFTER the load, so the wrong secrets are already in "
         f"scope by the time it fires."
     )
-    guard = tasks[min(mine)]["ansible.builtin.assert"]["that"]
+    guard = tasks[mine[0]]["ansible.builtin.assert"]["that"]
     assert "ansible_play_hosts_all" in guard and VAR_NAME in guard, (
         f"the assert in {PREAMBLE} is {guard!r}. It has to compare {VAR_NAME} across "
         f"`ansible_play_hosts_all` — checking anything else does not catch a mixed play."
     )
-    assert "run_once" in tasks[min(mine)], (
+    assert "run_once" in tasks[mine[0]], (
         f"the assert in {PREAMBLE} is not `run_once`, so it re-runs per host. It reads the "
         f"whole play either way; running it once matches the load it guards."
     )
