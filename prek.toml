@@ -226,6 +226,18 @@ entry = "uv run actionlint"
 language = "system"
 files = "^\\.github/workflows/[^/]+\\.ya?ml$"
 
+# The security half of workflow linting, which actionlint does not do: a checkout that leaves
+# the token on disk, a `${{ }}` expression injected into a `run:` shell, an unpinned action, a
+# `pull_request_target` reading the PR head. Enabling it found 4 medium findings (every
+# checkout persisting credentials, 2026-09-02), all fixed in the same commit. Offline audits
+# only: the online ones ask GitHub's API and would need a token on every commit.
+[[repos.hooks]]
+id = "zizmor"
+name = "Audit GitHub Actions workflows (zizmor)"
+entry = "uv run zizmor --no-progress --no-online-audits"
+language = "system"
+files = "^\\.github/workflows/[^/]+\\.ya?ml$"
+
 # Gate that the secret-rotation registry (ansible/secret_rotation.yml) stays in sync with the
 # encrypted secrets.yml — fails the commit if a secret was added/removed without running
 # `secret_rotation.py sync`. Read-only: reads plaintext key NAMES only, never decrypts a value
