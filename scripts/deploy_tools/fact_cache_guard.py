@@ -55,6 +55,12 @@ import os
 import sys
 from pathlib import Path
 
+# Reach the sibling package directories: a directly-invoked script gets only its own
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.repo_paths import REPO  # noqa: E402
+
 # The marker that makes a path worktree-local. Claude Code puts every session worktree under
 # <repo>/.claude/worktrees/<name>, so the segment after it is the worktree's identity.
 WORKTREE_SEGMENT = (".claude", "worktrees")
@@ -190,7 +196,7 @@ def main() -> int:
     ap.add_argument(
         "--repo-root",
         type=Path,
-        default=Path(__file__).resolve().parents[2],
+        default=REPO,
         help="the checkout this deploy renders from (default: this script's repo)",
     )
     args = ap.parse_args()

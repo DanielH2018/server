@@ -31,17 +31,10 @@ from pathlib import Path
 
 # The build/roll couplings live in deploy_logic so this and `deploy_tags.py changed` widen
 # identically -- two derivations that disagree is the defect this import exists to prevent.
-sys.path.insert(
-    0,
-    str(
-        Path(__file__).resolve().parents[2]
-        / "ansible"
-        / "roles"
-        / "setup"
-        / "gitops_deploy"
-        / "files"
-    ),
-)
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.repo_paths import GITOPS_DEPLOY_FILES  # noqa: E402
+
+sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 from deploy_logic import (  # noqa: E402 — needs the path insert above
     _BROAD_MANUAL_PREFIXES,

@@ -37,8 +37,10 @@ from pathlib import Path
 import yaml
 from jinja2 import Environment, StrictUndefined
 
-_REPO = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_REPO / "scripts" / "validate"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.repo_paths import SCRIPTS  # noqa: E402
+
+sys.path.insert(0, str(SCRIPTS / "validate"))
 
 from validate_k8s_manifests import (  # noqa: E402 — needs the path insert above
     ALL_VARS,

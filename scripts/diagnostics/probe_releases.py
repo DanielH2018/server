@@ -32,7 +32,13 @@ import probe_core as core  # noqa: F401  (kept for the monkeypatch convention ab
 # two agree rather than trusting the comment.
 RELEASE_DIR = Path("/var/lib/homelab/k8s-releases.d")
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+# Reach the sibling package directories: a directly-invoked script gets only its own
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+import sys as _sys
+
+_sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.repo_paths import REPO as REPO_ROOT  # noqa: E402
 
 
 def load_records(release_dir=RELEASE_DIR, previous=False):

@@ -26,7 +26,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
+# Reach the sibling package directories: a directly-invoked script gets only its own
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.repo_paths import REPO  # noqa: E402
+
 HOST_LIB_PATH = Path("/opt/gitops-deploy/host_lib.py")
 CONFIG_ENV_PATH = Path("/etc/gitops-deploy/config.env")
 PROBE_TIMEOUT_S = 30

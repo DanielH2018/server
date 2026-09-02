@@ -19,8 +19,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-_REPO = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_REPO / "ansible/filter_plugins"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.repo_paths import FILTER_PLUGINS, REPO as _REPO  # noqa: E402
+
+sys.path.insert(0, str(FILTER_PLUGINS))
 
 import yaml  # noqa: E402
 from k8s_autodeploy import SHARED_ROLES, k8s_autodeploy_denylist  # noqa: E402

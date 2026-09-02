@@ -8,9 +8,16 @@ importing one another. ``gen_infra_map`` re-exports the public names, so
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+# Reach the sibling package directories: a directly-invoked script gets only its own
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.repo_paths import REPO as REPO_ROOT  # noqa: E402,F401 -- re-exported
+
+
 DEFAULT_OUTPUT = Path.home() / ".claude" / "artifacts" / "homelab-infra-map.html"
 
 HOSTS = ("daniel-box", "daniel-server", "daniel-pi")

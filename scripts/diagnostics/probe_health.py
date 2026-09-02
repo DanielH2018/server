@@ -30,8 +30,15 @@ from pathlib import Path
 import probe_core as core
 from probe_core import PI_HOST
 
-REPO = Path(__file__).resolve().parents[2]
-PI_HOST_VARS = REPO / "ansible" / "inventory" / "host_vars" / "daniel-pi.yml"
+# Reach the sibling package directories: a directly-invoked script gets only its own
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+import sys as _sys
+
+_sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.repo_paths import HOST_VARS, K8S_ROLES, REPO  # noqa: E402
+
+PI_HOST_VARS = HOST_VARS / "daniel-pi.yml"
 
 # The kinds a rollout gate can actually check, and kubectl's spelling for each. Deployment
 # first because the fleet is overwhelmingly Deployments. StatefulSet is here with no live
@@ -416,7 +423,7 @@ def role_workload_targets(role, default_namespace):
     # Checked before the render context is built, so a block tag (`config`, `deploy`, `cron`)
     # costs a directory stat rather than 0.44s of ansible + kubernetes_validate imports, and a
     # broken renderer environment cannot fail a tag that was never a role.
-    role_dir = REPO / "ansible" / "roles" / "k8s" / role
+    role_dir = K8S_ROLES / role
     if not role_dir.is_dir():
         return None
 

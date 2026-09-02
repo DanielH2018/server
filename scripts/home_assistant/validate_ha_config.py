@@ -42,8 +42,13 @@ import yaml
 from jinja2 import Environment, nodes
 from jinja2.exceptions import TemplateSyntaxError
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-ROLE_DIR = REPO_ROOT / "ansible/roles/k8s/home-assistant"
+# Reach the sibling package directories: a directly-invoked script gets only its own
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.repo_paths import K8S_ROLES  # noqa: E402
+
+ROLE_DIR = K8S_ROLES / "home-assistant"
 
 # templates/*.j2 render verbatim (no Ansible vars) -> copied to <name>.yaml.
 _TEMPLATE_FILES = ["configuration.yaml.j2", "customize.yaml.j2", "ui-lovelace.yaml.j2"]
