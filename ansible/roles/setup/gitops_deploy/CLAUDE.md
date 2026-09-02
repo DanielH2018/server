@@ -378,8 +378,8 @@ place and a `deploy_logic.<name>` citation in any doc stays true.
 
 One test file per module, named for it: `files/test_deploy_<module>.py`, with a second
 file where one module answers two separable questions — `test_deploy_changes_services.py`
-(path→service mapping) beside `test_deploy_changes_planes.py` (broad / setup / test-only
-planes), `test_deploy_git.py` (next-action, divergence, the dirty and behind markers) beside
+(path→service mapping) beside `test_deploy_changes_planes.py` (broad / setup planes) and
+`test_deploy_changes_test_paths.py` (the test-suite exemption), `test_deploy_git.py` (next-action, divergence, the dirty and behind markers) beside
 `test_deploy_git_ci.py` (the CI gate), and `test_deploy_k8s_eligibility.py` (the auto-deploy
 split and its caps) beside `test_deploy_k8s_declarations.py` (the denylist and snapshot-claim
 readers). `test_deploy_health.py` also holds `container_names()` — the health gate inspects
@@ -392,6 +392,7 @@ AST source guards because the module cannot be imported in CI (see *Traps* below
 `run()`'s process-group kill), `_main_guards` (merge target, hold-before-reset, the diverged
 marker), `_alert_delivery` (discord routing, queue-first delivery, the queue cap),
 `_fetch_skip`, `_timeout_budgets` (the cross-file timeout sums) and `_staging_timeouts`.
+The parsed tree and the AST helpers they share are fixtures in `files/conftest.py`.
 `test_systemd_unit_secrets.py` is the tree-wide ExecStart guard. Run via the repo pytest hook
 (`uv run pytest ansible/roles/setup/gitops_deploy/files`).
 

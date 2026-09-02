@@ -10,9 +10,6 @@ hides behind a green GitOps-Alive. gitops_deploy.py cannot be imported in CI (mo
 # ansible/roles/setup/gitops_deploy/files/test_gitops_deploy_fetch_skip.py
 
 import ast
-import pathlib
-
-_SRC = pathlib.Path(__file__).with_name("gitops_deploy.py")
 
 
 # A retryable fetch failure raises RetryableFetchError, which __main__ turns into a CLEAN skip:
@@ -20,13 +17,9 @@ _SRC = pathlib.Path(__file__).with_name("gitops_deploy.py")
 # refresh (so a persistent fetch break still surfaces via GitOps-Alive going stale).
 
 
-def _tree() -> ast.Module:
-    return ast.parse(_SRC.read_text())
-
-
-def _main_guard_try() -> ast.Try:
+def _main_guard_try(gitops_tree) -> ast.Try:
     """The `try:` under `if __name__ == '__main__':`."""
-    for node in ast.walk(_tree()):
+    for node in ast.walk(gitops_tree):
         if (
             isinstance(node, ast.If)
             and isinstance(node.test, ast.Compare)
@@ -46,25 +39,14 @@ def _handler(try_node: ast.Try, exc_name: str) -> ast.ExceptHandler:
     raise AssertionError(f"no `except {exc_name}` handler in __main__")
 
 
-def _calls(node: ast.AST, fn_name: str) -> bool:
-    return any(
-        isinstance(c, ast.Call)
-        and (
-            (isinstance(c.func, ast.Name) and c.func.id == fn_name)
-            or (isinstance(c.func, ast.Attribute) and c.func.attr == fn_name)
-        )
-        for c in ast.walk(node)
-    )
-
-
-def test_retryable_fetch_error_defined():
+def test_retryable_fetch_error_defined(gitops_tree):
     assert any(
         isinstance(n, ast.ClassDef) and n.name == "RetryableFetchError"
-        for n in ast.walk(_tree())
+        for n in ast.walk(gitops_tree)
     ), "RetryableFetchError must be defined"
 
 
-def test_fetch_failure_raises_retryable_error():
+def test_fetch_failure_raises_retryable_error(gitops_tree):
     # The fetch-failure path must raise RetryableFetchError — not fall through run()'s RuntimeError,
     # which would reach the generic crash-page (the double-page this fix removes).
     assert any(
@@ -72,16 +54,16 @@ def test_fetch_failure_raises_retryable_error():
         and isinstance(n.exc, ast.Call)
         and isinstance(n.exc.func, ast.Name)
         and n.exc.func.id == "RetryableFetchError"
-        for n in ast.walk(_tree())
+        for n in ast.walk(gitops_tree)
     ), "the fetch-failure path must `raise RetryableFetchError(...)`"
 
 
-def test_retryable_handler_does_not_page_or_refresh_liveness():
-    handler = _handler(_main_guard_try(), "RetryableFetchError")
-    assert not _calls(handler, "discord"), (
+def test_retryable_handler_does_not_page_or_refresh_liveness(ast_calls, gitops_tree):
+    handler = _handler(_main_guard_try(gitops_tree), "RetryableFetchError")
+    assert not ast_calls(handler, "discord"), (
         "the retryable-fetch handler must not post a Discord crash alert (no double-page)"
     )
-    assert not _calls(handler, "_write_marker"), (
+    assert not ast_calls(handler, "_write_marker"), (
         "the retryable-fetch handler must not write last_run — else a persistent fetch break "
         "hides behind a green GitOps-Alive"
     )
@@ -96,20 +78,22 @@ def test_retryable_handler_does_not_page_or_refresh_liveness():
     ), "the retryable-fetch handler must sys.exit(0)"
 
 
-def test_retryable_handler_precedes_generic_crash_handler():
+def test_retryable_handler_precedes_generic_crash_handler(gitops_tree):
     # Order matters: except-clauses match top-down, so RetryableFetchError must precede the bare
     # `except Exception` or it's dead code (Exception would catch it first and page).
     names = [
-        h.type.id for h in _main_guard_try().handlers if isinstance(h.type, ast.Name)
+        h.type.id
+        for h in _main_guard_try(gitops_tree).handlers
+        if isinstance(h.type, ast.Name)
     ]
     assert names.index("RetryableFetchError") < names.index("Exception"), (
         "`except RetryableFetchError` must precede `except Exception`"
     )
 
 
-def test_generic_crash_handler_still_pages():
+def test_generic_crash_handler_still_pages(ast_calls, gitops_tree):
     # Regression guard: the fix must not have silenced GENUINE crashes — the generic handler must
     # still Discord-page on an unexpected exception.
-    assert _calls(_handler(_main_guard_try(), "Exception"), "discord"), (
+    assert ast_calls(_handler(_main_guard_try(gitops_tree), "Exception"), "discord"), (
         "the generic crash handler must still post a Discord alert"
     )

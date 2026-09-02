@@ -13,34 +13,6 @@ The sibling files cover fetch failures, alert delivery, the staging gate and the
 # ansible/roles/setup/gitops_deploy/files/test_gitops_deploy_main_guards.py
 
 import ast
-import pathlib
-
-_SRC = pathlib.Path(__file__).with_name("gitops_deploy.py")
-
-
-def _tree() -> ast.Module:
-    return ast.parse(_SRC.read_text())
-
-
-def _fn(name: str) -> ast.FunctionDef:
-    fn = next(
-        (
-            n
-            for n in ast.walk(_tree())
-            if isinstance(n, ast.FunctionDef) and n.name == name
-        ),
-        None,
-    )
-    assert fn is not None, f"{name}() not found in gitops_deploy.py"
-    return fn
-
-
-def _str_constants(fn: ast.FunctionDef) -> set[str]:
-    return {
-        c.value
-        for c in ast.walk(fn)
-        if isinstance(c, ast.Constant) and isinstance(c.value, str)
-    }
 
 
 def _git_merge_calls(fn: ast.FunctionDef) -> list[ast.Call]:
@@ -61,7 +33,7 @@ def _git_merge_calls(fn: ast.FunctionDef) -> list[ast.Call]:
     return out
 
 
-def test_every_ff_merge_targets_the_pinned_sha_not_the_ref():
+def test_every_ff_merge_targets_the_pinned_sha_not_the_ref(gitops_fn):
     # 2026-08-22 review H1. main() pins the remote head ONCE (`origin = git rev-parse
     # origin/<branch>`) and gates on that pin: the CI verdict, the changed-path diff, the denylist
     # read and the broad marker all evaluate against that exact commit. Every merge must land the
@@ -78,7 +50,7 @@ def test_every_ff_merge_targets_the_pinned_sha_not_the_ref():
     #
     # An AST guard rather than a behavioural one because gitops_deploy.py is not importable in CI
     # (module-level `C = cfg()` reads /etc), the same reason the rest of this file is source-level.
-    merges = _git_merge_calls(_fn("main"))
+    merges = _git_merge_calls(gitops_fn("main"))
     assert merges, "no `git merge --ff-only` call found in main()"
     for call in merges:
         target = call.args[0].elts[-1]
@@ -103,12 +75,12 @@ def _is_git_reset_hard(node: ast.AST) -> bool:
     return {"reset", "--hard"} <= consts
 
 
-def test_write_hold_precedes_every_rollback_reset():
+def test_write_hold_precedes_every_rollback_reset(gitops_fn):
     # The 2026-07-14 run-4 M1 fix: write_hold(origin) must run BEFORE the `git reset --hard` + rollback
     # deploy() in BOTH failure paths, so a hung/SIGTERMed rollback still parks the bad commit on
     # skip_hold instead of re-merging + redeploying it every tick. A refactor moving write_hold after
     # the reset would otherwise reintroduce the strand-the-bad-commit loop and pass every other test.
-    main = _fn("main")
+    main = gitops_fn("main")
     reset_lines = [n.lineno for n in ast.walk(main) if _is_git_reset_hard(n)]
     # write_hold(<non-None>) linenos — write_hold(origin), NOT the write_hold(None) success-clear.
     hold_lines = [
@@ -130,22 +102,22 @@ def test_write_hold_precedes_every_rollback_reset():
         )
 
 
-def test_deploy_uses_frozen():
+def test_deploy_uses_frozen(gitops_fn, str_constants):
     # A dropped `--frozen` would let a deploy mutate uv.lock on the host, dirtying the tree and wedging
     # the dirty-skip. deploy() isn't unit-tested either, so guard the invariant at the source level.
-    assert "--frozen" in _str_constants(_fn("deploy")), (
+    assert "--frozen" in str_constants(gitops_fn("deploy")), (
         "deploy() must run ansible via `uv run --frozen`"
     )
 
 
-def test_rollback_return_is_gated_on_delivered_post():
+def test_rollback_return_is_gated_on_delivered_post(gitops_fn):
     # 2026-07-14 run-5 L2: each rollback path must `return 0 if posted else 1` — exit 0 when the
     # detailed Discord post was delivered so systemd's OnFailure generic curl doesn't ALSO fire
     # (double-page), exit 1 only if the post failed so OnFailure is the guaranteed backstop.
     # Collapsing either terminal return to a bare `return 1` reintroduces the double-page this fix
     # removes; a bare `return 0` drops the OnFailure backstop. main() is un-importable, so pin the
     # invariant at the source like the sibling write_hold-ordering guard above.
-    main = _fn("main")
+    main = gitops_fn("main")
     reset_count = sum(1 for n in ast.walk(main) if _is_git_reset_hard(n))
     posted_returns = [
         n
@@ -176,8 +148,8 @@ def test_rollback_return_is_gated_on_delivered_post():
 # green) and pass every other test. Pin it at the source like the write_hold-ordering guard above.
 
 
-def test_diverged_marker_write_is_gated_and_precedes_action_branching():
-    main = _fn("main")
+def test_diverged_marker_write_is_gated_and_precedes_action_branching(gitops_fn):
+    main = gitops_fn("main")
     marker_writes = [
         n
         for n in ast.walk(main)
@@ -227,14 +199,14 @@ def test_diverged_marker_write_is_gated_and_precedes_action_branching():
 # instead of silently never alerting on it.
 
 
-def test_alert_deferred_handles_k8s_channel():
-    fn = _fn("alert_deferred")
+def test_alert_deferred_handles_k8s_channel(gitops_fn):
+    fn = gitops_fn("alert_deferred")
     assert any(
         isinstance(n, ast.Attribute) and n.attr == "k8s" for n in ast.walk(fn)
     ), "alert_deferred() must alert on cs.k8s (the k8s-role defer-and-alert channel)"
 
 
-def test_the_k8s_autodeploy_branch_alerts_on_a_bundled_secrets_change():
+def test_the_k8s_autodeploy_branch_alerts_on_a_bundled_secrets_change(gitops_fn):
     """A secrets push riding along with an image bump must not be ff-merged silently.
 
     The k8s auto-deploy branch ff-merges, deploys the promoted service and returns. Until
@@ -247,7 +219,7 @@ def test_the_k8s_autodeploy_branch_alerts_on_a_bundled_secrets_change():
     CI (module-level `C = cfg()` reads /etc) — the same constraint the rest of this file works
     under.
     """
-    for node in ast.walk(_fn("main")):
+    for node in ast.walk(gitops_fn("main")):
         if not isinstance(node, ast.If):
             continue
         if ast.unparse(node.test) != "cs.k8s_deploy":

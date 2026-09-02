@@ -168,7 +168,7 @@ def test_every_module_the_entrypoint_reaches_is_shipped():
 def test_current_shape_is_clean(tmp_path):
     (tmp_path / "gitops_deploy.py").write_text("")
     (tmp_path / "deploy_logic.py").write_text("")
-    (tmp_path / "test_deploy_logic.py").write_text("")
+    (tmp_path / "test_deploy_health.py").write_text("")
     runtime = _runtime_modules_in(tmp_path)
     assert (
         _missing_from_copy_loop(["gitops_deploy.py", "deploy_logic.py"], runtime) == []

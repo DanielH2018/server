@@ -14,68 +14,29 @@ AST guards rather than behavioural ones: gitops_deploy.py cannot be imported in 
 # ansible/roles/setup/gitops_deploy/files/test_gitops_deploy_alert_delivery.py
 
 import ast
-import pathlib
-
-_SRC = pathlib.Path(__file__).with_name("gitops_deploy.py")
 
 
-def _tree() -> ast.Module:
-    return ast.parse(_SRC.read_text())
-
-
-def _fn(name: str) -> ast.FunctionDef:
-    fn = next(
-        (
-            n
-            for n in ast.walk(_tree())
-            if isinstance(n, ast.FunctionDef) and n.name == name
-        ),
-        None,
-    )
-    assert fn is not None, f"{name}() not found in gitops_deploy.py"
-    return fn
-
-
-def _str_constants(fn: ast.FunctionDef) -> set[str]:
-    return {
-        c.value
-        for c in ast.walk(fn)
-        if isinstance(c, ast.Constant) and isinstance(c.value, str)
-    }
-
-
-def _calls(node: ast.AST, fn_name: str) -> bool:
-    return any(
-        isinstance(c, ast.Call)
-        and (
-            (isinstance(c.func, ast.Name) and c.func.id == fn_name)
-            or (isinstance(c.func, ast.Attribute) and c.func.attr == fn_name)
-        )
-        for c in ast.walk(node)
-    )
-
-
-def test_discord_delegates_to_shared_discord_post():
+def test_discord_delegates_to_shared_discord_post(ast_calls, gitops_fn, str_constants):
     # The Cloudflare-1010 User-Agent + 2xx-only-success contract now lives in host_lib.discord_post,
     # which IS importable and is behaviourally tested (common/files/test_host_lib.py) — strictly
     # stronger than the old AST proxy that pinned the "User-Agent"/200/300 constants inside this
     # un-importable module. Guard here only that gitops's discord() still ROUTES through it (a
     # regression inlining a UA-less POST would drop the call) and passes its own User-Agent.
-    fn = _fn("discord")
-    assert _calls(fn, "discord_post"), (
+    fn = gitops_fn("discord")
+    assert ast_calls(fn, "discord_post"), (
         "discord() must delegate to host_lib.discord_post (the UA + 2xx contract lives there)"
     )
-    assert "gitops-deploy" in _str_constants(fn), (
+    assert "gitops-deploy" in str_constants(fn), (
         "discord() must pass its own User-Agent ('gitops-deploy') to discord_post"
     )
 
 
-def test_drain_pending_runs_before_short_circuits():
+def test_drain_pending_runs_before_short_circuits(gitops_fn):
     # The ff-merged secrets/tasks/meta/combined paths never re-reach their alert code on the next
     # (noop) tick, so a transient webhook failure is only recoverable by draining the queue at the TOP
     # of every tick — before the noop/hold/dirty returns. Guard that drain_pending() is called in
     # main() ahead of its first `return`.
-    main = _fn("main")
+    main = gitops_fn("main")
     drain_line = next(
         (
             n.lineno
@@ -93,14 +54,14 @@ def test_drain_pending_runs_before_short_circuits():
     )
 
 
-def test_deliver_queues_undelivered_for_retry():
+def test_deliver_queues_undelivered_for_retry(ast_calls, gitops_fn):
     # deliver() must persist an alert that failed to send (else H1's whole point — surviving a
     # transient webhook blip — is lost) and must actually attempt delivery via discord().
-    fn = _fn("deliver")
-    assert _calls(fn, "_write_pending"), (
+    fn = gitops_fn("deliver")
+    assert ast_calls(fn, "_write_pending"), (
         "deliver() must persist an undelivered alert for retry"
     )
-    assert _calls(fn, "discord"), "deliver() must attempt delivery via discord()"
+    assert ast_calls(fn, "discord"), "deliver() must attempt delivery via discord()"
 
 
 # The 2026-08-31 review M-1. alert_once advances its per-SHA marker BEFORE calling deliver(), and
@@ -130,9 +91,9 @@ def sends_before_queueing(fn: ast.FunctionDef) -> bool:
     return send_line < write_line
 
 
-def test_deliver_queues_before_it_sends():
+def test_deliver_queues_before_it_sends(gitops_fn):
     """The accepting half: the live deliver() writes the queue ahead of the POST."""
-    assert not sends_before_queueing(_fn("deliver")), (
+    assert not sends_before_queueing(gitops_fn("deliver")), (
         "deliver() calls discord() before _write_pending() — a death inside the 10s POST then "
         "drops the alert permanently, because alert_once has already advanced its marker"
     )
@@ -160,7 +121,7 @@ def test_a_deliver_that_sends_first_is_flagged():
     )
 
 
-def test_deliver_clears_against_the_queued_baseline():
+def test_deliver_clears_against_the_queued_baseline(gitops_fn):
     """Queue-first has one trap, and it turns the fix into a repost-every-tick bug.
 
     The post-send persist is guarded by an inequality. Compared against the PRE-queue dict, a
@@ -168,7 +129,7 @@ def test_deliver_clears_against_the_queued_baseline():
     file, and drain_pending() reposts that alert on every tick forever. The baseline must be the
     dict that was actually written before the POST.
     """
-    fn = _fn("deliver")
+    fn = gitops_fn("deliver")
     written = {
         n.args[0].id
         for n in ast.walk(fn)
@@ -206,31 +167,31 @@ def test_deliver_clears_against_the_queued_baseline():
 # which is the half those tests structurally cannot see.
 
 
-def test_deliver_caps_the_pending_queue():
+def test_deliver_caps_the_pending_queue(gitops_fn):
     """Without this the queue is unbounded: nothing reads the file back except drain_pending(),
     so a permanently broken webhook grows it every 30 minutes forever."""
     called = {
         n.func.id
-        for n in ast.walk(_fn("deliver"))
+        for n in ast.walk(gitops_fn("deliver"))
         if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
     }
     assert "cap_pending" in called, "deliver() no longer bounds the pending-alert queue"
 
 
-def test_deliver_logs_every_dropped_alert():
+def test_deliver_logs_every_dropped_alert(gitops_fn, gitops_src):
     """An undelivered alert discarded without a trace is the failure the queue exists to prevent.
     The drop must reach the journal, which is what Loki indexes."""
-    body = ast.dump(_fn("deliver"))
+    body = ast.dump(gitops_fn("deliver"))
     assert "log" in body, "deliver() no longer logs"
-    src = ast.get_source_segment(_SRC.read_text(), _fn("deliver")) or ""
+    src = ast.get_source_segment(gitops_src.read_text(), gitops_fn("deliver")) or ""
     assert "dropping oldest undelivered" in src, (
         "deliver() drops queue entries without logging which ones"
     )
 
 
-def test_cap_pending_is_imported_from_the_pure_module():
+def test_cap_pending_is_imported_from_the_pure_module(gitops_src):
     """It must be the tested implementation, not a second copy that can drift from it."""
-    tree = ast.parse(_SRC.read_text())
+    tree = ast.parse(gitops_src.read_text())
     imported = {
         alias.name
         for node in ast.walk(tree)
