@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/gen_reference_freshness.py
-generated_at: 2026-09-02 12:53 UTC
-generated_sha: cf7c52de
+generated_at: 2026-09-02 12:59 UTC
+generated_sha: 34840fd7
 ---
 
 !!! warning "Generated file — do not edit"
@@ -20,7 +20,6 @@ generated_sha: cf7c52de
 | [networkpolicy-slice-answers.md](../networkpolicy-slice-answers.md) | 2026-09-01 | 18 | 7 | `ansible/roles/setup/k3s/tasks/agent.yml` (2026-09-02) |
 | [kopia-disaster-recovery.md](../kopia-disaster-recovery.md) | 2026-08-30 | 12 | 6 | `docs/longhorn-disaster-recovery.md` (2026-09-02) |
 | [gitops-argo-flux-evaluation.md](../gitops-argo-flux-evaluation.md) | 2026-09-01 | 13 | 5 | `scripts/validate/validate_k8s_manifests.py` (2026-09-02) |
-| [gitops-pipeline.md](../gitops-pipeline.md) | 2026-09-01 | 10 | 5 | `ansible/roles/setup/gitops_deploy/CLAUDE.md` (2026-09-02) |
 | [adr/0001-mkdocs-site-with-generated-reference.md](../adr/0001-mkdocs-site-with-generated-reference.md) | 2026-08-25 | 4 | 4 | `scripts/docs/service_catalog.py` (2026-09-02) |
 | [k3s-etcd-restore.md](../k3s-etcd-restore.md) | 2026-08-31 | 6 | 4 | `ansible/k3s-bringup.yml` (2026-09-02) |
 | [b2-api-drain-scoping.md](../b2-api-drain-scoping.md) | 2026-08-22 | 4 | 3 | `scripts/secrets_mgmt/secret_rotation.py` (2026-09-02) |
@@ -37,10 +36,9 @@ generated_sha: cf7c52de
 | [security-tools.md](../security-tools.md) | 2026-08-24 | 3 | 1 | `ansible/initial_setup.yml` (2026-08-29) |
 | [wireguard-private-homelab-access.md](../wireguard-private-homelab-access.md) | 2026-08-24 | 2 | 1 | `ansible/inventory/host_vars/daniel-box.yml` (2026-09-02) |
 | [adr/0012-zero-downtime-deploys-gate-on-rollout-and-restarts.md](../adr/0012-zero-downtime-deploys-gate-on-rollout-and-restarts.md) | 2026-08-25 | 1 | 1 | `scripts/diagnostics/probe.py` (2026-09-02) |
+| [adr/0015-d2-for-hand-authored-diagrams.md](../adr/0015-d2-for-hand-authored-diagrams.md) | 2026-09-01 | 2 | 1 | `scripts/docs/build_docs.py` (2026-09-02) |
 | [deploying.md](../deploying.md) | 2026-09-01 | 2 | 1 | `scripts/diagnostics/probe.py` (2026-09-02) |
 | [adr/0004-authelia-is-the-single-sign-on-layer.md](../adr/0004-authelia-is-the-single-sign-on-layer.md) | 2026-08-24 | 0 | 0 | — |
-| [index.md](../index.md) | 2026-08-25 | 0 | 0 | — |
-| [adr/0015-d2-for-hand-authored-diagrams.md](../adr/0015-d2-for-hand-authored-diagrams.md) | 2026-09-01 | 2 | 0 | — |
 | [adr/0006-longhorn-for-cluster-storage.md](../adr/0006-longhorn-for-cluster-storage.md) | 2026-09-02 | 1 | 0 | — |
 | [adr/0008-16-mib-longhorn-blocks.md](../adr/0008-16-mib-longhorn-blocks.md) | 2026-09-02 | 1 | 0 | — |
 | [adr/0011-one-lock-serialises-every-deploy-path.md](../adr/0011-one-lock-serialises-every-deploy-path.md) | 2026-09-02 | 3 | 0 | — |
@@ -49,7 +47,9 @@ generated_sha: cf7c52de
 | [anilist-integration.md](../anilist-integration.md) | 2026-09-02 | 3 | 0 | — |
 | [claude-shell-permissions.md](../claude-shell-permissions.md) | 2026-09-02 | 7 | 0 | — |
 | [claude-tooling.md](../claude-tooling.md) | 2026-09-02 | 12 | 0 | — |
+| [gitops-pipeline.md](../gitops-pipeline.md) | 2026-09-02 | 6 | 0 | — |
 | [healthchecks-io-deadman.md](../healthchecks-io-deadman.md) | 2026-09-02 | 14 | 0 | — |
+| [index.md](../index.md) | 2026-09-02 | 0 | 0 | — |
 | [longhorn-disaster-recovery.md](../longhorn-disaster-recovery.md) | 2026-09-02 | 13 | 0 | — |
 | [longhorn-upgrade.md](../longhorn-upgrade.md) | 2026-09-02 | 7 | 0 | — |
 | [networkpolicy-default-deny.md](../networkpolicy-default-deny.md) | 2026-09-02 | 8 | 0 | — |
