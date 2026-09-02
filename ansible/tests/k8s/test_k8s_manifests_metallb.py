@@ -53,9 +53,11 @@ def test_general_pool_does_not_contain_the_ingress_vip():
 
 
 def test_the_general_pool_narrows_before_the_ingress_pool_is_created():
-    """kubectl applies documents in file order and MetalLB's validating webhook rejects
-    overlapping pools, so the wide pool has to narrow first. Applying ingress-pool ahead of it
-    failed on daniel-box (2026-08-02) with:
+    """The wide pool has to narrow before the ingress pool exists, or the apply fails.
+
+    kubectl applies documents in file order and MetalLB's validating webhook rejects
+    overlapping pools. Applying ingress-pool ahead of it failed on daniel-box (2026-08-02)
+    with:
 
         CIDR "10.0.0.240/32" in pool "ingress-pool" overlaps with already
         defined CIDR "10.0.0.240/29"

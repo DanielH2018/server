@@ -201,19 +201,24 @@ select = [
   "D210",
 ]
 
-# Test modules are exempt from docstring layout, and the exemption is the reason this gate could
-# land at all — it is not an oversight to tidy away later. Google makes a test module's docstring
-# optional, and says a test docstring exists only to carry something beyond "Tests for foo":
-# a run instruction, a setup pattern, an external dependency. PR #785 left tests alone on that
-# basis. Behind this ignore sit 250 D205 and 203 D209 whole-tree, against 0 and 3 outside it, so
-# removing these lines turns a 47-fix gate into a 612-error wall — which is how a later session
-# "cleaning up" the ignore ends up reverting the whole thing instead.
-# (Counts from `uv run ruff check --select D... --statistics` under this config, 2026-09-02.
-# A run with `--isolated` reports higher: it bypasses `extend-exclude` above, and ruff lints
-# Python inside Markdown code blocks.)
-"**/tests/**" = ["D205", "D415", "D212", "D209", "D210"]
-"**/test_*.py" = ["D205", "D415", "D212", "D209", "D210"]
-"**/conftest.py" = ["D205", "D415", "D212", "D209", "D210"]
+# Test modules are exempt from TWO of the five layout rules, and the exemption is the reason this
+# gate could land at all — it is not an oversight to tidy away later. Google makes a test module's
+# docstring optional, and says a test docstring exists only to carry something beyond "Tests for
+# foo": a run instruction, a setup pattern, an external dependency. PR #785 left tests alone on
+# that basis, so behind this ignore sit 253 D205 and 202 D209. Removing these two entries turns a
+# 4-fix gate into a 455-error wall, which is how a later session "cleaning up" the ignore ends up
+# reverting the whole thing instead.
+#
+# D415, D212 and D210 are NOT exempt, and that is deliberate. PR #832 repaired all 111 test
+# docstrings that #785 split at a colon; with D415 exempt here, nothing would stop them silently
+# regressing — a fix with no gate behind it lasts until the next mechanical pass. It cost 4 fixes
+# to close: three multi-line summaries in the k8s manifest guards, and one docstring opening with
+# a quoted word, whose leading space existed only to avoid four consecutive quotes.
+# (Counts measured with `--isolated --exclude '*.md' --exclude ansible/collections`, which is what
+# bypasses these very entries; a plain `--select` run cannot see behind them. 2026-09-02.)
+"**/tests/**" = ["D205", "D209"]
+"**/test_*.py" = ["D205", "D209"]
+"**/conftest.py" = ["D205", "D209"]
 
 [tool.ty.environment]
 python-version = "3.14"

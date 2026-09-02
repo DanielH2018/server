@@ -457,7 +457,7 @@ def test_a_clean_pr_is_never_dead_path():
 
 
 def test_dead_path_note_names_the_files_and_the_remedy():
-    """ "Conflicting" implies a rebase will fix it; here nothing will, so say so."""
+    """A "Conflicting" label implies a rebase fixes it; here nothing does, so say so."""
     note = nl._pr_note(_pr(conflicting=True, dead_paths=_GONE))
     assert "deleted path" in note
     assert "close it" in note.lower()
