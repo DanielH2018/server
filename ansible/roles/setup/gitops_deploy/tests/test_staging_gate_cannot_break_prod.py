@@ -1,20 +1,24 @@
-"""Slice 3's staging gate must be advisory, and must not be able to break a prod deploy.
+"""The staging gate must not be able to break a prod deploy, blocking or not.
 
-Source-level guards on consult_staging()'s subprocess launches, plus the one ordering
-invariant in main() whose rejecting half parses a pre-fix shape of the function.
+Source-level guards on consult_staging()'s subprocess launches, plus the ordering invariants in
+main(). Each rejecting half parses a pre-fix shape of the function, so a check that stopped
+matching fails rather than passing vacuously.
 
-WHY THESE THREE. Phase C's whole sequencing rests on slice 3 collecting a false-failure rate
-BEFORE anything depends on the answer (docs/staging-phase-c.md). The slice is also the one most
-likely to be quietly skipped, because once it works, enforcing is one flag away. So the
-advisory property is pinned by a check rather than by intent:
+WHAT CHANGED AT SLICE 4. Three of these tests pinned the gate as ADVISORY: consult_staging
+returned nothing, and main() called it as a bare statement. Slice 4 made it return a verdict and
+made main() branch on it, so those three were rewritten here deliberately — which is what the
+slice-3 versions asked for. What did NOT change is the property that matters in both modes:
+a wedged guest, a missing script or a bug in the gate must never reach the prod deploy. That is
+now carried by the broad `except` PLUS `staging_blocks`, which blocks on a rejection and nothing
+else; test_staging_blocking.py owns the second half.
 
-  1. `consult_staging` returns no verdict, so no caller can branch on one by accident.
-  2. Its subprocess work is inside a broad `except`, so a wedged guest or a missing script
+Still pinned here:
+
+  1. Its subprocess work is inside a broad `except`, so a wedged guest or a missing script
      cannot propagate into the prod deploy.
-  3. `main()` calls it as a bare statement before `deploy_k8s`, never in a condition.
-
-If a later slice makes the gate blocking, these tests are the ones to change deliberately —
-which is the point.
+  2. `main()` reads the verdict through `staging_blocks` rather than testing it inline, so the
+     NO_VERDICT decision lives in one checked place.
+  3. `main()` consults the gate before `deploy_k8s`, and before the ff-merge.
 """
 
 from __future__ import annotations
@@ -51,20 +55,23 @@ def sys_executable_launches(fn: ast.FunctionDef) -> list[str]:
     return launched
 
 
-def test_consult_staging_returns_no_verdict(gitops_fn) -> None:
-    """A returned verdict is a verdict something can branch on.
+def test_consult_staging_returns_a_verdict_on_every_path(gitops_fn) -> None:
+    """Every exit from the gate hands back a word, including the broad `except`.
 
-    Advisory means there is nothing to branch on, enforced here rather than left to a reader's
-    discretion.
+    A bare `return` there would give main() None, which `staging_blocks` reads as "does not
+    block" — correct by luck rather than by construction, and silent: the same path also has to
+    reach the alert. It returned bare until slice 4, which was harmless only while nothing
+    branched on the answer.
     """
-    returns = [
+    fn = gitops_fn("consult_staging")
+    bare = [
         node
-        for node in ast.walk(gitops_fn("consult_staging"))
-        if isinstance(node, ast.Return) and node.value is not None
+        for node in ast.walk(fn)
+        if isinstance(node, ast.Return) and node.value is None
     ]
-    assert not returns, (
-        "consult_staging returns a value, so a caller can gate on it — that is slice 4, and it "
-        "must be a deliberate change to this test rather than a side effect."
+    assert not bare, (
+        "consult_staging has a bare `return`, so one path hands main() None instead of a "
+        "verdict — and skips the alert that makes a non-PASS visible."
     )
 
 
@@ -107,34 +114,53 @@ def test_the_staging_subprocesses_cannot_escape(gitops_fn) -> None:
     )
 
 
-def test_main_calls_the_gate_as_a_bare_statement_before_deploying_prod(
-    gitops_fn,
-) -> None:
-    """Advisory by position as well as by return type.
+def test_main_decides_through_staging_blocks_rather_than_inline(gitops_fn) -> None:
+    """The verdict must be routed through the checked decision, not compared in main().
 
-    The call must be a bare expression — not assigned, not a condition — and it must come
-    before `deploy_k8s`, since a gate consulted afterwards would have nothing left to gate.
+    `staging_blocks` is where the NO_VERDICT decision lives and where test_staging_blocking.py
+    can reach it. An inline `if verdict == "rejected"` in main() would be the same behaviour
+    today and unreviewable the next time someone widens what blocks.
     """
+    main = gitops_fn("main")
+    assert any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "staging_blocks"
+        for node in ast.walk(main)
+    ), (
+        "main() does not call staging_blocks — the blocking decision has moved out of its check"
+    )
+    inline = [
+        ast.unparse(node)
+        for node in ast.walk(main)
+        if isinstance(node, ast.Compare)
+        and any(
+            isinstance(c, ast.Constant)
+            and c.value in {"rejected", "no_verdict", "pass"}
+            for c in node.comparators
+        )
+    ]
+    assert not inline, f"main() compares a staging verdict inline: {inline}"
+
+
+def test_main_consults_the_gate_before_deploying_prod(gitops_fn) -> None:
+    """A gate consulted after the deploy gates nothing."""
     main = gitops_fn("main")
     stmts = list(ast.walk(main))
 
-    bare_calls = [
+    gate_calls = [
         node
         for node in stmts
-        if isinstance(node, ast.Expr)
-        and isinstance(node.value, ast.Call)
-        and isinstance(node.value.func, ast.Name)
-        and node.value.func.id == "consult_staging"
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "consult_staging"
     ]
-    assert bare_calls, (
-        "main() does not call consult_staging as a bare statement — either it stopped calling "
-        "it, or it is now using the result, which would make the gate blocking."
-    )
+    assert gate_calls, "main() no longer calls consult_staging at all"
 
     def _line_of(pred) -> int:
         return min(n.lineno for n in stmts if pred(n))
 
-    gate_line = min(node.lineno for node in bare_calls)
+    gate_line = min(node.lineno for node in gate_calls)
     deploy_line = _line_of(
         lambda n: (
             isinstance(n, ast.Call)
@@ -291,6 +317,20 @@ def test_the_gate_is_off_by_default(gitops_deploy) -> None:
     assert gitops_deploy.STAGING_GATE is False, (
         "STAGING_GATE no longer defaults to false — enabling the gate for every host on merge "
         "is a deliberate decision, not a default."
+    )
+
+
+def test_blocking_is_off_by_default(gitops_deploy) -> None:
+    """The switch that decides whether a rejection stops prod must default to advisory.
+
+    Its sibling above covers STAGING_GATE. This one is the more consequential default: a host
+    that merged slice 4 without opting in must not start refusing deploys, and the entry
+    condition in docs/staging-phase-c.md is what the opt-in waits on. Asserted directly, so a
+    flipped default fails with a message about the default rather than about a missing merge.
+    """
+    assert gitops_deploy.STAGING_GATE_BLOCKING is False, (
+        "STAGING_GATE_BLOCKING no longer defaults to false — a staging rejection would start "
+        "blocking prod deploys on merge, which is a decision the entry condition gates."
     )
 
 

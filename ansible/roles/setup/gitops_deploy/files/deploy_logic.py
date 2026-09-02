@@ -103,4 +103,13 @@ from deploy_remediation import (  # noqa: F401
     deferred_service_alerts,
     k8s_remediation,
 )
-from deploy_staging import staging_scope, staging_verdict_summary  # noqa: F401
+from deploy_staging import (  # noqa: F401
+    STAGING_NO_VERDICT,
+    STAGING_PASS,
+    STAGING_REJECTED,
+    STAGING_SKIPPED,
+    staging_blocks,
+    staging_scope,
+    staging_verdict,
+    staging_verdict_summary,
+)

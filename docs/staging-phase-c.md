@@ -4,13 +4,17 @@ Makes `gitops-deploy` deploy a merged change to `daniel-stage` first, and touch 
 that succeeded. Phases A and B (`staging-cluster.md`) built a cluster and taught the repo to
 deploy to it. This is the phase where the cluster starts refusing things.
 
-**Status as of 2026-08-30: slices 1-3 built, and the gate is ON in advisory mode on
+**Status as of 2026-09-02: slices 1-4 are built, and the gate is ON in advisory mode on
 daniel-box.** It asks daniel-stage about every commit that would auto-deploy a k8s service,
-logs and alerts the verdict, and deploys prod either way. Slice 4 (blocking) is not started,
-and its entry condition is evidence rather than effort — see *Entry condition* at the end,
+logs and alerts the verdict, and deploys prod either way. Slice 4's code has landed behind its
+own switch, `gitops_deploy_staging_gate_blocking`, which is **false everywhere** — so the
+deployer's behaviour is slice 3's until that switch is flipped.
+
+**The flip is gated on evidence rather than effort** — see *Entry condition* at the end,
 **rescoped 2026-08-30** because the original version could not be satisfied: the gate is
 reachable by roughly one real tick a month, so the evidence is now gathered by a deliberate
-backfill rather than by waiting on merges.
+backfill rather than by waiting on merges. Part 1 reached 20/20 on 2026-09-02. Part 2 is the
+one still outstanding.
 
 Set `gitops_deploy_staging_gate: false` and re-run `initial_setup.yml --tags gitops_deploy` to
 switch it back off, at which point the deployer behaves exactly as it did before any of this
@@ -205,15 +209,20 @@ Vertical slices; each leaves something exercisable, and the gate arrives last on
 3. **Advisory mode.** — BUILT (#566) and ON. `consult_staging()` runs both checks, logs and
    alerts the verdict, and deploys prod regardless. It is advisory *by construction*, not by
    intent: the function returns nothing, every child process it starts sits inside a broad
-   `except`, and `test_staging_gate_is_advisory.py` fails if either changes or if `main()`
-   starts branching on it. It is switched on (`gitops_deploy_staging_gate: true`) rather than
+   `except`. `test_staging_gate_cannot_break_prod.py` is that file after slice 4 rewrote its
+   three advisory-specific checks; what it still pins is the property both modes need — a wedged
+   guest cannot reach the prod deploy. It is switched on (`gitops_deploy_staging_gate: true`) rather than
    merely built, because building it exercises nothing. **It does not, on its own, collect the
    false-failure rate** — that was this spec's original plan and it does not work; see *Entry
    condition* for why the organic sample rate is about one a month, and what replaced it. What
    slice 3 does supply is the two real gated ticks part 2 of that condition requires, and the
    live path a backfill would otherwise only simulate.
-4. **Enforcing mode, with the override.** Flip advisory to blocking. Ship the override in the
-   same slice, never later.
+4. **Enforcing mode, with the override.** — BUILT (`gitops_deploy_staging_gate_blocking`),
+   NOT FLIPPED. `consult_staging` returns a verdict, `staging_blocks` decides whether it stops
+   the prod deploy, and `main()` holds the SHA and skips prod on a rejection. The override
+   shipped in the same change, as Decision 4 asks. The switch stays false until the entry
+   condition is met — which is why it is a second switch rather than a widening of
+   `gitops_deploy_staging_gate`: the code and the evidence arrive at different times.
 
 Slice 3 is the point. It is also the one most likely to be skipped, because by then everything
 works and enforcing is one flag away.
@@ -361,13 +370,48 @@ resolving to whichever venv sat in `WorkingDirectory`, and `uv run` picking its 
 cwd). If no eligible bump lands naturally, force one by bumping an image pin on freshrss,
 node-exporter or ical-proxy.
 
-**3. A written answer to what blocking mode does on NO_VERDICT.**
+**3. A written answer to what blocking mode does on NO_VERDICT.** — ANSWERED 2026-09-02.
 
-A decision rather than data, and the old condition hid it inside the phrase "false-failure rate." NO_VERDICT
-means the gate could not be asked, which is never the change's fault. Blocking on it parks prod
-behind staging's availability; passing on it makes any staging outage a way through the gate.
-Slice 4 must state which, and if the answer is to block, it must also state the operator's route
-past it — the override this slice ships anyway.
+A decision rather than data, and the old condition hid it inside the phrase "false-failure rate."
+NO_VERDICT means the gate could not be asked, which is never the change's fault. Blocking on it
+parks prod behind staging's availability; passing on it makes any staging outage a way through
+the gate.
+
+**The answer is: NO_VERDICT passes through. Only a REJECTED blocks.**
+
+The asymmetry that decides it is the one this spec already used to exclude a false-PASS rate from
+the condition. A gate that misses a defect leaves prod exactly where it is today; a gate that
+blocks a good change is a regression against today. Blocking on NO_VERDICT would import the
+availability of one guest on a NAT network — no HA, not on prod's critical path, covering six services of
+fifty-four — into every prod deploy, in exchange for closing a hole whose worst case is the
+behaviour prod had before any of this existed.
+
+**The cost is real and is paid for with noise rather than with a block.** A permanently broken
+staging degrades the gate to nothing, silently, unless every NO_VERDICT is loud. So it is:
+`consult_staging` alerts on every non-PASS, and as of slice 4 that includes the internal-error
+path, which returned before reaching the alert while nothing branched on the answer. The
+"Staging Backfill Ratchet" monitor is the second signal — it pages when the harness stops
+running at all, which the per-run `OnFailure=` structurally cannot see.
+
+**The operator's route past a block** is `touch /var/lib/gitops-deploy/staging_gate_override` on
+daniel-box. It lets exactly one blocking tick through, posts to Discord naming itself when it is
+spent, and removes itself; `rm` disarms it before use. It is consumed at the point the gate would
+block, never on entry — otherwise arming it before a quiet tick would spend it on a tick that
+needed nothing, and the operator's actual push would meet the block with the hatch already gone.
+
+A staging rejection also **holds the SHA** (`hold_sha`), so the block does not re-fire every
+tick — which matters here, because re-consulting costs 600s + 120s of the tick's budget and of
+the shared tree lock.
+
+**The block and the marker clear on different schedules, and only the first is quick.** The block
+stops applying as soon as master moves past the held SHA: `skip_hold` matches only while
+`origin_head == hold_sha`. The marker does not clear then. `write_hold(None)` sits in two
+branches this host reaches — a successful k8s auto-deploy and a successful broad apply — so the
+**GitOps Deploy — Status** monitor, which pages on a non-empty `hold_sha` with no origin
+comparison, stays red until one of those lands. At the measured arrival rate for a gated tick
+that can be weeks, not the next push. An operator clearing a staging block should expect to
+delete the marker by hand, exactly as this role's CLAUDE.md already prescribes for a k8s
+rollback whose follow-up commits reach no service here.
 
 ### What is deliberately NOT in the condition
 
@@ -378,7 +422,42 @@ against today. Only the second decides whether blocking is safe.
 
 ### Where the evidence stands
 
-Not yet satisfied. Encouraging, and not a substitute for part 1: after the staleness fix (#599),
+**Part 1: MET, 2026-09-02.** `backfill_staging_gate.py` reports `clean streak=20/20` over 26
+recorded runs — 20 pass, 6 false-failure (all six predating the fixes described above), 0
+true-failure, 0 needs-triage. Read it from the script rather than by eye, and read it again
+immediately before flipping the switch: the hourly ratchet keeps appending, and one untriaged
+REJECTED drops the verdict back to NOT MET.
+
+**Part 2: NOT MET, 0 of 2 — and the first attempt to force a sample produced none.**
+`journalctl -u gitops-deploy` carries no `staging:` line at all since the gate was switched on
+2026-08-30: not a rejection, not a pass, not even the `nothing to gate` skip. That is the
+one-a-month arrival rate showing up exactly as predicted.
+
+#857 bumped freshrss's digest deliberately to force one, which the spec authorises — node-exporter
+is already at its current release and ical-proxy's pin has no upstream to move, so freshrss is
+the only one of the three that can supply a sample. **It did not produce one.** The pod ended up
+on the new digest, so the change shipped; the tick that ff-merged it did not promote it, and
+`land.sh` deployed it at step 5 as a deferral instead.
+
+**The reason generalises, and it is what a future attempt has to plan around.** A tick diffs
+`local..origin`, not one commit. Two other PRs merged during #857's CI wait, so the tick's range
+carried 49 files across three PRs — and `split_k8s_auto_deploy` promotes a service only when
+every path the push touched under its role is exactly its `defaults/main.yml`. A bump that shares
+a tick with unrelated work is not a bump as far as the promotion is concerned.
+
+So forcing a sample needs a **quiet tick**, not just a qualifying commit: merge the bump when no
+other PR is in flight, and do not let the CI wait absorb another session's landing. On a repo where
+several sessions land daily, that is the constraining condition — more than finding something to
+bump.
+
+**The second sample needs a second such tick.** `freshrss_k8s_cache_image` — `nginx:alpine`,
+pinned at `4a73073b`, and `db35bfc6` upstream as of 2026-09-02 — is the remaining candidate in
+that file.
+
+**Part 3: MET, 2026-09-02** — written above, and pinned by
+`ansible/roles/setup/gitops_deploy/tests/test_staging_blocking.py::test_no_verdict_never_blocks`.
+
+Older evidence, and not a substitute for part 1: after the staleness fix (#599),
 six consecutive hand runs against real master SHAs all returned PASS, two of them through the
 restricted key. Those were ad-hoc — varied tags, chosen SHAs — so they are a prior, not the
 backfill. Every NO VERDICT observed before that fix was the gate's own staleness bug rather than

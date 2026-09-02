@@ -79,6 +79,28 @@ stay).
     (that file carries a comment saying so). An empty list or repo **disarms** the gate with a log
     line rather than passing everything — the same fail-closed shape as the k8s denylist. Set
     `gitops_deploy_require_ci: false` to turn it off.
+- **Staging gate — two switches, and only one of them is about blocking.** `STAGING_GATE`
+  (`gitops_deploy_staging_gate`) asks daniel-stage about every commit that would auto-deploy a
+  k8s service, on the k8s path only. `STAGING_GATE_BLOCKING`
+  (`gitops_deploy_staging_gate_blocking`) decides whether a REJECTION stops the prod deploy.
+  With the second false the gate is advisory: the verdict is logged and alerted, prod deploys
+  either way, and this deployer behaves as it did before slice 4. Both are false by default;
+  daniel-box sets only the first. `docs/staging-phase-c.md` carries the entry condition the flip
+  is gated on — do not restate the status here.
+  - **NO VERDICT never blocks, in either mode.** A wedged guest, an ssh outage, a timeout or a
+    bug in the gate reports NO VERDICT and prod deploys. Blocking there would park prod behind
+    one guest on a NAT network covering six services of fifty-four, where passing through leaves prod
+    where it was before the gate existed. `staging_blocks` carries the reasoning and
+    `tests/test_staging_blocking.py` pins it.
+  - **A rejection holds the SHA and applies nothing.** `consult_staging` runs BEFORE the
+    ff-merge, so the tree is still on `local` when the verdict arrives: no reset, no volume
+    revert, nothing to roll back. That asymmetry is Phase C's main prize. Moving the gate after
+    the merge would silently break it.
+  - **The escape hatch is one tick, and it announces itself.** `touch
+    /var/lib/gitops-deploy/staging_gate_override` on this host lets the next blocking tick
+    through, posts to Discord when it is spent, and removes itself; `rm` disarms it before use.
+    It is read at the point the gate would block, never on entry — arming it before a quiet tick
+    must not burn it.
 - Read-only against the repo (no push); rollback is local-only + self-guarding.
 - Refuses to *deploy* from a dirty working tree (operator mid-edit) but the tick still
   completes normally and writes `last_run` (`next_action(..., dirty=True) -> "dirty"`) — the
@@ -374,7 +396,7 @@ place and a `deploy_logic.<name>` citation in any doc stays true.
 | `deploy_health` | the Docker health gate and the Discord delivery queue |
 | `deploy_inventory` | what this host declares, parsed from host_vars text |
 | `deploy_k8s` | k8s auto-deploy eligibility, the denylist, the rollback's revert note |
-| `deploy_staging` | the staging subset and its verdict summary |
+| `deploy_staging` | the staging subset, its verdict, and whether that verdict blocks |
 
 One test file per module, named for it: `tests/test_deploy_<module>.py`, with a second
 file where one module answers two separable questions — `test_deploy_changes_services.py`

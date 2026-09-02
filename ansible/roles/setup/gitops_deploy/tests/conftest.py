@@ -7,7 +7,7 @@ host's /etc copy (0600, it carries the Discord webhook). The `gitops_deploy` fix
 that import; `state_dir` repoints every /var/lib/gitops-deploy marker at tmp_path.
 
 The AST fixtures below remain for the guards that pin a function's shape at the source
-(test_staging_gate_is_advisory.py, test_gitops_deploy_timeout_budgets.py); `tick` runs
+(test_staging_gate_cannot_break_prod.py, test_gitops_deploy_timeout_budgets.py); `tick` runs
 main() itself against a scripted checkout (test_gitops_deploy_main_branches.py).
 
 Fixtures rather than importable functions: `from conftest import x` resolves to whichever
@@ -146,6 +146,9 @@ class ScriptedTick:
         playbook_outcomes: an exception to raise from each playbook run in turn; None runs
             clean, and the list running out means every later run is clean.
         healthy: what the Docker health gate reports for every service.
+        staging_verdict: the word consult_staging returns — "pass", "rejected", "no_verdict"
+            or "skipped".
+        staging_override: whether the operator's one-tick override is armed.
         discord_ok: whether Discord accepts each post.
         log: every call, oldest first, as ("git", argv), ("playbook", argv, kwargs),
             ("staging", services), ("annotation", services) or ("post", content).
@@ -166,6 +169,8 @@ class ScriptedTick:
         self.diffs: dict[str, str] = {}
         self.playbook_outcomes: list[Exception | None] = []
         self.healthy = True
+        self.staging_verdict = "pass"
+        self.staging_override = False
         self.discord_ok = True
         self.log: list[tuple] = []
         self.repo = repo
@@ -291,11 +296,18 @@ def tick(gitops_deploy: ModuleType, monkeypatch, state_dir, tmp_path) -> Scripte
     monkeypatch.setattr(
         gitops_deploy, "service_healthy", lambda _svc, deadline=None: scripted.healthy
     )
-    monkeypatch.setattr(
-        gitops_deploy,
-        "consult_staging",
-        lambda services, _origin: scripted.log.append(("staging", set(services))),
-    )
+
+    def _consult(services, _origin):
+        scripted.log.append(("staging", set(services)))
+        return scripted.staging_verdict
+
+    def _consume_override():
+        spent, scripted.staging_override = scripted.staging_override, False
+        scripted.log.append(("override", spent))
+        return spent
+
+    monkeypatch.setattr(gitops_deploy, "consult_staging", _consult)
+    monkeypatch.setattr(gitops_deploy, "consume_staging_override", _consume_override)
     monkeypatch.setattr(
         gitops_deploy,
         "emit_deploy_annotation",
