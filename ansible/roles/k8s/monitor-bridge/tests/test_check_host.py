@@ -45,7 +45,7 @@ def test_disk_over_threshold_names_mount(monkeypatch):
 
 
 def test_disk_names_the_breaching_host_not_the_healthy_one(monkeypatch):
-    """THE BUG THIS PINS (2026-08-15):
+    """THE BUG THIS PINS (2026-08-15): a full disk was paired with the other host's size.
 
     avail and size were two separate max() queries, so once both estates reported into one
     Prometheus a full disk on one host could be paired with the other's size. A per-origin
@@ -292,9 +292,9 @@ def test_host_origins_floor_defaults_to_both_nodes():
 
 
 def test_host_origins_floor_is_overridable_from_the_env_secret():
-    """It must be a rendered key, not just a code default:
+    """The floor must be a rendered key, not just a code default.
 
-    a planned single-node maintenance window otherwise turns check_disk and check_mem permanently
+    A planned single-node maintenance window otherwise turns check_disk and check_mem permanently
     red with no way to stand them down. A one-way door is a bug even when the door is a threshold.
     """
     import pathlib

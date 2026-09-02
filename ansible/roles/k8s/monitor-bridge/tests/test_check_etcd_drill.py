@@ -59,9 +59,9 @@ def test_etcd_drill_fails_when_it_has_never_run(tmp_path, monkeypatch):
 
 
 def test_etcd_drill_fails_when_the_stamp_is_unreadable(tmp_path, monkeypatch):
-    """Not hypothetical:
+    """An unreadable stamp is not hypothetical, and must report distinctly from an absent one.
 
-    the first real run wrote 0640 root:root under UMASK 027 while this pod runs as uid 1000. An
+    The first real run wrote 0640 root:root under UMASK 027 while this pod runs as uid 1000. An
     unreadable stamp and an absent one are otherwise indistinguishable, so they must report
     distinctly — they need different fixes.
     """

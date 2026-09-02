@@ -376,9 +376,9 @@ def test_resolve_vars_expands_through_a_list_of_dicts():
 
 
 def test_resolve_vars_leaves_a_brace_free_value_alone():
-    """The accepting half:
+    """The accepting half: a brace-free value is left alone.
 
-    expansion must not rewrite values that held no template, and must not coerce non-strings. A
+    Expansion must not rewrite values that held no template, and must not coerce non-strings. A
     recursive walk that stringified as it went would pass the three tests above and quietly turn
     every int and bool in the inventory into text.
     """

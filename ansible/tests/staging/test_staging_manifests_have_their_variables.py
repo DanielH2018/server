@@ -577,7 +577,7 @@ def test_a_remote_url_apply_is_not_a_gap():
 
 
 def test_a_rendered_then_applied_template_is_covered_not_excused():
-    """The real traefik shape:
+    """The real traefik shape: a rendered-then-applied template is covered, not excused.
 
     `template:` writes rbac.yaml.j2 to disk, a shell-out applies it. It must drop OUT of the
     uncounted list and INTO the corpus — an exemption alone would leave it as uncovered as before.
@@ -600,7 +600,7 @@ def test_a_rendered_then_applied_template_is_covered_not_excused():
 
 
 def test_traefik_rbac_is_in_the_real_corpus():
-    """The regression guard for the instance that motivated this:
+    """The regression guard for the instance that motivated this.
 
     rbac.yaml.j2 reaches the corpus, so the staging variable checks above now cover it.
     """

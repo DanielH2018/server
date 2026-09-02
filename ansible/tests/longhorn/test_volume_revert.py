@@ -211,9 +211,9 @@ def test_the_input_check_rejects_an_empty_or_malformed_call() -> None:
 
 
 def test_the_sha_shape_is_checked_against_the_hex_it_must_be() -> None:
-    """The regex is the assert's whole content, so it is worth pinning:
+    """The regex is the assert's whole content, so it is worth pinning.
 
-    it must accept the eight-or-more lowercase hex `--short=8` produces and reject a branch name, an
+    It must accept the eight-or-more lowercase hex `--short=8` produces and reject a branch name, an
     empty string or a truncating typo.
     """
     that = _named(_MAIN, "Check that volume-revert was given")[
@@ -269,7 +269,7 @@ def test_the_listing_jsonpath_parses() -> None:
 
 
 def test_the_revert_body_matches_the_servers_own_schema() -> None:
-    """The action name and its input field are read from the manifest, not from memory:
+    """The action name and its input field are read from the manifest, not from memory.
 
     `snapshotRevert` takes a `snapshotInput`, whose only relevant field is `name`. A typo in either
     would surface as a 404 or a no-op revert during an incident.

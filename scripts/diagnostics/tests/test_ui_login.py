@@ -68,7 +68,7 @@ def test_backend_reached_is_accepted():
 
 
 def test_portal_redirect_is_flagged():
-    """The case that makes a status-code-only check useless:
+    """The case that makes a status-code-only check useless.
 
     302 to the portal is exactly what an unauthenticated request looks like, and 3xx would otherwise
     read as success.
@@ -189,9 +189,9 @@ def test_a_cookieless_state_file_is_flagged_locally():
 
 
 def test_local_check_cannot_see_a_revoked_cookie():
-    """Pins the reason check() calls Authelia at all:
+    """Pins the reason check() calls Authelia at all.
 
-    a cookie revoked server-side leaves a file this function is happy with, so passing here must
+    A cookie revoked server-side leaves a file this function is happy with, so passing here must
     never stand as the verdict.
     """
     state = ui_login.build_storage_state("revoked-server-side", "example.com", 2**31)

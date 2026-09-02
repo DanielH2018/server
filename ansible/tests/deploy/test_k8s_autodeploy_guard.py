@@ -291,11 +291,10 @@ def test_an_unresolvable_claim_var_is_reported_not_dropped(tmp_path: Path) -> No
 
 
 def test_pvc_template_claim_is_resolved_through_defaults(tmp_path: Path) -> None:
-    """A role's own `kind:
+    """A role's own PersistentVolumeClaim template, live-shaped and resolved through its defaults.
 
-    PersistentVolumeClaim` template, live-shaped: `metadata.name` is a single-var Jinja reference
-    (zigbee2mqtt's and code-server's actual shape), resolved through the role's own defaults rather
-    than left as the literal `{{ ... }}` string.
+    `metadata.name` is a single-var Jinja reference (zigbee2mqtt's and code-server's actual shape),
+    resolved through the role's own defaults rather than left as the literal `{{ ... }}` string.
     """
     role = tmp_path / "widget"
     (role / "templates").mkdir(parents=True)
@@ -317,7 +316,7 @@ def test_pvc_template_claim_is_resolved_through_defaults(tmp_path: Path) -> None
 def test_pvc_template_claim_is_found_when_name_is_not_the_first_metadata_key(
     tmp_path: Path,
 ) -> None:
-    """R6:
+    """R6: a PVC whose metadata carries `labels:` first must still yield a claim.
 
     `_PVC_NAME` used to require `name:` on the line immediately after `metadata:`, so a PVC whose
     metadata carried `labels:` first yielded no claim and no complaint — silently, a declared

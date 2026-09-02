@@ -47,11 +47,10 @@ def _test_files():
 
 
 def _patched_pairs(test_sources, module_names):
-    """{module:
+    """Map each runtime module to the attribute names a test assigns, patches, or mutates in place.
 
-    {name}} for every attribute of a runtime module a test assigns, patches, or mutates in place. An
-    AST walk, not a grep: a wrapped `monkeypatch.setattr(` and a plain `mod.X = ...` assignment both
-    count.
+    Returns `{module: {name}}`. An AST walk, not a grep: a wrapped `monkeypatch.setattr(` and a
+    plain `mod.X = ...` assignment both count.
     """
     pairs = {}
 
@@ -92,10 +91,10 @@ def _patched_pairs(test_sources, module_names):
 
 
 def _defined_names(source):
-    """Names a module DEFINES at top level:
+    """Names a module DEFINES at top level: def, class, assignment.
 
-    def, class, assignment. Imports do not count — that is the whole difference from the
-    monitor-bridge guard, and what makes a facade fail.
+    Imports do not count — that is the whole difference from the monitor-bridge guard, and what
+    makes a facade fail.
     """
     defined = set()
     for node in ast.parse(source).body:

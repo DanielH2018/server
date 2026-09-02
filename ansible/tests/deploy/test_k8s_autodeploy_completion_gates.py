@@ -94,9 +94,9 @@ def test_a_trailing_comment_arguing_against_a_wait_is_not_a_gate(widget_role) ->
 
 
 def test_a_debug_describing_a_wait_is_not_a_completion_gate(widget_role) -> None:
-    """Measured before the fix:
+    """Measured before the fix: a debug describing a wait satisfied the completion-gate check.
 
-    an `ansible.builtin.debug` whose `msg:` names the wait satisfied `_has_completion_gate`, because
+    An `ansible.builtin.debug` whose `msg:` names the wait satisfied `_has_completion_gate`, because
     `_task_command_text`'s module discipline was applied in `_batch_gated_names` and not here.
     """
     role = widget_role(

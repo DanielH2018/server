@@ -83,10 +83,9 @@ def test_the_failure_guard_covers_an_empty_result() -> None:
 
 
 def test_soft_mode_records_the_miss_instead_of_failing() -> None:
-    """`longhorn_api_required:
+    """`longhorn_api_required: false` is the ONLY supported way to make an absent manager non-fatal.
 
-    false` is the ONLY supported way to make an absent manager pod non-fatal for a caller —
-    `ignore_errors` on the include does not work, see
+    `ignore_errors` on the include does not work — see
     `test_longhorn_api_soft_mode_survives_no_manager` below, which proves the mechanism rather than
     the YAML shape.
     """
@@ -294,7 +293,7 @@ def _run_longhorn_api_scratch_play(
     shutil.which("ansible-playbook") is None, reason="ansible-playbook not on PATH"
 )
 def test_longhorn_api_soft_mode_survives_no_manager() -> None:
-    """The fix:
+    """The fix: soft mode works because resolve.yml skips its own `fail()`.
 
     `longhorn_api_required: false` makes an absent manager pod non-fatal because resolve.yml itself
     skips its own `fail()`, not because a caller's `ignore_errors` catches it. If this regresses
@@ -313,7 +312,7 @@ def test_longhorn_api_soft_mode_survives_no_manager() -> None:
     shutil.which("ansible-playbook") is None, reason="ansible-playbook not on PATH"
 )
 def test_longhorn_api_hard_mode_still_fails_by_default() -> None:
-    """The control for the test above:
+    """The control for the test above: hard mode still fails by default.
 
     k8s/volume-revert never sets `longhorn_api_required`, so it must keep getting today's hard
     failure. Without this, a bug that made soft mode the DEFAULT would pass the test above and

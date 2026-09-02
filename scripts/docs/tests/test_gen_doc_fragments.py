@@ -1,6 +1,6 @@
-"""gen_doc_fragments:
+"""Tests for gen_doc_fragments: its readers, its renderers, and the two-way fragment wiring.
 
-the readers find their sources, the renderers are pure, and every fragment is wired both ways -- a
+The readers find their sources, the renderers are pure, and every fragment is wired both ways -- a
 page includes it, and it exists for the page to include.
 """
 

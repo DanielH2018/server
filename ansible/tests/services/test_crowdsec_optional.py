@@ -376,9 +376,9 @@ def test_the_bouncer_reading_follows_the_flag() -> None:
 def test_the_verdict_rejects_a_mismatched_pair(
     public: bool, bouncer: bool, expect: str
 ) -> None:
-    """Each direction separately:
+    """Each direction separately.
 
-    a guard catching only the harmless drift would still miss the unprotected edge, which is the one
+    A guard catching only the harmless drift would still miss the unprotected edge, which is the one
     that matters.
     """
     assert expect in public_edge_problem(public, bouncer)

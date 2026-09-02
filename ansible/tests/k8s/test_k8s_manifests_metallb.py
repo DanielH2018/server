@@ -35,11 +35,10 @@ def _pools() -> dict[str, dict]:
 
 
 def test_ingress_pool_is_a_single_address_that_is_never_auto_assigned():
-    """autoAssign:
+    """`autoAssign: false` is the whole reservation of the ingress address.
 
-    false is the whole reservation. Without it MetalLB hands the ingress address to whichever
-    LoadBalancer Service asks first, and ingress moves — after that address is in DNS and, from
-    slice 6, in the router's port-forward.
+    Without it MetalLB hands the ingress address to whichever LoadBalancer Service asks first, and
+    ingress moves — after that address is in DNS and, from slice 6, in the router's port-forward.
     """
     ingress = _pools()["ingress-pool"]
     assert ingress["spec"]["autoAssign"] is False

@@ -62,11 +62,10 @@ def test_ship_list_excludes_the_test_suite():
 
 
 def test_autofix_py_cross_role_imports_are_shipped():
-    """The direct check:
+    """The direct check: a cross-role module autofix.py imports must travel with it.
 
-    a cross-role module autofix.py imports must travel with it. Scoped to names known to be
-    cross-role (bridge_common) rather than every ImportFrom target, since a stdlib import (json,
-    sys, ...) has no place in this ship list.
+    Scoped to names known to be cross-role (bridge_common) rather than every ImportFrom target,
+    since a stdlib import (json, sys, ...) has no place in this ship list.
     """
     shipped = {
         item["name"][:-3] for item in _ship_list() if item["name"].endswith(".py")

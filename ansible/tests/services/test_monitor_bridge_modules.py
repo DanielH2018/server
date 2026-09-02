@@ -123,9 +123,9 @@ def _runtime_module_names():
 
 
 def _patched_pairs(test_files=None, module_names=None):
-    """{module:
+    """Map each runtime module to the attributes the suite assigns, patches, or mutates in place.
 
-    {name}} for every attribute of a runtime module the suite assigns, patches, or mutates in place.
+    Returns `{module: {name}}`.
     """
     module_names = module_names if module_names is not None else _runtime_module_names()
     if test_files is None:

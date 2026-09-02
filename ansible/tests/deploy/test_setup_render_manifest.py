@@ -102,10 +102,10 @@ def test_the_manifest_names_no_template_that_stopped_existing():
 
 
 def test_declared_paths_are_repo_relative_and_resolve():
-    """The whole point of the H1 fix:
+    """The whole point of the H1 fix: an entry carries its own path.
 
-    an entry carries its own path so the check joins nothing onto a hardcoded role directory. A bare
-    filename here would silently stop resolving.
+    The check joins nothing onto a hardcoded role directory. A bare filename here would silently
+    stop resolving.
     """
     for tpl in sorted(_declared_paths()):
         assert tpl.startswith("ansible/roles/"), (
@@ -224,10 +224,9 @@ def test_the_k3s_readers_note_rewording_still_matches_the_library():
 
 
 def test_other_setup_roles_stamp_their_own_artifacts():
-    """H1's actual finding:
+    """H1's actual finding: nine rendered artifacts outside the k3s role were watched by nothing.
 
-    nine rendered artifacts outside the k3s role were watched by nothing. Each owning role now
-    includes the shared stamp, and this fails if one stops.
+    Each owning role now includes the shared stamp, and this fails if one stops.
 
     daniel-pi's optimize_pi scripts are deliberately absent — that host runs no
     manifest-prune-check, and stamping them here would claim coverage this host cannot provide.

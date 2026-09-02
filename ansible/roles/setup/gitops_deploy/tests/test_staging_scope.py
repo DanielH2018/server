@@ -36,9 +36,9 @@ def test_a_deploy_outside_the_subset_is_gated_by_nothing() -> None:
 
 
 def test_a_mixed_deploy_splits() -> None:
-    """The case the design most needs right:
+    """The case the design most needs right.
 
-    shipping the half staging never saw on the strength of an unrelated service's pass.
+    Shipping the half staging never saw on the strength of an unrelated service's pass.
     """
     gated, ungated = staging_scope({"freshrss", "jellyfin"}, SUBSET)
     assert gated == {"freshrss"}
@@ -139,10 +139,9 @@ def test_a_failed_deploy_is_a_rejection() -> None:
 
 
 def test_a_deployed_service_that_answers_wrong_is_also_a_rejection() -> None:
-    """The ical-proxy shape:
+    """The ical-proxy shape: the play exits zero and the routes are broken.
 
-    the play exits zero and the routes are broken. If this ever stops being a rejection, slice 2 has
-    been made decorative.
+    If this ever stops being a rejection, slice 2 has been made decorative.
     """
     summary = staging_verdict_summary({"ical-proxy"}, set(), 0, 1)
     assert "REJECTED" in summary

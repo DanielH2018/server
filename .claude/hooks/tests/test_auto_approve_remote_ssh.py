@@ -69,9 +69,9 @@ def test_wrapper_passes_a_flag_the_classifier_recognises():
 
 
 def test_wrapper_fails_open_when_the_repo_is_missing():
-    """cd must not be able to strand the hook:
+    """cd must not be able to strand the hook.
 
-    a failed cd has to exit 0, not run the exec from whatever directory it happened to land in.
+    A failed cd has to exit 0, not run the exec from whatever directory it happened to land in.
     """
     assert "|| exit 0" in WRAPPER_TEXT, "cd has no fail-open guard"
 

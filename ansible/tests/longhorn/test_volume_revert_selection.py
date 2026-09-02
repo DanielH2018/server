@@ -50,11 +50,10 @@ _OLDER = (
 
 
 def test_the_selection_takes_the_newest_by_creation_timestamp() -> None:
-    """One SHA can own several snapshots:
+    """One SHA can own several snapshots, so the newest is chosen by `creationTimestamp`.
 
     volume-snapshot appends a per-run token, so a dirty tree deployed twice, or a retried deploy,
-    leaves two CRs sharing the prefix. CR names are not chronologically sortable as strings, so the
-    choice is made on `creationTimestamp`.
+    leaves two CRs sharing the prefix. CR names are not chronologically sortable as strings.
     """
     assert _selection([_OLDER, _NEWEST])[0].endswith("20260821180000")
     assert _selection([_NEWEST, _OLDER])[0].endswith("20260821180000")
@@ -68,11 +67,10 @@ def test_the_selection_takes_the_newest_by_creation_timestamp() -> None:
 
 
 def test_the_selection_rejects_a_markremoved_snapshot() -> None:
-    """Measured 2026-08-21:
+    """Measured 2026-08-21: a snapshot already `markRemoved` cannot be reverted to.
 
-    a snapshot already `markRemoved` cannot be reverted to. Taking one would fail the revert after
-    the scale-down — and a retention pass racing a rollback is exactly how the newest becomes
-    markRemoved.
+    Taking one would fail the revert after the scale-down — and a retention pass racing a rollback
+    is exactly how the newest becomes markRemoved.
     """
     removed = _NEWEST.replace("|false|", "|true|")
     assert _selection([_OLDER, removed]) == [

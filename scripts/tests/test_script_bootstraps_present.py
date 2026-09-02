@@ -1,7 +1,4 @@
-"""Guard 2:
-
-every `scripts/**/*.py` module with a cross-directory import carries a working `sys.path` bootstrap
-for it.
+"""Guard 2: every cross-directory `scripts/**/*.py` import carries a working `sys.path` bootstrap.
 
 Repo-root CLAUDE.md (~:29-40): a directly-invoked script gets only its OWN directory on `sys.path`;
 `pyproject.toml`'s `pythonpath` list is a pytest-only setting. So a module that does `from

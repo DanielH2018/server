@@ -1,6 +1,6 @@
-"""Guards on the images this repo builds itself:
+"""Guards on the images this repo builds itself.
 
-every Dockerfile is Renovate-visible, no base image floats, and the pins that exist twice by design
+Every Dockerfile is Renovate-visible, no base image floats, and the pins that exist twice by design
 move in lockstep.
 
 A Dockerfile Renovate cannot see ages silently, and a `FROM` without a tag or digest is rebuilt

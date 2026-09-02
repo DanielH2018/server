@@ -347,10 +347,9 @@ def test_probes_absent_workload_messages_carry_no_skip_marker():
 
 
 def test_probes_not_applicable_messages_do_carry_a_skip_marker():
-    """The other half:
+    """The other half: a tag that names nothing must still skip.
 
-    a tag that names nothing must still skip, or every block tag in a --tags list turns an otherwise
-    good deploy red.
+    Otherwise every block tag in a --tags list turns an otherwise good deploy red.
     """
     undeclared, _ = probe_health.format_health([], "config", declared=False)
     no_workload, _ = probe_health.format_k8s_health(None, None, "config", _NOW)

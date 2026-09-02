@@ -171,9 +171,9 @@ def test_an_unread_inventory_prescribes_the_full_deploy(
 def _repo_with(
     tmp_path: pathlib.Path, rendered: list[str], declared: str | None
 ) -> pathlib.Path:
-    """A fake checkout:
+    """Build a fake checkout carrying rendered composes and this host's host_vars.
 
-    a rendered compose per name in `rendered`, and this host's host_vars holding `declared` (None
+    A rendered compose per name in `rendered`, and this host's host_vars holding `declared` (None
     leaves the file absent).
     """
     repo = tmp_path / "repo"

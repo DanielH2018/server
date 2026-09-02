@@ -16,12 +16,11 @@ from _volume_revert import _CLAIM, _GUARD, _MAIN, _guard_of, _index, _named, _ta
 
 
 def test_the_revert_asserts_the_frontend_is_disabled_before_reverting() -> None:
-    """Measured 2026-08-21:
+    """Measured 2026-08-21: a revert with the frontend enabled returns HTTP 500.
 
-    a revert with the frontend enabled returns HTTP 500 `failed to revert snapshot for volume ...
-    with frontend enabled`. The assert is the precondition, not a formality — without it the revert
-    fails late, after the workload is already scaled to zero, leaving the service down AND
-    unreverted.
+    The server answers `failed to revert snapshot for volume ... with frontend enabled`. The assert
+    is the precondition, not a formality — without it the revert fails late, after the workload is
+    already scaled to zero, leaving the service down AND unreverted.
     """
     tasks = _task_names(_CLAIM)
     assert _index(tasks, "disableFrontend") < _index(tasks, "Revert the volume")
@@ -160,10 +159,9 @@ def test_the_detach_does_not_pretend_hostid_matters() -> None:
 
 
 def test_the_attach_requests_maintenance_mode_on_this_node() -> None:
-    """`disableFrontend:
+    """`disableFrontend: true` is what makes the revert possible at all.
 
-    true` is what makes the revert possible at all, and `hostId` is what keeps the attach on the
-    node whose manager is answering.
+    `hostId` is what keeps the attach on the node whose manager is answering.
     """
     body = _named(_CLAIM, "in maintenance mode")["ansible.builtin.uri"]["body"]
     assert body["disableFrontend"] is True

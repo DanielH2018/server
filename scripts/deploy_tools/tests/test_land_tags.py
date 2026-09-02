@@ -75,10 +75,10 @@ def test_small_pr_scopes_to_its_services():
 
 
 def test_truncated_file_list_is_flagged_and_falls_back():
-    """100 returned against 137 changed:
+    """100 returned against 137 changed means the list is truncated.
 
-    the list is truncated. The tags returned alongside `fallback` are empty on purpose -- a partial
-    list is worse than none, because it looks like an answer.
+    The tags returned alongside `fallback` are empty on purpose -- a partial list is worse than
+    none, because it looks like an answer.
     """
     files = [f"ansible/roles/k8s/sonarr/f{i}.yaml" for i in range(100)]
     tags, source = land_tags.derive(files, changed_files=137)
@@ -167,7 +167,7 @@ def test_land_still_invokes_the_deployer():
 
 
 def test_a_build_role_pulls_in_the_workload_that_runs_its_image():
-    """PR #570's real shape:
+    """PR #570's real shape: a build role must pull in the workload that runs its image.
 
     Renovate bumped only the two n8n Dockerfiles. Deriving `n8n-images` alone builds the images and
     rolls nothing, because k8s_rebuilt_images is play-scoped -- the 2026-08-08 `@n8n/di` failure.
@@ -215,22 +215,22 @@ def test_land_treats_a_stale_tree_as_a_resume_point():
 
 
 def test_land_never_bypasses_the_staleness_guard():
-    """The reject half of the retry:
+    """The reject half of the retry: land never bypasses the staleness guard.
 
-    the tempting fix for exit 4 is the flag that disables the check, which deploys stale templates
+    The tempting fix for exit 4 is the flag that disables the check, which deploys stale templates
     over live config.
     """
     assert "--skip-staleness-check" not in _LAND_SH
 
 
 def test_a_setup_plane_pr_is_not_nothing_to_deploy():
-    """PR #587's real shape:
+    """PR #587's real shape: a setup-plane PR is not nothing-to-deploy.
 
-    no k8s or containers role, so zero deploy tags — but it changed the deployer and land.sh
-    reported `nothing-to-deploy` and exited 0 (2026-08-29). The deployer applies its own role itself
-    since #719, so the note is empty now and the landing is instead verified against the deployer's
-    state (`self_applied` below); what still needs a hand is a setup role initial_setup.yml does not
-    include.
+    It carried no k8s or containers role, so zero deploy tags — but it changed the deployer and
+    land.sh reported `nothing-to-deploy` and exited 0 (2026-08-29). The deployer applies its own
+    role itself since #719, so the note is empty now and the landing is instead verified against the
+    deployer's state (`self_applied` below); what still needs a hand is a setup role
+    initial_setup.yml does not include.
     """
     files = [
         "ansible/roles/setup/k3s/defaults/main.yml",
@@ -261,9 +261,9 @@ def test_a_deploy_plane_change_is_the_ticks_to_apply():
 
 
 def test_a_bringup_playbook_is_still_owed_to_a_hand():
-    """The reject half of `self_applied`:
+    """The reject half of `self_applied`: a bringup playbook is still owed to a hand.
 
-    the tick parks on these outright, so the deployer's state can never say they were applied.
+    The tick parks on these outright, so the deployer's state can never say they were applied.
     """
     files = ["ansible/bootstrap.yml"]
     assert land_tags.plane_note(files) != ""
@@ -292,10 +292,9 @@ def test_an_ordinary_service_pr_needs_no_manual_apply():
 
 
 def test_a_mixed_pr_reports_both_a_tag_and_a_manual_apply():
-    """The harder silence:
+    """The harder silence: a tag-carrying PR must still surface the half a hand owes.
 
-    the deploy genuinely succeeds and half the change is unapplied, so a tag-carrying PR must still
-    surface the half a hand owes.
+    The deploy genuinely succeeds and half the change is unapplied.
     """
     files = [
         "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2",
@@ -471,21 +470,21 @@ def test_land_does_not_call_a_refused_tag_list_nothing_to_deploy():
 
 
 def test_land_still_has_a_nothing_to_deploy_path():
-    """The reject half of the verdict change:
+    """The reject half of the verdict change: a docs-only PR really is finished.
 
-    a docs-only PR really is finished, and must not be reported as needing a human.
+    It must not be reported as needing a human.
     """
     assert "nothing-to-deploy" in _LAND_SH
 
 
 def test_a_secrets_rotation_is_flagged():
-    """PR #695's real shape:
+    """PR #695's real shape: a secrets rotation touching no role derives zero tags.
 
-    it rotated `ruleset_drift_push_token` and touched no role at all, so it derived zero tags and
-    land.sh reported `nothing-to-deploy` and exited 0. Both consumers -- the uptime-kuma tile and
-    the gitops_deploy pusher cron -- kept rendering the old value (2026-09-01). A secret's value
-    lives in no role's template, so changed-file tag scoping is structurally blind to a rotation and
-    the note is the only signal.
+    It rotated `ruleset_drift_push_token` and touched no role at all, so land.sh reported
+    `nothing-to-deploy` and exited 0. Both consumers -- the uptime-kuma tile and the gitops_deploy
+    pusher cron -- kept rendering the old value (2026-09-01). A secret's value lives in no role's
+    template, so changed-file tag scoping is structurally blind to a rotation and the note is the
+    only signal.
     """
     files = [
         "ansible/secret_rotation.yml",
@@ -527,7 +526,7 @@ def test_a_pr_without_secrets_is_clean():
 
 
 def test_a_secrets_rotation_beside_a_service_is_flagged():
-    """The harder silence, the same shape as the setup-plane mixed case:
+    """The harder silence, the same shape as the setup-plane mixed case.
 
     sonarr really deploys, so the verdict would otherwise read `settled`. A PR shipping secrets.yml
     WITH one consuming template still cannot show the secret's OTHER consumers, so the note must

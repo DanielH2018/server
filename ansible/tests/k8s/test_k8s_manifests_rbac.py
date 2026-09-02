@@ -158,9 +158,9 @@ def test_headlamp_keeps_its_serviceaccount_token_mounted():
 
 
 def test_homepage_kubernetes_widget_wiring_holds_together():
-    """Three pieces have to agree or the widget renders EMPTY rather than erroring:
+    """Three pieces have to agree or the widget renders EMPTY rather than erroring.
 
-    the config must ask for cluster mode, the pod must name the SA that mode authenticates with, and
+    The config must ask for cluster mode, the pod must name the SA that mode authenticates with, and
     that SA must be able to read the metrics API. Any one of them missing looks identical from the
     dashboard — a tile with no numbers, which reads as "nothing to report".
     """

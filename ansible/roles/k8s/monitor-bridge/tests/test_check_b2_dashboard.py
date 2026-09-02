@@ -70,9 +70,9 @@ def test_the_b2_storage_line_still_matches_the_dashboard_regex():
 
 
 def test_the_dashboard_regex_rejects_a_reworded_line():
-    """The accepting half's mirror:
+    """The accepting half's mirror.
 
-    a regexp loose enough to match anything would pass the test above while pinning nothing.
+    A regexp loose enough to match anything would pass the test above while pinning nothing.
     """
     assert not re.search(_dashboard_b2_regex(), "B2 storage is fine, 1110 objects")
 

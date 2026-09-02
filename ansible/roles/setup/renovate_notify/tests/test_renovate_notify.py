@@ -78,9 +78,9 @@ def test_gh_auth_token_fills_an_empty_config():
 
 
 def test_no_token_anywhere_stays_anonymous():
-    """The reject half:
+    """The reject half: no token anywhere must stay anonymous.
 
-    a logged-out gh or a missing binary must degrade to the anonymous request this notifier always
+    A logged-out gh or a missing binary must degrade to the anonymous request this notifier always
     made, never crash the daily run into a false OnFailure page.
     """
     assert rn.github_token({}, lambda *_a, **_k: _Proc(1, "")) == ""

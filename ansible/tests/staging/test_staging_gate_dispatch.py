@@ -361,9 +361,9 @@ def test_a_glob_cannot_smuggle_a_filename_in_as_the_sha(tmp_path):
 
 
 def test_the_glob_guard_does_not_break_a_normal_request(tmp_path):
-    """The accepting half of the pair:
+    """The accepting half of the pair.
 
-    disabling pathname expansion must not disturb the ordinary path, and the field split must still
+    Disabling pathname expansion must not disturb the ordinary path, and the field split must still
     happen.
     """
     login_dir = tmp_path / "login"
