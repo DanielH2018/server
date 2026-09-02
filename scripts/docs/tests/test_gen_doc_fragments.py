@@ -47,7 +47,7 @@ def test_every_fragment_is_included_by_at_least_one_page():
 
 def test_the_include_scan_finds_the_known_corpus():
     # A regex that stops matching would make both checks above pass on nothing.
-    assert len(_includes()) >= 4
+    assert len(_includes()) >= 7
 
 
 def test_every_committed_fragment_matches_what_the_generator_writes_now(tmp_path):
@@ -167,3 +167,100 @@ def test_secret_tiers_renders_cadence_and_count_per_tier():
 def test_a_second_run_writes_nothing(tmp_path):
     assert g.write_fragments(tmp_path) == len(g.FRAGMENTS)
     assert g.write_fragments(tmp_path) == 0
+
+
+# --- fail2ban, deadman cadences, LAN addresses ---------------------------------------------
+
+_CONF = """\
+[DEFAULT]
+bantime = 1h
+findtime = 10m
+maxretry = 5
+
+[sshd]
+enabled = true
+
+[dovecot]
+enabled = false
+
+[recidive]
+enabled = true
+bantime = 7d
+findtime = 1d
+maxretry = 3
+"""
+
+
+def test_parse_jails_resolves_defaults_and_skips_disabled():
+    jails = g.parse_jails(_CONF)
+    assert [j["jail"] for j in jails] == ["sshd", "recidive"]
+    assert jails[0] == {
+        "jail": "sshd",
+        "maxretry": "5",
+        "findtime": "10m",
+        "bantime": "1h",
+    }
+    assert jails[1]["bantime"] == "7d"
+
+
+def test_fail2ban_table_renders_one_row_per_enabled_jail():
+    out = g.render_fail2ban_jails(g.parse_jails(_CONF))
+    assert "| `sshd` | 5 failures in 10m (`maxretry 5`, `findtime 10m`) | 1h |" in out
+    assert "dovecot" not in out
+
+
+def test_container_udp_port_reads_the_named_entry():
+    hv = {
+        "containers_list": [
+            {"name": "a", "udp_port": 1},
+            {"name": "wg-easy", "udp_port": 51820},
+        ]
+    }
+    assert g.container_udp_port(hv, "wg-easy") == "51820"
+
+
+def test_container_udp_port_refuses_an_ambiguous_or_missing_entry():
+    hv = {
+        "containers_list": [
+            {"name": "wg-easy", "udp_port": 1},
+            {"name": "wg-easy", "udp_port": 2},
+        ]
+    }
+    with pytest.raises(AssertionError):
+        g.container_udp_port(hv, "wg-easy")
+    with pytest.raises(AssertionError):
+        g.container_udp_port({"containers_list": []}, "wg-easy")
+
+
+def test_deadman_cadences_assembles_each_cron_from_its_variables():
+    k3s = {
+        "k3s_longhorn_backup_health_cron_minute": "*/10",
+        "k3s_disk_health_cron_minute": "*/5",
+        "k3s_etcd_s3_cron_hour": "2",
+        "k3s_etcd_s3_cron_minute": "45",
+        "k3s_manifest_prune_cron_hour": "5",
+        "k3s_manifest_prune_cron_minute": "15",
+    }
+    registry = {
+        "registry_k8s_gc_cron_weekday": "0",
+        "registry_k8s_gc_cron_hour": "4",
+        "registry_k8s_gc_cron_minute": "20",
+    }
+    out = g.render_deadman_cadences(
+        k3s, {"pi_peer_backup_k8s_schedule": "30 23 * * *"}, registry
+    )
+    assert "| `daniel-box-disk-health` | `*/5 * * * *` |" in out
+    assert "| `etcd-snapshot-offbox` | `45 2 * * *` |" in out
+    assert "| `registry-gc` | `20 4 * * 0` |" in out
+    assert "| `uptime-kuma-alive` | `*/10 * * * *` |" in out
+
+
+def test_deadman_cadences_fails_on_a_missing_variable_rather_than_guessing():
+    with pytest.raises(KeyError):
+        g.render_deadman_cadences({}, {"pi_peer_backup_k8s_schedule": "x"}, {})
+
+
+def test_lan_addresses_names_each_value_and_its_variable():
+    out = g.render_lan_addresses("10.0.0.240", "10.0.0.243", "51820", "51822")
+    assert "| `10.0.0.240` | `k3s_metallb_ingress_vip` |" in out
+    assert "| `51822/udp` |" in out
