@@ -33,14 +33,15 @@
 # Exit codes:
 #   0   deployed and settled, or there was nothing to deploy
 #   1   CI red, blocked by a change needing a hand, deploy failed, the health gate failed, or
-#       the PR was closed unmerged
+#       the PR was closed unmerged or conflicts with master
 #   2   bad arguments
 #   75  gave up waiting — the merge budget or CI budget elapsed, the deploy lock stayed busy,
 #       the tick was skipped for lock contention every time, or the tick has not yet crossed
 #       origin
 #
 # Verdicts printed on stdout: settled | unhealthy | deploy-failed | nothing-to-deploy |
-# blocked | needs-manual-apply | deferred | merge-timeout | ci-red | ci-timeout | lock-busy.
+# blocked | needs-manual-apply | deferred | merge-conflict | merge-timeout | ci-red |
+# ci-timeout | lock-busy.
 # The last four are the `die` exits that used to reach the Landings board as one `aborted`
 # verdict: the 45 landings before 2026-09-02 held four of them, two at exactly the 2700s
 # merge budget and two at the CI budget, and nothing on the board told them apart from a
@@ -52,6 +53,8 @@
 # — so it is landed but not live. `deferred` means the tick applies this PR itself (a setup
 # role or the deploy plane) and has not crossed origin yet, usually because a newer merge's
 # CI is still running; the next tick does it, and nothing is wrong with this PR.
+# `merge-conflict` is the merge wait ending early: the PR cannot merge until it is rebased,
+# which is a different instruction to the reader than `merge-timeout`'s "nobody merged it yet".
 set -uo pipefail
 
 PR=''
@@ -64,8 +67,10 @@ CI_TIMEOUT=900
 # is not being merged, and the session should look at why.
 AWAIT_MERGE=0
 MERGE_TIMEOUT=2700
-MERGE_POLL=30
-PRIMARY=/home/ubuntu/server
+# Both overridable so the merge-wait loop can be exercised by a test with a stubbed `gh`, in a
+# temporary checkout and without a 30s sleep per poll. Nothing operational sets them.
+MERGE_POLL=${LAND_MERGE_POLL:-30}
+PRIMARY=${LAND_PRIMARY:-/home/ubuntu/server}
 BRANCH=master
 LOCK_RETRIES=5
 LOCK_BACKOFF=60
@@ -190,12 +195,34 @@ cd "$PRIMARY" || die "cannot cd to $PRIMARY" 1
 if [ "$AWAIT_MERGE" -eq 1 ]; then
   echo "== 0/6  waiting for PR #$PR to merge (auto-merge or the merge queue)"
   waited=0
+  conflicting=0
   while :; do
-    state=$(gh pr view "$PR" --json state --jq '.state') || die "could not read PR #$PR" 1
+    pr_state=$(gh pr view "$PR" --json state,mergeable --jq '.state + " " + .mergeable') ||
+      die "could not read PR #$PR" 1
+    state=${pr_state% *}
+    mergeable=${pr_state#* }
     case "$state" in
       MERGED) break ;;
       CLOSED) die "PR #$PR was closed without merging — nothing to land" 1 ;;
     esac
+    # A PR that goes CONFLICTING after `gh pr merge --auto` was armed never merges, and
+    # nothing on the PR says so — with several sessions landing at once, another merge moving
+    # master under an open PR is the ordinary way it happens. Without this the landing sat out
+    # the whole 2700s budget and reported merge-timeout, which reads as "nobody merged it"
+    # rather than "it cannot be merged".
+    # Only CONFLICTING may bail — GitHub computes mergeability asynchronously and serves
+    # UNKNOWN until it settles (PR #657 read UNKNOWN on a live open PR, 2026-09-02), so
+    # bailing on anything-but-MERGEABLE would abort every landing that polled too early.
+    # Two consecutive polls, because master moving under the PR flips the field for one
+    # poll while GitHub recomputes.
+    if [ "$mergeable" = "CONFLICTING" ]; then
+      conflicting=$((conflicting + 1))
+      if [ "$conflicting" -ge 2 ]; then
+        die "PR #$PR conflicts with $BRANCH — rebase it, re-arm \`gh pr merge --squash --auto\`, then re-run this" 1 merge-conflict
+      fi
+    else
+      conflicting=0
+    fi
     if [ "$waited" -ge "$MERGE_TIMEOUT" ]; then
       die "PR #$PR still $state after ${MERGE_TIMEOUT}s — not being merged; look at its checks or the queue" 75 merge-timeout
     fi
