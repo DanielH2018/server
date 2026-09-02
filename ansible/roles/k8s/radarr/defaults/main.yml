@@ -1,5 +1,5 @@
 ---
-radarr_k8s_image: lscr.io/linuxserver/radarr:6.1.1.10360-ls304
+radarr_k8s_image: lscr.io/linuxserver/radarr:6.3.0.10514-ls314
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Migrating state — strategy is Recreate and the config volume is seeded through
