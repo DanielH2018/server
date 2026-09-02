@@ -7,7 +7,8 @@ Kuma monitor — it goes **down** when any secret is past its per-tier window, o
 secret exists in `secrets.yml` but not the registry.
 
 Rotation dates are **staggered** at registration (a deterministic per-name offset), so the
-~90 secrets come due a few at a time across the year — never all on one day.
+registered secrets come due a few at a time across the year — never all on one day. The
+[Secrets reference](reference/secrets.md) lists them, with each one's tier and due date.
 
 ## Daily use
 

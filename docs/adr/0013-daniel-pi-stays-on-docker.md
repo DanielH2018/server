@@ -19,8 +19,10 @@ The k3s migration covered `daniel-box` and `daniel-server`. `daniel-pi` was name
 out of scope at design time rather than left undecided, because "we will get to the Pi
 later" is how a two-platform homelab becomes permanent by accident instead of by choice.
 
-The Pi runs a small set of LAN-only utilities: WireGuard, a Docker socket proxy, a log
-viewer, a metrics viewer and an autoheal watchdog. It is a different architecture, it is the
+The Pi runs a small set of LAN-only utilities: WireGuard, a Docker socket proxy, a metrics
+viewer, an autoheal watchdog, and the node-exporter and promtail agents that feed the
+cluster's monitoring (`containers_list` in `host_vars/daniel-pi.yml` is the current set; the
+[Services reference](../reference/services.md) renders it). It is a different architecture, it is the
 WireGuard endpoint that must stay reachable when the cluster is down, and it is the machine
 an operator uses to get back in when something else has broken.
 
