@@ -96,12 +96,22 @@
     fail_msg: >-
       {{ item.name }} is stale: the registry serves {{ item.digest }} but at least one running pod
       resolved something else. A built image is pushed to a mutable tag, so the Deployment spec does
-      not change and nothing rolls — the new image sits in the registry unused while every other
-      check reads green. This is what a rollout that was never queued looks like from the outside.
-      Roll it with:
+      not change on a rebuild — and there are TWO ways that ends here, with different fixes.
+      (1) NO ROLLOUT WAS QUEUED: the new image sits in the registry unused while every other check
+      reads green. Roll it with:
       ./scripts/deploy.sh --tags <role> -e image_builder_force=true
-      Inspect what is actually running with:
+      (2) THE POD ROLLED AND REUSED A CACHED TAG: check `imagePullPolicy` on the container below.
+      Under IfNotPresent the node answers `already present on machine` and starts the old bytes, so
+      a forced rebuild changes NOTHING — it pushes the same digest the node is refusing to fetch.
+      The fix is `imagePullPolicy: Always` in the role's template, which
+      ansible/tests/k8s/test_built_images_pull_always.py requires; the API server defaults this
+      field only at CREATE time, so a Deployment first created with an upstream `@sha256:` pin
+      keeps IfNotPresent through every later apply that changes only `image`.
+      Tell them apart by the pod's age: a pod older than this deploy is (1), a fresh one is (2).
+      Inspect what is actually running, with the age and pull policy the two cases turn on:
       k3s kubectl -n {{ k8s_namespace }} get pods -o jsonpath='{range .items[*]}{.metadata.name}{"
+      "}{.metadata.creationTimestamp}{"
+      "}{.spec.containers[*].imagePullPolicy}{"
       "}{.status.containerStatuses[*].imageID}{"\n"}{end}' | grep {{ item.name }}
     quiet: true
   loop: "{{ k8s_built_images | default([]) }}"

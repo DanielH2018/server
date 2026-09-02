@@ -254,3 +254,73 @@ def test_the_gate_skips_an_unreadable_registry_digest():
         {"items": [_pod("localhost:5000/nut@sha256:bbb")]},
         {"name": "nut", "digest": ""},
     )
+
+
+def _fail_msg() -> str:
+    """The gate's rendered fail_msg, folded by the YAML loader exactly as Ansible sees it."""
+    for task in _tasks(_GATE):
+        msg = task.get("ansible.builtin.assert", {}).get("fail_msg")
+        if msg:
+            return msg
+    raise AssertionError("the gate no longer sets a fail_msg")
+
+
+def test_the_failure_names_both_causes_and_their_different_fixes():
+    """One symptom, two causes — and the remedy for one is a no-op for the other.
+
+    The message named only "nothing rolled" until 2026-09-02, when terraria hit the OTHER cause:
+    the pod DID roll and the node served its cached `:latest`, because the Deployment carried
+    `imagePullPolicy: IfNotPresent`. An operator following the message ran the forced rebuild it
+    prescribes, which pushed the same digest the node was already refusing to fetch and changed
+    nothing. A remediation that cannot work for the case in front of you is worse than none: it
+    spends a deploy and reads as "the fix didn't take".
+    """
+    msg = _fail_msg()
+
+    assert "image_builder_force=true" in msg, (
+        "the message no longer names the forced rebuild, which is the fix for the "
+        "no-rollout-was-queued cause"
+    )
+    assert "imagePullPolicy" in msg and "Always" in msg, (
+        "the message no longer names the cached-tag cause. A pod that rolled and reused its "
+        "cached :latest presents identically, and the forced rebuild above does nothing for it."
+    )
+
+
+def test_the_inspect_command_shows_what_tells_the_two_causes_apart():
+    """A diagnosis the reader cannot make from the command they are handed is not a diagnosis.
+
+    Pod age separates the two: a pod older than this deploy never rolled, a fresh one rolled and
+    re-used the cache. Pull policy confirms which. Both have to be IN the jsonpath, or the reader
+    is sent to compose a second command at the moment they are least equipped to.
+    """
+    msg = _fail_msg()
+
+    assert "creationTimestamp" in msg, (
+        "the inspect command no longer prints pod age — the field that says whether the pod "
+        "rolled at all"
+    )
+    assert "imagePullPolicy" in msg.split("Inspect what is actually running", 1)[-1], (
+        "the inspect command no longer prints imagePullPolicy, so the reader cannot confirm "
+        "the cached-tag cause from the output the message hands them"
+    )
+
+
+def test_the_inspect_jsonpath_folds_to_a_single_line():
+    """The separators are written as folded newlines and must render as spaces, not breaks.
+
+    `{"` + newline + `"}` inside a YAML `>-` scalar is how this file writes `{" "}` without a
+    line over 100 characters. Indent one of those continuation lines by one extra space and YAML
+    stops folding it: the jsonpath reaches the operator with a literal newline inside a quoted
+    string, and pasting it fails with an unhelpful kubectl parse error.
+    """
+    jsonpath = _fail_msg().split("jsonpath=", 1)[-1]
+
+    assert "\n" not in jsonpath, (
+        "the fail_msg's jsonpath contains a literal newline — a continuation line is indented "
+        f"past the fold: {jsonpath!r}"
+    )
+    assert '{" "}' in jsonpath, (
+        "the jsonpath no longer separates its fields with a folded space; the fields would run "
+        f"together in the output: {jsonpath!r}"
+    )
