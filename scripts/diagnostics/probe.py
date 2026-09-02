@@ -89,11 +89,10 @@ from probe_health import (
     k8s_pods_argv,
     resolve_ip,
     run_health,
-    run_readonly_rbac,
-    run_vip_placement,
 )
 from probe_metrics import run_query
 from probe_monitors import run_kuma_drift, run_monitors
+from probe_readonly_rbac import run_readonly_rbac
 from probe_releases import run_releases
 from probe_storage import (
     LONGHORN_PREFIX,
@@ -103,6 +102,7 @@ from probe_storage import (
     run_b2_spend,
     run_longhorn_blocks,
 )
+from probe_vip_placement import run_vip_placement
 
 
 def cert_stages(host, port, sni):
