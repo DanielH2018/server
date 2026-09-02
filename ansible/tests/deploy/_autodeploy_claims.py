@@ -152,7 +152,7 @@ def _deployment_strategy_is_recreate(role: Path) -> bool:
 
 
 def _migrating_state(role: Path) -> bool:
-    """Whether `role` has the shape volume-snapshot exists for:
+    """Whether `role` has the shape volume-snapshot exists for.
 
     `strategy: Recreate` against at least one rendered RWO PVC claim.
 

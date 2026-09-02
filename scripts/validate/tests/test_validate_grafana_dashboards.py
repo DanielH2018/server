@@ -54,7 +54,7 @@ def test_every_duplicated_uid_is_reported_not_just_the_first():
 
 
 def test_the_real_tree_has_no_duplicate_uids():
-    """The regression guard over the real dashboards:
+    """The regression guard over the real dashboards.
 
     19 boards, all uids distinct when the eight legacy copies were deleted.
     """

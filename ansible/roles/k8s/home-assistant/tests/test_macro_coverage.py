@@ -1,9 +1,8 @@
-"""Guard:
+"""Guard: every macro in custom_templates/*.jinja must be exercised by a render_macro() call.
 
-every macro defined in custom_templates/*.jinja must be exercised by a render_macro() call in this
-tests/ directory. Deterministic (covered: yes/no) — the replacement for a fuzzy 'is this logic too
-complex' judgment. Matches the macro name as the 2nd positional arg to render_macro(FILE, "<name>",
-...), NOT a bare substring (a comment/docstring can't satisfy it).
+Coverage is scoped to this tests/ directory and is deterministic (covered: yes/no) — the replacement
+for a fuzzy 'is this logic too complex' judgment. Matches the macro name as the 2nd positional arg
+to render_macro(FILE, "<name>", ...), NOT a bare substring (a comment/docstring can't satisfy it).
 """
 
 import re

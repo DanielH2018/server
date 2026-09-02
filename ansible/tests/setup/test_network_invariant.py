@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Invariant:
+"""Invariant: every Docker network a service attaches to must be created by docker_install.
 
-every Docker network a service attaches to (host_vars `containers_list[].networks`) must be created
-by docker_install's "Create Docker networks" loop.
+The networks a service attaches to are host_vars `containers_list[].networks`; the creating loop is
+docker_install's "Create Docker networks".
 
 Otherwise a service on a brand-new network deploys fine on an EXISTING host (the net is already
 there) but fails only on a fresh-host bring-up — this catches it pre-deploy instead.

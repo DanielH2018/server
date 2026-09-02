@@ -123,9 +123,9 @@ _LAYOUT_EXCEPTIONS = {
 
 
 def _tracked_suite_files() -> list[str]:
-    """The test files plus every `conftest.py`:
+    """The test files plus every `conftest.py`.
 
-    a conftest beside shipped code is the same hazard as a test beside it, and #764 moved two of
+    A conftest beside shipped code is the same hazard as a test beside it, and #764 moved two of
     them.
     """
     return sorted(

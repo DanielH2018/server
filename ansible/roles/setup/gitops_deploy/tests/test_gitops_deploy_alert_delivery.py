@@ -127,9 +127,9 @@ def test_an_undelivered_alert_stays_queued(gitops_deploy, monkeypatch, state_dir
 def test_deliver_caps_the_queue_and_logs_each_drop(
     gitops_deploy, monkeypatch, state_dir, capsys
 ):
-    """Without the cap the queue is unbounded:
+    """Without the cap the queue is unbounded.
 
-    nothing reads the file back except drain_pending(), so a permanently broken webhook grows it
+    Nothing reads the file back except drain_pending(), so a permanently broken webhook grows it
     every 30 minutes forever. A drop must reach the journal (which Loki indexes) naming the alert
     discarded.
     """

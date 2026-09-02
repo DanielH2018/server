@@ -166,9 +166,9 @@ def test_k8s_health_incomplete_rollout_exits_one():
 
 
 def test_k8s_health_recent_restart_exits_one_despite_being_ready():
-    """The kube-state-metrics failure of 2026-08-07:
+    """The kube-state-metrics failure of 2026-08-07: a recent restart exits 1 despite being Ready.
 
-    a bad liveness probe passes READINESS, flips the Deployment to Available, and only then starts
+    A bad liveness probe passes READINESS, flips the Deployment to Available, and only then starts
     getting killed. Every readiness-derived field reads healthy while the pod crashloops.
     """
     just_now = "2026-08-16T11:59:30Z"
@@ -465,9 +465,9 @@ def test_multi_workload_roles_still_resolve_their_siblings():
 
 
 def test_multi_workload_roles_are_not_named_after_their_tag():
-    """The reject half of the pin above:
+    """The reject half of the pin above: a multi-workload role is not named after its tag.
 
-    these roles are listed BECAUSE the tag alone is not enough. One that became a plain
+    These roles are listed BECAUSE the tag alone is not enough. One that became a plain
     single-workload role should leave the list rather than sit here asserting nothing.
     """
     resolved = _resolved()
@@ -543,10 +543,10 @@ def test_pod_selector_matches_a_workloads_own_labels():
 
 
 def test_pod_selector_is_flagged_when_it_would_differ_from_the_name():
-    """pihole-2's Deployment selects `app:
+    """A pod selector that would differ from the workload name must be flagged.
 
-    pihole`. `app=pihole-2` matched no pods at all, and `app=pihole` matched BOTH piholes' —
-    confirmed live 2026-09-01.
+    pihole-2's Deployment selects `app: pihole`. `app=pihole-2` matched no pods at all, and
+    `app=pihole` matched BOTH piholes' — confirmed live 2026-09-01.
     """
     selector = probe_health.pod_selector(_workload("pihole-2", {"app": "pihole"}))
     assert selector == "app=pihole"

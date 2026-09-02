@@ -155,9 +155,9 @@ def test_the_configmap_is_built_from_the_injected_tree():
 
 
 def test_the_injector_writes_a_derived_tree_not_the_staged_one():
-    """Injecting in place makes the staging copy task fight the injector:
+    """Injecting in place makes the staging copy task fight the injector.
 
-    it restores the pristine JSON every deploy, the injector re-injects, and Grafana rolls every
+    It restores the pristine JSON every deploy, the injector re-injects, and Grafana rolls every
     time.
     """
     tasks = _DASHBOARDS_TASKS.read_text()

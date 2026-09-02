@@ -85,10 +85,9 @@ def _runtime_modules():
 
 
 def _patched_names_by_module(test_files=None, module_names=None):
-    """{module:
+    """Map each runtime module to the attributes either suite assigns, patches, or mutates in place.
 
-    {name}} for every attribute of a runtime module either suite assigns, patches, or mutates in
-    place.
+    Returns `{module: {name}}`.
 
     AST walk, not a regex — a line-oriented regex over `monkeypatch.setattr(bridge_common, "X"`
     misses the wrapped form ruff format produces and misses plain `bridge_common.X = ...` assignment

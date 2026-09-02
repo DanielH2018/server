@@ -98,9 +98,9 @@ def test_the_newest_snapshot_is_never_pruned() -> None:
 def test_retain_zero_clamps_to_two_rather_than_deleting_the_rollback_recovery_point() -> (
     None
 ):
-    """Not a floor of 1:
+    """Not a floor of 1: the chain must keep this run's own snapshot and the earlier one.
 
-    a rollback run takes its own snapshot and prunes BEFORE k8s/volume-revert reads the chain, so
+    A rollback run takes its own snapshot and prunes BEFORE k8s/volume-revert reads the chain, so
     the chain must keep this run's own snapshot AND the earlier one the revert needs. See
     CLAUDE.md's "The revert needs two, not one".
     """
@@ -165,9 +165,9 @@ def test_markremoved_snapshots_are_excluded_from_the_window_not_counted_in_it() 
 
 
 def test_an_unpopulated_markremoved_is_treated_as_not_removed() -> None:
-    """R14:
+    """R14: an unpopulated `markRemoved` must be treated as not removed.
 
-    a snapshot read moments after creation can have `status.markRemoved` still unpopulated,
+    A snapshot read moments after creation can have `status.markRemoved` still unpopulated,
     rendering `<ts>||<name>` rather than `<ts>|false|<name>`.
 
     An `equalto 'false'` filter drops that line out of the listing entirely — including THIS run's
@@ -231,9 +231,9 @@ def test_the_snapshot_name_starts_with_the_prefix_the_prune_selects_on() -> None
 
 
 def test_the_full_name_has_the_sha_claim_string_as_a_strict_prefix() -> None:
-    """R2:
+    """R2: the reconstructable string is a strict prefix of the CR name, and the token follows it.
 
-    the run token makes `autodeploy-<svc>-<sha8>-<claim>` non-unique by design (a rollback redeploy
+    The run token makes `autodeploy-<svc>-<sha8>-<claim>` non-unique by design (a rollback redeploy
     must not collide with that commit's earlier snapshot), so 7b's reconstruction is a prefix match
     rather than an equality test. Pin that the reconstructable string — service, sha8, and claim,
     with no run token — is still an exact prefix of whatever this role actually names the CR, and
@@ -258,9 +258,9 @@ def test_the_full_name_has_the_sha_claim_string_as_a_strict_prefix() -> None:
 
 
 def test_two_deploys_of_the_same_sha_get_two_names() -> None:
-    """R2:
+    """R2: two deploys of the same SHA must get two distinct names sharing one prefix.
 
-    redeploying an older commit is the manual rollback this slice exists to enable, and it must not
+    Redeploying an older commit is the manual rollback this slice exists to enable, and it must not
     be refused by its own snapshot step colliding with that commit's earlier,
     markRemoved-but-not-gone CR. Two runs with different tokens for the same service/claim/sha must
     produce two distinct names, both sharing the reconstructable prefix.
@@ -309,9 +309,9 @@ def test_two_claims_of_one_service_get_two_names() -> None:
 
 
 def test_the_run_token_is_computed_once_in_main_not_inside_the_claim_loop() -> None:
-    """A token recomputed per claim would drift mid-role:
+    """A token recomputed per claim would drift mid-role.
 
-    the wait task in claim.yml polls for the exact name the apply task in the SAME claim.yml pass
+    The wait task in claim.yml polls for the exact name the apply task in the SAME claim.yml pass
     created, so two different `now()` calls for the same claim would never agree on it. Pin that the
     fact is set in main.yml (which runs once per role, before the per-claim loop) and nowhere in
     claim.yml (which runs once per claim, inside that loop).

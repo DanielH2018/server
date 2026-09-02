@@ -258,9 +258,9 @@ def test_a_scoped_setup_run_fits_the_budget():
 
 
 def test_a_full_deploy_plus_rollback_is_flagged_over_budget():
-    """Measured 2026-08-22:
+    """Measured 2026-08-22: a full deploy plus rollback leaves 96s against TimeoutStartSec.
 
-    a full deploy.yml is 1212s. 180 + 1212 + 1212 = 2604 against TimeoutStartSec=2700 leaves 96s, so
+    A full deploy.yml is 1212s. 180 + 1212 + 1212 = 2604 against TimeoutStartSec=2700 leaves 96s, so
     a run four percent slower than measured is SIGTERMed mid-rollback -- which strands the tree at
     the failed commit with live state half-applied. This is the reject half, and it is the whole
     argument for forward-only.

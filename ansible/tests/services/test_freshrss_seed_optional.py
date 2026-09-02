@@ -163,10 +163,9 @@ def test_the_two_creators_agree_on_the_claim(host: str) -> None:
 
 
 def test_the_deployment_references_the_claim_the_flag_creates() -> None:
-    """Ties the two halves together:
+    """Ties the two halves together: the name the PVC renders is the name the pod mounts.
 
-    the name the PVC template renders is the name the pod mounts. A rename on one side alone passes
-    every check above.
+    A rename on one side alone passes every check above.
     """
     ctx = _context("daniel-stage")
     env = Environment(undefined=StrictUndefined)

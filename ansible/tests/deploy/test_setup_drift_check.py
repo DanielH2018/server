@@ -146,9 +146,9 @@ def test_a_current_render_is_clean(tmp_path):
 
 
 def test_a_changed_template_is_reported_stale(tmp_path):
-    """The rejecting half, and the exact live shape:
+    """The rejecting half, and the exact live shape.
 
-    the stamp records what the host rendered, the tree has moved on, and nothing else on
+    The stamp records what the host rendered, the tree has moved on, and nothing else on
     daniel-server can see the difference.
     """
     repo = tmp_path / "repo"
@@ -245,9 +245,9 @@ def test_the_tree_age_arm_reads_the_checkout(tmp_path):
 
 
 def test_an_unreadable_checkout_is_a_fault_not_a_pass(tmp_path):
-    """The rejecting half of the arm above:
+    """The rejecting half of the arm above: an unreadable checkout is a fault, not a pass.
 
-    with no age the arms below it cannot be trusted, so the honest verdict is 'could not read the
+    With no age the arms below it cannot be trusted, so the honest verdict is 'could not read the
     tree', never 'nothing has drifted'.
     """
     script = tmp_path / "age.sh"

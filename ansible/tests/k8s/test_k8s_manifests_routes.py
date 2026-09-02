@@ -51,10 +51,10 @@ def test_k8s_session_cookie_name_is_set():
 
 
 def test_k8s_authelia_database_is_on_its_own_volume():
-    """The slice-1 hazard from design.md:
+    """The slice-1 hazard from design.md: two Authelias writing one SQLite file corrupt it.
 
-    two Authelias writing one SQLite file corrupt it. The database must live under the mount backed
-    by the PVC, never on a path shared with daniel-server's bind mount.
+    The database must live under the mount backed by the PVC, never on a path shared with
+    daniel-server's bind mount.
     """
     db_path = _k8s_authelia_config()["storage"]["local"]["path"]
     assert db_path.startswith("/config/")
@@ -111,9 +111,9 @@ AUTHELIA_BYPASS_ROUTES = {
 
 
 def test_every_authed_service_carries_forward_auth_and_rate_limit():
-    """The check that has to scale:
+    """The check that has to scale.
 
-    slice 2 hand-authors ~33 more IngressRoutes, and a missing middleware is an ungated service that
+    Slice 2 hand-authors ~33 more IngressRoutes, and a missing middleware is an ungated service that
     returns 200 and looks fine.
 
     Iterates every document, not just the first: a role may ship more than one IngressRoute
@@ -249,11 +249,10 @@ def _tlsoption_names() -> set:
 
 
 def test_routes_reference_a_tlsoption_that_exists_and_is_not_named_default():
-    """`default` is reserved:
+    """`default` is reserved, so an IngressRoute naming it explicitly fails to build.
 
     Traefik registers a TLSOption of that name as the global default options, never under
-    <namespace>-default@kubernetescrd. An IngressRoute naming it explicitly therefore fails to
-    build, while the object sits there looking perfectly valid:
+    <namespace>-default@kubernetescrd. The object meanwhile sits there looking perfectly valid:
 
         error "unknown TLS options: homelab-default@kubernetescrd"
 

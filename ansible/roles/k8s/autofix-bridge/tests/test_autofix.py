@@ -299,7 +299,7 @@ def _configure_sonarr_only(monkeypatch):
 
 
 def _fake_request(records, calls):
-    """A `_request` stand-in:
+    """A `_request` stand-in that answers the queue poll and records everything else.
 
     GETs (the queue poll) return the canned records; anything else (DELETE / /api/v3/command) is
     recorded instead of hitting the network.

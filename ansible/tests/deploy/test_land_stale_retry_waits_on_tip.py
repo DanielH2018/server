@@ -96,7 +96,7 @@ def test_a_loop_without_a_counter_step_is_flagged():
 
 
 def _books_tip_wait_under_wait_ci(block: str) -> bool:
-    """Both stamps must shift by the same waited seconds:
+    """Both stamps must shift by the same waited seconds.
 
     T_CI alone would also stretch `tick`, T_TICK alone would shrink `deploy` without crediting
     `wait_ci`.

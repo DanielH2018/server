@@ -78,7 +78,7 @@ def test_no_bridge_hostname_key_survives_anywhere():
 
 
 def test_docker_edge_renders_no_bridge_machinery():
-    """The Docker edge itself retired at E7 (2026-08-13):
+    """The Docker edge itself retired at E7 (2026-08-13), so it renders no bridge machinery.
 
     traefik + authelia are gone from daniel-server, so there is no file-provider config left to
     render bridge machinery into. This is now an absence guard, not a render check — a reappearing
@@ -92,11 +92,10 @@ def test_docker_edge_renders_no_bridge_machinery():
 
 
 def test_gate_serves_every_token_router():
-    """The gate must render:
+    """The gate must serve every token router, and every router must reach its service.
 
-    a token router and an Authelia'd /_utils carve-out per livesync name form, the LAN-only probe
-    router, and homelab-mcp's bearer router — and every router must reach its service. Losing a
-    token predicate would forward PAST the gate.
+    A token router and an Authelia'd /_utils carve-out per livesync name form, the LAN-only probe
+    router, and homelab-mcp's bearer router. Losing a token predicate would forward PAST the gate.
     """
     gate = _gate_config()
     routers = gate["http"]["routers"]
@@ -133,9 +132,9 @@ def test_gate_serves_every_token_router():
 
 
 def test_gate_stays_out_of_crd_objects():
-    """The token's whole safety argument:
+    """The token's whole safety argument: it lives in a Secret, never in an IngressRoute.
 
-    it lives in a Secret (RBAC-denied to the readonly kubeconfig), never in an IngressRoute.
+    That Secret is RBAC-denied to the readonly kubeconfig.
 
     livesync therefore renders NO IngressRoute at all. It used to render one for the `-k8s` names
     only; when that suffix retired (2026-08-15) the route was deleted rather than collapsed onto the
@@ -151,11 +150,11 @@ def test_gate_stays_out_of_crd_objects():
 
 
 def test_reverse_bridge_stays_retired():
-    """The reverse bridge retired at E7 (2026-08-13):
+    """The reverse bridge retired at E7 (2026-08-13) when its last tenant moved to the k8s portal.
 
-    its last tenant — the Docker Authelia portal on the unsuffixed auth name — moved to the k8s
-    portal, which now owns auth.<domain> and the OIDC issuer. A reappearing template would put two
-    routers on one Host and silently shadow the portal.
+    That tenant — the Docker Authelia portal on the unsuffixed auth name — moved to the k8s portal,
+    which now owns auth.<domain> and the OIDC issuer. A reappearing template would put two routers
+    on one Host and silently shadow the portal.
     """
     assert not (
         ANSIBLE / "roles" / "k8s" / "traefik" / "templates" / "reverse-bridge.yaml.j2"

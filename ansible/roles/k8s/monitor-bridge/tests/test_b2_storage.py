@@ -43,9 +43,9 @@ def test_verdict_down_over_threshold():
 
 
 def test_verdict_treats_a_truncated_walk_as_failure():
-    """Under-reporting is the dangerous direction:
+    """Under-reporting is the dangerous direction.
 
-    a partial sum looks like headroom we do not have, so a truncated listing must page rather than
+    A partial sum looks like headroom we do not have, so a truncated listing must page rather than
     report a smaller number confidently.
     """
     ok, msg = checks_b2.b2_storage_verdict(1e9, 50000, True, cap=10e9, max_pct=80)

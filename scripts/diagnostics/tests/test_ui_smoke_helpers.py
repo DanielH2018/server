@@ -86,9 +86,9 @@ def test_settled_title_waits_out_a_title_the_app_sets_mid_hydration():
 
 
 def test_settled_title_returns_the_wrong_title_rather_than_hiding_it():
-    """The rejecting half:
+    """The rejecting half: a wrong title must be returned rather than hidden.
 
-    a title that never becomes the expected one must reach the assertion, or a genuinely renamed
+    A title that never becomes the expected one must reach the assertion, or a genuinely renamed
     page passes forever.
     """
     client = client_returning(

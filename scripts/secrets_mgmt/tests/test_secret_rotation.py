@@ -404,9 +404,9 @@ def test_advance_moves_a_stale_date_forward():
 
 
 def test_advance_never_moves_a_date_backward():
-    """Advance-only is what stops this creating an overdue secret:
+    """Advance-only is what stops this creating an overdue secret.
 
-    a registry date newer than git's — a rotation recorded before its commit landed — must survive.
+    A registry date newer than git's — a rotation recorded before its commit landed — must survive.
     """
     reg = {"secrets": {"tok": {"tier": "assisted", "last_rotated": "2026-08-25"}}}
     assert sr.advance_last_rotated(reg, {"tok": dt.date(2026, 3, 13)}) == []
@@ -473,7 +473,7 @@ def test_every_consumer_tag_names_a_role_that_renders_the_token():
 
 
 def test_every_consumer_tag_is_a_real_deploy_tag():
-    """The same failure one step along:
+    """The same failure one step along: every consumer tag must be a real deploy tag.
 
     `ansible-playbook deploy.yml --tags <unmatched>` runs nothing and exits 0, so the rotation still
     reads as deployed. Three mis-routed tokens are pushed by SETUP roles with no `containers_list`
@@ -497,7 +497,7 @@ def test_every_consumer_tag_is_a_real_deploy_tag():
 
 
 def test_rotate_commit_sends_new_token_on_stdin_not_argv(monkeypatch):
-    """Regression guard for the 2026-08-27 fix:
+    """Regression guard for the 2026-08-27 fix: the new token travels on stdin, not argv.
 
     `sops set` used to take the freshly minted token as a CLI argument, which sits in
     /proc/<pid>/cmdline for the call's lifetime (no hidepid here — see secret-rotate.sh.j2's own

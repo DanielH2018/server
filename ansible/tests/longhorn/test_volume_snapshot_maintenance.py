@@ -113,9 +113,9 @@ def test_the_maintenance_attach_requests_disablefrontend_on_this_node() -> None:
 
 
 def test_the_maintenance_detach_sends_neither_hostid_nor_attachment_id() -> None:
-    """Pairs with the attach on the empty ticket key, same as k8s/volume-revert:
+    """Pairs with the attach on the empty ticket key, same as k8s/volume-revert.
 
-    sending `attachmentID` on the attach alone would make this detach remove nothing while still
+    Sending `attachmentID` on the attach alone would make this detach remove nothing while still
     returning 200.
     """
     body = _named(_CLAIM, "Detach")["ansible.builtin.uri"].get("body", {})
@@ -269,9 +269,9 @@ def test_the_retaken_snapshot_wait_registers_to_its_own_name() -> None:
 
 
 def test_the_downstream_fail_reads_the_folded_readiness_fact() -> None:
-    """The other half of the fix:
+    """The other half of the fix: the fail task reads the folded readiness fact.
 
-    the fail task must read the folded fact rather than either wait's register directly, or the
+    The fail task must read the folded fact rather than either wait's register directly, or the
     clobber comes back the moment someone reorders the file.
     """
     task = _named(_CLAIM, "Fail on a snapshot that never became usable")
@@ -344,9 +344,9 @@ def test_every_maintenance_attach_task_is_guarded_on_detached_and_no_mutate() ->
 
 
 def test_the_maintenance_sequence_runs_in_the_drill_proven_order() -> None:
-    """Mutated 2026-08-21:
+    """Mutated 2026-08-21: two order swaps both went red only under this positional test.
 
-    swapping 'Retake' and 'Attach' (retaking before attaching) and, separately, swapping 'Detach'
+    Swapping 'Retake' and 'Attach' (retaking before attaching) and, separately, swapping 'Detach'
     and 'Wait for the retaken snapshot' both went red under this test — see the fix-round report for
     the transcript. Every per-task guard test in this file stayed green under both mutations, which
     is why a positional test exists at all.

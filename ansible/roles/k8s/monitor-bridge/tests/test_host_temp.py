@@ -381,9 +381,9 @@ def test_a_missing_host_pages_once_the_grace_expires(monkeypatch):
 
 
 def test_a_short_coverage_gap_is_held(monkeypatch):
-    """The accepting half:
+    """The accepting half: a short coverage gap must be held, not paged on.
 
-    the Pi's hwmon series went absent for about 20 minutes over the 7d to 2026-08-29, so a floor
+    The Pi's hwmon series went absent for about 20 minutes over the 7d to 2026-08-29, so a floor
     with no grace would page on a healthy estate.
     """
     _reset()
@@ -409,9 +409,9 @@ def test_full_coverage_clears_the_shortfall_streak(monkeypatch):
 
 
 def test_a_hot_sensor_outranks_a_coverage_shortfall(monkeypatch):
-    """Precedence, mirroring check_disk:
+    """Precedence, mirroring check_disk: a hot sensor outranks a coverage shortfall.
 
-    a host that IS reporting and IS too hot pages ahead of a complaint about the absent one.
+    A host that IS reporting and IS too hot pages ahead of a complaint about the absent one.
     Reporting the shortfall first would bury a real breach.
     """
     _reset()

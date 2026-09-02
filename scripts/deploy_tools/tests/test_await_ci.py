@@ -66,10 +66,9 @@ def test_no_verdict_sha_resolves_to_the_tip_when_it_is_an_ancestor():
 
 
 def test_no_verdict_sha_does_not_resolve_to_an_unrelated_tip():
-    """The reject half:
+    """The reject half: an unrelated tip says nothing about this commit.
 
-    an unrelated tip says nothing about this commit, so following it would report somebody else's
-    verdict as this PR's.
+    Following it would report somebody else's verdict as this PR's.
     """
     resolved = await_ci.resolve_sha(
         "aaa", fetch_tip=lambda: "ccc", is_ancestor=lambda _a, _b: False
@@ -95,9 +94,9 @@ def test_only_no_verdict_conclusions_is_detected():
 
 
 def test_a_real_failure_is_not_read_as_no_verdict():
-    """The reject half of the tip-following trigger:
+    """The reject half of the tip-following trigger.
 
-    a genuine failure must stop the wait, not send it chasing the tip for a second opinion.
+    A genuine failure must stop the wait, not send it chasing the tip for a second opinion.
     """
     runs = [_run("prek (lint + validate + tests + secrets)", "completed", "failure")]
     assert not await_ci._has_only_no_verdict_conclusions(runs, REQUIRED)
@@ -137,10 +136,10 @@ def test_gh_auth_token_is_used_when_the_environment_has_none():
 
 
 def test_no_token_falls_back_to_anonymous():
-    """The reject half:
+    """The reject half: no token must fall back to anonymous, never to a crash.
 
-    a logged-out gh, a missing binary, a hung keyring -- every one of them must degrade to the
-    anonymous request this poll made before, never to a crash.
+    A logged-out gh, a missing binary, a hung keyring -- every one of them must degrade to the
+    anonymous request this poll made before.
     """
     assert await_ci.github_token({}, lambda *_a, **_k: _Proc(1, "")) is None
     assert await_ci.github_token({}, lambda *_a, **_k: _Proc(0, "  \n")) is None
@@ -163,9 +162,9 @@ def _suite(status, conclusion, runs):
 
 
 def test_a_workflow_cancelled_before_any_run_registered_is_no_verdict():
-    """#766 on 2026-09-02:
+    """#766 on 2026-09-02: a workflow cancelled before any run registered is no verdict.
 
-    the merge commit's CI suite read `completed cancelled` with zero check-runs, so the required
+    The merge commit's CI suite read `completed cancelled` with zero check-runs, so the required
     name never appeared and two waits sat out 2400s.
     """
     suites = [_suite("completed", "success", 2), _suite("completed", "cancelled", 0)]
@@ -213,9 +212,9 @@ def test_wait_follows_the_tip_when_the_workflow_was_cancelled_before_registering
 
 
 def test_wait_does_not_follow_the_tip_for_a_fresh_sha(monkeypatch):
-    """The reject half:
+    """The reject half: a fresh SHA must not send the wait chasing the tip.
 
-    no suites at all means the run has not registered; the wait must stay on the SHA it was given
+    No suites at all means the run has not registered; the wait must stay on the SHA it was given
     and run out its budget rather than chase the tip.
     """
     green = [_run("prek (lint + validate + tests + secrets)", "completed", "success")]

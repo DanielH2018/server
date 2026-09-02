@@ -75,10 +75,11 @@ def test_a_mounted_page_is_not_retryable():
 
 
 def test_grafanas_chrome_without_a_dashboard_is_retryable():
-    """The signature `--disable-http2` was added to prevent:
+    """Grafana's chrome without a dashboard is retryable, which is why `--disable-http2` exists.
 
-    Grafana's own navigation and menus render (27-53 testids), the dashboard request 421s, and the
-    URL never gains its slug. A testid count alone reads this as a mounted page with no panels.
+    Without it Grafana's own navigation and menus render (27-53 testids), the dashboard request
+    421s, and the URL never gains its slug. A testid count alone reads this as a mounted page with
+    no panels.
     """
     v = classify(
         UNMOUNTED | {"testids": 53, "path": "/d/longhorn-storage/"}, min_headers=10

@@ -135,7 +135,7 @@ def test_the_phantom_check_goes_red_on_a_tag_that_references_nothing():
 
 
 def test_the_setup_plane_check_goes_red_when_a_setup_consumer_is_claimed_deployable():
-    """The reject half:
+    """The reject half: a setup-plane consumer claimed auto-deployable must be flagged.
 
     sonarr_api_key genuinely has a setup-plane consumer, so claiming it is auto-deployable must be
     flagged. This is today's incident, replayed.

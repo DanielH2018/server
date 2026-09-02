@@ -124,16 +124,16 @@ def _body_with_prose(task: dict) -> str:
 
 
 def test_the_role_never_scales_back_up() -> None:
-    """Every one of the thirteen manifests carries an explicit `replicas:
+    """The role never scales back up: the only replica count it may name anywhere is zero.
 
-    1`, so the apply that follows this role restores the Deployment. Scaling back here would roll
-    the workload twice and race the apply.
+    Every one of the thirteen manifests carries an explicit `replicas: 1`, so the apply that follows
+    this role restores the Deployment. Scaling back here would roll the workload twice and race the
+    apply.
 
     Both files, and the class rather than the literal. Measured 2026-08-21: appending an unguarded
     `kubectl scale ... --replicas=1` to `main.yml` left all 27 tests green, because the check read
     `claim.yml` alone; and a scale-back can equally be written `--replicas={{ n }}`,
-    `kubernetes.core.k8s_scale`, or `kubectl patch -p '{"spec": {"replicas":1}}'`. So: the only
-    replica count this role may name anywhere is zero.
+    `kubernetes.core.k8s_scale`, or `kubectl patch -p '{"spec": {"replicas":1}}'`.
     """
     for _path, task in _role_tasks():
         body = _body(task)

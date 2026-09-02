@@ -66,9 +66,9 @@ def test_a_caller_rendered_role_really_has_templates(role: str):
 
 
 def test_the_two_classes_are_disjoint_and_cover_skip_roles():
-    """The rejecting half of the split itself:
+    """The rejecting half of the split itself.
 
-    a name in both sets would satisfy both tests above while meaning nothing, and a name in neither
+    A name in both sets would satisfy both tests above while meaning nothing, and a name in neither
     would silently stop being skipped.
     """
     assert not (NO_MANIFEST_ROLES & CALLER_RENDERED_ROLES)
