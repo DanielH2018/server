@@ -30,7 +30,7 @@ def _run(paths, monkeypatch, comment_only=frozenset()) -> int:
     # same file, which would read as comment-only. Tests say which paths are.
     monkeypatch.setattr(
         deploy_tags,
-        "_comment_only_manual_changes",
+        "comment_only_paths",
         lambda paths, old, new: set(comment_only),
     )
 

@@ -38,7 +38,7 @@ from deploy_changes import (  # noqa: F401
     ChangeSet,
     _is_test_only_path,
     _note_setup_role,
-    comment_only_manual_changes,
+    comment_only_broad_changes,
     expand_build_couplings,
     services_from_changed_paths,
     setup_role_playbook,

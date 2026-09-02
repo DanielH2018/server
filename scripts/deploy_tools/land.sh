@@ -280,19 +280,30 @@ SELF_APPLIED=''
 NEEDS_DIFF=''
 if [ -z "$TAGS" ]; then
   pr_json=$(gh pr view "$PR" --json files,changedFiles) || die "could not read PR files" 1
+  # The PR's OWN diff, so a broad path whose change is comments only can be dropped before
+  # the plane is classified. `$MERGE_SHA^..$MERGE_SHA` and not `$SINCE..`: --since covers
+  # every other session's merged work too, and a quiet path there is not this PR's to judge.
+  # Empty when the parent is not local (a shallow or unfetched checkout), which classifies
+  # every broad path as loud — the direction a wrong answer must fall (issue #848).
+  quiet_range=''
+  if git rev-parse -q --verify "$MERGE_SHA^" >/dev/null; then
+    quiet_range="$MERGE_SHA^..$MERGE_SHA"
+  else
+    say "no local parent for $MERGE_SHA — not reading the diff for comment-only broad paths"
+  fi
   # What a deploy tag cannot reach. deploy.yml is a containers_list loop, so a setup-plane
   # change needs initial_setup.yml and derives no tag at all — which land.sh used to report
   # as nothing-to-deploy. A shared k8s role (manifests, volume-claim, …) has no entry in that
   # list either, so it needs a full deploy. Computed whether or not tags were derived: a PR
   # can touch a deployable role AND one of those planes, and then the deploy succeeds while
   # half the change is unapplied, under a `settled` verdict.
-  PLANE=$(uv run python scripts/deploy_tools/land_tags.py --plane --json "$pr_json") ||
+  PLANE=$(uv run python scripts/deploy_tools/land_tags.py --plane --range "$quiet_range" --json "$pr_json") ||
     die "plane classification failed" 1
   # `yes` when the tick applies part of this PR itself (a setup role initial_setup.yml
   # includes, or the deploy plane). Only then does the deployer's state after the tick
   # speak to THIS landing — for an ordinary service PR, `behind_since` is somebody else's
   # pending merge and says nothing about the services deploy.sh just rolled out.
-  SELF_APPLIED=$(uv run python scripts/deploy_tools/land_tags.py --self-applied --json "$pr_json") ||
+  SELF_APPLIED=$(uv run python scripts/deploy_tools/land_tags.py --self-applied --range "$quiet_range" --json "$pr_json") ||
     die "self-applied classification failed" 1
   derived=$(uv run python scripts/deploy_tools/land_tags.py --json "$pr_json") ||
     die "tag derivation failed" 1
