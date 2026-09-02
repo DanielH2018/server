@@ -87,7 +87,7 @@ Two primitives that look like they solve this and do not, both because they are 
 fixed. None had been caught because, as here, their assertions happened to hold on both sides
 of a roll.
 
-**Don't re-derive this by hand.** `ansible/tests/test_inline_rollout_gates.py` now decides it:
+**Don't re-derive this by hand.** `ansible/tests/deploy/test_inline_rollout_gates.py` now decides it:
 any role that looks up a pod by its own app label must gate on `rollout status` first, and the
 check flattens included *and* imported task files so it can see a `verify.yml`. A new role with
 this shape fails the suite rather than waiting for a deploy to fail.
@@ -149,7 +149,7 @@ live Kuma push tokens leaking into `curl` argv across the estate, one world-read
 seventh for a low-urgency drift check would grow the exact class being remediated in the same
 review. `logger` writes to the `{job="syslog"}` Loki stream instead, which
 `scripts/diagnostics/probe.py alerts` already reads. This is why `prefs-check.sh.j2` is absent
-from `ansible/tests/test_cron_scripts_publish_via_pr.py`'s push-script corpus (it holds neither
+from `ansible/tests/setup/test_cron_scripts_publish_via_pr.py`'s push-script corpus (it holds neither
 `api/push` nor `PUSH_URL`) — it isn't a push script and doesn't need to sit in the shared
 `kuma-push-lib.sh` contract that file enforces.
 

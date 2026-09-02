@@ -92,7 +92,7 @@
 #
 # It answers only "is there anything to build". Whether we are ALLOWED to build stays a separate
 # `not k8s_no_mutate` clause on each task below, deliberately not folded in here: that guard is
-# what keeps a dry run from pushing an image, and `ansible/tests/test_k8s_dry_run.py` reads it
+# what keeps a dry run from pushing an image, and `ansible/tests/deploy/test_k8s_dry_run.py` reads it
 # textually at each mutating task. Folding it behind this fact would still be correct and would
 # make the check unable to see it — a safety test that has to follow an indirection is one that
 # stops catching the next role to get this wrong.
@@ -241,7 +241,7 @@
 # on a SKIPPED build is what lets post_tasks/k8s_image_drift_gate.yml see a stale pod sitting in
 # front of an unchanged registry tag — the case that hid nut's week-old image for 90 minutes on
 # 2026-08-27. Gating this for consistency with its siblings is the obvious tidy-up and it blinds
-# the gate. ENFORCED by ansible/tests/test_built_image_drift_gate.py.
+# the gate. ENFORCED by ansible/tests/deploy/test_built_image_drift_gate.py.
 - name: Read the post-build digest of {{ image_builder_name }}
   tags: [deploy]
   ansible.builtin.uri:
@@ -290,7 +290,7 @@
 # image_builder_building — unlike the build, the result read and the failure paths above. That is
 # what lets a skipped build still contribute a digest here. Folding that read under
 # image_builder_building as an optimisation would blind the gate on exactly case (2);
-# ansible/tests/test_built_image_drift_gate.py fails if that guard reappears.
+# ansible/tests/deploy/test_built_image_drift_gate.py fails if that guard reappears.
 - name: Record the registry digest for the drift gate of {{ image_builder_name }}
   tags: [deploy]
   when: not k8s_no_mutate

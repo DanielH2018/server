@@ -157,7 +157,7 @@ add_orphan() { ORPHANS="${ORPHANS:+$ORPHANS; }$1"; }
 # object read as "still declared" — in ANY file, of ANY kind — and the orphan was missed by the
 # check that exists to find it. manifest-declares.py reads document position instead: a
 # top-level `kind` paired with the `name` inside that document's own `metadata:` block.
-# ansible/tests/test_manifest_declares.py asserts it returns what PyYAML returns for every
+# ansible/tests/k8s/test_manifest_declares.py asserts it returns what PyYAML returns for every
 # manifest this repo renders, so a shape it cannot read fails CI rather than going quiet here.
 #
 # Namespace is deliberately not part of the key — see that script's header. `kind/name` is

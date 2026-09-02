@@ -59,7 +59,7 @@ The `peanut` case is a genuine prerequisite the design missed: `nut` publishes `
 | File | Responsibility |
 |---|---|
 | `ansible/filter_plugins/toposort.py` | **Modify.** Add `filter_by_platform` alongside the existing dependency filters. Lives here rather than in a new plugin file because Ansible loads every module in this directory at deploy time — one more file is one more import on every run, and this filter operates on the same `containers_list` shape as its neighbours. |
-| `ansible/tests/test_platform_filter.py` | **Create.** Unit tests for the new filter. Separate from `test_toposort.py` because that file documents itself as covering the four dependency-resolution filters; platform selection is a different concern with a different failure mode. |
+| `ansible/tests/deploy/test_platform_filter.py` | **Create.** Unit tests for the new filter. Separate from `test_toposort.py` because that file documents itself as covering the four dependency-resolution filters; platform selection is a different concern with a different failure mode. |
 | `ansible/deploy.yml` | **Modify.** Filter `containers_list` to Docker-platform entries before the dependency map is built. |
 | `ansible/inventory/host_vars/_example.yml` | **Modify.** Document the `platform:` key so the next person adding a service sees it. |
 
@@ -71,7 +71,7 @@ The whole risk of this task is the default. Every one of the 46 existing entries
 
 **Files:**
 - Modify: `ansible/filter_plugins/toposort.py`
-- Test: `ansible/tests/test_platform_filter.py`
+- Test: `ansible/tests/deploy/test_platform_filter.py`
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks.
@@ -79,7 +79,7 @@ The whole risk of this task is the default. Every one of the 46 existing entries
 
 - [ ] **Step 1: Write the failing test**
 
-Create `ansible/tests/test_platform_filter.py`:
+Create `ansible/tests/deploy/test_platform_filter.py`:
 
 ```python
 #!/usr/bin/env python3
@@ -93,7 +93,7 @@ deploy. The default-behaviour tests below are the guard against that.
 Lives in ansible/tests/ (not under filter_plugins/) so Ansible's filter-plugin
 loader doesn't import it as a plugin.
 
-Run: uv run pytest ansible/tests/test_platform_filter.py
+Run: uv run pytest ansible/tests/deploy/test_platform_filter.py
 """
 
 from toposort import filter_by_platform
@@ -154,7 +154,7 @@ def test_original_list_is_not_mutated():
 - [ ] **Step 2: Run the test to verify it fails**
 
 ```bash
-uv run pytest ansible/tests/test_platform_filter.py -v
+uv run pytest ansible/tests/deploy/test_platform_filter.py -v
 ```
 
 Expected: collection error — `ImportError: cannot import name 'filter_by_platform' from 'toposort'`.
@@ -190,7 +190,7 @@ Register it in the `filters` map:
 - [ ] **Step 4: Run the tests to verify they pass**
 
 ```bash
-uv run pytest ansible/tests/test_platform_filter.py -v
+uv run pytest ansible/tests/deploy/test_platform_filter.py -v
 ```
 
 Expected: 7 passed.
@@ -206,7 +206,7 @@ Expected: all pre-existing tests still pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add ansible/filter_plugins/toposort.py ansible/tests/test_platform_filter.py
+git add ansible/filter_plugins/toposort.py ansible/tests/deploy/test_platform_filter.py
 git commit -m "Add filter_by_platform for dual-stack container deploys
 
 The k3s migration runs Docker and k8s side by side for weeks, and both
@@ -344,7 +344,7 @@ If Docker *is* present, stop — someone installed it since, and the risk assess
 >
 > Docker was purged the same day and the precondition is now **enforced rather than assumed**:
 > `docker_install` carries `when: has_docker`, which `host_vars/daniel-box.yml` sets false.
-> See the handoff doc §1a and `ansible/tests/test_k3s_host_has_no_docker.py`.
+> See the handoff doc §1a and `ansible/tests/setup/test_k3s_host_has_no_docker.py`.
 
 - [ ] **Step 2: Install k3s**
 
@@ -522,7 +522,7 @@ One node cannot satisfy 2 replicas; leaving the default at 2 makes every PVC rep
 > `numberOfReplicas` is **omitted**, so the setting is the single lever. StorageClass
 > parameters are immutable, so the role deletes and recreates the class when it finds one
 > still pinning a count — safe, because parameters are read at provision time only and an
-> existing PV keeps its own spec. Guarded by `ansible/tests/test_longhorn_storageclass.py`.
+> existing PV keeps its own spec. Guarded by `ansible/tests/longhorn/test_longhorn_storageclass.py`.
 > Keeping the parameter absent is also what keeps slice 7's raise a settings patch instead of
 > StorageClass surgery under live workloads.
 

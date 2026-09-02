@@ -40,7 +40,7 @@
     uv run python scripts/diagnostics/staging_egress_probe.py
 
   It must report the internet still reachable and every production target refused. The shape
-  of this filter and its attachment are ENFORCED by ansible/tests/test_staging_egress_fence.py,
+  of this filter and its attachment are ENFORCED by ansible/tests/staging/test_staging_egress_fence.py,
   but a filter that is defined and unattached reads identical to a working one from the host,
   so the probe is the thing that decides.
 -->
@@ -75,7 +75,7 @@
        Services is delivered on the guest's internal cni0 and by its own kube-proxy rules; it
        never crosses the tap device this filter attaches to, so these rules cannot see it.
        Add a staging agent node and pod-to-pod traffic starts crossing the wire, where a /16
-       drop would break it. ansible/tests/test_staging_egress_fence.py ties that assumption to
+       drop would break it. ansible/tests/staging/test_staging_egress_fence.py ties that assumption to
        k3s_agent_node_ips and fails when it stops holding. -->
 {% for cidr in [lan_subnet, k3s_pod_cidr, k3s_service_cidr] %}
   <rule action='drop' direction='out' priority='100'>

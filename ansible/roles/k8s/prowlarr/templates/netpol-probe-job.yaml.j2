@@ -50,7 +50,7 @@ spec:
               # Budget: 30 attempts x (3s connect timeout + 2s sleep) = 150s worst case, which is
               # why activeDeadlineSeconds is 240 and the Ansible wait is 300s. Those three numbers
               # move together — shrinking the deadline below the retry budget silently restores
-              # the race. ansible/tests/test_netpol_probe_race.py pins the ordering.
+              # the race. ansible/tests/k8s/test_netpol_probe_race.py pins the ordering.
               attempt=0
               until nc -w 3 -z prowlarr {{ container_item.port }}; do
                 attempt=$((attempt + 1))

@@ -28,7 +28,7 @@ autofix.py carried a byte-identical copy — bridge_common.py is the module both
 autofix.py import it from now. Its header states the same rule this one does, checked against
 both files' test suites rather than just this one's.
 
-ENFORCED by ansible/tests/test_monitor_bridge_modules.py, which re-derives the patched
+ENFORCED by ansible/tests/services/test_monitor_bridge_modules.py, which re-derives the patched
 set from the test sources on every run. Deriving it is the point: the first census here
 was a grep for one spelling of `setattr`, and it silently missed both the line-wrapped
 form and every `check.X = ...` assignment.

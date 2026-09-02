@@ -147,7 +147,7 @@ The link is bidirectional and enforced:
 
 - A marker whose reasoning outgrew its line gains an `ADR-NNNN` reference.
 - An ADR carries a `governs:` frontmatter list of `file:line` anchors.
-- `ansible/tests/test_adr_links.py` checks both directions — every `ADR-NNNN` cited in the tree
+- `ansible/tests/repo/test_adr_links.py` checks both directions — every `ADR-NNNN` cited in the tree
   resolves to an ADR that exists, and every `governs:` path resolves to a real file.
 
 **Not every marker needs an ADR.** The rule: an ADR exists when the reasoning outgrows the line
@@ -252,12 +252,12 @@ checks them reliably, and a bad approximation of them produces noise.
 - **Generator emitters** — pytest per generator, following the pattern in
   `scripts/docs/test_service_catalog.py` and `scripts/infra_map/test_gen_infra_map.py`. Assert the Markdown and
   SVG output against fixtures.
-- **`ansible/tests/test_adr_links.py`** — the bidirectional ADR ↔ marker check.
+- **`ansible/tests/repo/test_adr_links.py`** — the bidirectional ADR ↔ marker check.
 - **Manifest validation** — `scripts/validate/validate_k8s_manifests.py` covers the new role's templates
   automatically, since it renders every `*.j2` under `roles/k8s/*/templates/`.
 - **Vale** — prek hook plus CI.
 - **`--dry-run`** — the docs role mutates nothing outside `roles/k8s/manifests`, so it must not
-  need an entry in `k8s_dry_run_unsupported`. `ansible/tests/test_k8s_dry_run.py` re-derives that
+  need an entry in `k8s_dry_run_unsupported`. `ansible/tests/deploy/test_k8s_dry_run.py` re-derives that
   list from the role sources, so a mistake here fails a test rather than drifting.
 
 ## Risks and accepted trade-offs

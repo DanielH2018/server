@@ -29,7 +29,7 @@ Environment=KUBECONFIG=/home/{{ sys_user }}/.kube/config
 # builds a readline interface on stdin to ask which spawn mode to use (it guards that on
 # process.stdin.isTTY). Under systemd there is no stdin to answer, so the host would sit
 # there having never connected — a hang, not an error. ENFORCED by
-# ansible/tests/test_claude_rc_unit.py.
+# ansible/tests/setup/test_claude_rc_unit.py.
 ExecStart=/home/{{ sys_user }}/.local/bin/claude rc \
   --spawn={{ claude_code_rc_spawn_mode }} \
   --permission-mode {{ claude_code_rc_permission_mode }} \

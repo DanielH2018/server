@@ -106,7 +106,7 @@ See repo-root `CLAUDE.md` for conventions.
     was never the gap. Reporting `down` on a cycle that had to intervene is what keeps an
     auto-restart loop visible: pushing `up` after a successful restart would make a container
     crashing every 5 minutes read green forever.
-    ENFORCED by `ansible/tests/test_pi_recovery_restarts_and_reports.py`, which renders and
+    ENFORCED by `ansible/tests/setup/test_pi_recovery_restarts_and_reports.py`, which renders and
     runs the script against a stub `docker`.
 
 11. **Both health crons leave a durable record** at `/var/log/pi-health/health.log`, which the
@@ -122,7 +122,7 @@ See repo-root `CLAUDE.md` for conventions.
     **The timestamp format is load-bearing**: `_SYSLOG_LINE_RE` wants exactly two
     whitespace-free tokens before the tag, so the scripts emit `date -Is` (one token).
     Traditional syslog format is four tokens and parses as nothing.
-    ENFORCED by `ansible/tests/test_pi_health_log_line_shape.py`, which feeds the scripts'
+    ENFORCED by `ansible/tests/setup/test_pi_health_log_line_shape.py`, which feeds the scripts'
     real output through the real parser.
     Adding this stream meant excluding it from monitor-bridge's Loki file-tail arm
     (`machine!="daniel-pi"` in `LOKI_STREAM`) — a Pi stream under `job="syslog"` would
@@ -164,7 +164,7 @@ See repo-root `CLAUDE.md` for conventions.
     and nothing else on this host caches.
     Verify with a marked query: the Pi is not a k3s node, so it has no flannel SNAT and must
     appear in Pi-hole's client list as its LAN address, not a `10.42.x` one.
-    ENFORCED by `ansible/tests/test_node_resolv_order.py`, which checks both callers of the
+    ENFORCED by `ansible/tests/setup/test_node_resolv_order.py`, which checks both callers of the
     shared template for order, a present fallback, and the absence of `rotate`.
 
 ## Notable

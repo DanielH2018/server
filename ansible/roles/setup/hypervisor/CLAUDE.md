@@ -34,7 +34,7 @@ the Ubuntu noble cloud image, seeded with cloud-init and attached to the `stagin
   would be a second secret to rotate for no additional isolation.
 - **No graphics device.** `virsh console` is the recovery path when ssh is what is broken.
 
-ENFORCED by `ansible/tests/test_staging_vm.py`. The load-bearing assertion is that the
+ENFORCED by `ansible/tests/staging/test_staging_vm.py`. The load-bearing assertion is that the
 domain's interface MAC equals the network's DHCP reservation: if they drift, the guest still
 boots and still gets an address, just a dynamic one, and every later slice that names
 `staging_vm_ip` points at nothing.
@@ -57,7 +57,7 @@ The guest's address is a **DHCP reservation** on a fixed QEMU-OUI MAC, declared 
 `group_vars/all.yml` so the role and the inventory entry that reaches the guest share one
 source. It sits outside the dynamic range, or the lease could be handed out first.
 
-ENFORCED by `ansible/tests/test_staging_network.py`, which renders the template and parses
+ENFORCED by `ansible/tests/staging/test_staging_network.py`, which renders the template and parses
 it. That matters more here than elsewhere: nothing else in the repo validates libvirt XML,
 and two bugs in this role reached a real host in one afternoon because every check only
 parsed the file they lived in.
@@ -91,7 +91,7 @@ Two mechanics that decide whether a change lands:
   `virsh destroy daniel-stage` first, then undefine, then re-run the role. The refusal is a
   feature — the fence cannot be removed out from under a running guest.
 
-ENFORCED by `ansible/tests/test_staging_egress_fence.py`, which renders the filter and parses it.
+ENFORCED by `ansible/tests/staging/test_staging_egress_fence.py`, which renders the filter and parses it.
 That check sees shape and attachment only. Whether the fence *fires* is a property of the host, and
 the gate for that half is the probe, run on daniel-server:
 
@@ -127,7 +127,7 @@ irreversible in a way a package is not.
 orphans its disk image with nothing that knows how to start it, which reads as a successful
 teardown. Undefining a guest is a decision; the assert names the guests in the way.
 
-ENFORCED by `ansible/tests/test_has_flag_roles_have_both_directions.py`: a role dispatching
+ENFORCED by `ansible/tests/setup/test_has_flag_roles_have_both_directions.py`: a role dispatching
 on a `has_*` flag must handle both values. `docker_install` honoured only the true branch
 for months, which is how `has_docker: false` came to describe a state nothing converged to.
 
@@ -189,7 +189,7 @@ master's tip and this tree only moves forward; a hand-run or a backfill can, whi
 code. A PASS about the wrong commit is worse than any refusal.
 
 The path and the lock are duplicated between this role's `defaults/main.yml` and that shell
-script, which cannot read a Jinja var. `ansible/tests/test_staging_gate_paths_agree.py` pins them
+script, which cannot read a Jinja var. `ansible/tests/staging/test_staging_gate_paths_agree.py` pins them
 equal — the drift is silent in the worst direction, since a stale path in the script makes every
 tick answer NO_VERDICT rather than fail.
 
@@ -220,7 +220,7 @@ decorative. The dispatcher therefore closes stdin on its first executable line a
 never a script body. Every field is checked against a whitelist charset and *rejected* rather
 than escaped; nothing is interpolated into a shell string.
 
-`ansible/tests/test_staging_gate_dispatch.py` drives the dispatcher's own `validate_request`
+`ansible/tests/staging/test_staging_gate_dispatch.py` drives the dispatcher's own `validate_request`
 (the file guards `main` on `BASH_SOURCE` so the test can source it) and pins both properties.
 Its rejecting half covers `bash -s`, an empty command, a ref name in place of a SHA, and shell
 metacharacters in the tags; two tests feed a script body on stdin and assert it does not run.
@@ -265,7 +265,7 @@ script closes both halves: it refuses to connect at all until `ssh-keygen -y` on
 dispatcher's own refusal marker on stderr — a fallback to another key cannot print that marker,
 so "fell back" and "restriction bypassed" stay distinguishable. Its exit codes name them
 separately: 10 key unusable, 11 fell back, 12 restriction open, 13 no verdict.
-`ansible/tests/test_verify_staging_gate_key.py` drives that verdict function without a network.
+`ansible/tests/staging/test_verify_staging_gate_key.py` drives that verdict function without a network.
 
 **What stops a silent fallback.** `IdentitiesOnly=yes` does not guarantee this key is the one
 used — the default identity files still count as configured — so if the key were missing or
@@ -286,7 +286,7 @@ work.
 ADDS.** Swapping `files/staging-gate.pub` therefore authorizes the new key and leaves the old
 one working — a rotation that reads as done from every angle except the one that matters.
 `files/staging-gate-retired/*.pub` is the other half: a second task withdraws every key in
-there with `state: absent`. `ansible/tests/test_staging_gate_retired_keys.py` pins both
+there with `state: absent`. `ansible/tests/staging/test_staging_gate_retired_keys.py` pins both
 properties, including that a retired key is never also the live one — the role would
 otherwise authorize a key and immediately withdraw it, since `absent` runs second.
 

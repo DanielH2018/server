@@ -156,7 +156,7 @@ spec:
   have changed anything. What finally isolated it was a field-by-field diff against
   n8n-monitoring, which works from the same caller and carries `tls:`.
 
-  Guard: ansible/tests/test_k8s_manifests.py fails any rendered IngressRoute that serves the
+  Guard: ansible/tests/k8s/test_k8s_manifests.py fails any rendered IngressRoute that serves the
   https entrypoint without a tls block, so this cannot regress silently again.
 
   The guards it is MEANT to provide, kept in the rule so they are real once it routes:

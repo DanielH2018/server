@@ -34,7 +34,7 @@ from the phone produced `.claude/worktrees/test-scratch` on branch `worktree-tes
 and reached a prompt, with no workspace-trust dialog.
 
 Setting the var back to `false` stops **and** disables the host and its restart timer. That
-is the rollback, and `ansible/tests/test_claude_rc_unit.py` pins that both directions stay
+is the rollback, and `ansible/tests/setup/test_claude_rc_unit.py` pins that both directions stay
 wired.
 
 To re-run that check after a change that could affect it — a Claude Code upgrade, a different
@@ -96,7 +96,7 @@ sessions" and nothing else.
 - **`--spawn=` must be passed explicitly.** Omitted, Claude Code builds a readline interface
   on stdin to ask which mode to use (guarded on `process.stdin.isTTY`). Under systemd there
   is no stdin, so the host hangs having never connected while the unit reads `active`.
-  ENFORCED by `ansible/tests/test_claude_rc_unit.py`.
+  ENFORCED by `ansible/tests/setup/test_claude_rc_unit.py`.
 - **`PATH` must name `/usr/local/bin`.** systemd gives a minimal PATH exactly as cron does;
   without it a spawned session loses `kubectl` and `uv` and reports an **empty cluster**
   rather than failing. ENFORCED by the same test.

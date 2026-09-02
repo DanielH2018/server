@@ -70,12 +70,15 @@ markers = [
 # import-tested renovate_notify.py + test_host_lib.py resolve it in CI. scripts: the k8s manifest
 # tests import the render guards from there — _k8s_render.py did it with a sys.path insert, which
 # only worked for modules importing _k8s_render first. gitops_deploy/files: lets
-# ansible/tests/test_denylist_parsers_agree.py import deploy_logic alongside the filter plugin.
+# ansible/tests/deploy/test_denylist_parsers_agree.py import deploy_logic alongside the filter plugin.
 # monitor-bridge/files: bridge_common.py is the same cross-role pattern as host_lib.py, staged
 # into autofix-bridge's ConfigMap rather than duplicated — without this, `uv run pytest
 # ansible/roles/k8s/autofix-bridge/files` alone can't resolve `from bridge_common import ...`
 # (it only worked when monitor-bridge/files happened to already be on sys.path from the same run).
 pythonpath = [
+  # `ansible/tests` so the guards in its subdirectories reach the shared `_helpers.py` and
+  # `_k8s_render.py` at its root: pytest prepends only a test's OWN directory.
+  "ansible/tests",
   "ansible/filter_plugins",
   "ansible/roles/setup/common/files",
   "ansible/roles/setup/gitops_deploy/files",

@@ -4,8 +4,8 @@ Read it through the module object (`import bridge_config as cfg` then `cfg.PROM_
 by `from bridge_config import PROM_URL`. A from-import copies the value into the importer's
 globals at import time, so a test that patches `bridge_config.PROM_URL` afterwards would change
 nothing the importer reads. Tests patch the constants HERE, on this module, and the checks that
-read them look them up at call time. ansible/tests/test_bridge_patch_boundary.py enforces the
-qualified read; ansible/tests/test_monitor_bridge_modules.py checks that every patched name is
+read them look them up at call time. ansible/tests/services/test_bridge_patch_boundary.py enforces the
+qualified read; ansible/tests/services/test_monitor_bridge_modules.py checks that every patched name is
 bound in the module the test patches it on.
 
 The two tests that re-derive `PROM_ORIGIN` from the environment `importlib.reload()` THIS

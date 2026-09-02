@@ -18,7 +18,7 @@
   # guard, so a host that somehow misses it fails its cron loudly and drops the heartbeat
   # rather than skipping the push and reporting green.
   # Two push scripts deliberately do NOT source it, each for a stated reason, and
-  # ansible/tests/test_cron_scripts_publish_via_pr.py carries that exemption set with the reasons.
+  # ansible/tests/setup/test_cron_scripts_publish_via_pr.py carries that exemption set with the reasons.
   # The invariant that binds ALL of them — no push token ever reaches curl's argv — is asserted
   # separately there with no exemptions at all, so opting out of the library cannot opt a script
   # out of the security property.

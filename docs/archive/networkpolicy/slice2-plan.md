@@ -309,7 +309,7 @@ For configarr the path is `spec.jobTemplate.spec.template.metadata.labels`. Veri
 
 - [ ] **Step 2: Extend the label guard test**
 
-Modify `ansible/tests/test_netpol_baseline_labels.py` — it currently pins the labelled set to slice 1's six. Add slice 2's ten so the set is sixteen. The test must still fail on both a dropped and an added label.
+Modify `ansible/tests/k8s/test_netpol_baseline_labels.py` — it currently pins the labelled set to slice 1's six. Add slice 2's ten so the set is sixteen. The test must still fail on both a dropped and an added label.
 
 Read the existing file first; keep its structure and naming. If it hardcodes a `SLICE_1` constant, add a `SLICE_2` constant and assert against the union rather than renaming the existing one.
 
@@ -320,7 +320,7 @@ Read the existing file first; keep its structure and naming. If it hardcodes a `
 Run: `uv run python scripts/validate/validate_k8s_manifests.py`
 Expected: PASS.
 
-Run: `uv run pytest ansible/tests/test_netpol_baseline_labels.py -v`
+Run: `uv run pytest ansible/tests/k8s/test_netpol_baseline_labels.py -v`
 Expected: PASS.
 
 Run: `grep -rln "netpol-baseline: enforced" ansible/roles/k8s/*/templates/`
@@ -332,7 +332,7 @@ Expected: `0`.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add ansible/roles/k8s ansible/tests/test_netpol_baseline_labels.py
+git add ansible/roles/k8s ansible/tests/k8s/test_netpol_baseline_labels.py
 git commit -m "Opt the media stack and both bridges into the ingress baseline
 
 Ten workloads. Six of them -- bazarr, tdarr, configarr, janitorr,
@@ -484,7 +484,7 @@ Expected: both probes print their assertions green.
 Run: `kubectl -n homelab get pods -l netpol-baseline=enforced --no-headers | wc -l`
 Expected: **15** standing pods.
 
-The durable invariant is **16 roles** — slice 1's six plus slice 2's ten — pinned by `ansible/tests/test_netpol_baseline_labels.py`. The pod count is not that number and never settles on it: configarr is a CronJob with no standing pod, so it contributes zero between runs. A count above 15 means a Job pod is still around and has not yet aged out — a configarr CronJob run, or the `configarr-deploy-*` one-off from this deploy. Count roles (or run the test); do not treat a pod count as the check.
+The durable invariant is **16 roles** — slice 1's six plus slice 2's ten — pinned by `ansible/tests/k8s/test_netpol_baseline_labels.py`. The pod count is not that number and never settles on it: configarr is a CronJob with no standing pod, so it contributes zero between runs. A count above 15 means a Job pod is still around and has not yet aged out — a configarr CronJob run, or the `configarr-deploy-*` one-off from this deploy. Count roles (or run the test); do not treat a pod count as the check.
 
 Run: `kubectl -n homelab get networkpolicy`
 Expected: `baseline-ingress`, `flaresolverr`, `headlamp`, `n8n-broker`, `registry`, plus the four new ones.
@@ -521,7 +521,7 @@ Mark slice 2 done. Move jellyfin explicitly into slice 4's row with the VIP reas
 
 ## Done when
 
-- All 16 roles stamp `netpol-baseline: enforced` onto their pod template — asserted by `ansible/tests/test_netpol_baseline_labels.py`, not by a live pod count (15 pods stand; configarr's CronJob has none between runs).
+- All 16 roles stamp `netpol-baseline: enforced` onto their pod template — asserted by `ansible/tests/k8s/test_netpol_baseline_labels.py`, not by a live pod count (15 pods stand; configarr's CronJob has none between runs).
 - Four new NetworkPolicies are live.
 - Both probes green.
 - sonarr's indexers and download client both test green in its UI.

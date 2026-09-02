@@ -12,7 +12,7 @@
 #
 # `rollout status` and NOT a readiness wait — the old pod satisfies every readiness-shaped
 # check, including the `--field-selector status.phase=Running` below, because phase stays
-# Running while Terminating. See ansible/tests/test_inline_rollout_gates.py.
+# Running while Terminating. See ansible/tests/deploy/test_inline_rollout_gates.py.
 - name: Wait for the tdarr rollout to finish before verifying it
   tags: [deploy]
   ansible.builtin.command:

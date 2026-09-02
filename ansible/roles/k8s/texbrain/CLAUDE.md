@@ -44,7 +44,7 @@ symptom shows up in this cluster, not in that repo:
 - **The pod dials nothing, but the app reaches the internet.** jsDelivr serves on-demand TeX
   packages beyond the 86 MB subset baked into the image, and a CORS proxy carries git
   push/pull. Both are the *browser's* fetches, from the reader's machine. That is why
-  texbrain is in `BORN_FENCED_ROLES` in `ansible/tests/test_netpol_baseline_labels.py`.
+  texbrain is in `BORN_FENCED_ROLES` in `ansible/tests/k8s/test_netpol_baseline_labels.py`.
 - **An expired Authelia session can leave the app serving HTML as JavaScript.** The service
   worker's `handleImmutable` caches any 200 under a content-hashed name and treats it as
   permanent, so a chunk fetch that follows the redirect to the login page caches the portal.

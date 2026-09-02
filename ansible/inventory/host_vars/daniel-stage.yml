@@ -12,7 +12,7 @@
 # Its address on the staging NAT network. This is a DHCP reservation keyed on
 # staging_vm_mac, declared in group_vars/all.yml — not a lease — so it is stable across a
 # rebuild of the guest. Both this and the reservation read the same variable, and
-# ansible/tests/test_staging_vm.py asserts the domain and the network agree on the MAC.
+# ansible/tests/staging/test_staging_vm.py asserts the domain and the network agree on the MAC.
 server_ip: "{{ staging_vm_ip }}"
 
 # Stock Ubuntu cloud image. NOT the Pi's sshd_config.d/50-cloud-init.conf path: the noble

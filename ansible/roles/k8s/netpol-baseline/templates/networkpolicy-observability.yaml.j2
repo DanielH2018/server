@@ -56,7 +56,7 @@ spec:
         # invariant this bare selector leans on, and it is exactly what a second role landing in
         # the namespace later would silently invalidate — it would get free ingress to every
         # already-fenced pod here with no policy change of its own (guarded by
-        # ansible/tests/test_observability_sole_tenancy.py). Enumerating each workload's pairwise
+        # ansible/tests/k8s/test_observability_sole_tenancy.py). Enumerating each workload's pairwise
         # edges would add review surface without adding a boundary; the boundary that matters is
         # the namespace edge. A bare podSelector is correct here and means observability only.
         - podSelector: {}

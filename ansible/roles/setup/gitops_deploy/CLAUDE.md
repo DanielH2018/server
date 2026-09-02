@@ -96,13 +96,13 @@ stay).
   playbook and an ff-merge (2026-09-01). A test-only push now produces an empty `ChangeSet` and
   takes the `if not cs.services` ff-merge branch, exactly like a docs-only push. The invariant it
   rests on — no role ships a test file to a host — is enforced tree-wide by
-  `ansible/tests/test_no_role_ships_a_test_file.py`, because a role that started shipping one
+  `ansible/tests/repo/test_no_role_ships_a_test_file.py`, because a role that started shipping one
   would turn this skip into a change to deployed code that never deploys.
 - **A new module in `files/` goes in two lists in `tasks/main.yml`** — the copy task's `loop:`
   that installs it under `/opt/gitops-deploy/`, and `stamp_deployed_pairs`, which records its
   render provenance. pytest imports from `files/` on disk, so a module added and forgotten in
   the copy loop passes CI and kills the deployer at import on its next tick. ENFORCED by
-  `ansible/tests/test_gitops_deploy_ship_list.py`, which fails when a runtime module in
+  `ansible/tests/deploy/test_gitops_deploy_ship_list.py`, which fails when a runtime module in
   `files/` is missing from either list; it is the sibling of `test_monitor_bridge_modules.py`.
 - **Broad changes split three ways** (`deploy_logic._BROAD_*_PREFIXES`). A setup-plane change
   under `roles/setup/<name>/` (or `requirements.yml`) fast-forwards and applies as
@@ -123,7 +123,7 @@ stay).
     now own the routing, `setup_tags_for` returns nothing for a role initial_setup.yml cannot
     apply (so it defers rather than guessing), and `broad_remediation` names the real playbook.
     The map is hand-written because this module runs under `uv run --no-project` and cannot
-    import yaml; `ansible/tests/test_setup_role_playbooks_agree.py` derives the truth from the
+    import yaml; `ansible/tests/deploy/test_setup_role_playbooks_agree.py` derives the truth from the
     playbooks and fails when the two drift.
   - **The ff-merge happens BEFORE the apply**, which is the order the *Deploying this role under
     the shared tree lock* trap below already prescribes for the manual path: applying first
@@ -224,7 +224,7 @@ stay).
     here almost always produces a spurious disarm rather than a permitted deploy. The one gap is
     a file that is invalid YAML overall, which the regex can still read a value out of but the
     filter would raise on rather than deny; CI is what closes it, not the regex's own bias —
-    `ansible/tests/test_denylist_parsers_agree.py` runs the filter against the live tree and
+    `ansible/tests/deploy/test_denylist_parsers_agree.py` runs the filter against the live tree and
     fails on exactly that shape, and `REQUIRE_CI` refuses to promote a red tip.
   - **The gate is in the play, not here.** `roles/k8s/manifests` applies,
     `roles/k8s/rollout-drain` runs `rollout status --timeout`, and
@@ -400,7 +400,7 @@ The parsed tree and the AST helpers they share are fixtures in `files/conftest.p
 `monkeypatch` on `deploy_logic.<name>` rebinds a re-export no function reads, so the test passes
 against unpatched code; and a runtime module that from-imports a name a test patches elsewhere
 holds its own reference from import time. Both are the holes monitor-bridge's check.py split
-hit. ENFORCED by `ansible/tests/test_gitops_deploy_patch_boundary.py`, which requires every
+hit. ENFORCED by `ansible/tests/deploy/test_gitops_deploy_patch_boundary.py`, which requires every
 patched name to be *defined* (not merely imported) on the module it is patched on — the
 monitor-bridge guard counts an import as bound, which a facade defeats.
 

@@ -39,7 +39,7 @@ containers_list:
   # BEFORE traefik deliberately: the traefik pod carries a crowdsec agent sidecar that logs
   # into this engine's LAPI, and a post-deploy task in this role registers the machine
   # credential — so the engine must exist before a traefik rollout starts the sidecar.
-  # Asserted by ansible/tests/test_containers_list_ordering.py.
+  # Asserted by ansible/tests/deploy/test_containers_list_ordering.py.
   #
   # The cost accepted for that: this role renders an IngressRoute (the LAPI's LAN face)
   # ahead of traefik installing the CRDs. Harmless on the running cluster; on a rebuild it

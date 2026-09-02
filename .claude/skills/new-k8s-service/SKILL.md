@@ -24,7 +24,7 @@ Copy the shape from a close sibling rather than writing one from scratch:
 
 **Name every `volumes[].name` for the workload or component that owns it** — `sonarr-config`,
 never `config` — so a mount reads unambiguously in a diff or a `kubectl describe`. ENFORCED by
-`ansible/tests/test_volume_names_descriptive.py`, which also catches the half-finished rename
+`ansible/tests/k8s/test_volume_names_descriptive.py`, which also catches the half-finished rename
 (a `volumeMounts` entry with no matching volume) that no schema check can see.
 
 `templates/` is for **manifests only**: `validate_k8s_manifests.py` renders every `*.j2` there

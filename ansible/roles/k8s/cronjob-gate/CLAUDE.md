@@ -35,7 +35,7 @@ imperatively from the CronJob — `kubectl create job <name>-deploy-gate --from=
 which copies the CronJob's pod template exactly, so the run exercises the same image, the same
 config and the same volumes the schedule will.
 
-`ansible/tests/test_k8s_autodeploy_batch_gates.py` knows about this role: a role that renders a
+`ansible/tests/deploy/test_k8s_autodeploy_batch_gates.py` knows about this role: a role that renders a
 CronJob and includes `k8s/cronjob-gate` with a matching `cronjob_gate_name` counts as gating
 that workload, and is therefore allowed to declare `k8s_autodeploy: true`.
 
@@ -70,7 +70,7 @@ real workload run on every deploy — not a probe, not a dry run, the actual job
 hung run hits its deadline first, the Job goes `Failed`, the poll sees it, and the deploy fails
 with this role's own message naming what it could and could not read. Set the other way, the
 poll's retries run out first and Ansible aborts with a bare "ran out of retries" — no message,
-no states, nothing to act on. `ansible/tests/test_cronjob_gate_decision.py` enforces the
+no states, nothing to act on. `ansible/tests/deploy/test_cronjob_gate_decision.py` enforces the
 ordering against every caller's rendered CronJob, because the prose version of this rule was
 violated by the shipped default on the day it was written.
 
@@ -114,7 +114,7 @@ There is deliberately **no per-caller opt-out**. A switch that let a caller turn
 would be an exemption-shaped hole, and this slice deleted two of those already. Narrowing what
 the gate claims is the right move; letting a caller opt out of the claim is not.
 
-`ansible/tests/test_cronjob_gate_decision.py` pins the split against synthetic container states.
+`ansible/tests/deploy/test_cronjob_gate_decision.py` pins the split against synthetic container states.
 It exercises the decision, not the deploy: `kubectl` here is read-only, so the live path from a
 broken image through to a failed play is unexercised.
 

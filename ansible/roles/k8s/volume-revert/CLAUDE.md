@@ -11,7 +11,7 @@ them. A caller that reverts without applying afterwards leaves the service down.
 
 **This code path runs only during an incident.** Nothing exercises it on a good day. That is
 why every step that can fail on its own account is checked before the scale-down, and why
-`ansible/tests/test_volume_revert.py` pins claim.yml's whole sequence rather than a few pairs.
+`ansible/tests/longhorn/test_volume_revert.py` pins claim.yml's whole sequence rather than a few pairs.
 Two transpositions that look harmless are outages: scaling down AFTER the maintenance-mode
 attach leaves the pod holding the volume, and detaching BEFORE the revert gives the revert a
 volume with no engine. Read the table below before reordering anything.
@@ -187,7 +187,7 @@ list keys on `ansible_run_tags`, so it only reaches roles an operator names on t
 internally instead. This role does the same: every mutating task and every wait carries
 `when: not (k8s_no_mutate | bool)`, which is `ansible_check_mode or (k8s_dry_run | bool)`.
 
-Guarding on either half alone is the bug that guard exists to prevent. `ansible/tests/test_volume_revert.py`
+Guarding on either half alone is the bug that guard exists to prevent. `ansible/tests/longhorn/test_volume_revert.py`
 pins the whole census of mutating tasks against it.
 
 ## Measured cycle time (task-6 drill, 2026-08-21)
@@ -295,5 +295,5 @@ That drill also found what source-text tests structurally cannot. The role's inp
 its SHA check as a bare `regex_search`, which returns the matched STRING; ansible-core 2.21
 refuses a non-boolean conditional, so **the assert aborted on every invocation, with a valid
 SHA, before the role did anything** — the rollback path could never have run. Every test of that
-guard read its source text and passed throughout. `ansible/tests/test_volume_revert_input_guard.py`
+guard read its source text and passed throughout. `ansible/tests/longhorn/test_volume_revert_input_guard.py`
 now runs the guard instead, and is the test that would have caught it.

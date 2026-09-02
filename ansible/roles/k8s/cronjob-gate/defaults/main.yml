@@ -13,7 +13,7 @@
 # role-authored message, no container states, no log. Set above it, the Job hits its own
 # deadline, goes Failed, and the poll returns to the role's own failure text.
 #
-# `ansible/tests/test_cronjob_gate_decision.py` enforces that ordering against every caller's
+# `ansible/tests/deploy/test_cronjob_gate_decision.py` enforces that ordering against every caller's
 # rendered CronJob, because the prose version of this rule was violated by the shipped default
 # on the day it was written.
 #

@@ -221,7 +221,7 @@ def test_split_k8s_combined_push_deploys_eligible_defers_denylisted():
 # rollback playbook run, while K8S_ROLLBACK_TIMEOUT_S is derived for the worst SINGLE one — so
 # two co-batched already exceed it and killpg lands mid-revert, after volume-revert has scaled
 # the workload to zero and attached its volume in maintenance mode. The budget arithmetic itself
-# is pinned by ansible/tests/test_rollback_timeout_budget.py; these cover the partition.
+# is pinned by ansible/tests/longhorn/test_rollback_timeout_budget.py; these cover the partition.
 
 
 def test_split_k8s_caps_claim_declaring_services_separately():

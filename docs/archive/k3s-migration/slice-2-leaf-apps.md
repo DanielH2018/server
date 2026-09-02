@@ -325,7 +325,7 @@ un-gated, its ordinary bridge monitor already reaches the app, so it is the cana
 bridge mechanism itself — it goes red if the mechanism breaks, independently of whether the
 gated services' probe paths are still right.
 
-`ansible/tests/test_strangler_bridge.py` holds the parts that span both inventories — a
+`ansible/tests/services/test_strangler_bridge.py` holds the parts that span both inventories — a
 bridged service must have no Docker container left, must have a k8s route behind it, and must
 send an SNI matching the Host it serves.
 

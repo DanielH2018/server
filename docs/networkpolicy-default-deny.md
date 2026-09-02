@@ -237,7 +237,7 @@ reason below.
 **Services born fenced.** A leaf app added after slice 1 shipped belongs to no slice, but has
 slice 1's shape: Traefik is its only caller and it dials nothing. Those carry the label from
 their first deploy rather than waiting for slice 5 to sweep them up, and
-`ansible/tests/test_netpol_baseline_labels.py` lists them in `BORN_FENCED_ROLES` so the set
+`ansible/tests/k8s/test_netpol_baseline_labels.py` lists them in `BORN_FENCED_ROLES` so the set
 stays as explicit as the slices. So far: **artifacts** (2026-08-19), the read-only browser over
 each host's `~/.claude/artifacts`; **docs** (2026-08-24), nginx over a hostPath of built MkDocs
 output, whose site is generated on the host by the `docs-refresh` cron so the pod never fetches,
@@ -368,7 +368,7 @@ bazarr → sonarr/radarr, freshrss → feed-cache, home-assistant → mosquitto.
 1. Whether a lint should require every `containers_list` entry to have a policy — the
    baseline makes a missing policy safe rather than broken, so this is optional, but it is
    the executable-check end of the repo's escalation ladder. Slice 1 shipped a narrower
-   version of this: `ansible/tests/test_netpol_baseline_labels.py` pins the labelled set.
+   version of this: `ansible/tests/k8s/test_netpol_baseline_labels.py` pins the labelled set.
 2. The probe's `activeDeadlineSeconds` (120s) is shorter than the Ansible wait (180s), so a
    deadline-exceeded run produces a misleading diagnosis in either branch of the fail message.
    Slice 1's probe completed well inside both, so the real timings are now known and this can

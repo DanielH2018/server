@@ -401,14 +401,14 @@ def _test_files(repo: Path, scripts: Path) -> list[Path]:
     return (
         sorted(scripts.glob("test_*.py"))
         + sorted(scripts.glob("*/test_*.py"))
-        + sorted((repo / "ansible" / "tests").glob("test_*.py"))
+        + sorted((repo / "ansible" / "tests").rglob("test_*.py"))
     )
 
 
 def _indirect_test(name: str, test_files: list[Path], scripts: Path) -> tuple[str, str]:
     """The test that names this script but is not called `test_<name>.py`.
 
-    `gitops_tick.sh` has five tests, in `ansible/tests/test_gitops_manual_trigger.py`, and
+    `gitops_tick.sh` has five tests, in `ansible/tests/deploy/test_gitops_manual_trigger.py`, and
     reporting it as untested on the naming convention alone put a covered script on the gap
     list. A module with no test file of its own is likewise often reached through the entry
     point that imports it.

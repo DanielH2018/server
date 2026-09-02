@@ -50,7 +50,7 @@ def is_image_only_diff(diff_text: str) -> bool:
 
 # Roles under roles/k8s/ that deploy no service of their own — they are included by other roles
 # and carry no defaults/main.yml, so they declare nothing. Mirrors SHARED_ROLES in
-# ansible/filter_plugins/k8s_autodeploy.py; ansible/tests/test_denylist_parsers_agree.py asserts
+# ansible/filter_plugins/k8s_autodeploy.py; ansible/tests/deploy/test_denylist_parsers_agree.py asserts
 # the two stay in step.
 SHARED_K8S_ROLES = frozenset({"manifests", "rollout-drain"})
 
@@ -90,7 +90,7 @@ def declared_denylist(sources: dict[str, str | None]) -> frozenset[str]:
     origin — it never decides eligibility. So it is deliberately biased: anything unclear reads
     as denied, which can make the comparison mismatch and disarm auto-deploy, but can never make
     a denied role look permitted. The authoritative derivation is the Ansible filter, which
-    parses real YAML; ansible/tests/test_denylist_parsers_agree.py pins the two together.
+    parses real YAML; ansible/tests/deploy/test_denylist_parsers_agree.py pins the two together.
     """
     denied = set()
     for role, text in sources.items():

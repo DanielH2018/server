@@ -24,7 +24,7 @@ creation_rules:
   # and the production rule below matches `vars/secrets-staging.yml` by path just as well. With
   # these two swapped, a `sops` create encrypts the staging file to all four production
   # recipients — the exact opposite of what this rule exists to do, and silently.
-  # ENFORCED by ansible/tests/test_sops_staging_rule.py.
+  # ENFORCED by ansible/tests/staging/test_sops_staging_rule.py.
   #
   # DECIDED: daniel-server's key ALONE — not daniel-box's, and not the off-box recovery key.
   # `pre_tasks/load_secrets.yml` decrypts with `delegate_to: localhost`, so the CONTROLLER

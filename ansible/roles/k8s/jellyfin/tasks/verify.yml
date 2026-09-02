@@ -16,7 +16,7 @@
 # old ReplicaSet), `wait --for=condition=ready pod -l app=x` (the old pod is Ready until it
 # stops), and `--field-selector status.phase=Running` (phase stays Running while Terminating —
 # that word is kubectl rendering deletionTimestamp, not a phase). Only `rollout status` gates on
-# the new ReplicaSet. See ansible/tests/test_inline_rollout_gates.py.
+# the new ReplicaSet. See ansible/tests/deploy/test_inline_rollout_gates.py.
 - name: Wait for the jellyfin rollout to finish before verifying it
   tags: [deploy]
   ansible.builtin.command:

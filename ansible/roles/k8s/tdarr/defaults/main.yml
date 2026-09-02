@@ -90,7 +90,7 @@ tdarr_k8s_server_port: 8266
 # DaemonSet and monitor-bridge's K8S_EXTENDED_RESOURCES default. Four independent strings.
 # A rename catching only some of them leaves this pod requesting a resource nothing advertises —
 # unschedulable, not a loud error — or leaves monitor-bridge fail-closed-paging for a resource
-# that is fine. ansible/tests/test_dri_resource_name_agrees.py is what actually couples them.
+# that is fine. ansible/tests/services/test_dri_resource_name_agrees.py is what actually couples them.
 tdarr_k8s_dri_resource: devic.es/dri
 
 tdarr_k8s_cpu_limit: "6"

@@ -140,7 +140,7 @@ def host_files(host_vars: Path = HOST_VARS) -> list[Path]:
 
     ``_example.yml`` is a template for a new host, not a host — Ansible only loads a host_vars
     file whose name matches an inventory hostname, so it is inert to a real run and must be
-    inert here too. ``ansible/tests/test_containers_list_roles_exist.py`` makes the same
+    inert here too. ``ansible/tests/deploy/test_containers_list_roles_exist.py`` makes the same
     exclusion, and ``test_deploy_tags.py::test_example_host_vars_is_not_a_source_of_tags`` pins
     it. The ``host_vars`` argument stays a parameter because every caller's tests inject a
     ``tmp_path`` through it.

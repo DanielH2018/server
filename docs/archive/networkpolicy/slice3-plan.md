@@ -75,7 +75,7 @@ Prometheus *scraping outward* needs no rule at all: that is egress from promethe
 | `roles/k8s/claude-otel/templates/*.yaml.j2` (6 workloads) | **Modify.** Add the `netpol-baseline: enforced` pod label. |
 | `roles/k8s/netpol-baseline/templates/netpol-probe-slice3-job.yaml.j2` | **Create.** Inverted probe + controls. |
 | `roles/k8s/netpol-baseline/tasks/main.yml` | **Modify.** Readiness gate + probe run for slice 3. |
-| `ansible/tests/test_netpol_baseline_labels.py` | **Modify.** Workload-granular guard; add `SLICE_3_WORKLOADS`. |
+| `ansible/tests/k8s/test_netpol_baseline_labels.py` | **Modify.** Workload-granular guard; add `SLICE_3_WORKLOADS`. |
 
 ---
 
@@ -84,7 +84,7 @@ Prometheus *scraping outward* needs no rule at all: that is egress from promethe
 The guard currently answers "does this role render *any* doc carrying the label". Six workloads in one role makes that answer useless. It must answer per pod-producing document.
 
 **Files:**
-- Modify: `ansible/tests/test_netpol_baseline_labels.py:62-83`
+- Modify: `ansible/tests/k8s/test_netpol_baseline_labels.py:62-83`
 
 **Interfaces:**
 - Produces: `_labelled_workloads() -> set[tuple[str, str]]` — `(role, workload_name)` pairs, where `workload_name` is the doc's `metadata.name`. Tasks 3 and 7 consume this.
@@ -127,14 +127,14 @@ def test_every_pod_producing_doc_in_a_fenced_role_is_labelled() -> None:
 
 - [ ] **Step 2: Run it**
 
-Run: `uv run pytest ansible/tests/test_netpol_baseline_labels.py -v`
+Run: `uv run pytest ansible/tests/k8s/test_netpol_baseline_labels.py -v`
 
 Expected: PASS if slices 1–2 are internally consistent. **If it FAILS, stop and report** — that is a real unfenced workload in already-deployed code, and it is a finding, not a test bug.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add ansible/tests/test_netpol_baseline_labels.py
+git add ansible/tests/k8s/test_netpol_baseline_labels.py
 git commit -F - <<'EOF'
 Make the netpol label guard workload-granular, not role-granular
 
@@ -229,7 +229,7 @@ Expected: PASS. Confirm by eye that the off-state renders `- {}` and the on-stat
 
 **Files:**
 - Modify: `ansible/roles/k8s/claude-otel/templates/{grafana,prometheus,loki,tempo,kube-state-metrics,collector}.yaml.j2`
-- Modify: `ansible/tests/test_netpol_baseline_labels.py`
+- Modify: `ansible/tests/k8s/test_netpol_baseline_labels.py`
 
 - [ ] **Step 1: Add `SLICE_3_WORKLOADS` to the guard, as workload names**
 
@@ -261,7 +261,7 @@ Under `spec.template.metadata.labels` for the five Deployments and the DaemonSet
 
 - [ ] **Step 3: Run the guard**
 
-Run: `uv run pytest ansible/tests/test_netpol_baseline_labels.py -v`
+Run: `uv run pytest ansible/tests/k8s/test_netpol_baseline_labels.py -v`
 Expected: PASS, 17 roles (the 16 already fenced plus `claude-otel`) + 6 observability workloads.
 
 - [ ] **Step 4: Commit**

@@ -37,7 +37,7 @@ kubectl -n longhorn-system get volumes.longhorn.io \
    `deploy/longhorn.yaml` against `roles/setup/k3s/files/longhorn-storageclass.yaml`, carry over any
    new parameters, and update the provenance line in its header. **Never** paste
    `numberOfReplicas` back in — `default-replica-count` is the single source of truth, and
-   `ansible/tests/test_longhorn_storageclass.py` fails if the parameter reappears.
+   `ansible/tests/longhorn/test_longhorn_storageclass.py` fails if the parameter reappears.
    Apply the same diff to `longhorn-storageclass-nobackup.yaml`.
 3. **Deploy**, on daniel-box (the play refuses to run anywhere else):
    ```bash

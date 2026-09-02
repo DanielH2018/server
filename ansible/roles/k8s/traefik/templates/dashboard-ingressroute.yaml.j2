@@ -53,7 +53,7 @@ spec:
   # Not boilerplate. An IngressRoute on the https entrypoint with no tls block becomes a
   # NON-TLS router and is never a candidate for an HTTPS request — it does not lose a
   # priority contest, it is not in the running at all. ENFORCED by
-  # ansible/tests/test_k8s_manifests.py. Do not shorten to the file provider's `tls: {}`;
+  # ansible/tests/k8s/test_k8s_manifests.py. Do not shorten to the file provider's `tls: {}`;
   # that shorthand is not IngressRoute syntax.
   tls:
 {% if k8s_tls_cert_resolver %}

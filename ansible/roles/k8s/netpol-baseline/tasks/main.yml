@@ -30,7 +30,7 @@
     quiet: true
 
 # Slice 5's gate, and it reads the CLUSTER rather than the rendered templates on purpose.
-# `ansible/tests/test_netpol_baseline_labels.py` already pins the exempt set against the
+# `ansible/tests/k8s/test_netpol_baseline_labels.py` already pins the exempt set against the
 # templates — but during slice 4.5 the templates and the cluster disagreed for ~16 hours
 # (n8n-runners rendered its label and the live Deployment did not carry it) with that guard
 # green throughout. Under namespace scope the same drift is worse in both directions: a pod

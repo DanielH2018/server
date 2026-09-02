@@ -30,7 +30,7 @@
   # Same assert as server.yml, same reason: k3s brings its own containerd and its iptables
   # rules would land on top of Docker's chains. Both node roles need it — a guard on one
   # path is a guard the other host can walk around, which is exactly what happened on
-  # 2026-08-19. ENFORCED as a pair by ansible/tests/test_k3s_docker_guard.py.
+  # 2026-08-19. ENFORCED as a pair by ansible/tests/setup/test_k3s_docker_guard.py.
   ansible.builtin.stat:
     path: /usr/bin/docker
   register: k3s_agent_docker_binary

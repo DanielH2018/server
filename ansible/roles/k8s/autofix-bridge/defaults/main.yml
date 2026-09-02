@@ -12,7 +12,7 @@ autofix_bridge_k8s_image: python:3.14-alpine@sha256:05b2b8b732ecd268fee8727a369f
 # autofix.py is this role's own file. bridge_common.py is monitor-bridge's canonical copy,
 # staged cross-role — the same pattern `host_lib.py` uses from `roles/setup/common` — never a
 # second edited copy under this role's files/.
-# ENFORCED by ansible/tests/test_autofix_bridge_modules.py.
+# ENFORCED by ansible/tests/services/test_autofix_bridge_modules.py.
 autofix_bridge_modules:
   - name: autofix.py
     src: "{{ playbook_dir }}/roles/k8s/autofix-bridge/files/autofix.py"

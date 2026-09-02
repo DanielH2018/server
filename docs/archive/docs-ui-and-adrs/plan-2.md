@@ -4,7 +4,7 @@
 
 **Goal:** Add an architecture-decision record set linked bidirectionally to the `# DECIDED:` markers already in the code, a scoped Vale style gate, and D2 for hand-authored diagrams.
 
-**Architecture:** ADRs live in `docs/adr/` as MADR-lite documents with a `governs:` frontmatter list of `file:line` anchors. A `# DECIDED:` marker whose reasoning outgrew its line gains an `ADR-NNNN` reference, and `ansible/tests/test_adr_links.py` enforces both directions. Vale runs as a prek hook scoped to the new trees only. D2 renders committed `.d2` sources to SVG at commit time.
+**Architecture:** ADRs live in `docs/adr/` as MADR-lite documents with a `governs:` frontmatter list of `file:line` anchors. A `# DECIDED:` marker whose reasoning outgrew its line gains an `ADR-NNNN` reference, and `ansible/tests/repo/test_adr_links.py` enforces both directions. Vale runs as a prek hook scoped to the new trees only. D2 renders committed `.d2` sources to SVG at commit time.
 
 **Tech Stack:** Vale + the Google style package, D2, Python 3.14 + uv, pytest, prek.
 
@@ -73,7 +73,7 @@ consequences section is empty is a decision nobody stress-tested.
 
 Where this decision is enforced in the tree. Each entry is a `file:line` anchor that
 carries a `# DECIDED: … ADR-NNNN` marker pointing back here. The `governs:` frontmatter
-list must match; `ansible/tests/test_adr_links.py` checks both directions.
+list must match; `ansible/tests/repo/test_adr_links.py` checks both directions.
 ```
 
 **The `governs:` list may be empty.** Some decisions have no single line that enforces them — the choice of MkDocs over a flat index is one. An empty list is valid; a wrong one is not.
@@ -101,7 +101,7 @@ reasoning stays where it is, as a `# DECIDED:` comment at the code line it gover
 that is what a reviewer trips over before they spend an hour re-deriving it.
 
 An ADR is the long-form why; the marker is the pointer. Where both exist they reference
-each other, and `ansible/tests/test_adr_links.py` fails if either direction breaks.
+each other, and `ansible/tests/repo/test_adr_links.py` fails if either direction breaks.
 
 ## Superseding
 
@@ -148,7 +148,7 @@ reasoning outgrows the line it sits on. Short reasoning stays a
 Two registries that reference each other by convention drift. This is the executable check that makes the link real, and it must exist **before** the backfill — otherwise the backfill writes 13 links with nothing verifying any of them.
 
 **Files:**
-- Create: `ansible/tests/test_adr_links.py`
+- Create: `ansible/tests/repo/test_adr_links.py`
 
 **Interfaces:**
 - Consumes: the ADR frontmatter schema from Task 1.
@@ -292,7 +292,7 @@ def test_superseded_adrs_name_their_successor():
 
 - [ ] **Step 3: Run it**
 
-Run: `uv run pytest ansible/tests/test_adr_links.py -v`
+Run: `uv run pytest ansible/tests/repo/test_adr_links.py -v`
 Expected: PASS. With only ADR-0001 and an empty `governs`, the link assertions have nothing to check yet — that is correct, and they start biting in Task 3.
 
 - [ ] **Step 4: Check `testpaths` covers it**
@@ -303,7 +303,7 @@ Run: `uv run pytest` and confirm the new file appears in the collected set. **A 
 
 - [ ] **Step 5: Commit**
 
-Stage `ansible/tests/test_adr_links.py`. Commit with:
+Stage `ansible/tests/repo/test_adr_links.py`. Commit with:
 
 ```
 Enforce the ADR / '# DECIDED:' link in both directions
@@ -387,7 +387,7 @@ Then list that `file:line` in the ADR's `governs:`. `test_adr_links.py` fails if
 
 - [ ] **Step 3: Verify after each ADR**
 
-Run: `uv run pytest ansible/tests/test_adr_links.py -v`
+Run: `uv run pytest ansible/tests/repo/test_adr_links.py -v`
 Run: `uv run mkdocs build --strict`
 
 Both must pass before the next ADR. A backfill that accumulates thirteen broken links before anyone runs the test is thirteen debugging sessions at once.

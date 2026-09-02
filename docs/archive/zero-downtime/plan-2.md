@@ -315,11 +315,11 @@ which is far harder to diagnose than an outage."
 Three things silently undo this: dropping to one instance, letting them restart together, and splitting them across nodes. Each fails green.
 
 **Files:**
-- Create: `ansible/tests/test_pihole_redundancy.py`
+- Create: `ansible/tests/services/test_pihole_redundancy.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `ansible/tests/test_pihole_redundancy.py`:
+Create `ansible/tests/services/test_pihole_redundancy.py`:
 
 ```python
 """LAN DNS survives a Pi-hole deploy only while three properties hold.
@@ -435,7 +435,7 @@ def test_the_rollout_is_sequenced_per_instance():
 
 - [ ] **Step 2: Run it**
 
-Run: `uv run pytest ansible/tests/test_pihole_redundancy.py -v -n0`
+Run: `uv run pytest ansible/tests/services/test_pihole_redundancy.py -v -n0`
 Expected: PASS, 6 tests.
 
 - [ ] **Step 3: Prove each guard catches its regression**
@@ -449,7 +449,7 @@ For each of the three, make the change, confirm the named test fails, then resto
 - [ ] **Step 4: Commit**
 
 ```bash
-git add ansible/tests/test_pihole_redundancy.py
+git add ansible/tests/services/test_pihole_redundancy.py
 git commit -m "Guard the three properties Pi-hole redundancy depends on
 
 Dropping to one instance, restarting both at once, and splitting them across

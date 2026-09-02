@@ -152,7 +152,7 @@
   # The first condition repeats the producer's, deliberately: a skipped task still sets its
   # register and the skip result carries no `stdout`, so reading it on a stopped guest would
   # fail with an attribute error rather than skip. ENFORCED by
-  # ansible/tests/test_conditional_register_consumers.py, which caught exactly that here.
+  # ansible/tests/deploy/test_conditional_register_consumers.py, which caught exactly that here.
   when:
     - hypervisor_staging_vm_info.stdout is search('State:\s+running')
     - hypervisor_staging_vm_live_xml.stdout is not search("filterref filter='" ~ hypervisor_staging_nwfilter_name ~ "'")

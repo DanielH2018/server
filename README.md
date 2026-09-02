@@ -108,7 +108,7 @@ namespace. Where policies do exist, **ingress** rules are enforced; **egress** r
   4. For a tagged run (`--tags sonarr`), `dep_closure` + `expand_with_deps` pull up any
      **down** dependencies while skipping ones already running.
 
-  These filters are unit-tested (`ansible/tests/test_toposort.py`) — run via the `pytest`
+  These filters are unit-tested (`ansible/tests/deploy/test_toposort.py`) — run via the `pytest`
   pre-commit hook.
 
 - **k8s play** (`platform: k8s`) — includes `roles/k8s/<name>` in **list order**. There is

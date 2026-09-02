@@ -62,7 +62,7 @@ unconditionally, and `tasks/main.yml` dispatches internally on `has_docker` (`in
 longer reinstalls Docker — but it now also runs the teardown pass every time (reaping any stale
 Compose systemd units/crons; a no-op once nothing is left to reap), which the old gated version
 never did. Runs here still need no `--tags` to stay safe. Guarded by
-`ansible/tests/test_k3s_host_has_no_docker.py`.
+`ansible/tests/setup/test_k3s_host_has_no_docker.py`.
 
 ### 1b. Claude Code is installed — RESOLVED 2026-08-01
 
@@ -170,7 +170,7 @@ StorageClass had no replica count to strip.
 Fixed in `roles/setup/k3s`: it now applies `files/longhorn-storageclass.yaml` (upstream's class
 with `numberOfReplicas` omitted, so the setting governs) and deletes/recreates the class when it
 finds one still pinning a count — parameters are immutable. Guarded by
-`ansible/tests/test_longhorn_storageclass.py`.
+`ansible/tests/longhorn/test_longhorn_storageclass.py`.
 
 **Applied and proven** on the rebuilt cluster: a fresh PVC binds at `numberOfReplicas: 1`.
 
@@ -207,7 +207,7 @@ was silently skipped on an installed host, so it now compares the desired argume
 the systemd unit; and `k3s_version` is pinned, because a re-runnable installer would otherwise
 upgrade the control plane as a side effect of a flag change. The role also asserts the
 registered InternalIP equals `server_ip`. Guarded by
-`ansible/tests/test_k3s_node_ip_pinned.py`.
+`ansible/tests/setup/test_k3s_node_ip_pinned.py`.
 
 **The cluster had to be rebuilt to take it, and that is the trap worth remembering.** Moving
 the address is not a restart — etcd stores the member's peer URL and k3s validates its own
@@ -267,11 +267,11 @@ remove the backup from B2; drop the `Backup` CR too if you do not want it linger
 
 - **`ansible_env.HOME` is `/root`.** `initial_setup.yml` gathers facts escalated on purpose, so
   `ansible_env` reflects root even inside a `become: false` task. Use `/home/{{ sys_user }}`.
-  Guarded by `ansible/tests/test_per_user_home_resolution.py`.
+  Guarded by `ansible/tests/setup/test_per_user_home_resolution.py`.
 - **APT keyrings must set an explicit mode.** `initial_setup` sets `UMASK 027`; a keyring created
   by a `command` (e.g. `gpg --dearmor`) lands 0640, and apt's unprivileged `_apt` user then
   reports the repo as *unsigned*. This silently broke Docker's install for weeks. Guarded by
-  `ansible/tests/test_apt_keyring_permissions.py`.
+  `ansible/tests/setup/test_apt_keyring_permissions.py`.
 - **`DanielH2018/dotfiles` is private**; `DanielH2018/server` is public. That asymmetry hid the
   missing credential until chezmoi tried to clone.
 - **chezmoi's `--promptBool`/`--promptString` do not satisfy `promptBoolOnce`/`promptStringOnce`.**

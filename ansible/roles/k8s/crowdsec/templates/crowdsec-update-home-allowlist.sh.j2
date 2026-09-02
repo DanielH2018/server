@@ -57,7 +57,7 @@ PUSH_URL="https://uptime-kuma.local.{{ domain }}/api/push/{{ monitor_bridge_home
 # reasoning away from the line that makes the trade-off. The library's actual security property —
 # the token-bearing URL reaching curl on stdin as a config file rather than as an argv element,
 # because /proc is mounted without hidepid and this runs every 5 minutes — is reproduced inline
-# below, and ansible/tests/test_cron_scripts_publish_via_pr.py enforces it here with no exemption.
+# below, and ansible/tests/setup/test_cron_scripts_publish_via_pr.py enforces it here with no exemption.
 push() { # up|down msg
   printf 'url = "%s"\n' "$PUSH_URL" |
     curl -fsS --max-time 10 --retry 3 --retry-all-errors -G -K - \

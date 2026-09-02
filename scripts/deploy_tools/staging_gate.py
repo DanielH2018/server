@@ -77,7 +77,7 @@ NOT_RUN = 3
 # The restricted key's dispatcher refusing the request outright — a malformed operation name,
 # a SHA that is not a 40-hex object name, tags outside its charset. Defined in
 # roles/setup/hypervisor/templates/staging-gate-dispatch.sh.j2 and pinned to this constant by
-# ansible/tests/test_staging_gate_dispatch.py.
+# ansible/tests/staging/test_staging_gate_dispatch.py.
 #
 # It classifies as NO_VERDICT for the same reason PREP_FAILED does: the gate could not be
 # ASKED. Reading a malformed request as "staging rejected this change" would fail a merge for

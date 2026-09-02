@@ -34,7 +34,7 @@ hypervisor_net_source_dir: /etc/libvirt/declared-networks
 # 172.17.0.0/16 (bridges left by the retired Docker install), and 192.168.122.0/24
 # (libvirt's own `default`, defined-but-stopped). Sitting outside 10/8 entirely means a
 # future k3s or Docker range cannot grow into it.
-# ENFORCED by ansible/tests/test_staging_network.py, which re-checks the overlap.
+# ENFORCED by ansible/tests/staging/test_staging_network.py, which re-checks the overlap.
 hypervisor_staging_net_name: staging
 hypervisor_staging_net_bridge: virbr-stage
 # The egress fence attached to the guest's interface. Named rather than inlined because two

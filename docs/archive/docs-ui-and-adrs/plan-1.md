@@ -18,7 +18,7 @@
 - **Generators parse statically.** They must never shell out to `ansible` or `kubectl` to read *repo* facts. A fresh worktree has no Ansible collections, and `ansible/inventory/*.yml` holds SOPS lookups that do not render outside a deploy. Read YAML with `yaml.safe_load` and template text with regex. Live *cluster* state is the sole exception, and it degrades to declared-only when unreachable.
 - **An underivable fact prints its reason, never a guess.** Follow the `"unknown"` precedent in `scripts/docs/service_catalog.py`.
 - **`ansible/roles/k8s/<name>/templates/` holds manifests only.** `validate_k8s_manifests.py` renders every `*.j2` there and parses it as YAML. Non-manifest config goes in `templates/config/`, static assets in `files/`.
-- **Volume names are descriptive.** `docs-site`, never `site`. ENFORCED by `ansible/tests/test_volume_names_descriptive.py`.
+- **Volume names are descriptive.** `docs-site`, never `site`. ENFORCED by `ansible/tests/k8s/test_volume_names_descriptive.py`.
 - **Image tags are pinned to a real version** — a version tag or `latest@sha256:…`. Never a bare `:latest`.
 - **Commits are signed and hooks run.** Never `--no-verify`, `--no-gpg-sign`, or `core.hooksPath=/dev/null`.
 - **Deploy through `./scripts/deploy.sh`**, which takes the git-tree lock. Exit 75 means the lock was busy and nothing deployed; exit 4 means the tree is behind master.

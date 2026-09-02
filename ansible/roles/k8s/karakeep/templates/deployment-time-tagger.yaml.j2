@@ -99,7 +99,7 @@ spec:
             # THE OBVIOUS FIX IS THE WRONG ONE HERE. Uncommenting `logger.remove()` in the
             # vendored script would also reach handler 1 — but that file is upstream's bytes,
             # pinned by sha256 to an immutable commit in the archived Docker role, and
-            # ansible/tests/test_karakeep_time_tagger_script.py exists to fail when the vendored
+            # ansible/tests/services/test_karakeep_time_tagger_script.py exists to fail when the vendored
             # copy stops matching what upstream serves. Editing it and re-pinning to our own hash
             # would keep the test green while destroying what it checks.
             #

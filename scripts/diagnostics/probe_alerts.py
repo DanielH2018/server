@@ -84,7 +84,7 @@ def parse_down_line(line):
 # whitespace-free tokens before the tag, which is what rsyslog's own prefix gives. The Pi
 # emits `date -Is` (one token) to match; traditional syslog format ("Aug 29 19:12:26 host")
 # is four tokens and parses as nothing. Changing either side alone silently drops every Pi
-# episode, which is why ansible/tests/test_pi_health_log_line_shape.py pins the pair.
+# episode, which is why ansible/tests/setup/test_pi_health_log_line_shape.py pins the pair.
 SYSLOG_ALERT_LOGQL = '{job="syslog"} |= "status=down"'
 _SYSLOG_LINE_RE = re.compile(
     r"^\S+\s+\S+\s+(?P<name>[A-Za-z0-9_.-]+?)(?:\[\d+\])?:\s+(?P<rest>.*status=down.*)$"

@@ -334,7 +334,7 @@ _PR_617_FILES = [
     "ansible/roles/k8s/valheim-stats/defaults/main.yml",
     "ansible/roles/k8s/zigbee2mqtt/defaults/main.yml",
     "ansible/roles/setup/k3s/defaults/main.yml",
-    "ansible/tests/test_base_images_digest_pinned.py",
+    "ansible/tests/k8s/test_base_images_digest_pinned.py",
     "docs/claude-tooling.md",
     "scripts/diagnostics/probe.py",
     "scripts/diagnostics/probe_releases.py",

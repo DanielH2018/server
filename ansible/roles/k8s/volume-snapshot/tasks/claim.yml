@@ -88,7 +88,7 @@
   # spent twice. Dropping the redundant copy takes the worst offender (home-assistant, 71) to
   # 55. `volume-revert` applies the IDENTICAL expression when it reconstructs this prefix — the
   # two must stay in step or 7b silently matches nothing, which is why
-  # `ansible/tests/test_snapshot_name_length.py` compares them rather than trusting a comment.
+  # `ansible/tests/longhorn/test_snapshot_name_length.py` compares them rather than trusting a comment.
   #
   # Stripping is skipped when it would empty the segment (a claim named exactly for its
   # service), because `autodeploy-<svc>-<sha>--<token>` is the degenerate name volume-revert's

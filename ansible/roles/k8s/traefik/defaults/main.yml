@@ -42,7 +42,7 @@ traefik_k8s_uid: 65532
 # entry, and static-config.yaml.j2 lists the same set as `providers.kubernetesCRD.namespaces`.
 # ONE variable, so the two cannot drift — they were two hand-maintained lists with a comment
 # on each asking the next editor to keep them in step.
-# ENFORCED by ansible/tests/test_traefik_watched_namespaces.py, which compares the RENDERED
+# ENFORCED by ansible/tests/services/test_traefik_watched_namespaces.py, which compares the RENDERED
 # manifests (Role namespaces vs the provider list), not the templates' text.
 #
 # Scoped to named namespaces: Traefik should not pick up an IngressRoute someone drops in an

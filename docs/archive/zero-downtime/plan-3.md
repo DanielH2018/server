@@ -165,11 +165,11 @@ nothing."
 Four sidecars have no `readinessProbe` on purpose, and the reasoning lives in three separate template comments. Someone auditing probe coverage — exactly what produced this plan — will find them again and "fix" them, and giving Traefik's CrowdSec sidecar a readinessProbe takes every route in the homelab out of service when the agent hiccups.
 
 **Files:**
-- Create: `ansible/tests/test_readiness_coverage.py`
+- Create: `ansible/tests/k8s/test_readiness_coverage.py`
 
 - [ ] **Step 1: Write the guard**
 
-Create `ansible/tests/test_readiness_coverage.py`:
+Create `ansible/tests/k8s/test_readiness_coverage.py`:
 
 ```python
 """Containers with no readinessProbe are a decision, not an oversight.
@@ -263,7 +263,7 @@ def test_every_reason_is_substantive():
 
 - [ ] **Step 2: Run it and reconcile against reality**
 
-Run: `uv run pytest ansible/tests/test_readiness_coverage.py -v -n0`
+Run: `uv run pytest ansible/tests/k8s/test_readiness_coverage.py -v -n0`
 Expected: PASS, 3 tests.
 
 The allowlist above was written from an audit of the rendered manifests, and Tasks 1 and 2 remove three entries' worth of containers from the "no probe" set. If `test_the_record_has_no_stale_entries` fails naming `nut`, `terraria` or `valheim`, that is Tasks 1–2 having worked — those keys were never added, so this should not happen; if it does, something else changed and is worth reading before editing.
@@ -280,7 +280,7 @@ Run: `uv run pytest -q` and `prek run --all-files`
 Expected: both pass.
 
 ```bash
-git add ansible/tests/test_readiness_coverage.py
+git add ansible/tests/k8s/test_readiness_coverage.py
 git commit -m "Record which containers deliberately have no readinessProbe
 
 The reasoning currently lives in three separate template comments, so the next

@@ -157,7 +157,7 @@ the **`land-after-merge` skill**.
 `cancelled`, `stale` and `skipped_by_concurrency` mean *no verdict for this SHA*, never *this
 SHA is bad* — `_CI_NO_VERDICT_CONCLUSIONS` in `deploy_logic.py` is the list, and a commit whose
 merge was immediately followed by another reads `cancelled` permanently. If you ever check by
-hand, check that way. (ENFORCED: `ansible/tests/test_ci_cancelled_is_not_a_verdict.py` requires
+hand, check that way. (ENFORCED: `ansible/tests/deploy/test_ci_cancelled_is_not_a_verdict.py` requires
 this paragraph to stay in CLAUDE.md rather than move to the skill.)
 
 **Verify the change, not just the workload.** The `VERDICT:` line gates the rollout and the
@@ -452,6 +452,14 @@ uv run pytest scripts         # just one suite
   the auto-deploy gates, the documented-path and macro checks), a role's own cluster-side logic
   under `ansible/roles/<plane>/<role>/files/`, the Bash classifier in `.claude/hooks/`, and
   `scripts/`. A role that ships a `files/*.py` with logic adds itself to `testpaths`.
+  `ansible/tests/` is grouped by what a guard reads: `deploy/` (the deploy play, gitops_deploy
+  and the rollout gates), `k8s/` (manifest render and workload hygiene across roles),
+  `longhorn/` (backup, snapshot, revert), `setup/` (the host plane: k3s install, crons, DNS,
+  UPS, the Pi), `staging/`, `services/` (one role each) and `repo/` (CI, docs and the suite's
+  own guards). `_helpers.py`, `_k8s_render.py` and `conftest.py` stay at the root, reachable
+  from every subdirectory because `pyproject.toml` puts `ansible/tests` on `pythonpath`. A
+  new guard goes in the directory whose name answers "what does it read", and keeps a unique
+  basename — there are no `__init__.py` files, so pytest names modules by basename alone.
 - **A new check ships with a proof it can go RED.** Any validator, guard, health check or probe
   lands with a paired test: one input it must accept, and one input it must reject. A check is only
   ever observed passing, so without the rejecting half there is no evidence it can fail — and this

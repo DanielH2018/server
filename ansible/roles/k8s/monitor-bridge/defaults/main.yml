@@ -10,7 +10,7 @@ monitor_bridge_k8s_image: python:3.14-alpine@sha256:05b2b8b732ecd268fee8727a369f
 #
 # Deliberately explicit rather than a `files/*.py` glob: files/ also holds the pytest suite
 # and conftest.py, which must not reach the image.
-# ENFORCED by ansible/tests/test_monitor_bridge_modules.py, which fails when a runtime module
+# ENFORCED by ansible/tests/services/test_monitor_bridge_modules.py, which fails when a runtime module
 # in files/ is absent here.
 monitor_bridge_modules:
   - check.py

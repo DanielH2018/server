@@ -49,7 +49,7 @@
 # --force-conflicts takes the data keys from the client-side field manager that applied them
 # before the switch. Server-side apply prints the same line whether or not anything changed,
 # so the changed signal is the staged file. ENFORCED by
-# ansible/tests/test_script_configmaps_apply_server_side.py.
+# ansible/tests/k8s/test_script_configmaps_apply_server_side.py.
 - name: Apply the script ConfigMap
   tags: [deploy]
   ansible.builtin.command:

@@ -1004,7 +1004,7 @@ selecting the main router, which reads as "the matcher is being ignored" rather 
 router does not exist for TLS traffic".
 
 **Fix:** `monitoring_route()` now emits the same `tls:` block as `ingressroute()`, guarded by
-`test_every_https_route_carries_tls` in `ansible/tests/test_k8s_manifests.py`, which fails any
+`test_every_https_route_carries_tls` in `ansible/tests/k8s/test_k8s_manifests.py`, which fails any
 rendered IngressRoute serving the https entrypoint without one.
 
 **Verified end to end** — a tagged probe from the monitor-bridge container now selects

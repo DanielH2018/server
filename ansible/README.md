@@ -219,7 +219,7 @@ uv run ansible-playbook ansible/deploy.yml          # deploy all workloads (Dock
 > set `has_docker: false` (daniel-server since the 2026-08-14 uninstall), so `initial_setup.yml`
 > only *installs* Docker on `daniel-pi` — the `has_docker: true` in `group_vars/all.yml` is now a
 > default that every real host except the Pi overrides, and on daniel-box/daniel-server a run
-> instead exercises the teardown path. `ansible/tests/test_k3s_host_has_no_docker.py` guards
+> instead exercises the teardown path. `ansible/tests/setup/test_k3s_host_has_no_docker.py` guards
 > against reintroducing the old `when: has_docker` gate on the role include.
 
 or `./ansible/bring-up.sh --continue [--host <name>]`, which runs those three in order and
