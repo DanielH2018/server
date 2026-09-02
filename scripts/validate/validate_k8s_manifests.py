@@ -40,6 +40,7 @@ from pathlib import Path
 import jsonschema
 import kubernetes_validate
 import yaml
+import yaml.constructor
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.

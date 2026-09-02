@@ -59,7 +59,9 @@ def _render(template: str, manage_acme: bool) -> str:
     env.globals["lookup"] = make_lookup(ctx)
     register_ansible_filters(env)
     rendered, err = render_or_error(env, template, ctx)
-    assert err is None, f"{template} failed to render with {_FLAG}={manage_acme}: {err}"
+    assert rendered is not None, (
+        f"{template} failed to render with {_FLAG}={manage_acme}: {err}"
+    )
     return rendered
 
 

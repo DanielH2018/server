@@ -8,6 +8,7 @@ code that mutates them. Rule and enforcement: bridge_config.py's header.
 
 import base64
 import time
+import urllib.error
 import urllib.parse
 
 import bridge_config as cfg

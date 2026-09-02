@@ -27,6 +27,11 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   # would break the moment that pin moves.
   "mkdocs-material>=9.5",           # the docs site; `uv run mkdocs build` renders docs/ into site/
   "zizmor>=1.0",
+  "ty==0.0.77",                     # first-party Python type gate (prek hook). Pinned exactly, not
+  # `>=`, because ty is pre-1.0: a 0.0.x bump can add a rule or
+  # change an inference and turn master red on an unrelated PR.
+  # Renovate raises the bump as its own PR, which is where the
+  # new diagnostics get read.
 ]
 
 [tool.pytest.ini_options]
@@ -159,3 +164,90 @@ select = [
 # asserts its sha256 against the commit the archived Docker role pins, so a lint fix here is a
 # drift that test exists to catch.
 "ansible/roles/k8s/karakeep/files/karakeep-time-tagger.py" = ["RUF012"]
+
+[tool.ty.environment]
+python-version = "3.14"
+# This repo has no `__init__.py` files and no installed package: a script reaches a sibling
+# directory through the `sys.path` bootstrap the root CLAUDE.md describes, and a test reaches its
+# role's `files/` the same way. ty resolves imports from search paths alone, so without this list
+# it reports 189 unresolved-import diagnostics for first-party modules that resolve fine at
+# runtime. The list is the union of pytest's `pythonpath` above, `.claude/hooks`, and the `files/`
+# sibling of every `testpaths` entry — the same three sources the bootstrap draws on.
+# ENFORCED: ansible/tests/repo/test_ty_extra_paths_cover_pythonpath.py fails if a pythonpath entry
+# is added here without a matching search path.
+extra-paths = [
+  "ansible/tests",
+  "ansible/filter_plugins",
+  "ansible/roles/setup/common/files",
+  "ansible/roles/setup/gitops_deploy/files",
+  "ansible/roles/k8s/monitor-bridge/files",
+  "scripts",
+  "scripts/availability_bots",
+  "scripts/backup",
+  "scripts/deploy_tools",
+  "scripts/dev",
+  "scripts/docs",
+  "scripts/grafana",
+  "scripts/home_assistant",
+  "scripts/infra_map",
+  "scripts/lib",
+  "scripts/diagnostics",
+  "scripts/secrets_mgmt",
+  "scripts/validate",
+  ".claude/hooks",
+  "ansible/roles/k8s/autofix-bridge/files",
+  "ansible/roles/k8s/configarr/files",
+  "ansible/roles/k8s/janitorr/files",
+  "ansible/roles/k8s/qbittorrent/files",
+  "ansible/roles/setup/fake_remux/files",
+  "ansible/roles/k8s/terraria-stats/files",
+  "ansible/roles/k8s/valheim-stats/files",
+  "ansible/roles/k8s/ical-proxy/files",
+  "ansible/roles/k8s/homelab-mcp/files",
+  "ansible/roles/k8s/artifacts/files",
+  "ansible/roles/setup/k3s/files",
+  "ansible/roles/setup/renovate_notify/files",
+  "ansible/roles/k8s/home-assistant/files",
+]
+
+[tool.ty.src]
+# `ansible/collections` is the vendored third-party tree, excluded here for the same reason
+# ruff's `extend-exclude` skips it. `site/` and `.venv` are build output.
+include = ["scripts", ".claude", "ansible/roles", "ansible/tests", "ansible/filter_plugins", "evals"]
+exclude = ["ansible/collections", "site", ".venv"]
+
+[tool.ty.rules]
+# Four rules are OFF, each with the count that was measured against the tree before the gate
+# landed (2026-09-02, ty 0.0.77, 228 diagnostics total). They are off because the diagnostics are
+# annotation debt rather than bugs, not because they are hard — turning one on is a PR of its own
+# with its own measurement, which is the point of recording the number here.
+#
+# invalid-argument-type (94: 54 in tests, 40 in production). The test half is almost entirely
+#   monkeypatch doubles — a plain function assigned where a bound method is annotated — which ty
+#   flags structurally and which no runtime path can reach. The production half is real narrowing
+#   debt in the validators, and worth its own pass.
+# unresolved-attribute (68: 51 in tests, 17 in production). 45 of these are one idiom:
+#   `importlib.util.spec_from_file_location` returns `ModuleSpec | None`, and the loader dance
+#   that follows never narrows it. It appears in .claude/hooks and nine hook test files.
+# invalid-assignment (10). The same monkeypatch idiom as above, plus three production sites.
+# unsupported-operator (14). Eight are arithmetic on monitor-bridge's `_env` helper, which is
+#   annotated to return a union including `str`; retyping that one helper is the whole fix.
+invalid-argument-type = "ignore"
+unresolved-attribute = "ignore"
+invalid-assignment = "ignore"
+unsupported-operator = "ignore"
+# Warning by default; an error here. `import urllib` alone then reaching `urllib.error` works
+# only while something else in the process has imported the submodule, which is the
+# plausible-wrong-answer shape block-footguns exists for.
+possibly-missing-submodule = "error"
+
+[[tool.ty.overrides]]
+# Two scripts run inside container images built elsewhere, so their third-party imports are not
+# and should not be in this repo's dev group. The rule stays on everywhere else, where an
+# unresolved import means a typo or a missing search path above.
+include = [
+  "ansible/roles/k8s/homelab-mcp/files/app.py",
+  "ansible/roles/k8s/karakeep/files/karakeep-time-tagger.py",
+]
+[tool.ty.overrides.rules]
+unresolved-import = "ignore"

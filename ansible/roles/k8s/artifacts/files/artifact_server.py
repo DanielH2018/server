@@ -555,10 +555,12 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "artifacts/1.0"
     cache: IndexCache = None  # type: ignore[assignment]
 
-    def log_message(self, fmt: str, *args) -> None:
+    # `format` shadows the builtin, and is the parameter name BaseHTTPRequestHandler.log_message
+    # declares — renaming it makes this an incompatible override.
+    def log_message(self, format: str, *args: object) -> None:
         # One line per request on stdout, so `kubectl logs` reads like every other workload
         # here rather than BaseHTTPRequestHandler's stderr format.
-        print(f"{self.address_string()} {fmt % args}", flush=True)
+        print(f"{self.address_string()} {format % args}", flush=True)
 
     def _send(
         self, status: int, body: bytes, ctype: str, extra: dict | None = None

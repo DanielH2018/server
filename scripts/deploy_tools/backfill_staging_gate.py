@@ -424,7 +424,9 @@ def main() -> int:
     head = staging_head() if plan else None
     if plan and head is None:
         print(f"warning: cannot read {STAGE_HOST}:{STAGE_REPO} HEAD — planning blind")
-    elif plan:
+    elif (
+        head is not None
+    ):  # `head` is only read when `plan` is non-empty, so this is `elif plan`
         stale = unrunnable(plan, head)
         if stale and not args.allow_ancestors:
             print(

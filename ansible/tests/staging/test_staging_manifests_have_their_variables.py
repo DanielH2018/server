@@ -137,7 +137,9 @@ def _render(role: str, template: str, extra: dict) -> str:
     env.globals["lookup"] = make_lookup(ctx)
     register_ansible_filters(env)
     rendered, err = render_or_error(env, template, ctx)
-    assert err is None, f"{role}/{template} failed to render for {_HOST}: {err}"
+    assert rendered is not None, (
+        f"{role}/{template} failed to render for {_HOST}: {err}"
+    )
     return rendered
 
 

@@ -68,7 +68,9 @@ def _render(role: str, template: str, **overrides) -> str:
     env.globals["lookup"] = make_lookup(ctx)
     register_ansible_filters(env)
     rendered, err = render_or_error(env, template, ctx)
-    assert err is None, f"{role}/{template} failed to render with {overrides}: {err}"
+    assert rendered is not None, (
+        f"{role}/{template} failed to render with {overrides}: {err}"
+    )
     return rendered
 
 
@@ -283,7 +285,9 @@ def _host_render(host: str, template: str) -> str:
     env.globals["lookup"] = make_lookup(ctx)
     register_ansible_filters(env)
     rendered, err = render_or_error(env, template, ctx)
-    assert err is None, f"traefik/{template} failed to render for {host}: {err}"
+    assert rendered is not None, (
+        f"traefik/{template} failed to render for {host}: {err}"
+    )
     return rendered
 
 

@@ -374,7 +374,8 @@ def _make_handler():
     class Handler(BaseHTTPRequestHandler):
         """Serves /metrics (Prometheus exposition) and /healthz (poll staleness)."""
 
-        def log_message(self, *a):
+        # `format` is the parameter name BaseHTTPRequestHandler.log_message declares.
+        def log_message(self, format: str, *args: object) -> None:
             pass
 
         def do_GET(self):

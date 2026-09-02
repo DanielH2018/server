@@ -417,7 +417,7 @@ def build_env(template_dir: Path) -> Environment:
 def render_template(path: Path, ctx: dict) -> str:
     env = build_env(path.parent)
     rendered, err = render_or_error(env, path.name, ctx)
-    if err:
+    if rendered is None:
         raise RuntimeError(err)
     return rendered
 

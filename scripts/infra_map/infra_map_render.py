@@ -478,7 +478,7 @@ def _diagram_view(model: dict) -> str:
         f'<text class="t-sub" x="1078" y="497" text-anchor="end">{e(plane_sub)}</text>'
     )
 
-    node_boxes = cluster["nodes"] or [
+    node_boxes: list[dict[str, Any]] = cluster["nodes"] or [
         {
             "name": h["name"],
             "ip": h["ip"],

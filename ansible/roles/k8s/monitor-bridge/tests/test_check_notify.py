@@ -8,6 +8,7 @@ wrong system.
 
 import io
 import urllib.error
+import urllib.request
 
 import pytest
 
