@@ -14,8 +14,8 @@ incidents each one encodes — read
 
 ## What a tick does
 
-A systemd timer runs `gitops-deploy.service` on `daniel-box` every 10 minutes (`gitops_deploy_tick_interval`; 30 until 2026-09-01). One tick, in
-order:
+A systemd timer runs `gitops-deploy.service` on `daniel-box`
+every 10 minutes (`gitops_deploy_tick_interval`). One tick, in order:
 
 1. Fetch `origin`.
 2. Read the check runs for the origin SHA and decide a CI verdict (`ci_verdict()` in

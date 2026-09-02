@@ -70,7 +70,7 @@ role already owns `/config`, so a separate role would split one concern across t
 jellyfin_k8s_anisync_version: "4.4.0.0"
 jellyfin_k8s_anisync_url: "https://github.com/vosmiic/jellyfin-ani-sync/releases/download/v4.4/10.11.11.-.ani-sync_4.4.0.0.zip"
 jellyfin_k8s_anisync_md5: "0d398377b33c27840c021779497c72dc"
-jellyfin_k8s_anisync_init_image: python:3.14-alpine
+jellyfin_k8s_anisync_init_image: python:3.14-alpine@sha256:<digest>
 ```
 
 The URL and the checksum both come from the plugin's published `manifest.json`. The asset
