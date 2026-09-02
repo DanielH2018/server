@@ -21,7 +21,9 @@ sit in front.
 Traefik supports forward-auth as a middleware
 ([ADR-0005](0005-traefik-is-the-edge-with-ingressroute-crds.md)), so a gate at the edge costs
 one middleware reference per route and requires nothing of the application behind it. That is
-what makes it viable across roughly 30 services that were never written to be behind SSO.
+what makes it viable across the many services that were never written to be behind SSO. (The
+[Services reference](../reference/services.md) has the current set and which of them the gate
+covers.)
 
 Authelia also provides OIDC, so a service that *can* speak it gets real identity rather than
 a proxy header.

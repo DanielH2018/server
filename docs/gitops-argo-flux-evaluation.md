@@ -10,7 +10,7 @@
 **Recommendation: augment with Flux, in narrow slices, and keep Ansible.** Move the *apply*
 of non-secret k8s manifests to Flux's `kustomize`-controller; keep Ansible as the *renderer*,
 the host-config plane, and the secret plane. Do not replace `gitops_deploy.py` wholesale —
-its 784 lines of decision logic encode roughly ten recorded incidents, and most of them have
+its decision logic encodes roughly ten recorded incidents, and most of them have
 no controller-native equivalent.
 
 Argo CD is the wrong fit here for two measurable reasons, not for taste: it has no native

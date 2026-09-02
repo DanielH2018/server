@@ -16,9 +16,12 @@ Accepted.
 
 Three facts about the repo set the scope.
 
-**Nothing assembled the repo's facts into one readable place.** Around 60 services are
-declared across two inventory files and implemented across 87 roles. Answering "what runs
-here, on which host, behind which auth, backed up how" meant reading the tree. Two
+**Nothing assembled the repo's facts into one readable place.** Services are declared across
+the inventory's `host_vars` and implemented one role each, at a scale where answering "what
+runs here, on which host, behind which auth, backed up how" meant reading the tree. (The
+counts are in [Services](../reference/services.md) and [Hosts](../reference/hosts.md), which
+this decision is what produced; this record quoted them until 2026-09-02, and both had
+drifted.) Two
 generators already solved parts of it — `scripts/infra_map/gen_infra_map.py` rendered a
 declared-versus-live topology page and `scripts/docs/service_catalog.py` rendered a service
 table — but each emitted a standalone HTML file with no navigation between them, and

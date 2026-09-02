@@ -380,3 +380,32 @@ language = "system"
 # docs/[^/]+\.md is every top-level page and nothing below it, which is what keeps
 # docs/archive/ and docs/reference/ out. See .vale.ini for why each is excluded.
 files = "^(docs/adr/.*\\.md|docs/[^/]+\\.md)$"
+
+# Build the docs site the way the cron does, and fail on anything --strict rejects.
+#
+# WHY THIS EXISTS. Three generators now emit fragments that hand-written pages transclude
+# with `--8<--` (scripts/docs/gen_doc_fragments.py). The fragment tests hold the wiring in
+# both directions — every include names a fragment, every fragment is included — but neither
+# they nor any other gate ever BUILDS the site. So a broken include, a nav entry pointing at
+# a deleted page, or a dead internal link reached master and was caught only by the
+# docs-refresh cron, which does not fail loudly: it logs, rebuilds without regenerating, and
+# keeps serving the previous site. The page then reads as though its table were simply
+# missing.
+#
+# `files` is deliberately wide — anything the build reads. A fragment lives under
+# docs/assets/generated/, which no other docs hook touches, and mkdocs.yml itself changes the
+# nav. pass_filenames = false because mkdocs takes a config, not a file list.
+#
+# The site directory is left in the checkout on purpose and MUST stay ignored. `.gitignore:2`
+# denies every root path (`/*`), so `.mkdocs-strict-check/` is covered without an entry of its
+# own — which matters more than it looks: the docs-refresh cron commits with these hooks
+# running, and `gitops_deploy` reads `git status --porcelain`, where a single UNTRACKED file
+# parks the deployer silently. A build directory anywhere git can see would do exactly that.
+# Anything that moves this path out from under the root deny needs its own ignore entry first.
+[[repos.hooks]]
+id = "mkdocs-strict"
+name = "Build the docs site (mkdocs --strict)"
+entry = "uv run mkdocs build --strict --site-dir .mkdocs-strict-check"
+language = "system"
+pass_filenames = false
+files = "^(docs/.*|mkdocs\\.yml|scripts/docs/.*\\.py)$"

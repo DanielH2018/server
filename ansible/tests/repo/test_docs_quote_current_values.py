@@ -24,6 +24,23 @@ once or sits next to one that did; a table that tried to cover every number woul
 second copy of the docs. Prefer the generated fragments under `docs/assets/generated/` for a
 whole table of tunables, and a row here for a single figure inside a sentence.
 
+NO EXPIRING-CAVEAT CHECK, and this is the place that records why. A sibling guard was
+proposed on 2026-09-02: fail on any `until <date>` or `as of <date>` in a live doc once the
+date has passed, so a caveat like "every 10 minutes (`gitops_deploy_tick_interval`; 30 until
+2026-09-01)" is removed rather than fossilised. Measuring the corpus refuted it. 14 such
+phrases exist outside `docs/archive/`, and 13 are legitimate provenance -- "the monitor this
+recorded until 2026-08-30 no longer exists", "not zstd as this line claimed until
+2026-08-22", "it named four exempt workloads from 2026-08-17 until 2026-08-23". Those are the
+corrections this repo's docs are supposed to carry, and a guard that fires on all of them
+would be answered with an allowlist, which is where a real finding goes to hide.
+
+The one defect had a different shape -- a bare superseded value parked before `until`, with
+no verb, inside a parenthesis carrying the current value too. Distinguishing that from a
+past-tense clause is a heuristic over prose, and one instance does not earn one: a guard that
+checks a single thing passes vacuously. It was removed by hand instead, and the live value
+beside it is guarded by the `gitops-pipeline.md` row below. Revisit if a second instance
+appears -- two is a class.
+
 Two failure shapes, and both must fail. A regex that finds nothing means the sentence was
 reworded and the guard is no longer reading anything -- that is flagged, not skipped,
 because a guard that silently stops matching is the shape this repo has paid for before
