@@ -39,7 +39,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
     prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, the ten
     prom-dependent checks (disk/cert/memory/restarts/oom/cpu/targets/traefik5xx/ups/
-    promtail_dropped) are
+    shipper_dropped) are
     **suppressed** — pushed `up` with a "skipped — Prometheus unreachable" msg so their push-monitor
     heartbeats stay alive — and only THIS monitor pages. Without the gate one Prometheus outage
     fires all ten at once: one root cause, a ten-monitor alert storm. A single scrape target down
@@ -623,16 +623,21 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     `LOKI_STREAM`/`LOKI_FILETAIL_WINDOW`/`LOKI_DOCKER_STREAM`/`LOKI_WINDOW`/`LOKI_PI_STREAM`. Pure
     `loki_ingestion_fresh()` + `loki_count()` are unit-tested. A freshness watchdog in the same
     idiom as the SMART/restore-drill checks.)
-  - **Promtail Dropped Entries** (`sum(increase(promtail_dropped_entries_total[1h]))`
-    from Prometheus, which already scrapes `promtail:9080` — `down` above `PROMTAIL_DROPPED_MAX` (1000)
+  - **Log Shipper Dropped Entries** (`sum(increase({__name__=~"loki_write_dropped_entries_total|promtail_dropped_entries_total"}[1h]))`
+    from Prometheus, which scrapes both shippers — the cluster Alloy DaemonSet (`job=alloy`, port 12345) and
+    daniel-pi's Promtail (`job=promtail-pi`) — `down` above `SHIPPER_DROPPED_MAX` (1000)
     entries dropped in the window. Where **Loki Log Ingestion** catches TOTAL silence, this surfaces
-    PARTIAL loss: entries promtail gave up shipping across ALL drop reasons (`ingester_error`,
+    PARTIAL loss: entries a shipper gave up on across ALL drop reasons (`ingester_error`,
     `rate_limited`, `stream_limited`, `line_too_long` — the selector dropped its `ingester_error`-only
     filter on 2026-07-15, review M2, so Loki's own configured limits no longer reject logs unseen).
     The threshold keeps a transient Loki restart's handful
-    of drops from paging; `increase()` handles counter resets; no series → 0 → up (a dead promtail
+    of drops from paging; `increase()` handles counter resets; no series → 0 → up (a dead shipper
     scrape is Scrape Targets' page). **Prom-dependent** — suppressed under the Prometheus gate. Pure
-    `promtail_dropped()` is unit-tested; `PROMTAIL_DROPPED_WINDOW`/`PROMTAIL_DROPPED_MAX` tune it.)
+    `shipper_dropped()` is unit-tested; `SHIPPER_DROPPED_WINDOW`/`SHIPPER_DROPPED_MAX` tune it. A shipper's
+    FIRST start re-tails every current file from offset 0 and Loki rejects the already-ingested history
+    as "too far behind", counted under `reason="ingester_error"` — 193,348 at the 2026-09-02 Alloy
+    cutover, nothing lost — so expect one page per shipper cutover, and land a shipper change more
+    than an hour before pointing this check at its counter.)
   - **Discord Delivery** (GET-verifies **all five** Discord notification webhooks: Kuma's own
     `monitor_discord_webhook_url` — the one Kuma POSTs every alert to — CrowdSec's
     `crowdsec_discord_webhook_url`, which CrowdSec POSTs ban alerts to *directly* (not via Kuma),
@@ -869,7 +874,7 @@ landed 2026-09-01, `check.py` from 3,732 lines to ~510).
 | `check.py` | `CHECKS`, the `*_DEPENDENT` gate sets, `STARTUP_GRACE`, `check_enabled`, `apply_startup_grace`, `_gate`, `run_once`, `main` |
 | `checks/service.py` | `check_n8n` with `_n8n_streaks`, `check_arr_queue`, `check_bazarr` with `bazarr_problems`, `check_prowlarr_indexers`, the gitops pair with `gitops_status` and `_parse_behind`, `check_etcd_restore_drill`, `check_ha_heartbeat` with `with_ha_ban` |
 | `checks/notify.py` | `check_discord` with `_discord_webhooks`, `email_backstop` with `_smtp_login_ok` and `_email_probe` |
-| `checks/logs.py` | `check_loki_ingestion`, `check_promtail_dropped`, `check_loki_reachable`, `with_log_errors` (the Loki arm `check_k8s_workloads` folds in) |
+| `checks/logs.py` | `check_loki_ingestion`, `check_shipper_dropped`, `check_loki_reachable`, `with_log_errors` (the Loki arm `check_k8s_workloads` folds in) |
 | `checks/cluster.py` | the cAdvisor trio `check_restarts` / `check_oom` / `check_cpu_throttle` with `_cadvisor_blind`, `_cadvisor_streaks` and `_cpu_breach_streak`; `check_prometheus`, `check_targets_down`, `check_traefik_5xx`, `check_traefik_latency`, `check_k8s_workloads`, `check_cluster_targets`, `check_cluster_prometheus` |
 | `checks/host.py` | `check_disk`, `check_cert`, `check_mem` and the `_host_origin_shortfall` floor with `_host_origin_streaks`; `check_host_temp`, `check_scrutiny`, `check_ups`, `check_pi_pressure` with `with_pi_ports`, `check_speedtest` with `speedtest_verdict` |
 | `checks/b2.py` | the `b2_*` family with `check_b2_reachable` (the `B2_DEPENDENT` gate) and `check_b2_storage`, and the probe caches `_b2_probe` / `_b2_storage` |

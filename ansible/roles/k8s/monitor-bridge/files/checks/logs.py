@@ -1,4 +1,4 @@
-"""Log-pipeline checks for monitor-bridge — Loki ingestion, promtail drops, Loki reachability.
+"""Log-pipeline checks for monitor-bridge — Loki ingestion, shipper drops, Loki reachability.
 
 Slice 3 of the check.py split. Reads config as `cfg.X` and the fetch layer as `bridge.net.X`,
 so the tests' patches on those modules reach it; the verdicts it from-imports are patched on
@@ -13,7 +13,7 @@ because it is a Loki arm folded into a cluster verdict — the caller reaches it
 import bridge.config as cfg
 import bridge.net
 from verdicts.cluster import log_error_verdict
-from verdicts.service import loki_ingestion_fresh, promtail_dropped
+from verdicts.service import loki_ingestion_fresh, shipper_dropped
 
 
 def check_loki_ingestion():
@@ -53,15 +53,13 @@ def check_loki_ingestion():
     return True, "%s (+ container stream, + pi)" % msg_all
 
 
-def check_promtail_dropped():
-    """Prometheus-based promtail partial-loss watchdog (see promtail_dropped). Prom-dependent."""
+def check_shipper_dropped():
+    """Prometheus-based log-shipper partial-loss watchdog (see shipper_dropped). Prom-dependent."""
     count = bridge.net.prom_scalar(
-        "sum(increase(%s[%s]))"
-        % (cfg.PROMTAIL_DROPPED_SELECTOR, cfg.PROMTAIL_DROPPED_WINDOW)
+        'sum(increase({__name__=~"%s"}[%s]))'
+        % (cfg.SHIPPER_DROPPED_METRICS, cfg.SHIPPER_DROPPED_WINDOW)
     )
-    return promtail_dropped(
-        count, cfg.PROMTAIL_DROPPED_WINDOW, cfg.PROMTAIL_DROPPED_MAX
-    )
+    return shipper_dropped(count, cfg.SHIPPER_DROPPED_WINDOW, cfg.SHIPPER_DROPPED_MAX)
 
 
 def check_loki_reachable():

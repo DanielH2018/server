@@ -657,7 +657,7 @@ LOKI_FILETAIL_WINDOW = _env("LOKI_FILETAIL_WINDOW", "3h")
 # the work succeeding". That is the shape of the Grafana dead-panel incident: a 1/1 pod, clean
 # rollout, and 19 panels rendering nothing for 55 minutes.
 #
-# Both estates in one selector. `job="k8s"` is the cluster promtail's label and `job="pi"` is
+# Both estates in one selector. `job="k8s"` is the cluster Alloy shipper's label and `job="pi"` is
 # daniel-pi's, so this arm covered the Pi from the day that shipped.
 LOG_ERROR_SELECTOR = _env("LOG_ERROR_SELECTOR", '{job=~"k8s|pi"}')
 # Deliberately narrow. `error` is not here and must not be added: it is the single most common
@@ -674,23 +674,36 @@ LOG_ERROR_MAX = float(_env("LOG_ERROR_MAX", "20"))
 # this list short and say WHY in the inventory — a growing ignore list is the arm decaying.
 LOG_ERROR_IGNORE = _env("LOG_ERROR_IGNORE", "")
 
-# Promtail dropped-entries watchdog: Prometheus scrapes promtail:9080, which exposes the
-# promtail_dropped_entries_total{reason=...} counter. Loki Log Ingestion only catches TOTAL silence;
-# this surfaces PARTIAL loss — entries promtail gave up shipping. NO reason filter (was
-# reason="ingester_error" only): every reason is a real drop, and Loki's own configured limits
-# reject under DIFFERENT reasons the ingester_error-only selector missed entirely — rate_limited
-# (per_stream_rate_limit / ingestion_rate_mb), stream_limited (max_global_streams_per_user), and
-# line_too_long — so a stream explosion or a chatty container hitting the rate cap dropped logs while
-# this stayed green (2026-07-15 review M2). increase() over a window handles counter resets; alert
-# only ABOVE a threshold so a transient Loki restart's handful of drops doesn't page. Prom-dependent
-# (suppressed under the Prometheus gate). No series (counter never incremented) reads as 0 -> up; a
-# dead promtail scrape is Scrape Targets' page, not this one.
-PROMTAIL_DROPPED_SELECTOR = _env(
-    "PROMTAIL_DROPPED_SELECTOR",
-    "promtail_dropped_entries_total",
+# Log-shipper dropped-entries watchdog. Prometheus scrapes both shippers' own metrics: the
+# cluster's Alloy DaemonSet (job=alloy, port 12345) exposes loki_write_dropped_entries_total and
+# daniel-pi's Promtail (job=promtail-pi) still exposes promtail_dropped_entries_total, so the
+# selector matches BOTH names by __name__ — naming one reads the other estate as "0 dropped"
+# forever, the fail-open shape of a selector on a label nothing emits. Drop the promtail name
+# when the Pi migrates. Loki Log Ingestion only catches TOTAL silence; this surfaces PARTIAL
+# loss — entries a shipper gave up on. NO reason filter (was reason="ingester_error" only):
+# every reason is a real drop, and Loki's own configured limits reject under DIFFERENT reasons
+# the ingester_error-only selector missed entirely — rate_limited (per_stream_rate_limit /
+# ingestion_rate_mb), stream_limited (max_global_streams_per_user), and line_too_long — so a
+# stream explosion or a chatty container hitting the rate cap dropped logs while this stayed
+# green (2026-07-15 review M2). increase() over a window handles counter resets; alert only
+# ABOVE a threshold so a transient Loki restart's handful of drops doesn't page. Prom-dependent
+# (suppressed under the Prometheus gate). No series (counter never incremented) reads as 0 ->
+# up; a dead shipper scrape is Scrape Targets' page, not this one.
+#
+# Known one-off: a shipper's first start re-tails every current file from offset 0 and Loki
+# rejects the already-ingested history as "too far behind", which the shipper counts under
+# reason="ingester_error". Measured at the 2026-09-02 Alloy cutover: 193,348 on daniel-box,
+# nothing lost. That is a page per shipper cutover, not a threshold problem.
+#
+# A metric-name regex rather than a ready-made `{__name__=~...}` selector, because
+# test_check_loki.py treats every `{...}` string constant here as a LogQL stream selector and
+# checks its labels against the Loki vocabulary — which `__name__` is not.
+SHIPPER_DROPPED_METRICS = _env(
+    "SHIPPER_DROPPED_METRICS",
+    "loki_write_dropped_entries_total|promtail_dropped_entries_total",
 )
-PROMTAIL_DROPPED_WINDOW = _env("PROMTAIL_DROPPED_WINDOW", "1h")
-PROMTAIL_DROPPED_MAX = float(_env("PROMTAIL_DROPPED_MAX", "1000"))
+SHIPPER_DROPPED_WINDOW = _env("SHIPPER_DROPPED_WINDOW", "1h")
+SHIPPER_DROPPED_MAX = float(_env("SHIPPER_DROPPED_MAX", "1000"))
 
 
 # Pi pressure: the 512MB Zero 2 W dies by swap-thrash, not by clean failures —
