@@ -15,7 +15,8 @@ Accepted. The exit-code half was settled on 2026-08-23.
 
 ## Context
 
-Several things deploy from the same checkout: the GitOps timer every 30 minutes, an
+Several things deploy from the same checkout: the GitOps timer on its tick interval
+(`gitops_deploy_tick_interval` in the role's defaults), an
 operator running `./scripts/deploy.sh`, the weekly secret-rotation cron, and the twice-daily
 docs refresh. Several Claude sessions can be working the repo at once, each in its own
 worktree but all deploying from the one primary checkout.
@@ -44,10 +45,12 @@ run page through `OnFailure`. Seven such ticks in seven days, each logging nothi
 because `flock` died before the deployer started.
 
 **Raising the timeout cannot fix that**, which is why the exit code had to change instead.
-The unit's own worst case is 2220 seconds against a 2700-second `TimeoutStartSec`, so the
-largest legal `-w` is 480 seconds — still far short of a routine 20-minute deploy.
+The unit's own worst-case lock hold has to fit inside its `TimeoutStartSec` with the wait
+added, which leaves the largest legal `-w` at a few hundred seconds — far short of a routine
+20-minute deploy.
 `test_gitops_deploy_timeout_budgets.py::test_k8s_deploy_timeout_budget_survives_max_flock_contention`
-asserts that bound and goes red if someone tries.
+computes that bound from the live defaults and goes red if someone tries. (This record
+quoted the figures until 2026-09-02, and all three had moved.)
 
 **Contention is not silent starvation.** The `flock` path never writes `last_run`, so
 contention outlasting `GITOPS_MAX_AGE_S` still pages through the GitOps-Alive monitor.

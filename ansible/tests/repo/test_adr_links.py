@@ -167,6 +167,39 @@ def test_ids_are_unique():
     assert len(ids) == len(set(ids)), f"duplicate ADR ids: {sorted(ids)}"
 
 
+def superseded_target(status: str) -> str | None:
+    """The four-digit id a `Superseded by ADR-NNNN` status names, else None."""
+    match = re.fullmatch(r"Superseded by ADR-(\d{4})", status)
+    return match.group(1) if match else None
+
+
+@pytest.mark.parametrize("adr", _adr_files(), ids=lambda p: p.name)
+def test_a_superseded_status_names_an_adr_that_exists(adr):
+    """VALID_STATUS checks the SHAPE of a successor reference; this checks the target.
+
+    A record superseded by an ADR nobody wrote points the reader at nothing, and the shape
+    check above passes it. No record is superseded as of 2026-09-02, so the corpus half of
+    this is unexercised; the unit pair below is what proves the check can go red.
+    """
+    target = superseded_target(str(_frontmatter(adr)["status"]))
+    if target is None:
+        return
+    ids = {str(_frontmatter(p)["id"]) for p in _adr_files()}
+    assert target in ids, (
+        f"{adr.name}: superseded by ADR-{target}, which does not exist"
+    )
+    assert target != str(_frontmatter(adr)["id"]), f"{adr.name}: supersedes itself"
+
+
+def test_a_successor_reference_is_extracted():
+    assert superseded_target("Superseded by ADR-0016") == "0016"
+
+
+def test_a_non_superseded_status_yields_no_target():
+    assert superseded_target("Accepted") is None
+    assert superseded_target("Superseded by ADR-16") is None
+
+
 # Direction 1: an ADR's `governs:` anchors must resolve to a marker naming that ADR.
 
 

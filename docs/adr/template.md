@@ -31,6 +31,14 @@ Prefer a consequence that was actually paid over one that was predicted. The pro
 memory under `~/.claude/projects/-home-ubuntu-server/memory/` records what these decisions
 cost in practice, and a specific cost is worth more here than a general caution.
 
+**Do not restate a tunable.** A decision does not change when a retain count, a timer
+interval or a timeout does, but a record that quotes the value goes stale the day it moves
+and nothing regenerates an ADR. Name the default or the test that computes the figure
+(`gitops_deploy_tick_interval`, `k3s_longhorn_backup_retain`,
+`test_gitops_deploy_timeout_budgets.py`) and let the reader follow it. A figure that is
+context for the decision rather than a live setting says so, as in "at the time, 30 minutes."
+ADR-0011 quoted three timeout figures and all three had moved by 2026-09-02.
+
 ## Governs
 
 Where this decision is enforced in the tree. Each entry is a `file:line` anchor whose line
