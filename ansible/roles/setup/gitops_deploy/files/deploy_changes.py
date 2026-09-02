@@ -11,6 +11,7 @@ the same question asked of one path.
 from __future__ import annotations
 
 import re
+import subprocess
 from dataclasses import dataclass, field
 
 # A bind-mounted file under an active container role's templates/ or files/ dir — the
@@ -191,6 +192,64 @@ _BROAD_MANUAL_PREFIXES = (
 # _BROAD_PREFIXES on purpose: the /add-secret flow ships secrets.yml WITH the consuming
 # template, and that should stay a scoped single-service deploy, not a manual full deploy.
 _SECRETS_FILE = "ansible/vars/secrets.yml"
+
+# `key: |` / `key: >-` and their chomping/indent modifiers, with or without a trailing comment.
+_BLOCK_SCALAR_HEAD = re.compile(r":\s*[|>][-+0-9]*\s*(?:#.*)?$")
+
+
+def _content_lines(text: str) -> list[str]:
+    """The lines of a YAML file that carry meaning.
+
+    Full-line comments and blank lines are dropped, except inside a block scalar, where a
+    line starting with `#` is part of the string and a blank line is a newline in it. The
+    scalar runs from its `key: |` line until the next non-blank line indented no deeper
+    than that key. Trailing comments on a content line are kept as-is: telling `# note`
+    from a `#` inside a quoted value needs a parser, and the deployer runs stdlib-only
+    (`uv run --no-project`), so the safe reading is that such a line changed.
+    """
+    kept: list[str] = []
+    scalar_indent: int | None = None
+    for line in text.splitlines():
+        stripped = line.strip()
+        indent = len(line) - len(line.lstrip())
+        if scalar_indent is not None:
+            if stripped and indent <= scalar_indent:
+                scalar_indent = None
+            else:
+                kept.append(line.rstrip())
+                continue
+        if not stripped or stripped.startswith("#"):
+            continue
+        kept.append(line.rstrip())
+        if _BLOCK_SCALAR_HEAD.search(line):
+            scalar_indent = indent
+    return kept
+
+
+def comment_only_manual_changes(paths, old_ref: str, new_ref: str, show) -> set[str]:
+    """The _BROAD_MANUAL_PREFIXES paths whose change between two refs is comments only.
+
+    The classifier decides by path alone, so a one-line comment edit to k3s-bringup.yml
+    parked every session's landing until an operator ff-merged the primary checkout by hand
+    (PR #746, 2026-09-02). A caller drops the paths returned here before classifying;
+    the remaining paths still take the manual arm on their own.
+
+    `show(ref, path)` returns the file's text at that ref and raises when it cannot. A path
+    that is added, deleted or unreadable on either side stays broad -- the fail-safe
+    direction is to park, never to fast-forward past a change this did not read.
+    """
+    quiet: set[str] = set()
+    for p in paths:
+        if not any(p.startswith(prefix) for prefix in _BROAD_MANUAL_PREFIXES):
+            continue
+        try:
+            before = show(old_ref, p)
+            after = show(new_ref, p)
+        except RuntimeError, subprocess.CalledProcessError, OSError:
+            continue
+        if _content_lines(before) == _content_lines(after):
+            quiet.add(p)
+    return quiet
 
 
 def _is_test_only_path(path: str) -> bool:

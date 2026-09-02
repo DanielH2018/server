@@ -36,6 +36,7 @@ from deploy_logic import (  # noqa: E402
     behind_marker,
     broad_remediation,
     ci_verdict,
+    comment_only_manual_changes,
     github_auth_headers,
     github_token,
     setup_tags_for,
@@ -1139,6 +1140,18 @@ def main() -> int:
         return 0
 
     paths = run(["git", "diff", "--name-only", f"{local}..{origin}"]).splitlines()
+    # A comment-only edit to a bring-up playbook is not a change the deployer must park on;
+    # it parked three sessions' landings on 2026-09-02 (PR #746) until an operator ff-merged
+    # by hand. The paths dropped here would have set broad_manual by prefix alone.
+    quiet = comment_only_manual_changes(
+        paths, local, origin, lambda ref, p: run(["git", "show", f"{ref}:{p}"])
+    )
+    if quiet:
+        log(
+            f"comment-only change in {', '.join(sorted(quiet))} — "
+            "not parking; the tick treats it as no change"
+        )
+        paths = [p for p in paths if p not in quiet]
     cs = services_from_changed_paths(paths)
     cs.k8s_consumers = shared_module_consumers(paths, REPO)
     # A path under ansible/roles/containers/<svc>/ maps to <svc> by NAME ALONE — it doesn't know

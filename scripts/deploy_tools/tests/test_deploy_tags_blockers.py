@@ -21,15 +21,42 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import deploy_tags  # noqa: E402 — needs the path insert above
 
 
-def _run(paths, monkeypatch) -> int:
+def _run(paths, monkeypatch, comment_only=frozenset()) -> int:
     monkeypatch.setattr(
         deploy_tags, "_incoming_paths", lambda ref, cwd=None: list(paths)
+    )
+    # The real read runs `git show` on both refs; with the paths faked above they are the
+    # same file, which would read as comment-only. Tests say which paths are.
+    monkeypatch.setattr(
+        deploy_tags,
+        "_comment_only_manual_changes",
+        lambda paths, old, new: set(comment_only),
     )
 
     class Args:
         ref = "origin/master"
 
     return deploy_tags._cmd_blockers(Args())
+
+
+def test_a_comment_only_bringup_edit_does_not_block(monkeypatch):
+    """PR #746's one-line comment in k3s-bringup.yml parked three landings; the tick now
+    crosses it, so reporting it as a blocker would stop a landing for nothing."""
+    rc = _run(
+        ["ansible/k3s-bringup.yml"],
+        monkeypatch,
+        comment_only={"ansible/k3s-bringup.yml"},
+    )
+    assert rc == 0
+
+
+def test_a_comment_only_edit_beside_a_real_one_still_blocks(monkeypatch):
+    rc = _run(
+        ["ansible/k3s-bringup.yml", "ansible/bootstrap.yml"],
+        monkeypatch,
+        comment_only={"ansible/k3s-bringup.yml"},
+    )
+    assert rc == 3
 
 
 def test_a_deployer_change_no_longer_blocks(monkeypatch):
