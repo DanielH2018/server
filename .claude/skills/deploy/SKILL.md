@@ -159,8 +159,8 @@ automated pipeline or with another Claude session. The lock guards the local git
 deploy reads its templates from, which gitops-deploy rewrites with a `git pull` mid-run, so a
 `-e target=daniel-pi` deploy takes it too.
 
-Its four non-zero exits all mean **nothing was deployed**, and each is a resume point rather
-than a failure:
+Four of its non-zero exits mean **nothing was deployed**, and each is a resume point rather
+than a failure. The fifth, 20, is the inverse: the playbook ran and changes are live.
 
 | Exit | Meaning | What to do |
 |---|---|---|
@@ -168,6 +168,7 @@ than a failure:
 | 4 | the tree is behind `origin/master` | `git pull`, never `--skip-staleness-check` |
 | 3 | the change is broad and maps to no single service | deploy by hand, or see *When to wait* |
 | 2 | a `--tags` value matched no service | `--list-services` prints every valid value |
+| 20 | the playbook ran and a task failed — **changes before it are live** | read the PLAY RECAP and the failing TASK; a re-run is not automatically safe |
 
 Exit 4 exists because a stale tree renders stale templates and reverts live config while every
 repo-side check still reads green (`scripts/deploy_tools/deploy_staleness.py`). It runs ahead
@@ -177,3 +178,9 @@ misleading signal. Being *ahead* of master is normal branch work and is never re
 Exit 2 exists because Ansible itself exits 0 on an unmatched tag, so the wrapper checks tags
 against `containers_list` first (`scripts/deploy_tools/deploy_tags.py`).
 `--skip-tag-check` bypasses it.
+
+Exit 20 exists because ansible-playbook's own codes collide with the four above: it returns 2 on
+a failed host, 3 on an unreachable one and 4 on a parse error. `deploy.sh` returned that status
+verbatim until 2026-09-02, so a play that applied its manifests and then failed on a post-apply
+assert exited 2 and read as the tag miss (issue #840). Every non-zero playbook status is now
+collapsed onto 20; ansible's own number is printed on stderr rather than returned.

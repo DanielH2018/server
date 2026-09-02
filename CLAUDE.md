@@ -112,8 +112,9 @@ Before it takes the lock it clears an Ansible fact cache pinning another worktre
 pruned worktree used to fail EVERY deploy at Gathering Facts for the full 7200s TTL — with an
 error naming a module rather than the cache, after the ~9-minute wait on the lock.
 
-Its four non-zero exits all mean **nothing was deployed**, and each is a resume point rather
-than a playbook failure. They arrive as a bare `Exit code N`, which is why they are here:
+Four of its non-zero exits mean **nothing was deployed**, and each is a resume point rather
+than a playbook failure. The fifth, 20, is the inverse and the only one where changes are live.
+They arrive as a bare `Exit code N`, which is why they are here:
 
 | Exit | Meaning | What to do |
 |---|---|---|
@@ -121,6 +122,14 @@ than a playbook failure. They arrive as a bare `Exit code N`, which is why they 
 | 4 | the tree is behind `origin/master` | `git pull`, never `--skip-staleness-check` |
 | 3 | the change is broad and maps to no single service | see *When to wait* |
 | 2 | a `--tags` value matched no service | `--list-services` prints every valid value |
+| 20 | the playbook ran and a task failed — **changes before it are live** | read the PLAY RECAP and the failing TASK; a re-run is not automatically safe |
+
+**20 exists because ansible-playbook's own exit codes collide with the four above.** Ansible
+returns 2 on a failed host, 3 on an unreachable one and 4 on a parse error, and `deploy.sh`
+returned that status verbatim until 2026-09-02. A play that applied both its manifests and then
+failed on a `k8s/rollout-drain` assert therefore exited 2, and `land.sh` reported `a derived tag
+matched no service, so nothing deployed` (issue #840). Every non-zero playbook status is now
+collapsed onto 20, so a wrapper refusal and a playbook failure can never share a number.
 
 The full command reference — the Pi's `-e target=`, config-only runs, the GitOps tick, initial
 setup — and why each exit code exists are in the **`deploy` skill**.

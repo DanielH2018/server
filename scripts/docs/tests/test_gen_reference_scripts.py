@@ -385,9 +385,15 @@ def test_an_import_counts_even_from_another_scripts_test():
 
 
 def test_deploy_sh_is_credited_to_the_test_that_reads_it():
-    """Not to `test_deploy_detach_notify.py`, whose first line merely names the path."""
+    """Not to `test_deploy_detach_notify.py`, whose first line merely names the path.
+
+    The credit moved from `test_deploy_annotations.py` on 2026-09-02, when
+    `test_deploy_exit_codes.py` began running the script itself over stubbed `uv` and `flock`.
+    Either is a test that reads deploy.sh; what the guard rules out is the notifier's test,
+    which only mentions the path.
+    """
     rows = {r["name"]: r for r in g.build_rows()}
-    assert rows["deploy.sh"]["indirect_tests"] == "test_deploy_annotations.py"
+    assert rows["deploy.sh"]["indirect_tests"] == "test_deploy_exit_codes.py"
 
 
 def test_a_package_member_import_counts_as_coverage():

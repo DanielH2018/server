@@ -78,6 +78,14 @@ then ticks and deploys. The tip wait is booked under `wait_ci` on the Landings b
 Before 2026-09-02 that retry skipped the wait and ended `deploy-failed (exit 4)` with nothing
 deployed, three landings in one day.
 
+**One `deploy-failed` variant means the opposite of the rest.** `a playbook task failed AFTER
+applying; some changes are live` is `deploy.sh` exit 20: the play reached its tasks and one of
+them failed, so everything applied before it took effect. Every other `deploy-failed` line means
+nothing was deployed, and re-running is safe; this one is not a resume point. It exists because
+`deploy.sh` returned ansible-playbook's own status until 2026-09-02, and ansible exits 2 on a
+failed host — the same number as the tag miss, which is how a run whose manifests both applied
+was reported as `a derived tag matched no service, so nothing deployed` (issue #840).
+
 Every run also writes one logfmt line to syslog on exit (`logger -t landing-annotation`):
 the PR, the merge SHA, the verdict, and seconds spent in each phase — `wait_merge`,
 `wait_ci`, `tick`, `deploy`, `total` — plus `lock`, the seconds spent in tick or deploy
