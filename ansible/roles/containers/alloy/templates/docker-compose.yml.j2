@@ -51,8 +51,9 @@ services:
       # A HARD ceiling on the Go heap, not a hint. The Go runtime will happily grow to whatever
       # the cgroup allows and only collect under pressure; GOMEMLIMIT makes it collect early
       # instead, which is the right trade on a host with ~165 MiB free — CPU is cheaper here
-      # than RAM. Measured 2026-09-02 under this limit: 43-49 MiB RSS over the spike hour,
-      # against Promtail's 15-22 MiB for the same two sources.
+      # than RAM. Measured 2026-09-02 under this limit: 34-43 MiB RSS across twelve 5-minute
+      # samples of the spike hour (49 MiB in its first minute), no OOM kill, against
+      # Promtail's 15-22 MiB for the same two sources.
       - GOMEMLIMIT=48MiB
       # One GC-visible processor. Alloy defaults GOMAXPROCS to the 4 cores on this Pi and
       # spawns a worker set to match, which is pure contention for a job this small on a box
