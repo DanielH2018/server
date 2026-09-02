@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""No `cmd:` jsonpath filter loses its double quotes to the command module's shlex-split.
+r"""No `cmd:` jsonpath filter loses its double quotes to the command module's shlex-split.
 
 `ansible.builtin.command` shlex-splits `cmd` before exec'ing it. A jsonpath filter written
 as `-o jsonpath={.items[0].status.conditions[?(@.type=="Ready")].status}` has its inner
