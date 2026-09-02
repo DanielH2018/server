@@ -195,7 +195,7 @@ def k8s_pods_argv(service, namespace, selector=None):
 
 
 def pod_selector(workload):
-    """The `-l` expression matching a workload's OWN pods, read from its spec.selector.
+    """The `-l` expression matching a workload's OWN pods, read from its pod template labels.
 
     Not `app=<name>`. pihole-2's Deployment selects `app: pihole`, so `app=pihole-2` matched
     no pods at all while `app=pihole` matched both piholes' — and a pod query that matches
@@ -203,18 +203,27 @@ def pod_selector(workload):
     genuinely quiet workload. That would leave the restart half of this gate silently inert,
     the half that caught a crashlooping kube-state-metrics on 2026-08-07.
 
-    64 of the 65 rendered workloads do use `app=<name>`, and a rule that is right 64 times and
-    quietly wrong the 65th is the wrong rule for a gate. Falls back to the guess only for a
-    workload carrying no selector at all, which the k8s API rejects — querying every pod in the
-    namespace instead would be worse than the guess.
+    Nor `spec.selector.matchLabels`, which is what this read until 2026-09-02. `spec.selector`
+    is `apps/v1` immutable, so a role running two instances off one pod template cannot
+    discriminate them there: both pihole Deployments select `app: pihole`, and each therefore
+    read the union of the two instances' pods. The pod template is where the discriminating
+    label can live — pihole's carries `instance: pihole` / `instance: pihole-2` for exactly
+    that reason (`roles/k8s/pihole/templates/deployment.yaml.j2`), and the pihole web Service
+    already selects on it. k8s requires `spec.template.metadata.labels` to be a superset of
+    `spec.selector.matchLabels`, so this is never wider than the selector.
 
-    Both pihole Deployments select `app: pihole`, so each now reads the union of the two's
-    pods and a restart in either fails both. That over-reports rather than under-reports, which
-    is the direction a gate may err in; the overlapping selectors themselves are a pihole role
-    question, not this function's.
+    It can be narrower than the running set during a deploy that changes a pod template label:
+    pods from the previous revision do not carry the new label and drop out of the query. The
+    rollout half of the gate still sees them, because that half reads the Deployment's own
+    replica counts rather than this query.
+
+    Falls back to the selector, then to the `app=<name>` guess, for a workload carrying
+    neither — which the k8s API rejects, so it is unreachable. An empty `-l` would query every
+    pod in the namespace, which is worse than the guess.
     """
-    labels = ((workload or {}).get("spec") or {}).get("selector") or {}
-    matched = labels.get("matchLabels") or {}
+    spec = (workload or {}).get("spec") or {}
+    template = ((spec.get("template") or {}).get("metadata") or {}).get("labels") or {}
+    matched = template or (spec.get("selector") or {}).get("matchLabels") or {}
     return ",".join(f"{key}={value}" for key, value in sorted(matched.items()))
 
 

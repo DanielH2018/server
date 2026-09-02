@@ -6,6 +6,7 @@ killing it, so a rollout check alone reports green on a crashlooping pod. An unr
 time counts as recent, so the gate fails closed.
 """
 
+import collections
 import functools
 from datetime import datetime, timezone
 
@@ -531,8 +532,11 @@ def test_statefulset_is_resolvable_and_lookupable():
 #
 
 
-def _workload(name, selector):
-    return {"metadata": {"name": name}, "spec": {"selector": {"matchLabels": selector}}}
+def _workload(name, selector, template=None):
+    spec = {"selector": {"matchLabels": selector}}
+    if template is not None:
+        spec["template"] = {"metadata": {"labels": template}}
+    return {"metadata": {"name": name}, "spec": spec}
 
 
 def test_pod_selector_matches_a_workloads_own_labels():
@@ -551,6 +555,62 @@ def test_pod_selector_is_flagged_when_it_would_differ_from_the_name():
     selector = probe_health.pod_selector(_workload("pihole-2", {"app": "pihole"}))
     assert selector == "app=pihole"
     assert selector != "app=pihole-2"
+
+
+def test_pod_selector_separates_two_instances_sharing_one_selector():
+    """The accept half of the pihole fix (issue #802).
+
+    `spec.selector` is immutable, so both pihole Deployments select `app: pihole` and neither can
+    be given a discriminating selector label. The pod template carries `instance:` instead, and
+    reading the template is what makes each instance's query match only its own pods.
+    """
+    shared = {"app": "pihole"}
+    one = probe_health.pod_selector(
+        _workload("pihole", shared, {"app": "pihole", "instance": "pihole"})
+    )
+    two = probe_health.pod_selector(
+        _workload("pihole-2", shared, {"app": "pihole", "instance": "pihole-2"})
+    )
+    assert one == "app=pihole,instance=pihole"
+    assert two == "app=pihole,instance=pihole-2"
+    assert one != two
+
+
+def test_pod_selector_is_flagged_when_it_reads_only_the_shared_selector():
+    """The reject half.
+
+    Reading `spec.selector.matchLabels` — what this did until 2026-09-02 — returns the same
+    string for both instances, so each one's pod query matched the union of the two. A test that
+    only asserted the selector is non-empty would pass just as well with that rule back in place.
+    """
+    shared = {"app": "pihole"}
+    templates = [
+        {"app": "pihole", "instance": "pihole"},
+        {"app": "pihole", "instance": "pihole-2"},
+    ]
+    old_rule = {
+        ",".join(f"{k}={v}" for k, v in sorted(shared.items())) for _ in templates
+    }
+    new_rule = {
+        probe_health.pod_selector(_workload("pihole", shared, template))
+        for template in templates
+    }
+    assert len(old_rule) == 1
+    assert len(new_rule) == 2
+
+
+def test_pod_selector_is_never_wider_than_the_workloads_own_selector():
+    """k8s requires the template labels to be a superset of the selector, so the query this
+    builds can only ever narrow. Asserting it directly keeps a future edit from widening it."""
+    selector = {"app": "pihole"}
+    template = {"app": "pihole", "instance": "pihole-2", "netpol-baseline": "enforced"}
+    built = dict(
+        pair.split("=", 1)
+        for pair in probe_health.pod_selector(
+            _workload("pihole-2", selector, template)
+        ).split(",")
+    )
+    assert selector.items() <= built.items()
 
 
 def test_pod_selector_falls_back_rather_than_matching_every_pod():
@@ -612,6 +672,21 @@ def test_every_rendered_workload_yields_a_usable_pod_selector():
     for role, doc in workloads:
         name = (doc.get("metadata") or {}).get("name")
         assert probe_health.pod_selector(doc), f"{role}/{name} declares no matchLabels"
+
+
+def test_no_two_rendered_workloads_share_a_pod_selector():
+    """The tree-wide pin for issue #802.
+
+    Two workloads resolving to the same `-l` expression means each reads the union of both's
+    pods, so a restart in either fails the gate for both. The unit tests above pin the pihole
+    pair; this one catches the next role that grows a second instance off one pod template.
+    """
+    by_selector = collections.defaultdict(list)
+    for role, doc in _rendered_workloads():
+        name = (doc.get("metadata") or {}).get("name")
+        by_selector[probe_health.pod_selector(doc)].append(f"{role}/{name}")
+    shared = {sel: names for sel, names in by_selector.items() if len(names) > 1}
+    assert not shared, shared
 
 
 def test_a_workload_selecting_labels_other_than_its_own_name_still_exists():

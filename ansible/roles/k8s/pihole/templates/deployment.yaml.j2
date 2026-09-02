@@ -27,6 +27,9 @@ spec:
         # instance's pod: `kubectl exec deploy/<name>` resolves through the Deployment's
         # selector, which is `app: pihole` on both Deployments, so it always lands on
         # whichever pod that selector happens to pick — never guaranteed to be this one.
+        # `probe.py health` reads it for the same reason: its `pod_selector()` builds the
+        # pod query from these template labels, not from spec.selector, so each instance's
+        # restart count covers only its own pod (issue #802).
         instance: {{ inst.name }}
     spec:
       # Pinned to the VIP-announcing node while the MetalLB L2Advertisement is pinned
