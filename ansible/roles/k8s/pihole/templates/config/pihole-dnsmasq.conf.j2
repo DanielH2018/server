@@ -60,3 +60,24 @@ address=/{{ extra }}.local.{{ domain }}/{{ k3s_metallb_ingress_vip }}
 # (SSL_ERROR_RX_RECORD_TOO_LONG). `.lan` sidesteps HSTS entirely. Reach the Pi's LAN-bound
 # services at daniel-pi.lan:<port>. IP via hostvars since the Pi isn't the host running Pi-hole.
 host-record=daniel-pi.lan,{{ hostvars['daniel-pi'].server_ip }}
+
+# The two cluster nodes, under BOTH the `.lan` name and the bare hostname. Until this
+# existed, `daniel-box` resolved nowhere on the LAN. daniel-box reaches daniel-server
+# through a client-side alias in its own SSH client config, and that file is deliberately
+# not deployed to any of the three homelab hosts (see `.chezmoiignore` in the dotfiles
+# repo — its key paths name credentials these machines do not hold), so the reverse
+# direction had nothing to resolve with. otel-sweep-watch on daniel-server therefore
+# reported `box: unreachable (Could not resolve hostname daniel-box)` on every run from at
+# least 2026-08-30 — a daily false finding on the check whose whole purpose is to be
+# believed, and the exact failure that check's own header warns gets it muted.
+#
+# The BARE name is the load-bearing half. otel-sweep addresses its machines from a fixed
+# enum that is deliberately not caller-configurable, and that enum holds `daniel-box` and
+# `daniel-server` — so a `.lan`-only record would leave it exactly as broken. The `.lan`
+# name comes along because it is the convention daniel-pi above already sets.
+#
+# /etc/hosts still wins for a node's own name (`127.0.1.1 daniel-box`, files before dns in
+# nsswitch), so a node keeps resolving itself to loopback and the sweep's self-detection is
+# untouched.
+host-record=daniel-box.lan,daniel-box,{{ hostvars['daniel-box'].server_ip }}
+host-record=daniel-server.lan,daniel-server,{{ hostvars['daniel-server'].server_ip }}
