@@ -54,7 +54,7 @@ hypervisor_staging_vm_disk_size: 100G
 
 # The base image and the guest's own copy. The base is kept so a rebuild does not re-download.
 # The path deliberately does NOT end in `_image`: in a setup role's defaults that suffix means
-# a container image pin, and scripts/test_renovate_managers.py reads every such key as one
+# a container image pin, and scripts/tests/test_renovate_managers.py reads every such key as one
 # Renovate must be able to bump. This is a file on disk, so naming it `_image` made it fail a
 # guard that was reading it correctly.
 hypervisor_staging_vm_image_url: https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img

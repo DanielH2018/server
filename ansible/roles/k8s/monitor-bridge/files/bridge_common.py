@@ -7,7 +7,7 @@ same few pure helpers — this module is the one place those bodies live now.
 WHAT MAY LIVE HERE, AND WHY SOME DUPLICATION STAYS
 ===========================================================
 This module is imported by check.py, so bridge_parsing.py's rule binds here too, in a form the
-`scripts/diagnostics/test_probe_boundaries.py` precedent widens rather than a strict ban: a helper the test
+`scripts/diagnostics/tests/test_probe_boundaries.py` precedent widens rather than a strict ban: a helper the test
 suites patch directly may still live here, PROVIDED every caller reaches it *qualified* —
 `bridge_common.log(...)`, never `from bridge_common import log` — since `monkeypatch.setattr`
 rebinds the attribute on this module object, and only a qualified lookup re-reads that attribute

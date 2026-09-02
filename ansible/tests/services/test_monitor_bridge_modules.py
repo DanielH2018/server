@@ -13,9 +13,9 @@ That lands on the one workload that cannot page about its own failure — monito
 alert pipeline, which is why the role sets `k8s_autodeploy: false`. The pod would crashloop and
 the estate would go quiet rather than loud.
 
-The list is deliberately explicit rather than a `files/*.py` glob, because files/ also holds
-the pytest suite and conftest.py, which must not reach the image. This test is what keeps the
-explicit list honest.
+The list is deliberately explicit rather than a `files/*.py` glob: nothing on disk stops a
+future test file from landing in `files/` instead of the sibling `tests/` directory, and if
+one did, it must not reach the image. This test is what keeps the explicit list honest.
 
 Run: uv run pytest ansible/tests/services/test_monitor_bridge_modules.py
 """
@@ -28,6 +28,7 @@ from _helpers import REPO
 
 ROLE = REPO / "ansible" / "roles" / "k8s" / "monitor-bridge"
 FILES = ROLE / "files"
+TESTS = ROLE / "tests"
 ENTRYPOINT = "check.py"
 
 
@@ -37,7 +38,11 @@ def _ship_list():
 
 
 def _runtime_modules():
-    """The .py files in files/ that are production code, not the test suite."""
+    """The .py files in files/ that are production code, not the test suite.
+
+    The test suite lives in the sibling `tests/` directory; the name filter here is a
+    belt-and-suspenders check against a stray test file landing in files/ instead.
+    """
     return sorted(
         p.name
         for p in FILES.glob("*.py")
@@ -56,7 +61,7 @@ def test_ship_list_carries_the_entrypoint():
 
 def test_ship_list_excludes_the_test_suite():
     shipped = set(_ship_list())
-    tests = {p.name for p in FILES.glob("test_*.py")} | {"conftest.py"}
+    tests = {p.name for p in TESTS.glob("test_*.py")} | {"conftest.py"}
     assert not (shipped & tests)
 
 
@@ -124,7 +129,7 @@ def _patched_pairs(test_files=None, module_names=None):
     if test_files is None:
         test_files = sorted(
             p
-            for p in FILES.glob("*.py")
+            for p in TESTS.glob("*.py")
             if p.name.startswith("test_") or p.name == "conftest.py"
         )
     pairs = {}

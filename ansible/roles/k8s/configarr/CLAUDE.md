@@ -104,7 +104,7 @@ uv run python scripts/diagnostics/probe.py arr sonarr "/api/v3/qualityprofile" -
 ## Editing
 - Sync config: `templates/config/config.yml.j2`
 - Health evaluator: `files/configarr_status.py` (pure exit-code/output verdict logic,
-  unit-tested in `files/test_configarr_status.py`) — copied by `roles/k8s/configarr` into
+  unit-tested in `tests/test_configarr_status.py`) — copied by `roles/k8s/configarr` into
   `/opt/configarr-health` on daniel-box, where a cron reads the last Job and pushes Kuma.
   (Its Docker-era compose wrapper `files/configarr_sync.py` was deleted 2026-08-14, with the
   host residue it wrote to — `/opt/configarr` and `/var/lib/configarr` — removed 2026-08-09.)
@@ -112,4 +112,4 @@ uv run python scripts/diagnostics/probe.py arr sonarr "/api/v3/qualityprofile" -
   the k8s role also runs a one-off `configarr-deploy-gate` Job so the edit syncs immediately.
 - Verify a sync: `kubectl -n homelab logs job/configarr-deploy-gate` (or the latest
   `configarr-…` CronJob pod) — a healthy run lists the managed CFs and reports no errors.
-- Unit tests: `uv run pytest ansible/roles/k8s/configarr/files`.
+- Unit tests: `uv run pytest ansible/roles/k8s/configarr/tests`.

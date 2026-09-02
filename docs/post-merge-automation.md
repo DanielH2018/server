@@ -224,7 +224,7 @@ not the remediation when the tree is already merged and the playbook is what bro
 
 Every new rule ships with a proof it can go red — one input it must accept, one it must reject.
 Name them as `..._is_clean` / `..._is_flagged` pairs, following
-`scripts/validate/test_validate_compose_templates.py`.
+`scripts/validate/tests/test_validate_compose_templates.py`.
 
 | Rule | Accepts | Rejects |
 |---|---|---|
@@ -245,7 +245,7 @@ invocation does not.
 |---|---|
 | `scripts/deploy_tools/await_ci.py` | new |
 | `scripts/deploy_tools/land.sh` | new |
-| `scripts/deploy_tools/test_await_ci.py` | new |
+| `scripts/deploy_tools/tests/test_await_ci.py` | new |
 | `scripts/deploy_tools/deploy_detach_notify.py` | `--no-post` |
 | `ansible/roles/setup/gitops_deploy/files/deploy_logic.py` | broad split, setup-tag derivation |
 | `ansible/roles/setup/gitops_deploy/files/gitops_deploy.py` | the two apply arms |

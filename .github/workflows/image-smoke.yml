@@ -49,7 +49,7 @@ jobs:
         with:
           # Kept, though this job no longer needs a specific interpreter (see below): the pin is
           # asserted in lockstep with ci.yml and .python-version by
-          # scripts/test_renovate_managers.py::test_python_version_pins_in_lockstep, and the step
+          # scripts/tests/test_renovate_managers.py::test_python_version_pins_in_lockstep, and the step
           # measures 0s because ubuntu-latest preinstalls this version.
           python-version: "3.14"
 

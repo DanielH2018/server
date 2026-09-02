@@ -128,7 +128,7 @@ not route around it either — the read-only ServiceAccount is denied `create po
 
 ### The regression suite
 
-`uv run pytest -m ui` (`scripts/diagnostics/test_ui_smoke.py`) drives this same MCP server over
+`uv run pytest -m ui` (`scripts/diagnostics/tests/test_ui_smoke.py`) drives this same MCP server over
 stdio, so a break in the wrapper's DNS pin, session minting or launch config fails a test rather
 than silently degrading a Claude session. The `ui` marker is deselected by `addopts`, because
 these tests need the host's age key, LAN reachability and a browser — none of which a GitHub

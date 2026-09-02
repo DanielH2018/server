@@ -84,7 +84,7 @@ uv run python evals/trend.py report.json --no-write                 # report onl
   `--skip-stable` into `run-evals.mjs` is a small follow-up if you want the paid-run cost saving
   automated.
 - `history.json` is committed (a hermetic run is reproducible, so it's a real baseline). The pure
-  trend logic is offline-tested in `test_trend.py`, part of `uv run pytest evals`.
+  trend logic is offline-tested in `test_trend.py`, part of `uv run pytest evals/tests`.
 
 ## What's tested (v1: the /homelab-review fleet)
 

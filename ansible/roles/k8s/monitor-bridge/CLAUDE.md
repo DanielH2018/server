@@ -915,20 +915,21 @@ failure. pytest cannot catch that: it imports from `files/` on disk and never re
 - Manifests: `templates/deployment.yaml.j2`, `templates/env-secret.yaml.j2` · Logic:
   `files/check.py` plus the modules beside it (see *Module layout* above)
 - Unit tests (parsing + every check's decision logic):
-  `uv run pytest ansible/roles/k8s/monitor-bridge/files`.
+  `uv run pytest ansible/roles/k8s/monitor-bridge/tests`.
   Also run automatically by the `pytest` prek hook (`prek run pytest --all-files`).
 - **The suite is split by subject, one file per domain** — `test_check_{ha,loki,gitops,r2,
   speedtest,scrutiny,ups,pi,longhorn,etcd_drill,cadvisor_floor,b2_dashboard}.py` beside
   `test_check_{gates,gates_exporters,streaks,host,service,notify,parsing}.py`. Put a new test
   with the domain it exercises rather than in whichever file is open.
 - **A shared test helper goes in `conftest.py`, never in a new module beside `check.py`.**
-  `_runtime_modules()` in `ansible/tests/services/test_monitor_bridge_modules.py` treats every non-test
-  `.py` here as production code, so a `_fixtures.py` either fails that guard or — if someone
-  adds it to `monitor_bridge_modules` to make the failure go away — ships test code into the
-  pod's ConfigMap. `conftest.py` is the one file the guard exempts, which is where the `seq`
-  fixture lives. Share it as a **fixture**, not as `from conftest import ...` — that import
-  resolves to whichever `conftest.py` sys.path reached first once the whole repo suite runs, so
-  it passes on this directory alone and fails under a bare `uv run pytest`.
+  `_runtime_modules()` in `ansible/tests/services/test_monitor_bridge_modules.py` treats every
+  `.py` in `files/` as production code, so a `_fixtures.py` dropped there either fails that guard
+  or — if someone adds it to `monitor_bridge_modules` to make the failure go away — ships test
+  code into the pod's ConfigMap. `tests/conftest.py`, a sibling of `files/` rather than a member
+  of it, is where the `seq` fixture lives instead. Share it as a **fixture**, not as
+  `from conftest import ...` — that import resolves to whichever `conftest.py` sys.path reached
+  first once the whole repo suite runs, so it passes on this directory alone and fails under a
+  bare `uv run pytest`.
 - Smoke test one pass:
   `sudo k3s kubectl -n homelab exec deploy/monitor-bridge -- python /app/check.py --once`
   (the readonly SA plain `kubectl` uses holds no exec verb)

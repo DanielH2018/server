@@ -28,7 +28,7 @@ repo that owns this machine's shell config, so today that's just the intent `lis
 chosen to keep open, not something wired up. `describe` is the separate human-facing view; `list`
 stays flat and one-per-line for that possible future consumer (see test_deploy_tags.py).
 
-Run: uv run pytest scripts/deploy_tools/test_deploy_tags.py
+Run: uv run pytest scripts/deploy_tools/tests/test_deploy_tags.py
 """
 
 from __future__ import annotations

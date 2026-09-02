@@ -6,7 +6,7 @@ holds names, tiers and dates — no values. It never reads ansible/vars/secrets.
 invokes the decryption tool, because this page is committed and browsable behind SSO: a
 generator able to read plaintext secrets is one bug away from publishing them.
 
-scripts/docs/test_gen_reference_secrets.py enforces that BEHAVIOURALLY: it records every path
+scripts/docs/tests/test_gen_reference_secrets.py enforces that BEHAVIOURALLY: it records every path
 build_rows() opens and asserts the registry is the only one. A source-text scan for "sops"
 was the obvious alternative and is a bad test — the rendered page legitimately tells an
 operator to run `sops`, so the scan fails on correct output while proving nothing about

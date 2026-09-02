@@ -89,7 +89,7 @@ exclude_docs: |
 not_in_nav: |
   archive/
 
-# ENFORCED by scripts/test_mkdocs_config.py, in both directions: every entry below must
+# ENFORCED by scripts/tests/test_mkdocs_config.py, in both directions: every entry below must
 # resolve to a file, and every docs/**.md must appear here OR be matched by exclude_docs above.
 # A document absent from the nav is still built and served, but nothing links to it — which is
 # indistinguishable from it not existing.
