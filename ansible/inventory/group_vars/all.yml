@@ -522,6 +522,15 @@ has_docker: true
 # hypervisor appearing on a node by default is a third writer of firewall state next to k3s
 # and any container runtime. daniel-server overrides this true.
 has_hypervisor: false
+# Whether this host holds a checkout of THIS repository at ~/server. True by default — every
+# host built by initial_setup.yml has had one, which is why a handful of tasks reach for
+# `{{ playbook_dir }}` or `~/server/...` with no gate at all. daniel-stage overrides this
+# false: it is a libvirt guest that Ansible drives over ssh and never checks the repo out.
+#
+# NOT derivable from ansible_connection. daniel-pi is `connection=ssh` and DOES hold a
+# checkout (verified 2026-09-02: /home/ubuntu/server/ansible exists there), so deriving this
+# from the connection type would skip three tasks that work on the Pi today.
+has_repo_checkout: true
 
 # The staging-cluster guest. Declared here rather than in the hypervisor role's defaults
 # because two places need one source of truth: the role reserves this MAC->IP pair in the

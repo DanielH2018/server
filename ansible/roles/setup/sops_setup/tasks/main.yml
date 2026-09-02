@@ -41,6 +41,9 @@
     -r {{ playbook_dir }}/requirements.yml
     -p {{ playbook_dir }}/collections
   changed_when: false
+  # `command` runs on the TARGET, so both paths must exist there. They are the CONTROLLER's
+  # collections in any case — a host Ansible drives over ssh never loads them.
+  when: has_repo_checkout
 
 # 2. KEY GENERATION
 
@@ -106,7 +109,14 @@
   # Only seeds the very first host. ansible/.sops.yaml is tracked, so every host that has
   # the repo checkout already has it -> this skips. Additional hosts add their key to the
   # existing ansible/.sops.yaml + `sops updatekeys`; they must NOT overwrite it here.
-  when: not (lookup('file', playbook_dir + '/.sops.yaml', errors='ignore'))
+  # Two conditions, and the second is not redundant. `dest` writes on the TARGET while a
+  # `lookup()` reads on the CONTROLLER, so on its own the guard below decides a target-side
+  # write by reading the controller's copy. It happens to skip on a checkout-less host, because
+  # ansible/.sops.yaml is tracked and the controller always has one — correct by accident. The
+  # gate says what is actually meant.
+  when:
+    - has_repo_checkout
+    - not (lookup('file', playbook_dir + '/.sops.yaml', errors='ignore'))
 
 - name: Export SOPS_AGE_KEY_FILE in .bashrc
   tags: [sops-config]

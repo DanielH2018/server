@@ -343,6 +343,12 @@
     cron_file: etcd-restore-drill
     state: "{{ 'present' if k3s_etcd_restore_drill_armed else 'absent' }}"
   become: true
+  # Runs the drill IN PLACE from the checkout (see the comment above), so a host without one
+  # gets a cron pointing at nothing. `ansible.builtin.cron` writes the line regardless, so the
+  # deploy would read green and the drill would fail weekly where nothing reads its stderr.
+  # daniel-stage is a k3s server and does not override `k3s_etcd_restore_drill_armed`, so
+  # without this gate the first setup-plane run against it installs exactly that.
+  when: has_repo_checkout
 
 # Render provenance, stamped LAST so a run that fails partway through leaves the previous
 # checksums in place rather than declaring the scripts it never reached to be current. Each

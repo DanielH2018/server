@@ -92,6 +92,13 @@
   delegate_to: localhost
   block:
     - name: Read the deploy commit for host scripts
+      # On the CONTROLLER, not the target. This names the commit whose scripts are being
+      # shipped, and those are rendered from the controller's checkout — so the target's HEAD
+      # was never the right answer, it merely agreed on the `connection=local` hosts. On
+      # daniel-pi it could disagree, stamping a release with the Pi's own checkout SHA; on
+      # daniel-stage there is no checkout and the task failed the run outright.
+      delegate_to: localhost
+      become: false
       ansible.builtin.command:
         argv: [git, rev-parse, --short=12, HEAD]
         chdir: "{{ playbook_dir }}/.."
@@ -213,5 +220,10 @@
       - "{{ release_bin_keep | default(5) }}"
       - --apply
   register: common_release_prune
+  # Needs the checkout: the pruner is run in place from `{{ playbook_dir }}/../scripts/`, the
+  # same shape the gen_infra_map and docs-refresh crons use. A host without one therefore keeps
+  # every superseded release — disk only, and staging is disposable. Shipping the pruner as a
+  # released artifact would remove the dependency; filed rather than done here.
+  when: has_repo_checkout
   changed_when: "'removing ' in common_release_prune.stdout"
   become: true

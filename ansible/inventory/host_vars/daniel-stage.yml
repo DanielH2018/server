@@ -147,6 +147,12 @@ has_gitops: false
 # It is a guest, not a VM host.
 has_hypervisor: false
 
+# No checkout of this repo. Ansible drives it over ssh from daniel-box, so `{{ playbook_dir }}`
+# and `~/server/...` name paths that exist on the CONTROLLER and not here. Three tasks in the
+# setup plane read them; without this gate one fails the run outright and one installs a broken
+# weekly cron successfully, which no check that watches the deploy can see.
+has_repo_checkout: false
+
 # ---------------------------------------------------------------------------
 # k3s server overrides. Prod runs roles/setup/k3s with nothing overridden; every
 # entry below is staging declining work that only makes sense against prod, or

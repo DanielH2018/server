@@ -250,6 +250,11 @@
     job: "truncate -s 0 /home/{{ sys_user }}/server/ansible.log"
   become: true
   tags: [crons]
+  # The gate matters MORE here than on a task that fails. `ansible.builtin.cron` only writes a
+  # crontab line, so on a host with no checkout this task SUCCEEDS and the deploy reads green —
+  # the failure is deferred to 06:00 every Sunday, on stderr nothing reads. A task that installs
+  # a broken thing successfully is invisible to every check that watches the deploy.
+  when: has_repo_checkout
 
 - name: Schedule the infrastructure-map refresh (box only)
   tags: [crons, infra-map]

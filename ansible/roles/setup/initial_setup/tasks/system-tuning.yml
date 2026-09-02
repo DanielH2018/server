@@ -202,6 +202,9 @@
 
 - name: Install Git hooks
   tags: [git-hooks]
+  # `chdir` runs on the TARGET, so this needs the repo to be there. On a host Ansible drives
+  # over ssh with no checkout it fails the run outright.
+  when: has_repo_checkout
   ansible.builtin.command: prek install
   args:
     chdir: "{{ playbook_dir }}"
