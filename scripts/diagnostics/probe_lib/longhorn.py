@@ -489,7 +489,7 @@ def run_b2_longhorn(ns):
 # get it. That is why this is a census of live state rather than a setting to read once.
 LONGHORN_WEEKLY_BLOCK_BYTES = 16 * 1024 * 1024
 
-_RECURRING_GROUP_PREFIX = "recurring-job-group.longhorn.io/"
+_RECURRING_GROUP = "recurring-job-group.longhorn.io"
 
 
 def volume_tier_census(volumes):
@@ -506,9 +506,9 @@ def volume_tier_census(volumes):
         spec = item.get("spec") or {}
         labels = (item.get("metadata") or {}).get("labels") or {}
         groups = sorted(
-            key[len(_RECURRING_GROUP_PREFIX) :]
-            for key in labels
-            if key.startswith(_RECURRING_GROUP_PREFIX)
+            name
+            for group, sep, name in (key.partition("/") for key in labels)
+            if sep and group == _RECURRING_GROUP
         )
         key = (
             ",".join(groups) or "-",

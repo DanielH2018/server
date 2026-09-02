@@ -48,6 +48,22 @@ def test_the_group_decides_the_tier_not_the_target():
     assert ("no-backup", "default", _2MiB) in rows
 
 
+def test_a_neighbouring_label_group_contributes_no_recurring_job():
+    """The census compares the label key's group exactly, not as a `<group>/` prefix.
+
+    A volume whose only such label belongs to another group has no recurring job, so it must
+    census as `-` rather than borrowing that group's name.
+    """
+    vol = {
+        "metadata": {
+            "name": "spoof",
+            "labels": {"recurring-job-group.longhorn.io.example.com/weekly": "enabled"},
+        },
+        "spec": {"backupTargetName": "default", "backupBlockSize": _16MiB},
+    }
+    assert ("-", "default", _16MiB) in ps.volume_tier_census(_items(vol))
+
+
 def test_a_weekly_volume_off_the_block_size_is_flagged():
     rows = ps.volume_tier_census(_items(_vol("stale", "weekly-backup-d3", block=_2MiB)))
     offenders = ps.weekly_volumes_off_block_size(rows)
