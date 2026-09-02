@@ -338,7 +338,13 @@ def comment_only_paths(paths: list[str], old_ref: str, new_ref: str) -> set[str]
 
     Public because `land_tags` asks the same question for its plane note, and two
     derivations that disagree about one commit is the defect this module's shared imports
-    exist to prevent. `git show` runs against the primary checkout (`REPO`).
+    exist to prevent.
+
+    `git show` runs with `REPO` — the checkout this module LIVES in — as its cwd, which
+    land.sh reaches through `$LAND_DIR` rather than the primary checkout. That is safe here
+    where it would not be for `blockers` or `changed`: those read a HEAD, and this reads two
+    explicit refs. Worktrees share the object store with the checkout they were made from,
+    so a ref fetched in the primary is readable from a worktree that never fetched it.
     """
     sys.path.insert(0, str(DEPLOY_LOGIC_DIR))
     from deploy_logic import comment_only_broad_changes

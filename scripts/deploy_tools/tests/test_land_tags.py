@@ -201,9 +201,12 @@ def test_land_preflights_before_waiting_on_ci():
     await_ci.py a second question during the merge wait (the PR's own CI, #814), which comes
     before the preflight by construction -- there is no merge commit to check blockers
     against yet -- so a bare `await_ci.py` anchor matches that one and fails.
+
+    The anchor carries the closing quote of `"$LAND_DIR/await_ci.py"`, because that helper is
+    invoked through the directory land.sh itself came from (issue #851).
     """
     preflight = _LAND_SH.index("deploy_tags.py blockers")
-    ci_wait = _LAND_SH.index('await_ci.py "$MERGE_SHA"')
+    ci_wait = _LAND_SH.index('await_ci.py" "$MERGE_SHA"')
     assert preflight < ci_wait, "land.sh waits on CI before checking for blockers"
 
 
@@ -334,7 +337,7 @@ def test_land_can_wait_for_the_merge_itself_without_reading_ci():
     wait_block = _LAND_SH[start:end]
     assert "gh pr view" in wait_block and "--json state" in wait_block
     assert "gh pr checks" not in wait_block and "gh run" not in wait_block
-    assert "await_ci.py --timeout 0" in wait_block, (
+    assert 'await_ci.py" --timeout 0' in wait_block, (
         "the PR's CI verdict must come from await_ci.py, not from logic written here"
     )
     assert "MERGED" in wait_block and "CLOSED" in wait_block
@@ -659,3 +662,53 @@ def test_land_falls_back_to_loud_when_the_range_cannot_be_read():
     """A fetch or merge-base that fails must classify every path as loud."""
     assert "quiet_range=''" in _LAND_SH
     assert "every broad path stays owed to a hand" in _LAND_SH
+
+
+# --- which checkout each helper comes from (issue #851) -------------------------------------
+#
+# `land.sh` cd's to the primary checkout so deploy.sh renders from a tree that is not behind
+# master. That made every RELATIVE helper path resolve there too, while land.sh itself is the
+# copy in the checkout it was invoked from. PR #850 added a flag to `land_tags.py` and a call
+# site in `land.sh`, and failed on its own landing with
+# `land_tags.py: error: unrecognized arguments: --range`.
+#
+# The split is not uniform, and the reject half below is the point: moving `deploy_tags.py`
+# to `$LAND_DIR` too would silently re-aim `blockers` and `changed` at the WORKTREE's HEAD.
+
+_CODE_MUST_MATCH = (
+    "land_tags.py",
+    "await_ci.py",
+    "deploy_detach_notify.py",
+    "gitops_tick.sh",
+)
+
+
+def test_helpers_that_must_match_land_sh_come_from_its_own_checkout():
+    """A helper this script passes new flags to has to be the same release as this script."""
+    assert "LAND_DIR=$(cd -- " in _LAND_SH
+    for helper in _CODE_MUST_MATCH:
+        assert f'"$LAND_DIR/{helper}"' in _LAND_SH, helper
+        assert f"scripts/deploy_tools/{helper}" not in _LAND_SH, helper
+
+
+def test_deploy_tags_still_reads_the_primary_checkout():
+    """The reject half, and the reason the split is not a uniform sweep.
+
+    `blockers` reads `HEAD..origin/master` and `changed` reads `<since>...HEAD`, both with
+    their own checkout as the cwd. Through `$LAND_DIR` that HEAD becomes the worktree's --
+    a missed blocker or a wrong tag list, neither of which announces itself.
+    """
+    assert "$LAND_DIR/deploy_tags.py" not in _LAND_SH
+    assert 'scripts/deploy_tools/deploy_tags.py blockers "origin/$BRANCH"' in _LAND_SH
+    assert "scripts/deploy_tools/deploy_tags.py changed" in _LAND_SH
+
+
+def test_deploy_sh_still_runs_from_the_primary_checkout():
+    """deploy.sh renders from its working directory, so it must never move.
+
+    A worktree is behind master after a squash merge; deploying from one is refused as stale,
+    and would render stale templates if it were not.
+    """
+    assert "./scripts/deploy.sh --tags" in _LAND_SH
+    assert "$LAND_DIR/scripts/deploy.sh" not in _LAND_SH
+    assert 'cd "$PRIMARY"' in _LAND_SH

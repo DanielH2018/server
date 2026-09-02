@@ -40,7 +40,7 @@ def _order_is_blockers_then_tip_wait_then_tick(block: str) -> bool:
         return False
     # The wait must target the fetched tip, not the PR's own merge commit step 3 already
     # settled -- waiting on MERGE_SHA again would return instantly and change nothing.
-    return bool(re.search(r'await_ci\.py "\$TIP_SHA"', block))
+    return bool(re.search(r'await_ci\.py" "\$TIP_SHA"', block))
 
 
 def test_stale_retry_waits_on_the_tip_after_blockers_and_before_the_tick():
@@ -59,7 +59,7 @@ def test_a_retry_that_reticks_without_waiting_is_flagged():
 
 def test_a_retry_that_waits_on_the_merge_commit_instead_of_the_tip_is_flagged():
     block = _stale_retry_block(_LAND_SH.read_text())
-    mutated = block.replace('await_ci.py "$TIP_SHA"', 'await_ci.py "$MERGE_SHA"')
+    mutated = block.replace('await_ci.py" "$TIP_SHA"', 'await_ci.py" "$MERGE_SHA"')
     assert not _order_is_blockers_then_tip_wait_then_tick(mutated)
 
 
