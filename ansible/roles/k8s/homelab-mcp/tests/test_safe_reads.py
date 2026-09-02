@@ -8,7 +8,7 @@ sys.path.insert(
     0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "files")
 )
 
-from safe_reads import (  # noqa: E402
+from safe_reads import (
     allowed_hosts_and_origins,
     bearer_token_valid,
     container_ref_valid,

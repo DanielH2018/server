@@ -443,11 +443,9 @@ def test_resolve_arr_ip_raises_on_kubectl_failure(monkeypatch):
         stderr = 'services "sonarr" not found'
 
     monkeypatch.setattr(probe.subprocess, "run", lambda argv, **kwargs: FakeResult())
-    try:
+    with pytest.raises(SystemExit) as excinfo:
         probe_arr.resolve_arr_ip("sonarr")
-        raise AssertionError("expected SystemExit")
-    except SystemExit as e:
-        assert "sonarr" in str(e)
+    assert "sonarr" in str(excinfo.value)
 
 
 def test_resolve_arr_ip_raises_on_empty_cluster_ip(monkeypatch):
@@ -459,11 +457,9 @@ def test_resolve_arr_ip_raises_on_empty_cluster_ip(monkeypatch):
         stderr = ""
 
     monkeypatch.setattr(probe.subprocess, "run", lambda argv, **kwargs: FakeResult())
-    try:
+    with pytest.raises(SystemExit) as excinfo:
         probe_arr.resolve_arr_ip("sonarr")
-        raise AssertionError("expected SystemExit")
-    except SystemExit as e:
-        assert "ClusterIP" in str(e)
+    assert "ClusterIP" in str(excinfo.value)
 
 
 def test_arr_subcommand_parses_app_path_and_json_flag():

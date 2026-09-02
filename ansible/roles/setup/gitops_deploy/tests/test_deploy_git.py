@@ -11,6 +11,7 @@ catching up. The CI gate has its own file, test_deploy_git_ci.py.
 # ansible/roles/setup/gitops_deploy/tests/test_deploy_git.py
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from deploy_git import (
     behind_marker,
@@ -20,6 +21,9 @@ from deploy_git import (
     next_action,
     should_alert_dirty,
 )
+
+# should_alert_dirty takes `now` already in the target zone (America/Chicago).
+CT = ZoneInfo("America/Chicago")
 
 
 def test_next_action_noop_when_in_sync():
@@ -185,19 +189,19 @@ def test_behind_marker_restamps_when_marker_unparseable():
 # pages once at ~8 AM and once at ~8 PM, not all night.
 def test_dirty_alert_fires_first_tick_after_8am_when_never_alerted():
     # Overnight-dirty tree, first eligible morning tick, no prior alert today.
-    now = datetime(2026, 6, 20, 8, 0)
+    now = datetime(2026, 6, 20, 8, 0, tzinfo=CT)
     assert should_alert_dirty(now, None) is True
 
 
 def test_dirty_alert_suppressed_before_8am():
     # A pre-dawn tick must stay silent even if we've never alerted.
-    now = datetime(2026, 6, 20, 7, 59)
+    now = datetime(2026, 6, 20, 7, 59, tzinfo=CT)
     assert should_alert_dirty(now, None) is False
 
 
 def test_dirty_alert_suppressed_when_already_alerted_this_morning():
     # Second (and every later) morning tick after the morning alert.
-    now = datetime(2026, 6, 20, 12, 30)
+    now = datetime(2026, 6, 20, 12, 30, tzinfo=CT)
     assert should_alert_dirty(now, "2026-06-20:am") is False
 
 
@@ -206,61 +210,70 @@ def test_dirty_alert_fires_in_evening_after_morning_alert():
     # 21:00, not 20:00: the boundary itself is test_dirty_alert_at_exactly_8pm_boundary_
     # inclusive's job, and using it here made the two tests the same case, so the evening
     # slot's interior was never covered by either.
-    now = datetime(2026, 6, 20, 21, 0)
+    now = datetime(2026, 6, 20, 21, 0, tzinfo=CT)
     assert should_alert_dirty(now, "2026-06-20:am") is True
 
 
 def test_dirty_alert_suppressed_when_already_alerted_this_evening():
     # A later evening tick after the evening alert -> no repeat.
-    now = datetime(2026, 6, 20, 22, 15)
+    now = datetime(2026, 6, 20, 22, 15, tzinfo=CT)
     assert should_alert_dirty(now, "2026-06-20:pm") is False
 
 
 def test_dirty_alert_fires_again_next_morning():
     # Still dirty the next morning after last night's page -> a fresh reminder.
-    now = datetime(2026, 6, 21, 8, 15)
+    now = datetime(2026, 6, 21, 8, 15, tzinfo=CT)
     assert should_alert_dirty(now, "2026-06-20:pm") is True
 
 
 def test_dirty_alert_at_exactly_8am_boundary_inclusive():
-    now = datetime(2026, 6, 20, 8, 0)
+    now = datetime(2026, 6, 20, 8, 0, tzinfo=CT)
     assert should_alert_dirty(now, "2026-06-19:pm") is True
 
 
 def test_dirty_alert_at_exactly_8pm_boundary_inclusive():
-    now = datetime(2026, 6, 20, 20, 0)
+    now = datetime(2026, 6, 20, 20, 0, tzinfo=CT)
     assert should_alert_dirty(now, "2026-06-20:am") is True
 
 
 def test_dirty_alert_predawn_tick_after_evening_alert_stays_quiet():
     # Dirty from 8 PM through 2 AM: the after-midnight tick is before the morning
     # slot, so it must not re-page even though the date has rolled over.
-    now = datetime(2026, 6, 21, 2, 0)
+    now = datetime(2026, 6, 21, 2, 0, tzinfo=CT)
     assert should_alert_dirty(now, "2026-06-20:pm") is False
 
 
 def test_dirty_alert_newly_dirtied_after_8am_alerts_once():
     # Tree goes dirty mid-afternoon with no alert recorded today -> one alert now.
-    now = datetime(2026, 6, 20, 15, 0)
+    now = datetime(2026, 6, 20, 15, 0, tzinfo=CT)
     assert should_alert_dirty(now, None) is True
 
 
 def test_dirty_alert_custom_hours():
     # Custom morning/evening hours push both slot boundaries.
-    assert should_alert_dirty(datetime(2026, 6, 20, 8, 0), None, 9, 21) is False
-    assert should_alert_dirty(datetime(2026, 6, 20, 9, 0), None, 9, 21) is True
     assert (
-        should_alert_dirty(datetime(2026, 6, 20, 20, 0), "2026-06-20:am", 9, 21)
+        should_alert_dirty(datetime(2026, 6, 20, 8, 0, tzinfo=CT), None, 9, 21) is False
+    )
+    assert (
+        should_alert_dirty(datetime(2026, 6, 20, 9, 0, tzinfo=CT), None, 9, 21) is True
+    )
+    assert (
+        should_alert_dirty(
+            datetime(2026, 6, 20, 20, 0, tzinfo=CT), "2026-06-20:am", 9, 21
+        )
         is False
     )
     assert (
-        should_alert_dirty(datetime(2026, 6, 20, 21, 0), "2026-06-20:am", 9, 21) is True
+        should_alert_dirty(
+            datetime(2026, 6, 20, 21, 0, tzinfo=CT), "2026-06-20:am", 9, 21
+        )
+        is True
     )
 
 
 def test_dirty_alert_slot_keys():
-    assert dirty_alert_slot(datetime(2026, 6, 20, 7, 59)) is None
-    assert dirty_alert_slot(datetime(2026, 6, 20, 8, 0)) == "2026-06-20:am"
-    assert dirty_alert_slot(datetime(2026, 6, 20, 19, 59)) == "2026-06-20:am"
-    assert dirty_alert_slot(datetime(2026, 6, 20, 20, 0)) == "2026-06-20:pm"
-    assert dirty_alert_slot(datetime(2026, 6, 20, 23, 30)) == "2026-06-20:pm"
+    assert dirty_alert_slot(datetime(2026, 6, 20, 7, 59, tzinfo=CT)) is None
+    assert dirty_alert_slot(datetime(2026, 6, 20, 8, 0, tzinfo=CT)) == "2026-06-20:am"
+    assert dirty_alert_slot(datetime(2026, 6, 20, 19, 59, tzinfo=CT)) == "2026-06-20:am"
+    assert dirty_alert_slot(datetime(2026, 6, 20, 20, 0, tzinfo=CT)) == "2026-06-20:pm"
+    assert dirty_alert_slot(datetime(2026, 6, 20, 23, 30, tzinfo=CT)) == "2026-06-20:pm"

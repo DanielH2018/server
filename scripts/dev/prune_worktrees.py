@@ -41,7 +41,7 @@ from pathlib import Path
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib.git import git_stdout  # noqa: E402
+from lib.git import git_stdout
 
 REMOVABLE = "removable"
 KEEP = "keep"

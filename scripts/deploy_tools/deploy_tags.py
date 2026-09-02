@@ -48,14 +48,14 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from lib.render_guard import (  # noqa: E402
+from lib.render_guard import (
     ALL_VARS,
     HOST_VARS,
     REPO,
     containers_entries,
     host_files,
 )
-from lib.repo_paths import GITOPS_DEPLOY_FILES  # noqa: E402
+from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 # deploy_logic.py lives under the gitops_deploy role's files/ because that role's own script
 # (gitops_deploy.py) imports it as a same-directory sibling. scripts/ needs the same pure
@@ -206,7 +206,7 @@ def _load_deploy_logic():
     time, so `validate`/`list`/`describe` never pay for or depend on this cross-directory import
     succeeding — only `changed` needs it."""
     sys.path.insert(0, str(DEPLOY_LOGIC_DIR))
-    from deploy_logic import (  # noqa: E402  (see docstring above)
+    from deploy_logic import (
         broad_remediation,
         expand_build_couplings,
         k8s_remediation,
@@ -310,7 +310,7 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
 
 def _is_broad_manual(path: str) -> bool:
     sys.path.insert(0, str(DEPLOY_LOGIC_DIR))
-    from deploy_logic import _BROAD_MANUAL_PREFIXES  # noqa: E402
+    from deploy_logic import _BROAD_MANUAL_PREFIXES
 
     return any(path.startswith(prefix) for prefix in _BROAD_MANUAL_PREFIXES)
 
@@ -319,7 +319,7 @@ def _comment_only_manual_changes(
     paths: list[str], old_ref: str, new_ref: str
 ) -> set[str]:
     sys.path.insert(0, str(DEPLOY_LOGIC_DIR))
-    from deploy_logic import comment_only_manual_changes  # noqa: E402
+    from deploy_logic import comment_only_manual_changes
 
     def show(ref: str, path: str) -> str:
         return subprocess.run(

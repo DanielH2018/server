@@ -48,7 +48,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from lib.render_guard import (  # noqa: E402
+from lib.render_guard import (
     ALL_VARS,
     ANSIBLE,
     BASE_CONTEXT,
@@ -61,9 +61,9 @@ from lib.render_guard import (  # noqa: E402
 )
 
 sys.path.insert(0, str(ANSIBLE / "filter_plugins"))
-from toposort import filter_by_platform  # noqa: E402 — needs the path insert above
+from toposort import filter_by_platform
 
-from ansible.plugins.filter.core import to_bool  # noqa: E402
+from ansible.plugins.filter.core import to_bool
 
 
 def register_ansible_filters(env):
@@ -231,7 +231,7 @@ def parse_docs(rendered: str) -> list:
     """Parse a rendered manifest into its YAML documents, the same way yaml_error does. Only
     called after yaml_error has already confirmed the render is valid YAML — a raise here would
     be a bug in this function, not in the manifest."""
-    return list(yaml.load_all(rendered, Loader=_StrictKeyLoader))  # noqa: S506
+    return list(yaml.load_all(rendered, Loader=_StrictKeyLoader))
 
 
 def find_pvc_names(doc) -> list[str]:
@@ -299,7 +299,7 @@ def volume_claim_pvc_names(role: str, ctx: dict) -> list[str]:
                 continue
             try:
                 names.append(env.from_string(claim).render(ctx))
-            except Exception:
+            except Exception:  # noqa: S112 -- a claim name this stub context cannot render is not one this validator can check
                 continue
     return names
 
@@ -313,7 +313,7 @@ def yaml_error(rendered: str) -> str | None:
     outer YAML would miss precisely the indentation bugs that matter most here.
     """
     try:
-        docs = list(yaml.load_all(rendered, Loader=_StrictKeyLoader))  # noqa: S506 — SafeLoader subclass
+        docs = list(yaml.load_all(rendered, Loader=_StrictKeyLoader))
     except yaml.YAMLError as exc:
         return f"invalid YAML: {exc}"
 
@@ -325,7 +325,7 @@ def yaml_error(rendered: str) -> str | None:
                 if not key.endswith((".yml", ".yaml")) or not isinstance(value, str):
                     continue
                 try:
-                    yaml.load(value, Loader=_AppTagLoader)  # noqa: S506 — tolerant SafeLoader subclass
+                    yaml.load(value, Loader=_AppTagLoader)
                 except yaml.YAMLError as exc:
                     return f"invalid embedded YAML in {field}.{key}: {exc}"
     return None

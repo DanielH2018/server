@@ -12,7 +12,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import fake_remux_logic as frl  # noqa: E402  (sibling module — the detector's signal, reused)
+import fake_remux_logic as frl
 
 _WRONG_MAP = re.compile(r"wasn.?t requested", re.I)
 _BLOCKED = re.compile(r"blocked till|is disabled|unavailable", re.I)

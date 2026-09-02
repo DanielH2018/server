@@ -20,7 +20,7 @@ import time
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from notify_logic import (  # noqa: E402
+from notify_logic import (
     PR,
     actionable,
     ci_rollup,
@@ -35,7 +35,7 @@ from notify_logic import (  # noqa: E402
     should_notify,
     CLEARED_MSG,
 )
-from host_lib import atomic_write, discord_post, parse_env_file  # noqa: E402
+from host_lib import atomic_write, discord_post, parse_env_file
 
 CONFIG = "/etc/renovate-notify/config.env"
 API = "https://api.github.com"
@@ -66,7 +66,7 @@ def github_token(config: dict[str, str], run) -> str:
         return token
     try:
         proc = run(["gh", "auth", "token"], capture_output=True, text=True, timeout=10)
-    except Exception:  # noqa: BLE001 — absent binary, timeout, anything: anonymous is fine
+    except Exception:
         return ""
     if proc.returncode != 0:
         return ""
@@ -130,7 +130,7 @@ def dead_paths(repo: str, n: int, pr: dict) -> tuple[str, ...]:
     base = ((pr.get("base") or {}).get("ref")) or "master"
     try:
         files = get("%s/repos/%s/pulls/%d/files?per_page=100" % (API, repo, n))
-    except Exception as exc:  # noqa: BLE001 - degrade to the ordinary conflicting note
+    except Exception as exc:
         log("dead_paths: could not list files for #%d: %s" % (n, exc))
         return ()
     if not files:
@@ -142,7 +142,7 @@ def dead_paths(repo: str, n: int, pr: dict) -> tuple[str, ...]:
             continue
         try:
             get("%s/repos/%s/contents/%s?ref=%s" % (API, repo, path, base))
-        except Exception:  # noqa: BLE001 - a 404 is the answer we are looking for
+        except Exception:
             gone.append(path)
             continue
         # The file still exists on base: an ordinary conflict, resolvable by rebase.

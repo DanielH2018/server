@@ -18,7 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import deploy_tags  # noqa: E402 — needs the path insert above
+import deploy_tags
 
 
 def _run(paths, monkeypatch, comment_only=frozenset()) -> int:

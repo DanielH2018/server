@@ -18,7 +18,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from staging_expectations import (  # noqa: E402 — needs the path insert above
+from staging_expectations import (
     compare,
     expectations,
     missing_expectations,

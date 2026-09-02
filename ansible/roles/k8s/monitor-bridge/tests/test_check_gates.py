@@ -54,7 +54,7 @@ def test_check_prometheus_reachable(monkeypatch):
 
 def test_check_prometheus_no_data_is_down(monkeypatch):
     monkeypatch.setattr(bridge_io, "prom_scalar", lambda q: None)
-    ok, msg = check.check_prometheus()
+    ok, _msg = check.check_prometheus()
     assert not ok
 
 

@@ -15,7 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import await_ci  # noqa: E402 — needs the path insert above
+import await_ci
 
 REQUIRED = frozenset({"prek (lint + validate + tests + secrets)"})
 

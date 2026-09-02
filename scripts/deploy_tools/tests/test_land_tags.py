@@ -19,7 +19,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import land_tags  # noqa: E402 — needs the path insert above
+import land_tags
 
 # A fixture, not live inventory. These tests pin the DERIVATION, and reading containers_list
 # would make them fail whenever a service is retired -- `dozzle` was in this file until it was

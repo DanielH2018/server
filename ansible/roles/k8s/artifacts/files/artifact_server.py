@@ -256,7 +256,7 @@ def parse_html(body: str) -> dict:
     return meta
 
 
-def load_known_services(path: Path = None) -> list[str]:
+def load_known_services(path: Path | None = None) -> list[str]:
     """Service names to match documents against; empty when the file is absent."""
     path = path or SERVICES_FILE
     try:
@@ -440,7 +440,7 @@ def scan(root: Path) -> list[tuple[str, Path, os.stat_result]]:
     return found
 
 
-def build_index(root: Path, known_services: list[str] = None) -> dict:
+def build_index(root: Path, known_services: list[str] | None = None) -> dict:
     known = load_known_services() if known_services is None else known_services
     entries = []
     for host, path, st in scan(root):
@@ -534,7 +534,7 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "artifacts/1.0"
     cache: IndexCache = None  # type: ignore[assignment]
 
-    def log_message(self, fmt: str, *args) -> None:  # noqa: A003
+    def log_message(self, fmt: str, *args) -> None:
         # One line per request on stdout, so `kubectl logs` reads like every other workload
         # here rather than BaseHTTPRequestHandler's stderr format.
         print(f"{self.address_string()} {fmt % args}", flush=True)
@@ -555,10 +555,10 @@ class Handler(BaseHTTPRequestHandler):
         if self.command != "HEAD":
             self.wfile.write(body)
 
-    def do_HEAD(self) -> None:  # noqa: N802
+    def do_HEAD(self) -> None:
         self.do_GET()
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         path = unquote(urlparse(self.path).path)
         if path in ("/", "/index.html"):
             self._send(200, render_gui(), "text/html; charset=utf-8")

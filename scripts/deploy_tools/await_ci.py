@@ -32,12 +32,12 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from lib.git import git_stdout  # noqa: E402
-from lib.repo_paths import GITOPS_DEPLOY_FILES  # noqa: E402
+from lib.git import git_stdout
+from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
-from deploy_logic import (  # noqa: E402 — needs the path insert above
+from deploy_logic import (
     _CI_NO_VERDICT_CONCLUSIONS,
     ci_verdict,
     github_auth_headers,

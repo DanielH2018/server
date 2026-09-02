@@ -23,7 +23,7 @@ sys.path.insert(
     0, str(REPO / "ansible" / "roles" / "setup" / "gitops_deploy" / "files")
 )
 
-from deploy_logic import (  # noqa: E402 — needs the path insert above
+from deploy_logic import (
     _BUILD_ROLL_COUPLINGS,
     expand_build_couplings,
 )

@@ -48,14 +48,14 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from lib.docs_provenance import md_cell as _md_cell  # noqa: E402
-from lib.invocation_sites import (  # noqa: E402
+from lib.docs_provenance import md_cell as _md_cell
+from lib.invocation_sites import (
     claude_hook_files as _claude_hook_files,
     cron_jobs as _shared_cron_jobs,
     sh_j2_templates as _sh_j2_templates,
     workflow_files as _workflow_files,
 )
-from lib.repo_paths import REPO, SCRIPTS  # noqa: E402
+from lib.repo_paths import REPO, SCRIPTS
 
 # Not documentation about the tree: a test, a pytest fixture module, or a private helper
 # whose name says it is not an entry point.

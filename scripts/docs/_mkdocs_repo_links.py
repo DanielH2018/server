@@ -192,7 +192,7 @@ def link_paths(page_html: str, resolve) -> str:
 _state: dict[str, object] = {}
 
 
-def on_files(files, config):  # noqa: ANN001 - mkdocs event signature
+def on_files(files, config):
     """Build the path index once per build, from the file set mkdocs is about to render."""
     scripts_page = files.get_file_from_path(SCRIPTS_PAGE)
     paths: set[str] = set()
@@ -208,7 +208,7 @@ def on_files(files, config):  # noqa: ANN001 - mkdocs event signature
     return files
 
 
-def on_page_content(page_html, page, config, files):  # noqa: ANN001 - mkdocs event signature
+def on_page_content(page_html, page, config, files):
     from mkdocs.utils import get_relative_url
 
     index = _state.get("index")

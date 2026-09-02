@@ -29,10 +29,10 @@ import time
 import urllib.error
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import fake_remux_logic as frl  # noqa: E402  (sibling module — probe parsing + sanitize)
-import fake_remux_replace_logic as frl_replace  # noqa: E402  (sibling module — the decision core)
-import fake_remux_scan as scan  # noqa: E402  (sibling shell — reused boilerplate, see class Sonarr below)
-from host_lib import atomic_write, discord_post, parse_env_file  # noqa: E402
+import fake_remux_logic as frl
+import fake_remux_replace_logic as frl_replace
+import fake_remux_scan as scan
+from host_lib import atomic_write, discord_post, parse_env_file
 
 CONFIG_PATH = os.environ.get(
     "FAKE_REMUX_REPLACE_CONFIG", "/etc/autofix-fake-remux/config.env"

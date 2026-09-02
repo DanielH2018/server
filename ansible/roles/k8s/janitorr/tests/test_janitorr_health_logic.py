@@ -4,7 +4,7 @@ import sys
 sys.path.insert(
     0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "files")
 )
-from janitorr_health_logic import (  # noqa: E402
+from janitorr_health_logic import (
     effective_window_s,
     janitorr_errors_ok,
 )

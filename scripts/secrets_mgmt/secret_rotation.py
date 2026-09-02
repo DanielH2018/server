@@ -58,6 +58,7 @@ import sys
 import urllib.parse
 import urllib.request
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import yaml
 
@@ -65,7 +66,7 @@ import yaml
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib.git import git  # noqa: E402
+from lib.git import git
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SECRETS_FILE = os.path.join(REPO, "ansible", "vars", "secrets.yml")
@@ -391,6 +392,13 @@ def _stable_offset(name: str, span: int) -> int:
     return int(hashlib.sha256(name.encode()).hexdigest(), 16) % span
 
 
+def today() -> dt.date:
+    """The registry's calendar day. Rotation dates are day-granular and the hosts, the crons
+    and the operator all live in America/Chicago, so the day is pinned to that zone rather than
+    to whichever TZ the invoking shell happens to carry."""
+    return dt.datetime.now(tz=ZoneInfo("America/Chicago")).date()
+
+
 def seed_last_rotated(name: str, tier: str, today: dt.date) -> str | None:
     """A staggered seed date: due = seed + cadence lands in [today+lead, today+cadence],
     so nothing is overdue at registration and the due-dates are spread across the window."""
@@ -578,7 +586,7 @@ def _push(url: str, ok: bool, msg: str) -> None:
 
 def cmd_sync(args) -> int:
     reg = load_registry()
-    added, stale = sync(reg, secret_names(), dt.date.today())
+    added, stale = sync(reg, secret_names(), today())
     save_registry(reg)
     print("sync: %d added, %d stale" % (len(added), len(stale)))
     for n in added:
@@ -702,7 +710,7 @@ def cmd_audit(args) -> int:
     )
     for name, old, new in advanced:
         print("  rotated in git, date advanced: %-30s %s -> %s" % (name, old, new))
-    res = audit(reg, dt.date.today())
+    res = audit(reg, today())
     n_over = len(res["overdue"])
     for name, tier, d, days_left in res["all"]:
         flag = "OVERDUE" if days_left < 0 else ("soon" if days_left <= 14 else "ok")
@@ -780,8 +788,8 @@ def unattended_due(rows: list, rotate_all: bool = False) -> list:
 
 def cmd_rotate(args) -> int:
     reg = load_registry()
-    today = dt.date.today()
-    res = audit(reg, today)
+    now = today()
+    res = audit(reg, now)
     if args.name:
         targets = [r for r in res["all"] if r[0] == args.name]
         if targets and targets[0][1] != "auto":
@@ -828,7 +836,7 @@ def cmd_rotate(args) -> int:
             check=True,
             cwd=REPO,
         )
-        reg["secrets"][name]["last_rotated"] = today.isoformat()
+        reg["secrets"][name]["last_rotated"] = now.isoformat()
         tags.update(consumer_tags(name))
         print("  rotated %s" % name)
     if not args.commit:

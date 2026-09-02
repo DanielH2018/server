@@ -408,7 +408,7 @@ def run_once():
 
     # Loki-reachability gate (peer of the Prometheus gate): probe Loki once so a single Loki outage
     # is one page (Loki Reachable), not a storm across every Loki-querying check (LOKI_DEPENDENT).
-    loki_ok, loki_msg = _gate(
+    loki_ok, _loki_msg = _gate(
         "loki_reachable", check_loki_reachable, "KUMA_PUSH_LOKI_REACHABLE"
     )
 
@@ -419,7 +419,7 @@ def run_once():
     # needs B2. The probe is throttled inside b2_reachable (it must not spend the transaction
     # budget it is watching), but the cached verdict is pushed every cycle so this monitor's own
     # heartbeat stays alive.
-    b2_ok, b2_msg = _gate("b2_reachable", check_b2_reachable, "KUMA_PUSH_B2_REACHABLE")
+    b2_ok, _b2_msg = _gate("b2_reachable", check_b2_reachable, "KUMA_PUSH_B2_REACHABLE")
 
     # Cluster-Prometheus gate (peer of the Prometheus gate, for the OTHER instance): the cluster
     # checks read daniel-box's Prometheus over the cluster ingress, a path none of the other gates

@@ -29,7 +29,7 @@ import yaml
 from jinja2 import ChainableUndefined, Environment, FileSystemLoader
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from lib.repo_paths import (  # noqa: E402
+from lib.repo_paths import (
     ALL_VARS,
     ANSIBLE,
     HOST_VARS,
@@ -131,7 +131,7 @@ def render_or_error(
     env.globals.update(ctx)
     try:
         return env.get_template(name).render(**ctx), None
-    except Exception as exc:  # noqa: BLE001 — surface any render failure
+    except Exception as exc:
         return None, f"render error: {type(exc).__name__}: {exc}"
 
 

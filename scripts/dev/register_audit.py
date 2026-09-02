@@ -40,7 +40,7 @@ from pathlib import Path
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib.repo_paths import REPO  # noqa: E402
+from lib.repo_paths import REPO
 
 DEFAULT_REGISTER = (
     Path.home()

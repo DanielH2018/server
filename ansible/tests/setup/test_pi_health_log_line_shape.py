@@ -26,7 +26,7 @@ from _helpers import REPO
 from _pi_health import run
 
 sys.path.insert(0, str(REPO / "scripts" / "diagnostics"))
-from probe_alerts import parse_syslog_down_line  # noqa: E402
+from probe_alerts import parse_syslog_down_line
 
 
 BOTH = ["autoheal", "docker-proxy"]

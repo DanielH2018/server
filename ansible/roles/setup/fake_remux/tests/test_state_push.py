@@ -4,7 +4,7 @@ import sys
 import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "files"))
-from state_push import main, read_state, verdict  # noqa: E402
+from state_push import main, read_state, verdict
 
 HOUR = 3600.0
 

@@ -2,6 +2,7 @@
 
 import yaml
 import ha_state_model as hsm
+import probe_ha
 
 
 def test_call_service_handles_service_and_action_keys():
@@ -312,9 +313,6 @@ def test_cmd_refresh_writes_both_snapshots(tmp_path, monkeypatch):
     assert rc == 0
     saved = yaml.safe_load((tmp_path / "external_services.yml").read_text())
     assert "notify.mobile_app_pixel_watch_3" in saved["services"]
-
-
-import probe_ha
 
 
 def test_ha_state_rows_renders_cell_values_and_anomaly():

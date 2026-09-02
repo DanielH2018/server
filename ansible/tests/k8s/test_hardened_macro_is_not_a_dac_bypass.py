@@ -24,7 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _helpers import K8S_ROLES, REPO  # noqa: E402
+from _helpers import K8S_ROLES, REPO
 
 # `run_as_user=0` anywhere in a hardened_security_context() call, tolerant of whitespace and of
 # whichever other arguments sit around it. Deliberately textual, matching the guard it protects.

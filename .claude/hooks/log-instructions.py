@@ -34,7 +34,7 @@ def rel(path, cwd):
     try:
         if path and cwd and os.path.commonpath([path, cwd]) == cwd:
             return os.path.relpath(path, cwd)
-    except Exception:
+    except Exception:  # noqa: S110 -- an unrelatable path is logged as given
         pass
     return path
 
@@ -76,5 +76,5 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except Exception:
+    except Exception:  # noqa: S110 -- a logging hook must never block the tool call
         pass

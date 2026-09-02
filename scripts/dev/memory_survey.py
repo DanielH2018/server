@@ -47,7 +47,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 # The checkout a memory's cited check paths are resolved against. Resolved from this file's
 # own location so the survey works from a worktree, where the primary checkout's paths would
 # be the wrong tree to ask.
-from lib.repo_paths import REPO as REPO_ROOT  # noqa: E402
+from lib.repo_paths import REPO as REPO_ROOT
+
+
+def _local_datetime(epoch: float) -> _dt.datetime:
+    """An aware datetime in this machine's zone: transcripts are local files, so local days."""
+    return _dt.datetime.fromtimestamp(epoch, tz=_dt.UTC).astimezone()
+
 
 DEFAULT_MEMORY_DIR = Path.home() / ".claude/projects/-home-ubuntu-server/memory"
 DEFAULT_TRANSCRIPT_DIR = Path.home() / ".claude/projects/-home-ubuntu-server"
@@ -207,7 +213,7 @@ def last_referenced(
     if not transcript_dir.is_dir():
         return result
 
-    cutoff = _dt.datetime.now().timestamp() - days * 86400
+    cutoff = _dt.datetime.now(tz=_dt.UTC).timestamp() - days * 86400
     slugs = {f.stem: f.name for f in files}
 
     transcripts = [
@@ -223,7 +229,7 @@ def last_referenced(
     for tpath in transcripts:
         if not outstanding:
             break
-        day = _dt.datetime.fromtimestamp(tpath.stat().st_mtime).strftime("%Y-%m-%d")
+        day = _local_datetime(tpath.stat().st_mtime).strftime("%Y-%m-%d")
         try:
             with tpath.open("r", encoding="utf-8", errors="replace") as fh:
                 for line in fh:
@@ -381,7 +387,7 @@ def survey(
     store_bytes = sum(p.stat().st_size for p in files)
 
     refs = last_referenced(files, transcript_dir, transcript_days)
-    today = _dt.date.today()
+    today = _local_datetime(_dt.datetime.now(tz=_dt.UTC).timestamp()).date()
 
     entries = []
     for p in files:
@@ -393,9 +399,7 @@ def survey(
             {
                 "file": p.name,
                 "bytes": p.stat().st_size,
-                "modified": _dt.datetime.fromtimestamp(p.stat().st_mtime).strftime(
-                    "%Y-%m-%d"
-                ),
+                "modified": _local_datetime(p.stat().st_mtime).strftime("%Y-%m-%d"),
                 "last_referenced": seen,
                 "days_since_referenced": age_days,
                 "indexed": p.name in linked,

@@ -15,7 +15,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import probe_readonly_rbac as ph  # noqa: E402
+import probe_readonly_rbac as ph
 
 _CONTROLS_OK = {("get", "pods"): True, ("list", "deployments"): True}
 _CONTROLS_REFUSED = {("get", "pods"): False, ("list", "deployments"): True}

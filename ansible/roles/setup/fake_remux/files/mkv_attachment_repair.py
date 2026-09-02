@@ -33,8 +33,8 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import mkv_attachment_logic as mal  # noqa: E402  (sibling, resolved via the sys.path insert)
-from host_lib import atomic_write, discord_post, parse_env_file  # noqa: E402
+import mkv_attachment_logic as mal
+from host_lib import atomic_write, discord_post, parse_env_file
 
 CONFIG_PATH = os.environ.get("FAKE_REMUX_CONFIG", "/etc/autofix-fake-remux/config.env")
 USER_AGENT = "autofix-mkv-attachments"

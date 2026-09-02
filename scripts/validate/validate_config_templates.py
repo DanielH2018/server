@@ -29,7 +29,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from lib.render_guard import (  # noqa: E402
+from lib.render_guard import (
     ALL_VARS,
     ANSIBLE,
     BASE_CONTEXT,
@@ -39,7 +39,7 @@ from lib.render_guard import (  # noqa: E402
     make_env,
     render_or_error,
 )
-from lib.render_guard import StubUndefined as _BaseStubUndefined  # noqa: E402
+from lib.render_guard import StubUndefined as _BaseStubUndefined
 
 ROLES = ANSIBLE / "roles" / "containers"
 

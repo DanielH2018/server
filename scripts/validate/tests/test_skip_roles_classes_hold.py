@@ -24,7 +24,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from validate_k8s_manifests import (  # noqa: E402 — needs the path insert above
+from validate_k8s_manifests import (
     CALLER_RENDERED_ROLES,
     K8S_ROLES,
     NO_MANIFEST_ROLES,

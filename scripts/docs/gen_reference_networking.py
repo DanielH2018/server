@@ -41,8 +41,8 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from lib.render_guard import host_files, load_yaml  # noqa: E402
-from lib.repo_paths import HOST_VARS, K8S_ROLES  # noqa: E402
+from lib.render_guard import host_files, load_yaml
+from lib.repo_paths import HOST_VARS, K8S_ROLES
 
 # The macro applies these to every route it renders, in this order. Read from
 # ansible/templates/ingressroute.yml.j2 rather than assumed; see _baseline_middlewares.

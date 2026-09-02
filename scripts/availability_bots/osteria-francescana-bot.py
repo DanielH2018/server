@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -40,7 +41,7 @@ HEADERS = {
 }
 
 # Dates to watch and the seating time we care about.
-TARGET_DATES = [datetime(2025, 6, 29)]
+TARGET_DATES = [datetime(2025, 6, 29, tzinfo=ZoneInfo("Europe/Rome"))]
 WANTED_TIME = "12:30"
 
 # CoverManager returns HTML fragments; scrape party sizes and offered times out of them.

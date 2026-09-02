@@ -15,7 +15,7 @@ from pathlib import Path
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib.repo_paths import REPO as REPO_ROOT  # noqa: E402,F401 -- re-exported
+from lib.repo_paths import REPO as REPO_ROOT  # noqa: F401 -- re-exported
 
 
 DEFAULT_OUTPUT = Path.home() / ".claude" / "artifacts" / "homelab-infra-map.html"

@@ -70,8 +70,8 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from lib.docs_provenance import md_cell as _md_cell  # noqa: E402
-from lib.render_guard import (  # noqa: E402
+from lib.docs_provenance import md_cell as _md_cell
+from lib.render_guard import (
     ALL_VARS,
     HOST_VARS,
     REPO,
@@ -79,7 +79,7 @@ from lib.render_guard import (  # noqa: E402
     host_files,
     load_yaml as _load_yaml,
 )
-from route_facts import linkify_fqdns, reachability, route_cell  # noqa: E402
+from route_facts import linkify_fqdns, reachability, route_cell
 
 K8S_ROLES = REPO / "ansible" / "roles" / "k8s"
 K3S_DEFAULTS = REPO / "ansible" / "roles" / "setup" / "k3s" / "defaults" / "main.yml"

@@ -19,8 +19,8 @@ import time
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import host_lib  # noqa: E402  (sibling copy, deployed alongside — see the k8s/janitorr role)
-import janitorr_health_logic as logic  # noqa: E402  (sibling module, via the sys.path insert)
+import host_lib
+import janitorr_health_logic as logic
 
 NAMESPACE = os.environ.get("JANITORR_NAMESPACE", "homelab")
 WINDOW_S = float(os.environ.get("JANITORR_WINDOW_H", "12")) * 3600

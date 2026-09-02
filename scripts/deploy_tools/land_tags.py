@@ -32,11 +32,11 @@ from pathlib import Path
 # The build/roll couplings live in deploy_logic so this and `deploy_tags.py changed` widen
 # identically -- two derivations that disagree is the defect this import exists to prevent.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from lib.repo_paths import GITOPS_DEPLOY_FILES  # noqa: E402
+from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
-from deploy_logic import (  # noqa: E402 — needs the path insert above
+from deploy_logic import (
     _BROAD_MANUAL_PREFIXES,
     broad_remediation,
     expand_build_couplings,
@@ -48,7 +48,7 @@ from deploy_logic import (  # noqa: E402 — needs the path insert above
 # Same directory, so a direct invocation already has it on sys.path. `service_tags` is the
 # one reader of containers_list, and sharing it is what keeps "is this name a deploy tag?"
 # answered identically here and in deploy.sh's own validation.
-import deploy_tags  # noqa: E402
+import deploy_tags
 
 _K8S = re.compile(r"^ansible/roles/k8s/([^/]+)/")
 _DOCKER = re.compile(r"^ansible/roles/containers/([^/]+)/")

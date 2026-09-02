@@ -103,7 +103,7 @@ def _get_json(url, headers=None):
         hdrs.update(headers)
     req = urllib.request.Request(url, headers=hdrs)
     try:
-        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:  # noqa: S310 (internal URLs)
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
             return json.load(resp)
     except urllib.error.HTTPError as e:
         # Re-raise the SAME type: check_discord branches on `e.code`, so wrapping this would
@@ -133,7 +133,7 @@ def _post_json(url, payload, headers=None):
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=body, headers=hdrs, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:  # noqa: S310
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
             return json.load(resp)
     except urllib.error.HTTPError as e:
         try:

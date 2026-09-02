@@ -29,8 +29,8 @@ import time
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import fake_remux_logic as frl  # noqa: E402  (sibling module, resolved via the sys.path insert)
-from host_lib import atomic_write, discord_post, parse_env_file  # noqa: E402
+import fake_remux_logic as frl
+from host_lib import atomic_write, discord_post, parse_env_file
 
 CONFIG_PATH = os.environ.get("FAKE_REMUX_CONFIG", "/etc/autofix-fake-remux/config.env")
 USER_AGENT = "autofix-fake-remux"
@@ -88,7 +88,7 @@ class Sonarr:
             headers["Content-Type"] = "application/json"
         req = urllib.request.Request(url, headers=headers, data=body, method=method)
         eff_timeout = self.timeout if timeout is None else timeout
-        with urllib.request.urlopen(req, timeout=eff_timeout) as resp:  # noqa: S310 (internal URL)
+        with urllib.request.urlopen(req, timeout=eff_timeout) as resp:
             raw = resp.read()
             return json.loads(raw) if raw else None
 

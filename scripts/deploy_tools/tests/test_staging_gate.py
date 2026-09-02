@@ -16,9 +16,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-_real_run = subprocess.run
-
 import pytest
+
+_real_run = subprocess.run
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 

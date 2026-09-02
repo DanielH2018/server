@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from register_audit import (  # noqa: E402
+from register_audit import (
     STATUS_CLOSED,
     STATUS_OPEN,
     STATUS_UNRESOLVED,

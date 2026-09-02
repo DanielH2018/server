@@ -398,7 +398,7 @@ def test_arr_queue_only_checks_configured_app(monkeypatch):
         return _queue()
 
     monkeypatch.setattr(bridge_io, "_get_json", fake_get_json)
-    ok, msg = checks_service.check_arr_queue()
+    ok, _msg = checks_service.check_arr_queue()
     assert ok
     assert len(calls) == 1
     assert "sonarr" in calls[0]

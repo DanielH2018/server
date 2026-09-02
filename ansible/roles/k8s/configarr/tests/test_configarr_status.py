@@ -4,7 +4,7 @@ import sys
 sys.path.insert(
     0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "files")
 )
-from configarr_status import evaluate, has_error_line, summarize  # noqa: E402
+from configarr_status import evaluate, has_error_line, summarize
 
 
 def test_clean_exit_no_errors_is_ok():

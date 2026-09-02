@@ -34,8 +34,8 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from lib.repo_paths import ANSIBLE  # noqa: E402
-from secrets_mgmt import secret_rotation  # noqa: E402
+from lib.repo_paths import ANSIBLE
+from secrets_mgmt import secret_rotation
 
 REGISTRY = ANSIBLE / "secret_rotation.yml"
 
@@ -54,7 +54,7 @@ def build_rows(
     registry: Path = REGISTRY, today: dt.date | None = None
 ) -> list[dict[str, str]]:
     """One row per registered secret: name, tier, last rotated, due, days left."""
-    now = today or dt.date.today()
+    now = today or secret_rotation.today()
     reg = secret_rotation.load_registry(str(registry))
     rows = []
     for name, entry in sorted((reg.get("secrets") or {}).items()):
