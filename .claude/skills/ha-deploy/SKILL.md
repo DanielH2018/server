@@ -17,11 +17,11 @@ rollout restart). A restart is ~60-120s.
    `uv run pytest ansible/roles/k8s/home-assistant/tests`. Don't deploy a config that
    fails structural validation.
 
-2. **A new config file must be added to the k8s role's ConfigMap + init-container install
-   list** (`roles/k8s/home-assistant/templates/configmap.yaml.j2` + `deployment.yaml.j2`) —
-   the manifests role rolls the deployment when the rendered ConfigMap/Secret changes, so
-   already-listed files redeploy automatically; a file the ConfigMap doesn't carry silently
-   never reaches `/config`.
+2. **A new config file must be added to its `home_assistant_*_files` list in the role's
+   `defaults/main.yml`** — the ConfigMap loops over those lists and the init container installs
+   whatever the ConfigMap holds. The manifests role rolls the deployment when the rendered
+   ConfigMap/Secret changes, so already-listed files redeploy automatically; a file no list
+   names never reaches `/config`, and `validate_ha_config.py` fails on the disagreement.
 
 3. **Deploy:**
    ```

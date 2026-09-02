@@ -37,19 +37,21 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
 - **`templates/` (role root) — k8s manifests ONLY.** `configmap.yaml.j2`, `deployment.yaml.j2`,
   `service.yaml.j2`, `ingressroute.yaml.j2`, `secret.yaml.j2`. `validate/k8s_manifests.py` renders
   and YAML-parses every `*.j2` it finds here, so HA config must never land in this directory.
-- **`templates/config/` — the HA config files, shipped VERBATIM.** `configuration.yaml.j2`,
-  `customize.yaml.j2`, `ui-lovelace.yaml.j2`. Despite the `.j2` suffix (vestigial), these are
-  carried by `lookup('file')`, not `lookup('template')` — and `validate_ha_config.py` **rejects**
-  any `{{` or `{% %}` in them (`scripts/home_assistant/validate_ha_config.py:133`). So: no Ansible vars *and*
-  no HA Jinja inline here. `secrets.yaml.j2` is the one genuinely Ansible-templated file — it
-  goes through `lookup('template')` in `secret.yaml.j2` and carries the SOPS values.
-- **`files/` — HA's own `{{ }}` Jinja lives here, also shipped verbatim.** `automations/<topic>.yaml`,
-  `scenes.yaml`, `scripts/<topic>.yaml`, `templates.yaml`, `rest.yaml`, and `custom_templates/*.jinja`.
-  **The single most important rule: HA Jinja goes in `files/`, never inline in
-  `configuration.yaml.j2`** — `template: !include templates.yaml` is how it gets pulled in.
-- **A new file ships nothing until `configmap.yaml.j2` names it.** Each config file is embedded
-  by an explicit `lookup('file', …)` line, and `deployment.yaml.j2`'s init container names each
-  one again in its `install` commands (`custom_templates/` is enumerated file-by-file in both).
+- **`files/` — every HA config file, shipped VERBATIM.** `configuration.yaml`, `customize.yaml`,
+  `ui-lovelace.yaml`, `scenes.yaml`, `templates.yaml`, `rest.yaml` at the root;
+  `automations/<topic>.yaml`, `scripts/<topic>.yaml` and `custom_templates/*.jinja` below it. All
+  carried by `lookup('file')`, never `lookup('template')`. `validate_ha_config.py` **rejects** any
+  `{{` or `{% %}` in `configuration.yaml`, `customize.yaml` and `ui-lovelace.yaml` (see
+  `_NO_JINJA_FILES` there): an Ansible var written in a verbatim file reaches HA unrendered.
+  **The single most important rule: HA Jinja goes in `templates.yaml`, `rest.yaml`, the
+  automations and the scripts, never inline in `configuration.yaml`** — `template: !include
+  templates.yaml` is how it gets pulled in.
+- **`templates/config/secrets.yaml.j2`** is the one genuinely Ansible-templated file — it goes
+  through `lookup('template')` in `secret.yaml.j2` and carries the SOPS values.
+- **A new file ships nothing until its list in `defaults/main.yml` names it.** Four lists, one
+  per tree: `home_assistant_root_files`, `_automation_files`, `_script_files`,
+  `_template_files`. `configmap.yaml.j2` loops over them, the init container installs whatever
+  each ConfigMap holds, and the validator fails when a list and its directory disagree.
   Add a new `files/*.yaml` or `*.jinja` without adding both lines — and its `!include` — and
   the deploy is green while the pod never sees it. This replaces the old Docker-era
   `common_config_changed` wiring; there are no bind mounts and no `register:` chain any more.

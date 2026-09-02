@@ -13,7 +13,7 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
 - **Host: daniel-box (k8s), since 2026-08-09 — slice 5, B3.** This role is both the workload
   and the **config-authoring home** (validate-ha-config, the macro tests,
   `sanctioned_writers.yml`, the skills all anchor here): its ConfigMap ships
-  `templates/config/` + `files/` into the cluster. Edit HA config HERE; deploy with
+  `files/` into the cluster. Edit HA config HERE; deploy with
   `--tags home-assistant` from daniel-box.
 - **Port:** 8123 · **Authelia:** no · `home-assistant.<domain>` is served directly by the cluster
   Traefik (companion app unchanged). The `bridge_hostname` forward this used to describe died with
@@ -44,13 +44,16 @@ every task in this directory whether or not it is needed.
   are shipped verbatim — `configmap.yaml.j2` carries each one with `lookup('file')`, NOT
   `lookup('template')`, because they use HA `{{ }}` Jinja that Ansible's templater would try to
   render and fail (no `{% raw %}` needed). **This is why HA Jinja lives in these files, never
-  inline in `configuration.yaml.j2`** — `template: !include templates.yaml` pulls the template
-  sensors in. `templates/config/*.j2` ship verbatim too (the suffix is vestigial;
-  `validate_ha_config.py` rejects Ansible markers in them); `secrets.yaml.j2` is the only
-  genuinely templated config file. Git is the source of truth; HA UI edits are overwritten on
-  deploy. A config edit changes the rendered ConfigMap, so `k8s/manifests` rolls the Deployment
-  (~120s) — the k8s replacement for the old `common_config_changed` wiring. A *new* file ships
-  nothing until `configmap.yaml.j2` and `deployment.yaml.j2`'s init container both name it. The
+  inline in `configuration.yaml`** — `template: !include templates.yaml` pulls the template
+  sensors in. `files/configuration.yaml`, `customize.yaml` and `ui-lovelace.yaml` ship verbatim
+  too, listed in `home_assistant_root_files`; `validate_ha_config.py` rejects a `{{ }}` marker in
+  those three, because an Ansible var in a verbatim file reaches HA unrendered and renders to
+  nothing. `templates/config/secrets.yaml.j2` is the only genuinely templated config file. Git
+  is the source of truth; HA UI edits are overwritten on deploy. A config edit changes the
+  rendered ConfigMap, so `k8s/manifests` rolls the Deployment (~120s) — the k8s replacement for
+  the old `common_config_changed` wiring. A *new* file ships nothing until its list in
+  `defaults/main.yml` names it: `configmap.yaml.j2` loops over the four lists and the init
+  container installs whatever each ConfigMap holds. The
   Tap Dial button map, fan-dial mode, and the lux gate are documented in
   [`docs/lighting-and-presence.md`](docs/lighting-and-presence.md).
 
@@ -136,8 +139,8 @@ every task in this directory whether or not it is needed.
   can't derive. Design + Phase-2 plan: `docs/superpowers/specs/2026-06-21-ha-state-model-phase*`.
 
 ## Editing
-- HA cfg: `templates/config/configuration.yaml.j2` + `files/` (shipped into the cluster by
-  `roles/k8s/home-assistant`)
+- HA cfg: `files/` (shipped into the cluster by `roles/k8s/home-assistant`; only
+  `templates/config/secrets.yaml.j2` is rendered)
 - Deploy (from daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "home-assistant"`
   — or the `/ha-deploy` skill, which adds the health + loaded-config gates
 

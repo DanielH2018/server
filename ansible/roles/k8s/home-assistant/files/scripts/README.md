@@ -19,7 +19,7 @@ To change one, edit the file and run:
 ```
 
 To add a file, also add its name to `home_assistant_script_files` in `defaults/main.yml`.
-That list is what the ConfigMap and the init container ship, and `validate_ha_config.py`
+That list is what the ConfigMap carries and the init container installs, and `validate_ha_config.py`
 fails when the list and this directory disagree.
 
 The authoring conventions (copy-not-template, math in a tested macro, the single-writer

@@ -1,5 +1,19 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
+{# The config trees configmap.yaml.j2 builds, keyed the same way: the ConfigMap and the
+   subdirectory of /config it lands in ('root' is /config itself). The three subdirectories
+   are swept by pattern before the install; the root is not (see the init container). #}
+{% set config_trees = [
+     ('home-assistant-config', 'root'),
+     ('home-assistant-automations', 'automations'),
+     ('home-assistant-scripts', 'scripts'),
+     ('home-assistant-custom-templates', 'custom_templates'),
+   ] %}
+{% set config_subdirs = [
+     ('automations', '*.yaml'),
+     ('scripts', '*.yaml'),
+     ('custom_templates', '*.jinja'),
+   ] %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -27,37 +41,35 @@ spec:
       # PUID/PGID itself, chowning /config on the way — same contract as under Docker.
       initContainers:
         # Lay the git-owned config plane into the PVC on every start (see the ConfigMap's
-        # comment). Only these named files are written; .storage/, the recorder DB, secrets
-        # consumers, custom_components/ are PVC state this never touches.
+        # comment). Each ConfigMap is mounted under /cm/<tree> and installed by glob: the
+        # ConfigMap holds exactly the files its list in defaults/main.yml names, so the glob
+        # cannot pick up anything the list left out, and the file lists live in one place.
+        # .storage/, the recorder DB, secrets consumers, custom_components/ are PVC state this
+        # never touches.
         #
-        # automations/, scripts/ and custom_templates/ are CLEARED before the install because `install`
-        # only overwrites what it is given: a file dropped from the ConfigMap would otherwise
-        # survive on the PVC and keep being loaded, green deploy and all, with the repo showing
-        # it gone. Both directories are git-owned, so deleting them wholesale is safe. The
-        # `rm -f /config/automations.yaml` retires the pre-split single files for the same
-        # reason; it is harmless once nothing includes it, but a stale copy invites confusion.
-        # The named files above are
-        # each overwritten every start, so they can't go stale the same way — but REMOVING one
-        # from the ConfigMap still leaves the PVC copy behind, and that needs a manual delete.
+        # automations/, scripts/ and custom_templates/ are CLEARED before the install because
+        # `install` only overwrites what it is given: a file dropped from the ConfigMap would
+        # otherwise survive on the PVC and keep being loaded, green deploy and all, with the
+        # repo showing it gone. All three directories are git-owned, so deleting them wholesale
+        # is safe. The root of /config is NOT swept — the PVC's own files live there — so the
+        # root files are each overwritten every start and cannot go stale, but REMOVING one
+        # from the list still leaves the PVC copy behind, and that needs a manual delete. The
+        # `rm -f` retires the pre-split single files for the same reason; harmless once
+        # nothing includes them, but a stale copy invites confusion.
         - name: config-install
           image: {{ home_assistant_k8s_init_image }}
           command:
             - sh
-            - -c
-            - install -m 644 /cm/configuration.yaml /cm/customize.yaml /cm/ui-lovelace.yaml
-              /cm/scenes.yaml /cm/templates.yaml
-              /cm/rest.yaml /config/ &&
-              install -m 600 /sec/secrets.yaml /config/secrets.yaml &&
-              rm -f /config/automations.yaml /config/scripts.yaml &&
-              mkdir -p /config/automations &&
-              find /config/automations -maxdepth 1 -name '*.yaml' -delete &&
-              install -m 644 {% for name in home_assistant_automation_files %}/au/{{ name }} {% endfor %}/config/automations/ &&
-              mkdir -p /config/scripts &&
-              find /config/scripts -maxdepth 1 -name '*.yaml' -delete &&
-              install -m 644 {% for name in home_assistant_script_files %}/sc/{{ name }} {% endfor %}/config/scripts/ &&
-              mkdir -p /config/custom_templates &&
-              find /config/custom_templates -maxdepth 1 -name '*.jinja' -delete &&
-              install -m 644 {% for name in home_assistant_template_files %}/ct/{{ name }} {% endfor %}/config/custom_templates/
+            - -ec
+            - |
+              install -m 644 /cm/root/*.yaml /config/
+              install -m 600 /sec/secrets.yaml /config/secrets.yaml
+              rm -f /config/automations.yaml /config/scripts.yaml
+{% for subdir, pattern in config_subdirs %}
+              mkdir -p /config/{{ subdir }}
+              find /config/{{ subdir }} -maxdepth 1 -name '{{ pattern }}' -delete
+              install -m 644 /cm/{{ subdir }}/{{ pattern }} /config/{{ subdir }}/
+{% endfor %}
           # As PUID, not root: the seeded /config is uid-1000-owned and this container drops
           # ALL caps (no DAC_OVERRIDE), so only the owner can overwrite the previous copies.
           # Root-with-no-caps failed exactly there on first boot ("can't create: File
@@ -68,18 +80,11 @@ spec:
           # only place a non-root assertion is safe.
 {{ hardened_security_context(read_only=true, non_root=true, run_as_user=puid, run_as_group=pgid) }}
           volumeMounts:
-            - name: home-assistant-config-files
-              mountPath: /cm
+{% for configmap_name, subdir in config_trees %}
+            - name: {{ configmap_name }}-files
+              mountPath: /cm/{{ subdir }}
               readOnly: true
-            - name: home-assistant-scripts
-              mountPath: /sc
-              readOnly: true
-            - name: home-assistant-automations
-              mountPath: /au
-              readOnly: true
-            - name: home-assistant-custom-templates
-              mountPath: /ct
-              readOnly: true
+{% endfor %}
             - name: home-assistant-config-secrets
               mountPath: /sec
               readOnly: true
@@ -140,18 +145,11 @@ spec:
             timeoutSeconds: 5
 {{ container_resources(cpu_limit=home_assistant_k8s_cpu_limit, mem_limit=home_assistant_k8s_mem_limit, cpu_request=home_assistant_k8s_cpu_request, mem_request=home_assistant_k8s_mem_request) }}
       volumes:
-        - name: home-assistant-config-files
+{% for configmap_name, subdir in config_trees %}
+        - name: {{ configmap_name }}-files
           configMap:
-            name: home-assistant-config
-        - name: home-assistant-scripts
-          configMap:
-            name: home-assistant-scripts
-        - name: home-assistant-automations
-          configMap:
-            name: home-assistant-automations
-        - name: home-assistant-custom-templates
-          configMap:
-            name: home-assistant-custom-templates
+            name: {{ configmap_name }}
+{% endfor %}
         - name: home-assistant-config-secrets
           secret:
             secretName: home-assistant-secrets

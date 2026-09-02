@@ -1,7 +1,7 @@
 # Configure a default setup of Home Assistant (frontend, api, etc)
 default_config:
 
-# Entity friendly-name / icon overrides (templated — see customize.yaml.j2).
+# Entity friendly-name / icon overrides (templated — see customize.yaml).
 homeassistant:
   customize: !include customize.yaml
   # Instance URLs so the Google Cast receiver on the Nest Hub Max can reach the HA frontend when
@@ -12,7 +12,7 @@ homeassistant:
   external_url: !secret external_url
   internal_url: !secret internal_url
 
-# Frontend theme — a compact dark theme PINNED to the Bedroom dashboard (ui-lovelace.yaml.j2 sets
+# Frontend theme — a compact dark theme PINNED to the Bedroom dashboard (ui-lovelace.yaml sets
 # `theme: nest_dark` on the view) so it renders dark when cast to the Nest Hub. The cast receiver
 # runs with NO logged-in user, so it ignores the app/browser dark-mode profile and would otherwise
 # show light; pinning an explicit theme to the view forces dark regardless of device/user. Static

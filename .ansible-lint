@@ -19,6 +19,9 @@ exclude_paths:
   # above — ansible-lint walks the filesystem, so a gitignored directory is still linted, and
   # the full-tree hook then fails on any staged .yml.
   - "styles/"
+  # Home Assistant config, not Ansible. configuration.yaml carries HA's own YAML tags
+  # (`!include`, `!secret`), which this loader cannot construct; validate-ha-config lints it.
+  - "ansible/roles/k8s/home-assistant/files/"
 
 skip_list:
   - no-changed-when

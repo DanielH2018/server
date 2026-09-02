@@ -97,7 +97,7 @@ that reports rather than actuates.
   (`files/templates.yaml`, HA Jinja) converts load% to watts via `load% / 100 * 900`, where **900 W is
   `ups.realpower.nominal` read off the NUT server for THIS unit (APC Back-UPS RS 1500MS2) — change the
   constant if the UPS is swapped**; then a Riemann-sum `integration` platform sensor `sensor.ups_energy`
-  (inline `sensor:` in `configuration.yaml.j2` — no HA Jinja, so it's fine in the verbatim-copied file)
+  (inline `sensor:` in `configuration.yaml` — no HA Jinja, so it's fine in the verbatim-copied file)
   accumulates that to kWh and auto-stamps `device_class: energy` + `state_class: total` (what the
   dashboard requires). `method: left` (load is a step function) + `max_sub_interval: "00:05:00"` so a
   steady load still accrues. Accuracy is a **coarse estimate** (Back-UPS load% is quantized) covering

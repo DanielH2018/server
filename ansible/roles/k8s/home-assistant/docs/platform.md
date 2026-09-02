@@ -30,9 +30,9 @@ automations do.
     Authentication → TOTP (and keep the recovery code from enrolment).
 - **HACS preinstalled** via `DOCKER_MODS=linuxserver/mods:homeassistant-hacs`
   (LSIO Docker mod that drops the Home Assistant Community Store into `/config`).
-- **`configuration.yaml` is templated** from `configuration.yaml.j2` — since the k8s cutover it
-  renders into the cluster ConfigMap/Secret set (`roles/k8s/home-assistant`), and an init
-  container installs it into `/config` at pod start. It sets `use_x_forwarded_for: true` +
+- **`configuration.yaml` ships verbatim** from `files/configuration.yaml` — the ConfigMap
+  (`roles/k8s/home-assistant`) carries it with `lookup('file')`, and an init container
+  installs it into `/config` at pod start. It sets `use_x_forwarded_for: true` +
   `trusted_proxies` covering every hop of the bridge chain (`172.16.0.0/12`, the pod CIDR
   `10.42.0.0/16`, and daniel-server's LAN IP — the bridge egresses as it) so HA honors
   Traefik's `X-Forwarded-For` (without it HA rejects the proxied request with
