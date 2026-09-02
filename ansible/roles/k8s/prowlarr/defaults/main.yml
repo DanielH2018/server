@@ -43,26 +43,59 @@ prowlarr_k8s_size: 2Gi
 # and B3 proved egress policies here do nothing — so this is a control that actually holds, and
 # the probe beside it says so rather than assuming.
 #
-# Tag KEPT alongside the digest (repo:latest@sha256) so Renovate's k8s-defaults manager still
-# tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal
-# (2026-08-13 pin).
-prowlarr_k8s_flaresolverr_image: ghcr.io/flaresolverr/flaresolverr:latest@sha256:139dfee1c6f89249c8d665d1333a42e8ec74ec0a86bc6bb1c8461e10d3a66a47
+# DECIDED: the workload runs BYPARR, and every Kubernetes object it owns is still named
+# `flaresolverr`. Byparr (github.com/ThePhaseless/Byparr) is an API-compatible replacement —
+# same POST /v1 contract, same port 8191 — so Prowlarr talks to it unchanged. The names stayed
+# because renaming them costs more than it buys, on four counts:
+#   1. prowlarr's SEEDED database stores the proxy URL as `http://flaresolverr:8191`
+#      (see the header of service-flaresolverr.yaml.j2). That database lives on
+#      prowlarr-config, which k8s_autodeploy_snapshot_pvcs reverts to a pre-apply Longhorn
+#      snapshot when a deploy fails — so a live URL edit is state git cannot hold and the
+#      revert path can silently undo, pointing prowlarr at a Service that no longer exists.
+#   2. `probe.py health prowlarr` maps the deploy tag to the workload names
+#      {flaresolverr, prowlarr}; a role whose workloads don't share its name is skipped
+#      silently rather than failed.
+#   3. netpol-baseline's exemption list, this role's inverted isolation probe
+#      (`nc -z flaresolverr 8191`) and networkpolicy-prowlarr's caller allowlist all key on
+#      `app: flaresolverr`.
+#   4. ansible/tests/k8s/test_netpol_baseline_labels.py and
+#      ansible/tests/deploy/test_k8s_autodeploy_rollout_gates.py both assert the name.
+# The rename is filed as its own change rather than smuggled into an image swap.
+#
+# Tag KEPT alongside the digest (repo:<ver>@sha256) so Renovate's k8s-images manager tracks it —
+# a bare repo@sha256 would freeze it with zero update signal (2026-08-13 pin). Unlike the
+# FlareSolverr pin this replaces, the tag is a SEMVER tag rather than `latest`: Byparr publishes
+# real versions, so Renovate can offer a version bump here, not only a digest re-push.
+prowlarr_k8s_flaresolverr_image: ghcr.io/thephaseless/byparr:3.0.4@sha256:874f719518f617d03a60e03411fc5d090647e1a877041e81f8dc965927c7deb6
 prowlarr_k8s_flaresolverr_port: 8191
 prowlarr_k8s_flaresolverr_claim: prowlarr-flaresolverr-config
 
 # busybox nc is all the isolation probe needs.
 prowlarr_k8s_probe_image: alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 
-# Mirrors resources('1.0', '1024M', '0.10', '128M') for prowlarr and
-# resources('2.0', '1024M', '0.10', '128M') for flaresolverr.
+# prowlarr mirrors resources('1.0', '1024M', '0.10', '128M') from the retired Compose role.
+#
+# The `fs_` (flaresolverr-slot) memory limit is 2Gi rather than the 1024Mi FlareSolverr ran
+# under, because Byparr's pod mounts a MEMORY-BACKED emptyDir at /dev/shm (512Mi — see
+# deployment-flaresolverr.yaml.j2 for why the 64Mi default is not enough for the browser).
+# tmpfs pages are charged to the pod's memory cgroup, so under the old limit a full shm plus a
+# running browser would OOM-kill the container rather than fail the page it was rendering.
+# 2Gi = 512Mi shm ceiling + ~1Gi browser + headroom; it is a bound, not a measurement, and the
+# thing to measure after the first real challenge-solve is container_memory_working_set_bytes.
+# The request stays low: the pod is idle between indexer challenges, and requesting the tmpfs
+# ceiling would reserve node memory that is never touched.
 prowlarr_k8s_cpu_limit: "1"
 prowlarr_k8s_mem_limit: 1024Mi
 prowlarr_k8s_cpu_request: "100m"
 prowlarr_k8s_mem_request: 128Mi
 prowlarr_k8s_fs_cpu_limit: "2"
-prowlarr_k8s_fs_mem_limit: 1024Mi
+prowlarr_k8s_fs_mem_limit: 2Gi
 prowlarr_k8s_fs_cpu_request: "100m"
-prowlarr_k8s_fs_mem_request: 128Mi
+prowlarr_k8s_fs_mem_request: 256Mi
+# /dev/shm for the headless browser. Byparr's own README calls out raising shared memory to
+# 512 MB; Kubernetes gives a container 64Mi by default, and a browser that runs out of shm
+# fails at renderer-process launch rather than degrading.
+prowlarr_k8s_fs_shm_size: 512Mi
 
 # See roles/k8s/sonarr/defaults/main.yml for the full rationale: upstream defaults are
 # LogLevel=debug / Rotate=50 / SizeLimit=1MB, and the churn that produces is what inflates the
