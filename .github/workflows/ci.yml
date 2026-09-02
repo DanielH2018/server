@@ -85,8 +85,8 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1  # no floating major tag is published; pin the exact release
         with:
-          # Nine prek hooks shell out to `uv run`, which resolves the whole `dev` group
-          # (ansible-core, pytest, docker, flask, ruff, shellcheck-py) before the first one
+          # Most prek hooks shell out to `uv run`, which resolves the whole `dev` group
+          # (ansible-core, pytest, docker, flask, ruff, ty, shellcheck-py) before the first one
           # executes. Without this the download is repaid on every run. Keyed on uv.lock by
           # the action itself, so a lock change invalidates it exactly.
           enable-cache: true

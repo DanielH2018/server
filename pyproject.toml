@@ -173,7 +173,7 @@ python-version = "3.14"
 # it reports 189 unresolved-import diagnostics for first-party modules that resolve fine at
 # runtime. The list is the union of pytest's `pythonpath` above, `.claude/hooks`, and the `files/`
 # sibling of every `testpaths` entry — the same three sources the bootstrap draws on.
-# ENFORCED: ansible/tests/repo/test_ty_extra_paths_cover_pythonpath.py fails if a pythonpath entry
+# ENFORCED: ansible/tests/repo/test_ty_config_covers_the_repo.py fails if a pythonpath entry
 # is added here without a matching search path.
 extra-paths = [
   "ansible/tests",
@@ -211,10 +211,25 @@ extra-paths = [
 ]
 
 [tool.ty.src]
-# `ansible/collections` is the vendored third-party tree, excluded here for the same reason
-# ruff's `extend-exclude` skips it. `site/` and `.venv` are build output.
-include = ["scripts", ".claude", "ansible/roles", "ansible/tests", "ansible/filter_plugins", "evals"]
-exclude = ["ansible/collections", "site", ".venv"]
+# `ansible/collections` is the vendored third-party tree, excluded for the same reason ruff's
+# `extend-exclude` skips it. `site` is the mkdocs build output, and `.claude/worktrees` holds
+# other live sessions' whole checkouts of this same repo.
+#
+# The `include` list is required, not tidiness: dropping it does NOT fall back to the whole
+# project. Measured 2026-09-02 — with `include` absent, a deliberately broken file at the repo
+# root was not checked at all, while one under `scripts/` still was. A hand-kept list is the
+# enumeration failure `testpaths` has a guard for, so this one has a guard too.
+# ENFORCED: ansible/tests/repo/test_ty_config_covers_the_repo.py fails on a tracked .py
+# file outside these directories.
+include = [
+  "scripts",
+  ".claude",
+  "ansible/roles",
+  "ansible/tests",
+  "ansible/filter_plugins",
+  "evals",
+]
+exclude = ["ansible/collections", "site", ".claude/worktrees"]
 
 [tool.ty.rules]
 # Four rules are OFF, each with the count that was measured against the tree before the gate
