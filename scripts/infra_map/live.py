@@ -247,10 +247,16 @@ def parse_kubectl_nodes(payload: str) -> dict[str, dict]:
             c.get("type"): c.get("status")
             for c in item.get("status", {}).get("conditions", [])
         }
+        # A label key is `<group>/<name>`, so compare the group exactly rather than testing
+        # the key for a `<group>/` prefix. Identical for well-formed keys, and CodeQL reads a
+        # prefix test against a dotted string as URL-host sanitization (py/incomplete-url-
+        # substring-sanitization), which it is not.
         roles = sorted(
-            label.split("/", 1)[1]
-            for label in meta.get("labels", {})
-            if label.startswith("node-role.kubernetes.io/")
+            name
+            for group, sep, name in (
+                label.partition("/") for label in meta.get("labels", {})
+            )
+            if sep and group == "node-role.kubernetes.io"
         )
         addresses = {
             a.get("type"): a.get("address")
