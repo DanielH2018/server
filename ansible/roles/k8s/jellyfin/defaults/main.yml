@@ -80,10 +80,10 @@ jellyfin_k8s_published_url: "http://{{ jellyfin_k8s_lan_ip }}:8096"
 # 10.11.11.0, and Jellyfin's loader rejects a plugin whose targetAbi is NEWER than the server;
 # jellyfin_k8s_image above is 10.11.10. 4.1.0.0 declares 10.11.6.0 and loads. Raise this and
 # the image together, never the plugin alone.
-jellyfin_k8s_anisync_version: "4.1.0.0"
+jellyfin_k8s_anisync_version: "4.4.0.0"
 # URL and checksum both come from the plugin's published manifest.json. The MD5 was verified
 # against the actual download, not copied on trust.
-jellyfin_k8s_anisync_url: "https://github.com/vosmiic/jellyfin-ani-sync/releases/download/v4.1/10.11.6.-.ani-sync_4.1.0.0.zip"
+jellyfin_k8s_anisync_url: "https://github.com/vosmiic/jellyfin-ani-sync/releases/download/v4.4/10.11.6.-.ani-sync_4.4.0.0.zip"
 jellyfin_k8s_anisync_md5: "4d95c608192395b72efe57551a6f2ae0"
 # The installer runs on python, not the alpine:3.24 the sibling init container uses. See the
 # deployment template for why: the release is a .zip and /config is owned by uid {{ puid }}, so
