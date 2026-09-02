@@ -1,0 +1,21 @@
+# `input_datetime:` for configuration.yaml, pulled in by `input_datetime: !include input_datetime.yaml`.
+# Heartbeat helper — the `ha_heartbeat` automation (files/automations/system.yaml) stamps this with now()
+# every minute, so its last_changed is fresh ONLY while the automation scheduler is executing.
+# monitor-bridge polls it over the apps net (check_ha_heartbeat) and pushes a Kuma monitor down when
+# it goes stale — catching a wedged-but-running HA the container healthcheck (HTTP :8123) can't see.
+# Excluded from the recorder below (it changes every minute, zero history value). See the
+# 2026-06-19 spec in docs/superpowers/specs/.
+ha_heartbeat:
+  name: HA heartbeat
+  has_date: true
+  has_time: true
+  icon: mdi:heart-pulse
+# Timestamp of the last morning wake ramp START (real alarm OR the 06:00 fallback). Written by
+# bedroom_morning_reset (alarm branch) and bedroom_fallback_wake; the fallback reads it to know
+# a wake already happened today, so a lagging watch alarm that fires then advances can't
+# double-wake. Survives restarts (no restore: needed — a real datetime, not a boot-transient flag).
+bedroom_last_wake:
+  name: Bedroom last wake
+  has_date: true
+  has_time: true
+  icon: mdi:weather-sunset-up

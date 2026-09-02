@@ -38,6 +38,12 @@ home_assistant_root_files:
   - configuration.yaml
   - customize.yaml
   - ui-lovelace.yaml
+  - input_boolean.yaml
+  - input_select.yaml
+  - input_number.yaml
+  - input_datetime.yaml
+  - timer.yaml
+  - thresholds.yaml
   - scenes.yaml
   - templates.yaml
   - rest.yaml

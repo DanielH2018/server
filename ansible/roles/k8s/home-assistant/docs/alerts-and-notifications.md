@@ -4,7 +4,7 @@ Split out of the role's `CLAUDE.md` on 2026-08-15; the content is unchanged.
 The threshold-alert engine, the `bedroom_notify` routing script, and every automation
 that reports rather than actuates.
 
-- **Threshold alerts — unified engine (since 2026-06-18).** `configuration.yaml` defines sixteen
+- **Threshold alerts — unified engine (since 2026-06-18).** `thresholds.yaml` defines sixteen
   built-in `threshold` binary-sensors; the platform's native hysteresis (on past bound±hyst) IS the
   "alert once + recovery, no bounce" lifecycle. ALL feed ONE automation `bedroom_threshold_alert`
   (files/automations/alerts.yaml) in four **categories** — air quality (CO2/PM2.5/VOC/NOx, `upper`),
