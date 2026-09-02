@@ -320,6 +320,20 @@ def test_the_gate_is_off_by_default(gitops_deploy) -> None:
     )
 
 
+def test_blocking_is_off_by_default(gitops_deploy) -> None:
+    """The switch that decides whether a rejection stops prod must default to advisory.
+
+    Its sibling above covers STAGING_GATE. This one is the more consequential default: a host
+    that merged slice 4 without opting in must not start refusing deploys, and the entry
+    condition in docs/staging-phase-c.md is what the opt-in waits on. Asserted directly, so a
+    flipped default fails with a message about the default rather than about a missing merge.
+    """
+    assert gitops_deploy.STAGING_GATE_BLOCKING is False, (
+        "STAGING_GATE_BLOCKING no longer defaults to false — a staging rejection would start "
+        "blocking prod deploys on merge, which is a decision the entry condition gates."
+    )
+
+
 def merge_precedes_the_gate(fn: ast.FunctionDef) -> bool:
     """Does a `git merge --ff-only` run BEFORE consult_staging() in this function?
 

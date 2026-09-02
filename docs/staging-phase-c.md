@@ -400,9 +400,18 @@ block, never on entry — otherwise arming it before a quiet tick would spend it
 needed nothing, and the operator's actual push would meet the block with the hatch already gone.
 
 A staging rejection also **holds the SHA** (`hold_sha`), so the block does not re-fire every
-tick. The hold stops applying as soon as master moves past it, the same as any other hold:
-`skip_hold` matches only while `origin_head == hold_sha`. So a single false failure parks prod
-until the next push, not indefinitely.
+tick — which matters here, because re-consulting costs 600s + 120s of the tick's budget and of
+the shared tree lock.
+
+**The block and the marker clear on different schedules, and only the first is quick.** The block
+stops applying as soon as master moves past the held SHA: `skip_hold` matches only while
+`origin_head == hold_sha`. The marker does not clear then. `write_hold(None)` sits in two
+branches this host reaches — a successful k8s auto-deploy and a successful broad apply — so the
+**GitOps Deploy — Status** monitor, which pages on a non-empty `hold_sha` with no origin
+comparison, stays red until one of those lands. At the measured arrival rate for a gated tick
+that can be weeks, not the next push. An operator clearing a staging block should expect to
+delete the marker by hand, exactly as this role's CLAUDE.md already prescribes for a k8s
+rollback whose follow-up commits reach no service here.
 
 ### What is deliberately NOT in the condition
 
@@ -419,14 +428,31 @@ true-failure, 0 needs-triage. Read it from the script rather than by eye, and re
 immediately before flipping the switch: the hourly ratchet keeps appending, and one untriaged
 REJECTED drops the verdict back to NOT MET.
 
-**Part 2: NOT MET, 0 of 2.** `journalctl -u gitops-deploy` carries no `staging:` line at all —
-not a rejection, not a pass, not even the `nothing to gate` skip — since the gate was switched on
-2026-08-30. That is the one-a-month arrival rate showing up exactly as predicted, not a fault.
-The first sample is being forced deliberately by a freshrss digest bump (#857), which the spec
-authorises; node-exporter is already at its current release and ical-proxy's pin has no upstream
-to move, so freshrss is the only one of the three that can supply one. **The second sample needs
-a second tick**: a tick diffs `local..origin`, so two bumps merged before the first tick runs
-collapse into one promotion and one sample.
+**Part 2: NOT MET, 0 of 2 — and the first attempt to force a sample produced none.**
+`journalctl -u gitops-deploy` carries no `staging:` line at all since the gate was switched on
+2026-08-30: not a rejection, not a pass, not even the `nothing to gate` skip. That is the
+one-a-month arrival rate showing up exactly as predicted.
+
+#857 bumped freshrss's digest deliberately to force one, which the spec authorises — node-exporter
+is already at its current release and ical-proxy's pin has no upstream to move, so freshrss is
+the only one of the three that can supply a sample. **It did not produce one.** The pod ended up
+on the new digest, so the change shipped; the tick that ff-merged it did not promote it, and
+`land.sh` deployed it at step 5 as a deferral instead.
+
+**The reason generalises, and it is what a future attempt has to plan around.** A tick diffs
+`local..origin`, not one commit. Two other PRs merged during #857's CI wait, so the tick's range
+carried 49 files across three PRs — and `split_k8s_auto_deploy` promotes a service only when
+every path the push touched under its role is exactly its `defaults/main.yml`. A bump that shares
+a tick with unrelated work is not a bump as far as the promotion is concerned.
+
+So forcing a sample needs a **quiet tick**, not just a qualifying commit: merge the bump when no
+other PR is in flight, and do not let the CI wait absorb another session's landing. On a repo where
+several sessions land daily, that is the constraining condition — more than finding something to
+bump.
+
+**The second sample needs a second such tick.** `freshrss_k8s_cache_image` — `nginx:alpine`,
+pinned at `4a73073b`, and `db35bfc6` upstream as of 2026-09-02 — is the remaining candidate in
+that file.
 
 **Part 3: MET, 2026-09-02** — written above, and pinned by
 `ansible/roles/setup/gitops_deploy/tests/test_staging_blocking.py::test_no_verdict_never_blocks`.
