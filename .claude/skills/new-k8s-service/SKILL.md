@@ -27,7 +27,7 @@ never `config` — so a mount reads unambiguously in a diff or a `kubectl descri
 `ansible/tests/k8s/test_volume_names_descriptive.py`, which also catches the half-finished rename
 (a `volumeMounts` entry with no matching volume) that no schema check can see.
 
-`templates/` is for **manifests only**: `validate_k8s_manifests.py` renders every `*.j2` there
+`templates/` is for **manifests only**: `validate/k8s_manifests.py` renders every `*.j2` there
 and parses it as YAML. App config a manifest embeds via `lookup()` goes in `templates/config/`,
 static assets in `files/`. `Dockerfile*` is exempt and may sit in `templates/` directly.
 

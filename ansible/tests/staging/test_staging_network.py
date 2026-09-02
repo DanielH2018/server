@@ -7,7 +7,7 @@ file they live in: an assert on `ansible_processor_flags` (not an Ansible fact),
 verification whose become_user session predated the group it needed. ansible-lint on the
 production profile, prek and the whole suite passed over both.
 
-Nothing else in the repo validates libvirt XML -- validate_k8s_manifests.py covers k8s
+Nothing else in the repo validates libvirt XML -- validate/k8s_manifests.py covers k8s
 templates and validate-compose covers Compose. So this renders the template with the real
 defaults and parses the result, which is the only way a Jinja or XML mistake here fails
 anywhere but on daniel-server.

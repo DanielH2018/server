@@ -13,7 +13,7 @@ is exercised with the same shape it is deployed with (port, hostname, networks,
 use_authelia). Commented-out services are skipped automatically (they are not in
 the parsed list).
 
-Run directly (``python3 scripts/validate/validate_compose_templates.py``) or via the
+Run directly (``python3 scripts/validate/compose_templates.py``) or via the
 ``validate-compose-templates`` prek hook. Exits non-zero if any template fails to
 render or produces invalid YAML.
 """
@@ -356,7 +356,7 @@ def main() -> int:
         host_ctx = {**BASE_CONTEXT, **all_vars, **host_vars}
         host_ctx.pop("containers_list", None)
 
-        # k8s entries render manifests, not compose — validate_k8s_manifests.py owns them.
+        # k8s entries render manifests, not compose — validate/k8s_manifests.py owns them.
         # Excluding them here is what lets a *Docker* entry with no template be an error
         # rather than a silent [ok]; that blind spot let a broken glances role ship.
         docker = [ci for ci in containers if ci.get("platform") != "k8s"]

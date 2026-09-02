@@ -94,7 +94,7 @@ report() {
 
 # Armed state is rendered as a value and branched on at RUNTIME rather than with a Jinja
 # `{% raw %}{% if %}{% endraw %}` around an early exit: a template that renders two different
-# shapes makes half the script unreachable in whichever shape validate_shell_templates renders,
+# shapes makes half the script unreachable in whichever shape validate.shell_templates renders,
 # and shellcheck flags it (SC2317). Also no `| bool` — that validator renders with a plain Jinja
 # environment which has no Ansible filters.
 ARMED="{{ 1 if k3s_etcd_s3_armed else 0 }}"

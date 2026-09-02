@@ -15,7 +15,7 @@ had no container block at all — loki-homelab plus four of claude-otel's — an
 Nothing else enforces this: the cluster has no PodSecurity admission labels on any namespace,
 so an absent container securityContext is simply honoured.
 
-Rendering goes through validate_k8s_manifests' own machinery rather than a second stub set, so
+Rendering goes through validate.k8s_manifests' own machinery rather than a second stub set, so
 this cannot drift from what that validator considers a renderable manifest.
 """
 
@@ -48,7 +48,7 @@ _PRIVILEGED = {
 # Roles this guard's corpus does NOT contain, each with the reason it is out.
 #
 # THE BLIND SPOT THIS PINS (2026-08-23): rendered_docs() filters on
-# validate_k8s_manifests.SKIP_ROLES — a list maintained for a DIFFERENT purpose, namely what the
+# validate.k8s_manifests.SKIP_ROLES — a list maintained for a DIFFERENT purpose, namely what the
 # manifest validator can render standalone. Coverage of this security guard was therefore a side
 # effect of someone else's list. volume-claim is on it, and seed-pod.yaml.j2 runs `runAsUser: 0`
 # with no container securityContext at all, so every assertion in this file passed while that pod

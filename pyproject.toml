@@ -10,17 +10,17 @@ package = false                      # virtual project: manage deps/lock, do not
 dev = [                              # `dev` is uv's default group for `uv run`/`uv sync`
   "pytest>=8",
   "ansible-core>=2.18",             # test_toposort imports ansible.errors; also runs deploys via `uv run ansible-playbook`
-  "pyyaml",                         # validate_compose_templates
-  "jinja2>=3",                      # validate_compose_templates
+  "pyyaml",                         # validate.compose_templates
+  "jinja2>=3",                      # validate.compose_templates
   "requests",                       # community.docker modules (docker_container_info dependency check)
   "docker",                         # community.docker SDK-backed modules
   "flask",                          # ical-proxy app.py imports flask at module top (test_app.py)
   "ruff>=0.10",                     # first-party Python lint gate (prek hook); pinned via uv.lock
-  "shellcheck-py==0.11.0.1",        # validate_shell_templates; pinned to match prek.toml's shellcheck-py rev
+  "shellcheck-py==0.11.0.1",        # validate.shell_templates; pinned to match prek.toml's shellcheck-py rev
   "actionlint-py",                  # workflow lint gate (prek hook); ships the actionlint binary as a wheel
   "pytest-xdist",                   # -n auto in addopts below; pytest was 13.5s of CI's hook budget
   "kubernetes-validate==1.36.0",
-  "jsonschema",                     # validate_k8s_manifests checks CRDs against the vendored
+  "jsonschema",                     # validate.k8s_manifests checks CRDs against the vendored
   # schemas in scripts/validate/schemas/. Declared rather than
   # left transitive: it arrives today only as a dependency of
   # kubernetes-validate, so an import that works by accident
@@ -115,7 +115,6 @@ pythonpath = [
   "scripts/lib",
   "scripts/diagnostics",
   "scripts/secrets_mgmt",
-  "scripts/validate",
 ]
 
 [tool.ruff]
@@ -248,7 +247,6 @@ extra-paths = [
   "scripts/lib",
   "scripts/diagnostics",
   "scripts/secrets_mgmt",
-  "scripts/validate",
   ".claude/hooks",
   "ansible/roles/k8s/autofix-bridge/files",
   "ansible/roles/k8s/configarr/files",
@@ -340,7 +338,7 @@ unsupported-operator = "ignore"
 # commit that turned the rule on read as though it had caught a running defect. checks_b2.py
 # reaches `urllib.error.HTTPError` and imports only `urllib.parse`, but it also imports
 # `bridge_io`, which imports `urllib.error` — so in the real monitor-bridge process it always
-# resolved. validate_k8s_manifests.py gets `yaml.constructor` the same way, via `yaml.loader`.
+# resolved. validate/k8s_manifests.py gets `yaml.constructor` the same way, via `yaml.loader`.
 # The rule is on because that is a guarantee held by a sibling module's import list rather than
 # by anything local, and it breaks silently when the sibling's imports are tidied.
 possibly-missing-submodule = "error"

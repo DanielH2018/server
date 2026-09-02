@@ -85,7 +85,7 @@ def test_the_expr_parses_the_fields_the_annotation_renders():
 def test_the_datasource_uid_matches_the_provisioned_one():
     """A wrong uid renders the annotation against nothing, with no error.
 
-    Same silent shape as the stale-uid class validate_grafana_dashboards.py guards for panels —
+    Same silent shape as the stale-uid class validate/grafana_dashboards.py guards for panels —
     but an injected annotation never appears in the source JSON, so that validator cannot see it.
     """
     uid = _defaults()["claude_otel_loki_homelab_uid"]

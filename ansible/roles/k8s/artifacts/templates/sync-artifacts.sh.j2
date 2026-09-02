@@ -9,7 +9,7 @@ set -euo pipefail
 
 # Destination paths are written out per host below rather than through a shared variable:
 # the peer list can be empty, and an unused variable is a shellcheck failure in the rendered
-# script (validate_shell_templates.py renders with the loop unrolled to nothing).
+# script (validate/shell_templates.py renders with the loop unrolled to nothing).
 
 # One sync at a time. The cron interval is far longer than a run, but a slow or hung ssh must
 # not stack copies of rsync against the same destination.

@@ -294,12 +294,12 @@ def test_the_live_tree_classifies_the_names_we_already_know():
         "build_docs.py": "scheduled",
         "gen_infra_map.py": "scheduled",
         "secret_rotation.py": "scheduled",
-        "validate_k8s_manifests.py": "gate",
-        "validate_compose_templates.py": "gate",
-        "validate_shell_templates.py": "gate",
+        "k8s_manifests.py": "gate",
+        "compose_templates.py": "gate",
+        "shell_templates.py": "gate",
         "validate_ha_config.py": "gate",
-        "validate_config_templates.py": "gate",
-        "validate_grafana_dashboards.py": "gate",
+        "config_templates.py": "gate",
+        "grafana_dashboards.py": "gate",
         "deploy_tags.py": "gate",
         "deploy_staleness.py": "gate",
         "smoke_extract.py": "gate",
@@ -503,6 +503,44 @@ def test_no_two_scripts_share_a_basename():
         "two scripts share a basename, so they merge into one row on the reference page: "
         + "; ".join(clashes)
     )
+
+
+def test_a_test_beside_the_module_beats_one_that_merely_imports_it(tmp_path):
+    """Proximity decides when several tests import the same module.
+
+    `_indirect_test` returned whichever test sorted first. After the validators took the
+    package form, `test_probe_health.py` -- a caller's suite that imports
+    `validate.k8s_manifests` -- sorted ahead of the module's own tests and was credited as
+    its coverage, on a page whose whole job is to say where a script's coverage lives.
+    """
+    repo, scripts = _repo(tmp_path)
+    _write(scripts / "pkg" / "subject.py", '"""Summary."""\n')
+    _write(
+        scripts / "pkg" / "tests" / "test_subject_behaviour.py",
+        "from pkg import subject\n",
+    )
+    _write(
+        scripts / "other" / "tests" / "test_aaa_caller.py",
+        "from pkg import subject\n",
+    )
+    rows = {r["name"]: r for r in g.build_rows(scripts, repo)}
+    assert rows["subject.py"]["indirect_tests"] == "test_subject_behaviour.py"
+
+
+def test_a_distant_test_still_counts_when_nothing_sits_beside_the_module(tmp_path):
+    """The RED half: proximity is a preference, not a requirement.
+
+    Making it a requirement would report every module whose only coverage is its caller's
+    suite as untested -- the same understatement the preference exists to fix.
+    """
+    repo, scripts = _repo(tmp_path)
+    _write(scripts / "pkg" / "orphan.py", '"""Summary."""\n')
+    _write(
+        scripts / "other" / "tests" / "test_far_away.py",
+        "from pkg import orphan\n",
+    )
+    rows = {r["name"]: r for r in g.build_rows(scripts, repo)}
+    assert rows["orphan.py"]["indirect_tests"] == "test_far_away.py"
 
 
 def test_the_basename_guard_flags_a_real_clash():

@@ -180,7 +180,7 @@ def test_the_roles_outside_the_render_walk_are_accounted_for() -> None:
     assert excluded, "neither role ships a pod template any more; drop this guard"
     # This check reads raw template TEXT, so a pod spec that moved its resources behind
     # container_resources() would leave it comparing False to False — passing, with its whole
-    # point gone. Both roles are in validate_k8s_manifests.SKIP_ROLES and cannot be rendered
+    # point gone. Both roles are in validate.k8s_manifests.SKIP_ROLES and cannot be rendered
     # standalone, so grepping is the only option here and the coverage has to be asserted
     # rather than assumed. ansible/templates/container-resources.yml.j2 records that these two
     # roles are deliberately not converted.

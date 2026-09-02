@@ -6,7 +6,7 @@ Renders with stubbed vars, then lints with `bash -n` + shellcheck. The prek
 shebang-aware `types = ["shell"]`), but identify tags a `*.sh.j2` template as `{jinja, text}` —
 never `shell` — so a Jinja-templated script (e.g. an entrypoint or cron script) is invisible to
 both gates no matter how badly it's broken. This is the same render-then-lint pattern as
-`validate_compose_templates.py` / `validate_config_templates.py`, extended from YAML parsing to
+`validate/compose_templates.py` / `validate/config_templates.py`, extended from YAML parsing to
 shell linting: render structure with stubbed vars, then prove the OUTPUT is valid shell.
 
 Structural check only: SOPS secrets and other runtime vars are stubbed (StubUndefined, plus a
@@ -540,7 +540,7 @@ def main() -> int:
         print(
             "[FAIL] shellcheck not found on PATH. It ships via the `shellcheck-py` dev "
             "dependency (pyproject.toml [dependency-groups] dev) — run through `uv run "
-            "python scripts/validate/validate_shell_templates.py` (or any `uv run ...`) so uv's synced "
+            "python scripts/validate/shell_templates.py` (or any `uv run ...`) so uv's synced "
             "venv is on PATH. Failing closed rather than silently degrading to bash -n alone.",
             file=sys.stderr,
         )

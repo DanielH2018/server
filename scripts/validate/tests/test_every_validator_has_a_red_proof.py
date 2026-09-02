@@ -44,8 +44,27 @@ RED_PROOF = re.compile(
 )
 
 
+# Not a validator: it re-downloads the vendored CRD schemas that k8s_manifests.py checks
+# against. One named exclusion, so the set stays derived rather than listed — the glob was
+# `validate_*.py` until the modules dropped that prefix, at which point it matched nothing and
+# `test_the_scan_finds_the_validators` below is what said so.
+NOT_A_VALIDATOR = {"refresh_crd_schemas.py"}
+
+
 def validators() -> list[Path]:
-    return sorted(VALIDATE.glob("validate_*.py"))
+    return sorted(p for p in VALIDATE.glob("*.py") if p.name not in NOT_A_VALIDATOR)
+
+
+def suite_for(validator: Path) -> Path:
+    """The suite covering one validator.
+
+    `test_validate_<name>.py`, not `test_<name>.py`. The modules dropped their `validate_`
+    prefix once `validate/` became a package; the test files could not follow, because pytest
+    names modules by basename across the whole repo — there are no `__init__.py` files — and
+    `ansible/tests/k8s/test_k8s_manifests.py` already holds the name `k8s_manifests.py` would
+    want. Renaming four of five and leaving one is worse than keeping the convention.
+    """
+    return TESTS / f"test_validate_{validator.name}"
 
 
 def test_the_scan_finds_the_validators():
@@ -55,7 +74,7 @@ def test_the_scan_finds_the_validators():
 
 @pytest.mark.parametrize("validator", validators(), ids=lambda p: p.stem)
 def test_every_validator_has_a_test_module(validator: Path):
-    assert (TESTS / f"test_{validator.name}").is_file(), (
+    assert suite_for(validator).is_file(), (
         f"{validator.name} has no test module. A validator with no test is a check nobody has "
         f"seen fail."
     )
@@ -63,7 +82,7 @@ def test_every_validator_has_a_test_module(validator: Path):
 
 @pytest.mark.parametrize("validator", validators(), ids=lambda p: p.stem)
 def test_every_validator_has_a_proof_it_can_go_red(validator: Path):
-    tests = TESTS / f"test_{validator.name}"
+    tests = suite_for(validator)
     if not tests.is_file():
         pytest.skip("covered by test_every_validator_has_a_test_module")
     assert RED_PROOF.search(tests.read_text(errors="replace")), (

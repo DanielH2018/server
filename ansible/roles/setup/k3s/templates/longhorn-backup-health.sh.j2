@@ -73,7 +73,7 @@ WEEKLY_MAX_AGE_S=$(( {{ k3s_longhorn_weekly_backup_max_age_hours }} * 3600 ))
 # When each tier's job is scheduled, as `H:MM` — used to work out whether a young PVC has yet
 # had a run it could have been backed up BY (see first_run_after). Derived from the same vars
 # that render the cron and the RecurringJob, so the grace cannot drift from the schedule.
-# Split in shell rather than Jinja: these are ROLE defaults, and validate_shell_templates.py
+# Split in shell rather than Jinja: these are ROLE defaults, and validate/shell_templates.py
 # renders with group_vars only, so a `.split()` on the stub raises instead of rendering.
 DAILY_RUN_HHMM=$(awk '{ print $2 ":" $1 }' <<<"{{ k3s_longhorn_backup_cron }}")
 WEEKLY_RUN_HHMM=$(awk '{ print $2 ":" $1 }' <<<"{{ k3s_longhorn_weekly_backup_minute_hour }}")

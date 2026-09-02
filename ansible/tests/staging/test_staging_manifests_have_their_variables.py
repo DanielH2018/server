@@ -6,7 +6,7 @@ credential that is simply not there. Ansible does not fail on that — an undefi
 value templates as an empty string or the literal `AnsibleUndefined`, and the Secret applies.
 The workload then fails later, for a reason several steps removed from the missing variable.
 
-Nothing else catches it. `validate_k8s_manifests` renders under daniel-box's variables, so it
+Nothing else catches it. `validate.k8s_manifests` renders under daniel-box's variables, so it
 never sees staging's overrides at all. `--dry-run` refuses `traefik` (`k8s_dry_run_unsupported`)
 and would not check variable resolution anyway. The pre-deploy census this replaces was run by
 hand on 2026-08-28 and is exactly the kind of check that stops being run.
@@ -32,7 +32,7 @@ from _helpers import REPO
 _REPO = REPO
 sys.path.insert(0, str(_REPO / "scripts"))
 
-from validate_k8s_manifests import (  # noqa: E402 — needs the path insert above
+from validate.k8s_manifests import (  # noqa: E402 — needs the path insert above
     ALL_VARS,
     ANSIBLE,
     BASE_CONTEXT,
@@ -129,7 +129,7 @@ def _render(role: str, template: str, extra: dict) -> str:
     base = _base_context()
     entry = next(c for c in base["containers_list"] if c["name"] == role)
     # Role defaults FIRST: Ansible ranks host_vars above them, and a staging host exists to
-    # override them. validate_k8s_manifests' own order is the other way round; that is now held
+    # override them. validate.k8s_manifests' own order is the other way round; that is now held
     # harmless by `colliding_default_keys`, which fails the validator if any role default ever
     # shares a key with the inventory, rather than by nobody having done it yet.
     ctx = {**role_defaults(role, base), **base, **extra, "container_item": entry}

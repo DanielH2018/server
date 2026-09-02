@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Re-download the vendored CRD JSON schemas that validate_k8s_manifests.py checks against.
+"""Re-download the vendored CRD JSON schemas that validate/k8s_manifests.py checks against.
 
-WHY THESE ARE VENDORED RATHER THAN FETCHED. `validate_k8s_manifests.py` runs as a prek hook, on
+WHY THESE ARE VENDORED RATHER THAN FETCHED. `validate/k8s_manifests.py` runs as a prek hook, on
 every commit that touches a manifest template. A hook that resolves DNS is a hook that fails
 when DNS is down — and this repo *is* the DNS: Pi-hole, unbound and the host resolver all live
 here, and a session fixing a broken resolver must still be able to commit. So the schemas are a

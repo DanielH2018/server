@@ -37,12 +37,11 @@ from pathlib import Path
 import yaml
 from jinja2 import Environment, StrictUndefined
 
+# `scripts/` on sys.path is what resolves `validate.k8s_manifests` below: a directly-invoked
+# script gets only its own directory, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from lib.repo_paths import SCRIPTS
 
-sys.path.insert(0, str(SCRIPTS / "validate"))
-
-from validate_k8s_manifests import (
+from validate.k8s_manifests import (
     ALL_VARS,
     ANSIBLE,
     BASE_CONTEXT,

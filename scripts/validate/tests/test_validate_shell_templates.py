@@ -1,4 +1,4 @@
-"""Tests for scripts/validate/validate_shell_templates.py — the render-then-lint guard for Jinja-templated
+"""Tests for scripts/validate/shell_templates.py — the render-then-lint guard for Jinja-templated
 shell scripts (*.sh.j2) that the prek bash-syntax-check / shellcheck hooks can't see (identify
 tags a `.sh.j2` as {jinja, text}, never `shell`).
 """
@@ -6,7 +6,7 @@ tags a `.sh.j2` as {jinja, text}, never `shell`).
 import shutil
 
 import pytest
-import validate_shell_templates as v
+from validate import shell_templates as v
 from lib.render_guard import ALL_VARS, BASE_CONTEXT, load_yaml
 
 BACKUP_HEALTH = v.ROLES / "setup" / "k3s" / "templates" / "longhorn-backup-health.sh.j2"
@@ -139,8 +139,8 @@ def test_shellcheck_batch_blames_every_file_when_it_cannot_attribute(tmp_path):
 def test_all_real_shell_templates_render_and_lint_clean():
     # The regression guard: every *.sh.j2 under ansible/roles/ must render with stubbed vars to
     # a script that passes both `bash -n` and shellcheck. Mirrors the sibling validators'
-    # real-render tests (validate_compose_templates.test_real_templates_render_clean,
-    # validate_config_templates.test_all_real_config_templates_render_to_valid_yaml).
+    # real-render tests (validate.compose_templates.test_real_templates_render_clean,
+    # validate.config_templates.test_all_real_config_templates_render_to_valid_yaml).
     assert v.main() == 0
 
 

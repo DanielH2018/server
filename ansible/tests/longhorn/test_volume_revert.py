@@ -117,7 +117,7 @@ def test_the_role_declares_its_autodeploy_stance() -> None:
 
 
 def test_the_validator_skips_a_role_with_no_manifests() -> None:
-    """`validate_k8s_manifests.py` renders every role's templates.
+    """`validate/k8s_manifests.py` renders every role's templates.
 
     This role has none, so it must be in SKIP_ROLES or the validator fails on an absent templates
     directory.

@@ -31,14 +31,14 @@ flagging** (silence ≠ unhandled — most "gaps" already have a guard).
   (compose tags, prek.toml, galaxy collections, the CI prek pin). **Watchtower is retired** — image
   updates are Renovate-PR-driven only, so a `:latest` tag no longer auto-updates and the residual
   `watchtower.enable=false` labels are dead metadata. A compose CI guard
-  (`scripts/validate/validate_compose_templates.py`) enforces cap_drop + watchtower update-policy on services.
+  (`scripts/validate/compose_templates.py`) enforces cap_drop + watchtower update-policy on services.
 - **Secret rotation:** `scripts/secrets_mgmt/secret_rotation.py` (sync/audit/rotate) + `ansible/secret_rotation.yml`
   (plaintext registry: names/tiers/dates, no values) + a daily Kuma push.
 
 ## Tools (read-only)
 - `Read`/`Grep` the workflow, `prek.toml`, `renovate.json`, the gitops_deploy files + CLAUDE.md.
 - `uv run pytest <suite>` (read-only test run), `uv run python scripts/secrets_mgmt/secret_rotation.py audit`,
-  `uv run python scripts/validate/validate_compose_templates.py` — confirm the live state matches the comments.
+  `uv run python scripts/validate/compose_templates.py` — confirm the live state matches the comments.
   Never run a command that writes state (no `rotate`/`sync`, no deploy, no commit, no push).
 
 ## Method

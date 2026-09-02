@@ -2,7 +2,7 @@
 """Every inventory entry must resolve to a role that can actually deploy it.
 
 An entry naming a role that was moved, renamed or retired deploys nothing, and
-until now nothing said so: validate_compose_templates.py returned "nothing to
+until now nothing said so: validate/compose_templates.py returned "nothing to
 validate" for a missing template, which prints [ok]. That is how a broken
 glances role shipped. The validator now errors on it; this test is the durable
 half, checking the inventory against the role trees directly.

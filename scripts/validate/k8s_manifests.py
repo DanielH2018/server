@@ -2,7 +2,7 @@
 """Render every k8s manifest template with stubbed vars and assert each parses as valid YAML.
 
 The Docker side has had this guard since the compose templates existed
-(``validate_compose_templates.py``); the k8s manifests introduced in slice 1 of the k3s
+(``validate/compose_templates.py``); the k8s manifests introduced in slice 1 of the k3s
 migration need the same one for the same reason. A Jinja indentation bug is exactly the class
 ``check-yaml`` and ``ansible-lint`` miss — neither renders ``.j2`` — so it passes CI and first
 appears as ``error validating data`` partway through a ``kubectl apply``, with some objects
@@ -135,7 +135,7 @@ def is_manifest_template(path: Path) -> bool:
     """True if this `.j2` under a role's templates/ is a manifest this script should parse.
 
     A role may also ship a helper script (claude-otel's telemetry-health.sh.j2) or a Dockerfile
-    for image-builder (homelab-mcp). Shell is rendered and linted by validate_shell_templates.py;
+    for image-builder (homelab-mcp). Shell is rendered and linted by validate/shell_templates.py;
     a Dockerfile is consumed by buildctl. Parsing either here reports a comment line as malformed
     YAML.
 
@@ -447,7 +447,7 @@ def make_lookup(ctx: dict):
             env.filters["to_json"] = _to_json
             return env.get_template(path.name).render(ctx).rstrip("\n")
         raise ValueError(
-            "validate_k8s_manifests implements lookup('file') and lookup('template'), "
+            "validate.k8s_manifests implements lookup('file') and lookup('template'), "
             f"got {kind!r}"
         )
 
@@ -803,7 +803,7 @@ def main() -> int:
         # Not every .j2 in a k8s role's templates/ is a manifest — a role may also ship a
         # helper script (claude-otel's telemetry-health.sh.j2) or a Dockerfile for
         # image-builder (homelab-mcp). Shell is rendered and linted by
-        # validate_shell_templates.py; a Dockerfile is consumed by buildctl. Parsing
+        # validate/shell_templates.py; a Dockerfile is consumed by buildctl. Parsing
         # either here reports a comment line as malformed YAML.
         #
         # The glob is deliberately non-recursive, which is what makes templates/config/

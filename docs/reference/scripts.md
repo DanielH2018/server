@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/gen_reference_scripts.py
-generated_at: 2026-09-02 14:25 UTC
-generated_sha: 1f998308
+generated_at: 2026-09-02 16:07 UTC
+generated_sha: fc47f0e3
 ---
 
 !!! warning "Generated file — do not edit"
@@ -20,7 +20,7 @@ The sections below split them by **how each one is run**, which is derived from 
     Whether a script is safe to run. The summary is whatever its author wrote, and nothing here judges blast radius. For the ones that run unattended, and which of those change state, see [Scheduled jobs](crons.md).
 
 
-**0 of the 34 scripts that run unattended have no test; 9 of all 87 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
+**0 of the 34 scripts that run unattended have no test; 8 of all 87 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
 
 !!! note "Where the Tests column looks"
     First for a `scripts/test_<name>.py`. Failing that, for any test in `scripts/` or `ansible/tests/` that names the script — `gitops_tick.sh` has five, in `test_gitops_manual_trigger.py`, and the naming convention alone called it untested. Those show as *(indirect)*, which means a test exercises it, not that the test is about it.
@@ -52,27 +52,27 @@ The sections below split them by **how each one is run**, which is derived from 
 | Script | What it does | Reached by | Tests |
 |---|---|---|---|
 | `scripts/deploy_tools/await_ci.py` | Wait for master CI to reach a verdict on one SHA. | land.sh (every commit, CI run, deploy or Claude session runs it) | `test_await_ci.py` |
+| `scripts/validate/compose_templates.py` | Render every configured container's docker-compose.yml.j2 and assert it parses as YAML. | prek hook (every commit) | `test_validate_compose_templates.py` *(indirect)* |
+| `scripts/validate/config_templates.py` | Render the high-value NON-compose YAML config templates (monitoring) and assert they parse. | prek hook (every commit) | `test_validate_config_templates.py` *(indirect)* |
 | `scripts/deploy.sh` | Run an interactive Ansible deploy under the same lock the automated deployers take. | land.sh (every commit, CI run, deploy or Claude session runs it) | `test_deploy_annotations.py` *(indirect)* |
 | `scripts/deploy_tools/deploy_detach_notify.py` | Post-deploy notifier for `scripts/deploy.sh --detach`. | every deploy (deploy.sh) | `test_deploy_detach_notify.py` |
 | `scripts/deploy_tools/deploy_staleness.py` | Refuse a deploy from a git tree that is behind origin/master. | every deploy (deploy.sh) | `test_deploy_staleness.py` |
 | `scripts/deploy_tools/deploy_tags.py` | Validate the --tags a deploy was given, before Ansible silently accepts them. | every deploy (deploy.sh) | `test_deploy_tags.py` |
 | `scripts/deploy_tools/fact_cache_guard.py` | Clear the shared Ansible fact cache when it pins another worktree's interpreter. | every deploy (deploy.sh) | `test_fact_cache_guard.py` |
 | `scripts/deploy_tools/gitops_tick.sh` | trigger a GitOps deploy tick by hand and report what it did. | land.sh (every commit, CI run, deploy or Claude session runs it) | `test_gitops_manual_trigger.py` *(indirect)* |
+| `scripts/validate/grafana_dashboards.py` | Validate that every provisioned Grafana dashboard's datasource uid resolves to a real one. | prek hook (every commit) | `test_validate_grafana_dashboards.py` *(indirect)* |
 | `scripts/grafana/inject_dashboard_annotations.py` | Add the deploy-annotation query to every provisioned Grafana dashboard, from one place. | deploy: ansible/roles/k8s/claude-otel/tasks/dashboards.yml | `test_inject_dashboard_annotations.py` |
+| `scripts/validate/k8s_manifests.py` | Render every k8s manifest template with stubbed vars and assert each parses as valid YAML. | prek hook (every commit) | `test_validate_k8s_manifests.py` *(indirect)* |
 | `scripts/deploy_tools/land.sh` | follow a merged PR through to a verified deploy, in one invocation. | Claude hook: nudge-land-sh.py | `test_land_stale_retry_waits_on_tip.py` *(indirect)* |
 | `scripts/deploy_tools/land_tags.py` | Derive deploy tags from a merged PR's own file list. | land.sh (every commit, CI run, deploy or Claude session runs it) | `test_land_tags.py` |
 | `scripts/diagnostics/probe.py` | Read-only homelab diagnostics. | Claude hook: session-health.py | `test_probe.py` |
 | `scripts/deploy_tools/prune_releases.py` | Remove old host-script release directories, never the one in use. | deploy: ansible/roles/setup/common/tasks/release_bin.yml | `test_prune_releases.py` |
 | `scripts/dev/prune_worktrees.py` | Report and remove Claude session worktrees under .claude/worktrees/ that are done with. | Claude hook: session-health.py | `test_prune_worktrees.py` |
+| `scripts/validate/shell_templates.py` | Render every Jinja-templated shell script under ansible/roles/ and lint the output. | prek hook (every commit) | `test_validate_shell_templates.py` *(indirect)* |
 | `scripts/dev/smoke_extract.py` | Extract newly-added container image references from a unified git diff. | CI: image-smoke.yml | `test_smoke_extract.py` |
 | `scripts/diagnostics/staging_egress_probe.py` | Acceptance gate for the staging guest's egress fence. | deploy: ansible/roles/setup/hypervisor/templates/staging-nwfilter.xml.j2 | `test_staging_egress_fence.py` *(indirect)* |
 | `scripts/deploy_tools/staging_gate_remote.sh` | The daniel-server half of the staging gate. Two arguments: the SHA under test, and the | deploy: ansible/roles/setup/hypervisor/tasks/install.yml | `test_staging_gate_paths_agree.py` *(indirect)* |
-| `scripts/validate/validate_compose_templates.py` | Render every configured container's docker-compose.yml.j2 and assert it parses as YAML. | prek hook (every commit) | `test_validate_compose_templates.py` |
-| `scripts/validate/validate_config_templates.py` | Render the high-value NON-compose YAML config templates (monitoring) and assert they parse. | prek hook (every commit) | `test_validate_config_templates.py` |
-| `scripts/validate/validate_grafana_dashboards.py` | Validate that every provisioned Grafana dashboard's datasource uid resolves to a real one. | prek hook (every commit) | `test_validate_grafana_dashboards.py` |
 | `scripts/home_assistant/validate_ha_config.py` | Lightweight structural validation of the Home Assistant config — no Docker, no HA dependency. | prek hook (every commit) | `test_validate_ha_config.py` |
-| `scripts/validate/validate_k8s_manifests.py` | Render every k8s manifest template with stubbed vars and assert each parses as valid YAML. | prek hook (every commit) | `test_validate_k8s_manifests.py` |
-| `scripts/validate/validate_shell_templates.py` | Render every Jinja-templated shell script under ansible/roles/ and lint the output. | prek hook (every commit) | `test_validate_shell_templates.py` |
 
 ## Imported, never run on their own
 
@@ -106,8 +106,8 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/diagnostics/probe_releases.py` | `probe.py releases` -- which commit produced the manifests each k8s service is running. | imported by probe.py | `test_probe_releases.py` |
 | `scripts/diagnostics/probe_vip_placement.py` | `probe.py vip-placement` — does every ETP=Local VIP have a Ready endpoint on an announcing node? | imported by probe.py | `test_probe_vip_placement.py` |
 | `scripts/infra_map/render.py` | Rendering: turn the reconciled model into one self-contained HTML page. | imported by gen_infra_map.py | `test_infra_map_render.py` *(indirect)* |
-| `scripts/lib/render_guard.py` | Shared helpers for the render-guard scripts and other Ansible-inventory readers. | imported by deploy_tags.py, gen_reference_hosts.py, gen_reference_networking.py, service_catalog.py, validate_compose_templates.py, validate_config_templates.py, validate_k8s_manifests.py, validate_shell_templates.py | `test_render_guard.py` |
-| `scripts/lib/repo_paths.py` | The repo path anchors a script under ``scripts/`` reads the Ansible tree through. | imported by await_ci.py, build_docs.py, constants.py, deploy_detach_notify.py, deploy_tags.py, docs_provenance.py, fact_cache_guard.py, gen_doc_fragments.py, gen_hosts_block.py, gen_reference_crons.py, gen_reference_freshness.py, gen_reference_hosts.py, gen_reference_networking.py, gen_reference_scripts.py, gen_reference_secrets.py, invocation_sites.py, k8s_autodeploy_counts.py, land_tags.py, memory_survey.py, probe_health.py, probe_releases.py, render_guard.py, route_facts.py, secret_bearing_host_paths.py, staging_egress_probe.py, staging_expectations.py, staging_gate.py, validate_grafana_dashboards.py, validate_ha_config.py | `test_render_guard.py` *(indirect)* |
+| `scripts/lib/render_guard.py` | Shared helpers for the render-guard scripts and other Ansible-inventory readers. | imported by compose_templates.py, config_templates.py, deploy_tags.py, gen_reference_hosts.py, gen_reference_networking.py, k8s_manifests.py, service_catalog.py, shell_templates.py | `test_render_guard.py` |
+| `scripts/lib/repo_paths.py` | The repo path anchors a script under ``scripts/`` reads the Ansible tree through. | imported by await_ci.py, build_docs.py, constants.py, deploy_detach_notify.py, deploy_tags.py, docs_provenance.py, fact_cache_guard.py, gen_doc_fragments.py, gen_hosts_block.py, gen_reference_crons.py, gen_reference_freshness.py, gen_reference_hosts.py, gen_reference_networking.py, gen_reference_scripts.py, gen_reference_secrets.py, grafana_dashboards.py, invocation_sites.py, k8s_autodeploy_counts.py, land_tags.py, memory_survey.py, probe_health.py, probe_releases.py, render_guard.py, route_facts.py, secret_bearing_host_paths.py, staging_egress_probe.py, staging_gate.py, validate_ha_config.py | `test_render_guard.py` *(indirect)* |
 | `scripts/docs/route_facts.py` | Shared route facts for the reference generators. | imported by gen_reference_networking.py, service_catalog.py | `test_route_facts.py` |
 | `scripts/deploy_tools/staging_gate.py` | Ask the staging cluster whether it accepts a commit, from daniel-box. | imported by backfill_staging_gate.py | `test_staging_gate.py` |
 
@@ -130,7 +130,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/dev/memory_survey.py` | Survey the project's Claude memory store and report what it costs and what nothing reads. | no automated caller in the tree | `test_memory_survey.py` |
 | `scripts/availability_bots/osteria-francescana-bot.py` | Watch Osteria Francescana (via CoverManager) for a table on the target dates. | no automated caller in the tree | `test_availability_bots.py` *(indirect)* |
 | `scripts/diagnostics/postflight.py` | Verify the post-deploy setup that Ansible can't do (ansible/README.md §9). | playbook: ansible/bring-up.sh | `test_postflight.py` |
-| `scripts/validate/refresh_crd_schemas.py` | Re-download the vendored CRD JSON schemas that validate_k8s_manifests.py checks against. | no automated caller in the tree | — |
+| `scripts/validate/refresh_crd_schemas.py` | Re-download the vendored CRD JSON schemas that validate/k8s_manifests.py checks against. | no automated caller in the tree | `test_validate_k8s_manifests.py` *(indirect)* |
 | `scripts/lib/release_bin_groups.py` | Resolve which source files a `release_bin.yml` group deploys. | no automated caller in the tree | `test_release_bin_groups_have_no_secrets.py` *(indirect)* |
 | `scripts/dev/run_as_cron.sh` | run a command in the environment cron actually gives it. | no automated caller in the tree | `test_run_as_cron.py` |
 | `scripts/secrets_mgmt/secret_bearing_host_paths.py` | Deployed host paths whose content embeds a credential, derived from the tree. | no automated caller in the tree | — |

@@ -440,11 +440,19 @@ def _indirect_test(name: str, test_files: list[Path], scripts: Path) -> tuple[st
         # import. Requiring a bare `import` here reported two genuinely tested bots as
         # untested, which is the page telling a story about coverage that isn't true.
         import_re = re.compile(rf"""['"]{re.escape(name)}['"]""")
-    for path in test_files:
+
+    # A test living beside the module wins over one that merely imports it from elsewhere.
+    # Several tests may import the same module, and taking whichever sorted first credited
+    # `validate/k8s_manifests.py` to `test_probe_health.py` — a caller's test, naming the
+    # wrong suite on a page whose whole job is to say where a script's coverage lives.
+    module = _by_name(scripts).get(name)
+    home = module.parent if module else None
+    ordered = sorted(test_files, key=lambda p: home is None or home not in p.parents)
+    for path in ordered:
         text = _read(path)
         if import_re and import_re.search(text):
             return path.name, "import"
-    for path in test_files:
+    for path in ordered:
         if path_re.search(_read(path)) and not _is_another_scripts_test(path, scripts):
             return path.name, "path"
     return "", ""

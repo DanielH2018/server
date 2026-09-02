@@ -43,7 +43,7 @@ Keep the Ansible-rendered, pull-based deployer. Argo CD is rejected. Flux is eva
 deferred, not adopted.
 
 The one new capability the Kustomize port would have bought — schema-checking the rendered
-manifests — was obtained without it: `scripts/validate/validate_k8s_manifests.py` learned to
+manifests — was obtained without it: `scripts/validate/k8s_manifests.py` learned to
 schema-check the documents it already rendered, wired into the prek hook. That is what turned
 the port from a recommendation into an option.
 

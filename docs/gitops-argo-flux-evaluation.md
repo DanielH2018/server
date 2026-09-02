@@ -1,7 +1,7 @@
 # Argo CD / Flux evaluation for this homelab
 
 > **Status, 2026-08-21.** §8's recommendation is done: PR #303 taught
-> `scripts/validate/validate_k8s_manifests.py` to schema-check the docs it already renders, and wired it
+> `scripts/validate/k8s_manifests.py` to schema-check the docs it already renders, and wired it
 > into the prek hook. That was the one *new capability* the Kustomize port would have bought, so
 > the port is now purely optional — which is what §8 concluded it should become. Everything else
 > here is an evaluation, not a plan of record: no Flux controller is installed and none is
@@ -194,7 +194,7 @@ points at the repo directly and the deploy branch stops existing for that role.
 
 | Gain | Detail |
 |---|---|
-| **Offline schema validation** | There is none today. `validate_k8s_manifests.py` renders and parses YAML — it never checks a field name against a schema. `--dry-run` does, but it needs a live API server and refuses ~17 services. Native YAML means `kubeconform` in CI over every ported role, on a PR, with no cluster. This is a new capability, not a refactor. |
+| **Offline schema validation** | There is none today. `validate/k8s_manifests.py` renders and parses YAML — it never checks a field name against a schema. `--dry-run` does, but it needs a live API server and refuses ~17 services. Native YAML means `kubeconform` in CI over every ported role, on a PR, with no cluster. This is a new capability, not a refactor. |
 | **Renovate's built-in `kustomize` manager** | Image pins are found today by a custom regex on `^ansible/roles/k8s/[^/]+/defaults/main\.yml$`. A `kustomization.yaml` `images:` block is read by the manager Renovate ships and tests. One less bespoke regex to keep correct. |
 | **`k8s_namespace` disappears** | 321 of 1,925 substitutions across all manifests are `k8s_namespace`. Kustomize's `namespace:` field sets it for every resource. A clean total win — one sixth of the templating is this one variable. |
 | **`tz` / `puid` / `pgid` dedupe** | 119 more substitutions, identical in every role. One shared Kustomize component patching the env block replaces all of them, and it is genuinely better than today: a component is applied by reference, whereas the Jinja is copied per template. |
@@ -235,7 +235,7 @@ eleven generator roles while Flux reads the other forty-odd from the repo direct
 
 ### The strongest win is separable — and that decides it
 
-`scripts/validate/validate_k8s_manifests.py` already renders every template with daniel-box's real
+`scripts/validate/k8s_manifests.py` already renders every template with daniel-box's real
 `containers_list` and parses the result (`docs = list(yaml.load_all(rendered, ...))`, line 230).
 The rendered YAML is in hand, inside an existing loop. Adding schema validation there — a
 kubeconform binary or an offline schema library — buys win #1 on all 52 roles now, with no
@@ -250,6 +250,6 @@ manifests to be rewritten.
 
 ### Sequencing
 
-Slice 7 is now one task, not a migration: teach `validate_k8s_manifests.py` to schema-check the
+Slice 7 is now one task, not a migration: teach `validate/k8s_manifests.py` to schema-check the
 docs it already renders, and wire it into the existing prek hook. The Kustomize port stays
 available and stays optional; nothing downstream depends on it.

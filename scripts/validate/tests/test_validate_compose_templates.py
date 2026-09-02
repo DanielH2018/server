@@ -12,7 +12,7 @@ flagged.
 Run: uv run pytest scripts/validate/tests/test_validate_compose_templates.py
 """
 
-import validate_compose_templates as vct
+from validate import compose_templates as vct
 
 
 def _docs(spec):

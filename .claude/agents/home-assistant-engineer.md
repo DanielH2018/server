@@ -35,7 +35,7 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
 ## Where things live (the mental model)
 
 - **`templates/` (role root) — k8s manifests ONLY.** `configmap.yaml.j2`, `deployment.yaml.j2`,
-  `service.yaml.j2`, `ingressroute.yaml.j2`, `secret.yaml.j2`. `validate_k8s_manifests.py` renders
+  `service.yaml.j2`, `ingressroute.yaml.j2`, `secret.yaml.j2`. `validate/k8s_manifests.py` renders
   and YAML-parses every `*.j2` it finds here, so HA config must never land in this directory.
 - **`templates/config/` — the HA config files, shipped VERBATIM.** `configuration.yaml.j2`,
   `customize.yaml.j2`, `ui-lovelace.yaml.j2`. Despite the `.j2` suffix (vestigial), these are

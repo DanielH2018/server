@@ -22,7 +22,7 @@ _MAIN = _ROLE / "tasks/main.yml"
 
 _DEFAULTS = _ROLE / "defaults/main.yml"
 
-_VALIDATOR = _REPO / "scripts/validate/validate_k8s_manifests.py"
+_VALIDATOR = _REPO / "scripts/validate/k8s_manifests.py"
 
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
 

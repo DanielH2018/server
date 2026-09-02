@@ -1,5 +1,5 @@
 {#
-  artifact_server.py lives in files/, not templates/: validate_k8s_manifests.py renders every
+  artifact_server.py lives in files/, not templates/: validate/k8s_manifests.py renders every
   *.j2 under templates/ and parses it as YAML, and a Python script is not a manifest. Carrying
   it via lookup('file') also means this rendered ConfigMap changes whenever the script does, so
   the central rollout-restart in roles/k8s/manifests picks the change up — no checksum/ pod
