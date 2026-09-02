@@ -674,12 +674,13 @@ LOG_ERROR_MAX = float(_env("LOG_ERROR_MAX", "20"))
 # this list short and say WHY in the inventory — a growing ignore list is the arm decaying.
 LOG_ERROR_IGNORE = _env("LOG_ERROR_IGNORE", "")
 
-# Log-shipper dropped-entries watchdog. Prometheus scrapes both shippers' own metrics: the
-# cluster's Alloy DaemonSet (job=alloy, port 12345) exposes loki_write_dropped_entries_total and
-# daniel-pi's Promtail (job=promtail-pi) still exposes promtail_dropped_entries_total, so the
-# selector matches BOTH names by __name__ — naming one reads the other estate as "0 dropped"
-# forever, the fail-open shape of a selector on a label nothing emits. Drop the promtail name
-# when the Pi migrates. Loki Log Ingestion only catches TOTAL silence; this surfaces PARTIAL
+# Log-shipper dropped-entries watchdog. Prometheus scrapes both shippers' own metrics — the
+# cluster's Alloy DaemonSet (job=alloy) and daniel-pi's Alloy container (job=alloy-pi), both
+# on 12345 — and both expose loki_write_dropped_entries_total. The name is still matched by
+# __name__ regex so a second shipper with a different counter can join without a code change;
+# a selector naming only one estate's counter reads the other as "0 dropped" forever, the
+# fail-open shape of a selector on a label nothing emits (the Pi ran Promtail with its own
+# counter name until 2026-09-02). Loki Log Ingestion only catches TOTAL silence; this surfaces PARTIAL
 # loss — entries a shipper gave up on. NO reason filter (was reason="ingester_error" only):
 # every reason is a real drop, and Loki's own configured limits reject under DIFFERENT reasons
 # the ingester_error-only selector missed entirely — rate_limited (per_stream_rate_limit /
@@ -700,7 +701,7 @@ LOG_ERROR_IGNORE = _env("LOG_ERROR_IGNORE", "")
 # checks its labels against the Loki vocabulary — which `__name__` is not.
 SHIPPER_DROPPED_METRICS = _env(
     "SHIPPER_DROPPED_METRICS",
-    "loki_write_dropped_entries_total|promtail_dropped_entries_total",
+    "loki_write_dropped_entries_total",
 )
 SHIPPER_DROPPED_WINDOW = _env("SHIPPER_DROPPED_WINDOW", "1h")
 SHIPPER_DROPPED_MAX = float(_env("SHIPPER_DROPPED_MAX", "1000"))

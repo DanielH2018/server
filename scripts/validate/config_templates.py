@@ -51,11 +51,11 @@ CONFIG_TEMPLATES = [
     # successor's config renders inside the loki-homelab ConfigMap, covered by the k8s
     # manifest validator. The list may be empty between config-bearing eras.
     #
-    # A new Docker promtail opened the next such era on daniel-pi. Same reasoning as the old
-    # entry: it is bind-mounted, Jinja-bearing (the Loki push URL interpolates `domain`),
-    # re-rendered every deploy, and a YAML error in it does not fail the deploy — promtail
-    # simply exits at startup and the Pi's logs stop, which is the quiet failure this catches.
-    "promtail/promtail.yml.j2",
+    # A Docker promtail opened the next such era on daniel-pi (2026-08-29 to 2026-09-02) and
+    # closed it: its Alloy successor's config is River, not YAML, so this parser cannot check
+    # it. ansible/tests/services/test_alloy_pi_config_labels.py reads that template's text
+    # instead, and the cluster shipper's River config was parsed by the real `alloy validate`
+    # before it shipped (PR #909) — the Pi's copy is the same shape.
 ]
 
 

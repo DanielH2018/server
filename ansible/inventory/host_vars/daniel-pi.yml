@@ -93,8 +93,9 @@ containers_list:
   # template and the cap is 96M; if the measured RSS sits near the cap rather than near
   # 48 MiB, this host cannot afford a log shipper and the right answer is a syslog forwarder,
   # not a bigger limit. Host logs are deliberately NOT shipped: rsyslog is inactive here.
-  - name: promtail
-    port: 9080
+  # Grafana Alloy since 2026-09-02 (Promtail reached end of life on 2026-03-02).
+  - name: alloy
+    port: 12345
     use_authelia: false
     networks:
       - proxy

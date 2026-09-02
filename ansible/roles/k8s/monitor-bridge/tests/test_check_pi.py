@@ -151,7 +151,7 @@ PUBLISHED = (
     ("glances", 61208),
     ("dozzle", 8080),
     ("node-exporter", 9100),
-    ("promtail", 9080),
+    ("alloy", 12345),
 )
 
 
@@ -163,7 +163,7 @@ def _container(name, ports, status="healthy"):
 # mapping alongside a merely-exposed 61209/tcp, which is why the match is on "->".
 CONTAINERS_OK = [
     _container("glances", "61208->61208/tcp,61209/tcp"),
-    _container("promtail", "9080->9080/tcp"),
+    _container("alloy", "12345->12345/tcp"),
     _container("dozzle", "8080->8080/tcp"),
     _container("node-exporter", "9100->9100/tcp"),
     _container("wg-easy", "51821->51821/tcp,51822->51822/udp"),
@@ -202,7 +202,7 @@ def test_exposed_but_unpublished_port_reads_as_detached():
     # An exposed port carries no "->" and is not a published mapping — the whole basis of the
     # diagnosis, so a container showing only exposed ports must not read as publishing.
     ok, msg = checks.host.pi_ports_verdict(
-        [("promtail", 9080)], 5, _with("promtail", ports="9080/tcp")
+        [("alloy", 12345)], 5, _with("alloy", ports="12345/tcp")
     )
     assert not ok
     assert "RECREATE" in msg
