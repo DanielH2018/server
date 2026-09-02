@@ -15,14 +15,19 @@ after a rename -- prek's `entry =`, a GitHub Actions `run:` step, an `ansible.bu
 wrapper, and `.claude/settings*.json`'s permission strings -- and asserts every `scripts/...`
 token found there names a file that exists on disk.
 
-Extraction is scoped to the exact field each mechanism executes (prek's `entry`, a step's
-`run`, a cron's `job`, an `ExecStart*=` line), not a blind grep for the substring `scripts/`
-over whole files. That substring also shows up in comments and docstrings that execute
-nothing, and in `docs/archive/` (deliberately describing pre-reorg paths) and
-`scripts/docs/test_mkdocs_repo_links.py:137` (a NEGATIVE fixture proving a stale path is not
-re-linked). Neither is one of the invocation sites this test reads, so neither needs excluding
-here -- but if this test is ever extended to a new source, re-check that both stay out of scope
-rather than relying on a regex to skip them.
+File discovery and field extraction (WHICH files, WHICH field) live in
+`lib/invocation_sites.py`, shared with `scripts/docs/gen_reference_scripts.py` -- the other
+place that walks these same sites, to say HOW a script is run rather than whether it exists.
+What stays local to this file is the token regex below and the comment-line filtering: this
+test deliberately takes a conservative superset for the shell categories (the `initial_setup`
+`*.sh.j2` templates and the `.claude/hooks` wrappers), where the generator excludes comment
+lines, backtick prose and `echo` lines. Extraction is scoped to the exact field each mechanism
+executes, not a blind grep for the substring `scripts/` over whole files. That substring also
+shows up in comments and docstrings that execute nothing, and in `docs/archive/` (deliberately
+describing pre-reorg paths) and `scripts/docs/test_mkdocs_repo_links.py:137` (a NEGATIVE
+fixture proving a stale path is not re-linked). Neither is one of the invocation sites this
+test reads, so neither needs excluding here -- but if this test is ever extended to a new
+source, re-check that both stay out of scope rather than relying on a regex to skip them.
 
 For the two shell-syntax categories (the `initial_setup` `*.sh.j2` templates and the
 `.claude/hooks` `*.sh`/`*.py` wrappers) a whole-line `#` comment is skipped; anything else on a
@@ -33,11 +38,18 @@ mention there is still worth catching even though it isn't strictly "invoking" a
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 
-import yaml
+from lib.invocation_sites import (
+    claude_hook_files,
+    claude_settings_entries,
+    cron_jobs as _shared_cron_jobs,
+    prek_hook_entries,
+    sh_j2_templates as _shared_sh_j2_templates,
+    systemd_exec_lines as _shared_systemd_exec_lines,
+    workflow_run_steps as _shared_workflow_run_steps,
+)
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -60,61 +72,41 @@ def _non_comment_lines(path: Path) -> list[tuple[int, str]]:
 
 def prek_entries() -> list[tuple[str, str]]:
     """Every `scripts/...` token in a prek.toml hook's `entry =`."""
-    import tomllib
-
-    config = tomllib.loads((REPO / "prek.toml").read_text())
-    out = []
-    for repo in config.get("repos", []):
-        for hook in repo.get("hooks", []):
-            entry = hook.get("entry")
-            if not entry:
-                continue
-            for token in _tokens(entry):
-                out.append((f"prek.toml hook {hook.get('id')!r} entry=", token))
-    return out
+    return [
+        (loc, token)
+        for loc, entry in prek_hook_entries(REPO)
+        for token in _tokens(entry)
+    ]
 
 
 def workflow_run_steps() -> list[tuple[str, str]]:
     """Every `scripts/...` token in a `run:` step of a GitHub Actions workflow."""
-    out = []
-    for wf in sorted((REPO / ".github/workflows").glob("*.yml")):
-        data = yaml.safe_load(wf.read_text()) or {}
-        for job_name, job in (data.get("jobs") or {}).items():
-            for i, step in enumerate(job.get("steps") or []):
-                run = step.get("run")
-                if not run:
-                    continue
-                for token in _tokens(run):
-                    loc = f"{wf.relative_to(REPO)} job {job_name!r} step {i}"
-                    out.append((loc, token))
-    return out
+    return [
+        (loc, token)
+        for loc, run in _shared_workflow_run_steps(REPO)
+        for token in _tokens(run)
+    ]
 
 
 def cron_jobs() -> list[tuple[str, str]]:
-    """Every `scripts/...` token in an `ansible.builtin.cron` task's `job:`."""
-    path = REPO / "ansible/roles/setup/initial_setup/tasks/crons.yml"
-    tasks = yaml.safe_load(path.read_text()) or []
-    out = []
-    for task in tasks:
-        if not isinstance(task, dict):
-            continue
-        cron = task.get("ansible.builtin.cron")
-        if not isinstance(cron, dict):
-            continue
-        job = cron.get("job")
-        if not job:
-            continue
-        name = task.get("name", "<unnamed task>")
-        for token in _tokens(job):
-            out.append((f"crons.yml task {name!r} job=", token))
-    return out
+    """Every `scripts/...` token in an `ansible.builtin.cron` task's `job:`, tree-wide.
+
+    Not scoped to `initial_setup` -- traefik, claude-otel, qbittorrent and eight other
+    roles each carry their own cron tasks (`lib/invocation_sites.py` finds all of them).
+    """
+    return [
+        (f"{job.path.relative_to(REPO)} task {job.name!r} job=", token)
+        for job in _shared_cron_jobs(REPO)
+        for token in _tokens(job.job)
+    ]
 
 
 def sh_j2_templates() -> list[tuple[str, str]]:
     """Every `scripts/...` token on a non-comment line of an initial_setup `*.sh.j2`."""
     out = []
-    template_dir = REPO / "ansible/roles/setup/initial_setup/templates"
-    for tpl in sorted(template_dir.glob("*.sh.j2")):
+    for tpl in _shared_sh_j2_templates(REPO):
+        if tpl.parent.parent.name != "initial_setup":
+            continue
         for lineno, line in _non_comment_lines(tpl):
             for token in _tokens(line):
                 out.append((f"{tpl.relative_to(REPO)}:{lineno}", token))
@@ -123,14 +115,11 @@ def sh_j2_templates() -> list[tuple[str, str]]:
 
 def systemd_exec_lines() -> list[tuple[str, str]]:
     """Every `scripts/...` token on an `ExecStart*=` line of a systemd `*.service.j2`."""
-    out = []
-    for svc in sorted(REPO.glob("ansible/roles/**/*.service.j2")):
-        for lineno, line in enumerate(svc.read_text().splitlines(), start=1):
-            if not line.strip().startswith("ExecStart"):
-                continue
-            for token in _tokens(line):
-                out.append((f"{svc.relative_to(REPO)}:{lineno}", token))
-    return out
+    return [
+        (loc, token)
+        for loc, line in _shared_systemd_exec_lines(REPO)
+        for token in _tokens(line)
+    ]
 
 
 def claude_hook_wrappers() -> list[tuple[str, str]]:
@@ -140,11 +129,7 @@ def claude_hook_wrappers() -> list[tuple[str, str]]:
     fed to a classifier), not invocation sites themselves.
     """
     out = []
-    hooks_dir = REPO / ".claude/hooks"
-    files = sorted(hooks_dir.glob("*.sh")) + sorted(hooks_dir.glob("*.py"))
-    for f in files:
-        if f.name.startswith("test_"):
-            continue
+    for f in claude_hook_files(REPO):
         for lineno, line in _non_comment_lines(f):
             for token in _tokens(line):
                 out.append((f"{f.relative_to(REPO)}:{lineno}", token))
@@ -153,15 +138,11 @@ def claude_hook_wrappers() -> list[tuple[str, str]]:
 
 def claude_settings() -> list[tuple[str, str]]:
     """Every `scripts/...` token in a `.claude/settings*.json` permission string."""
-    out = []
-    for f in sorted(REPO.glob(".claude/settings*.json")):
-        data = json.loads(f.read_text())
-        perms = data.get("permissions", {})
-        for bucket in ("allow", "deny", "ask"):
-            for entry in perms.get(bucket, []) or []:
-                for token in _tokens(entry):
-                    out.append((f"{f.relative_to(REPO)} permissions.{bucket}", token))
-    return out
+    return [
+        (loc, token)
+        for loc, entry in claude_settings_entries(REPO)
+        for token in _tokens(entry)
+    ]
 
 
 _SOURCES = {
