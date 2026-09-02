@@ -12,7 +12,7 @@ from __future__ import annotations
 
 
 import gen_infra_map as g
-import infra_map_render as render
+from infra_map import render
 
 from _infra_map import (
     GLOBALS,

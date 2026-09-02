@@ -1098,24 +1098,24 @@ one appearing.
 
 ### Task 5: `gen_infra_map.py` emits a standalone SVG
 
-`_diagram_view()` at `scripts/infra_map/infra_map_render.py:361` already returns a complete `<svg class="dg" viewBox="0 0 1140 900">…</svg>`. Its colours do not travel with it: every fill and stroke comes from the module-level `STYLE` string, injected into the page's `<style>` element at line 687. Embedded in Markdown, that SVG renders as unstyled black shapes.
+`_diagram_view()` at `scripts/infra_map/render.py:361` already returns a complete `<svg class="dg" viewBox="0 0 1140 900">…</svg>`. Its colours do not travel with it: every fill and stroke comes from the module-level `STYLE` string, injected into the page's `<style>` element at line 687. Embedded in Markdown, that SVG renders as unstyled black shapes.
 
 The fix is to inline the stylesheet as a `<style>` child of the `<svg>` element. This is the whole task — the drawing code does not change.
 
 **Files:**
-- Modify: `scripts/infra_map/infra_map_render.py` (add `render_svg()`)
+- Modify: `scripts/infra_map/render.py` (add `render_svg()`)
 - Modify: `scripts/infra_map/gen_infra_map.py` (add `--format`, re-export `render_svg`)
 - Modify: `scripts/infra_map/test_gen_infra_map.py` (add the SVG cases)
 - Create: `docs/reference/topology.md` (generated, committed)
 - Create: `docs/assets/generated/infra-map.svg` (generated, committed)
 
 **Interfaces:**
-- Consumes: `_diagram_view(model)` and `STYLE`, both already in `infra_map_render`.
+- Consumes: `_diagram_view(model)` and `STYLE`, both already in `infra_map.render`.
 - Produces: `render_svg(model: dict) -> str` — a standalone SVG document, valid on its own. Task 6 calls `gen_infra_map.py --format svg --out docs/assets/generated/infra-map.svg`.
 
 - [ ] **Step 1: Read the two pieces you are joining**
 
-Read `scripts/infra_map/infra_map_render.py:361` (`_diagram_view`), its return at lines 595-596, and the `STYLE` constant used at line 687. Confirm for yourself that the CSS selectors `_diagram_view` relies on (`.box`, `.edge`, `.t-title`, `.t-sub`, `.t-edge`, and the `s-<status>` classes) are all defined in `STYLE`. If some live in a different constant, inline that one too.
+Read `scripts/infra_map/render.py:361` (`_diagram_view`), its return at lines 595-596, and the `STYLE` constant used at line 687. Confirm for yourself that the CSS selectors `_diagram_view` relies on (`.box`, `.edge`, `.t-title`, `.t-sub`, `.t-edge`, and the `s-<status>` classes) are all defined in `STYLE`. If some live in a different constant, inline that one too.
 
 - [ ] **Step 2: Write the failing tests**
 
@@ -1170,7 +1170,7 @@ Expected: FAIL — `render_svg` is not defined.
 
 - [ ] **Step 4: Implement `render_svg()`**
 
-Add to `scripts/infra_map/infra_map_render.py`, next to `render_html()`:
+Add to `scripts/infra_map/render.py`, next to `render_html()`:
 
 ```python
 def render_svg(model: dict) -> str:

@@ -24,8 +24,8 @@ An unreachable host degrades to declared-only rather than failing the render —
 this runs unattended, and a partial map beats no map.
 
 The work is split across four sibling modules, in the order the data moves:
-``infra_map_inventory`` (repo) and ``infra_map_live`` (cluster) gather,
-``infra_map_model`` reconciles them, ``infra_map_render`` draws the page. This
+``infra_map.inventory`` (repo) and ``infra_map.live`` (cluster) gather,
+``infra_map.model`` reconciles them, ``infra_map.render`` draws the page. This
 module owns the CLI and re-exports the public names, so ``gen_infra_map.<name>``
 keeps resolving for callers and tests.
 
@@ -43,10 +43,18 @@ import json
 import os
 import socket
 import sys
+import sys as _sys
 from datetime import datetime, timezone
 from pathlib import Path
+from pathlib import Path as _Path
 
-from infra_map_common import (
+# `infra_map` is a namespace package under `scripts/`, so reaching a sibling by package
+# name needs `scripts/` on sys.path: a directly-invoked script — which is how the cron runs
+# this one — gets only its own directory, and pyproject's `pythonpath` is a pytest setting.
+# This has to sit ABOVE the sibling imports below, not after them: they are what needs it.
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
+from infra_map.constants import (
     DEFAULT_OUTPUT,
     HOST_PLANE,
     HOST_ROLE,
@@ -55,7 +63,7 @@ from infra_map_common import (
     PAGE_REFRESH_SECONDS,
     REPO_ROOT,
 )
-from infra_map_inventory import (
+from infra_map.inventory import (
     LONG_RUNNING_KINDS,
     RoleIndex,
     declared_services,
@@ -63,7 +71,7 @@ from infra_map_inventory import (
     load_roles,
     resolve_vars,
 )
-from infra_map_live import (
+from infra_map.live import (
     MissingToolError,
     collect_cluster,
     collect_docker,
@@ -76,7 +84,7 @@ from infra_map_live import (
     parse_kubectl_nodes,
     parse_pod_placement,
 )
-from infra_map_model import (
+from infra_map.model import (
     build_model,
     find_extra_containers,
     match_k8s_workloads,
@@ -85,14 +93,7 @@ from infra_map_model import (
     reconcile_k8s,
     services_on_host,
 )
-from infra_map_render import group_services, render_html, render_svg
-
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from infra_map.render import group_services, render_html, render_svg
 
 # Re-exported so `gen_infra_map.<name>` keeps working for the cron entry point,
 # the tests, and anything else that treats this module as the public surface.
