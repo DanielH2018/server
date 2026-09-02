@@ -5,6 +5,8 @@ widened verb or a binding to a writing role is a silent privilege grant. Headlam
 homepage Kubernetes widget carry their own cluster identities and are held to the same rule.
 """
 
+import re
+
 import yaml
 from _helpers import ANSIBLE
 from _manifest_guards import (
@@ -194,7 +196,10 @@ def test_readonly_role_covers_the_crd_groups_this_homelab_deploys():
     Forbidden, and the caller falls back to sudo — which is the thing this replaced."""
     groups = set(K3S_DEFAULTS["k3s_readonly_crd_api_groups"])
     route = (ANSIBLE / "templates" / "ingressroute.yml.j2").read_text()
-    assert "traefik.io" in route, (
+    # Match the apiVersion line itself, not a bare substring: `traefik.io` appears in
+    # comments and annotation keys too, so a substring check would keep passing after the
+    # macro moved off the group.
+    assert re.search(r"^apiVersion: traefik\.io/", route, re.MULTILINE), (
         "ingressroute macro no longer uses the traefik.io group"
     )
     assert "traefik.io" in groups, "IngressRoute/Middleware unreadable without sudo"
