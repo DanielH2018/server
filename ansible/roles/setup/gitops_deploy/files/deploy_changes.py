@@ -350,7 +350,7 @@ class ChangeSet:
 
 
 def shared_module_consumers(paths, repo_root) -> set[str]:
-    """k8s roles that import a changed `files/*.py` module owned by a DIFFERENT role.
+    """k8s roles that import a changed `files/**/*.py` module owned by a DIFFERENT role.
 
     `_ACTIVE_K8S` maps a path to the role whose directory it sits in, which is right for a
     manifest and wrong for a shared library. `bridge_common.py` lives under monitor-bridge and
@@ -361,41 +361,73 @@ def shared_module_consumers(paths, repo_root) -> set[str]:
     Derived by reading the imports rather than listing the pair, because a hardcoded pair is
     the same guard-scope mistake one level up: it would go stale the first time a third role
     imported the module. Returns only the EXTRA roles; the owning role is already in `cs.k8s`.
+
+    A module is identified by its dotted path under `files/`, so `files/bridge/common.py` is
+    `bridge.common` and is matched in every spelling a consumer can use for it. The first
+    version of this matched one level (`files/<name>.py`) and a bare `import bridge_common`, which
+    reads as complete and is not: the moment the shared module moved into a package it would
+    have stopped matching, and the deployer would have emitted `--tags monitor-bridge` alone
+    again -- the exact silence this function exists to prevent, reintroduced by a rename.
     """
     from pathlib import Path
 
     k8s = Path(repo_root) / "ansible" / "roles" / "k8s"
     changed_modules = {
-        Path(p).stem
-        for p in paths
-        if re.match(r"^ansible/roles/k8s/[^/]+/files/[^/]+\.py$", p)
+        _module_id(m.group(2)) for p in paths if (m := _FILES_MODULE_RE.match(p))
     }
     if not changed_modules or not k8s.is_dir():
         return set()
 
-    owners = {
-        m.group(1)
-        for p in paths
-        if (m := re.match(r"^ansible/roles/k8s/([^/]+)/files/[^/]+\.py$", p))
-    }
+    owners = {m.group(1) for p in paths if (m := _FILES_MODULE_RE.match(p))}
+    patterns = [_import_re(mod) for mod in changed_modules]
     consumers: set[str] = set()
     for role in k8s.iterdir():
         if not (role / "files").is_dir() or role.name in owners:
             continue
-        for src in (role / "files").glob("*.py"):
-            if src.name.startswith("test_"):
+        for src in (role / "files").rglob("*.py"):
+            if src.name.startswith("test_") or "__pycache__" in src.parts:
                 continue
             try:
                 text = src.read_text(errors="ignore")
             except OSError:
                 continue
-            if any(
-                re.search(r"^\s*(?:import|from)\s+%s\b" % re.escape(mod), text, re.M)
-                for mod in changed_modules
-            ):
+            if any(pat.search(text) for pat in patterns):
                 consumers.add(role.name)
                 break
     return consumers
+
+
+# A changed module under a k8s role's files/, at ANY depth: group 1 is the role, group 2 the
+# path under files/. One level (`files/[^/]+\.py$`) was the original, and it is the shape
+# repo-root CLAUDE.md's "a check that finds its own subject by pattern" rule is about.
+_FILES_MODULE_RE = re.compile(
+    r"^ansible/roles/k8s/([^/]+)/files/((?:[^/]+/)*[^/]+\.py)$"
+)
+
+
+def _module_id(rel_path: str) -> str:
+    """`bridge/common.py` -> `bridge.common`; `bridge_common.py` -> `bridge_common`."""
+    return rel_path[: -len(".py")].replace("/", ".")
+
+
+def _import_re(module_id: str) -> re.Pattern:
+    """Every import statement that binds `module_id`, as a consumer would spell it.
+
+    For `bridge.common`: `import bridge.common`, `from bridge.common import x`, and
+    `from bridge import common` (with or without `as`, anywhere in the imported list). For a
+    flat `bridge_common` the last form has no package to come from, so only the first two.
+    """
+    dotted = re.escape(module_id)
+    forms = [
+        rf"import\s+{dotted}\b",
+        rf"from\s+{dotted}\s+import\b",
+    ]
+    package, _, name = module_id.rpartition(".")
+    if package:
+        forms.append(
+            rf"from\s+{re.escape(package)}\s+import\s+(?:[^\n]*[\s,(])?{re.escape(name)}\b"
+        )
+    return re.compile(r"^\s*(?:" + "|".join(forms) + ")", re.M)
 
 
 def services_from_changed_paths(paths: list[str]) -> ChangeSet:

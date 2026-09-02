@@ -17,13 +17,25 @@ The list is deliberately explicit rather than a `files/*.py` glob: nothing on di
 future test file from landing in `files/` instead of the sibling `tests/` directory, and if
 one did, it must not reach the image. This test is what keeps the explicit list honest.
 
+A module is identified by its dotted path under `files/` (`bridge/config.py` is
+`bridge.config`), and the ship list carries paths relative to `files/`, so the census sees a
+module at any depth. The one-level `FILES.glob("*.py")` this used until 2026-09-02 would have
+returned nothing for a packaged layout and compared an empty census against the ship list.
+
 Run: uv run pytest ansible/tests/services/test_monitor_bridge_modules.py
 """
 
 import ast
 
 import yaml
-from _helpers import REPO
+from _helpers import (
+    REPO,
+    import_bindings,
+    imported_module_ids,
+    module_id,
+    module_of,
+    python_modules,
+)
 
 
 ROLE = REPO / "ansible" / "roles" / "k8s" / "monitor-bridge"
@@ -38,15 +50,9 @@ def _ship_list():
 
 
 def _runtime_modules():
-    """The .py files in files/ that are production code, not the test suite.
-
-    The test suite lives in the sibling `tests/` directory; the name filter here is a
-    belt-and-suspenders check against a stray test file landing in files/ instead.
-    """
+    """Every production .py under files/, as a path relative to files/, at any depth."""
     return sorted(
-        p.name
-        for p in FILES.glob("*.py")
-        if not p.name.startswith("test_") and p.name != "conftest.py"
+        p.relative_to(FILES).as_posix() for p in python_modules(FILES).values()
     )
 
 
@@ -72,32 +78,26 @@ def test_every_module_check_py_imports_is_shipped():
     property that actually breaks the pod, and it keeps holding if the runtime/test split above
     is ever loosened.
     """
-    shipped = {m[: -len(".py")] for m in _ship_list()}
-    local = {p.stem for p in FILES.glob("*.py")}
+    local = set(python_modules(FILES))
+    shipped = {module_id(FILES / m, FILES) for m in _ship_list()}
     tree = ast.parse((FILES / ENTRYPOINT).read_text())
-
-    imported_locally = set()
-    for node in ast.walk(tree):
-        if (
-            isinstance(node, ast.ImportFrom)
-            and node.level == 0
-            and node.module in local
-        ):
-            imported_locally.add(node.module)
-        elif isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.name in local:
-                    imported_locally.add(alias.name)
-
-    missing = imported_locally - shipped
+    missing = imported_module_ids(tree, local) - shipped
     assert not missing, (
         f"check.py imports {sorted(missing)}, absent from monitor_bridge_modules"
     )
 
 
-# --- The second invariant: a split module must not hold anything the suite patches ---
-#
-# check.py's test suite mutates the `check` module object ~65 distinct names deep. A function
+def test_the_census_sees_a_module_inside_a_package(tmp_path):
+    """Red-proof for depth: a packaged layout must census the same way a flat one does."""
+    (tmp_path / "bridge").mkdir()
+    (tmp_path / "bridge" / "config.py").write_text("X = 1\n")
+    (tmp_path / "check.py").write_text("from bridge import config as cfg\n")
+    (tmp_path / "test_stray.py").write_text("")
+    assert set(python_modules(tmp_path)) == {"bridge.config", "check"}
+    tree = ast.parse((tmp_path / "check.py").read_text())
+    assert imported_module_ids(tree, {"bridge.config", "check"}) == {"bridge.config"}
+
+
 # --- The second invariant: every patched name is bound in the module the test patches it on ---
 #
 # The suite patches the runtime modules ~210 times: `bridge_io._get_json`, `bridge_config.X`,
@@ -116,10 +116,14 @@ def test_every_module_check_py_imports_is_shipped():
 # `monkeypatch.setattr(check, "X"` misses the wrapped form ruff format produces and misses plain
 # `check.X = ...` assignment entirely — that hole hid `_cpu_breach_streak`, `_down_streaks` and
 # `_evaluate` when the split was first measured.
+#
+# The test's local name for a module is resolved through its own imports, so `from bridge import
+# config as cfg` followed by `monkeypatch.setattr(cfg, "X", 1)` is a patch on `bridge.config`,
+# and `bridge.config.X = 1` after `import bridge.config` is the same patch spelled longhand.
 
 
 def _runtime_module_names():
-    return {m[: -len(".py")] for m in _runtime_modules()}
+    return set(python_modules(FILES))
 
 
 def _patched_pairs(test_files=None, module_names=None):
@@ -136,12 +140,16 @@ def _patched_pairs(test_files=None, module_names=None):
         )
     pairs = {}
 
-    def _add(module, name):
-        if module in module_names:
-            pairs.setdefault(module, set()).add(name)
-
     for path in test_files:
-        for node in ast.walk(ast.parse(path.read_text())):
+        tree = ast.parse(path.read_text())
+        bound = import_bindings(tree, module_names)
+
+        def _add(target, name, bound=bound):
+            module = module_of(target, bound, module_names)
+            if module:
+                pairs.setdefault(module, set()).add(name)
+
+        for node in ast.walk(tree):
             if isinstance(node, ast.Call):
                 fn = node.func
                 is_setattr = (
@@ -149,27 +157,21 @@ def _patched_pairs(test_files=None, module_names=None):
                 ) or (isinstance(fn, ast.Name) and fn.id in ("setattr", "delattr"))
                 if is_setattr and len(node.args) >= 2:
                     target, attr = node.args[0], node.args[1]
-                    if (
-                        isinstance(target, ast.Name)
-                        and isinstance(attr, ast.Constant)
-                        and isinstance(attr.value, str)
-                    ):
-                        _add(target.id, attr.value)
+                    if isinstance(attr, ast.Constant) and isinstance(attr.value, str):
+                        _add(target, attr.value)
                 # module.NAME.mutate(...) — conftest's check._down_streaks.clear()
-                if isinstance(fn, ast.Attribute):
-                    inner = fn.value
-                    if isinstance(inner, ast.Attribute) and isinstance(
-                        inner.value, ast.Name
-                    ):
-                        _add(inner.value.id, inner.attr)
+                if isinstance(fn, ast.Attribute) and isinstance(
+                    fn.value, ast.Attribute
+                ):
+                    _add(fn.value.value, fn.value.attr)
             targets = []
             if isinstance(node, ast.Assign):
                 targets = node.targets
             elif isinstance(node, (ast.AugAssign, ast.AnnAssign)):
                 targets = [node.target]
             for t in targets:
-                if isinstance(t, ast.Attribute) and isinstance(t.value, ast.Name):
-                    _add(t.value.id, t.attr)
+                if isinstance(t, ast.Attribute):
+                    _add(t.value, t.attr)
     return pairs
 
 
@@ -209,7 +211,8 @@ def test_the_patch_census_spans_more_than_the_entrypoint():
 
 def test_every_patched_name_is_bound_in_the_module_it_is_patched_on():
     pairs = _patched_pairs()
-    sources = {m: (FILES / f"{m}.py").read_text() for m in pairs}
+    modules = python_modules(FILES)
+    sources = {m: modules[m].read_text() for m in pairs}
     unbound = _unbound_patches(pairs, sources)
     assert not unbound, (
         f"patched on a module that does not bind the name: {unbound} — the setattr creates "
@@ -232,3 +235,32 @@ def test_unbound_patch_checker_fires_on_a_synthesized_bad_sample(tmp_path):
     assert pairs == {"mod": {"gone", "kept", "also_gone"}}
     unbound = _unbound_patches(pairs, {"mod": "from elsewhere import kept\n"})
     assert unbound == [("mod", "also_gone"), ("mod", "gone")]
+
+
+def test_the_patch_census_resolves_every_spelling_of_a_packaged_module(tmp_path):
+    """Red-proof for depth: the four ways a test can name `bridge.config` all census as it.
+
+    An alias (`as cfg`), a from-import of the module, a dotted import, and a dotted import with
+    its own alias. A census keyed on the bare `Name` a test used would file three of these
+    under names no module has and lose the patch silently.
+    """
+    test = tmp_path / "test_forms.py"
+    test.write_text(
+        "from bridge import config as cfg\n"
+        "from bridge import io\n"
+        "import bridge.streaks\n"
+        "import checks.b2 as b2\n\n"
+        "def test_x(monkeypatch):\n"
+        '    monkeypatch.setattr(cfg, "A", 1)\n'
+        '    monkeypatch.setattr(io, "B", 2)\n'
+        "    bridge.streaks.C = 3\n"
+        "    b2.D = 4\n"
+        "    bridge.streaks._state.clear()\n"
+    )
+    ids = {"bridge.config", "bridge.io", "bridge.streaks", "checks.b2", "check"}
+    assert _patched_pairs([test], ids) == {
+        "bridge.config": {"A"},
+        "bridge.io": {"B"},
+        "bridge.streaks": {"C", "_state"},
+        "checks.b2": {"D"},
+    }

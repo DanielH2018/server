@@ -1,67 +1,72 @@
-"""A patched helper must be reached qualified, never from-imported.
+"""A runtime module must not from-import a name its test suite patches on the source module.
 
-Precedent: `scripts/diagnostics/tests/test_probe_boundaries.py` solves the identical problem for the probe
-family, and this guard is a close port of it onto monitor-bridge + autofix-bridge.
-`monkeypatch.setattr(bridge_config, "PROM_URL", ...)` rebinds the attribute on the
-bridge_config module object. A caller that did `from bridge_config import PROM_URL` holds its
-own reference in its globals, taken at import time, and that reference never sees the patch —
-the test passes while patching nothing.
+`monkeypatch.setattr(bridge_common, "log", ...)` rebinds the attribute on the module object.
+A module that did `from bridge_common import log` holds its own reference in its globals,
+taken at import time, and that reference never sees the patch — the test passes while
+patching nothing. The failure is silent in the direction that matters: a test believing it
+stubbed the Kuma push would really push.
 
-The failure is silent in the direction that matters: a test believing it silenced `log`
-would really print to stdout (harmless, but proves the patch did nothing), and a check that
-reads a stubbed threshold through an unqualified name would run the real value instead of the
-stubbed one. Every runtime module's header records the qualified-access rule this enforces;
-this is the check that keeps it honest.
+The consumers are derived, not listed: every k8s role whose `files/` imports a runtime module
+defined under ANOTHER role's `files/`, plus that other role. That pair is monitor-bridge and
+autofix-bridge today, and it was the scope of the fix this shipped with; a hardcoded pair
+would let a third role join the rule silently unchecked — the guard-scope shape the same
+review found in four other places (2026-08-25 review M-2). The deployer derives the same set
+in `deploy_changes.shared_module_consumers`.
 
-The rule began as bridge_common-only. It widened to every runtime module when check.py split
-by domain: the tests now patch `bridge_config.X` and `bridge_io._get_json` rather than
-`check.X`, so a from-import of any patched name from any module is the same defect.
+A module is identified by its dotted path under `files/`, so the census sees a module at any
+depth and a test's own alias for it (`from bridge import config as cfg`) resolves to the
+module it names. The one-level `glob("*.py")` and the `"bridge_common" in text` substring
+this used until 2026-09-02 would both have gone quiet the moment the shared module moved into
+a package.
 
 Run: uv run pytest ansible/tests/services/test_bridge_patch_boundary.py
 """
 
 import ast
 
-from _helpers import REPO
+from _helpers import (
+    K8S_ROLES as K8S,
+    import_bindings,
+    imported_module_ids,
+    module_of,
+    python_modules,
+)
 
-K8S = REPO / "ansible" / "roles" / "k8s"
-MONITOR_FILES = K8S / "monitor-bridge" / "files"
+
+def _roles_with_files():
+    """Role name -> {module id: path} for every k8s role that ships Python under files/."""
+    return {
+        role.name: python_modules(role / "files")
+        for role in sorted(K8S.iterdir())
+        if (role / "files").is_dir()
+    }
 
 
 def _consumer_roots():
-    """Every k8s role's files/ dir that imports bridge_common, monitor-bridge included.
-
-    Derived, not the hardcoded (monitor-bridge, autofix-bridge) pair this was written for.
-    That pair is the scope of the fix it shipped with, so a third role importing
-    bridge_common would join the rule silently unchecked -- the guard-scope shape the same
-    review found in four other places (2026-08-25 review M-2). The deployer derives its own
-    consumer set the same way, in deploy_logic.shared_module_consumers.
-    """
-    roots = []
-    for role in sorted(K8S.iterdir()):
-        files = role / "files"
-        if not files.is_dir():
-            continue
-        if any(
-            "bridge_common" in p.read_text(errors="ignore")
-            for p in files.glob("*.py")
-            if p.name != "bridge_common.py"
-        ):
-            roots.append(files)
-    return roots
-
-
-def _is_test_file(path):
-    return path.name.startswith("test_") or path.name == "conftest.py"
+    """Every k8s role's files/ that shares a runtime module with another role, either way."""
+    per_role = _roles_with_files()
+    roots = set()
+    for name, modules in per_role.items():
+        for other, other_modules in per_role.items():
+            if other == name:
+                continue
+            foreign = set(other_modules) - set(modules)
+            if not foreign:
+                continue
+            for path in modules.values():
+                tree = ast.parse(path.read_text(errors="ignore"), filename=str(path))
+                if imported_module_ids(tree, foreign):
+                    roots |= {name, other}
+                    break
+    return [K8S / name / "files" for name in sorted(roots)]
 
 
 def _test_and_conftest_files():
-    """Every test module + conftest.py under a role that imports bridge_common — the suites
-    this rule binds. Every consumer's non-test modules are checked against the union of what
-    any of those suites patches, since bridge_common is shared between them.
+    """Every test module + conftest.py under a consumer role — the suites this rule binds.
 
-    Tests live in `tests/`, a sibling of the `files/` roots `_consumer_roots()` returns, not
-    inside `files/` itself.
+    Every consumer's non-test modules are checked against the union of what any of those
+    suites patches, since the shared module is shared between them. Tests live in `tests/`,
+    a sibling of the `files/` roots `_consumer_roots()` returns, not inside `files/` itself.
     """
     files = []
     for root in _consumer_roots():
@@ -76,35 +81,38 @@ def _test_and_conftest_files():
 
 
 def _runtime_modules():
-    """Every non-test module under a consumer role's files/ — the modules a test can patch
-    and the modules that may from-import a patched name."""
-    found = []
+    """Id -> path for every non-test module under a consumer role's files/, at any depth."""
+    found = {}
     for base in _consumer_roots():
-        found += sorted(p for p in base.glob("*.py") if not _is_test_file(p))
+        found.update(python_modules(base))
     return found
 
 
 def _patched_names_by_module(test_files=None, module_names=None):
-    """Map each runtime module to the attributes either suite assigns, patches, or mutates in place.
+    """Map each runtime module to the attributes any suite assigns, patches, or mutates.
 
     Returns `{module: {name}}`.
 
     AST walk, not a regex — a line-oriented regex over `monkeypatch.setattr(bridge_common, "X"`
-    misses the wrapped form ruff format produces and misses plain `bridge_common.X = ...` assignment
-    entirely. `ansible/tests/services/test_monitor_bridge_modules.py`'s census hit exactly that hole
-    when first measured; this mirrors its AST shape rather than repeating the mistake.
+    misses the wrapped form ruff format produces and misses plain `bridge_common.X = ...`
+    assignment entirely. `ansible/tests/services/test_monitor_bridge_modules.py`'s census hit
+    exactly that hole when first measured; this mirrors its AST shape rather than repeating
+    the mistake. The test's local name for a module is resolved through its own imports.
     """
     test_files = _test_and_conftest_files() if test_files is None else test_files
     if module_names is None:
-        module_names = {p.stem for p in _runtime_modules()}
+        module_names = set(_runtime_modules())
     names = {}
-
-    def _add(module, name):
-        if module in module_names:
-            names.setdefault(module, set()).add(name)
 
     for path in test_files:
         tree = ast.parse(path.read_text(), filename=str(path))
+        bound = import_bindings(tree, module_names)
+
+        def _add(target, name, bound=bound):
+            module = module_of(target, bound, module_names)
+            if module:
+                names.setdefault(module, set()).add(name)
+
         for node in ast.walk(tree):
             if isinstance(node, ast.Call):
                 fn = node.func
@@ -113,25 +121,26 @@ def _patched_names_by_module(test_files=None, module_names=None):
                 ) or (isinstance(fn, ast.Name) and fn.id == "setattr")
                 if is_setattr and len(node.args) >= 2:
                     target, attr = node.args[0], node.args[1]
-                    if (
-                        isinstance(target, ast.Name)
-                        and isinstance(attr, ast.Constant)
-                        and isinstance(attr.value, str)
-                    ):
-                        _add(target.id, attr.value)
+                    if isinstance(attr, ast.Constant) and isinstance(attr.value, str):
+                        _add(target, attr.value)
             targets = []
             if isinstance(node, ast.Assign):
                 targets = node.targets
             elif isinstance(node, (ast.AugAssign, ast.AnnAssign)):
                 targets = [node.target]
             for t in targets:
-                if isinstance(t, ast.Attribute) and isinstance(t.value, ast.Name):
-                    _add(t.value.id, t.attr)
+                if isinstance(t, ast.Attribute):
+                    _add(t.value, t.attr)
     return names
 
 
 def _unqualified_binds(patched, modules):
-    """Every `from <M> import <name>` in `modules` where `<name>` is patched on `<M>`."""
+    """Every `from <M> import <name>` in `modules` where `<name>` is patched on `<M>`.
+
+    `<M>` is a module id, so `from bridge.config import PROM_URL` is checked against
+    `patched["bridge.config"]`. A `from bridge import config` names a module, not a patched
+    name, and `bridge` is never a patched module, so it passes — as it should.
+    """
     problems = []
     for path in modules:
         tree = ast.parse(path.read_text(), filename=str(path))
@@ -155,14 +164,16 @@ def test_there_are_patched_names_to_check():
 
 
 def test_there_are_consumer_modules():
-    assert _runtime_modules(), (
-        f"no runtime modules found under {[str(r) for r in _consumer_roots()]}"
-    )
+    # Naming the pair as well as counting: an empty census reads the same as a full one to
+    # `assert modules`, and this rule exists for these two roles first.
+    roots = {r.parent.name for r in _consumer_roots()}
+    assert {"monitor-bridge", "autofix-bridge"} <= roots, sorted(roots)
+    assert _runtime_modules()
 
 
 def test_no_module_binds_a_patched_name_by_name():
     patched = _patched_names_by_module()
-    problems = _unqualified_binds(patched, _runtime_modules())
+    problems = _unqualified_binds(patched, sorted(_runtime_modules().values()))
     assert not problems, "\n".join(problems)
 
 
@@ -184,10 +195,10 @@ def test_every_patched_name_exists_on_its_module():
     # A rename that leaves a stale patched name would quietly stop guarding it. Checked by AST
     # rather than by importing: autofix-bridge's files/ is not on pytest's pythonpath, and an
     # import would also run each module's env reads for nothing.
-    by_stem = {p.stem: p for p in _runtime_modules()}
+    by_id = _runtime_modules()
     missing = []
     for module, names in sorted(_patched_names_by_module().items()):
-        bound = _top_level_bindings(by_stem[module])
+        bound = _top_level_bindings(by_id[module])
         missing += [f"{module}.{n}" for n in sorted(names) if n not in bound]
     assert not missing, f"patched names absent from their module: {missing}"
 
@@ -231,3 +242,53 @@ def test_checker_fires_on_a_synthesized_bad_sample(tmp_path):
     assert _patched_names_by_module([bad_test], {"bridge_config"}) == {
         "bridge_config": {"PROM_URL", "LOKI_URL"}
     }
+
+
+def test_checker_sees_a_packaged_module_in_every_spelling(tmp_path):
+    """Red-proof for depth: the rule holds for `bridge.config` exactly as for `bridge_config`.
+
+    The from-import of a patched name is flagged whether the module is flat or packaged; a
+    from-import of the MODULE (`from bridge import config`) is the qualified form and passes;
+    and the census resolves a test's alias back to the module id.
+    """
+    patched = {"bridge.config": {"PROM_URL"}}
+    bad = tmp_path / "bad.py"
+    bad.write_text("from bridge.config import PROM_URL\n")
+    assert len(_unqualified_binds(patched, [bad])) == 1
+    good = tmp_path / "good.py"
+    good.write_text("from bridge import config as cfg\ncfg.PROM_URL\n")
+    assert not _unqualified_binds(patched, [good])
+
+    test = tmp_path / "test_alias.py"
+    test.write_text(
+        "from bridge import config as cfg\nimport bridge.io\n\n"
+        "def test_x(monkeypatch):\n"
+        '    monkeypatch.setattr(cfg, "PROM_URL", "x")\n'
+        "    bridge.io.TIMEOUT = 1\n"
+    )
+    assert _patched_names_by_module([test], {"bridge.config", "bridge.io"}) == {
+        "bridge.config": {"PROM_URL"},
+        "bridge.io": {"TIMEOUT"},
+    }
+
+    # A nested consumer tree is censused, and a role that only mentions the shared module in
+    # a comment is not a consumer.
+    k8s = tmp_path / "k8s"
+    for rel, source in {
+        "alpha/files/bridge/common.py": "def log(): pass\n",
+        "alpha/files/check.py": "from bridge import common\n",
+        "beta/files/sub/autofix.py": "import bridge.common as bc\n",
+        "gamma/files/z.py": "# from bridge import common\n",
+    }.items():
+        p = k8s / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(source)
+    per_role = {
+        role.name: python_modules(role / "files") for role in sorted(k8s.iterdir())
+    }
+    assert set(per_role["alpha"]) == {"bridge.common", "check"}
+    assert set(per_role["beta"]) == {"sub.autofix"}
+    tree = ast.parse((k8s / "beta/files/sub/autofix.py").read_text())
+    assert imported_module_ids(tree, set(per_role["alpha"])) == {"bridge.common"}
+    tree = ast.parse((k8s / "gamma/files/z.py").read_text())
+    assert not imported_module_ids(tree, set(per_role["alpha"]))
