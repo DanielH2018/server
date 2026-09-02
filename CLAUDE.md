@@ -453,7 +453,8 @@ uv run pytest scripts         # just one suite
   under `ansible/roles/<plane>/<role>/tests/` (the code it covers stays in `files/`, which is
   what the role ships), the Bash classifier in `.claude/hooks/tests/`, and `scripts/<dir>/tests/`.
   Tests never sit beside the code they cover: a `tests/` sibling keeps them out of every
-  `files/` ship list and lets the deployer's test-only path rule stay a directory check. A test
+  `files/` ship list and lets the deployer's test-only path rule stay a directory check
+  (ENFORCED by `ansible/tests/repo/test_testpaths_covers_every_test_file.py`). A test
   in a `tests/` directory reaches its module through a `sys.path` bootstrap pointing at the
   sibling `files/`, or through `pythonpath` where the module is shared across roles. A role
   that ships a `files/*.py` with logic adds its `tests/` directory to `testpaths`.

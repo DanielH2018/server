@@ -16,7 +16,16 @@ Run: uv run pytest scripts/diagnostics/tests/test_probe_boundaries.py
 import ast
 from pathlib import Path
 
-SCRIPTS = Path(__file__).resolve().parents[2]
+# The directory holding the probe modules. This read `parents[1]` while the test sat beside
+# them and `parents[2]` after it moved into tests/, and both resolve to the top-level
+# `scripts/`, one above the modules — so the glob below only ever matched `scripts/conftest.py`,
+# which mentions probe_core in a comment. The guard passed for months while checking nothing.
+DIAGNOSTICS = Path(__file__).resolve().parents[1]
+
+# Consumers that must be in the census. A wrong directory makes `_probe_modules()` return
+# something rather than nothing (conftest.py did), so an "is non-empty" check cannot catch it;
+# naming two known consumers can.
+KNOWN_CONSUMERS = frozenset({"probe.py", "probe_health.py"})
 
 # Names the probe test suites monkeypatch on probe_core. Keep in step with the
 # `setattr(core, "...")` calls in scripts/diagnostics/tests/test_probe*.py.
@@ -39,7 +48,7 @@ def _probe_modules() -> list[Path]:
     that is what this matches.
     """
     found = []
-    for path in sorted(SCRIPTS.glob("*.py")):
+    for path in sorted(DIAGNOSTICS.glob("*.py")):
         if path.name in ("probe_core.py",) or path.name.startswith("test_"):
             continue
         if "probe_core" in path.read_text():
@@ -47,9 +56,13 @@ def _probe_modules() -> list[Path]:
     return found
 
 
-def test_there_are_probe_modules_to_check():
+def test_the_census_reaches_the_known_consumers():
     # Without this the assertions below pass vacuously if the scan ever stops matching.
-    assert _probe_modules(), f"no probe_core consumers found under {SCRIPTS}"
+    names = {path.name for path in _probe_modules()}
+    missing = KNOWN_CONSUMERS - names
+    assert not missing, (
+        f"{missing} not found under {DIAGNOSTICS}; census sees {sorted(names)}"
+    )
 
 
 def test_no_module_binds_a_patched_core_helper_by_name():
