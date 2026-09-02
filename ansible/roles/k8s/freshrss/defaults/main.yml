@@ -5,7 +5,7 @@
 # rollback artifact — see that file) so the k8s-defaults manager tracks digest bumps for the
 # pod that's actually live; a bare repo@sha256 would freeze it with zero update signal instead
 # (2026-08-13 pin).
-freshrss_k8s_image: lscr.io/linuxserver/freshrss:latest@sha256:7ba33d8d9721c2a27bba7780e6072c004c477b9ad27ee770eab5d60c834de0d0
+freshrss_k8s_image: lscr.io/linuxserver/freshrss:latest@sha256:7d070735b9e168d5561bcf81560103e9ceb3de81f848f1c6d01439b6995adcdb
 freshrss_k8s_cache_image: nginx:alpine@sha256:4a73073bd557c65b759505da037898b61f1be6cbcc3c2c3aeac22d2a470c1752
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
