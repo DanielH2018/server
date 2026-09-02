@@ -59,7 +59,7 @@ registry_k8s_gc_ttl_s: 604800
 # The proof-of-loop pair (see tasks/main.yml). crane rather than docker or skopeo: it is a
 # static binary in a distroless image, needs no daemon, and copies between registries directly
 # without a local store to fill the node's disk.
-registry_k8s_crane_image: gcr.io/go-containerregistry/crane:v0.21.9
+registry_k8s_crane_image: gcr.io/go-containerregistry/crane:v0.22.0
 # Deliberately tiny and deliberately not something the fleet runs — the point is to move bytes
 # through the registry, and a real image would make a failure ambiguous between "the registry
 # is broken" and "that image changed".
