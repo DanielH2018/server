@@ -114,3 +114,42 @@ def staging_blocks(verdict: str | None, *, blocking: bool) -> bool:
     entry condition can be met long after the code lands.
     """
     return blocking and verdict == STAGING_REJECTED
+
+
+# The outcome vocabulary `backfill_staging_gate.py` records in its ledger, restated here because
+# the two trees cannot import each other — `deploy_staging.py` ships to the host in the role's
+# files/, and the backfill runs from the repo. The three words are asserted equal to that
+# module's constants by test_tick_and_backfill_agree_on_the_outcome_vocabulary, so a rename on
+# either side fails rather than silently splitting the ledger's meaning in two.
+TICK_OK = "pass"
+TICK_FALSE_FAILURE = "false-failure"
+TICK_NEEDS_TRIAGE = "needs-triage"
+
+_TICK_OUTCOMES = {
+    STAGING_PASS: TICK_OK,
+    # NO_VERDICT is a false failure by definition: the gate could not be asked, which is never a
+    # property of the commit. Same call `classify` makes on the backfill side.
+    STAGING_NO_VERDICT: TICK_FALSE_FAILURE,
+    # A rejection is either the gate misfiring or a real defect, and only an operator can say
+    # which. Recorded as needing triage rather than guessed at — guessing is how a broken gate
+    # comes to report itself healthy.
+    STAGING_REJECTED: TICK_NEEDS_TRIAGE,
+}
+
+
+def staging_tick_outcome(verdict: str) -> str | None:
+    """The ledger outcome for a real gated tick's verdict, or None when there is nothing to record.
+
+    Args:
+        verdict: one of `staging_verdict`'s words, or `STAGING_SKIPPED`.
+
+    Returns:
+        The outcome word, or None for a verdict that is not a sample.
+
+    A SKIPPED verdict returns None and MUST NOT be written. `consult_staging` returns it on two
+    paths that measured nothing — the gate is off, and the tick touched no staging service — and
+    a tick runs every ten minutes. Recording those would bury the real samples under thousands of
+    rows that say only that the gate did not run, which is the same reason the backfill drops its
+    own SKIPPED rather than shipping it to the ledger.
+    """
+    return _TICK_OUTCOMES.get(verdict)

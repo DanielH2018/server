@@ -112,6 +112,7 @@ from deploy_staging import (  # noqa: F401
     STAGING_SKIPPED,
     staging_blocks,
     staging_scope,
+    staging_tick_outcome,
     staging_verdict,
     staging_verdict_summary,
 )

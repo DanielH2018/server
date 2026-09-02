@@ -46,6 +46,7 @@ ExecStart=/home/{{ sys_user }}/.local/bin/uv run --no-project --no-python-downlo
   scripts/deploy_tools/backfill_staging_gate.py \
   --since-ledger \
   --jsonl {{ gitops_deploy_staging_backfill_ledger }} \
+  --tick-jsonl {{ gitops_deploy_staging_tick_ledger }} \
   --count {{ gitops_deploy_staging_backfill_count }} \
   --timeout {{ gitops_deploy_staging_backfill_timeout_s }}
 # The run-recency heartbeat. ExecStopPost= runs whatever the outcome — the tolerated exit 1, a

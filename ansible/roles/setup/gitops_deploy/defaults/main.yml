@@ -249,6 +249,14 @@ gitops_deploy_staging_gate_key_path: /etc/gitops-deploy/staging_gate_ed25519
 # Rides `gitops_deploy_staging_gate` rather than carrying its own switch: a ratchet that ran
 # while the gate was off would deploy to staging for a measurement nobody was collecting.
 gitops_deploy_staging_backfill_ledger: /var/lib/gitops-deploy/staging-backfill.jsonl
+
+# Where a REAL gated tick records its verdict. A separate file from the backfill ledger above,
+# not a `source` column in it, for two reasons. `--since-ledger` plans its next window as
+# `<newest recorded sha>..master`, so a tick row landing in that file would send the hourly timer
+# to a window it cannot run. And the two measure different things — the backfill gates the
+# services a commit CHANGED, a tick gates the narrower set it PROMOTED — so pooling them would
+# put a differently-scoped run into the streak that decides entry-condition part 1.
+gitops_deploy_staging_tick_ledger: /var/lib/gitops-deploy/staging-ticks.jsonl
 # Commits per run. Small on purpose — each one is a real staging deploy, and the window is a
 # range from the ledger, so anything not reached this hour is reached the next.
 gitops_deploy_staging_backfill_count: 2
