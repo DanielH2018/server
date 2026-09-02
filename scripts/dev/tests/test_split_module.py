@@ -101,6 +101,36 @@ def test_split_refuses_a_name_claimed_twice():
         split(SOURCE, spec)
 
 
+def test_split_accepts_a_well_shaped_spec():
+    """The clean half of the shape check: a str header and a list of str names."""
+    kept, outputs = split(SOURCE, {"a.py": {"header": "", "names": ["LIMIT"]}})
+    assert "LIMIT" in outputs["a.py"]
+    assert "LIMIT = " not in kept
+
+
+@pytest.mark.parametrize(
+    ("entry", "match"),
+    [
+        ({"header": 123, "names": ["LIMIT"]}, "header is int, not a string"),
+        ({"header": None, "names": ["LIMIT"]}, "header is NoneType, not a string"),
+        ({"names": ["LIMIT"]}, "header is NoneType, not a string"),
+        ({"header": "", "names": "LIMIT"}, "names is not a list of strings"),
+        ({"header": "", "names": [1]}, "names is not a list of strings"),
+        ({"header": "", "names": None}, "names is not a list of strings"),
+    ],
+)
+def test_split_refuses_a_spec_entry_of_the_wrong_shape(entry, match):
+    """The spec comes from `json.loads`, so the TypedDict enforces nothing at that boundary.
+
+    Every one of these reached the body before: a non-string header was written into the new
+    file's first line, and a non-list `names` raised straight out of the `for` loop as a
+    TypeError. `main()` catches ValueError only, so an unchecked shape bug printed a traceback
+    where every other spec bug prints `error: ...`.
+    """
+    with pytest.raises(ValueError, match=match):
+        split(SOURCE, {"a.py": entry})
+
+
 def test_split_refuses_a_name_the_source_lacks():
     with pytest.raises(ValueError, match=r"not found in the source: \['test_absent'\]"):
         split(SOURCE, {"a.py": {"header": "", "names": ["test_absent"]}})

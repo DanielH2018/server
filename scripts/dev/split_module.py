@@ -95,13 +95,38 @@ def _span(node: ast.stmt, lines: list[str]) -> tuple[int, int]:
     return start, node.end_lineno
 
 
+def _check_spec(spec: Spec) -> None:
+    """Raise ValueError unless every entry is shaped like a Target.
+
+    `main()` hands this the result of `json.loads`, which is untyped, so the `Target` TypedDict
+    documents the shape without enforcing it anywhere. The body then indexes `cfg["header"]` and
+    iterates `cfg["names"]` as a str and a list of str -- so a spec with `"header": 123` used to
+    write a file headed `123` (the old `str()` coercion), and after that coercion was dropped it
+    raised AttributeError instead. `main()` catches only ValueError, so either way the operator
+    got the wrong thing: a nonsense file, or a traceback where every other spec bug prints
+    `error: ...` and exits 1.
+    """
+    for target, cfg in spec.items():
+        if not isinstance(cfg, dict):
+            raise ValueError(f"{target}: entry is {type(cfg).__name__}, not an object")
+        header, names = cfg.get("header"), cfg.get("names")
+        if not isinstance(header, str):
+            raise ValueError(
+                f"{target}: header is {type(header).__name__}, not a string"
+            )
+        if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
+            raise ValueError(f"{target}: names is not a list of strings")
+
+
 def split(source: str, spec: Spec) -> tuple[str, dict[str, str]]:
     """Return (what SRC keeps, {target path: its new content}) without touching any file.
 
-    Raises ValueError when a name is claimed by two targets, when one statement (such as a
-    tuple assignment) would have to go to two targets, or when a named definition is not in
-    the source at all -- each of those is a spec bug, and a partial move is worse than none.
+    Raises ValueError when the spec is not shaped like a Spec, when a name is claimed by two
+    targets, when one statement (such as a tuple assignment) would have to go to two targets, or
+    when a named definition is not in the source at all -- each of those is a spec bug, and a
+    partial move is worse than none.
     """
+    _check_spec(spec)
     owner: dict[str, str] = {}
     for target, cfg in spec.items():
         for name in cfg["names"]:
