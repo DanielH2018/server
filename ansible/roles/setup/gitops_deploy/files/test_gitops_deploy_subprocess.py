@@ -11,7 +11,6 @@ must kill the whole process group or a wedged ansible-playbook outlives the tick
 
 import ast
 import os
-import pathlib
 import subprocess
 import sys
 import time
@@ -105,14 +104,7 @@ def test_deploy_k8s_treats_a_whitespace_only_restore_sha_as_absent(monkeypatch) 
 # mocking all of that for one two-line assertion. This parses the ACTUAL call arguments Python
 # executes (not comment text), the same AST-source-guard shape test_gitops_deploy_main_guards.py
 # already uses for the rest of this un-importable-in-CI module.
-_GITOPS_SRC = pathlib.Path(__file__).with_name("gitops_deploy.py")
-
-
-def _deploy_k8s_calls_in_main() -> list[ast.Call]:
-    tree = ast.parse(_GITOPS_SRC.read_text())
-    main_fn = next(
-        n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "main"
-    )
+def _deploy_k8s_calls_in_main(main_fn: ast.FunctionDef) -> list[ast.Call]:
     return [
         n
         for n in ast.walk(main_fn)
@@ -122,12 +114,12 @@ def _deploy_k8s_calls_in_main() -> list[ast.Call]:
     ]
 
 
-def test_the_rollback_redeploy_passes_the_FAILED_sha_not_the_good_one():
+def test_the_rollback_redeploy_passes_the_FAILED_sha_not_the_good_one(gitops_fn):
     """The snapshot worth reverting to was taken before the failed deploy, so it is named for
     `origin` — the commit being rolled back FROM. Passing `local` here would look correct, find
     no snapshot for a first-time rollback, and fail the deploy; worse, on a second rollback of
     the same service it would find a stale snapshot and revert to the wrong point."""
-    calls = _deploy_k8s_calls_in_main()
+    calls = _deploy_k8s_calls_in_main(gitops_fn("main"))
     assert len(calls) == 2, (
         "expected exactly one forward deploy_k8s call and one rollback redeploy in main()"
     )
@@ -153,10 +145,10 @@ def test_the_rollback_redeploy_passes_the_FAILED_sha_not_the_good_one():
     )
 
 
-def test_the_rollback_redeploy_uses_its_own_timeout_budget():
+def test_the_rollback_redeploy_uses_its_own_timeout_budget(gitops_fn):
     """Task 4's addendum: give the rollback redeploy a distinct budget rather than sharing
     K8S_DEPLOY_TIMEOUT_S, since it does strictly more work than the forward deploy."""
-    forward, rollback = _deploy_k8s_calls_in_main()
+    forward, rollback = _deploy_k8s_calls_in_main(gitops_fn("main"))
     assert ast.unparse(forward.args[1]) == "K8S_DEPLOY_TIMEOUT_S"
     assert ast.unparse(rollback.args[1]) == "K8S_ROLLBACK_TIMEOUT_S"
 
