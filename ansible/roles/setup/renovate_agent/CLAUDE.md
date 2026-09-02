@@ -38,6 +38,21 @@ kick a session as a side effect. Start one by hand:
 sudo systemctl start renovate-agent && journalctl -u renovate-agent -f
 ```
 
+## Exercising the wrapper without arming anything
+
+`RENOVATE_AGENT_CONFIG` overrides the config path, so the I/O shell can be run end-to-end
+against a throwaway config before the timer exists. Point `REPO` at the real repo with the
+backlog empty and the gate returns before it spends a session, which makes it a free pass
+through config parsing, the `gh` census and the return path:
+
+```bash
+RENOVATE_AGENT_CONFIG=/tmp/agent-test.env \
+  uv run python ansible/roles/setup/renovate_agent/files/renovate_agent.py
+```
+
+The override exists for exactly this. Without it the first armed tick would be the first time
+this code ever ran.
+
 ## What bounds the run
 
 The unit is deliberately **not** sandboxed, unlike the sibling `renovate-notify.service`.

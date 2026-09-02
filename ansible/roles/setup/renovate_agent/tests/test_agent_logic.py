@@ -12,6 +12,8 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "files"))
 import agent_logic as al
+import pytest
+import renovate_agent
 
 
 def _pr(number: int) -> al.OpenPR:
@@ -167,3 +169,25 @@ class TestRenderDigest:
         )
         assert len(text) < 1900
         assert "resolved #1" in text
+
+
+class TestConfigGuard:
+    """`main()` indexes config keys directly, so a missing one must name itself.
+
+    Without the guard the first armed tick dies on a bare `KeyError: 'REPO_DIR'` before any
+    Discord post exists to carry the reason.
+    """
+
+    def test_a_complete_config_is_clean(self, tmp_path, monkeypatch) -> None:
+        cfg = tmp_path / "config.env"
+        cfg.write_text("REPO=o/r\nREPO_DIR=/repo\nPROMPT_FILE=/p.txt\n")
+        monkeypatch.setattr(renovate_agent, "CONFIG", str(cfg))
+        monkeypatch.setattr(renovate_agent, "open_prs", lambda repo: [])
+        assert renovate_agent.main() == 0
+
+    def test_a_missing_key_is_flagged_by_name(self, tmp_path, monkeypatch) -> None:
+        cfg = tmp_path / "config.env"
+        cfg.write_text("REPO=o/r\n")
+        monkeypatch.setattr(renovate_agent, "CONFIG", str(cfg))
+        with pytest.raises(RuntimeError, match="REPO_DIR, PROMPT_FILE"):
+            renovate_agent.main()

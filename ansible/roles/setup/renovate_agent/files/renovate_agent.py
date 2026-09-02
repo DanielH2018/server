@@ -28,7 +28,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from agent_logic import OpenPR, decide, delta, parse_run, render_digest, render_skip
 from host_lib import atomic_write, discord_post, parse_env_file
 
-CONFIG = "/etc/renovate-agent/config.env"
+# The env override exists so the I/O shell can be exercised end-to-end against a throwaway
+# config before the timer is ever armed. Without it the only way to run this code is to deploy
+# it, and the first armed tick would be its first execution.
+CONFIG = os.environ.get("RENOVATE_AGENT_CONFIG", "/etc/renovate-agent/config.env")
 USER_AGENT = "renovate-agent"
 
 # Written by gitops_deploy.py. Read, never written, here.
@@ -179,6 +182,9 @@ def run_session(cfg: dict[str, str], cwd: str, log_path: str) -> tuple[str, int,
 
 def main() -> int:
     cfg = parse_env_file(CONFIG)
+    missing = [k for k in ("REPO", "REPO_DIR", "PROMPT_FILE") if not cfg.get(k)]
+    if missing:
+        raise RuntimeError(f"{CONFIG} is missing {', '.join(missing)}")
     host = os.uname().nodename
     webhook = cfg.get("DISCORD_WEBHOOK", "")
     state_dir = cfg.get("STATE_DIR", "/var/lib/renovate-agent")
