@@ -34,11 +34,13 @@ from deploy_logic import (
     apply_drain_result,
     apply_send_result,
     behind_marker,
+    broad_hold_cleared_by,
     broad_remediation,
     ci_verdict,
     comment_only_broad_changes,
     github_auth_headers,
     github_token,
+    hold_plane_marker,
     setup_tags_for,
     containers_to_gate,
     declared_denylist,
@@ -250,7 +252,9 @@ def broad_failure_alert(
         f"The tree is fast-forwarded and the plane is **unapplied**. This arm is "
         f"forward-only — **nothing was rolled back**, so live state is whatever the "
         f"failed run left.\n"
-        f"**Action:** fix forward and re-run that playbook by hand."
+        f"**Action:** fix forward and re-run that playbook by hand. A later tick clears the "
+        f"hold only by applying this same plane — after a hand run, "
+        f"`rm {HOLD_FILE} {HOLD_PLANE_FILE}`."
     )
 
 
@@ -587,6 +591,39 @@ def read_hold() -> str | None:
 
 def write_hold(sha: str | None) -> None:
     _write_marker(HOLD_FILE, sha)
+
+
+def clear_broad_hold(playbook: str, tags: list[str]) -> None:
+    """Clear the hold after a broad apply, but only if this apply covered the held plane.
+
+    A hold says one plane is unapplied, and every consumer gates on `hold_sha` — so clearing
+    it after a success in a DIFFERENT plane turns GitOps Deploy — Status green over a plane
+    nothing has applied (issue #878). When the hold survives, the tick still succeeded: the
+    marker is the only thing kept.
+    """
+    held = _read_marker(HOLD_PLANE_FILE) or ""
+    if not broad_hold_cleared_by(held, playbook, tags):
+        log(
+            f"hold kept: {held} is still unapplied "
+            f"(this tick applied {hold_plane_marker(playbook, tags)})"
+        )
+        return
+    _write_marker(HOLD_PLANE_FILE, None)
+    write_hold(None)
+
+
+def clear_service_hold() -> None:
+    """Clear a hold after a successful service deploy, unless a broad plane is unapplied.
+
+    A k8s or Docker deploy applies no plane, so it is never evidence that the plane a broad
+    hold names has been applied. Without this, an unrelated service deploy clears `hold_sha`
+    and orphans `hold_plane`, which `gitops_status` never reads on its own.
+    """
+    held = _read_marker(HOLD_PLANE_FILE)
+    if held:
+        log(f"hold kept: {held} is still unapplied; a service deploy does not clear it")
+        return
+    write_hold(None)
 
 
 def emit_deploy_annotation(services: set[str], sha: str) -> None:
@@ -1502,14 +1539,13 @@ def main() -> int:
         except Exception as exc:
             log(f"broad apply failed ({playbook} {tags}): {exc}")
             write_hold(origin)
-            _write_marker(HOLD_PLANE_FILE, f"{playbook} {','.join(tags)}".strip())
+            _write_marker(HOLD_PLANE_FILE, hold_plane_marker(playbook, tags))
             posted = discord(broad_failure_alert(HOSTNAME, playbook, tags, origin, exc))
             # Exit 0 on a delivered detailed post so systemd's OnFailure generic curl doesn't
             # double-page; exit 1 only if the post failed, leaving OnFailure the backstop.
             return 0 if posted else 1
 
-        _write_marker(HOLD_PLANE_FILE, None)
-        write_hold(None)
+        clear_broad_hold(playbook, tags)
         alert_secrets_deferred(origin, cs)
         alert_deferred(origin, set(), cs, k8s_services)
         return 0
@@ -1615,7 +1651,7 @@ def main() -> int:
         # solely in the Docker health-gate branch below, which such a host never reaches — so
         # without this the first rollback would leave GitOps Deploy — Status red forever and
         # need a manual rm (the trap this role's CLAUDE.md documents).
-        write_hold(None)
+        clear_service_hold()
         # Only after the gate inside deploy_k8s has passed and the hold is cleared — annotating
         # from inside the try would mark a deploy that the rollout gate went on to reject.
         emit_deploy_annotation(cs.k8s_deploy, origin)
@@ -1693,7 +1729,7 @@ def main() -> int:
     gate_deadline = RUN_START + RUN_BUDGET_S
     failed = gate_services(cs.services, service_healthy, gate_deadline, time.time)
     if not failed:
-        write_hold(None)
+        clear_service_hold()
         # Combined-push safety: a tasks/ or meta/deps.yml change bundled for a service OTHER than
         # the one(s) just deployed is ff-merged but unapplied — flag that remainder (a bundled
         # change to a DEPLOYED service rode its own --tags redeploy, so it's excluded). Only on a

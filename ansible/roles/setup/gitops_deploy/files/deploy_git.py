@@ -151,6 +151,41 @@ def next_action(
     return "deploy"
 
 
+def hold_plane_marker(playbook: str, tags: list[str] | None) -> str:
+    """The `hold_plane` marker text naming a broad apply: the playbook, then its tags.
+
+    One definition so the writer and `broad_hold_cleared_by` cannot disagree on the format.
+    """
+    return f"{playbook} {','.join(tags or [])}".strip()
+
+
+def broad_hold_cleared_by(held: str, playbook: str, tags: list[str] | None) -> bool:
+    """Does a successful apply of `playbook`/`tags` cover the plane recorded in `held`?
+
+    A broad hold says one plane is unapplied. Clearing it on a success in a DIFFERENT plane
+    throws away the fact it records: on 2026-09-02 a failed `ansible/deploy.yml` held
+    `2d25ced3`, the next tick applied the setup plane, and both markers were gone within 30
+    seconds while the deploy plane stayed unapplied (issue #878). Every consumer —
+    `checks_service.gitops_status`, `land.sh`, `renovate_agent.decide` — gates on `hold_sha`,
+    so the erasure also turned **GitOps Deploy — Status** green over that unapplied plane.
+
+    Coverage, not equality, and it runs both ways round. An untagged run applies the whole
+    playbook, so it covers any tag set held against it; a tagged run covers a held tag set it
+    is a superset of, and covers an UNTAGGED hold not at all — that hold names the whole
+    playbook, of which a tagged run applies one part. An empty `held` means nothing is held.
+    """
+    if not held.strip():
+        return True
+    held_playbook, _, held_tags = held.strip().partition(" ")
+    if held_playbook != playbook:
+        return False
+    applied = set(tags or [])
+    if not applied:
+        return True
+    wanted = {t for t in held_tags.split(",") if t}
+    return bool(wanted) and wanted.issubset(applied)
+
+
 def is_diverged(
     origin_head: str, local_head: str, origin_ahead: bool, local_ahead: bool
 ) -> bool:

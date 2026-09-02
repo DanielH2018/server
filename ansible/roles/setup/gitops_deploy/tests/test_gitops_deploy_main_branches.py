@@ -253,6 +253,49 @@ def test_a_bring_up_playbook_push_parks_and_pages(gitops_deploy, tick, state_dir
     assert "needing a hand" in tick.posts[0]
 
 
+# ── a hold clears only when its own plane is applied ──────────────────────────────────────────
+def _hold_the_deploy_plane(state_dir) -> None:
+    """The state a failed `ansible/deploy.yml` broad apply leaves behind."""
+    (state_dir / "hold_sha").write_text("f" * 40)
+    (state_dir / "hold_plane").write_text("ansible/deploy.yml")
+
+
+def test_a_setup_plane_success_keeps_a_deploy_plane_hold(
+    gitops_deploy, tick, state_dir
+):
+    """The 2026-09-02 erasure: a held deploy.yml, then a successful setup-plane tick.
+
+    Both markers went within 30 seconds while the deploy plane stayed unapplied, and every
+    consumer gates on hold_sha — so GitOps Deploy — Status read green over it.
+    """
+    _hold_the_deploy_plane(state_dir)
+    tick.paths = ["ansible/roles/setup/gitops_deploy/tasks/main.yml"]
+    assert gitops_deploy.main() == 0
+    assert tick.playbooks, "the setup plane still applies"
+    assert _marker(state_dir, "hold_sha") == "f" * 40
+    assert _marker(state_dir, "hold_plane") == "ansible/deploy.yml"
+
+
+def test_applying_the_held_plane_clears_the_hold(gitops_deploy, tick, state_dir):
+    """The converse, so the guard is not simply "never clears"."""
+    (state_dir / "hold_sha").write_text("f" * 40)
+    (state_dir / "hold_plane").write_text("ansible/initial_setup.yml gitops_deploy")
+    tick.paths = ["ansible/roles/setup/gitops_deploy/tasks/main.yml"]
+    assert gitops_deploy.main() == 0
+    assert _marker(state_dir, "hold_sha") is None
+    assert _marker(state_dir, "hold_plane") is None
+
+
+def test_a_service_deploy_does_not_clear_a_broad_hold(gitops_deploy, tick, state_dir):
+    """A service deploy applies no plane, so it is no evidence the held one was applied."""
+    _hold_the_deploy_plane(state_dir)
+    _docker_push(tick)
+    assert gitops_deploy.main() == 0
+    assert tick.playbooks == [DEPLOY_WG_EASY], "the service still deploys"
+    assert _marker(state_dir, "hold_sha") == "f" * 40
+    assert _marker(state_dir, "hold_plane") == "ansible/deploy.yml"
+
+
 # ── the k8s auto-deploy path ──────────────────────────────────────────────────────────────────
 def _image_bump(
     gitops_deploy, monkeypatch, tick, extra_paths: Sequence[str] = ()

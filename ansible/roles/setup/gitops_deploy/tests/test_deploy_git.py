@@ -15,8 +15,10 @@ from zoneinfo import ZoneInfo
 
 from deploy_git import (
     behind_marker,
+    broad_hold_cleared_by,
     dirty_alert_slot,
     dirty_summary,
+    hold_plane_marker,
     is_diverged,
     next_action,
     should_alert_dirty,
@@ -279,3 +281,51 @@ def test_dirty_alert_slot_keys():
     assert dirty_alert_slot(datetime(2026, 6, 20, 19, 59, tzinfo=CT)) == "2026-06-20:am"
     assert dirty_alert_slot(datetime(2026, 6, 20, 20, 0, tzinfo=CT)) == "2026-06-20:pm"
     assert dirty_alert_slot(datetime(2026, 6, 20, 23, 30, tzinfo=CT)) == "2026-06-20:pm"
+
+
+# ── which apply clears a broad hold ───────────────────────────────────────────────────────────
+# A hold names one unapplied plane, and every consumer gates on hold_sha, so clearing it after
+# a success in another plane reads as "the pipeline is fine" over a plane nothing applied.
+def test_the_same_playbook_untagged_clears_a_deploy_plane_hold():
+    assert broad_hold_cleared_by("ansible/deploy.yml", "ansible/deploy.yml", [])
+
+
+def test_another_playbook_does_not_clear_it():
+    assert not broad_hold_cleared_by(
+        "ansible/deploy.yml", "ansible/initial_setup.yml", ["gitops_deploy"]
+    )
+
+
+def test_an_untagged_run_covers_any_tag_set_held_against_it():
+    assert broad_hold_cleared_by(
+        "ansible/initial_setup.yml k3s", "ansible/initial_setup.yml", []
+    )
+
+
+def test_a_superset_of_tags_clears_it():
+    assert broad_hold_cleared_by(
+        "ansible/initial_setup.yml k3s", "ansible/initial_setup.yml", ["k3s", "dns"]
+    )
+
+
+def test_a_subset_of_tags_does_not():
+    assert not broad_hold_cleared_by(
+        "ansible/initial_setup.yml k3s,dns", "ansible/initial_setup.yml", ["k3s"]
+    )
+
+
+def test_a_tagged_run_does_not_clear_an_untagged_hold():
+    assert not broad_hold_cleared_by(
+        "ansible/initial_setup.yml", "ansible/initial_setup.yml", ["k3s"]
+    )
+
+
+def test_no_hold_is_nothing_to_keep():
+    assert broad_hold_cleared_by("", "ansible/deploy.yml", [])
+
+
+def test_the_marker_format_round_trips():
+    marker = hold_plane_marker("ansible/initial_setup.yml", ["k3s", "dns"])
+    assert marker == "ansible/initial_setup.yml k3s,dns"
+    assert broad_hold_cleared_by(marker, "ansible/initial_setup.yml", ["k3s", "dns"])
+    assert hold_plane_marker("ansible/deploy.yml", []) == "ansible/deploy.yml"

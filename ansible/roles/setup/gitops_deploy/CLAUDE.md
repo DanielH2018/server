@@ -29,9 +29,14 @@ and alerts the dedicated Discord webhook. Reverting the offending PR advances `o
 the held SHA, which stops the `skip_hold` short-circuit — but the marker itself (and the red
 **GitOps Deploy — Status** monitor, which pages on a non-empty `hold_sha`, no origin
 comparison) only clears when a later tick completes a *successful service deploy on this
-host*: `write_hold(None)` sits in the clean-deploy branch, and noop/docs-only ticks return
+host*: the clean-deploy branch calls `clear_service_hold()`, and noop/docs-only ticks return
 before reaching it. If everything after the held SHA maps to no service here, diagnose the
 hold, then delete `/var/lib/gitops-deploy/hold_sha` by hand.
+
+**A BROAD hold clears only when its own plane is applied** — see *Which apply clears a hold*
+below. `clear_service_hold()` is the service half of that rule: a k8s or Docker deploy applies
+no plane, so it leaves a broad hold standing rather than clearing `hold_sha` out from under an
+unapplied plane.
 
 **A service migrated off this host must take its rendered compose with it.** `containers_for()`
 treats a present `containers/<svc>/docker-compose.yml` as proof the service is deployed here,
@@ -161,7 +166,8 @@ stay).
     measurement against today's tree, not the slack a ceiling raise left behind. Nothing changed
     behaviour when the ceiling moved — `broad_budget_ok` has no production caller. A
     failure writes `hold_sha` **and** `hold_plane`, alerts saying nothing was rolled back, and
-    leaves the tree fast-forwarded. It deliberately does not `git reset` — resetting without
+    leaves the tree fast-forwarded. Both markers then survive every tick until this same plane
+    applies — *Which apply clears a hold* below. It deliberately does not `git reset` — resetting without
     redeploying would leave the tree claiming the old commit while live state is half-new.
   - **`_BROAD_MANUAL_PREFIXES` keeps the old defer-and-alert with no ff-merge**:
     `bootstrap.yml`, `k3s-bringup.yml`, `initial_setup.yml` — the bring-up playbooks, which run
@@ -263,9 +269,10 @@ stay).
     matches only while `origin_head == hold_sha`, so **the bad pin is still on master** — the next
     push past the held commit redeploys it. The Discord page says so; the fix is a revert on the
     remote (or a Renovate `allowedVersions` pin), not just clearing the hold.
-  - **A clean k8s tick is the second place `hold_sha` clears.** `write_hold(None)` also sits in the
-    Docker health-gate branch, which an all-k8s host never reaches — without this the first
-    rollback would leave **GitOps Deploy — Status** red permanently and need a manual `rm`.
+  - **A clean k8s tick is the second place `hold_sha` clears.** `clear_service_hold()` also sits
+    in the Docker health-gate branch, which an all-k8s host never reaches — without this the
+    first rollback would leave **GitOps Deploy — Status** red permanently and need a manual `rm`.
+    It clears a rollback hold only; a BROAD hold survives it, per *Which apply clears a hold*.
   - **One tick promotes at most `gitops_deploy_k8s_autodeploy_max_per_tick` services (default 3).**
     Every promoted service shares a single `ansible-playbook` run under one
     `K8S_DEPLOY_TIMEOUT_S`, and the failure path resets the whole merged range — so an
@@ -438,6 +445,38 @@ holds its own reference from import time. Both are the holes monitor-bridge's ch
 hit. ENFORCED by `ansible/tests/deploy/test_gitops_deploy_patch_boundary.py`, which requires every
 patched name to be *defined* (not merely imported) on the module it is patched on — the
 monitor-bridge guard counts an import as bound, which a facade defeats.
+
+## Which apply clears a hold
+
+**`hold_sha` clears only when the plane the hold names is applied** (`clear_broad_hold` /
+`clear_service_hold` in `gitops_deploy.py`, deciding through
+`deploy_logic.broad_hold_cleared_by`). Coverage, not equality: an untagged run applies the
+whole playbook and covers any tag set held against it, a tagged run covers a held tag set it is
+a superset of, and a tagged run covers an untagged hold not at all.
+
+It was unconditional until 2026-09-02, and that erased the fault. A broad apply of
+`ansible/deploy.yml` failed on `2d25ced3` and wrote both markers; the next tick routed to the
+setup plane, applied successfully, and cleared both within 30 seconds while the deploy plane
+stayed unapplied (issue #878). The k8s and Docker branches did the same through a second door —
+they cleared `hold_sha` and never touched `hold_plane`, orphaning it.
+
+**Why that is worse than a lost diagnostic.** Every consumer gates on `hold_sha` alone:
+`checks_service.gitops_status` reads `hold_plane` only to choose which sentence to print,
+`land.sh` reports `deploy-failed` off `hold_sha`, and `renovate_agent.decide` refuses to run a
+session while one is set. So the erasure turned **GitOps Deploy — Status** green over a plane
+nothing had applied.
+
+**The way out is manual, and both surfaces name it.** A hand `ansible-playbook` run is not the
+deployer, so it clears nothing — after fixing forward, `rm /var/lib/gitops-deploy/hold_sha
+/var/lib/gitops-deploy/hold_plane`. The Discord alert and the monitor's own message both print
+that. This is the same hand-clear the *Health gate + rollback* section already prescribes for a
+hold whose commits map to no service on this host.
+
+**The cost, stated: a surviving hold parks the Renovate agent** (`agent_logic.decide` returns
+`run=False` for any non-empty `hold_sha`). That is the intended direction — an unapplied plane
+is not the moment to land more bumps — but it means the manual clear is load-bearing, not
+cosmetic. It does not park deploys: `skip_hold` matches only while `origin_head == hold_sha`,
+so a stale hold stops nothing once origin advances.
 
 ## A failed run's error string
 
