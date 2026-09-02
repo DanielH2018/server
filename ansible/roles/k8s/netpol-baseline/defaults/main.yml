@@ -95,3 +95,22 @@ netpol_baseline_obs_node_cidrs:
   - 10.42.1.1/32    # daniel-server cni0 (otelq's loopback path when loki/prometheus/tempo land here)
   - 10.42.0.0/32    # daniel-box flannel.1 (the claude-otel cron, when prometheus is cross-node)
   - 10.42.1.0/32    # daniel-server flannel.1 (no caller nameable today; deliberate over-inclusion)
+
+# The slice-4.5 probe's targets, in one place because THREE things must agree about them: the
+# readiness gate in tasks/main.yml, the assertions in netpol-probe-slice45-job.yaml.j2, and the
+# ports that template hardcodes. Adding an assertion there without adding its target here reopens
+# the silent-green hole the gate exists to close.
+#
+# terraria is ABSENT, and its absence is the whole reason this list exists as a variable. It was
+# scaled to `replicas: 0` by #836 (2026-09-02 15:10) and its EndpointSlice emptied ten minutes
+# later, at which point every full `deploy.yml` began failing here — three times on 2026-09-02
+# before anyone read the task name, because a scoped per-service deploy never reaches this role.
+# Its probe leg is gated on this same list, so restoring terraria to a running replica count is a
+# one-line change here and the coverage comes back with it.
+netpol_baseline_slice45_targets:
+  - speedtest
+  - home-assistant
+  - uptime-kuma
+  - loki-homelab
+  - scrutiny
+  - karakeep-meilisearch
