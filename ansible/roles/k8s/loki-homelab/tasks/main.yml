@@ -1,8 +1,8 @@
 ---
 # Slice-7 Phase D.2 (2026-08-10): the homelab log store, SEPARATE from the claude-otel Loki
 # by decision KL1 (slice-7-phase-d-loki.md) — merging would give the verbatim-prompts store
-# the LAN route it deliberately lacks. Ships with the KL3 pod-log DaemonSet, which is what
-# un-darkens terraria-stats and restores log-based checks for cluster services.
+# the LAN route it deliberately lacks. Ships with the KL3 pod-log DaemonSet (Grafana Alloy),
+# which is what un-darkens terraria-stats and restores log-based checks for cluster services.
 
 - name: Deploy loki-homelab to the cluster
   ansible.builtin.include_role:
@@ -19,28 +19,10 @@
       # daniel-pi's push-only door. A separate router rather than another CIDR on the one
       # above — see the template for why that distinction is the whole point.
       - ingressroute-push.yaml
-      - promtail-daemonset.yaml
-
-- name: Restart the promtail DaemonSet after a config change
-  tags: [deploy]
-  # manifests_rollout above names the loki-homelab DEPLOYMENT, so the shared role's
-  # rollout-restart only ever reaches that one object; promtail reads the same ConfigMap and
-  # is a DaemonSet. This makes config delivery to it explicit, matching what claude-otel
-  # does for its own collector DaemonSet.
-  #
-  # Belt-and-braces by intent: promtail also reloads its config file on its own (it logs
-  # "Reloading configuration file"), so this is a guarantee rather than the sole delivery
-  # path — a ConfigMap propagating to a mounted volume is eventually-consistent, and a
-  # deploy that reports green should not depend on that timing.
-  #
-  # Skipped when this run created the DaemonSet — its pods start on the new config already,
-  # and `rollout restart` would race the initial rollout.
-  ansible.builtin.command:
-    cmd: k3s kubectl -n {{ k8s_namespace }} rollout restart daemonset/promtail
-  become: true
-  changed_when: true
-  when:
-    - manifests_render is changed
-    # `| default('')` — see the same guard in k8s/claude-otel for why an unreadable register
-    # must mean "restart" rather than raise.
-    - not (manifests_apply.stdout | default('')) is search('daemonset\.apps/promtail created')
+      - alloy-daemonset.yaml
+    # manifests_rollout names the loki-homelab DEPLOYMENT; the Alloy shipper reads the same
+    # ConfigMap and is a DaemonSet, so it is rolled as an extra. The shared role skips the
+    # restart on the run that created it, and queues it for the batch drain like any other.
+    manifests_extra_rollouts:
+      - name: alloy
+        kind: daemonset

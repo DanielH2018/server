@@ -85,7 +85,7 @@ def test_the_two_root_sites_are_still_written_out_in_full() -> None:
     """
     for rel in (
         "code-server/templates/deployment.yaml.j2",
-        "loki-homelab/templates/promtail-daemonset.yaml.j2",
+        "loki-homelab/templates/alloy-daemonset.yaml.j2",
     ):
         text = (K8S_ROLES / rel).read_text()
         assert re.search(r"^\s*runAsUser:\s*0\s*$", text, re.MULTILINE), (

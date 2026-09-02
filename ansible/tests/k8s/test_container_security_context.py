@@ -225,7 +225,7 @@ _ENTRYPOINT_DROPS = {
 # Root for host or network access that k8s cannot express any other way.
 _HOST_OR_NETWORK_ROOT = {
     # DAC_READ_SEARCH over a wholesale /var/log hostPath; syslog and auth.log are syslog:adm 640.
-    ("loki-homelab", "promtail"),
+    ("loki-homelab", "alloy"),
     ("crowdsec", "crowdsec-agent"),
     # NET_ADMIN for wg-quick and iptables, plus two pod sysctls.
     ("wg-easy", "wg-easy"),

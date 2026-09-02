@@ -241,12 +241,12 @@ def _daemonset(generation=1, observed=1, desired=2, updated=2, ready=2, availabl
 
 
 def test_k8s_health_reads_a_daemonset():
-    """Six workloads here are DaemonSets — promtail, node-exporter, the crowdsec node agent.
+    """Six workloads here are DaemonSets — alloy, node-exporter, the crowdsec node agent.
 
     They carry the same four numbers under different status field names.
     """
     text, code = health.format_k8s_health(
-        _daemonset(), _pods(("app", 0, None)), "promtail", _NOW
+        _daemonset(), _pods(("app", 0, None)), "alloy", _NOW
     )
     assert code == 0
     assert "2/2 ready" in text
@@ -256,16 +256,14 @@ def test_k8s_health_daemonset_missing_a_node_exits_one():
     """Scheduled on 2 nodes, ready on 1 — a Deployment's readyReplicas would read 0 here, so
     the field mapping has to be per-kind rather than a shared default."""
     text, code = health.format_k8s_health(
-        _daemonset(ready=1, available=1), _pods(("app", 0, None)), "promtail", _NOW
+        _daemonset(ready=1, available=1), _pods(("app", 0, None)), "alloy", _NOW
     )
     assert code == 1
     assert "rollout incomplete" in text
 
 
 def test_k8s_health_argv_can_ask_for_a_daemonset():
-    assert "daemonset" in health.k8s_deploy_argv(
-        "promtail", "homelab", kind="daemonset"
-    )
+    assert "daemonset" in health.k8s_deploy_argv("alloy", "homelab", kind="daemonset")
 
 
 def test_k8s_health_argv_targets_the_named_namespace():
@@ -405,7 +403,7 @@ _MULTI_WORKLOAD_ROLES = {
         "karakeep-meilisearch",
         "karakeep-time-tagger",
     },
-    "loki-homelab": {"loki-homelab", "promtail"},
+    "loki-homelab": {"alloy", "loki-homelab"},
     "n8n": {"n8n", "n8n-runners"},
     "pihole": {"pihole", "pihole-2"},
     "prowlarr": {"flaresolverr", "prowlarr"},

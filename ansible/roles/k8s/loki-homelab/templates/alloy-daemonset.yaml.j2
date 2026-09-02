@@ -1,17 +1,21 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 ---
-# KL3: the cluster pod-log shipper. A DaemonSet (not a Deployment) so the Phase F join adds
-# daniel-server's pod logs automatically when it becomes a node.
+# KL3: the cluster pod-log shipper, Grafana Alloy since 2026-09-02 (Promtail reached end of
+# life on 2026-03-02). A DaemonSet (not a Deployment) so a joining node adds its own pod and
+# host logs automatically. The config it runs is templates/config/config.alloy.j2.
+#
+# This is NOT the only shipper: daniel-pi runs its own Docker copy
+# (roles/containers/promtail/) and pushes over the LAN through ingressroute-push.yaml.j2.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: promtail
+  name: alloy
   namespace: {{ k8s_namespace }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: promtail
+  name: alloy
 rules:
   - apiGroups: [""]
     resources: [pods]
@@ -20,66 +24,74 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: promtail
+  name: alloy
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: promtail
+  name: alloy
 subjects:
   - kind: ServiceAccount
-    name: promtail
+    name: alloy
     namespace: {{ k8s_namespace }}
 ---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: promtail
+  name: alloy
   namespace: {{ k8s_namespace }}
 spec:
   selector:
     matchLabels:
-      app: promtail
+      app: alloy
   template:
     metadata:
       labels:
-        app: promtail
+        # `app: alloy` is what netpol-baseline's loki-homelab policy admits and what the
+        # claude-otel Prometheus job keeps — both move with this label.
+        app: alloy
         netpol-baseline: enforced
     spec:
-      # Unpinned at the drain step (2026-08-14): the Docker promtail retired with it, so
-      # this DaemonSet is the only shipper and covers both nodes' host + pod logs.
       enableServiceLinks: false
-      serviceAccountName: promtail
+      serviceAccountName: alloy
       priorityClassName: homelab-best-effort
       containers:
-        - name: promtail
-          image: {{ loki_homelab_promtail_image }}
-          # expand-env resolves ${HOSTNAME} (the downward-API nodeName) in the machine labels.
-          args: ["-config.file=/etc/promtail/promtail.yaml", "-config.expand-env=true"]
+        - name: alloy
+          image: {{ loki_homelab_alloy_image }}
+          args:
+            - run
+            - /etc/alloy/config.alloy
+            # Alloy binds 127.0.0.1 by default; the probes and the Prometheus scrape need the
+            # pod IP.
+            - --server.http.listen-addr=0.0.0.0:12345
+            # The tailing cursor lives here — see the positions volume below.
+            - --storage.path=/var/lib/alloy/data
+            # Same reason Loki's config sets analytics.reporting_enabled false: Pi-hole blocks
+            # stats.grafana.org and each report would spend its retry budget on a name that
+            # never resolves.
+            - --disable-reporting
           env:
-            # promtail drops any discovered target whose __host__ label doesn't match its
-            # own hostname — which in a pod is the POD name, never the node name the
-            # kubernetes_sd relabel writes into __host__. Without this override every
-            # pod-log target is silently filtered and {job="k8s"} stays empty.
+            # The node name, for the `machine` label and the discovery field selector. A pod's
+            # own HOSTNAME is the POD name, which would label every stream with a value that
+            # changes on every restart and match no node in the selector.
             - name: HOSTNAME
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
           ports:
-            - name: http
-              containerPort: 9080
+            - name: http-metrics
+              containerPort: 12345
           readinessProbe:
             httpGet:
-              path: /ready
-              port: 9080
+              path: /-/ready
+              port: http-metrics
             initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /ready
-              port: 9080
-            # promtail's /ready returns 503 until it has discovered targets, which is
-            # slower and less predictable than Loki's own readiness — a generous
-            # cold-start budget here, not Loki's tight 60s/30s.
+              path: /-/ready
+              port: http-metrics
+            # A generous cold-start budget rather than Loki's tight 60s/30s: the shipper's
+            # readiness waits on discovery, which is slower and less predictable than a store's.
             initialDelaySeconds: 60
             periodSeconds: 30
             failureThreshold: 10
@@ -92,45 +104,46 @@ spec:
               add:
                 # syslog/auth.log are owned by the `syslog` user (640), so root WITHOUT
                 # this cannot read them — the recurring root-without-DAC lesson, read-only
-                # variant. Same cap the Docker promtail carries for the same files.
+                # variant. Same cap the Docker shipper on the Pi carries for the same files.
                 - DAC_READ_SEARCH
           volumeMounts:
-            - name: promtail-config
-              mountPath: /etc/promtail
-            - name: promtail-varlog
+            - name: alloy-config
+              mountPath: /etc/alloy
+            - name: alloy-varlog
               mountPath: /var/log
               readOnly: true
             # The tailing cursor — losing it re-reads every log from the start, which is
-            # what the Loki ingest limits guard against (the Docker promtail_positions
-            # volume's whole reason to exist).
-            - name: promtail-positions
-              mountPath: /positions
+            # what the Loki ingest limits guard against.
+            - name: alloy-positions
+              mountPath: /var/lib/alloy/data
 {% if k3s_audit_log_enabled | default(false) %}
-            # The apiserver audit log, mounted at its real host path so the promtail config's
-            # __path__ needs no translation. Read-only: nothing here should ever write to the
-            # control plane's data directory.
+            # The apiserver audit log, mounted at its real host path so the config's path
+            # needs no translation. Read-only: nothing here should ever write to the control
+            # plane's data directory.
             - name: k8s-audit
               mountPath: {{ k3s_audit_log_dir }}
               readOnly: true
 {% endif %}
-          # 1 core, not 250m: promtail's work arrives in bursts as log lines do, and a quota
+          # 1 core, not 250m: a shipper's work arrives in bursts as log lines do, and a quota
           # clipped them for no benefit on a node running ~1.5 of 24 cores. Throttled seconds
           # measured 0.0076/s on 2026-08-29 — small, but the ceiling bought nothing against
           # it. The request (50m) is what reserves capacity under contention and is unchanged.
 {{ container_resources(cpu_limit='1', mem_limit='256Mi', cpu_request='50m', mem_request='64Mi') }}
       volumes:
-        - name: promtail-config
+        - name: alloy-config
           configMap:
             name: loki-homelab-config
             items:
-              - key: promtail.yaml
-                path: promtail.yaml
-        - name: promtail-varlog
+              - key: config.alloy
+                path: config.alloy
+        - name: alloy-varlog
           hostPath:
             path: /var/log
-        - name: promtail-positions
+        - name: alloy-positions
           hostPath:
-            path: /var/lib/promtail-positions
+            # A new path, not the Promtail one: Alloy cannot read positions.yaml, and sharing
+            # the directory would leave a stale file beside the live cursor forever.
+            path: /var/lib/alloy-positions
             type: DirectoryOrCreate
 {% if k3s_audit_log_enabled | default(false) %}
         - name: k8s-audit

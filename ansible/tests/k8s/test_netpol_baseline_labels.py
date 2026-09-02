@@ -117,7 +117,7 @@ SLICE_45A_WORKLOADS = {
     ("freshrss", "freshrss"),
     ("freshrss", "freshrss-feed-cache"),
     ("loki-homelab", "loki-homelab"),
-    ("loki-homelab", "promtail"),
+    ("loki-homelab", "alloy"),
     ("cloudflare-ddns", "cloudflare-ddns-direct"),
     ("cloudflare-ddns", "cloudflare-ddns-proxied"),
     ("node-exporter", "node-exporter"),

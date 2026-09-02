@@ -233,20 +233,22 @@ data:
       # the kubernetes-cadvisor job below; retargeting the retired checks onto its label
       # shape (container/pod, no `name`) is a Phase G candidate, not a drop-in.
       # Phase F drain (2026-08-14): the Docker promtail's LAN-published 9102 retired with
-      # it; the promtail DaemonSet is scraped per-pod like the otel/crowdsec jobs — one
+      # it; the shipper DaemonSet is scraped per-pod like the otel/crowdsec jobs — one
       # target per node, no origin label (it leaves the origin-pinned Scrape Targets set,
-      # TARGETS_MIN 3->2, and joins the cluster-native count).
-      - job_name: promtail
+      # TARGETS_MIN 3->2, and joins the cluster-native count). Alloy since 2026-09-02: the
+      # job keeps its name so the loki_write_* / loki_process_* series carry no job churn,
+      # and the port is Alloy's 12345.
+      - job_name: alloy
         scrape_interval: 1m
         kubernetes_sd_configs:
           - role: pod
         relabel_configs:
           - source_labels: [__meta_kubernetes_pod_label_app]
             action: keep
-            regex: promtail
+            regex: alloy
           - source_labels: [__meta_kubernetes_pod_container_port_number]
             action: keep
-            regex: "9080"
+            regex: "12345"
           - source_labels: [__meta_kubernetes_pod_node_name]
             target_label: node
       # The *arr stack's exportarr sidecars — queue depth, indexer health, per-root-folder free

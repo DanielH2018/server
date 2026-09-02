@@ -321,18 +321,18 @@ def test_secret_reads_are_logged_at_metadata():
         )
 
 
-def test_promtail_tails_the_audit_log():
+def test_alloy_tails_the_audit_log():
     """A log nobody can read is not a control — and the tail has two halves."""
     loki = ANSIBLE / "roles" / "k8s" / "loki-homelab" / "templates"
-    config = (loki / "configmap.yaml.j2").read_text()
-    daemonset = (loki / "promtail-daemonset.yaml.j2").read_text()
+    config = (loki / "config" / "config.alloy.j2").read_text()
+    daemonset = (loki / "alloy-daemonset.yaml.j2").read_text()
     assert "k3s_audit_log_path" in config, (
-        "promtail's config must declare a scrape job for k3s_audit_log_path. Otherwise the "
+        "the Alloy config must declare a file source for k3s_audit_log_path. Otherwise the "
         "audit log is readable only as root on daniel-box, which means in practice nobody "
         "reads it."
     )
     assert "k3s_audit_log_dir" in daemonset, (
-        "promtail's DaemonSet must hostPath-mount k3s_audit_log_dir. A scrape job whose path "
+        "the Alloy DaemonSet must hostPath-mount k3s_audit_log_dir. A file source whose path "
         "is not mounted into the container tails nothing and reports no error — the job just "
         "quietly finds no targets."
     )
@@ -345,7 +345,7 @@ def test_audit_log_vars_are_visible_to_both_roles():
         assert name in shared, (
             f"{name} must live in group_vars/all.yml. setup/k3s writes the log and "
             "loki-homelab tails it; as a role default the second role sees only the "
-            "`| default(false)` fallback, so promtail silently never tails the file."
+            "`| default(false)` fallback, so the shipper silently never tails the file."
         )
         assert name not in role, (
             f"{name} must not ALSO be a k3s role default — two definitions drift, and the "
