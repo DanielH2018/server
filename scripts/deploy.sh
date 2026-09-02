@@ -48,6 +48,16 @@
 
 set -u
 
+# Ansible's cli/__init__.py refuses to start on a non-blocking stdout or stderr
+# ("ERROR: Ansible requires blocking IO on stdin/stdout/stderr"), and Claude Code's Bash
+# tool hands its child a regular file with O_NONBLOCK set. The .claude/hooks/uv-python.sh
+# fixup cannot reach the `uv run ansible-playbook` inside this script — it only rewrites
+# the command text a session types — so the restore is repeated here. O_NONBLOCK lives on
+# the open file description that fork/exec shares, so clearing it from this child clears
+# it for the ansible run below; on a terminal or under systemd the flag is already clear
+# and this is a no-op.
+python3 -c 'import os; [os.set_blocking(f, True) for f in (0, 1, 2)]' 2>/dev/null || true
+
 LOCK=/var/lock/server-git-tree.lock
 # Covers gitops-deploy's worst-case hold of 2940s (STAGING_GATE_TIMEOUT_S 600 +
 # STAGING_EXPECT_TIMEOUT_S 120 + K8S_DEPLOY_TIMEOUT_S 900 + K8S_ROLLBACK_TIMEOUT_S 1320), not its

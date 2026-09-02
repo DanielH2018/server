@@ -24,6 +24,7 @@ Two properties matter more than any single vector:
 """
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -34,6 +35,11 @@ HOOKS = Path(__file__).resolve().parent.parent
 HOOK = HOOKS / "uv-python.sh"
 
 HOOK_TEXT = HOOK.read_text(encoding="utf-8")
+
+# The prefix the hook puts in front of an ansible command. Kept verbatim rather than
+# re-derived: a change to what the hook prepends should fail here and be read, since the
+# ansible CLIs refuse to start when it is missing.
+STDIO_FIXUP = "python3 -c 'import os; [os.set_blocking(f, True) for f in (0, 1, 2)]' 2>/dev/null; "
 
 _runnable = pytest.mark.skipif(
     not (shutil.which("bash") and shutil.which("jq")),
@@ -90,9 +96,10 @@ def test_hook_bails_on_an_unterminated_quote():
         ("py.test", "uv run py.test"),
         ("python -V", "uv run python -V"),
         ("python3 -m pytest", "uv run python3 -m pytest"),
+        # ansible carries the stdio fixup too; the pair below owns that half.
         (
             "ansible-playbook ansible/deploy.yml --check",
-            "uv run ansible-playbook ansible/deploy.yml --check",
+            STDIO_FIXUP + "uv run ansible-playbook ansible/deploy.yml --check",
         ),
         # A shebang-invoked script names no interpreter, so nothing python-shaped
         # appears in the command at all — it would otherwise reach 3.12 unnoticed.
@@ -194,3 +201,98 @@ def test_a_command_substitution_separator_is_a_real_separator():
 @_runnable
 def test_an_unterminated_quote_leaves_the_command_alone():
     assert rewrite("""python3 -c 'unterminated && pytest""") is None
+
+
+# --- the blocking-stdio fixup -------------------------------------------------------------
+#
+# Claude Code's Bash tool hands its child stdout and stderr with O_NONBLOCK set, and every
+# ansible CLI calls check_blocking_io() at import time and exits rather than run. The pair
+# below is what a rule needs to be trusted: commands that must carry the fixup, and
+# commands that must not.
+
+
+@_runnable
+@pytest.mark.parametrize(
+    "command",
+    [
+        "ansible-playbook ansible/deploy.yml --tags jellyfin",
+        # Already `uv run`, so the rewrite above changes nothing and only the fixup fires.
+        "uv run ansible-playbook ansible/bootstrap.yml",
+        "ansible --version",
+        "uv run ansible-vault view ansible/vars/secrets.yml",
+        "ansible-inventory --list",
+        # Not the first segment: the flag is shared, so one clear at the front covers it.
+        'cd "$HOME/server" && ansible-playbook ansible/deploy.yml',
+    ],
+)
+def test_ansible_commands_carry_the_stdio_fixup(command):
+    out = rewrite(command)
+    assert out is not None, command
+    assert out.startswith(STDIO_FIXUP), out
+
+
+@_runnable
+@pytest.mark.parametrize(
+    "command",
+    [
+        "pytest ansible/tests",
+        "uv run python scripts/diagnostics/probe.py targets",
+        "./scripts/diagnostics/probe.py health jellyfin",
+        # Arguments and prose, not programs.
+        "grep -rn ansible-playbook scripts",
+        "echo 'run ansible-playbook by hand'",
+    ],
+)
+def test_non_ansible_commands_do_not_carry_the_stdio_fixup(command):
+    out = rewrite(command)
+    assert out is None or STDIO_FIXUP not in out, out
+
+
+@_runnable
+def test_the_fixup_is_applied_once():
+    """A command already carrying it must not collect a second copy."""
+    out = rewrite(STDIO_FIXUP + "uv run ansible-playbook ansible/deploy.yml")
+    assert out is None or out.count("os.set_blocking") == 1
+
+
+@_runnable
+def test_the_fixup_actually_restores_blocking_stdio(tmp_path):
+    """The functional half: run the fixup with O_NONBLOCK set, and read the flag back.
+
+    A textual assertion that the hook prepends *something* cannot see whether that
+    something works. This reproduces the harness's own shape — a regular file opened
+    non-blocking — and asserts the flag is clear by the next command in the same shell.
+    """
+    out = tmp_path / "out"
+    fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_NONBLOCK)
+    try:
+        assert not os.get_blocking(fd)
+        probe = "python3 -c 'import os; print(os.get_blocking(1))'"
+        subprocess.run(
+            ["bash", "-c", STDIO_FIXUP + probe],
+            stdout=fd,
+            stderr=subprocess.DEVNULL,
+            check=True,
+            timeout=60,
+        )
+    finally:
+        os.close(fd)
+    assert out.read_text(encoding="utf-8").strip() == "True"
+
+
+def test_the_fixup_is_needed_because_a_non_blocking_child_reads_non_blocking(tmp_path):
+    """The control: without the fixup the same shell sees O_NONBLOCK, so the test above
+    is measuring the fixup rather than a default."""
+    out = tmp_path / "out"
+    fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_NONBLOCK)
+    try:
+        subprocess.run(
+            ["bash", "-c", "python3 -c 'import os; print(os.get_blocking(1))'"],
+            stdout=fd,
+            stderr=subprocess.DEVNULL,
+            check=True,
+            timeout=60,
+        )
+    finally:
+        os.close(fd)
+    assert out.read_text(encoding="utf-8").strip() == "False"
