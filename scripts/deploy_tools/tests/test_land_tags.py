@@ -539,3 +539,90 @@ def test_a_secrets_rotation_beside_a_service_is_flagged():
     tags, _ = land_tags.derive(files, changed_files=2)
     assert tags == ["sonarr"]
     assert land_tags.plane_note(files) != ""
+
+
+# --- a broad path whose change is comments only (issue #848) --------------------------------
+#
+# PR #843 changed three comments in `roles/setup/k3s/defaults/main.yml` and land.sh printed
+# `needs-manual-apply`, naming `k3s-bringup.yml --tags k3s` for a file whose rendered content
+# had not moved. The operator either runs a bring-up playbook for three comments or learns to
+# second-guess the verdict, and the second is the expensive one: `needs-manual-apply` is
+# load-bearing for the changes that genuinely need it.
+#
+# The path was never in `_BROAD_MANUAL_PREFIXES` -- those are the three bring-up playbooks --
+# so the comment-only read that shipped with PR #746 could not reach it. It is an UNROUTABLE
+# setup role: k3s lives in k3s-bringup.yml rather than initial_setup.yml.
+#
+# `quiet` is the set `deploy_tags.comment_only_paths` returns from the PR's own diff. These
+# tests pass it directly; the diff read itself is covered by the deployer's own suite
+# (`test_deploy_changes_planes.py`), which is where the YAML content reader lives.
+
+_PR_843 = [
+    "ansible/roles/setup/k3s/defaults/main.yml",
+    "ansible/tests/setup/test_etcd_restore_drill_cron.py",
+    "scripts/backup/etcd_restore_drill.sh",
+]
+_K3S_DEFAULTS = "ansible/roles/setup/k3s/defaults/main.yml"
+
+
+def test_a_comment_only_setup_role_edit_is_owed_to_nobody():
+    """PR #843's file list, with its one broad path read as comments only."""
+    assert land_tags.plane_note(_PR_843, quiet={_K3S_DEFAULTS}) == ""
+    assert land_tags.self_applied(_PR_843, quiet={_K3S_DEFAULTS}) is False
+
+
+def test_the_same_pr_with_a_real_edit_still_names_the_playbook():
+    """The reject half: the identical file list, nothing quiet.
+
+    Without this pair, a filter that emptied the note unconditionally would look the same
+    from the passing side.
+    """
+    assert "k3s-bringup.yml --tags k3s" in land_tags.plane_note(_PR_843)
+
+
+def test_a_quiet_path_does_not_excuse_the_loud_one_beside_it():
+    """One dropped path must not take the rest of the broad half with it."""
+    files = [*_PR_843, "ansible/bootstrap.yml"]
+    note = land_tags.plane_note(files, quiet={_K3S_DEFAULTS})
+    assert "initial_setup.yml --tags <role>" in note
+
+
+def test_a_quiet_path_never_mutes_a_secrets_rotation():
+    """The secrets half reads the UNFILTERED list.
+
+    `comment_only_broad_changes` cannot return `ansible/vars/secrets.yml` today, and keeping
+    the two reads separate means a later widening there cannot silently drop a rotation --
+    the one note whose absence leaves a live credential stale in a consumer.
+    """
+    files = ["ansible/vars/secrets.yml", _K3S_DEFAULTS]
+    note = land_tags.plane_note(
+        files, quiet={_K3S_DEFAULTS, "ansible/vars/secrets.yml"}
+    )
+    assert "secrets.yml" in note
+
+
+def test_an_unusable_range_reads_nothing_as_quiet():
+    """No range, or a malformed one, keeps every broad path loud.
+
+    A wrong answer here has to fall on the side of asking for the manual apply, so a range
+    this cannot use must never widen what gets dropped.
+    """
+    for range_ in ("", "..", "abc", "..def", "ghi.."):
+        assert land_tags._quiet_paths(_PR_843, range_) == set(), range_
+
+
+def test_land_reads_the_prs_own_diff_for_quiet_paths():
+    """land.sh must pass the PR's own range, not `--since`.
+
+    `--since` covers every other session's merged work, and a quiet path there is not this
+    PR's to judge.
+    """
+    assert '"$MERGE_SHA^..$MERGE_SHA"' in _LAND_SH
+    assert "--plane --range" in _LAND_SH
+    assert "--self-applied --range" in _LAND_SH
+
+
+def test_land_falls_back_to_loud_when_the_parent_is_not_local():
+    """A merge commit whose parent this checkout lacks must classify every path as loud."""
+    assert 'git rev-parse -q --verify "$MERGE_SHA^"' in _LAND_SH
+    assert "quiet_range=''" in _LAND_SH

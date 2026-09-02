@@ -281,7 +281,7 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
 
     # Same read the tick makes, so a comment-only edit to a bring-up playbook that the tick
     # will cross is not reported here as a blocker.
-    quiet = _comment_only_manual_changes(paths, "HEAD", args.ref)
+    quiet = comment_only_paths(paths, "HEAD", args.ref)
     if quiet:
         print(
             f"deploy blockers: comment-only change in {', '.join(sorted(quiet))} — the "
@@ -321,11 +321,15 @@ def _is_broad_manual(path: str) -> bool:
     return any(path.startswith(prefix) for prefix in _BROAD_MANUAL_PREFIXES)
 
 
-def _comment_only_manual_changes(
-    paths: list[str], old_ref: str, new_ref: str
-) -> set[str]:
+def comment_only_paths(paths: list[str], old_ref: str, new_ref: str) -> set[str]:
+    """The broad-plane paths whose diff between two refs carries no content change.
+
+    Public because `land_tags` asks the same question for its plane note, and two
+    derivations that disagree about one commit is the defect this module's shared imports
+    exist to prevent. `git show` runs against the primary checkout (`REPO`).
+    """
     sys.path.insert(0, str(DEPLOY_LOGIC_DIR))
-    from deploy_logic import comment_only_manual_changes
+    from deploy_logic import comment_only_broad_changes
 
     def show(ref: str, path: str) -> str:
         return subprocess.run(
@@ -336,7 +340,7 @@ def _comment_only_manual_changes(
             check=True,
         ).stdout
 
-    return comment_only_manual_changes(paths, old_ref, new_ref, show)
+    return comment_only_broad_changes(paths, old_ref, new_ref, show)
 
 
 def _cmd_changed(args: argparse.Namespace) -> int:

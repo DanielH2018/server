@@ -18,7 +18,7 @@ import yaml
 from deploy_changes import (
     ChangeSet,
     _content_lines,
-    comment_only_manual_changes,
+    comment_only_broad_changes,
     services_from_changed_paths,
     setup_tags_for,
 )
@@ -353,7 +353,7 @@ def test_every_task_file_deploy_yml_imports_is_visible_to_the_classifier():
 # --- comment-only edits to the manual set --------------------------------------------------
 #
 # The classifier decides by path alone, so PR #746's one-line comment edit to k3s-bringup.yml
-# parked every session's landing on 2026-09-02. comment_only_manual_changes reads both sides
+# parked every session's landing on 2026-09-02. comment_only_broad_changes reads both sides
 # and names the paths a caller may drop. The deployer is stdlib-only, so this compares content
 # lines rather than parsed YAML; every reject case below is a change that MUST stay broad.
 
@@ -389,7 +389,7 @@ def _quiet(
         texts[("old", path)] = before
     if after is not None:
         texts[("new", path)] = after
-    return comment_only_manual_changes([path], "old", "new", _show_from(texts))
+    return comment_only_broad_changes([path], "old", "new", _show_from(texts))
 
 
 def test_a_comment_only_edit_to_a_bringup_playbook_is_not_broad():
@@ -441,22 +441,88 @@ def test_a_playbook_added_or_deleted_in_the_range_stays_broad():
     assert _quiet(_PLAYBOOK, None) == set()
 
 
-def test_a_comment_only_edit_outside_the_manual_set_is_not_reported():
-    """Only the manual set is read.
+def test_a_comment_only_edit_on_the_deploy_plane_is_not_reported():
+    """Only the setup plane is read, and the deploy plane is deliberately outside it.
 
-    The other planes have their own arms and this function must not widen what the tick
-    fast-forwards past.
+    A comment-only edit under ansible/templates/ still runs a full deploy.yml. That costs
+    twenty minutes and tells no lie; the failure this function exists to stop is a verdict
+    naming a playbook with nothing to do, and only the setup plane produces one.
     """
     texts = {
         ("old", "ansible/templates/x.j2"): "# a\nb\n",
         ("new", "ansible/templates/x.j2"): "# c\nb\n",
     }
     assert (
-        comment_only_manual_changes(
+        comment_only_broad_changes(
             ["ansible/templates/x.j2"], "old", "new", _show_from(texts)
         )
         == set()
     )
+
+
+# --- comment-only edits to a setup ROLE (issue #848) ---------------------------------------
+#
+# The widening past the bring-up playbooks. PR #843 changed three comments in
+# `roles/setup/k3s/defaults/main.yml` -- not a manual path at all, but an UNROUTABLE setup
+# role, k3s living in k3s-bringup.yml rather than initial_setup.yml -- and land.sh ended
+# `needs-manual-apply` naming a bring-up playbook with nothing to apply.
+
+_K3S_DEFAULTS = """\
+# The etcd restore drill. Five structural failures are documented in the script.
+k3s_etcd_restore_drill_armed: true
+k3s_etcd_restore_drill_cron: "20 10 * * 1"
+k3s_drill_note: >-
+  the drill is --list-only
+  # not a comment: part of the note
+"""
+
+_SETUP_DEFAULTS = "ansible/roles/setup/k3s/defaults/main.yml"
+
+
+def test_a_comment_only_edit_to_a_setup_role_is_not_broad():
+    """PR #843's shape: only comment lines moved."""
+    after = _K3S_DEFAULTS.replace(
+        "# The etcd restore drill. Five structural failures are documented in the script.\n",
+        "# The etcd restore drill.\n# Five structural failures are documented in the script.\n",
+    )
+    quiet = _quiet(_K3S_DEFAULTS, after, path=_SETUP_DEFAULTS)
+    assert quiet == {_SETUP_DEFAULTS}
+    remaining = [p for p in [_SETUP_DEFAULTS] if p not in quiet]
+    assert not services_from_changed_paths(remaining).setup_roles
+
+
+def test_a_value_edit_to_a_setup_role_stays_broad():
+    """The reject half: the same file, one tunable changed."""
+    after = _K3S_DEFAULTS.replace('"20 10 * * 1"', '"20 11 * * 1"')
+    assert _quiet(_K3S_DEFAULTS, after, path=_SETUP_DEFAULTS) == set()
+    assert services_from_changed_paths([_SETUP_DEFAULTS]).setup_roles == {"k3s"}
+
+
+def test_a_comment_only_edit_to_a_non_yaml_setup_file_stays_broad():
+    """`_content_lines` is a YAML reader, so anything else is UNCLASSIFIABLE.
+
+    A `#` line in a `.j2` is usually rendered content, and the block-scalar rule means
+    nothing in a `.sh`. Both keep their broad classification rather than being guessed at.
+    """
+    for path in (
+        "ansible/roles/setup/k3s/files/drill.sh",
+        "ansible/roles/setup/k3s/templates/unit.j2",
+    ):
+        texts = {("old", path): "# a\nb\n", ("new", path): "# c\nb\n"}
+        assert (
+            comment_only_broad_changes([path], "old", "new", _show_from(texts)) == set()
+        ), path
+
+
+def test_a_comment_only_edit_to_a_service_role_is_not_reported():
+    """A service role is not a broad plane, so it is outside this read entirely.
+
+    Its deploy tag is derived from the path, and dropping the path would silently skip a
+    deploy this function has no business deciding about.
+    """
+    path = "ansible/roles/k8s/sonarr/defaults/main.yml"
+    texts = {("old", path): "# a\nb\n", ("new", path): "# c\nb\n"}
+    assert comment_only_broad_changes([path], "old", "new", _show_from(texts)) == set()
 
 
 def test_content_lines_reads_a_real_bringup_playbook_without_losing_tasks():

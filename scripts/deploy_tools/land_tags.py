@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -114,7 +115,7 @@ def shared_roles(files, declared: set[str] | None = None) -> list[str]:
     return sorted(roles - declared)
 
 
-def plane_note(files, declared: set[str] | None = None) -> str:
+def plane_note(files, declared: set[str] | None = None, quiet=()) -> str:
     """What this PR still needs a HUMAN to apply, or "" if nothing.
 
     A deploy tag covers roles/k8s and roles/containers. It does not cover the setup plane,
@@ -136,8 +137,16 @@ def plane_note(files, declared: set[str] | None = None) -> str:
     many roles consume it: PR #695 rotated `ruleset_drift_push_token`, whose two consumers --
     the uptime-kuma tile and the gitops_deploy pusher cron -- both kept rendering the old
     value, and this reported `nothing-to-deploy` (2026-09-01).
+
+    `quiet` is the broad-plane paths whose diff carries no content change, from
+    `deploy_tags.comment_only_paths`. They are dropped from the BROAD half only: a playbook
+    named for three edited comments has nothing to apply, and PR #843 ended
+    `needs-manual-apply` for exactly that (issue #848). The secrets half reads the unfiltered
+    list -- `comment_only_broad_changes` cannot return `ansible/vars/secrets.yml`, and
+    keeping the reads separate means a later widening there cannot silently mute a rotation.
     """
     files = list(files)
+    quiet = set(quiet)
     declared = declared_tags() if declared is None else declared
     notes = []
     shared = shared_roles(files, declared)
@@ -163,10 +172,11 @@ def plane_note(files, declared: set[str] | None = None) -> str:
     # roles here made land.sh exit 1 with `needs-manual-apply` for #723 while the next tick was
     # applying exactly those roles (2026-09-01). land.sh reads the deployer's own state for
     # that case instead.
-    manual = [p for p in files if any(p.startswith(x) for x in _BROAD_MANUAL_PREFIXES)]
+    loud = [p for p in files if p not in quiet]
+    manual = [p for p in loud if any(p.startswith(x) for x in _BROAD_MANUAL_PREFIXES)]
     unroutable = {
         r
-        for r in cs.setup_roles
+        for r in services_from_changed_paths(loud).setup_roles
         if setup_role_playbook(r) != "ansible/initial_setup.yml"
     }
     if manual or unroutable:
@@ -195,7 +205,7 @@ def plane_note(files, declared: set[str] | None = None) -> str:
     return " ".join(notes)
 
 
-def self_applied(files) -> bool:
+def self_applied(files, quiet=()) -> bool:
     """Whether the PR carries a broad change that the TICK applies, not deploy.sh.
 
     When true, the landing is not done until the deployer's own state says it converged.
@@ -204,8 +214,13 @@ def self_applied(files) -> bool:
     (deploy.sh's job), and for what `plane_note` already hands to a human. land.sh uses it
     to decide whether `behind_since` after the tick means "this PR is not applied yet" or
     is merely somebody else's pending merge.
+
+    `quiet` is dropped for the same reason `plane_note` drops it: a comment-only setup-role
+    edit is nothing for the tick to apply, so waiting on the deployer's state to prove it
+    did is waiting on a convergence that means something else.
     """
-    cs = services_from_changed_paths(list(files))
+    quiet = set(quiet)
+    cs = services_from_changed_paths([p for p in files if p not in quiet])
     if cs.broad_deploy:
         return True
     return any(
@@ -236,6 +251,22 @@ def derive(
     return sorted(tags), "pr"
 
 
+def _quiet_paths(paths: list[str], range_: str) -> set[str]:
+    """The broad paths in `paths` whose change over `<old>..<new>` is comments only.
+
+    Empty when no range was given, or when the range is malformed, or when git cannot read
+    a side of it -- every one of those keeps the path broad, which is the direction a wrong
+    answer here must fall (issue #848).
+    """
+    old, sep, new = range_.partition("..")
+    if not (sep and old and new):
+        return set()
+    try:
+        return deploy_tags.comment_only_paths(paths, old, new)
+    except subprocess.CalledProcessError, OSError:
+        return set()
+
+
 def main(argv: list[str] | None = None) -> int:
     """Print, from a PR's file list, its deploy tags, plane note, or self-applied flag.
 
@@ -256,14 +287,21 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="print `yes` if the tick applies part of this PR itself (empty otherwise)",
     )
+    parser.add_argument(
+        "--range",
+        dest="range_",
+        default="",
+        help="`<old>..<new>` — read the diff to drop broad paths whose change is comments only",
+    )
     ns = parser.parse_args(argv)
     payload = json.loads(ns.json)
     paths = [f["path"] for f in payload.get("files", [])]
+    quiet = _quiet_paths(paths, ns.range_)
     if ns.plane:
-        print(plane_note(paths))
+        print(plane_note(paths, quiet=quiet))
         return 0
     if ns.self_applied:
-        print("yes" if self_applied(paths) else "")
+        print("yes" if self_applied(paths, quiet=quiet) else "")
         return 0
     tags, source = derive(
         [f["path"] for f in payload.get("files", [])],

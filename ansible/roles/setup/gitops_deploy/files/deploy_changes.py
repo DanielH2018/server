@@ -226,13 +226,40 @@ def _content_lines(text: str) -> list[str]:
     return kept
 
 
-def comment_only_manual_changes(paths, old_ref: str, new_ref: str, show) -> set[str]:
-    """The _BROAD_MANUAL_PREFIXES paths whose change between two refs is comments only.
+# The paths a comment-only edit may be read out of. Both broad-setup families, which is a
+# superset of _BROAD_MANUAL_PREFIXES (all three bring-up playbooks are listed there too) --
+# written as the union so widening either list widens this with it.
+#
+# The DEPLOY plane is deliberately absent. A comment-only edit under ansible/templates/ or
+# ansible/inventory/ still runs a full deploy.yml, which costs twenty minutes and tells no
+# lie; the failure this exists to stop is a verdict that sends an operator to a playbook with
+# nothing to do, and that verdict only comes off the setup plane.
+_COMMENT_ONLY_PREFIXES = tuple(
+    dict.fromkeys(_BROAD_MANUAL_PREFIXES + _BROAD_SETUP_PREFIXES)
+)
+# `_content_lines` is a YAML reader: it knows block scalars, and `#` starts a comment. In a
+# `.j2` a `#` line is usually rendered content, and in a `.sh` or `.py` the block-scalar rule
+# is meaningless -- so anything else is UNCLASSIFIABLE and keeps its broad classification.
+# Every _BROAD_MANUAL_PREFIXES path is a `.yml`, so this suffix guard changed nothing about
+# the behaviour that shipped with PR #746.
+_COMMENT_ONLY_SUFFIXES = (".yml", ".yaml")
+
+
+def comment_only_broad_changes(paths, old_ref: str, new_ref: str, show) -> set[str]:
+    """The broad-plane YAML paths whose change between two refs is comments only.
 
     The classifier decides by path alone, so a one-line comment edit to k3s-bringup.yml
     parked every session's landing until an operator ff-merged the primary checkout by hand
     (PR #746, 2026-09-02). A caller drops the paths returned here before classifying;
-    the remaining paths still take the manual arm on their own.
+    the remaining paths still take the broad arm on their own.
+
+    Eligibility widened from the bring-up playbooks to the whole setup plane on 2026-09-02.
+    A comment-only edit to `roles/setup/k3s/defaults/main.yml` is not a manual path at all --
+    it is an UNROUTABLE setup role, k3s living in k3s-bringup.yml rather than
+    initial_setup.yml -- so PR #843 ended `needs-manual-apply`, naming a bring-up playbook
+    with nothing to apply for three edited comments (issue #848). Reading the same question
+    ("did any content change?") on both families keeps the deployer's defer-and-alert and
+    land.sh's verdict from disagreeing about the same commit.
 
     `show(ref, path)` returns the file's text at that ref and raises when it cannot. A path
     that is added, deleted or unreadable on either side stays broad -- the fail-safe
@@ -240,7 +267,9 @@ def comment_only_manual_changes(paths, old_ref: str, new_ref: str, show) -> set[
     """
     quiet: set[str] = set()
     for p in paths:
-        if not any(p.startswith(prefix) for prefix in _BROAD_MANUAL_PREFIXES):
+        if not p.endswith(_COMMENT_ONLY_SUFFIXES):
+            continue
+        if not any(p.startswith(prefix) for prefix in _COMMENT_ONLY_PREFIXES):
             continue
         try:
             before = show(old_ref, p)

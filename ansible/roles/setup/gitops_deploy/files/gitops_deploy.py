@@ -36,7 +36,7 @@ from deploy_logic import (
     behind_marker,
     broad_remediation,
     ci_verdict,
-    comment_only_manual_changes,
+    comment_only_broad_changes,
     github_auth_headers,
     github_token,
     setup_tags_for,
@@ -1222,7 +1222,7 @@ def main() -> int:
     # A comment-only edit to a bring-up playbook is not a change the deployer must park on;
     # it parked three sessions' landings on 2026-09-02 (PR #746) until an operator ff-merged
     # by hand. The paths dropped here would have set broad_manual by prefix alone.
-    quiet = comment_only_manual_changes(
+    quiet = comment_only_broad_changes(
         paths, local, origin, lambda ref, p: run(["git", "show", f"{ref}:{p}"])
     )
     if quiet:
