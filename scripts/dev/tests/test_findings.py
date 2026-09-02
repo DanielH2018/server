@@ -6,6 +6,7 @@ Run: uv run pytest scripts/dev/tests/test_findings.py
 from __future__ import annotations
 
 import json
+import subprocess
 
 import findings
 
@@ -266,7 +267,13 @@ def test_open_with_a_fixed_match_reopens_then_comments():
     assert "regression" in plans[1][plans[1].index("--body") + 1].lower()
 
 
+def _all_labels_exist(monkeypatch):
+    """Every `open` CLI test needs this: cmd_open syncs labels before it reads issues."""
+    monkeypatch.setattr(findings, "_existing_labels", lambda: set(findings.LABELS))
+
+
 def test_open_cli_exits_3_on_refuted(monkeypatch, tmp_path):
+    _all_labels_exist(monkeypatch)
     body = tmp_path / "b.md"
     body.write_text("B")
     fp = findings.fingerprint("T", "a.py:1")
@@ -301,6 +308,7 @@ def test_open_cli_exits_3_on_refuted(monkeypatch, tmp_path):
 
 
 def test_open_cli_prints_the_created_number(monkeypatch, tmp_path, capsys):
+    _all_labels_exist(monkeypatch)
     body = tmp_path / "b.md"
     body.write_text("B")
     monkeypatch.setattr(findings, "load_issues", lambda state="all": [])
@@ -405,3 +413,228 @@ def test_close_refuted_without_a_reason_is_rejected_before_any_write(monkeypatch
         lambda *a, **k: (_ for _ in ()).throw(AssertionError("gh called")),
     )
     assert findings.main(["close", "5", "--refuted"]) == 2
+
+
+def test_close_refuted_with_a_pr_is_rejected(monkeypatch):
+    monkeypatch.setattr(
+        findings,
+        "gh",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("gh called")),
+    )
+    assert (
+        findings.main(["close", "5", "--refuted", "--reason", "r", "--pr", "700"]) == 2
+    )
+
+
+def test_close_fixed_with_a_pr_is_accepted(monkeypatch):
+    calls = []
+    monkeypatch.setattr(findings, "gh", lambda *a, **k: calls.append(list(a)))
+    assert findings.main(["close", "5", "--fixed", "--pr", "700"]) == 0
+    assert calls[0][:3] == ["issue", "close", "5"]
+
+
+# --- the Project board is best-effort ---------------------------------------------------------
+
+
+def test_without_project_drops_the_pair_by_position():
+    argv = [
+        "issue",
+        "create",
+        "--title",
+        "Claude findings",
+        "--project",
+        "Claude findings",
+    ]
+    assert findings.without_project(argv) == [
+        "issue",
+        "create",
+        "--title",
+        "Claude findings",
+    ]
+
+
+def test_is_project_failure_matches_project_and_scope_only():
+    assert findings.is_project_failure("could not resolve to a ProjectV2")
+    assert findings.is_project_failure("missing required SCOPES")
+    assert not findings.is_project_failure("HTTP 422: label not found")
+    assert not findings.is_project_failure(None)
+
+
+def _open_argv(body):
+    return [
+        "open",
+        "--title",
+        "T",
+        "--body-file",
+        str(body),
+        "--severity",
+        "low",
+        "--kind",
+        "gap",
+    ]
+
+
+class _CreatedProcess:
+    stdout = "https://github.com/o/r/issues/42\n"
+
+
+def test_open_retries_without_project_and_warns(monkeypatch, tmp_path, capsys):
+    _all_labels_exist(monkeypatch)
+    body = tmp_path / "b.md"
+    body.write_text("B")
+    monkeypatch.setattr(findings, "load_issues", lambda state="all": [])
+    calls = []
+
+    def fake_gh(*argv, **kwargs):
+        calls.append(list(argv))
+        if len(calls) == 1:
+            raise subprocess.CalledProcessError(
+                1, "gh", stderr="could not resolve to a ProjectV2\nmore\n"
+            )
+        return _CreatedProcess()
+
+    monkeypatch.setattr(findings, "gh", fake_gh)
+    assert findings.main(_open_argv(body)) == 0
+    out = capsys.readouterr()
+    assert "#42 created" in out.out
+    assert 'not added to Project "Claude findings": could not resolve' in out.err
+    assert "--project" in calls[0] and "--project" not in calls[1]
+
+
+def test_open_propagates_a_non_project_failure(monkeypatch, tmp_path):
+    _all_labels_exist(monkeypatch)
+    body = tmp_path / "b.md"
+    body.write_text("B")
+    monkeypatch.setattr(findings, "load_issues", lambda state="all": [])
+
+    def fake_gh(*argv, **kwargs):
+        raise subprocess.CalledProcessError(1, "gh", stderr="HTTP 422: label not found")
+
+    monkeypatch.setattr(findings, "gh", fake_gh)
+    assert findings.main(_open_argv(body)) == 1
+
+
+# --- open creates the labels it is about to use -----------------------------------------------
+
+
+def test_open_creates_a_missing_label_before_the_issue(monkeypatch, tmp_path):
+    body = tmp_path / "b.md"
+    body.write_text("B")
+    monkeypatch.setattr(
+        findings, "_existing_labels", lambda: set(findings.LABELS) - {"kind/gap"}
+    )
+    monkeypatch.setattr(findings, "load_issues", lambda state="all": [])
+    calls = []
+
+    def fake_gh(*argv, **kwargs):
+        calls.append(list(argv))
+        return _CreatedProcess()
+
+    monkeypatch.setattr(findings, "gh", fake_gh)
+    assert findings.main(_open_argv(body)) == 0
+    assert calls[0][:3] == ["label", "create", "kind/gap"]
+    assert calls[1][:2] == ["issue", "create"]
+
+
+def test_open_with_every_label_present_creates_none(monkeypatch, tmp_path):
+    _all_labels_exist(monkeypatch)
+    body = tmp_path / "b.md"
+    body.write_text("B")
+    monkeypatch.setattr(findings, "load_issues", lambda state="all": [])
+    calls = []
+
+    def fake_gh(*argv, **kwargs):
+        calls.append(list(argv))
+        return _CreatedProcess()
+
+    monkeypatch.setattr(findings, "gh", fake_gh)
+    assert findings.main(_open_argv(body)) == 0
+    assert all(argv[:2] != ["label", "create"] for argv in calls)
+
+
+# --- the fingerprint trailer across line endings -----------------------------------------------
+
+_CRLF_BODY = "details\r\n\r\n---\r\nFingerprint: `abc123def456`\r\nSource: s\r\n"
+
+
+def test_find_by_fingerprint_matches_a_crlf_body():
+    issue = _issue(7)
+    issue["body"] = _CRLF_BODY
+    assert findings.find_by_fingerprint([issue], "abc123def456")["number"] == 7
+
+
+def test_find_by_fingerprint_rejects_a_different_id_in_a_crlf_body():
+    issue = _issue(7)
+    issue["body"] = _CRLF_BODY
+    assert findings.find_by_fingerprint([issue], "0123456789ab") is None
+
+
+# --- documented exits instead of tracebacks ----------------------------------------------------
+
+
+def test_open_with_a_missing_body_file_exits_2_without_calling_gh(
+    monkeypatch, tmp_path
+):
+    def boom(*a, **k):
+        raise AssertionError("gh called")
+
+    monkeypatch.setattr(findings, "gh", boom)
+    monkeypatch.setattr(findings, "_existing_labels", boom)
+    assert findings.main(_open_argv(tmp_path / "absent.md")) == 2
+
+
+def test_a_gh_timeout_exits_1(monkeypatch, tmp_path, capsys):
+    _all_labels_exist(monkeypatch)
+    body = tmp_path / "b.md"
+    body.write_text("B")
+
+    def boom(state="all"):
+        raise subprocess.TimeoutExpired("gh", 60)
+
+    monkeypatch.setattr(findings, "load_issues", boom)
+    assert findings.main(_open_argv(body)) == 1
+    assert "gh failed:" in capsys.readouterr().err
+
+
+# --- a closed issue's date and state -----------------------------------------------------------
+
+
+def test_open_on_a_refuted_issue_with_a_null_closed_at(monkeypatch, tmp_path, capsys):
+    _all_labels_exist(monkeypatch)
+    body = tmp_path / "b.md"
+    body.write_text("B")
+    existing = _issue(
+        3, state="CLOSED", labels=("refuted",), fp=findings.fingerprint("T", None)
+    )
+    existing["closedAt"] = None
+    monkeypatch.setattr(findings, "load_issues", lambda state="all": [existing])
+    monkeypatch.setattr(
+        findings,
+        "gh",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("gh called")),
+    )
+    assert findings.main(_open_argv(body)) == 3
+    assert "refuted" in capsys.readouterr().out
+
+
+def test_touch_refuses_a_closed_issue(monkeypatch, capsys):
+    monkeypatch.setattr(
+        findings,
+        "gh_json",
+        lambda *a, **k: _issue(12, state="CLOSED", labels=("refuted",)),
+    )
+    monkeypatch.setattr(
+        findings,
+        "gh",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("gh called")),
+    )
+    assert findings.main(["touch", "12"]) == 3
+    assert "closed (refuted)" in capsys.readouterr().out
+
+
+# --- label prefixes resolve deterministically ---------------------------------------------------
+
+
+def test_prefixed_picks_the_alphabetically_first_of_two():
+    for names in ({"domain/network", "domain/cicd"}, {"domain/cicd", "domain/network"}):
+        assert findings._prefixed(names, "domain/") == "cicd"

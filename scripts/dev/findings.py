@@ -23,7 +23,8 @@ Usage::
     uv run python scripts/dev/findings.py list [--state open|closed|all] [--json]
 
 Exit codes: 0 done; 1 gh failed (its stderr is printed); 2 bad arguments;
-3 the fingerprint belongs to an issue closed as refuted, nothing was written.
+3 nothing was written because the issue refuses it — the fingerprint belongs to an issue
+closed as refuted, or `touch` was given a closed issue.
 """
 
 from __future__ import annotations
@@ -80,11 +81,14 @@ for _d in DOMAINS:
 # The GitHub Project (v2) every created issue is added to. Projects is a board over issues,
 # not a second record: the issue and its labels stay the source of truth, and the board is
 # what the operator looks at. `gh issue create --project <title>` adds the item in the same
-# call, so no second write and no item id. It needs the `project` token scope.
+# call, so no second write and no item id. It needs the `project` token scope, so the board
+# is best-effort: `cmd_open` retries without it and warns rather than losing the finding.
 PROJECT_TITLE = "Claude findings"
 
 _LIST_FIELDS = "number,title,state,labels,body,createdAt,closedAt,url,comments"
-_FP_RE = re.compile(r"^Fingerprint: `([0-9a-f]{12})`$", re.M)
+# `\s*$` rather than `$`: a body fetched from the API can carry CRLF line endings, and
+# `re.M`'s `$` matches before the `\n` but not before the `\r`.
+_FP_RE = re.compile(r"^Fingerprint: `([0-9a-f]{12})`\s*$", re.M)
 _LINE_SUFFIX = re.compile(r":\d+(?:-\d+)?$")
 _REOBSERVED = "Re-observed"
 
@@ -130,10 +134,44 @@ def reobservations(issue: dict) -> int:
 
 
 def _prefixed(names: set[str], prefix: str) -> str | None:
-    for n in names:
+    """The first label under ``prefix``, alphabetically.
+
+    Iterating the set directly would pick an arbitrary one of two `severity/*` labels, so
+    the same issue could render two different rows on two runs.
+    """
+    for n in sorted(names):
         if n.startswith(prefix):
             return n[len(prefix) :]
     return None
+
+
+def without_project(argv: list[str]) -> list[str]:
+    """``argv`` with the ``--project <title>`` pair removed.
+
+    Removal is by position, not by value: a finding titled "Claude findings" would otherwise
+    lose its own ``--title`` argument.
+    """
+    out = []
+    skip = False
+    for i, arg in enumerate(argv):
+        if skip:
+            skip = False
+            continue
+        if arg == "--project" and i + 1 < len(argv):
+            skip = True
+            continue
+        out.append(arg)
+    return out
+
+
+def is_project_failure(stderr: str | None) -> bool:
+    """Whether ``gh``'s stderr blames the Project rather than the issue.
+
+    A missing board reads "could not resolve to a ProjectV2"; a token without the `project`
+    scope reads "missing required scopes". Both mean the issue itself is fine.
+    """
+    low = (stderr or "").lower()
+    return "project" in low or "scope" in low
 
 
 def issue_rows(issues: list[dict]) -> list[dict]:
@@ -196,6 +234,13 @@ def load_issues(state: str = "all") -> list[dict]:
         )
         or []
     )
+
+
+def _existing_labels() -> set[str]:
+    return {
+        lab["name"]
+        for lab in gh_json("label", "list", "--limit", "200", "--json", "name") or []
+    }
 
 
 def run(plans: list[list[str]], dry_run: bool) -> None:
@@ -271,7 +316,29 @@ def plan_open(
     return "touched", 0, plan_touch(existing, source)
 
 
+def _create_with_optional_project(argv: list[str]) -> str:
+    """Run the create argv, retrying without ``--project`` if the board is the only problem.
+
+    Returns the created issue's URL. The board is a view; losing it must not lose the
+    finding, so a Project failure warns and the issue is created anyway.
+    """
+    try:
+        return gh(*argv).stdout.strip()
+    except subprocess.CalledProcessError as exc:
+        if not is_project_failure(exc.stderr):
+            raise
+        first_line = (exc.stderr or "").strip().partition("\n")[0]
+        url = gh(*without_project(argv)).stdout.strip()
+        sys.stderr.write(
+            f'warning: not added to Project "{PROJECT_TITLE}": {first_line}\n'
+        )
+        return url
+
+
 def cmd_open(args: argparse.Namespace) -> int:
+    if not args.body_file.is_file():
+        sys.stderr.write(f"open: body file not found: {args.body_file}\n")
+        return 2
     body = args.body_file.read_text()
     fp = fingerprint(args.title, args.file)
     labels = ["claude", f"severity/{args.severity}", f"kind/{args.kind}"]
@@ -279,13 +346,16 @@ def cmd_open(args: argparse.Namespace) -> int:
         labels.append(f"domain/{args.domain}")
     if args.no_vetted_remediation:
         labels.append("no-vetted-remediation")
+    # `gh issue create --label` fails on a label the repo does not have, so the first `open`
+    # in a fresh repo has to create the label set before it can use it.
+    run(plan_sync_labels(_existing_labels()), args.dry_run)
     existing = find_by_fingerprint(load_issues("all"), fp)
     outcome, code, plans = plan_open(
         existing, title=args.title, body=body, labels=labels, fp=fp, source=args.source
     )
     if outcome == "refuted":
         print(
-            f"#{existing['number']} refuted: closed on {existing.get('closedAt', '?')[:10]}; not reopened"
+            f"#{existing['number']} refuted: closed on {(existing.get('closedAt') or '?')[:10]}; not reopened"
         )
         return code
     if outcome == "created":
@@ -293,7 +363,7 @@ def cmd_open(args: argparse.Namespace) -> int:
             run(plans, True)
             print(f"(dry-run) would create; fingerprint {fp}")
             return 0
-        url = gh(*plans[0]).stdout.strip()
+        url = _create_with_optional_project(plans[0])
         print(f"#{url.rsplit('/', 1)[-1]} created  {url}")
         return 0
     run(plans, args.dry_run)
@@ -330,6 +400,10 @@ def _load_issue(number: int) -> dict:
 
 def cmd_touch(args: argparse.Namespace) -> int:
     issue = _load_issue(args.number)
+    if issue.get("state") == "CLOSED":
+        why = "refuted" if "refuted" in label_names(issue) else "fixed"
+        print(f"#{args.number} is closed ({why}); use open to re-file")
+        return 3
     plans = plan_touch(issue, args.source)
     run(plans, args.dry_run)
     escalated = any(p[:2] == ["issue", "edit"] for p in plans)
@@ -338,6 +412,10 @@ def cmd_touch(args: argparse.Namespace) -> int:
 
 
 def cmd_close(args: argparse.Namespace) -> int:
+    # argparse cannot express "--pr only with --fixed" across a mutually exclusive group.
+    if args.refuted and args.pr:
+        sys.stderr.write("close --pr goes with --fixed\n")
+        return 2
     if args.refuted and not args.reason:
         sys.stderr.write(
             "close --refuted needs --reason: a bare refutation teaches the next run nothing\n"
@@ -352,11 +430,7 @@ def cmd_close(args: argparse.Namespace) -> int:
 
 
 def cmd_sync_labels(args: argparse.Namespace) -> int:
-    existing = {
-        lab["name"]
-        for lab in gh_json("label", "list", "--limit", "200", "--json", "name") or []
-    }
-    plans = plan_sync_labels(existing)
+    plans = plan_sync_labels(_existing_labels())
     run(plans, args.dry_run)
     print(f"sync-labels: {len(plans)} label(s) created")
     return 0
@@ -459,8 +533,15 @@ def main(argv: list[str] | None = None) -> int:
     }[args.cmd]
     try:
         return handler(args)
-    except subprocess.CalledProcessError as exc:
-        sys.stderr.write(f"gh failed ({exc.returncode}): {exc.stderr.strip()}\n")
+    except (subprocess.SubprocessError, OSError) as exc:
+        # OSError covers a missing `gh` binary; SubprocessError covers TimeoutExpired as
+        # well as the CalledProcessError whose stderr is the message worth showing.
+        if isinstance(exc, subprocess.CalledProcessError):
+            sys.stderr.write(
+                f"gh failed ({exc.returncode}): {(exc.stderr or '').strip()}\n"
+            )
+        else:
+            sys.stderr.write(f"gh failed: {exc}\n")
         return 1
 
 
