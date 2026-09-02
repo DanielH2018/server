@@ -1,0 +1,93 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: navidrome
+  namespace: {{ k8s_namespace }}
+spec:
+  revisionHistoryLimit: 3
+  # Zero on purpose — see the parked note in this role's defaults/main.yml.
+  replicas: {{ navidrome_k8s_replicas }}
+  # The data PVC is ReadWriteOnce and Longhorn runs one replica, so a rolling update would
+  # deadlock: the new pod waits for a volume the old pod still holds. Navidrome's index is
+  # sqlite besides, which wants one writer.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: navidrome
+  template:
+    metadata:
+      labels:
+        app: navidrome
+        netpol-baseline: enforced
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        runAsUser: {{ navidrome_k8s_uid }}
+        runAsGroup: {{ navidrome_k8s_uid }}
+        # Longhorn hands back a root-owned filesystem; without an fsGroup the non-root process
+        # cannot create its sqlite index on the fresh volume.
+        fsGroup: {{ navidrome_k8s_uid }}
+      automountServiceAccountToken: false
+      priorityClassName: homelab-best-effort
+      # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
+      # Weighted so the pod still schedules if daniel-server is cordoned or full.
+{{ node_affinity_preference('daniel-server') }}
+      containers:
+        - name: navidrome
+          image: {{ navidrome_k8s_image }}
+          ports:
+            - containerPort: {{ container_item.port }}
+{{ hardened_security_context(read_only=true, non_root=true) }}
+          env:
+            - name: ND_MUSICFOLDER
+              value: {{ navidrome_k8s_music_dir }}
+            - name: ND_DATAFOLDER
+              value: /data
+            - name: ND_PORT
+              value: "{{ container_item.port }}"
+            # Off, and load-bearing for the netpol posture: this switch governs BOTH the
+            # GitHub release check and the metadata agents (Last.fm, Spotify, ListenBrainz).
+            # With it false the pod opens no outbound connection at all, which is what puts
+            # navidrome in BORN_FENCED_ROLES — see docs/networkpolicy-default-deny.md.
+            - name: ND_ENABLEEXTERNALSERVICES
+              value: "false"
+            - name: TZ
+              value: "{{ tz }}"
+          volumeMounts:
+            - name: navidrome-data
+              mountPath: /data
+            # The library. An emptyDir until a music tree exists on the media volume — the
+            # media PVC holds books, movies and tv only. Mounting the media root here instead
+            # would point the scanner at the video library.
+            - name: navidrome-music
+              mountPath: {{ navidrome_k8s_music_dir }}
+              readOnly: true
+            # readOnlyRootFilesystem is on, and the transcoder writes its scratch files here.
+            - name: navidrome-tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: {{ container_item.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: {{ container_item.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 30
+{{ container_resources(cpu_limit=navidrome_k8s_cpu_limit, mem_limit=navidrome_k8s_mem_limit, cpu_request=navidrome_k8s_cpu_request, mem_request=navidrome_k8s_mem_request) }}
+      volumes:
+        - name: navidrome-data
+          persistentVolumeClaim:
+            claimName: {{ navidrome_k8s_claim }}
+        - name: navidrome-music
+          emptyDir: {}
+        - name: navidrome-tmp
+          emptyDir: {}

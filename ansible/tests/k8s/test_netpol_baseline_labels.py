@@ -60,6 +60,10 @@ BORN_FENCED_ROLES = {
     # app does reach jsDelivr for on-demand TeX packages and a CORS proxy for git — but those
     # are the BROWSER's fetches, not the pod's, so the container itself dials nothing.
     "texbrain",
+    # Music server over its own Longhorn volume. Traefik is its only caller, and
+    # ND_ENABLEEXTERNALSERVICES=false in its deployment turns off the two things that would
+    # otherwise make it dial out: the GitHub version check and the metadata agents.
+    "navidrome",
 }
 
 LABEL = ("netpol-baseline", "enforced")

@@ -245,7 +245,10 @@ clones or resolves anything; **texbrain** (2026-08-26), nginx over a static LaTe
 into the image. texbrain is worth a second look because it appears to contradict the shape: the
 app reaches jsDelivr for on-demand TeX packages and a CORS proxy for git. Those are the
 browser's fetches, made from the reader's machine, not the pod's — the container serves files
-and opens no connection of its own.
+and opens no connection of its own. **navidrome** (2026-09-02), the music server, is the one
+here that had to be *made* to fit: the image checks GitHub for a new release and runs metadata
+agents by default, so its deployment sets `ND_ENABLEEXTERNALSERVICES=false`. Turn that back on
+and navidrome stops being a leaf app, so it leaves this set at the same time.
 
 **Why observability moved from first to third.** It is small in pod count but dense in
 exactly the paths that are hardest — `loki:3100`, `tempo:3200`, `prometheus:9090` and

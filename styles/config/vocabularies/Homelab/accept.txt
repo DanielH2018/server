@@ -162,6 +162,7 @@ MetalLB
 Mullvad
 [Pp]ihole
 [Pp]romtail
+[Nn]avidrome
 [Pp]rowlarr
 [Qq]bittorrent
 [Rr]adarr

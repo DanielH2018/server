@@ -1,0 +1,25 @@
+---
+# Navidrome — issue #803. One Deployment, one Longhorn claim, one Authelia-gated route.
+
+# The claim is created BEFORE the workload, so the pod has a PVC to mount. Created here rather
+# than rendered as a pvc.yaml: exactly one path must own a claim name, and volume-claim is the
+# path every other Longhorn-backed role in this fleet uses.
+- name: Create the navidrome data volume claim
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: k8s/volume-claim
+  vars:
+    volume_claim_service: navidrome
+    volume_claim_name: "{{ navidrome_k8s_claim }}"
+    volume_claim_storage_class: "{{ navidrome_k8s_storage_class }}"
+    volume_claim_size: "{{ navidrome_k8s_size }}"
+
+- name: Deploy navidrome to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: navidrome
+    manifests_files:
+      - deployment.yaml
+      - service.yaml
+      - ingressroute.yaml
