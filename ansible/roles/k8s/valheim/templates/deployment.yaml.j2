@@ -62,6 +62,14 @@ spec:
               value: "{{ valheim_k8s_server_public }}"
             - name: TZ
               value: "{{ tz }}"
+            # The image zips worlds_local hourly and keeps three days of zips. Left at the
+            # default /config/backups those land on the backed-up claim, and because a zip
+            # shares no bytes with the last one, every weekly Longhorn backup re-uploaded the
+            # whole rotation: 2.2 G of new blocks a week, 5.0 G of a 7.6 G B2 bucket by
+            # 2026-09-02. The nobackup claim keeps the local rollback zips and costs B2 nothing.
+            # A sibling of the SteamCMD install, not inside it — steamcmd only touches server/.
+            - name: BACKUPS_DIRECTORY
+              value: /opt/valheim/backups
             - name: SERVER_PASS
               valueFrom:
                 secretKeyRef:
