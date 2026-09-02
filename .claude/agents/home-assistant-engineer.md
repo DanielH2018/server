@@ -91,7 +91,7 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
   pre-deploy validation: YAML syntax, duplicate keys, broken `!include`s, the *syntax* of
   every inline `{{ }}`/`{% %}` + each `custom_templates/*.jinja`, the no-Ansible-markers contract
   on `templates/config/`, **and the state-model guardrails** (it calls
-  `ha_state_model.check_errors()` — freshness, entity resolution, single-writer, override
+  `ha_state_checks.check_errors()` — freshness, entity resolution, single-writer, override
   tripwire). Run it before deploying.
 - **`scripts/home_assistant/ha_state_model.py`** — `generate` (regenerate `derived_state.yml` + `STATE.md` after
   any change to writes), `check` (the guardrails alone), `refresh` (snapshot live external

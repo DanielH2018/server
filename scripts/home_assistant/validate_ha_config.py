@@ -410,9 +410,9 @@ def validate(role_dir: Path = ROLE_DIR) -> list[str]:
         errors += macro_bool_coercion_errors(trees, dest / "custom_templates")
         # State-model guardrails (freshness, entity-resolution, override tripwire, structural).
         try:
-            import ha_state_model
+            import ha_state_checks
 
-            errors += ha_state_model.check_errors(role_dir)
+            errors += ha_state_checks.check_errors(role_dir)
         except Exception as exc:  # never let the state-model check mask a config error
             errors.append(f"state-model check crashed: {exc}")
         return errors
