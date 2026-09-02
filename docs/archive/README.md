@@ -9,6 +9,19 @@ shared filename prefix moves onto that directory — `networkpolicy/slice5-plan.
 `networkpolicy-slice5-plan.md`. The four here are `k3s-migration/`, `networkpolicy/`,
 `zero-downtime/` and `docs-ui-and-adrs/`.
 
+**DECIDED: the `slice-` prefix in `k3s-migration/` stays, against the rule above.** Those
+filenames are a citation key, not decoration: manifest templates cite them by name, and a
+comment change in a `.j2` re-renders the role's manifests, which fires the central
+rollout-restart in `ansible/roles/k8s/manifests`. Renaming the files therefore rolls the
+observability stack and qbittorrent — `claude-otel/templates/prometheus.yaml.j2`,
+`claude-otel/templates/kube-state-metrics.yaml.j2` and
+`qbittorrent/templates/service-wireguard.yaml.j2` are the three templates that cite them —
+and moves several other roles into the deployer's changed set. Re-measure the citation
+surface with `grep -rn "slice-[0-7]-" --exclude-dir=.git . | grep -v
+"^./docs/archive/k3s-migration/slice-"` before contradicting this. PR #813 renamed the
+`plan-N.md` files under `zero-downtime/` and `docs-ui-and-adrs/` for exactly this reason:
+nothing outside `docs/` cited those.
+
 A document belongs here once its decision lives somewhere a reader will actually find:
 an ADR, a runbook, or a `# DECIDED:` marker at the line it governs. The *Decision recorded
 in* column is that pointer, and an empty one means the work shipped without a decision worth
