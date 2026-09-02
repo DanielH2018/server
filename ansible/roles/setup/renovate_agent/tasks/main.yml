@@ -1,0 +1,118 @@
+---
+- name: Create renovate-agent directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0750"
+  loop:
+    - /opt/renovate-agent       # wrapper scripts + the rendered prompt
+    - /var/lib/renovate-agent   # state (last_run) + the last session's transcript
+    - /etc/renovate-agent       # config.env (0600 secret)
+  become: true
+
+- name: Install agent Python files
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/opt/renovate-agent/{{ item }}"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  loop:
+    - renovate_agent.py
+    - agent_logic.py
+  become: true
+
+- name: Install the shared host_lib helper (source of truth in roles/setup/common/files)
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../common/files/host_lib.py"
+    dest: /opt/renovate-agent/host_lib.py
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+# Rendered rather than shipped as a file so it can carry the caps the unit actually enforces.
+# A prompt naming a different PR cap or timeout from the ones in defaults/main.yml is how the
+# session ends up starting a landing it has no budget to finish.
+- name: Render the session prompt
+  ansible.builtin.template:
+    src: prompt.txt.j2
+    dest: /opt/renovate-agent/prompt.txt
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0644"
+  become: true
+
+- name: Write agent config (secret webhook, host-only)
+  ansible.builtin.template:
+    src: config.env.j2
+    dest: /etc/renovate-agent/config.env
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0600"
+  become: true
+  no_log: true
+
+- name: Write the alert webhook where only systemd reads it
+  ansible.builtin.template:
+    src: alert-webhook.env.j2
+    dest: /etc/renovate-agent/alert-webhook.env
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+  no_log: true
+  notify: Reload systemd
+
+- name: Install systemd units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - renovate-agent.service
+    - renovate-agent-alert.service
+    - renovate-agent.timer
+  become: true
+  notify: Reload systemd
+
+# Both directions are wired: setting renovate_agent_enabled back to false stops AND disables
+# the timer. A one-way arming switch is the reverse-state bug this repo keeps paying for.
+# ENFORCED: ansible/tests/setup/test_renovate_agent_unit.py.
+- name: Enable and start the timer
+  ansible.builtin.systemd:
+    name: renovate-agent.timer
+    enabled: "{{ renovate_agent_enabled }}"
+    state: "{{ 'started' if renovate_agent_enabled else 'stopped' }}"
+    daemon_reload: true
+  become: true
+
+# Render provenance for manifest-prune-check.sh's stale-script arm — see the gitops_deploy role
+# for why these were previously watched by nothing (2026-08-23b review H1).
+- name: Stamp the rendered renovate-agent units
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: renovate-agent
+    stamp_render_templates:
+      - ansible/roles/setup/renovate_agent/templates/renovate-agent.service.j2
+      - ansible/roles/setup/renovate_agent/templates/renovate-agent-alert.service.j2
+      - ansible/roles/setup/renovate_agent/templates/renovate-agent.timer.j2
+      # The stamp and the check both hash the repo source, never the rendered file, so an
+      # .env.j2 carries no secret into either (2026-08-24 review M-9).
+      - ansible/roles/setup/renovate_agent/templates/config.env.j2
+      - ansible/roles/setup/renovate_agent/templates/alert-webhook.env.j2
+      - ansible/roles/setup/renovate_agent/templates/prompt.txt.j2
+
+- name: Record the deployed renovate-agent code
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
+  vars:
+    stamp_deployed_name: renovate-agent
+    stamp_deployed_pairs:
+      - live: /opt/renovate-agent/renovate_agent.py
+        src: ansible/roles/setup/renovate_agent/files/renovate_agent.py
+      - live: /opt/renovate-agent/agent_logic.py
+        src: ansible/roles/setup/renovate_agent/files/agent_logic.py
+      - live: /opt/renovate-agent/host_lib.py
+        src: ansible/roles/setup/common/files/host_lib.py

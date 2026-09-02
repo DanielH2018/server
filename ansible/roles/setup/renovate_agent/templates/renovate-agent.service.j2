@@ -1,0 +1,46 @@
+[Unit]
+Description=Unattended Renovate agent (one headless Claude session over the open Renovate PRs)
+After=network-online.target
+Wants=network-online.target
+OnFailure=renovate-agent-alert.service
+
+[Service]
+Type=oneshot
+User={{ sys_user }}
+WorkingDirectory={{ renovate_agent_repo_dir }}
+# The wrapper's own RUN_TIMEOUT_S ({{ renovate_agent_run_timeout_s }}s) should always trip
+# first: it kills the session and still posts a digest naming the timeout, where this ceiling
+# kills the whole cgroup and posts only the OnFailure alert. Killing the cgroup is the reason
+# for the gap — a landing in flight means `land.sh` is inside an Ansible run, and a partial run
+# is the policies-first hazard. Keep this strictly above RUN_TIMEOUT_S plus the two `gh pr list`
+# censuses either side of it.
+TimeoutStartSec={{ renovate_agent_unit_timeout }}
+# Need ~/.local/bin for `claude` and `uv`, and /usr/local/bin for `gh`; systemd supplies a
+# minimal PATH exactly as cron does.
+Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/home/{{ sys_user }}
+Environment=PYTHONDONTWRITEBYTECODE=1
+# journald stores only notice+ on these hosts, and a unit's stdout logs at info by default —
+# so without this every wrapper line is discarded at the source and a post-mortem has nothing
+# to read. Same reasoning as gitops-deploy.service.
+SyslogLevel=notice
+# Deliberately NOT sandboxed, unlike the sibling renovate-notify unit. This session reads and
+# writes the repo, drives git, gh, uv, ansible and kubectl, and needs ~/.claude for its own
+# credentials and session state — so ProtectHome/ProtectSystem/ReadWritePaths would all have to
+# be widened to the point of meaning nothing. The blast radius is bounded by what the session
+# can do, not by the unit's confinement: a PR cap, a spend ceiling, a wall clock, and a
+# worktree it cannot leave without the deployer noticing.
+#
+# `-n`: never queue. Two of these overlapping would fight over the same worktree, and the timer
+# is daily, so a run still going when the next one fires means something is wrong and the second
+# should say so rather than wait.
+ExecStart=/usr/bin/flock -n /var/lock/renovate-agent.lock \
+  /usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
+  /opt/renovate-agent/renovate_agent.py
+{% if renovate_agent_kuma_push_token | default('') %}
+# The alive beat, sent only when ExecStart succeeded. The URL embeds the push token, so it
+# reaches curl on stdin as a config file (`-K -`) rather than as an argv element: /proc is
+# mounted without hidepid here, and `systemctl show -p ExecStartPost` publishes this line over
+# the system bus. `%%s`, not `%s` — systemd expands a bare `%s` to the service user's shell.
+ExecStartPost=/bin/sh -c 'printf "url = \"%%s\"\n" "https://uptime-kuma.local.{{ domain }}/api/push/{{ renovate_agent_kuma_push_token }}" | curl -fsS -m 15 -K - --get --data-urlencode "msg=agent ran" >/dev/null'
+{% endif %}

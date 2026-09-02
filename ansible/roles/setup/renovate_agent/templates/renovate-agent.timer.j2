@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the unattended Renovate agent daily
+
+[Timer]
+OnCalendar={{ renovate_agent_oncalendar }}
+RandomizedDelaySec=10min
+# Persistent=true so a host that was down at 15:00 still runs the tick when it comes back —
+# the backlog this clears only grows while nothing runs.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
