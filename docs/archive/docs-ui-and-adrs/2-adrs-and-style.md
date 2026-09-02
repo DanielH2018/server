@@ -10,7 +10,7 @@
 
 **Spec:** `docs/archive/docs-ui-and-adrs/design.md`
 
-**Prerequisite:** `docs/archive/docs-ui-and-adrs/plan-1.md` must be merged. This plan adds pages to a site that plan 1 builds and serves.
+**Prerequisite:** `docs/archive/docs-ui-and-adrs/1-docs-site.md` must be merged. This plan adds pages to a site that plan 1 builds and serves.
 
 ## Global Constraints
 
