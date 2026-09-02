@@ -46,10 +46,10 @@ def declared_services(hostvars_text: str) -> set[str]:
 
 
 def declared_k8s_services(hostvars_text: str) -> set[str]:
-    """k8s-platform service names declared in a host's containers_list — the platform:
+    """The `platform: k8s` service names declared in a host's containers_list.
 
-    k8s counterpart to declared_services(), used to catch a same-named Docker role that's actually
-    k8s on THIS host (see reroute_k8s_services).
+    The counterpart to declared_services(), used to catch a same-named Docker role that is
+    actually k8s on THIS host (see reroute_k8s_services).
     """
     out: set[str] = set()
     for m in _DECLARED_ENTRY.finditer(hostvars_text):

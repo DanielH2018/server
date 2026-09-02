@@ -336,10 +336,10 @@ def claude_code_usage() -> dict:
 
 @mcp.tool()
 def claude_code_events(limit: int = 100, hours: float = 24.0) -> list[dict]:
-    """Recent Claude Code events:
+    """Recent Claude Code events: tool decisions, API calls, MCP connections, mode changes.
 
-    tool decisions, api_request / api_error / api_refusal, mcp_server_connection, permission-mode
-    changes.
+    The full set is tool decisions, api_request / api_error / api_refusal,
+    mcp_server_connection, and permission-mode changes.
 
     Metadata ONLY — the source (the claude-otel Loki) stores prompts, responses and tool output
     verbatim, and that content must never gain a LAN-reachable path (KL1), so rows are projected

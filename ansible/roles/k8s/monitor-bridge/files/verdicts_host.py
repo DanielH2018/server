@@ -132,10 +132,9 @@ def scrutiny_wear_verdict(devices, wear_max):
 
 
 def ups_health(charge_pct, runtime_s, replace_battery, charge_min_pct, runtime_min_s):
-    """Pure:
+    """Pure: is the UPS battery healthy? Returns (ok, msg).
 
-    is the UPS battery healthy given charge (%), estimated runtime (s), and the replace- battery
-    verdict (0/1)? (ok, msg).
+    Judged on charge (%), estimated runtime (s) and the replace-battery verdict (0/1).
 
     Any value may be None (that metric absent) — only present arms are judged, and the caller
     handles the all-absent / partial-absence cases. A low charge means an active deep discharge on
@@ -358,10 +357,9 @@ def hwmon_temp_limits(
     exclude_chip,
     names=None,
 ):
-    """Pure:
+    """Pure: assign every scraped sensor a temperature limit.
 
-    assign every scraped sensor a temperature limit. Returns a list of (label, temp, limit, basis)
-    with basis "declared" or "fallback".
+    Returns a list of (label, temp, limit, basis) with basis "declared" or "fallback".
 
     Exhaustive by construction — a sensor either has a plausible declared max or takes the fallback,
     so no scraped sensor is ever left without a limit. That is the property worth holding: a check

@@ -88,7 +88,9 @@ def slug(title):
 
 
 def normalize(obj):
-    """Recursively clean a dashboard model in place:
+    """Recursively clean a dashboard model in place.
+
+    Two passes:
 
     * rewrite stale datasource uids onto the canonical ones, and
     * drop the ephemeral ``key`` on query targets — it's a Grafana query-editor React

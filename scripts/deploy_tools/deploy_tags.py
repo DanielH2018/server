@@ -181,9 +181,9 @@ def _cmd_list(_args: argparse.Namespace) -> int:
 
 
 def _cmd_describe(_args: argparse.Namespace) -> int:
-    """Human-facing view of `list`'s flat output:
+    """Human-facing view of `list`'s flat output.
 
-    grouped by host/platform, dry-run-unsupported services flagged. Does not touch `list`'s own
+    Grouped by host/platform, dry-run-unsupported services flagged. Does not touch `list`'s own
     shape — that stays pinned flat and sorted.
     """
     unsupported = dry_run_unsupported()

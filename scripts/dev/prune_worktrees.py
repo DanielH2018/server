@@ -285,7 +285,7 @@ def is_merged(repo: str, head: str, branch: str = "") -> bool:
 
 
 def pr_head_says_merged(stdout: str, head: str) -> bool:
-    """Read `gh pr list --state merged --head <branch> --json headRefOid`:
+    """Read `gh pr list --state merged --head <branch> --json headRefOid`.
 
     True when one of those merged PRs was merged from exactly this commit.
 

@@ -114,10 +114,10 @@ def dump_numbered(text: str) -> None:
 
 
 def make_env(dirs, undefined_cls=StubUndefined) -> Environment:
-    """The Jinja Environment shared by the three render guards:
+    """The Jinja Environment shared by the three render guards.
 
-    the given template dirs on the loader, the stub-undefined class, and the whitespace flags
-    matching Ansible's Templar so rendered output matches a real deploy. Callers register any
+    Carries the given template dirs on the loader, the stub-undefined class, and the whitespace
+    flags matching Ansible's Templar so rendered output matches a real deploy. Callers register any
     Ansible filter/test shims (the compose guard's ``hash`` filter, the shell guard's ``search``
     test) on the returned env.
     """

@@ -169,9 +169,9 @@ def is_diverged(
 def behind_marker(
     behind: bool, origin_head: str, existing: str | None, now: float
 ) -> str | None:
-    """Next value of the `behind_since` marker:
+    """Next value of the `behind_since` marker.
 
-    "<origin_sha> <unix_ts_first_seen>", or None to clear it.
+    Either "<origin_sha> <unix_ts_first_seen>", or None to clear it.
 
     `behind` means origin is strictly ahead of local at the END of a tick — we saw new commits and
     did not converge on them. Unlike is_diverged this is not a broken state on its own: a routine

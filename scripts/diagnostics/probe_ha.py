@@ -167,10 +167,10 @@ def _recv_exact_from(sock):
 
 
 def format_trace(trace) -> str:
-    """Human timeline from a trace/get result:
+    """Human timeline from a trace/get result.
 
-    trigger -> each step path (+ PASS/FAIL for a condition step, whose result is {"result": bool})
-    -> error.
+    Reads trigger -> each step path -> error, with PASS/FAIL on a condition step (whose result
+    is {"result": bool}).
 
     HA's trace/get payload has `trigger` as a plain string description (e.g. "state of
     binary_sensor.aqara_fp300_presence"); older/nested shapes may be a dict with a `description` key

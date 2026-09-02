@@ -91,10 +91,10 @@ def portal_host(domain):
 
 
 def cookie_domain(domain):
-    """Leading dot:
+    """The cookie domain, with a leading dot.
 
-    the cookie is issued for the whole `local.<domain>` cookie-domain, so one login covers every
-    service route, not just the portal it was minted at.
+    The dot issues the cookie for the whole `local.<domain>` cookie-domain, so one login covers
+    every service route, not just the portal it was minted at.
     """
     return f".local.{domain}"
 

@@ -112,10 +112,10 @@ def scene_entity_map(scenes: list) -> dict[str, list[str]]:
 
 
 def automation_writer(auto: dict) -> str:
-    """The state-machine name of an automation:
+    """The state-machine name of an automation, `automation.<slug(alias)>`.
 
-    `automation.<slug(alias)>` (HA derives the entity_id from the alias, not the id; fall back to
-    the id when alias is absent).
+    HA derives the entity_id from the alias, not the id; falls back to the id when the alias is
+    absent.
     """
     return "automation." + slugify(auto.get("alias") or auto.get("id") or "unknown")
 
@@ -394,10 +394,10 @@ def parse_services(api_services: list) -> set[str]:
 
 
 def config_services(config: dict) -> set[str]:
-    """Services the config itself defines:
+    """Services the config itself defines, one `script.<name>` per script.
 
-    every script registers `script.<name>`. This is the freshness escape-hatch so a brand-new script
-    (not yet in the committed snapshot) resolves.
+    The freshness escape-hatch, so a brand-new script not yet in the committed snapshot
+    resolves.
     """
     return {f"script.{name}" for name in (config.get("script") or {})}
 
@@ -421,7 +421,8 @@ def cmd_refresh(get_states=None, get_services=None) -> int:
     2026-08-16. It broke the same way a second time when probe.py was split up: the helpers now
     live in probe_core (ha_base/ha_resolve) and probe_ha (ha_token/ha_get/ha_get_url), and a bare
     `probe.` prefix raised AttributeError again. It is the ONLY live path in this script, which is
-    why a stale external_entities.yml silently outlived two removed sensors."""
+    why a stale external_entities.yml silently outlived two removed sensors.
+    """
     if get_states is None or get_services is None:
         import json
 
@@ -468,10 +469,9 @@ def cmd_refresh(get_states=None, get_services=None) -> int:
 
 
 def override_consistency_report(writes: dict) -> list[str]:
-    """REPORT:
+    """REPORT: actuators whose manual-detect override is not engaged by every manual surface.
 
-    surfaces actuators whose manual-detect override isn't engaged by every manual surface. Phase 1
-    emits the lights<->manual_off relationship as a starting datapoint.
+    Phase 1 emits the lights<->manual_off relationship as a starting datapoint.
     """
     rep = []
     light_writers = set(writes.get("light.bedroom_lights", []))

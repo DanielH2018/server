@@ -252,10 +252,10 @@ def check_bazarr():
 
 
 def check_prowlarr_indexers():
-    """Prowlarr sustained-indexer watchdog (see indexers_down):
+    """Prowlarr sustained-indexer watchdog (see indexers_down).
 
-    page only when an indexer has been failing >= PROWLARR_INDEXER_MIN_DOWN_MIN, not on the brief
-    flaps public trackers throw that self-clear inside Prowlarr's backoff.
+    Pages only when an indexer has been failing >= PROWLARR_INDEXER_MIN_DOWN_MIN, not on the
+    brief flaps public trackers throw that self-clear inside Prowlarr's backoff.
 
     Empty PROWLARR_API_KEY -> disabled (stays up), like check_n8n. An unreachable Prowlarr is NOT
     caught here — it bubbles up and _evaluate renders it `down` with the error (the

@@ -405,10 +405,10 @@ def today() -> dt.date:
 
 
 def seed_last_rotated(name: str, tier: str, today: dt.date) -> str | None:
-    """A staggered seed date:
+    """A staggered seed date.
 
-    due = seed + cadence lands in [today+lead, today+cadence], so nothing is overdue at registration
-    and the due-dates are spread across the window.
+    `due = seed + cadence` lands in [today+lead, today+cadence], so nothing is overdue at
+    registration and the due-dates are spread across the window.
     """
     days = TIER_DAYS[tier]
     if not days:
@@ -807,10 +807,10 @@ def cmd_audit(args) -> int:
 
 
 def unattended_due(rows: list, rotate_all: bool = False) -> list:
-    """Auto-tier rows the unattended weekly cron should rotate:
+    """Auto-tier rows the unattended weekly cron should rotate.
 
-    due within ROTATE_LEAD_DAYS (everything auto-tier with rotate_all). Rows are audit() tuples
-    (name, tier, due_date, days_left).
+    Those due within ROTATE_LEAD_DAYS, or everything auto-tier when `rotate_all`. Rows are
+    audit() tuples (name, tier, due_date, days_left).
     """
     return [
         r for r in rows if r[1] == "auto" and (rotate_all or r[3] < ROTATE_LEAD_DAYS)
