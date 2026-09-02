@@ -60,7 +60,7 @@ selecting the `r2` target, not `default`; see
 | tdarr-server, tdarr-configs | weekly (Mon/Tue) | B2 | `transcode_cache/` + logs already emptyDir; `Backups/` zips diverted |
 | terraria-config | weekly (Wed) | B2 | `.wld.bak*` churn accepted at weekly cadence (retired service; live `.wld` backed up, same operator call as kopia's) |
 | `scrutiny`-web-config | weekly (Sat) | B2 | clean |
-| valheim-config | weekly (Tue) | B2 | post-doc addition (2026-08-13, pwd→SOPS recovery); world saves |
+| valheim-config | weekly (Tue) | B2 | post-doc addition (2026-08-13, pwd→SOPS recovery); world saves. The image's hourly world zips were diverted to the nobackup `valheim-server` claim on 2026-09-02 (`BACKUPS_DIRECTORY`) — see *The storage cap is a second axis* |
 | valheim-stats-data, terraria-stats-data | weekly (Mon/Sun) | B2 | post-doc additions; small stats DBs |
 | pi-peer-backup-data | weekly (Sat) | B2 | post-doc addition (2026-08-14); the Pi's nightly rsync lands at 04:30 UTC, so a Saturday 04:30 backup captures the previous day's sync — crash-consistent either way |
 | `scrutiny`-influxdb-data | **no-backup** | — | kopia: `scrutiny/influxdb2/` — the volume IS the TSDB (single mount, verified) |
@@ -123,6 +123,13 @@ Two consequences that are easy to get backwards:
   irrelevant, because the job never runs against that volume. `longhorn-reap-orphan-backups.sh`
   is their only owner, and its safety floor means it can only clear them once the volume has
   weekly backups of its own.
+- **A seed is unowned in a way the reaper cannot see.** `seed_volume_backup.yml` makes a backup
+  carrying no `RecurringJob` label at all, so no job's `retain` ever counts or prunes it, and the
+  reaper reads an unlabelled backup as the current tier's own — on 2026-09-02 it listed zero
+  reapable against eleven live seeds. `drop_seed_backups.yml` is their owner. It retires a seed
+  once its volume holds `drop_seed_floor` (default 2, the shards' retain) Completed backups that
+  do carry a job label, dry-runs by default, and takes `drop_seed_claim` to pace the Class C
+  spend one volume at a time.
 
 `k3s_longhorn_weekly_backup_retain` was lowered 4 → 2 on 2026-08-17. Retention is what costs, so
 holding two rather than four pins fewer blocks and makes every future prune cheaper; the trade is
@@ -138,6 +145,48 @@ not evidence of the end state.
 re-derives the projection from one listing of the live bucket (~10 Class C) and exits non-zero if
 a shard is over budget. Nothing else announces the drift, because the cost grows quietly with
 stored blocks rather than with anything a deploy touches.
+
+## The storage cap is a second axis (2026-09-02)
+
+Everything above prices a backup in transactions. B2's free tier also caps **stored bytes at
+10 GB**, and that is the cap that fired on 2026-09-02, with the transaction budget nowhere near
+its limit. The two axes have different drivers and different remedies, so a change that fixes one
+can leave the other untouched.
+
+Storage is priced by **retained blocks** — every block any retained backup still references. Three
+consequences, each measured on 2026-09-02.
+
+**A rewritten file costs new blocks every week, and cadence does not help.** `valheim-config` held
+5.01 GB of a 7.59 GB bucket. The image zips `worlds_local` hourly into `/config/backups` and keeps
+three days of zips; a zip shares no bytes with the one before it, so every weekly backup uploaded
+the whole rotation — 135 new 16 MiB blocks on 2026-09-01, about 2.2 GB a week. That is rule 2
+above ("rewritten zips") on a volume added after the 2026-08-12 audit, and the remedy is the one
+tdarr already had: `BACKUPS_DIRECTORY` points at the nobackup `valheim-server` claim, which keeps
+the local rollback zips and costs B2 nothing.
+
+**Deleting the files does not shrink the backup. A trim does.** Removing `/config/backups` took
+the filesystem from 1.33 GB to 58.6 MB and left Longhorn's `actualSize` at 4.26 GB, because a
+filesystem delete unmaps nothing underneath — the next backup would still have referenced those
+blocks. `fstrim` against the volume's mount on the node released 2.1 GiB:
+
+```bash
+findmnt -rn -o TARGET,SOURCE | grep <pvc-name>          # find the globalmount handle
+sudo fstrim -v /var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/<handle>/globalmount
+```
+
+`actualSize` then fell to 3.61 GB rather than to the filesystem's 58.6 MB, because two snapshots
+still hold the old bytes: the seed's 1.53 GB and the 2026-09-01 weekly's 2.02 GB. A snapshot that
+a backup is made of cannot be released while that backup exists, so the remainder returns as
+`retain: 2` rotates those backups out — two more weekly runs here, not immediately.
+
+**A deletion's saving lands seven days later.** The bucket carries one lifecycle rule,
+`daysFromHidingToDeleting: 7`. A delete writes a hide marker over the current version, and B2
+bills the hidden version until the rule removes it. Deleting the eleven seeds took live bytes from
+7.59 GB to 6.14 GB and moved the billed figure by nothing — the console kept reading 7.59 GB, and
+would for a week. Measure the live figure by taking the newest version per name and skipping the
+ones whose `action` is `hide`; a plain `b2_list_file_names` reports the hidden name as gone and
+the reclaimed bytes as already saved, which is wrong in both directions. This is the same trap as
+the drain's `b2_list_file_versions` above, one level up.
 
 ## Deliberate deviations from kopiaignore (all in the cheap direction)
 
