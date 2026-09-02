@@ -1,32 +1,38 @@
 # PINNED in lockstep with Dockerfile.j2 — see the reasoning there for why this is the channel tag
 # plus a digest rather than a version. The two must name the SAME channel: the runners are
 # version-coupled to the n8n they serve, and a split would surface as task failures rather than a
-# build error. The digests differ because these are different images; `runners:stable` and
-# `runners:2.35.4` were the same digest when this was written, so both sides sit on 2.35.4.
+# build error. The digests differ because these are different images, so read the version each
+# side carries from its `org.opencontainers.image.version` label rather than from the digest.
 FROM n8nio/runners:stable@sha256:9ddeb7c4797f5bda2aa746364848e9e8c5f8f50b8355e05e6ac5e5ee9183eaf9
 
 USER root
 
 # Install JS packages.
 #
-# Match pnpm to the store the base image was built with, rather than reinstalling into a new one.
-# The base ships node_modules linked from a pnpm store at .../store/v10, while the pnpm corepack
-# resolves by default is 11.20.0 and wants .../store/v11 — so a bare `pnpm add` aborts with
-# ERR_PNPM_UNEXPECTED_STORE.
+# Use the pnpm the BASE IMAGE ships, rather than fetching one. Upstream installs pnpm directly at
+# /usr/local/bin/pnpm and builds the runner's node_modules with it, so the client and the store
+# layout in `node_modules/.modules.yaml` agree by construction — which is the property this line
+# needs and the reason not to name a version here.
 #
-# The 2026-08-06 answer to that was `CI=true pnpm install` first, following pnpm's own error text.
-# It was wrong in a way the build itself could not show: that reinstall PURGES node_modules and
-# restores only what the lockfile declares, and the base's `@n8n/{di,config,errors,utils}` are
-# workspace packages absent from it. The build stayed green (rc=0) and produced an image whose
-# runner process died on every task offer with `Cannot find module '@n8n/di'` — so every Code-node
-# workflow failed with `Task request timed out`, 100+ failed executions in 9 h, while the pod
-# stayed Ready the whole time because the launcher survives its crashing child.
+# It was `corepack prepare pnpm@<exact> --activate` until 2026-09-02, when n8n 2.37.7 replaced
+# corepack with a plain pnpm install and the build died with `corepack: not found` (exit 127).
+# The exact pin existed because the base's store was a major version behind the pnpm corepack
+# resolved by default, so a bare `pnpm add` aborted with ERR_PNPM_UNEXPECTED_STORE. Inheriting the
+# base's own pnpm removes that mismatch at the source instead of tracking it.
 #
-# Pinned exact. If the base image's store moves to v11 this fails at BUILD time with
-# ERR_PNPM_UNEXPECTED_STORE, and that is the failure worth having: the bug above was a loud build
-# error traded for a silent runtime one. The fix then is to bump this pin, not to reinstall.
+# `pnpm add`, never `pnpm install`. The 2026-08-06 answer to the store mismatch was
+# `CI=true pnpm install` first, following pnpm's own error text. It was wrong in a way the build
+# itself could not show: that reinstall PURGES node_modules and restores only what the lockfile
+# declares, and the base's `@n8n/{di,config,errors,utils}` are workspace packages absent from it.
+# The build stayed green (rc=0) and produced an image whose runner process died on every task offer
+# with `Cannot find module '@n8n/di'` — so every Code-node workflow failed with
+# `Task request timed out`, 100+ failed executions in 9 h, while the pod stayed Ready the whole
+# time because the launcher survives its crashing child.
+#
+# If the base ever ships a pnpm that disagrees with its own store this still fails at BUILD time
+# with ERR_PNPM_UNEXPECTED_STORE, and that is the failure worth having: the bug above was a loud
+# build error traded for a silent runtime one.
 RUN cd /opt/runners/task-runner-javascript \
-    && corepack prepare pnpm@10.15.0 --activate \
     && pnpm add fuzzball
 
 # Fails the build if the base's workspace packages or the added one cannot be resolved. One line,
