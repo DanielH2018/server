@@ -82,13 +82,12 @@ discovery. A third appearance is an escalation signal (it belongs in a durable o
 lint, a CLAUDE.md rule), and re-presenting it as new is how it stays unowned. Verify each is still
 live before reporting: the register is only as fresh as the last ledger.
 
-**Run `uv run python scripts/dev/register_audit.py` before you read the register.** It reports
-which rows look CLOSED against the repo as it stands today, so a row whose fix has already
-shipped is caught before a reviewer re-derives it cold. That failure has happened four times;
-two rows were still listed open on 2026-08-22 with the fixes shipped days earlier. It is
-read-only, best-effort and always exits 0 — a row it cannot resolve is reported UNRESOLVED for
-you to read rather than dropped, so treat its output as a **prior on where to look**, not a
-verdict. You still confirm each row yourself at a cited `file:line`.
+**Run `uv run python scripts/dev/findings.py list` before you read the register.** The open
+findings live as GitHub Issues labelled `claude`; that command prints them severity-first with
+the first-seen date and the re-observation count. A finding a reviewer surfaces that matches an
+open issue is a **recurrence**: record it with `findings.py touch <n> --source review-<date>`
+(the third sighting adds `escalated`), never as a new row or a new issue. The list is only as
+fresh as the last close, so still confirm each item at a cited `file:line` before reporting it.
 
 **When the standing list and a dated ledger disagree, the ledger wins** and the standing list is
 stale — say so in the report so the next distillation fixes it.
@@ -239,20 +238,26 @@ control is the "fires on nothing" case the repo warns about, and it reads exactl
   recommendation. Cite each finding's ansible `file:line`. Mark each remediation with its fix-skeptic
   verdict, and mark a finding whose only remediation was refuted as **no vetted remediation**.
 - **STOP.** Recommend next steps; do not implement, deploy, or commit.
-- Offer to record a new `review-<date>-state` memory — the established pattern that keeps the next
-  review high-signal, and the thing step 2 reads. It is what step 2 needs or it is noise, so give it:
-  a one-line headline; then, **tagged by area** (the step-1 names, so a later run can filter to its
-  own domain), the **confirmed** findings and what happened to each (shipped / open / deferred), the
-  **refuted** ones *with the evidence that disproved them* (a bare "refuted" teaches the next run
-  nothing), and the **deliberate trade-offs** not to re-flag. If a `review-<date>-state` memory
-  already exists for today, write the next letter suffix (`…-state`, `…b-state`) rather than
-  overwriting — the earlier run's ledger stays live.
+- **File every CONFIRMED finding the operator does not fix in this session** with
+  `uv run python scripts/dev/findings.py open --title "<one-line title>" --body-file <f> --severity
+  <high|medium|low> --kind <gap|improvement|addition> --domain <step-1 name> --file <file:line>
+  --source review-<date>`, adding `--no-vetted-remediation` when both remediations failed step 7.
+  The body file carries where, mechanism, fix, and the two verdicts. `open` dedupes by title and
+  file, so a re-filed finding touches the existing issue instead of duplicating it; an exit of 3
+  means a skeptic refuted it in an earlier run, and the issue holds the evidence — read it before
+  re-raising. When the skeptic REFUTES a finding that already has an issue, close it with
+  `findings.py close <n> --refuted --reason "<what disproved it>"`.
+- Offer to record a new `review-<date>-state` memory — the run narrative step 2 reads. Give it a
+  one-line headline; then, **tagged by area**, each confirmed finding as `#<n>` plus what happened
+  to it (shipped / filed / touched), each **refuted** finding *with the evidence that disproved it*,
+  and the **deliberate trade-offs** not to re-flag. Do not restate an issue's body in the ledger;
+  the issue is the record and the ledger links it. If a ledger already exists for today, write the
+  next letter suffix rather than overwriting.
 - **Then fold the durable half into `homelab-review-standing-donot-reflag`** — a new deliberate
-  trade-off, a refutation that will recur, a recurring-open item's incremented run count, or an
-  entry this run proved stale. Step 2 reads that file instead of every ledger, so a run that
-  writes only its dated ledger quietly re-grows the priming cost this skill was rebuilt to avoid.
-  Per the repo's corroborate-before-promote rule, promote an item only on a **second** independent
-  occurrence or against real evidence; a single run's say-so stays in the dated ledger.
+  trade-off, a refutation of a finding that was never filed, or an entry this run proved stale.
+  Open and recurring items no longer go there; `findings.py list` is that register. Per the
+  repo's corroborate-before-promote rule, promote a trade-off or refutation only on a **second**
+  independent occurrence or against real evidence.
 - **Every row you write into `Deliberate trade-offs` opens with a provenance token** — `[operator]`
   if the operator ruled, `[enforced]` if a named test, hook or `# DECIDED:` marker makes the
   alternative fail. Step 2's table says what each licenses, and the two differ in cost: an

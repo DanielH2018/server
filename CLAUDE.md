@@ -69,6 +69,7 @@ Route to the source of truth by what you're doing, before reading linearly:
 | A host can't decrypt secrets | `add-secret` skill → *Onboarding a host that cannot decrypt yet* |
 | Starting Claude Code sessions from a phone | `ansible/roles/setup/claude_code/CLAUDE.md` — `claude-rc.service` hosts them. `/remote-control` inside a session and `claude rc` from a shell are different features; only the second creates sessions on demand. |
 | Adding / changing a cron that changes state | that role's `CLAUDE.md` *Autonomous-role contract* |
+| Recording a finding, fix or improvement you will not do this session | `uv run python scripts/dev/findings.py open …` — it files a GitHub Issue labelled `claude`, deduped by title and file. `findings.py list` is the open register; `docs/reference/backlog.md` renders it. Never `gh issue create` by hand. |
 
 ## Adding a New Service
 
@@ -339,6 +340,14 @@ feedback + MLD discipline):
   (`.claude/skills/homelab-review/SKILL.md`, step 3), so the marker is what carries the decision to
   the agent that would otherwise re-open it. It is a prior, not a verdict: contradict one with new
   evidence at a cited `file:line` and name the marker you are contradicting.
+- **A finding you will not fix this session is filed, not remembered.** Run
+  `uv run python scripts/dev/findings.py open --title … --body-file … --severity … --kind …`
+  before the session ends, for a review finding, a remediation the fix-skeptic refused, or an
+  improvement you noticed while doing something else. List the issue numbers in the end-of-job
+  report. A memory file, `PLANS.md`, or a "3 pending" line in the session notes has no status
+  field and no owner; an issue closes from the fixing PR's `Closes #<n>`. Refuted findings close
+  with `--refuted --reason`, and the wrapper refuses to reopen them, so the do-not-re-flag list
+  no longer needs to carry them.
 
 ## Parallel Claude Sessions
 Several sessions work this repo at once, each in its own `.claude/worktrees/<name>` checkout.
