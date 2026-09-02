@@ -429,3 +429,89 @@ def test_markdown_splits_the_scripts_by_how_they_run(tmp_path):
     out = g.render_markdown(g.build_rows(scripts, repo))
     for heading in ("on a schedule", "Imported, never run", "Run by hand"):
         assert heading in out
+
+
+def test_a_nested_script_is_listed_and_credited_to_its_caller(tmp_path):
+    """Depth is not capped: a module two directories down is found and classified.
+
+    Discovery globbed `scripts/*` and `scripts/*/*`, and both script-reference patterns
+    allowed a single directory segment. A module at `scripts/a/b/c.py` was therefore
+    absent from the page altogether — worse than being listed as uncovered, because a
+    reference page that silently omits a script says nothing is there to check.
+    """
+    repo, scripts = _repo(tmp_path)
+    _write(scripts / "deep" / "nested" / "buried.py", '"""Buried summary."""\n')
+    _write(
+        scripts / "caller.py",
+        '"""Summary."""\nimport subprocess\n'
+        'subprocess.run(["uv", "run", "python", "scripts/deep/nested/buried.py"])\n',
+    )
+    rows = {r["name"]: r for r in g.build_rows(scripts, repo)}
+    assert "buried.py" in rows
+    assert rows["buried.py"]["path"] == "scripts/deep/nested/buried.py"
+    assert rows["buried.py"]["evidence"] == f"caller.py ({g.RUNS['adhoc']})"
+
+
+def test_a_path_outside_scripts_is_still_not_a_reference(tmp_path):
+    """The RED half: widening the directory group must not widen what counts as a script.
+
+    `*` on the segment makes the pattern accept any depth under `scripts/`. It must still
+    reject a same-shaped path rooted anywhere else, or every `ansible/roles/x/files/y.py`
+    would start reading as an invocation of a first-party script.
+    """
+    assert g._ARGV_RE.fullmatch("scripts/deep/nested/buried.py")
+    assert not g._ARGV_RE.fullmatch("ansible/roles/r/files/buried.py")
+    assert not g._ARGV_RE.fullmatch("other/scripts/deep/buried.py")
+
+
+def _basename_clashes(paths):
+    """Pairs of paths sharing a basename, in the order given."""
+    seen: dict[str, Path] = {}
+    clashes = []
+    for path in paths:
+        if path.name in seen:
+            clashes.append(f"{seen[path.name]} and {path}")
+        seen[path.name] = path
+    return clashes
+
+
+def test_no_two_scripts_share_a_basename():
+    """The page keys verdicts, importers and test credits on a script's bare filename.
+
+    Two files with the same basename in different `scripts/` subdirectories therefore
+    merge into one row, and the merged row states things that are false: renaming
+    `infra_map_common.py` to `common.py` in PR #825 made the page claim
+    `scripts/availability_bots/`'s bots import infra_map's module, because
+    `availability_bots/common.py` already existed. The rename shipped as `constants.py`
+    instead, and this is what stops the next one landing silently.
+
+    Keying by path would relocate the ambiguity rather than remove it. The evidence that
+    a script is invoked comes from free text — a cron `job:` string, an argv literal, a
+    shell line — and that text often names a bare filename with no directory at all. A
+    path-keyed generator still needs a basename-to-path resolution step, and that step is
+    undecidable for exactly the colliding names this test forbids. So uniqueness is the
+    invariant, and this is where it is enforced.
+    """
+    clashes = _basename_clashes(g._candidates(g.SCRIPTS))
+    assert not clashes, (
+        "two scripts share a basename, so they merge into one row on the reference page: "
+        + "; ".join(clashes)
+    )
+
+
+def test_the_basename_guard_flags_a_real_clash():
+    """The RED half of the pair above.
+
+    The clean half runs against a tree that currently satisfies the invariant, so on its
+    own it is indistinguishable from a check that never fires.
+    """
+    clashes = _basename_clashes(
+        [
+            Path("scripts/availability_bots/common.py"),
+            Path("scripts/infra_map/common.py"),
+            Path("scripts/infra_map/render.py"),
+        ]
+    )
+    assert clashes == [
+        "scripts/availability_bots/common.py and scripts/infra_map/common.py"
+    ]

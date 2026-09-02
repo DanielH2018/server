@@ -83,13 +83,15 @@ RUNS = {
 _PRECEDENCE = ("adhoc", "library", "gate", "scheduled")
 
 # A reference to a script, in any of the spellings the tree uses.
+# `*` on the directory group, not `?`: a script may sit any number of directories under
+# `scripts/`, and capping the path at one level made a nested one read as never invoked.
 _SCRIPT_REF_RE = re.compile(
-    r"(?:\./|/)?scripts/(?:[A-Za-z0-9_]+/)?([A-Za-z0-9_-]+\.(?:py|sh))"
+    r"(?:\./|/)?scripts/(?:[A-Za-z0-9_]+/)*([A-Za-z0-9_-]+\.(?:py|sh))"
 )
 
 # A whole string literal that is a script path and nothing else — one element of an argv
 # list, as opposed to a sentence that happens to name a script.
-_ARGV_RE = re.compile(r"(?:\./)?scripts/(?:[A-Za-z0-9_]+/)?([A-Za-z0-9_-]+\.(?:py|sh))")
+_ARGV_RE = re.compile(r"(?:\./)?scripts/(?:[A-Za-z0-9_]+/)*([A-Za-z0-9_-]+\.(?:py|sh))")
 
 # A line that RUNS something, as opposed to one that mentions it. Every generated doc page,
 # every role CLAUDE.md and a good many comments name these scripts; without this the census
@@ -464,19 +466,30 @@ def _is_candidate(path: Path) -> bool:
     )
 
 
+def _walk(scripts: Path) -> list[Path]:
+    """Every file under scripts/, at any depth, skipping compiled caches."""
+    return sorted(p for p in scripts.rglob("*") if "__pycache__" not in p.parts)
+
+
 def _all_py(scripts: Path) -> list[Path]:
     """Every .py under scripts/, including the tests — the import scan needs their stems."""
-    return sorted(list(scripts.glob("*.py")) + list(scripts.glob("*/*.py")))
+    return [p for p in _walk(scripts) if p.suffix == ".py"]
 
 
 def _candidates(scripts: Path) -> list[Path]:
-    """Every first-party script, at the scripts/ root or one directory down.
+    """Every first-party script under scripts/, at any depth.
+
+    Depth is not capped. It was capped at one directory until 2026-09-02, which meant a
+    module in a nested subdirectory was absent from the page entirely rather than listed
+    as uncovered — the failure mode a reference page must not have.
 
     Filenames stay unique across the subdirectories, which is what lets the rest of this
-    module keep keying verdicts and evidence on the bare name rather than a path.
+    module key verdicts and evidence on the bare name rather than a path. That is now an
+    enforced invariant, not an assumption: see
+    `test_no_two_scripts_share_a_basename` in this module's tests for why keying by path
+    would relocate the ambiguity rather than remove it.
     """
-    found = list(scripts.glob("*")) + list(scripts.glob("*/*"))
-    return sorted((p for p in found if _is_candidate(p)), key=lambda p: p.name)
+    return sorted((p for p in _walk(scripts) if _is_candidate(p)), key=lambda p: p.name)
 
 
 def _by_name(scripts: Path) -> dict[str, Path]:
