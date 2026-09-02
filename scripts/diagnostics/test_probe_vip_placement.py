@@ -19,7 +19,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import probe_health as ph  # noqa: E402
+import probe_vip_placement as ph  # noqa: E402
 
 
 def _svc(name, etp="Local", ip="10.0.0.240", type_="LoadBalancer"):
