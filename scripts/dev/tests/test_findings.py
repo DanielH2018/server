@@ -70,7 +70,9 @@ def test_find_by_fingerprint_matches_the_trailer_only():
     hit = _issue(3, fp="abc123def456")
     miss = _issue(4)
     miss["body"] = "mentions abc123def456 in prose"
-    assert findings.find_by_fingerprint([miss, hit], "abc123def456")["number"] == 3
+    found = findings.find_by_fingerprint([miss, hit], "abc123def456")
+    assert found is not None, "the fingerprinted issue was not matched at all"
+    assert found["number"] == 3
     assert findings.find_by_fingerprint([miss], "abc123def456") is None
 
 
@@ -560,7 +562,9 @@ _CRLF_BODY = "details\r\n\r\n---\r\nFingerprint: `abc123def456`\r\nSource: s\r\n
 def test_find_by_fingerprint_matches_a_crlf_body():
     issue = _issue(7)
     issue["body"] = _CRLF_BODY
-    assert findings.find_by_fingerprint([issue], "abc123def456")["number"] == 7
+    found = findings.find_by_fingerprint([issue], "abc123def456")
+    assert found is not None, "a CRLF body hid the fingerprint"
+    assert found["number"] == 7
 
 
 def test_find_by_fingerprint_rejects_a_different_id_in_a_crlf_body():

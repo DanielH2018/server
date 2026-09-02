@@ -334,6 +334,21 @@ language = "system"
 pass_filenames = false
 files = "\\.py$"
 
+# Type-check first-party Python. ruff reads one file at a time, so the whole class of bug where
+# a value crosses a function boundary as the wrong type is invisible to it — a `str | None`
+# reaching a `-> str` return, an unnarrowed regex match subscripted, a submodule reached through
+# a parent import that only resolves because something else imported it. ty is the gate for that
+# half. Four of its rules are off, each with the count that was measured before this landed; the
+# reasons are in pyproject [tool.ty.rules]. `pass_filenames = false` because ty resolves imports
+# across the whole project, and a per-file run would report first-party imports as unresolved.
+[[repos.hooks]]
+id = "ty"
+name = "Type-check first-party Python (ty)"
+entry = "uv run ty check"
+language = "system"
+pass_filenames = false
+files = "\\.py$"
+
 # Fast syntax-only gate: `bash -n` parses (doesn't run) every shell script. Catches the exact
 # bug class that killed the kopia backup-maintenance watchdog cron for a day (2026-07-01,
 # ansible/roles/containers/archive/kopia/files/maintenance-check.sh, under archive/ since the

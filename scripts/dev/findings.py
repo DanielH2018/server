@@ -392,11 +392,6 @@ def cmd_open(args: argparse.Namespace) -> int:
     outcome, code, plans = plan_open(
         existing, title=args.title, body=body, labels=labels, fp=fp, source=args.source
     )
-    if outcome == "refuted":
-        print(
-            f"#{existing['number']} refuted: closed on {(existing.get('closedAt') or '?')[:10]}; not reopened"
-        )
-        return code
     if outcome == "created":
         if args.dry_run:
             run(plans, True)
@@ -405,6 +400,15 @@ def cmd_open(args: argparse.Namespace) -> int:
         url = _create_with_optional_project(plans[0])
         print(f"#{url.rsplit('/', 1)[-1]} created  {url}")
         return 0
+    # "created" is the only outcome plan_open returns for a missing issue, so every branch
+    # below has one to name. Checked here rather than in each branch: the two of them read
+    # `existing` four times between them.
+    assert existing is not None
+    if outcome == "refuted":
+        print(
+            f"#{existing['number']} refuted: closed on {(existing.get('closedAt') or '?')[:10]}; not reopened"
+        )
+        return code
     run(plans, args.dry_run)
     print(f"#{existing['number']} {outcome}  {existing.get('url', '')}")
     return 0

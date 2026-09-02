@@ -89,25 +89,35 @@ def _linkify(hostname: str, data_host: str = "sonarr.local") -> dict | None:
     return _run(hostname, data_host)["replacement"]
 
 
+def _link(hostname: str, data_host: str = "sonarr.local") -> dict:
+    """The element the script produced, asserting that it produced one at all.
+
+    Without the assert, a script change that stops replacing the span fails the tests below
+    with ``TypeError: 'NoneType' object is not subscriptable`` and no mention of the span."""
+    link = _linkify(hostname, data_host)
+    assert link is not None, f"{hostname} / {data_host}: the script left the span alone"
+    return link
+
+
 def _resolve(hostname: str, anchor_href: str) -> str:
     """The href the script left on a nav anchor carrying a sentinel host."""
     return _run(hostname, "sonarr", anchor_href)["anchorHref"]
 
 
 def test_the_public_docs_name_produces_a_public_link():
-    link = _linkify("docs.example.com", "sonarr")
+    link = _link("docs.example.com", "sonarr")
     assert link["href"] == "https://sonarr.example.com"
     assert link["textContent"] == "sonarr.example.com"
 
 
 def test_the_lan_docs_name_produces_a_lan_link():
     """Both names must resolve to one domain, or one tier's links all break."""
-    link = _linkify("docs.local.example.com", "sonarr.local")
+    link = _link("docs.local.example.com", "sonarr.local")
     assert link["href"] == "https://sonarr.local.example.com"
 
 
 def test_a_deeper_domain_keeps_every_remaining_label():
-    link = _linkify("docs.local.a.b.example.com", "sonarr")
+    link = _link("docs.local.a.b.example.com", "sonarr")
     assert link["href"] == "https://sonarr.a.b.example.com"
 
 
@@ -131,7 +141,7 @@ def test_a_span_with_no_data_host_is_skipped():
 
 
 def test_links_open_in_a_new_tab_without_leaking_the_opener():
-    link = _linkify("docs.example.com", "sonarr")
+    link = _link("docs.example.com", "sonarr")
     assert link["target"] == "_blank"
     assert link["rel"] == "noopener"
 

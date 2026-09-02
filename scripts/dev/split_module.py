@@ -30,8 +30,17 @@ import ast
 import json
 import sys
 from pathlib import Path
+from typing import TypedDict
 
-Spec = dict[str, dict[str, object]]
+
+class Target(TypedDict):
+    """One entry of a split spec: the header text for the new file, and the names to move."""
+
+    header: str
+    names: list[str]
+
+
+Spec = dict[str, Target]
 
 
 def _names_of(node: ast.stmt) -> list[str]:
@@ -95,7 +104,7 @@ def split(source: str, spec: Spec) -> tuple[str, dict[str, str]]:
     """
     owner: dict[str, str] = {}
     for target, cfg in spec.items():
-        for name in cfg["names"]:  # type: ignore[union-attr]
+        for name in cfg["names"]:
             if name in owner:
                 raise ValueError(f"{name} named twice ({owner[name]} and {target})")
             owner[name] = target
@@ -122,7 +131,7 @@ def split(source: str, spec: Spec) -> tuple[str, dict[str, str]]:
 
     outputs = {}
     for target, cfg in spec.items():
-        header = str(cfg["header"]).rstrip("\n")
+        header = cfg["header"].rstrip("\n")
         body = "\n\n".join(chunk.rstrip("\n") for chunk in moved[target])
         outputs[target] = f"{header}\n\n\n{body}\n"
     kept = "".join(line for i, line in enumerate(lines, 1) if i not in cut)

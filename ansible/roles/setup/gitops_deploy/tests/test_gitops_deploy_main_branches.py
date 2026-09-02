@@ -13,6 +13,7 @@ call in order, so each guard is now an assertion on what main() did.
 # ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_main_branches.py
 
 import json
+from collections.abc import Sequence
 
 import pytest
 
@@ -253,7 +254,9 @@ def test_a_bring_up_playbook_push_parks_and_pages(gitops_deploy, tick, state_dir
 
 
 # ── the k8s auto-deploy path ──────────────────────────────────────────────────────────────────
-def _image_bump(gitops_deploy, monkeypatch, tick, extra_paths: list[str] = ()) -> None:
+def _image_bump(
+    gitops_deploy, monkeypatch, tick, extra_paths: Sequence[str] = ()
+) -> None:
     monkeypatch.setattr(gitops_deploy, "K8S_AUTODEPLOY_ENABLED", True)
     monkeypatch.setattr(gitops_deploy, "K8S_AUTODEPLOY_DENYLIST", frozenset())
     monkeypatch.setattr(gitops_deploy, "K8S_AUTODEPLOY_PILOT", frozenset())

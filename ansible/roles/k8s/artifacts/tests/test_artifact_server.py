@@ -321,7 +321,11 @@ class TestApplyMetadata:
         assert entry["source"]["category"] == "declared"
 
     def test_derived_values_are_marked_derived(self):
-        entry = {"title": "B2 cost review", "text": "spend cap billing", "slices": None}
+        entry: dict = {
+            "title": "B2 cost review",
+            "text": "spend cap billing",
+            "slices": None,
+        }
         srv.apply_metadata(entry, "<p>x</p>", False, KNOWN)
         assert entry["category"] == "cost"
         assert entry["source"]["category"] == "derived"

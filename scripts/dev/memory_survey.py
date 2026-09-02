@@ -39,6 +39,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -408,7 +409,7 @@ def survey(
     refs = last_referenced(files, transcript_dir, transcript_days)
     today = _local_datetime(_dt.datetime.now(tz=_dt.UTC).timestamp()).date()
 
-    entries = []
+    entries: list[dict[str, Any]] = []
     for p in files:
         seen = refs[p.name]
         age_days = None
