@@ -71,137 +71,53 @@ These are **not** captured by `deploy.yml` — they're device/app/UI state:
 
 ## 4. Files in this role
 
-Everything below lives under `files/` and is carried into the cluster by
-`templates/configmap.yaml.j2` with `lookup('file')` — **verbatim** — then installed onto the
-`/config` PVC by the Deployment's init container on every pod start. What ships is what the
-four `home_assistant_*_files` lists in `defaults/main.yml` name, one list per tree; the
-validator fails when a list and its directory disagree.
-
-| File | What it holds |
-|---|---|
-| `files/configuration.yaml` | `default_config`, Adaptive Lighting, the `!include` lines for everything below, `recorder:` excludes, http/trusted-proxy, Lovelace |
-| `files/automations/*.yaml` | the automations, one file per topic (lighting, wake-and-sleep, fan-and-air, alerts, presence, display, system), merged by `!include_dir_merge_list` |
-| `files/scripts/*.yaml` | the scripts, one file per topic (lighting, wake-and-sleep, fan, alerts, test-harness), merged by `!include_dir_merge_named` |
-| `files/input_boolean.yaml`, `input_select.yaml`, `input_number.yaml`, `input_datetime.yaml`, `timer.yaml` | the helpers, one file per domain (`input_boolean: !include input_boolean.yaml` and so on) |
-| `files/thresholds.yaml` | the 16 `threshold` binary sensors (`binary_sensor: !include thresholds.yaml`) |
-| `files/scenes.yaml` | `bedroom_bright` / `bedroom_nightlight` |
-| `files/templates.yaml` | `sensor.bedroom_wake_start` template sensor |
-| `files/rest.yaml` | Open-Meteo outdoor AQI sensors, pulled in via `rest: !include rest.yaml` |
-| `files/custom_templates/*.jinja` | shared HA Jinja macros, auto-loaded at startup — `fan` (`pct_to_level`/`level_to_pct`), `lighting` (wake-ramp math), `ventilation` (window advisor), `diagnostics` (runtime-error alert scope). The pure ones are unit-tested under `tests/`. |
-| `files/customize.yaml` | entity friendly-name / icon overrides |
-| `files/ui-lovelace.yaml` | the Bedroom dashboard |
+Every HA config file lives under `files/` and ships **verbatim** — `templates/configmap.yaml.j2`
+carries each one into the cluster with `lookup('file')`, and the Deployment's init container
+installs them onto the `/config` PVC on every pod start. A file ships only once it is named in
+one of the four `home_assistant_*_files` lists in `defaults/main.yml`; the validator fails when
+a list and its directory disagree. `files/automations/README.md` and `files/scripts/README.md`
+give the merge rules and add-a-file steps for those two trees; [`CLAUDE.md`](CLAUDE.md) ("The
+one convention that breaks edits") covers the rest, including why HA Jinja can't go inline in
+`configuration.yaml`/`customize.yaml`/`ui-lovelace.yaml`.
 
 The one exception is `templates/config/secrets.yaml.j2` — the only genuinely Ansible-templated
-config file, rendered with `lookup('template')` into the role's Secret (see §11c).
-
-> **HA Jinja (`{{ }}`) never goes inline in `configuration.yaml`, `customize.yaml` or
-> `ui-lovelace.yaml`.** `validate_ha_config.py` rejects any `{{`/`{% %}` in those three outright
-> (even a brace pair in a comment): every file ships verbatim, so an Ansible var written there
-> would reach HA unrendered and render to nothing. That's why template sensors live in
-> `files/templates.yaml` and are pulled in with `template: !include templates.yaml`.
+config file, rendered with `lookup('template')` into the role's Secret, feeding the rest of the
+config through HA's native `!secret` indirection (see §10c).
 
 ---
 
 ## 5. Helpers & sensors
 
-**Helpers** (`files/input_boolean.yaml`, `input_select.yaml`, `input_number.yaml`, `input_datetime.yaml`, `timer.yaml` — one file per domain, each behind an `!include`):
-- `input_boolean.bedroom_manual_off` — set when you turn lights off via the dial; suppresses
-  presence auto-on. Cleared on manual-on or the morning reset.
-- `input_boolean.bedroom_fan_manual` — set when the fan is changed by hand/remote; suppresses
-  temperature fan control. Cleared by Tap Dial button 3 or the morning reset.
-- `input_boolean.bedroom_sleep_mode` — set by the bedtime routine; caps the fan to Low and switches
-  the nightlight window on. Cleared by the morning reset.
-- `input_number.bedroom_fan_expected_level` — internal: the fan level the script last commanded, so
-  the manual-fan detector can tell our own cloud echo from a real manual change.
-
-**Template sensor** (`files/templates.yaml`):
-- `sensor.bedroom_wake_start` — the watch alarm minus 15 min, available only for *morning* alarms
-  (03:00–11:00). The single source of truth for the wake-ramp window.
-
-**`threshold` binary-sensors** (`files/thresholds.yaml`) — native hysteresis = "alert once +
-recovery, no bounce". Sixteen, feeding `bedroom_threshold_alert`:
-- Air quality indoor (moderate): `bedroom_{co2,pm2_5,voc,nox}_high`
-- Air quality indoor (severe, pierces DND): `bedroom_{co2,pm2_5,voc,nox}_severe`
-- Air quality outdoor: `outdoor_pm2_5_high` (moderate, watch) / `outdoor_pm2_5_severe` (wildfire tier, pierces DND)
-- Temperature: `bedroom_temp_high` / `_low` — the away safety net (`critical_away`: pushes even while you're out)
-- Battery: `bedroom_{fp300,tap_dial}_battery_low`
-- Humidity: `bedroom_humidity_high` / `_low`
+`state/STATE.md` (generated — do not hand-edit) lists every coordination helper with its entity
+and purpose. The threshold binary-sensors (`files/thresholds.yaml`) and the wake-start template
+sensor (`files/templates.yaml`) are documented in `docs/alerts-and-notifications.md`,
+`docs/climate-and-air.md`, and `docs/lighting-and-presence.md` respectively; tuning their
+thresholds and curves is §9 below.
 
 ---
 
-## 6. Scripts (the reusable building blocks)
+## 6. Scripts and automations
 
-> The **core** building blocks below; the suite has **16** scripts in total.
-> [`CLAUDE.md`](CLAUDE.md) is the authoritative, exhaustive per-feature reference — this section
-> is a curated walkthrough, not a full inventory (keeping it one keeps it from drifting).
+The suite ships 16 scripts (`files/scripts/*.yaml`) and 35 automations
+(`files/automations/*.yaml`), one topic per file. What each one does is documented at its point
+of use:
 
-- **`bedroom_apply_natural`** — sets the lights to their "natural" state *right now*: an ordered
-  `choose:` of time-based exceptions over **full Adaptive Lighting** (the default). Exceptions, in
-  order: (1) **night nightlight** (`scene.bedroom_nightlight`) when sleep mode is on OR 00:00–05:00;
-  (2) **morning wake ramp** (a gradual 1%→100% sunrise over a 45-min window, `alarm−15`→`alarm+30`,
-  that keeps climbing to full brightness so the hand-off to Adaptive Lighting has no sudden pop). Uses
-  `bedroom_set_natural_brightness` (a helper that releases AL, applies its natural color, then sets
-  a brightness). Called by presence-on, the morning reset, Tap Dial button 4, and arrive-home.
-- **`bedroom_apply_fan`** — smooth temperature→fan curve (~1 DREO level/°F, off below ~72°F, up to
-  L9 by ~80°F) with a ~0.7-level hysteresis deadband and level caps (L4 at night, L2 in sleep mode).
-- **`bedroom_bedtime`** — the sleep routine: sleep mode on + Adaptive Lighting sleep mode +
-  `scene.bedroom_nightlight` + re-apply the (now quiet-capped) fan.
-- **`bedroom_notify`** — the one notification layer everything calls. Fields:
-  `title, message, tag, watch, pierce`. Picks Android channel/importance from `pierce` + the live
-  "quiet" state (DND on **or** sleep mode); mirrors to the watch if `watch`.
-- **`bedroom_alert_pulse`** — snapshot → red flash → restore, for a bad-air-quality pulse when the
-  lights are already on.
+- **`docs/lighting-and-presence.md`** — presence, Adaptive Lighting, the Tap Dial, the lux gate,
+  manual override, bedtime and wake.
+- **`docs/alerts-and-notifications.md`** — threshold alerts, `bedroom_notify` routing, away-hold,
+  UPS/CO2/sensor-offline/Zigbee-bridge alerts.
+- **`docs/climate-and-air.md`** — fan control, the dashboard, outdoor AQI and the window advisor.
+- **`docs/platform.md`** — auth, HACS, entity naming, the PVC, pod networking.
+- The file headers in `files/automations/*.yaml` and `files/scripts/*.yaml` carry the per-file
+  rationale (e.g. `system.yaml`'s header on why the Zigbee-bridge alert exists alongside the
+  per-device offline alert).
+
+`scripts/diagnostics/probe.py ha verify-automations` reads the live list against
+`files/automations/*.yaml` — use it rather than a hand-maintained count, which drifts.
 
 ---
 
-## 7. Automations (what each does)
-
-> The **core** automations below; the suite has **33** in total (the cast/display, heartbeat,
-> runtime-error, color-track, AL-startup-suppress, air-purifier-presence, wake-ramp, held-notification
-> flush, and others are documented per-feature in [`CLAUDE.md`](CLAUDE.md), the authoritative reference).
-
-**Presence & lighting**
-- `bedroom_presence_on` — FP300 occupied (+ home, + dark-or-in-wake-window) → `apply_natural`.
-- `bedroom_absence_off` — room empty 5 min → lights off (5 min, not 1, for FP300 false-absence de-flap).
-- `bedroom_morning_reset` — at `sensor.bedroom_wake_start` (the alarm) + a 09:00 fallback: clear the
-  overnight overrides, re-apply the fan, and (if present, alarm trigger) run the wake ramp + a
-  "you slept N h" note (gentler ramp if you slept < 6 h).
-
-**Fan**
-- `bedroom_fan_temperature` — on temp change / 22:00 / 06:00 → `apply_fan` (gated on home +
-  `fan_manual` off).
-- `bedroom_fan_manual_detect` — a hand/remote fan change → set `bedroom_fan_manual`.
-
-**Bedtime & controls**
-- `bedroom_bedtime` — phone Bedtime mode on (while home) → `bedroom_bedtime` script.
-- `bedroom_bedtime_prompt` — at wind-down time (alarm − 8h, or the 22:30 fallback on no-alarm
-  nights — `sensor.bedroom_winddown_start`), if present + not in sleep mode + home → a "Ready for
-  bed?" notify with a **Start now** button.
-- `bedroom_tap_dial_control` — the Tap Dial (see §8).
-
-**Home / away & security**
-- `bedroom_away` — left home (10 min) + a 30-min failsafe → turn off lights + fan, notify what was on.
-- `bedroom_arrive_home` — returned home → resume the fan, re-check lights if you're in the room.
-- `bedroom_unexpected_occupancy` — FP300 presence while away > 5 min → security alert (watch + pierce).
-
-**Alerts & notifications**
-- `bedroom_threshold_alert` — the unified engine: any threshold sensor crossing → routed notify
-  (air-quality also pulses the lights; severe air-quality pierces DND).
-- `bedroom_sensor_offline_alert` — a watched dependency `unavailable` 5 min → notify (watch).
-- `zigbee_bridge_offline` — the Zigbee2MQTT bridge (whole mesh) offline 2 min → notify (watch); a
-  faster root-cause signal than the per-device offline alert, via `binary_sensor.zigbee2mqtt_bridge_connection_state`. Recovery when it returns.
-- `bedroom_notification_action` — handles taps on notification buttons (`BEDROOM_*` actions).
-- `update_available_digest` — Sunday 10:00, a digest of pending device/integration updates.
-
-**Maintenance & power**
-- `bedroom_co2_calibration_reminder` — quarterly (1st of Jan/Apr/Jul/Oct) notify to recalibrate the
-  AirGradient CO₂ sensor against the outdoor ~400 ppm baseline (notify-only; no one-tap calibrate).
-- `ups_power_event` — UPS outage / low-battery / restored, off the raw NUT flags
-  (`sensor.apc_ups_status_data`); low-battery pierces DND (the server may shut down).
-
----
-
-## 8. Operator controls
+## 7. Operator controls
 
 **Tap Dial (RDM002):**
 
@@ -222,7 +138,7 @@ recovery, no bounce". Sixteen, feeding `bedroom_threshold_alert`:
 
 ---
 
-## 9. Notification model
+## 8. Notification model
 
 | Severity | Behavior | Examples |
 |---|---|---|
@@ -234,7 +150,7 @@ All set per-category in `bedroom_threshold_alert`'s `cfg` map or per-call to `be
 
 ---
 
-## 10. Tuning guide
+## 9. Tuning guide
 
 | Want to change… | Where |
 |---|---|
@@ -253,7 +169,7 @@ Z2M's data volume (a Longhorn PVC backed up to B2, not git) — re-apply after a
 
 ---
 
-## 11. Google Nest Hub Max — voice control + dashboard casting
+## 10. Google Nest Hub Max — voice control + dashboard casting
 
 Two **independent**, self-hosted (no Nabu Casa) integrations with a Nest Hub Max:
 
@@ -265,13 +181,13 @@ Two **independent**, self-hosted (no Nabu Casa) integrations with a Nest Hub Max
   over mDNS — `known_hosts` names the Hub Max by IP and skips discovery entirely. Outbound
   container→LAN traffic works through bridge+NAT, so **no host-networking change is needed.**
 
-### 11a. Prerequisite — give the Hub Max a fixed IP
+### 10a. Prerequisite — give the Hub Max a fixed IP
 `cast` `known_hosts` needs a stable address. Reserve a DHCP lease for the Hub Max's MAC (home
 router, or — if Pi-hole serves DHCP — a `dhcp-host=<MAC>,<IP>` line in
 `pihole/templates/dnsmasq.yml.j2`). Find the MAC in the Google Home app (device → Settings →
 Technical information) or the router's lease table. Record the IP for `known_hosts`.
 
-### 11b. Voice control — Google-side (one-time clickops; not captured by `deploy.yml`)
+### 10b. Voice control — Google-side (one-time clickops; not captured by `deploy.yml`)
 Google's console UI shifts often — the HA docs are authoritative:
 <https://www.home-assistant.io/integrations/google_assistant/>. **This is the smart-home /
 cloud-to-cloud path** (HomeGraph device control) — NOT "Conversational Actions" (those were sunset
@@ -297,7 +213,7 @@ Home Developer Console — use that. Repo-specific values:
 > Hand off three things from the above: the **Project ID**, the **service-account JSON**, and the
 > **HomeGraph API key**. They become the SOPS secrets below.
 
-### 11c. Voice control — repo-side (Ansible) — IMPLEMENTED (2026-06-21)
+### 10c. Voice control — repo-side (Ansible) — IMPLEMENTED (2026-06-21)
 **Key constraint:** `configuration.yaml` is copied verbatim — it must contain **no** Ansible
 `{{ }}` (the `validate-ha-config` hook rejects it). So all templated/secret values go through HA's
 native `!secret` indirection backed by an Ansible-generated `secrets.yaml`.
@@ -328,17 +244,17 @@ native `!secret` indirection backed by an Ansible-generated `secrets.yaml`.
    ```
    Both files are already carried by the role's ConfigMap/Secret, so editing them rolls the pod
    on the next deploy. Deploy: `ha-deploy`.
-4. **Finish in the Google Home app:** link the `[test] <action>` (§11b step 5), then say
+4. **Finish in the Google Home app:** link the `[test] <action>` (§10b step 5), then say
    "Hey Google, sync my devices". Expose another device later = one more `entity_config` entry with
    `expose: true`, redeploy, resync.
 
-### 11d. Dashboard casting — UI / `.storage` (the `cast` integration is NOT YAML)
+### 10d. Dashboard casting — UI / `.storage` (the `cast` integration is NOT YAML)
 Modern HA **rejects** a YAML `cast:` block ("does not support YAML setup") — Cast is a config-entry
-integration. `external_url`/`internal_url` are already set (§11c step 2), so only the device list is
+integration. `external_url`/`internal_url` are already set (§10c step 2), so only the device list is
 left, and it's a one-time UI step:
 - **Settings → Devices & Services → + Add Integration → Google Cast.** HA is bridge-networked (no
   mDNS), so when prompted add the Hub by IP under **Known hosts = `10.0.0.137`** (or set it later via
-  the integration's **Configure**). The Hub must keep that reserved DHCP lease (§11a).
+  the integration's **Configure**). The Hub must keep that reserved DHCP lease (§10a).
 - A `media_player.<hub>` entity then appears. Cast a view from **Developer Tools → Actions** with
   `cast.show_lovelace_view` (target that media_player, `dashboard_path: lovelace`, `view_path: 0`);
   optionally automate it.
@@ -347,7 +263,7 @@ left, and it's a one-time UI step:
 > and the Hub Max to resolve + reach the `external_url`. If casting misbehaves, check that the Hub
 > Max resolves `home-assistant.daniel-hunter.com`, or fall back to the LAN `internal_url`.
 
-### 11e. Verify
+### 10e. Verify
 - `uv run python scripts/home_assistant/validate_ha_config.py` passes; deploy with `ha-deploy` (gates on health).
 - `scripts/diagnostics/probe.py ha get error_log` shows no `google_assistant` setup errors (it loads with no
   entities — it's cloud-fulfillment). After adding Cast in the UI,
