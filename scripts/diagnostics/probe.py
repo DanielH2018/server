@@ -287,7 +287,8 @@ def _build_parser():
         "vip-placement",
         help="assert every ETP=Local MetalLB VIP has a Ready endpoint on the node that "
         "announces it — exit 1 when one is stranded (the announcer DROPs its traffic while "
-        "the Service reads healthy), 2 when the read came back empty.",
+        "the Service reads healthy), 2 when the read came back empty. A VIP whose workloads "
+        "all declare zero replicas is reported scaled-to-zero, not stranded.",
     )
     vp.add_argument(
         "--dry-run",

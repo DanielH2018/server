@@ -22,12 +22,28 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from diagnostics.probe_lib import vip_placement as ph
 
 
-def _svc(name, etp="Local", ip="10.0.0.240", type_="LoadBalancer"):
+def _svc(name, etp="Local", ip="10.0.0.240", type_="LoadBalancer", selector=None):
     return {
         "metadata": {"namespace": "homelab", "name": name},
-        "spec": {"type": type_, "externalTrafficPolicy": etp},
+        "spec": {
+            "type": type_,
+            "externalTrafficPolicy": etp,
+            "selector": {"app": name} if selector is None else selector,
+        },
         "status": {"loadBalancer": {"ingress": [{"ip": ip}]}},
     }
+
+
+def _workload(app, replicas, namespace="homelab"):
+    """A Deployment as `kubectl get -o json` returns it. `replicas=None` omits the field."""
+    spec = {
+        "template": {
+            "metadata": {"labels": {"app": app, "netpol-baseline": "enforced"}}
+        }
+    }
+    if replicas is not None:
+        spec["replicas"] = replicas
+    return {"metadata": {"namespace": namespace, "name": app}, "spec": spec}
 
 
 def _slice(service_name, node, ready=True):
@@ -130,7 +146,89 @@ def test_a_selector_matching_nothing_resolves_to_nothing():
     assert ph.announcing_nodes([advert], [_node("daniel-box")]) == set()
 
 
+def test_a_zero_replica_workload_is_not_stranded():
+    """terraria is parked at zero replicas by design, so its empty endpoint set is expected.
+
+    Issue #870: this FAILed the whole command, and a check that is red whenever a service is
+    intentionally off trains its reader to ignore the red.
+    """
+    text, code = ph.format_vip_placement(
+        [_svc("terraria", ip="10.0.0.245")], [], _BOX, [_workload("terraria", 0)]
+    )
+    assert code == 0
+    assert "scaled-to-zero" in text, "the row stays visible rather than being omitted"
+    assert "terraria" in text and "not checked" in text
+
+
+def test_a_one_replica_workload_with_no_endpoint_is_still_flagged():
+    """The reject half. Without it the skip could match every workload."""
+    _text, code = ph.format_vip_placement(
+        [_svc("pihole-dns")], [], _BOX, [_workload("pihole-dns", 1)]
+    )
+    assert code == 1
+
+
+def test_an_absent_replicas_field_is_not_zero():
+    """A missing `spec.replicas` means the API default of 1, so a falsy test would fail open."""
+    _text, code = ph.format_vip_placement(
+        [_svc("pihole-dns")], [], _BOX, [_workload("pihole-dns", None)]
+    )
+    assert code == 1
+
+
+def test_a_selector_resolving_to_no_workload_is_still_flagged():
+    """A Service pointing at nothing is the class of bug this probe exists for."""
+    _text, code = ph.format_vip_placement([_svc("pihole-dns")], [], _BOX, [])
+    assert code == 1
+
+
+def test_one_of_two_matching_workloads_at_zero_is_still_flagged():
+    """Off means EVERY matching workload declares zero, not just one of them."""
+    _text, code = ph.format_vip_placement(
+        [_svc("pihole-dns")],
+        [],
+        _BOX,
+        [_workload("pihole-dns", 0), _workload("pihole-dns", 1)],
+    )
+    assert code == 1
+
+
+def test_an_empty_service_selector_matches_no_workload():
+    """`all()` over an empty selector is True, which would match every workload in scope."""
+    assert ph.workload_replicas([_workload("terraria", 0)], "homelab", {}) == []
+
+
+def test_a_workload_in_another_namespace_does_not_match():
+    assert (
+        ph.workload_replicas(
+            [_workload("terraria", 0, namespace="observability")],
+            "homelab",
+            {"app": "terraria"},
+        )
+        == []
+    )
+
+
+def test_a_scaled_to_zero_vip_with_an_endpoint_still_reads_ok():
+    """A backed VIP is `ok` on its endpoints, never reclassified by its replica count."""
+    text, code = ph.format_vip_placement(
+        [_svc("terraria")],
+        [_slice("terraria", "daniel-box")],
+        _BOX,
+        [_workload("terraria", 0)],
+    )
+    assert code == 0 and "scaled-to-zero" not in text
+
+
 def test_the_probe_only_reads():
     """Every call is a `get`. This runs against a cluster Ansible alone may write."""
-    for argv in ph.vip_placement_argv():
+    argvs = ph.vip_placement_argv()
+    assert {argv[2] for argv in argvs} == {
+        "svc",
+        "endpointslices",
+        "l2advertisements.metallb.io",
+        "nodes",
+        "deployments,statefulsets",
+    }, "a dropped read would leave this loop passing over fewer calls"
+    for argv in argvs:
         assert argv[:2] == ["kubectl", "get"]
