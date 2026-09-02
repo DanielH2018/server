@@ -110,3 +110,91 @@ def test_the_datasource_uid_matches_the_provisioned_one():
     board = _BOARD.read_text()
     uids = set(re.findall(r'"uid":\s*"([^"]+)"', board)) - {"landings"}
     assert uids == {"bf4q19tuivta8e"}, uids
+
+
+_VERDICT_HEADER = re.compile(
+    r"# Verdicts printed on stdout: (.+?)\.\n# The last four", re.S
+)
+_DIE_WITH_VERDICT = re.compile(r'\bdie "[^"]*" (\d+) ([a-z-]+)\s*(?:;;)?$')
+_DIE_75_BARE = re.compile(r'\bdie "[^"]*" 75\s*(?:;;)?$')
+
+
+def _documented_verdicts() -> set[str]:
+    m = _VERDICT_HEADER.search(_LAND_SH.read_text())
+    assert m, "land.sh's header no longer lists its verdicts"
+    return {v.strip() for v in m.group(1).replace("\n#", " ").split("|")}
+
+
+def test_every_die_verdict_is_a_documented_one():
+    """A `die` verdict the header does not list is a name the board and the skill never learn."""
+    named = {
+        m.group(2)
+        for line in _LAND_SH.read_text().splitlines()
+        if (m := _DIE_WITH_VERDICT.search(line))
+    }
+    undocumented = named - _documented_verdicts()
+    assert not undocumented, (
+        f"die() names verdicts the header does not list: {sorted(undocumented)}"
+    )
+
+
+def test_every_exit_75_die_names_a_verdict():
+    """Every `die ... 75` — a budget elapsed, or the lock stayed busy — carries a verdict.
+
+    Before 2026-09-02 all of them reached the Landings board as `aborted`: two merge-budget
+    timeouts and two CI-budget timeouts read as one bucket, and were taken for lock contention.
+    """
+    bare = [
+        line.strip()
+        for line in _LAND_SH.read_text().splitlines()
+        if _DIE_75_BARE.search(line)
+    ]
+    assert not bare, f"exit-75 die sites with no verdict: {bare}"
+
+
+def test_a_bare_exit_75_die_would_be_caught():
+    assert _DIE_75_BARE.search('  75) die "lock stayed busy" 75 ;;')
+    assert not _DIE_75_BARE.search('  75) die "lock stayed busy" 75 lock-busy ;;')
+
+
+def _retry_loop(text: str, call: str) -> str:
+    start = text.index(call)
+    return text[start : text.index("\ndone\n", start)]
+
+
+def test_lock_contention_is_recorded_in_both_retry_loops():
+    """The tick loop and the deploy loop each retry on contention; each must book the wait."""
+    text = _LAND_SH.read_text()
+    tick_loop = _retry_loop(text, "gitops_tick.sh\n  tick_rc=$?")
+    deploy_loop = _retry_loop(text, 'deploy.sh --tags "$TAGS"\n  deploy_rc=$?')
+    assert "note_lock_contention" in tick_loop, (
+        "the tick retry loop does not record its lock wait"
+    )
+    assert "note_lock_contention" in deploy_loop, (
+        "the deploy retry loop does not record its lock wait"
+    )
+
+
+def test_nothing_to_deploy_is_decided_before_the_ci_wait():
+    """A PR that reaches no service, plane or self-applied role exits before `await_ci.py`.
+
+    Sixteen of the 45 landings before 2026-09-02 waited a median seven minutes of CI to
+    learn there was nothing to deploy. The deployer's own tick fast-forwards those.
+    """
+    text = _LAND_SH.read_text()
+    shortcut = text.index("LAND_VERDICT=nothing-to-deploy")
+    ci_wait = text.index('await_ci.py "$MERGE_SHA"')
+    assert shortcut < ci_wait, (
+        "the nothing-to-deploy short-circuit sits after the CI wait"
+    )
+
+
+def test_the_diff_fallback_is_not_short_circuited():
+    """A truncated file list derives from `$SINCE...HEAD`, and HEAD is the primary checkout
+    the tick has not fast-forwarded yet — so that path must still go through the tick."""
+    text = _LAND_SH.read_text()
+    shortcut = text.index("LAND_VERDICT=nothing-to-deploy")
+    guard = text[text.rindex("\nif ", 0, shortcut) : shortcut]
+    assert '[ -z "$NEEDS_DIFF" ]' in guard, (
+        "the short-circuit ignores the truncated-file-list fallback"
+    )

@@ -40,7 +40,11 @@
 #       origin
 #
 # Verdicts printed on stdout: settled | unhealthy | deploy-failed | nothing-to-deploy |
-# blocked | needs-manual-apply | deferred. `blocked` is not a failure of this PR — something
+# blocked | needs-manual-apply | deferred | merge-timeout | ci-red | ci-timeout | lock-busy.
+# The last four are the `die` exits that used to reach the Landings board as one `aborted`
+# verdict: the 45 landings before 2026-09-02 held four of them, two at exactly the 2700s
+# merge budget and two at the CI budget, and nothing on the board told them apart from a
+# lock that stayed busy. `blocked` is not a failure of this PR — something
 # else in the incoming range needs an operator, and nothing was deployed. `needs-manual-apply`
 # means this PR reaches something neither a deploy tag nor the tick covers — a bring-up
 # playbook, a setup role initial_setup.yml does not include, a shared k8s role with no
@@ -66,8 +70,22 @@ BRANCH=master
 LOCK_RETRIES=5
 LOCK_BACKOFF=60
 
+#######################################
+# Stop the landing with a message on stderr.
+# Globals:
+#   LAND_VERDICT (set when a verdict is given, so the EXIT trap logs it)
+#   PR
+# Arguments:
+#   the message, the exit code (default 2), an optional verdict name
+# Outputs:
+#   `land: <message>` on stderr; `VERDICT: <verdict> (...)` on stdout when one is given
+#######################################
 die() {
   printf 'land: %s\n' "$1" >&2
+  if [ -n "${3:-}" ]; then
+    LAND_VERDICT=$3
+    echo "VERDICT: $3 (PR #${PR:-?} — $1)"
+  fi
   exit "${2:-2}"
 }
 say() { printf '  %s\n' "$1"; }
@@ -87,6 +105,32 @@ T_DEPLOY=''
 LAND_VERDICT=''
 MERGE_SHA=''
 TAGS_LABEL=''
+# Seconds spent in tick or deploy attempts that ended in lock contention, backoff included,
+# and what held the lock the first time. Part of `tick` and `deploy` on the board, not a
+# fifth phase: the contended attempt is inside those stamps. deploy.sh alone can sit 3000s
+# on the lock before its exit 75, all of it booked as deploy time until this field existed.
+LOCK=/var/lock/server-git-tree.lock
+LOCK_WAITED=0
+LOCK_HOLDER=''
+#######################################
+# Record one attempt that lost the tree lock, and name the holder on the first one.
+# Globals:
+#   LOCK, LOCK_WAITED, LOCK_HOLDER
+# Arguments:
+#   seconds the attempt spent before giving up
+# Outputs:
+#   the holder's age and command on stdout, once
+#######################################
+note_lock_contention() {
+  LOCK_WAITED=$((LOCK_WAITED + $1))
+  [ -z "$LOCK_HOLDER" ] || return 0
+  local pid
+  # fuser prints the PIDs on stdout and the path on stderr; the lowest PID is the flock
+  # parent, its children inherit the descriptor.
+  pid=$(fuser "$LOCK" 2>/dev/null | tr -s ' ' '\n' | grep -m1 '[0-9]') || return 0
+  LOCK_HOLDER=$(ps -o etimes=,args= -p "$pid" 2>/dev/null | tr -s ' ' | tr -d '"' | cut -c1-120)
+  say "lock held by pid $pid (etimes, command): $LOCK_HOLDER"
+}
 # shellcheck disable=SC2317,SC2329  # both are reached through the EXIT trap below
 phase() { # seconds between two stamps, or empty when the later one was never reached
   [ -n "$2" ] && [ -n "$1" ] && echo $(($2 - $1))
@@ -100,6 +144,7 @@ emit_landing_annotation() {
     "wait_merge=$(phase "$T_START" "$T_MERGED") wait_ci=$(phase "$T_MERGED" "$T_CI")" \
     "tick=$(phase "$T_CI" "$T_TICK") deploy=$(phase "$T_TICK" "$T_DEPLOY")" \
     "total=$((SECONDS - T_START)) tags=${TAGS_LABEL:-none}" \
+    "lock=${LOCK_WAITED} holder=\"${LOCK_HOLDER}\"" \
     2>/dev/null || true
 }
 trap emit_landing_annotation EXIT
@@ -152,7 +197,7 @@ if [ "$AWAIT_MERGE" -eq 1 ]; then
       CLOSED) die "PR #$PR was closed without merging — nothing to land" 1 ;;
     esac
     if [ "$waited" -ge "$MERGE_TIMEOUT" ]; then
-      die "PR #$PR still $state after ${MERGE_TIMEOUT}s — not being merged; look at its checks or the queue" 75
+      die "PR #$PR still $state after ${MERGE_TIMEOUT}s — not being merged; look at its checks or the queue" 75 merge-timeout
     fi
     sleep "$MERGE_POLL"
     waited=$((waited + MERGE_POLL))
@@ -168,85 +213,16 @@ if [ -z "$MERGE_SHA" ] || [ "$MERGE_SHA" = "null" ]; then
   die "PR #$PR has no merge commit — is it merged?" 1
 fi
 say "merge commit $MERGE_SHA"
-
-# Before waiting on anything. A _BROAD_MANUAL_PREFIXES change anywhere in the incoming range
-# stops the tick fast-forwarding, which guarantees deploy.sh refuses as stale (exit 4) however
-# green CI turns out. Landing PR #570 on 2026-08-29 spent ~6 minutes waiting for CI and then
-# failed at step 4, with the blocker visible in the range before the wait began.
-echo "== 2/6  pre-flight: can the tick cross what is incoming?"
 git fetch -q origin "$BRANCH" || die "could not fetch origin/$BRANCH" 1
-uv run python scripts/deploy_tools/deploy_tags.py blockers "origin/$BRANCH"
-pf_rc=$?
-case "$pf_rc" in
-  0) say "nothing in the way" ;;
-  3)
-    LAND_VERDICT=blocked
-    echo "VERDICT: blocked (PR #$PR — an incoming change needs a hand; see above)"
-    exit 1
-    ;;
-  *) die "pre-flight failed (exit $pf_rc) — nothing deployed" 1 ;;
-esac
 
-echo "== 3/6  waiting for master CI"
-uv run python scripts/deploy_tools/await_ci.py "$MERGE_SHA" --timeout "$CI_TIMEOUT"
-ci_rc=$?
-case "$ci_rc" in
-  0) ;;
-  1) die "master CI is RED on $MERGE_SHA — nothing deployed" 1 ;;
-  75) die "no CI verdict inside ${CI_TIMEOUT}s — nothing deployed" 75 ;;
-  *) die "await_ci failed (exit $ci_rc) — nothing deployed" 1 ;;
-esac
-
-T_CI=$SECONDS
-echo "== 4/6  GitOps tick (fetch, ff-merge, deploy what is eligible)"
-tick_rc=0
-attempt=1
-while [ "$attempt" -le "$LOCK_RETRIES" ]; do
-  ./scripts/deploy_tools/gitops_tick.sh
-  tick_rc=$?
-  # 3 = lock contention: the unit's own `flock -w 180` gave up, so the tick fast-forwarded
-  # NOTHING. Another session's deploy can hold the tree lock for twenty minutes, and a
-  # landing that carried on from here left the primary checkout behind origin with every
-  # later step reading that as "the tick deferred" (#723, 2026-09-01). Retried the way the
-  # scoped deploy below retries its own exit 75; each attempt already waits 180s inside
-  # the unit, so five of them cover the long deploy this was measured against.
-  if [ "$tick_rc" -ne 3 ]; then
-    break
-  fi
-  say "tick skipped for lock contention (attempt $attempt/$LOCK_RETRIES); retrying in ${LOCK_BACKOFF}s"
-  sleep "$LOCK_BACKOFF"
-  attempt=$((attempt + 1))
-done
-# 75 = the wrapper stopped watching a run still in flight. Not a failure of the tick, and it
-# leaves the ff-merge either done or retryable next tick, so carry on to the scoped deploy.
-case "$tick_rc" in
-  0 | 75) say "tick exit $tick_rc" ;;
-  3) die "tick skipped for lock contention $LOCK_RETRIES times — nothing fast-forwarded" 75 ;;
-  *) die "gitops tick failed (exit $tick_rc)" 1 ;;
-esac
-
-# What the deployer itself did with this landing, read from its own state rather than
-# inferred from the PR's paths. A setup-plane or deploy-plane change is applied BY THE TICK
-# since 2026-08-29 (the deployer's own role since #719), so for a PR with no service tag the
-# tick's apply IS the deploy — and the only evidence of it is the deployer's markers.
-# `behind_since` non-empty means the tick did not cross origin (a newer merge whose CI is
-# still running, most often); `hold_sha` non-empty means an apply failed and the tick is
-# holding. Both files are written by the deployer after main() returns.
-DEPLOYER_STATE=/var/lib/gitops-deploy
-tick_state() {
-  if [ -s "$DEPLOYER_STATE/hold_sha" ]; then
-    echo held
-  elif [ -s "$DEPLOYER_STATE/behind_since" ]; then
-    echo behind
-  else
-    echo converged
-  fi
-}
-
-T_TICK=$SECONDS
-echo "== 5/6  deploying what the tick deferred"
+# What this PR reaches, read from its file list BEFORE any wait. A PR that reaches no service
+# tag, no plane a hand applies and nothing the tick applies itself has nothing to wait for:
+# the deployer fast-forwards it on its own tick, and CI on the merge commit is the deployer's
+# gate, not this landing's. Sixteen of the 45 landings before 2026-09-02 ended
+# nothing-to-deploy after a median seven minutes of PR CI plus master CI.
 PLANE=''
 SELF_APPLIED=''
+NEEDS_DIFF=''
 if [ -z "$TAGS" ]; then
   pr_json=$(gh pr view "$PR" --json files,changedFiles) || die "could not read PR files" 1
   # What a deploy tag cannot reach. deploy.yml is a containers_list loop, so a setup-plane
@@ -270,20 +246,110 @@ if [ -z "$TAGS" ]; then
   if [ "$source_kind" = "fallback" ]; then
     [ -n "$SINCE" ] ||
       die "PR file list was truncated and no --since was given — rerun with --since <pre-merge-sha>"
-    say "file list truncated; deriving from the diff since $SINCE instead"
-    # Resolve to a tag list HERE rather than handing deploy.sh --changed. Both run the same
-    # deriver, but only this leaves step 5 something to health-check: --changed resolves
-    # internally, so deploy.sh would deploy real services while the verdict call received an
-    # empty --tags and reported settled having checked nothing — on the large-PR path, where
-    # verification matters most.
-    TAGS=$(uv run python scripts/deploy_tools/deploy_tags.py changed "$SINCE")
-    changed_rc=$?
-    case "$changed_rc" in
-      0) ;;
-      3) die "the change is broad and maps to no service list — deploy it by hand" 1 ;;
-      *) die "deploy_tags.py changed failed (exit $changed_rc)" 1 ;;
-    esac
+    # The diff-based derivation reads `$SINCE...HEAD`, and HEAD is the primary checkout,
+    # which the tick has not fast-forwarded yet. Derived in step 5 instead, after the tick.
+    NEEDS_DIFF=1
+    say "file list truncated; deriving from the diff since $SINCE after the tick"
   fi
+fi
+
+if [ -z "$TAGS" ] && [ -z "$PLANE" ] && [ -z "$SELF_APPLIED" ] && [ -z "$NEEDS_DIFF" ]; then
+  LAND_VERDICT=nothing-to-deploy
+  echo "VERDICT: nothing-to-deploy (PR #$PR touched no service; the deployer fast-forwards it on its next tick)"
+  exit 0
+fi
+
+# Before waiting on anything. A _BROAD_MANUAL_PREFIXES change anywhere in the incoming range
+# stops the tick fast-forwarding, which guarantees deploy.sh refuses as stale (exit 4) however
+# green CI turns out. Landing PR #570 on 2026-08-29 spent ~6 minutes waiting for CI and then
+# failed at step 4, with the blocker visible in the range before the wait began.
+echo "== 2/6  pre-flight: can the tick cross what is incoming?"
+uv run python scripts/deploy_tools/deploy_tags.py blockers "origin/$BRANCH"
+pf_rc=$?
+case "$pf_rc" in
+  0) say "nothing in the way" ;;
+  3)
+    LAND_VERDICT=blocked
+    echo "VERDICT: blocked (PR #$PR — an incoming change needs a hand; see above)"
+    exit 1
+    ;;
+  *) die "pre-flight failed (exit $pf_rc) — nothing deployed" 1 ;;
+esac
+
+echo "== 3/6  waiting for master CI"
+uv run python scripts/deploy_tools/await_ci.py "$MERGE_SHA" --timeout "$CI_TIMEOUT"
+ci_rc=$?
+case "$ci_rc" in
+  0) ;;
+  1) die "master CI is RED on $MERGE_SHA — nothing deployed" 1 ci-red ;;
+  75) die "no CI verdict inside ${CI_TIMEOUT}s — nothing deployed" 75 ci-timeout ;;
+  *) die "await_ci failed (exit $ci_rc) — nothing deployed" 1 ;;
+esac
+
+T_CI=$SECONDS
+echo "== 4/6  GitOps tick (fetch, ff-merge, deploy what is eligible)"
+tick_rc=0
+attempt=1
+while [ "$attempt" -le "$LOCK_RETRIES" ]; do
+  t_attempt=$SECONDS
+  ./scripts/deploy_tools/gitops_tick.sh
+  tick_rc=$?
+  # 3 = lock contention: the unit's own `flock -w 180` gave up, so the tick fast-forwarded
+  # NOTHING. Another session's deploy can hold the tree lock for twenty minutes, and a
+  # landing that carried on from here left the primary checkout behind origin with every
+  # later step reading that as "the tick deferred" (#723, 2026-09-01). Retried the way the
+  # scoped deploy below retries its own exit 75; each attempt already waits 180s inside
+  # the unit, so five of them cover the long deploy this was measured against.
+  if [ "$tick_rc" -ne 3 ]; then
+    break
+  fi
+  note_lock_contention $((SECONDS - t_attempt + LOCK_BACKOFF))
+  say "tick skipped for lock contention (attempt $attempt/$LOCK_RETRIES); retrying in ${LOCK_BACKOFF}s"
+  sleep "$LOCK_BACKOFF"
+  attempt=$((attempt + 1))
+done
+# 75 = the wrapper stopped watching a run still in flight. Not a failure of the tick, and it
+# leaves the ff-merge either done or retryable next tick, so carry on to the scoped deploy.
+case "$tick_rc" in
+  0 | 75) say "tick exit $tick_rc" ;;
+  3) die "tick skipped for lock contention $LOCK_RETRIES times — nothing fast-forwarded" 75 lock-busy ;;
+  *) die "gitops tick failed (exit $tick_rc)" 1 ;;
+esac
+
+# What the deployer itself did with this landing, read from its own state rather than
+# inferred from the PR's paths. A setup-plane or deploy-plane change is applied BY THE TICK
+# since 2026-08-29 (the deployer's own role since #719), so for a PR with no service tag the
+# tick's apply IS the deploy — and the only evidence of it is the deployer's markers.
+# `behind_since` non-empty means the tick did not cross origin (a newer merge whose CI is
+# still running, most often); `hold_sha` non-empty means an apply failed and the tick is
+# holding. Both files are written by the deployer after main() returns.
+DEPLOYER_STATE=/var/lib/gitops-deploy
+tick_state() {
+  if [ -s "$DEPLOYER_STATE/hold_sha" ]; then
+    echo held
+  elif [ -s "$DEPLOYER_STATE/behind_since" ]; then
+    echo behind
+  else
+    echo converged
+  fi
+}
+
+T_TICK=$SECONDS
+echo "== 5/6  deploying what the tick deferred"
+if [ -n "$NEEDS_DIFF" ]; then
+  say "deriving tags from the diff since $SINCE"
+  # Resolve to a tag list HERE rather than handing deploy.sh --changed. Both run the same
+  # deriver, but only this leaves step 5 something to health-check: --changed resolves
+  # internally, so deploy.sh would deploy real services while the verdict call received an
+  # empty --tags and reported settled having checked nothing — on the large-PR path, where
+  # verification matters most.
+  TAGS=$(uv run python scripts/deploy_tools/deploy_tags.py changed "$SINCE")
+  changed_rc=$?
+  case "$changed_rc" in
+    0) ;;
+    3) die "the change is broad and maps to no service list — deploy it by hand" 1 ;;
+    *) die "deploy_tags.py changed failed (exit $changed_rc)" 1 ;;
+  esac
 fi
 
 if [ -z "$TAGS" ]; then
@@ -325,6 +391,7 @@ TAGS_LABEL=$TAGS
 deploy_rc=0
 attempt=1
 while [ "$attempt" -le "$LOCK_RETRIES" ]; do
+  t_attempt=$SECONDS
   ./scripts/deploy.sh --tags "$TAGS"
   deploy_rc=$?
   # 75 = the git-tree lock stayed busy (the 10-min timer, or another session). Nothing was
@@ -332,6 +399,7 @@ while [ "$attempt" -le "$LOCK_RETRIES" ]; do
   if [ "$deploy_rc" -ne 75 ]; then
     break
   fi
+  note_lock_contention $((SECONDS - t_attempt + LOCK_BACKOFF))
   say "deploy lock busy (attempt $attempt/$LOCK_RETRIES); retrying in ${LOCK_BACKOFF}s"
   sleep "$LOCK_BACKOFF"
   attempt=$((attempt + 1))
@@ -382,8 +450,8 @@ while [ "$deploy_rc" -eq 4 ] && [ "$stale_attempt" -lt "$STALE_RETRIES" ]; do
     T_TICK=$((T_TICK + tip_waited))
     case "$tip_ci_rc" in
       0) ;;
-      1) die "master CI is RED on the tip $TIP_SHA — the tick cannot cross it; nothing deployed" 1 ;;
-      75) die "no CI verdict on the tip $TIP_SHA inside ${CI_TIMEOUT}s — nothing deployed" 75 ;;
+      1) die "master CI is RED on the tip $TIP_SHA — the tick cannot cross it; nothing deployed" 1 ci-red ;;
+      75) die "no CI verdict on the tip $TIP_SHA inside ${CI_TIMEOUT}s — nothing deployed" 75 ci-timeout ;;
       *) die "await_ci failed on the tip (exit $tip_ci_rc) — nothing deployed" 1 ;;
     esac
   fi
@@ -404,7 +472,7 @@ case "$deploy_rc" in
     echo "VERDICT: deploy-failed (PR #$PR — a derived tag matched no service, so nothing deployed; tags: $TAGS)"
     exit 1
     ;;
-  75) die "deploy lock stayed busy after $LOCK_RETRIES attempts — nothing deployed" 75 ;;
+  75) die "deploy lock stayed busy after $LOCK_RETRIES attempts — nothing deployed" 75 lock-busy ;;
   *)
     LAND_VERDICT=deploy-failed
     echo "VERDICT: deploy-failed (PR #$PR, exit $deploy_rc)"

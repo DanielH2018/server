@@ -84,6 +84,15 @@
           "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | unwrap total [$__interval])",
           "legendFormat": "total",
           "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | unwrap lock [$__interval])",
+          "legendFormat": "lock",
+          "refId": "E"
         }
       ],
       "title": "Landing phases",
@@ -170,6 +179,15 @@
           "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | unwrap total [$__range])",
           "legendFormat": "median total",
           "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | unwrap lock [$__range])",
+          "legendFormat": "median lock",
+          "refId": "E"
         }
       ],
       "title": "Medians over the range",
