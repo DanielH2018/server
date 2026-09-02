@@ -63,7 +63,12 @@ _NOT_SERVICES = frozenset({"common", "archive"})
 # The remediation for a rotated secret. Flat text rather than derived from the file list,
 # because the consuming role is not knowable from here: a secret's value lives in no role's
 # template, so the changed-path matching every other rule uses has nothing to match on.
-_SECRETS_NOTE = (
+#
+# Named for the rotation it describes, not for the file that triggers it. CodeQL classifies a
+# constant whose name reads as `SECRET` as sensitive data, so `print(plane_note(...))` was
+# reported as py/clear-text-logging-sensitive-data every time a refactor moved that line. This
+# constant is operator prose and holds no credential.
+_ROTATION_NOTE = (
     "`ansible/vars/secrets.yml` changed, and a secret's VALUE lives in no role's template — so "
     "a rotation **maps to no deploy tag by construction** and every consumer keeps rendering "
     "the OLD value until its own role is redeployed. Resolve them: `uv run python "
@@ -201,7 +206,7 @@ def plane_note(files, declared: set[str] | None = None, quiet=()) -> str:
         # `ansible/secret_rotation.yml` carries names and dates but no values, and
         # `ansible/vars/secrets-staging.yml` belongs to daniel-stage, which land.sh never
         # deploys. Both are correctly outside it.
-        notes.append(_SECRETS_NOTE)
+        notes.append(_ROTATION_NOTE)
     return " ".join(notes)
 
 
