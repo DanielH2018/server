@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-09-02 17:42 UTC
-generated_sha: 24c4bd31
+generated_at: 2026-09-02 18:17 UTC
+generated_sha: b49b867a
 ---
 
 !!! warning "Generated file — do not edit"
@@ -16,5 +16,5 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed |
 |---|---|---|---|---|---|---|
-| [#803](https://github.com/DanielH2018/server/issues/803) | low | addition | - | Add Navidrome | 2026-09-02 | 0 |
-| [#822](https://github.com/DanielH2018/server/issues/822) | - | gap | backup-observability | The Kuma TCP port monitor crashes terraria, which pages k3s Workload Health | 2026-09-02 | 0 |
+| [#862](https://github.com/DanielH2018/server/issues/862) | low | improvement | cicd | Code scanning runs under default setup, so every false positive costs a hand-dismissal that a refactor undoes | 2026-09-02 | 0 |
+| [#866](https://github.com/DanielH2018/server/issues/866) | low | addition | - | Give navidrome a real music library and unpark it | 2026-09-02 | 0 |
