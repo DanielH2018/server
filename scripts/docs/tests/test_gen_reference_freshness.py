@@ -1,4 +1,4 @@
-"""gen_reference_freshness: the ranking and the table, from synthetic PageFreshness rows."""
+"""docs.reference.freshness: the ranking and the table, from synthetic PageFreshness rows."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import gen_reference_freshness as g
+from docs.reference import freshness as g
 from lib.doc_freshness import PageFreshness
 
 A = PageFreshness(
@@ -42,7 +42,5 @@ def test_the_most_recently_moved_source_is_the_latest_by_date():
 
 def test_the_page_carries_the_provenance_banner():
     out = g.render_markdown([A])
-    assert out.startswith(
-        "---\ngenerated_from: scripts/docs/gen_reference_freshness.py\n"
-    )
+    assert out.startswith("---\ngenerated_from: scripts/docs/reference/freshness.py\n")
     assert "3 hand-written page(s)" in g.render_markdown([A, B, C])

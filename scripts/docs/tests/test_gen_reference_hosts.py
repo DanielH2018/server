@@ -1,4 +1,4 @@
-"""Tests for scripts/docs/gen_reference_hosts.py.
+"""Tests for scripts/docs/reference/hosts.py.
 
 Fixture-driven: a synthetic hosts.ini and host_vars under tmp_path, never the real
 inventory, which changes.
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import textwrap
 
-import gen_reference_hosts as g
+from docs.reference import hosts as g
 
 
 def _make_inventory(tmp_path):
@@ -121,7 +121,7 @@ def test_markdown_opens_with_the_provenance_banner(tmp_path):
     ini, host_vars = _make_inventory(tmp_path)
     out = g.render_markdown(g.build_rows(ini, host_vars))
     assert out.startswith("---\n")
-    assert "generated_from: scripts/docs/gen_reference_hosts.py" in out
+    assert "generated_from: scripts/docs/reference/hosts.py" in out
 
 
 def test_markdown_records_the_limit_trap(tmp_path):

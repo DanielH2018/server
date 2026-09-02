@@ -13,7 +13,7 @@ honest outcome — a page that quietly went stale would read as an empty backlog
 
 Usage::
 
-    uv run python scripts/docs/gen_reference_backlog.py --out docs/reference/backlog.md
+    uv run python scripts/docs/reference/backlog.py --out docs/reference/backlog.md
 """
 
 from __future__ import annotations
@@ -26,12 +26,12 @@ from pathlib import Path
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from dev.findings import issue_rows, load_issues, sort_key
 from lib.docs_provenance import finish_generator, generated_banner, md_cell
 
-SOURCE = "scripts/docs/gen_reference_backlog.py"
+SOURCE = "scripts/docs/reference/backlog.py"
 
 
 def render_markdown(rows: list[dict]) -> str:
@@ -75,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     rows = issue_rows(load_issues("open"))
     return finish_generator(
-        "gen_reference_backlog", args.out, rows, render_markdown, "finding"
+        "docs.reference.backlog", args.out, rows, render_markdown, "finding"
     )
 
 

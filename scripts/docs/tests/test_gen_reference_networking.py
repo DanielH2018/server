@@ -1,4 +1,4 @@
-"""Tests for scripts/docs/gen_reference_networking.py.
+"""Tests for scripts/docs/reference/networking.py.
 
 Fixture-driven: synthetic host_vars, roles and group_vars under tmp_path.
 
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import textwrap
 
-import gen_reference_networking as g
+from docs.reference import networking as g
 
 
 def _make(tmp_path):
@@ -148,7 +148,7 @@ def test_markdown_opens_with_the_provenance_banner(tmp_path):
     host_vars, roles, group_vars = _make(tmp_path)
     out = g.render_markdown(g.build_rows(host_vars, roles, group_vars))
     assert out.startswith("---\n")
-    assert "generated_from: scripts/docs/gen_reference_networking.py" in out
+    assert "generated_from: scripts/docs/reference/networking.py" in out
 
 
 def test_markdown_ends_with_exactly_one_newline(tmp_path):

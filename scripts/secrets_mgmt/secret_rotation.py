@@ -348,10 +348,10 @@ def consumer_commands(name: str, repo: str = REPO) -> list[str]:
     deploy_tags = sorted(r for r, plane in consumers.items() if plane == "deploy")
     setup_roles = sorted(r for r, plane in consumers.items() if plane == "setup")
     # BACKTICKS ARE LOAD-BEARING, not decoration. This module is reached by two crons, and
-    # `gen_reference_scripts.py` classifies a script as `scheduled` when a scheduled script's
+    # `reference/scripts.py` classifies a script as `scheduled` when a scheduled script's
     # text invokes it — so a bare `./scripts/deploy.sh ...` literal here would reclassify the
     # interactive deploy path as cron-driven in the generated reference. That resolver already
-    # draws the distinction this needs (`_invoked_in`, gen_reference_scripts.py:102): a line
+    # draws the distinction this needs (`_invoked_in`, reference/scripts.py:102): a line
     # carrying a backtick is prose CITING a command rather than running one, which is exactly
     # what these strings are. Quoting them says so in the one way the tree can read.
     commands = []

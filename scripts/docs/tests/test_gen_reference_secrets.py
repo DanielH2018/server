@@ -1,4 +1,4 @@
-"""Tests for scripts/docs/gen_reference_secrets.py.
+"""Tests for scripts/docs/reference/secrets.py.
 
 The page this generates is committed and served behind SSO, so the assertion that
 matters is about what the generator READS, not what it prints.
@@ -12,7 +12,7 @@ import builtins
 import datetime as dt
 import textwrap
 
-import gen_reference_secrets as g
+from docs.reference import secrets as g
 
 TODAY = dt.date(2026, 8, 24)
 
@@ -110,7 +110,7 @@ def test_no_secret_value_appears_in_the_page(tmp_path):
 def test_markdown_opens_with_the_provenance_banner(tmp_path):
     out = g.render_markdown(g.build_rows(_registry(tmp_path), TODAY))
     assert out.startswith("---\n")
-    assert "generated_from: scripts/docs/gen_reference_secrets.py" in out
+    assert "generated_from: scripts/docs/reference/secrets.py" in out
 
 
 def test_markdown_ends_with_exactly_one_newline(tmp_path):

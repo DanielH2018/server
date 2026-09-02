@@ -139,7 +139,7 @@ def finish_generator[R: Sized](
 ) -> int:
     """The tail every reference-page generator shares: render, write if changed, report.
 
-    Five ``gen_reference_*`` scripts carried this verbatim before it moved here. The argparse
+    Five reference generators (now `scripts/docs/reference/`) carried this verbatim before it moved here. The argparse
     front half stays in each script because their arguments differ; only the part that has
     to stay identical -- the write policy and the one-line report the docs-refresh cron log
     is read through -- is shared.

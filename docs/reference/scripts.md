@@ -1,11 +1,11 @@
 ---
-generated_from: scripts/docs/gen_reference_scripts.py
-generated_at: 2026-09-02 16:07 UTC
-generated_sha: fc47f0e3
+generated_from: scripts/docs/reference/scripts.py
+generated_at: 2026-09-02 16:56 UTC
+generated_sha: 28398a17
 ---
 
 !!! warning "Generated file — do not edit"
-    This page is rendered from the Ansible tree by `scripts/docs/gen_reference_scripts.py`. Hand edits are
+    This page is rendered from the Ansible tree by `scripts/docs/reference/scripts.py`. Hand edits are
     overwritten by the next run, and a prek hook rejects them at commit time.
     To change what appears here, change the generator or the source it reads.
 
@@ -32,17 +32,17 @@ The sections below split them by **how each one is run**, which is derived from 
 
 | Script | What it does | Reached by | Tests |
 |---|---|---|---|
+| `scripts/docs/reference/backlog.py` | Generate docs/reference/backlog.md — the open findings Claude filed as GitHub Issues. | build_docs.py (a cron runs it unattended) | `test_gen_reference_backlog.py` *(indirect)* |
 | `scripts/docs/build_docs.py` | Regenerate the reference pages, then build the MkDocs site. | cron: Refresh generated docs (via docs-refresh.sh) | `test_build_docs.py` |
+| `scripts/docs/reference/crons.py` | Generate docs/reference/crons.md — every scheduled job the tree installs. | build_docs.py (a cron runs it unattended) | `test_gen_reference_crons.py` *(indirect)* |
+| `scripts/docs/reference/freshness.py` | Generates docs/reference/freshness.md, ranking hand-written pages by source staleness. | build_docs.py (a cron runs it unattended) | `test_gen_reference_freshness.py` *(indirect)* |
 | `scripts/docs/gen_doc_fragments.py` | Generate the fact tables the hand-written docs transclude. | build_docs.py (a cron runs it unattended) | `test_gen_doc_fragments.py` |
 | `scripts/infra_map/gen_infra_map.py` | Render a self-contained HTML map of the homelab infrastructure. | cron: Refresh homelab infrastructure map | `test_gen_infra_map.py` |
-| `scripts/docs/gen_reference_backlog.py` | Generate docs/reference/backlog.md — the open findings Claude filed as GitHub Issues. | build_docs.py (a cron runs it unattended) | `test_gen_reference_backlog.py` |
-| `scripts/docs/gen_reference_crons.py` | Generate docs/reference/crons.md — every scheduled job the tree installs. | build_docs.py (a cron runs it unattended) | `test_gen_reference_crons.py` |
-| `scripts/docs/gen_reference_freshness.py` | Generates docs/reference/freshness.md, ranking hand-written pages by source staleness. | build_docs.py (a cron runs it unattended) | `test_gen_reference_freshness.py` |
-| `scripts/docs/gen_reference_hosts.py` | Generate docs/reference/hosts.md — the three hosts and what each one is. | build_docs.py (a cron runs it unattended) | `test_gen_reference_hosts.py` |
-| `scripts/docs/gen_reference_networking.py` | Generate docs/reference/networking.md — what is routed, and what fronts it. | build_docs.py (a cron runs it unattended) | `test_gen_reference_networking.py` |
-| `scripts/docs/gen_reference_scripts.py` | Generate docs/reference/scripts.md — every first-party script and what it is for. | build_docs.py (a cron runs it unattended) | `test_gen_reference_scripts.py` |
-| `scripts/docs/gen_reference_secrets.py` | Generate docs/reference/secrets.md — the secret ROTATION REGISTRY, never any value. | build_docs.py (a cron runs it unattended) | `test_gen_reference_secrets.py` |
+| `scripts/docs/reference/hosts.py` | Generate docs/reference/hosts.md — the three hosts and what each one is. | build_docs.py (a cron runs it unattended) | `test_gen_reference_hosts.py` *(indirect)* |
+| `scripts/docs/reference/networking.py` | Generate docs/reference/networking.md — what is routed, and what fronts it. | build_docs.py (a cron runs it unattended) | `test_gen_reference_networking.py` *(indirect)* |
+| `scripts/docs/reference/scripts.py` | Generate docs/reference/scripts.md — every first-party script and what it is for. | build_docs.py (a cron runs it unattended) | `test_gen_reference_scripts.py` *(indirect)* |
 | `scripts/secrets_mgmt/secret_rotation.py` | Secret rotation registry: audit + staggered rotation for ansible/vars/secrets.yml. | cron: Daily secret rotation audit (via secret-rotation-audit.sh) | `test_secret_rotation.py` |
+| `scripts/docs/reference/secrets.py` | Generate docs/reference/secrets.md — the secret ROTATION REGISTRY, never any value. | build_docs.py (a cron runs it unattended) | `test_gen_reference_secrets.py` *(indirect)* |
 | `scripts/docs/service_catalog.py` | Generate a single HTML page answering "what runs in this homelab". | build_docs.py (a cron runs it unattended) | `test_service_catalog.py` |
 
 ## Run automatically, on a commit, CI run, deploy or session
@@ -54,7 +54,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/deploy_tools/await_ci.py` | Wait for master CI to reach a verdict on one SHA. | land.sh (every commit, CI run, deploy or Claude session runs it) | `test_await_ci.py` |
 | `scripts/validate/compose_templates.py` | Render every configured container's docker-compose.yml.j2 and assert it parses as YAML. | prek hook (every commit) | `test_validate_compose_templates.py` *(indirect)* |
 | `scripts/validate/config_templates.py` | Render the high-value NON-compose YAML config templates (monitoring) and assert they parse. | prek hook (every commit) | `test_validate_config_templates.py` *(indirect)* |
-| `scripts/deploy.sh` | Run an interactive Ansible deploy under the same lock the automated deployers take. | land.sh (every commit, CI run, deploy or Claude session runs it) | `test_deploy_annotations.py` *(indirect)* |
+| `scripts/deploy.sh` | Run an interactive Ansible deploy under the same lock the automated deployers take. | land.sh (every commit, CI run, deploy or Claude session runs it) | `test_deploy_exit_codes.py` *(indirect)* |
 | `scripts/deploy_tools/deploy_detach_notify.py` | Post-deploy notifier for `scripts/deploy.sh --detach`. | every deploy (deploy.sh) | `test_deploy_detach_notify.py` |
 | `scripts/deploy_tools/deploy_staleness.py` | Refuse a deploy from a git tree that is behind origin/master. | every deploy (deploy.sh) | `test_deploy_staleness.py` |
 | `scripts/deploy_tools/deploy_tags.py` | Validate the --tags a deploy was given, before Ansible silently accepts them. | every deploy (deploy.sh) | `test_deploy_tags.py` |
@@ -82,15 +82,15 @@ The sections below split them by **how each one is run**, which is derived from 
 |---|---|---|---|
 | `scripts/availability_bots/common.py` | Shared helpers for the availability-watcher bots in this folder. | imported by glenstone-bot.py, osteria-francescana-bot.py | `test_availability_bots.py` *(indirect)* |
 | `scripts/infra_map/constants.py` | Constants shared by the infra-map inventory, live, model and render stages. | imported by gen_infra_map.py, inventory.py, live.py, model.py, render.py | — |
-| `scripts/lib/doc_freshness.py` | How old a hand-written doc is, and whether the files it names have moved under it. | imported by _mkdocs_freshness.py, gen_reference_freshness.py | `test_doc_freshness.py` |
-| `scripts/lib/docs_provenance.py` | The provenance banner every generated documentation page opens with. | imported by gen_doc_fragments.py, gen_infra_map.py, gen_reference_backlog.py, gen_reference_crons.py, gen_reference_freshness.py, gen_reference_hosts.py, gen_reference_networking.py, gen_reference_scripts.py, gen_reference_secrets.py, service_catalog.py | `test_docs_provenance.py` |
-| `scripts/dev/findings.py` | File, re-observe, escalate and close Claude's unfixed findings as GitHub Issues. | imported by gen_reference_backlog.py | `test_findings.py` |
+| `scripts/lib/doc_freshness.py` | How old a hand-written doc is, and whether the files it names have moved under it. | imported by _mkdocs_freshness.py, freshness.py | `test_doc_freshness.py` |
+| `scripts/lib/docs_provenance.py` | The provenance banner every generated documentation page opens with. | imported by backlog.py, crons.py, freshness.py, gen_doc_fragments.py, gen_infra_map.py, hosts.py, networking.py, scripts.py, secrets.py, service_catalog.py | `test_docs_provenance.py` |
+| `scripts/dev/findings.py` | File, re-observe, escalate and close Claude's unfixed findings as GitHub Issues. | imported by backlog.py | `test_findings.py` |
 | `scripts/lib/gh.py` | One way to run the GitHub CLI from a script, with no prompt and no notifier. | imported by findings.py | `test_gh.py` |
 | `scripts/lib/git.py` | One way to run git from a script, with the repository chosen by ``cwd`` alone. | imported by await_ci.py, deploy_staleness.py, doc_freshness.py, docs_provenance.py, prune_worktrees.py, secret_rotation.py | `test_git.py` |
 | `scripts/home_assistant/ha_state_checks.py` | Guardrail checks over the HA state model built by `ha_state_model.py`. | imported by ha_state_model.py, validate_ha_config.py | `test_ha_state_checks.py` |
 | `scripts/home_assistant/ha_state_model.py` | Derived state model for the Home Assistant bedroom control plane. | imported by ha_state_checks.py | `test_ha_state_model.py` |
 | `scripts/infra_map/inventory.py` | Declared state: what ``containers_list`` and the role trees say should run. | imported by gen_infra_map.py, model.py | — |
-| `scripts/lib/invocation_sites.py` | Where a `scripts/...` path can be executed from, read once for two different questions. | imported by gen_reference_scripts.py | `test_invocation_sites.py` |
+| `scripts/lib/invocation_sites.py` | Where a `scripts/...` path can be executed from, read once for two different questions. | imported by scripts.py | `test_invocation_sites.py` |
 | `scripts/infra_map/live.py` | Live state: what the cluster and the Pi report is actually running. | imported by gen_infra_map.py | `test_infra_map_live.py` *(indirect)* |
 | `scripts/infra_map/model.py` | Reconciliation: overlay live state onto the declared skeleton. | imported by gen_infra_map.py | — |
 | `scripts/diagnostics/probe_alerts.py` | `probe.py alerts` -- DOWN history reconstructed from Loki, since Kuma keeps only current state. | imported by probe.py | `test_probe_alerts.py` |
@@ -106,9 +106,9 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/diagnostics/probe_releases.py` | `probe.py releases` -- which commit produced the manifests each k8s service is running. | imported by probe.py | `test_probe_releases.py` |
 | `scripts/diagnostics/probe_vip_placement.py` | `probe.py vip-placement` — does every ETP=Local VIP have a Ready endpoint on an announcing node? | imported by probe.py | `test_probe_vip_placement.py` |
 | `scripts/infra_map/render.py` | Rendering: turn the reconciled model into one self-contained HTML page. | imported by gen_infra_map.py | `test_infra_map_render.py` *(indirect)* |
-| `scripts/lib/render_guard.py` | Shared helpers for the render-guard scripts and other Ansible-inventory readers. | imported by compose_templates.py, config_templates.py, deploy_tags.py, gen_reference_hosts.py, gen_reference_networking.py, k8s_manifests.py, service_catalog.py, shell_templates.py | `test_render_guard.py` |
-| `scripts/lib/repo_paths.py` | The repo path anchors a script under ``scripts/`` reads the Ansible tree through. | imported by await_ci.py, build_docs.py, constants.py, deploy_detach_notify.py, deploy_tags.py, docs_provenance.py, fact_cache_guard.py, gen_doc_fragments.py, gen_hosts_block.py, gen_reference_crons.py, gen_reference_freshness.py, gen_reference_hosts.py, gen_reference_networking.py, gen_reference_scripts.py, gen_reference_secrets.py, grafana_dashboards.py, invocation_sites.py, k8s_autodeploy_counts.py, land_tags.py, memory_survey.py, probe_health.py, probe_releases.py, render_guard.py, route_facts.py, secret_bearing_host_paths.py, staging_egress_probe.py, staging_gate.py, validate_ha_config.py | `test_render_guard.py` *(indirect)* |
-| `scripts/docs/route_facts.py` | Shared route facts for the reference generators. | imported by gen_reference_networking.py, service_catalog.py | `test_route_facts.py` |
+| `scripts/lib/render_guard.py` | Shared helpers for the render-guard scripts and other Ansible-inventory readers. | imported by compose_templates.py, config_templates.py, deploy_tags.py, hosts.py, k8s_manifests.py, networking.py, service_catalog.py, shell_templates.py | `test_render_guard.py` |
+| `scripts/lib/repo_paths.py` | The repo path anchors a script under ``scripts/`` reads the Ansible tree through. | imported by await_ci.py, build_docs.py, constants.py, crons.py, deploy_detach_notify.py, deploy_tags.py, docs_provenance.py, fact_cache_guard.py, freshness.py, gen_doc_fragments.py, gen_hosts_block.py, grafana_dashboards.py, hosts.py, invocation_sites.py, k8s_autodeploy_counts.py, land_tags.py, memory_survey.py, networking.py, probe_health.py, probe_releases.py, render_guard.py, route_facts.py, scripts.py, secret_bearing_host_paths.py, secrets.py, staging_egress_probe.py, staging_gate.py, validate_ha_config.py | `test_render_guard.py` *(indirect)* |
+| `scripts/docs/route_facts.py` | Shared route facts for the reference generators. | imported by networking.py, service_catalog.py | `test_route_facts.py` |
 | `scripts/deploy_tools/staging_gate.py` | Ask the staging cluster whether it accepts a commit, from daniel-box. | imported by backfill_staging_gate.py | `test_staging_gate.py` |
 
 ## Run by hand
@@ -146,12 +146,24 @@ The sections below split them by **how each one is run**, which is derived from 
 12 script(s) document how to invoke themselves. The rest take `--help`.
 
 
+### `scripts/docs/reference/backlog.py`
+
+```
+uv run python scripts/docs/reference/backlog.py --out docs/reference/backlog.md
+```
+
 ### `scripts/docs/build_docs.py`
 
 ```
 uv run python scripts/docs/build_docs.py                          # default site dir
 uv run python scripts/docs/build_docs.py --site-dir /tmp/site
 uv run python scripts/docs/build_docs.py --skip-generators        # rebuild only
+```
+
+### `scripts/docs/reference/crons.py`
+
+```
+uv run python scripts/docs/reference/crons.py --out docs/reference/crons.md
 ```
 
 ### `scripts/dev/findings.py`
@@ -165,6 +177,12 @@ uv run python scripts/dev/findings.py touch 688 [--source review-2026-09-02]
 uv run python scripts/dev/findings.py close 688 --fixed [--pr 700]
 uv run python scripts/dev/findings.py close 688 --refuted --reason "..."
 uv run python scripts/dev/findings.py list [--state open|closed|all] [--json]
+```
+
+### `scripts/docs/reference/freshness.py`
+
+```
+uv run python scripts/docs/reference/freshness.py --out docs/reference/freshness.md
 ```
 
 ### `scripts/docs/gen_doc_fragments.py`
@@ -181,46 +199,28 @@ uv run python scripts/infra_map/gen_infra_map.py -o /tmp/map.html
 uv run python scripts/infra_map/gen_infra_map.py --no-live           # declared state only
 ```
 
-### `scripts/docs/gen_reference_backlog.py`
+### `scripts/docs/reference/hosts.py`
 
 ```
-uv run python scripts/docs/gen_reference_backlog.py --out docs/reference/backlog.md
+uv run python scripts/docs/reference/hosts.py --out docs/reference/hosts.md
 ```
 
-### `scripts/docs/gen_reference_crons.py`
+### `scripts/docs/reference/networking.py`
 
 ```
-uv run python scripts/docs/gen_reference_crons.py --out docs/reference/crons.md
+uv run python scripts/docs/reference/networking.py --out docs/reference/networking.md
 ```
 
-### `scripts/docs/gen_reference_freshness.py`
+### `scripts/docs/reference/scripts.py`
 
 ```
-uv run python scripts/docs/gen_reference_freshness.py --out docs/reference/freshness.md
+uv run python scripts/docs/reference/scripts.py --out docs/reference/scripts.md
 ```
 
-### `scripts/docs/gen_reference_hosts.py`
+### `scripts/docs/reference/secrets.py`
 
 ```
-uv run python scripts/docs/gen_reference_hosts.py --out docs/reference/hosts.md
-```
-
-### `scripts/docs/gen_reference_networking.py`
-
-```
-uv run python scripts/docs/gen_reference_networking.py --out docs/reference/networking.md
-```
-
-### `scripts/docs/gen_reference_scripts.py`
-
-```
-uv run python scripts/docs/gen_reference_scripts.py --out docs/reference/scripts.md
-```
-
-### `scripts/docs/gen_reference_secrets.py`
-
-```
-uv run python scripts/docs/gen_reference_secrets.py --out docs/reference/secrets.md
+uv run python scripts/docs/reference/secrets.py --out docs/reference/secrets.md
 ```
 
 ### `scripts/dev/split_module.py`

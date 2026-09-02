@@ -1,4 +1,4 @@
-"""Tests for scripts/docs/gen_reference_backlog.py: rendering only, gh is stubbed.
+"""Tests for scripts/docs/reference/backlog.py: rendering only, gh is stubbed.
 
 Run: uv run pytest scripts/docs/tests/test_gen_reference_backlog.py
 """
@@ -6,7 +6,7 @@ Run: uv run pytest scripts/docs/tests/test_gen_reference_backlog.py
 from __future__ import annotations
 
 import build_docs
-import gen_reference_backlog as g
+from docs.reference import backlog as g
 
 
 def _row(number, severity="high", escalated=False, title="t", **kw):
@@ -52,7 +52,7 @@ def test_main_writes_the_page_with_a_provenance_banner(tmp_path, monkeypatch):
     out = tmp_path / "backlog.md"
     assert g.main(["--out", str(out)]) == 0
     text = out.read_text()
-    assert text.startswith("---\ngenerated_from: scripts/docs/gen_reference_backlog.py")
+    assert text.startswith("---\ngenerated_from: scripts/docs/reference/backlog.py")
 
 
 def test_build_docs_registers_the_backlog_page():

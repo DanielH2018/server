@@ -16,7 +16,7 @@ its own blast radius.
 
 Usage::
 
-    uv run python scripts/docs/gen_reference_crons.py --out docs/reference/crons.md
+    uv run python scripts/docs/reference/crons.py --out docs/reference/crons.md
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ import yaml
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.repo_paths import REPO, ROLES
 
@@ -158,7 +158,7 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
     """
     from lib.docs_provenance import generated_banner
 
-    parts = [generated_banner("scripts/docs/gen_reference_crons.py")]
+    parts = [generated_banner("scripts/docs/reference/crons.py")]
     parts.append("# Scheduled jobs\n")
     parts.append(f"{len(rows)} cron entrie(s) installed across the roles.\n")
     parts.append(
@@ -201,7 +201,7 @@ def main(argv: list[str] | None = None) -> int:
 
     rows = build_rows(args.roles)
     return finish_generator(
-        "gen_reference_crons", args.out, rows, render_markdown, "cron"
+        "docs.reference.crons", args.out, rows, render_markdown, "cron"
     )
 
 
