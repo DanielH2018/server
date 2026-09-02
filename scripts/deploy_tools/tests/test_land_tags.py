@@ -611,18 +611,51 @@ def test_an_unusable_range_reads_nothing_as_quiet():
         assert land_tags._quiet_paths(_PR_843, range_) == set(), range_
 
 
-def test_land_reads_the_prs_own_diff_for_quiet_paths():
-    """land.sh must pass the PR's own range, not `--since`.
+def test_a_range_narrower_than_the_file_list_reads_nothing_as_quiet(monkeypatch):
+    """A valid range that covers only part of the PR is the unsafe failure.
 
-    `--since` covers every other session's merged work, and a quiet path there is not this
-    PR's to judge.
+    A broad path changed OUTSIDE the range reads as identical on both sides, comes back
+    quiet, and its manual apply is skipped. The accept half is the test below.
     """
-    assert '"$MERGE_SHA^..$MERGE_SHA"' in _LAND_SH
+    monkeypatch.setattr(
+        land_tags.deploy_tags, "range_paths", lambda old, new: ["a.yml"]
+    )
+    monkeypatch.setattr(
+        land_tags.deploy_tags,
+        "comment_only_paths",
+        lambda paths, old, new: set(paths),
+    )
+    assert land_tags._quiet_paths(["a.yml", "b.yml"], "old..new") == set()
+
+
+def test_a_range_covering_the_file_list_is_read(monkeypatch):
+    """The accept half: a range wide enough is used."""
+    monkeypatch.setattr(
+        land_tags.deploy_tags, "range_paths", lambda old, new: ["a.yml", "b.yml"]
+    )
+    monkeypatch.setattr(
+        land_tags.deploy_tags, "comment_only_paths", lambda paths, old, new: {"a.yml"}
+    )
+    assert land_tags._quiet_paths(["a.yml", "b.yml"], "old..new") == {"a.yml"}
+
+
+def test_land_reads_the_prs_own_range_from_the_pull_ref():
+    """land.sh must derive the range from `refs/pull/<n>/head` and its merge base.
+
+    Not `--since`, which covers every other session's merged work. And not
+    `$MERGE_SHA^..$MERGE_SHA`, which is right for a squash merge and WRONG for a rebase
+    merge of a multi-commit PR: the parent is then the PR's own commit n-1, so a broad path
+    changed in commit 1 reads identical across the range. This repo allows all three merge
+    methods and PR #843 was two commits.
+    """
+    assert '"refs/pull/$PR/head"' in _LAND_SH
+    assert 'git merge-base "$pr_head" "$MERGE_SHA"' in _LAND_SH
+    assert "$MERGE_SHA^.." not in _LAND_SH
     assert "--plane --range" in _LAND_SH
     assert "--self-applied --range" in _LAND_SH
 
 
-def test_land_falls_back_to_loud_when_the_parent_is_not_local():
-    """A merge commit whose parent this checkout lacks must classify every path as loud."""
-    assert 'git rev-parse -q --verify "$MERGE_SHA^"' in _LAND_SH
+def test_land_falls_back_to_loud_when_the_range_cannot_be_read():
+    """A fetch or merge-base that fails must classify every path as loud."""
     assert "quiet_range=''" in _LAND_SH
+    assert "every broad path stays owed to a hand" in _LAND_SH

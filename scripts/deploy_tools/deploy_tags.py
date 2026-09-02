@@ -254,6 +254,18 @@ def _incoming_paths(ref: str, cwd: Path = REPO) -> list[str]:
     return [line for line in result.stdout.splitlines() if line]
 
 
+def range_paths(old_ref: str, new_ref: str, cwd: Path = REPO) -> list[str]:
+    """The paths a two-dot range touches, for a caller checking that a range is wide enough."""
+    result = subprocess.run(
+        ["git", "diff", "--name-only", f"{old_ref}..{new_ref}"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return [line for line in result.stdout.splitlines() if line]
+
+
 def _cmd_blockers(args: argparse.Namespace) -> int:
     """Exit 3 if a `_BROAD_MANUAL_PREFIXES` path sits between HEAD and `ref`.
 
