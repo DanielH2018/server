@@ -728,9 +728,10 @@ k3s_etcd_s3_cron_minute: "45"
 # on daniel-box at all — five structural failures documented at scripts/backup/etcd_restore_drill.sh:43-64
 # — and scheduling it would be strictly harmful: cleanup() sets KEEP=1 on ANY non-zero exit and
 # scratch dirs are swept only at +30 days, so a monthly failing full drill holds one to two
-# restored etcd databases plus cluster-token copies in /var/tmp as a steady state. That script's
-# own :213-221 records the accumulation is bounded ONLY because the drill has no cron. A cadence
-# that inverts its own stated bound is not a fix.
+# restored etcd databases plus cluster-token copies in /var/tmp as a steady state. The scheduled
+# list-only arm has no such cost: it exits at the drill's `--list-only` branch, BEFORE the
+# `install -d "$SCRATCH"` that creates the directory at all, so however often it fails it writes
+# nothing to /var/tmp. That asymmetry is why one mode is scheduled and the other is not.
 #
 # Monday 10:20: clear of every backup window (02:45 snapshot, 03:30/04:30 Longhorn, 04:10 drill),
 # clear of the 05:15 manifest-prune and the 06:10 trim, and in an hour nothing else uses. Daytime
