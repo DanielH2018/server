@@ -9,6 +9,7 @@ the thin FastMCP wiring on top; the risky decisions are all in this module.
 from __future__ import annotations
 
 import hmac
+import ssl
 from pathlib import Path, PurePosixPath
 
 # docker-proxy runs CONTAINERS=1, so GET /containers/{id}/json returns the
@@ -226,3 +227,17 @@ def docker_base_or_raise(url: str) -> str:
             "retire with the Phase F drain."
         )
     return url
+
+
+def tls_context() -> ssl.SSLContext:
+    """A client TLS context with the protocol floor stated rather than inherited.
+
+    `ssl.create_default_context()` already refuses TLS below 1.2 on this Python, so the
+    assignment changes no handshake.
+    """
+    # DECIDED: state the floor instead of leaving it to the platform default. CodeQL's
+    # py/insecure-protocol reads a bare default context as permitting TLSv1 and TLSv1_1, and
+    # a hand-dismissal of that alert does not survive the next file move. (ADR-0016)
+    ctx = ssl.create_default_context()
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    return ctx

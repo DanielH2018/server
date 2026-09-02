@@ -12,7 +12,6 @@ live in safe_reads.py and are unit-tested offline; this file is the wiring.
 from __future__ import annotations
 
 import os
-import ssl
 import socket
 from datetime import datetime, timezone
 from pathlib import Path
@@ -256,7 +255,7 @@ def disk_health() -> dict:
 @mcp.tool()
 def cert_expiry(host: str, port: int = 443) -> dict:
     """TLS certificate expiry for host:port."""
-    ctx = ssl.create_default_context()
+    ctx = safe_reads.tls_context()
     with socket.create_connection((host, port), timeout=10) as sock:
         with ctx.wrap_socket(sock, server_hostname=host) as ss:
             cert = ss.getpeercert()

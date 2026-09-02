@@ -372,3 +372,11 @@ def test_automations_source_text_concatenates_every_file(tmp_path):
         "one",
         "two",
     }
+
+
+def test_tls_context_states_the_protocol_floor():
+    # The floor is stated rather than inherited, so a platform whose default drops below 1.2
+    # cannot weaken this client silently. See ADR-0016.
+    import ssl
+
+    assert ha.tls_context().minimum_version == ssl.TLSVersion.TLSv1_2

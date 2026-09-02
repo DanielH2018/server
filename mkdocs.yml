@@ -151,6 +151,7 @@ nav:
       - "ADR-0013 daniel-pi stays on Docker": adr/0013-daniel-pi-stays-on-docker.md
       - "ADR-0014 Kopia retired, Longhorn owns B2": adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md
       - "ADR-0015 D2 for hand-authored diagrams": adr/0015-d2-for-hand-authored-diagrams.md
+      - "ADR-0016 Code scanning stays on default setup": adr/0016-code-scanning-stays-on-default-setup.md
       # The long-form documents three of the records above compress. They sit under Decisions
       # rather than in a section of their own: each one is the working-out behind a single
       # ADR, and a reader who wants that depth arrives from the record, not from a
