@@ -1,0 +1,38 @@
+This issue lists Renovate updates and detected dependencies. Read the [Dependency Dashboard](https://docs.renovatebot.com/key-concepts/dashboard/) docs to learn more.<br>[View this repository on the Mend.io Web Portal](https://developer.mend.io/github/DanielH2018/server).
+
+## Awaiting Schedule
+
+The following updates are awaiting their schedule. To get an update now, click on a checkbox below.
+
+ - [ ] <!-- unschedule-branch=renovate/lock-file-maintenance -->Lock file maintenance
+
+## Pending Status Checks
+
+The following updates await pending status checks. To force their creation now, click on a checkbox below.
+
+ - [ ] <!-- approvePr-branch=renovate/k8s-image-ghcr.ioalam00000bentopdf -->Update ghcr.io/alam00000/bentopdf:latest Docker digest to 6ef493c
+ - [ ] <!-- approvePr-branch=renovate/k8s-image-ghcr.iogethomepagehomepage -->Update ghcr.io/gethomepage/homepage:latest Docker digest to 753eeb0
+ - [ ] <!-- approvePr-branch=renovate/k8s-image-ghcr.iohaveagitgattdarr -->Update ghcr.io/haveagitgat/tdarr:latest Docker digest to 45742f0
+ - [ ] <!-- approvePr-branch=renovate/k8s-image-ghcr.iokarakeep-appkarakeep -->Update ghcr.io/karakeep-app/karakeep:release Docker digest to b069e43
+ - [ ] <!-- approvePr-branch=renovate/k8s-image-ghcr.ioschakajanitorr -->Update ghcr.io/schaka/janitorr:jvm-stable Docker digest to fa86a05
+ - [ ] <!-- approvePr-branch=renovate/k8s-image-lscr.iolinuxserverhealthchecks -->Update lscr.io/linuxserver/healthchecks:latest Docker digest to f6739c4
+ - [ ] <!-- approvePr-branch=renovate/k8s-image-lscr.iolinuxserverqbittorrent -->Update lscr.io/linuxserver/qbittorrent:latest Docker digest to a00b6a5
+ - [ ] <!-- approvePr-branch=renovate/k8s-image-lscr.iolinuxserverspeedtest-tracker -->Update lscr.io/linuxserver/speedtest-tracker:latest Docker digest to 1193562
+ - [ ] <!-- approvePr-branch=renovate/k8s-image-python -->Update python:3.14-alpine Docker digest to c6ead21
+ - [ ] <!-- approvePr-branch=renovate/k3s-control-plane-(manual-plan-the-upgrade-mind-longhorn's-version-skips) -->Update dependency k3s-io/k3s to v1.36.4+k3s1
+ - [ ] <!-- approvePr-branch=renovate/k8s-image-grafanagrafana -->Update grafana/grafana Docker tag to v13.2.1
+ - [ ] <!-- approvePr-branch=renovate/k8s-image-grafanaloki -->Update grafana/loki Docker tag to v3.7.7
+ - [ ] <!-- approvePr-branch=renovate/k8s-image-traefik -->Update traefik Docker tag to v3.7.12
+ - [ ] <!-- approvePr-branch=renovate/container-images-(non-major) -->Update container images (non-major) (`prek`, `vale-cli/vale`)
+ - [ ] <!-- approvePr-branch=renovate/k8s-image-crowdsecuritycrowdsec -->Update crowdsecurity/crowdsec Docker tag to v1.8.0
+ - [ ] <!-- approvePr-branch=renovate/k8s-image-ghcr.iokoenkkzigbee2mqtt -->Update ghcr.io/koenkk/zigbee2mqtt Docker tag to v2.14.0
+ - [ ] <!-- approvePr-branch=renovate/k8s-image-lscr.iolinuxserverbazarr -->Update lscr.io/linuxserver/bazarr Docker tag to v1.6.0-ls362
+ - [ ] <!-- approvePr-branch=renovate/k8s-image-lscr.iolinuxserverhomeassistant -->Update lscr.io/linuxserver/homeassistant Docker tag to v2026.9.0-ls244
+ - [ ] <!-- approvePr-branch=renovate/k8s-image-lscr.iolinuxserverprowlarr -->Update lscr.io/linuxserver/prowlarr Docker tag to v2.5.2.5491-ls158
+ - [ ] <!-- approvePr-branch=renovate/k8s-image-mobybuildkit -->Update moby/buildkit Docker tag to v0.33.0
+ - [ ] <!-- approvePr-branch=renovate/k8s-image-nginxincnginx-unprivileged -->Update nginxinc/nginx-unprivileged Docker tag to v1.31
+ - [ ] <!-- approvePr-branch=renovate/k8s-image-registry.k8s.iokube-state-metricskube-state-metrics -->[Update registry.k8s.io/kube-state-metrics/kube-state-metrics Docker tag to v2.20.0](../pull/891)
+
+## Detected Dependencies
+
+<!-- fixture: the Detected Dependencies listing is truncated here; it is thousands of lines of inventory and nothing in notify_logic parses it. -->

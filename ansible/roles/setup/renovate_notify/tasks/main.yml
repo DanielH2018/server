@@ -8,7 +8,7 @@
     mode: "0750"
   loop:
     - /opt/renovate-notify       # notifier scripts
-    - /var/lib/renovate-notify   # state (last_notified, last_run) + monitor-bridge bind source
+    - /var/lib/renovate-notify   # state (last_notified, last_run, pending_seen.json) + monitor-bridge bind source
     - /etc/renovate-notify       # config.env (0600 secret)
   become: true
 

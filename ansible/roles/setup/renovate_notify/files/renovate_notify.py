@@ -24,16 +24,24 @@ from notify_logic import (
     PR,
     actionable,
     ci_rollup,
+    dashboard_body,
+    dashboard_headers_unrecognized,
     dashboard_stale,
     find_dashboard,
     find_dashboard_problems,
     fingerprint,
     parse_automerge,
+    parse_pending,
+    pending_fingerprint,
     problems_fingerprint,
     render_digest,
+    render_pending,
     render_problems,
     should_notify,
+    stale_pending,
+    update_pending_seen,
     CLEARED_MSG,
+    DASHBOARD_UNPARSEABLE_MSG,
 )
 from host_lib import atomic_write, discord_post, parse_env_file
 
@@ -180,6 +188,51 @@ def write_state(path: str, fp: str) -> None:
     atomic_write(path, fp)  # torn-write-safe temp+rename, see host_lib
 
 
+DISCORD_LIMIT = 1950  # Discord rejects a message over 2000 characters.
+
+
+def clamp_for_discord(content: str) -> str:
+    """Bound the whole message, after the individual renderers have bounded their own parts.
+
+    Each renderer truncates independently, so a run reporting a stale dashboard AND repository
+    problems AND stuck-pending items AND a PR backlog can still concatenate past the cap. A
+    rejected post returns False from discord(), which leaves the dedupe fingerprint unadvanced
+    and re-posts the same oversized message every day — so the last resort is a hard trim rather
+    than a failed delivery.
+    """
+    if len(content) <= DISCORD_LIMIT:
+        return content
+    return content[: DISCORD_LIMIT - 20].rstrip() + "\n…(truncated)"
+
+
+def read_pending_seen(path: str) -> dict[str, float]:
+    """The {branch: first-seen epoch} map for pending dashboard items.
+
+    Any unreadable or malformed file degrades to an empty map, which restarts every clock at
+    the current run rather than raising: a corrupt state file must delay this check, never take
+    the daily digest down with it.
+    """
+    try:
+        with open(path) as fh:
+            data = json.load(fh)
+    except OSError, ValueError:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {k: float(v) for k, v in data.items() if isinstance(v, (int, float))}
+
+
+def write_pending_seen(path: str, seen: dict[str, float]) -> None:
+    """Persist the first-seen map, unconditionally — NOT behind Discord delivery.
+
+    The `last_notified` fingerprint beside it is written only on a confirmed post, because a
+    failed post must be retried. This map is the opposite: it is a clock, and most runs post
+    nothing. Gating it on delivery would reset every item's dwell on each quiet day and the
+    check could never reach its threshold.
+    """
+    atomic_write(path, json.dumps(seen, sort_keys=True))
+
+
 def main() -> int:
     """Fetch open Renovate PRs and the dashboard, and post a digest on a fingerprint change.
 
@@ -216,25 +269,53 @@ def main() -> int:
     # otherwise (karakeep's gcr.io image, 2026-08). Problem strings go straight into the
     # fingerprint so a NEW problem re-pages even while an old one is still unresolved.
     problems = find_dashboard_problems(issues)
+    # Updates that soaked past their minimumReleaseAge and never got a PR (issue #886). Neither
+    # of the two checks above can see this one: the dashboard keeps updating (not stale) and a
+    # held update is not a lookup failure (no Repository Problem) — the item just sits in
+    # "Pending Status Checks" indefinitely, which is how promtail ran 3.3.0 for 111 days.
+    body = dashboard_body(issues)
+    unparseable = body is not None and dashboard_headers_unrecognized(body)
+    pending = parse_pending(body or "")
+    now = time.time()
+    seen_file = os.path.join(state_dir, "pending_seen.json")
+    seen = update_pending_seen(read_pending_seen(seen_file), pending, now)
+    stuck_pending = stale_pending(seen, pending, now)
     cur_fp = (
         fingerprint(items)
         + ("|dashboard-stale" if stale else "")
+        + ("|dashboard-unparseable" if unparseable else "")
         + ("|problems:" + problems_fingerprint(problems) if problems else "")
+        + ("|pending:" + pending_fingerprint(stuck_pending) if stuck_pending else "")
     )
     prev_fp = read_state(state_file)
     notify, kind = should_notify(prev_fp, cur_fp)
     log(
-        "actionable=%d dashboard_stale=%s problems=%d fp=%r prev=%r -> %s"
-        % (len(items), stale, len(problems), cur_fp, prev_fp, kind)
+        "actionable=%d dashboard_stale=%s problems=%d pending=%d stuck_pending=%d "
+        "unparseable=%s fp=%r prev=%r -> %s"
+        % (
+            len(items),
+            stale,
+            len(problems),
+            len(pending),
+            len(stuck_pending),
+            unparseable,
+            cur_fp,
+            prev_fp,
+            kind,
+        )
     )
 
     if notify:
-        if stale or problems:
+        if stale or problems or stuck_pending or unparseable:
             parts = []
             if stale:
                 parts.append(DASHBOARD_STALE_MSG % repo)
+            if unparseable:
+                parts.append(DASHBOARD_UNPARSEABLE_MSG % repo)
             if problems:
                 parts.append(render_problems(problems))
+            if stuck_pending:
+                parts.append(render_pending(stuck_pending))
             content = "\n\n".join(parts)
             if items:
                 content += "\n\n" + render_digest(items)
@@ -242,6 +323,7 @@ def main() -> int:
             content = CLEARED_MSG
         else:
             content = render_digest(items)
+        content = clamp_for_discord(content)
         if dry:
             log("--- DRY RUN, would post ---\n%s" % content)
         else:
@@ -250,6 +332,9 @@ def main() -> int:
                 write_state(state_file, cur_fp)
 
     if not dry:
+        # The dwell clock, written every run regardless of what was posted — see
+        # write_pending_seen for why it must not ride the delivery gate.
+        write_pending_seen(seen_file, seen)
         # Liveness marker for monitor-bridge — only on a clean completion (a fetch
         # exception propagates and skips this, so a broken notifier goes stale). Atomic
         # (via write_state) so a torn read can't false-page Renovate Notifier — Alive.
