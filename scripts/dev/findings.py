@@ -1,0 +1,317 @@
+#!/usr/bin/env python3
+"""File, re-observe, escalate and close Claude's unfixed findings as GitHub Issues.
+
+WHY A WRAPPER. The homelab-review skill, the review-and-fix command and an ordinary session
+all produce findings nobody fixes that day. Until 2026-09-02 they landed in a memory table
+with no status field, a gitignored triage file that suppressed them, and session notes.
+GitHub Issues has the status field; this script owns the three rules that make issues a
+register rather than a pile: one issue per fingerprint, a re-observation is a comment and
+the third one escalates, and a refuted finding stays closed.
+
+Every command PLANS a list of gh argv first (pure, unit-tested), then runs it. `--dry-run`
+prints the plan and writes nothing.
+
+Usage::
+
+    uv run python scripts/dev/findings.py sync-labels
+    uv run python scripts/dev/findings.py open --title "..." --body-file f.md \\
+        --severity high --kind gap [--domain network] [--file path/to/file.py:12] \\
+        [--source review-2026-09-02] [--no-vetted-remediation] [--dry-run]
+    uv run python scripts/dev/findings.py touch 688 [--source review-2026-09-02]
+    uv run python scripts/dev/findings.py close 688 --fixed [--pr 700]
+    uv run python scripts/dev/findings.py close 688 --refuted --reason "..."
+    uv run python scripts/dev/findings.py list [--state open|closed|all] [--json]
+
+Exit codes: 0 done; 1 gh failed (its stderr is printed); 2 bad arguments;
+3 the fingerprint belongs to an issue closed as refuted, nothing was written.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+# Reach the sibling package directories: a directly-invoked script gets only its own
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
+from lib.gh import gh, gh_json  # noqa: E402
+
+SEVERITIES = ("high", "medium", "low")
+KINDS = ("gap", "improvement", "addition")
+DOMAINS = (
+    "backup-observability",
+    "cicd",
+    "container",
+    "docs",
+    "network",
+    "security",
+    "home-assistant",
+)
+
+# name -> (colour, description). Colours are Catppuccin Mocha so the label set reads as one
+# system with the artifacts; severity is red / yellow / green, state markers are greys.
+LABELS: dict[str, tuple[str, str]] = {
+    "claude": ("cba6f7", "Filed by Claude via scripts/dev/findings.py"),
+    "severity/high": ("f38ba8", "Review severity: High"),
+    "severity/medium": ("f9e2af", "Review severity: Medium"),
+    "severity/low": ("a6e3a1", "Review severity: Low"),
+    "kind/gap": ("fab387", "Something missing that should exist"),
+    "kind/improvement": ("89b4fa", "Something present that could be better"),
+    "kind/addition": ("94e2d5", "A new capability"),
+    "refuted": (
+        "6c7086",
+        "Closed because a skeptic disproved the finding; do not reopen",
+    ),
+    "escalated": ("f5c2e7", "Re-observed three or more times; needs a durable owner"),
+    "no-vetted-remediation": ("585b70", "Every proposed fix failed the fix-skeptic"),
+}
+for _d in DOMAINS:
+    LABELS[f"domain/{_d}"] = ("b4befe", f"Reviewer domain: {_d}")
+
+# The GitHub Project (v2) every created issue is added to. Projects is a board over issues,
+# not a second record: the issue and its labels stay the source of truth, and the board is
+# what the operator looks at. `gh issue create --project <title>` adds the item in the same
+# call, so no second write and no item id. It needs the `project` token scope.
+PROJECT_TITLE = "Claude findings"
+
+_LIST_FIELDS = "number,title,state,labels,body,createdAt,url,comments"
+_FP_RE = re.compile(r"^Fingerprint: `([0-9a-f]{12})`$", re.M)
+_LINE_SUFFIX = re.compile(r":\d+(?:-\d+)?$")
+_REOBSERVED = "Re-observed"
+
+
+# --- pure helpers ---------------------------------------------------------------------------
+
+
+def fingerprint(title: str, file: str | None) -> str:
+    """Stable id for a finding: title words plus the file, never the line number."""
+    norm_title = " ".join(re.sub(r"[^0-9a-z]+", " ", title.lower()).split())
+    norm_file = _LINE_SUFFIX.sub("", (file or "").strip())
+    return hashlib.sha1(f"{norm_title}\n{norm_file}".encode()).hexdigest()[:12]
+
+
+def trailer(fp: str, source: str) -> str:
+    return (
+        "\n\n---\n"
+        f"Fingerprint: `{fp}`\n"
+        f"Source: {source}\n"
+        "Filed by `scripts/dev/findings.py`. Re-observations are comments beginning "
+        f"`{_REOBSERVED}`.\n"
+    )
+
+
+def label_names(issue: dict) -> set[str]:
+    return {lab["name"] for lab in issue.get("labels", [])}
+
+
+def find_by_fingerprint(issues: list[dict], fp: str) -> dict | None:
+    for issue in issues:
+        m = _FP_RE.search(issue.get("body") or "")
+        if m and m.group(1) == fp:
+            return issue
+    return None
+
+
+def reobservations(issue: dict) -> int:
+    return sum(
+        1
+        for c in issue.get("comments", [])
+        if (c.get("body") or "").startswith(_REOBSERVED)
+    )
+
+
+def _prefixed(names: set[str], prefix: str) -> str | None:
+    for n in names:
+        if n.startswith(prefix):
+            return n[len(prefix) :]
+    return None
+
+
+def issue_rows(issues: list[dict]) -> list[dict]:
+    rows = []
+    for issue in issues:
+        names = label_names(issue)
+        rows.append(
+            {
+                "number": issue["number"],
+                "title": issue["title"],
+                "state": issue.get("state", "OPEN"),
+                "severity": _prefixed(names, "severity/"),
+                "kind": _prefixed(names, "kind/"),
+                "domain": _prefixed(names, "domain/"),
+                "escalated": "escalated" in names,
+                "no_vetted_remediation": "no-vetted-remediation" in names,
+                "first_seen": (issue.get("createdAt") or "")[:10],
+                "reobservations": reobservations(issue),
+                "url": issue.get("url", ""),
+            }
+        )
+    return rows
+
+
+def sort_key(row: dict) -> tuple:
+    sev = (
+        SEVERITIES.index(row["severity"])
+        if row["severity"] in SEVERITIES
+        else len(SEVERITIES)
+    )
+    return (sev, 0 if row["escalated"] else 1, row["number"])
+
+
+def plan_sync_labels(existing: set[str]) -> list[list[str]]:
+    plans = []
+    for name, (colour, desc) in LABELS.items():
+        if name not in existing:
+            plans.append(
+                ["label", "create", name, "--color", colour, "--description", desc]
+            )
+    return plans
+
+
+# --- gh-facing ------------------------------------------------------------------------------
+
+
+def load_issues(state: str = "all") -> list[dict]:
+    return (
+        gh_json(
+            "issue",
+            "list",
+            "--label",
+            "claude",
+            "--state",
+            state,
+            "--limit",
+            "1000",
+            "--json",
+            _LIST_FIELDS,
+        )
+        or []
+    )
+
+
+def run(plans: list[list[str]], dry_run: bool) -> None:
+    for argv in plans:
+        if dry_run:
+            print("gh " + " ".join(argv))
+        else:
+            gh(*argv)
+
+
+# --- commands ---------------------------------------------------------------------------------
+
+
+def cmd_open(args):  # replaced in Task 3
+    raise NotImplementedError
+
+
+def cmd_touch(args):  # replaced in Task 4
+    raise NotImplementedError
+
+
+def cmd_close(args):  # replaced in Task 4
+    raise NotImplementedError
+
+
+def cmd_sync_labels(args: argparse.Namespace) -> int:
+    existing = {
+        lab["name"]
+        for lab in gh_json("label", "list", "--limit", "200", "--json", "name") or []
+    }
+    plans = plan_sync_labels(existing)
+    run(plans, args.dry_run)
+    print(f"sync-labels: {len(plans)} label(s) created")
+    return 0
+
+
+def cmd_list(args: argparse.Namespace) -> int:
+    rows = sorted(issue_rows(load_issues(args.state)), key=sort_key)
+    if args.json:
+        print(json.dumps(rows, indent=2))
+        return 0
+    for r in rows:
+        flags = "".join(
+            f" [{f}]"
+            for f, on in (
+                ("escalated", r["escalated"]),
+                ("no-vetted-remediation", r["no_vetted_remediation"]),
+            )
+            if on
+        )
+        print(
+            f"#{r['number']:<5} {r['severity'] or '-':<6} {r['kind'] or '-':<11} "
+            f"{r['domain'] or '-':<21} since {r['first_seen']} x{r['reobservations']}{flags}  {r['title']}"
+        )
+    return 0
+
+
+def _parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(description=__doc__.splitlines()[1])
+    p.add_argument(
+        "--dry-run", action="store_true", help="print the gh commands, write nothing"
+    )
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    o = sub.add_parser(
+        "open", help="file a finding, or touch/reopen the existing issue"
+    )
+    o.add_argument("--title", required=True)
+    o.add_argument("--body-file", required=True, type=Path)
+    o.add_argument("--severity", required=True, choices=SEVERITIES)
+    o.add_argument("--kind", required=True, choices=KINDS)
+    o.add_argument("--domain", choices=DOMAINS)
+    o.add_argument(
+        "--file",
+        help="primary file:line the finding cites; the line is dropped from the fingerprint",
+    )
+    o.add_argument("--source", default="session", help="review-<date> or session")
+    o.add_argument("--no-vetted-remediation", action="store_true")
+
+    t = sub.add_parser(
+        "touch", help="record a re-observation; the third adds escalated"
+    )
+    t.add_argument("number", type=int)
+    t.add_argument("--source", default="session")
+
+    c = sub.add_parser("close", help="close as fixed or refuted")
+    c.add_argument("number", type=int)
+    how = c.add_mutually_exclusive_group(required=True)
+    how.add_argument("--fixed", action="store_true")
+    how.add_argument("--refuted", action="store_true")
+    c.add_argument("--pr", type=int, help="the PR that fixed it")
+    c.add_argument("--reason", help="required with --refuted: what disproved it")
+
+    ls = sub.add_parser("list", help="rows for the review skill and the docs generator")
+    ls.add_argument("--state", default="open", choices=("open", "closed", "all"))
+    ls.add_argument("--json", action="store_true")
+
+    sub.add_parser("sync-labels", help="create any missing label")
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parser().parse_args(argv)
+    handler = {
+        "sync-labels": cmd_sync_labels,
+        "list": cmd_list,
+        "open": cmd_open,
+        "touch": cmd_touch,
+        "close": cmd_close,
+    }[args.cmd]
+    try:
+        return handler(args)
+    except subprocess.CalledProcessError as exc:
+        sys.stderr.write(f"gh failed ({exc.returncode}): {exc.stderr.strip()}\n")
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
