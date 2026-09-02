@@ -12,14 +12,23 @@ import os
 import re
 import subprocess
 
+# `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
+# needs `scripts/` on sys.path — a module gets only its importer's path otherwise, and
+# pyproject's `pythonpath` is a pytest setting. This has to sit ABOVE the imports below.
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
 # `core.<name>` for anything the tests monkeypatch -- binding those into this module's
-# globals with a `from probe_core import ...` would take a snapshot the patch never reaches.
-import probe_core as core
+# globals with a `from core import ...` would take a snapshot the patch never reaches.
+from diagnostics.probe_lib import core
 from datetime import datetime, timezone
 
-from probe_core import SECRETS_PATH, prom_endpoint, prom_query_url
-from probe_health import _seconds_since, k8s_pods_argv
+from diagnostics.probe_lib.core import SECRETS_PATH, prom_endpoint, prom_query_url
+from diagnostics.probe_lib.health import _seconds_since, k8s_pods_argv
 
+from lib.repo_paths import REPO
 
 # Kuma's own numeric status codes, from the exporter that feeds monitor_status.
 _MONITOR_STATUS_LABELS = {"0": "DOWN", "1": "UP", "2": "PENDING", "3": "MAINTENANCE"}
@@ -70,7 +79,7 @@ def format_monitor_status(data):
 # `"name"` in it is a literal, and parsing beats standing up a Jinja environment with a stub for
 # every push token just to recover strings that were never templated.
 STATIC_MONITORS_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    REPO,
     "ansible",
     "roles",
     "k8s",

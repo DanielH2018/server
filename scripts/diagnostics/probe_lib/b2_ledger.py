@@ -10,7 +10,7 @@ badly. Anything that talks to B2 records what it spent here, so the controllable
 bill stops being guesswork.
 
 Patched in tests via the module attribute (`ledger.B2_LEDGER_DIR`), so keep callers inside
-this module referring to the bare name and let the tests patch here. See probe_core's
+this module referring to the bare name and let the tests patch here. See core's
 docstring for why that matters.
 """
 
@@ -19,9 +19,17 @@ import os
 import re
 from datetime import datetime, timezone
 
-import probe_core as core
-import probe_longhorn as longhorn
-from probe_core import (
+# `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
+# needs `scripts/` on sys.path — a module gets only its importer's path otherwise, and
+# pyproject's `pythonpath` is a pytest setting. This has to sit ABOVE the imports below.
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
+from diagnostics.probe_lib import core
+from diagnostics.probe_lib import longhorn
+from diagnostics.probe_lib.core import (
     _CHICAGO,
     _rows_from_loki,
     loki_endpoint,

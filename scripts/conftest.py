@@ -31,11 +31,13 @@ def _load_by_path(name, filename):
     return module
 
 
-# probe.py must load first, by path — its own top-level `import probe_core as core`
-# is a normal import, and every test file's later `import probe_core as core` (or
-# `import probe_ha as ha` / `import probe_longhorn as longhorn`) is what reuses that
-# same cached module rather than importing a second copy. Loading probe.py after
-# would still work, but this is the order the test suites were written against.
+# probe.py and postflight.py are flat scripts in `scripts/diagnostics/`, and that directory
+# is deliberately NOT on pythonpath (see pyproject.toml), so nothing on disk resolves the
+# names `probe` / `postflight` until something loads them by path. Their subcommand modules
+# need no such load: `probe_lib/` is a namespace package under `scripts/` and every caller
+# spells `from diagnostics.probe_lib import core`, so normal import machinery caches one
+# object under one sys.modules key. probe.py loads first because the test suites were
+# written against that order.
 probe = _load_by_path("probe", "diagnostics/probe.py")
 
 postflight = _load_by_path("postflight", "diagnostics/postflight.py")

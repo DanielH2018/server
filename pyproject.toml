@@ -100,9 +100,14 @@ pythonpath = [
   "ansible/roles/k8s/monitor-bridge/files",
   # `scripts` resolves the cross-directory `from lib.docs_provenance import ...` form (a PEP 420
   # namespace package — the subdirectories deliberately have no __init__.py, which would change
-  # how pytest names the test modules under them). Each subdirectory is listed as well because
-  # conftest.py loads probe.py by path and that module's own `import probe_core` has to resolve
-  # without depending on which suite pytest happened to collect first.
+  # how pytest names the test modules under them). Each remaining subdirectory is listed as well
+  # because the modules under it still import their siblings by bare name, which resolves only
+  # when that directory is itself on sys.path.
+  #
+  # `scripts/validate` and `scripts/diagnostics` are deliberately ABSENT. Their modules are
+  # packages (`validate.k8s_manifests`, `diagnostics.probe_lib.core`) reached through `scripts`
+  # alone, and leaving the directory listed would let a bare sibling import resolve here while
+  # failing for the directly-invoked script that is how both actually run in production.
   "scripts",
   "scripts/availability_bots",
   "scripts/backup",
@@ -113,7 +118,6 @@ pythonpath = [
   "scripts/home_assistant",
   "scripts/infra_map",
   "scripts/lib",
-  "scripts/diagnostics",
   "scripts/secrets_mgmt",
 ]
 

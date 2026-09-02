@@ -1,8 +1,8 @@
 """`probe.py health <svc>` — the post-deploy gate, plus the argv builders it shares.
 
 Split out of probe.py, which had grown to 1349 lines across thirteen subcommands.
-`readonly-rbac` and `vip-placement` have since moved out too, to probe_readonly_rbac.py and
-probe_vip_placement.py — the three subcommands shared a file but never shared logic, so this
+`readonly-rbac` and `vip-placement` have since moved out too, to probe_lib/readonly_rbac.py and
+probe_lib/vip_placement.py — the three subcommands shared a file but never shared logic, so this
 one keeps only `health` and the argv builders/format functions `run_health` uses.
 
 The gate exits 0 only when the workload is fully rolled out AND nothing restarted recently.
@@ -26,18 +26,19 @@ claude-otel deploy whose health gate never ran.
 import json
 import subprocess
 from datetime import datetime, timezone
-from pathlib import Path
+
+# `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
+# needs `scripts/` on sys.path — a module gets only its importer's path otherwise, and
+# pyproject's `pythonpath` is a pytest setting. This has to sit ABOVE the imports below.
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 # `core.<name>` for anything the tests monkeypatch — binding those into this module's
-# globals with a `from probe_core import ...` would take a snapshot the patch never reaches.
-import probe_core as core
-from probe_core import PI_HOST
-
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
-
-_sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# globals with a `from core import ...` would take a snapshot the patch never reaches.
+from diagnostics.probe_lib import core
+from diagnostics.probe_lib.core import PI_HOST
 
 from lib.repo_paths import HOST_VARS, K8S_ROLES, REPO
 

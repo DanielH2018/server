@@ -9,8 +9,8 @@ import os
 
 import pytest
 
-import probe_core as core
-import probe_ha as ha
+from diagnostics.probe_lib import core
+from diagnostics.probe_lib import ha
 
 
 def test_ha_base_builds_on_ha_host(monkeypatch):
@@ -221,7 +221,7 @@ def test_format_trace_reports_error():
 
 
 def test_expected_automation_ids_matches_top_level_only():
-    from probe_ha import expected_automation_ids
+    from diagnostics.probe_lib.ha import expected_automation_ids
 
     text = (
         "- id: bedroom_presence_on\n"
@@ -236,7 +236,7 @@ def test_expected_automation_ids_matches_top_level_only():
 
 
 def test_automation_load_errors_flags_missing_and_unavailable():
-    from probe_ha import automation_load_errors
+    from diagnostics.probe_lib.ha import automation_load_errors
 
     expected = {"a_loaded", "b_missing", "c_unavailable", "d_disabled"}
     live = [
@@ -265,7 +265,7 @@ def test_automation_load_errors_flags_missing_and_unavailable():
 
 
 def test_automation_load_errors_clean_when_all_loaded():
-    from probe_ha import automation_load_errors
+    from diagnostics.probe_lib.ha import automation_load_errors
 
     expected = {"a", "b"}
     live = [
@@ -278,7 +278,7 @@ def test_automation_load_errors_clean_when_all_loaded():
 def test_automation_load_errors_tolerates_missing_attributes():
     # A live entity with attributes null or absent must be skipped, not raise — exercises the
     # `(a.get("attributes") or {})` guard. (No expected id matches them, so they're ignored.)
-    from probe_ha import automation_load_errors
+    from diagnostics.probe_lib.ha import automation_load_errors
 
     expected = {"a"}
     live = [
@@ -297,7 +297,7 @@ def test_verify_automations_subcommand_parses():
 
 
 def test_snapshot_entity_ids_parses_list_items():
-    from probe_ha import snapshot_entity_ids
+    from diagnostics.probe_lib.ha import snapshot_entity_ids
 
     text = (
         "# generated\n"
@@ -313,7 +313,7 @@ def test_snapshot_entity_ids_parses_list_items():
 
 
 def test_vanished_snapshot_entities_reports_only_absent_ids():
-    from probe_ha import vanished_snapshot_entities
+    from diagnostics.probe_lib.ha import vanished_snapshot_entities
 
     snapshot = {"sensor.a", "sensor.gone", "sensor.b"}
     live = ["sensor.a", "sensor.b", "sensor.extra_not_in_snapshot"]
@@ -324,7 +324,7 @@ def test_vanished_snapshot_entities_reports_only_absent_ids():
 
 def test_verify_entities_snapshot_path_exists():
     """Same pinning as the automations gate — the snapshot must be readable and parseable."""
-    from probe_ha import EXTERNAL_ENTITIES_YAML, snapshot_entity_ids
+    from diagnostics.probe_lib.ha import EXTERNAL_ENTITIES_YAML, snapshot_entity_ids
 
     assert os.path.isfile(EXTERNAL_ENTITIES_YAML), f"{EXTERNAL_ENTITIES_YAML} missing"
     with open(EXTERNAL_ENTITIES_YAML, encoding="utf-8") as f:
@@ -340,7 +340,7 @@ def test_verify_automations_path_exists():
     test above passed throughout, because it never opens the file. Reading it here means a
     future move of the role breaks a test instead of the post-deploy gate.
     """
-    from probe_ha import (
+    from diagnostics.probe_lib.ha import (
         AUTOMATIONS_DIR,
         automations_source_text,
         expected_automation_ids,
@@ -353,14 +353,17 @@ def test_verify_automations_path_exists():
 
 def test_automations_source_text_rejects_empty_dir(tmp_path):
     # An empty directory must not read as "expect nothing": that gate passes on anything.
-    from probe_ha import automations_source_text
+    from diagnostics.probe_lib.ha import automations_source_text
 
     with pytest.raises(FileNotFoundError, match="no \\*\\.yaml"):
         automations_source_text(str(tmp_path))
 
 
 def test_automations_source_text_concatenates_every_file(tmp_path):
-    from probe_ha import automations_source_text, expected_automation_ids
+    from diagnostics.probe_lib.ha import (
+        automations_source_text,
+        expected_automation_ids,
+    )
 
     (tmp_path / "b.yaml").write_text("- id: two\n")
     (tmp_path / "a.yaml").write_text("- id: one\n")

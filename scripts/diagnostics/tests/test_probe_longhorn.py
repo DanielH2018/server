@@ -6,7 +6,7 @@ credential-handling that keeps it safe to run, and the Class C budget projection
 """
 
 import probe
-import probe_longhorn as longhorn
+from diagnostics.probe_lib import longhorn
 
 LSF = [
     "backupstore/volumes/aa/bb/pvc-authelia/volume.cfg;120",

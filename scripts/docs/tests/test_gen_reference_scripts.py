@@ -305,7 +305,7 @@ def test_the_live_tree_classifies_the_names_we_already_know():
         "smoke_extract.py": "gate",
         "probe.py": "gate",
         "docs_provenance.py": "library",
-        "probe_core.py": "library",
+        "core.py": "library",
         # "gate" rather than "adhoc" since 2026-08-29, and the call graph changed rather than
         # the classifier. The staging gate has always ended in `deploy.sh`, but it reached it
         # through a script PIPED over ssh, which is invisible to a scan of the tree. The
@@ -378,16 +378,20 @@ def test_an_import_counts_even_from_another_scripts_test():
     """The reject above is about path mentions; an import is real exercise.
 
     Asserted on the MECHANISM and on the credited file really importing the module, not on
-    which filename wins. Several tests import `probe_core`, so pinning one name made this
+    which filename wins. Several tests import `core`, so pinning one name made this
     fail the moment probe.py was split and a different importer sorted first -- a rename in
     the suite is not a regression in the classifier.
     """
     rows = {r["name"]: r for r in g.build_rows()}
-    credited = rows["probe_core.py"]["indirect_tests"]
-    assert rows["probe_core.py"]["indirect_via"] == "import"
+    credited = rows["core.py"]["indirect_tests"]
+    assert rows["core.py"]["indirect_via"] == "import"
     assert credited.startswith("test_")
     hit = next(p for p in (g.SCRIPTS / "diagnostics").rglob(credited))
-    assert re.search(r"^\s*import probe_core\b", hit.read_text(), re.MULTILINE)
+    assert re.search(
+        r"^\s*from diagnostics\.probe_lib import .*\bcore\b",
+        hit.read_text(),
+        re.MULTILINE,
+    )
 
 
 def test_deploy_sh_is_credited_to_the_test_that_reads_it():

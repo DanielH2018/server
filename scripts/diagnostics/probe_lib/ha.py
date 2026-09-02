@@ -12,8 +12,16 @@ import re
 import socket
 import ssl
 
-import probe_core as core
-from probe_core import (
+# `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
+# needs `scripts/` on sys.path — a module gets only its importer's path otherwise, and
+# pyproject's `pythonpath` is a pytest setting. This has to sit ABOVE the imports below.
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
+from diagnostics.probe_lib import core
+from diagnostics.probe_lib.core import (
     DEFAULT_TIMEOUT,
     config_get,
     ha_base,
@@ -22,12 +30,7 @@ from probe_core import (
     ha_resolve,
 )
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from lib.repo_paths import REPO
 
 # Git-managed automation source (repo-root relative to this file) — the "expected" set for
 # the verify-automations post-deploy gate. The deployed config is copied from here verbatim,
@@ -37,7 +40,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 # test only asserted argparse wiring and never opened the file — test_verify_automations_path_exists
 # now pins the path itself.
 AUTOMATIONS_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    REPO,
     "ansible",
     "roles",
     "k8s",
@@ -70,7 +73,7 @@ _AUTOMATION_ID_RE = re.compile(r"^- id:\s*(\S+)", re.MULTILINE)
 # The generated snapshot of integration-provided entities that validate_ha_config.py resolves
 # config references against — the "expected" set for the verify-entities gate.
 EXTERNAL_ENTITIES_YAML = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    REPO,
     "ansible",
     "roles",
     "k8s",

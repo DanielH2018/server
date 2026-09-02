@@ -2,7 +2,7 @@
 
 import yaml
 import ha_state_model as hsm
-import probe_ha
+from diagnostics.probe_lib import ha
 
 
 def test_call_service_handles_service_and_action_keys():
@@ -334,7 +334,7 @@ def test_ha_state_rows_renders_cell_values_and_anomaly():
             "last_changed": "2026-06-21T12:00:00+00:00",
         }
     ]
-    out = probe_ha.ha_state_rows(states, model)
+    out = ha.ha_state_rows(states, model)
     assert "input_boolean.bedroom_sleep_mode" in out
     assert "on" in out
 
@@ -350,8 +350,10 @@ def test_cmd_refresh_live_imports_resolve_under_direct_invocation():
     `test_cmd_refresh_writes_both_snapshots` injects get_states/get_services and is
     structurally upstream of the import, so it stays green either way.
 
-    Red-proof: delete the `scripts/diagnostics` sys.path insert in ha_state_model.py and
-    this fails with `ModuleNotFoundError: No module named 'probe_core'`.
+    Red-proof: delete the `scripts/` sys.path insert in ha_state_model.py and this fails
+    with `ModuleNotFoundError: No module named 'diagnostics'`. It used to need a SECOND
+    insert adding `scripts/diagnostics` itself, because the probe modules imported each
+    other by bare name; they are the `probe_lib` package now, so one insert does it.
     """
     import os
     import subprocess
@@ -365,8 +367,8 @@ def test_cmd_refresh_live_imports_resolve_under_direct_invocation():
             sys.executable,
             "-c",
             "import sys; sys.path.insert(0, sys.argv[1]); import ha_state_model; "
-            "from diagnostics import probe_core, probe_ha; "
-            "print(probe_core.__name__, probe_ha.__name__)",
+            "from diagnostics.probe_lib import core, ha; "
+            "print(core.__name__, ha.__name__)",
             str(script_dir),
         ],
         cwd=str(script_dir.parent.parent),
@@ -375,4 +377,4 @@ def test_cmd_refresh_live_imports_resolve_under_direct_invocation():
         text=True,
     )
     assert proc.returncode == 0, proc.stderr
-    assert "diagnostics.probe_ha" in proc.stdout
+    assert "diagnostics.probe_lib.ha" in proc.stdout

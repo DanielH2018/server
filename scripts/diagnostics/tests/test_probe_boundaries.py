@@ -1,7 +1,7 @@
 """The probe modules must reach patched core helpers through `core.<name>`.
 
-`monkeypatch.setattr(probe_core, "sops_extract", ...)` rebinds the attribute on
-the probe_core module object. A module that did `from probe_core import
+`monkeypatch.setattr(core, "sops_extract", ...)` rebinds the attribute on
+the core module object. A module that did `from core import
 sops_extract` holds its own reference in its globals, taken at import time, and
 that reference never sees the patch — the test passes while patching nothing.
 
@@ -19,15 +19,17 @@ from pathlib import Path
 # The directory holding the probe modules. This read `parents[1]` while the test sat beside
 # them and `parents[2]` after it moved into tests/, and both resolve to the top-level
 # `scripts/`, one above the modules — so the glob below only ever matched `scripts/conftest.py`,
-# which mentions probe_core in a comment. The guard passed for months while checking nothing.
+# which mentions core in a comment. The guard passed for months while checking nothing.
 DIAGNOSTICS = Path(__file__).resolve().parents[1]
 
 # Consumers that must be in the census. A wrong directory makes `_probe_modules()` return
 # something rather than nothing (conftest.py did), so an "is non-empty" check cannot catch it;
 # naming two known consumers can.
-KNOWN_CONSUMERS = frozenset({"probe.py", "probe_health.py"})
+KNOWN_CONSUMERS = frozenset(
+    {"probe.py", "probe_lib/health.py", "probe_lib/monitors.py"}
+)
 
-# Names the probe test suites monkeypatch on probe_core. Keep in step with the
+# Names the probe test suites monkeypatch on core. Keep in step with the
 # `setattr(core, "...")` calls in scripts/diagnostics/tests/test_probe*.py.
 PATCHED = frozenset(
     {
@@ -41,24 +43,31 @@ PATCHED = frozenset(
 
 
 def _probe_modules() -> list[Path]:
-    """Every non-test module that imports probe_core.
+    """Every non-test module that imports core, at any depth under `scripts/diagnostics/`.
 
-    Deliberately not a `probe*.py` glob: `postflight.py` imports probe_core too and
+    Deliberately not a `probe*.py` glob: `postflight.py` imports core too and
     would have slipped straight through one. The rule is about who imports it, so
     that is what this matches.
+
+    `rglob`, not `glob`: the twelve subcommand modules moved into `probe_lib/` and a
+    one-level glob saw none of them. KNOWN_CONSUMERS is what caught that, and it names a
+    module in the subdirectory for exactly this reason.
     """
     found = []
-    for path in sorted(DIAGNOSTICS.glob("*.py")):
-        if path.name in ("probe_core.py",) or path.name.startswith("test_"):
+    for path in sorted(DIAGNOSTICS.rglob("*.py")):
+        rel = path.relative_to(DIAGNOSTICS).as_posix()
+        if rel == "probe_lib/core.py" or path.name.startswith("test_"):
             continue
-        if "probe_core" in path.read_text():
+        if "tests" in path.relative_to(DIAGNOSTICS).parts:
+            continue
+        if "core" in path.read_text():
             found.append(path)
     return found
 
 
 def test_the_census_reaches_the_known_consumers():
     # Without this the assertions below pass vacuously if the scan ever stops matching.
-    names = {path.name for path in _probe_modules()}
+    names = {path.relative_to(DIAGNOSTICS).as_posix() for path in _probe_modules()}
     missing = KNOWN_CONSUMERS - names
     assert not missing, (
         f"{missing} not found under {DIAGNOSTICS}; census sees {sorted(names)}"
@@ -70,12 +79,12 @@ def test_no_module_binds_a_patched_core_helper_by_name():
     for path in _probe_modules():
         tree = ast.parse(path.read_text(), filename=str(path))
         for node in ast.walk(tree):
-            if not isinstance(node, ast.ImportFrom) or node.module != "probe_core":
+            if not isinstance(node, ast.ImportFrom) or node.module != "core":
                 continue
             for alias in node.names:
                 if alias.name in PATCHED:
                     problems.append(
-                        f"{path.name}:{node.lineno}: `from probe_core import "
+                        f"{path.name}:{node.lineno}: `from core import "
                         f"{alias.name}` — call it as `core.{alias.name}(...)` instead, "
                         "or the tests' monkeypatch silently misses this module"
                     )
@@ -84,7 +93,7 @@ def test_no_module_binds_a_patched_core_helper_by_name():
 
 def test_every_patched_name_exists_on_probe_core():
     # A rename that leaves PATCHED stale would quietly stop guarding that name.
-    import probe_core
+    from diagnostics.probe_lib import core
 
-    missing = sorted(n for n in PATCHED if not hasattr(probe_core, n))
-    assert not missing, f"PATCHED names absent from probe_core: {missing}"
+    missing = sorted(n for n in PATCHED if not hasattr(core, n))
+    assert not missing, f"PATCHED names absent from core: {missing}"

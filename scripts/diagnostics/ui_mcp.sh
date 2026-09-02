@@ -6,7 +6,7 @@
 # before that works on this host, and this wrapper supplies all three:
 #
 #   1. DNS. This host's resolver bypasses the LAN DNS, so `.local.<domain>` does not
-#      resolve to the cluster edge from a shell here — the same trap probe_core documents
+#      resolve to the cluster edge from a shell here — the same trap probe_lib/core.py documents
 #      and works around with `curl --resolve`. Chromium's equivalent is
 #      --host-resolver-rules, which only reaches it through a config file's launchOptions.
 #   2. Auth. Every `*.local.<domain>` route is Authelia one_factor; the browser context

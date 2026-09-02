@@ -8,7 +8,7 @@ for two reasons this script exists to solve:
      (`roles/k8s/authelia/templates/config-secret.yaml.j2:100`), so an unauthenticated
      browser sees the login portal instead of the app.
   2. This host's resolver bypasses the LAN DNS, so `.local.<domain>` does not resolve
-     to the cluster edge from a shell here. Same trap `probe_core.k8s_endpoint` documents;
+     to the cluster edge from a shell here. Same trap `core.k8s_endpoint` documents;
      the browser needs Chromium's `--host-resolver-rules`, which `ui_mcp.sh` supplies.
 
 Rather than drive the login form in a browser, this posts straight to Authelia's
@@ -45,8 +45,14 @@ import subprocess
 import sys
 import tempfile
 import time
+from pathlib import Path as _Path
 
-import probe_core as core
+# `probe_lib` is a namespace package under `scripts/`, so reaching it by package name needs
+# `scripts/` on sys.path: a directly-invoked script gets only its own directory, and
+# pyproject's `pythonpath` is a pytest setting. This has to sit ABOVE the import below.
+sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
+from diagnostics.probe_lib import core
 
 # The cookie Authelia issues for the LAN cookie-domain. Mirrors
 # `authelia_k8s_cookie_name` in roles/k8s/authelia/defaults/main.yml:48 — a rename there

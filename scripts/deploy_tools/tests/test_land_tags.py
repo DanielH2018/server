@@ -389,7 +389,7 @@ _PR_617_FILES = [
     "ansible/tests/k8s/test_base_images_digest_pinned.py",
     "docs/claude-tooling.md",
     "scripts/diagnostics/probe.py",
-    "scripts/diagnostics/probe_releases.py",
+    "scripts/diagnostics/probe_lib/releases.py",
     "scripts/diagnostics/test_probe_releases.py",
 ]
 

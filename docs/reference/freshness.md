@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/freshness.py
-generated_at: 2026-09-02 16:56 UTC
-generated_sha: 28398a17
+generated_at: 2026-09-02 17:42 UTC
+generated_sha: 24c4bd31
 ---
 
 !!! warning "Generated file — do not edit"
@@ -39,7 +39,7 @@ generated_sha: 28398a17
 | [b2-api-drain-scoping.md](../b2-api-drain-scoping.md) | 2026-09-02 | 4 | 0 | — |
 | [b2-transaction-cap-monitoring-gaps.md](../b2-transaction-cap-monitoring-gaps.md) | 2026-09-02 | 8 | 0 | — |
 | [claude-shell-permissions.md](../claude-shell-permissions.md) | 2026-09-02 | 7 | 0 | — |
-| [claude-tooling.md](../claude-tooling.md) | 2026-09-02 | 12 | 0 | — |
+| [claude-tooling.md](../claude-tooling.md) | 2026-09-02 | 13 | 0 | — |
 | [gitops-argo-flux-evaluation.md](../gitops-argo-flux-evaluation.md) | 2026-09-02 | 13 | 0 | — |
 | [gitops-pipeline.md](../gitops-pipeline.md) | 2026-09-02 | 6 | 0 | — |
 | [healthchecks-io-deadman.md](../healthchecks-io-deadman.md) | 2026-09-02 | 14 | 0 | — |
