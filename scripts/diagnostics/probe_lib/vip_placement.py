@@ -12,6 +12,14 @@ silently, with the Service Ready and the pod 1/1.
 This has fired twice (2026-08-13 node join, 2026-08-14 cold-boot reschedule; the second took
 LAN DNS down). Both times a host-originated probe read green, because kube-proxy gives
 node-local clients the cluster-policy path. Nothing else in the fleet notices.
+
+A workload deliberately parked at zero replicas has no endpoint by design, and nothing is
+dropped because nothing is meant to be listening. Such a row is reported `scaled-to-zero`
+and excluded from the FAIL — a check that is red whenever a service is intentionally off
+trains its reader to ignore the red. The replica count is read LIVE (`kubectl get
+deployments,statefulsets`) rather than from the rendered manifest: every other read here is
+live, and rendering would drag in the role-name resolution `health.py` needs and this does
+not.
 """
 
 # `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
@@ -47,6 +55,7 @@ def etp_local_services(services):
                 "namespace": meta.get("namespace", ""),
                 "name": meta.get("name", ""),
                 "ip": ingress[0].get("ip", "none"),
+                "selector": spec.get("selector") or {},
             }
         )
     return sorted(rows, key=lambda r: (r["namespace"], r["name"]))
@@ -95,12 +104,53 @@ def ready_endpoint_nodes(slices, service_name):
     return nodes - {""}
 
 
-def format_vip_placement(services, slices, announcers):
+def workload_replicas(workloads, namespace, selector):
+    """Declared `spec.replicas` of every workload whose pod template matches `selector`.
+
+    A Service's `spec.selector` must be a SUBSET of the workload's pod-template labels. An
+    empty or missing selector resolves to nothing rather than to everything: `all()` over an
+    empty dict is True, which would match every workload in the namespace.
+
+    `spec.get("replicas")` is compared to 0 explicitly by the caller. A missing field means
+    the API default of 1, so a falsy test would read it as zero — the fail-open hole here.
+    """
+    if not selector:
+        return []
+    counts = []
+    for workload in workloads:
+        meta = workload.get("metadata") or {}
+        if meta.get("namespace") != namespace:
+            continue
+        spec = workload.get("spec") or {}
+        labels = ((spec.get("template") or {}).get("metadata") or {}).get(
+            "labels"
+        ) or {}
+        if all(labels.get(k) == v for k, v in selector.items()):
+            counts.append(spec.get("replicas"))
+    return counts
+
+
+def is_scaled_to_zero(workloads, namespace, selector):
+    """True when the Service resolves to at least one workload and EVERY one declares zero.
+
+    Both halves matter. No workload at all stays a FAIL — a Service pointing at nothing is
+    the class of bug this probe exists for, and `all()` over an empty list would pass it.
+    Two workloads with one at zero and one at 1 is likewise not "off".
+    """
+    counts = workload_replicas(workloads, namespace, selector)
+    return bool(counts) and all(count == 0 for count in counts)
+
+
+def format_vip_placement(services, slices, announcers, workloads=()):
     """Render the placement verdict.
 
     Exit 2 INCONCLUSIVE when there is nothing to check — no ETP=Local Service, or no announcing
     node resolved. Either means the read came back empty, and an empty read must never pass:
     the same green-while-blind shape a denial-only RBAC probe has.
+
+    A scaled-to-zero row is NOT that shape and exits 0: the read returned data and resolved a
+    positive fact about the row. The OK line counts only the VIPs actually asserted, so the
+    number never overstates what was checked, and names the skipped ones separately.
     """
     rows = etp_local_services(services)
     lines = []
@@ -118,16 +168,22 @@ def format_vip_placement(services, slices, announcers):
         return "\n".join(lines), 2
 
     stranded = []
+    parked = []
     for row in rows:
         on = ready_endpoint_nodes(slices, row["name"])
         local = on & announcers
-        flag = "ok" if local else "STRANDED"
+        if local:
+            flag = "ok"
+        elif is_scaled_to_zero(workloads, row["namespace"], row["selector"]):
+            flag = "scaled-to-zero"
+            parked.append(f"{row['namespace']}/{row['name']}")
+        else:
+            flag = "STRANDED"
+            stranded.append(f"{row['namespace']}/{row['name']} ({row['ip']})")
         lines.append(
             f"  {row['namespace']}/{row['name']:<14} {row['ip']:<12} "
             f"endpoints={sorted(on) or '[]'} {flag}"
         )
-        if not local:
-            stranded.append(f"{row['namespace']}/{row['name']} ({row['ip']})")
 
     lines.append("")
     lines.append(f"announcing nodes: {sorted(announcers)}")
@@ -139,9 +195,19 @@ def format_vip_placement(services, slices, announcers):
             "Service and pods read healthy: " + ", ".join(stranded)
         )
         return "\n".join(lines), 1
-    lines.append(
-        f"OK: all {len(rows)} ETP=Local VIPs have a Ready endpoint on an announcing node."
-    )
+    checked = len(rows) - len(parked)
+    if checked:
+        summary = f"OK: all {checked} ETP=Local VIPs have a Ready endpoint on an announcing node."
+    else:
+        summary = (
+            "OK: no ETP=Local VIP was asserted — every one declares zero replicas."
+        )
+    if parked:
+        summary += (
+            f" {len(parked)} declared zero replicas and {'was' if len(parked) == 1 else 'were'}"
+            " not checked: " + ", ".join(parked)
+        )
+    lines.append(summary)
     return "\n".join(lines), 0
 
 
@@ -152,6 +218,7 @@ def vip_placement_argv():
         ["kubectl", "get", "endpointslices", "-A", "-o", "json"],
         ["kubectl", "get", "l2advertisements.metallb.io", "-A", "-o", "json"],
         ["kubectl", "get", "nodes", "-o", "json"],
+        ["kubectl", "get", "deployments,statefulsets", "-A", "-o", "json"],
     ]
 
 
@@ -167,9 +234,9 @@ def run_vip_placement(ns):
         data = core.json_or_none(argv)
         return (data or {}).get("items") or []
 
-    services, slices, adverts, nodes = (items(argv) for argv in calls)
+    services, slices, adverts, nodes, workloads = (items(argv) for argv in calls)
     text, code = format_vip_placement(
-        services, slices, announcing_nodes(adverts, nodes)
+        services, slices, announcing_nodes(adverts, nodes), workloads
     )
     print(text)
     return code
