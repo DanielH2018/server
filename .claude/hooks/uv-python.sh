@@ -36,10 +36,26 @@ cmd=$(printf '%s' "$input" | jq -r '
 # would otherwise slip past every python-named pattern here.
 PROGS='(python3?|pytest|py\.test|ansible-playbook|[^[:space:]]*\.py)'
 
+# The ansible CLIs, which refuse to start at all on a non-blocking stdout or stderr:
+# `ansible/cli/__init__.py` calls check_blocking_io() at import time and exits with
+# "ERROR: Ansible requires blocking IO on stdin/stdout/stderr". Claude Code's Bash tool
+# hands its child a regular file with O_NONBLOCK set (verified: st_mode 0o100660,
+# O_NONBLOCK on fds 1 and 2), so every ansible run from a session died on that check while
+# the same command from a terminal worked. O_NONBLOCK has no effect on writes to a regular
+# file, so clearing it changes nothing about how the output is captured.
+ANSIBLE_PROGS='ansible(-playbook|-vault|-galaxy|-console|-doc|-config|-inventory|-pull)?'
+
+# Clearing the flag in the shell itself, rather than reopening the fds, because
+# O_NONBLOCK lives on the open file description that fork/exec shares — one clear fixes
+# the shell and every later child, and leaves a single description so nothing has to
+# reason about interleaved appends. The system python3 is right here: this touches no repo
+# file, so the 3.14 requirement above does not apply, and `uv run` would cost a resolve.
+STDIO_FIXUP="python3 -c 'import os; [os.set_blocking(f, True) for f in (0, 1, 2)]' 2>/dev/null; "
+
 # Fast reject before any scanning. Measured on this repo's traffic the overwhelming
 # majority of Bash calls name none of these, and they should pay a single regex rather
 # than the character walk below.
-[[ "$cmd" =~ (python|pytest|py\.test|ansible-playbook|\.py) ]] || exit 0
+[[ "$cmd" =~ (python|pytest|py\.test|ansible|\.py) ]] || exit 0
 
 # Find the offsets a command starts at: position 0, and every position just past a `;`,
 # `&`, `|` or newline that the shell would read as a separator.
@@ -96,6 +112,18 @@ for ((k = ${#starts[@]} - 1; k >= 0; k--)); do
     [[ "$rest" =~ ^([[:space:]]*)$PROGS([[:space:];\&|\)]|$) ]] || continue
     ins=$((p + ${#BASH_REMATCH[1]}))
     updated="${updated:0:ins}uv run ${updated:ins}"
+done
+
+# The fixup is prepended to the whole command rather than to each ansible segment: the
+# flag it clears is shared, so one clear at the front covers every segment after it.
+# Matched against $cmd, whose offsets the walk computed and the splices above invalidated,
+# and past an optional `uv run` so it fires whether or not the rewrite added one.
+for p in "${starts[@]}"; do
+    rest=${cmd:p}
+    if [[ "$rest" =~ ^[[:space:]]*(uv[[:space:]]+run[[:space:]]+)?$ANSIBLE_PROGS([[:space:];\&|\)]|$) ]]; then
+        [[ "$updated" == *"os.set_blocking"* ]] || updated="$STDIO_FIXUP$updated"
+        break
+    fi
 done
 
 [[ "$updated" == "$cmd" ]] && exit 0
