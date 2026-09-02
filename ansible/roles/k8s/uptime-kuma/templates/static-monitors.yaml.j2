@@ -92,8 +92,16 @@ stringData:
   # TCP check like this is what actually catches it.
   jellyfin-lan-vip.json: |
     {"type": "port", "name": "k3s Jellyfin (VIP)", "hostname": "{{ jellyfin_k8s_lan_ip }}", "port": 8096, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
-  terraria-vip.json: |
-    {"type": "port", "name": "k3s Terraria (game port)", "hostname": "{{ hostvars[k8s_primary_node].server_ip }}", "port": 7777, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # terraria's port tile was HERE and is deliberately gone (2026-09-02, issue #822). It is the
+  # only thing left that opened a TCP connection to the game server, and on Terraria 1.4.5.7 a
+  # connect-and-drop kills the server loop: `TcpSocket.IsConnected` now reads
+  # `DebugNetworkStream.HasBufferedData` -> `NetworkStream.DataAvailable`, which throws
+  # `ObjectDisposedException` on a stream the peer already closed, unhandled, on the server
+  # thread. It crashed terraria 8 times in 51 minutes, every crash on this tile's probe tick.
+  # 1.4.5.6 had no such property in the binary and took the same probe for weeks without a
+  # crash. The workload is scaled to zero for now (terraria/defaults/main.yml), which would make
+  # this tile permanently red regardless — but the crash, not the scale-down, is why it must not
+  # come back with the server. Restoring it needs an image past 1.4.5.7; #822 carries the check.
   # wg-easy's VIP is WireGuard-over-UDP — Kuma port monitors are TCP-only, so it cannot get
   # a port-check tile here.
   zigbee2mqtt-k8s.json: |

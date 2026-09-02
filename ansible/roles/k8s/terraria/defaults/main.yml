@@ -38,3 +38,23 @@ terraria_k8s_cpu_limit: "2"
 terraria_k8s_mem_limit: 2048Mi
 terraria_k8s_cpu_request: "250m"
 terraria_k8s_mem_request: 512Mi
+
+# Scaled to zero on 2026-09-02, on operator request — the server is not wanted up right now, and
+# on 1.4.5.7 it cannot stay up while anything opens a TCP connection to it (issue #822).
+#
+# Declarative rather than a live `kubectl scale`, for two reasons. The next
+# `./scripts/deploy.sh --tags terraria` re-applies this Deployment and would reset a live scale
+# back to 1; and the read-only ServiceAccount cannot scale anything anyway, so Ansible is the
+# only write path. `session-health.py`'s `_is_scaled_to_zero` already reads a deliberate
+# `spec.replicas: 0` as intentional rather than as an outage, so the SessionStart banner stays
+# quiet without a suppression list.
+#
+# This is NOT covered by test_every_snapshot_role_restores_its_own_replicas, which requires
+# `replicas >= 1`: that guard reads roles declaring `k8s_autodeploy_snapshot_pvcs`, and terraria
+# declares none. If terraria ever opts into pre-deploy snapshots, this zero and that guard
+# collide, and the guard is the one that is right.
+#
+# To bring it back, see the restore checklist on issue #822. Setting this to 1 is the first of
+# two steps and the port monitor is deliberately NOT the second — do not restore the Kuma tile
+# until the image is past 1.4.5.7.
+terraria_k8s_replicas: 0
