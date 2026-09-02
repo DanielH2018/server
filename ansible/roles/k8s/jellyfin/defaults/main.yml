@@ -5,9 +5,12 @@
 # library. What makes it the exit criterion is the GPU — it is the first workload to request the
 # `devic.es/dri` extended resource the B1 device plugin advertises, so a wrong answer here is a
 # wrong answer about the whole media plane on this host.
-# The same tag the Docker copy ran, so a behavioural difference between the two is never the
-# image. NOT the opencl-intel DOCKER_MODS variant — see D8/D12.
-jellyfin_k8s_image: lscr.io/linuxserver/jellyfin:10.11.10ubu2404-ls35
+# 10.11.10ubu2404-ls35 was the tag the Docker copy ran, kept through the migration so a
+# behavioural difference between the two was never the image. Raised to 10.11.11 on 2026-09-02
+# because jellyfin-ani-sync 4.4.0.0 targets that ABI (see the plugin pin below); linuxserver
+# builds 10.11.11 on the ubu2604 base from ls43 on, so the base moved with it. NOT the
+# opencl-intel DOCKER_MODS variant — see D8/D12.
+jellyfin_k8s_image: lscr.io/linuxserver/jellyfin:10.11.11ubu2604-ls47
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Migrating state — strategy is Recreate and the config volume is seeded through
@@ -76,15 +79,17 @@ jellyfin_k8s_published_url: "http://{{ jellyfin_k8s_lan_ip }}:8096"
 # makes "rate on AniList, sync from Jellyfin" safe to run together, and it is the reason this
 # role installs the plugin at all rather than a rating bridge. docs/anilist-integration.md.
 #
-# PINNED one release behind on purpose. The current release 4.4.0.0 declares targetAbi
-# 10.11.11.0, and Jellyfin's loader rejects a plugin whose targetAbi is NEWER than the server;
-# jellyfin_k8s_image above is 10.11.10. 4.1.0.0 declares 10.11.6.0 and loads. Raise this and
-# the image together, never the plugin alone.
+# The plugin declares a targetAbi, and Jellyfin's loader rejects one NEWER than the server —
+# silently, behind a green rollout. 4.4.0.0 declares 10.11.11.0; jellyfin_k8s_image above is
+# 10.11.11. Raise this and the image together, never the plugin alone. The Renovate PR for
+# this pin is deliberately manual (renovate.json names it): Renovate can bump the version but
+# not the image, the asset filename (it leads with the targetAbi) or the MD5.
+# ansible/tests/services/test_anisync_pin_matches_server.py refuses the mismatch.
 jellyfin_k8s_anisync_version: "4.4.0.0"
 # URL and checksum both come from the plugin's published manifest.json. The MD5 was verified
 # against the actual download, not copied on trust.
-jellyfin_k8s_anisync_url: "https://github.com/vosmiic/jellyfin-ani-sync/releases/download/v4.4/10.11.6.-.ani-sync_4.4.0.0.zip"
-jellyfin_k8s_anisync_md5: "4d95c608192395b72efe57551a6f2ae0"
+jellyfin_k8s_anisync_url: "https://github.com/vosmiic/jellyfin-ani-sync/releases/download/v4.4/10.11.11.-.ani-sync_4.4.0.0.zip"
+jellyfin_k8s_anisync_md5: "0d398377b33c27840c021779497c72dc"
 # The installer runs on python, not the alpine:3.24 the sibling init container uses. See the
 # deployment template for why: the release is a .zip and /config is owned by uid {{ puid }}, so
 # an alpine container would need `apk add unzip` as root — and root there holds no

@@ -46,11 +46,11 @@ That is the property that makes rating on AniList and syncing from Jellyfin safe
 
 ### Version pin
 
-The Jellyfin server runs 10.11.10, pinned as
-`lscr.io/linuxserver/jellyfin:10.11.10ubu2404-ls35`. The plugin's current release, 4.4.0.0,
-declares `targetAbi` 10.11.11.0, which the loader rejects on an older server. Version 4.1.0.0
-declares 10.11.6.0 and installs. The pin is therefore 4.1.0.0 until Jellyfin moves to 10.11.11
-or later.
+The Jellyfin server runs 10.11.11, pinned as
+`lscr.io/linuxserver/jellyfin:10.11.11ubu2604-ls47`. The plugin release 4.4.0.0 declares
+`targetAbi` 10.11.11.0, which the loader rejects on an older server. Until 2026-09-02 the
+server was 10.11.10 and the plugin pin was held at 4.1.0.0 (`targetAbi` 10.11.6.0) for that
+reason; the two were raised together, and every future bump has to move them together too.
 
 `ansible/tests/services/test_anisync_pin_matches_server.py` enforces this rather than leaving it to
 memory. The release asset's filename leads with the `targetAbi` it was built for and the image
@@ -67,9 +67,9 @@ role already owns `/config`, so a separate role would split one concern across t
 `defaults/main.yml` gains four variables:
 
 ```yaml
-jellyfin_k8s_anisync_version: "4.1.0.0"
-jellyfin_k8s_anisync_url: "https://github.com/vosmiic/jellyfin-ani-sync/releases/download/v4.1/10.11.6.-.ani-sync_4.1.0.0.zip"
-jellyfin_k8s_anisync_md5: "4d95c608192395b72efe57551a6f2ae0"
+jellyfin_k8s_anisync_version: "4.4.0.0"
+jellyfin_k8s_anisync_url: "https://github.com/vosmiic/jellyfin-ani-sync/releases/download/v4.4/10.11.11.-.ani-sync_4.4.0.0.zip"
+jellyfin_k8s_anisync_md5: "0d398377b33c27840c021779497c72dc"
 jellyfin_k8s_anisync_init_image: python:3.14-alpine
 ```
 
@@ -126,7 +126,7 @@ A green rollout does not prove the plugin loaded. Verification has three steps:
 
 1. `uv run python scripts/diagnostics/probe.py health jellyfin` gates the rollout and the
    restart window.
-2. `GET /Plugins` on the Jellyfin API lists `Ani-Sync` with version 4.1.0.0.
+2. `GET /Plugins` on the Jellyfin API lists `Ani-Sync` with the pinned version (`jellyfin_k8s_anisync_version`).
 3. Playing an episode to completion produces a matching progress change on the AniList entry.
 
 Step 3 is the only one that exercises the actual integration. Steps 1 and 2 both pass on a
