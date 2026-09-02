@@ -79,8 +79,10 @@ def test_path_includes_usr_local_bin(unit: str) -> None:
     assert paths, (
         "the unit must set Environment=PATH= — systemd's default omits /usr/local/bin"
     )
-    assert "/usr/local/bin" in paths[0], (
-        f"PATH must include /usr/local/bin (kubectl, uv); got {paths[0]}"
+    # systemd's last assignment of a variable wins, so the effective PATH is paths[-1].
+    # Reading paths[0] would pass on a unit whose second PATH= drops /usr/local/bin.
+    assert "/usr/local/bin" in paths[-1], (
+        f"PATH must include /usr/local/bin (kubectl, uv); got {paths[-1]}"
     )
 
 
@@ -90,8 +92,9 @@ def test_home_is_set_to_the_real_user(unit: str) -> None:
     assert homes, (
         "the unit must set Environment=HOME= or Claude Code reads the wrong home"
     )
-    assert "{{ sys_user }}" in homes[0], (
-        f"HOME must be the sys_user's home; got {homes[0]}"
+    # Last assignment wins, as with PATH above.
+    assert "{{ sys_user }}" in homes[-1], (
+        f"HOME must be the sys_user's home; got {homes[-1]}"
     )
 
 
