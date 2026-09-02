@@ -31,6 +31,9 @@ spec:
       containers:
         - name: nut
           image: {{ nut_k8s_image }}
+          # Built in-cluster to a mutable :latest; explicit for the reason terraria's
+          # deployment records.
+          imagePullPolicy: Always
           ports:
             - containerPort: 3493
               # Loopback publish for the HOST's own upsmon (secondary, nut_host role):

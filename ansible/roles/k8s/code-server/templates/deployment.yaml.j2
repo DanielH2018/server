@@ -39,6 +39,9 @@ spec:
       initContainers:
         - name: seed-workspace-claim
           image: {{ code_server_k8s_image }}
+          # Built in-cluster to a mutable :latest; explicit for the reason terraria's
+          # deployment records.
+          imagePullPolicy: Always
           command:
             - /bin/sh
             - -c
@@ -92,6 +95,7 @@ spec:
       containers:
         - name: code-server
           image: {{ code_server_k8s_image }}
+          imagePullPolicy: Always  # as on the init container above
           ports:
             - containerPort: {{ container_item.port }}
           # The compose template's cap_drop/cap_add pair — the s6 privilege-drop set.
