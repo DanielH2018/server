@@ -7,8 +7,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import gen_reference_freshness as g  # noqa: E402
-from lib.doc_freshness import PageFreshness  # noqa: E402
+import gen_reference_freshness as g
+from lib.doc_freshness import PageFreshness
 
 A = PageFreshness(
     "docs/a.md", "2026-08-01", [("x.py", "2026-09-01")], [("x.py", "2026-09-01")]

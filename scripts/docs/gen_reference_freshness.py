@@ -19,8 +19,8 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from lib.doc_freshness import PageFreshness, survey  # noqa: E402
-from lib.repo_paths import REPO  # noqa: E402
+from lib.doc_freshness import PageFreshness, survey
+from lib.repo_paths import REPO
 
 
 def ranked(pages: list[PageFreshness]) -> list[PageFreshness]:

@@ -42,7 +42,7 @@ from pathlib import Path
 # A directly-imported lib module gets only its importer's directory on sys.path; the
 # sibling package needs the scripts/ root, the same way docs_provenance.py reaches it.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from lib.git import git_stdout  # noqa: E402
+from lib.git import git_stdout
 
 # A code span, and within it a path-like word: a letter-led extension, an optional `:12`,
 # `:12-40` or `::test_name` suffix, which is dropped. Words rather than whole spans, because

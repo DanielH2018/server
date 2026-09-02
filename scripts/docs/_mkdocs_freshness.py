@@ -22,7 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib.doc_freshness import (  # noqa: E402
+from lib.doc_freshness import (
     is_hand_written,
     last_change_dates,
     page_freshness,
@@ -36,7 +36,7 @@ TABLE = (
 _state: dict[str, object] = {}
 
 
-def footer(fresh, table_link: str) -> str:  # noqa: ANN001 - PageFreshness; hook loader
+def footer(fresh, table_link: str) -> str:
     """The stamp for one page, as Markdown appended below a rule.
 
     Args:
@@ -56,7 +56,7 @@ def footer(fresh, table_link: str) -> str:  # noqa: ANN001 - PageFreshness; hook
     return '\n\n---\n\n<p class="doc-freshness" markdown>' + " ".join(parts) + "</p>\n"
 
 
-def on_config(config):  # noqa: ANN001 - mkdocs event signature
+def on_config(config):
     repo = Path(config.docs_dir).parent
     _state["repo"] = repo
     _state["tracked"] = tracked_files(repo)
@@ -64,7 +64,7 @@ def on_config(config):  # noqa: ANN001 - mkdocs event signature
     return config
 
 
-def on_page_markdown(markdown, page, config, files):  # noqa: ANN001 - mkdocs event signature
+def on_page_markdown(markdown, page, config, files):
     rel = f"docs/{page.file.src_uri}"
     if not is_hand_written(rel, markdown):
         return markdown
