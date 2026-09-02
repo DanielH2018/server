@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Render the high-value NON-compose YAML config templates (monitoring) with stubbed vars and
-assert each parses as valid YAML.
+"""Render the high-value NON-compose YAML config templates (monitoring) and assert they parse.
 
 The container *compose* templates already have this guard (validate_compose_templates.py), but
 the bind-mounted *config* templates did not — yet they re-render on every deploy of the
@@ -61,9 +60,11 @@ CONFIG_TEMPLATES = [
 
 
 class StubUndefined(_BaseStubUndefined):
-    """Extends the shared base with ``__add__``/``__radd__`` so ``{{ secret | indent(n) }}`` renders
-    instead of aborting — Jinja's ``indent`` filter concatenates a newline onto the value, which the
-    bare Undefined can't do."""
+    """Extends the shared base so ``{{ secret | indent(n) }}`` renders instead of aborting.
+
+    Adds ``__add__``/``__radd__`` because Jinja's ``indent`` filter concatenates a newline
+    onto the value, which the bare Undefined can't do.
+    """
 
     def __add__(self, other):
         return self._FILL + str(other)
@@ -107,6 +108,11 @@ def check_template(rel: str, ctx: dict) -> str | None:
 
 
 def main() -> int:
+    """Render every template in `CONFIG_TEMPLATES` and report render/parse failures.
+
+    Returns:
+        0 if every template rendered and parsed as YAML, 1 if any failed.
+    """
     ctx = {**BASE_CONTEXT, **load_yaml(ALL_VARS)}
     failures = 0
     for rel in CONFIG_TEMPLATES:

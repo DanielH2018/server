@@ -90,6 +90,15 @@ def is_renovate(pr: dict) -> bool:
 
 
 def build_pr(repo: str, pr: dict) -> PR:
+    """Build a PR record for one open Renovate pull, fetching its detail, CI, and dead paths.
+
+    Args:
+        repo: "owner/repo".
+        pr: one entry from the pulls-list payload.
+
+    Returns:
+        The PR dataclass, with `dead_paths` populated only when the PR is conflicting.
+    """
     n = pr["number"]
     detail = get("%s/repos/%s/pulls/%d" % (API, repo, n))
     # mergeable_state "dirty" = conflicting; mergeable False likewise. null = unknown -> not conflicting.
@@ -151,9 +160,11 @@ def dead_paths(repo: str, n: int, pr: dict) -> tuple[str, ...]:
 
 
 def discord(webhook: str, content: str) -> bool:
-    """Post the digest via the shared host_lib.discord_post — see there for the Cloudflare-1010
-    User-Agent + 2xx-only-success contract the dedupe fingerprint gates on. Failure returns False so
-    the digest is retried on the next daily run."""
+    """Post the digest via the shared host_lib.discord_post.
+
+    See there for the Cloudflare-1010 User-Agent + 2xx-only-success contract the dedupe
+    fingerprint gates on. Failure returns False so the digest is retried on the next daily run.
+    """
     return discord_post(webhook, content, "renovate-notify", log=log)
 
 
@@ -170,6 +181,12 @@ def write_state(path: str, fp: str) -> None:
 
 
 def main() -> int:
+    """Fetch open Renovate PRs and the dashboard, and post a digest on a fingerprint change.
+
+    With `--dry-run`, logs what it would post instead of calling Discord and does not persist
+    the fingerprint or the liveness marker. A fetch failure raises rather than returning
+    non-zero, so the OnFailure alert unit pages on it. Otherwise always returns 0.
+    """
     dry = "--dry-run" in sys.argv
     c = cfg()
     repo = c["REPO"]

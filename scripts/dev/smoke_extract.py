@@ -31,6 +31,7 @@ _K8S_DEFAULT_IMAGE_RE = re.compile(
 
 
 def extract_changed_images(diff_text: str) -> list[str]:
+    """Every newly-added image ref in `diff_text`, in first-seen order, de-duplicated."""
     seen: list[str] = []
     for line in diff_text.splitlines():
         m = _IMAGE_RE.match(line) or _K8S_DEFAULT_IMAGE_RE.match(line)

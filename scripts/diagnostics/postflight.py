@@ -93,9 +93,12 @@ def secret(name):
 
 
 def _cluster_prom_query(promql):
-    """Query the CLUSTER prometheus through its LAN query route (the uptime-kuma job
-    moved there at the Phase D dashboard triage, PG1). VIP-pinned — this host's
-    resolver bypasses the LAN DNS, so the name alone does not reach the cluster edge."""
+    """Query the cluster Prometheus through its LAN query route.
+
+    The uptime-kuma job moved there at the Phase D dashboard triage, PG1. VIP-pinned —
+    this host's resolver bypasses the LAN DNS, so the name alone does not reach the
+    cluster edge.
+    """
     base, pin = core.k8s_endpoint("prometheus")
     from urllib.parse import urlencode
 
@@ -173,6 +176,12 @@ def _unreachable(app, detail):
 
 
 def check_arr_key(app):
+    """§9.3 — verify ``app``'s SOPS-held API key authenticates against its own instance.
+
+    Args:
+        app: The *arr app name (``sonarr``, ``radarr`` or ``prowlarr``), used both as the
+            secret name prefix and to build the status-check URL.
+    """
     ip = service_ip(app)
     key, err = secret(f"{app}_api_key")
     if not key:
@@ -188,6 +197,7 @@ def check_arr_key(app):
 
 
 def check_jellyfin_key():
+    """§9.3 — verify the SOPS-held ``jellyfin_api_key`` authenticates against Jellyfin."""
     ip = service_ip("jellyfin")
     key, err = secret("jellyfin_api_key")
     if not key:
@@ -215,6 +225,11 @@ HA_TOKENS = [
 
 
 def check_ha_token(name):
+    """§9.4 — verify one Home Assistant long-lived token still authenticates.
+
+    Args:
+        name: The SOPS secret name of the token to check (one of ``HA_TOKENS``).
+    """
     # Since slice-5 B3 HA runs in the cluster — core.ha_base() is the bridge URL, the same
     # endpoint before and after the cutover (no container to inspect).
     token, err = secret(name)
@@ -235,6 +250,7 @@ def check_ha_token(name):
 
 
 def check_authelia():
+    """§9.5 — verify Authelia is serving and its OIDC secrets are present."""
     ip = service_ip("authelia")
     status, body = get(f"http://{ip}:9091/api/health")
     if status != 200:
@@ -272,6 +288,11 @@ CHECKS = [
 
 
 def main():
+    """Run every §9 check, print a report line for each, and exit non-zero on any FAIL.
+
+    A check that raises is caught and reported as FAIL rather than aborting the run, so
+    one broken check never hides the checks after it.
+    """
     failures = 0
     width = max(len(name) for _, name, _ in CHECKS)
     for item, name, check in CHECKS:

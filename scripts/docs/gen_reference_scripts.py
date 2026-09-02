@@ -530,6 +530,18 @@ def build_rows(scripts: Path = SCRIPTS, repo: Path = REPO) -> list[dict[str, str
 
 
 def render_markdown(rows: list[dict[str, str]]) -> str:
+    """Render `rows` as the "Scripts" reference page, grouped by how each script is run.
+
+    Splits the rows into scheduled / gate / library / adhoc sections, calls out scripts that
+    run unattended with no test coverage, and appends a usage block for each script that
+    documents its own invocation.
+
+    Args:
+        rows: Script rows as returned by `build_rows`.
+
+    Returns:
+        The full page as Markdown text, ending in a single trailing newline.
+    """
     from lib.docs_provenance import generated_banner
 
     by_run = {kind: [r for r in rows if r["run"] == kind] for kind in RUNS}
@@ -619,6 +631,11 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Build the script rows, render the reference page, and write it if the body changed.
+
+    Returns:
+        The exit code from `finish_generator` (0 on success, non-zero on a write failure).
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, required=True, help="output file path")
     parser.add_argument("--scripts", type=Path, default=SCRIPTS)

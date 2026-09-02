@@ -154,6 +154,12 @@ def find_repo_root(target, default):
 
 
 def main():
+    """Read the hook payload from stdin and deny an Edit/Write to a protected file.
+
+    Resolves the edited file's own repo root (so a worktree edit is checked against that
+    worktree, not the primary checkout), then emits the PreToolUse deny decision `classify`
+    returns. Always returns 0.
+    """
     try:
         data = json.load(sys.stdin)
     except Exception:

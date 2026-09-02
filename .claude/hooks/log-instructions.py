@@ -41,6 +41,11 @@ def rel(path, cwd):
 
 
 def main():
+    """Append one line to the instructions log for an InstructionsLoaded event on stdin.
+
+    Ignores any other hook event. The caller wraps this in a broad except so a failure here
+    never blocks session startup.
+    """
     d = json.loads(sys.stdin.read())
     if d.get("hook_event_name") != "InstructionsLoaded":
         return

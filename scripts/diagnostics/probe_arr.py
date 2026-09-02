@@ -49,11 +49,12 @@ def arr_curl_config(api_key):
 
 
 def resolve_arr_ip(app):
-    """The *arr app's k8s Service ClusterIP — resolve_ip's k8s equivalent, used instead of
-    k8s_endpoint because sonarr/radarr/prowlarr have no Authelia bypass rule for /api/* (see
-    the comment above ARR_PORTS). A ClusterIP is stable across pod restarts and redeploys,
-    so this doesn't reintroduce the hand-copied-IP staleness `docker inspect` was resolving
-    around in the first place.
+    """Resolve the *arr app's k8s Service ClusterIP.
+
+    resolve_ip's k8s equivalent, used instead of k8s_endpoint because sonarr/radarr/prowlarr
+    have no Authelia bypass rule for /api/* (see the comment above ARR_PORTS). A ClusterIP is
+    stable across pod restarts and redeploys, so this doesn't reintroduce the hand-copied-IP
+    staleness `docker inspect` was resolving around in the first place.
 
     CAVEAT confirmed live 2026-08-17: this only reaches the app when its pod is scheduled on
     THIS node (daniel-box). Each app's NetworkPolicy allows ingress only from specific pod
@@ -63,7 +64,8 @@ def resolve_arr_ip(app):
     traffic apparently doesn't pass through the destination node's own NetworkPolicy iptables
     the same way same-node traffic does. This will flip on the next reschedule; a real fix
     needs a NetworkPolicy ipBlock for the node (ansible/roles/k8s/*/templates/), out of scope
-    here."""
+    here.
+    """
     return resolve_service_ip(app)
 
 

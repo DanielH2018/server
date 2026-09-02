@@ -121,8 +121,11 @@ def emit_permissionrequest_allow() -> None:
 
 
 def emit_pretooluse_decision(decision: str, reason: str) -> None:
-    """Print the Claude Code PreToolUse permission-decision JSON — ``decision`` is ``"allow"`` or
-    ``"deny"``, ``reason`` the human-readable justification the harness surfaces."""
+    """Print the Claude Code PreToolUse permission-decision JSON.
+
+    ``decision`` is ``"allow"`` or ``"deny"``; ``reason`` is the human-readable
+    justification the harness surfaces.
+    """
     print(
         json.dumps(
             {

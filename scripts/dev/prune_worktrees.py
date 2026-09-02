@@ -52,6 +52,13 @@ LOCK_OWNER = re.compile(r"\(pid (\d+) start (\d+)\)")
 
 @dataclass
 class Worktree:
+    """One entry from `git worktree list --porcelain`.
+
+    Attributes:
+        branch: the checked-out branch, or None when the worktree is detached.
+        lock_reason: the reason text `git worktree lock` recorded, empty when unlocked.
+    """
+
     path: str
     head: str
     branch: str | None
@@ -377,6 +384,10 @@ def brief() -> int:
 
 
 def main() -> int:
+    """Report each session worktree's removable/keep/orphan verdict, and prune with `--prune`.
+
+    Exits 1 when not inside a git repository, 0 otherwise.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--prune",

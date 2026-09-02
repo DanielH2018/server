@@ -276,6 +276,11 @@ def problem(command: str) -> str | None:
 
 
 def main() -> int:
+    """Read the hook payload from stdin and deny the command if `problem` flags it.
+
+    Emits a PreToolUse deny decision naming the flagged footgun; otherwise emits nothing.
+    Always returns 0 (a deny is expressed through emitted JSON, not the exit code).
+    """
     try:
         payload = json.loads(sys.stdin.read() or "{}")
     except json.JSONDecodeError:

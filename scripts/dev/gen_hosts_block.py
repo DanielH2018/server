@@ -173,6 +173,7 @@ def render(pairs: list[tuple[str, str]]) -> str:
 
 
 def main() -> int:
+    """Print the /etc/hosts block, plus install instructions when `--sudo` is given."""
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument(
         "--sudo", action="store_true", help="also print install instructions"

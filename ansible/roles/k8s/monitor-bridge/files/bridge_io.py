@@ -153,10 +153,12 @@ def _post_json(url, payload, headers=None):
 
 
 def _instant_query(base_url, path, query, source):
-    """Run an instant query against `base_url + path` (Prometheus or Loki — same
-    /query?query= shape and {status, data.result} envelope); return the result list.
-    Raises RuntimeError if the endpoint reports a non-success status. `source` labels
-    the error ('prometheus'/'loki')."""
+    """Runs an instant query against `base_url + path` and returns the result list.
+
+    Prometheus and Loki share the same /query?query= shape and {status, data.result}
+    envelope. Raises RuntimeError if the endpoint reports a non-success status; `source`
+    labels the error ('prometheus'/'loki').
+    """
     url = base_url + path + "?" + urllib.parse.urlencode({"query": query})
     data = _get_json(url)
     if data.get("status") != "success":
@@ -252,6 +254,16 @@ def loki_reachable():
 
 
 def push(token, ok, msg):
+    """Pushes an up/down heartbeat plus message to the Kuma push monitor for `token`.
+
+    A no-op, logged, when token is unset. Best-effort: an unreachable Kuma is logged and
+    swallowed rather than raised, so it never crashes the check loop.
+
+    Args:
+        token: The Kuma push-monitor token; empty/None skips the push.
+        ok: Whether the check succeeded (pushed as status "up") or not ("down").
+        msg: The status message to attach to the push.
+    """
     if not token:
         bridge_common.log("WARN: no push token set; skipping push:", msg)
         return

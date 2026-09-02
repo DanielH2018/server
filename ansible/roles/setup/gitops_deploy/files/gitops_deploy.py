@@ -69,14 +69,16 @@ from host_lib import atomic_write, discord_post, parse_env_file
 
 
 class RetryableFetchError(Exception):
-    """A transient git failure — `git fetch origin` (GitHub blip, momentary DNS) or a `git status`
-    that momentarily cannot read the work tree. entrypoint() turns this into
-    a CLEAN skip of the tick — exit 0, NO in-script Discord crash-page, NO OnFailure — that also does
-    NOT refresh last_run. So a one-off blip is silently retried next tick, while a PERSISTENT fetch
-    failure still surfaces via GitOps-Alive going stale over several missed ticks. Distinct from a
-    real crash (unexpected exception), which still pages. Before this, a `run()`-raised fetch error
-    propagated to entrypoint() and double-paged (the crash Discord + the OnFailure unit) every 30-min
-    tick for the whole duration of a GitHub-side incident."""
+    """A transient git failure: `git fetch origin`, or `git status` unable to read the tree.
+
+    entrypoint() turns this into a CLEAN skip of the tick — exit 0, NO in-script Discord
+    crash-page, NO OnFailure — that also does NOT refresh last_run. So a one-off blip is
+    silently retried next tick, while a PERSISTENT fetch failure still surfaces via
+    GitOps-Alive going stale over several missed ticks. Distinct from a real crash (unexpected
+    exception), which still pages. Before this, a `run()`-raised fetch error propagated to
+    entrypoint() and double-paged (the crash Discord + the OnFailure unit) every 30-min tick for
+    the whole duration of a GitHub-side incident.
+    """
 
 
 HOLD_FILE = "/var/lib/gitops-deploy/hold_sha"
@@ -195,6 +197,21 @@ def run(
     check: bool = True,
     timeout: float | None = None,
 ) -> str:
+    """Run a subprocess and return its stripped stdout.
+
+    Args:
+        args: the argv to execute.
+        cwd: working directory for the subprocess.
+        check: raise RuntimeError if the process exits non-zero.
+        timeout: wall-clock bound in seconds, or None to wait indefinitely. When set, the
+            process runs in its own process group so a timeout kills the whole group —
+            including a grandchild like `ansible-playbook` forked by `uv run` — not just the
+            direct child.
+
+    Raises:
+        RuntimeError: the process exited non-zero and `check` is True.
+        subprocess.TimeoutExpired: the process (and its group) was killed after `timeout`.
+    """
     # timeout defaults to None so the long deploy/git calls are unbounded as before;
     # only the health-gate's docker inspects and the k8s deploy/rollback calls pass one.
     if timeout is None:
@@ -520,9 +537,12 @@ def emit_deploy_annotation(services: set[str], sha: str) -> None:
 
 
 def discord(content: str) -> bool:
-    """Post to the alert webhook via the shared host_lib.discord_post — see there for the
-    Cloudflare-1010 User-Agent + 2xx-only-success contract the per-SHA dedupe markers gate on. A
-    missing webhook or any error returns False, so the alert is retried on the next tick."""
+    """Post to the alert webhook via the shared host_lib.discord_post.
+
+    See there for the Cloudflare-1010 User-Agent + 2xx-only-success contract the per-SHA
+    dedupe markers gate on. A missing webhook or any error returns False, so the alert is
+    retried on the next tick.
+    """
     return discord_post(C.get("DISCORD_WEBHOOK", ""), content, "gitops-deploy", log=log)
 
 
@@ -549,13 +569,16 @@ def _write_pending(pending: dict[str, str]) -> None:
 
 
 def deliver(key: str, content: str) -> bool:
-    """Post an alert now, queuing it (keyed by "<channel>:<sha>") for retry on a delivery FAILURE so a
-    transient webhook blip can't permanently drop it — the ff-merged secrets/tasks/meta/combined paths
-    never re-reach their alert code on the next (noop) tick, so `discord()`'s own 'retry next tick'
-    doesn't hold for them. drain_pending() resends any queued entry every tick. Returns discord()'s result.
+    """Post an alert now, queuing it (keyed by "<channel>:<sha>") for retry on a delivery failure.
 
-    The queue write happens BEFORE the send, so a process death during discord() leaves the alert
-    queued rather than lost — see the DECIDED note below."""
+    A transient webhook blip can't permanently drop it — the ff-merged secrets/tasks/meta/
+    combined paths never re-reach their alert code on the next (noop) tick, so `discord()`'s
+    own 'retry next tick' doesn't hold for them. drain_pending() resends any queued entry every
+    tick. Returns discord()'s result.
+
+    The queue write happens BEFORE the send, so a process death during discord() leaves the
+    alert queued rather than lost — see the DECIDED note below.
+    """
     pending = _read_pending()
     # DECIDED: queue BEFORE the send, not after. discord() blocks for up to 10s in urlopen, and
     # alert_once has already advanced its per-SHA marker by the time we get here — so a process
@@ -655,8 +678,7 @@ def alert_deferred(
     cs: ChangeSet,
     declared_k8s: set[str] | None = None,
 ) -> None:
-    """Fire the tasks/, meta/deps.yml, and k8s-role defer-and-alert for changes NOT redeployed
-    this tick.
+    """Fire the tasks/, meta/deps.yml, and k8s-role defer-and-alert for changes not redeployed.
 
     Runs on BOTH the no-services branch (deployed=set()) and after a SUCCESSFUL deploy
     (deployed=cs.services): a combined push (svcA template + svcB meta/deps.yml) deploys svcA but
@@ -729,8 +751,9 @@ def _inspect(fmt: str, container: str, timeout: float = 15.0) -> str:
 def health_ok(
     container: str, settle_checks: int = 3, deadline: float | None = None
 ) -> bool:
-    """True if `container` reaches 'healthy', or — for an image with no
-    HEALTHCHECK — stays 'running' across `settle_checks` consecutive polls
+    """True if `container` reaches 'healthy', or settles as 'running' with no HEALTHCHECK.
+
+    For an image with no HEALTHCHECK, stays 'running' across `settle_checks` consecutive polls
     (~20s) so a boot-then-crash loop doesn't slip the gate the way a single
     'running' sample would. Polls until HEALTH_TIMEOUT_S — or the earlier
     `deadline` (the run-wide gate budget), so one slow container can't blow the
@@ -774,10 +797,13 @@ def containers_for(service: str) -> list[str]:
 
 
 def check_stale_composes() -> None:
-    """Page (once per distinct set) when containers/<svc>/docker-compose.yml exists on disk
-    but <svc> has no containers_list entry — the stale-compose trap (see
-    deploy_logic.stale_rendered_services for the incident history). Detection only, never
-    cleanup: the remedy removes containers and directories, which stays an operator action."""
+    """Page (once per distinct set) when a rendered compose has no matching containers_list entry.
+
+    containers/<svc>/docker-compose.yml exists on disk but <svc> has no containers_list entry —
+    the stale-compose trap (see deploy_logic.stale_rendered_services for the incident history).
+    Detection only, never cleanup: the remedy removes containers and directories, which stays
+    an operator action.
+    """
     containers_dir = os.path.join(REPO, "containers")
     hostvars = os.path.join(
         REPO, "ansible", "inventory", "host_vars", f"{HOSTNAME}.yml"
@@ -970,10 +996,12 @@ def deploy_k8s(
 
 
 def read_local_k8s_default(role: str) -> str | None:
-    """A k8s role's defaults/main.yml, read from the CURRENT working tree rather than via `git
-    show`. Only called from the rollback path, after `git reset --hard local` — so a plain read
+    """Read a k8s role's defaults/main.yml from the CURRENT working tree, not via `git show`.
+
+    Only called from the rollback path, after `git reset --hard local` — so a plain read
     matches exactly what roles/k8s/manifests itself reads for the claim list (see the comment
-    above the revert task in that role's tasks/main.yml)."""
+    above the revert task in that role's tasks/main.yml).
+    """
     path = (
         pathlib.Path(REPO)
         / "ansible"
@@ -1007,6 +1035,11 @@ def deploy_broad(playbook: str, tags: list[str], timeout: float) -> None:
 
 
 def deploy(services: set[str]) -> None:
+    """Deploy Docker-platform `services` via `ansible/deploy.yml --tags <services>`.
+
+    Args:
+        services: service tags to deploy, joined into one comma-separated `--tags` value.
+    """
     tags = ",".join(sorted(services))
     # Run via `uv run` so the deploy uses the repo's pinned env (ansible-core plus
     # the community.docker deps requests/docker) — the same toolchain the operator
@@ -1025,6 +1058,18 @@ def deploy(services: set[str]) -> None:
 
 
 def main() -> int:
+    """Run one gitops-deploy tick end to end.
+
+    Fetches origin/master; if it advanced, requires the tip's CI to pass, classifies the
+    changed paths into a ChangeSet, and acts on them: fast-forwards, deploys the mapped Docker
+    or k8s services, health-gates the result, and on failure rolls back to the previous HEAD
+    and holds the bad SHA. Also handles the broad-change, secrets-only, k8s-defer, and
+    dirty-tree branches described in this role's CLAUDE.md.
+
+    Almost always returns 0 — a failed tick pages via Discord and the hold marker rather than a
+    non-zero exit. The exceptions are the few `0 if posted else 1` branches, reached only when
+    even the failure alert itself could not be delivered.
+    """
     if not REPO:
         # No config, no repo to tick: page via the crash handler rather than run every git
         # command below against cwd="".

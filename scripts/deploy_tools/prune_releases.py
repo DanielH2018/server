@@ -71,6 +71,11 @@ def resolve_current(pointer):
 
 
 def main(argv=None):
+    """Report, or with `--apply` remove, the prunable release dirs under `group_dir`.
+
+    Always exits 0 — a missing release directory or an unresolvable `current` pointer is
+    reported and treated as nothing to prune, not an error.
+    """
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument(
         "group_dir", help="directory holding this group's <sha> release dirs"

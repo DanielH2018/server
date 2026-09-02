@@ -61,6 +61,11 @@ def find_available_dates(session: requests.Session) -> list[str]:
 
 
 def main() -> None:
+    """Check Glenstone availability once, notify Discord, and ping the healthcheck.
+
+    Exits normally in all cases; a failed availability check pings the healthcheck as a
+    failure instead of raising.
+    """
     webhook_url = require_env("GLENSTONE_DISCORD_WEBHOOK_URL")
     healthcheck_url = require_env("GLENSTONE_HEALTHCHECK_URL")
     session = new_session(HEADERS)

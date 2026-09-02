@@ -109,6 +109,12 @@ def bump(session_id: str, now: float | None = None) -> int:
 
 
 def main() -> int:
+    """Read the hook payload from stdin and deny a CI-status command `classify` flags.
+
+    Denies a command that blocks on CI outright, and denies the third or later CI-status
+    read in the session (tracked per session_id via `bump`), naming `land.sh` in both cases.
+    Always returns 0; a deny is expressed through emitted JSON, not the exit code.
+    """
     try:
         payload = json.loads(sys.stdin.read() or "{}")
     except json.JSONDecodeError:

@@ -150,6 +150,13 @@ def sweep(cfg, roots, apply_changes: bool):
 
 
 def main(argv=None) -> int:
+    """Parse args, sweep the configured (or given) paths, and write the state file.
+
+    With `--dry-run`, sweeps and reports without renaming anything and writes no state file.
+    A sweep that raises is caught and recorded as a failed run rather than propagated, so a bad
+    sweep pages through the state file instead of crashing the cron. Always returns 0 — the exit
+    code carries no information, the state file does.
+    """
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument(
         "--dry-run",

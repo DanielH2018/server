@@ -63,6 +63,14 @@ def read_state(path):
 
 
 def main(argv) -> int:
+    """Print one `up`/`down`-tab-message line per (label, state-file, max-age-hours) triple.
+
+    Args:
+        argv: sys.argv — argv[0] is ignored, the rest must be triples.
+
+    Always returns 0: a malformed call or a DOWN verdict are both printed as data for the
+    wrapper to push to Kuma, never raised.
+    """
     args = argv[1:]
     if not args or len(args) % 3:
         print("down\tstate_push.py called with %d args (need triples)" % len(args))

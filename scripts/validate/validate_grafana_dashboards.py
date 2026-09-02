@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Validate that every provisioned Grafana dashboard's datasource references resolve to a
-datasource declared in datasources.yml.j2.
+"""Validate that every provisioned Grafana dashboard's datasource uid resolves to a real one.
 
-A panel pointing at a wrong/empty datasource uid renders a silent "No data" with no error —
+Checks each dashboard against the datasources declared in datasources.yml.j2. A panel
+pointing at a wrong/empty datasource uid renders a silent "No data" with no error —
 exactly the stale-uid class the grafana role CLAUDE.md warns about (the lingering IH0jqv6nz
 uid). This guard is deterministic over all provisioned dashboards.
 
@@ -85,6 +85,7 @@ def datasource_refs_in(obj) -> list[tuple[str, str | None]]:
     refs: list[tuple[str, str | None]] = []
 
     def visit(node, title):
+        """Recurse into `node`, collecting datasource refs under the nearest enclosing `title`."""
         if isinstance(node, dict):
             t = node.get("title")
             if isinstance(t, str):
@@ -175,6 +176,11 @@ def validate(
 
 
 def main() -> int:
+    """Run `validate` and print its errors, if any.
+
+    Returns:
+        0 if `validate` found no errors, 1 otherwise.
+    """
     errors = validate()
     if errors:
         print("Grafana dashboard datasource validation FAILED:")

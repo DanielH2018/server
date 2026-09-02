@@ -64,6 +64,7 @@ def check_one(tag: str, run=subprocess.run) -> tuple[str, str]:
     """
 
     def probe(extra: list[str]) -> tuple[int, str]:
+        """Run probe.py health for `tag` with `extra` args; return (exit code, first line)."""
         try:
             res = run(
                 [
@@ -152,6 +153,7 @@ def notify(content: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Gate the deploy's health, post the verdict to Discord, and exit 0 if settled else 1."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--status", type=int, required=True, help="ansible-playbook's exit status"

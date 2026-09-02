@@ -155,6 +155,22 @@ class StatsState:
             p["last_seen"] = ts
 
     def apply(self, kind, value, ts):
+        """Applies one console event (connect/spawn/death/disconnect/restart/heartbeat).
+
+        connect holds a SteamID until the next spawn names the character (the console
+        never puts both on one line). spawn opens a new session, unless one is already
+        open (a respawn after death, not a second session). disconnect closes the
+        session bound to the SteamID's last-known name. restart closes every open
+        session and clears the SteamID<->name mapping. heartbeat records the server's
+        own connection count.
+
+        Args:
+            kind: One of "connect", "spawn", "death", "disconnect", "restart",
+                "heartbeat".
+            value: The SteamID (connect/disconnect), player name (spawn/death), or
+                connection count (heartbeat); ignored for "restart".
+            ts: The event's Unix timestamp, in seconds.
+        """
         self.last_event_ts = max(self.last_event_ts, ts)
         if kind == "connect":
             # Held until the next spawn names the character. The binding is ADJACENCY —
@@ -214,6 +230,16 @@ def escape_label_value(v):
 
 
 def render_metrics(state, now):
+    """Renders `state` as Prometheus text exposition format.
+
+    Args:
+        state: The StatsState to render.
+        now: The current Unix timestamp, used to include in-progress session time in
+            each player's playtime.
+
+    Returns:
+        The full exposition text, HELP/TYPE lines included, newline-terminated.
+    """
     out = []
     out.append(
         "# HELP valheim_player_playtime_seconds_total Total seconds a player has been connected."
@@ -306,6 +332,8 @@ def apply_entries(state, entries):
 
 # SQLite source of truth
 class Store:
+    """SQLite-backed source of truth for player stats, the ingest cursor, and the raw event log."""
+
     def __init__(self, path):
         self.conn = sqlite3.connect(path)
         self.conn.execute("PRAGMA journal_mode=WAL")
@@ -340,6 +368,13 @@ class Store:
         c.commit()
 
     def load_state(self):
+        """Loads all players and the SteamID<->name mapping from SQLite into a fresh StatsState.
+
+        Returns:
+            A StatsState populated from the players and steam_names tables, with
+            last_event_ts approximated from each player's last_seen (see the note below
+            for its one blind spot).
+        """
         st = StatsState()
         for name, tot, sess, deaths, fs, ls, css in self.conn.execute(
             "SELECT name,total_playtime_seconds,session_count,death_count,first_seen,"
@@ -464,10 +499,13 @@ _last_poll_ok = 0.0
 
 def _make_handler():
     class Handler(BaseHTTPRequestHandler):
+        """Serves /metrics (Prometheus exposition) and /healthz (poll staleness)."""
+
         def log_message(self, *a):
             pass
 
         def do_GET(self):
+            """Routes the request path to /metrics, /healthz, or a 404."""
             if self.path == "/metrics":
                 with _lock:
                     body = render_metrics(_state, time.time()).encode()
@@ -500,6 +538,13 @@ def initial_cursor(stored_cursor, backfill, now, backfill_days):
 
 
 def main():
+    """Loads persisted state, starts the metrics server, and runs the poll loop.
+
+    Runs a single cycle and returns when invoked with --once or --backfill; otherwise
+    starts a background HTTP server for /metrics and /healthz and polls Loki forever at
+    POLL_INTERVAL. A poll cycle's own exception is caught and logged rather than
+    allowed to kill the loop.
+    """
     global _state, _last_poll_ok
     once = "--once" in sys.argv
     backfill = "--backfill" in sys.argv

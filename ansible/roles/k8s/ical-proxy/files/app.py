@@ -1,3 +1,11 @@
+"""Flask proxy that republishes ICS calendar feeds Homepage can render directly.
+
+Fetches two Google Calendar ICS feeds and one Obsidian Tasks gist feed on a background
+refresh loop, processes each (drops superseded recurrence occurrences, caps overlapping
+recurring series, and — for the Obsidian feed — hoists a clickable link, a stable UID and
+drops LOCATION per VTODO), and serves the cached, processed result at /calendar{1,2,4}.ics.
+"""
+
 from flask import Flask, Response
 import requests, threading, time, os, re, hashlib
 
@@ -86,9 +94,9 @@ def filter_superseded_occurrences(events):
 
 
 def dedup_overlapping_recurrences(events):
-    """
-    For recurring events sharing the same SUMMARY and RRULE, cap the earlier
-    series with UNTIL set to the day before the later series starts.
+    """Caps the earlier of two recurring series that share the same SUMMARY and RRULE.
+
+    Sets UNTIL to the day before the later series starts, so the two don't overlap.
     """
     # Group recurring events by (SUMMARY, RRULE)
     groups = {}
@@ -188,6 +196,7 @@ def process_obsidian_ics(raw_ics):
     """
 
     def rewrite_todo(match):
+        """Applies the tag-strip, stable-UID, LOCATION-drop and URL fixups to one VTODO block."""
         block = match.group(0)
         source = get_prop(block, "DESCRIPTION") or get_prop(block, "LOCATION") or ""
         link = OBSIDIAN_URI_RE.search(source)
@@ -220,6 +229,18 @@ MAX_FEED_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
 def refresh_feed(key, url, processor=None):
+    """Fetches one ICS feed, processes it, and stores the result in cached_ics[key].
+
+    Streams the response under a byte ceiling (MAX_FEED_BYTES) rather than reading an
+    unbounded body into memory. Any fetch or parse error is caught and logged; on failure
+    cached_ics[key] is left holding its previous value rather than cleared.
+
+    Args:
+        key: The cached_ics dict key this feed's processed output is stored under.
+        url: The upstream ICS feed URL to fetch.
+        processor: Callable applied to the raw ICS text before caching; defaults to
+            process_ics.
+    """
     if processor is None:
         processor = process_ics
     try:
@@ -246,6 +267,12 @@ def refresh_feed(key, url, processor=None):
 
 
 def refresh_loop():
+    """Refreshes every configured feed in a loop, sleeping REFRESH_INTERVAL between passes.
+
+    Sets initial_fetch_done after the first full pass over all feeds (or immediately when no
+    ICS URLs are configured), so callers can wait for it before serving a first request. A
+    single feed's error is caught and logged; it never stops the loop or the other feeds.
+    """
     feeds = [
         (k, u, p)
         for k, u, p in [

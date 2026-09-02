@@ -71,6 +71,7 @@ def select_replacement(candidates, policy):
     deprio = policy.get("depreference_codecs", [])
 
     def key(rel):
+        """Sort key ranking candidates best-first: tier, non-AV1, CF score, group, indexer, seeders."""
         title = rel.get("title", "")
         return (
             -quality_rank(rel),  # higher tier first
@@ -106,13 +107,15 @@ def is_authentic(probe, policy) -> bool:
 
 
 def plan_searches(ledger, policy):
-    """Up to searches_per_tick 'detected' entries to interactive-search this tick, oldest first
-    (deterministic), capped so no more than max_concurrent_replacements are in flight
-    (grabbed/verifying/importing) at once — a reconciler throttle distinct from the detector's
-    MAX_PER_SCAN blast valve. The shell spaces the searches by search_spacing_s and never issues a
-    season search. Returns search-action dicts; does not mutate state (the shell sets
-    grabbed/held/detected after the grab, so a crash mid-tick simply leaves the entry 'detected' for
-    the next tick)."""
+    """Return up to searches_per_tick 'detected' entries to interactive-search this tick.
+
+    Oldest first (deterministic), capped so no more than max_concurrent_replacements are in
+    flight (grabbed/verifying/importing) at once — a reconciler throttle distinct from the
+    detector's MAX_PER_SCAN blast valve. The shell spaces the searches by search_spacing_s and
+    never issues a season search. Returns search-action dicts; does not mutate state (the shell
+    sets grabbed/held/detected after the grab, so a crash mid-tick simply leaves the entry
+    'detected' for the next tick).
+    """
     per_tick = int(policy.get("searches_per_tick", 2))
     cap = int(policy.get("max_concurrent_replacements", 5))
     active = sum(

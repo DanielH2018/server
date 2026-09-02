@@ -153,6 +153,7 @@ def _recv_exact_from(sock):
     buf = bytearray()
 
     def recv_exact(n: int) -> bytes:
+        """Read and return exactly `n` bytes from `sock`, buffering across recv() calls."""
         while len(buf) < n:
             chunk = sock.recv(4096)
             if not chunk:
@@ -230,11 +231,15 @@ def vanished_snapshot_entities(snapshot_ids, live_entity_ids):
 
 
 def automation_load_errors(expected_ids, live_automations):
-    """expected_ids = ids from files/automations/*.yaml; live_automations = the automation.* entries
-    from /api/states. A defined id with no live automation carrying that attributes.id did NOT
-    load (dropped). A defined id whose live automation is `unavailable` errored at load. A
-    disabled automation (state 'off') is fine. Live ids not in the file (UI/.storage cruft) are
-    ignored — this gate is file-driven so cruft can't make it red."""
+    """Return one error string per automation id that is defined but did not load cleanly.
+
+    `expected_ids` are ids from files/automations/*.yaml; `live_automations` are the
+    automation.* entries from /api/states. A defined id with no live automation carrying
+    that attributes.id did NOT load (dropped). A defined id whose live automation is
+    `unavailable` errored at load. A disabled automation (state 'off') is fine. Live ids
+    not in the file (UI/.storage cruft) are ignored — this gate is file-driven so cruft
+    can't make it red.
+    """
     by_id = {}
     for a in live_automations:
         aid = (a.get("attributes") or {}).get("id")
@@ -333,11 +338,13 @@ def _slug(name):
 
 
 def match_automation(states, query):
-    """Find an automation in a `/api/states` list by entity_id, `attributes.id`,
-    or friendly-name slug. Resolves the alias-slug-vs-id trap: an automation's
-    entity_id derives from its *alias*, not its `id`, so the two can differ
-    (e.g. id `bedroom_fan_temperature` -> `automation.bedroom_fan_temperature_control`).
-    Accepts a bare slug/id or a full `automation.<slug>` entity_id. None if no match."""
+    """Find an automation in a `/api/states` list by entity_id, `attributes.id`, or slug.
+
+    Resolves the alias-slug-vs-id trap: an automation's entity_id derives from its
+    *alias*, not its `id`, so the two can differ (e.g. id `bedroom_fan_temperature` ->
+    `automation.bedroom_fan_temperature_control`). Accepts a bare slug/id or a full
+    `automation.<slug>` entity_id. Returns None if no match.
+    """
     want_entity = query if query.startswith("automation.") else "automation." + query
     for s in states:
         eid = s.get("entity_id", "")
@@ -428,6 +435,18 @@ def _ha_url(ip, ns):
 
 
 def run_ha(ns):
+    """Dispatch a parsed `ha` subcommand against the live HA API.
+
+    Handles trace/why, verify-automations, verify-entities, get, state, and a bare
+    automation lookup.
+
+    Args:
+        ns: The parsed argparse namespace for the `ha` subcommand.
+
+    Returns:
+        0 on success, 1 when the check itself found a problem (e.g. an automation not
+        found, a vanished entity, an unparseable body).
+    """
     if ns.ha_cmd in ("trace", "why"):
         if ns.dry_run:
             print(
@@ -536,6 +555,11 @@ def run_ha(ns):
 
 
 def run_ha_state(ns):
+    """Print the derived state-model rows, and the full entity inventory if requested.
+
+    Args:
+        ns: The parsed argparse namespace for the `ha state` subcommand.
+    """
     import json
     from home_assistant import ha_state_model
 

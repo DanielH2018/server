@@ -114,6 +114,7 @@ _EXTERNAL = {
 
 
 def classify(name: str) -> str:
+    """The rotation tier for a secret name: ignore, pinned, external, auto, or assisted."""
     if name in _IGNORE or name.endswith(_IGNORE_SUFFIX):
         return "ignore"
     if name in _PINNED:
@@ -219,11 +220,11 @@ UPTIME_KUMA_TAG = "uptime-kuma"
 
 
 def consumer_tags(name: str) -> tuple[str, ...]:
-    """Deploy tags whose redeploy makes a rotated push token take effect — EMPTY when the
-    consumer spans hosts / is self-referential (those stay MANUAL: the unattended cron skips
-    them, the audit still reminds).
+    """Deploy tags whose redeploy makes a rotated push token take effect.
 
-    Plural, and a tuple, since 2026-08-28. The pre-migration docstring here said a push token
+    EMPTY when the consumer spans hosts or is self-referential — those stay MANUAL: the
+    unattended cron skips them, the audit still reminds. Plural, and a tuple, since
+    2026-08-28. The pre-migration docstring here said a push token
     "lives in two places on one compose file", which was true under Docker+AutoKuma labels and
     false after the k3s migration split the pusher and the tile into two roles. Both roles
     deploy from daniel-box in ONE playbook run, so both tags are reachable by a single
@@ -363,6 +364,7 @@ def consumer_commands(name: str, repo: str = REPO) -> list[str]:
 
 
 def cmd_consumers(args) -> int:
+    """Print every role that references `args.name`, and the commands to redeploy them."""
     consumers = tree_consumers(args.name)
     if not consumers:
         print(
@@ -597,6 +599,7 @@ def _push(url: str, ok: bool, msg: str) -> None:
 
 
 def cmd_sync(args) -> int:
+    """Reconcile the registry with secrets.yml, save it, and print what changed."""
     reg = load_registry()
     added, stale = sync(reg, secret_names(), today())
     save_registry(reg)
@@ -718,6 +721,13 @@ def audit_summary(res: dict, missing: list, stale: list) -> str:
 
 
 def cmd_audit(args) -> int:
+    """Print each secret's rotation status, push the summary to Kuma, and gate on drift.
+
+    Exits 2 when `--push` is given without SECRET_ROTATION_KUMA set, 1 when `--check` is
+    given and the registry is out of sync with secrets.yml, 0 otherwise — overdue secrets
+    and malformed push tokens are reported but never fail this exit code; those are the
+    daily Kuma push's concern, not a CI gate's.
+    """
     reg = load_registry()
     # Registry drift: warn by default (so a forgotten `sync` is visible); --check fails on it.
     missing, stale = registry_drift(set(reg.get("secrets", {})), set(secret_names()))
@@ -808,6 +818,12 @@ def unattended_due(rows: list, rotate_all: bool = False) -> list:
 
 
 def cmd_rotate(args) -> int:
+    """Rotate `args.name`, or every coming-due auto-tier secret, and optionally redeploy.
+
+    Dry-run by default; `--commit` writes new values via `sops set`. Exits 2 when
+    `args.name` names a non-auto-tier secret, 1 when `--deploy` is given and the redeploy
+    fails (the new tokens are written but their consumers are not), 0 otherwise.
+    """
     reg = load_registry()
     now = today()
     res = audit(reg, now)
@@ -896,6 +912,7 @@ def cmd_rotate(args) -> int:
 
 
 def main(argv=None) -> int:
+    """Dispatch to the `sync`/`consumers`/`audit`/`rotate` subcommand and return its exit code."""
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )

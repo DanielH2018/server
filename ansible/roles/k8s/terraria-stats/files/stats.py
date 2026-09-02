@@ -103,6 +103,16 @@ class StatsState:
             p["last_seen"] = ts
 
     def apply(self, kind, name, ts):
+        """Applies one connection event (join/leave/restart) to the in-memory state.
+
+        A join with no matching leave (a dangling open_start) is closed defensively
+        before the new session opens. A restart closes every currently open session.
+
+        Args:
+            kind: One of "join", "leave", "restart".
+            name: The player name the event applies to (ignored for "restart").
+            ts: The event's Unix timestamp, in seconds.
+        """
         self.last_event_ts = max(self.last_event_ts, ts)
         if kind == "join":
             self._close(name, ts)  # defensive: a rejoin with no leave line
@@ -135,6 +145,16 @@ def escape_label_value(v):
 
 
 def render_metrics(state, now):
+    """Renders `state` as Prometheus text exposition format.
+
+    Args:
+        state: The StatsState to render.
+        now: The current Unix timestamp, used to include in-progress session time in
+            each player's playtime.
+
+    Returns:
+        The full exposition text, HELP/TYPE lines included, newline-terminated.
+    """
     out = []
     out.append(
         "# HELP terraria_player_playtime_seconds_total Total seconds a player has been connected."
@@ -202,6 +222,8 @@ def apply_entries(state, entries):
 
 # SQLite source of truth
 class Store:
+    """SQLite-backed source of truth for player stats, the ingest cursor, and the raw event log."""
+
     def __init__(self, path):
         self.conn = sqlite3.connect(path)
         self.conn.execute("PRAGMA journal_mode=WAL")
@@ -231,6 +253,13 @@ class Store:
         c.commit()
 
     def load_state(self):
+        """Loads all players from SQLite into a fresh StatsState.
+
+        Returns:
+            A StatsState populated from the players table, with last_event_ts
+            approximated from each player's last_seen (see the note below for its one
+            blind spot).
+        """
         st = StatsState()
         for name, tot, sess, fs, ls, css in self.conn.execute(
             "SELECT name,total_playtime_seconds,session_count,first_seen,"
@@ -343,10 +372,13 @@ _last_poll_ok = 0.0
 
 def _make_handler():
     class Handler(BaseHTTPRequestHandler):
+        """Serves /metrics (Prometheus exposition) and /healthz (poll staleness)."""
+
         def log_message(self, *a):
             pass
 
         def do_GET(self):
+            """Routes the request path to /metrics, /healthz, or a 404."""
             if self.path == "/metrics":
                 with _lock:
                     body = render_metrics(_state, time.time()).encode()
@@ -380,6 +412,13 @@ def initial_cursor(stored_cursor, backfill, now, backfill_days):
 
 
 def main():
+    """Loads persisted state, starts the metrics server, and runs the poll loop.
+
+    Runs a single cycle and returns when invoked with --once or --backfill; otherwise
+    starts a background HTTP server for /metrics and /healthz and polls Loki forever at
+    POLL_INTERVAL. A poll cycle's own exception is caught and logged rather than
+    allowed to kill the loop.
+    """
     global _state, _last_poll_ok
     once = "--once" in sys.argv
     backfill = "--backfill" in sys.argv

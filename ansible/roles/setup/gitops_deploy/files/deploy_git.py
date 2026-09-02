@@ -108,6 +108,20 @@ def next_action(
     origin_ahead: bool = True,
     ci: str = "pass",
 ) -> str:
+    """Decide what one tick does, given the two HEADs, the hold, and the CI verdict.
+
+    Args:
+        local_head: this host's current git SHA.
+        origin_head: `origin/master`'s SHA as of this tick's fetch.
+        hold_sha: the SHA a previous failed deploy pinned, or None if nothing is held.
+        dirty: whether the working tree has uncommitted local changes.
+        origin_ahead: whether `local_head` is an ancestor of `origin_head` (a normal
+            fast-forward is possible). False also covers the diverged case.
+        ci: `ci_verdict`'s reduction for `origin_head` — "pass", "pending", or "fail".
+
+    Returns:
+        One of "dirty", "noop", "skip_hold", "ci_failed", "ci_pending", or "deploy".
+    """
     # A dirty working tree (operator mid-edit) is a healthy skip, not an outage,
     # and must never be deployed from — so it short-circuits every other outcome.
     if dirty:
@@ -140,13 +154,15 @@ def next_action(
 def is_diverged(
     origin_head: str, local_head: str, origin_ahead: bool, local_ahead: bool
 ) -> bool:
-    """True when origin and local have DIVERGED — they differ yet neither is an ancestor of the
-    other, so the deployer can neither fast-forward (`origin_ahead`) nor is this the healthy
-    committed-but-unpushed local state (`local_ahead`, which secret-rotate owns and which stays a
-    plain noop). A diverged tree noops forever while origin's new commits — a Renovate/security bump
-    — never deploy, and both GitOps monitors stay green (last_run keeps ticking, no hold). The
-    deployer records this so GitOps Status surfaces it instead of camouflaging it as a healthy noop
-    (2026-07-15 review L3)."""
+    """True when origin and local have DIVERGED — they differ, neither an ancestor of the other.
+
+    The deployer can neither fast-forward (`origin_ahead`) nor is this the healthy
+    committed-but-unpushed local state (`local_ahead`, which secret-rotate owns and which stays
+    a plain noop). A diverged tree noops forever while origin's new commits — a
+    Renovate/security bump — never deploy, and both GitOps monitors stay green (last_run keeps
+    ticking, no hold). The deployer records this so GitOps Status surfaces it instead of
+    camouflaging it as a healthy noop (2026-07-15 review L3).
+    """
     return origin_head != local_head and not origin_ahead and not local_ahead
 
 

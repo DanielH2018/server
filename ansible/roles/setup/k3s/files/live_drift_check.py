@@ -323,6 +323,14 @@ def push(status: str, message: str) -> None:
 
 
 def main() -> int:
+    """Fetch every in-scope object, compare it to its last-applied baseline, and push to Kuma.
+
+    Prints each drifted object's diff, each unannotated object, and each fetch error to
+    stderr, then a one-line summary to stdout. Pushes "up"/"down" plus `verdict`'s message to
+    Kuma. Returns `verdict`'s exit code: 0 clean, 2 on a read failure (fail closed — a check
+    that can't read the cluster must not report it clean), otherwise the drift/unannotated
+    verdict.
+    """
     drifted: list[tuple[str, str, str, list]] = []
     unannotated: list[str] = []
     errors: list[str] = []

@@ -41,6 +41,12 @@ def uptime_seconds(started_at: str) -> float:
 
 
 def main() -> int:
+    """Reads the running janitorr pod's error rate and prints an `up\\tmsg` / `down\\tmsg` verdict.
+
+    Always exits 0: a down verdict is printed output for the wrapper to push to Kuma, not a
+    process failure, so every failure path (unreadable pod, unparseable start time, unreadable
+    logs) prints a `down` line and returns 0 rather than raising.
+    """
     # The CONTAINER's startedAt, not the pod's: a container that crash-looped inside a long-lived
     # pod restarts its own clock, and the boot race restarts with it. Using the pod's start time
     # would put a just-restarted janitorr past grace and count its startup errors against it.

@@ -146,6 +146,19 @@ class QbtClient:
             return resp.read().decode()
 
     def login(self, username: str, password: str) -> None:
+        """Logs in and raises SystemExit if qBittorrent did not set a session cookie.
+
+        Success is judged by the session cookie, not the response body or status:
+        qBittorrent 5.2.3 answers a good login with HTTP 204 and an empty body, so
+        checking for the older "Ok." string would wrongly reject a successful login.
+
+        Args:
+            username: The qBittorrent WebUI username.
+            password: The qBittorrent WebUI password.
+
+        Raises:
+            SystemExit: If no QBT_SID session cookie was set after the login POST.
+        """
         # SUCCESS IS THE SESSION COOKIE, NOT THE BODY. qBittorrent 5.2.3 answers a good
         # login with **HTTP 204 and an empty body**; older builds answered 200 with the
         # literal string "Ok.". Checking for "Ok." therefore rejects a login that in fact
@@ -167,6 +180,14 @@ class QbtClient:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parses --url and --dry-run, defaulting --url from the QBT_URL environment variable.
+
+    Args:
+        argv: Argument list to parse; defaults to sys.argv[1:] when None.
+
+    Returns:
+        The parsed Namespace.
+    """
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -188,6 +209,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Logs into qBittorrent, diffs live preferences against DESIRED, and applies drift.
+
+    Reads QBT_USERNAME/QBT_PASSWORD from the environment. In --dry-run mode, reports drift
+    without writing. Otherwise applies the changed keys and reads preferences back to
+    confirm the write took, since setPreferences returns 200 even for keys it silently
+    ignored.
+
+    Args:
+        argv: Argument list to parse; defaults to sys.argv[1:] when None.
+
+    Returns:
+        EXIT_OK if nothing needed changing or the apply succeeded and confirmed, EXIT_BAD_ARGS
+        if the qBittorrent credentials are missing, EXIT_UNREACHABLE if the WebUI could not
+        be reached or a write did not take, or EXIT_DRIFT if --dry-run found drift.
+    """
     args = parse_args(argv)
 
     username = os.environ.get("QBT_USERNAME")

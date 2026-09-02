@@ -105,6 +105,21 @@ def prom_label_values(query, resolved):
 
 
 def adapt(name, d):
+    """Rewrite an imported dashboard's datasource/variable placeholders for this cluster.
+
+    Resolves each `datasource`-type template variable and `${DS_*}`/`${ds_*}` import
+    input to a live datasource uid, picks a default value for each `query`-type
+    variable (or `All` when it allows one), and drops the panels named in
+    `DROP_PANELS[name]`.
+
+    Args:
+        name: The dashboard's filename stem, used to key `DROP_PANELS`.
+        d: The dashboard JSON, mutated in place.
+
+    Returns:
+        A tuple of the dashboard re-serialized as a JSON string (placeholders
+        resolved) and the `resolved` map of query-variable name to chosen value.
+    """
     placeholders = {}  # ${NAME} -> uid string
     resolved = {}  # var name -> chosen single value (for chaining)
 

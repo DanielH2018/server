@@ -403,6 +403,13 @@ def verify(service, two_factor=False):
 
 
 def main(argv=None):
+    """Parse args and mint, check, verify, or locate an Authelia session state file.
+
+    With no flag, mints a new session (two_factor if `--totp` is given, else
+    one_factor). `--path` only prints the state file location; `--check` and `--verify`
+    inspect an existing session without minting a new one. Returns the exit code of the
+    action taken; a bare mint always returns 0.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--check",

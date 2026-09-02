@@ -174,6 +174,14 @@ def collect_live(
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Build the infra model and write it as HTML, SVG, or JSON (per `--format`/`--json`).
+
+    Writes HTML via write-then-rename so a reader never sees a half-written page, and
+    writes SVG only when its body actually changed. Exits 2 without touching the
+    existing output if live collection is missing a required tool — overwriting it
+    with a declared-only render would replace real data with a page that looks healthy
+    and reports nothing wrong.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "-o", "--output", type=Path, default=DEFAULT_OUTPUT, help="output HTML path"

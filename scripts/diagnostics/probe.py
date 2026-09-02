@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""Read-only homelab diagnostics — one allow-listed surface for the queries that
-used to be hand-written `curl`/`openssl` one-offs.
+"""Read-only homelab diagnostics.
+
+One allow-listed surface for the queries that used to be hand-written `curl`/`openssl`
+one-offs.
 
 The monitoring stack (Prometheus, Loki, Scrutiny, uptime-kuma) does NOT publish
 host ports; it's internal to the Docker network. The old approach was to
@@ -427,6 +429,13 @@ def run_pipeline(stages):
 
 
 def main(argv=None):
+    """Parse argv, dispatch to the matching subcommand, and return its exit code.
+
+    `health` and the handler-table subcommands answer directly from an API or from
+    `docker inspect`/kubectl. `metric`/`loki-query` without `--json`/`--dry-run` use the
+    formatted view; every other subcommand falls through to the streaming `curl` pipeline
+    built by `plan()`.
+    """
     argv = list(sys.argv[1:] if argv is None else argv)
     ns = _build_parser().parse_args(argv)
     # `health` parses/formats docker inspect rather than streaming a pipeline.

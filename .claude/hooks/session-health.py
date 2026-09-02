@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""SessionStart health banner — when a Claude Code session opens in this repo,
-surface anything that's already broken so you don't start work blind:
+"""SessionStart health banner: surfaces what's already broken before work starts.
+
+When a Claude Code session opens in this repo, this prints anything already broken so
+work doesn't start blind:
   * containers that are unhealthy or stuck restarting (fast, local `docker ps`)
   * Prometheus scrape targets that are down (fleet-wide, via scripts/diagnostics/probe.py)
   * this branch sitting behind origin/master's last-fetched ref (local-only, no `git fetch`)
@@ -97,9 +99,11 @@ def docker_problems():
 
 
 def _k8s_namespace():
-    """k8s_namespace, read from the same plaintext inventory file scripts/diagnostics/probe.py reads it
-    from. Duplicated rather than imported — target_problems() shells out to probe.py rather
-    than importing it (see its own docstring), and this stays consistent with that."""
+    """Return k8s_namespace from the same plaintext inventory file probe.py reads it from.
+
+    Duplicated rather than imported — target_problems() shells out to probe.py rather than
+    importing it (see its own docstring), and this stays consistent with that.
+    """
     path = os.path.join(REPO, "ansible", "inventory", "group_vars", "all.yml")
     try:
         with open(path) as f:
@@ -147,9 +151,11 @@ def _is_scaled_to_zero(job, namespace):
 
 
 def target_problems():
-    """Best-effort list of down Prometheus scrape targets, minus any whose Deployment is
-    deliberately scaled to 0 replicas. [] on any failure (monitoring being unreachable must
-    not block or spam session start)."""
+    """Return down Prometheus scrape targets, minus any deliberately scaled to 0 replicas.
+
+    Best-effort: returns [] on any failure, since monitoring being unreachable must not
+    block or spam session start.
+    """
     try:
         res = _run(
             ["uv", "run", "python", "scripts/diagnostics/probe.py", "targets"], 6
@@ -288,6 +294,12 @@ def format_banner(problems):
 
 
 def main():
+    """Print the SessionStart health banner for a genuine session open, then exit 0.
+
+    Skips a mid-session compaction event. Combines container, Prometheus-target and
+    stale-branch problems into one banner, then separately prints other live sessions in
+    this repo and any worktrees ready to remove — both regardless of health status.
+    """
     raw = sys.stdin.read()
     try:
         payload = json.loads(raw) if raw.strip() else {}

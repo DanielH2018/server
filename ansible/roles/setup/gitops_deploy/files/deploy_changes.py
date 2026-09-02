@@ -277,6 +277,11 @@ def _is_test_only_path(path: str) -> bool:
 
 @dataclass
 class ChangeSet:
+    """What one push's changed paths add up to: which services to deploy, which planes are broad.
+
+    Each field's own comment documents its meaning and how it interacts with the others.
+    """
+
     services: set[str] = field(default_factory=set)
     broad: bool = False
     # Which manual playbook a broad change needs — deploy.yml's plane (shared templates/inventory/
@@ -365,6 +370,19 @@ def shared_module_consumers(paths, repo_root) -> set[str]:
 
 
 def services_from_changed_paths(paths: list[str]) -> ChangeSet:
+    """Classify one push's changed paths into a ChangeSet.
+
+    Routes each path to the plane it belongs to — Docker service config, the tasks/meta
+    defer-and-alert channels, a k8s role, or one of the broad-change prefixes — in the order
+    each branch below requires (test paths first, then secrets, then broad-manual ahead of
+    broad-setup, then the active-role regexes).
+
+    Args:
+        paths: repo-relative paths changed between local and origin.
+
+    Returns:
+        A ChangeSet describing what this push reaches.
+    """
     cs = ChangeSet()
     for p in paths:
         # Test-suite files reach no host, so they must not drive a deploy decision. Checked

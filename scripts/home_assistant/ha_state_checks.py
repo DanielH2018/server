@@ -81,10 +81,13 @@ def _walk_entity_id_fields(node) -> Iterator[str]:
 
 
 def referenced_entities(config: dict) -> set[str]:
-    """Write targets + every structural `entity_id:` field (triggers/conditions/actions) across
-    automations and scripts. Templated values are dropped (can't be resolved statically).
-    NON-GOAL (deliberate): entity ids inside `{{ }}` template bodies (states('sensor.x')) are NOT
-    extracted — that is regex-fragile and would make this the flaky part of the gate."""
+    """Write targets and every structural `entity_id:` field across automations and scripts.
+
+    Covers triggers/conditions/actions. Templated values are dropped (can't be resolved
+    statically). NON-GOAL (deliberate): entity ids inside `{{ }}` template bodies
+    (states('sensor.x')) are NOT extracted — that is regex-fragile and would make this
+    the flaky part of the gate.
+    """
     refs: set[str] = set()
     for auto in config.get("automation") or []:
         refs |= set(_walk_entity_id_fields(auto))
@@ -94,8 +97,10 @@ def referenced_entities(config: dict) -> set[str]:
 
 
 def resolution_errors(config: dict, known: set[str]) -> list[str]:
-    """A managed-domain entity referenced but absent from `known` (= a typo or a stale external
-    snapshot — run `refresh`)."""
+    """List errors for each managed-domain entity referenced but absent from `known`.
+
+    Absence means a typo or a stale external snapshot — run `refresh`.
+    """
     errs = []
     for ref in sorted(referenced_entities(config)):
         if ref.split(".")[0] in _MANAGED_DOMAINS and ref not in known:
@@ -337,6 +342,11 @@ def threshold_cfg_coverage_errors(config: dict) -> list[str]:
 
 
 def alias_collision_errors(config: dict) -> list[str]:
+    """List errors for automations whose alias-derived entity_id slug collides.
+
+    Two automations with different `id`s can still generate the same `automation.*`
+    entity_id when their aliases slug to the same value, silently shadowing one of them.
+    """
     seen: dict[str, str] = {}
     errs = []
     for auto in config.get("automation") or []:
@@ -416,6 +426,12 @@ def system_log_fire_event_errors(config: dict) -> list[str]:
 
 
 def freshness_errors(role_dir: Path = ROLE_DIR) -> list[str]:
+    """List errors for any generated file that no longer matches the derived model.
+
+    Rebuilds the model from `role_dir` and compares it against the committed
+    `DERIVED_YAML` and `STATE_MD`, both of which only `ha_state_model.py generate`
+    should update.
+    """
     model = build_model(load_role(role_dir))
     errs = []
     for path, want in (

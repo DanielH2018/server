@@ -183,11 +183,13 @@ def resolve_vars(values: dict, context: dict, passes: int = 5) -> dict:
     env.filters["bool"] = ansible_bool
 
     def expand(node, ctx):
-        """Ansible templates a variable's value wherever a string sits inside it, not only
-        when the whole value IS a string. A list- or dict-valued variable holding `{{ ... }}`
-        therefore reaches a template already expanded; scanning only top-level strings left
-        the literal braces in place, which is the exact defect this function's docstring
-        describes -- one level further down."""
+        """Recursively render every `{{ ... }}` string in `node`, not just a top-level one.
+
+        Ansible templates a variable's value wherever a string sits inside it, not only when
+        the whole value IS a string. A list- or dict-valued variable holding `{{ ... }}`
+        therefore reaches a template already expanded; scanning only top-level strings would
+        leave the literal braces in place one level further down.
+        """
         if isinstance(node, str):
             return env.from_string(node).render(ctx) if "{{" in node else node
         if isinstance(node, list):
@@ -237,8 +239,11 @@ def parse_docs(rendered: str) -> list:
 
 
 def find_pvc_names(doc) -> list[str]:
-    """The name of the PVC this document declares, if it is one — a rendered manifest is one
-    object per document, so this is a direct check, not a recursive search."""
+    """Return the name of the PVC `doc` declares, if it is one.
+
+    A rendered manifest is one object per document, so this is a direct check, not a
+    recursive search.
+    """
     if isinstance(doc, dict) and doc.get("kind") == "PersistentVolumeClaim":
         name = (doc.get("metadata") or {}).get("name")
         if isinstance(name, str):
@@ -345,6 +350,11 @@ class _StrictKeyLoader(yaml.SafeLoader):
     """
 
     def construct_mapping(self, node, deep=False):
+        """Construct `node` as a mapping, raising on a duplicate key instead of overwriting it.
+
+        Raises:
+            yaml.constructor.ConstructorError: `node` has two entries for the same key.
+        """
         seen = set()
         for key_node, _ in node.value:
             key = self.construct_object(key_node, deep=deep)
@@ -360,20 +370,24 @@ class _StrictKeyLoader(yaml.SafeLoader):
 
 
 class _AppTagLoader(_StrictKeyLoader):
-    """SafeLoader that tolerates application-defined tags in EMBEDDED config (home-assistant's
-    configuration.yaml uses ``!include``/``!secret``). The structure is still fully parsed —
-    only the tag resolves to a placeholder. HA's own files get deep validation from
-    validate-ha-config; this guard just proves the ConfigMap embeds well-formed YAML."""
+    """SafeLoader that tolerates application-defined tags in EMBEDDED config.
+
+    home-assistant's configuration.yaml uses ``!include``/``!secret``. The structure is still
+    fully parsed — only the tag resolves to a placeholder. HA's own files get deep validation
+    from validate-ha-config; this guard just proves the ConfigMap embeds well-formed YAML.
+    """
 
 
 _AppTagLoader.add_multi_constructor("!", lambda loader, suffix, node: f"<{suffix}>")
 
 
 def _from_json(value) -> object:
-    """Ansible's ``from_json`` for looked-up templates (home-assistant's secrets.yaml.j2 parses
-    a SOPS-stored service-account blob). Under this guard the value is a StubUndefined, not
-    JSON — return an empty dict so attribute access on the result stubs out like any other
-    undefined instead of aborting the render."""
+    """Ansible's ``from_json`` for looked-up templates.
+
+    home-assistant's secrets.yaml.j2 parses a SOPS-stored service-account blob with it. Under
+    this guard the value is a StubUndefined, not JSON — return an empty dict so attribute
+    access on the result stubs out like any other undefined instead of aborting the render.
+    """
     try:
         return json.loads(str(value))
     except ValueError, TypeError:
@@ -402,6 +416,16 @@ def make_lookup(ctx: dict):
     """
 
     def lookup(kind: str, *args: str) -> str:
+        """Resolve one `lookup()` call, supporting `file`, `pipe` (base64 only) and `template`.
+
+        Args:
+            kind: The lookup plugin name.
+            args: The plugin's positional arguments; `args[0]` is always a path or command.
+
+        Raises:
+            ValueError: `kind` is not one of the three supported plugins, or `kind == "pipe"`
+                names something other than `base64 -w0 <path>`.
+        """
         path = Path(args[0])
         if kind == "file":
             return path.read_text().rstrip("\n")
@@ -732,6 +756,16 @@ def check_template(role: str, tpl: Path, ctx: dict) -> tuple[str | None, list]:
 
 
 def main() -> int:
+    """Render every k8s role's manifest templates and validate them against the k3s schemas.
+
+    Renders each role's `templates/*.j2` manifests with a real (unstubbed) group_vars/host_vars
+    context, checks the result is valid, duplicate-key-free YAML, schema-checks each object
+    against `K8S_SCHEMA_VERSION` (or a vendored CRD schema), and cross-references every declared
+    PersistentVolumeClaim against every `claimName` reference across all roles.
+
+    Returns:
+        0 if every template rendered, parsed and schema-checked clean; 1 otherwise.
+    """
     # playbook_dir is real, not stubbed: templates use it to build lookup('file', ...) paths
     # into the Docker roles, and a stubbed value would make those paths unreadable.
     # group_vars values are resolved against each other first — several reference siblings

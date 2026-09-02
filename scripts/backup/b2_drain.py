@@ -217,6 +217,13 @@ def read_live_volumes(path: str) -> set[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Parse args, drain the requested volumes' B2 prefixes, and report the result.
+
+    Without ``--apply`` this only reports what a drain would delete. Exits 2 on a
+    missing credential, an unreadable input file, no volumes named, or a ``DrainError``
+    (including a failed post-delete verification); exits 1 if any requested volume was
+    refused (e.g. still live); exits 0 otherwise.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--live-volumes-file", required=True)
     source = parser.add_mutually_exclusive_group(required=True)

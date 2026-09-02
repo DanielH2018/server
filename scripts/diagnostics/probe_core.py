@@ -23,10 +23,13 @@ _CHICAGO = ZoneInfo("America/Chicago")
 
 
 def ha_host():
-    """HA's unsuffixed .local hostname — carries no Authelia and pointed at the same HA
-    before AND after the cutover. Since the bridge teardown (slice-7 BT4) the name serves
-    from the cluster edge, and host-shell DNS for it rides the Cloudflare grey-cloud
-    wildcard — so callers pin it to the ingress VIP (ha_resolve) instead of trusting DNS."""
+    """HA's unsuffixed .local hostname.
+
+    Carries no Authelia and pointed at the same HA before AND after the cutover. Since
+    the bridge teardown (slice-7 BT4) the name serves from the cluster edge, and
+    host-shell DNS for it rides the Cloudflare grey-cloud wildcard — so callers pin it
+    to the ingress VIP (ha_resolve) instead of trusting DNS.
+    """
     return f"home-assistant.local.{sops_extract('domain')}"
 
 
@@ -103,8 +106,11 @@ def prom_targets_url(base):
 
 
 def prom_endpoint():
-    """The cluster prometheus via its query-only IngressRoute (the Docker prometheus —
-    the old resolve_ip("prometheus") target — retired 2026-08-14 with the drain)."""
+    """The cluster prometheus's query-only IngressRoute endpoint.
+
+    The Docker prometheus — the old resolve_ip("prometheus") target — retired
+    2026-08-14 with the drain.
+    """
     return k8s_endpoint("prometheus")
 
 
@@ -113,6 +119,16 @@ def loki_labels_url(base):
 
 
 def loki_query_url(base, logql, limit, start=None, end=None, direction=None):
+    """Build a Loki `query_range` URL, omitting each optional param when it is unset.
+
+    Args:
+        base: The Loki base URL.
+        logql: The LogQL query string.
+        limit: Max lines to return.
+        start: Range start, in nanoseconds since epoch.
+        end: Range end, in nanoseconds since epoch.
+        direction: `forward` or `backward`.
+    """
     params = {"query": logql, "limit": limit}
     if start is not None:
         params["start"] = start
@@ -168,10 +184,12 @@ def pi_url(subpath):
 
 
 def pi_ip():
-    """daniel-pi's LAN IP, read from inventory (plaintext, not a secret) — same reason as
-    metallb_vip(): this host's resolver has no answer for daniel-pi.lan (a Pi-hole-only LAN
-    name), so `getent hosts daniel-pi.lan` exits 2 here and curl needs a --resolve pin instead
-    of DNS."""
+    """daniel-pi's LAN IP, read from inventory.
+
+    Plaintext, not a secret — same reason as metallb_vip(): this host's resolver has no
+    answer for daniel-pi.lan (a Pi-hole-only LAN name), so `getent hosts daniel-pi.lan`
+    exits 2 here and curl needs a --resolve pin instead of DNS.
+    """
     with open(HOSTS_INI_PATH) as f:
         for line in f:
             if line.startswith("daniel-pi ") or line.startswith("daniel-pi\t"):
@@ -195,8 +213,11 @@ def curl_argv(url, timeout=DEFAULT_TIMEOUT, resolve=None):
 
 
 def print_dry_run(url, resolve=None):
-    """Print the plain curl argv for --dry-run and return 0 — the shape shared by every
-    subcommand whose dry run is just "show the one GET this would make"."""
+    """Print the plain curl argv for --dry-run and return 0.
+
+    The shape shared by every subcommand whose dry run is just "show the one GET this
+    would make".
+    """
     print(" ".join(curl_argv(url, resolve=resolve)))
     return 0
 
@@ -226,10 +247,13 @@ def fetch_json(url, resolve=None):
 
 
 def json_or_none(argv):
-    """Run `argv` and return its stdout parsed as JSON, or None on a non-zero exit or
-    unparseable output. The kubectl-argv analog of fetch_json: callers that need to tell
-    "ran but returned nothing" from "found nothing" use this rather than raising, since a
-    missing workload/Service/EndpointSlice is an expected result, not a failure."""
+    """Run `argv` and return its stdout parsed as JSON, or None on failure.
+
+    None covers a non-zero exit or unparseable output. The kubectl-argv analog of
+    fetch_json: callers that need to tell "ran but returned nothing" from "found
+    nothing" use this rather than raising, since a missing workload/Service/EndpointSlice
+    is an expected result, not a failure.
+    """
     out = subprocess.run(argv, capture_output=True, text=True)
     if out.returncode != 0:
         return None
@@ -266,8 +290,10 @@ def sops_extract(key_name):
 
 
 def _rows_from_loki(data: dict) -> list[tuple[int, str]]:
-    """Flatten a Loki query_range response into a time-sorted list of (ns_ts, line)
-    tuples across all returned streams."""
+    """Flatten a Loki query_range response into a time-sorted list of rows.
+
+    Each row is an (ns_ts, line) tuple, across all returned streams.
+    """
     rows = [
         (int(ts), line)
         for stream in (data.get("data") or {}).get("result") or []

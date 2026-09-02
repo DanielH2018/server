@@ -111,6 +111,7 @@ def normalize(obj):
 
 
 def main():
+    """Export every non-skipped live dashboard to a normalized JSON file under OUTDIR."""
     index = gapi("/api/search?type=dash-db")
     untracked = []
     for entry in sorted(index, key=lambda e: e["title"]):

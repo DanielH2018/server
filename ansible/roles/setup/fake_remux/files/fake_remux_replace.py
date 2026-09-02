@@ -152,8 +152,11 @@ def _queue_by_episode(records):
 
 
 def _mirrors(cands, chosen):
-    """`chosen` first, then any other candidate offering the identical release (a mirror upload on a
-    second indexer) — so a rejected/dead mirror doesn't waste the tick when another copy is grabbable."""
+    """Return `chosen` first, then any other candidate offering the identical release.
+
+    A mirror upload on a second indexer — so a rejected/dead mirror doesn't waste the tick when
+    another copy is grabbable.
+    """
     others = [
         c
         for c in (cands or [])
@@ -183,9 +186,12 @@ _host_path = frl.host_path
 
 
 def _host_ffprobe(ffprobe_bin, path, args, timeout):
-    """Run ffprobe directly on the host — the reconciler runs here, and unlike the library the
-    download dir (/data/torrents) is NOT mounted in jellyfin. Returns stdout, or "" on any failure
-    (a probe glitch / missing file / missing binary must SKIP the file, never wrongly flag it)."""
+    """Run ffprobe directly on the host.
+
+    The reconciler runs here, and unlike the library the download dir (/data/torrents) is NOT
+    mounted in jellyfin. Returns stdout, or "" on any failure (a probe glitch / missing file /
+    missing binary must SKIP the file, never wrongly flag it).
+    """
     try:
         out = subprocess.run(
             [ffprobe_bin, "-v", "error", *args, path],
@@ -353,9 +359,12 @@ _OUTCOMES_KEEP_LINES = 2000
 
 
 def _trim_outcomes(path):
-    """Bound the append-only outcomes log — prune_history bounds the ledger, but nothing bounded this.
-    A full rewrite past the cap is fine: only real actions get logged, so it grows slowly and trims
-    rarely. Written atomically since monitor-bridge doesn't read it, but the ledger writer might."""
+    """Bound the append-only outcomes log.
+
+    prune_history bounds the ledger, but nothing bounded this. A full rewrite past the cap is
+    fine: only real actions get logged, so it grows slowly and trims rarely. Written atomically
+    since monitor-bridge doesn't read it, but the ledger writer might.
+    """
     try:
         if os.path.getsize(path) <= _OUTCOMES_MAX_BYTES:
             return
@@ -507,6 +516,13 @@ def reconcile_once(cfg, sonarr=None):
 
 
 def main() -> int:
+    """Run one reconcile tick end to end and write the state file.
+
+    Loads config, defaults LEDGER_FILE/REPLACE_STATE_FILE, and calls reconcile_once(). A tick
+    that raises is caught and recorded as a failed run via scan.write_state rather than
+    propagated, so a bad tick pages through the state file instead of crashing the cron. Always
+    returns 0 — the exit code carries no information, the state file does.
+    """
     cfg = load_config()
     state_file = cfg.get(
         "REPLACE_STATE_FILE", "/var/lib/autofix-fake-remux/replace_state.json"

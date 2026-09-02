@@ -201,6 +201,11 @@ def decide(command, repo_root):
 
 
 def main():
+    """Read the hook payload from stdin and gate a Bash command via `decide`.
+
+    Emits the PreToolUse deny or ask decision `decide` returns; ignores non-Bash tool
+    calls and commands `decide` has no opinion on. Always returns 0.
+    """
     try:
         data = json.load(sys.stdin)
     except Exception:

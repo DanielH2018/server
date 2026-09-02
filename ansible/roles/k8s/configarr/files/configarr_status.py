@@ -38,9 +38,12 @@ def has_error_line(output) -> bool:
 
 
 def summarize(output, maxlen: int = 200) -> str:
-    """Last meaningful line of configarr's output, whitespace-collapsed + length-capped — the useful
-    tail for a Kuma/Discord one-liner. Skips docker-compose's own container lifecycle lines so the
-    summary is configarr's output, not "Container … Created". Empty output -> a fixed placeholder."""
+    """Returns the last meaningful line of configarr's output, collapsed and length-capped.
+
+    The useful tail for a Kuma/Discord one-liner. Skips docker-compose's own container
+    lifecycle lines so the summary is configarr's output, not "Container … Created". Empty
+    output returns a fixed placeholder.
+    """
     lines = [ln.strip() for ln in (output or "").splitlines() if ln.strip()]
     if not lines:
         return "(no output)"

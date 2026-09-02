@@ -145,9 +145,10 @@ def cap_pending(
 
 
 def apply_drain_result(pending: dict[str, str], delivered: set[str]) -> dict[str, str]:
-    """The queue after a drain pass in which the `delivered` keys were confirmed sent — every other
-    entry is kept for the next tick. Pure; the caller (`drain_pending`) does the per-entry discord()
-    I/O and persists only on a change.
+    """Return the queue after a drain pass that confirmed the `delivered` keys were sent.
+
+    Every other entry is kept for the next tick. Pure; the caller (`drain_pending`) does the
+    per-entry discord() I/O and persists only on a change.
     """
     return {k: c for k, c in pending.items() if k not in delivered}
 

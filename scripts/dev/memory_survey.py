@@ -375,6 +375,25 @@ def survey(
     transcript_days: int,
     duplicate_threshold: float = 0.12,
 ) -> dict:
+    """Measure the memory store's size, staleness, and index health.
+
+    Reads every `*.md` file in `memory_dir` (except MEMORY.md itself), cross-references
+    which are linked from the index and which transcripts under `transcript_dir` cited in
+    the last `transcript_days` days, and flags near-duplicate entries and enforcement
+    references along the way.
+
+    Args:
+        memory_dir: directory holding MEMORY.md and its entry files.
+        transcript_dir: directory of session transcripts to scan for citations.
+        transcript_days: how many days back to scan transcripts for citations.
+        duplicate_threshold: the similarity ratio above which two entries are flagged as
+            near-duplicate candidates.
+
+    Returns:
+        A dict with `index`/`store` size stats, `dead_links`, `orphans`, `unreferenced`,
+        `duplicate_candidates`, `enforcement`, per-file `entries`, and
+        `transcript_window_days`.
+    """
     index_path = memory_dir / "MEMORY.md"
     files = sorted(
         p for p in memory_dir.glob("*.md") if p.is_file() and p.name != "MEMORY.md"
@@ -508,6 +527,12 @@ def _render(s: dict) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run `survey` and print it, as text or `--json`.
+
+    Exits 1 when the index links a file that is not on disk (a dead link), 2 when
+    `--memory-dir` does not exist, 0 otherwise — every other finding needs a judgement
+    call, not a failing exit.
+    """
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--memory-dir", type=Path, default=DEFAULT_MEMORY_DIR)
     ap.add_argument("--transcript-dir", type=Path, default=DEFAULT_TRANSCRIPT_DIR)

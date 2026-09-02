@@ -204,6 +204,12 @@ def measure(wanted: list[tuple[str, str, str, int]], timeout: float) -> tuple[in
 
 
 def main() -> int:
+    """Probe staging's declared expectations and report whether they were met.
+
+    Exits PASS (0) when every expectation matched, FAILED (1) when at least one did not,
+    and NO_VERDICT (2) when the harness itself could not check — a coverage gap, no
+    expectations to check, or the probes failing to run at all.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--timeout", type=float, default=180.0, help="seconds for the whole probe run"

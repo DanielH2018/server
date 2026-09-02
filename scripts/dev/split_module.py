@@ -130,6 +130,10 @@ def split(source: str, spec: Spec) -> tuple[str, dict[str, str]]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Dispatch to `graph` (print references) or `split` (move names per SPEC).
+
+    `split` writes its outputs to disk. Exits 1 when the spec is invalid, 0 otherwise.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
     graph = sub.add_parser(

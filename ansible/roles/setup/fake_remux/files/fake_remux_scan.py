@@ -51,8 +51,11 @@ def log(*args) -> None:
 
 
 def resolve_ip(container: str) -> str:
-    """First bridge IP of a container via docker inspect (resolved at run time — it changes on
-    recreate). Mirrors scripts/diagnostics/probe.py's resolve_ip; the host can reach any of a container's IPs."""
+    """Return the first bridge IP of a container via docker inspect.
+
+    Resolved at run time — it changes on recreate. Mirrors scripts/diagnostics/probe.py's
+    resolve_ip; the host can reach any of a container's IPs.
+    """
     out = subprocess.run(
         [
             "docker",
@@ -75,6 +78,14 @@ def resolve_ip(container: str) -> str:
 
 
 class Sonarr:
+    """Thin client for the parts of Sonarr's v3 API the fake-remux scan needs.
+
+    Attributes:
+        base: Sonarr's base URL, trailing slash stripped.
+        api_key: the Sonarr API key, sent as the X-Api-Key header.
+        timeout: default per-request timeout in seconds; overridable per call.
+    """
+
     def __init__(self, base: str, api_key: str, timeout: int):
         self.base = base.rstrip("/")
         self.api_key = api_key
@@ -312,6 +323,12 @@ def scan(cfg):
 
 
 def main() -> int:
+    """Run one scan end to end and write the state file.
+
+    A scan that raises is caught and recorded as a failed run via write_state rather than
+    propagated, so a bad scan pages through the state file instead of crashing the cron. Always
+    returns 0 — the exit code carries no information, the state file does.
+    """
     cfg = load_config()
     state_file = cfg.get("STATE_FILE", "/var/lib/autofix-fake-remux/state.json")
     log("fake-remux scan starting")

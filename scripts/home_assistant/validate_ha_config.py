@@ -90,10 +90,13 @@ class HAConfigLoader(yaml.SafeLoader):
         super().__init__(stream)
 
     def construct_mapping(self, node, deep=False):
-        # Reject genuine duplicate keys (HA does; stock PyYAML silently keeps the last). Check the
-        # EXPLICIT keys only — skip YAML merge keys (`<<`) so a legal merge-override (an explicit
-        # key overriding a merged one) is not mis-flagged — then delegate to SafeConstructor, which
-        # processes the merge and builds the dict.
+        """Construct the mapping, raising HAConfigError on an explicit duplicate key.
+
+        HA rejects a genuine duplicate key; stock PyYAML silently keeps the last one.
+        """
+        # Check the EXPLICIT keys only — skip YAML merge keys (`<<`) so a legal merge-override (an
+        # explicit key overriding a merged one) is not mis-flagged — then delegate to
+        # SafeConstructor, which processes the merge and builds the dict.
         seen = set()
         for key_node, _ in node.value:
             if key_node.tag == "tag:yaml.org,2002:merge":
@@ -274,9 +277,12 @@ def _iter_template_strings(node):
 
 
 def jinja_errors(trees: list, custom_templates_dir: Path) -> list[str]:
-    """Syntax-check (parse, not render) every inline template string in `trees` and each
-    custom_templates/*.jinja file. parse() needs no filters/globals/state, so HA's custom
-    filters and `{% from ... import ... %}` don't cause false positives."""
+    """Syntax-check every inline template string in `trees` and each custom_templates file.
+
+    Parses rather than renders each template and each custom_templates/*.jinja file.
+    parse() needs no filters/globals/state, so HA's custom filters and
+    `{% from ... import ... %}` don't cause false positives.
+    """
     env = Environment()
     errors: list[str] = []
     for tree in trees:
@@ -297,8 +303,11 @@ def jinja_errors(trees: list, custom_templates_dir: Path) -> list[str]:
 
 
 def _macro_names(custom_templates_dir: Path, env: Environment) -> set[str]:
-    """Names of every macro defined in custom_templates/*.jinja, via the AST (nodes.Macro) —
-    not regex, so comment prose like 'macro argument' is never miscaptured."""
+    """Names of every macro defined in custom_templates/*.jinja.
+
+    Found via the AST (nodes.Macro), not regex, so comment prose like 'macro argument'
+    is never miscaptured.
+    """
     names: set[str] = set()
     for jinja_file in sorted(custom_templates_dir.glob("*.jinja")):
         try:
@@ -344,8 +353,11 @@ def uncoerced_macro_bool_uses(
 
 
 def macro_bool_coercion_errors(trees: list, custom_templates_dir: Path) -> list[str]:
-    """Flag every known-macro call used as a bare and/or/not operand across the inline templates
-    (from `trees`) and the custom_templates/*.jinja files. AST-based; deterministic."""
+    """Flag every known-macro call used as a bare and/or/not operand.
+
+    Checked across the inline templates (from `trees`) and the custom_templates/*.jinja
+    files. AST-based; deterministic.
+    """
     env = Environment()
     macro_names = _macro_names(custom_templates_dir, env)
     if not macro_names:
@@ -379,8 +391,11 @@ _SHIPPED_DIR_LISTS = {
 
 
 def shipped_dir_list_errors(role_dir: Path) -> list[str]:
-    """Each list in _SHIPPED_DIR_LISTS must name exactly the matching files under its
-    directory, in both directions."""
+    """Verify each _SHIPPED_DIR_LISTS entry names exactly the matching files on disk.
+
+    Checked in both directions: a file on disk not in the list, and a listed file not
+    on disk.
+    """
     defaults = role_dir / "defaults" / "main.yml"
     if not defaults.is_file():
         return []
@@ -432,6 +447,7 @@ def validate(role_dir: Path = ROLE_DIR) -> list[str]:
 
 
 def main() -> int:
+    """Run `validate()`, print its errors (if any), and exit 1 if it found one."""
     errors = validate()
     if errors:
         print("Home Assistant config validation FAILED:")

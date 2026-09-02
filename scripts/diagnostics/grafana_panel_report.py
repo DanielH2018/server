@@ -64,6 +64,14 @@ FLAGGED = "flagged"
 
 @dataclass(frozen=True)
 class Verdict:
+    """The result of classifying one dashboard's rendered panel state.
+
+    Attributes:
+        status: One of ``NOT_MOUNTED``, ``OK`` or ``FLAGGED``.
+        detail: Human-readable explanation of the status.
+        empty: Whether the dashboard mounted but drew no panel or row at all.
+    """
+
     status: str
     detail: str
     empty: bool = False

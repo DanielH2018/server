@@ -151,6 +151,13 @@ def deploy_exit_note(payload: dict) -> str | None:
 
 
 def main() -> None:
+    """Read the hook payload from stdin and bridge one PermissionDenied or PostToolUseFailure.
+
+    For a PermissionDenied event, requests a retry (via `should_retry`) when the ledger
+    hasn't already spent it on this session. For a PostToolUseFailure event, decodes a
+    `deploy.sh` non-zero exit into an explanatory `additionalContext` note. Prints the
+    corresponding hookSpecificOutput JSON and returns; any other payload is ignored.
+    """
     try:
         payload = json.load(sys.stdin)
     except ValueError, OSError:

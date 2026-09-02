@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Render every configured container's docker-compose.yml.j2 and assert the
-output parses as valid YAML.
+"""Render every configured container's docker-compose.yml.j2 and assert it parses as YAML.
 
 This guards against template edits — especially to the shared ``traefik.yml.j2``
 and ``autokuma.yml.j2`` label macros — that silently produce malformed YAML or
@@ -56,6 +55,14 @@ ROLES = ANSIBLE / "roles" / "containers"
 
 
 def build_env(role: str) -> Environment:
+    """Build the Jinja environment for `role`'s compose templates, its own dir plus the shared one.
+
+    Args:
+        role: The container role name under `ROLES`.
+
+    Returns:
+        A Jinja `Environment` with Ansible's `hash` filter added.
+    """
     env = make_env([ROLES / role / "templates", SHARED_TPL])
     # Ansible's `hash` filter, which this Jinja environment does not get for free. No LIVE
     # compose template uses it since dozzle retired 2026-08-29 — dozzle's inlined jittered
@@ -68,21 +75,24 @@ def build_env(role: str) -> Environment:
 
 
 def _unescaped_dollars(value) -> list[str]:
-    """From a string or list-of-strings, return the items containing a `$` that is
-    NOT doubled as `$$`. Dropping every `$$` first means an escaped `$$(...)` leaves
-    no `$` behind, while a lone `$VAR` / `$(...)` does."""
+    """Return the items in `value` containing a `$` that is not doubled as `$$`.
+
+    Dropping every `$$` first means an escaped `$$(...)` leaves no `$` behind, while a lone
+    `$VAR` / `$(...)` does.
+    """
     items = value if isinstance(value, list) else [value]
     return [s for s in items if isinstance(s, str) and "$" in s.replace("$$", "")]
 
 
 def find_dollar_escape_bugs(docs) -> list[tuple[str, str, str]]:
-    """Return (service, key, snippet) for every command/entrypoint/healthcheck.test
-    string holding an un-doubled `$`. Docker Compose interpolates `$VAR` / `${VAR}` /
-    `$(...)` at parse time, so a shell `$` meant for the container must be written
-    `$$`; otherwise the value is silently blanked or substituted. Restricted to these
-    shell-bearing keys so the deliberate `${GID-...}` interpolation that some services
-    use in `environment:` is not flagged. The plain-YAML validator and ansible-lint
-    both miss this."""
+    """Return (service, key, snippet) for every shell-bearing key holding an un-doubled `$`.
+
+    Checks `command`, `entrypoint` and `healthcheck.test`. Docker Compose interpolates `$VAR`
+    / `${VAR}` / `$(...)` at parse time, so a shell `$` meant for the container must be
+    written `$$`; otherwise the value is silently blanked or substituted. Restricted to these
+    shell-bearing keys so the deliberate `${GID-...}` interpolation that some services use in
+    `environment:` is not flagged. The plain-YAML validator and ansible-lint both miss this.
+    """
     bugs: list[tuple[str, str, str]] = []
     for doc in docs:
         services = doc.get("services") if isinstance(doc, dict) else None
@@ -103,13 +113,14 @@ def find_dollar_escape_bugs(docs) -> list[tuple[str, str, str]]:
 
 
 def find_watchtower_label_bugs(docs) -> list[tuple[str, str]]:
-    """Return (service, label) for every LIST-form ``com.centurylinklabs.watchtower.*``
-    label written without an ``=``. Docker splits a list-item label on the first ``=``
-    only, so a ``:``-separated watchtower label (e.g. ``...depends-on:docker-proxy``)
-    parses as a key with an EMPTY value — the directive (``enable`` / ``depends-on``)
-    silently becomes a no-op. The plain-YAML validator and ansible-lint both miss this
-    because the document still renders and parses cleanly. Mapping-form labels are
-    inherently ``key: value`` so they need no ``=`` and are skipped."""
+    """Return (service, label) for every LIST-form watchtower label written without an ``=``.
+
+    Docker splits a list-item label on the first ``=`` only, so a ``:``-separated watchtower
+    label (e.g. ``...depends-on:docker-proxy``) parses as a key with an EMPTY value — the
+    directive (``enable`` / ``depends-on``) silently becomes a no-op. The plain-YAML validator
+    and ansible-lint both miss this because the document still renders and parses cleanly.
+    Mapping-form labels are inherently ``key: value`` so they need no ``=`` and are skipped.
+    """
     bugs: list[tuple[str, str]] = []
     for doc in docs:
         services = doc.get("services") if isinstance(doc, dict) else None
@@ -324,6 +335,12 @@ def check_container(host_ctx: dict, ci: dict) -> str | None:
 
 
 def main() -> int:
+    """Render every host's Docker `containers_list` entries and report render/parse failures.
+
+    Returns:
+        0 if every template rendered and parsed as YAML, 1 if any failed or no host_vars
+        were found.
+    """
     all_vars = load_yaml(ALL_VARS)
     host_files = sorted(HOST_VARS.glob("*.yml"))
     if not host_files:
