@@ -48,6 +48,7 @@ Tiers (and default rotation cadence):
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as dt
 import hashlib
 import os
@@ -894,6 +895,15 @@ def cmd_rotate(args) -> int:
             ",".join(sorted(tags)),
         ]
         print("  deploying:", " ".join(cmd))
+        # Ansible exits at import on a non-blocking stdout or stderr, and Claude Code's
+        # Bash tool hands its child both with O_NONBLOCK set. The flag lives on the open
+        # file description this process shares with the child, so clearing it here clears
+        # it for ansible; anywhere else it is already clear and this does nothing. The
+        # .claude/hooks/uv-python.sh fixup cannot reach here — this command names ansible
+        # nowhere a hook reading the session's command text could see it.
+        for handle in (sys.stdin, sys.stdout, sys.stderr):
+            with contextlib.suppress(OSError, ValueError):
+                os.set_blocking(handle.fileno(), True)
         r = subprocess.run(cmd, cwd=REPO)
         if r.returncode != 0:
             print(
