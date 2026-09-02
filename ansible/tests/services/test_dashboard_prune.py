@@ -123,8 +123,11 @@ def test_the_annotated_prune_is_clean_when_the_sets_agree() -> None:
 
 
 def test_the_annotated_prune_rewrites_the_staged_path_before_comparing() -> None:
-    """The two trees differ only by directory name. Comparing them without the rewrite would
-    find every annotated file orphaned and delete the whole tree on the first run."""
+    """The two trees differ only by directory name.
+
+    Comparing them without the rewrite would find every annotated file orphaned and delete the whole
+    tree on the first run.
+    """
     loop = _loop_of("Remove annotated dashboards with no staged source")
     assert "dashboards-annotated" in loop and "regex_replace" in loop, (
         "the staged allow-list must be rewritten into annotated paths before the difference, or "
@@ -175,8 +178,11 @@ def test_the_key_prune_is_clean_when_the_sets_agree() -> None:
 
 
 def test_the_key_prune_treats_a_missing_configmap_as_empty() -> None:
-    """`--ignore-not-found` returns an empty stdout. Without the `default('{}', true)` the
-    from_json raises and the whole deploy fails on a ConfigMap that does not exist yet."""
+    """`--ignore-not-found` returns an empty stdout.
+
+    Without the `default('{}', true)` the from_json raises and the whole deploy fails on a ConfigMap
+    that does not exist yet.
+    """
     assert _stale_keys(live_json="", source_files=[f"{ANNOTATED}/Apps/live.json"]) == []
 
 
@@ -241,7 +247,9 @@ def test_the_prune_set_has_not_grown_unguarded() -> None:
 
 def test_the_pruned_tree_is_derived_not_enumerated() -> None:
     """The corpus is right — `fileglob` over the role's own files, not a hardcoded board list.
-    Pinned so a future 'simplification' to a literal list cannot pass unnoticed."""
+
+    Pinned so a future 'simplification' to a literal list cannot pass unnoticed.
+    """
     justify = task_named(
         _tasks(), "Build the staged paths the role's own files justify"
     )

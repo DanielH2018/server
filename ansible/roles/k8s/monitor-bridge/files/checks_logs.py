@@ -17,6 +17,13 @@ from verdicts_service import loki_ingestion_fresh, promtail_dropped
 
 
 def check_loki_ingestion():
+    """Checks that all three Loki ingestion arms (file-tail, container stream, Pi) are fresh.
+
+    Down if any arm is silent: the file-tail union, the docker-stream arm (a
+    docker_sd-specific break the file-tail selector excludes), and the Pi's own stream
+    (uncounted by the other two, so a dead Pi promtail would otherwise be invisible).
+    Returns (ok, msg).
+    """
     # Two arms, down if EITHER pipeline is silent: the file-tail union (arm 1) catches a
     # file-tail break (all of authlog/syslog/traefik going silent — a total promtail death or
     # a static_configs/bind regression) over a tolerant window; the container-stream arm

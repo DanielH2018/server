@@ -96,6 +96,11 @@ def process_tree(src: Path, dest: Path, annotation: dict) -> tuple[int, int]:
 
 
 def main() -> int:
+    """Copy every dashboard from `--src` to `--dest`, injecting the deploy annotation.
+
+    Exits 1 if `--src` isn't a directory or if the copy produced no dashboards at all
+    (an empty `--dest` would otherwise remove every board from Grafana).
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--src", required=True, type=Path)
     parser.add_argument("--dest", required=True, type=Path)

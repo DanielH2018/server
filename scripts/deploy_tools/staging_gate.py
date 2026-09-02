@@ -304,6 +304,11 @@ def run_gate(sha: str, tags: str, timeout: float) -> int:
 
 
 def main() -> int:
+    """Deploy `sha` to staging over the one restricted SSH call, and print the verdict.
+
+    Exits PASS (0), REJECTED (1), NO_VERDICT (2), or — with `--report-busy` — NOT_RUN (3)
+    when the run never started because the remote lock was held.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("sha", help="the commit to deploy to staging")
     parser.add_argument(

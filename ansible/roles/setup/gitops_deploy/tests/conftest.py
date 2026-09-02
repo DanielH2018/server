@@ -82,7 +82,8 @@ def gitops_fn(
     """`gitops_fn("main")` is main()'s FunctionDef; a missing name fails, never returns None.
 
     `tree` overrides the parsed module for a rejecting half that parses the pre-fix shape
-    of a function and asserts the check still flags it."""
+    of a function and asserts the check still flags it.
+    """
 
     def _fn(name: str, tree: ast.AST | None = None) -> ast.FunctionDef:
         fn = next(
@@ -273,9 +274,12 @@ class ScriptedTick:
 
 @pytest.fixture
 def tick(gitops_deploy: ModuleType, monkeypatch, state_dir, tmp_path) -> ScriptedTick:
-    """main() against a scripted checkout: git, ansible-playbook, the CI verdict, the health
-    gate, the staging gate and Discord all answer from the ScriptedTick, and the state files
-    live under `state_dir`. Nothing reaches a shell or the network."""
+    """main() against a scripted checkout:
+
+    git, ansible-playbook, the CI verdict, the health gate, the staging gate and Discord all answer
+    from the ScriptedTick, and the state files live under `state_dir`. Nothing reaches a shell or
+    the network.
+    """
     repo = tmp_path / "repo"
     repo.mkdir()
     scripted = ScriptedTick(repo)

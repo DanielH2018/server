@@ -441,6 +441,21 @@ def scan(root: Path) -> list[tuple[str, Path, os.stat_result]]:
 
 
 def build_index(root: Path, known_services: list[str] | None = None) -> dict:
+    """Scans `root` and builds the searchable index of every artifact under it.
+
+    Parses each HTML/Markdown file for title, summary, and metadata (matched against
+    `known_services`, loaded from disk when not given), and flags a Markdown file with an
+    HTML companion of the same stem so the GUI can fold the duplicate away.
+
+    Args:
+        root: Directory containing one subdirectory per host.
+        known_services: Service names to match against metadata; loaded via
+            load_known_services() when None.
+
+    Returns:
+        The index dict, with keys `generated`, `count`, `hosts`, `categories`, `statuses`
+        and `artifacts`.
+    """
     known = load_known_services() if known_services is None else known_services
     entries = []
     for host, path, st in scan(root):
@@ -531,6 +546,12 @@ def render_gui() -> bytes:
 
 
 class Handler(BaseHTTPRequestHandler):
+    """Handles GET/HEAD requests for the GUI, index JSON, health check, and stored artifacts.
+
+    Attributes:
+        cache: The shared IndexCache instance serving /api/index.json.
+    """
+
     server_version = "artifacts/1.0"
     cache: IndexCache = None  # type: ignore[assignment]
 
@@ -559,6 +580,7 @@ class Handler(BaseHTTPRequestHandler):
         self.do_GET()
 
     def do_GET(self) -> None:
+        """Routes the request path to the GUI, health check, index JSON, or a stored artifact."""
         path = unquote(urlparse(self.path).path)
         if path in ("/", "/index.html"):
             self._send(200, render_gui(), "text/html; charset=utf-8")

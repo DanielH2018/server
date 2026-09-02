@@ -45,7 +45,8 @@ def record_run(
 
     `epoch` tags the worker configuration that produced the run (model + coding-agent version).
     A regression across an epoch boundary is likely the *worker* changing, not the harness — the
-    trend summary flags that so an upgrade isn't mistaken for a harness regression."""
+    trend summary flags that so an upgrade isn't mistaken for a harness regression.
+    """
     for case in report:
         # INCONCLUSIVE runs carry no pass/fail signal — record the status but leave
         # thresholdMet null so the trend math skips them (mirrors the engine).
@@ -75,9 +76,12 @@ def _signal(entries: list[dict], mode: str) -> list[bool]:
 
 
 def _epoch_shift(entries: list[dict], mode: str):
-    """If the last two signal-bearing `mode` entries ran under different worker epochs, return
-    (prev_epoch, cur_epoch); else None. Used to flag a regression that coincides with a worker
-    change (a new model / agent version) rather than a harness change."""
+    """Return (prev_epoch, cur_epoch) when the last two signal-bearing `mode` entries differ.
+
+    Returns None when there are fewer than two signal-bearing entries or their epochs
+    match. Used to flag a regression that coincides with a worker change (a new model /
+    agent version) rather than a harness change.
+    """
     signal_entries = [
         e
         for e in entries
@@ -95,8 +99,10 @@ def _epoch_shift(entries: list[dict], mode: str):
 def classify(
     history: dict, *, mode: str = "hermetic", window: int = 5, stable_n: int = 3
 ) -> dict:
-    """Bucket each case by its recent signal history. Categories are exclusive; a
-    case needs at least two signal-bearing runs to be classified."""
+    """Bucket each case by its recent signal history.
+
+    Categories are exclusive; a case needs at least two signal-bearing runs to be classified.
+    """
     out: dict[str, list[str]] = {
         "regressed": [],
         "recovered": [],
@@ -153,6 +159,13 @@ def _print_summary(history: dict, buckets: dict, mode: str, recorded: bool) -> N
 
 
 def main(argv=None) -> int:
+    """Roll a report.json into evals/history.json and print the cross-run trend summary.
+
+    In `--mode subscription`, reports current FAILs without recording or comparing. In
+    `--mode hermetic` (default), records the run, classifies each case as REGRESSION /
+    FLAKY / STABLE, prints the summary, and writes history back unless `--no-write` is
+    passed. Returns 1 if any case regressed, else 0.
+    """
     p = argparse.ArgumentParser(
         description="Roll eval report.json into cross-run trends."
     )

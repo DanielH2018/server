@@ -175,6 +175,12 @@ def is_project_failure(stderr: str | None) -> bool:
 
 
 def issue_rows(issues: list[dict]) -> list[dict]:
+    """Flattens gh's issue JSON into the rows ``sort_key`` and ``cmd_list`` consume.
+
+    Args:
+        issues: gh issue objects, each carrying labels, comments and the other
+            ``_LIST_FIELDS``.
+    """
     rows = []
     for issue in issues:
         names = label_names(issue)
@@ -219,6 +225,11 @@ def plan_sync_labels(existing: set[str]) -> list[list[str]]:
 
 
 def load_issues(state: str = "all") -> list[dict]:
+    """Fetches every ``claude``-labeled issue from gh, up to 1000.
+
+    Args:
+        state: issue state to filter by (``open``, ``closed`` or ``all``).
+    """
     return (
         gh_json(
             "issue",
@@ -281,6 +292,21 @@ def plan_open(
     fp: str,
     source: str,
 ) -> tuple[str, int, list[list[str]]]:
+    """Plans the gh argv to file, touch or reopen a finding, given its matching issue.
+
+    Args:
+        existing: the issue matching this finding's fingerprint, or None if it is new.
+        title: issue title.
+        body: issue body, before the fingerprint/source trailer is appended.
+        labels: labels to apply on create.
+        fp: the finding's fingerprint.
+        source: the review or session that produced this finding.
+
+    Returns:
+        A ``(outcome, exit_code, plans)`` tuple: outcome is one of ``created``, ``touched``,
+        ``reopened`` or ``refuted``; exit_code is 3 only for ``refuted``; plans is the gh
+        argv list to run.
+    """
     if existing is None:
         argv = [
             "issue",
@@ -336,6 +362,19 @@ def _create_with_optional_project(argv: list[str]) -> str:
 
 
 def cmd_open(args: argparse.Namespace) -> int:
+    """Handles the ``open`` subcommand: files, touches or reopens a finding's issue.
+
+    Syncs labels first since ``gh issue create --label`` fails on a label the repo lacks,
+    then reads the body file, computes the fingerprint, and runs whatever ``plan_open``
+    decides.
+
+    Args:
+        args: parsed CLI namespace for the ``open`` subcommand.
+
+    Returns:
+        The process exit code: 0 on success, 2 if the body file is missing, 3 if the
+        fingerprint belongs to an issue closed as refuted.
+    """
     if not args.body_file.is_file():
         sys.stderr.write(f"open: body file not found: {args.body_file}\n")
         return 2
@@ -374,6 +413,14 @@ def cmd_open(args: argparse.Namespace) -> int:
 def plan_close(
     number: int, *, fixed: bool, pr: int | None, reason: str | None
 ) -> list[list[str]]:
+    """Plans the gh argv to close an issue as fixed or refuted.
+
+    Args:
+        number: the issue number.
+        fixed: True to close as completed, False to close as refuted.
+        pr: the PR that fixed it, included in the close comment when given.
+        reason: required when ``fixed`` is False; what disproved the finding.
+    """
     n = str(number)
     if fixed:
         by = f" by PR #{pr}" if pr else ""
@@ -399,6 +446,14 @@ def _load_issue(number: int) -> dict:
 
 
 def cmd_touch(args: argparse.Namespace) -> int:
+    """Handles the ``touch`` subcommand: records a re-observation on an open issue.
+
+    Args:
+        args: parsed CLI namespace carrying ``number``, ``source`` and ``dry_run``.
+
+    Returns:
+        3 if the issue is already closed, 0 otherwise.
+    """
     issue = _load_issue(args.number)
     if issue.get("state") == "CLOSED":
         why = "refuted" if "refuted" in label_names(issue) else "fixed"
@@ -412,6 +467,14 @@ def cmd_touch(args: argparse.Namespace) -> int:
 
 
 def cmd_close(args: argparse.Namespace) -> int:
+    """Handles the ``close`` subcommand: closes an issue as fixed or refuted.
+
+    Args:
+        args: parsed CLI namespace for the ``close`` subcommand.
+
+    Returns:
+        2 if ``--refuted`` is combined with ``--pr`` or missing ``--reason``, 0 otherwise.
+    """
     # argparse cannot express "--pr only with --fixed" across a mutually exclusive group.
     if args.refuted and args.pr:
         sys.stderr.write("close --pr goes with --fixed\n")
@@ -437,6 +500,11 @@ def cmd_sync_labels(args: argparse.Namespace) -> int:
 
 
 def cmd_list(args: argparse.Namespace) -> int:
+    """Handles the ``list`` subcommand: prints open findings as a table or JSON.
+
+    Args:
+        args: parsed CLI namespace carrying ``state`` and ``json``.
+    """
     rows = sorted(issue_rows(load_issues(args.state)), key=sort_key)
     if args.json:
         print(json.dumps(rows, indent=2))
@@ -523,6 +591,17 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Entry point: parses argv and dispatches to the matching subcommand handler.
+
+    Catches gh failures at this outer layer so every subcommand handler can call ``gh``
+    directly without duplicating error handling.
+
+    Args:
+        argv: command-line arguments, or None to use ``sys.argv``.
+
+    Returns:
+        The dispatched handler's exit code, or 1 if `gh` failed.
+    """
     args = _parser().parse_args(argv)
     handler = {
         "sync-labels": cmd_sync_labels,

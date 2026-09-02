@@ -48,10 +48,12 @@ def load_config():
 
 
 class Sonarr(scan.Sonarr):
-    """Extends the scan shell's Sonarr client with the endpoints the reconciler needs. `_request` and
-    `delete_episodefile` are inherited unchanged from scan.Sonarr. `search_timeout` is used only for
-    the interactive /release search, which fans out to every indexer and routinely takes 1-3 min —
-    far longer than the 15s HTTP_TIMEOUT that fits the fast queue/grab/delete calls."""
+    """Extends the scan shell's Sonarr client with the endpoints the reconciler needs.
+
+    `_request` and `delete_episodefile` are inherited unchanged from scan.Sonarr. `search_timeout`
+    is used only for the interactive /release search, which fans out to every indexer and routinely
+    takes 1-3 min — far longer than the 15s HTTP_TIMEOUT that fits the fast queue/grab/delete calls.
+    """
 
     search_timeout = 180
 
@@ -131,8 +133,11 @@ def _qname(cand):
 
 
 def _queue_by_episode(records):
-    """episodeId (str) -> queue record, first wins. A season-pack item lists several episodes under
-    `episodes`, so it gets mapped under each of their ids as well as its own `episodeId`."""
+    """episodeId (str) -> queue record, first wins.
+
+    A season-pack item lists several episodes under `episodes`, so it gets mapped under each of
+    their ids as well as its own `episodeId`.
+    """
     by_ep = {}
     for rec in records or []:
         eids = set()
@@ -147,8 +152,11 @@ def _queue_by_episode(records):
 
 
 def _mirrors(cands, chosen):
-    """`chosen` first, then any other candidate offering the identical release (a mirror upload on a
-    second indexer) — so a rejected/dead mirror doesn't waste the tick when another copy is grabbable."""
+    """Return `chosen` first, then any other candidate offering the identical release.
+
+    A mirror upload on a second indexer — so a rejected/dead mirror doesn't waste the tick when
+    another copy is grabbable.
+    """
     others = [
         c
         for c in (cands or [])
@@ -158,8 +166,11 @@ def _mirrors(cands, chosen):
 
 
 def _try_grab(sonarr, cand):
-    """POST the grab; None on a 4xx (e.g. "Getting release from indexer failed" — dead mirror, try the
-    next one), re-raise anything else so a real outage surfaces as this run's failure."""
+    """POST the grab; None on a 4xx (e.g.
+
+    "Getting release from indexer failed" — dead mirror, try the next one), re-raise anything else
+    so a real outage surfaces as this run's failure.
+    """
     try:
         return sonarr.grab(cand["guid"], cand["indexerId"])
     except urllib.error.HTTPError as e:
@@ -175,9 +186,12 @@ _host_path = frl.host_path
 
 
 def _host_ffprobe(ffprobe_bin, path, args, timeout):
-    """Run ffprobe directly on the host — the reconciler runs here, and unlike the library the
-    download dir (/data/torrents) is NOT mounted in jellyfin. Returns stdout, or "" on any failure
-    (a probe glitch / missing file / missing binary must SKIP the file, never wrongly flag it)."""
+    """Run ffprobe directly on the host.
+
+    The reconciler runs here, and unlike the library the download dir (/data/torrents) is NOT
+    mounted in jellyfin. Returns stdout, or "" on any failure (a probe glitch / missing file /
+    missing binary must SKIP the file, never wrongly flag it).
+    """
     try:
         out = subprocess.run(
             [ffprobe_bin, "-v", "error", *args, path],
@@ -200,9 +214,12 @@ _VIDEO_EXTS = (".mkv", ".mp4", ".m4v", ".avi", ".ts")
 
 
 def _resolve_video(host_path):
-    """The video file to ffprobe. A single-file download's outputPath IS the file; a multi-file
-    (folder) download's outputPath is the directory — return the largest video inside it. None if the
-    path is missing or has no video (the probe then skips and the entry holds — fail-safe)."""
+    """The video file to ffprobe.
+
+    A single-file download's outputPath IS the file; a multi-file (folder) download's outputPath is
+    the directory — return the largest video inside it. None if the path is missing or has no video
+    (the probe then skips and the entry holds — fail-safe).
+    """
     if os.path.isfile(host_path):
         return host_path
     if os.path.isdir(host_path):
@@ -224,8 +241,10 @@ def _resolve_video(host_path):
 
 def _probe_completed(cfg, ledger, q_by_episode, policy):
     """ffprobe every fully-downloaded queue item belonging to a grabbed/verifying ledger entry.
+
     Returns {episodeId: probe} for `advance()`; an entry with no probe stays in verifying and is
-    re-checked next tick (download_stall_hours eventually holds it)."""
+    re-checked next tick (download_stall_hours eventually holds it).
+    """
     ffprobe_bin = cfg.get("HOST_FFPROBE_BIN", "ffprobe")
     host_data_root = cfg.get("HOST_DATA_ROOT", "")
     window_s = int(cfg.get("PROBE_WINDOW_S", "40"))
@@ -294,11 +313,13 @@ def _probe_completed(cfg, ledger, q_by_episode, policy):
 
 def _files_for_ledger(sonarr, ledger):
     """Current episodeId -> fileId for every series with a grabbed/verifying/importing ledger entry.
+
     advance() consults files_by_ep in BOTH the importing branch (has the fake's fileId been replaced
     by Sonarr's import yet) AND the grabbed branch (a grab Sonarr auto-imported left the queue but
     the episode has a NEW file → 'replaced', not a lost grab). Scoping this to 'importing' only left
     that grabbed-branch success path dead in production unless a sibling episode happened to be
-    importing at the same tick."""
+    importing at the same tick.
+    """
     series_ids = {
         rec["seriesId"]
         for rec in ledger.values()
@@ -338,9 +359,12 @@ _OUTCOMES_KEEP_LINES = 2000
 
 
 def _trim_outcomes(path):
-    """Bound the append-only outcomes log — prune_history bounds the ledger, but nothing bounded this.
-    A full rewrite past the cap is fine: only real actions get logged, so it grows slowly and trims
-    rarely. Written atomically since monitor-bridge doesn't read it, but the ledger writer might."""
+    """Bound the append-only outcomes log.
+
+    prune_history bounds the ledger, but nothing bounded this. A full rewrite past the cap is
+    fine: only real actions get logged, so it grows slowly and trims rarely. Written atomically
+    since monitor-bridge doesn't read it, but the ledger writer might.
+    """
     try:
         if os.path.getsize(path) <= _OUTCOMES_MAX_BYTES:
             return
@@ -374,8 +398,11 @@ def _outcome(cfg, kind, rec, detail):
 
 
 def _alert_transitions(cfg, before_states, ledger):
-    """advance() deliberately emits no 'alert' action (it's pure, Discord isn't). Alerting instead
-    diffs ledger state: any episode that newly entered held or replaced this tick gets one line."""
+    """advance() deliberately emits no 'alert' action (it's pure, Discord isn't).
+
+    Alerting instead diffs ledger state: any episode that newly entered held or replaced this tick
+    gets one line.
+    """
     webhook = cfg.get("ARR_DISCORD_WEBHOOK_URL", "")
     for ep, rec in ledger.items():
         state = rec.get("state")
@@ -405,9 +432,12 @@ def _summarize(ledger):
 
 
 def reconcile_once(cfg, sonarr=None):
-    """One full tick. Returns (ok, summary) for the state file. Raises only on a failure that
-    prevents the tick running at all (main() records that as ok=false). `sonarr` is an injection
-    seam for tests; production leaves it unset and gets the real client."""
+    """One full tick.
+
+    Returns (ok, summary) for the state file. Raises only on a failure that prevents the tick
+    running at all (main() records that as ok=false). `sonarr` is an injection seam for tests;
+    production leaves it unset and gets the real client.
+    """
     mode = cfg.get("FAKE_REMUX_REPLACE_MODE", "shadow").strip().lower()
     if mode == "off":
         return True, "replacer off"
@@ -486,6 +516,13 @@ def reconcile_once(cfg, sonarr=None):
 
 
 def main() -> int:
+    """Run one reconcile tick end to end and write the state file.
+
+    Loads config, defaults LEDGER_FILE/REPLACE_STATE_FILE, and calls reconcile_once(). A tick
+    that raises is caught and recorded as a failed run via scan.write_state rather than
+    propagated, so a bad tick pages through the state file instead of crashing the cron. Always
+    returns 0 — the exit code carries no information, the state file does.
+    """
     cfg = load_config()
     state_file = cfg.get(
         "REPLACE_STATE_FILE", "/var/lib/autofix-fake-remux/replace_state.json"

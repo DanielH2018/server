@@ -137,10 +137,11 @@ def test_every_doc_is_either_in_the_nav_or_explicitly_excluded():
 
 
 def test_the_untracked_plans_directory_is_excluded():
-    """Untracked is not unpublished. The docs cron builds from the host's working tree, so
-    the gitignored `docs/superpowers/` plans were served from an internet-facing site.
-    Pinned by name because the directory does not exist in a fresh checkout, which is
-    exactly why the test above cannot see it.
+    """Untracked is not unpublished.
+
+    The docs cron builds from the host's working tree, so the gitignored `docs/superpowers/` plans
+    were served from an internet-facing site. Pinned by name because the directory does not exist in
+    a fresh checkout, which is exactly why the test above cannot see it.
     """
     assert "superpowers/" in _patterns(_load_config(), "exclude_docs"), (
         "docs/superpowers/ is gitignored but still built from the host's working tree"

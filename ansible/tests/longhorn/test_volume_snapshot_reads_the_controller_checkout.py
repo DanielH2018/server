@@ -131,8 +131,11 @@ def test_the_check_accepts_the_delegated_form() -> None:
 
 
 def test_the_role_really_has_a_checkout_read_to_govern() -> None:
-    """Pins the premise. If the `git rev-parse` ever moves out of this role, the parametrised
-    check above keeps passing over a corpus that no longer contains the thing it governs."""
+    """Pins the premise.
+
+    If the `git rev-parse` ever moves out of this role, the parametrised check above keeps passing
+    over a corpus that no longer contains the thing it governs.
+    """
     reads = [
         task
         for name in (_ROLE / "tasks").glob("*.yml")

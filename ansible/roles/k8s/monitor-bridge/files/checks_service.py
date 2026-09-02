@@ -1,5 +1,7 @@
-"""Service checks for monitor-bridge — n8n, the *arrs, Bazarr, Prowlarr, the GitOps pair, the
-etcd restore drill, and the Home Assistant heartbeat with its ip_ban arm.
+"""Service checks for monitor-bridge.
+
+Covers n8n, the *arrs, Bazarr, Prowlarr, the GitOps pair, the etcd restore drill, and the
+Home Assistant heartbeat with its ip_ban arm.
 
 Slice 7 of the check.py split. Reads config as `cfg.X`, the fetch layer as `bridge_io.X` and
 the shared streak counter as `bridge_streaks.X`, so the tests' patches on those modules reach
@@ -37,9 +39,11 @@ _n8n_streaks = {}
 
 
 def _parse_behind(marker):
-    """Split the deployer's "<origin_sha> <unix_ts_first_seen>" marker. Returns (sha, since) with
-    since=None when absent or unparseable — an unreadable marker must read as "not behind" rather
-    than page forever on garbage."""
+    """Split the deployer's "<origin_sha> <unix_ts_first_seen>" marker.
+
+    Returns (sha, since) with since=None when absent or unparseable — an unreadable marker must read
+    as "not behind" rather than page forever on garbage.
+    """
     if not marker:
         return "", None
     parts = marker.split()
@@ -248,9 +252,10 @@ def check_bazarr():
 
 
 def check_prowlarr_indexers():
-    """Prowlarr sustained-indexer watchdog (see indexers_down): page only when an indexer has been
-    failing >= PROWLARR_INDEXER_MIN_DOWN_MIN, not on the brief flaps public trackers throw that
-    self-clear inside Prowlarr's backoff.
+    """Prowlarr sustained-indexer watchdog (see indexers_down):
+
+    page only when an indexer has been failing >= PROWLARR_INDEXER_MIN_DOWN_MIN, not on the brief
+    flaps public trackers throw that self-clear inside Prowlarr's backoff.
 
     Empty PROWLARR_API_KEY -> disabled (stays up), like check_n8n. An unreachable Prowlarr is NOT
     caught here — it bubbles up and _evaluate renders it `down` with the error (the
@@ -289,6 +294,11 @@ def check_prowlarr_indexers():
 
 
 def check_gitops_alive():
+    """Checks that the GitOps deployer's last_run marker is fresh.
+
+    Down when the marker is missing (the deployer never completed a tick) or unparseable.
+    Returns (ok, msg).
+    """
     try:
         with open(os.path.join(cfg.GITOPS_STATE_DIR, "last_run")) as fh:
             ts = float(fh.read().strip())

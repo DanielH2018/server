@@ -46,9 +46,11 @@ _FORWARD_ARGV = [
 
 
 def test_deploy_k8s_passes_no_extra_vars_by_default(gitops_deploy, monkeypatch) -> None:
-    """The ordinary deploy must be byte-identical to what it was before this slice. ~50
-    services go through this call on every tick. Pins the full argv, not just -e's absence —
-    a stray extra arg anywhere else in the list would pass a presence-only check."""
+    """The ordinary deploy must be byte-identical to what it was before this slice.
+
+    ~50 services go through this call on every tick. Pins the full argv, not just -e's absence — a
+    stray extra arg anywhere else in the list would pass a presence-only check.
+    """
     calls = _capture_run(gitops_deploy, monkeypatch)
     gitops_deploy.deploy_k8s({"sonarr"}, 900.0)
     assert calls[0].argv == _FORWARD_ARGV

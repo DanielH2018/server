@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Shared helpers for the render-guard scripts (``validate_compose_templates.py``,
-``validate_config_templates.py``, ``validate_shell_templates.py``) and for the other scripts
-that read the same Ansible inventory.
+"""Shared helpers for the render-guard scripts and other Ansible-inventory readers.
+
+Used by ``validate_compose_templates.py``, ``validate_config_templates.py``, and
+``validate_shell_templates.py``, plus the other scripts that read the same Ansible
+inventory.
 
 Each render guard renders Jinja templates with stubbed variables and asserts the output is valid
 (YAML for the first two, shell for the third). The pieces that are identical across all three —
@@ -71,10 +73,13 @@ BASE_CONTEXT = {
 
 
 class StubUndefined(ChainableUndefined):
-    """Any undefined variable (a SOPS secret, a host fact) renders as the literal ``STUB`` and
-    tolerates attribute/item access, iteration, and concatenation (Jinja's ``indent`` filter
-    prepends a newline via ``+``, so ``{{ secret | indent(n) }}`` needs ``__add__``), so
-    structural rendering never aborts on a missing value."""
+    """A Jinja undefined value that renders as the literal ``STUB`` instead of raising.
+
+    Used for any undefined variable — a SOPS secret, a host fact — so structural
+    rendering never aborts on a missing value. Tolerates attribute/item access,
+    iteration, and concatenation (Jinja's ``indent`` filter prepends a newline via
+    ``+``, so ``{{ secret | indent(n) }}`` needs ``__add__``).
+    """
 
     _FILL = "STUB"
 
@@ -109,10 +114,13 @@ def dump_numbered(text: str) -> None:
 
 
 def make_env(dirs, undefined_cls=StubUndefined) -> Environment:
-    """The Jinja Environment shared by the three render guards: the given template dirs on the
-    loader, the stub-undefined class, and the whitespace flags matching Ansible's Templar so
-    rendered output matches a real deploy. Callers register any Ansible filter/test shims
-    (the compose guard's ``hash`` filter, the shell guard's ``search`` test) on the returned env."""
+    """The Jinja Environment shared by the three render guards:
+
+    the given template dirs on the loader, the stub-undefined class, and the whitespace flags
+    matching Ansible's Templar so rendered output matches a real deploy. Callers register any
+    Ansible filter/test shims (the compose guard's ``hash`` filter, the shell guard's ``search``
+    test) on the returned env.
+    """
     return Environment(
         loader=FileSystemLoader([str(d) for d in dirs]),
         undefined=undefined_cls,
@@ -126,8 +134,10 @@ def render_or_error(
     env: Environment, name: str, ctx: dict
 ) -> tuple[str | None, str | None]:
     """Render template ``name`` with ``ctx`` (also injected as globals so imported macros see it).
+
     Return ``(rendered, None)`` on success or ``(None, "render error: <Type>: <msg>")`` — the
-    identical error format all three guards wrapped their render call in."""
+    identical error format all three guards wrapped their render call in.
+    """
     env.globals.update(ctx)
     try:
         return env.get_template(name).render(**ctx), None

@@ -164,8 +164,7 @@ def list_nodes() -> list[dict]:
 
 @mcp.tool()
 def pod_logs(name: str, namespace: str = "homelab", tail: int = 100) -> str:
-    """Last `tail` lines of a pod's logs (bounded; cluster-API successor to
-    container_logs)."""
+    """Last `tail` lines of a pod's logs (bounded; cluster-API successor to container_logs)."""
     if not k8s_reads.k8s_name_valid(name):
         raise ValueError("invalid pod name")
     if not k8s_reads.k8s_name_valid(namespace):
@@ -211,9 +210,10 @@ def service_health(name: str) -> dict:
 
 
 def _demux_docker_logs(raw: bytes) -> str:
-    """Docker's log stream frames each chunk with an 8-byte header when the
-    container has no TTY. Strip the headers; fall back to raw decode if the
-    stream isn't framed (TTY containers)."""
+    """Docker's log stream frames each chunk with an 8-byte header when the container has no TTY.
+
+    Strip the headers; fall back to raw decode if the stream isn't framed (TTY containers).
+    """
     out, i = [], 0
     while i + 8 <= len(raw):
         size = int.from_bytes(raw[i + 4 : i + 8], "big")
@@ -336,14 +336,15 @@ def claude_code_usage() -> dict:
 
 @mcp.tool()
 def claude_code_events(limit: int = 100, hours: float = 24.0) -> list[dict]:
-    """Recent Claude Code events: tool decisions, api_request / api_error /
-    api_refusal, mcp_server_connection, permission-mode changes.
+    """Recent Claude Code events:
 
-    Metadata ONLY — the source (the claude-otel Loki) stores prompts, responses and
-    tool output verbatim, and that content must never gain a LAN-reachable path
-    (KL1), so rows are projected through k8s_reads.CLAUDE_EVENT_FIELDS and the log
-    body is dropped entirely. query_logs cannot reach this store; it reads the
-    homelab Loki.
+    tool decisions, api_request / api_error / api_refusal, mcp_server_connection, permission-mode
+    changes.
+
+    Metadata ONLY — the source (the claude-otel Loki) stores prompts, responses and tool output
+    verbatim, and that content must never gain a LAN-reachable path (KL1), so rows are projected
+    through k8s_reads.CLAUDE_EVENT_FIELDS and the log body is dropped entirely. query_logs cannot
+    reach this store; it reads the homelab Loki.
     """
     base = k8s_reads.claude_loki_base_or_raise(CLAUDE_LOKI)
     params = safe_reads.loki_range_params(

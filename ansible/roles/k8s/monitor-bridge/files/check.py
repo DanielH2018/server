@@ -361,8 +361,11 @@ def down_exporters(up_vector):
 
 
 def _evaluate(name, fn):
-    """Run one check; convert an unreachable source/metric into a descriptive `down` instead
-    of letting it kill the loop. Returns (ok, msg)."""
+    """Runs one check, converting an unreachable source/metric into a descriptive `down`.
+
+    Keeps the loop alive instead of letting an unreachable source or metric raise and
+    kill it. Returns (ok, msg).
+    """
     try:
         return fn()
     except Exception as e:  # an unreachable source/metric must not kill the loop
@@ -385,6 +388,14 @@ def _gate(name, fn, push_env):
 
 
 def run_once():
+    """Runs one full check cycle: the reachability gates, then every enabled check.
+
+    Evaluates the Prometheus, Loki, B2 and cluster-Prometheus gates first, so a single
+    outage in one of them suppresses its dependent checks (pushed `up` with a skip
+    message) instead of paging each of them separately. Every enabled check in CHECKS is
+    then evaluated (unless suppressed by a gate or an exporter outage) and its result is
+    logged and pushed to its Kuma monitor.
+    """
     # Prometheus reachability is evaluated FIRST and gates the prom-dependent checks: a single
     # Prometheus outage would otherwise page all of them at once (one root cause, an alert storm).
     # When it's down they're suppressed (pushed `up` with a skip msg, keeping each push monitor's
@@ -490,6 +501,12 @@ def run_once():
 
 
 def main():
+    """Validates the check filter, then runs the check loop.
+
+    Exits 2 without running any check if CHECKS_ONLY/CHECKS_SKIP names an unknown check.
+    Otherwise loops run_once() at cfg.INTERVAL seconds, touching the heartbeat file after
+    every cycle, forever unless invoked with --once.
+    """
     once = "--once" in sys.argv
     problems = validate_check_filter(CHECKS_ONLY, CHECKS_SKIP, CHECKS)
     if problems:

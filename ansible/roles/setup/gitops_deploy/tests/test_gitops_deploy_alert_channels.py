@@ -171,8 +171,11 @@ def test_an_unread_inventory_prescribes_the_full_deploy(
 def _repo_with(
     tmp_path: pathlib.Path, rendered: list[str], declared: str | None
 ) -> pathlib.Path:
-    """A fake checkout: a rendered compose per name in `rendered`, and this host's host_vars
-    holding `declared` (None leaves the file absent)."""
+    """A fake checkout:
+
+    a rendered compose per name in `rendered`, and this host's host_vars holding `declared` (None
+    leaves the file absent).
+    """
     repo = tmp_path / "repo"
     for svc in rendered:
         (repo / "containers" / svc).mkdir(parents=True)
@@ -297,10 +300,12 @@ def test_a_git_failure_here_logs_and_leaves_the_marker(
 def test_state_dir_repoints_every_state_path_in_the_module(
     gitops_deploy, gitops_tree, state_dir
 ):
-    """The fixture patches module constants whose value starts with the state prefix. A path
-    built any other way (an f-string, os.path.join) would keep pointing at the host and the
-    test writing through it would pass against /var/lib. Every string literal naming the
-    prefix must therefore be a module-level constant, and after the fixture none may remain."""
+    """The fixture patches module constants whose value starts with the state prefix.
+
+    A path built any other way (an f-string, os.path.join) would keep pointing at the host and the
+    test writing through it would pass against /var/lib. Every string literal naming the prefix must
+    therefore be a module-level constant, and after the fixture none may remain.
+    """
     prefix = "/var/lib/gitops-deploy"
     literals = {
         node.value

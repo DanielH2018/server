@@ -117,19 +117,20 @@ def test_the_role_declares_its_autodeploy_stance() -> None:
 
 
 def test_the_validator_skips_a_role_with_no_manifests() -> None:
-    """`validate_k8s_manifests.py` renders every role's templates. This role has none, so it
-    must be in SKIP_ROLES or the validator fails on an absent templates directory.
+    """`validate_k8s_manifests.py` renders every role's templates.
+
+    This role has none, so it must be in SKIP_ROLES or the validator fails on an absent templates
+    directory.
 
     Read as parsed set literals rather than searched for as a substring: a commented-out entry
-    satisfies a substring search while the validator no longer skips anything, which is the
-    mutation that found this test asserting nothing on 2026-08-21. They are parsed instead of
-    imported because importing the validator pulls in `kubernetes_validate` and its sys.path
-    setup for a one-line fact.
+    satisfies a substring search while the validator no longer skips anything, which is the mutation
+    that found this test asserting nothing on 2026-08-21. They are parsed instead of imported
+    because importing the validator pulls in `kubernetes_validate` and its sys.path setup for a
+    one-line fact.
 
-    The two component sets are read rather than `SKIP_ROLES` itself, which is now their union
-    and so is a BinOp that `ast.literal_eval` refuses. Same trap this test already documents in
-    a different spelling: a check that reads source text breaks the moment the source gains an
-    indirection.
+    The two component sets are read rather than `SKIP_ROLES` itself, which is now their union and so
+    is a BinOp that `ast.literal_eval` refuses. Same trap this test already documents in a different
+    spelling: a check that reads source text breaks the moment the source gains an indirection.
     """
     tree = ast.parse(_VALIDATOR.read_text())
     skipped: set[str] = set()
@@ -210,9 +211,11 @@ def test_the_input_check_rejects_an_empty_or_malformed_call() -> None:
 
 
 def test_the_sha_shape_is_checked_against_the_hex_it_must_be() -> None:
-    """The regex is the assert's whole content, so it is worth pinning: it must accept the
-    eight-or-more lowercase hex `--short=8` produces and reject a branch name, an empty string
-    or a truncating typo."""
+    """The regex is the assert's whole content, so it is worth pinning:
+
+    it must accept the eight-or-more lowercase hex `--short=8` produces and reject a branch name, an
+    empty string or a truncating typo.
+    """
     that = _named(_MAIN, "Check that volume-revert was given")[
         "ansible.builtin.assert"
     ]["that"]
@@ -267,8 +270,10 @@ def test_the_listing_jsonpath_parses() -> None:
 
 def test_the_revert_body_matches_the_servers_own_schema() -> None:
     """The action name and its input field are read from the manifest, not from memory:
-    `snapshotRevert` takes a `snapshotInput`, whose only relevant field is `name`. A typo in
-    either would surface as a 404 or a no-op revert during an incident."""
+
+    `snapshotRevert` takes a `snapshotInput`, whose only relevant field is `name`. A typo in either
+    would surface as a 404 or a no-op revert during an incident.
+    """
     task = _named(_CLAIM, "Revert the volume")["ansible.builtin.uri"]
     assert task["url"].endswith("?action=snapshotRevert")
     assert set(task["body"]) == {"name"}

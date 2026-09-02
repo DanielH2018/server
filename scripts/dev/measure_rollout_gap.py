@@ -36,6 +36,12 @@ Sample = tuple[float, bool]
 
 @dataclass(frozen=True)
 class GapReport:
+    """The failure windows found in one poll run, from `summarize`.
+
+    Attributes:
+        gaps: each failure window as a (start, end) timestamp pair.
+    """
+
     total: int
     failures: int
     longest_gap_s: float
@@ -78,6 +84,7 @@ def summarize(samples: list[Sample]) -> GapReport:
 
 
 def probe_http(url: str, timeout: float, insecure: bool) -> bool:
+    """Whether `url` answered without a 5xx, treating any non-5xx status as up."""
     ctx = ssl.create_default_context()
     if insecure:
         ctx.check_hostname = False
@@ -194,6 +201,11 @@ def run(args: argparse.Namespace) -> tuple[GapReport, int]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Poll the target for `--seconds`, print the gap report, and exit on the result.
+
+    Exits 2 when no sample was made at all, 1 when any sample failed, 0 when every sample
+    succeeded.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     target = parser.add_mutually_exclusive_group(required=True)
     target.add_argument("--url", help="HTTP(S) URL to poll")

@@ -72,9 +72,12 @@ def test_health_absent_and_undeclared_is_clean():
 
 
 def test_health_absent_but_declared_is_flagged():
-    """The reject half. A service daniel-pi's inventory declares, with no container on the
-    host, is a deploy that did not create it — and until 2026-09-01 it shared the undeclared
-    case's "not found (not created" message, which the notifier skipped."""
+    """The reject half.
+
+    A service daniel-pi's inventory declares, with no container on the host, is a deploy that did
+    not create it — and until 2026-09-01 it shared the undeclared case's "not found (not created"
+    message, which the notifier skipped.
+    """
     text, code = probe_health.format_health([], "wg-easy", declared=True)
     assert code == 1
     assert "MISSING" in text
@@ -163,9 +166,11 @@ def test_k8s_health_incomplete_rollout_exits_one():
 
 
 def test_k8s_health_recent_restart_exits_one_despite_being_ready():
-    """The kube-state-metrics failure of 2026-08-07: a bad liveness probe passes READINESS,
-    flips the Deployment to Available, and only then starts getting killed. Every
-    readiness-derived field reads healthy while the pod crashloops."""
+    """The kube-state-metrics failure of 2026-08-07:
+
+    a bad liveness probe passes READINESS, flips the Deployment to Available, and only then starts
+    getting killed. Every readiness-derived field reads healthy while the pod crashloops.
+    """
     just_now = "2026-08-16T11:59:30Z"
     text, code = probe_health.format_k8s_health(
         _deploy(), _pods(("app", 3, just_now)), "kube-state-metrics", _NOW
@@ -236,7 +241,9 @@ def _daemonset(generation=1, observed=1, desired=2, updated=2, ready=2, availabl
 
 def test_k8s_health_reads_a_daemonset():
     """Six workloads here are DaemonSets — promtail, node-exporter, the crowdsec node agent.
-    They carry the same four numbers under different status field names."""
+
+    They carry the same four numbers under different status field names.
+    """
     text, code = probe_health.format_k8s_health(
         _daemonset(), _pods(("app", 0, None)), "promtail", _NOW
     )
@@ -298,8 +305,11 @@ def test_role_health_all_present_is_clean():
 
 
 def test_role_health_absent_workload_is_flagged():
-    """The safety-critical half. The role's manifests declare grafana; the cluster does not
-    have it. That is a failed deploy, and it must NOT read as a skip."""
+    """The safety-critical half.
+
+    The role's manifests declare grafana; the cluster does not have it. That is a failed deploy, and
+    it must NOT read as a skip.
+    """
     text, code = probe_health.format_role_health(
         "claude-otel",
         [
@@ -316,8 +326,11 @@ def test_role_health_absent_workload_is_flagged():
 
 
 def test_role_health_unhealthy_sibling_is_flagged():
-    """A workload the tag is NOT named after still fails the role. karakeep-time-tagger
-    crashlooping behind a healthy `karakeep` was invisible before the resolution step."""
+    """A workload the tag is NOT named after still fails the role.
+
+    karakeep-time-tagger crashlooping behind a healthy `karakeep` was invisible before the
+    resolution step.
+    """
     text, code = probe_health.format_role_health(
         "karakeep",
         [
@@ -452,9 +465,11 @@ def test_multi_workload_roles_still_resolve_their_siblings():
 
 
 def test_multi_workload_roles_are_not_named_after_their_tag():
-    """The reject half of the pin above: these roles are listed BECAUSE the tag alone is not
-    enough. One that became a plain single-workload role should leave the list rather than sit
-    here asserting nothing."""
+    """The reject half of the pin above:
+
+    these roles are listed BECAUSE the tag alone is not enough. One that became a plain
+    single-workload role should leave the list rather than sit here asserting nothing.
+    """
     resolved = _resolved()
     for role in _MULTI_WORKLOAD_ROLES:
         names = {name for _, _, name in resolved[role]}
@@ -474,11 +489,13 @@ def test_workloads_without_an_explicit_namespace_take_the_default():
 
 
 def test_resolver_returns_none_for_a_tag_that_is_not_a_k8s_role():
-    """`config` is a block tag; glances and autoheal run only on daniel-pi. None sends
-    run_health down the guess-the-name path, which is what lets --docker reach the Pi.
+    """`config` is a block tag; glances and autoheal run only on daniel-pi.
+
+    None sends run_health down the guess-the-name path, which is what lets --docker reach the Pi.
 
     Not wg-easy: it is a role on BOTH trees, and the resolver prefers the k8s one, matching
-    run_health's own k8s-first ordering."""
+    run_health's own k8s-first ordering.
+    """
     assert probe_health.role_workload_targets("config", _DEFAULT_NS) is None
     assert probe_health.role_workload_targets("glances", _DEFAULT_NS) is None
     assert probe_health.role_workload_targets("autoheal", _DEFAULT_NS) is None
@@ -495,8 +512,11 @@ def test_resolver_respects_the_validators_skip_roles():
 
 
 def test_statefulset_is_resolvable_and_lookupable():
-    """No role deploys one today. Resolving a kind the kubectl lookup cannot ask for would make
-    the first StatefulSet added read as MISSING, so the two sets have to agree."""
+    """No role deploys one today.
+
+    Resolving a kind the kubectl lookup cannot ask for would make the first StatefulSet added read
+    as MISSING, so the two sets have to agree.
+    """
     assert "StatefulSet" in probe_health.WORKLOAD_KINDS
     assert probe_health.WORKLOAD_KINDS["StatefulSet"] == "statefulset"
     assert "statefulset" in probe_health.k8s_deploy_argv(
@@ -523,8 +543,11 @@ def test_pod_selector_matches_a_workloads_own_labels():
 
 
 def test_pod_selector_is_flagged_when_it_would_differ_from_the_name():
-    """pihole-2's Deployment selects `app: pihole`. `app=pihole-2` matched no pods at all,
-    and `app=pihole` matched BOTH piholes' — confirmed live 2026-09-01."""
+    """pihole-2's Deployment selects `app:
+
+    pihole`. `app=pihole-2` matched no pods at all, and `app=pihole` matched BOTH piholes' —
+    confirmed live 2026-09-01.
+    """
     selector = probe_health.pod_selector(_workload("pihole-2", {"app": "pihole"}))
     assert selector == "app=pihole"
     assert selector != "app=pihole-2"
@@ -578,9 +601,12 @@ def _iter_rendered_workloads():
 
 
 def test_every_rendered_workload_yields_a_usable_pod_selector():
-    """The tree-wide pin. Nothing else connects a manifest's selector to the query the gate
-    runs, and a selector matching nothing reads as a healthy quiet workload. An empty result
-    here would send `kubectl get pods -l ''` at the whole namespace."""
+    """The tree-wide pin.
+
+    Nothing else connects a manifest's selector to the query the gate runs, and a selector matching
+    nothing reads as a healthy quiet workload. An empty result here would send `kubectl get pods -l
+    ''` at the whole namespace.
+    """
     workloads = list(_rendered_workloads())
     assert len(workloads) > 50, len(workloads)
     for role, doc in workloads:
@@ -589,9 +615,12 @@ def test_every_rendered_workload_yields_a_usable_pod_selector():
 
 
 def test_a_workload_selecting_labels_other_than_its_own_name_still_exists():
-    """The reject half. `app=<name>` was the assumption until 2026-09-01, and it is right for
-    every workload but one — so a test asserting only that the selector is non-empty would pass
-    just as well with the assumption back in place. This names the counter-example."""
+    """The reject half.
+
+    `app=<name>` was the assumption until 2026-09-01, and it is right for every workload but one —
+    so a test asserting only that the selector is non-empty would pass just as well with the
+    assumption back in place. This names the counter-example.
+    """
     divergent = {
         (role, (doc.get("metadata") or {}).get("name"))
         for role, doc in _rendered_workloads()

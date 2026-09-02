@@ -30,6 +30,11 @@ _FAIL_CONCLUSIONS = {
 
 @dataclass(frozen=True)
 class PR:
+    """One open Renovate PR, as classify_pr / actionable / render_digest consume it.
+
+    Fields carrying non-obvious meaning have their own comment below.
+    """
+
     number: int
     title: str
     url: str
@@ -74,13 +79,15 @@ REPOSITORY_PROBLEMS_HEADER = "## Repository Problems"
 
 
 def parse_repository_problems(body: str) -> set[str]:
-    """Parse the dashboard body's "## Repository Problems" section into a set of problem
-    strings — per-package lookup failures, config warnings, etc. Renovate renders each as
-    a backtick-wrapped bullet (` - \\`<problem>\\` `) between the header and the next
+    """Parse the dashboard body's "## Repository Problems" section into a set of problem strings.
+
+    Per-package lookup failures, config warnings, etc. Renovate renders each as a
+    backtick-wrapped bullet (` - \\`<problem>\\` `) between the header and the next
     top-level `## ` section. This is the bucket the PR digest can't see: a package whose
     lookup starts failing gets no PR and doesn't touch dashboard staleness either (the
     dashboard still updates fine) — it just silently stops receiving updates forever
-    (karakeep's gcr.io image, 2026-08). Absent section -> empty set."""
+    (karakeep's gcr.io image, 2026-08). Absent section -> empty set.
+    """
     if REPOSITORY_PROBLEMS_HEADER not in (body or ""):
         return set()
     section = body.split(REPOSITORY_PROBLEMS_HEADER, 1)[1]
@@ -94,9 +101,10 @@ def parse_repository_problems(body: str) -> set[str]:
 
 
 def find_dashboard_problems(issues: list[dict]) -> set[str]:
-    """Parse the dashboard issue's Repository Problems section (see
-    parse_repository_problems). Empty set when the dashboard is absent or has no
-    problems section."""
+    """Parse the dashboard issue's Repository Problems section (see parse_repository_problems).
+
+    Empty set when the dashboard is absent or has no problems section.
+    """
     issue = _find_dashboard_issue(issues)
     if issue is None:
         return set()
@@ -104,9 +112,12 @@ def find_dashboard_problems(issues: list[dict]) -> set[str]:
 
 
 def problems_fingerprint(problems: set[str]) -> str:
-    """Dedupe key for the Repository Problems bucket. Sorted so ordering is stable, but the
-    problem strings themselves are the key — a persistent problem set re-notifies only on
-    change, while a NEW problem (even alongside old ones) changes the string and re-pages."""
+    """Dedupe key for the Repository Problems bucket.
+
+    Sorted so ordering is stable, but the problem strings themselves are the key — a persistent
+    problem set re-notifies only on change, while a NEW problem (even alongside old ones) changes
+    the string and re-pages.
+    """
     return ",".join(sorted(problems))
 
 
@@ -130,7 +141,8 @@ def dashboard_stale(
     `updated_at` is the issue's ISO-8601 timestamp (GitHub uses a trailing 'Z'), or None
     when no dashboard issue exists. A stale/absent dashboard is the fail-loud signal that
     Renovate itself stopped — the case the 'Renovate Notifier — Alive' monitor (which
-    watches the *notifier*, not Renovate) can't see."""
+    watches the *notifier*, not Renovate) can't see.
+    """
     if not updated_at:
         return True
     now = now or datetime.now(timezone.utc)
@@ -141,15 +153,19 @@ def dashboard_stale(
 
 
 def parse_automerge(body: str) -> bool:
-    """True only if Renovate's body explicitly says Automerge Enabled. Absent/unknown
-    -> False, so classify_pr() surfaces it as `manual` (fail toward surfacing)."""
+    """True only if Renovate's body explicitly says Automerge Enabled.
+
+    Absent/unknown -> False, so classify_pr() surfaces it as `manual` (fail toward surfacing).
+    """
     return "Automerge**: Enabled" in (body or "")
 
 
 def ci_rollup(check_runs: list[dict], statuses: list[dict]) -> str:
-    """Fold the two disjoint GitHub CI sources — Checks API (check_runs) and the legacy
-    Commit Status API (statuses) — into one verdict. Failure precedes pending precedes
-    success: a failure in EITHER source counts."""
+    """Fold the two disjoint GitHub CI sources into one verdict: "failure", "pending", or "success".
+
+    Checks API (check_runs) and the legacy Commit Status API (statuses). Failure precedes
+    pending precedes success: a failure in EITHER source counts.
+    """
     failure = pending = False
     for c in check_runs:
         if c.get("status") != "completed":
@@ -192,6 +208,7 @@ def is_dead_path(pr: PR) -> bool:
 
 
 def classify_pr(pr: PR) -> str:
+    """Bucket one PR as "dead-path", "manual", "stuck", or "on-track"."""
     if is_dead_path(pr):
         # Ahead of the automerge check on purpose: a dead-path PR needs a human whether or not
         # automerge was ever enabled on it, and "manual" would file it with PRs that are merely
@@ -229,8 +246,11 @@ _STUCK_AGE_THRESHOLDS = (1, 3, 7, 14)
 
 
 def _stuck_age_bucket(pr: PR, now: datetime) -> int:
-    """Largest `_STUCK_AGE_THRESHOLDS` value the PR's age has crossed, or 0 if under a day old
-    or `created_at` is missing/unparseable (age unknown -> no age dimension, same as before)."""
+    """Largest `_STUCK_AGE_THRESHOLDS` value the PR's age has crossed, or 0 if under a day old.
+
+    Also 0 when `created_at` is missing or unparseable (age unknown -> no age dimension, same
+    as before).
+    """
     if not pr.created_at:
         return 0
     try:
@@ -246,12 +266,14 @@ def _stuck_age_bucket(pr: PR, now: datetime) -> int:
 
 
 def fingerprint(items: list[tuple[PR, str]], now: datetime | None = None) -> str:
-    """Dedupe key for the actionable PR set. `stuck` PRs carry a coarse age dimension
-    (`_stuck_age_bucket`) so a PR that's been stuck for a while re-pages at each threshold
-    crossing instead of paging once on day 1 and then going silent forever while it ages
-    (PR #67, stuck since 2026-08-03, is the case this closes — `manual` PRs don't get one:
-    they're "waiting on your merge", not "broken and getting worse", so there's nothing to
-    escalate on)."""
+    """Dedupe key for the actionable PR set.
+
+    `stuck` PRs carry a coarse age dimension (`_stuck_age_bucket`) so a PR that's been stuck for a
+    while re-pages at each threshold crossing instead of paging once on day 1 and then going silent
+    forever while it ages (PR #67, stuck since 2026-08-03, is the case this closes — `manual` PRs
+    don't get one: they're "waiting on your merge", not "broken and getting worse", so there's
+    nothing to escalate on).
+    """
     now = now or datetime.now(timezone.utc)
     parts = []
     for pr, bucket in items:
@@ -290,6 +312,15 @@ def _pr_note(pr: PR) -> str:
 
 
 def render_digest(items: list[tuple[PR, str]], limit: int = 1900) -> str:
+    """Render the actionable (pr, bucket) list into a Discord digest message.
+
+    Groups by bucket in `_BUCKET_ORDER`, then truncates the tail (adding a "…and N more"
+    line) to stay under `limit` characters — Discord's message cap.
+
+    Args:
+        items: (pr, bucket) pairs, typically `actionable()`'s output.
+        limit: character budget for the rendered message.
+    """
     total = len(items)
     head = "📦 Renovate — %d PR(s) need attention" % total
     # Build per-PR entries in bucket order; add as many as fit, count the remainder.

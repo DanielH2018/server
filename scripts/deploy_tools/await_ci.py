@@ -89,9 +89,12 @@ def fetch_check_runs(sha: str) -> list[dict]:
 
 
 def fetch_check_suites(sha: str) -> list[dict]:
-    """Check-suites for one SHA -- one per workflow run, present even when the run was
-    cancelled before any job registered a check-run. Fetched only when no required run
-    exists, so it costs nothing on the ordinary path."""
+    """Check-suites for one SHA.
+
+    One per workflow run, present even when the run was cancelled before any job
+    registered a check-run. Fetched only when no required run exists, so it costs
+    nothing on the ordinary path.
+    """
     return _github_get(f"commits/{sha}/check-suites?per_page=100").get(
         "check_suites", []
     )
@@ -187,16 +190,16 @@ def _has_only_no_verdict_conclusions(runs: list[dict], required) -> bool:
 def _cancelled_before_any_run_registered(
     runs: list[dict], suites: list[dict], required
 ) -> bool:
-    """True when no required run exists AND a workflow suite for the SHA already finished
-    with no verdict and zero runs.
+    """True when no required run exists and CI already finished with no verdict.
 
-    Two merges seconds apart cancel the first one's CI workflow before its `prek` job
-    registers a check-run, so the check-runs list never carries a required name. To
-    `_has_only_no_verdict_conclusions` that is indistinguishable from a freshly-pushed
-    SHA, and the wait sat out its whole budget twice on #766 (2026-09-02: 900s, then
-    1500s) with the tip green the entire time. The check-suite is the record that
-    survives: `completed cancelled` with `latest_check_runs_count == 0`. A suite still
-    `queued` or `in_progress` is a run that may yet register, and is left alone.
+    That covers a workflow suite for the SHA that already finished with no verdict and
+    zero runs. Two merges seconds apart cancel the first one's CI workflow before its
+    `prek` job registers a check-run, so the check-runs list never carries a required
+    name. To `_has_only_no_verdict_conclusions` that is indistinguishable from a
+    freshly-pushed SHA, and the wait sat out its whole budget twice on #766 (2026-09-02:
+    900s, then 1500s) with the tip green the entire time. The check-suite is the record
+    that survives: `completed cancelled` with `latest_check_runs_count == 0`. A suite
+    still `queued` or `in_progress` is a run that may yet register, and is left alone.
     """
     if any(r.get("name") in required for r in runs):
         return False
@@ -261,6 +264,11 @@ def wait(
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Parse args, wait for the SHA's CI verdict, and print it.
+
+    Exits with the code `wait` returns (see the module docstring's Exit codes), or 2
+    when the required-context gate is disarmed.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("sha", help="the commit to wait on")
     parser.add_argument(

@@ -95,8 +95,11 @@ def test_build_job_is_not_privileged():
 
 
 def test_build_job_runs_unprivileged_uid():
-    """uid 1000, not root. Rootless BuildKit is the entire justification for the Unconfined
-    profiles, and it stops being rootless the moment this becomes 0."""
+    """uid 1000, not root.
+
+    Rootless BuildKit is the entire justification for the Unconfined profiles, and it stops being
+    rootless the moment this becomes 0.
+    """
     doc = _build_job()
     pod_uid = (_pod_spec(doc).get("securityContext") or {}).get("runAsUser")
     for container in _containers(doc):
@@ -120,8 +123,11 @@ def test_build_job_adds_no_capabilities():
 
 
 def test_build_job_mounts_no_host_path():
-    """Its volumes are the build context and buildkitd's emptyDir state. A hostPath would put the
-    builder onto the node's own filesystem, which is the escalation the uid pin exists to avoid."""
+    """Its volumes are the build context and buildkitd's emptyDir state.
+
+    A hostPath would put the builder onto the node's own filesystem, which is the escalation the uid
+    pin exists to avoid.
+    """
     offenders = [
         v["name"] for v in _pod_spec(_build_job()).get("volumes", []) if "hostPath" in v
     ]
@@ -137,9 +143,11 @@ def test_build_job_does_not_join_host_namespaces():
 
 
 def test_build_job_does_not_mount_a_service_account_token():
-    """It talks to the in-cluster registry over the network and needs no API access. A mounted
-    token on a container running Unconfined is a credential inside the least-confined thing in
-    the fleet."""
+    """It talks to the in-cluster registry over the network and needs no API access.
+
+    A mounted token on a container running Unconfined is a credential inside the least-confined
+    thing in the fleet.
+    """
     spec = _pod_spec(_build_job())
     assert spec.get("automountServiceAccountToken") is False, (
         "image-builder must set automountServiceAccountToken: false — it needs no Kubernetes "

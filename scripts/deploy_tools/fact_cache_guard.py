@@ -181,6 +181,11 @@ def our_worktree_name(repo_root: Path) -> str | None:
 
 
 def main() -> int:
+    """Scan the fact cache for entries pinning a gone or foreign worktree, and report them.
+
+    Exits 0 when nothing is stale, 1 when stale entries were found and not cleared (or a
+    clear failed), and 0 after successfully clearing them with `--clear`.
+    """
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument(
         "--clear",

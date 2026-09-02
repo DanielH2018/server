@@ -74,10 +74,13 @@ class HAConfigError(Exception):
 
 
 class HAConfigLoader(yaml.SafeLoader):
-    """SafeLoader + HA semantics. Subclassing SafeLoader (NOT the unsafe loader) keeps
-    `yaml.load(..., Loader=HAConfigLoader)` safe — it cannot construct arbitrary Python — while
-    letting us register the `!include`/`!secret` tags that `safe_load` cannot. Each instance
-    records its file's directory so `!include` resolves relative to it, matching HA."""
+    """SafeLoader + HA semantics.
+
+    Subclassing SafeLoader (NOT the unsafe loader) keeps `yaml.load(..., Loader=HAConfigLoader)`
+    safe — it cannot construct arbitrary Python — while letting us register the `!include`/`!secret`
+    tags that `safe_load` cannot. Each instance records its file's directory so `!include` resolves
+    relative to it, matching HA.
+    """
 
     def __init__(self, stream):
         try:
@@ -87,10 +90,13 @@ class HAConfigLoader(yaml.SafeLoader):
         super().__init__(stream)
 
     def construct_mapping(self, node, deep=False):
-        # Reject genuine duplicate keys (HA does; stock PyYAML silently keeps the last). Check the
-        # EXPLICIT keys only — skip YAML merge keys (`<<`) so a legal merge-override (an explicit
-        # key overriding a merged one) is not mis-flagged — then delegate to SafeConstructor, which
-        # processes the merge and builds the dict.
+        """Construct the mapping, raising HAConfigError on an explicit duplicate key.
+
+        HA rejects a genuine duplicate key; stock PyYAML silently keeps the last one.
+        """
+        # Check the EXPLICIT keys only — skip YAML merge keys (`<<`) so a legal merge-override (an
+        # explicit key overriding a merged one) is not mis-flagged — then delegate to
+        # SafeConstructor, which processes the merge and builds the dict.
         seen = set()
         for key_node, _ in node.value:
             if key_node.tag == "tag:yaml.org,2002:merge":
@@ -130,13 +136,16 @@ def _construct_include(loader: HAConfigLoader, node: yaml.Node):
 
 
 def _include_dir_files(loader: HAConfigLoader, node: yaml.Node, expected: type):
-    """The (path, loaded) pairs behind an `!include_dir_*` tag: every *.yaml under the
-    directory (recursive, sorted, dotfiles skipped — HA's `_find_files` order).
+    """The (path, loaded) pairs behind an `!include_dir_*` tag:
 
-    Stricter than HA on one point, on purpose: HA silently SKIPS a file whose top level is not
-    the expected shape, so an automation file accidentally written as a mapping (or a script
-    file written as a list) would ship nothing and surface only as a missing entity at
-    runtime. Here it is an error."""
+    every *.yaml under the directory (recursive, sorted, dotfiles skipped — HA's `_find_files`
+    order).
+
+    Stricter than HA on one point, on purpose: HA silently SKIPS a file whose top level is not the
+    expected shape, so an automation file accidentally written as a mapping (or a script file
+    written as a list) would ship nothing and surface only as a missing entity at runtime. Here it
+    is an error.
+    """
     tag = node.tag
     target = (loader._root / loader.construct_scalar(node)).resolve()
     mark = node.start_mark
@@ -177,7 +186,8 @@ def _construct_include_dir_merge_named(loader: HAConfigLoader, node: yaml.Node):
     """`!include_dir_merge_named dir/`: the files' mappings merged into one mapping.
 
     HA lets a later file silently override a key an earlier file defined; here a key that
-    appears in two files is an error, so a script cannot be shadowed by a same-named copy."""
+    appears in two files is an error, so a script cannot be shadowed by a same-named copy.
+    """
     merged: dict = {}
     owner: dict = {}
     mark = node.start_mark
@@ -213,7 +223,8 @@ def assemble_config(role_dir: Path, dest: Path) -> None:
     """Copy the deployed /config layout into dest (verbatim — the templates carry no Ansible vars).
 
     Raises HAConfigError if a templates/*.j2 contains Ansible templating, which would need a real
-    render and violates the repo's copy-not-template rule for HA config files."""
+    render and violates the repo's copy-not-template rule for HA config files.
+    """
     dest.mkdir(parents=True, exist_ok=True)
     # templates/config/, not templates/: the role's templates/ root holds k8s manifests, and
     # validate_k8s_manifests.py parses every .j2 it finds there as YAML.
@@ -238,7 +249,8 @@ def load_config(dest: Path) -> tuple[list[str], list]:
     """Structurally load each entry file via HAConfigLoader. Returns (errors, loaded_trees).
 
     The recursive !include means loading configuration.yaml transitively validates every included
-    file's YAML syntax and duplicate keys."""
+    file's YAML syntax and duplicate keys.
+    """
     errors: list[str] = []
     trees: list = []
     for entry in _ENTRY_FILES:
@@ -265,9 +277,12 @@ def _iter_template_strings(node):
 
 
 def jinja_errors(trees: list, custom_templates_dir: Path) -> list[str]:
-    """Syntax-check (parse, not render) every inline template string in `trees` and each
-    custom_templates/*.jinja file. parse() needs no filters/globals/state, so HA's custom
-    filters and `{% from ... import ... %}` don't cause false positives."""
+    """Syntax-check every inline template string in `trees` and each custom_templates file.
+
+    Parses rather than renders each template and each custom_templates/*.jinja file.
+    parse() needs no filters/globals/state, so HA's custom filters and
+    `{% from ... import ... %}` don't cause false positives.
+    """
     env = Environment()
     errors: list[str] = []
     for tree in trees:
@@ -288,8 +303,11 @@ def jinja_errors(trees: list, custom_templates_dir: Path) -> list[str]:
 
 
 def _macro_names(custom_templates_dir: Path, env: Environment) -> set[str]:
-    """Names of every macro defined in custom_templates/*.jinja, via the AST (nodes.Macro) —
-    not regex, so comment prose like 'macro argument' is never miscaptured."""
+    """Names of every macro defined in custom_templates/*.jinja.
+
+    Found via the AST (nodes.Macro), not regex, so comment prose like 'macro argument'
+    is never miscaptured.
+    """
     names: set[str] = set()
     for jinja_file in sorted(custom_templates_dir.glob("*.jinja")):
         try:
@@ -304,9 +322,11 @@ def uncoerced_macro_bool_uses(
     template: str, macro_names: set[str], env: Environment | None = None
 ) -> list[str]:
     """Sorted names of known macros used as a BARE and/or/not operand (no `| bool`) in `template`.
+
     A `| bool`-wrapped call is a nodes.Filter (not a Call) -> not flagged; a Compare (`== 'x'`) or a
     standalone `{{ macro() }}` is not an and/or/not operand -> not flagged. find_all recurses, so
-    nested/chained boolean expressions and operands inside call-args are covered."""
+    nested/chained boolean expressions and operands inside call-args are covered.
+    """
     env = env or Environment()
     ast = env.parse(template)
 
@@ -333,8 +353,11 @@ def uncoerced_macro_bool_uses(
 
 
 def macro_bool_coercion_errors(trees: list, custom_templates_dir: Path) -> list[str]:
-    """Flag every known-macro call used as a bare and/or/not operand across the inline templates
-    (from `trees`) and the custom_templates/*.jinja files. AST-based; deterministic."""
+    """Flag every known-macro call used as a bare and/or/not operand.
+
+    Checked across the inline templates (from `trees`) and the custom_templates/*.jinja
+    files. AST-based; deterministic.
+    """
     env = Environment()
     macro_names = _macro_names(custom_templates_dir, env)
     if not macro_names:
@@ -368,8 +391,11 @@ _SHIPPED_DIR_LISTS = {
 
 
 def shipped_dir_list_errors(role_dir: Path) -> list[str]:
-    """Each list in _SHIPPED_DIR_LISTS must name exactly the matching files under its
-    directory, in both directions."""
+    """Verify each _SHIPPED_DIR_LISTS entry names exactly the matching files on disk.
+
+    Checked in both directions: a file on disk not in the list, and a listed file not
+    on disk.
+    """
     defaults = role_dir / "defaults" / "main.yml"
     if not defaults.is_file():
         return []
@@ -394,8 +420,10 @@ def shipped_dir_list_errors(role_dir: Path) -> list[str]:
 
 
 def validate(role_dir: Path = ROLE_DIR) -> list[str]:
-    """Assemble + structurally load + Jinja-syntax-check the HA config. Returns error strings
-    ([] = clean)."""
+    """Assemble + structurally load + Jinja-syntax-check the HA config.
+
+    Returns error strings ([] = clean).
+    """
     with tempfile.TemporaryDirectory() as tmp:
         dest = Path(tmp)
         try:
@@ -419,6 +447,7 @@ def validate(role_dir: Path = ROLE_DIR) -> list[str]:
 
 
 def main() -> int:
+    """Run `validate()`, print its errors (if any), and exit 1 if it found one."""
     errors = validate()
     if errors:
         print("Home Assistant config validation FAILED:")

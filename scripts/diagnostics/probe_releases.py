@@ -138,6 +138,11 @@ def format_records(records, merged, service=None):
 
 
 def run_releases(ns):
+    """Print the release records (or, with `--json`, raw JSON) and return the exit code.
+
+    Args:
+        ns: The parsed argparse namespace for the `releases` subcommand.
+    """
     records = load_records(previous=getattr(ns, "previous", False))
     if getattr(ns, "json", False):
         print(json.dumps(records, indent=2))

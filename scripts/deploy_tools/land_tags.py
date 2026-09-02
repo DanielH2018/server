@@ -196,14 +196,14 @@ def plane_note(files, declared: set[str] | None = None) -> str:
 
 
 def self_applied(files) -> bool:
-    """Whether the PR carries a broad change the TICK applies — so the landing is not done
-    until the deployer's own state says it converged.
+    """Whether the PR carries a broad change that the TICK applies, not deploy.sh.
 
-    True for a deploy-plane change (a full deploy.yml) and for a setup role initial_setup.yml
-    includes (`--tags <role>`). False for docs, for an ordinary service (deploy.sh's job), and
-    for what `plane_note` already hands to a human. land.sh uses it to decide whether
-    `behind_since` after the tick means "this PR is not applied yet" or is merely somebody
-    else's pending merge.
+    When true, the landing is not done until the deployer's own state says it converged.
+    True for a deploy-plane change (a full deploy.yml) and for a setup role
+    initial_setup.yml includes (`--tags <role>`). False for docs, for an ordinary service
+    (deploy.sh's job), and for what `plane_note` already hands to a human. land.sh uses it
+    to decide whether `behind_since` after the tick means "this PR is not applied yet" or
+    is merely somebody else's pending merge.
     """
     cs = services_from_changed_paths(list(files))
     if cs.broad_deploy:
@@ -237,6 +237,11 @@ def derive(
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Print, from a PR's file list, its deploy tags, plane note, or self-applied flag.
+
+    Which one prints depends on `--plane`/`--self-applied`; with neither, prints the
+    derived `--tags` value. Always exits 0.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--json", required=True, help="`gh pr view --json files,changedFiles` output"

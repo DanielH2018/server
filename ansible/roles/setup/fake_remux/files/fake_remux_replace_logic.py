@@ -49,9 +49,12 @@ def quality_rank(rel) -> int:
 
 
 def select_replacement(candidates, policy):
-    """Best grabbable candidate, or (None, reason). Rejects only what's decidable from the release
-    metadata; authenticity ('actually the claimed quality') is enforced post-download by is_authentic.
-    NEVER rejects on codec or resolution — quality range is the Sonarr profile's job."""
+    """Best grabbable candidate, or (None, reason).
+
+    Rejects only what's decidable from the release metadata; authenticity ('actually the claimed
+    quality') is enforced post-download by is_authentic. NEVER rejects on codec or resolution —
+    quality range is the Sonarr profile's job.
+    """
     deny = policy.get("deny_release_groups", [])
     viable = [
         rel
@@ -68,6 +71,7 @@ def select_replacement(candidates, policy):
     deprio = policy.get("depreference_codecs", [])
 
     def key(rel):
+        """Sort key ranking candidates best-first: tier, non-AV1, CF score, group, indexer, seeders."""
         title = rel.get("title", "")
         return (
             -quality_rank(rel),  # higher tier first
@@ -82,10 +86,12 @@ def select_replacement(candidates, policy):
 
 
 def is_authentic(probe, policy) -> bool:
-    """False iff a downloaded file betrays a mislabeled re-encode: it claims a stream-copy tier
-    (Remux) but its video stream is a consumer re-encode (re-encoder ENCODER tag or long GOP). A
-    non-remux claim (WEB-DL / Bluray encode) legitimately carries an encoder tag → authentic. Codec-
-    and resolution-agnostic — the gate is about honesty, not format."""
+    """False iff a downloaded file betrays a mislabeled re-encode:
+
+    it claims a stream-copy tier (Remux) but its video stream is a consumer re-encode (re-encoder
+    ENCODER tag or long GOP). A non-remux claim (WEB-DL / Bluray encode) legitimately carries an
+    encoder tag → authentic. Codec- and resolution-agnostic — the gate is about honesty, not format.
+    """
     quality = probe.get("quality")
     if not frl.is_remux_quality(quality):
         return True
@@ -101,13 +107,15 @@ def is_authentic(probe, policy) -> bool:
 
 
 def plan_searches(ledger, policy):
-    """Up to searches_per_tick 'detected' entries to interactive-search this tick, oldest first
-    (deterministic), capped so no more than max_concurrent_replacements are in flight
-    (grabbed/verifying/importing) at once — a reconciler throttle distinct from the detector's
-    MAX_PER_SCAN blast valve. The shell spaces the searches by search_spacing_s and never issues a
-    season search. Returns search-action dicts; does not mutate state (the shell sets
-    grabbed/held/detected after the grab, so a crash mid-tick simply leaves the entry 'detected' for
-    the next tick)."""
+    """Return up to searches_per_tick 'detected' entries to interactive-search this tick.
+
+    Oldest first (deterministic), capped so no more than max_concurrent_replacements are in
+    flight (grabbed/verifying/importing) at once — a reconciler throttle distinct from the
+    detector's MAX_PER_SCAN blast valve. The shell spaces the searches by search_spacing_s and
+    never issues a season search. Returns search-action dicts; does not mutate state (the shell
+    sets grabbed/held/detected after the grab, so a crash mid-tick simply leaves the entry
+    'detected' for the next tick).
+    """
     per_tick = int(policy.get("searches_per_tick", 2))
     cap = int(policy.get("max_concurrent_replacements", 5))
     active = sum(
@@ -133,13 +141,16 @@ def _queue_quality_name(item):
 
 
 def adopt_in_flight(ledger, queue_by_episode, now):
-    """Idempotency guard against a duplicate grab. A 'detected' entry whose episode ALREADY has a live
-    download in Sonarr's queue was grabbed on an earlier tick whose ledger write never landed — a crash
-    before the save, or a concurrent scan clobbering the file. Adopt that in-flight download as
-    'grabbed' rather than letting plan_searches issue a second real grab for it. Safe by construction:
-    the adopted download still passes the same post-download authenticity gate before any delete, so
-    adopting an unrelated or itself-fake download can never delete the fake prematurely. Returns
-    (ledger, adopted_count); the ledger is unchanged when there's nothing to adopt."""
+    """Idempotency guard against a duplicate grab.
+
+    A 'detected' entry whose episode ALREADY has a live download in Sonarr's queue was grabbed on an
+    earlier tick whose ledger write never landed — a crash before the save, or a concurrent scan
+    clobbering the file. Adopt that in-flight download as 'grabbed' rather than letting
+    plan_searches issue a second real grab for it. Safe by construction: the adopted download still
+    passes the same post-download authenticity gate before any delete, so adopting an unrelated or
+    itself-fake download can never delete the fake prematurely. Returns (ledger, adopted_count); the
+    ledger is unchanged when there's nothing to adopt.
+    """
     out = dict(ledger)
     adopted = 0
     for ep, rec in ledger.items():
@@ -166,7 +177,9 @@ def adopt_in_flight(ledger, queue_by_episode, now):
 
 def prune_history(ledger, retention_days, now):
     """Drop 'replaced' entries older than retention_days so the ledger doesn't grow without bound.
-    'held' entries are kept — they still page until a human resolves them."""
+
+    'held' entries are kept — they still page until a human resolves them.
+    """
     cutoff = now - int(retention_days) * 86400
     return {
         k: r
@@ -182,9 +195,12 @@ def _set(ledger, ep, **changes):
 
 
 def _apply_verdict(out, ep, rec, item, probe, policy, now, actions):
-    """Shared verify-and-transition for a completed download. Authentic -> delete fake + import
-    (-> importing). Else blocklist (if we still have the queue item) and retry (-> detected, clearing
-    chosen) or hold at the attempt cap (keeping chosen for diagnostics)."""
+    """Shared verify-and-transition for a completed download.
+
+    Authentic -> delete fake + import (-> importing). Else blocklist (if we still have the queue
+    item) and retry (-> detected, clearing chosen) or hold at the attempt cap (keeping chosen for
+    diagnostics).
+    """
     if is_authentic(probe, policy):
         actions.append(
             {
@@ -225,11 +241,13 @@ def _apply_verdict(out, ep, rec, item, probe, policy, now, actions):
 
 
 def advance(ledger, queue_by_episode, files_by_ep, probes, policy, now):
-    """Advance grabbed→verifying→importing→replaced from observed reality. Pure: the shell has
-    already grabbed, ffprobed completed downloads (into `probes`, keyed by episodeId), and read the
-    queue (`queue_by_episode`, also keyed by episodeId) + current files. Emits delete_file / import /
-    blocklist / alert for the shell to execute (only in live mode). No delete is ever emitted unless
-    the download is complete AND authentic."""
+    """Advance grabbed→verifying→importing→replaced from observed reality.
+
+    Pure: the shell has already grabbed, ffprobed completed downloads (into `probes`, keyed by
+    episodeId), and read the queue (`queue_by_episode`, also keyed by episodeId) + current files.
+    Emits delete_file / import / blocklist / alert for the shell to execute (only in live mode). No
+    delete is ever emitted unless the download is complete AND authentic.
+    """
     stall_s = float(policy.get("download_stall_hours", 12)) * 3600
     max_attempts = int(policy.get("max_attempts", 3))
     actions = []

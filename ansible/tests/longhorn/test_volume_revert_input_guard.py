@@ -143,8 +143,11 @@ def test_volume_revert_input_guard_accepts_a_real_sha() -> None:
     shutil.which("ansible-playbook") is None, reason="ansible-playbook not on PATH"
 )
 def test_volume_revert_input_guard_still_rejects_a_bad_sha() -> None:
-    """The control for the test above. `is not none` must not defang the guard: a SHA that is
-    not eight-or-more lowercase hex digits still has to stop the play before the scale-down."""
+    """The control for the test above.
+
+    `is not none` must not defang the guard: a SHA that is not eight-or-more lowercase hex digits
+    still has to stop the play before the scale-down.
+    """
     result = _run_revert_guard("nope")
     assert result.returncode != 0
     assert "GUARD_PASSED" not in result.stdout

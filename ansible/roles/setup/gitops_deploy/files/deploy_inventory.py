@@ -33,7 +33,8 @@ def declared_services(hostvars_text: str) -> set[str]:
     stale-compose watchdog (`stale_rendered_services`) diffs against `containers/<svc>/` dirs
     rendered by deploy.yml's DOCKER play only, so a platform: k8s entry counting as "declared"
     here would let a leftover rendered compose for a service that migrated to k8s (a real stale
-    dir) hide behind it as phantom-declared, instead of being flagged."""
+    dir) hide behind it as phantom-declared, instead of being flagged.
+    """
     out: set[str] = set()
     for m in _DECLARED_ENTRY.finditer(hostvars_text):
         name, block = m.group(1), m.group(2)
@@ -45,9 +46,11 @@ def declared_services(hostvars_text: str) -> set[str]:
 
 
 def declared_k8s_services(hostvars_text: str) -> set[str]:
-    """k8s-platform service names declared in a host's containers_list — the platform: k8s
-    counterpart to declared_services(), used to catch a same-named Docker role that's actually
-    k8s on THIS host (see reroute_k8s_services)."""
+    """k8s-platform service names declared in a host's containers_list — the platform:
+
+    k8s counterpart to declared_services(), used to catch a same-named Docker role that's actually
+    k8s on THIS host (see reroute_k8s_services).
+    """
     out: set[str] = set()
     for m in _DECLARED_ENTRY.finditer(hostvars_text):
         name, block = m.group(1), m.group(2)
@@ -67,7 +70,8 @@ def reroute_k8s_services(cs: ChangeSet, k8s_services: set[str]) -> ChangeSet:
     Deploying such a match with `--tags <svc>` resolves to deploy.yml's K8S play, not the Docker
     one _ACTIVE_CONFIG assumed — an idempotent no-op whose health gate is silently skipped
     (containers_for() finds no rendered docker-compose.yml for a k8s entry), instead of the
-    defer-and-alert a k8s-platform change should get (same as ansible/roles/k8s/** changes)."""
+    defer-and-alert a k8s-platform change should get (same as ansible/roles/k8s/** changes).
+    """
     moved = cs.services & k8s_services
     if not moved:
         return cs
@@ -81,5 +85,6 @@ def stale_rendered_services(rendered: list[str], declared: set[str]) -> list[str
     cutover cleans it up; the phantom compose then feeds containers_for(), the health gate
     polls a container that will never run again, and a healthy push rolls back with a hold
     (code-server 2026-08-10, then the kopia/terraria cutover the same day — the second
-    occurrence is why this is now a machine check instead of an operator memory)."""
+    occurrence is why this is now a machine check instead of an operator memory).
+    """
     return sorted(set(rendered) - declared)

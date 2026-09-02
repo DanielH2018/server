@@ -115,6 +115,16 @@ def _rel(path: Path, roles: Path) -> str:
 
 
 def build_rows(roles: Path = ROLES) -> list[dict[str, str]]:
+    """Collect every active cron task under `roles` into one row per job.
+
+    Skips archived roles and any task whose cron spec sets `state: absent`.
+
+    Args:
+        roles: Root directory to search for `tasks/*.yml` files.
+
+    Returns:
+        One dict per cron job, keyed by the columns rendered in `render_markdown`.
+    """
     rows = []
     for path in sorted(roles.rglob("tasks/*.yml")):
         if "/archive/" in path.as_posix():
@@ -138,6 +148,14 @@ def build_rows(roles: Path = ROLES) -> list[dict[str, str]]:
 
 
 def render_markdown(rows: list[dict[str, str]]) -> str:
+    """Render `rows` as the "Scheduled jobs" reference page, banner and schedule notes included.
+
+    Args:
+        rows: Cron job rows as returned by `build_rows`.
+
+    Returns:
+        The full page as Markdown text, ending in a single trailing newline.
+    """
     from lib.docs_provenance import generated_banner
 
     parts = [generated_banner("scripts/docs/gen_reference_crons.py")]
@@ -169,6 +187,11 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Build the cron rows, render the reference page, and write it if the body changed.
+
+    Returns:
+        The exit code from `finish_generator` (0 on success, non-zero on a write failure).
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, required=True, help="output file path")
     parser.add_argument("--roles", type=Path, default=ROLES)

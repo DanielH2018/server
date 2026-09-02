@@ -43,8 +43,11 @@ DEFAULT_RE_ENCODER_MARKERS = (
 
 
 def sanitize(s, maxlen: int = 160) -> str:
-    """Neutralize adversary-controlled text (release paths, encoder tags) before it enters a
-    Discord-bound string: collapse whitespace, defuse @mentions/backticks, cap length."""
+    """Neutralize adversary-controlled text before it enters a Discord-bound string.
+
+    Collapses whitespace, defuses @mentions/backticks, and caps length. Used on release paths
+    and encoder tags.
+    """
     s = "?" if s is None else str(s)
     s = " ".join(s.split())
     s = s.replace("@", "(at)").replace("`", "'")
@@ -58,10 +61,12 @@ def is_remux_quality(quality_name) -> bool:
 
 
 def remux_candidates(episodefiles, series_title):
-    """The remux-quality files in one series' /api/v3/episodefile list, flattened to the fields the
-    ffprobe pass + report + delete need. `path` is the ABSOLUTE library path (Sonarr mounts
-    containers/data at /data; jellyfin mounts the same tree at /data/media, so this path resolves
-    unchanged inside jellyfin for ffprobe). Files with no path are skipped (nothing to probe)."""
+    """Return one series' remux-quality files, flattened for the probe/report/delete steps.
+
+    `path` is the ABSOLUTE library path (Sonarr mounts containers/data at /data; jellyfin
+    mounts the same tree at /data/media, so this path resolves unchanged inside jellyfin for
+    ffprobe). Files with no path are skipped (nothing to probe).
+    """
     out = []
     for ef in episodefiles:
         quality = ((ef.get("quality") or {}).get("quality") or {}).get("name")
@@ -85,8 +90,11 @@ def remux_candidates(episodefiles, series_title):
 
 
 def parse_encoder_tag(ffprobe_stream_json):
-    """The video stream's ENCODER tag from `ffprobe -show_entries stream_tags=ENCODER -of json`
-    output, or None. Never raises on malformed input (a probe glitch must not flag a file)."""
+    """Return the video stream's ENCODER tag from ffprobe stream_tags=ENCODER output, or None.
+
+    Reads `ffprobe -show_entries stream_tags=ENCODER -of json` output. Never raises on
+    malformed input (a probe glitch must not flag a file).
+    """
     import json
 
     if not ffprobe_stream_json:
@@ -106,9 +114,12 @@ def parse_encoder_tag(ffprobe_stream_json):
 
 
 def parse_keyframe_csv(text):
-    """Keyframe presentation timestamps from `ffprobe -show_entries frame=key_frame,pts_time
-    -of csv=p=0` output (each line `<key_frame>,<pts_time>`). Keeps only rows flagged as a keyframe
-    with a numeric time; malformed rows are skipped."""
+    """Return keyframe presentation timestamps parsed from ffprobe CSV output.
+
+    Reads `ffprobe -show_entries frame=key_frame,pts_time -of csv=p=0` output (each line
+    `<key_frame>,<pts_time>`). Keeps only rows flagged as a keyframe with a numeric time;
+    malformed rows are skipped.
+    """
     times = []
     for line in (text or "").splitlines():
         parts = line.split(",")
@@ -130,8 +141,11 @@ def encoder_is_reencoder(encoder_tag, markers) -> bool:
 
 
 def max_keyframe_gap(keyframe_times, probe_window_s):
-    """Largest gap (seconds) between consecutive keyframes. With fewer than two keyframes in the
-    probed window the GOP is at least the window length, so return the window itself."""
+    """Largest gap (seconds) between consecutive keyframes.
+
+    With fewer than two keyframes in the probed window the GOP is at least the window length, so
+    return the window itself.
+    """
     times = sorted(t for t in (keyframe_times or []) if t is not None)
     if len(times) < 2:
         return float(probe_window_s)
@@ -145,8 +159,11 @@ def gop_exceeds(keyframe_times, probe_window_s, gop_max_s) -> bool:
 def reencode_evidence(
     quality, encoder, keyframe_times, probe_window_s, gop_max_s, markers
 ):
-    """Why a remux-quality file is really a re-encode, or None if it looks genuine. Encoder tag
-    first (metadata-only, cheapest); GOP is the backstop when a re-encode stripped the tag."""
+    """Why a remux-quality file is really a re-encode, or None if it looks genuine.
+
+    Encoder tag first (metadata-only, cheapest); GOP is the backstop when a re-encode stripped the
+    tag.
+    """
     if not is_remux_quality(quality):
         return None
     if encoder_is_reencoder(encoder, markers):
@@ -157,8 +174,11 @@ def reencode_evidence(
 
 
 def select_fakes(probed, probe_window_s, gop_max_s, markers):
-    """Filter probed candidates (each enriched by the shell with `encoder` + `keyframes`) to the
-    re-encoded remuxes, tagging each with the `evidence` string for the report."""
+    """Filter probed candidates down to the re-encoded remuxes.
+
+    Each candidate arrives enriched by the shell with `encoder` + `keyframes`. Each fake returned
+    is tagged with the `evidence` string for the report.
+    """
     out = []
     for p in probed:
         ev = reencode_evidence(
@@ -186,9 +206,11 @@ def format_fake_line(verb, fake) -> str:
 
 
 def episode_file_map(episodes):
-    """Map episodeFileId -> episodeId for MONITORED episodes only. A fake on an unmonitored episode
-    (e.g. one the operator has already watched and deliberately unmonitored) must not be seeded for
-    replacement, so it is excluded here."""
+    """Map episodeFileId -> episodeId for MONITORED episodes only.
+
+    A fake on an unmonitored episode (e.g. one the operator has already watched and deliberately
+    unmonitored) must not be seeded for replacement, so it is excluded here.
+    """
     out = {}
     for ep in episodes or []:
         fid = ep.get("episodeFileId")
@@ -198,11 +220,13 @@ def episode_file_map(episodes):
 
 
 def seed_ledger(ledger, fakes, max_concurrent, now):
-    """Add newly-detected fakes (each carrying an `episodeId`) to the reconciler's ledger as
-    'detected', keyed by str(episodeId) to match fake_remux_replace_logic.py's correlation. A single
-    pass finding more than max_concurrent NEW fakes is a systemic import/rule bug, not N independent
-    bad grabs: seed none and report held so the detector pages instead of handing the reconciler a
-    flood of replacements to chase."""
+    """Add newly-detected fakes to the reconciler's ledger as 'detected'.
+
+    Each fake carries an `episodeId`; entries are keyed by str(episodeId) to match
+    fake_remux_replace_logic.py's correlation. A single pass finding more than max_concurrent NEW
+    fakes is a systemic import/rule bug, not N independent bad grabs: seed none and report held so
+    the detector pages instead of handing the reconciler a flood of replacements to chase.
+    """
     new = [f for f in fakes if str(f["episodeId"]) not in ledger]
     if len(new) > int(max_concurrent):
         return ledger, True

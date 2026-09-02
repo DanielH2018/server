@@ -76,8 +76,11 @@ def test_every_split_build_role_declares_its_consumer():
 
 
 def test_no_coupling_names_a_role_that_deploys_itself():
-    """The reject half of the census. A coupling on a role that renders its own workload is
-    dead weight, and would hide the fact that the class has changed shape."""
+    """The reject half of the census.
+
+    A coupling on a role that renders its own workload is dead weight, and would hide the fact that
+    the class has changed shape.
+    """
     stale = set(_BUILD_ROLL_COUPLINGS) - _split_build_roles()
     assert not stale, (
         f"couplings for roles that already deploy themselves: {sorted(stale)}"
@@ -100,10 +103,13 @@ def test_every_coupling_target_is_a_real_role():
 
 
 def test_the_build_role_runs_before_its_consumer():
-    """Tags do not reorder anything. `containers_list` runs in list order with no toposort,
-    so a consumer listed BEFORE its build role reads `k8s_rebuilt_images` while the fact is
-    still empty -- the expanded tag set would be correct and the rollout would still miss the
-    rebuild. Assert the order, or the fix ships a green run that changes nothing."""
+    """Tags do not reorder anything.
+
+    `containers_list` runs in list order with no toposort, so a consumer listed BEFORE its build
+    role reads `k8s_rebuilt_images` while the fact is still empty -- the expanded tag set would be
+    correct and the rollout would still miss the rebuild. Assert the order, or the fix ships a green
+    run that changes nothing.
+    """
     text = (REPO / "ansible" / "inventory" / "host_vars" / "daniel-box.yml").read_text()
     for build_role, needs in _BUILD_ROLL_COUPLINGS.items():
         build_at = text.find(f"name: {build_role}\n")
@@ -127,6 +133,8 @@ def test_expansion_leaves_an_unrelated_tag_alone():
 
 
 def test_expansion_is_one_directional():
-    """Editing the workload's manifests needs no rebuild — the manifest change rolls on its
-    own. Widening that direction would rebuild an image on every manifest edit."""
+    """Editing the workload's manifests needs no rebuild — the manifest change rolls on its own.
+
+    Widening that direction would rebuild an image on every manifest edit.
+    """
     assert expand_build_couplings({"n8n"}) == {"n8n"}

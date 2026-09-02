@@ -48,8 +48,11 @@ def test_release_dir_matches_the_ansible_default():
 
 
 def _row(text, service):
-    """The service's own line. The footer legend names both flags, so asserting against the
-    whole rendering would score every clean table as flagged."""
+    """The service's own line.
+
+    The footer legend names both flags, so asserting against the whole rendering would score every
+    clean table as flagged.
+    """
     return next(line for line in text.splitlines() if line.startswith(service))
 
 

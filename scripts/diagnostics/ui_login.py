@@ -91,8 +91,11 @@ def portal_host(domain):
 
 
 def cookie_domain(domain):
-    """Leading dot: the cookie is issued for the whole `local.<domain>` cookie-domain, so
-    one login covers every service route, not just the portal it was minted at."""
+    """Leading dot:
+
+    the cookie is issued for the whole `local.<domain>` cookie-domain, so one login covers every
+    service route, not just the portal it was minted at.
+    """
     return f".local.{domain}"
 
 
@@ -400,6 +403,13 @@ def verify(service, two_factor=False):
 
 
 def main(argv=None):
+    """Parse args and mint, check, verify, or locate an Authelia session state file.
+
+    With no flag, mints a new session (two_factor if `--totp` is given, else
+    one_factor). `--path` only prints the state file location; `--check` and `--verify`
+    inspect an existing session without minting a new one. Returns the exit code of the
+    action taken; a bare mint always returns 0.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--check",

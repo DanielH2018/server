@@ -299,8 +299,11 @@ def _configure_sonarr_only(monkeypatch):
 
 
 def _fake_request(records, calls):
-    """A `_request` stand-in: GETs (the queue poll) return the canned records; anything
-    else (DELETE / /api/v3/command) is recorded instead of hitting the network."""
+    """A `_request` stand-in:
+
+    GETs (the queue poll) return the canned records; anything else (DELETE / /api/v3/command) is
+    recorded instead of hitting the network.
+    """
 
     def fake(url, method="GET", headers=None, data=None):
         if method == "GET":

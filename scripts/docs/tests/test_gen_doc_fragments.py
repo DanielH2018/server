@@ -1,5 +1,8 @@
-"""gen_doc_fragments: the readers find their sources, the renderers are pure, and every
-fragment is wired both ways -- a page includes it, and it exists for the page to include."""
+"""gen_doc_fragments:
+
+the readers find their sources, the renderers are pure, and every fragment is wired both ways -- a
+page includes it, and it exists for the page to include.
+"""
 
 from __future__ import annotations
 

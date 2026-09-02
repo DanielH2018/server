@@ -76,17 +76,22 @@ _EXIT_CODE = re.compile(r"^Exit code (\d+)", re.MULTILINE)
 
 
 def ledger_path(session_id: str) -> str:
-    """Where this session's retry count lives. `.claude/logs/` is gitignored and already the
-    hooks' scratch dir, so the ledger doesn't have to invent a location outside the repo."""
+    """Where this session's retry count lives.
+
+    `.claude/logs/` is gitignored and already the hooks' scratch dir, so the ledger doesn't have to
+    invent a location outside the repo.
+    """
     repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     return os.path.join(repo, ".claude", "logs", f"auto-mode-retries-{session_id}.json")
 
 
 def retries_used(path: str) -> int:
-    """Retries already granted this session. An unreadable or malformed ledger counts as zero:
-    the cap is a guard against a loop, and a broken ledger must not be a way to lose the feature
-    silently — the loop it guards against needs the classifier to deny twice more, which the
-    consecutive-block fallback stops on its own."""
+    """Retries already granted this session.
+
+    An unreadable or malformed ledger counts as zero: the cap is a guard against a loop, and a
+    broken ledger must not be a way to lose the feature silently — the loop it guards against needs
+    the classifier to deny twice more, which the consecutive-block fallback stops on its own.
+    """
     try:
         with open(path, encoding="utf-8") as fh:
             value = json.load(fh).get("retries", 0)
@@ -96,8 +101,11 @@ def retries_used(path: str) -> int:
 
 
 def record_retry(path: str, used: int) -> None:
-    """Bump the ledger. Best-effort: a write that fails leaves the count where it was, which
-    costs at most one extra retry and never blocks the decision."""
+    """Bump the ledger.
+
+    Best-effort: a write that fails leaves the count where it was, which costs at most one extra
+    retry and never blocks the decision.
+    """
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as fh:
@@ -128,7 +136,8 @@ def deploy_exit_note(payload: dict) -> str | None:
     """The resume-point meaning of a failed deploy.sh, or None when this isn't one.
 
     Keyed on the `Exit code N` first line, which the hook docs name as the stable part of the
-    error string; everything after it is display text."""
+    error string; everything after it is display text.
+    """
     if payload.get("tool_name") != "Bash":
         return None
     if not _DEPLOY_CMD.search(payload.get("tool_input", {}).get("command", "")):
@@ -142,6 +151,13 @@ def deploy_exit_note(payload: dict) -> str | None:
 
 
 def main() -> None:
+    """Read the hook payload from stdin and bridge one PermissionDenied or PostToolUseFailure.
+
+    For a PermissionDenied event, requests a retry (via `should_retry`) when the ledger
+    hasn't already spent it on this session. For a PostToolUseFailure event, decodes a
+    `deploy.sh` non-zero exit into an explanatory `additionalContext` note. Prints the
+    corresponding hookSpecificOutput JSON and returns; any other payload is ignored.
+    """
     try:
         payload = json.load(sys.stdin)
     except ValueError, OSError:

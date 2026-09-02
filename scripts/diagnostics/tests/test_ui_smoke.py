@@ -197,9 +197,11 @@ class McpClient:
 
 
 def http_status(report: str) -> int | None:
-    """The status Playwright reported, or None when it reported none (a 200 is not always
-    printed). Checked before the title so a mid-rollout 404 says `HTTP 404` rather than
-    making someone work backwards from a missing title."""
+    """The status Playwright reported, or None when it reported none (a 200 is not always printed).
+
+    Checked before the title so a mid-rollout 404 says `HTTP 404` rather than making someone work
+    backwards from a missing title.
+    """
     for line in report.splitlines():
         if "HTTP status:" in line:
             return int(line.split("HTTP status:", 1)[1].strip())
@@ -386,7 +388,9 @@ def test_two_factor_service_serves_its_own_ui(
     two_factor_browser, domain, service, title, path
 ):
     """Same four claims as the one_factor tier, plus the fact that the second factor worked:
-    reaching any of these at all requires `authentication_level 2`."""
+
+    reaching any of these at all requires `authentication_level 2`.
+    """
     report, is_error = two_factor_browser.navigate(f"https://{service}.local.{domain}/")
     assert_serves_ui(
         report,
@@ -458,7 +462,9 @@ _PANEL_STATE_JS = """() => {
 
 class GrafanaPage:
     """A logged-in Grafana, wrapping the MCP client with the two things this tier needs:
-    an evaluate that returns parsed JSON, and a navigate that survives the un-mounted race."""
+
+    an evaluate that returns parsed JSON, and a navigate that survives the un-mounted race.
+    """
 
     def __init__(self, client: McpClient, base: str, secret: str) -> None:
         self.client = client

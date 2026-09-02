@@ -73,8 +73,10 @@ def test_format_backup_spend_totals_and_says_when_the_window_was_empty():
 
 
 def test_format_backup_spend_shows_maintenance_and_never_sums_the_two_windows():
-    """Backups span --since; the ledger covers the UTC day. A combined total would match
-    neither, so the report must keep them apart."""
+    """Backups span --since; the ledger covers the UTC day.
+
+    A combined total would match neither, so the report must keep them apart.
+    """
     text = ledger.format_backup_spend(
         ledger.parse_backup_spend(SPEND_LOG),
         "6h",

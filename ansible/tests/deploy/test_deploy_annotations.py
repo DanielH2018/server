@@ -122,8 +122,10 @@ def test_deploy_sh_annotates_only_on_success():
 
 
 def test_annotating_can_never_fail_a_good_deploy():
-    """`logger` is absent in a container and can fail on a full disk. Neither may turn a
-    successful deploy into a reported failure."""
+    """`logger` is absent in a container and can fail on a full disk.
+
+    Neither may turn a successful deploy into a reported failure.
+    """
     body = _DEPLOY_SH.read_text()
     func = body.split("emit_deploy_annotation() {", 1)[1].split("\n}", 1)[0]
     assert "|| true" in func, "the logger call must be fire-and-forget"
@@ -153,8 +155,11 @@ def test_the_configmap_is_built_from_the_injected_tree():
 
 
 def test_the_injector_writes_a_derived_tree_not_the_staged_one():
-    """Injecting in place makes the staging copy task fight the injector: it restores the
-    pristine JSON every deploy, the injector re-injects, and Grafana rolls every time."""
+    """Injecting in place makes the staging copy task fight the injector:
+
+    it restores the pristine JSON every deploy, the injector re-injects, and Grafana rolls every
+    time.
+    """
     tasks = _DASHBOARDS_TASKS.read_text()
     step = tasks.split("Inject the deploy-annotation query", 1)
     assert len(step) == 2, "dashboards.yml no longer injects the annotation"

@@ -69,6 +69,7 @@ def behind_ahead(repo, ref: str = "origin/master") -> tuple[int, int]:
 
 
 def format_refusal(behind: int, ahead: int, ref: str) -> str:
+    """The stderr message printed when the tree is behind `ref`, with the fixes to try."""
     ahead_note = f" (and {ahead} ahead)" if ahead else ""
     return (
         f"deploy: this tree is {behind} commit(s) behind {ref}{ahead_note} "
@@ -81,6 +82,7 @@ def format_refusal(behind: int, ahead: int, ref: str) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Fetch origin, compare HEAD to `--ref`, and exit STALE_EXIT (4) when behind, else 0."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo", default=".")
     parser.add_argument("--ref", default="origin/master")

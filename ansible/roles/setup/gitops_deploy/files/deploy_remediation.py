@@ -159,10 +159,10 @@ def k8s_remediation(
 def deferred_service_alerts(
     cs: ChangeSet, deployed: set[str]
 ) -> tuple[set[str], set[str]]:
-    """The (tasks, meta) service sets that still need a defer-and-alert after a tick that
-    redeployed `deployed` (empty on the docs-only branch — no service mapped).
+    """Return the (tasks, meta) service sets that still need a defer-and-alert.
 
-    A `tasks/` or `meta/deps.yml` change is NOT auto-deployed, and unlike a doc edit it changes
+    Given a tick that redeployed `deployed` (empty on the docs-only branch — no service
+    mapped). A `tasks/` or `meta/deps.yml` change is NOT auto-deployed, and unlike a doc edit it changes
     what a deploy DOES — so for a service that was not itself redeployed it must be flagged, not
     silently ff-merged. Subtracting `deployed` is the combined-push fix: a single push that
     deploys svcA (its template changed) while also carrying svcB's `meta/deps.yml` leaves svcB's

@@ -182,16 +182,16 @@ def test_the_deployed_selector_roster_covers_known_overrides():
 
 
 def test_deployed_loki_selectors_use_real_stream_labels():
-    """The in-code-default arm above cannot see a deploy-time override. This is the other
-    half: `LOKI_STREAM` and `LOG_ERROR_SELECTOR` both ship a different selector than their
-    check.py default (env-secret.yaml.j2), and neither ever ran through `_selector_labels`
-    until now.
+    """The in-code-default arm above cannot see a deploy-time override.
 
-    Right now this is a regression guard, not an active finding: both deployed selectors
-    select on `job`, which is a real promtail label, so this passes today. It exists for the
-    NEXT edit to either constant -- the precedent is HA_BAN_SELECTOR (see this role's
-    CLAUDE.md), which shipped an `app=` label that matched no stream and read "no ip_ban
-    events" permanently green.
+    This is the other half: `LOKI_STREAM` and `LOG_ERROR_SELECTOR` both ship a different selector
+    than their check.py default (env-secret.yaml.j2), and neither ever ran through
+    `_selector_labels` until now.
+
+    Right now this is a regression guard, not an active finding: both deployed selectors select on
+    `job`, which is a real promtail label, so this passes today. It exists for the NEXT edit to
+    either constant -- the precedent is HA_BAN_SELECTOR (see this role's CLAUDE.md), which shipped
+    an `app=` label that matched no stream and read "no ip_ban events" permanently green.
     """
     for name, selector in _deployed_selector_values().items():
         unknown = _selector_labels(selector) - LOKI_STREAM_LABELS

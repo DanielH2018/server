@@ -295,7 +295,10 @@ def test_every_composed_script_path_resolves():
 
 
 def test_the_composed_scan_still_finds_its_known_site():
-    """validate-compose.sh is the only composed-path site today. If it stops matching -- the
-    hook is rewritten, the regex drifts -- this arm would silently assert nothing, so pin it."""
+    """validate-compose.sh is the only composed-path site today.
+
+    If it stops matching -- the hook is rewritten, the regex drifts -- this arm would silently
+    assert nothing, so pin it.
+    """
     locs = {loc.split(":")[0] for loc, _ in composed_hook_invocations()}
     assert ".claude/hooks/validate-compose.sh" in locs, locs

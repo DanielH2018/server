@@ -1,7 +1,10 @@
-"""Guard: every macro defined in custom_templates/*.jinja must be exercised by a render_macro()
-call in this tests/ directory. Deterministic (covered: yes/no) — the replacement for a fuzzy
-'is this logic too complex' judgment. Matches the macro name as the 2nd positional arg to
-render_macro(FILE, "<name>", ...), NOT a bare substring (a comment/docstring can't satisfy it)."""
+"""Guard:
+
+every macro defined in custom_templates/*.jinja must be exercised by a render_macro() call in this
+tests/ directory. Deterministic (covered: yes/no) — the replacement for a fuzzy 'is this logic too
+complex' judgment. Matches the macro name as the 2nd positional arg to render_macro(FILE, "<name>",
+...), NOT a bare substring (a comment/docstring can't satisfy it).
+"""
 
 import re
 from pathlib import Path

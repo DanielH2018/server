@@ -1,3 +1,10 @@
+"""Ansible filter plugin for ordering containers_list by declared role_deps.
+
+Loads each container's meta/deps.yml, builds a dependency map, and exposes filters that
+topologically sort containers_list, find the transitive-dependency closure of a tagged
+deploy, and expand a tagged deploy to include dependencies that are not already running.
+"""
+
 from __future__ import annotations
 import heapq
 import os
@@ -6,8 +13,11 @@ from ansible.errors import AnsibleFilterError
 
 
 def _tags(container):
-    """Effective deploy tags for a containers_list entry: defaults to [name] so
-    host_vars don't have to repeat `tags: [<name>]`; an explicit `tags:` overrides."""
+    """Effective deploy tags for a containers_list entry:
+
+    defaults to [name] so host_vars don't have to repeat `tags: [<name>]`; an explicit `tags:`
+    overrides.
+    """
     return container.get("tags", [container["name"]])
 
 
@@ -149,6 +159,8 @@ def filter_by_platform(containers_list, platform="docker"):
 
 
 class FilterModule:
+    """Ansible filter plugin registering this module's containers_list helpers."""
+
     def filters(self):
         return {
             "build_dep_map": build_dep_map,

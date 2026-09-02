@@ -81,8 +81,10 @@ def test_rows_carry_name_tier_and_dates(tmp_path):
 
 
 def test_due_dates_come_from_secret_rotation(tmp_path):
-    """Not a second implementation: two would drift, and the page would then disagree
-    with the audit cron that actually pages."""
+    """Not a second implementation:
+
+    two would drift, and the page would then disagree with the audit cron that actually pages.
+    """
     import secret_rotation
 
     rows = {r["name"]: r for r in g.build_rows(_registry(tmp_path), TODAY)}

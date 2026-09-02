@@ -238,6 +238,15 @@ def build_site(site_dir: str, generators: str = "ok") -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Regenerate the reference pages, then build and swap in the MkDocs site.
+
+    Runs every generator (unless `--skip-generators`), builds the site with a
+    generators-status string embedded, and returns a distinct exit code for each failure mode
+    so the caller can tell stale pages from a stale site.
+
+    Returns:
+        0 on success, 2 if one or more generators failed, 3 if the site build failed.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--site-dir",

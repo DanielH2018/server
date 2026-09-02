@@ -51,9 +51,11 @@ def test_k8s_session_cookie_name_is_set():
 
 
 def test_k8s_authelia_database_is_on_its_own_volume():
-    """The slice-1 hazard from design.md: two Authelias writing one SQLite file corrupt it.
-    The database must live under the mount backed by the PVC, never on a path shared with
-    daniel-server's bind mount."""
+    """The slice-1 hazard from design.md:
+
+    two Authelias writing one SQLite file corrupt it. The database must live under the mount backed
+    by the PVC, never on a path shared with daniel-server's bind mount.
+    """
     db_path = _k8s_authelia_config()["storage"]["local"]["path"]
     assert db_path.startswith("/config/")
 
@@ -109,12 +111,14 @@ AUTHELIA_BYPASS_ROUTES = {
 
 
 def test_every_authed_service_carries_forward_auth_and_rate_limit():
-    """The check that has to scale: slice 2 hand-authors ~33 more IngressRoutes, and a
-    missing middleware is an ungated service that returns 200 and looks fine.
+    """The check that has to scale:
+
+    slice 2 hand-authors ~33 more IngressRoutes, and a missing middleware is an ungated service that
+    returns 200 and looks fine.
 
     Iterates every document, not just the first: a role may ship more than one IngressRoute
-    (healthchecks ships its ping bypass alongside the UI route), and reading only the first
-    would leave the extra ones unchecked — exactly where an ungated route would hide.
+    (healthchecks ships its ping bypass alongside the UI route), and reading only the first would
+    leave the extra ones unchecked — exactly where an ungated route would hide.
     """
     for entry in _k8s_entries():
         route_tpl = K8S / entry["name"] / "templates" / "ingressroute.yaml.j2"
@@ -245,14 +249,16 @@ def _tlsoption_names() -> set:
 
 
 def test_routes_reference_a_tlsoption_that_exists_and_is_not_named_default():
-    """`default` is reserved: Traefik registers a TLSOption of that name as the global default
-    options, never under <namespace>-default@kubernetescrd. An IngressRoute naming it
-    explicitly therefore fails to build, while the object sits there looking perfectly valid:
+    """`default` is reserved:
+
+    Traefik registers a TLSOption of that name as the global default options, never under
+    <namespace>-default@kubernetescrd. An IngressRoute naming it explicitly therefore fails to
+    build, while the object sits there looking perfectly valid:
 
         error "unknown TLS options: homelab-default@kubernetescrd"
 
-    Every router carrying that reference stops serving. Guard both halves — the name is not
-    the reserved one, and the name the macro asks for is one the traefik role defines.
+    Every router carrying that reference stops serving. Guard both halves — the name is not the
+    reserved one, and the name the macro asks for is one the traefik role defines.
     """
     defined = _tlsoption_names()
     assert defined, "the traefik role no longer defines any TLSOption"

@@ -253,13 +253,15 @@ def test_stranded_falls_back_to_zero_without_ownership_data():
 
 
 def test_format_backup_budget_reports_stranded_backups_not_pending_deletes():
-    """Stranded backups are abandoned, not queued. Longhorn enforces retain only when the owning
-    job runs against a volume still in its groups, counting only its own backups — so a volume
-    that moved tier keeps its old backups forever and only the reaper clears them.
+    """Stranded backups are abandoned, not queued.
 
-    This asserted `backups - retain` until 2026-08-19, which is a different quantity and made
-    the check ratify the bug: 11 backups against retain 4 read as 7 stranded, when the answer
-    depends entirely on who owns them. Here the d5 job owns 2, so the other 9 are the strays.
+    Longhorn enforces retain only when the owning job runs against a volume still in its groups,
+    counting only its own backups — so a volume that moved tier keeps its old backups forever and
+    only the reaper clears them.
+
+    This asserted `backups - retain` until 2026-08-19, which is a different quantity and made the
+    check ratify the bug: 11 backups against retain 4 read as 7 stranded, when the answer depends
+    entirely on who owns them. Here the d5 job owns 2, so the other 9 are the strays.
     """
     vols = {"pvc-a": {"prune": 100, "blocks": 50, "backups": 11}}
     owners = {"pvc-a": {"daily-backup": 9, "weekly-backup-d5": 2}}

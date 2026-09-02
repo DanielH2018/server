@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
-"""Invariant: every Docker network a service attaches to (host_vars `containers_list[].networks`)
-must be created by docker_install's "Create Docker networks" loop.
+"""Invariant:
 
-Otherwise a service on a brand-new network deploys fine on an EXISTING host (the net is
-already there) but fails only on a fresh-host bring-up — this catches it pre-deploy instead.
-Service-INTERNAL nets (pihole_internal, scrutiny_internal, crowdsec-db) are declared inside
-their own compose and never appear in host_vars, so they're correctly out of scope here.
-Mirrors validate_compose_templates' host_vars-driven model.
+every Docker network a service attaches to (host_vars `containers_list[].networks`) must be created
+by docker_install's "Create Docker networks" loop.
 
-E7 (2026-08-13) retired the Docker edge (traefik + authelia containers): the guards that used
-to check Traefik joined every routed service's network (`_traefik_networks`,
-`test_traefik_joins_every_routed_network`) went with it — there is no Docker-side router left
-to route anything, so the invariant became vacuous. What remains below still verifies
-something real regardless of which host runs an edge.
+Otherwise a service on a brand-new network deploys fine on an EXISTING host (the net is already
+there) but fails only on a fresh-host bring-up — this catches it pre-deploy instead.
+Service-INTERNAL nets (pihole_internal, scrutiny_internal, crowdsec-db) are declared inside their
+own compose and never appear in host_vars, so they're correctly out of scope here. Mirrors
+validate_compose_templates' host_vars-driven model.
+
+E7 (2026-08-13) retired the Docker edge (traefik + authelia containers): the guards that used to
+check Traefik joined every routed service's network (`_traefik_networks`,
+`test_traefik_joins_every_routed_network`) went with it — there is no Docker-side router left to
+route anything, so the invariant became vacuous. What remains below still verifies something real
+regardless of which host runs an edge.
 
 Run: uv run pytest ansible/tests/setup/test_network_invariant.py
 """

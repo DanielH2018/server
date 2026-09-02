@@ -1,5 +1,7 @@
-"""Cluster checks for monitor-bridge — the cAdvisor trio (restarts, OOM, CPU throttle), the
-Prometheus gates, scrape targets, Traefik 5xx and latency, and k3s workload health.
+"""Cluster checks for monitor-bridge.
+
+Covers the cAdvisor trio (restarts, OOM, CPU throttle), the Prometheus gates, scrape
+targets, Traefik 5xx and latency, and k3s workload health.
 
 Slice 6 of the check.py split. Reads config as `cfg.X`, the fetch layer as `bridge_io.X`,
 the shared streak counter as `bridge_streaks.X` and the Loki arm as

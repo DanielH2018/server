@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Drive the staging gate over a run of real master commits and report whether it is
-trustworthy enough to block on.
+"""Drive the staging gate over real master commits and report whether it is trustworthy.
 
-This answers part 1 of slice 4's entry condition (`docs/staging-phase-c.md`): N consecutive
+The report says whether the gate is trustworthy enough to block on. This answers part 1 of
+slice 4's entry condition (`docs/staging-phase-c.md`): N consecutive
 gate runs against real master SHAs with zero FALSE failures. It exists because the original
 condition — collect the rate from real ticks — cannot be met. `consult_staging` runs only
 when a tick carries `cs.k8s_deploy`, which needs a service that is in the staging subset AND
@@ -107,6 +107,17 @@ COULD_NOT_RUN = 2
 
 @dataclass
 class Run:
+    """One gate invocation against a single master commit, as recorded in the ledger.
+
+    Attributes:
+        sha: the commit gated.
+        subject: the commit's subject line, for a human-readable ledger.
+        tags: the `--tags` value passed to staging_gate.py.
+        rc: the exit code staging_gate.py returned.
+        outcome: one of OK, SKIPPED, FALSE_FAILURE, NEEDS_TRIAGE, from `classify`.
+        note: the reason accompanying a non-OK outcome.
+    """
+
     sha: str
     subject: str
     tags: str
@@ -281,6 +292,7 @@ def staging_head() -> str | None:
 
 
 def is_ancestor(sha: str, of: str) -> bool:
+    """Whether `sha` is an ancestor of `of`."""
     return (
         subprocess.run(
             ["git", "merge-base", "--is-ancestor", sha, of],
@@ -315,6 +327,7 @@ def load_ledger(path: Path) -> list[Run]:
 
 
 def gate(sha: str, tags: str, timeout: int) -> int:
+    """Run staging_gate.py for one commit and return its exit code."""
     return subprocess.run(
         [
             sys.executable,
@@ -333,6 +346,16 @@ def gate(sha: str, tags: str, timeout: int) -> int:
 
 
 def main() -> int:
+    """Plan a window of commits, gate each one, and report the entry-condition verdict.
+
+    Loads any ledger already recorded in `--jsonl`, plans new commits back from `--from`
+    (or, with `--since-ledger`, only those newer than the last recorded run), runs
+    `staging_gate.py` against each, and appends the result. Exits CONDITION_MET (0) once
+    the clean streak first reaches `--required`, CONDITION_NOT_MET (1) otherwise, and
+    COULD_NOT_RUN (2) when the plan itself could not be built (no gateable commits, a
+    stale checkout without `--allow-ancestors`, or `--since-ledger` given with no ledger
+    to read).
+    """
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument(
         "--count", type=int, default=20, help="runs to collect (default 20)"

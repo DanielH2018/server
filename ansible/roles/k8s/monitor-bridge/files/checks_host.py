@@ -1,5 +1,7 @@
-"""Host and hardware checks for monitor-bridge — disk, memory, cert expiry, host temperature,
-SMART, the UPS, Pi pressure and published ports, the speedtest.
+"""Host and hardware checks for monitor-bridge.
+
+Covers disk, memory, cert expiry, host temperature, SMART, the UPS, Pi pressure and
+published ports, and the speedtest.
 
 Slice 5 of the check.py split. Reads config as `cfg.X`, the fetch layer as `bridge_io.X` and
 the shared streak counter as `bridge_streaks.X`, so the tests' patches on those modules reach
@@ -82,6 +84,12 @@ def _host_origin_shortfall(key, vec, what, min_origins=None, consecutive=None):
 
 
 def check_disk():
+    """Checks whether any monitored disk mountpoint is over cfg.DISK_MAX_PCT full.
+
+    Computes each mountpoint's used percentage per-origin (host), pairing avail and size
+    from the same series so a multi-host estate can't cross-pair one host's avail with
+    another's size. Returns (ok, msg).
+    """
     # Percentage computed per series, then grouped by origin, so avail and size always come from
     # the SAME host and device. The previous form took max(avail) and max(size) as two separate
     # queries: fine while one estate reported, but once daniel-server and daniel-box both landed
@@ -127,6 +135,12 @@ def check_cert():
 
 
 def check_mem():
+    """Checks whether any host's memory usage is over cfg.MEM_MAX_PCT.
+
+    Host-level pressure only; per-container OOM kills are check_oom's job. Computed
+    per-origin so a two-host estate can't pair one host's avail with another's total.
+    Returns (ok, msg).
+    """
     # Host memory pressure only. Per-container OOM kills are reported (with the
     # offending container named) by check_oom — single source of truth.
     #
@@ -183,6 +197,11 @@ def scrutiny_wear_devices(summary):
 
 
 def check_scrutiny():
+    """Checks Scrutiny's summary for freshness, drive health, and (if configured) wear.
+
+    Fetches /api/summary once; per-device wear details are fetched only when freshness and
+    health both pass and cfg.SCRUTINY_WEAR_MAX is set. Returns (ok, msg).
+    """
     data = bridge_io._get_json(cfg.SCRUTINY_URL + "/api/summary")
     summary = (data.get("data") or {}).get("summary")
     fresh_ok, fresh_msg = scrutiny_freshness(summary, cfg.SCRUTINY_MAX_AGE_H)

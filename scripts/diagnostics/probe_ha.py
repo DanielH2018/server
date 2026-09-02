@@ -48,8 +48,11 @@ AUTOMATIONS_DIR = os.path.join(
 
 
 def automations_source_text(directory: str = AUTOMATIONS_DIR) -> str:
-    """Every *.yaml under the automations directory, concatenated. An empty directory is an
-    error rather than an empty expected set: a gate that expects nothing passes on anything."""
+    """Every *.yaml under the automations directory, concatenated.
+
+    An empty directory is an error rather than an empty expected set: a gate that expects nothing
+    passes on anything.
+    """
     paths = sorted(glob.glob(os.path.join(directory, "*.yaml")))
     if not paths:
         raise FileNotFoundError(f"no *.yaml under {directory}")
@@ -90,8 +93,10 @@ def ha_state_url(base, entity_id):
 
 def ha_get_url(base, path):
     """URL for an arbitrary HA REST path under `base` (scheme://host, no trailing slash).
-    Normalizes a leading `/` and an `api/` prefix so `error_log`, `/error_log`, and
-    `/api/error_log` all work."""
+
+    Normalizes a leading `/` and an `api/` prefix so `error_log`, `/error_log`, and `/api/error_log`
+    all work.
+    """
     path = path.lstrip("/")
     if path.startswith("api/"):
         path = path[len("api/") :]
@@ -148,6 +153,7 @@ def _recv_exact_from(sock):
     buf = bytearray()
 
     def recv_exact(n: int) -> bytes:
+        """Read and return exactly `n` bytes from `sock`, buffering across recv() calls."""
         while len(buf) < n:
             chunk = sock.recv(4096)
             if not chunk:
@@ -161,12 +167,15 @@ def _recv_exact_from(sock):
 
 
 def format_trace(trace) -> str:
-    """Human timeline from a trace/get result: trigger -> each step path (+ PASS/FAIL for a
-    condition step, whose result is {"result": bool}) -> error.
+    """Human timeline from a trace/get result:
 
-    HA's trace/get payload has `trigger` as a plain string description (e.g.
-    "state of binary_sensor.aqara_fp300_presence"); older/nested shapes may be a dict
-    with a `description` key — both are handled."""
+    trigger -> each step path (+ PASS/FAIL for a condition step, whose result is {"result": bool})
+    -> error.
+
+    HA's trace/get payload has `trigger` as a plain string description (e.g. "state of
+    binary_sensor.aqara_fp300_presence"); older/nested shapes may be a dict with a `description` key
+    — both are handled.
+    """
     if not trace:
         return (
             "no stored trace (the automation hasn't run since the last HA restart/deploy; "
@@ -193,8 +202,11 @@ def format_trace(trace) -> str:
 
 
 def expected_automation_ids(text: str) -> set[str]:
-    """The `id:` of every top-level automation in the automations/ source text. Regex over the raw
-    text (no YAML parse) — robust to the HA Jinja inside the file; ids are simple slugs."""
+    """The `id:` of every top-level automation in the automations/ source text.
+
+    Regex over the raw text (no YAML parse) — robust to the HA Jinja inside the file; ids are simple
+    slugs.
+    """
     return set(_AUTOMATION_ID_RE.findall(text))
 
 
@@ -219,11 +231,15 @@ def vanished_snapshot_entities(snapshot_ids, live_entity_ids):
 
 
 def automation_load_errors(expected_ids, live_automations):
-    """expected_ids = ids from files/automations/*.yaml; live_automations = the automation.* entries
-    from /api/states. A defined id with no live automation carrying that attributes.id did NOT
-    load (dropped). A defined id whose live automation is `unavailable` errored at load. A
-    disabled automation (state 'off') is fine. Live ids not in the file (UI/.storage cruft) are
-    ignored — this gate is file-driven so cruft can't make it red."""
+    """Return one error string per automation id that is defined but did not load cleanly.
+
+    `expected_ids` are ids from files/automations/*.yaml; `live_automations` are the
+    automation.* entries from /api/states. A defined id with no live automation carrying
+    that attributes.id did NOT load (dropped). A defined id whose live automation is
+    `unavailable` errored at load. A disabled automation (state 'off') is fine. Live ids
+    not in the file (UI/.storage cruft) are ignored — this gate is file-driven so cruft
+    can't make it red.
+    """
     by_id = {}
     for a in live_automations:
         aid = (a.get("attributes") or {}).get("id")
@@ -256,12 +272,15 @@ def _ws_recv_json(recv_exact):
 
 
 def ha_trace(host, token, automation_id, timeout=DEFAULT_TIMEOUT, connect_ip=None):
-    """Fetch the latest execution trace for an automation via the HA WebSocket API. Read-only:
-    sends ONLY auth + trace/list + trace/get. Returns the trace dict, or None if no stored trace.
+    """Fetch the latest execution trace for an automation via the HA WebSocket API.
 
-    `host` is the unsuffixed .local hostname (TLS on 443, SNI/Host). `connect_ip` pins the
-    TCP connection to the ingress VIP — since the bridge teardown (slice-7 BT4) the host
-    shell's DNS answer for the name is not the cluster edge (see ha_host)."""
+    Read-only: sends ONLY auth + trace/list + trace/get. Returns the trace dict, or None if no
+    stored trace.
+
+    `host` is the unsuffixed .local hostname (TLS on 443, SNI/Host). `connect_ip` pins the TCP
+    connection to the ingress VIP — since the bridge teardown (slice-7 BT4) the host shell's DNS
+    answer for the name is not the cluster edge (see ha_host).
+    """
     import base64
     import os
 
@@ -319,11 +338,13 @@ def _slug(name):
 
 
 def match_automation(states, query):
-    """Find an automation in a `/api/states` list by entity_id, `attributes.id`,
-    or friendly-name slug. Resolves the alias-slug-vs-id trap: an automation's
-    entity_id derives from its *alias*, not its `id`, so the two can differ
-    (e.g. id `bedroom_fan_temperature` -> `automation.bedroom_fan_temperature_control`).
-    Accepts a bare slug/id or a full `automation.<slug>` entity_id. None if no match."""
+    """Find an automation in a `/api/states` list by entity_id, `attributes.id`, or slug.
+
+    Resolves the alias-slug-vs-id trap: an automation's entity_id derives from its
+    *alias*, not its `id`, so the two can differ (e.g. id `bedroom_fan_temperature` ->
+    `automation.bedroom_fan_temperature_control`). Accepts a bare slug/id or a full
+    `automation.<slug>` entity_id. Returns None if no match.
+    """
     want_entity = query if query.startswith("automation.") else "automation." + query
     for s in states:
         eid = s.get("entity_id", "")
@@ -393,8 +414,10 @@ def ha_state_rows(states, model):
 
 
 def ha_token():
-    """Decrypt claude_ha_token from the SOPS secrets file. Requires the host's age
-    key (present on daniel-server, where HA runs)."""
+    """Decrypt claude_ha_token from the SOPS secrets file.
+
+    Requires the host's age key (present on daniel-server, where HA runs).
+    """
     return core.sops_extract("claude_ha_token")
 
 
@@ -412,6 +435,18 @@ def _ha_url(ip, ns):
 
 
 def run_ha(ns):
+    """Dispatch a parsed `ha` subcommand against the live HA API.
+
+    Handles trace/why, verify-automations, verify-entities, get, state, and a bare
+    automation lookup.
+
+    Args:
+        ns: The parsed argparse namespace for the `ha` subcommand.
+
+    Returns:
+        0 on success, 1 when the check itself found a problem (e.g. an automation not
+        found, a vanished entity, an unparseable body).
+    """
     if ns.ha_cmd in ("trace", "why"):
         if ns.dry_run:
             print(
@@ -520,6 +555,11 @@ def run_ha(ns):
 
 
 def run_ha_state(ns):
+    """Print the derived state-model rows, and the full entity inventory if requested.
+
+    Args:
+        ns: The parsed argparse namespace for the `ha state` subcommand.
+    """
     import json
     from home_assistant import ha_state_model
 

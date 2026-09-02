@@ -209,6 +209,7 @@ def on_files(files, config):
 
 
 def on_page_content(page_html, page, config, files):
+    """Rewrite bare repo-path mentions in `page_html` into links, using the `on_files` index."""
     from mkdocs.utils import get_relative_url
 
     index = _state.get("index")
@@ -219,6 +220,7 @@ def on_page_content(page_html, page, config, files):
         page_html = add_script_anchors(page_html, _state["paths"])
 
     def resolve(text: str) -> str | None:
+        """Look up `text` in the path index and return a URL relative to the current page."""
         found = lookup(index, text)
         if found is None:
             return None

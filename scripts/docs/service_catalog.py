@@ -89,6 +89,15 @@ UNKNOWN = "unknown"
 
 @dataclass
 class ServiceRow:
+    """One row of the service catalog: a single service's derived facts, host-scoped.
+
+    Attributes:
+        route: The IngressRoute/Traefik reachability derivation, or an `UNKNOWN` explanation.
+        auth_tier: Whether the route sits behind Authelia, read from `use_authelia`.
+        backup_tier: The Longhorn backup tier(s) its PVC(s) fall into, or "n/a" off k8s.
+        autodeploy: Whether the GitOps deployer will auto-apply this service's image bumps.
+    """
+
     name: str
     host: str
     platform: str  # "k8s" or "docker"
@@ -119,6 +128,16 @@ def k8s_route(
     k8s_roles: Path = K8S_ROLES,
     all_vars: Path = ALL_VARS,
 ) -> str:
+    """Derive a k8s service's route cell from its role's IngressRoute template, if any.
+
+    Args:
+        entry: The service's `containers_list` entry.
+        k8s_roles: Root directory of the k8s roles.
+        all_vars: Path to `group_vars/all.yml`, read for the public-route default.
+
+    Returns:
+        A route cell string, or "no route (infra role)" when the role has no IngressRoute.
+    """
     name = entry["name"]
     role_dir = k8s_roles / name
     if not (role_dir / "templates" / "ingressroute.yaml.j2").is_file():
@@ -148,6 +167,7 @@ def route_for(
     k8s_roles: Path = K8S_ROLES,
     all_vars: Path = ALL_VARS,
 ) -> str:
+    """Derive `entry`'s route cell, dispatching to `k8s_route` or `docker_route` by platform."""
     if platform == "k8s":
         return k8s_route(entry, k8s_roles, all_vars)
     return docker_route(entry, host_data)
@@ -202,8 +222,11 @@ def _pvc_claim_names(role_dir: Path) -> list[str]:
 
 
 def _resolve_claim_name(expr: str, role_dir: Path) -> str | None:
-    """Resolve a PVC name expression to a literal string, or None if it can't be
-    resolved from this role's own defaults/main.yml alone (see FIELD NOTES)."""
+    """Resolve a PVC name expression to a literal string.
+
+    Returns None if it can't be resolved from this role's own defaults/main.yml alone
+    (see FIELD NOTES).
+    """
     if not expr.startswith("{{"):
         return expr  # already literal
     match = _SIMPLE_VAR_RE.match(expr)
@@ -220,10 +243,12 @@ def _resolve_claim_name(expr: str, role_dir: Path) -> str | None:
 def load_longhorn_tier_lists(
     k3s_defaults: Path = K3S_DEFAULTS,
 ) -> tuple[set[str], set[str]]:
-    """(r2_volumes, weekly_volumes) — "namespace/claim" strings, from the k3s role's
-    defaults. Everything else with a PVC falls into the `default` RecurringJob group,
-    which Longhorn applies to any volume with no job of its own (daily, to B2) — see
-    ansible/roles/setup/k3s/templates/longhorn-recurringjob.yaml.j2."""
+    """(r2_volumes, weekly_volumes) — "namespace/claim" strings, from the k3s role's defaults.
+
+    Everything else with a PVC falls into the `default` RecurringJob group, which Longhorn applies
+    to any volume with no job of its own (daily, to B2) — see
+    ansible/roles/setup/k3s/templates/longhorn-recurringjob.yaml.j2.
+    """
     data = _load_yaml(k3s_defaults)
     r2 = set(data.get("k3s_longhorn_r2_volumes") or [])
     weekly = set(data.get("k3s_longhorn_weekly_volumes") or [])
@@ -238,6 +263,23 @@ def backup_tier(
     weekly_volumes: set[str],
     k8s_roles: Path = K8S_ROLES,
 ) -> str:
+    """Derive `entry`'s Longhorn backup tier(s) from its role's PVC claim names.
+
+    Resolves each PVC the role declares (or references by `claimName:`) to a literal claim
+    name, then classifies `namespace/claim` against the R2 and weekly volume lists. A role
+    with multiple PVCs in different tiers reports all of them, de-duplicated.
+
+    Args:
+        entry: The service's `containers_list` entry.
+        platform: "k8s" or "docker" — only "k8s" is Longhorn-backed.
+        k8s_namespace: The cluster namespace PVCs are classified under.
+        r2_volumes: "namespace/claim" strings backed up daily to R2.
+        weekly_volumes: "namespace/claim" strings backed up weekly to B2.
+        k8s_roles: Root directory of the k8s roles.
+
+    Returns:
+        A semicolon-joined string of tier labels, "no PVC (stateless)", or "n/a" off k8s.
+    """
     if platform != "k8s":
         return "n/a (Docker/Pi, not Longhorn-backed)"
     role_dir = k8s_roles / entry["name"]
@@ -278,6 +320,17 @@ def autodeploy_eligibility(
     host_data: dict[str, Any],
     k8s_roles: Path = K8S_ROLES,
 ) -> str:
+    """Derive `entry`'s GitOps auto-deploy eligibility from its role's `k8s_autodeploy` default.
+
+    Args:
+        entry: The service's `containers_list` entry.
+        platform: "k8s" or "docker" — only "k8s" has a GitOps auto-deploy path.
+        host_data: The host's parsed `host_vars`, read for `has_gitops` off k8s.
+        k8s_roles: Root directory of the k8s roles.
+
+    Returns:
+        "eligible", "denylisted (<reason>)", or an `UNKNOWN`/"n/a" explanation.
+    """
     if platform != "k8s":
         if host_data.get("has_gitops") is False:
             return "n/a (host has no GitOps auto-deploy path)"
@@ -304,6 +357,17 @@ def build_rows(
     k3s_defaults: Path = K3S_DEFAULTS,
     all_vars: Path = ALL_VARS,
 ) -> list[ServiceRow]:
+    """Build one `ServiceRow` per `containers_list` entry across every host.
+
+    Args:
+        host_vars: Directory holding each host's `host_vars` file.
+        k8s_roles: Root directory of the k8s roles.
+        k3s_defaults: Path to the k3s role's `defaults/main.yml`, for the Longhorn tier lists.
+        all_vars: Path to `group_vars/all.yml`.
+
+    Returns:
+        One `ServiceRow` per service, across every host in `host_vars`.
+    """
     r2_volumes, weekly_volumes = load_longhorn_tier_lists(k3s_defaults)
     k8s_namespace = _load_yaml(all_vars).get("k8s_namespace", "homelab")
 
@@ -464,6 +528,14 @@ def render_markdown(rows: list[ServiceRow]) -> str:
 
 
 def render_html(rows: list[ServiceRow]) -> str:
+    """Render `rows` as the standalone HTML service-catalog artifact, one table per host.
+
+    Args:
+        rows: Service rows as returned by `build_rows`.
+
+    Returns:
+        A complete, self-contained HTML document.
+    """
     hosts = sorted({r.host for r in rows})
     total = len(rows)
     unknown_fields = ["route", "auth_tier", "backup_tier", "autodeploy"]
@@ -519,6 +591,15 @@ repo alone; see scripts/docs/service_catalog.py's FIELD NOTES for why.</p>
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Build the service rows and write them as HTML or Markdown, per `--format`.
+
+    The Markdown path writes through `finish_generator` (only on a body change, for the
+    committed reference page); the HTML path writes unconditionally to the artifacts dir,
+    which is not committed.
+
+    Returns:
+        0 on success.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, required=True, help="output file path")
     parser.add_argument(

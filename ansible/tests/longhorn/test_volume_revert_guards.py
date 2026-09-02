@@ -124,15 +124,16 @@ def _body_with_prose(task: dict) -> str:
 
 
 def test_the_role_never_scales_back_up() -> None:
-    """Every one of the thirteen manifests carries an explicit `replicas: 1`, so the apply that
-    follows this role restores the Deployment. Scaling back here would roll the workload twice
-    and race the apply.
+    """Every one of the thirteen manifests carries an explicit `replicas:
 
-    Both files, and the class rather than the literal. Measured 2026-08-21: appending an
-    unguarded `kubectl scale ... --replicas=1` to `main.yml` left all 27 tests green, because
-    the check read `claim.yml` alone; and a scale-back can equally be written
-    `--replicas={{ n }}`, `kubernetes.core.k8s_scale`, or `kubectl patch -p '{"spec":
-    {"replicas":1}}'`. So: the only replica count this role may name anywhere is zero.
+    1`, so the apply that follows this role restores the Deployment. Scaling back here would roll
+    the workload twice and race the apply.
+
+    Both files, and the class rather than the literal. Measured 2026-08-21: appending an unguarded
+    `kubectl scale ... --replicas=1` to `main.yml` left all 27 tests green, because the check read
+    `claim.yml` alone; and a scale-back can equally be written `--replicas={{ n }}`,
+    `kubernetes.core.k8s_scale`, or `kubectl patch -p '{"spec": {"replicas":1}}'`. So: the only
+    replica count this role may name anywhere is zero.
     """
     for _path, task in _role_tasks():
         body = _body(task)
@@ -157,12 +158,13 @@ def test_the_role_never_scales_back_up() -> None:
 
 
 def test_every_mutation_is_guarded_on_k8s_no_mutate() -> None:
-    """`k8s_no_mutate` is `ansible_check_mode or (k8s_dry_run | bool)`. Guarding on either half
-    alone leaves the other half mutating a live cluster during a run that promised not to.
+    """`k8s_no_mutate` is `ansible_check_mode or (k8s_dry_run | bool)`.
 
-    WHICH TEST COVERS WHICH GUARD. Nine tasks in `claim.yml` carry the guard, and three
-    mechanisms divide them — jointly exhaustive as of 2026-09-01, and nothing makes them stay
-    that way:
+    Guarding on either half alone leaves the other half mutating a live cluster during a run that
+    promised not to.
+
+    WHICH TEST COVERS WHICH GUARD. Nine tasks in `claim.yml` carry the guard, and three mechanisms
+    divide them — jointly exhaustive as of 2026-09-01, and nothing makes them stay that way:
 
       * seven by this census — the scale-down, the three waits and the three API calls. It was
         eight until 2026-09-01, when the seeded-annotation strip went: it paired with

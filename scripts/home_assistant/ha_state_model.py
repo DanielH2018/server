@@ -47,8 +47,11 @@ def slugify(name: str) -> str:
 
 
 def call_service(call: dict) -> str | None:
-    """The service id of a service-call step. Handles both the `service:` (this repo) and the
-    newer `action:` spelling; returns None for non-call dicts."""
+    """The service id of a service-call step.
+
+    Handles both the `service:` (this repo) and the newer `action:` spelling; returns None for
+    non-call dicts.
+    """
     svc = call.get("service")
     if svc is None:
         svc = call.get("action")
@@ -56,8 +59,11 @@ def call_service(call: dict) -> str | None:
 
 
 def call_targets(call: dict) -> list[str]:
-    """Entity ids a service call targets — across `target.entity_id`, legacy top-level
-    `entity_id`, and `data.entity_id`; scalar or list. Templated ids are returned verbatim."""
+    """Entity ids a service call targets.
+
+    Covers `target.entity_id`, legacy top-level `entity_id`, and `data.entity_id`;
+    scalar or list. Templated ids are returned verbatim.
+    """
     ids: list[str] = []
     for container in (call.get("target"), call, call.get("data")):
         if not isinstance(container, dict):
@@ -71,10 +77,12 @@ def call_targets(call: dict) -> list[str]:
 
 
 def iter_service_calls(node) -> Iterator[dict]:
-    """Yield every service-call dict anywhere under `node`. Recurses universally, so all of
-    choose/if/then/else/repeat/parallel/sequence are covered without special-casing — a step is
-    a 'call' iff it has a `service`/`action` key whose value is a `domain.service` string (a
-    block-style `action:` is a list, so it is not mistaken for a call)."""
+    """Yield every service-call dict anywhere under `node`.
+
+    Recurses universally, so all of choose/if/then/else/repeat/parallel/sequence are covered without
+    special-casing — a step is a 'call' iff it has a `service`/`action` key whose value is a
+    `domain.service` string (a block-style `action:` is a list, so it is not mistaken for a call).
+    """
     if isinstance(node, dict):
         if call_service(node) is not None:
             yield node
@@ -90,8 +98,10 @@ def _is_templated(entity_id: str) -> bool:
 
 
 def scene_entity_map(scenes: list) -> dict[str, list[str]]:
-    """Map `scene.<id>` -> the entity ids the scene sets (so `scene.turn_on` counts as a write
-    to those entities)."""
+    """Map `scene.<id>` -> the entity ids the scene sets.
+
+    So `scene.turn_on` counts as a write to those entities.
+    """
     out: dict[str, list[str]] = {}
     for scene in scenes or []:
         sid = scene.get("id")
@@ -102,18 +112,31 @@ def scene_entity_map(scenes: list) -> dict[str, list[str]]:
 
 
 def automation_writer(auto: dict) -> str:
-    """The state-machine name of an automation: `automation.<slug(alias)>` (HA derives the
-    entity_id from the alias, not the id; fall back to the id when alias is absent)."""
+    """The state-machine name of an automation:
+
+    `automation.<slug(alias)>` (HA derives the entity_id from the alias, not the id; fall back to
+    the id when alias is absent).
+    """
     return "automation." + slugify(auto.get("alias") or auto.get("id") or "unknown")
 
 
 def extract_writes(automations, scripts, scene_map):
-    """Return (writes, dynamic_writes). writes[entity] = sorted writer names; dynamic_writes
-    [writer] = sorted templated target strings that couldn't be resolved to an entity."""
+    """Return (writes, dynamic_writes).
+
+    writes[entity] = sorted writer names; dynamic_writes [writer] = sorted templated target strings
+    that couldn't be resolved to an entity.
+    """
     writes: dict[str, set] = defaultdict(set)
     dynamic: dict[str, set] = defaultdict(set)
 
     def record(writer, call):
+        """Attribute one service call's write(s) to `writer` in `writes`/`dynamic`.
+
+        A `scene.turn_on` targeting a known scene fans out to that scene's own
+        entities; a templated target goes to `dynamic` instead, since it can't be
+        resolved to a concrete entity; any other `scene.*` call (create/reload) is
+        not a device-state write and is skipped.
+        """
         svc = call_service(call)
         for ent in call_targets(call):
             if _is_templated(ent):
@@ -145,8 +168,10 @@ _CELL_DOMAINS = ("input_boolean", "input_number", "input_datetime", "timer")
 
 
 def load_role(role_dir: Path = ROLE_DIR) -> dict:
-    """Assemble the deployed /config layout into a temp dir and return the loaded
-    configuration.yaml tree (automation/script/scene/template sub-trees inlined via !include)."""
+    """Assemble the deployed /config layout into a temp dir and return the loaded tree.
+
+    automation/script/scene/template sub-trees are inlined via !include.
+    """
     with tempfile.TemporaryDirectory() as tmp:
         dest = Path(tmp)
         assemble_config(role_dir, dest)
@@ -173,8 +198,11 @@ def _threshold_sensors(config: dict) -> list[dict]:
 
 
 def extract_thresholds(config: dict) -> list[dict]:
-    """Each threshold binary_sensor -> {entity, name, bound, source}. The derived entity id is
-    binary_sensor.<slug(name)> (how HA names a platform sensor from its `name`)."""
+    """Each threshold binary_sensor -> {entity, name, bound, source}.
+
+    The derived entity id is binary_sensor.<slug(name)> (how HA names a platform sensor from its
+    `name`).
+    """
     out = []
     for s in _threshold_sensors(config):
         name = s.get("name", "")
@@ -215,9 +243,12 @@ def _all_service_calls(config: dict):
 
 
 def created_scenes(config: dict) -> set[str]:
-    """`scene.<scene_id>` for every `scene.create` call — transient scenes built at runtime
-    (e.g. bedroom_pre_alert from script.bedroom_alert_pulse) that are legitimately referenced
-    by a later `scene.turn_on` but exist in no scenes.yaml entry and no live snapshot."""
+    """`scene.<scene_id>` for every `scene.create` call.
+
+    These are transient scenes built at runtime (e.g. bedroom_pre_alert from
+    script.bedroom_alert_pulse) that are legitimately referenced by a later
+    `scene.turn_on` but exist in no scenes.yaml entry and no live snapshot.
+    """
     out: set[str] = set()
     for call in _all_service_calls(config):
         if call_service(call) == "scene.create":
@@ -228,9 +259,11 @@ def created_scenes(config: dict) -> set[str]:
 
 
 def config_entities(config: dict, scenes: list) -> set[str]:
-    """Every entity id derivable from the repo config — helpers, scenes (static + runtime-created),
-    threshold sensors, template sensors. The resolution check unions this with the live
-    external-entity snapshot."""
+    """Every entity id derivable from the repo config.
+
+    Covers helpers, scenes (static + runtime-created), threshold sensors, and template
+    sensors. The resolution check unions this with the live external-entity snapshot.
+    """
     ents = {c["entity"] for c in extract_cells(config).values()}
     ents |= {t["entity"] for t in extract_thresholds(config)}
     ents |= set(scene_entity_map(scenes).keys())
@@ -247,16 +280,21 @@ _GENERATED_BANNER = "# GENERATED by scripts/home_assistant/ha_state_model.py —
 
 
 class _IndentDumper(yaml.SafeDumper):
-    """SafeDumper that indents sequence items under their parent key, so the generated YAML
-    satisfies ansible-lint/yamllint's `indent-sequences` (these files live under ansible/)."""
+    """SafeDumper that indents sequence items under their parent key.
+
+    So the generated YAML satisfies ansible-lint/yamllint's `indent-sequences` (these
+    files live under ansible/).
+    """
 
     def increase_indent(self, flow=False, indentless=False):
         return super().increase_indent(flow, indentless=False)
 
 
 def _dump_yaml(data) -> str:
-    """Deterministic, ansible-lint-clean YAML dump used for every generated state-model file
-    (derived_state.yml, external_entities.yml, expected_override_writers seed)."""
+    """Deterministic, ansible-lint-clean YAML dump for every generated state-model file.
+
+    Used for derived_state.yml, external_entities.yml and the expected_override_writers seed.
+    """
     return yaml.dump(
         data, Dumper=_IndentDumper, sort_keys=True, default_flow_style=False
     )
@@ -271,6 +309,15 @@ def _actuator_lights(config: dict) -> set[str]:
 
 
 def build_model(config: dict) -> dict:
+    """Derive the state model (cells, actuators, writers) from a loaded HA config tree.
+
+    Args:
+        config: The `configuration.yaml` tree from `load_role`.
+
+    Returns:
+        A dict with sorted `cells`, `actuators`, `writes` and `dynamic_writes` keys, the
+        shape `render_derived_yaml`/`render_state_md` consume.
+    """
     scenes = config.get("scene") or []
     cells = extract_cells(config)
     writes, dynamic = extract_writes(
@@ -291,6 +338,11 @@ def render_derived_yaml(model: dict) -> str:
 
 
 def render_state_md(model: dict) -> str:
+    """Render the model as the committed `STATE.md` Markdown document.
+
+    Args:
+        model: A model dict as returned by `build_model`.
+    """
     lines = [
         "<!-- GENERATED by scripts/home_assistant/ha_state_model.py — DO NOT EDIT. Run `generate`. -->",
         "# Bedroom HA — Derived State Model",
@@ -327,8 +379,10 @@ EXTERNAL_SERVICES_YAML = STATE_DIR / "external_services.yml"
 
 
 def parse_services(api_services: list) -> set[str]:
-    """Flatten HA's GET /api/services (a list of {domain, services: {name: ...}}) into a flat
-    {f"{domain}.{name}"} set."""
+    """Flatten HA's GET /api/services response into a flat {f"{domain}.{name}"} set.
+
+    The input is a list of {domain, services: {name: ...}} entries.
+    """
     out: set[str] = set()
     for block in api_services or []:
         domain = block.get("domain")
@@ -340,8 +394,11 @@ def parse_services(api_services: list) -> set[str]:
 
 
 def config_services(config: dict) -> set[str]:
-    """Services the config itself defines: every script registers `script.<name>`. This is the
-    freshness escape-hatch so a brand-new script (not yet in the committed snapshot) resolves."""
+    """Services the config itself defines:
+
+    every script registers `script.<name>`. This is the freshness escape-hatch so a brand-new script
+    (not yet in the committed snapshot) resolves.
+    """
     return {f"script.{name}" for name in (config.get("script") or {})}
 
 
@@ -352,9 +409,11 @@ def load_external_services() -> set[str]:
 
 
 def cmd_refresh(get_states=None, get_services=None) -> int:
-    """Snapshot live external entity ids + the live service registry into external_entities.yml /
-    external_services.yml. get_states/get_services are injected for tests; both default to live HA
-    (needs the host age key + a running HA, reached through the cluster ingress VIP).
+    """Snapshot live external entity ids and the service registry into their YAML files.
+
+    Writes external_entities.yml and external_services.yml. get_states/get_services are injected
+    for tests; both default to live HA (needs the host age key + a running HA, reached through the
+    cluster ingress VIP).
 
     Talks to HA the same way probe.py's own `ha` subcommands do — base URL + --resolve pin. It
     used to call probe.resolve_ip(probe.HA_CONTAINER), a Docker-era container lookup that stopped
@@ -409,8 +468,11 @@ def cmd_refresh(get_states=None, get_services=None) -> int:
 
 
 def override_consistency_report(writes: dict) -> list[str]:
-    """REPORT: surfaces actuators whose manual-detect override isn't engaged by every manual
-    surface. Phase 1 emits the lights<->manual_off relationship as a starting datapoint."""
+    """REPORT:
+
+    surfaces actuators whose manual-detect override isn't engaged by every manual surface. Phase 1
+    emits the lights<->manual_off relationship as a starting datapoint.
+    """
     rep = []
     light_writers = set(writes.get("light.bedroom_lights", []))
     override_writers = set(writes.get("input_boolean.bedroom_manual_off", []))
@@ -438,6 +500,11 @@ def cmd_generate(role_dir: Path = ROLE_DIR) -> int:
 
 
 def main(argv=None) -> int:
+    """Dispatch `generate`, `refresh`, or `check` (the default guardrail-check run).
+
+    Exits 1 when `check` finds a hard error; each subcommand otherwise returns its own
+    exit code.
+    """
     p = argparse.ArgumentParser(prog="ha_state_model.py", description=__doc__)
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("generate", help="regenerate derived_state.yml + STATE.md")

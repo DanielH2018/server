@@ -115,8 +115,7 @@ _SNAPSHOT_CLAIM_RE = re.compile(
 
 
 def declares_snapshot_claims(text: str | None) -> bool:
-    """Whether a role's defaults/main.yml declares at least one PVC for k8s/volume-revert to
-    consider.
+    """Whether a role's defaults/main.yml declares at least one PVC for k8s/volume-revert.
 
     Two consumers, and they want opposite things from an unparseable input:
 
@@ -142,9 +141,10 @@ def declares_snapshot_claims(text: str | None) -> bool:
 def rollback_volume_revert_note(
     services: set[str], reverting: set[str], rollback_failed: str | None
 ) -> str:
-    """One line for gitops-deploy's rollback-failure Discord alert, stating plainly whether the
-    volume revert to the pre-deploy snapshot actually ran and for which services — "was my data
-    rolled back too" is the first question during an incident.
+    """One line for gitops-deploy's rollback-failure Discord alert.
+
+    States plainly whether the volume revert to the pre-deploy snapshot actually ran and for
+    which services — "was my data rolled back too" is the first question during an incident.
 
     `rollback_failed`, when given, is the rollback redeploy's own exception message: the
     redeploy raised before Ansible could reach the revert task (or during it), so the revert may

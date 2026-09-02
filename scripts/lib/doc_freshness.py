@@ -168,6 +168,12 @@ def page_freshness(
 
 
 def is_hand_written(page: str, text: str) -> bool:
+    """Whether `page` is a hand-written doc page, not a generated one.
+
+    Args:
+        page: repo-relative path, e.g. `docs/reference/services.md`.
+        text: the page's file content.
+    """
     if not page.startswith("docs/") or not page.endswith(".md"):
         return False
     if page.startswith(SKIPPED_PREFIXES) or page in SKIPPED_PAGES:

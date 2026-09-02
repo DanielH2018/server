@@ -132,15 +132,17 @@ def scrutiny_wear_verdict(devices, wear_max):
 
 
 def ups_health(charge_pct, runtime_s, replace_battery, charge_min_pct, runtime_min_s):
-    """Pure: is the UPS battery healthy given charge (%), estimated runtime (s), and the replace-
-    battery verdict (0/1)? (ok, msg).
+    """Pure:
 
-    Any value may be None (that metric absent) — only present arms are judged, and the caller handles
-    the all-absent / partial-absence cases. A low charge means an active deep discharge on battery; a
-    low runtime means an aged battery whose full-charge runway has decayed OR a discharge nearing
-    shutdown; replace_battery>0 is the UPS's OWN self-test verdict (NUT RB flag), which can trip while
-    charge/runtime still read fine — the earliest replace-the-battery signal. Strict `<`, so a value
-    exactly at the floor is still ok.
+    is the UPS battery healthy given charge (%), estimated runtime (s), and the replace- battery
+    verdict (0/1)? (ok, msg).
+
+    Any value may be None (that metric absent) — only present arms are judged, and the caller
+    handles the all-absent / partial-absence cases. A low charge means an active deep discharge on
+    battery; a low runtime means an aged battery whose full-charge runway has decayed OR a discharge
+    nearing shutdown; replace_battery>0 is the UPS's OWN self-test verdict (NUT RB flag), which can
+    trip while charge/runtime still read fine — the earliest replace-the-battery signal. Strict `<`,
+    so a value exactly at the floor is still ok.
     """
     problems = []
     if charge_pct is not None and charge_pct < charge_min_pct:
@@ -356,15 +358,17 @@ def hwmon_temp_limits(
     exclude_chip,
     names=None,
 ):
-    """Pure: assign every scraped sensor a temperature limit. Returns a list of
-    (label, temp, limit, basis) with basis "declared" or "fallback".
+    """Pure:
 
-    Exhaustive by construction — a sensor either has a plausible declared max or takes the
-    fallback, so no scraped sensor is ever left without a limit. That is the property worth
-    holding: a check that silently covers a subset reads green for the rest forever.
+    assign every scraped sensor a temperature limit. Returns a list of (label, temp, limit, basis)
+    with basis "declared" or "fallback".
 
-    A declared max outside (min_plausible, max_plausible] is treated as ABSENT, not as a limit.
-    Some NVMe controllers report 65261.85 for "no max declared" and a ratio of that never fires.
+    Exhaustive by construction — a sensor either has a plausible declared max or takes the fallback,
+    so no scraped sensor is ever left without a limit. That is the property worth holding: a check
+    that silently covers a subset reads green for the rest forever.
+
+    A declared max outside (min_plausible, max_plausible] is treated as ABSENT, not as a limit. Some
+    NVMe controllers report 65261.85 for "no max declared" and a ratio of that never fires.
 
     `names` is the hwmon_name_maps pair; omitting it labels sensors by their raw sysfs path.
     """

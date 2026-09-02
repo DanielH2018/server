@@ -187,6 +187,13 @@ def _reachable_from_here(command: str) -> bool | None:
 
 
 def main() -> int:
+    """Probe every target from the staging guest, verify with a control leg, and report.
+
+    Exits 2 when nothing was proven (the guest is unreachable over ssh, or a target
+    answered from neither side and so is presumed stale/moved), 1 when the fence is
+    broken (the control target is unreachable, meaning the guest has no egress at all,
+    or a production target leaked), and 0 when the fence holds.
+    """
     guest, targets = _targets()
     results: dict[str, bool | None] = {}
     controls: dict[str, str] = {}

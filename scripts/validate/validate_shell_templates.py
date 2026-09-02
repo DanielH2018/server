@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Render every Jinja-templated shell script under ansible/roles/ with stubbed vars and lint
-the output (`bash -n` + shellcheck).
+"""Render every Jinja-templated shell script under ansible/roles/ and lint the output.
 
-The prek `bash-syntax-check` / shellcheck hooks gate plain shell files (via identify's
+Renders with stubbed vars, then lints with `bash -n` + shellcheck. The prek
+`bash-syntax-check` / shellcheck hooks gate plain shell files (via identify's
 shebang-aware `types = ["shell"]`), but identify tags a `*.sh.j2` template as `{jinja, text}` —
 never `shell` — so a Jinja-templated script (e.g. an entrypoint or cron script) is invisible to
 both gates no matter how badly it's broken. This is the same render-then-lint pattern as
@@ -51,12 +51,14 @@ from lib.render_guard import (
 
 
 def _ansible_search(value, pattern, ignorecase=False, multiline=False) -> bool:
-    """Mirror Ansible's `search` Jinja test (ansible.plugins.test.core) — a plain regex search,
-    not a full match. Vanilla Jinja2 has no `search` test, so any template using Ansible's
-    `search` (e.g. `list | reject('search', pattern)`) would otherwise fail to render here
-    with `TemplateRuntimeError: No test named 'search'`. No current template needs it
+    """Mirror Ansible's `search` Jinja test — a plain regex search, not a full match.
+
+    Vanilla Jinja2 has no `search` test, so any template using Ansible's `search` (e.g.
+    `list | reject('search', pattern)`) would otherwise fail to render here with
+    `TemplateRuntimeError: No test named 'search'`. No current template needs it
     (docker-user-rules.sh.j2, the last one that did, retired at E7 2026-08-13) — kept
-    registered so the next one that does just works."""
+    registered so the next one that does just works.
+    """
     flags = (re.I if ignorecase else 0) | (re.M if multiline else 0)
     return bool(re.search(pattern, str(value), flags))
 
@@ -107,9 +109,11 @@ SHELL_STUB_OVERRIDES = {
 
 
 def discover_templates() -> list[Path]:
-    """Every *.sh.j2 under ansible/roles/ (real templates only — ansible/collections/ is the
-    vendored third-party tree and is excluded the same way pytest's testpaths / ruff's
-    extend-exclude skip it)."""
+    """Return every *.sh.j2 under ansible/roles/, real templates only.
+
+    Excludes ansible/collections/, the vendored third-party tree, the same way pytest's
+    testpaths / ruff's extend-exclude skip it.
+    """
     return sorted(ROLES.rglob("*.sh.j2"))
 
 
@@ -315,8 +319,11 @@ def _strip_comments(text: str) -> str:
 def cron_path_error(
     template: Path, rendered: str, cron_map: dict[Path, Path]
 ) -> str | None:
-    """None if this template is fine; an error string if it's a cron job target that calls
-    kubectl/k3s bare and has no PATH fix anywhere (in-script export, or a crontab PATH line)."""
+    """Return an error string if `template` is a cron target with a bare, PATH-unfixed k8s call.
+
+    None if this template is fine. "No PATH fix" means neither an in-script export nor a
+    crontab PATH line covers the bare `kubectl`/`k3s` invocation.
+    """
     task_file = cron_map.get(template)
     if task_file is None:
         return None  # not a cron job target at all — out of scope for this rule
@@ -346,10 +353,9 @@ def cron_path_error(
 def cron_kubeconfig_error(
     template: Path, rendered: str, roles: Path = ROLES
 ) -> str | None:
-    """None if this template is fine; an error string if a NON-ROOT cron job target touches the
-    cluster without a KUBECONFIG it can read.
+    """Return an error string if a NON-ROOT cron target touches the cluster with no KUBECONFIG.
 
-    The sibling of `cron_path_error`, and the trap its own memory entry predicted would still be
+    None if this template is fine. The sibling of `cron_path_error`, and the trap its own memory entry predicted would still be
     live once the PATH half was fixed: "cron inherits neither PATH nor KUBECONFIG". The two fail
     differently, which is why one check cannot cover both. A missing PATH makes k3s not resolve,
     so the script dies loudly. A missing KUBECONFIG resolves the binary fine and then reports an
@@ -425,8 +431,11 @@ def bash_syntax_check(path: Path) -> str | None:
 
 
 def shellcheck_check(path: Path, shellcheck_bin: str) -> str | None:
-    """Run shellcheck (all severities — the repo default, no --severity override, matching the
-    prek shellcheck hook) against the rendered script. Return an error string, or None."""
+    """Run shellcheck against the rendered script at `path`; return an error string, or None.
+
+    All severities — the repo default, no --severity override, matching the prek shellcheck
+    hook.
+    """
     proc = subprocess.run([shellcheck_bin, str(path)], capture_output=True, text=True)
     if proc.returncode != 0:
         return (
@@ -475,12 +484,16 @@ def check_template(
     shellcheck_bin: str | None,
     cron_map: dict[Path, Path],
 ) -> str | None:
-    """Render one template, write it under out_dir preserving its relative path (minus the
-    trailing .j2), then lint the rendered file. Return an error string, or None on success.
+    """Render one template, write it under out_dir, and lint the rendered file.
 
+    Writes the rendered file preserving `path`'s relative path (minus the trailing .j2).
     `shellcheck_bin=None` skips the per-file shellcheck step: main() passes None and runs
     `shellcheck_batch` over every rendered file afterwards, which is the same check in one
-    process. A caller checking a single template passes the binary and gets it inline."""
+    process. A caller checking a single template passes the binary and gets it inline.
+
+    Returns:
+        An error string, or None on success.
+    """
     rel = path.relative_to(ANSIBLE)
     env = build_env(path.parent)
     rendered, err = render_or_error(env, path.name, ctx)
@@ -516,6 +529,12 @@ def check_template(
 
 
 def main() -> int:
+    """Render every discovered shell template, then `bash -n` and shellcheck the output.
+
+    Returns:
+        0 if every template rendered clean and passed both linters, 1 otherwise (including
+        when shellcheck is missing from PATH or no templates were found).
+    """
     shellcheck_bin = shutil.which("shellcheck")
     if not shellcheck_bin:
         print(

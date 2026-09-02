@@ -28,9 +28,12 @@ ARR_API_VERSION = {"sonarr": "v3", "radarr": "v3", "prowlarr": "v1"}
 
 
 def arr_url(ip, app, path):
-    """Build an *arr API URL. Normalizes a leading `/`, an `api/` prefix, and a
-    redundant version segment so `health`, `/health`, `api/v3/health`, and
-    `v3/health` all resolve to the app's correct `/api/<ver>/health`."""
+    """Build an *arr API URL.
+
+    Normalizes a leading `/`, an `api/` prefix, and a redundant version segment so `health`,
+    `/health`, `api/v3/health`, and `v3/health` all resolve to the app's correct
+    `/api/<ver>/health`.
+    """
     ver = ARR_API_VERSION[app]
     p = path.lstrip("/")
     if p.startswith("api/"):
@@ -46,11 +49,12 @@ def arr_curl_config(api_key):
 
 
 def resolve_arr_ip(app):
-    """The *arr app's k8s Service ClusterIP — resolve_ip's k8s equivalent, used instead of
-    k8s_endpoint because sonarr/radarr/prowlarr have no Authelia bypass rule for /api/* (see
-    the comment above ARR_PORTS). A ClusterIP is stable across pod restarts and redeploys,
-    so this doesn't reintroduce the hand-copied-IP staleness `docker inspect` was resolving
-    around in the first place.
+    """Resolve the *arr app's k8s Service ClusterIP.
+
+    resolve_ip's k8s equivalent, used instead of k8s_endpoint because sonarr/radarr/prowlarr
+    have no Authelia bypass rule for /api/* (see the comment above ARR_PORTS). A ClusterIP is
+    stable across pod restarts and redeploys, so this doesn't reintroduce the hand-copied-IP
+    staleness `docker inspect` was resolving around in the first place.
 
     CAVEAT confirmed live 2026-08-17: this only reaches the app when its pod is scheduled on
     THIS node (daniel-box). Each app's NetworkPolicy allows ingress only from specific pod
@@ -60,7 +64,8 @@ def resolve_arr_ip(app):
     traffic apparently doesn't pass through the destination node's own NetworkPolicy iptables
     the same way same-node traffic does. This will flip on the next reschedule; a real fix
     needs a NetworkPolicy ipBlock for the node (ansible/roles/k8s/*/templates/), out of scope
-    here."""
+    here.
+    """
     return resolve_service_ip(app)
 
 
@@ -74,7 +79,8 @@ def run_arr(ns):
     run time) via kubectl instead of docker — see the comment above ARR_PORTS for why
     this talks to the Service directly instead of going through k8s_endpoint like every
     other cluster subcommand. Pulls <app>_api_key from SOPS and passes it via stdin.
-    Pretty-prints JSON by default; `--json` prints the raw response."""
+    Pretty-prints JSON by default; `--json` prints the raw response.
+    """
     if ns.dry_run:
         print(
             " ".join(ha_curl_argv(arr_url("<arr-clusterip>", ns.app, ns.path)))

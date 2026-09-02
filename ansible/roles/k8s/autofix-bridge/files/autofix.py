@@ -84,8 +84,11 @@ def dangerous(messages, patterns):
 
 
 def all_error_text(item):
-    """statusMessage strings PLUS the queue record's top-level errorMessage — download-client
-    communication errors often land in errorMessage rather than statusMessages."""
+    """Returns statusMessage strings plus the queue record's top-level errorMessage.
+
+    Download-client communication errors often land in errorMessage rather than
+    statusMessages.
+    """
     out = item_messages(item)
     err = item.get("errorMessage")
     if err:
@@ -94,14 +97,17 @@ def all_error_text(item):
 
 
 def client_comm_error(item, patterns):
-    """True if the item's error text matches a transient download-client-communication problem
-    (client unreachable / not responding), as opposed to a bad release. Reuses the same
-    case-insensitive substring matcher as dangerous()."""
+    """True if the item's error text matches a transient download-client-communication issue.
+
+    As opposed to a bad release — client unreachable / not responding. Reuses the same
+    case-insensitive substring matcher as dangerous().
+    """
     return dangerous(all_error_text(item), patterns)
 
 
 def is_candidate(item, patterns, client_error_patterns=()):
-    """A queue item is an auto-block candidate when it is hard-bad OR malware-signature,
+    """Returns whether a queue item is an auto-block candidate (hard-bad or malware-signature).
+
     EXCEPT a bare trackedDownloadStatus=='error' that looks like a transient download-client
     communication problem (client/VPN unreachable) — blocklisting that would wrongly nuke a
     legitimate in-progress download.
@@ -191,6 +197,19 @@ def search_command(app_name, item):
 
 
 def format_action(dry_run, app_name, title, reason, streak, grace):
+    """Formats one action-log / Discord line for an autoblock decision.
+
+    Args:
+        dry_run: Whether the action was simulated rather than applied.
+        app_name: The *arr instance name (Sonarr/Radarr).
+        title: The release title, sanitized before formatting.
+        reason: The human reason for the action, sanitized before formatting.
+        streak: The item's current consecutive-cycle streak.
+        grace: The configured grace-cycle threshold.
+
+    Returns:
+        A one-line human-readable summary of the action.
+    """
     verb = "WOULD blocklist" if dry_run else "Blocklisted + re-searched"
     return "%s [%s] %s — %s (%d/%d)" % (
         verb,
@@ -229,6 +248,15 @@ def post_discord(msg):
 
 
 def push(ok, msg):
+    """Pushes an up/down heartbeat plus message to the Kuma push monitor.
+
+    A no-op, logged, when KUMA_PUSH is unset. Best-effort: an unreachable Kuma is logged
+    and swallowed rather than raised, so it never crashes the poll loop.
+
+    Args:
+        ok: Whether the cycle succeeded (pushed as status "up") or not ("down").
+        msg: The status message to attach to the push.
+    """
     if not KUMA_PUSH:
         bridge_common.log("WARN: no push token set; skipping push:", msg)
         return
@@ -240,8 +268,11 @@ def push(ok, msg):
 
 
 def run_once(streaks):
-    """One poll+decide+act cycle. Returns (ok, msg) for the Kuma push. Raises on an
-    unreachable *arr / failed mutation, which main() converts to a descriptive `down`."""
+    """One poll+decide+act cycle.
+
+    Returns (ok, msg) for the Kuma push. Raises on an unreachable *arr / failed mutation, which
+    main() converts to a descriptive `down`.
+    """
     apps = [
         (
             "Sonarr",
@@ -318,6 +349,12 @@ def run_once(streaks):
 
 
 def main():
+    """Runs the poll+decide+act loop, pushing a Kuma heartbeat after every cycle.
+
+    Loops forever at INTERVAL seconds unless invoked with --once, in which case it runs a
+    single cycle and returns. A cycle's own exception is caught, logged, and pushed as a
+    DOWN status rather than allowed to kill the loop.
+    """
     once = "--once" in sys.argv
     streaks = {}
     bridge_common.log(

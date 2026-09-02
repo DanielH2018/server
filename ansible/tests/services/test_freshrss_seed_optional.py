@@ -108,8 +108,10 @@ def creators(host: str) -> list[str]:
 
 
 def creator_problem(found: list[str]) -> str:
-    """The verdict, taking its list as an argument so the rejecting test drives the same
-    code. Empty string means exactly one creator."""
+    """The verdict, taking its list as an argument so the rejecting test drives the same code.
+
+    Empty string means exactly one creator.
+    """
     if len(found) > 1:
         return (
             f"{_CLAIM} has {len(found)} creators ({found}) — both apply the same object "
@@ -161,8 +163,11 @@ def test_the_two_creators_agree_on_the_claim(host: str) -> None:
 
 
 def test_the_deployment_references_the_claim_the_flag_creates() -> None:
-    """Ties the two halves together: the name the PVC template renders is the name the pod
-    mounts. A rename on one side alone passes every check above."""
+    """Ties the two halves together:
+
+    the name the PVC template renders is the name the pod mounts. A rename on one side alone passes
+    every check above.
+    """
     ctx = _context("daniel-stage")
     env = Environment(undefined=StrictUndefined)
     register_ansible_filters(env)

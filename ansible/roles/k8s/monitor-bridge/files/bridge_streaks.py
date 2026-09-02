@@ -17,12 +17,15 @@ _down_streaks: dict[str, int] = {}
 
 
 def down_streak(count, threshold, msg, grace_note, held_label="down streak"):
-    """Pure consecutive-down hysteresis step shared by every per-check grace (check_ha_heartbeat/
-    check_ups/check_discord) and apply_startup_grace. Call on a DOWN result — the caller resets its
-    own counter to 0 on `ok`. Increments `count` and returns (new_count, hold_ok, out_msg): while
-    under `threshold` it holds `up` with a "<held_label> n/N (<grace_note>): msg" note; the
-    `threshold`'th straight down pages with "msg (n cycles)". (check_cpu_throttle keeps its own down
-    branch — its page message embeds the throttle thresholds, so it can't use the generic format.)
+    """Pure consecutive-down hysteresis step shared by every per-check grace mechanism.
+
+    Used by check_ha_heartbeat's, check_ups's and check_discord's per-check grace, plus
+    apply_startup_grace. Call on a DOWN result — the caller resets its own counter to 0 on
+    `ok`. Increments `count` and returns (new_count, hold_ok, out_msg): while under
+    `threshold` it holds `up` with a "<held_label> n/N (<grace_note>): msg" note; the
+    `threshold`'th straight down pages with "msg (n cycles)". (check_cpu_throttle keeps its
+    own down branch — its page message embeds the throttle thresholds, so it can't use the
+    generic format.)
     """
     count += 1
     if count < threshold:

@@ -123,8 +123,10 @@ def _runtime_module_names():
 
 
 def _patched_pairs(test_files=None, module_names=None):
-    """{module: {name}} for every attribute of a runtime module the suite assigns, patches, or
-    mutates in place."""
+    """{module:
+
+    {name}} for every attribute of a runtime module the suite assigns, patches, or mutates in place.
+    """
     module_names = module_names if module_names is not None else _runtime_module_names()
     if test_files is None:
         test_files = sorted(

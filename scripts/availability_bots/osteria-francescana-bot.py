@@ -81,6 +81,11 @@ def check_date(session: requests.Session, date: datetime) -> list[str]:
 
 
 def main() -> None:
+    """Check every date in ``TARGET_DATES``, notify Discord, and ping the healthcheck.
+
+    Pings the healthcheck as a failure if any date's check errored; a single bad date
+    does not stop the remaining dates from being checked.
+    """
     webhook_url = require_env("OSTERIA_DISCORD_WEBHOOK_URL")
     healthcheck_url = require_env("OSTERIA_HEALTHCHECK_URL")
     session = new_session(HEADERS)

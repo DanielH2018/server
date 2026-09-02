@@ -41,6 +41,12 @@ def age_seconds(stamp: str) -> float:
 
 
 def main() -> int:
+    """Reads the latest finished configarr Job and prints an `up\\tmsg` / `down\\tmsg` verdict.
+
+    Always exits 0: a down verdict is printed output for the wrapper to push to Kuma, not a
+    process failure, so every failure path (unreadable Jobs, unparseable JSON, no finished
+    Job, unparseable finish time) prints a `down` line and returns 0 rather than raising.
+    """
     rc, out = kubectl("get", "jobs", "-l", "app=%s" % CRONJOB, "-o", "json")
     if rc != 0:
         print("down\tcannot read Jobs in %s: %s" % (NAMESPACE, out.strip()[:200]))

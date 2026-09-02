@@ -56,6 +56,15 @@ def b2_authorize_config(key_id, app_key):
 
 
 def b2_list_files_config(api_url, token, bucket_id, prefix, start=None):
+    """Build the `curl --config -` body (via stdin) for one B2 `b2_list_file_names` page.
+
+    Args:
+        api_url: The B2 API base URL from the authorize response.
+        token: The B2 auth token.
+        bucket_id: The bucket to list.
+        prefix: The file-name prefix to list under.
+        start: The `startFileName` cursor to resume a truncated listing, if any.
+    """
     query = {
         "bucketId": bucket_id,
         "prefix": prefix.rstrip("/") + "/",

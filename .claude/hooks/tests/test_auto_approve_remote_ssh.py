@@ -69,8 +69,10 @@ def test_wrapper_passes_a_flag_the_classifier_recognises():
 
 
 def test_wrapper_fails_open_when_the_repo_is_missing():
-    """cd must not be able to strand the hook: a failed cd has to exit 0, not run the exec
-    from whatever directory it happened to land in."""
+    """cd must not be able to strand the hook:
+
+    a failed cd has to exit 0, not run the exec from whatever directory it happened to land in.
+    """
     assert "|| exit 0" in WRAPPER_TEXT, "cd has no fail-open guard"
 
 
@@ -95,9 +97,11 @@ def test_destructive_ssh_command_is_left_to_the_prompt():
 
 @_runnable
 def test_local_read_only_command_is_not_answered_here():
-    """The narrowing this entry point exists for. classify() calls `git status` read-only,
-    but this hook speaks only for ssh traffic — answering more would resolve `ask` rules it
-    was never meant to cover."""
+    """The narrowing this entry point exists for.
+
+    classify() calls `git status` read-only, but this hook speaks only for ssh traffic — answering
+    more would resolve `ask` rules it was never meant to cover.
+    """
     code, out = run_hook(request("git status"))
     assert code == 0
     assert out == ""

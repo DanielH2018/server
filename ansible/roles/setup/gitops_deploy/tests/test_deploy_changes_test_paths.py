@@ -50,9 +50,12 @@ def test_a_test_only_push_is_clean():
 
 
 def test_the_deployers_own_module_is_still_flagged():
-    """The rejecting half. deploy_logic.py sits in the same directory as the test above and
-    must still read as a setup-plane change the tick applies — not as the empty ChangeSet a
-    test-only push produces, which would ff-merge it and leave the host on the old code."""
+    """The rejecting half.
+
+    deploy_logic.py sits in the same directory as the test above and must still read as a
+    setup-plane change the tick applies — not as the empty ChangeSet a test-only push produces,
+    which would ff-merge it and leave the host on the old code.
+    """
     cs = services_from_changed_paths(
         ["ansible/roles/setup/gitops_deploy/files/deploy_logic.py"]
     )
@@ -61,9 +64,11 @@ def test_the_deployers_own_module_is_still_flagged():
 
 
 def test_a_test_file_does_not_disarm_a_real_change_beside_it():
-    """The case an over-broad predicate breaks. The plane flags are ORed across the push, so
-    one exempt path must not clear the flag a sibling set — a half-applied broad change is
-    exactly what the arm exists to prevent."""
+    """The case an over-broad predicate breaks.
+
+    The plane flags are ORed across the push, so one exempt path must not clear the flag a sibling
+    set — a half-applied broad change is exactly what the arm exists to prevent.
+    """
     cs = services_from_changed_paths(
         [
             "ansible/roles/setup/gitops_deploy/tests/test_deploy_health.py",

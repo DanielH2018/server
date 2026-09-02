@@ -905,6 +905,13 @@ def classify_remote(command):
 
 
 def main():
+    """Read the hook payload from stdin and emit an allow decision for a read-only command.
+
+    Under `--permission-request`, allows a PermissionRequest command only when
+    `classify_remote` finds an `ssh` stage in it; otherwise allows a PreToolUse command
+    whenever `classify` recognizes it as read-only. Emits nothing, and always exits 0, when
+    no rule matches.
+    """
     try:
         data = json.load(sys.stdin)
     except Exception:

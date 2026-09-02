@@ -137,6 +137,7 @@ def dry_run_unsupported(all_vars: Path = ALL_VARS) -> set[str]:
 
 
 def unknown_tags(tags: list[str], host_vars: Path = HOST_VARS) -> list[str]:
+    """The tags in `tags` that name no known service, order-preserving and de-duplicated."""
     known = known_tags(host_vars)
     # Order-preserving and de-duplicated, so the message reads in the order typed.
     seen: set[str] = set()
@@ -180,8 +181,11 @@ def _cmd_list(_args: argparse.Namespace) -> int:
 
 
 def _cmd_describe(_args: argparse.Namespace) -> int:
-    """Human-facing view of `list`'s flat output: grouped by host/platform, dry-run-unsupported
-    services flagged. Does not touch `list`'s own shape — that stays pinned flat and sorted."""
+    """Human-facing view of `list`'s flat output:
+
+    grouped by host/platform, dry-run-unsupported services flagged. Does not touch `list`'s own
+    shape — that stays pinned flat and sorted.
+    """
     unsupported = dry_run_unsupported()
     records = service_records()
     hosts = sorted({host for host, _platform, _tag in records})
@@ -201,10 +205,12 @@ def _cmd_describe(_args: argparse.Namespace) -> int:
 
 
 def _load_deploy_logic():
-    """Import deploy_logic.py from the gitops_deploy role — see DEPLOY_LOGIC_DIR above for why
-    it lives outside scripts/. Done lazily, inside this function rather than at module import
-    time, so `validate`/`list`/`describe` never pay for or depend on this cross-directory import
-    succeeding — only `changed` needs it."""
+    """Import deploy_logic.py from the gitops_deploy role.
+
+    See DEPLOY_LOGIC_DIR above for why it lives outside scripts/. Done lazily, inside this
+    function rather than at module import time, so `validate`/`list`/`describe` never pay
+    for or depend on this cross-directory import succeeding — only `changed` needs it.
+    """
     sys.path.insert(0, str(DEPLOY_LOGIC_DIR))
     from deploy_logic import (
         broad_remediation,
@@ -334,9 +340,11 @@ def _comment_only_manual_changes(
 
 
 def _cmd_changed(args: argparse.Namespace) -> int:
-    """Print, on stdout, the comma-joined --tags value for every service changed vs `ref`
-    (default origin/master) — nothing else goes to stdout, so scripts/deploy.sh can capture it
-    directly. Everything explaining the derivation goes to stderr."""
+    """Print, on stdout, the comma-joined --tags value for every service changed vs `ref`.
+
+    `ref` defaults to origin/master. Nothing else goes to stdout, so scripts/deploy.sh can
+    capture it directly. Everything explaining the derivation goes to stderr.
+    """
     (
         services_from_changed_paths,
         broad_remediation,
@@ -427,6 +435,10 @@ def _cmd_changed(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Dispatch to the `validate`/`list`/`describe`/`changed`/`blockers` subcommand.
+
+    Returns that subcommand's own exit code.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
 

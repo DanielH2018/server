@@ -155,8 +155,10 @@ def test_non_bash_tools_are_ignored():
 
 @_runnable
 def test_quoted_program_text_is_never_spliced():
-    """The `;` here is inside the -c program, not a command separator. Rewriting at it
-    would insert `uv run` into the Python source and change what the command means."""
+    """The `;` here is inside the -c program, not a command separator.
+
+    Rewriting at it would insert `uv run` into the Python source and change what the command means.
+    """
     out = rewrite("""python3 -c 'a = 1; python3 = 2'""")
     assert out == """uv run python3 -c 'a = 1; python3 = 2'"""
 
@@ -168,9 +170,11 @@ def test_leading_program_is_still_rewritten_when_arguments_are_quoted():
 
 @_runnable
 def test_a_quoted_cd_prefix_still_reaches_the_test_command():
-    """The shape a worktree session actually types. A guard that bailed on the mere
-    presence of a quote would leave this `pytest` bare — the exact failure the hook
-    exists to prevent, and silently."""
+    """The shape a worktree session actually types.
+
+    A guard that bailed on the mere presence of a quote would leave this `pytest` bare — the exact
+    failure the hook exists to prevent, and silently.
+    """
     assert (
         rewrite('cd "$HOME/server" && pytest') == 'cd "$HOME/server" && uv run pytest'
     )

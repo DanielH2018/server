@@ -76,8 +76,11 @@ def test_every_copy_of_the_staging_subset_agrees() -> None:
 
 
 def test_the_agreement_check_rejects_a_drifted_copy() -> None:
-    """The rejecting half. Without it a check that stopped reading one of the copies — an
-    AST walk that matches nothing, a renamed key — would pass by finding no disagreement."""
+    """The rejecting half.
+
+    Without it a check that stopped reading one of the copies — an AST walk that matches nothing, a
+    renamed key — would pass by finding no disagreement.
+    """
     truth = inventory_subset()
     drifted = disagreeing_copies(
         {
@@ -95,9 +98,11 @@ def test_the_agreement_check_rejects_a_drifted_copy() -> None:
 
 
 def test_the_inventory_read_finds_the_real_list() -> None:
-    """The premise the two tests above rest on. An inventory read that silently returned an
-    empty set would make both of them vacuous, since every copy would then 'disagree' or the
-    comparison would collapse."""
+    """The premise the two tests above rest on.
+
+    An inventory read that silently returned an empty set would make both of them vacuous, since
+    every copy would then 'disagree' or the comparison would collapse.
+    """
     names = inventory_subset()
     assert len(names) >= 6, f"daniel-stage's containers_list read as {names}"
     assert "freshrss" in names

@@ -99,10 +99,12 @@ def test_ansible_bool_filter_mirrors_ansible_semantics(value, expected: bool):
 
 
 def test_shellcheck_batch_attributes_findings_to_the_file_that_has_them(tmp_path):
-    """One shellcheck process over many files must blame only the dirty one. The accept half
-    is the clean file's absence from the result; the reject half is the dirty file's presence
-    with its own finding — a batch that flagged everything or nothing would pass a test that
-    only checked the return value's truthiness."""
+    """One shellcheck process over many files must blame only the dirty one.
+
+    The accept half is the clean file's absence from the result; the reject half is the dirty file's
+    presence with its own finding — a batch that flagged everything or nothing would pass a test
+    that only checked the return value's truthiness.
+    """
     shellcheck_bin = shutil.which("shellcheck")
     assert shellcheck_bin
     clean = tmp_path / "clean.sh"

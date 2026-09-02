@@ -48,8 +48,10 @@ def _board_exprs() -> list[str]:
 
 
 def test_every_field_the_board_unwraps_is_one_land_sh_writes():
-    """The join. A panel unwrapping `wait_ci` renders "No data" with no error if the script
-    spells it `ci_wait`."""
+    """The join.
+
+    A panel unwrapping `wait_ci` renders "No data" with no error if the script spells it `ci_wait`.
+    """
     unwrapped = {
         m.group(1)
         for expr in _board_exprs()

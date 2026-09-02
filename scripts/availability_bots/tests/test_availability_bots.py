@@ -90,8 +90,11 @@ def test_glenstone_ignores_an_available_date_nobody_is_watching():
 
 
 def test_glenstone_treats_a_missing_status_as_unavailable():
-    """`status` absent means the API changed shape. Failing closed keeps a shape change from
-    reading as an opening — the bot alerts on a real offer, not on a parse it did not make."""
+    """`status` absent means the API changed shape.
+
+    Failing closed keeps a shape change from reading as an opening — the bot alerts on a real offer,
+    not on a parse it did not make.
+    """
     session = _Session([{"date": glenstone.TARGET_DATES[0]}])
     assert glenstone.find_available_dates(session) == []
 

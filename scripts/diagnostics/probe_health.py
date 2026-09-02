@@ -65,8 +65,11 @@ def inspect_ip_argv(container):
 
 
 def parse_ip(inspect_output):
-    """First non-empty token of `docker inspect`'s IP list (host can reach any
-    of a container's bridge IPs). None if the container has no address."""
+    """First non-empty token of `docker inspect`'s IP list.
+
+    Host can reach any of a container's bridge IPs. None if the container has no
+    address.
+    """
     for tok in inspect_output.split():
         if tok:
             return tok
@@ -78,8 +81,11 @@ def inspect_argv(container):
 
 
 def k8s_service_ip_argv(service, namespace):
-    """kubectl argv for a Service's ClusterIP — the k8s analog of inspect_ip_argv, for
-    apps (arr) that must be reached directly rather than through k8s_endpoint."""
+    """kubectl argv for a Service's ClusterIP.
+
+    The k8s analog of inspect_ip_argv, for apps (arr) that must be reached directly
+    rather than through k8s_endpoint.
+    """
     return [
         "k3s",
         "kubectl",
@@ -148,6 +154,13 @@ RECENT_RESTART_SECONDS = 180
 
 
 def k8s_deploy_argv(service, namespace, kind="deploy"):
+    """kubectl argv to fetch a Deployment/DaemonSet/StatefulSet as JSON.
+
+    Args:
+        service: The workload name.
+        namespace: The k8s namespace it runs in.
+        kind: The workload kind to fetch (``deploy``, ``daemonset`` or ``statefulset``).
+    """
     return [
         "k3s",
         "kubectl",
@@ -162,8 +175,11 @@ def k8s_deploy_argv(service, namespace, kind="deploy"):
 
 
 def k8s_pods_argv(service, namespace, selector=None):
-    """kubectl argv for a workload's pods. `selector` overrides the `app=<service>` guess —
-    pass `pod_selector(workload)` whenever the workload document is in hand."""
+    """kubectl argv for a workload's pods.
+
+    `selector` overrides the `app=<service>` guess — pass `pod_selector(workload)` whenever the
+    workload document is in hand.
+    """
     return [
         "k3s",
         "kubectl",
@@ -303,10 +319,10 @@ def format_k8s_health(deploy, pods, service, now):
 
 
 def resolve_service_ip(name):
-    """A workload's k8s Service ClusterIP — the k8s replacement for `docker inspect`ing a
-    container's bridge IP.
+    """A workload's k8s Service ClusterIP.
 
-    A ClusterIP is stable across pod restarts and redeploys, so this does not reintroduce
+    The k8s replacement for `docker inspect`ing a container's bridge IP. A ClusterIP is
+    stable across pod restarts and redeploys, so this does not reintroduce
     the hand-copied-IP staleness the docker lookup existed to avoid. Callers reach the
     Service directly rather than through k8s_endpoint, which would put Traefik and Authelia
     in front of an API path that has no bypass rule.
@@ -322,8 +338,11 @@ def resolve_service_ip(name):
 
 
 def resolve_ip(container):
-    """A Docker container's bridge IP. daniel-pi is the only host that still has Docker —
-    on either cluster node this raises FileNotFoundError, so use resolve_service_ip."""
+    """A Docker container's bridge IP.
+
+    daniel-pi is the only host that still has Docker — on either cluster node this raises
+    FileNotFoundError, so use resolve_service_ip.
+    """
     out = subprocess.run(inspect_ip_argv(container), capture_output=True, text=True)
     if out.returncode != 0:
         raise SystemExit(f"docker inspect {container} failed: {out.stderr.strip()}")

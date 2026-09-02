@@ -94,6 +94,12 @@ def workflow_run_steps(repo: Path = REPO) -> list[tuple[str, str]]:
 
 @dataclass(frozen=True)
 class CronJob:
+    """One `ansible.builtin.cron` task found in the tree.
+
+    Attributes:
+        job: the task's `job:` command text, as written.
+    """
+
     path: Path
     name: str
     job: str
@@ -132,8 +138,11 @@ def cron_jobs(repo: Path = REPO) -> list[CronJob]:
 
 
 def sh_j2_templates(repo: Path = REPO) -> list[Path]:
-    """Every `*.sh.j2` template in the tree — a cron's `job:` can name one by basename,
-    and `initial_setup`'s templates are themselves a stale-path invocation site."""
+    """Every `*.sh.j2` template in the tree.
+
+    A cron's `job:` can name one by basename, and `initial_setup`'s templates are
+    themselves a stale-path invocation site.
+    """
     return sorted(
         p for p in (repo / "ansible").rglob("templates/*.sh.j2") if not _is_archived(p)
     )

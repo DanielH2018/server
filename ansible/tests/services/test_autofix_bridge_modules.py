@@ -36,8 +36,10 @@ def _ship_list():
 
 
 def _resolve_src(src):
-    """`{{ playbook_dir }}/...` -> the real file it renders to. playbook_dir is the ansible/
-    directory deploy.yml runs from."""
+    """`{{ playbook_dir }}/...` -> the real file it renders to.
+
+    playbook_dir is the ansible/ directory deploy.yml runs from.
+    """
     rel = src.replace("{{ playbook_dir }}/", "")
     return REPO / "ansible" / rel
 
@@ -60,9 +62,12 @@ def test_ship_list_excludes_the_test_suite():
 
 
 def test_autofix_py_cross_role_imports_are_shipped():
-    """The direct check: a cross-role module autofix.py imports must travel with it. Scoped to
-    names known to be cross-role (bridge_common) rather than every ImportFrom target, since a
-    stdlib import (json, sys, ...) has no place in this ship list."""
+    """The direct check:
+
+    a cross-role module autofix.py imports must travel with it. Scoped to names known to be
+    cross-role (bridge_common) rather than every ImportFrom target, since a stdlib import (json,
+    sys, ...) has no place in this ship list.
+    """
     shipped = {
         item["name"][:-3] for item in _ship_list() if item["name"].endswith(".py")
     }

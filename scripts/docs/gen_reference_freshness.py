@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Generate docs/reference/freshness.md -- every hand-written page, ranked by how far the
-files it names have moved since it was last changed.
+"""Generates docs/reference/freshness.md, ranking hand-written pages by source staleness.
 
+Each page is ranked by how far the files it names have moved since it was last changed.
 The per-page stamp `_mkdocs_freshness.py` appends answers "how old is this page". This
 table answers "which page should someone reread next": pages with the most moved sources
 first, then the oldest. `scripts/lib/doc_freshness.py` defines both numbers.
@@ -29,6 +29,11 @@ def ranked(pages: list[PageFreshness]) -> list[PageFreshness]:
 
 
 def render_markdown(pages: list[PageFreshness]) -> str:
+    """Renders the freshness page: the provenance banner, intro prose, and the ranked table.
+
+    Args:
+        pages: per-page freshness facts, as returned by `lib.doc_freshness.survey`.
+    """
     from lib.docs_provenance import generated_banner
 
     parts = [generated_banner("scripts/docs/gen_reference_freshness.py")]
@@ -55,6 +60,11 @@ def render_markdown(pages: list[PageFreshness]) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Entry point: surveys the repo and writes the freshness page.
+
+    Args:
+        argv: command-line arguments, or None to use `sys.argv`.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=_Path, required=True, help="output file path")
     args = parser.parse_args(argv)

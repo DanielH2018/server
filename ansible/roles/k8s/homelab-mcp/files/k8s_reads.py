@@ -1,7 +1,8 @@
-"""Pure logic for the cluster-API container tools (the Phase G successors to the
-Docker-socket tools that went dark at the k8s rehome — Security M1 bars the cluster
-from the Docker plane, so these read the Kubernetes API with the pod's own read-only
-ServiceAccount instead).
+"""Pure logic for the cluster-API container tools.
+
+The Phase G successors to the Docker-socket tools that went dark at the k8s rehome —
+Security M1 bars the cluster from the Docker plane, so these read the Kubernetes API
+with the pod's own read-only ServiceAccount instead.
 
 Same contract as safe_reads.py: everything here is unit-tested offline; app.py is
 the wiring. Nothing in this module performs I/O.

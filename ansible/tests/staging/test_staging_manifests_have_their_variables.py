@@ -475,8 +475,11 @@ def test_the_corpus_reaches_a_name_used_only_under_templates_config() -> None:
 
 
 def test_the_name_really_is_only_under_templates_config() -> None:
-    """Pins the premise of the test above. If configarr moves that reference up into
-    templates/, the widening test keeps passing while proving nothing."""
+    """Pins the premise of the test above.
+
+    If configarr moves that reference up into templates/, the widening test keeps passing while
+    proving nothing.
+    """
     top = sorted(
         t.name
         for t in (K8S_ROLES / _CONFIG_DIR_ROLE / "templates").glob("*.j2")
@@ -507,11 +510,14 @@ def test_traefik_comes_first() -> None:
 
 @pytest.mark.parametrize("role", _staging_roles())
 def test_the_role_applies_nothing_outside_the_counted_path(role: str) -> None:
-    """The regression guard. Every check in this file is built on `_deployed_templates`, which
-    reads only the `manifests_files` of `include_role: k8s/manifests` — so a manifest applied by
-    `kubernetes.core.k8s` or a `kubectl apply` shell-out is covered by nothing and says so
-    nowhere. Zero staging roles do this when the guard landed; the day one does, it fails here
-    instead of quietly shrinking the corpus."""
+    """The regression guard.
+
+    Every check in this file is built on `_deployed_templates`, which reads only the
+    `manifests_files` of `include_role: k8s/manifests` — so a manifest applied by
+    `kubernetes.core.k8s` or a `kubectl apply` shell-out is covered by nothing and says so nowhere.
+    Zero staging roles do this when the guard landed; the day one does, it fails here instead of
+    quietly shrinking the corpus.
+    """
     tasks = yaml.safe_load((K8S_ROLES / role / "tasks" / "main.yml").read_text())
     uncounted = uncounted_manifest_applications(tasks)
     assert not uncounted, (
@@ -540,8 +546,11 @@ def test_an_uncounted_apply_is_flagged():
 
 
 def test_a_role_that_only_uses_the_counted_path_is_clean():
-    """The accepting half. A guard that fired on everything would pass the test above too — and
-    `kubectl rollout status`/`get` must NOT trip it, since read-only calls apply nothing."""
+    """The accepting half.
+
+    A guard that fired on everything would pass the test above too — and `kubectl rollout
+    status`/`get` must NOT trip it, since read-only calls apply nothing.
+    """
     tasks = [
         {"name": "apply", "include_role": {"name": "k8s/manifests"}},
         {"name": "wait", "ansible.builtin.command": "kubectl rollout status deploy/x"},
@@ -551,8 +560,11 @@ def test_a_role_that_only_uses_the_counted_path_is_clean():
 
 
 def test_a_remote_url_apply_is_not_a_gap():
-    """Traefik's pinned upstream CRDs. There is no local template behind a URL, so flagging it
-    would be a finding no edit could ever clear."""
+    """Traefik's pinned upstream CRDs.
+
+    There is no local template behind a URL, so flagging it would be a finding no edit could ever
+    clear.
+    """
     tasks = [
         {
             "name": "crds",
@@ -563,9 +575,11 @@ def test_a_remote_url_apply_is_not_a_gap():
 
 
 def test_a_rendered_then_applied_template_is_covered_not_excused():
-    """The real traefik shape: `template:` writes rbac.yaml.j2 to disk, a shell-out applies it.
-    It must drop OUT of the uncounted list and INTO the corpus — an exemption alone would leave
-    it as uncovered as before."""
+    """The real traefik shape:
+
+    `template:` writes rbac.yaml.j2 to disk, a shell-out applies it. It must drop OUT of the
+    uncounted list and INTO the corpus — an exemption alone would leave it as uncovered as before.
+    """
     tasks = [
         {
             "name": "render",
@@ -584,6 +598,8 @@ def test_a_rendered_then_applied_template_is_covered_not_excused():
 
 
 def test_traefik_rbac_is_in_the_real_corpus():
-    """The regression guard for the instance that motivated this: rbac.yaml.j2 reaches the
-    corpus, so the staging variable checks above now cover it."""
+    """The regression guard for the instance that motivated this:
+
+    rbac.yaml.j2 reaches the corpus, so the staging variable checks above now cover it.
+    """
     assert "rbac.yaml.j2" in _deployed_templates("traefik")

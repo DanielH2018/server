@@ -75,9 +75,11 @@ def test_a_mounted_page_is_not_retryable():
 
 
 def test_grafanas_chrome_without_a_dashboard_is_retryable():
-    """The signature `--disable-http2` was added to prevent: Grafana's own navigation and
-    menus render (27-53 testids), the dashboard request 421s, and the URL never gains its
-    slug. A testid count alone reads this as a mounted page with no panels."""
+    """The signature `--disable-http2` was added to prevent:
+
+    Grafana's own navigation and menus render (27-53 testids), the dashboard request 421s, and the
+    URL never gains its slug. A testid count alone reads this as a mounted page with no panels.
+    """
     v = classify(
         UNMOUNTED | {"testids": 53, "path": "/d/longhorn-storage/"}, min_headers=10
     )
@@ -94,8 +96,11 @@ def test_a_dashboard_that_drew_nothing_is_worth_a_second_load():
 
 
 def test_a_partial_render_is_reported_without_retrying():
-    """The rejecting half. Some panels drawn and some missing is a finding, and loading
-    again would average over exactly the breakage the tier exists to see."""
+    """The rejecting half.
+
+    Some panels drawn and some missing is a finding, and loading again would average over exactly
+    the breakage the tier exists to see.
+    """
     v = classify(RENDERED | {"headers": 3, "rows": 4}, min_headers=10)
     assert v.status == FLAGGED
     assert not v.worth_renavigating
@@ -135,8 +140,11 @@ def test_a_panel_carrying_a_real_error_is_flagged():
 
 
 def test_panels_reading_no_data_are_clean():
-    """The rejecting half. Grafana marks an EMPTY panel with the same testid it marks a
-    broken one, so counting the testid flags every dashboard whose window is quiet."""
+    """The rejecting half.
+
+    Grafana marks an EMPTY panel with the same testid it marks a broken one, so counting the testid
+    flags every dashboard whose window is quiet.
+    """
     v = classify(
         RENDERED | {"statusError": 10, "errorTexts": ["No data", "No data"]},
         min_headers=10,

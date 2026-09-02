@@ -105,8 +105,7 @@ def test_every_container_without_readiness_is_recorded():
 
 
 def test_the_record_has_no_stale_entries():
-    """A container that gained a probe must leave the list, or the list stops meaning
-    anything."""
+    """A container that gained a probe must leave the list, or the list stops meaning anything."""
     without = {
         (role, c["name"]) for role, _w, c in _containers() if "readinessProbe" not in c
     }

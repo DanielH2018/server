@@ -21,9 +21,11 @@ AUTHELIA_DEFAULTS = os.path.join(
 
 
 def test_cookie_name_matches_the_authelia_role_default():
-    """The one fact this script cannot derive at runtime. A rename in the role would
-    otherwise leave the browser holding a cookie Authelia stopped issuing — which presents
-    as a silent redirect to the login portal, not as an error."""
+    """The one fact this script cannot derive at runtime.
+
+    A rename in the role would otherwise leave the browser holding a cookie Authelia stopped issuing
+    — which presents as a silent redirect to the login portal, not as an error.
+    """
     with open(AUTHELIA_DEFAULTS) as f:
         match = re.search(r"^authelia_k8s_cookie_name:\s*(\S+)", f.read(), re.M)
     assert match, f"authelia_k8s_cookie_name not found in {AUTHELIA_DEFAULTS}"
@@ -66,8 +68,11 @@ def test_backend_reached_is_accepted():
 
 
 def test_portal_redirect_is_flagged():
-    """The case that makes a status-code-only check useless: 302 to the portal is exactly
-    what an unauthenticated request looks like, and 3xx would otherwise read as success."""
+    """The case that makes a status-code-only check useless:
+
+    302 to the portal is exactly what an unauthenticated request looks like, and 3xx would otherwise
+    read as success.
+    """
     ok, detail = ui_login.classify_response(
         302, "https://auth.local.example.com/?rd=..."
     )
@@ -112,9 +117,11 @@ def test_two_factor_requirement_accepts_a_level_two_session():
 
 
 def test_two_factor_requirement_rejects_a_one_factor_session():
-    """The guard that keeps a valid-but-insufficient cookie from reading green. A level-1
-    session is genuinely authenticated and still bounces off code-server, n8n and longhorn,
-    so `authenticated` alone is the wrong question for the two_factor jar."""
+    """The guard that keeps a valid-but-insufficient cookie from reading green.
+
+    A level-1 session is genuinely authenticated and still bounces off code-server, n8n and
+    longhorn, so `authenticated` alone is the wrong question for the two_factor jar.
+    """
     valid, detail = ui_login.classify_state(_state(1), required_level=2)
     assert valid is False
     assert "one_factor" in detail
@@ -135,9 +142,12 @@ def test_an_expired_two_factor_session_reports_minutes_not_days():
 
 
 def test_deauthenticated_cookie_is_flagged():
-    """The whole point of asking Authelia. It answers HTTP 200 with level 0 to a cookie it
-    no longer honours — after a restart or an authelia_secret rotation — while the expiry
-    stamped in the local file goes on reading valid for weeks."""
+    """The whole point of asking Authelia.
+
+    It answers HTTP 200 with level 0 to a cookie it no longer honours — after a restart or an
+    authelia_secret rotation — while the expiry stamped in the local file goes on reading valid for
+    weeks.
+    """
     valid, detail = ui_login.classify_state(_state(0))
     assert valid is False
     assert "authentication_level 0" in detail
@@ -179,8 +189,11 @@ def test_a_cookieless_state_file_is_flagged_locally():
 
 
 def test_local_check_cannot_see_a_revoked_cookie():
-    """Pins the reason check() calls Authelia at all: a cookie revoked server-side leaves a
-    file this function is happy with, so passing here must never stand as the verdict."""
+    """Pins the reason check() calls Authelia at all:
+
+    a cookie revoked server-side leaves a file this function is happy with, so passing here must
+    never stand as the verdict.
+    """
     state = ui_login.build_storage_state("revoked-server-side", "example.com", 2**31)
     assert ui_login.local_state_problem(state, now=0) is None
     assert ui_login.classify_state(_state(0))[0] is False
@@ -202,8 +215,10 @@ def test_storage_state_is_playwright_shaped():
 
 
 def test_cookie_is_scoped_to_the_whole_lan_cookie_domain():
-    """The leading dot is what makes one login cover every service route. Without it the
-    cookie would only be sent to the portal host itself."""
+    """The leading dot is what makes one login cover every service route.
+
+    Without it the cookie would only be sent to the portal host itself.
+    """
     state = ui_login.build_storage_state("tok", "example.com", 0)
     assert state["cookies"][0]["domain"] == ".local.example.com"
 

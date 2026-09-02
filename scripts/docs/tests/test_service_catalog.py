@@ -22,8 +22,11 @@ def _write(path, content):
 
 
 def _make_repo(tmp_path):
-    """A minimal synthetic repo: one k8s host, one docker host, group_vars, and k3s
-    defaults carrying the two Longhorn tier lists. Individual tests layer roles on top."""
+    """A minimal synthetic repo:
+
+    one k8s host, one docker host, group_vars, and k3s defaults carrying the two Longhorn tier
+    lists. Individual tests layer roles on top.
+    """
     host_vars = tmp_path / "host_vars"
     _write(
         host_vars / "box.yml",

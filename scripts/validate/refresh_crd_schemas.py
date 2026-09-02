@@ -42,6 +42,11 @@ VENDORED = [
 
 
 def main() -> int:
+    """Download each schema in `VENDORED` from the CRDs-catalog and vendor it under `schemas/`.
+
+    Returns:
+        0 if every schema downloaded, 1 if any failed.
+    """
     SCHEMA_DIR.mkdir(exist_ok=True)
     failures = 0
     for group, kind, version in VENDORED:

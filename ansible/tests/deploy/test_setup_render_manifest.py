@@ -102,8 +102,11 @@ def test_the_manifest_names_no_template_that_stopped_existing():
 
 
 def test_declared_paths_are_repo_relative_and_resolve():
-    """The whole point of the H1 fix: an entry carries its own path so the check joins nothing
-    onto a hardcoded role directory. A bare filename here would silently stop resolving."""
+    """The whole point of the H1 fix:
+
+    an entry carries its own path so the check joins nothing onto a hardcoded role directory. A bare
+    filename here would silently stop resolving.
+    """
     for tpl in sorted(_declared_paths()):
         assert tpl.startswith("ansible/roles/"), (
             f"{tpl!r} is not a repo-relative path. The check resolves entries against the repo "
@@ -124,10 +127,12 @@ def test_no_template_is_stamped_by_two_groups():
 
 
 def test_each_stamp_task_carries_exactly_its_groups_tag_family():
-    """The M6 guard proper. The old single stamp carried [backup-health, disk-health,
-    manifest-prune] and omitted etcd-snapshot, while checksumming all eight scripts — so three
-    families restamped the etcd script they never rendered, and `--tags etcd-snapshot` skipped
-    the stamp entirely. Membership and tags have to agree, and only a test can hold them there.
+    """The M6 guard proper.
+
+    The old single stamp carried [backup-health, disk-health, manifest-prune] and omitted
+    etcd-snapshot, while checksumming all eight scripts — so three families restamped the etcd
+    script they never rendered, and `--tags etcd-snapshot` skipped the stamp entirely. Membership
+    and tags have to agree, and only a test can hold them there.
     """
     # Parsed as YAML, not matched with a regex: the tasks ARE structured data, and a pattern
     # spanning task boundaries is both fragile and — as written the first time — quadratic.
@@ -175,10 +180,12 @@ def test_the_check_reads_the_manifest_it_is_given():
 
 
 def test_both_readers_source_the_shared_arms():
-    """The indirection guard. Arms 2 and 3 live in one library so daniel-box's reader and
-    daniel-server's cannot diverge — but every assertion in this file now points at that
-    library, so a consumer that quietly re-inlined the loops would satisfy none of them and
-    break nothing. This is what fails in that case."""
+    """The indirection guard.
+
+    Arms 2 and 3 live in one library so daniel-box's reader and daniel-server's cannot diverge — but
+    every assertion in this file now points at that library, so a consumer that quietly re-inlined
+    the loops would satisfy none of them and break nothing. This is what fails in that case.
+    """
     for path in _ARM_CONSUMERS:
         text = path.read_text()
         assert "source /usr/local/lib/setup-drift-lib.sh" in text, (
@@ -217,8 +224,10 @@ def test_the_k3s_readers_note_rewording_still_matches_the_library():
 
 
 def test_other_setup_roles_stamp_their_own_artifacts():
-    """H1's actual finding: nine rendered artifacts outside the k3s role were watched by nothing.
-    Each owning role now includes the shared stamp, and this fails if one stops.
+    """H1's actual finding:
+
+    nine rendered artifacts outside the k3s role were watched by nothing. Each owning role now
+    includes the shared stamp, and this fails if one stops.
 
     daniel-pi's optimize_pi scripts are deliberately absent — that host runs no
     manifest-prune-check, and stamping them here would claim coverage this host cannot provide.
@@ -251,9 +260,11 @@ _DEPLOYED_DIR = "/var/lib/homelab/setup-deployed-manifest.d"
 
 
 def test_the_deployed_code_arm_derives_its_pairs_from_fragments():
-    """M-5. The arm hardcoded three paths — all gitops-deploy's — so it could only ever prove
-    the code its own author had in mind. Nine other `copy:`-deployed files on this host were
-    watched by nothing while the same script reported "deployed code matches the repo".
+    """M-5.
+
+    The arm hardcoded three paths — all gitops-deploy's — so it could only ever prove the code its
+    own author had in mind. Nine other `copy:`-deployed files on this host were watched by nothing
+    while the same script reported "deployed code matches the repo".
 
     A fragment directory makes it per-host by construction, the same shape the stale-script arm
     already uses: a pair exists only where the role that deploys it ran.
@@ -332,9 +343,12 @@ def test_an_absent_manifest_is_not_reported_as_drift():
 
 
 def test_an_empty_fragment_cannot_disarm_the_arm():
-    """L2. The guard was `[[ -r … ]]`: a zero-byte manifest is readable, so it took the present
-    branch, contributed no comparisons, and the check reported a confident green while watching
-    nothing at all."""
+    """L2.
+
+    The guard was `[[ -r … ]]`: a zero-byte manifest is readable, so it took the present branch,
+    contributed no comparisons, and the check reported a confident green while watching nothing at
+    all.
+    """
     script = _ARMS_LIB.read_text()
     assert re.search(r'\[\[\s+-s\s+"\$fragment"', script), (
         "the fragment loop must test -s, not -r: an empty file is readable and silently "

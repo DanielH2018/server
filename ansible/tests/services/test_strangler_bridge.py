@@ -78,10 +78,13 @@ def test_no_bridge_hostname_key_survives_anywhere():
 
 
 def test_docker_edge_renders_no_bridge_machinery():
-    """The Docker edge itself retired at E7 (2026-08-13): traefik + authelia are gone from
-    daniel-server, so there is no file-provider config left to render bridge machinery into.
-    This is now an absence guard, not a render check — a reappearing config.yml.j2 would mean
-    a second edge came back, which test_reverse_bridge_stays_retired also guards against."""
+    """The Docker edge itself retired at E7 (2026-08-13):
+
+    traefik + authelia are gone from daniel-server, so there is no file-provider config left to
+    render bridge machinery into. This is now an absence guard, not a render check — a reappearing
+    config.yml.j2 would mean a second edge came back, which test_reverse_bridge_stays_retired also
+    guards against.
+    """
     assert not (TRAEFIK / "config.yml.j2").exists(), (
         "roles/containers/traefik/templates/config.yml.j2 reappeared — the Docker edge "
         "retired at E7; a file-provider config here means bridge machinery could too"
@@ -89,10 +92,12 @@ def test_docker_edge_renders_no_bridge_machinery():
 
 
 def test_gate_serves_every_token_router():
-    """The gate must render: a token router and an Authelia'd /_utils carve-out per
-    livesync name form, the LAN-only probe router, and homelab-mcp's bearer router — and
-    every router must reach its service. Losing a token predicate would forward PAST the
-    gate."""
+    """The gate must render:
+
+    a token router and an Authelia'd /_utils carve-out per livesync name form, the LAN-only probe
+    router, and homelab-mcp's bearer router — and every router must reach its service. Losing a
+    token predicate would forward PAST the gate.
+    """
     gate = _gate_config()
     routers = gate["http"]["routers"]
     services = gate["http"]["services"]
@@ -128,14 +133,15 @@ def test_gate_serves_every_token_router():
 
 
 def test_gate_stays_out_of_crd_objects():
-    """The token's whole safety argument: it lives in a Secret (RBAC-denied to the
-    readonly kubeconfig), never in an IngressRoute.
+    """The token's whole safety argument:
 
-    livesync therefore renders NO IngressRoute at all. It used to render one for the `-k8s`
-    names only; when that suffix retired (2026-08-15) the route was deleted rather than
-    collapsed onto the plain name, because a bare `Host(livesync…)` router beside the gate's
-    would break the gate's invariant — that a request without the token matches no router and
-    404s before CouchDB. Re-adding the template puts that hole back.
+    it lives in a Secret (RBAC-denied to the readonly kubeconfig), never in an IngressRoute.
+
+    livesync therefore renders NO IngressRoute at all. It used to render one for the `-k8s` names
+    only; when that suffix retired (2026-08-15) the route was deleted rather than collapsed onto the
+    plain name, because a bare `Host(livesync…)` router beside the gate's would break the gate's
+    invariant — that a request without the token matches no router and 404s before CouchDB.
+    Re-adding the template puts that hole back.
     """
     assert not (
         ANSIBLE / "roles" / "k8s" / "livesync" / "templates" / "ingressroute.yaml.j2"
@@ -145,10 +151,12 @@ def test_gate_stays_out_of_crd_objects():
 
 
 def test_reverse_bridge_stays_retired():
-    """The reverse bridge retired at E7 (2026-08-13): its last tenant — the Docker
-    Authelia portal on the unsuffixed auth name — moved to the k8s portal, which now
-    owns auth.<domain> and the OIDC issuer. A reappearing template would put two
-    routers on one Host and silently shadow the portal."""
+    """The reverse bridge retired at E7 (2026-08-13):
+
+    its last tenant — the Docker Authelia portal on the unsuffixed auth name — moved to the k8s
+    portal, which now owns auth.<domain> and the OIDC issuer. A reappearing template would put two
+    routers on one Host and silently shadow the portal.
+    """
     assert not (
         ANSIBLE / "roles" / "k8s" / "traefik" / "templates" / "reverse-bridge.yaml.j2"
     ).exists()

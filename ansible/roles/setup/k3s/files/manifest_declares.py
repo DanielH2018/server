@@ -107,6 +107,14 @@ def declared(root: Path) -> tuple[set[str], list[str]]:
 
 
 def main(argv: list[str]) -> int:
+    """Print every `kind/name` declared under `argv[1]`, one per line, sorted.
+
+    Exits 64 on a bad usage, 66 if the given root isn't a directory, and 1 if the root yielded
+    no declared objects at all — an empty result must not read as "no orphans", so this is a
+    read failure the caller reports rather than the several hundred orphans an empty set would
+    silently imply. Any unreadable manifest is printed to stderr but does not fail the run by
+    itself. Returns 0 on success.
+    """
     if len(argv) != 2:
         print(f"usage: {argv[0]} <manifest-root>", file=sys.stderr)
         return 64

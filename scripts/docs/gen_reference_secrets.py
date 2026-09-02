@@ -73,6 +73,14 @@ def build_rows(
 
 
 def render_markdown(rows: list[dict[str, str]]) -> str:
+    """Render `rows` as the "Secrets" reference page, grouped by rotation tier.
+
+    Args:
+        rows: Secret rows as returned by `build_rows`.
+
+    Returns:
+        The full page as Markdown text, ending in a single trailing newline.
+    """
     from lib.docs_provenance import generated_banner
 
     parts = [generated_banner("scripts/docs/gen_reference_secrets.py")]
@@ -122,6 +130,11 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Build the secret rows, render the reference page, and write it if the body changed.
+
+    Returns:
+        The exit code from `finish_generator` (0 on success, non-zero on a write failure).
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, required=True, help="output file path")
     parser.add_argument("--registry", type=Path, default=REGISTRY)

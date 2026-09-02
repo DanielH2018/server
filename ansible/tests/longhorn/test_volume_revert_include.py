@@ -27,15 +27,17 @@ def _snapshot_roles() -> dict[str, list[str]]:
 
 
 def test_every_snapshot_role_restores_its_own_replicas() -> None:
-    """`volume-revert` scales to zero and never scales back. That is only correct because the
-    apply which follows restores the workload, and it restores it only if the role renders a
-    Deployment **named for the service** with an **explicit replica count**.
+    """`volume-revert` scales to zero and never scales back.
 
-    Nothing else in the repo enforces that. A role that opts into a snapshot but runs a
-    StatefulSet, names its workload something other than the service, or omits `replicas:` and
-    inherits the API server's default would leave its service at zero replicas after a
-    rollback — the outage the rollback was meant to end. This is the executable version of a
-    sentence that otherwise lives only in a comment.
+    That is only correct because the apply which follows restores the workload, and it restores it
+    only if the role renders a Deployment **named for the service** with an **explicit replica
+    count**.
+
+    Nothing else in the repo enforces that. A role that opts into a snapshot but runs a StatefulSet,
+    names its workload something other than the service, or omits `replicas:` and inherits the API
+    server's default would leave its service at zero replicas after a rollback — the outage the
+    rollback was meant to end. This is the executable version of a sentence that otherwise lives
+    only in a comment.
     """
     roles = _snapshot_roles()
     # A floor, and only as a sanity check on the reader itself: the guard below is the loop,
@@ -69,10 +71,13 @@ def test_every_snapshot_role_restores_its_own_replicas() -> None:
 
 
 def test_the_revert_runs_after_the_snapshot_and_before_the_apply() -> None:
-    """Order is the whole contract. A revert AFTER the apply restores the old data and then the
-    new pod migrates it again. A revert BEFORE the snapshot discards the recovery point for the
-    state being replaced. The three-way chain pins both adjacent pairs the insertion touches, so
-    moving the revert either direction fails one of the two comparisons."""
+    """Order is the whole contract.
+
+    A revert AFTER the apply restores the old data and then the new pod migrates it again. A revert
+    BEFORE the snapshot discards the recovery point for the state being replaced. The three-way
+    chain pins both adjacent pairs the insertion touches, so moving the revert either direction
+    fails one of the two comparisons.
+    """
     names = _task_names(_MANIFESTS)
     assert (
         _index(names, "Snapshot the stateful volumes")
@@ -125,14 +130,16 @@ def test_the_revert_fires_on_a_real_rollback_call() -> None:
 
 
 def test_the_revert_is_inert_without_the_restore_var() -> None:
-    """~50 roles call k8s/manifests. On every ordinary deploy — which is all of them but a
-    failed auto-deploy's second attempt — this include must not run.
+    """~50 roles call k8s/manifests.
 
-    Checked by rendering the clause, not by matching its text: a text-anchored assert pins
-    spelling, and a prior version of this test rejected `| trim | length > 0` — a strictly more
-    correct rewrite of the same clause (see the whitespace case below) — for failing to match
-    the exact punctuation it was written against. `k8s_no_mutate` is held False and the claims
-    list populated throughout, so only the sha input varies.
+    On every ordinary deploy — which is all of them but a failed auto-deploy's second attempt — this
+    include must not run.
+
+    Checked by rendering the clause, not by matching its text: a text-anchored assert pins spelling,
+    and a prior version of this test rejected `| trim | length > 0` — a strictly more correct
+    rewrite of the same clause (see the whitespace case below) — for failing to match the exact
+    punctuation it was written against. `k8s_no_mutate` is held False and the claims list populated
+    throughout, so only the sha input varies.
     """
     # never set — the ordinary-deploy case; gitops-deploy sets this extra-var only on a
     # rollback redeploy
@@ -184,9 +191,11 @@ def test_the_revert_include_passes_the_roles_own_interface() -> None:
 
 
 def test_the_revert_does_not_swallow_a_failed_claim() -> None:
-    """The call site must not blunt the role's own fail-fast behaviour. `k8s/volume-revert`
-    already stops the play on a failed claim; adding `ignore_errors` or `failed_when: false`
-    here would turn that into a partial revert nothing then flags."""
+    """The call site must not blunt the role's own fail-fast behaviour.
+
+    `k8s/volume-revert` already stops the play on a failed claim; adding `ignore_errors` or
+    `failed_when: false` here would turn that into a partial revert nothing then flags.
+    """
     task = _named(_MANIFESTS, "Revert the stateful volumes")
     assert "ignore_errors" not in task
     assert "failed_when" not in task

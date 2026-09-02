@@ -381,8 +381,11 @@ def test_a_missing_host_pages_once_the_grace_expires(monkeypatch):
 
 
 def test_a_short_coverage_gap_is_held(monkeypatch):
-    """The accepting half: the Pi's hwmon series went absent for about 20 minutes over the 7d to
-    2026-08-29, so a floor with no grace would page on a healthy estate."""
+    """The accepting half:
+
+    the Pi's hwmon series went absent for about 20 minutes over the 7d to 2026-08-29, so a floor
+    with no grace would page on a healthy estate.
+    """
     _reset()
     _stub_prom(monkeypatch, _cool_estate(("daniel-server", "daniel-box")))
     held = [
@@ -406,8 +409,11 @@ def test_full_coverage_clears_the_shortfall_streak(monkeypatch):
 
 
 def test_a_hot_sensor_outranks_a_coverage_shortfall(monkeypatch):
-    """Precedence, mirroring check_disk: a host that IS reporting and IS too hot pages ahead of
-    a complaint about the absent one. Reporting the shortfall first would bury a real breach."""
+    """Precedence, mirroring check_disk:
+
+    a host that IS reporting and IS too hot pages ahead of a complaint about the absent one.
+    Reporting the shortfall first would bury a real breach.
+    """
     _reset()
     _stub_prom(
         monkeypatch,
@@ -444,9 +450,12 @@ def test_the_two_graces_are_not_compounded(monkeypatch):
 
 
 def test_a_host_whose_only_sensors_are_excluded_does_not_count(monkeypatch):
-    """The shared-predicate guard. HWMON_TEMP_EXCLUDE_CHIP drops the nvme chips, so a host that
-    scrapes nothing else is a host this check does not cover — counting it toward the floor
-    would satisfy the coverage requirement with a host nothing is watching."""
+    """The shared-predicate guard.
+
+    HWMON_TEMP_EXCLUDE_CHIP drops the nvme chips, so a host that scrapes nothing else is a host this
+    check does not cover — counting it toward the floor would satisfy the coverage requirement with
+    a host nothing is watching.
+    """
     _reset()
     _stub_prom(
         monkeypatch,
@@ -494,8 +503,10 @@ def test_the_floor_and_its_grace_are_pinned_and_overridable():
 
 
 def test_a_dead_node_exporter_suppresses_this_check():
-    """With the floor armed, a dead node-exporter drops that host's series and trips it. Without
-    this entry one root cause pages twice — Scrape Targets plus a coverage complaint."""
+    """With the floor armed, a dead node-exporter drops that host's series and trips it.
+
+    Without this entry one root cause pages twice — Scrape Targets plus a coverage complaint.
+    """
     assert "host_temp" in check.EXPORTER_DEPENDENT["node"]
     assert check.down_exporters([({"job": "node"}, 0)]) == {"node"}
 

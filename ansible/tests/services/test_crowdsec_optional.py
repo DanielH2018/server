@@ -324,8 +324,10 @@ def has_bouncer(host: str) -> bool:
 
 
 def public_edge_problem(public: bool, bouncer: bool) -> str:
-    """The verdict, taking both readings as arguments so the rejecting test drives the same
-    code. Empty string means the pair is consistent."""
+    """The verdict, taking both readings as arguments so the rejecting test drives the same code.
+
+    Empty string means the pair is consistent.
+    """
     if public and not bouncer:
         return (
             "k8s_public_route is on with no CrowdSec bouncer on the edge — an unprotected "
@@ -347,12 +349,14 @@ def test_the_public_route_and_the_bouncer_move_together(host: str) -> None:
 
 
 def test_the_bouncer_reading_follows_the_flag() -> None:
-    """The rejecting half for the DETECTION. Every host today is a consistent pair, so the
-    assertion above is only ever observed passing and cannot show that `has_bouncer` reads
-    anything at all — a detector stuck on False would agree with every LAN-only host.
+    """The rejecting half for the DETECTION.
 
-    daniel-box runs the bouncer and daniel-stage does not, so one real True and one real
-    False is what proves the reading tracks the flag rather than the template text.
+    Every host today is a consistent pair, so the assertion above is only ever observed passing and
+    cannot show that `has_bouncer` reads anything at all — a detector stuck on False would agree
+    with every LAN-only host.
+
+    daniel-box runs the bouncer and daniel-stage does not, so one real True and one real False is
+    what proves the reading tracks the flag rather than the template text.
     """
     assert has_bouncer("daniel-box") is True
     assert has_bouncer("daniel-stage") is False
@@ -368,8 +372,11 @@ def test_the_bouncer_reading_follows_the_flag() -> None:
 def test_the_verdict_rejects_a_mismatched_pair(
     public: bool, bouncer: bool, expect: str
 ) -> None:
-    """Each direction separately: a guard catching only the harmless drift would still miss
-    the unprotected edge, which is the one that matters."""
+    """Each direction separately:
+
+    a guard catching only the harmless drift would still miss the unprotected edge, which is the one
+    that matters.
+    """
     assert expect in public_edge_problem(public, bouncer)
 
 

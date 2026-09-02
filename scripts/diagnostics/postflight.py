@@ -34,11 +34,13 @@ class Skip(Exception):
 
 
 def get(url, header=None, timeout=TIMEOUT, resolve=None):
-    """GET url, returning (http_status, body). `header` is a full `curl --config`
-    body (e.g. `header = "X-Api-Key: ..."`) fed via stdin so credentials stay out
-    of argv. `resolve` is a curl --resolve pin (core.k8s_endpoint's second element)
-    for cluster routes the host shell can't resolve. status 0 means curl itself failed
-    (connection refused, DNS, timeout)."""
+    """GET url, returning (http_status, body).
+
+    `header` is a full `curl --config` body (e.g. `header = "X-Api-Key: ..."`) fed via stdin so
+    credentials stay out of argv. `resolve` is a curl --resolve pin (core.k8s_endpoint's second
+    element) for cluster routes the host shell can't resolve. status 0 means curl itself failed
+    (connection refused, DNS, timeout).
+    """
     argv = [
         "curl",
         "-sS",
@@ -91,9 +93,12 @@ def secret(name):
 
 
 def _cluster_prom_query(promql):
-    """Query the CLUSTER prometheus through its LAN query route (the uptime-kuma job
-    moved there at the Phase D dashboard triage, PG1). VIP-pinned — this host's
-    resolver bypasses the LAN DNS, so the name alone does not reach the cluster edge."""
+    """Query the cluster Prometheus through its LAN query route.
+
+    The uptime-kuma job moved there at the Phase D dashboard triage, PG1. VIP-pinned —
+    this host's resolver bypasses the LAN DNS, so the name alone does not reach the
+    cluster edge.
+    """
     base, pin = core.k8s_endpoint("prometheus")
     from urllib.parse import urlencode
 
@@ -137,8 +142,10 @@ def check_kuma_drift():
 
 def check_kuma_scrape():
     """§9.2 — a stale prometheus_kuma_api_key leaves the uptime-kuma target at 401.
-    Reads `up{job=...}` rather than the targets API: the cluster route only admits
-    /api/v1/query paths, and up==0 is the same evidence the target listing gave."""
+
+    Reads `up{job=...}` rather than the targets API: the cluster route only admits /api/v1/query
+    paths, and up==0 is the same evidence the target listing gave.
+    """
     status, body = _cluster_prom_query('up{job="uptime-kuma"}')
     if status != 200:
         return FAIL, f"cluster prometheus query returned {status}"
@@ -169,6 +176,12 @@ def _unreachable(app, detail):
 
 
 def check_arr_key(app):
+    """§9.3 — verify ``app``'s SOPS-held API key authenticates against its own instance.
+
+    Args:
+        app: The *arr app name (``sonarr``, ``radarr`` or ``prowlarr``), used both as the
+            secret name prefix and to build the status-check URL.
+    """
     ip = service_ip(app)
     key, err = secret(f"{app}_api_key")
     if not key:
@@ -184,6 +197,7 @@ def check_arr_key(app):
 
 
 def check_jellyfin_key():
+    """§9.3 — verify the SOPS-held ``jellyfin_api_key`` authenticates against Jellyfin."""
     ip = service_ip("jellyfin")
     key, err = secret("jellyfin_api_key")
     if not key:
@@ -211,6 +225,11 @@ HA_TOKENS = [
 
 
 def check_ha_token(name):
+    """§9.4 — verify one Home Assistant long-lived token still authenticates.
+
+    Args:
+        name: The SOPS secret name of the token to check (one of ``HA_TOKENS``).
+    """
     # Since slice-5 B3 HA runs in the cluster — core.ha_base() is the bridge URL, the same
     # endpoint before and after the cutover (no container to inspect).
     token, err = secret(name)
@@ -231,6 +250,7 @@ def check_ha_token(name):
 
 
 def check_authelia():
+    """§9.5 — verify Authelia is serving and its OIDC secrets are present."""
     ip = service_ip("authelia")
     status, body = get(f"http://{ip}:9091/api/health")
     if status != 200:
@@ -268,6 +288,11 @@ CHECKS = [
 
 
 def main():
+    """Run every §9 check, print a report line for each, and exit non-zero on any FAIL.
+
+    A check that raises is caught and reported as FAIL rather than aborting the run, so
+    one broken check never hides the checks after it.
+    """
     failures = 0
     width = max(len(name) for _, name, _ in CHECKS)
     for item, name, check in CHECKS:

@@ -94,6 +94,16 @@ def build_rows(
     host_vars: Path = HOST_VARS,
     all_vars: Path = ALL_VARS,
 ) -> list[dict[str, str]]:
+    """Collect every host in `hosts_ini` into one row of inventory facts each.
+
+    Args:
+        hosts_ini: Path to the Ansible `hosts.ini` inventory.
+        host_vars: Directory holding each host's `host_vars` file.
+        all_vars: Path to `group_vars/all.yml`, read for group-default flag values.
+
+    Returns:
+        One dict per host, keyed by the columns rendered in `render_markdown`.
+    """
     # A parameter, not the module constant read directly: a test builds a synthetic
     # inventory in a tmp dir, and reaching past it to the real group_vars would make that
     # fixture depend on the repo it is meant to stand in for.
@@ -119,6 +129,14 @@ def build_rows(
 
 
 def render_markdown(rows: list[dict[str, str]]) -> str:
+    """Render `rows` as the "Hosts" reference page, one section per host.
+
+    Args:
+        rows: Host rows as returned by `build_rows`.
+
+    Returns:
+        The full page as Markdown text, ending in a single trailing newline.
+    """
     from lib.docs_provenance import generated_banner
 
     parts = [generated_banner("scripts/docs/gen_reference_hosts.py")]
@@ -148,6 +166,11 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Build the host rows, render the reference page, and write it if the body changed.
+
+    Returns:
+        The exit code from `finish_generator` (0 on success, non-zero on a write failure).
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, required=True, help="output file path")
     parser.add_argument("--hosts-ini", type=Path, default=HOSTS_INI)
