@@ -48,3 +48,20 @@ ExecStart=/home/{{ sys_user }}/.local/bin/uv run --no-project --no-python-downlo
   --jsonl {{ gitops_deploy_staging_backfill_ledger }} \
   --count {{ gitops_deploy_staging_backfill_count }} \
   --timeout {{ gitops_deploy_staging_backfill_timeout_s }}
+# The run-recency heartbeat. ExecStopPost= runs whatever the outcome — the tolerated exit 1, a
+# COULD_NOT_RUN 2, a TimeoutStartSec kill — which is exactly the property wanted: this answers
+# "did the ratchet run at all", and OnFailure= above answers "did it fail". A heartbeat that
+# only fired on success would go stale on a run that failed, duplicating the page next to it and
+# saying nothing new.
+#
+# `/bin/sh -c` because systemd runs no shell and would pass `>` to date as an argument. Epoch in
+# a file rather than an empty file read by mtime, matching both siblings the reader follows
+# (gitops-deploy's `last_run`, the etcd drill's `epoch=` stamp) — mtime survives a `cp -p` or a
+# restore that a written epoch does not.
+#
+# `%%s`, NOT `%s`. systemd expands specifiers in a command line before /bin/sh ever sees it, and
+# `%s` is the USER SHELL specifier (systemd.unit(5), systemd 255 on this host) — so `date +%s`
+# would run `date +/bin/bash`, write `/bin/bash` to the heartbeat, and the reader would call it
+# unparseable and page DOWN forever against a perfectly healthy ratchet. `%%` is the literal
+# percent. ENFORCED by test_the_heartbeat_writer_escapes_systemds_specifiers.
+ExecStopPost=/bin/sh -c 'date +%%s > {{ gitops_deploy_staging_backfill_heartbeat }}'

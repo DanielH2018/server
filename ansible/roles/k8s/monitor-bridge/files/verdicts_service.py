@@ -111,6 +111,26 @@ def gitops_alive(age_s, max_age_s):
     return False, "deployer last ran %.0fm ago (> %.0fm)" % (age_s / 60, max_age_s / 60)
 
 
+def staging_backfill_alive(armed, age_s, max_age_s):
+    """Pure: is the staging-gate backfill ratchet still running? Returns (ok, msg).
+
+    `armed` is the arm state, not a liveness signal: the ratchet's timer is stopped whenever
+    `gitops_deploy_staging_gate` is off, so a disarmed ratchet produces no heartbeat BY DESIGN
+    and reporting that as DOWN would page forever on a deliberate switch. It reports up and says
+    what it suppressed, so the tile is never silently inert.
+
+    `age_s` is None when the ratchet is armed and no heartbeat exists at all — the state most
+    worth reporting, and the one an age comparison alone cannot express.
+    """
+    if not armed:
+        return True, "ratchet disarmed (staging gate off) — no heartbeat expected"
+    if age_s is None:
+        return False, "ratchet armed but has never run (no heartbeat)"
+    if age_s <= max_age_s:
+        return True, "ratchet ran %.0fm ago" % (age_s / 60)
+    return False, "ratchet last ran %.0fm ago (> %.0fm)" % (age_s / 60, max_age_s / 60)
+
+
 def queue_warnings(queue_json, app_name):
     """Pure: (app_name, title, reason) for each queue item needing an operator's eyes.
 
