@@ -9,7 +9,11 @@ wrong until someone notices. Measured 2026-09-02: five quoted values were stale,
 a weekly Longhorn retain of 4 (lowered to 2 on 2026-08-17) and a GitOps tick of 30 minutes
 (10 since 2026-09-01), both on pages an operator reads during a recovery.
 
-`test_documented_paths_exist.py` guards the NAMES a doc cites. This guards the VALUES. The
+`test_documented_paths_exist.py` guards the NAMES a doc cites. This guards the VALUES.
+A whole table of tunables is not guarded here at all: scripts/docs/gen_doc_fragments.py
+generates it and the page transcludes it, so there is no quoted copy to drift. The Longhorn
+retains and the secret-tier cadences moved that way on 2026-09-02; what stays here is the
+figure inside a sentence. The
 two are deliberately separate: a name is extracted by one regex over every doc, while a
 value has no shape of its own -- "14" is a retain count on one line and a port on the next
 -- so each guarded value is a row here: the page, a regex whose single capture group is the
@@ -69,17 +73,6 @@ def _python_constant(path: Path, name: str) -> Callable[[], str]:
     return read
 
 
-def _tier_days(tier: str) -> Callable[[], str]:
-    def read() -> str:
-        match = re.search(
-            rf'^\s+"{tier}": (\d+),$', SECRET_ROTATION.read_text(), re.MULTILINE
-        )
-        assert match, f"secret_rotation.py: no TIER_DAYS entry for {tier!r}"
-        return match.group(1)
-
-    return read
-
-
 @dataclass(frozen=True)
 class Row:
     doc: str
@@ -92,18 +85,6 @@ class Row:
 
 
 ROWS: list[Row] = [
-    Row(
-        "docs/longhorn-disaster-recovery.md",
-        r"\*\*Daily tier\*\* \(the four R2 volumes, retain (\d+)\)",
-        "k3s_longhorn_backup_retain",
-        _k3s_default("k3s_longhorn_backup_retain"),
-    ),
-    Row(
-        "docs/longhorn-disaster-recovery.md",
-        r"\*\*Weekly tier\*\* \(all \d+ B2 volumes[^)]*, retain (\d+)\)",
-        "k3s_longhorn_weekly_backup_retain",
-        _k3s_default("k3s_longhorn_weekly_backup_retain"),
-    ),
     Row(
         "docs/gitops-pipeline.md",
         r"every (\d+) minutes \(`gitops_deploy_tick_interval`",
@@ -127,15 +108,6 @@ ROWS: list[Row] = [
         r"`ROTATE_LEAD_DAYS` = (\d+)",
         "secret_rotation.ROTATE_LEAD_DAYS",
         _python_constant(SECRET_ROTATION, "ROTATE_LEAD_DAYS"),
-    ),
-    *(
-        Row(
-            "docs/secret-rotation.md",
-            rf"^\| `{tier}` \| (\d+) d \|",
-            f"secret_rotation.TIER_DAYS[{tier!r}]",
-            _tier_days(tier),
-        )
-        for tier in ("auto", "assisted", "external", "pinned")
     ),
 ]
 
