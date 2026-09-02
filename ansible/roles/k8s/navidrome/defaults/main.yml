@@ -1,0 +1,51 @@
+---
+# Navidrome — Subsonic-compatible music server, added for issue #803.
+#
+# Pinned tag@sha256 rather than a bare digest: the k8s-images Renovate manager keys on
+# `_image:` in this file and needs the tag to read a version stream, and a bare repo@sha256
+# would freeze the pin with no update signal (same reasoning as texbrain_k8s_image).
+navidrome_k8s_image: ghcr.io/navidrome/navidrome:0.63.2@sha256:9012939114fbb1bb641b81cf96dec5ded15f0aafefe8d47a511d7cb919658e40
+
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Off: this workload is parked at zero replicas (below), so an auto-applied image bump would
+# never reach a pod while reading as shipped. Turn this on in the same change that raises the
+# replica count.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "parked at replicas 0 — an auto-applied image bump would never reach a pod"  # noqa var-naming[no-role-prefix]
+
+# ── parked ──────────────────────────────────────────────────────────────────────────────────
+# Stood up and verified on 2026-09-02 (issue #803), then scaled to zero on operator request.
+# There is also nothing for it to serve yet: /srv/media/media holds books, movies and tv and no
+# music directory, so `navidrome_k8s_music_dir` below is still backed by an emptyDir.
+#
+# Declarative rather than a live `kubectl scale`, for the two reasons terraria's defaults
+# record: the next `./scripts/deploy.sh --tags navidrome` re-applies this Deployment and would
+# reset a live scale back to 1, and the read-only ServiceAccount cannot scale anything anyway,
+# so Ansible is the only write path. `session-health.py`'s `_is_scaled_to_zero` reads a
+# deliberate `spec.replicas: 0` as intentional, so the SessionStart banner stays quiet.
+#
+# To bring it back: set this to 1, point the music mount at a real library on the media volume,
+# flip k8s_autodeploy, and add a Kuma monitor. A monitor added now would be permanently red.
+#
+# This role deliberately declares no `k8s_autodeploy_snapshot_pvcs`:
+# test_every_snapshot_role_restores_its_own_replicas requires replicas >= 1 from roles that do,
+# and that guard is right — a snapshot-protected role must not be parked.
+navidrome_k8s_replicas: 0
+
+# The image's own entrypoint runs as root. Run it as the fleet's ubuntu uid instead, so the
+# Longhorn volume's files are owned by the same user everything else here writes as.
+navidrome_k8s_uid: 1000
+
+# Where the library is mounted inside the pod. Empty today — see the parked note above.
+navidrome_k8s_music_dir: /music
+
+# SQLite index plus the transcoding cache. 2Gi is headroom, not a measurement: the library is
+# empty, so there is nothing yet to size against.
+navidrome_k8s_claim: navidrome-data
+navidrome_k8s_storage_class: longhorn
+navidrome_k8s_size: 2Gi
+
+navidrome_k8s_cpu_limit: "1"
+navidrome_k8s_mem_limit: 512Mi
+navidrome_k8s_cpu_request: "50m"
+navidrome_k8s_mem_request: 64Mi

@@ -200,6 +200,13 @@ containers_list:
     hostname: "freshrss"
     port: 80
     use_authelia: true
+  # Parked at replicas 0 — see roles/k8s/navidrome/defaults/main.yml. The entry stays in the
+  # list so the Deployment, Service and route keep being reconciled; only the pod count is 0.
+  - name: navidrome
+    platform: k8s
+    hostname: "navidrome"
+    port: 4533
+    use_authelia: true
   # port 8000, not 80 — uWSGI serves directly, there is no nginx in front of it. Assuming
   # 80 costs a five-minute rollout timeout with a perfectly healthy app behind a probe
   # pointed at a closed port.
