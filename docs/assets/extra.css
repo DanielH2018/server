@@ -99,3 +99,10 @@
 .md-typeset table:not([class]) tr:has(code:target) {
   background-color: var(--md-typeset-mark-color);
 }
+
+/* The per-page freshness footer _mkdocs_freshness.py appends below a rule on every
+ * hand-written page. Muted and small: it is a stamp, not content. */
+.md-typeset .doc-freshness {
+  font-size: 0.7rem;
+  color: var(--md-default-fg-color--light);
+}

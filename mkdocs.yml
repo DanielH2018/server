@@ -75,6 +75,11 @@ extra_javascript:
 # The leading underscore keeps it out of the Scripts reference, which enumerates scripts/**.
 hooks:
   - scripts/docs/_mkdocs_repo_links.py
+  # Appends to every hand-written page the date of its last commit and which of the repo
+  # files it names changed after that -- the freshness signal the generated pages get from
+  # their frontmatter. Computed from git at build time, so nothing is committed;
+  # reference/freshness.md is the same data as one ranked table.
+  - scripts/docs/_mkdocs_freshness.py
 
 # Pages that are BUILT unless named here. mkdocs serves everything under docs_dir whether or
 # not the nav links it, and it logs an unlinked page at INFO — so `--strict` does not catch
@@ -125,6 +130,7 @@ nav:
       - Networking: reference/networking.md
       - Scripts: reference/scripts.md
       - Topology: reference/topology.md
+      - Doc freshness: reference/freshness.md
   # template.md is deliberately absent — it is a form, not a document. The nav test only
   # checks docs/*.md, not subdirectories, so leaving it out costs nothing.
   - Decisions:
