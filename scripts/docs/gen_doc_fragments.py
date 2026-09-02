@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import configparser
 import sys as _sys
 from collections.abc import Callable
 from pathlib import Path as _Path
@@ -62,6 +63,13 @@ DEPLOY_CHANGES = REPO / "ansible/roles/setup/gitops_deploy/files/deploy_changes.
 GITOPS_DEPLOY = REPO / "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py"
 SECRET_ROTATION = REPO / "scripts/secrets_mgmt/secret_rotation.py"
 SECRET_REGISTRY = REPO / "ansible/secret_rotation.yml"
+PI_PEER_DEFAULTS = REPO / "ansible/roles/k8s/pi-peer-backup/defaults/main.yml"
+REGISTRY_DEFAULTS = REPO / "ansible/roles/k8s/registry/defaults/main.yml"
+FAIL2BAN_CONF = (
+    REPO / "ansible/roles/setup/initial_setup/templates/fail2ban_homelab.conf.j2"
+)
+GROUP_VARS = REPO / "ansible/inventory/group_vars/all.yml"
+HOST_VARS = REPO / "ansible/inventory/host_vars"
 
 
 def header(sources: list[str]) -> str:
@@ -212,6 +220,143 @@ def _staging() -> tuple[str, list[str]]:
     ]
 
 
+def parse_jails(conf: str) -> list[dict[str, str]]:
+    """Every enabled jail with its effective maxretry, findtime and bantime.
+
+    The template is plain INI, so configparser reads it and resolves each jail's values
+    through `[DEFAULT]` the way fail2ban does.
+    """
+    parser = configparser.ConfigParser(interpolation=None)
+    parser.read_string(conf)
+    jails = []
+    for name in parser.sections():
+        section = parser[name]
+        if section.get("enabled", "false").lower() != "true":
+            continue
+        jails.append(
+            {
+                "jail": name,
+                "maxretry": section["maxretry"],
+                "findtime": section["findtime"],
+                "bantime": section["bantime"],
+            }
+        )
+    return jails
+
+
+def container_udp_port(host_vars: dict, name: str) -> str:
+    entries = [c for c in host_vars["containers_list"] if c.get("name") == name]
+    assert len(entries) == 1, (
+        f"expected one {name!r} in containers_list, found {len(entries)}"
+    )
+    return str(entries[0]["udp_port"])
+
+
+def render_deadman_cadences(k3s: dict, pi_peer: dict, registry: dict) -> str:
+    """One row per Healthchecks.io slug: the cron that pings it, assembled from its vars."""
+    every_10 = f"{k3s['k3s_longhorn_backup_health_cron_minute']} * * * *"
+    rows = [
+        (
+            "longhorn-backup-health",
+            every_10,
+            "`k3s_longhorn_backup_health_cron_minute`",
+        ),
+        (
+            "daniel-box-disk-health",
+            f"{k3s['k3s_disk_health_cron_minute']} * * * *",
+            "`k3s_disk_health_cron_minute`",
+        ),
+        (
+            "etcd-snapshot-offbox",
+            f"{k3s['k3s_etcd_s3_cron_minute']} {k3s['k3s_etcd_s3_cron_hour']} * * *",
+            "`k3s_etcd_s3_cron_hour` / `_minute`",
+        ),
+        (
+            "manifest-prune-check",
+            f"{k3s['k3s_manifest_prune_cron_minute']} {k3s['k3s_manifest_prune_cron_hour']} * * *",
+            "`k3s_manifest_prune_cron_hour` / `_minute`",
+        ),
+        (
+            "pi-peer-backup",
+            str(pi_peer["pi_peer_backup_k8s_schedule"]),
+            "`pi_peer_backup_k8s_schedule` (a k8s CronJob, not a host cron)",
+        ),
+        (
+            "registry-gc",
+            f"{registry['registry_k8s_gc_cron_minute']} {registry['registry_k8s_gc_cron_hour']} "
+            f"* * {registry['registry_k8s_gc_cron_weekday']}",
+            "`registry_k8s_gc_cron_weekday` / `_hour` / `_minute`",
+        ),
+        (
+            "uptime-kuma-alive",
+            every_10,
+            "the `longhorn-backup-health` cron; the same script pings both",
+        ),
+    ]
+    lines = ["| Check slug | Cron (daniel-box, UTC) | Set by |", "|---|---|---|"]
+    lines += [f"| `{slug}` | `{cron}` | {source} |" for slug, cron, source in rows]
+    return "\n".join(lines) + "\n"
+
+
+def render_fail2ban_jails(jails: list[dict[str, str]]) -> str:
+    lines = ["| Jail | Trigger | Ban |", "|---|---|---|"]
+    for j in jails:
+        lines.append(
+            f"| `{j['jail']}` | {j['maxretry']} failures in {j['findtime']} "
+            f"(`maxretry {j['maxretry']}`, `findtime {j['findtime']}`) | {j['bantime']} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def render_lan_addresses(
+    ingress_vip: str, dns_vip: str, wg_port: str, pi_wg_port: str
+) -> str:
+    rows = [
+        ("k3s ingress VIP (MetalLB; every `.local` service answers here)", ingress_vip,
+         "`k3s_metallb_ingress_vip`"),
+        ("Pi-hole DNS VIP (MetalLB)", dns_vip, "`dns_k8s_vip`"),
+        ("WireGuard UDP port, wg-easy on daniel-box", f"{wg_port}/udp",
+         "`udp_port` on the k8s `wg-easy` entry in `host_vars/daniel-box.yml`"),
+        ("WireGuard UDP port, the Pi's LAN-only wg-easy", f"{pi_wg_port}/udp",
+         "`udp_port` on `wg-easy` in `host_vars/daniel-pi.yml`"),
+    ]  # fmt: skip
+    lines = ["| Address | Value | Set by |", "|---|---|---|"]
+    lines += [f"| {what} | `{value}` | {source} |" for what, value, source in rows]
+    return "\n".join(lines) + "\n"
+
+
+def _deadman() -> tuple[str, list[str]]:
+    return render_deadman_cadences(
+        role_defaults(K3S_DEFAULTS),
+        role_defaults(PI_PEER_DEFAULTS),
+        role_defaults(REGISTRY_DEFAULTS),
+    ), [
+        "ansible/roles/setup/k3s/defaults/main.yml",
+        "ansible/roles/k8s/pi-peer-backup/defaults/main.yml",
+        "ansible/roles/k8s/registry/defaults/main.yml",
+    ]
+
+
+def _fail2ban() -> tuple[str, list[str]]:
+    return render_fail2ban_jails(parse_jails(FAIL2BAN_CONF.read_text())), [
+        "ansible/roles/setup/initial_setup/templates/fail2ban_homelab.conf.j2"
+    ]
+
+
+def _lan() -> tuple[str, list[str]]:
+    group = role_defaults(GROUP_VARS)
+    return render_lan_addresses(
+        str(group["k3s_metallb_ingress_vip"]),
+        str(group["dns_k8s_vip"]),
+        container_udp_port(role_defaults(HOST_VARS / "daniel-box.yml"), "wg-easy"),
+        container_udp_port(role_defaults(HOST_VARS / "daniel-pi.yml"), "wg-easy"),
+    ), [
+        "ansible/inventory/group_vars/all.yml",
+        "ansible/inventory/host_vars/daniel-box.yml",
+        "ansible/inventory/host_vars/daniel-pi.yml",
+    ]
+
+
 def _secrets() -> tuple[str, list[str]]:
     return render_secret_tiers(
         module_constant(SECRET_ROTATION, "TIER_DAYS"),
@@ -226,6 +371,9 @@ FRAGMENTS: dict[str, Callable[[], tuple[str, list[str]]]] = {
     "broad-prefixes": _gitops,
     "staging-subset": _staging,
     "secret-tiers": _secrets,
+    "deadman-cadences": _deadman,
+    "fail2ban-jails": _fail2ban,
+    "lan-addresses": _lan,
 }
 
 

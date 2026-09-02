@@ -10,15 +10,20 @@ it is a second destination for the handful of jobs whose silence actually matter
 
 ## What is wired
 
-| Check slug | Source | Cadence | Pings `/fail` when |
-|---|---|---|---|
-| `longhorn-backup-health` | `roles/setup/k3s/templates/longhorn-backup-health.sh.j2` | every 10 min | target unavailable, backups stale/missing/errored, or the daily count exceeds the B2 budget |
-| `daniel-box-disk-health` | `roles/setup/k3s/templates/disk-health.sh.j2` | every 10 min | `/` over the headroom threshold, or `df` fails |
-| `etcd-snapshot-offbox` | `roles/setup/k3s/templates/etcd-snapshot-offbox.sh.j2` | 02:45 daily | the snapshot or its R2 upload failed, the credentials file is missing or incomplete, or snapshots are disarmed |
-| `manifest-prune-check` | `roles/setup/k3s/templates/manifest-prune-check.sh.j2` | 05:15 daily | any of its three arms: live routing or workload objects absent from the staged manifests; a `copy:`-deployed artifact differing byte-for-byte from the repo; or a `template:`-rendered setup script whose source checksum no longer matches the render manifest this host wrote |
-| `pi-peer-backup` | `roles/k8s/pi-peer-backup/files/pull-pi-peers.sh` | 23:30 daily | rsync failed, or fewer than 2 peer files landed |
-| `registry-gc` | `roles/k8s/registry/templates/registry-gc.sh.j2` | 04:20 Sundays (UTC) | GC job exceeded its deadline, the registry pod would not terminate, the job manifest failed to apply, or the registry did not come back afterwards |
-| `uptime-kuma-alive` | `roles/setup/k3s/templates/longhorn-backup-health.sh.j2` | every 10 min | that script's Kuma push returned non-zero — see *Watching the spine itself* below |
+| Check slug | Source | Pings `/fail` when |
+|---|---|---|
+| `longhorn-backup-health` | `roles/setup/k3s/templates/longhorn-backup-health.sh.j2` | target unavailable, backups stale/missing/errored, or the daily count exceeds the B2 budget |
+| `daniel-box-disk-health` | `roles/setup/k3s/templates/disk-health.sh.j2` | `/` over the headroom threshold, or `df` fails |
+| `etcd-snapshot-offbox` | `roles/setup/k3s/templates/etcd-snapshot-offbox.sh.j2` | the snapshot or its R2 upload failed, the credentials file is missing or incomplete, or snapshots are disarmed |
+| `manifest-prune-check` | `roles/setup/k3s/templates/manifest-prune-check.sh.j2` | any of its three arms: live routing or workload objects absent from the staged manifests; a `copy:`-deployed artifact differing byte-for-byte from the repo; or a `template:`-rendered setup script whose source checksum no longer matches the render manifest this host wrote |
+| `pi-peer-backup` | `roles/k8s/pi-peer-backup/files/pull-pi-peers.sh` | rsync failed, or fewer than 2 peer files landed |
+| `registry-gc` | `roles/k8s/registry/templates/registry-gc.sh.j2` | GC job exceeded its deadline, the registry pod would not terminate, the job manifest failed to apply, or the registry did not come back afterwards |
+| `uptime-kuma-alive` | `roles/setup/k3s/templates/longhorn-backup-health.sh.j2` | that script's Kuma push returned non-zero — see *Watching the spine itself* below |
+
+The cron behind each slug, read from the variables that set it:
+
+<!-- Generated from the cron variables in the k3s, pi-peer-backup and registry roles; edit those. -->
+--8<-- "assets/generated/fragments/deadman-cadences.md"
 
 Cadences are the host's clock, and daniel-box runs **UTC** — not the `America/Chicago` the
 containers use. A check created in Chicago time drifts 5-6 hours from the cron that feeds it
@@ -30,15 +35,19 @@ These live only in the Healthchecks.io console; nothing in this repo can set the
 2026-08-30 only three of the seven were written down anywhere, so the other four could not be
 verified against their crons at all. Set them to match this table.
 
-| Check slug | Schedule type | Period / expression | Grace |
-|---|---|---|---|
-| `longhorn-backup-health` | Simple | 10 minutes | 20 minutes |
-| `daniel-box-disk-health` | Simple | 10 minutes | 20 minutes |
-| `uptime-kuma-alive` | Simple | 10 minutes | 20 minutes |
-| `manifest-prune-check` | Cron | `15 5 * * *` UTC | 1 hour |
-| `etcd-snapshot-offbox` | Cron | `45 2 * * *` UTC | 1 hour |
-| `pi-peer-backup` | Cron | `30 23 * * *` UTC | 1 hour |
-| `registry-gc` | Cron | `20 4 * * 0` UTC | 1 hour |
+The period or expression is the cron in the table above: a `*/10` minute cron is a Simple
+check with a 10-minute period, and every other slug is a Cron check carrying that expression
+in UTC.
+
+| Check slug | Schedule type | Grace |
+|---|---|---|
+| `longhorn-backup-health` | Simple | 20 minutes |
+| `daniel-box-disk-health` | Simple | 20 minutes |
+| `uptime-kuma-alive` | Simple | 20 minutes |
+| `manifest-prune-check` | Cron | 1 hour |
+| `etcd-snapshot-offbox` | Cron | 1 hour |
+| `pi-peer-backup` | Cron | 1 hour |
+| `registry-gc` | Cron | 1 hour |
 
 **The 20-minute grace on the three 10-minute checks is derived, not chosen.** Their crons skip
 their first run after a boot — `boot_grace_active` in `kuma-push-lib.sh`, sized by

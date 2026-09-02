@@ -189,10 +189,11 @@ The `S` flag means the process ran with superuser privileges.
 
 **Ban policy:**
 
-| Jail | Trigger | Ban |
-|------|---------|-----|
-| `sshd` / `postfix` | 5 failures in 10 min (`maxretry 5`, `findtime 10m`) | 1 hour |
-| `recidive` | 3 bans within 1 day | 7 days |
+<!-- Generated from the fail2ban jail template; edit that. -->
+--8<-- "assets/generated/fragments/fail2ban-jails.md"
+
+For `recidive` a "failure" is a ban by another jail, so its row reads as bans within the
+window.
 
 **Check for findings:**
 
