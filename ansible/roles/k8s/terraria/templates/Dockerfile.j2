@@ -22,10 +22,19 @@
 # bug for that one plus a root init container.
 #
 # DIGEST-PINNED, and doubly load-bearing here: this image holds the one irreplaceable dataset in
-# the fleet. `vanilla-latest` is the only tag beardedio publishes for the vanilla channel — there
-# is no version stream to track — so the digest is the entire pin. Renovate's dockerfile manager
-# raises a digest PR when the tag re-points; keep the tag alongside the digest so the channel is
-# still legible. A bump is realised by a rebuild, never by a pull: see defaults/main.yml.
+# the fleet. The pin sits on `vanilla-latest`, a MUTABLE tag, so the digest is the entire pin and
+# Renovate's dockerfile manager raises a digest PR when the tag re-points; keep the tag alongside
+# the digest so the channel is still legible. A bump is realised by a rebuild, never by a pull:
+# see defaults/main.yml.
+#
+# beardedio ALSO publishes an immutable versioned tag per release — `vanilla-1.4.5.7`,
+# `vanilla-1.4.5.6`, back to `vanilla-1.4.1.2` (read off the Docker Hub tag list, 2026-09-02).
+# This comment said the opposite until then, and the correction is operational rather than
+# cosmetic: pinning back to a known-good game version is a clean tag pin, not a bare digest.
+# That is remediation option 2 on issue #822, where a connect-and-drop TCP probe against
+# 1.4.5.7 crashes the server loop and 1.4.5.6 takes the same probe without incident. It stays
+# an option rather than the fix because 1.4.5.7 has already saved this world, and a 1.4.5.6
+# server may refuse or damage a world it wrote.
 FROM beardedio/terraria:vanilla-latest@sha256:2b305d0eabbba11d14545159b015eb9f5d15a003ae7d90f6b0bb839cbce37773
 
 # The whole fix. Two paths, for two different reasons:
