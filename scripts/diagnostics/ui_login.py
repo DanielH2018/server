@@ -174,7 +174,10 @@ def post_json(host, path, body, cookie=None):
             # curl reads its config from stdin too, so the body moves to a file to keep
             # both off argv.
             body_path = os.path.join(tmp, "post")
-            with open(body_path, "w") as f:
+            # 0600 rather than the umask default: the TemporaryDirectory is already 0700,
+            # so this is belt-and-braces on a file that holds a live TOTP code.
+            fd = os.open(body_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as f:
                 f.write(body)
             argv[argv.index("--data") + 1] = f"@{body_path}"
             argv += ["--config", "-"]
