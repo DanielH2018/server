@@ -25,15 +25,17 @@ All under `ansible/roles/k8s/home-assistant/`:
 | Script | `files/scripts/<topic>.yaml` (lighting, wake-and-sleep, fan, alerts, test-harness); a NEW file also goes in `home_assistant_script_files` in `defaults/main.yml` |
 | Template sensor / binary_sensor | `files/templates.yaml` |
 | **Tunable math** (curve/threshold/ramp) | `files/custom_templates/*.jinja` macro **+ a test** |
-| HTTP/integrations/`threshold:`/`http:` etc. | `templates/config/configuration.yaml.j2` |
-| Dashboard / entity friendly-names | `templates/config/ui-lovelace.yaml.j2` / `templates/config/customize.yaml.j2` |
+| HTTP/integrations/`threshold:`/`http:` etc. | `files/configuration.yaml` |
+| Dashboard / entity friendly-names | `files/ui-lovelace.yaml` / `files/customize.yaml` |
+| A NEW root file behind a fresh `!include` | also goes in `home_assistant_root_files` in `defaults/main.yml` |
 
-**The rule that bites:** HA `{{ }}` Jinja goes in `files/`, **never** inline in
-`configuration.yaml.j2`. Both trees ship verbatim (`lookup('file')` in `configmap.yaml.j2`,
-never `lookup('template')`), and `validate_ha_config.py` **rejects any `{{`/`{% %}` in
-`templates/config/`** — the `.j2` suffix there is vestigial. `template: !include templates.yaml`
-pulls template sensors in. `secrets.yaml.j2` is the only Ansible-templated config file.
-The role's `templates/` root is k8s manifests only — never put HA config there.
+**The rule that bites:** HA `{{ }}` Jinja goes in `templates.yaml`, `rest.yaml`, the automations
+and the scripts, **never** inline in `configuration.yaml`, `customize.yaml` or `ui-lovelace.yaml`.
+Everything ships verbatim (`lookup('file')` in `configmap.yaml.j2`, never `lookup('template')`),
+and `validate_ha_config.py` **rejects any `{{`/`{% %}` in those three files**: an Ansible var
+there would reach HA unrendered. `template: !include templates.yaml` pulls template sensors in.
+`templates/config/secrets.yaml.j2` is the only Ansible-templated config file. The role's
+`templates/` root is k8s manifests only — never put HA config there.
 
 ## 2. If it's math, put it in a tested macro — don't inline
 

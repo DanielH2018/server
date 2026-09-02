@@ -58,7 +58,10 @@ id = "ansible-lint"
 # directly). `ansible/collections/` needs no exclude here because it is gitignored and prek
 # only ever passes tracked files, but secrets.yml is tracked AND encrypted, so it does.
 files = "^ansible/.*\\.ya?ml$"
-exclude = "^ansible/vars/secrets\\.yml$"
+# home-assistant/files/ is Home Assistant config, not Ansible: configuration.yaml carries HA's
+# own YAML tags (`!include`, `!include_dir_merge_list`, `!secret`), which ansible-lint's
+# loader cannot construct, and the validate-ha-config hook below is that tree's linter.
+exclude = "^ansible/(vars/secrets\\.yml|roles/k8s/home-assistant/files/.*)$"
 # Cap ansible-core <3 so a surprise upstream major can't silently change lint behavior
 # or break this hook on a day nothing in the repo changed (these deps aren't lock-pinned).
 additional_dependencies = ["ansible-core>=2.18,<3.0", "jmespath"]

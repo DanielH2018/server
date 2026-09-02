@@ -7,7 +7,7 @@
 # FAST mode is a PREVIEW: it snapshots the room (sticky flags + light/fan via scene.create), runs the
 # scenario, then restores the exact prior state after an observe window — so e.g. bedtime's sleep_mode
 # doesn't stick. `reset` (the baseline) and real mode are NOT wrapped. Narrates as a persistent_notification
-# (id test_scenario, updates in place). Invoked by the dashboard Run button (ui-lovelace.yaml.j2). DIRECT
+# (id test_scenario, updates in place). Invoked by the dashboard Run button (ui-lovelace.yaml). DIRECT
 # light write = the nightlight branch's scene.turn_on (sanctioned_writers light exemption); the restore
 # writes the 3 override booleans (declared in expected_override_writers.yml). The bedroom_pre_test
 # scene.turn_on restores the fan at runtime but is NOT a tracked write (runtime scene, not in scene_map).

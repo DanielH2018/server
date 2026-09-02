@@ -50,14 +50,24 @@ from lib.repo_paths import K8S_ROLES
 
 ROLE_DIR = K8S_ROLES / "home-assistant"
 
-# templates/*.j2 render verbatim (no Ansible vars) -> copied to <name>.yaml.
-_TEMPLATE_FILES = ["configuration.yaml.j2", "customize.yaml.j2", "ui-lovelace.yaml.j2"]
-# files/* copied as-is into the config dir root.
-_STATIC_FILES = [
+# files/*.yaml copied as-is into the config dir root: configuration.yaml and the files it
+# pulls in by name. The deployed set is `home_assistant_root_files` in defaults/main.yml
+# (checked against the directory by shipped_dir_list_errors); this is the fallback for a
+# fixture role with no defaults file.
+_ROOT_FILES = [
+    "configuration.yaml",
+    "customize.yaml",
+    "ui-lovelace.yaml",
     "scenes.yaml",
     "templates.yaml",
     "rest.yaml",
 ]
+# The root files an operator would reach for an Ansible var in (the domain, the LAN host).
+# Every shipped file is copied verbatim with lookup('file'), so a `{{ domain }}` here ships
+# literally, and HA renders an unknown name to an empty string without an error. A marker in
+# one of these is therefore rejected outright. The other root files carry HA Jinja by design
+# (templates.yaml, rest.yaml) and are syntax-checked instead.
+_NO_JINJA_FILES = ["configuration.yaml", "customize.yaml", "ui-lovelace.yaml"]
 # files/<dir>/ copied as-is as a directory. automations/ is pulled in by
 # `automation: !include_dir_merge_list automations/`, scripts/ by
 # `script: !include_dir_merge_named scripts/`; custom_templates/ holds the Jinja macros.
@@ -219,28 +229,37 @@ HAConfigLoader.add_constructor("!secret", _construct_placeholder)
 HAConfigLoader.add_constructor("!env_var", _construct_placeholder)
 
 
-def assemble_config(role_dir: Path, dest: Path) -> None:
-    """Copy the deployed /config layout into dest (verbatim — the templates carry no Ansible vars).
+def _root_files(role_dir: Path) -> list[str]:
+    """The root file list the ConfigMap ships: `home_assistant_root_files`, else _ROOT_FILES."""
+    defaults = role_dir / "defaults" / "main.yml"
+    if defaults.is_file():
+        listed = (yaml.safe_load(defaults.read_text()) or {}).get(
+            "home_assistant_root_files"
+        )
+        if listed:
+            return list(listed)
+    return list(_ROOT_FILES)
 
-    Raises HAConfigError if a templates/*.j2 contains Ansible templating, which would need a real
-    render and violates the repo's copy-not-template rule for HA config files.
+
+def assemble_config(role_dir: Path, dest: Path) -> None:
+    """Copy the deployed /config layout into dest, verbatim, the way the init container does.
+
+    Raises HAConfigError if one of _NO_JINJA_FILES contains a template marker: every file ships
+    with lookup('file'), so an Ansible var there is never rendered and reaches HA literally.
     """
     dest.mkdir(parents=True, exist_ok=True)
-    # templates/config/, not templates/: the role's templates/ root holds k8s manifests, and
-    # validate/k8s_manifests.py parses every .j2 it finds there as YAML.
-    templates = role_dir / "templates" / "config"
     files = role_dir / "files"
-    for tpl in _TEMPLATE_FILES:
-        src = templates / tpl
-        text = src.read_text()
-        if any(marker in text for marker in _ANSIBLE_MARKERS):
-            raise HAConfigError(
-                f"{src} contains Ansible templating ({' or '.join(_ANSIBLE_MARKERS)}); the HA "
-                "config validator assumes these files are copied verbatim"
-            )
-        (dest / tpl.removesuffix(".j2")).write_text(text)
-    for static in _STATIC_FILES:
-        shutil.copy(files / static, dest / static)
+    for name in _root_files(role_dir):
+        src = files / name
+        if name in _NO_JINJA_FILES:
+            text = src.read_text()
+            if any(marker in text for marker in _ANSIBLE_MARKERS):
+                raise HAConfigError(
+                    f"{src} contains a template marker ({' or '.join(_ANSIBLE_MARKERS)}); "
+                    "this file is copied verbatim, so an Ansible var here would reach HA "
+                    "unrendered"
+                )
+        shutil.copy(src, dest / name)
     for static_dir in _STATIC_DIRS:
         shutil.copytree(files / static_dir, dest / static_dir)
 
@@ -379,11 +398,13 @@ def macro_bool_coercion_errors(trees: list, custom_templates_dir: Path) -> list[
     return errs
 
 
-# files/<dir> -> the defaults/main.yml variable listing the files the ConfigMap and the init
-# container ship from it. HA merges whatever is in the directory, but the pod sees only what
-# the list names, so a file in the directory and not the list validates clean and never
-# reaches the pod. The check below makes that disagreement an error.
+# files/<dir> -> the defaults/main.yml variable listing the files the ConfigMap ships from
+# it ("" is files/ itself, the root of /config). HA merges whatever is in the directory, but
+# the pod sees only what the list names, so a file in the directory and not the list
+# validates clean and never reaches the pod. The check below makes that disagreement an
+# error.
 _SHIPPED_DIR_LISTS = {
+    "": ("home_assistant_root_files", "*.yaml"),
     "automations": ("home_assistant_automation_files", "*.yaml"),
     "scripts": ("home_assistant_script_files", "*.yaml"),
     "custom_templates": ("home_assistant_template_files", "*.jinja"),
@@ -406,14 +427,15 @@ def shipped_dir_list_errors(role_dir: Path) -> list[str]:
         if listed is None:
             continue
         on_disk = sorted(p.name for p in (role_dir / "files" / subdir).glob(pattern))
+        shown = f"files/{subdir}/" if subdir else "files/"
         for name in sorted(set(on_disk) - set(listed)):
             errors.append(
-                f"files/{subdir}/{name} is not in {var} (defaults/main.yml): "
+                f"{shown}{name} is not in {var} (defaults/main.yml): "
                 "the ConfigMap would not carry it"
             )
         for name in sorted(set(listed) - set(on_disk)):
             errors.append(
-                f"{var} names {name} but files/{subdir}/ has no such file: "
+                f"{var} names {name} but {shown} has no such file: "
                 "the ConfigMap lookup would fail the deploy"
             )
     return errors

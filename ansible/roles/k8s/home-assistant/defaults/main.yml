@@ -24,12 +24,26 @@ k8s_autodeploy_snapshot_pvcs: [home-assistant-config]  # noqa var-naming[no-role
 # Same init image peanut and zigbee2mqtt use.
 home_assistant_k8s_init_image: alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 
+# The four lists below name every file the ConfigMaps carry into the pod, one list per tree
+# under files/. Each is the single source of what ships: configmap.yaml.j2 loops over it, the
+# init container installs whatever the ConfigMap holds, and `validate_ha_config.py` fails the
+# prek hook when a list and its directory disagree. Listed rather than globbed because a glob
+# that shipped nothing would surface only as missing automations at runtime. A new file is
+# added to its list and nowhere else.
+#
+# files/*.yaml, installed at the root of /config: configuration.yaml and the files it pulls
+# in by name. The root is not swept on install (the PVC's own files live there), so removing
+# a name here leaves the old copy on the PVC until it is deleted by hand.
+home_assistant_root_files:
+  - configuration.yaml
+  - customize.yaml
+  - ui-lovelace.yaml
+  - scenes.yaml
+  - templates.yaml
+  - rest.yaml
+
 # files/automations/*.yaml, one file per topic, merged into the `automation:` list by
-# `!include_dir_merge_list automations/` in configuration.yaml. Listed here rather than
-# globbed because two templates consume it — the ConfigMap that carries the files and the
-# init container that installs them — and a glob that shipped nothing would surface only as
-# missing automations at runtime. A new file is added here and nowhere else;
-# `validate_ha_config.py` fails the prek hook when this list and the directory disagree.
+# `!include_dir_merge_list automations/` in configuration.yaml.
 home_assistant_automation_files:
   - alerts.yaml
   - display.yaml
@@ -39,8 +53,8 @@ home_assistant_automation_files:
   - system.yaml
   - wake-and-sleep.yaml
 
-# files/custom_templates/*.jinja, the shared Jinja macros. Same rule again; this is what makes
-# "a new .jinja ships automatically" true — the file only has to be listed here.
+# files/custom_templates/*.jinja, the shared Jinja macros. This is what makes "a new .jinja
+# ships automatically" true — the file only has to be listed here.
 home_assistant_template_files:
   - diagnostics.jinja
   - fan.jinja
@@ -48,8 +62,7 @@ home_assistant_template_files:
   - ventilation.jinja
 
 # files/scripts/*.yaml, the same shape for scripts: one file per topic, merged into the
-# `script:` mapping by `!include_dir_merge_named scripts/`. Same rule — a new file is added
-# here and the validator checks the list against the directory.
+# `script:` mapping by `!include_dir_merge_named scripts/`.
 home_assistant_script_files:
   - alerts.yaml
   - fan.yaml

@@ -71,35 +71,38 @@ These are **not** captured by `deploy.yml` — they're device/app/UI state:
 
 ## 4. Files in this role
 
-Everything below is carried into the cluster by `templates/configmap.yaml.j2` with
-`lookup('file')` — i.e. **verbatim**, whatever the `.j2` suffix suggests — and installed onto the
-`/config` PVC by the Deployment's init container on every pod start.
+Everything below lives under `files/` and is carried into the cluster by
+`templates/configmap.yaml.j2` with `lookup('file')` — **verbatim** — then installed onto the
+`/config` PVC by the Deployment's init container on every pod start. What ships is what the
+four `home_assistant_*_files` lists in `defaults/main.yml` name, one list per tree; the
+validator fails when a list and its directory disagree.
 
 | File | What it holds |
 |---|---|
-| `templates/config/configuration.yaml.j2` | `default_config`, helpers, Adaptive Lighting, 16 `threshold` sensors, `template: !include`, `recorder:` excludes, http/trusted-proxy, Lovelace |
+| `files/configuration.yaml` | `default_config`, helpers, Adaptive Lighting, 16 `threshold` sensors, `template: !include`, `recorder:` excludes, http/trusted-proxy, Lovelace |
 | `files/automations/*.yaml` | the automations, one file per topic (lighting, wake-and-sleep, fan-and-air, alerts, presence, display, system), merged by `!include_dir_merge_list` |
 | `files/scripts/*.yaml` | the scripts, one file per topic (lighting, wake-and-sleep, fan, alerts, test-harness), merged by `!include_dir_merge_named` |
 | `files/scenes.yaml` | `bedroom_bright` / `bedroom_nightlight` |
 | `files/templates.yaml` | `sensor.bedroom_wake_start` template sensor |
 | `files/rest.yaml` | Open-Meteo outdoor AQI sensors, pulled in via `rest: !include rest.yaml` |
 | `files/custom_templates/*.jinja` | shared HA Jinja macros, auto-loaded at startup — `fan` (`pct_to_level`/`level_to_pct`), `lighting` (wake-ramp math), `ventilation` (window advisor), `diagnostics` (runtime-error alert scope). The pure ones are unit-tested under `tests/`. |
-| `templates/config/customize.yaml.j2` | entity friendly-name / icon overrides |
-| `templates/config/ui-lovelace.yaml.j2` | the Bedroom dashboard |
+| `files/customize.yaml` | entity friendly-name / icon overrides |
+| `files/ui-lovelace.yaml` | the Bedroom dashboard |
 
 The one exception is `templates/config/secrets.yaml.j2` — the only genuinely Ansible-templated
 config file, rendered with `lookup('template')` into the role's Secret (see §11c).
 
-> **HA Jinja (`{{ }}`) only goes in `files/` — never inline in `configuration.yaml.j2`.**
-> `validate_ha_config.py` rejects any `{{`/`{% %}` in `templates/config/` outright (even a brace
-> pair in a comment), so that split is enforced, not just conventional. That's why template
-> sensors live in `files/templates.yaml` and are pulled in with `template: !include templates.yaml`.
+> **HA Jinja (`{{ }}`) never goes inline in `configuration.yaml`, `customize.yaml` or
+> `ui-lovelace.yaml`.** `validate_ha_config.py` rejects any `{{`/`{% %}` in those three outright
+> (even a brace pair in a comment): every file ships verbatim, so an Ansible var written there
+> would reach HA unrendered and render to nothing. That's why template sensors live in
+> `files/templates.yaml` and are pulled in with `template: !include templates.yaml`.
 
 ---
 
 ## 5. Helpers & sensors
 
-**Helpers** (`configuration.yaml.j2`):
+**Helpers** (`configuration.yaml`):
 - `input_boolean.bedroom_manual_off` — set when you turn lights off via the dial; suppresses
   presence auto-on. Cleared on manual-on or the morning reset.
 - `input_boolean.bedroom_fan_manual` — set when the fan is changed by hand/remote; suppresses
@@ -113,7 +116,7 @@ config file, rendered with `lookup('template')` into the role's Secret (see §11
 - `sensor.bedroom_wake_start` — the watch alarm minus 15 min, available only for *morning* alarms
   (03:00–11:00). The single source of truth for the wake-ramp window.
 
-**`threshold` binary-sensors** (`configuration.yaml.j2`) — native hysteresis = "alert once +
+**`threshold` binary-sensors** (`configuration.yaml`) — native hysteresis = "alert once +
 recovery, no bounce". Sixteen, feeding `bedroom_threshold_alert`:
 - Air quality indoor (moderate): `bedroom_{co2,pm2_5,voc,nox}_high`
 - Air quality indoor (severe, pierces DND): `bedroom_{co2,pm2_5,voc,nox}_severe`
@@ -233,7 +236,7 @@ All set per-category in `bedroom_threshold_alert`'s `cfg` map or per-call to `be
 
 | Want to change… | Where |
 |---|---|
-| Air-quality / humidity / battery / severe thresholds | the `threshold` sensors in `configuration.yaml.j2` (`upper`/`lower`/`hysteresis`) |
+| Air-quality / humidity / battery / severe thresholds | the `threshold` sensors in `configuration.yaml` (`upper`/`lower`/`hysteresis`) |
 | Fan curve (start temp / slope / caps) | `bedroom_apply_fan` in `scripts/fan.yaml` (the `ideal`/`cap` lines) |
 | Wake ramp curve (knees / final brightness / short-night softening) | `wake_brightness` macro in `custom_templates/lighting.jinja` (`mid`/`knee`/`full`); window length in `in_wake_window` |
 | Nightlight window | `bedroom_apply_natural` first exception (`sleep_mode` or 00:00–05:00) |
@@ -293,7 +296,7 @@ Home Developer Console — use that. Repo-specific values:
 > **HomeGraph API key**. They become the SOPS secrets below.
 
 ### 11c. Voice control — repo-side (Ansible) — IMPLEMENTED (2026-06-21)
-**Key constraint:** `configuration.yaml.j2` is copied verbatim — it must contain **no** Ansible
+**Key constraint:** `configuration.yaml` is copied verbatim — it must contain **no** Ansible
 `{{ }}` (the `validate-ha-config` hook rejects it). So all templated/secret values go through HA's
 native `!secret` indirection backed by an Ansible-generated `secrets.yaml`.
 
@@ -307,7 +310,7 @@ native `!secret` indirection backed by an Ansible-generated `secrets.yaml`.
    multi-line PEM key into one escaped scalar: `google_assistant_project_id`,
    `google_assistant_sa_client_email`, `google_assistant_sa_private_key`, plus `external_url` /
    `internal_url` (these need the `domain` var, which is why they can't live in configuration.yaml).
-3. **`configuration.yaml.j2`** references them via `!secret` (curated exposure — `expose_by_default`
+3. **`configuration.yaml`** references them via `!secret` (curated exposure — `expose_by_default`
    off, so ONLY entities flagged `expose: true` are visible to Google):
    ```yaml
    google_assistant:

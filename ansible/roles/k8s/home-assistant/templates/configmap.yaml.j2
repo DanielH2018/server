@@ -2,73 +2,43 @@
 # The git-owned config plane, shipped from roles/k8s/home-assistant per slice-5 D3 —
 # that role stays the authoring home (validate-ha-config, the macro tests, the skills all
 # anchor there); this manifest only carries its files into the cluster. lookup('file'), not
-# 'template': these files are copied verbatim by contract (validate-ha-config rejects Ansible
-# markers in them), and 'file' makes a regression to real templating fail the deploy loudly.
+# 'template': every file here is copied verbatim by contract, and 'file' makes a regression
+# to real templating fail the deploy loudly. validate_ha_config.py also rejects an Ansible
+# marker in the three files an operator would reach for a var in (configuration.yaml,
+# customize.yaml, ui-lovelace.yaml): lookup('file') would ship it literally and HA renders an
+# unknown name to an empty string without an error.
 #
-# An init container installs these into the /config PVC on every pod start — the same
-# "Ansible is the source of truth, UI edits to THESE files don't survive" contract the Docker
-# role's every-deploy copy enforced. Runtime-owned state (.storage/, the recorder DB,
-# custom_components/) lives only on the PVC and is never touched.
+# One ConfigMap per tree, each carrying exactly the files its list in defaults/main.yml
+# names. The lists are the single source of what ships: the init container in
+# deployment.yaml.j2 installs whatever each ConfigMap holds, and validate_ha_config.py fails
+# when a list and its directory disagree, so a file that validates clean cannot silently
+# stay out of the pod. Listed rather than globbed because a glob that shipped nothing would
+# surface only as missing automations at runtime.
+#
+# The init container installs these into the /config PVC on every pod start. Runtime-owned
+# state (.storage/, the recorder DB, custom_components/) lives only on the PVC and is never
+# touched. The ConfigMap names predate the loop and stay as they are: kubectl apply does not
+# delete an object it stops declaring, so a rename would leave the old ConfigMap live.
+#
+# The (ConfigMap, subdirectory) pairing appears once more, in deployment.yaml.j2's volumes.
+{% set config_trees = [
+     ('home-assistant-config', '', home_assistant_root_files),
+     ('home-assistant-automations', 'automations/', home_assistant_automation_files),
+     ('home-assistant-scripts', 'scripts/', home_assistant_script_files),
+     ('home-assistant-custom-templates', 'custom_templates/', home_assistant_template_files),
+   ] %}
+{% for configmap_name, subdir, names in config_trees %}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: home-assistant-config
+  name: {{ configmap_name }}
   namespace: {{ k8s_namespace }}
 data:
-  configuration.yaml: |
-{{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/templates/config/configuration.yaml.j2') | indent(4, true) }}
-  customize.yaml: |
-{{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/templates/config/customize.yaml.j2') | indent(4, true) }}
-  ui-lovelace.yaml: |
-{{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/templates/config/ui-lovelace.yaml.j2') | indent(4, true) }}
-  scenes.yaml: |
-{{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/files/scenes.yaml') | indent(4, true) }}
-  templates.yaml: |
-{{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/files/templates.yaml') | indent(4, true) }}
-  rest.yaml: |
-{{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/files/rest.yaml') | indent(4, true) }}
----
-# automations/ as its own map, laid down as a directory and merged by
-# `automation: !include_dir_merge_list automations/`. The file list is
-# `home_assistant_automation_files` in defaults/main.yml, shared with the init container's
-# install line; the validator checks it against the directory.
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: home-assistant-automations
-  namespace: {{ k8s_namespace }}
-data:
-{% for name in home_assistant_automation_files %}
+{% for name in names %}
   {{ name }}: |
-{{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/files/automations/' + name) | indent(4, true) }}
+{{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/files/' + subdir + name) | indent(4, true) }}
 {% endfor %}
+{% if not loop.last %}
 ---
-# scripts/ likewise, merged by `script: !include_dir_merge_named scripts/`; the list is
-# `home_assistant_script_files`.
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: home-assistant-scripts
-  namespace: {{ k8s_namespace }}
-data:
-{% for name in home_assistant_script_files %}
-  {{ name }}: |
-{{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/files/scripts/' + name) | indent(4, true) }}
-{% endfor %}
----
-# custom_templates/ as its own map so the init container can lay it down as a directory.
-# The file list is `home_assistant_template_files` in defaults/main.yml, shared with the init
-# container and checked against the directory by the validator, rather than a fileglob: the
-# Jinja macros are load-bearing
-# (tested, imported by automations), and a glob that silently shipped nothing would surface
-# only as broken automations at runtime.
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: home-assistant-custom-templates
-  namespace: {{ k8s_namespace }}
-data:
-{% for name in home_assistant_template_files %}
-  {{ name }}: |
-{{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/files/custom_templates/' + name) | indent(4, true) }}
+{% endif %}
 {% endfor %}

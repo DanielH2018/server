@@ -17,7 +17,7 @@ To change one, edit the file and run:
 ```
 
 To add a file, also add its name to `home_assistant_automation_files` in
-`defaults/main.yml`. That list is what the ConfigMap and the init container ship, and
+`defaults/main.yml`. That list is what the ConfigMap carries and the init container installs, and
 `validate_ha_config.py` fails when the list and this directory disagree, so a file that
 would validate clean and never reach the pod cannot land.
 

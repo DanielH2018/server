@@ -50,9 +50,9 @@ advisor.
 - **YAML dashboard + entity customization.** `configuration.yaml` registers a YAML
   dashboard via `lovelace: dashboards:` (NOT the legacy top-level `mode: yaml` — deprecated,
   removed in HA 2026.8) pointing at `config/ui-lovelace.yaml`
-  (`templates/config/ui-lovelace.yaml.j2`), shown in the sidebar as "Bedroom".
+  (`files/ui-lovelace.yaml`), shown in the sidebar as "Bedroom".
   `homeassistant: customize: !include customize.yaml` holds friendly-name/icon overrides
-  (`templates/config/customize.yaml.j2`). Both are carried verbatim by the ConfigMap, so an edit
+  (`files/customize.yaml`). Both are carried verbatim by the ConfigMap, so an edit
   rolls the pod (~120s). Built-in cards only — no Lovelace `resources:`/`resource_mode:`.
   **The landing dashboard is NOT YAML-configurable:** HA opens its auto-generated areas "Overview"
   unless "Bedroom" is set as default in the UI (Settings → Dashboards → ⋮ → "Set as default for
@@ -72,7 +72,7 @@ advisor.
   `sensor.outdoor_ozone` — pulled via `files/rest.yaml` (copy'd, not templated; **no API key**;
   a `resource_template` reads `zone.home` lat/lon so the coordinates never enter git;
   `scan_interval: 1800` = poll every 30 min, the API being hourly). Two outdoor threshold
-  `binary_sensor`s (inline in `configuration.yaml.j2`) wire into the existing **threshold-alert
+  `binary_sensor`s (inline in `configuration.yaml`) wire into the existing **threshold-alert
   engine** as their own categories: `airqualityoutdoor` (`binary_sensor.outdoor_pm2_5_high`,
   `upper: 35` → alerts ≥ 40, moderate → `watch`) and `airqualityoutdoorsevere`
   (`binary_sensor.outdoor_pm2_5_severe`, `upper: 100` → alerts ≥ 105, wildfire tier →
@@ -95,4 +95,4 @@ advisor.
   `tests/test_ventilation_macros.py`; the HA `round` returns an int at precision 0
   (`forgiving_round`), so the "N° cooler" message renders cleanly. Dashboard:
   `weather.forecast_home` card + an outdoor-AQI glance (US AQI/PM2.5/PM10/ozone) next to the
-  indoor AirGradient card in `ui-lovelace.yaml.j2`.
+  indoor AirGradient card in `ui-lovelace.yaml`.

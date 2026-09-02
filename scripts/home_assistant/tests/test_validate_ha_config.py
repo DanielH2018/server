@@ -60,16 +60,33 @@ def test_loader_malformed_yaml_raises(tmp_path):
         _load(tmp_path / "bad.yaml")
 
 
+def _write_root_files(role, configuration="{}\n"):
+    """A minimal files/ root: every default root file, configuration.yaml as given."""
+    for name in ("customize.yaml", "ui-lovelace.yaml"):
+        _write(role / "files" / name, "{}\n")
+    for name in ("scenes.yaml", "templates.yaml", "rest.yaml"):
+        _write(role / "files" / name, "[]\n")
+    _write(role / "files/configuration.yaml", configuration)
+
+
 def test_assemble_rejects_ansible_markers(tmp_path):
     role = tmp_path / "role"
-    _write(
-        role / "templates/config/configuration.yaml.j2",
-        "homeassistant:\n  name: {{ ha_name }}\n",
-    )
-    _write(role / "templates/config/customize.yaml.j2", "{}\n")
-    _write(role / "templates/config/ui-lovelace.yaml.j2", "{}\n")
-    with pytest.raises(HAConfigError, match="Ansible templating"):
+    _write_root_files(role, "homeassistant:\n  name: {{ ha_name }}\n")
+    for d in ("automations", "scripts", "custom_templates"):
+        (role / "files" / d).mkdir()
+    with pytest.raises(HAConfigError, match="template marker"):
         assemble_config(role, tmp_path / "dest")
+
+
+def test_assemble_allows_ha_jinja_in_templates_yaml(tmp_path):
+    # templates.yaml carries HA Jinja by design; only the three _NO_JINJA_FILES are rejected.
+    role = tmp_path / "role"
+    _write_root_files(role)
+    _write(role / "files/templates.yaml", "- sensor:\n    - state: '{{ 1 + 1 }}'\n")
+    for d in ("automations", "scripts", "custom_templates"):
+        (role / "files" / d).mkdir()
+    assemble_config(role, tmp_path / "dest")
+    assert (tmp_path / "dest/templates.yaml").read_text().startswith("- sensor:")
 
 
 def test_real_config_structural_clean(tmp_path):
@@ -196,18 +213,7 @@ def test_validate_real_config_is_clean(real_role_errors):
 
 def test_validate_reports_structural_error(tmp_path):
     role = tmp_path / "role"
-    _write(
-        role / "templates/config/configuration.yaml.j2",
-        "recorder:\n  x: 1\nrecorder:\n  y: 2\n",
-    )
-    _write(role / "templates/config/customize.yaml.j2", "{}\n")
-    _write(role / "templates/config/ui-lovelace.yaml.j2", "{}\n")
-    for s in (
-        "scenes.yaml",
-        "templates.yaml",
-        "rest.yaml",
-    ):
-        _write(role / "files" / s, "[]\n")
+    _write_root_files(role, "recorder:\n  x: 1\nrecorder:\n  y: 2\n")
     (role / "files/custom_templates").mkdir(parents=True)
     (role / "files/automations").mkdir(parents=True)
     (role / "files/scripts").mkdir(parents=True)
@@ -289,6 +295,49 @@ def test_template_file_list_is_clean_when_it_matches(tmp_path):
         )
         == []
     )
+
+
+def test_root_file_list_flags_unlisted_file(tmp_path):
+    # A new root file (say thresholds.yaml behind a fresh !include) that nothing lists would
+    # validate clean and never reach the pod — the same gap the directory lists close.
+    errors = _role_with_shipped_list(
+        tmp_path,
+        ["configuration.yaml"],
+        ["configuration.yaml", "thresholds.yaml"],
+        subdir="",
+        var="home_assistant_root_files",
+    )
+    assert (
+        errors
+        and "files/thresholds.yaml is not in home_assistant_root_files" in errors[0]
+    )
+
+
+def test_root_file_list_is_clean_when_it_matches(tmp_path):
+    assert (
+        _role_with_shipped_list(
+            tmp_path,
+            ["configuration.yaml", "scenes.yaml"],
+            ["scenes.yaml", "configuration.yaml"],
+            subdir="",
+            var="home_assistant_root_files",
+        )
+        == []
+    )
+
+
+def test_root_file_list_ignores_the_subdirectories(tmp_path):
+    # files/automations/x.yaml is a directory list's business, not the root list's.
+    role = tmp_path / "role"
+    _write(role / "files/automations/x.yaml", "[]\n")
+    errors = _role_with_shipped_list(
+        tmp_path,
+        ["configuration.yaml"],
+        ["configuration.yaml"],
+        subdir="",
+        var="home_assistant_root_files",
+    )
+    assert errors == []
 
 
 def test_automation_file_list_flags_missing_file(tmp_path):

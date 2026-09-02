@@ -1,7 +1,7 @@
 ---
 # Threshold, sensor-offline and calibration alerts, and the notification action/hold plumbing. Conventions: see README.md in this directory.
 
-# Unified threshold alert engine: ALL `threshold` binary-sensors in configuration.yaml.j2 (air
+# Unified threshold alert engine: ALL `threshold` binary-sensors in configuration.yaml (air
 # quality CO2/PM2.5/VOC/NOx + the SEVERE tier, battery FP300/Tap Dial, humidity high/low) feed this
 # ONE automation. Hysteresis lives in the threshold sensors, so this just reacts to off<->on edges,
 # anchored on off<->on (NOT unknown) so an HA restart while bad doesn't re-alert and an unavailable
