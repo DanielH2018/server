@@ -409,9 +409,9 @@ in *Decision 6* is ordered by mechanism coverage, not by deploy order.
 
 ### 8. Three hazards that would otherwise reach prod data
 
-Each would fire on a staging deploy if inherited unchanged. The first is closed, the third is
-closed, and the second is closed by construction but not yet exercised — `ical-proxy` is still
-slice 6.
+Each would fire on a staging deploy if inherited unchanged. All three are closed, and as of
+2026-09-02 all three are **exercised** — the second was the last to be, because it needed a
+gated tick carrying a built image rather than only a pinned one.
 
 **`seed_volume_source_host: daniel-server`** — the role then called `seed-volume` copied a source
 directory from that host into a PVC. A staging deploy inheriting this default reads **prod's
@@ -435,6 +435,14 @@ images have nowhere to push unless that pin follows the cluster. Step 1 made it 
 so the pin follows the cluster without a second override. Staging runs its own registry. The
 alternative — pushing staging builds to the prod registry — would let a staging build overwrite a
 tag prod pulls, which is a staging change causing a prod rollout.
+
+Exercised 2026-09-02 20:16 by the gated tick on `ical-proxy`, the first to reach staging with a
+`Dockerfile.j2` rather than an image pin. The deployer's journal carries the whole path on
+`daniel-stage` — `Build the ical-proxy image`, then `k8s/image-builder : Confirm the registry
+now serves the built tag for ical-proxy`, then the post-build digest read — alongside
+`included: k8s/registry for daniel-stage`. So staging built, pushed to its OWN registry, and
+served the pull, which is what "the pin follows the cluster" had only asserted until then. The
+tick returned `staging: PASS on ['ical-proxy']` against 2/2 expectations.
 
 **Pre-apply Longhorn snapshots** — `k8s/manifests` snapshots a role's PVCs before applying, so a
 rollback has something to return to. On staging that is wrong twice over: the volumes hold nothing
