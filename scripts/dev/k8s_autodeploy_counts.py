@@ -20,12 +20,12 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from lib.repo_paths import FILTER_PLUGINS, REPO as _REPO  # noqa: E402
+from lib.repo_paths import FILTER_PLUGINS, REPO as _REPO
 
 sys.path.insert(0, str(FILTER_PLUGINS))
 
-import yaml  # noqa: E402
-from k8s_autodeploy import SHARED_ROLES, k8s_autodeploy_denylist  # noqa: E402
+import yaml
+from k8s_autodeploy import SHARED_ROLES, k8s_autodeploy_denylist
 
 _ROLES_DIR = _REPO / "ansible/roles/k8s"
 

@@ -19,7 +19,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from deploy_staleness import (  # noqa: E402
+from deploy_staleness import (
     STALE_EXIT,
     behind_ahead,
     format_refusal,

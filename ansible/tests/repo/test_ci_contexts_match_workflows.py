@@ -22,7 +22,7 @@ from _helpers import REPO
 
 sys.path.insert(0, str(REPO / "scripts" / "deploy_tools"))
 
-import await_ci  # noqa: E402 — needs the path insert above
+import await_ci
 
 # Job-level `name:` keys sit at four spaces under `jobs:`. Matching that depth rather than
 # any `name:` keeps step names (six spaces, and far more numerous) out of the set.

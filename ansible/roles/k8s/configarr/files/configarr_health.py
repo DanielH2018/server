@@ -20,8 +20,8 @@ import time
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import configarr_health_logic as logic  # noqa: E402  (sibling module, via the sys.path insert)
-import host_lib  # noqa: E402  (sibling copy, deployed alongside — see the k8s/configarr role)
+import configarr_health_logic as logic
+import host_lib
 
 NAMESPACE = os.environ.get("CONFIGARR_NAMESPACE", "homelab")
 CRONJOB = os.environ.get("CONFIGARR_CRONJOB", "configarr")

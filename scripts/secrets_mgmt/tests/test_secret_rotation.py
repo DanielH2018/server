@@ -145,7 +145,7 @@ def test_audit_summary_caps_the_overdue_name_list():
 def test_sync_adds_missing_and_preserves_existing():
     today = dt.date(2026, 6, 11)
     reg = _reg(("kept_push_token", "auto", "2026-05-05"))
-    added, stale = sr.sync(reg, ["kept_push_token", "new_push_token"], today)
+    added, _stale = sr.sync(reg, ["kept_push_token", "new_push_token"], today)
     assert added == ["new_push_token"]
     assert (
         reg["secrets"]["kept_push_token"]["last_rotated"] == "2026-05-05"
@@ -156,7 +156,7 @@ def test_sync_adds_missing_and_preserves_existing():
 def test_sync_reports_stale_registry_entries():
     today = dt.date(2026, 6, 11)
     reg = _reg(("gone_push_token", "auto", "2026-05-05"))
-    added, stale = sr.sync(reg, [], today)
+    _added, stale = sr.sync(reg, [], today)
     assert stale == ["gone_push_token"]
 
 
@@ -263,7 +263,7 @@ def test_no_cross_host_token_is_badly_overdue():
     # test_consumer_tags_cross_host_tokens_are_manual is the guard that keeps them there.
     grace_days = 30
     reg = sr.load_registry()
-    today = dt.date.today()
+    today = sr.today()
     res = sr.audit(reg, today)
     badly_overdue = [
         (name, -days)

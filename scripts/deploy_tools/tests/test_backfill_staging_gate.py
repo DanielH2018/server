@@ -12,7 +12,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-import backfill_staging_gate as bf  # noqa: E402
+import backfill_staging_gate as bf
 
 
 def _run(outcome: str, sha: str = "a" * 40) -> bf.Run:

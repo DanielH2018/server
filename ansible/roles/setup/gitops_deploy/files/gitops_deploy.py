@@ -27,7 +27,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from deploy_logic import (  # noqa: E402
+from deploy_logic import (
     PENDING_ALERTS_MAX,
     cap_pending,
     ChangeSet,
@@ -65,7 +65,7 @@ from deploy_logic import (  # noqa: E402
     staging_scope,
     staging_verdict_summary,
 )
-from host_lib import atomic_write, discord_post, parse_env_file  # noqa: E402
+from host_lib import atomic_write, discord_post, parse_env_file
 
 
 class RetryableFetchError(Exception):
@@ -467,7 +467,7 @@ def _record_behind() -> None:
             BEHIND_FILE,
             behind_marker(behind, origin, _read_marker(BEHIND_FILE), time.time()),
         )
-    except Exception as e:  # noqa: BLE001 - never fail the tick over a status marker
+    except Exception as e:
         log(f"could not record behind-origin state: {e}")
 
 
@@ -509,7 +509,7 @@ def emit_deploy_annotation(services: set[str], sha: str) -> None:
             capture_output=True,
             timeout=10,
         )
-    except Exception as exc:  # noqa: BLE001 — never let annotating fail a good deploy
+    except Exception as exc:
         log(f"deploy annotation failed (deploy itself succeeded): {exc}")
 
 
@@ -896,7 +896,7 @@ def consult_staging(services: set[str], origin: str) -> None:
                 timeout=STAGING_EXPECT_TIMEOUT_S,
                 check=False,
             ).returncode
-    except Exception as exc:  # noqa: BLE001 — advisory: never fail the prod deploy
+    except Exception as exc:
         log(f"staging gate errored ({exc}); continuing to prod unchecked")
         return
 
@@ -1200,7 +1200,7 @@ def main() -> int:
             k8s_defaults_at_origin = k8s_declarations_at(origin)
             declared = declared_denylist(k8s_defaults_at_origin)
             read_error = None
-        except Exception as exc:  # noqa: BLE001 - any failure here must disarm, not crash
+        except Exception as exc:
             k8s_defaults_at_origin = {}
             declared = None
             read_error = f"{type(exc).__name__}: {exc}"
@@ -1315,7 +1315,7 @@ def main() -> int:
         # is what stops the retry loop, and it does that whether or not the tree moved.
         try:
             deploy_broad(playbook, tags, BROAD_DEPLOY_TIMEOUT_S)
-        except Exception as exc:  # noqa: BLE001 — any playbook failure, or the timeout
+        except Exception as exc:
             log(f"broad apply failed ({playbook} {tags}): {exc}")
             write_hold(origin)
             _write_marker(HOLD_PLANE_FILE, f"{playbook} {','.join(tags)}".strip())
@@ -1350,7 +1350,7 @@ def main() -> int:
         run(["git", "merge", "--ff-only", origin])
         try:
             deploy_k8s(cs.k8s_deploy, K8S_DEPLOY_TIMEOUT_S)
-        except Exception as exc:  # noqa: BLE001 — any playbook failure, or the timeout above
+        except Exception as exc:
             # Hold BEFORE the reset, same as the Docker paths: a hung rollback redeploy would
             # otherwise be SIGTERMed before the marker is written, stranding the bad commit into
             # a per-tick redeploy loop.
@@ -1374,7 +1374,7 @@ def main() -> int:
                 deploy_k8s(
                     cs.k8s_deploy, K8S_ROLLBACK_TIMEOUT_S, restore_sha=origin[:8]
                 )
-            except Exception as exc2:  # noqa: BLE001 — best-effort restore; we still hold + alert
+            except Exception as exc2:
                 rollback_failed = exc2
                 log(f"k8s rollback redeploy of the prior version also failed: {exc2}")
             # Read from the tree AFTER the reset above, matching what roles/k8s/manifests itself
@@ -1432,7 +1432,7 @@ def main() -> int:
     run(["git", "merge", "--ff-only", origin])
     try:
         deploy(cs.services)
-    except Exception as exc:  # noqa: BLE001 — any ansible-playbook failure
+    except Exception as exc:
         # Deploy-EXECUTION failure (ansible-playbook itself errored: bad image manifest, a failed
         # task) — distinct from the health gate below. Without this the exception propagates to
         # entrypoint(), which alerts but re-raises WITHOUT writing last_run AND leaves the repo
@@ -1453,7 +1453,7 @@ def main() -> int:
         run(["git", "reset", "--hard", local])
         try:
             deploy(cs.services)
-        except Exception as exc2:  # noqa: BLE001 — best-effort restore; we still hold + alert
+        except Exception as exc2:
             log(f"rollback redeploy of the prior version also failed: {exc2}")
         posted = discord(
             f"🚨 gitops-deploy: **deploy failed** on {HOSTNAME}.\n"
@@ -1506,7 +1506,7 @@ def main() -> int:
     run(["git", "reset", "--hard", local])
     try:
         deploy(cs.services)
-    except Exception as exc:  # noqa: BLE001 — best-effort restore; we still hold + alert
+    except Exception as exc:
         log(f"rollback redeploy of the prior version also failed: {exc}")
     posted = discord(
         f"🚨 gitops-deploy: **rollback** on {HOSTNAME}.\n"

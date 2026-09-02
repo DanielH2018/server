@@ -213,7 +213,7 @@ def _request(url, method="GET", headers=None, data=None):
         body = json.dumps(data).encode()
         hdrs["Content-Type"] = "application/json"
     req = urllib.request.Request(url, headers=hdrs, data=body, method=method)
-    with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:  # noqa: S310 (internal URLs)
+    with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
         raw = resp.read()
         return json.loads(raw) if raw else None
 

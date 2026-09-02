@@ -57,7 +57,9 @@ testpaths = [                        # single source of truth for WHAT runs; exc
 # hook so a bare `uv run pytest` gets it too. The suite is filesystem-read-only and order-
 # independent, so it parallelises cleanly — if you add a test that writes shared state, fix the
 # test rather than dropping this. Pass `-n0` to disable it for a debugging run (--pdb needs that).
-addopts = "-q -n auto -m 'not ui'"
+# --strict-markers turns a misspelled marker into a collection error instead of a silently
+# unregistered one; --strict-config does the same for an unknown key in this table.
+addopts = "-q -n auto -m 'not ui' --strict-markers --strict-config"
 # `ui` is registered here so it stays a marker rather than becoming a typo nobody notices,
 # and so `--markers` documents it. The deselection lives in addopts above: these tests drive
 # a real browser against live LAN routes and read SOPS, none of which a GitHub runner has.
@@ -124,4 +126,29 @@ extend-exclude = ["ansible/collections", "*.md"]
 # by B023 (a closure over a loop variable in await_ci's CI poller) and B905 (six `zip()` calls,
 # four of which had an equal-length invariant nothing asserted). Both classes fail by producing
 # a plausible wrong answer rather than an error, which is the block-footguns criterion.
-select = ["F", "E9", "E711", "E712", "E722", "B"]
+#
+# The rest pass the same test, and each was measured against the tree before it was enabled
+# (2026-09-02):
+# - E402 + RUF100 together. 131 `# noqa: E402` comments sat on the sys.path bootstrap imports
+#   with E402 never selected, so the comments enforced nothing and nobody could tell; RUF100
+#   found 156 such dead directives (BLE001, S310 and S506 among them). E402 makes the bootstrap
+#   convention a lint, and RUF100 removes a noqa that names a rule this table does not run.
+# - DTZ: 30 naive datetime calls. The staleness, grace-period and rotation code compares
+#   timestamps across hosts and cron zones, where a naive value is the bug class the
+#   grace-periods-must-be-derived-from-the-schedule incident belongs to.
+# - RUF059 / RUF013 / RUF012 / PT017 / S110 / S112 / PLW0129 / PLW1508 / PGH003: 26 hits
+#   between them. An unpacked variable nothing reads, an implicit Optional, a mutable class
+#   default, an assert inside `except`, a swallowed exception, an assert on a string literal,
+#   a non-string envvar default and a blanket `type: ignore` are each legal, silent and wrong.
+select = [
+  "F", "E9", "E402", "E711", "E712", "E722", "B",
+  "DTZ",
+  "RUF100", "RUF059", "RUF013", "RUF012",
+  "PT017", "S110", "S112", "PLW0129", "PLW1508", "PGH003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Vendored upstream script, byte-for-byte: ansible/tests/services/test_karakeep_time_tagger_script.py
+# asserts its sha256 against the commit the archived Docker role pins, so a lint fix here is a
+# drift that test exists to catch.
+"ansible/roles/k8s/karakeep/files/karakeep-time-tagger.py" = ["RUF012"]

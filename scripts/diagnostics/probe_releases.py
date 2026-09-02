@@ -27,16 +27,16 @@ from pathlib import Path
 # with a `from probe_core import ...` would take a snapshot the patch never reaches.
 import probe_core as core  # noqa: F401  (kept for the monkeypatch convention above)
 
-# Mirrors manifests_release_dir in roles/k8s/manifests/defaults/main.yml. A mismatch makes this
-# reader silently report "no records", so scripts/diagnostics/tests/test_probe_releases.py asserts the
-# two agree rather than trusting the comment.
-RELEASE_DIR = Path("/var/lib/homelab/k8s-releases.d")
-
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 import sys as _sys
 
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+# Mirrors manifests_release_dir in roles/k8s/manifests/defaults/main.yml. A mismatch makes this
+# reader silently report "no records", so scripts/diagnostics/tests/test_probe_releases.py asserts the
+# two agree rather than trusting the comment.
+RELEASE_DIR = Path("/var/lib/homelab/k8s-releases.d")
 
 from lib.repo_paths import REPO as REPO_ROOT  # noqa: E402
 

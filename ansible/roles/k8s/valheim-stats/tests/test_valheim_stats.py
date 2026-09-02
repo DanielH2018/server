@@ -5,7 +5,7 @@ sys.path.insert(
     0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "files")
 )
 
-import valheim_stats as stats  # noqa: E402
+import valheim_stats as stats
 
 # Real shape of a line as it reaches Loki: the image wraps every console line in its own
 # supervisord prefix. Terraria's image does not, which is why its parser can anchor at ^

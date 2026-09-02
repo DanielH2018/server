@@ -39,7 +39,7 @@ import sys as _sys
 
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib.repo_paths import HOST_VARS, K8S_ROLES, REPO  # noqa: E402
+from lib.repo_paths import HOST_VARS, K8S_ROLES, REPO
 
 PI_HOST_VARS = HOST_VARS / "daniel-pi.yml"
 

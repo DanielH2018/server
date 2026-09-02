@@ -47,7 +47,7 @@ def github_token(environ: dict[str, str], run: Callable) -> str | None:
             return value
     try:
         proc = run(["gh", "auth", "token"], capture_output=True, text=True, timeout=10)
-    except Exception:  # noqa: BLE001 — absent binary, timeout, anything: anonymous is fine
+    except Exception:
         return None
     if proc.returncode != 0:
         return None

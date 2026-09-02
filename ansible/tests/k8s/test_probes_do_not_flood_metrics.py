@@ -115,8 +115,9 @@ def test_the_rule_rejects_the_shape_it_was_written_for():
         10,
     )
     assert _is_metrics_route(path)
-    assert period < _MIN_PERIOD_S
-    assert f"{role}/{tpl} {workload}/{cname} {kind} -> {path} every {period}s"
+    assert period < _MIN_PERIOD_S, (
+        f"{role}/{tpl} {workload}/{cname} {kind} -> {path} every {period}s"
+    )
 
 
 @pytest.mark.parametrize(

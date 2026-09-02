@@ -1,14 +1,14 @@
 from flask import Flask, Response
 import requests, threading, time, os, re, hashlib
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 app = Flask(__name__)
 
 GOOGLE_ICS_URL = os.environ.get("GOOGLE_ICS_URL", "")
 GOOGLE_ICS_URL_2 = os.environ.get("GOOGLE_ICS_URL_2", "")
 OBSIDIAN_GIST_URL = os.environ.get("OBSIDIAN_GIST_URL", "")
-REFRESH_INTERVAL = int(os.environ.get("REFRESH_INTERVAL", 900))
+REFRESH_INTERVAL = int(os.environ.get("REFRESH_INTERVAL", "900"))
 
 initial_fetch_done = threading.Event()
 
@@ -115,7 +115,7 @@ def dedup_overlapping_recurrences(events):
         # Cap each earlier series at the day before the next one starts
         for i in range(len(group) - 1):
             later_dtstart = normalize_dt(get_prop(group[i + 1], "DTSTART"))
-            dt = datetime.strptime(later_dtstart[:8], "%Y%m%d")
+            dt = datetime.strptime(later_dtstart[:8], "%Y%m%d").replace(tzinfo=UTC)
             until = (dt - timedelta(days=1)).strftime("%Y%m%dT235959Z")
             to_cap[id(group[i])] = until
 

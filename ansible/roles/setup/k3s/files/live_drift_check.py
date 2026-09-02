@@ -317,8 +317,8 @@ def push(status: str, message: str) -> None:
     query = urllib.parse.urlencode({"status": status, "msg": message[:900], "ping": ""})
     url = f"https://{host}/api/push/{token}?{query}"
     try:
-        urllib.request.urlopen(url, timeout=10).read()  # noqa: S310 — https, fixed host
-    except Exception as exc:  # noqa: BLE001 — a failed push must not fail the check
+        urllib.request.urlopen(url, timeout=10).read()
+    except Exception as exc:
         print(f"kuma push failed: {exc}", file=sys.stderr)
 
 

@@ -30,7 +30,7 @@ from pathlib import Path
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib.repo_paths import REPO  # noqa: E402
+from lib.repo_paths import REPO
 
 HOST_LIB_PATH = Path("/opt/gitops-deploy/host_lib.py")
 CONFIG_ENV_PATH = Path("/etc/gitops-deploy/config.env")
@@ -134,7 +134,7 @@ def notify(content: str) -> None:
         return
     sys.path.insert(0, str(HOST_LIB_PATH.parent))
     try:
-        from host_lib import discord_post, parse_env_file  # type: ignore
+        from host_lib import discord_post, parse_env_file  # type: ignore[import-not-found]
 
         cfg = parse_env_file(str(CONFIG_ENV_PATH))
         webhook = cfg.get("DISCORD_WEBHOOK", "")

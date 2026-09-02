@@ -35,7 +35,7 @@ import yaml
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from lib.repo_paths import ANSIBLE  # noqa: E402
+from lib.repo_paths import ANSIBLE
 
 REGISTRY = ANSIBLE / "secret_rotation.yml"
 

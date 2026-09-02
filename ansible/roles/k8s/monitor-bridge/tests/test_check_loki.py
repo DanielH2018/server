@@ -318,7 +318,7 @@ def test_loki_ingestion_zero_lines_is_down():
 
 def test_loki_ingestion_no_series_is_down():
     # an empty query result (no matching stream at all) is also a silent pipeline
-    ok, msg = checks_logs.loki_ingestion_fresh(None, "10m")
+    ok, _msg = checks_logs.loki_ingestion_fresh(None, "10m")
     assert not ok
 
 
@@ -346,7 +346,7 @@ def test_check_loki_ingestion_fresh_is_up(monkeypatch):
 
 def test_check_loki_ingestion_silent_is_down(monkeypatch):
     monkeypatch.setattr(bridge_io, "loki_count", lambda *a, **k: 0)
-    ok, msg = checks_logs.check_loki_ingestion()
+    ok, _msg = checks_logs.check_loki_ingestion()
     assert not ok
 
 

@@ -320,7 +320,7 @@ def test_run_once_dry_run_makes_zero_mutating_calls(monkeypatch):
 
     key = autofix.item_key("Sonarr", item)
     streaks = {key: autofix.GRACE_CYCLES - 1}
-    ok, msg = autofix.run_once(streaks)
+    ok, _msg = autofix.run_once(streaks)
 
     assert calls == []
     assert ok is True
@@ -335,7 +335,7 @@ def test_run_once_live_deletes_then_searches_in_order(monkeypatch):
 
     key = autofix.item_key("Sonarr", item)
     streaks = {key: autofix.GRACE_CYCLES - 1}
-    ok, msg = autofix.run_once(streaks)
+    ok, _msg = autofix.run_once(streaks)
 
     assert ok is True
     assert len(calls) == 2

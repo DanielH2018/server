@@ -54,7 +54,7 @@ def test_check_one_skipped_when_neither_platform_recognizes_it():
             )
         return _result(1, "config: no Deployment or DaemonSet in this namespace (...)")
 
-    state, detail = notify_mod.check_one("config", run=run)
+    state, _detail = notify_mod.check_one("config", run=run)
     assert state == "skipped"
 
 
@@ -177,7 +177,7 @@ def test_gate_unsettled_when_one_tag_is_unhealthy():
             return _result(1, "sonarr: 0/1 ready — rollout incomplete")
         return _result(0, f"{tag}: 1/1 ready, restarts=0")
 
-    ok, lines = notify_mod.gate(["jellyfin", "sonarr"], ansible_ok=True, run=run)
+    ok, _lines = notify_mod.gate(["jellyfin", "sonarr"], ansible_ok=True, run=run)
     assert ok is False
 
 

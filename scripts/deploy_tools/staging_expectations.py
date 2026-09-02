@@ -38,11 +38,11 @@ import yaml
 from jinja2 import Environment, StrictUndefined
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from lib.repo_paths import SCRIPTS  # noqa: E402
+from lib.repo_paths import SCRIPTS
 
 sys.path.insert(0, str(SCRIPTS / "validate"))
 
-from validate_k8s_manifests import (  # noqa: E402 — needs the path insert above
+from validate_k8s_manifests import (
     ALL_VARS,
     ANSIBLE,
     BASE_CONTEXT,

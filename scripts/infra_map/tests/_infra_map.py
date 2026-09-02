@@ -14,7 +14,7 @@ from pathlib import Path as _Path
 # and this bootstrap keeps the import honest outside pytest (the bootstrap guard checks).
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-import gen_infra_map as g  # noqa: E402
+import gen_infra_map as g
 
 
 REPO_ROOT = g.REPO_ROOT

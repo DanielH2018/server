@@ -15,7 +15,7 @@ sys.path.insert(
     0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "files")
 )
 
-import apply_prefs  # noqa: E402
+import apply_prefs
 
 
 def test_no_changes_when_everything_matches() -> None:

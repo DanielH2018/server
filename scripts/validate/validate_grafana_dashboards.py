@@ -22,7 +22,7 @@ import re
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib.repo_paths import K8S_ROLES, REPO  # noqa: E402
+from lib.repo_paths import K8S_ROLES, REPO
 
 GRAFANA_ROLE = K8S_ROLES / "claude-otel"
 DASHBOARDS_DIR = GRAFANA_ROLE / "files/dashboards"

@@ -31,8 +31,8 @@ from collections.abc import Callable, Sized
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from lib.git import git  # noqa: E402
-from lib.repo_paths import REPO  # noqa: E402
+from lib.git import git
+from lib.repo_paths import REPO
 
 # A generated page names the hook that protects it, because a reader of the rendered
 # page cannot see prek.toml.

@@ -45,9 +45,7 @@ def _routes(macro_call: str, resolver: str) -> list[dict]:
     rendered = (
         Environment(autoescape=False)
         .from_string(source)
-        .render(  # noqa: S701
-            {**_CONTEXT, RESOLVER_VAR: resolver}
-        )
+        .render({**_CONTEXT, RESOLVER_VAR: resolver})
     )
     docs = [d for d in yaml.safe_load_all(rendered) if d]
     assert docs, (

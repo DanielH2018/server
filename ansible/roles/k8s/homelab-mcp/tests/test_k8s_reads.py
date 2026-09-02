@@ -9,7 +9,7 @@ sys.path.insert(
     0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "files")
 )
 
-import k8s_reads  # noqa: E402
+import k8s_reads
 
 
 @pytest.mark.parametrize("name", ["homelab", "promtail-cmlg4", "a", "kube-system"])

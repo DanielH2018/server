@@ -29,7 +29,7 @@ from _helpers import REPO as _REPO
 _sys.path.insert(0, str(_ANSIBLE / "tests"))
 _sys.path.insert(0, str(_REPO / "scripts" / "validate"))
 
-from _k8s_render import rendered_docs  # noqa: E402 — needs the path inserts above
+from _k8s_render import rendered_docs
 
 
 def _scrape_jobs():

@@ -282,7 +282,7 @@ class Store:
 # HTTP I/O + main loop
 def http_get_json(url):
     req = urllib.request.Request(url, headers={"User-Agent": "terraria-stats"})
-    with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:  # noqa: S310 internal
+    with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
         return json.load(resp)
 
 

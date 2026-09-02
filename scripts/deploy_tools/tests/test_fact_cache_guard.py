@@ -15,7 +15,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from deploy_tools import fact_cache_guard as g  # noqa: E402
+from deploy_tools import fact_cache_guard as g
 
 
 def write_cache(
@@ -61,7 +61,7 @@ def test_primary_checkout_interpreter_is_clean(repo: Path, cache: Path):
 
 def test_missing_interpreter_is_flagged(repo: Path, cache: Path):
     write_cache(cache, "daniel-box", str(repo / ".venv/bin/python3.99"))
-    (entry, path, reason) = g.scan(cache, our_worktree=None)[0]
+    (entry, _path, reason) = g.scan(cache, our_worktree=None)[0]
     assert entry.name == "s1_daniel-box"
     assert "no longer exists" in reason
 

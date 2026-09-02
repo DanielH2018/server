@@ -22,6 +22,14 @@ id = "check-yaml"
 id = "check-json"
 
 [[repos.hooks]]
+# prek.toml and pyproject.toml configure every other gate; a TOML syntax error in either
+# fails those gates with a parser traceback rather than a pointer at the line.
+id = "check-toml"
+
+[[repos.hooks]]
+id = "check-merge-conflict"
+
+[[repos.hooks]]
 id = "check-added-large-files"
 
 [[repos.hooks]]

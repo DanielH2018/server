@@ -110,7 +110,7 @@ def test_etcd_drill_grace_is_derived_from_the_cron():
             / "main.yml"
         ).read_text()
     )
-    minute, hour, dom, month, dow = defaults["k3s_etcd_restore_drill_cron"].split()
+    _minute, _hour, dom, month, dow = defaults["k3s_etcd_restore_drill_cron"].split()
     assert (dom, month) == ("*", "*") and dow != "*", (
         "this window is derived from a WEEKLY cadence; if the cron stops being weekly, "
         "ETCD_DRILL_MAX_AGE_S has to move with it"

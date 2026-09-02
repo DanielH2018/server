@@ -55,7 +55,7 @@ import yaml
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib.repo_paths import INVENTORY, ROLES  # noqa: E402
+from lib.repo_paths import INVENTORY, ROLES
 
 SSH_OPTS = [
     "-o",

@@ -27,8 +27,8 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from lib.render_guard import load_yaml as _load_yaml_mapping  # noqa: E402
-from lib.repo_paths import ALL_VARS, HOST_VARS, HOSTS_INI  # noqa: E402
+from lib.render_guard import load_yaml as _load_yaml_mapping
+from lib.repo_paths import ALL_VARS, HOST_VARS, HOSTS_INI
 
 UNKNOWN = "unknown"
 
