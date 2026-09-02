@@ -28,7 +28,7 @@ ENV_SECRET = (
 
 # Measured against the live glances payload, 2026-08-27: these report a `->` mapping.
 # dozzle was the fifth until it was retired 2026-08-29 (see daniel-pi.yml).
-EXPECTED_PUBLISHERS = {"glances", "node-exporter", "promtail", "wg-easy"}
+EXPECTED_PUBLISHERS = {"alloy", "glances", "node-exporter", "wg-easy"}
 # These report `ports: ""` permanently. A rule that flagged them would page forever.
 EXPECTED_NON_PUBLISHERS = {"docker-proxy", "autoheal", "docker-proxy-lifecycle"}
 

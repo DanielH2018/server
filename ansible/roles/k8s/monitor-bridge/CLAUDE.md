@@ -430,7 +430,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     **This arm adds no reachability coverage — it adds attribution, and that is the whole
     case for it.** Measured 2026-08-27: Kuma HTTP-monitors glances and wg-easy (and dozzle,
     until it retired 2026-08-29), and
-    `promtail`/`node-exporter` are Prometheus scrape targets (`job=promtail-pi`, `job=node-pi`)
+    `alloy`/`node-exporter` are Prometheus scrape targets (`job=alloy-pi`, `job=node-pi`)
     that `check_targets_down` already covers. So every publisher was already watched. What
     nothing said was *why* a port went quiet, and on 2026-08-08 that cost a manual sweep
     across four monitors which then missed dozzle entirely. Turning "service X is down" into
@@ -623,9 +623,9 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     `LOKI_STREAM`/`LOKI_FILETAIL_WINDOW`/`LOKI_DOCKER_STREAM`/`LOKI_WINDOW`/`LOKI_PI_STREAM`. Pure
     `loki_ingestion_fresh()` + `loki_count()` are unit-tested. A freshness watchdog in the same
     idiom as the SMART/restore-drill checks.)
-  - **Log Shipper Dropped Entries** (`sum(increase({__name__=~"loki_write_dropped_entries_total|promtail_dropped_entries_total"}[1h]))`
+  - **Log Shipper Dropped Entries** (`sum(increase({__name__=~"loki_write_dropped_entries_total"}[1h]))`
     from Prometheus, which scrapes both shippers — the cluster Alloy DaemonSet (`job=alloy`, port 12345) and
-    daniel-pi's Promtail (`job=promtail-pi`) — `down` above `SHIPPER_DROPPED_MAX` (1000)
+    daniel-pi's Alloy container (`job=alloy-pi`) — `down` above `SHIPPER_DROPPED_MAX` (1000)
     entries dropped in the window. Where **Loki Log Ingestion** catches TOTAL silence, this surfaces
     PARTIAL loss: entries a shipper gave up on across ALL drop reasons (`ingester_error`,
     `rate_limited`, `stream_limited`, `line_too_long` — the selector dropped its `ingester_error`-only

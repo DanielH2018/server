@@ -238,12 +238,13 @@ def test_shipper_dropped(count, ok, must_contain):
 
 
 def test_check_shipper_dropped_reads_both_shippers_counters(monkeypatch):
-    """One query, both counter names, no reason filter.
+    """One query over a __name__ regex, no reason filter.
 
-    The cluster ships through Alloy (`loki_write_dropped_entries_total`) and daniel-pi still
-    through Promtail (`promtail_dropped_entries_total`). A selector naming only one of them
-    reads the other estate as "0 dropped" forever — the same fail-open shape as a selector on
-    a label nothing emits. No reason filter: every reason is a real drop (M2).
+    Both estates ship through Alloy and share `loki_write_dropped_entries_total`, but the
+    query stays a name regex: while daniel-pi ran Promtail its counter had a different name,
+    and a selector naming only one estate's counter read the other as "0 dropped" forever —
+    the same fail-open shape as a selector on a label nothing emits. No reason filter: every
+    reason is a real drop (M2).
     """
     queries = []
 
@@ -256,8 +257,8 @@ def test_check_shipper_dropped_reads_both_shippers_counters(monkeypatch):
     assert not ok
     assert any(
         "increase(" in q
+        and '{__name__=~"' in q
         and "loki_write_dropped_entries_total" in q
-        and "promtail_dropped_entries_total" in q
         and "reason" not in q
         for q in queries
     )

@@ -1,6 +1,6 @@
 """Holds the landing-annotation chain together end to end.
 
-    land.sh  --logger-->  syslog  --promtail-->  Loki  <--  Landings dashboard
+    land.sh  --logger-->  syslog  --alloy-->  Loki  <--  Landings dashboard
 
 land.sh writes one logfmt line per landing from its EXIT trap; the Landings dashboard
 unwraps named fields out of it. The two are edited independently, in different languages,

@@ -300,15 +300,16 @@ data:
             labels:
               origin: daniel-pi
               instance: daniel-pi
-      # promtail's OWN metrics, the answer to "is the Pi still shipping logs". A log shipper
-      # fails quietly by design — the container stays up, /ready keeps answering, and lines
-      # simply stop arriving — so promtail_sent_entries_total and promtail_dropped_entries_total
-      # are what make that visible. check_promtail_dropped already reads the second one estate-
-      # wide, so this target joins an existing check rather than needing a new one.
-      - job_name: promtail-pi
+      # The Pi's Alloy shipper's OWN metrics, the answer to "is the Pi still shipping logs". A
+      # log shipper fails quietly by design — the container stays up, /-/ready keeps answering,
+      # and lines simply stop arriving — so loki_write_sent_entries_total and
+      # loki_write_dropped_entries_total are what make that visible. check_shipper_dropped
+      # already reads the second one estate-wide, so this target joins an existing check
+      # rather than needing a new one.
+      - job_name: alloy-pi
         scrape_interval: 1m
         static_configs:
-          - targets: ['{{ k8s_pi_client_ip }}:9080']
+          - targets: ['{{ k8s_pi_client_ip }}:12345']
             labels:
               origin: daniel-pi
               instance: daniel-pi

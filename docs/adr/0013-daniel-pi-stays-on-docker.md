@@ -22,7 +22,7 @@ later" is how a two-platform homelab becomes permanent by accident instead of by
 <!-- vale Google.Will = YES -->
 
 The Pi runs a small set of LAN-only utilities: WireGuard, a Docker socket proxy, a metrics
-viewer, an autoheal watchdog, and the node-exporter and promtail agents that feed the
+viewer, an autoheal watchdog, and the node-exporter and Alloy agents that feed the
 cluster's monitoring (`containers_list` in `host_vars/daniel-pi.yml` is the current set; the
 [Services reference](../reference/services.md) renders it). It is a different architecture, it is the
 WireGuard endpoint that must stay reachable when the cluster is down, and it is the machine

@@ -13,7 +13,7 @@ alone is a silent fault rather than a loud one:
 Neither shows up in a render check, because both halves render perfectly well on their own.
 So the guard is that both read the SAME variable name — `k3s_etcd_expose_metrics`, defined
 once in group_vars/all.yml, exactly as `k3s_audit_log_path` is shared by setup/k3s and
-loki-homelab's promtail for the same two-roles-one-fact reason.
+loki-homelab's Alloy shipper for the same two-roles-one-fact reason.
 
 This deliberately does not assert the variable's VALUE. Off is the shipped default and armed
 is a legitimate operator choice; what must not happen is the two halves diverging.

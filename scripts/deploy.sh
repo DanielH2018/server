@@ -94,7 +94,7 @@ PLAYBOOK_FAILED=20
 # WHY A LOG LINE and not a POST to Grafana's /api/annotations. Grafana has no hostPort and no
 # pinned ClusterIP, and this script is a HOST process, so calling into the cluster would mean
 # either pinning a fourth address or routing through Traefik with a standing write credential.
-# Neither is needed: promtail already tails /var/log/syslog into loki-homelab on both nodes (the
+# Neither is needed: the Alloy shipper already tails /var/log/syslog into loki-homelab on both nodes (the
 # same path the host crons' `status=down` lines take to the alert-history board), and Grafana
 # already reads that Loki by Service DNS. So the deployer writes locally and the cluster reads —
 # no address, no credential, no new component.

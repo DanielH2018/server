@@ -723,7 +723,7 @@ def emit_deploy_annotation(services: set[str], sha: str) -> None:
     function in scripts/deploy.sh — the two deploy paths must annotate the same way or the
     dashboards show only half the deploys. Grafana has no hostPort and no pinned ClusterIP, and
     this runs on the HOST, so calling in would mean pinning a fourth address or routing through
-    Traefik with a standing write credential. Neither is needed: promtail already tails
+    Traefik with a standing write credential. Neither is needed: the Alloy shipper already tails
     /var/log/syslog into loki-homelab, and Grafana already reads that Loki by Service DNS.
 
     Only the k8s auto-deploy path calls this. The Docker branch further down is unreachable on
