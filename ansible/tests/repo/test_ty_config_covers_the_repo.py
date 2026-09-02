@@ -1,8 +1,7 @@
 """Guards that ty's two hand-kept path lists still cover the repo.
 
 `[tool.ty.src] include` decides which files are checked, and `[tool.ty.environment] extra-paths`
-decides which imports resolve. Both are enumerated by hand, and a gap in either is quiet: a file
-outside `include` produces no error and no skip, because from ty's side it does not exist.
+decides which imports resolve. Both are enumerated by hand, and both drift.
 
 WHY `include` IS HAND-KEPT AT ALL. Omitting it does not fall back to the whole project. Measured
 2026-09-02 with ty 0.0.77: with `include` absent, a deliberately broken file at the repo root was
@@ -13,13 +12,24 @@ through the `sys.path` bootstrap the root CLAUDE.md describes, and a role's test
 `files/` the same way. Two tools have to be told about that, and they are told separately —
 pytest by `[tool.pytest.ini_options] pythonpath`, ty by `[tool.ty.environment] extra-paths`.
 
-Two hand-kept lists over one convention drift. The failure is quiet in one direction and loud in
-the other, which is why the check runs on the quiet one. Adding a `pythonpath` entry and
-forgetting `extra-paths` leaves ty resolving a first-party import against nothing; it reports
-`unresolved-import` on a module that imports fine at runtime, and the reflex fix is to silence
-the rule rather than to add the path. The reverse costs nothing, so an `extra-paths` entry with
-no `pythonpath` twin is allowed: `extra-paths` deliberately also carries `.claude/hooks` and the
-`files/` sibling of every `testpaths` entry, neither of which pytest needs listed.
+Two hand-kept lists over one convention, so both drift. They are guarded for different reasons,
+and it is worth being clear which is which — an earlier version of this paragraph claimed the
+checks run only on the quiet failure and then described a loud one, which reads as an argument
+for deleting the include guard.
+
+The `include` gap is the quiet one, and `test_every_tracked_python_file_is_inside_a_ty_source_root`
+is the check for it. A file outside every source root is neither checked nor skipped; the gate
+reads green and nobody learns the file exists to ty.
+
+The `extra-paths` gaps are loud: ty reports `unresolved-import` on code that imports fine at
+runtime. They are guarded anyway because loud in the wrong place is still misleading — the
+reflex fix for an `unresolved-import` on first-party code is to silence the rule, not to add the
+missing search path, and these tests name the path instead. Two shapes are covered: a
+`pythonpath` entry with no `extra-paths` twin, and a `testpaths` entry whose sibling `files/` is
+missing from `extra-paths` (a role's tests reach its module through that directory).
+
+The reverse costs nothing and is allowed: `extra-paths` carries `.claude/hooks` with no
+`pythonpath` twin, and pytest needs no such listing.
 
 Clean/flagged pairs below, per the repo rule that a new check ships with a proof it can go RED.
 """
@@ -28,6 +38,7 @@ from __future__ import annotations
 
 import subprocess
 import tomllib
+from pathlib import PurePosixPath
 
 from _helpers import REPO
 
@@ -48,10 +59,70 @@ def _extra_paths(cfg: dict) -> list[str]:
     return paths
 
 
+def _norm(path: str) -> str:
+    """One spelling per directory.
+
+    `./scripts`, `scripts/` and `scripts` all work for pytest, so without this the guard can fail
+    naming a path that IS covered — and the reflex fix is to add a duplicate entry.
+    """
+    return PurePosixPath(path).as_posix().rstrip("/")
+
+
 def _missing(pythonpath: list[str], extra_paths: list[str]) -> list[str]:
     """Every pytest import root ty cannot resolve from."""
-    have = set(extra_paths)
-    return [p for p in pythonpath if p not in have]
+    have = {_norm(p) for p in extra_paths}
+    return [p for p in pythonpath if _norm(p) not in have]
+
+
+def _files_siblings(testpaths: list[str], extra_paths: list[str]) -> list[str]:
+    """Every `<role>/files` a role's tests import from that is not a ty search path.
+
+    A role's test reaches its module through the sibling `files/` directory, so a new role added
+    to `testpaths` needs that directory on `extra-paths` as well.
+    """
+    have = {_norm(p) for p in extra_paths}
+    out = []
+    for tp in testpaths:
+        sib = _norm(f"{PurePosixPath(tp).parent}/files")
+        if (REPO / sib).is_dir() and sib not in have:
+            out.append(sib)
+    return out
+
+
+def test_every_role_files_sibling_of_a_testpath_is_a_ty_search_path():
+    cfg = _config()
+    missing = _files_siblings(
+        cfg["tool"]["pytest"]["ini_options"]["testpaths"], _extra_paths(cfg)
+    )
+    assert not missing, (
+        "a role's tests import from its sibling `files/`, and ty cannot resolve modules in "
+        f"these: {missing}. Add them to [tool.ty.environment] extra-paths."
+    )
+
+
+def test_a_covered_files_sibling_is_clean():
+    assert (
+        _files_siblings(
+            ["ansible/roles/k8s/ical-proxy/tests"],
+            ["ansible/roles/k8s/ical-proxy/files"],
+        )
+        == []
+    )
+
+
+def test_an_uncovered_files_sibling_is_flagged():
+    assert _files_siblings(["ansible/roles/k8s/ical-proxy/tests"], []) == [
+        "ansible/roles/k8s/ical-proxy/files"
+    ]
+
+
+def test_a_testpath_with_no_files_sibling_is_not_flagged():
+    """`ansible/tests` and `evals` have no sibling `files/`; absence is not a gap."""
+    assert _files_siblings(["ansible/tests", "evals"], []) == []
+
+
+def test_an_alternative_spelling_of_a_covered_path_is_not_flagged():
+    assert _missing(["./scripts", "scripts/"], ["scripts"]) == []
 
 
 def test_every_pythonpath_entry_is_a_ty_search_path():

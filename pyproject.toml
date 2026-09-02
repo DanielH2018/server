@@ -247,19 +247,46 @@ exclude = ["ansible/collections", "site", ".claude/worktrees"]
 # invalid-assignment (10). The same monkeypatch idiom as above, plus three production sites.
 # unsupported-operator (14). Eight are arithmetic on monitor-bridge's `_env` helper, which is
 #   annotated to return a union including `str`; retyping that one helper is the whole fix.
+#
+# HOW 228 RECONCILES, because the parts do not obviously add up and a reader who cannot reproduce
+# the baseline cannot argue with it: 186 ignored by the four rules above, 31 fixed in the gated
+# rules, and 11 `unresolved-import` in the two files the [[tool.ty.overrides]] block below
+# exempts. Those 11 are the term that is easy to miss — a per-file `ignore` beats a CLI
+# `--error`, so re-measuring them needs the overrides block removed as well as the rule flipped.
+#
+# The per-rule numbers above are as measured BEFORE the 31 fixes. Re-running today reports 91 /
+# 66 / 14 / 10 rather than 94 / 68 / 14 / 10: three of the fixes were local annotations that
+# incidentally narrowed a value these rules were also complaining about. Both figures are correct
+# for their moment; the pre-fix ones are kept because they are the baseline a "turn this rule on"
+# PR would be measured against.
 invalid-argument-type = "ignore"
 unresolved-attribute = "ignore"
 invalid-assignment = "ignore"
 unsupported-operator = "ignore"
-# Warning by default; an error here. `import urllib` alone then reaching `urllib.error` works
-# only while something else in the process has imported the submodule, which is the
-# plausible-wrong-answer shape block-footguns exists for.
+# Warning by default; an error here. `import urllib` alone then reaching `urllib.error` resolves
+# only while something else in the process has imported the submodule, which is a dependency on
+# an import in a file you are not reading.
+#
+# The four sites this found were all LATENT, not live — worth stating plainly, because the
+# commit that turned the rule on read as though it had caught a running defect. checks_b2.py
+# reaches `urllib.error.HTTPError` and imports only `urllib.parse`, but it also imports
+# `bridge_io`, which imports `urllib.error` — so in the real monitor-bridge process it always
+# resolved. validate_k8s_manifests.py gets `yaml.constructor` the same way, via `yaml.loader`.
+# The rule is on because that is a guarantee held by a sibling module's import list rather than
+# by anything local, and it breaks silently when the sibling's imports are tidied.
 possibly-missing-submodule = "error"
 
 [[tool.ty.overrides]]
 # Two scripts run inside container images built elsewhere, so their third-party imports are not
 # and should not be in this repo's dev group. The rule stays on everywhere else, where an
 # unresolved import means a typo or a missing search path above.
+#
+# THE COLLATERAL, stated because it is not obvious: this is per-file, not per-module, so these
+# two files lose the check on their FIRST-party imports too. homelab-mcp/files/app.py imports
+# `k8s_reads` from its own directory, which is on extra-paths above and would otherwise be
+# checked — a typo there now reports nothing here and surfaces as a ModuleNotFoundError when the
+# pod starts. ty has no per-module suppression, so the alternatives are this or losing the rule
+# tree-wide. The role's own tests are what cover that file's imports.
 include = [
   "ansible/roles/k8s/homelab-mcp/files/app.py",
   "ansible/roles/k8s/karakeep/files/karakeep-time-tagger.py",

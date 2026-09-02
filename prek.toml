@@ -334,20 +334,29 @@ language = "system"
 pass_filenames = false
 files = "\\.py$"
 
-# Type-check first-party Python. ruff reads one file at a time, so the whole class of bug where
-# a value crosses a function boundary as the wrong type is invisible to it — a `str | None`
-# reaching a `-> str` return, an unnarrowed regex match subscripted, a submodule reached through
-# a parent import that only resolves because something else imported it. ty is the gate for that
-# half. Four of its rules are off, each with the count that was measured before this landed; the
-# reasons are in pyproject [tool.ty.rules]. `pass_filenames = false` because ty resolves imports
-# across the whole project, and a per-file run would report first-party imports as unresolved.
+# Type-check first-party Python, for the bugs ruff cannot see: it reads one file at a time, so a
+# value that crosses a function boundary as the wrong type is invisible to it.
+#
+# WHAT THIS GATE ACTUALLY CATCHES, since a check is worth exactly its true coverage. It catches a
+# `str | None` reaching a `-> str` RETURN, an unnarrowed regex match subscripted, a non-iterable
+# iterated, an override whose signature does not match its base, and a submodule reached through
+# a parent import. It does NOT catch a `str | None` reaching a CALL ARGUMENT — the more common
+# shape of the same mistake — because `invalid-argument-type` is one of the four rules turned off
+# in pyproject [tool.ty.rules], with its measured count and the reason. Two call sites in the
+# tree still pass `str | None` into a `str` parameter and this gate reads green on both.
+#
+# `pass_filenames = false` because ty resolves imports across the whole project, and a per-file
+# run would report first-party imports as unresolved. `files` covers the config as well as the
+# code: a commit that only edits [tool.ty.rules] or bumps the pin changes what the gate checks,
+# and would otherwise run no ty at all locally (CI's --all-files sweep is the only backstop).
+# Same pattern as the uv.lock hook above.
 [[repos.hooks]]
 id = "ty"
 name = "Type-check first-party Python (ty)"
 entry = "uv run ty check"
 language = "system"
 pass_filenames = false
-files = "\\.py$"
+files = "(\\.py$|^(pyproject\\.toml|uv\\.lock)$)"
 
 # Fast syntax-only gate: `bash -n` parses (doesn't run) every shell script. Catches the exact
 # bug class that killed the kopia backup-maintenance watchdog cron for a day (2026-07-01,
