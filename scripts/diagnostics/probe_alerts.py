@@ -182,10 +182,10 @@ def _fmt_duration(ns):
 
 
 def format_alert_episodes(episodes, days):
-    """Human view:
+    """Human view: one aligned row per episode, newest first.
 
-    one aligned row per episode, newest first (America/Chicago, the container-log timezone). Empty
-    -> a clear all-clear line.
+    Times are America/Chicago, the container-log timezone. An empty result renders a clear
+    all-clear line.
     """
     if not episodes:
         return f"no DOWN alerts in the last {days:g}d"

@@ -34,9 +34,9 @@ def ha_host():
 
 
 def ha_resolve():
-    """curl --resolve pin for ha_host() → the MetalLB ingress VIP (same reason as k8s_endpoint:
+    """A curl --resolve pin for ha_host(), aimed at the MetalLB ingress VIP.
 
-    the host shell's answer for the name is not the cluster edge).
+    Same reason as k8s_endpoint: the host shell's answer for the name is not the cluster edge.
     """
     return f"{ha_host()}:443:{metallb_vip()}"
 

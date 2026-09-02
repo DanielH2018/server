@@ -86,10 +86,10 @@ def select_replacement(candidates, policy):
 
 
 def is_authentic(probe, policy) -> bool:
-    """False iff a downloaded file betrays a mislabeled re-encode:
+    """False iff a downloaded file betrays a mislabeled re-encode.
 
-    it claims a stream-copy tier (Remux) but its video stream is a consumer re-encode (re-encoder
-    ENCODER tag or long GOP). A non-remux claim (WEB-DL / Bluray encode) legitimately carries an
+    That is: it claims a stream-copy tier (Remux) but its video stream is a consumer re-encode (a
+    re-encoder ENCODER tag or long GOP). A non-remux claim (WEB-DL / Bluray encode) legitimately carries an
     encoder tag → authentic. Codec- and resolution-agnostic — the gate is about honesty, not format.
     """
     quality = probe.get("quality")

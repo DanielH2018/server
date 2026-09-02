@@ -47,10 +47,10 @@ def format_metric(data):
 
 
 def format_loki(data):
-    """Human view of a Loki query_range result:
+    """Human view of a Loki query_range result: just the log lines.
 
-    just the log lines, sorted oldest -> newest across all streams (nanosecond-epoch timestamps), so
-    the newest sits nearest the prompt. Empty result -> 'no logs'.
+    Sorted oldest -> newest across all streams (nanosecond-epoch timestamps), so the newest sits
+    nearest the prompt. An empty result renders 'no logs'.
 
     Replaces the recurring `… | python3 -c "…for v in r['values']: print(v[1])"`.
     """

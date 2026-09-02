@@ -209,10 +209,10 @@ def _cap_drops_all(spec: dict) -> bool:
 
 
 def find_missing_cap_drop(docs, exempt=frozenset()) -> list:
-    """Return service names that do NOT ``cap_drop:
+    """Return service names that do NOT ``cap_drop: [ALL]`` and aren't in ``exempt``.
 
-    [ALL]`` and aren't in ``exempt``. Drop-all is the hardening baseline (then add back minimal
-    caps); a service that drops nothing — or only a subset — keeps Docker's default capability set.
+    Drop-all is the hardening baseline, with minimal caps added back after it. A service that
+    drops nothing — or only a subset — keeps Docker's default capability set.
     """
     missing = []
     for doc in docs:
@@ -238,12 +238,12 @@ def _sets_no_new_privileges(spec: dict) -> bool:
 
 
 def find_missing_no_new_privileges(docs, exempt=frozenset()) -> list:
-    """Return service names that do NOT set ``security_opt:
+    """Return service names that do NOT set ``security_opt: [no-new-privileges:true]``.
 
-    [no-new-privileges:true]`` and aren't in ``exempt``. It's the companion baseline to ``cap_drop:
-    [ALL]`` — stops a setuid binary from re-escalating past the dropped caps — so it's enforced
-    symmetrically here; a service that omits it (a new one, or a copy-paste that drops the line) is
-    flagged unless allowlisted with a reason.
+    Excludes anything in ``exempt``. This is the companion baseline to ``cap_drop: [ALL]`` — it
+    stops a setuid binary re-escalating past the dropped caps — so it is enforced symmetrically.
+    A service that omits it (a new one, or a copy-paste that drops the line) is flagged unless
+    allowlisted with a reason.
     """
     missing = []
     for doc in docs:

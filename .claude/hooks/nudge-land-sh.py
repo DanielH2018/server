@@ -66,7 +66,7 @@ _LAND = (
 
 
 def classify(command: str) -> str | None:
-    """ "watch", "status", or None -- what kind of CI polling this command is."""
+    """What kind of CI polling this command is: "watch", "status", or None."""
     for stage in split_stages(command):
         if any(invokes(stage, p) for p in _WATCH_COMMANDS):
             return "watch"

@@ -58,7 +58,7 @@ def get_prop(vevent, prop):
 
 
 def normalize_dt(dt_value):
-    """Strip timezone prefix if present, e.g. 'America/New_York:20210120T113000' -> '20210120T113000'"""
+    """Strip a timezone prefix, e.g. 'America/New_York:20210120T113000' -> '20210120T113000'."""
     if dt_value and ":" in dt_value:
         return dt_value.split(":")[-1]
     return dt_value

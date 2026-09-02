@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""InstructionsLoaded hook (observability only):
+"""Record which CLAUDE.md / .claude/rules file loaded into context, and why.
 
-append one line per CLAUDE.md / .claude/rules file as it loads into context, recording WHICH file
-loaded and WHY (`load_reason`): session_start, path_glob_match, nested_traversal, include, compact.
+One line per file as it loads, carrying the file and its `load_reason`: session_start,
+path_glob_match, nested_traversal, include, compact.
 
 The point: verify that path-scoped rules actually fire. Claude Code has known bugs where a
 `paths:`-scoped rule isn't loaded when you edit a matching file (or loads globally regardless). With

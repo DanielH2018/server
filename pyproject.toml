@@ -152,18 +152,67 @@ extend-exclude = ["ansible/collections", "*.md"]
 #   between them. An unpacked variable nothing reads, an implicit Optional, a mutable class
 #   default, an assert inside `except`, a swallowed exception, an assert on a string literal,
 #   a non-string envvar default and a blanket `type: ignore` are each legal, silent and wrong.
+#
+# DOCSTRING LAYOUT (D205/D415/D212/D209/D210) IS THE ONE EXCEPTION to "bug-catching rules only",
+# and it is a narrow one. Those five check the SHAPE of a docstring that already exists: a
+# one-line summary ending in `.`, `?` or `!`, a blank line, the body, and the closing quotes on
+# their own line. That shape is a written convention with a rule file behind it
+# (~/.claude/rules/python.md, from Google's Python style guide section 3.8), and PR #785 applied
+# it across 226 files and 900-odd docstrings. `ruff format` does not touch docstring bodies, so
+# unlike the E7 checks this table turns off, no formatter can hold the convention — it either
+# gets linted or it drifts back. 47 fixes outside tests when this landed, D205 already at 0
+# because #785 cleared all 228 of them.
+#
+# The undocumented-symbol rules stay OFF, deliberately, and the numbers are here so nobody has to
+# re-measure to reopen it: D103 118, D102 28, D107 9 outside tests. Ruff's versions have no size
+# threshold, where the rule we actually adopted asks for a docstring when a function is public
+# API, non-trivial in size, or non-obvious in logic. Selecting them means writing 155 docstrings
+# on mostly-trivial functions — a wider rule than #785 applied, so it needs its own PR and its
+# own argument rather than riding in on this one.
 select = [
   "F", "E9", "E402", "E711", "E712", "E722", "B",
   "DTZ",
   "RUF100", "RUF059", "RUF013", "RUF012",
   "PT017", "S110", "S112", "PLW0129", "PLW1508", "PGH003",
+  "D205", "D415", "D212", "D209", "D210",
 ]
+# Explicit codes above, never the bare `D` prefix: D203/D211 and D212/D213 are mutually
+# incompatible pairs, and selecting the prefix makes ruff warn and then silently drop one of
+# each. `[tool.ruff.lint.pydocstyle] convention` is deliberately absent — measured 2026-09-02 on
+# this repo's pinned ruff, it does not filter an explicitly-selected code, so beside these codes
+# it would be redundant rather than load-bearing.
 
 [tool.ruff.lint.per-file-ignores]
 # Vendored upstream script, byte-for-byte: ansible/tests/services/test_karakeep_time_tagger_script.py
 # asserts its sha256 against the commit the archived Docker role pins, so a lint fix here is a
 # drift that test exists to catch.
-"ansible/roles/k8s/karakeep/files/karakeep-time-tagger.py" = ["RUF012"]
+#
+# The docstring-layout rules are here for the same reason, and they are the load-bearing half:
+# all 5 of the tree's D212 hits are in this one file, so without this entry `ruff check --fix`
+# rewrites it and that sha256 test fails. A gate that forces an edit to a byte-pinned file is a
+# gate nobody can turn on.
+"ansible/roles/k8s/karakeep/files/karakeep-time-tagger.py" = [
+  "RUF012",
+  "D205",
+  "D415",
+  "D212",
+  "D209",
+  "D210",
+]
+
+# Test modules are exempt from docstring layout, and the exemption is the reason this gate could
+# land at all — it is not an oversight to tidy away later. Google makes a test module's docstring
+# optional, and says a test docstring exists only to carry something beyond "Tests for foo":
+# a run instruction, a setup pattern, an external dependency. PR #785 left tests alone on that
+# basis. Behind this ignore sit 250 D205 and 203 D209 whole-tree, against 0 and 3 outside it, so
+# removing these lines turns a 47-fix gate into a 612-error wall — which is how a later session
+# "cleaning up" the ignore ends up reverting the whole thing instead.
+# (Counts from `uv run ruff check --select D... --statistics` under this config, 2026-09-02.
+# A run with `--isolated` reports higher: it bypasses `extend-exclude` above, and ruff lints
+# Python inside Markdown code blocks.)
+"**/tests/**" = ["D205", "D415", "D212", "D209", "D210"]
+"**/test_*.py" = ["D205", "D415", "D212", "D209", "D210"]
+"**/conftest.py" = ["D205", "D415", "D212", "D209", "D210"]
 
 [tool.ty.environment]
 python-version = "3.14"

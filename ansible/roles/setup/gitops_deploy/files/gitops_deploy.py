@@ -692,7 +692,8 @@ def alert_deferred(
     for the caller that has not read the inventory; None is treated as the EMPTY set, which makes
     every changed role read as untaggable and prescribes a full deploy. That is the fail-safe
     direction: a full deploy is slower than necessary but always applies the change, whereas a
-    `--tags` line for a role with no entry exits 0 having applied nothing."""
+    `--tags` line for a role with no entry exits 0 having applied nothing.
+    """
     declared_k8s = declared_k8s or set()
     pending_tasks, pending_meta = deferred_service_alerts(cs, deployed)
     if pending_tasks:
@@ -762,7 +763,8 @@ def health_ok(
     The per-sample pass/wait + streak transition is the pure, unit-tested
     `deploy_logic.health_decision`; this function is just its I/O shell (docker
     inspect, the 10s poll, and the wall-clock deadline). `.State.Running` is only
-    inspected in the no-healthcheck case (st == ''), matching the decision's use."""
+    inspected in the no-healthcheck case (st == ''), matching the decision's use.
+    """
     per_deadline = time.time() + TIMEOUT
     if deadline is not None:
         per_deadline = min(per_deadline, deadline)
@@ -1580,7 +1582,7 @@ def main() -> int:
 
 
 def entrypoint() -> int:
-    """One tick as systemd runs it:
+    """One tick as systemd runs it.
 
     main() plus the exit-code contract around it. Returns the process exit code; the `__main__`
     guard below only hands it to sys.exit, so a test can call this directly

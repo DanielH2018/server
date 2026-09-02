@@ -58,9 +58,9 @@ def provisioned_datasource_ids(
 
 
 def _uid_from_ref(ref) -> list[str]:
-    """The uid(s) a `datasource` value references:
+    """The uid(s) a `datasource` value references.
 
-    object form {"uid": "X"} or legacy bare string "X". null / anything else → no ref.
+    Object form {"uid": "X"} or legacy bare string "X". null, or anything else, means no ref.
 
     A `${DS_*}` template-variable string is intentionally NOT special-cased: every board in this
     repo bakes a concrete uid into its panel refs, and the plan forbids template-var datasources in
@@ -146,10 +146,10 @@ def validate(
     dashboards_dir: Path = DASHBOARDS_DIR,
     datasources_template: Path = DATASOURCES_TEMPLATE,
 ) -> list[str]:
-    """Return a list of error strings ([] = clean):
+    """Return a list of error strings, empty when clean.
 
-    every dashboard JSON whose datasource refs all resolve to a provisioned datasource (or a
-    built-in), and whose uid no other dashboard claims, passes.
+    A dashboard JSON passes when every datasource ref resolves to a provisioned datasource or a
+    built-in, and no other dashboard claims its uid.
     """
     valid = provisioned_datasource_ids(datasources_template) | BUILTIN_DATASOURCE_UIDS
     errors: list[str] = []

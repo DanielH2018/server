@@ -136,10 +136,10 @@ def _construct_include(loader: HAConfigLoader, node: yaml.Node):
 
 
 def _include_dir_files(loader: HAConfigLoader, node: yaml.Node, expected: type):
-    """The (path, loaded) pairs behind an `!include_dir_*` tag:
+    """The (path, loaded) pairs behind an `!include_dir_*` tag.
 
-    every *.yaml under the directory (recursive, sorted, dotfiles skipped — HA's `_find_files`
-    order).
+    Every *.yaml under the directory: recursive, sorted, dotfiles skipped — HA's `_find_files`
+    order.
 
     Stricter than HA on one point, on purpose: HA silently SKIPS a file whose top level is not the
     expected shape, so an automation file accidentally written as a mapping (or a script file

@@ -45,10 +45,9 @@ def _run(cmd, timeout):
 
 
 def docker_problems():
-    """(lines, docker_ok):
+    """One line per unhealthy or restarting container, as (lines, docker_ok).
 
-    one line per unhealthy/restarting container. docker_ok=False (with a warning line) if dockerd is
-    unreachable.
+    docker_ok is False, with a warning line, when dockerd is unreachable.
     """
     try:
         unhealthy = _run(
@@ -116,12 +115,12 @@ def _k8s_namespace():
 
 
 def _is_scaled_to_zero(job, namespace):
-    """True only if `job`'s backing Deployment is confirmed to have spec.replicas:
+    """True only if `job`'s backing Deployment is confirmed to have `spec.replicas: 0`.
 
-    0 — an on-demand game server (terraria-stats, valheim-stats) deliberately left idle, not a
-    failure. Any lookup failure (wrong kind, missing Deployment, kubectl error, timeout) returns
-    False: a down target we can't explain to be intentional stays reported rather than silently
-    swallowed.
+    That is an on-demand game server (terraria-stats, valheim-stats) deliberately left idle, not
+    a failure. Any lookup failure (wrong kind, missing Deployment, kubectl error, timeout)
+    returns False: a down target we can't explain to be intentional stays reported rather than
+    silently swallowed.
     """
     if not namespace:
         return False
