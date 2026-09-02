@@ -346,3 +346,8 @@ cwd
 [Rr]escope
 testid
 OOMKilled
+
+# B2 storage cap and Longhorn trim (docs/longhorn-backup-tiering.md)
+[Rr]eapable
+[Uu]nmaps
+[Ff]ilesystem's
