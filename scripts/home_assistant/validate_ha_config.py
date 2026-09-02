@@ -361,24 +361,25 @@ def macro_bool_coercion_errors(trees: list, custom_templates_dir: Path) -> list[
 # the list names, so a file in the directory and not the list validates clean and never
 # reaches the pod. The check below makes that disagreement an error.
 _SHIPPED_DIR_LISTS = {
-    "automations": "home_assistant_automation_files",
-    "scripts": "home_assistant_script_files",
+    "automations": ("home_assistant_automation_files", "*.yaml"),
+    "scripts": ("home_assistant_script_files", "*.yaml"),
+    "custom_templates": ("home_assistant_template_files", "*.jinja"),
 }
 
 
 def shipped_dir_list_errors(role_dir: Path) -> list[str]:
-    """Each list in _SHIPPED_DIR_LISTS must name exactly the *.yaml files under its
+    """Each list in _SHIPPED_DIR_LISTS must name exactly the matching files under its
     directory, in both directions."""
     defaults = role_dir / "defaults" / "main.yml"
     if not defaults.is_file():
         return []
     values = yaml.safe_load(defaults.read_text()) or {}
     errors = []
-    for subdir, var in _SHIPPED_DIR_LISTS.items():
+    for subdir, (var, pattern) in _SHIPPED_DIR_LISTS.items():
         listed = values.get(var)
         if listed is None:
             continue
-        on_disk = sorted(p.name for p in (role_dir / "files" / subdir).glob("*.yaml"))
+        on_disk = sorted(p.name for p in (role_dir / "files" / subdir).glob(pattern))
         for name in sorted(set(on_disk) - set(listed)):
             errors.append(
                 f"files/{subdir}/{name} is not in {var} (defaults/main.yml): "

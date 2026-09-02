@@ -39,7 +39,7 @@ every task in this directory whether or not it is needed.
 ## The one convention that breaks edits
 - **Automations + scenes + scripts + template sensors + shared Jinja macros ARE copy'd (since 2026-06-18).**
   `files/automations/*.yaml` (one file per topic, merged by `!include_dir_merge_list`; a new file is also listed in `home_assistant_automation_files` in `defaults/main.yml` — the validator checks the two agree), `files/scenes.yaml`, `files/scripts/*.yaml` (same shape, merged by `!include_dir_merge_named`, listed in `home_assistant_script_files`), `files/templates.yaml`,
-  `files/rest.yaml`, and `files/custom_templates/*.jinja` (whole-dir copy —
+  `files/rest.yaml`, and `files/custom_templates/*.jinja` (listed in `home_assistant_template_files` —
   fan/lighting/ventilation/diagnostics)
   are shipped verbatim — `configmap.yaml.j2` carries each one with `lookup('file')`, NOT
   `lookup('template')`, because they use HA `{{ }}` Jinja that Ansible's templater would try to
@@ -142,8 +142,8 @@ every task in this directory whether or not it is needed.
   changed in only one place.
 - **Adding a tunable formula:** put the math in a `custom_templates/*.jinja` macro (numbers in →
   numbers/bool out), import it from the YAML caller, and add a test — don't inline new math in the
-  automations. The `custom_templates/` deploy is a whole-directory copy, so a new `.jinja` ships
-  automatically.
+  automations. A new `.jinja` ships once it is listed in `home_assistant_template_files` in `defaults/main.yml`; the validator fails the
+  prek hook until it is, so a macro cannot validate clean and never reach the pod.
 - **Config is structurally validated pre-deploy** by the `validate-ha-config` prek hook
   (`scripts/home_assistant/validate_ha_config.py`, runs locally + in CI on any change under the role's
   `templates/`+`files/`). Pure Python (no Docker): it assembles the deployed `/config` layout and

@@ -261,6 +261,36 @@ def test_script_file_list_flags_unlisted_file(tmp_path):
     )
 
 
+def test_template_file_list_flags_unlisted_macro(tmp_path):
+    # The case the role docs used to describe as "ships automatically": a new .jinja that
+    # nothing lists would validate clean and never reach the pod.
+    errors = _role_with_shipped_list(
+        tmp_path,
+        ["fan.jinja"],
+        ["fan.jinja", "new.jinja"],
+        subdir="custom_templates",
+        var="home_assistant_template_files",
+    )
+    assert (
+        errors
+        and "custom_templates/new.jinja is not in home_assistant_template_files"
+        in errors[0]
+    )
+
+
+def test_template_file_list_is_clean_when_it_matches(tmp_path):
+    assert (
+        _role_with_shipped_list(
+            tmp_path,
+            ["fan.jinja"],
+            ["fan.jinja"],
+            subdir="custom_templates",
+            var="home_assistant_template_files",
+        )
+        == []
+    )
+
+
 def test_automation_file_list_flags_missing_file(tmp_path):
     errors = _role_with_shipped_list(tmp_path, ["a.yaml", "gone.yaml"], ["a.yaml"])
     assert errors and "names gone.yaml" in errors[0]

@@ -57,7 +57,9 @@ data:
 {% endfor %}
 ---
 # custom_templates/ as its own map so the init container can lay it down as a directory.
-# Files enumerated explicitly rather than fileglob'd: the Jinja macros are load-bearing
+# The file list is `home_assistant_template_files` in defaults/main.yml, shared with the init
+# container and checked against the directory by the validator, rather than a fileglob: the
+# Jinja macros are load-bearing
 # (tested, imported by automations), and a glob that silently shipped nothing would surface
 # only as broken automations at runtime.
 apiVersion: v1
@@ -66,11 +68,7 @@ metadata:
   name: home-assistant-custom-templates
   namespace: {{ k8s_namespace }}
 data:
-  diagnostics.jinja: |
-{{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/files/custom_templates/diagnostics.jinja') | indent(4, true) }}
-  fan.jinja: |
-{{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/files/custom_templates/fan.jinja') | indent(4, true) }}
-  lighting.jinja: |
-{{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/files/custom_templates/lighting.jinja') | indent(4, true) }}
-  ventilation.jinja: |
-{{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/files/custom_templates/ventilation.jinja') | indent(4, true) }}
+{% for name in home_assistant_template_files %}
+  {{ name }}: |
+{{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/files/custom_templates/' + name) | indent(4, true) }}
+{% endfor %}

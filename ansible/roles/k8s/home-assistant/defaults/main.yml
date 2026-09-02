@@ -39,6 +39,14 @@ home_assistant_automation_files:
   - system.yaml
   - wake-and-sleep.yaml
 
+# files/custom_templates/*.jinja, the shared Jinja macros. Same rule again; this is what makes
+# "a new .jinja ships automatically" true — the file only has to be listed here.
+home_assistant_template_files:
+  - diagnostics.jinja
+  - fan.jinja
+  - lighting.jinja
+  - ventilation.jinja
+
 # files/scripts/*.yaml, the same shape for scripts: one file per topic, merged into the
 # `script:` mapping by `!include_dir_merge_named scripts/`. Same rule — a new file is added
 # here and the validator checks the list against the directory.
