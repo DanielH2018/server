@@ -125,23 +125,24 @@ RESTORE_TIMEOUT=600
 die() { echo "etcd-restore-drill: $*" >&2; exit 1; }
 log() { echo "[$(date -u +%H:%M:%S)] $*"; }
 
-# DECIDED: the stamp was write-only until this drill had a cron, and as of 2026-08-28 it has one.
-# health-crons.yml now schedules `--list-only` weekly under the `etcd-snapshot` tag
-# (k3s_etcd_restore_drill_cron, Monday 10:20), run in place from the primary checkout. That was
-# the stated precondition below, so THE READER IS NOW UNBLOCKED and is the remaining half of this
-# finding — it is not yet written.
+# DECIDED: the stamp is read, and both halves are shipped. health-crons.yml schedules
+# `--list-only` weekly under the `etcd-snapshot` tag (k3s_etcd_restore_drill_cron, Monday 10:20),
+# run in place from the primary checkout, since 2026-08-28 (PR #531). The fail-closed staleness
+# reader is `check_etcd_restore_drill` in monitor-bridge/check.py, since PR #535: it reads
+# `last-success-list-only` from this STAMP_DIR and pushes the `etcd Restore Drill` Kuma monitor.
 #
-# The ordering this block fixed still governs how it gets written, so it is kept rather than
-# deleted. A fail-closed staleness reader wired BEFORE the cron existed would have sat red
-# essentially always, which is a pager that trains the operator to ignore it; the cron is what
-# makes a red mean something. When the reader lands, monitor-bridge/check.py is the right owner —
-# it already aggregates unrelated stamps — not longhorn-backup-health.sh, which would be reading
-# a second drill's evidence out of the first drill's watchdog (2026-08-23b review M7).
+# The ordering this block fixed is kept rather than deleted, because it is the reason the pair
+# works. A fail-closed reader wired BEFORE the cron existed would have sat red essentially
+# always, which is a pager that trains the operator to ignore it; the cron is what makes a red
+# mean something. monitor-bridge/check.py is the owner because it already aggregates unrelated
+# stamps — not longhorn-backup-health.sh, which would be reading a second drill's evidence out of
+# the first drill's watchdog (2026-08-23b review M7).
 #
-# The reader must also key on the MODE. `last-success-list-only` and `last-success-full` are
-# written separately and must not be conflated: only the weekly list-only leg is scheduled, so a
-# reader that accepted either file as coverage would report the object-graph restore as proven
-# when nothing has ever proven it on this host. Read `last-success-list-only`, and say so.
+# The reader keys on the MODE. `last-success-list-only` and `last-success-full` are written
+# separately and must not be conflated: only the weekly list-only leg is scheduled, so a reader
+# that accepted either file as coverage would report the object-graph restore as proven when
+# nothing has ever proven it on this host. The reader opens `last-success-list-only` by name and
+# says so in its message.
 #
 # The stamp still earns its place unread: it is what makes "when did this last pass" answerable
 # at all, where before 2026-08-23 the only record was a hand-edited line in
@@ -226,9 +227,11 @@ esac
 # every failed drill leaves a restored etcd database plus a cluster-token copy behind — and the
 # 2026-08-22 session alone produced five failures. Nothing sweeps them: /var/tmp survives
 # reboots on the root ext4 LV, and systemd-tmpfiles ships its /var/tmp age rule COMMENTED OUT on
-# this host (`systemd-tmpfiles --cat-config` shows only systemd-private-* lines). Since the drill
-# has no cron, accumulation is operator-paced — which is why the five above were removed by hand,
-# and why that is the finding rather than the fix (2026-08-23b review M8).
+# this host (`systemd-tmpfiles --cat-config` shows only systemd-private-* lines). The only
+# scheduled arm is `--list-only`, which returns above the `install -d "$SCRATCH"` below and so
+# creates no dir to keep — a weekly failing cron accumulates nothing. Accumulation is therefore
+# still operator-paced, as the five dirs above were: they came from hand runs, and were removed by
+# hand (2026-08-23b review M8). That bound holds only while the full drill stays unscheduled.
 #
 # Swept here rather than in cleanup(): a run that dies before its trap installs still gets the
 # previous mess cleared, and this way the sweep is exercised on every invocation instead of only
