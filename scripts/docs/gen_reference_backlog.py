@@ -39,7 +39,8 @@ def render_markdown(rows: list[dict]) -> str:
     parts.append(
         "Findings Claude confirmed and did not fix in the session that found them, filed "
         "through `scripts/dev/findings.py` and labelled `claude` on GitHub. A row that has "
-        "been re-observed three times carries **escalated** and needs a durable owner: a "
+        "been seen three times carries **escalated** (the filing plus two re-observations) "
+        "and needs a durable owner: a "
         "test, a hook or a CLAUDE.md rule. Close one from a PR body with `Closes #<n>`.\n"
     )
     if not rows:

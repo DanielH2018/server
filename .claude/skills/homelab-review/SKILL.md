@@ -68,13 +68,15 @@ settled reasoning or suppress a live finding:
 | `## Deliberate trade-offs`, `[operator]` | The operator ruled. | Only the operator. Report it as a settled decision, never as a finding. |
 | `## Deliberate trade-offs`, `[enforced]` | A test, hook or `# DECIDED:` marker makes the alternative fail. | **Run the named check.** Do not re-derive the reasoning — the row already names the thing that decides. |
 | `## Durable refutations` | An agent disproved it at a cited `file:line`. | New evidence at a cited `file:line`. This is the ordinary re-flaggable case. |
-| `## Open and recurring` | The finding is **live**. Some rows also bar a specific remediation. | Nothing — report it as a recurrence. A barred fix means *don't propose that fix*, never *don't report the finding*. |
+| `## Open and recurring` (legacy rows only) | The finding is **live**. Some rows also bar a specific remediation. | Nothing — report it as a recurrence and record it with `findings.py touch <n>`, or `findings.py open` if it was never filed. A barred fix means *don't propose that fix*, never *don't report the finding*. |
 
-That last row is the one that has misfired: two open findings sat under a *do not re-flag*
-heading with only their prose saying they were open, so a reviewer extracting the section's
-list would have suppressed both. **A barred remediation is not a settled finding** — if a row
-prohibits a fix while calling the underlying gap real, it belongs in *Open and recurring*, and
-step 7 moves it there.
+That last section is closed to new rows: an open or recurring finding is a GitHub Issue, filed
+with `findings.py open` and re-observed with `findings.py touch`. It is in the table because
+rows written before 2026-09-02 are still there, and because of how the section misfired: two
+open findings sat under a *do not re-flag* heading with only their prose saying they were open,
+so a reviewer extracting the section's list would have suppressed both. **A barred remediation
+is not a settled finding** — a row that prohibits a fix while calling the underlying gap real
+belongs in an issue, and step 7 files it.
 
 **Also extract the still-OPEN confirmed findings**, not just the settled ones. A finding carried
 across runs must be reported as a **recurrence** — "open since 2026-08-15, third run" — never as a
@@ -255,7 +257,7 @@ control is the "fires on nothing" case the repo warns about, and it reads exactl
   next letter suffix rather than overwriting.
 - **Then fold the durable half into `homelab-review-standing-donot-reflag`** — a new deliberate
   trade-off, a refutation of a finding that was never filed, or an entry this run proved stale.
-  Open and recurring items no longer go there; `findings.py list` is that register. Per the
+  Open and recurring items belong in `findings.py`'s register, not there. Per the
   repo's corroborate-before-promote rule, promote a trade-off or refutation only on a **second**
   independent occurrence or against real evidence.
 - **Every row you write into `Deliberate trade-offs` opens with a provenance token** — `[operator]`
@@ -264,11 +266,12 @@ control is the "fires on nothing" case the repo warns about, and it reads exactl
   `[enforced]` row is settled by running the check it names, where an `[operator]` row can only be
   reopened by the operator. A trade-off you cannot label as either is not a trade-off yet — it is
   one run's inference, so leave it in the dated ledger.
-- **A row that bars a fix while calling the gap real goes in `Open and recurring`, not
-  `Deliberate trade-offs`.** The heading is what a reviewer extracts against, so an open finding
-  filed under *do not re-flag* is suppressed by the very step meant to prime them. Write the
-  finding as the row and the barred remediation as its second sentence, so *don't propose that
-  fix* cannot be read as *don't report the finding*.
+- **A row that bars a fix while calling the gap real is an issue, not a `Deliberate trade-offs`
+  row.** The heading is what a reviewer extracts against, so an open finding filed under *do not
+  re-flag* is suppressed by the very step meant to prime them. File it with `findings.py open`
+  (add `--no-vetted-remediation` when every proposed fix failed the fix-skeptic) and write the
+  barred remediation into the body, so *don't propose that fix* cannot be read as *don't report
+  the finding*. The standing memory keeps only deliberate trade-offs and durable refutations.
 - **On its third run, a recurring class stops being a ledger row.** The standing list already counts
   runs per recurring-open class — the guard-scope class reached run 4 and the push-token one run 3,
   each time by incrementing a counter and writing the finding again. Incrementing is what let them
