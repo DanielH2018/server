@@ -31,6 +31,27 @@ spec:
         # `app: n8n` only, so n8n-runners has no bespoke policy and the baseline is the only
         # thing fencing it. Exempting the runners would unfence them with nothing to notice.
         netpol-baseline-exempt: "true"
+      annotations:
+        # The digest the LOCAL REGISTRY serves for this image, stamped into the pod spec so that a
+        # rebuild changing it rolls the pod.
+        #
+        # This is not the same trigger as `k8s_rebuilt_images`, and it closes the gap that fact
+        # cannot. That one records images whose digest MOVED during this play, so it misses the
+        # case where the registry is already AHEAD of the running pod: a previous run pushed the
+        # image and then died before the rollout. A re-run rebuilds to a byte-identical digest,
+        # records no change and queues nothing, so the pod keeps the old image while every check
+        # reads green. Hit for real on 2026-09-02 — PR #859 pushed n8n 2.37.7, failed on the
+        # runners build, and `-e image_builder_force=true` then could NOT roll the app pod,
+        # because a reproducible rebuild reproduces the same digest.
+        #
+        # Stamping the digest makes the RENDER differ whenever the registry and the last render
+        # disagree, which is what `manifests_render is changed` already rolls on. It also records
+        # in the spec which image bytes a pod was created for, which nothing else does.
+        #
+        # `unstaged` when the fact is absent — a config-only run, `--skip-tags deploy`, or a
+        # validator rendering this file outside a play. Stable across all three, so none of them
+        # rolls the pod.
+        checksum/image: "{{ k8s_built_images | default([]) | selectattr('name', 'equalto', 'n8n') | map(attribute='digest') | first | default('unstaged') }}"
     spec:
       enableServiceLinks: false
       automountServiceAccountToken: false
