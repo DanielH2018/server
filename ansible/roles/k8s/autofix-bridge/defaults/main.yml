@@ -9,15 +9,20 @@ autofix_bridge_k8s_image: python:3.14-alpine@sha256:05b2b8b732ecd268fee8727a369f
 # ConfigMap, and the pod dies at import with ModuleNotFoundError the next time it rolls, on a
 # workload that fixes *arr issues with no page of its own if it silently stops.
 #
-# autofix.py is this role's own file. bridge_common.py is monitor-bridge's canonical copy,
+# autofix.py is this role's own file. bridge/common.py is monitor-bridge's canonical copy,
 # staged cross-role — the same pattern `host_lib.py` uses from `roles/setup/common` — never a
 # second edited copy under this role's files/.
 # ENFORCED by ansible/tests/services/test_autofix_bridge_modules.py.
+# `name` is the ConfigMap key (no slash allowed); `path` is where the Deployment mounts it
+# under /app, and where the staging copy lands. The shared module is `bridge/common.py` in
+# both roles' pods, so `autofix.py` imports it the same way monitor-bridge's modules do.
 autofix_bridge_modules:
   - name: autofix.py
+    path: autofix.py
     src: "{{ playbook_dir }}/roles/k8s/autofix-bridge/files/autofix.py"
   - name: bridge_common.py
-    src: "{{ playbook_dir }}/roles/k8s/monitor-bridge/files/bridge_common.py"
+    path: bridge/common.py
+    src: "{{ playbook_dir }}/roles/k8s/monitor-bridge/files/bridge/common.py"
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Observability: the auto-remediation twin of monitor-bridge — a broken deploy silently stops

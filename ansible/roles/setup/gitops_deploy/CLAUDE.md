@@ -461,7 +461,7 @@ stayed unapplied (issue #878). The k8s and Docker branches did the same through 
 they cleared `hold_sha` and never touched `hold_plane`, orphaning it.
 
 **Why that is worse than a lost diagnostic.** Every consumer gates on `hold_sha` alone:
-`checks_service.gitops_status` reads `hold_plane` only to choose which sentence to print,
+`checks.service.gitops_status` reads `hold_plane` only to choose which sentence to print,
 `land.sh` reports `deploy-failed` off `hold_sha`, and `renovate_agent.decide` refuses to run a
 session while one is set. So the erasure turned **GitOps Deploy — Status** green over a plane
 nothing had applied.

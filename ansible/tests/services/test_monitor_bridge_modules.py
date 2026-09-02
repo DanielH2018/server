@@ -7,7 +7,7 @@ goes green whatever the ship list says, while the pod only ever receives the fil
 `monitor_bridge_modules`. A module added to files/ and forgotten here therefore passes CI and
 kills the bridge at import on its next roll:
 
-    ModuleNotFoundError: No module named 'bridge_parsing'
+    ModuleNotFoundError: No module named 'bridge.parsing'
 
 That lands on the one workload that cannot page about its own failure — monitor-bridge IS the
 alert pipeline, which is why the role sets `k8s_autodeploy: false`. The pod would crashloop and
@@ -100,11 +100,11 @@ def test_the_census_sees_a_module_inside_a_package(tmp_path):
 
 # --- The second invariant: every patched name is bound in the module the test patches it on ---
 #
-# The suite patches the runtime modules ~210 times: `bridge_io._get_json`, `bridge_config.X`,
+# The suite patches the runtime modules ~210 times: `bridge.net._get_json`, `bridge.config.X`,
 # a verdict on the `checks_*` module that from-imports it, `check.CHECKS`. A function reads its
 # globals from the module it is DEFINED in, so a patch lands only if the module named in the
 # test is the module whose code reads the name. Patch `check.PROM_URL` after PROM_URL moved to
-# bridge_config and the setattr still SUCCEEDS — it creates a new attribute on `check` that
+# bridge.config and the setattr still SUCCEEDS — it creates a new attribute on `check` that
 # nothing reads — and the test passes against unpatched production code.
 #
 # That is a silent loss of coverage, which no amount of green runs will surface. Hence a guard:

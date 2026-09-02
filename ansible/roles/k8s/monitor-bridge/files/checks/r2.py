@@ -1,17 +1,17 @@
 """Cloudflare R2 free-tier headroom for monitor-bridge — one GraphQL query, four arms.
 
-Reads config as `cfg.X` and the fetch layer as `bridge_io.X`, so the tests' patches on those
+Reads config as `cfg.X` and the fetch layer as `bridge.net.X`, so the tests' patches on those
 modules reach it. `_r2_probe` lives beside `r2_usage`, the only code that mutates it. Rule and
-enforcement: bridge_config.py's header.
+enforcement: bridge/config.py's header.
 """
 
 import json
 import time
 from datetime import datetime, timedelta, timezone
 
-import bridge_config as cfg
-import bridge_io
-from bridge_parsing import FETCH_BODY_MAX
+import bridge.config as cfg
+import bridge.net
+from bridge.parsing import FETCH_BODY_MAX
 
 
 def r2_month_start(now):
@@ -163,7 +163,7 @@ def r2_query_usage(now):
             )
         ),
     }
-    data = bridge_io._post_json(
+    data = bridge.net._post_json(
         cfg.CF_GRAPHQL_URL,
         {"query": query},
         headers={"Authorization": "Bearer %s" % cfg.CF_ANALYTICS_TOKEN},

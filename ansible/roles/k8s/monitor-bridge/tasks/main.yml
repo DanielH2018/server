@@ -14,6 +14,19 @@
     group: root
   become: true
 
+# `ansible.builtin.copy` does not create a parent directory, and the modules are packages
+# under files/ (`bridge/`, `checks/`, `verdicts/`), so the staging tree needs them first.
+- name: Create the staging subdirectories
+  tags: [config]
+  ansible.builtin.file:
+    path: "/etc/rancher/k3s/monitor-bridge/{{ item }}"
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+  loop: "{{ monitor_bridge_modules | map('dirname') | reject('equalto', '') | unique | list }}"
+
 - name: Stage the bridge modules on the node
   tags: [config]
   ansible.builtin.copy:
@@ -42,7 +55,8 @@
 #
 # One --from-file per module rather than --from-file=<dir>: the staging directory also holds
 # the rendered configmap.yaml below, and the directory form would fold that into the ConfigMap
-# as a key of itself.
+# as a key of itself. The key is the module's path with `/` replaced by `_`, because a key
+# cannot contain a slash; the Deployment's `items:` mounts it back at the path.
 - name: Render the script ConfigMap manifest
   tags: [config]
   ansible.builtin.shell:
@@ -50,7 +64,7 @@
       set -o pipefail;
       k3s kubectl -n {{ k8s_namespace }} create configmap monitor-bridge-script
       {% for module in monitor_bridge_modules %}
-      --from-file={{ module }}=/etc/rancher/k3s/monitor-bridge/{{ module }}
+      --from-file={{ module | replace('/', '_') }}=/etc/rancher/k3s/monitor-bridge/{{ module }}
       {% endfor %}
       --dry-run=client -o yaml > /etc/rancher/k3s/monitor-bridge/configmap.yaml
     executable: /bin/bash

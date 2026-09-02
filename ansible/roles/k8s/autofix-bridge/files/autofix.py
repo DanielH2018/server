@@ -22,8 +22,8 @@ import time
 import urllib.parse
 import urllib.request
 
-import bridge_common
-from bridge_common import HTTP_TIMEOUT, _env, sanitize
+import bridge.common
+from bridge.common import HTTP_TIMEOUT, _env, sanitize
 
 INTERVAL = int(_env("INTERVAL", "300"))
 HEARTBEAT_FILE = _env("HEARTBEAT_FILE", "/tmp/heartbeat")
@@ -239,12 +239,12 @@ def _request(url, method="GET", headers=None, data=None):
 
 def post_discord(msg):
     if not DISCORD_WEBHOOK_URL:
-        bridge_common.log("WARN: no Discord webhook set; skipping report:", msg)
+        bridge.common.log("WARN: no Discord webhook set; skipping report:", msg)
         return
     try:
         _request(DISCORD_WEBHOOK_URL, method="POST", data={"content": msg})
     except Exception as e:  # best-effort report; never crash the loop
-        bridge_common.log("discord post failed (%s):" % msg, e)
+        bridge.common.log("discord post failed (%s):" % msg, e)
 
 
 def push(ok, msg):
@@ -258,13 +258,13 @@ def push(ok, msg):
         msg: The status message to attach to the push.
     """
     if not KUMA_PUSH:
-        bridge_common.log("WARN: no push token set; skipping push:", msg)
+        bridge.common.log("WARN: no push token set; skipping push:", msg)
         return
     qs = urllib.parse.urlencode({"status": "up" if ok else "down", "msg": msg})
     try:
         _request("%s/api/push/%s?%s" % (KUMA_URL, KUMA_PUSH, qs))
     except Exception as e:  # best-effort heartbeat; never crash the loop
-        bridge_common.log("push failed (%s):" % msg, e)
+        bridge.common.log("push failed (%s):" % msg, e)
 
 
 def run_once(streaks):
@@ -338,7 +338,7 @@ def run_once(streaks):
             streak,
             GRACE_CYCLES,
         )
-        bridge_common.log(report)
+        bridge.common.log(report)
         post_discord(report)
         acted += 1
 
@@ -357,7 +357,7 @@ def main():
     """
     once = "--once" in sys.argv
     streaks = {}
-    bridge_common.log(
+    bridge.common.log(
         "autofix-bridge starting (interval=%ss, dry_run=%s, once=%s)"
         % (INTERVAL, DRY_RUN, once)
     )
@@ -368,9 +368,9 @@ def main():
             Exception
         ) as e:  # an unreachable *arr / failed mutation must not kill the loop
             ok, msg = False, "autofix-bridge error: %s" % e
-        bridge_common.log("OK  " if ok else "DOWN", msg)
+        bridge.common.log("OK  " if ok else "DOWN", msg)
         push(ok, msg)
-        bridge_common.touch_heartbeat(HEARTBEAT_FILE)
+        bridge.common.touch_heartbeat(HEARTBEAT_FILE)
 
         if once:
             break

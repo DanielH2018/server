@@ -1,14 +1,14 @@
 """Cluster storage checks for monitor-bridge — Longhorn volume redundancy and PVC fullness.
 
 The Backblaze B2 and Cloudflare R2 checks that shared this module until 2026-09-01 are in
-checks_b2.py and checks_r2.py, mirroring their test files. Reads config as `cfg.X`, the fetch
-layer as `bridge_io.X` and the shared streak counter as `bridge_streaks.X`, so the tests'
-patches on those modules reach it. Rule and enforcement: bridge_config.py's header.
+checks/b2.py and checks/r2.py, mirroring their test files. Reads config as `cfg.X`, the fetch
+layer as `bridge.net.X` and the shared streak counter as `bridge.streaks.X`, so the tests'
+patches on those modules reach it. Rule and enforcement: bridge/config.py's header.
 """
 
-import bridge_config as cfg
-import bridge_io
-import bridge_streaks
+import bridge.config as cfg
+import bridge.net
+import bridge.streaks
 
 
 def check_longhorn_volumes():
@@ -37,12 +37,12 @@ def check_longhorn_volumes():
     reaper's unpopulated owner map). The volume count doubles as that input assertion: the
     one-hot shape guarantees a `state="healthy"` series per volume even when its value is 0.
     """
-    volumes = bridge_io.prom_scalar(
+    volumes = bridge.net.prom_scalar(
         'count(longhorn_volume_robustness{state="healthy"})'
     )
     if not volumes:
-        bridge_streaks._down_streaks["longhorn"], ok, msg = bridge_streaks.down_streak(
-            bridge_streaks._down_streaks.get("longhorn", 0),
+        bridge.streaks._down_streaks["longhorn"], ok, msg = bridge.streaks.down_streak(
+            bridge.streaks._down_streaks.get("longhorn", 0),
             cfg.LONGHORN_CONSECUTIVE,
             "no longhorn_volume_robustness series — replica redundancy is UNMONITORED "
             "(job=longhorn scrape down?), which is not the same as healthy",
@@ -50,7 +50,7 @@ def check_longhorn_volumes():
         )
         return ok, msg
     worst = {}
-    for labels, _value in bridge_io.prom_vector(
+    for labels, _value in bridge.net.prom_vector(
         'longhorn_volume_robustness{state=~"degraded|faulted"} == 1'
     ):
         name = labels.get("pvc") or labels.get("volume", "?")
@@ -59,7 +59,7 @@ def check_longhorn_volumes():
         if worst.get(name) != "faulted":
             worst[name] = state
     if not worst:
-        bridge_streaks._down_streaks["longhorn"] = 0
+        bridge.streaks._down_streaks["longhorn"] = 0
         return True, "%d volume(s) redundant, none degraded or faulted" % int(volumes)
     faulted = sorted(n for n, s in worst.items() if s == "faulted")
     degraded = sorted(n for n, s in worst.items() if s != "faulted")
@@ -70,8 +70,8 @@ def check_longhorn_volumes():
         parts.append(
             "%d degraded, single-copy (%s)" % (len(degraded), ", ".join(degraded[:5]))
         )
-    bridge_streaks._down_streaks["longhorn"], ok, msg = bridge_streaks.down_streak(
-        bridge_streaks._down_streaks.get("longhorn", 0),
+    bridge.streaks._down_streaks["longhorn"], ok, msg = bridge.streaks.down_streak(
+        bridge.streaks._down_streaks.get("longhorn", 0),
         cfg.LONGHORN_CONSECUTIVE,
         "of %d volume(s): %s" % (int(volumes), "; ".join(parts)),
         "drain/reboot grace",
@@ -102,13 +102,13 @@ def check_pvc_fullness():
     """
     if not cfg.CLUSTER_PROM_URL:
         return True, "PVC fullness check disabled (no CLUSTER_PROMETHEUS_URL)"
-    claims = bridge_io.prom_scalar(
+    claims = bridge.net.prom_scalar(
         "count(count by (namespace, persistentvolumeclaim)"
         " (kubelet_volume_stats_capacity_bytes))",
         base=cfg.CLUSTER_PROM_URL,
         source="cluster prometheus",
     )
-    vec = bridge_io.prom_vector(
+    vec = bridge.net.prom_vector(
         "max by (namespace, persistentvolumeclaim) (100 *"
         " (1 - kubelet_volume_stats_available_bytes"
         " / kubelet_volume_stats_capacity_bytes))",
@@ -124,9 +124,9 @@ def check_pvc_fullness():
         # A DIFFERENT fault from a thin claim census below, and it must not reach the `worst`
         # report: the ratio query returned nothing at all, which looks exactly like "no claim is
         # full" and is not the same fact.
-        bridge_streaks._down_streaks["pvc_fullness"], ok, msg = (
-            bridge_streaks.down_streak(
-                bridge_streaks._down_streaks.get("pvc_fullness", 0),
+        bridge.streaks._down_streaks["pvc_fullness"], ok, msg = (
+            bridge.streaks.down_streak(
+                bridge.streaks._down_streaks.get("pvc_fullness", 0),
                 cfg.PVC_CLAIMS_CONSECUTIVE,
                 "no PVC reported a fullness ratio — PVC fullness is UNKNOWN, not OK",
                 "kubelet scrape gap grace",
@@ -145,9 +145,9 @@ def check_pvc_fullness():
     shortfall = None
     if claims is None or claims < cfg.PVC_MIN_CLAIMS:
         seen = "no" if claims is None else "only %d" % int(claims)
-        bridge_streaks._down_streaks["pvc_fullness"], short_ok, short_msg = (
-            bridge_streaks.down_streak(
-                bridge_streaks._down_streaks.get("pvc_fullness", 0),
+        bridge.streaks._down_streaks["pvc_fullness"], short_ok, short_msg = (
+            bridge.streaks.down_streak(
+                bridge.streaks._down_streaks.get("pvc_fullness", 0),
                 cfg.PVC_CLAIMS_CONSECUTIVE,
                 "%s kubelet_volume_stats claims visible, below the floor of %d — PVC fullness is "
                 "UNKNOWN, not OK" % (seen, cfg.PVC_MIN_CLAIMS),
@@ -156,7 +156,7 @@ def check_pvc_fullness():
         )
         shortfall = (short_ok, short_msg)
     else:
-        bridge_streaks._down_streaks["pvc_fullness"] = 0
+        bridge.streaks._down_streaks["pvc_fullness"] = 0
     # A claim that IS reporting and IS full outranks a complaint about the ones that are not —
     # same ordering as check_disk, and for the same reason.
     if breaching:

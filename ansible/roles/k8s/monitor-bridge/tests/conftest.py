@@ -1,6 +1,6 @@
 """Shared pytest fixtures for the monitor-bridge check.py test suite."""
 
-import bridge_streaks
+import bridge.streaks
 import pytest
 
 
@@ -14,7 +14,7 @@ def _reset_down_streaks():
     `check._down_streaks["x"] = 0` line. This fixture replaces those ~27 hand-written
     resets with one reset applied to every test.
     """
-    bridge_streaks._down_streaks.clear()
+    bridge.streaks._down_streaks.clear()
 
 
 @pytest.fixture

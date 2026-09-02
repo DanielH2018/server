@@ -209,16 +209,16 @@ def test_k8s_remediation_never_prescribes_a_tag_that_deploys_nothing():
 
 def test_a_shared_module_edit_names_every_consumer_role():
     """`_ACTIVE_K8S` maps a path to the role whose directory holds it, which is right for a
-    manifest and wrong for a shared library. bridge_common.py lives under monitor-bridge and
+    manifest and wrong for a shared library. bridge/common.py lives under monitor-bridge and
     autofix-bridge imports it, so after the #407 split an edit there emitted
     `--tags monitor-bridge` alone and autofix-bridge's ConfigMap kept the old copy with
     nothing reporting it (2026-08-25 review M-2).
     """
     repo = pathlib.Path(__file__).resolve().parents[5]
-    paths = ["ansible/roles/k8s/monitor-bridge/files/bridge_common.py"]
+    paths = ["ansible/roles/k8s/monitor-bridge/files/bridge/common.py"]
     consumers = shared_module_consumers(paths, repo)
     assert "autofix-bridge" in consumers, (
-        "the deployer cannot see that autofix-bridge imports bridge_common, so a shared "
+        "the deployer cannot see that autofix-bridge imports bridge.common, so a shared "
         "edit ff-merges leaving its ConfigMap stale: %s" % sorted(consumers)
     )
     assert "monitor-bridge" not in consumers, "the owning role is already in cs.k8s"
@@ -257,7 +257,7 @@ def _k8s_tree(tmp_path, files):
 def test_a_shared_module_inside_a_package_is_still_seen(tmp_path):
     """The detector sees `files/bridge/common.py`, in every spelling a consumer can use.
 
-    The first version matched one level (`files/<name>.py`) and a bare `import bridge_common`.
+    The first version matched one level (`files/<name>.py`) and a bare `import bridge.common`.
     Moving the shared module into a package would have made it invisible to the one check that
     exists for it, and the deployer would have gone back to emitting `--tags monitor-bridge`
     alone -- the M-2 silence, reintroduced by a rename. The live-tree test above cannot be this

@@ -24,7 +24,7 @@ spec:
       annotations:
         # Recreate the pod when any bridge module's source changes — same idiom as
         # monitor-bridge's checksum/check-script. The fact is a hash over every module in
-        # autofix_bridge_modules, so an edit confined to bridge_common.py rolls the pod too.
+        # autofix_bridge_modules, so an edit confined to bridge/common.py rolls the pod too.
         checksum/autofix-script: "{{ autofix_bridge_script_checksum | default('unstaged') }}"
     spec:
       enableServiceLinks: false
@@ -74,5 +74,11 @@ spec:
         - name: autofix-bridge-script
           configMap:
             name: autofix-bridge-script
+            # Flat keys mounted back at their paths -- see monitor-bridge's deployment for why.
+            items:
+{% for item in autofix_bridge_modules %}
+              - key: {{ item.name }}
+                path: {{ item.path }}
+{% endfor %}
         - name: autofix-bridge-tmp
           emptyDir: {}

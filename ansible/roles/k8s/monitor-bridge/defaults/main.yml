@@ -12,24 +12,29 @@ monitor_bridge_k8s_image: python:3.14-alpine@sha256:05b2b8b732ecd268fee8727a369f
 # and conftest.py, which must not reach the image.
 # ENFORCED by ansible/tests/services/test_monitor_bridge_modules.py, which fails when a runtime module
 # in files/ is absent here.
+# Paths relative to files/. The ConfigMap key for each is the path with `/` replaced by
+# `_` (a key cannot contain a slash), and the Deployment's `items:` mounts that key back at
+# the path, so `checks/b2.py` ships as key `checks_b2.py` and lands at /app/checks/b2.py.
+# Both derivations sit in tasks/main.yml and templates/deployment.yaml.j2; the copy loop
+# below creates the subdirectories first.
 monitor_bridge_modules:
   - check.py
-  - bridge_config.py
-  - bridge_io.py
-  - bridge_streaks.py
-  - checks_logs.py
-  - checks_storage.py
-  - checks_b2.py
-  - checks_r2.py
-  - checks_host.py
-  - checks_cluster.py
-  - checks_service.py
-  - checks_notify.py
-  - bridge_common.py
-  - bridge_parsing.py
-  - verdicts_cluster.py
-  - verdicts_host.py
-  - verdicts_service.py
+  - bridge/config.py
+  - bridge/net.py
+  - bridge/streaks.py
+  - checks/logs.py
+  - checks/storage.py
+  - checks/b2.py
+  - checks/r2.py
+  - checks/host.py
+  - checks/cluster.py
+  - checks/service.py
+  - checks/notify.py
+  - bridge/common.py
+  - bridge/parsing.py
+  - verdicts/cluster.py
+  - verdicts/host.py
+  - verdicts/service.py
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Observability: this IS the alert pipeline — every threshold check in the fleet pushes through

@@ -8,10 +8,10 @@ and a failed attribution fetch downgrades the diagnosis rather than the verdict.
 
 import pytest
 
-import bridge_config
-import bridge_streaks
-import bridge_io
-import checks_host
+import bridge.config
+import bridge.streaks
+import bridge.net
+import checks.host
 
 MB = 1048576
 
@@ -32,7 +32,7 @@ FS_OK = [
 
 
 def test_pi_pressure_ok():
-    ok, msg = checks_host.pi_pressure(LOAD_OK, MEM_OK, FS_OK, 1.5, 50, 90)
+    ok, msg = checks.host.pi_pressure(LOAD_OK, MEM_OK, FS_OK, 1.5, 50, 90)
     assert ok
     assert "0.20/core" in msg and "150MB" in msg and "disk 3%" in msg
 
@@ -40,7 +40,7 @@ def test_pi_pressure_ok():
 def test_pi_pressure_high_load_alerts():
     # 2026-06-11 fwupd incident signature: load5 ~7.2 on 4 cores while every
     # container healthcheck timed out (mem available still ~150MB at that instant)
-    ok, msg = checks_host.pi_pressure(
+    ok, msg = checks.host.pi_pressure(
         {"min5": 7.2, "cpucore": 4}, MEM_OK, FS_OK, 1.5, 50, 90
     )
     assert not ok
@@ -48,7 +48,7 @@ def test_pi_pressure_high_load_alerts():
 
 
 def test_pi_pressure_low_mem_alerts():
-    ok, msg = checks_host.pi_pressure(
+    ok, msg = checks.host.pi_pressure(
         {"min5": 0.4, "cpucore": 4}, {"available": 13 * MB}, FS_OK, 1.5, 50, 90
     )
     assert not ok
@@ -59,7 +59,7 @@ def test_pi_pressure_full_disk_alerts_naming_device():
     fs = [
         {"device_name": "/dev/mmcblk0p2", "mnt_point": "/etc/hostname", "percent": 94.0}
     ]
-    ok, msg = checks_host.pi_pressure(LOAD_OK, MEM_OK, fs, 1.5, 50, 90)
+    ok, msg = checks.host.pi_pressure(LOAD_OK, MEM_OK, fs, 1.5, 50, 90)
     assert not ok
     assert "/dev/mmcblk0p2" in msg and "94" in msg
 
@@ -77,13 +77,13 @@ def test_pi_pressure_duplicate_device_entries_alert_once():
             "percent": 94.0,
         },
     ]
-    ok, msg = checks_host.pi_pressure(LOAD_OK, MEM_OK, fs, 1.5, 50, 90)
+    ok, msg = checks.host.pi_pressure(LOAD_OK, MEM_OK, fs, 1.5, 50, 90)
     assert not ok
     assert msg.count("/dev/mmcblk0p2") == 1
 
 
 def test_pi_pressure_both_breaches_named():
-    ok, msg = checks_host.pi_pressure(
+    ok, msg = checks.host.pi_pressure(
         {"min5": 8.0, "cpucore": 4}, {"available": 10 * MB}, FS_OK, 1.5, 50, 90
     )
     assert not ok
@@ -93,7 +93,7 @@ def test_pi_pressure_both_breaches_named():
 def test_pi_pressure_at_threshold_is_ok():
     # strictly greater / strictly less, like the other checks' threshold semantics
     fs = [{"device_name": "/dev/mmcblk0p2", "mnt_point": "/", "percent": 90.0}]
-    ok, _ = checks_host.pi_pressure(
+    ok, _ = checks.host.pi_pressure(
         {"min5": 6.0, "cpucore": 4}, {"available": 50 * MB}, fs, 1.5, 50, 90
     )
     assert ok
@@ -112,34 +112,34 @@ def test_pi_pressure_at_threshold_is_ok():
     ],
 )
 def test_pi_pressure_missing_input_alerts(load, fs):
-    ok, msg = checks_host.pi_pressure(load, MEM_OK, fs, 1.5, 50, 90)
+    ok, msg = checks.host.pi_pressure(load, MEM_OK, fs, 1.5, 50, 90)
     assert not ok
     assert "missing" in msg
 
 
 def test_pi_check_disabled_without_url():
     # PI_GLANCES_URL defaults to "" in tests -> monitoring disabled, never a false page
-    ok, msg = checks_host.check_pi_pressure()
+    ok, msg = checks.host.check_pi_pressure()
     assert ok
     assert "disabled" in msg.lower()
 
 
 def test_pi_check_down_on_pressure(monkeypatch, seq):
-    monkeypatch.setattr(bridge_config, "PI_GLANCES_URL", "http://pi:61208")
+    monkeypatch.setattr(bridge.config, "PI_GLANCES_URL", "http://pi:61208")
     monkeypatch.setattr(
-        bridge_io, "_get_json", seq({"min5": 7.2, "cpucore": 4}, MEM_OK, FS_OK)
+        bridge.net, "_get_json", seq({"min5": 7.2, "cpucore": 4}, MEM_OK, FS_OK)
     )
-    ok, msg = checks_host.check_pi_pressure()
+    ok, msg = checks.host.check_pi_pressure()
     assert not ok
     assert "load5" in msg
 
 
 def test_pi_check_up_when_quiet(monkeypatch, seq):
-    monkeypatch.setattr(bridge_config, "PI_GLANCES_URL", "http://pi:61208")
+    monkeypatch.setattr(bridge.config, "PI_GLANCES_URL", "http://pi:61208")
     monkeypatch.setattr(
-        bridge_io, "_get_json", seq({"min5": 0.4, "cpucore": 4}, MEM_OK, FS_OK)
+        bridge.net, "_get_json", seq({"min5": 0.4, "cpucore": 4}, MEM_OK, FS_OK)
     )
-    ok, _ = checks_host.check_pi_pressure()
+    ok, _ = checks.host.check_pi_pressure()
     assert ok
 
 
@@ -184,14 +184,14 @@ def _with(name, **changes):
 
 
 def test_every_port_listening_is_clean():
-    ok, msg = checks_host.pi_ports_verdict([], len(PUBLISHED))
+    ok, msg = checks.host.pi_ports_verdict([], len(PUBLISHED))
     assert ok
     assert "5 pi port(s) listening" in msg
 
 
 def test_dead_port_on_an_up_container_reads_as_detached():
     # The reboot signature: up, healthy, healthcheck passing on loopback, no mappings.
-    ok, msg = checks_host.pi_ports_verdict(
+    ok, msg = checks.host.pi_ports_verdict(
         [("dozzle", 8080)], 5, _with("dozzle", ports="")
     )
     assert not ok
@@ -201,7 +201,7 @@ def test_dead_port_on_an_up_container_reads_as_detached():
 def test_exposed_but_unpublished_port_reads_as_detached():
     # An exposed port carries no "->" and is not a published mapping — the whole basis of the
     # diagnosis, so a container showing only exposed ports must not read as publishing.
-    ok, msg = checks_host.pi_ports_verdict(
+    ok, msg = checks.host.pi_ports_verdict(
         [("promtail", 9080)], 5, _with("promtail", ports="9080/tcp")
     )
     assert not ok
@@ -209,7 +209,7 @@ def test_exposed_but_unpublished_port_reads_as_detached():
 
 
 def test_dead_port_on_a_stopped_container_is_not_called_detached():
-    ok, msg = checks_host.pi_ports_verdict(
+    ok, msg = checks.host.pi_ports_verdict(
         [("dozzle", 8080)], 5, _with("dozzle", ports="", status="exited")
     )
     assert not ok
@@ -218,7 +218,7 @@ def test_dead_port_on_a_stopped_container_is_not_called_detached():
 
 
 def test_dead_port_on_an_absent_container_says_so():
-    ok, msg = checks_host.pi_ports_verdict([("wg-easy", 51821)], 5, _without("wg-easy"))
+    ok, msg = checks.host.pi_ports_verdict([("wg-easy", 51821)], 5, _without("wg-easy"))
     assert not ok
     assert "container absent" in msg
     assert "RECREATE" not in msg
@@ -227,7 +227,7 @@ def test_dead_port_on_an_absent_container_says_so():
 def test_dead_port_while_docker_says_publishing_is_a_separate_diagnosis():
     # Mapping present, port unreachable: a bind-address or firewall fault, not a detached
     # container — and telling someone to recreate would be the wrong remediation.
-    ok, msg = checks_host.pi_ports_verdict([("dozzle", 8080)], 5, CONTAINERS_OK)
+    ok, msg = checks.host.pi_ports_verdict([("dozzle", 8080)], 5, CONTAINERS_OK)
     assert not ok
     assert "publishing but unreachable" in msg
     assert "RECREATE" not in msg
@@ -236,35 +236,35 @@ def test_dead_port_while_docker_says_publishing_is_a_separate_diagnosis():
 def test_failed_attribution_fetch_downgrades_the_diagnosis_not_the_verdict():
     # containers_json=None is the fetch having failed. The port is still dead, so the arm
     # must still be down — failing open here is what would make it inert.
-    ok, msg = checks_host.pi_ports_verdict([("dozzle", 8080)], 5, None)
+    ok, msg = checks.host.pi_ports_verdict([("dozzle", 8080)], 5, None)
     assert not ok
     assert "dozzle:8080 (cause unknown)" in msg
 
 
 def test_non_publishing_containers_are_never_named():
-    ok, msg = checks_host.pi_ports_verdict([], 5)
+    ok, msg = checks.host.pi_ports_verdict([], 5)
     assert ok
     for name in ("docker-proxy", "autoheal", "docker-proxy-lifecycle"):
         assert name not in msg
 
 
 def test_pi_check_arm_disabled_when_no_ports_configured(monkeypatch, seq):
-    monkeypatch.setattr(bridge_config, "PI_GLANCES_URL", "http://pi:61208")
-    monkeypatch.setattr(bridge_config, "PI_PUBLISHED_PORTS", ())
+    monkeypatch.setattr(bridge.config, "PI_GLANCES_URL", "http://pi:61208")
+    monkeypatch.setattr(bridge.config, "PI_PUBLISHED_PORTS", ())
     monkeypatch.setattr(
-        bridge_io, "_get_json", seq({"min5": 0.4, "cpucore": 4}, MEM_OK, FS_OK)
+        bridge.net, "_get_json", seq({"min5": 0.4, "cpucore": 4}, MEM_OK, FS_OK)
     )
-    ok, msg = checks_host.check_pi_pressure()
+    ok, msg = checks.host.check_pi_pressure()
     assert ok
     assert "listening" not in msg
 
 
 def _arm_ports(monkeypatch, open_ports, containers=None, streak=0):
-    monkeypatch.setattr(bridge_config, "PI_GLANCES_URL", "http://10.0.0.139:61208")
-    monkeypatch.setattr(bridge_config, "PI_PUBLISHED_PORTS", PUBLISHED)
-    monkeypatch.setattr(bridge_config, "PI_PORTS_CONSECUTIVE", 2)
-    bridge_streaks._down_streaks["pi_ports"] = streak
-    monkeypatch.setattr(checks_host, "_tcp_open", lambda h, p, t: p in open_ports)
+    monkeypatch.setattr(bridge.config, "PI_GLANCES_URL", "http://10.0.0.139:61208")
+    monkeypatch.setattr(bridge.config, "PI_PUBLISHED_PORTS", PUBLISHED)
+    monkeypatch.setattr(bridge.config, "PI_PORTS_CONSECUTIVE", 2)
+    bridge.streaks._down_streaks["pi_ports"] = streak
+    monkeypatch.setattr(checks.host, "_tcp_open", lambda h, p, t: p in open_ports)
     fetched = []
 
     def _get(url, **kwargs):
@@ -279,7 +279,7 @@ def _arm_ports(monkeypatch, open_ports, containers=None, streak=0):
             "/api/4/fs": FS_OK,
         }[url[len("http://10.0.0.139:61208") :]]
 
-    monkeypatch.setattr(bridge_io, "_get_json", _get)
+    monkeypatch.setattr(bridge.net, "_get_json", _get)
     return fetched
 
 
@@ -288,7 +288,7 @@ def test_pi_check_does_not_fetch_containers_when_every_port_is_up(monkeypatch):
     # has been measured timing out, so the happy path must never touch it.
     all_ports = {p for _, p in PUBLISHED}
     fetched = _arm_ports(monkeypatch, all_ports)
-    ok, msg = checks_host.check_pi_pressure()
+    ok, msg = checks.host.check_pi_pressure()
     assert ok
     assert fetched == []
     assert "5 pi port(s) listening" in msg
@@ -299,7 +299,7 @@ def test_pi_check_detached_leads_the_message(monkeypatch):
     fetched = _arm_ports(
         monkeypatch, all_ports - {8080}, _with("dozzle", ports=""), streak=1
     )
-    ok, msg = checks_host.check_pi_pressure()
+    ok, msg = checks.host.check_pi_pressure()
     assert not ok
     assert fetched, "a dead port must trigger the attribution fetch"
     # The pager must see the fault, not the load figure it is not about.
@@ -310,7 +310,7 @@ def test_pi_check_holds_the_first_dead_cycle_for_the_deploy_window(monkeypatch):
     # A Pi deploy recreates containers, so one cycle of dead ports is expected.
     all_ports = {p for _, p in PUBLISHED}
     _arm_ports(monkeypatch, all_ports - {8080}, _with("dozzle", ports=""), streak=0)
-    ok, msg = checks_host.check_pi_pressure()
+    ok, msg = checks.host.check_pi_pressure()
     assert ok
     assert "down streak 1/2" in msg
 
@@ -318,7 +318,7 @@ def test_pi_check_holds_the_first_dead_cycle_for_the_deploy_window(monkeypatch):
 def test_pi_check_reports_dead_port_when_attribution_fetch_fails(monkeypatch):
     all_ports = {p for _, p in PUBLISHED}
     _arm_ports(monkeypatch, all_ports - {8080}, None, streak=1)
-    ok, msg = checks_host.check_pi_pressure()
+    ok, msg = checks.host.check_pi_pressure()
     assert not ok
     assert "dozzle:8080 (cause unknown)" in msg
 
@@ -326,9 +326,9 @@ def test_pi_check_reports_dead_port_when_attribution_fetch_fails(monkeypatch):
 def test_pi_check_resets_the_streak_once_ports_return(monkeypatch):
     all_ports = {p for _, p in PUBLISHED}
     _arm_ports(monkeypatch, all_ports, streak=1)
-    ok, _ = checks_host.check_pi_pressure()
+    ok, _ = checks.host.check_pi_pressure()
     assert ok
-    assert bridge_streaks._down_streaks["pi_ports"] == 0
+    assert bridge.streaks._down_streaks["pi_ports"] == 0
 
 
 # check_longhorn_volumes — replica redundancy on the storage layer

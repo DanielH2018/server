@@ -195,7 +195,7 @@ def discover_docs() -> list[Path]:
 # glob returns an EMPTY set the moment the modules move down a directory, and every `all(...)`
 # over it passes; repo-root CLAUDE.md's "a check that finds its own subject by pattern" rule
 # records five guards that broke exactly that way. These readers identify a module by its
-# dotted path under the root, so a flat `bridge_config.py` and a nested `bridge/config.py`
+# dotted path under the root, so a flat `bridge/config.py` and a nested `bridge/config.py`
 # are each one id, and resolve an import to that id in every spelling Python allows.
 
 

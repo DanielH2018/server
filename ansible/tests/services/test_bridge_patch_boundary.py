@@ -1,7 +1,7 @@
 """A runtime module must not from-import a name its test suite patches on the source module.
 
-`monkeypatch.setattr(bridge_common, "log", ...)` rebinds the attribute on the module object.
-A module that did `from bridge_common import log` holds its own reference in its globals,
+`monkeypatch.setattr(bridge.common, "log", ...)` rebinds the attribute on the module object.
+A module that did `from bridge.common import log` holds its own reference in its globals,
 taken at import time, and that reference never sees the patch — the test passes while
 patching nothing. The failure is silent in the direction that matters: a test believing it
 stubbed the Kuma push would really push.
@@ -15,7 +15,7 @@ in `deploy_changes.shared_module_consumers`.
 
 A module is identified by its dotted path under `files/`, so the census sees a module at any
 depth and a test's own alias for it (`from bridge import config as cfg`) resolves to the
-module it names. The one-level `glob("*.py")` and the `"bridge_common" in text` substring
+module it names. The one-level `glob("*.py")` and the `"bridge.common" in text` substring
 this used until 2026-09-02 would both have gone quiet the moment the shared module moved into
 a package.
 
@@ -93,8 +93,8 @@ def _patched_names_by_module(test_files=None, module_names=None):
 
     Returns `{module: {name}}`.
 
-    AST walk, not a regex — a line-oriented regex over `monkeypatch.setattr(bridge_common, "X"`
-    misses the wrapped form ruff format produces and misses plain `bridge_common.X = ...`
+    AST walk, not a regex — a line-oriented regex over `monkeypatch.setattr(bridge.common, "X"`
+    misses the wrapped form ruff format produces and misses plain `bridge.common.X = ...`
     assignment entirely. `ansible/tests/services/test_monitor_bridge_modules.py`'s census hit
     exactly that hole when first measured; this mirrors its AST shape rather than repeating
     the mistake. The test's local name for a module is resolved through its own imports.
@@ -160,7 +160,7 @@ def _unqualified_binds(patched, modules):
 def test_there_are_patched_names_to_check():
     # Without this the assertion below passes vacuously if the AST walk ever stops matching.
     patched = _patched_names_by_module()
-    assert "bridge_common" in patched and "bridge_config" in patched, sorted(patched)
+    assert "bridge.common" in patched and "bridge.config" in patched, sorted(patched)
 
 
 def test_there_are_consumer_modules():
@@ -212,9 +212,9 @@ def test_checker_fires_on_a_synthesized_bad_sample(tmp_path):
     """
     bad = tmp_path / "bad_consumer.py"
     bad.write_text(
-        "from bridge_common import log\nfrom bridge_config import PROM_URL\n\nlog(PROM_URL)\n"
+        "from bridge.common import log\nfrom bridge.config import PROM_URL\n\nlog(PROM_URL)\n"
     )
-    patched = {"bridge_common": {"log"}, "bridge_config": {"PROM_URL"}}
+    patched = {"bridge.common": {"log"}, "bridge.config": {"PROM_URL"}}
     problems = _unqualified_binds(patched, [bad])
     assert len(problems) == 2, problems
     assert "bad_consumer.py" in problems[0] and "log" in problems[0]
@@ -224,28 +224,28 @@ def test_checker_fires_on_a_synthesized_bad_sample(tmp_path):
     # binding form, not on merely mentioning the name.
     good = tmp_path / "good_consumer.py"
     good.write_text(
-        "import bridge_common\nimport bridge_config as cfg\n\n"
-        "bridge_common.log(cfg.PROM_URL)\n"
+        "import bridge.common\nimport bridge.config as cfg\n\n"
+        "bridge.common.log(cfg.PROM_URL)\n"
     )
     assert not _unqualified_binds(patched, [good])
 
     # And the census itself: a wrapped setattr and a bare assignment both count.
     bad_test = tmp_path / "test_bad.py"
     bad_test.write_text(
-        "import bridge_config\n\n"
+        "import bridge.config\n\n"
         "def test_x(monkeypatch):\n"
         "    monkeypatch.setattr(\n"
-        '        bridge_config, "PROM_URL", "x"\n'
+        '        bridge.config, "PROM_URL", "x"\n'
         "    )\n"
-        "    bridge_config.LOKI_URL = 'y'\n"
+        "    bridge.config.LOKI_URL = 'y'\n"
     )
-    assert _patched_names_by_module([bad_test], {"bridge_config"}) == {
-        "bridge_config": {"PROM_URL", "LOKI_URL"}
+    assert _patched_names_by_module([bad_test], {"bridge.config"}) == {
+        "bridge.config": {"PROM_URL", "LOKI_URL"}
     }
 
 
 def test_checker_sees_a_packaged_module_in_every_spelling(tmp_path):
-    """Red-proof for depth: the rule holds for `bridge.config` exactly as for `bridge_config`.
+    """Red-proof for depth: the rule holds for `bridge.config` exactly as for `bridge.config`.
 
     The from-import of a patched name is flagged whether the module is flat or packaged; a
     from-import of the MODULE (`from bridge import config`) is the qualified form and passes;

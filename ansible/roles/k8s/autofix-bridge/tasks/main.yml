@@ -15,11 +15,24 @@
     group: root
   become: true
 
+# `ansible.builtin.copy` does not create a parent directory, and the shared module lives in
+# a package (`bridge/common.py`), so the staging tree needs the directory first.
+- name: Create the staging subdirectories
+  tags: [config]
+  ansible.builtin.file:
+    path: "/etc/rancher/k3s/autofix-bridge/{{ item }}"
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+  loop: "{{ autofix_bridge_modules | map(attribute='path') | map('dirname') | reject('equalto', '') | unique | list }}"
+
 - name: Stage the bridge modules on the node
   tags: [config]
   ansible.builtin.copy:
     src: "{{ item.src }}"
-    dest: "/etc/rancher/k3s/autofix-bridge/{{ item.name }}"
+    dest: "/etc/rancher/k3s/autofix-bridge/{{ item.path }}"
     mode: "0644"
     owner: root
     group: root
@@ -31,7 +44,7 @@
 
 # The pod-roll trigger must cover EVERY module, not just autofix.py — see monitor-bridge's
 # identically-named task for why: a ConfigMap update alone does not restart a Deployment, so an
-# edit confined to bridge_common.py would deploy, read green, and change nothing live.
+# edit confined to bridge/common.py would deploy, read green, and change nothing live.
 - name: Combine the staged module checksums into one pod-roll trigger
   tags: [config]
   ansible.builtin.set_fact:
@@ -48,7 +61,7 @@
       set -o pipefail;
       k3s kubectl -n {{ k8s_namespace }} create configmap autofix-bridge-script
       {% for item in autofix_bridge_modules %}
-      --from-file={{ item.name }}=/etc/rancher/k3s/autofix-bridge/{{ item.name }}
+      --from-file={{ item.name }}=/etc/rancher/k3s/autofix-bridge/{{ item.path }}
       {% endfor %}
       --dry-run=client -o yaml > /etc/rancher/k3s/autofix-bridge/configmap.yaml
     executable: /bin/bash

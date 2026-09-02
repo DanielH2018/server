@@ -353,7 +353,7 @@ def shared_module_consumers(paths, repo_root) -> set[str]:
     """k8s roles that import a changed `files/**/*.py` module owned by a DIFFERENT role.
 
     `_ACTIVE_K8S` maps a path to the role whose directory it sits in, which is right for a
-    manifest and wrong for a shared library. `bridge_common.py` lives under monitor-bridge and
+    manifest and wrong for a shared library. `bridge/common.py` lives under monitor-bridge and
     is imported by autofix-bridge too, so the #407 five-module split made an edit there emit
     `--tags monitor-bridge` alone -- autofix-bridge's ConfigMap kept the old copy, and nothing
     reported it (2026-08-25 review M-2).
@@ -364,7 +364,7 @@ def shared_module_consumers(paths, repo_root) -> set[str]:
 
     A module is identified by its dotted path under `files/`, so `files/bridge/common.py` is
     `bridge.common` and is matched in every spelling a consumer can use for it. The first
-    version of this matched one level (`files/<name>.py`) and a bare `import bridge_common`, which
+    version of this matched one level (`files/<name>.py`) and a bare `import bridge.common`, which
     reads as complete and is not: the moment the shared module moved into a package it would
     have stopped matching, and the deployer would have emitted `--tags monitor-bridge` alone
     again -- the exact silence this function exists to prevent, reintroduced by a rename.
@@ -406,7 +406,7 @@ _FILES_MODULE_RE = re.compile(
 
 
 def _module_id(rel_path: str) -> str:
-    """`bridge/common.py` -> `bridge.common`; `bridge_common.py` -> `bridge_common`."""
+    """`bridge/common.py` -> `bridge.common`; `bridge/common.py` -> `bridge.common`."""
     return rel_path[: -len(".py")].replace("/", ".")
 
 
@@ -415,7 +415,7 @@ def _import_re(module_id: str) -> re.Pattern:
 
     For `bridge.common`: `import bridge.common`, `from bridge.common import x`, and
     `from bridge import common` (with or without `as`, anywhere in the imported list). For a
-    flat `bridge_common` the last form has no package to come from, so only the first two.
+    flat `bridge.common` the last form has no package to come from, so only the first two.
     """
     dotted = re.escape(module_id)
     forms = [

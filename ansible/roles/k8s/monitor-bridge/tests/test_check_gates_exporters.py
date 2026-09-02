@@ -12,9 +12,9 @@ from pathlib import Path
 
 import pytest
 
-import bridge_config
-import bridge_io
-import checks_cluster
+import bridge.config
+import bridge.net
+import checks.cluster
 import check
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -146,7 +146,7 @@ def test_a_job_whose_origins_are_all_excluded_suppresses_no_host_metric_check():
     axis and not the other is exactly what shipped on 2026-08-29. Only statically-labelled jobs are
     readable here — `node` discovers its origins from k8s at scrape time — so this covers `node-pi`.
     """
-    excluded = re.compile(bridge_config.HOST_METRIC_ORIGIN_EXCLUDE)
+    excluded = re.compile(bridge.config.HOST_METRIC_ORIGIN_EXCLUDE)
     checked = 0
     for name, block in _scrape_job_blocks(_PROM_SCRAPE_CONFIG.read_text()):
         if name not in check.EXPORTER_DEPENDENT:
@@ -158,7 +158,7 @@ def test_a_job_whose_origins_are_all_excluded_suppresses_no_host_metric_check():
         leaked = check.EXPORTER_DEPENDENT[name] & {"disk", "memory"}
         assert not leaked, (
             f"job {name!r} declares only origins excluded by HOST_METRIC_ORIGIN_EXCLUDE "
-            f"({bridge_config.HOST_METRIC_ORIGIN_EXCLUDE!r}), so check_disk and check_mem never read them "
+            f"({bridge.config.HOST_METRIC_ORIGIN_EXCLUDE!r}), so check_disk and check_mem never read them "
             f"— suppressing {sorted(leaked)} there hides a real fault and reports nothing"
         )
     assert checked, "no excluded statically-labelled job found; this guard is inert"
@@ -167,10 +167,10 @@ def test_a_job_whose_origins_are_all_excluded_suppresses_no_host_metric_check():
 def _wire_run_once_prom_up(monkeypatch, up_vector, checks, prom_dependent):
     """Drive run_once with Prometheus UP and a stubbed `up` vector; capture what ran + pushed."""
     ran, pushes = [], []
-    monkeypatch.setattr(bridge_io, "push", lambda t, ok, m: pushes.append((t, ok, m)))
+    monkeypatch.setattr(bridge.net, "push", lambda t, ok, m: pushes.append((t, ok, m)))
     monkeypatch.setattr(check, "check_prometheus", lambda: (True, "prom ok"))
     monkeypatch.setattr(
-        bridge_io, "prom_vector", lambda q: up_vector if q == "up" else []
+        bridge.net, "prom_vector", lambda q: up_vector if q == "up" else []
     )
     monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset(prom_dependent))
     monkeypatch.setattr(check, "check_loki_reachable", lambda: (True, "loki ok"))
@@ -212,7 +212,7 @@ def _fake_vectors(monkeypatch, by_query):
     every other test in the suite, which is the failure the floor itself exists to prevent. The
     floor's own tests stub prom_vector directly and never come through here.
     """
-    monkeypatch.setattr(bridge_config, "CADVISOR_PODS_MIN", 0)
+    monkeypatch.setattr(bridge.config, "CADVISOR_PODS_MIN", 0)
 
     def fake(promql):
         for key, vec in by_query.items():
@@ -220,7 +220,7 @@ def _fake_vectors(monkeypatch, by_query):
                 return vec
         raise AssertionError("unexpected query: %s" % promql)
 
-    monkeypatch.setattr(bridge_io, "prom_vector", fake)
+    monkeypatch.setattr(bridge.net, "prom_vector", fake)
 
 
 def test_check_restarts_names_the_looping_pod(monkeypatch):
@@ -233,7 +233,7 @@ def test_check_restarts_names_the_looping_pod(monkeypatch):
             ]
         },
     )
-    ok, msg = checks_cluster.check_restarts()
+    ok, msg = checks.cluster.check_restarts()
     assert not ok and "n8n-abc" in msg
 
 
@@ -241,7 +241,7 @@ def test_check_restarts_quiet_is_up(monkeypatch):
     _fake_vectors(
         monkeypatch, {"container_start_time_seconds": [({"pod": "quiet"}, 1.0)]}
     )
-    ok, _ = checks_cluster.check_restarts()
+    ok, _ = checks.cluster.check_restarts()
     assert ok
 
 
@@ -249,14 +249,14 @@ def test_check_oom_names_the_killed_pod(monkeypatch):
     _fake_vectors(
         monkeypatch, {"container_oom_events_total": [({"pod": "karakeep-x"}, 2.0)]}
     )
-    ok, msg = checks_cluster.check_oom()
+    ok, msg = checks.cluster.check_oom()
     assert not ok and "karakeep-x" in msg
 
 
 def test_check_cpu_throttle_needs_both_gates_and_streak(monkeypatch):
     # 90% throttled AND real cores lost — but only pages on the CPU_CONSECUTIVE-th
     # consecutive breaching cycle.
-    checks_cluster._cpu_breach_streak = 0
+    checks.cluster._cpu_breach_streak = 0
     _fake_vectors(
         monkeypatch,
         {
@@ -264,17 +264,17 @@ def test_check_cpu_throttle_needs_both_gates_and_streak(monkeypatch):
             "container_cpu_cfs_throttled_seconds_total": [({"pod": "tdarr-y"}, 0.5)],
         },
     )
-    for _ in range(bridge_config.CPU_CONSECUTIVE - 1):
-        ok, msg = checks_cluster.check_cpu_throttle()
+    for _ in range(bridge.config.CPU_CONSECUTIVE - 1):
+        ok, msg = checks.cluster.check_cpu_throttle()
         assert ok and "tdarr-y" in msg  # named but not paging yet
-    ok, msg = checks_cluster.check_cpu_throttle()
+    ok, msg = checks.cluster.check_cpu_throttle()
     assert not ok and "tdarr-y" in msg
-    checks_cluster._cpu_breach_streak = 0
+    checks.cluster._cpu_breach_streak = 0
 
 
 def test_check_cpu_throttle_tiny_loss_stays_up(monkeypatch):
     # High ratio but negligible absolute cores lost — the volume floor gates it out.
-    checks_cluster._cpu_breach_streak = 0
+    checks.cluster._cpu_breach_streak = 0
     _fake_vectors(
         monkeypatch,
         {
@@ -282,7 +282,7 @@ def test_check_cpu_throttle_tiny_loss_stays_up(monkeypatch):
             "container_cpu_cfs_throttled_seconds_total": [({"pod": "sidecar"}, 0.0001)],
         },
     )
-    ok, _ = checks_cluster.check_cpu_throttle()
+    ok, _ = checks.cluster.check_cpu_throttle()
     assert ok
 
 
@@ -313,9 +313,9 @@ def test_run_once_up_probe_failure_does_not_suppress(monkeypatch):
         raise RuntimeError("prom hiccup")
 
     ran, pushes = [], []
-    monkeypatch.setattr(bridge_io, "push", lambda t, ok, m: pushes.append((t, ok, m)))
+    monkeypatch.setattr(bridge.net, "push", lambda t, ok, m: pushes.append((t, ok, m)))
     monkeypatch.setattr(check, "check_prometheus", lambda: (True, "prom ok"))
-    monkeypatch.setattr(bridge_io, "prom_vector", boom)
+    monkeypatch.setattr(bridge.net, "prom_vector", boom)
     monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset({"disk"}))
     monkeypatch.setattr(check, "check_loki_reachable", lambda: (True, "loki ok"))
 

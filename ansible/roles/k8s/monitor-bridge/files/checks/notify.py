@@ -1,10 +1,10 @@
 """Notification-path checks for monitor-bridge — Discord webhook delivery and the SMTP backstop.
 
-Slice 7 of the check.py split. Reads config as `cfg.X`, the fetch layer as `bridge_io.X` and
-the shared streak counter as `bridge_streaks.X`, so the tests' patches on those modules reach
+Slice 7 of the check.py split. Reads config as `cfg.X`, the fetch layer as `bridge.net.X` and
+the shared streak counter as `bridge.streaks.X`, so the tests' patches on those modules reach
 it; `discord_webhook_ok` is from-imported and patched on THIS module, where it is bound.
 `_email_probe` lives here beside `email_backstop`, the only code that mutates it. Rule and
-enforcement: bridge_config.py's header.
+enforcement: bridge/config.py's header.
 """
 
 import smtplib
@@ -12,11 +12,11 @@ import ssl
 import time
 import urllib.error
 
-import bridge_config as cfg
-import bridge_io
-import bridge_streaks
-from bridge_common import HTTP_TIMEOUT
-from verdicts_service import discord_webhook_ok
+import bridge.config as cfg
+import bridge.net
+import bridge.streaks
+from bridge.common import HTTP_TIMEOUT
+from verdicts.service import discord_webhook_ok
 
 
 def _discord_webhooks():
@@ -109,7 +109,7 @@ def check_discord():
     ok, msg, valid = True, "", []
     for label, url in webhooks:
         try:
-            data = bridge_io._get_json(url)
+            data = bridge.net._get_json(url)
             w_ok, w_msg = discord_webhook_ok(200, (data or {}).get("name"))
         except urllib.error.HTTPError as e:
             w_ok, w_msg = discord_webhook_ok(e.code)
@@ -128,10 +128,10 @@ def check_discord():
         else:
             ok, msg = False, e_msg
     if ok:
-        bridge_streaks._down_streaks["discord"] = 0
+        bridge.streaks._down_streaks["discord"] = 0
         return True, "delivery channels valid (%s)" % ", ".join(valid)
-    bridge_streaks._down_streaks["discord"], ok, msg = bridge_streaks.down_streak(
-        bridge_streaks._down_streaks.get("discord", 0),
+    bridge.streaks._down_streaks["discord"], ok, msg = bridge.streaks.down_streak(
+        bridge.streaks._down_streaks.get("discord", 0),
         cfg.DISCORD_CONSECUTIVE,
         msg,
         "transient grace",

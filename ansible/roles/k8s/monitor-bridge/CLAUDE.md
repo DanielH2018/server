@@ -202,7 +202,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     `roles/k8s/crowdsec/templates/crowdsec-appsec-verify.sh.j2`.
   - **Disk Autoprune** — RETIRED at the Docker uninstall (2026-08-14), with no successor. The
     cron pruned daniel-server's Docker daemon, which no longer exists; containerd's own image GC
-    owns that concern now (`files/bridge_config.py`, the `disk_prune check REMOVED` comment). Root Disk's threshold pager is what is
+    owns that concern now (`files/bridge/config.py`, the `disk_prune check REMOVED` comment). Root Disk's threshold pager is what is
     left on that axis — alerting without remediation, deliberately.
   - **Fake Remux Scan / Fake Remux Replace** — no longer bridge checks. The detector +
     reconciler crons moved to daniel-box with the media stack (2026-08-08, slice 4 B7c;
@@ -842,43 +842,57 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
 
 ## Module layout — and the one rule that governs it
 
-`files/` holds seventeen runtime modules. `check.py` is the entrypoint the Deployment runs and owns
-the `CHECKS` registry, the gate sets and the run loop — nothing else. `bridge_config.py` owns
-the env-derived config; `bridge_io.py` owns fetching and the Kuma push; each `checks_*` module
-owns one domain of `check_*` bodies, mirroring the test file for that domain; the rest hold
-pure logic that takes its inputs as arguments. Design and history of the split:
+`files/` holds `check.py` and three packages: `bridge/` (the plumbing every check shares),
+`checks/` (one module per domain of `check_*` bodies, mirroring the test file for that domain)
+and `verdicts/` (pure logic that takes its inputs as arguments). `check.py` is the entrypoint
+the Deployment runs and owns the `CHECKS` registry, the gate sets and the run loop — nothing
+else. `bridge/config.py` owns the env-derived config; `bridge/net.py` owns fetching and the
+Kuma push. A module imports a sibling by package (`from bridge import config as cfg`,
+`from checks.b2 import check_b2_storage`), which resolves because `/app` — where the pod
+mounts the ConfigMap — is `sys.path[0]` for `python /app/check.py`, and under pytest because
+`files/` is on `pythonpath`. There is no `__init__.py`; these are namespace packages like
+every other package in this repo.
+
+**The ConfigMap keys stay flat.** A key cannot contain `/`, so `monitor_bridge_modules` lists
+paths and each ships under the path with `/` replaced by `_`: `checks/b2.py` is key
+`checks_b2.py`. The Deployment's `items:` mounts every key back at its path, and the staging
+copy, the `--from-file` line and that `items:` list all derive from the one list.
+`ansible/tests/services/test_monitor_bridge_mount_layout.py` lays a directory out exactly as
+the rendered `items:` says the kubelet will and imports `check` from it in a fresh
+interpreter — the pod's import graph, proven before a deploy, which pytest's own imports from
+`files/` cannot see. Design and history of the split:
 `docs/superpowers/specs/2026-09-01-monitor-bridge-check-split-design.md` (seven slices, all
 landed 2026-09-01, `check.py` from 3,732 lines to ~510).
 
 | module | holds |
 |---|---|
 | `check.py` | `CHECKS`, the `*_DEPENDENT` gate sets, `STARTUP_GRACE`, `check_enabled`, `apply_startup_grace`, `_gate`, `run_once`, `main` |
-| `checks_service.py` | `check_n8n` with `_n8n_streaks`, `check_arr_queue`, `check_bazarr` with `bazarr_problems`, `check_prowlarr_indexers`, the gitops pair with `gitops_status` and `_parse_behind`, `check_etcd_restore_drill`, `check_ha_heartbeat` with `with_ha_ban` |
-| `checks_notify.py` | `check_discord` with `_discord_webhooks`, `email_backstop` with `_smtp_login_ok` and `_email_probe` |
-| `checks_logs.py` | `check_loki_ingestion`, `check_promtail_dropped`, `check_loki_reachable`, `with_log_errors` (the Loki arm `check_k8s_workloads` folds in) |
-| `checks_cluster.py` | the cAdvisor trio `check_restarts` / `check_oom` / `check_cpu_throttle` with `_cadvisor_blind`, `_cadvisor_streaks` and `_cpu_breach_streak`; `check_prometheus`, `check_targets_down`, `check_traefik_5xx`, `check_traefik_latency`, `check_k8s_workloads`, `check_cluster_targets`, `check_cluster_prometheus` |
-| `checks_host.py` | `check_disk`, `check_cert`, `check_mem` and the `_host_origin_shortfall` floor with `_host_origin_streaks`; `check_host_temp`, `check_scrutiny`, `check_ups`, `check_pi_pressure` with `with_pi_ports`, `check_speedtest` with `speedtest_verdict` |
-| `checks_b2.py` | the `b2_*` family with `check_b2_reachable` (the `B2_DEPENDENT` gate) and `check_b2_storage`, and the probe caches `_b2_probe` / `_b2_storage` |
-| `checks_r2.py` | the `r2_*` family with `check_r2_usage`, `R2_QUERY`, and `_r2_probe` |
-| `checks_storage.py` | `check_longhorn_volumes`, `check_pvc_fullness` — the cluster storage layer |
-| `bridge_config.py` | every `_env(...)` constant — thresholds, URLs, credentials, windows — with the commentary that justifies each value. Read as `cfg.X`, never from-imported |
-| `bridge_io.py` | `_get_json`, `_post_json`, `prom_scalar`, `prom_vector`, the `loki_*` queries, `push`, and the selector builders (`origin_sel`, `cadvisor_sel`, `host_metric_sel`). Read as `bridge_io.X`; the tests stub the fetch layer here |
-| `bridge_streaks.py` | `_down_streaks` and `down_streak` — the consecutive-down counter four domains share. `conftest.py` clears it here |
-| `bridge_common.py` | `_env`, `sanitize` — the two helpers shared verbatim with autofix-bridge's `autofix.py`, staged into that role's ConfigMap too (see its CLAUDE.md) |
-| `bridge_parsing.py` | duration/timestamp parsing, `endpoint_label`, `describe_fetch_failure` |
-| `verdicts_cluster.py` | `k8s_workloads_verdict`, `extended_resource_verdict`, `ksm_resource_label`, `targets_verdict` |
-| `verdicts_host.py` | `ups_health`, the `scrutiny_*` family, `pi_pressure` |
-| `verdicts_service.py` | n8n streaks, `queue_warnings`, `indexers_down`, `gitops_alive`, the HA/Loki/Discord verdicts |
+| `checks/service.py` | `check_n8n` with `_n8n_streaks`, `check_arr_queue`, `check_bazarr` with `bazarr_problems`, `check_prowlarr_indexers`, the gitops pair with `gitops_status` and `_parse_behind`, `check_etcd_restore_drill`, `check_ha_heartbeat` with `with_ha_ban` |
+| `checks/notify.py` | `check_discord` with `_discord_webhooks`, `email_backstop` with `_smtp_login_ok` and `_email_probe` |
+| `checks/logs.py` | `check_loki_ingestion`, `check_promtail_dropped`, `check_loki_reachable`, `with_log_errors` (the Loki arm `check_k8s_workloads` folds in) |
+| `checks/cluster.py` | the cAdvisor trio `check_restarts` / `check_oom` / `check_cpu_throttle` with `_cadvisor_blind`, `_cadvisor_streaks` and `_cpu_breach_streak`; `check_prometheus`, `check_targets_down`, `check_traefik_5xx`, `check_traefik_latency`, `check_k8s_workloads`, `check_cluster_targets`, `check_cluster_prometheus` |
+| `checks/host.py` | `check_disk`, `check_cert`, `check_mem` and the `_host_origin_shortfall` floor with `_host_origin_streaks`; `check_host_temp`, `check_scrutiny`, `check_ups`, `check_pi_pressure` with `with_pi_ports`, `check_speedtest` with `speedtest_verdict` |
+| `checks/b2.py` | the `b2_*` family with `check_b2_reachable` (the `B2_DEPENDENT` gate) and `check_b2_storage`, and the probe caches `_b2_probe` / `_b2_storage` |
+| `checks/r2.py` | the `r2_*` family with `check_r2_usage`, `R2_QUERY`, and `_r2_probe` |
+| `checks/storage.py` | `check_longhorn_volumes`, `check_pvc_fullness` — the cluster storage layer |
+| `bridge/config.py` | every `_env(...)` constant — thresholds, URLs, credentials, windows — with the commentary that justifies each value. Read as `cfg.X`, never from-imported |
+| `bridge/net.py` | `_get_json`, `_post_json`, `prom_scalar`, `prom_vector`, the `loki_*` queries, `push`, and the selector builders (`origin_sel`, `cadvisor_sel`, `host_metric_sel`). Read as `bridge.net.X`; the tests stub the fetch layer here |
+| `bridge/streaks.py` | `_down_streaks` and `down_streak` — the consecutive-down counter four domains share. `conftest.py` clears it here |
+| `bridge/common.py` | `_env`, `sanitize` — the two helpers shared verbatim with autofix-bridge's `autofix.py`, staged into that role's ConfigMap too (see its CLAUDE.md) |
+| `bridge/parsing.py` | duration/timestamp parsing, `endpoint_label`, `describe_fetch_failure` |
+| `verdicts/cluster.py` | `k8s_workloads_verdict`, `extended_resource_verdict`, `ksm_resource_label`, `targets_verdict` |
+| `verdicts/host.py` | `ups_health`, the `scrutiny_*` family, `pi_pressure` |
+| `verdicts/service.py` | n8n streaks, `queue_warnings`, `indexers_down`, `gitops_alive`, the HA/Loki/Discord verdicts |
 
 `gitops_status` is the one verdict that lives in a `checks_*` module rather than in
-`verdicts_service.py`, because it reads `cfg.GITOPS_BEHIND_MAX_S` itself; `gitops_alive` takes
+`verdicts/service.py`, because it reads `cfg.GITOPS_BEHIND_MAX_S` itself; `gitops_alive` takes
 its threshold as an argument. Its private helper `_parse_behind` sits beside it, so the only
 caller and the helper stay together.
 
 **A test patches the module that READS the name, and a module reads a patched name qualified.**
 A function reads its globals from the module it is DEFINED in. So a test that stubs a threshold
-patches `bridge_config.X`, and the check that reads it does so as `cfg.X` at call time; a
-`from bridge_config import X` would copy the value into the importer's globals at import time
+patches `bridge.config.X`, and the check that reads it does so as `cfg.X` at call time; a
+`from bridge.config import X` would copy the value into the importer's globals at import time
 and the patch would change nothing that runs. The same holds for every runtime module: patch
 `check.CHECKS` because `run_once` reads it there, patch a verdict on the module that from-imports
 it. Getting this wrong is silent — the setattr succeeds, creating an attribute nothing reads,
@@ -892,12 +906,12 @@ and the test passes against unpatched production code — which is why two tests
 Until 2026-09-01 the rule was the inverse — a function could leave `check.py` only if nothing
 patched it — and that capped `check.py` near 2,500 lines, because every `check_*` reads
 `_get_json` or a threshold. The two tests that `importlib.reload()` to re-derive `PROM_ORIGIN`
-from the environment now reload `bridge_config`, the module whose body derives it.
+from the environment now reload `bridge.config`, the module whose body derives it.
 
-`bridge_common.py` answers to the same rule twice over: it's imported by `check.py` like the
+`bridge/common.py` answers to the same rule twice over: it's imported by `check.py` like the
 other split modules, AND it's imported by autofix-bridge's `autofix.py`, whose own suite
 (`test_autofix.py`) patches `push` and `_request` directly. `_env`/`sanitize` are the only two
-helpers that clear both bars — see `bridge_common.py`'s own header for the full account of what
+helpers that clear both bars — see `bridge/common.py`'s own header for the full account of what
 was considered and rejected (`log`, `push`, `touch_heartbeat`, the urllib wrapper, each file's
 `main()`).
 
@@ -905,8 +919,9 @@ Mutable per-check state (`_n8n_streaks`, `_cadvisor_streaks`, `_host_origin_stre
 with the code that mutates it, not with the thresholds it pairs with. `_down_streaks` is the
 exception only because four domains mutate it, so it has a module of its own.
 
-**Adding a module means adding it to `monitor_bridge_modules`** in `defaults/main.yml` — the
-ConfigMap ships exactly that list, and a module missing from it kills the pod at import with
+**Adding a module means adding its path to `monitor_bridge_modules`** in `defaults/main.yml`
+(`checks/newdomain.py`, not a bare name) — the ConfigMap ships exactly that list, and a module
+missing from it kills the pod at import with
 `ModuleNotFoundError` on its next roll, on the one workload that cannot page about its own
 failure. pytest cannot catch that: it imports from `files/` on disk and never reads the list.
 `ansible/tests/services/test_monitor_bridge_modules.py` is what does.
