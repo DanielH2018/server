@@ -376,9 +376,12 @@ def test_resolve_vars_expands_through_a_list_of_dicts():
 
 
 def test_resolve_vars_leaves_a_brace_free_value_alone():
-    """The accepting half: expansion must not rewrite values that held no template, and must
-    not coerce non-strings. A recursive walk that stringified as it went would pass the three
-    tests above and quietly turn every int and bool in the inventory into text."""
+    """The accepting half:
+
+    expansion must not rewrite values that held no template, and must not coerce non-strings. A
+    recursive walk that stringified as it went would pass the three tests above and quietly turn
+    every int and bool in the inventory into text.
+    """
     values = {"ports": [80, 443], "on": True, "names": ["homelab"], "nested": {"n": 1}}
     assert vkm.resolve_vars(dict(values), {}) == values
 
@@ -387,10 +390,12 @@ def test_resolve_vars_leaves_a_brace_free_value_alone():
 
 
 def test_a_role_default_that_shadows_an_inventory_key_is_flagged():
-    """The rejecting half. `{**base, **role_defaults(...)}` ranks role defaults ABOVE the
-    group_vars and host_vars in `base`, which is the reverse of Ansible's own precedence — so a
-    shared key renders a value no deploy would produce, while staying valid YAML and passing the
-    schema check."""
+    """The rejecting half.
+
+    `{**base, **role_defaults(...)}` ranks role defaults ABOVE the group_vars and host_vars in
+    `base`, which is the reverse of Ansible's own precedence — so a shared key renders a value no
+    deploy would produce, while staying valid YAML and passing the schema check.
+    """
     assert vkm.colliding_default_keys(
         {"crowdsec_k8s_image": "role-value", "own_key": 1},
         {"crowdsec_k8s_image": "inventory-value", "other": 2},

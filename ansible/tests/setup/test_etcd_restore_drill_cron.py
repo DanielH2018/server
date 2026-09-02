@@ -148,9 +148,11 @@ def test_the_cadence_is_weekly_and_clear_of_every_backup_window() -> None:
 
 
 def test_the_scripts_ordering_note_still_matches_reality() -> None:
-    """The script's DECIDED block sequenced cron-then-reader. The cron now exists, so the block
-    must no longer claim the drill is never scheduled — a stale precondition is how the next
-    reviewer re-derives a closed decision."""
+    """The script's DECIDED block sequenced cron-then-reader.
+
+    The cron now exists, so the block must no longer claim the drill is never scheduled — a stale
+    precondition is how the next reviewer re-derives a closed decision.
+    """
     header = DRILL.read_text()
     assert "never deployed to a cron target" not in header, (
         "the drill IS now scheduled by health-crons.yml; leaving that claim in place would tell "

@@ -47,9 +47,12 @@ def _test_files():
 
 
 def _patched_pairs(test_sources, module_names):
-    """{module: {name}} for every attribute of a runtime module a test assigns, patches, or
-    mutates in place. An AST walk, not a grep: a wrapped `monkeypatch.setattr(` and a plain
-    `mod.X = ...` assignment both count."""
+    """{module:
+
+    {name}} for every attribute of a runtime module a test assigns, patches, or mutates in place. An
+    AST walk, not a grep: a wrapped `monkeypatch.setattr(` and a plain `mod.X = ...` assignment both
+    count.
+    """
     pairs = {}
 
     def _add(module, name):
@@ -89,8 +92,11 @@ def _patched_pairs(test_sources, module_names):
 
 
 def _defined_names(source):
-    """Names a module DEFINES at top level: def, class, assignment. Imports do not count —
-    that is the whole difference from the monitor-bridge guard, and what makes a facade fail."""
+    """Names a module DEFINES at top level:
+
+    def, class, assignment. Imports do not count — that is the whole difference from the
+    monitor-bridge guard, and what makes a facade fail.
+    """
     defined = set()
     for node in ast.parse(source).body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
@@ -173,8 +179,11 @@ def test_no_runtime_module_from_imports_a_name_a_test_patches_elsewhere():
 
 
 def test_the_facade_defines_nothing():
-    """deploy_logic.py is an index. A def added there is a def the two rules above cannot
-    place, and the first step back toward one 1.4k-line module."""
+    """deploy_logic.py is an index.
+
+    A def added there is a def the two rules above cannot place, and the first step back toward one
+    1.4k-line module.
+    """
     assert _defined_names((FILES / "deploy_logic.py").read_text()) == set()
 
 

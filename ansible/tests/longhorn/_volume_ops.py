@@ -20,8 +20,10 @@ from _helpers import load_tasks
 
 
 def assert_every_api_call_pins_a_single_status_code(claim_path: Path) -> None:
-    """A range accepts a 2xx that did not do the work. Longhorn answers a successful action
-    with 200, so 200 is what each call demands."""
+    """A range accepts a 2xx that did not do the work.
+
+    Longhorn answers a successful action with 200, so 200 is what each call demands.
+    """
     for task in load_tasks(claim_path):
         uri = task.get("ansible.builtin.uri")
         if uri is None:

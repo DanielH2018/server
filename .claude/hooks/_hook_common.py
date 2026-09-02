@@ -4,7 +4,8 @@
 Both hooks run standalone under the repo's uv python with the hooks dir as ``sys.path[0]`` (the
 ``exec uv run ... python .../X.py`` shim), and the test suite loads each hook by path from this same
 dir, so a plain ``from _hook_common import ...`` resolves in both. Stdlib-only — the hooks must stay
-dependency-free."""
+dependency-free.
+"""
 
 from __future__ import annotations
 
@@ -18,7 +19,8 @@ def split_stages(command: str) -> list[list[str]]:
     A hook that only inspected the first word would miss `git fetch && gh run watch`, which is
     how these calls are usually written. Unbalanced quotes return no stages: there is nothing
     reliable to match on, and a hook that guesses at a command it cannot parse is worse than
-    one that declines to judge it."""
+    one that declines to judge it.
+    """
     try:
         words = shlex.split(command)
     except ValueError:
@@ -75,7 +77,8 @@ def invokes(stage: list[str], prefix: tuple[str, ...]) -> bool:
     `gh run watch` and `gh --repo o/r run watch` are the same command. Dropping every flag
     instead would drop a flag's VALUE with it (`--repo o/r` leaves a bare `o/r` that shifts
     every position), so the subcommand words are matched as an adjacent run anywhere after the
-    binary — which also keeps `gh issue list --search run --label watch` from matching."""
+    binary — which also keeps `gh issue list --search run --label watch` from matching.
+    """
     if not stage or stage[0] != prefix[0]:
         return False
     words, rest = list(prefix[1:]), stage[1:]
@@ -88,7 +91,8 @@ def short_flags(stage: list[str]) -> set[str]:
     """Every single-letter flag in `stage`, unbundled.
 
     `-lZ` is `-l` and `-Z`, and a hook that only compared whole arguments to `-Z` would miss
-    the bundled form — which is the form the ugrep incident was actually written in."""
+    the bundled form — which is the form the ugrep incident was actually written in.
+    """
     letters: set[str] = set()
     for word in stage:
         if word.startswith("-") and not word.startswith("--") and len(word) > 1:
@@ -102,7 +106,8 @@ def emit_permissionrequest_allow() -> None:
     Separate from the PreToolUse decision below because the two events sit at different points
     in the permission pipeline. Claude Code evaluates ``ask`` rules regardless of what a
     PreToolUse hook returns, so a command covered by one (``Bash(ssh:*)``) is only ever
-    resolved by a hook on this event, which runs as part of that prompt."""
+    resolved by a hook on this event, which runs as part of that prompt.
+    """
     print(
         json.dumps(
             {

@@ -6,8 +6,11 @@ from ansible.errors import AnsibleFilterError
 
 
 def _tags(container):
-    """Effective deploy tags for a containers_list entry: defaults to [name] so
-    host_vars don't have to repeat `tags: [<name>]`; an explicit `tags:` overrides."""
+    """Effective deploy tags for a containers_list entry:
+
+    defaults to [name] so host_vars don't have to repeat `tags: [<name>]`; an explicit `tags:`
+    overrides.
+    """
     return container.get("tags", [container["name"]])
 
 

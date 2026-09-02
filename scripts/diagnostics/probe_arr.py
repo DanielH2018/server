@@ -28,9 +28,12 @@ ARR_API_VERSION = {"sonarr": "v3", "radarr": "v3", "prowlarr": "v1"}
 
 
 def arr_url(ip, app, path):
-    """Build an *arr API URL. Normalizes a leading `/`, an `api/` prefix, and a
-    redundant version segment so `health`, `/health`, `api/v3/health`, and
-    `v3/health` all resolve to the app's correct `/api/<ver>/health`."""
+    """Build an *arr API URL.
+
+    Normalizes a leading `/`, an `api/` prefix, and a redundant version segment so `health`,
+    `/health`, `api/v3/health`, and `v3/health` all resolve to the app's correct
+    `/api/<ver>/health`.
+    """
     ver = ARR_API_VERSION[app]
     p = path.lstrip("/")
     if p.startswith("api/"):
@@ -74,7 +77,8 @@ def run_arr(ns):
     run time) via kubectl instead of docker — see the comment above ARR_PORTS for why
     this talks to the Service directly instead of going through k8s_endpoint like every
     other cluster subcommand. Pulls <app>_api_key from SOPS and passes it via stdin.
-    Pretty-prints JSON by default; `--json` prints the raw response."""
+    Pretty-prints JSON by default; `--json` prints the raw response.
+    """
     if ns.dry_run:
         print(
             " ".join(ha_curl_argv(arr_url("<arr-clusterip>", ns.app, ns.path)))

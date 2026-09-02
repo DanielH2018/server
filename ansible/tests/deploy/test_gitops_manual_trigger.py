@@ -165,12 +165,14 @@ def test_lock_contention_exit_code_is_one_contract_across_all_three_readers():
 
 
 def test_wrapper_stops_watching_a_joined_run_when_it_ends():
-    """A tick already in flight is JOINED, not duplicated. The wait loop then needs a way to
-    notice that run ending: it breaks on `ExecMainStartTimestampMonotonic != started_before`,
-    and for a joined run `started_before` IS that run's stamp, so the loop could only exit at
-    its deadline. land.sh sat through the full 540s watch cap on 2026-09-01 for a broad tick
-    another session's merge had started, and read the timeout as a failure. Joining must
-    reset the stamp so the state check alone ends the wait."""
+    """A tick already in flight is JOINED, not duplicated.
+
+    The wait loop then needs a way to notice that run ending: it breaks on
+    `ExecMainStartTimestampMonotonic != started_before`, and for a joined run `started_before` IS
+    that run's stamp, so the loop could only exit at its deadline. land.sh sat through the full 540s
+    watch cap on 2026-09-01 for a broad tick another session's merge had started, and read the
+    timeout as a failure. Joining must reset the stamp so the state check alone ends the wait.
+    """
     wrapper = _WRAPPER.read_text()
     join = re.search(
         r'if \[\[ "\$\(show ActiveState\)" == "activating" \]\]; then(.*?)\nelse',

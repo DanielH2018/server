@@ -45,17 +45,22 @@ _GENERATED_DOC_TREES = (
 
 
 def is_sops_encrypted(text):
-    """True iff text is a SOPS-encrypted document. Keys off the structural integrity
-    MAC field in the sops metadata block (a `mac:` line whose value is AES256-GCM
-    ciphertext) rather than the bare marker substring — so a file that merely mentions
-    the marker (docs, tests, this progress log) is not misclassified as ciphertext."""
+    """True iff text is a SOPS-encrypted document.
+
+    Keys off the structural integrity MAC field in the sops metadata block (a `mac:` line whose
+    value is AES256-GCM ciphertext) rather than the bare marker substring — so a file that merely
+    mentions the marker (docs, tests, this progress log) is not misclassified as ciphertext.
+    """
     return bool(_SOPS_MAC_RE.search(text))
 
 
 def _read_file(path, limit=1_048_576):
-    """Read a file's text for marker detection. SOPS keeps its integrity MAC in the
-    metadata block at the END of the file, so we read the whole thing (capped — a real
-    secrets file is small; anything over the cap is not one). Missing/binary -> ''."""
+    """Read a file's text for marker detection.
+
+    SOPS keeps its integrity MAC in the metadata block at the END of the file, so we read the whole
+    thing (capped — a real secrets file is small; anything over the cap is not one). Missing/binary
+    -> ''.
+    """
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             return f.read(limit)

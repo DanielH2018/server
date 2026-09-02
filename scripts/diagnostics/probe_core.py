@@ -31,8 +31,10 @@ def ha_host():
 
 
 def ha_resolve():
-    """curl --resolve pin for ha_host() → the MetalLB ingress VIP (same reason as
-    k8s_endpoint: the host shell's answer for the name is not the cluster edge)."""
+    """curl --resolve pin for ha_host() → the MetalLB ingress VIP (same reason as k8s_endpoint:
+
+    the host shell's answer for the name is not the cluster edge).
+    """
     return f"{ha_host()}:443:{metallb_vip()}"
 
 
@@ -50,10 +52,12 @@ def metallb_vip():
 
 
 def k8s_endpoint(hostname):
-    """(base_url, curl --resolve pin) for a cluster route. This host's resolver bypasses
-    the LAN DNS, so a `.local` name does not resolve to the cluster edge from a shell
-    here; curl pins it to the MetalLB ingress VIP instead. Containers get the right
-    answer from Pi-hole and need no pin."""
+    """(base_url, curl --resolve pin) for a cluster route.
+
+    This host's resolver bypasses the LAN DNS, so a `.local` name does not resolve to the cluster
+    edge from a shell here; curl pins it to the MetalLB ingress VIP instead. Containers get the
+    right answer from Pi-hole and need no pin.
+    """
     host = f"{hostname}.local.{sops_extract('domain')}"
     return f"https://{host}", f"{host}:443:{metallb_vip()}"
 
@@ -208,9 +212,11 @@ def fetch(url, resolve=None):
 
 
 def fetch_json(url, resolve=None):
-    """fetch(url) parsed as JSON. Returns (data, None) on success, or (None, 1) after
-    printing the raw body — the JSONDecodeError guard a plain `core.fetch()` call
-    needs before its response can be trusted as JSON."""
+    """fetch(url) parsed as JSON.
+
+    Returns (data, None) on success, or (None, 1) after printing the raw body — the JSONDecodeError
+    guard a plain `core.fetch()` call needs before its response can be trusted as JSON.
+    """
     body = fetch(url, resolve=resolve)
     try:
         return json.loads(body), None
@@ -243,8 +249,10 @@ def k8s_namespace():
 
 
 def sops_extract(key_name):
-    """Decrypt a single top-level key from the SOPS secrets file. Requires the
-    host's age key (present on daniel-server)."""
+    """Decrypt a single top-level key from the SOPS secrets file.
+
+    Requires the host's age key (present on daniel-server).
+    """
     out = subprocess.run(
         ["sops", "-d", "--extract", f'["{key_name}"]', SECRETS_PATH],
         capture_output=True,
@@ -270,8 +278,11 @@ def _rows_from_loki(data: dict) -> list[tuple[int, str]]:
 
 
 def ha_curl_argv(url, timeout=DEFAULT_TIMEOUT, resolve=None):
-    """curl argv for an HA GET. The bearer header is fed via stdin (`--config -`,
-    see ha_curl_config), so the token NEVER appears in argv / `ps` / shell history."""
+    """curl argv for an HA GET.
+
+    The bearer header is fed via stdin (`--config -`, see ha_curl_config), so the token NEVER
+    appears in argv / `ps` / shell history.
+    """
     argv = ["curl", "-sS", "--max-time", str(timeout), "--config", "-"]
     if resolve:
         argv += ["--resolve", resolve]
@@ -279,8 +290,10 @@ def ha_curl_argv(url, timeout=DEFAULT_TIMEOUT, resolve=None):
 
 
 def config_get(url, config_body, resolve=None):
-    """Authenticated GET whose auth header is fed via curl `--config -` stdin
-    (never argv). Returns the response body."""
+    """Authenticated GET whose auth header is fed via curl `--config -` stdin (never argv).
+
+    Returns the response body.
+    """
     out = subprocess.run(
         ha_curl_argv(url, resolve=resolve),
         input=config_body,

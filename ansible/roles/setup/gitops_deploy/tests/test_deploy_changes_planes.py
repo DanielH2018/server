@@ -223,9 +223,11 @@ def test_a_manual_path_bundled_with_an_auto_one_stays_manual():
 
 
 def test_setup_tag_derivation_rejects_a_playbook_path():
-    """An empty set means "cannot be applied automatically". Returning a bogus tag would
-    be worse than nothing: `--tags` matching nothing makes Ansible exit 0, so the deployer
-    would report a successful apply having done nothing at all."""
+    """An empty set means "cannot be applied automatically".
+
+    Returning a bogus tag would be worse than nothing: `--tags` matching nothing makes Ansible exit
+    0, so the deployer would report a successful apply having done nothing at all.
+    """
     assert setup_tags_for(["ansible/bootstrap.yml"]) == set()
 
 
@@ -440,8 +442,11 @@ def test_a_playbook_added_or_deleted_in_the_range_stays_broad():
 
 
 def test_a_comment_only_edit_outside_the_manual_set_is_not_reported():
-    """Only the manual set is read: the other planes have their own arms and this function
-    must not widen what the tick fast-forwards past."""
+    """Only the manual set is read:
+
+    the other planes have their own arms and this function must not widen what the tick
+    fast-forwards past.
+    """
     texts = {
         ("old", "ansible/templates/x.j2"): "# a\nb\n",
         ("new", "ansible/templates/x.j2"): "# c\nb\n",
@@ -455,8 +460,11 @@ def test_a_comment_only_edit_outside_the_manual_set_is_not_reported():
 
 
 def test_content_lines_reads_a_real_bringup_playbook_without_losing_tasks():
-    """The block-scalar tracker must not swallow the rest of the file: every `- name:` in the
-    live playbook survives, and the file contains the `>-` scalars the tracker exists for."""
+    """The block-scalar tracker must not swallow the rest of the file:
+
+    every `- name:` in the live playbook survives, and the file contains the `>-` scalars the
+    tracker exists for.
+    """
     text = (_REPO_ROOT / "ansible" / "k3s-bringup.yml").read_text()
     assert ">-" in text
     kept = "\n".join(_content_lines(text))

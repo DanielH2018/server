@@ -278,13 +278,14 @@ def is_merged(repo: str, head: str, branch: str = "") -> bool:
 
 
 def pr_head_says_merged(stdout: str, head: str) -> bool:
-    """Read `gh pr list --state merged --head <branch> --json headRefOid`: True when one of
-    those merged PRs was merged from exactly this commit.
+    """Read `gh pr list --state merged --head <branch> --json headRefOid`:
 
-    Matching on the head SHA, never on "a merged PR exists for this branch name". Branch names
-    are reused here — one session landed three PRs from `worktree-pi-detached-container-arm` on
-    2026-08-27, each with a different tip — so a name match would delete a branch carrying work
-    that never landed. SHA equality is the whole guarantee.
+    True when one of those merged PRs was merged from exactly this commit.
+
+    Matching on the head SHA, never on "a merged PR exists for this branch name". Branch names are
+    reused here — one session landed three PRs from `worktree-pi-detached-container-arm` on
+    2026-08-27, each with a different tip — so a name match would delete a branch carrying work that
+    never landed. SHA equality is the whole guarantee.
     """
     try:
         prs = json.loads(stdout or "[]")
@@ -300,12 +301,14 @@ def is_dirty(path: str) -> bool:
 
 
 def remove(repo: str, tree: Worktree) -> tuple[bool, str]:
-    """Unlock if needed, then remove. Never --force: git's own refusal on a tree with
-    uncommitted or untracked files is the backstop that makes auto-unlock safe here —
-    classify() only marks a locked tree REMOVABLE once session_is_alive() has confirmed the
-    owner is dead, so this never releases a lock a live session still holds. Without the
-    unlock, `git worktree remove` fails outright on a locked tree ("cannot remove a locked
-    working tree") and the whole prune silently no-ops while reporting the tree as removed.
+    """Unlock if needed, then remove.
+
+    Never --force: git's own refusal on a tree with uncommitted or untracked files is the backstop
+    that makes auto-unlock safe here — classify() only marks a locked tree REMOVABLE once
+    session_is_alive() has confirmed the owner is dead, so this never releases a lock a live session
+    still holds. Without the unlock, `git worktree remove` fails outright on a locked tree ("cannot
+    remove a locked working tree") and the whole prune silently no-ops while reporting the tree as
+    removed.
     """
     if tree.locked:
         subprocess.run(

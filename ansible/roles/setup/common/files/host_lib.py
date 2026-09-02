@@ -56,17 +56,20 @@ def atomic_write(path: str, text: str) -> None:
 def discord_post(
     webhook: str, content: str, user_agent: str, log=None, marker: str = ""
 ) -> bool:
-    """POST ``content`` to a Discord ``webhook``. Returns True ONLY on a confirmed 2xx, so a caller
-    can gate a per-SHA dedupe marker/fingerprint on it — a transient failure returning True would
-    advance the marker and permanently suppress that alert. A ``user_agent`` is REQUIRED: Discord is
-    behind Cloudflare, which 403s the default python-urllib UA (error 1010). An empty webhook or any
-    error returns False (so the caller retries next run) and never raises, so alerting can't crash the
-    caller. ``log`` (optional callable) is called with a one-line reason on skip/failure.
+    """POST ``content`` to a Discord ``webhook``.
+
+    Returns True ONLY on a confirmed 2xx, so a caller can gate a per-SHA dedupe marker/fingerprint
+    on it — a transient failure returning True would advance the marker and permanently suppress
+    that alert. A ``user_agent`` is REQUIRED: Discord is behind Cloudflare, which 403s the default
+    python-urllib UA (error 1010). An empty webhook or any error returns False (so the caller
+    retries next run) and never raises, so alerting can't crash the caller. ``log`` (optional
+    callable) is called with a one-line reason on skip/failure.
 
     ``marker`` (optional) is prepended to the posted message so the automation's output is
     self-identifying in a shared channel — the ``user_agent`` is a header-only marker Discord never
     renders. Every automation's Discord message should carry a stable ``<automation>:`` identifier,
-    either via this arg or baked into ``content`` (as gitops_deploy / renovate_notify already do)."""
+    either via this arg or baked into ``content`` (as gitops_deploy / renovate_notify already do).
+    """
     if not webhook:
         if log:
             log("no Discord webhook set; skipping post")

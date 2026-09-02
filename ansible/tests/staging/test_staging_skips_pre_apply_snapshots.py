@@ -91,9 +91,11 @@ def _roles_of(host: str) -> list[str]:
 
 
 def test_the_gate_is_the_one_the_role_actually_carries() -> None:
-    """Pins that the gate still consults the claim list. If someone rewrites the `when:` to
-    read something else, every assertion below would keep passing against a stale idea of
-    what turns the snapshot on."""
+    """Pins that the gate still consults the claim list.
+
+    If someone rewrites the `when:` to read something else, every assertion below would keep passing
+    against a stale idea of what turns the snapshot on.
+    """
     assert any("k8s_autodeploy_snapshot_pvcs" in cond for cond in _snapshot_gate())
 
 
@@ -107,15 +109,20 @@ def test_staging_takes_no_pre_apply_snapshot(role: str) -> None:
 
 
 def test_prod_still_snapshots_freshrss() -> None:
-    """The accepting half. Every staging assertion above is a negative, so without this a
-    gate that had stopped firing anywhere would read entirely green."""
+    """The accepting half.
+
+    Every staging assertion above is a negative, so without this a gate that had stopped firing
+    anywhere would read entirely green.
+    """
     assert snapshot_runs("daniel-box", "freshrss")
 
 
 def test_the_evaluator_reports_true_when_the_gate_holds() -> None:
-    """The rejecting half for the evaluator itself. `snapshot_runs` returns False for any
-    unrenderable or absent condition, so a broken evaluator fails open into exactly the
-    all-green shape the staging tests want. Prod's freshrss above is one real True; this
-    pins that the mechanism, not the host, is what produced it."""
+    """The rejecting half for the evaluator itself.
+
+    `snapshot_runs` returns False for any unrenderable or absent condition, so a broken evaluator
+    fails open into exactly the all-green shape the staging tests want. Prod's freshrss above is one
+    real True; this pins that the mechanism, not the host, is what produced it.
+    """
     assert snapshot_runs("daniel-box", "freshrss") is True
     assert snapshot_runs("daniel-stage", "freshrss") is False

@@ -113,10 +113,12 @@ class Sonarr:
 
 
 def ffprobe(jellyfin: str, ffprobe_bin: str, path: str, args, timeout: int) -> str:
-    """Probe a library file. Returns stdout, or "" on any failure — a probe glitch, a missing
-    binary, or a wrong path SKIPS the file, never flags it. That asymmetry is the whole safety
-    property: this scan seeds a ledger the LIVE reconciler acts on, so a false negative costs one
-    missed fake and a false positive costs a real file.
+    """Probe a library file.
+
+    Returns stdout, or "" on any failure — a probe glitch, a missing binary, or a wrong path SKIPS
+    the file, never flags it. That asymmetry is the whole safety property: this scan seeds a ledger
+    the LIVE reconciler acts on, so a false negative costs one missed fake and a false positive
+    costs a real file.
 
     Two modes, selected by `jellyfin` being set:
 
@@ -126,9 +128,9 @@ def ffprobe(jellyfin: str, ffprobe_bin: str, path: str, args, timeout: int) -> s
       - **docker exec** (jellyfin set): the original daniel-server path, kept so the old host can
         still run this unchanged during the coexistence window.
 
-    In host mode the caller has already mapped Sonarr's `/data` view through
-    `frl.host_path`; under `docker exec` the path was used verbatim, because jellyfin mounted the
-    library at the same `/data/media` Sonarr reports.
+    In host mode the caller has already mapped Sonarr's `/data` view through `frl.host_path`; under
+    `docker exec` the path was used verbatim, because jellyfin mounted the library at the same
+    `/data/media` Sonarr reports.
     """
     argv = (
         [ffprobe_bin, "-v", "error", *args, path]
@@ -147,8 +149,9 @@ def ffprobe(jellyfin: str, ffprobe_bin: str, path: str, args, timeout: int) -> s
 
 
 def probe_candidate(cand, jellyfin, ffprobe_bin, window_s, timeout, host_data_root=""):
-    """Enrich one remux candidate with its ENCODER tag + keyframe times. Returns None when the file
-    couldn't be probed (skipped, not flagged).
+    """Enrich one remux candidate with its ENCODER tag + keyframe times.
+
+    Returns None when the file couldn't be probed (skipped, not flagged).
 
     `cand["path"]` is Sonarr's own `/data/...` view. Under `docker exec jellyfin` that resolved
     unchanged, because jellyfin mounted the library at the same path. Probing on the host does not:
@@ -208,8 +211,11 @@ def write_state(state_file, ok, msg):
 
 
 def scan(cfg):
-    """One full scan. Returns (ok, summary) for the state file. Raises only on a Sonarr failure that
-    prevents the scan running at all (main() records that as ok=false)."""
+    """One full scan.
+
+    Returns (ok, summary) for the state file. Raises only on a Sonarr failure that prevents the scan
+    running at all (main() records that as ok=false).
+    """
     api_key = cfg.get("SONARR_API_KEY", "")
     if not api_key:
         return True, "disabled (no Sonarr API key)"

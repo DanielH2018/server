@@ -16,13 +16,15 @@ from probe_core import (
 
 
 def format_metric(data):
-    """Human view of a Prometheus /api/v1/query result. One `<labels> = <value>`
-    line per series (labels are the metric dict minus __name__); a single
-    label-less series prints just the value, so scalars read cleanly. A matrix
-    (range vector) shows each series' latest point. Empty result -> 'no data'.
+    """Human view of a Prometheus /api/v1/query result.
 
-    Replaces the recurring `… | python3 -c "…[print(r['metric'].get('X'),'=',
-    r['value'][1]) …]"` reshapes."""
+    One `<labels> = <value>` line per series (labels are the metric dict minus __name__); a single
+    label-less series prints just the value, so scalars read cleanly. A matrix (range vector) shows
+    each series' latest point. Empty result -> 'no data'.
+
+    Replaces the recurring `… | python3 -c "…[print(r['metric'].get('X'),'=', r['value'][1]) …]"`
+    reshapes.
+    """
     d = data.get("data") or {}
     result = d.get("result") or []
     if d.get("resultType") == "scalar":  # result = [ts, "val"]
@@ -45,11 +47,13 @@ def format_metric(data):
 
 
 def format_loki(data):
-    """Human view of a Loki query_range result: just the log lines, sorted oldest
-    -> newest across all streams (nanosecond-epoch timestamps), so the newest sits
-    nearest the prompt. Empty result -> 'no logs'.
+    """Human view of a Loki query_range result:
 
-    Replaces the recurring `… | python3 -c "…for v in r['values']: print(v[1])"`."""
+    just the log lines, sorted oldest -> newest across all streams (nanosecond-epoch timestamps), so
+    the newest sits nearest the prompt. Empty result -> 'no logs'.
+
+    Replaces the recurring `… | python3 -c "…for v in r['values']: print(v[1])"`.
+    """
     rows = []
     for stream in (data.get("data") or {}).get("result") or []:
         for ts, line in stream.get("values") or []:
@@ -62,7 +66,9 @@ def format_loki(data):
 
 def run_query(ns):
     """Fetch a metric / loki-query and print the formatted view (the default).
-    `--json` and `--dry-run` never reach here — they take the raw streaming path."""
+
+    `--json` and `--dry-run` never reach here — they take the raw streaming path.
+    """
     if ns.cmd == "metric":
         base, pin = prom_endpoint()
         url = prom_query_url(base, ns.promql)

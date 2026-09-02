@@ -70,12 +70,15 @@ def _minimatch_to_regex(glob: str) -> re.Pattern:
 
 
 def _disabling_currentvalue_rules(package_rules: list[dict]) -> list[dict]:
-    """packageRules that disable a dependency by matching its `currentValue` (e.g. the /^latest$/
-    rule that started this whole guard — see test_every_k8s_role_image_is_renovate_tracked).
+    """packageRules that disable a dependency by matching its `currentValue` (e.g.
 
-    Deliberately excludes package-NAME disables (e.g. influxdb's `matchPackageNames` rule) —
-    those are a targeted, reviewed exemption for one dependency, not a value-shaped trap that can
-    silently swallow a whole class of images the way the currentValue rule did."""
+    the /^latest$/ rule that started this whole guard — see
+    test_every_k8s_role_image_is_renovate_tracked).
+
+    Deliberately excludes package-NAME disables (e.g. influxdb's `matchPackageNames` rule) — those
+    are a targeted, reviewed exemption for one dependency, not a value-shaped trap that can silently
+    swallow a whole class of images the way the currentValue rule did.
+    """
     return [
         r
         for r in package_rules
@@ -91,7 +94,8 @@ def _is_disabled_by_packagerule(
     A rule with no `matchFileNames` applies everywhere; one with `matchFileNames` applies only
     where at least one of its globs matches. This is the check the pre-2026-08-13 disable rule
     lacked scoping for: it matched every `currentValue: latest` regardless of file, silently
-    disabling 13 k8s roles' worth of deliberately digest-pinned images."""
+    disabling 13 k8s roles' worth of deliberately digest-pinned images.
+    """
     for rule in rules:
         if not _slash_regex(rule["matchCurrentValue"]).search(current_value):
             continue

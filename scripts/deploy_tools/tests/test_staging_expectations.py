@@ -53,8 +53,11 @@ def test_the_ical_proxy_404_would_have_been_caught() -> None:
 
 
 def test_a_200_on_a_forward_authed_route_is_a_failure() -> None:
-    """The direction matters. freshrss must redirect; a 200 means the Authelia middleware
-    stopped applying, which is the failure that looks most like success."""
+    """The direction matters.
+
+    freshrss must redirect; a 200 means the Authelia middleware stopped applying, which is the
+    failure that looks most like success.
+    """
     wanted = [("freshrss", "freshrss", "/", 302)]
     assert compare(wanted, {("freshrss", "/"): 200}) == [
         "freshrss: freshrss/ answered 200, expected 302"
@@ -62,8 +65,11 @@ def test_a_200_on_a_forward_authed_route_is_a_failure() -> None:
 
 
 def test_an_unmeasured_expectation_is_a_failure_not_a_skip() -> None:
-    """Silence must never read as a pass. If the probe never ran, the gate has no evidence and
-    must say so rather than counting the expectation as met."""
+    """Silence must never read as a pass.
+
+    If the probe never ran, the gate has no evidence and must say so rather than counting the
+    expectation as met.
+    """
     wanted = [("authelia", "auth", "/", 200)]
     assert compare(wanted, {}) == ["authelia: auth/ was never measured"]
 
@@ -77,8 +83,11 @@ def test_a_curl_failure_is_a_mismatch() -> None:
 
 
 def test_every_routable_staging_service_declares_an_expectation() -> None:
-    """The coverage guard. A service that gains a route, or a new service added to the subset,
-    must not silently join the gate unchecked."""
+    """The coverage guard.
+
+    A service that gains a route, or a new service added to the subset, must not silently join the
+    gate unchecked.
+    """
     missing = missing_expectations()
     assert not missing, (
         f"{missing} are routable on daniel-stage but declare no staging_expect, so the gate "
@@ -87,9 +96,12 @@ def test_every_routable_staging_service_declares_an_expectation() -> None:
 
 
 def test_the_non_routable_services_are_not_demanded() -> None:
-    """Pins the premise of the guard above. node-exporter has no IngressRoute and registry
-    deliberately has none — an ingress would put push access on the LAN. If the derivation
-    started claiming they are routable, the guard would demand expectations that cannot exist."""
+    """Pins the premise of the guard above.
+
+    node-exporter has no IngressRoute and registry deliberately has none — an ingress would put push
+    access on the LAN. If the derivation started claiming they are routable, the guard would demand
+    expectations that cannot exist.
+    """
     routable = routable_services()
     for service in ("node-exporter", "registry"):
         assert service not in routable, (

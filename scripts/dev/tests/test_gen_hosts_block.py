@@ -135,9 +135,11 @@ def test_auth_portal_is_present(real):
 
 
 def test_no_k8s_suffixed_names_remain(real):
-    """The transitional `-k8s` suffix retired 2026-08-15 with the last Docker twin. A name
-    reappearing here means an inventory `hostname:` grew the suffix back, which would emit a
-    hosts entry for a hostname no IngressRoute serves."""
+    """The transitional `-k8s` suffix retired 2026-08-15 with the last Docker twin.
+
+    A name reappearing here means an inventory `hostname:` grew the suffix back, which would emit a
+    hosts entry for a hostname no IngressRoute serves.
+    """
     assert not [fqdn for _, fqdn in real if "-k8s.local." in fqdn]
 
 

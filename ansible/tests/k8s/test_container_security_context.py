@@ -390,12 +390,14 @@ def test_every_container_asserts_non_root_or_is_allowlisted():
 
 
 def _missing_uid_pin(rows):
-    """Containers that assert runAsNonRoot but pin no uid. Pure, for the same reason
-    _root_offenders is: a guard over the live fleet is only ever observed passing.
+    """Containers that assert runAsNonRoot but pin no uid.
 
-    `runAsNonRoot` alone does not pin a uid — see the comment above
-    `_NON_ROOT_BY_IMAGE_DEFAULT` — so a container that asserts it while relying on the
-    image's own USER still passes admission under a different uid after a tag bump.
+    Pure, for the same reason _root_offenders is: a guard over the live fleet is only ever observed
+    passing.
+
+    `runAsNonRoot` alone does not pin a uid — see the comment above `_NON_ROOT_BY_IMAGE_DEFAULT` —
+    so a container that asserts it while relying on the image's own USER still passes admission
+    under a different uid after a tag bump.
     """
     return [
         f"{role}/{tpl}:{name}"

@@ -1,17 +1,19 @@
-"""Guard 2: every `scripts/**/*.py` module with a cross-directory import carries a working
-`sys.path` bootstrap for it.
+"""Guard 2:
 
-Repo-root CLAUDE.md (~:29-40): a directly-invoked script gets only its OWN directory on
-`sys.path`; `pyproject.toml`'s `pythonpath` list is a pytest-only setting. So a module that
-does `from lib.docs_provenance import ...` (or reaches into another `scripts/` subdirectory,
-or across into `ansible/filter_plugins`/a role's `files/`) resolves fine under pytest and then
-raises `ModuleNotFoundError` the moment a cron or a human runs it directly with
-`uv run python scripts/...`. Every such module is supposed to carry its own
-`sys.path.insert(...)` bootstrap rather than rely on pytest's `pythonpath`.
+every `scripts/**/*.py` module with a cross-directory import carries a working `sys.path` bootstrap
+for it.
 
-A bare textual check for the string `parents[1]` cannot tell a real bootstrap from a broken
-one -- this is the *textual-guard-checks-break-on-indirection* class recorded in this repo's
-own memory. Two real modules prove it:
+Repo-root CLAUDE.md (~:29-40): a directly-invoked script gets only its OWN directory on `sys.path`;
+`pyproject.toml`'s `pythonpath` list is a pytest-only setting. So a module that does `from
+lib.docs_provenance import ...` (or reaches into another `scripts/` subdirectory, or across into
+`ansible/filter_plugins`/a role's `files/`) resolves fine under pytest and then raises
+`ModuleNotFoundError` the moment a cron or a human runs it directly with `uv run python
+scripts/...`. Every such module is supposed to carry its own `sys.path.insert(...)` bootstrap rather
+than rely on pytest's `pythonpath`.
+
+A bare textual check for the string `parents[1]` cannot tell a real bootstrap from a broken one --
+this is the *textual-guard-checks-break-on-indirection* class recorded in this repo's own memory.
+Two real modules prove it:
 
   - `scripts/dev/k8s_autodeploy_counts.py` needs `ansible/filter_plugins` (for
     `from k8s_autodeploy import ...`) and bootstraps with `parents[2]`, not `parents[1]` -- a
@@ -23,20 +25,20 @@ own memory. Two real modules prove it:
     way to follow that indirection at all.
 
 So this test resolves the AST instead of grepping for a pattern: for each cross-directory
-`import`/`from ... import ...` (module-level or deferred inside a function -- some modules
-bootstrap once at module level and do the actual import later, lazily, e.g.
-`scripts/docs/gen_reference_hosts.py`), it finds every `sys.path.insert(...)` call reachable
-before that import executes, evaluates what directory each one actually inserts (by walking
-`Path(__file__).resolve().parents[N]`, `/` joins, and simple module-level constants -- crossing
-into another file's own module-level assignment when the value comes from an import, using
-THAT file's `__file__` for any further `parents[N]` arithmetic), and checks that one of them
-resolves to the exact directory the import needs -- not merely that some `sys.path.insert`
-call exists somewhere in the file.
+`import`/`from ... import ...` (module-level or deferred inside a function -- some modules bootstrap
+once at module level and do the actual import later, lazily, e.g.
+`scripts/docs/gen_reference_hosts.py`), it finds every `sys.path.insert(...)` call reachable before
+that import executes, evaluates what directory each one actually inserts (by walking
+`Path(__file__).resolve().parents[N]`, `/` joins, and simple module-level constants -- crossing into
+another file's own module-level assignment when the value comes from an import, using THAT file's
+`__file__` for any further `parents[N]` arithmetic), and checks that one of them resolves to the
+exact directory the import needs -- not merely that some `sys.path.insert` call exists somewhere in
+the file.
 
-What this still cannot catch: an insert built from control flow the evaluator does not model
-(a function call other than `Path`/`str`, an f-string, string concatenation, an `if`-chosen
-path). Those fall through to `None` and are reported as `unresolvable`, not silently passed --
-see `test_no_import_bootstrap_is_unresolvable` below, which currently expects zero.
+What this still cannot catch: an insert built from control flow the evaluator does not model (a
+function call other than `Path`/`str`, an f-string, string concatenation, an `if`-chosen path).
+Those fall through to `None` and are reported as `unresolvable`, not silently passed -- see
+`test_no_import_bootstrap_is_unresolvable` below, which currently expects zero.
 """
 
 from __future__ import annotations

@@ -71,9 +71,11 @@ def test_readonly_role_stays_read_only():
 
 
 def test_the_read_only_check_rejects_a_widened_role():
-    """The guard above only means something if it fails on a role that oversteps. These are
-    the three shapes a widening actually takes — a write verb, a named secret read, and a
-    wildcard that never says "secrets" out loud."""
+    """The guard above only means something if it fails on a role that oversteps.
+
+    These are the three shapes a widening actually takes — a write verb, a named secret read, and a
+    wildcard that never says "secrets" out loud.
+    """
     for rule in (
         {"apiGroups": [""], "resources": ["pods"], "verbs": ["get", "delete"]},
         {"apiGroups": [""], "resources": ["secrets"], "verbs": ["get"]},
@@ -119,8 +121,11 @@ def test_headlamp_cluster_identity_stays_read_only():
 
 
 def test_headlamp_binds_only_to_read_only_cluster_roles():
-    """A roleRef pointing anywhere else routes around the rule audit above. Upstream's Helm
-    chart binds `cluster-admin` — copying a fragment of it back in is the realistic mistake."""
+    """A roleRef pointing anywhere else routes around the rule audit above.
+
+    Upstream's Helm chart binds `cluster-admin` — copying a fragment of it back in is the realistic
+    mistake.
+    """
     allowed = {"view", "headlamp-cluster-read"}
     bindings = [d for d in _headlamp_rbac_docs() if d["kind"] == "ClusterRoleBinding"]
     assert bindings, "no ClusterRoleBinding rendered"
@@ -130,10 +135,12 @@ def test_headlamp_binds_only_to_read_only_cluster_roles():
 
 
 def test_headlamp_keeps_its_serviceaccount_token_mounted():
-    """The flag that removes the token prompt reads the projected SA token. Setting
-    automountServiceAccountToken false — or omitting serviceAccountName, which silently falls
-    back to the namespace `default` SA with no permissions — leaves a dashboard that loads,
-    authenticates nobody, and shows an empty cluster."""
+    """The flag that removes the token prompt reads the projected SA token.
+
+    Setting automountServiceAccountToken false — or omitting serviceAccountName, which silently
+    falls back to the namespace `default` SA with no permissions — leaves a dashboard that loads,
+    authenticates nobody, and shows an empty cluster.
+    """
     doc = yaml.safe_load(
         _render(
             K8S / "headlamp" / "templates" / "deployment.yaml.j2",
@@ -149,10 +156,12 @@ def test_headlamp_keeps_its_serviceaccount_token_mounted():
 
 
 def test_homepage_kubernetes_widget_wiring_holds_together():
-    """Three pieces have to agree or the widget renders EMPTY rather than erroring: the config
-    must ask for cluster mode, the pod must name the SA that mode authenticates with, and that
-    SA must be able to read the metrics API. Any one of them missing looks identical from the
-    dashboard — a tile with no numbers, which reads as "nothing to report"."""
+    """Three pieces have to agree or the widget renders EMPTY rather than erroring:
+
+    the config must ask for cluster mode, the pod must name the SA that mode authenticates with, and
+    that SA must be able to read the metrics API. Any one of them missing looks identical from the
+    dashboard — a tile with no numbers, which reads as "nothing to report".
+    """
     role = K8S / "homepage"
     assert "mode: cluster" in (role / "templates" / "kubernetes.yaml.j2").read_text()
 

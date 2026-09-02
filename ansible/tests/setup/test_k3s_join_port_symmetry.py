@@ -71,8 +71,11 @@ def test_agent_side_covers_every_server_side_port_but_the_named_exception():
 
 
 def test_the_server_only_exception_is_still_real():
-    """Guards the exemption itself: if 6443 leaves the server list, SERVER_ONLY is silently
-    excusing a port nobody opens, and the test above weakens without failing."""
+    """Guards the exemption itself:
+
+    if 6443 leaves the server list, SERVER_ONLY is silently excusing a port nobody opens, and the
+    test above weakens without failing.
+    """
     server = _ports("k3s_join_server_ports")
     stale = SERVER_ONLY - server
     assert not stale, (

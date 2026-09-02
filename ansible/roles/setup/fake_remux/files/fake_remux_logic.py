@@ -130,8 +130,11 @@ def encoder_is_reencoder(encoder_tag, markers) -> bool:
 
 
 def max_keyframe_gap(keyframe_times, probe_window_s):
-    """Largest gap (seconds) between consecutive keyframes. With fewer than two keyframes in the
-    probed window the GOP is at least the window length, so return the window itself."""
+    """Largest gap (seconds) between consecutive keyframes.
+
+    With fewer than two keyframes in the probed window the GOP is at least the window length, so
+    return the window itself.
+    """
     times = sorted(t for t in (keyframe_times or []) if t is not None)
     if len(times) < 2:
         return float(probe_window_s)
@@ -145,8 +148,11 @@ def gop_exceeds(keyframe_times, probe_window_s, gop_max_s) -> bool:
 def reencode_evidence(
     quality, encoder, keyframe_times, probe_window_s, gop_max_s, markers
 ):
-    """Why a remux-quality file is really a re-encode, or None if it looks genuine. Encoder tag
-    first (metadata-only, cheapest); GOP is the backstop when a re-encode stripped the tag."""
+    """Why a remux-quality file is really a re-encode, or None if it looks genuine.
+
+    Encoder tag first (metadata-only, cheapest); GOP is the backstop when a re-encode stripped the
+    tag.
+    """
     if not is_remux_quality(quality):
         return None
     if encoder_is_reencoder(encoder, markers):
@@ -186,9 +192,11 @@ def format_fake_line(verb, fake) -> str:
 
 
 def episode_file_map(episodes):
-    """Map episodeFileId -> episodeId for MONITORED episodes only. A fake on an unmonitored episode
-    (e.g. one the operator has already watched and deliberately unmonitored) must not be seeded for
-    replacement, so it is excluded here."""
+    """Map episodeFileId -> episodeId for MONITORED episodes only.
+
+    A fake on an unmonitored episode (e.g. one the operator has already watched and deliberately
+    unmonitored) must not be seeded for replacement, so it is excluded here.
+    """
     out = {}
     for ep in episodes or []:
         fid = ep.get("episodeFileId")

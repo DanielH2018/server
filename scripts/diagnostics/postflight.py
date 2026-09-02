@@ -34,11 +34,13 @@ class Skip(Exception):
 
 
 def get(url, header=None, timeout=TIMEOUT, resolve=None):
-    """GET url, returning (http_status, body). `header` is a full `curl --config`
-    body (e.g. `header = "X-Api-Key: ..."`) fed via stdin so credentials stay out
-    of argv. `resolve` is a curl --resolve pin (core.k8s_endpoint's second element)
-    for cluster routes the host shell can't resolve. status 0 means curl itself failed
-    (connection refused, DNS, timeout)."""
+    """GET url, returning (http_status, body).
+
+    `header` is a full `curl --config` body (e.g. `header = "X-Api-Key: ..."`) fed via stdin so
+    credentials stay out of argv. `resolve` is a curl --resolve pin (core.k8s_endpoint's second
+    element) for cluster routes the host shell can't resolve. status 0 means curl itself failed
+    (connection refused, DNS, timeout).
+    """
     argv = [
         "curl",
         "-sS",
@@ -137,8 +139,10 @@ def check_kuma_drift():
 
 def check_kuma_scrape():
     """§9.2 — a stale prometheus_kuma_api_key leaves the uptime-kuma target at 401.
-    Reads `up{job=...}` rather than the targets API: the cluster route only admits
-    /api/v1/query paths, and up==0 is the same evidence the target listing gave."""
+
+    Reads `up{job=...}` rather than the targets API: the cluster route only admits /api/v1/query
+    paths, and up==0 is the same evidence the target listing gave.
+    """
     status, body = _cluster_prom_query('up{job="uptime-kuma"}')
     if status != 200:
         return FAIL, f"cluster prometheus query returned {status}"

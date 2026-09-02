@@ -36,16 +36,21 @@ def test_a_deploy_outside_the_subset_is_gated_by_nothing() -> None:
 
 
 def test_a_mixed_deploy_splits() -> None:
-    """The case the design most needs right: shipping the half staging never saw on the
-    strength of an unrelated service's pass."""
+    """The case the design most needs right:
+
+    shipping the half staging never saw on the strength of an unrelated service's pass.
+    """
     gated, ungated = staging_scope({"freshrss", "jellyfin"}, SUBSET)
     assert gated == {"freshrss"}
     assert ungated == {"jellyfin"}
 
 
 def test_a_pass_names_what_it_did_not_check() -> None:
-    """The rejecting half for the over-reading failure. A summary that said only 'PASS' would
-    satisfy a naive test while hiding that most of the deploy was never gated."""
+    """The rejecting half for the over-reading failure.
+
+    A summary that said only 'PASS' would satisfy a naive test while hiding that most of the deploy
+    was never gated.
+    """
     summary = staging_verdict_summary({"freshrss"}, {"jellyfin", "sonarr"}, 0, 0)
     assert "PASS" in summary
     assert "2 unchecked" in summary, (
@@ -59,13 +64,15 @@ def test_a_fully_gated_pass_does_not_claim_unchecked_services() -> None:
 
 
 def test_every_verdict_names_what_it_did_not_check() -> None:
-    """Not just the pass. A rejection is where an operator is most likely to read the line as
-    covering the whole deploy, so that is where omitting the ungated half misleads most.
+    """Not just the pass.
+
+    A rejection is where an operator is most likely to read the line as covering the whole deploy,
+    so that is where omitting the ungated half misleads most.
 
     Observed 2026-08-28: a drill gating {freshrss, ical-proxy} out of a deploy that also carried
-    sonarr returned `staging: REJECTED ['freshrss', 'ical-proxy'] — deployed, but a service did
-    not answer as declared`. sonarr appeared nowhere, so the line reads as a verdict on the
-    deploy rather than on two thirds of it.
+    sonarr returned `staging: REJECTED ['freshrss', 'ical-proxy'] — deployed, but a service did not
+    answer as declared`. sonarr appeared nowhere, so the line reads as a verdict on the deploy
+    rather than on two thirds of it.
     """
     for deploy_rc, expect_rc in ((2, 2), (1, 2), (0, 1)):
         summary = staging_verdict_summary(
@@ -112,8 +119,10 @@ def test_nothing_to_gate_is_not_reported_as_a_pass() -> None:
 
 
 def test_no_verdict_is_not_a_rejection() -> None:
-    """Decision 4's core distinction. Both directions, since either script can be the one that
-    could not run."""
+    """Decision 4's core distinction.
+
+    Both directions, since either script can be the one that could not run.
+    """
     for deploy_rc, expect_rc in ((2, 0), (0, 2), (2, 2)):
         summary = staging_verdict_summary({"freshrss"}, set(), deploy_rc, expect_rc)
         assert "NO VERDICT" in summary, (deploy_rc, expect_rc, summary)
@@ -130,8 +139,11 @@ def test_a_failed_deploy_is_a_rejection() -> None:
 
 
 def test_a_deployed_service_that_answers_wrong_is_also_a_rejection() -> None:
-    """The ical-proxy shape: the play exits zero and the routes are broken. If this ever stops
-    being a rejection, slice 2 has been made decorative."""
+    """The ical-proxy shape:
+
+    the play exits zero and the routes are broken. If this ever stops being a rejection, slice 2 has
+    been made decorative.
+    """
     summary = staging_verdict_summary({"ical-proxy"}, set(), 0, 1)
     assert "REJECTED" in summary
     assert "did not answer as declared" in summary

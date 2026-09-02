@@ -146,7 +146,9 @@ def test_a_long_list_is_truncated_with_a_count():
 
 def test_an_empty_status_does_not_render_an_empty_line():
     """`dirty` is decided from the same string, so empty here means the tree changed under us.
-    Saying that is better than logging a bare trailing colon."""
+
+    Saying that is better than logging a bare trailing colon.
+    """
     assert "no entries" in dirty_summary("")
 
 

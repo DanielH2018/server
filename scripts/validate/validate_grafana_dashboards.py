@@ -35,12 +35,14 @@ BUILTIN_DATASOURCE_UIDS = {"-- Grafana --", "-- Mixed --", "-- Dashboard --", "g
 def provisioned_datasource_ids(
     datasources_template: Path = DATASOURCES_TEMPLATE,
 ) -> set[str]:
-    """uids AND names of every provisioned datasource. Since the Docker grafana role's
-    deploy machinery retired (2026-08-14) the live declaration is the cluster grafana's
-    provisioning ConfigMap (claude-otel grafana.yaml.j2). That file carries Jinja, so the
-    datasource entries are extracted by line rather than yaml-parsed whole; including
-    names as well as uids means a legacy name-form ref ("datasource": "Prometheus") also
-    resolves — a valid Grafana reference, not a bug."""
+    """uids AND names of every provisioned datasource.
+
+    Since the Docker grafana role's deploy machinery retired (2026-08-14) the live declaration is
+    the cluster grafana's provisioning ConfigMap (claude-otel grafana.yaml.j2). That file carries
+    Jinja, so the datasource entries are extracted by line rather than yaml-parsed whole; including
+    names as well as uids means a legacy name-form ref ("datasource": "Prometheus") also resolves —
+    a valid Grafana reference, not a bug.
+    """
     ids: set[str] = set()
     in_datasources = False
     for line in datasources_template.read_text().splitlines():
@@ -56,13 +58,15 @@ def provisioned_datasource_ids(
 
 
 def _uid_from_ref(ref) -> list[str]:
-    """The uid(s) a `datasource` value references: object form {"uid": "X"} or legacy bare
-    string "X". null / anything else → no ref.
+    """The uid(s) a `datasource` value references:
 
-    A `${DS_*}` template-variable string is intentionally NOT special-cased: every board in
-    this repo bakes a concrete uid into its panel refs, and the plan forbids template-var
-    datasources in new boards, so such a ref would (correctly) be reported as unresolved
-    rather than silently accepted."""
+    object form {"uid": "X"} or legacy bare string "X". null / anything else → no ref.
+
+    A `${DS_*}` template-variable string is intentionally NOT special-cased: every board in this
+    repo bakes a concrete uid into its panel refs, and the plan forbids template-var datasources in
+    new boards, so such a ref would (correctly) be reported as unresolved rather than silently
+    accepted.
+    """
     if isinstance(ref, str):
         return [ref]
     if isinstance(ref, dict):
@@ -72,10 +76,12 @@ def _uid_from_ref(ref) -> list[str]:
 
 
 def datasource_refs_in(obj) -> list[tuple[str, str | None]]:
-    """Every datasource ref in a loaded dashboard, as (uid, nearest_panel_title). Walks
-    recursively; a uid is collected only as the value of (or nested under) a `datasource`
-    key — so a dashboard's own top-level `uid` is never collected. `title` is the nearest
-    enclosing object's title, for error context."""
+    """Every datasource ref in a loaded dashboard, as (uid, nearest_panel_title).
+
+    Walks recursively; a uid is collected only as the value of (or nested under) a `datasource` key
+    — so a dashboard's own top-level `uid` is never collected. `title` is the nearest enclosing
+    object's title, for error context.
+    """
     refs: list[tuple[str, str | None]] = []
 
     def visit(node, title):
@@ -139,9 +145,11 @@ def validate(
     dashboards_dir: Path = DASHBOARDS_DIR,
     datasources_template: Path = DATASOURCES_TEMPLATE,
 ) -> list[str]:
-    """Return a list of error strings ([] = clean): every dashboard JSON whose datasource
-    refs all resolve to a provisioned datasource (or a built-in), and whose uid no other
-    dashboard claims, passes."""
+    """Return a list of error strings ([] = clean):
+
+    every dashboard JSON whose datasource refs all resolve to a provisioned datasource (or a
+    built-in), and whose uid no other dashboard claims, passes.
+    """
     valid = provisioned_datasource_ids(datasources_template) | BUILTIN_DATASOURCE_UIDS
     errors: list[str] = []
     boards: dict[str, list[str]] = {}

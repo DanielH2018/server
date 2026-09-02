@@ -105,12 +105,15 @@ from probe_vip_placement import run_vip_placement
 
 
 def cert_stages(host, port, sni):
-    """Two-stage pipeline: open a TLS session (with SNI) and decode the served
-    leaf cert's subject/issuer/validity. Read-only — no data is sent.
+    """Two-stage pipeline:
 
-    NB: connects to whatever DNS resolves `host` to. For a Cloudflare-proxied public host that's
-    the CF edge (→ the Cloudflare edge cert), NOT Traefik's origin cert — pass the origin IP as the
-    target with `--sni <host>` to inspect the origin Let's Encrypt cert."""
+    open a TLS session (with SNI) and decode the served leaf cert's subject/issuer/validity.
+    Read-only — no data is sent.
+
+    NB: connects to whatever DNS resolves `host` to. For a Cloudflare-proxied public host that's the
+    CF edge (→ the Cloudflare edge cert), NOT Traefik's origin cert — pass the origin IP as the
+    target with `--sni <host>` to inspect the origin Let's Encrypt cert.
+    """
     s_client = [
         "openssl",
         "s_client",

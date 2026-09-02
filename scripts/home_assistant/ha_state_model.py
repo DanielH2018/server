@@ -47,8 +47,11 @@ def slugify(name: str) -> str:
 
 
 def call_service(call: dict) -> str | None:
-    """The service id of a service-call step. Handles both the `service:` (this repo) and the
-    newer `action:` spelling; returns None for non-call dicts."""
+    """The service id of a service-call step.
+
+    Handles both the `service:` (this repo) and the newer `action:` spelling; returns None for
+    non-call dicts.
+    """
     svc = call.get("service")
     if svc is None:
         svc = call.get("action")
@@ -71,10 +74,12 @@ def call_targets(call: dict) -> list[str]:
 
 
 def iter_service_calls(node) -> Iterator[dict]:
-    """Yield every service-call dict anywhere under `node`. Recurses universally, so all of
-    choose/if/then/else/repeat/parallel/sequence are covered without special-casing — a step is
-    a 'call' iff it has a `service`/`action` key whose value is a `domain.service` string (a
-    block-style `action:` is a list, so it is not mistaken for a call)."""
+    """Yield every service-call dict anywhere under `node`.
+
+    Recurses universally, so all of choose/if/then/else/repeat/parallel/sequence are covered without
+    special-casing — a step is a 'call' iff it has a `service`/`action` key whose value is a
+    `domain.service` string (a block-style `action:` is a list, so it is not mistaken for a call).
+    """
     if isinstance(node, dict):
         if call_service(node) is not None:
             yield node
@@ -102,14 +107,20 @@ def scene_entity_map(scenes: list) -> dict[str, list[str]]:
 
 
 def automation_writer(auto: dict) -> str:
-    """The state-machine name of an automation: `automation.<slug(alias)>` (HA derives the
-    entity_id from the alias, not the id; fall back to the id when alias is absent)."""
+    """The state-machine name of an automation:
+
+    `automation.<slug(alias)>` (HA derives the entity_id from the alias, not the id; fall back to
+    the id when alias is absent).
+    """
     return "automation." + slugify(auto.get("alias") or auto.get("id") or "unknown")
 
 
 def extract_writes(automations, scripts, scene_map):
-    """Return (writes, dynamic_writes). writes[entity] = sorted writer names; dynamic_writes
-    [writer] = sorted templated target strings that couldn't be resolved to an entity."""
+    """Return (writes, dynamic_writes).
+
+    writes[entity] = sorted writer names; dynamic_writes [writer] = sorted templated target strings
+    that couldn't be resolved to an entity.
+    """
     writes: dict[str, set] = defaultdict(set)
     dynamic: dict[str, set] = defaultdict(set)
 
@@ -173,8 +184,11 @@ def _threshold_sensors(config: dict) -> list[dict]:
 
 
 def extract_thresholds(config: dict) -> list[dict]:
-    """Each threshold binary_sensor -> {entity, name, bound, source}. The derived entity id is
-    binary_sensor.<slug(name)> (how HA names a platform sensor from its `name`)."""
+    """Each threshold binary_sensor -> {entity, name, bound, source}.
+
+    The derived entity id is binary_sensor.<slug(name)> (how HA names a platform sensor from its
+    `name`).
+    """
     out = []
     for s in _threshold_sensors(config):
         name = s.get("name", "")
@@ -215,9 +229,11 @@ def _all_service_calls(config: dict):
 
 
 def created_scenes(config: dict) -> set[str]:
-    """`scene.<scene_id>` for every `scene.create` call — transient scenes built at runtime
-    (e.g. bedroom_pre_alert from script.bedroom_alert_pulse) that are legitimately referenced
-    by a later `scene.turn_on` but exist in no scenes.yaml entry and no live snapshot."""
+    """`scene.<scene_id>` for every `scene.create` call — transient scenes built at runtime (e.g.
+
+    bedroom_pre_alert from script.bedroom_alert_pulse) that are legitimately referenced by a later
+    `scene.turn_on` but exist in no scenes.yaml entry and no live snapshot.
+    """
     out: set[str] = set()
     for call in _all_service_calls(config):
         if call_service(call) == "scene.create":
@@ -327,8 +343,10 @@ EXTERNAL_SERVICES_YAML = STATE_DIR / "external_services.yml"
 
 
 def parse_services(api_services: list) -> set[str]:
-    """Flatten HA's GET /api/services (a list of {domain, services: {name: ...}}) into a flat
-    {f"{domain}.{name}"} set."""
+    """Flatten HA's GET /api/services (a list of {domain, services:
+
+    {name: ...}}) into a flat {f"{domain}.{name}"} set.
+    """
     out: set[str] = set()
     for block in api_services or []:
         domain = block.get("domain")
@@ -340,8 +358,11 @@ def parse_services(api_services: list) -> set[str]:
 
 
 def config_services(config: dict) -> set[str]:
-    """Services the config itself defines: every script registers `script.<name>`. This is the
-    freshness escape-hatch so a brand-new script (not yet in the committed snapshot) resolves."""
+    """Services the config itself defines:
+
+    every script registers `script.<name>`. This is the freshness escape-hatch so a brand-new script
+    (not yet in the committed snapshot) resolves.
+    """
     return {f"script.{name}" for name in (config.get("script") or {})}
 
 
@@ -409,8 +430,11 @@ def cmd_refresh(get_states=None, get_services=None) -> int:
 
 
 def override_consistency_report(writes: dict) -> list[str]:
-    """REPORT: surfaces actuators whose manual-detect override isn't engaged by every manual
-    surface. Phase 1 emits the lights<->manual_off relationship as a starting datapoint."""
+    """REPORT:
+
+    surfaces actuators whose manual-detect override isn't engaged by every manual surface. Phase 1
+    emits the lights<->manual_off relationship as a starting datapoint.
+    """
     rep = []
     light_writers = set(writes.get("light.bedroom_lights", []))
     override_writers = set(writes.get("input_boolean.bedroom_manual_off", []))

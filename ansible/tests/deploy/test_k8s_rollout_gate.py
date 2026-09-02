@@ -324,8 +324,9 @@ def test_every_built_image_reaches_a_running_pod() -> None:
 
 
 def test_manifests_queues_the_drain_under_the_deploy_tag() -> None:
-    """The queueing task's `tags: [deploy]` is the entire safety argument for the drain and the
-    gate being `always`.
+    """The queueing task's `tags:
+
+    [deploy]` is the entire safety argument for the drain and the gate being `always`.
 
     `always` ignores --tags filtering and is NOT removed by `--skip-tags deploy`, so the documented
     config-only path (root CLAUDE.md: `--tags <svc> --skip-tags deploy`) stays a no-op only because

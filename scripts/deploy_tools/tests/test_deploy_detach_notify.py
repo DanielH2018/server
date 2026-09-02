@@ -60,7 +60,9 @@ def test_check_one_skipped_when_neither_platform_recognizes_it():
 
 def test_check_one_skips_a_role_that_declares_no_workload():
     """netpol-baseline and media-volume render NetworkPolicies and PVCs, never a workload.
-    Nothing to gate, so the tag is skipped rather than failed."""
+
+    Nothing to gate, so the tag is skipped rather than failed.
+    """
 
     def run(argv, **kwargs):
         if "--docker" in argv:
@@ -79,9 +81,11 @@ def test_check_one_skips_a_role_that_declares_no_workload():
 
 def test_check_one_flags_a_declared_pi_container_that_is_absent():
     """The reject half of the skip above, and the safety-critical half of the 2026-09-01 fix.
-    A Pi service daniel-pi's inventory declares, with no container on the host, is a deploy
-    that failed. It shared the undeclared case's "not found (not created" message until then,
-    so it reported `skipped` and the verdict stayed `settled`."""
+
+    A Pi service daniel-pi's inventory declares, with no container on the host, is a deploy that
+    failed. It shared the undeclared case's "not found (not created" message until then, so it
+    reported `skipped` and the verdict stayed `settled`.
+    """
 
     def run(argv, **kwargs):
         if "--docker" in argv:
@@ -265,7 +269,9 @@ def test_main_parses_empty_tags_to_empty_list(monkeypatch):
 
 def test_no_post_prints_the_verdict_without_notifying(monkeypatch, capsys, tmp_path):
     """land.sh reuses this verdict but returns it to the session, not to Discord.
-    Posting from both paths would split one verdict across two channels."""
+
+    Posting from both paths would split one verdict across two channels.
+    """
     posted = []
     monkeypatch.setattr(notify_mod, "notify", lambda c: posted.append(c))
     monkeypatch.setattr(notify_mod, "gate", lambda tags, ok: (True, ["sonarr: ok"]))
@@ -280,8 +286,11 @@ def test_no_post_prints_the_verdict_without_notifying(monkeypatch, capsys, tmp_p
 
 
 def test_without_no_post_the_verdict_is_notified(monkeypatch, capsys, tmp_path):
-    """The reject half. Without it a --no-post that silently disabled ALL posting would
-    pass the test above, and every automated deploy outcome would stop reporting."""
+    """The reject half.
+
+    Without it a --no-post that silently disabled ALL posting would pass the test above, and every
+    automated deploy outcome would stop reporting.
+    """
     posted = []
     monkeypatch.setattr(notify_mod, "notify", lambda c: posted.append(c))
     monkeypatch.setattr(notify_mod, "gate", lambda tags, ok: (True, ["sonarr: ok"]))
@@ -322,8 +331,11 @@ def _matches_a_marker(message):
 
 
 def test_probes_absent_workload_messages_carry_no_skip_marker():
-    """The safety-critical assertion in this file. Both messages mean "the thing that should
-    exist is gone", which must fail the verdict rather than skip it."""
+    """The safety-critical assertion in this file.
+
+    Both messages mean "the thing that should exist is gone", which must fail the verdict rather
+    than skip it.
+    """
     docker_missing, _ = probe_health.format_health([], "wg-easy", declared=True)
     k8s_missing, _ = probe_health.format_role_health(
         "claude-otel",
@@ -335,8 +347,11 @@ def test_probes_absent_workload_messages_carry_no_skip_marker():
 
 
 def test_probes_not_applicable_messages_do_carry_a_skip_marker():
-    """The other half: a tag that names nothing must still skip, or every block tag in a
-    --tags list turns an otherwise good deploy red."""
+    """The other half:
+
+    a tag that names nothing must still skip, or every block tag in a --tags list turns an otherwise
+    good deploy red.
+    """
     undeclared, _ = probe_health.format_health([], "config", declared=False)
     no_workload, _ = probe_health.format_k8s_health(None, None, "config", _NOW)
     for message in (undeclared, no_workload):

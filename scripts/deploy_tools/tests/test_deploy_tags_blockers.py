@@ -60,9 +60,12 @@ def test_a_comment_only_edit_beside_a_real_one_still_blocks(monkeypatch):
 
 
 def test_a_deployer_change_no_longer_blocks(monkeypatch):
-    """The #570 blocker was another session's edit to gitops_deploy.py. Since 2026-09-01 the
-    deployer applies its own role like any other setup role, so the tick crosses it and a
-    landing behind it must NOT be told to stop -- three landings were, that day alone."""
+    """The #570 blocker was another session's edit to gitops_deploy.py.
+
+    Since 2026-09-01 the deployer applies its own role like any other setup role, so the tick
+    crosses it and a landing behind it must NOT be told to stop -- three landings were, that day
+    alone.
+    """
     rc = _run(["ansible/roles/setup/gitops_deploy/files/gitops_deploy.py"], monkeypatch)
     assert rc == 0
 
@@ -77,15 +80,21 @@ def test_the_bringup_playbooks_block(monkeypatch):
 
 
 def test_an_ordinary_service_change_does_not_block(monkeypatch):
-    """The reject half. Without it, a checker that returned 3 unconditionally would pass
-    every test above while stopping every landing."""
+    """The reject half.
+
+    Without it, a checker that returned 3 unconditionally would pass every test above while stopping
+    every landing.
+    """
     rc = _run(["ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"], monkeypatch)
     assert rc == 0
 
 
 def test_a_broad_but_applicable_change_does_not_block(monkeypatch):
-    """Broad is not the same as broad-MANUAL. The deployer applies a shared-template or
-    inventory change itself, so it must not stop a landing -- only the manual subset does."""
+    """Broad is not the same as broad-MANUAL.
+
+    The deployer applies a shared-template or inventory change itself, so it must not stop a landing
+    -- only the manual subset does.
+    """
     rc = _run(["ansible/inventory/group_vars/all.yml"], monkeypatch)
     assert rc == 0
 

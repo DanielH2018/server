@@ -240,8 +240,11 @@ def push(ok, msg):
 
 
 def run_once(streaks):
-    """One poll+decide+act cycle. Returns (ok, msg) for the Kuma push. Raises on an
-    unreachable *arr / failed mutation, which main() converts to a descriptive `down`."""
+    """One poll+decide+act cycle.
+
+    Returns (ok, msg) for the Kuma push. Raises on an unreachable *arr / failed mutation, which
+    main() converts to a descriptive `down`.
+    """
     apps = [
         (
             "Sonarr",

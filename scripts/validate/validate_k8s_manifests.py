@@ -228,9 +228,11 @@ def colliding_default_keys(role_vars: dict, base: dict) -> set:
 
 
 def parse_docs(rendered: str) -> list:
-    """Parse a rendered manifest into its YAML documents, the same way yaml_error does. Only
-    called after yaml_error has already confirmed the render is valid YAML — a raise here would
-    be a bug in this function, not in the manifest."""
+    """Parse a rendered manifest into its YAML documents, the same way yaml_error does.
+
+    Only called after yaml_error has already confirmed the render is valid YAML — a raise here would
+    be a bug in this function, not in the manifest.
+    """
     return list(yaml.load_all(rendered, Loader=_StrictKeyLoader))
 
 
@@ -379,8 +381,10 @@ def _from_json(value) -> object:
 
 
 def _to_json(value) -> str:
-    """Ansible's ``to_json`` for looked-up templates. ``default=str`` so a StubUndefined
-    serializes as its placeholder instead of aborting the render."""
+    """Ansible's ``to_json`` for looked-up templates.
+
+    ``default=str`` so a StubUndefined serializes as its placeholder instead of aborting the render.
+    """
     return json.dumps(value, default=str)
 
 
@@ -705,9 +709,12 @@ def netpol_port_mismatches(
 
 
 def check_template(role: str, tpl: Path, ctx: dict) -> tuple[str | None, list]:
-    """Render one manifest template. Returns (error, docs) — docs is [] whenever error is set,
-    otherwise the manifest's parsed YAML documents (for the PVC claimName cross-reference check
-    in main(), which needs the actual objects rather than just a pass/fail)."""
+    """Render one manifest template.
+
+    Returns (error, docs) — docs is [] whenever error is set, otherwise the manifest's parsed YAML
+    documents (for the PVC claimName cross-reference check in main(), which needs the actual objects
+    rather than just a pass/fail).
+    """
     env = make_env([K8S_ROLES / role / "templates", SHARED_TPL])
     env.globals["lookup"] = make_lookup(ctx)
     register_ansible_filters(env)

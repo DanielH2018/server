@@ -180,8 +180,11 @@ def _cmd_list(_args: argparse.Namespace) -> int:
 
 
 def _cmd_describe(_args: argparse.Namespace) -> int:
-    """Human-facing view of `list`'s flat output: grouped by host/platform, dry-run-unsupported
-    services flagged. Does not touch `list`'s own shape — that stays pinned flat and sorted."""
+    """Human-facing view of `list`'s flat output:
+
+    grouped by host/platform, dry-run-unsupported services flagged. Does not touch `list`'s own
+    shape — that stays pinned flat and sorted.
+    """
     unsupported = dry_run_unsupported()
     records = service_records()
     hosts = sorted({host for host, _platform, _tag in records})

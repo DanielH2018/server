@@ -143,8 +143,10 @@ _HOST_BIN_PREFIXES = ("/usr/local/bin", "/opt/homelab")
 
 
 def _secret_bearing_paths(repo_root):
-    """The derived host-path set, or {} if it cannot be computed. Import is deferred so the
-    hot path never pays for it — see the cheap gate above."""
+    """The derived host-path set, or {} if it cannot be computed.
+
+    Import is deferred so the hot path never pays for it — see the cheap gate above.
+    """
     scripts = os.path.join(repo_root, "scripts", "secrets_mgmt")
     if scripts not in sys.path:
         sys.path.insert(0, scripts)

@@ -20,8 +20,11 @@ _HARNESS = _REPO / "scripts/deploy_tools/backfill_staging_gate.py"
 
 
 def onfailure_target(unit_text: str) -> str | None:
-    """The unit named by `OnFailure=`, or None. A pure function so it can be given text that
-    must be REJECTED — the real tree can only ever be observed passing."""
+    """The unit named by `OnFailure=`, or None.
+
+    A pure function so it can be given text that must be REJECTED — the real tree can only ever be
+    observed passing.
+    """
     match = re.search(r"^OnFailure=(\S+)$", unit_text, re.M)
     return match.group(1) if match else None
 

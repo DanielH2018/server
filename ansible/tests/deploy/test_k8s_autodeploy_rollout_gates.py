@@ -443,16 +443,15 @@ def test_rollout_gate_flags_one_gated_and_one_ungated_batch_workload(
 def test_rollout_gate_does_not_falsely_accuse_a_role_gated_via_extras(
     widget_role,
 ) -> None:
-    """A role skipping the primary rollout but gating its Deployment via extras is not an
-    offender.
+    """A role skipping the primary rollout but gating its Deployment via extras is not an offender.
 
-    task-3-rulings-2.md S5: R2's unconditional "renders a Deployment ⇒ offender" flagged this
-    shape even though the Deployment IS gated — `manifests_extra_rollouts` rolls and soaks
-    independently of the primary, so `manifests_rollout: ''` on the primary alone proves
-    nothing here. The reviewer measured `_rollout_gate_offender: True` while
-    `_ungated_deployments: []` for exactly this construction. The generalised rule checks
-    `_ungated_deployments` (which already resolves gating by name, primary-or-extra) instead of
-    "renders any Deployment at all", so this is no longer a false offender.
+    task-3-rulings-2.md S5: R2's unconditional "renders a Deployment ⇒ offender" flagged this shape
+    even though the Deployment IS gated — `manifests_extra_rollouts` rolls and soaks independently
+    of the primary, so `manifests_rollout: ''` on the primary alone proves nothing here. The
+    reviewer measured `_rollout_gate_offender: True` while `_ungated_deployments: []` for exactly
+    this construction. The generalised rule checks `_ungated_deployments` (which already resolves
+    gating by name, primary-or-extra) instead of "renders any Deployment at all", so this is no
+    longer a false offender.
     """
     role = widget_role(
         "- ansible.builtin.include_role:\n"

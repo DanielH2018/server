@@ -50,9 +50,12 @@ _OLDER = (
 
 
 def test_the_selection_takes_the_newest_by_creation_timestamp() -> None:
-    """One SHA can own several snapshots: volume-snapshot appends a per-run token, so a dirty
-    tree deployed twice, or a retried deploy, leaves two CRs sharing the prefix. CR names are
-    not chronologically sortable as strings, so the choice is made on `creationTimestamp`."""
+    """One SHA can own several snapshots:
+
+    volume-snapshot appends a per-run token, so a dirty tree deployed twice, or a retried deploy,
+    leaves two CRs sharing the prefix. CR names are not chronologically sortable as strings, so the
+    choice is made on `creationTimestamp`.
+    """
     assert _selection([_OLDER, _NEWEST])[0].endswith("20260821180000")
     assert _selection([_NEWEST, _OLDER])[0].endswith("20260821180000")
     # The name and the timestamp deliberately disagree here: the newer CR carries the smaller
@@ -65,9 +68,12 @@ def test_the_selection_takes_the_newest_by_creation_timestamp() -> None:
 
 
 def test_the_selection_rejects_a_markremoved_snapshot() -> None:
-    """Measured 2026-08-21: a snapshot already `markRemoved` cannot be reverted to. Taking one
-    would fail the revert after the scale-down — and a retention pass racing a rollback is
-    exactly how the newest becomes markRemoved."""
+    """Measured 2026-08-21:
+
+    a snapshot already `markRemoved` cannot be reverted to. Taking one would fail the revert after
+    the scale-down — and a retention pass racing a rollback is exactly how the newest becomes
+    markRemoved.
+    """
     removed = _NEWEST.replace("|false|", "|true|")
     assert _selection([_OLDER, removed]) == [
         "autodeploy-speedtest-abc12345-config-20260821090000"
@@ -84,9 +90,11 @@ def test_the_selection_reads_an_unpopulated_markremoved_as_live() -> None:
 
 
 def test_the_selection_ignores_another_deploys_snapshots() -> None:
-    """The prefix carries the service, the deploy's SHA and the claim. Reverting to a snapshot
-    from a different commit restores data this deploy never wrote, and a different claim's
-    snapshot belongs to a different volume entirely."""
+    """The prefix carries the service, the deploy's SHA and the claim.
+
+    Reverting to a snapshot from a different commit restores data this deploy never wrote, and a
+    different claim's snapshot belongs to a different volume entirely.
+    """
     other_sha = _NEWEST.replace("abc12345", "def67890")
     other_claim = _NEWEST.replace("-config-", "-other-")
     assert _selection([other_sha, other_claim]) == []

@@ -45,10 +45,13 @@ def test_disk_over_threshold_names_mount(monkeypatch):
 
 
 def test_disk_names_the_breaching_host_not_the_healthy_one(monkeypatch):
-    """THE BUG THIS PINS (2026-08-15): avail and size were two separate max() queries, so once
-    both estates reported into one Prometheus a full disk on one host could be paired with the
-    other's size. A per-origin percentage keeps each host's numerator with its own denominator,
-    and the alert has to name WHICH host is full to be actionable."""
+    """THE BUG THIS PINS (2026-08-15):
+
+    avail and size were two separate max() queries, so once both estates reported into one
+    Prometheus a full disk on one host could be paired with the other's size. A per-origin
+    percentage keeps each host's numerator with its own denominator, and the alert has to name WHICH
+    host is full to be actionable.
+    """
     monkeypatch.setattr(bridge_config, "DISK_MOUNTPOINTS", ["/"])
     monkeypatch.setattr(
         bridge_io,
@@ -197,8 +200,11 @@ def test_full_coverage_resets_the_shortfall_streak(monkeypatch):
 
 
 def test_a_breaching_present_host_outranks_the_coverage_complaint(monkeypatch):
-    """A survivor that is genuinely full must still page as full. Ordering the floor ahead of the
-    breach scan would have replaced a real disk-full alert with 'only 1 of 2 hosts reporting'."""
+    """A survivor that is genuinely full must still page as full.
+
+    Ordering the floor ahead of the breach scan would have replaced a real disk-full alert with
+    'only 1 of 2 hosts reporting'.
+    """
     _reset_origin_streaks()
     monkeypatch.setattr(bridge_config, "DISK_MOUNTPOINTS", ["/"])
     monkeypatch.setattr(bridge_config, "HOST_ORIGINS_CONSECUTIVE", 1)
@@ -272,11 +278,13 @@ def test_the_recency_window_is_wider_than_the_worst_observed_restart_spacing():
 
 
 def test_host_origins_floor_defaults_to_both_nodes():
-    """The floor is 2 because node-exporter is a DaemonSet on both nodes. At 1 the arm is inert
-    and check_disk/check_mem silently report the survivor's numbers as the estate's — which is
-    precisely the 2026-08-23 outage it was added for, where daniel-box went unwatched for 5.4h
-    behind two green tiles. Every other arm here monkeypatches the constant, so nothing pinned
-    the shipped value (2026-08-23b review L3)."""
+    """The floor is 2 because node-exporter is a DaemonSet on both nodes.
+
+    At 1 the arm is inert and check_disk/check_mem silently report the survivor's numbers as the
+    estate's — which is precisely the 2026-08-23 outage it was added for, where daniel-box went
+    unwatched for 5.4h behind two green tiles. Every other arm here monkeypatches the constant, so
+    nothing pinned the shipped value (2026-08-23b review L3).
+    """
     assert bridge_config.HOST_ORIGINS_MIN == 2, (
         "HOST_ORIGINS_MIN must default to 2 — one per node. Below that the host-coverage arm "
         "cannot fire and both host checks go back to monitoring whichever node still reports."
@@ -284,9 +292,11 @@ def test_host_origins_floor_defaults_to_both_nodes():
 
 
 def test_host_origins_floor_is_overridable_from_the_env_secret():
-    """It must be a rendered key, not just a code default: a planned single-node maintenance
-    window otherwise turns check_disk and check_mem permanently red with no way to stand them
-    down. A one-way door is a bug even when the door is a threshold."""
+    """It must be a rendered key, not just a code default:
+
+    a planned single-node maintenance window otherwise turns check_disk and check_mem permanently
+    red with no way to stand them down. A one-way door is a bug even when the door is a threshold.
+    """
     import pathlib
 
     env_secret = (

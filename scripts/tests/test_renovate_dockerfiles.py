@@ -1,10 +1,12 @@
-"""Guards on the images this repo builds itself: every Dockerfile is Renovate-visible, no base
-image floats, and the pins that exist twice by design move in lockstep.
+"""Guards on the images this repo builds itself:
 
-A Dockerfile Renovate cannot see ages silently, and a `FROM` without a tag or digest is
-rebuilt against whatever upstream pushed last. The lockstep guards cover n8n (two
-Dockerfiles), shellcheck-py (prek.toml and pyproject.toml) and the Python version
-(`.python-version` and both workflows), each of which Renovate bumps as separate PRs.
+every Dockerfile is Renovate-visible, no base image floats, and the pins that exist twice by design
+move in lockstep.
+
+A Dockerfile Renovate cannot see ages silently, and a `FROM` without a tag or digest is rebuilt
+against whatever upstream pushed last. The lockstep guards cover n8n (two Dockerfiles),
+shellcheck-py (prek.toml and pyproject.toml) and the Python version (`.python-version` and both
+workflows), each of which Renovate bumps as separate PRs.
 
 Run: uv run pytest scripts/tests/test_renovate_dockerfiles.py
 """
@@ -41,7 +43,8 @@ def test_every_dockerfile_is_renovate_visible(tracked: list[str]) -> None:
 
     Whether the FROM carries a version is a separate question, and its own test below —
     this one is purely about file NAMING, so a build file renamed out of the manager's
-    filePatterns still fails here even when its pin is explicit."""
+    filePatterns still fails here even when its pin is explicit.
+    """
     from_re = re.compile(r"^FROM\s+\S+", re.MULTILINE)
     build_files = [
         f
@@ -90,7 +93,8 @@ def test_no_built_image_floats_on_an_unpinned_base(tracked: list[str]) -> None:
     k8s roles already use for mutable-tag upstreams.
 
     Multi-stage internal references (`FROM builder`) are skipped: a stage name declared
-    earlier in the same file is not an upstream image and has nothing to pin."""
+    earlier in the same file is not an upstream image and has nothing to pin.
+    """
     build_files = [
         f
         for f in tracked
@@ -151,7 +155,8 @@ def test_n8n_base_pins_in_lockstep() -> None:
     The check reads the same way for a plain version pin, so it survives a move back to one.
 
     The same shape as test_shellcheck_py_pins_in_lockstep below, and for the same reason: a
-    grouping rule expresses intent, only a test enforces it."""
+    grouping rule expresses intent, only a test enforces it.
+    """
     root = _REPO / "ansible/roles/k8s/n8n-images/templates"
     app = re.search(
         r"^FROM\s+n8nio/n8n:([^@\s]+)",
@@ -179,7 +184,8 @@ def test_shellcheck_py_pins_in_lockstep() -> None:
     committed shell scripts, the pyproject dev dep lints RENDERED .sh.j2 output via
     validate_shell_templates — so a version skew means the two gates disagree about the same
     code. They are tracked by different Renovate datasources (github-tags vs pypi); a
-    packageRule groups them into one PR, and this asserts that coupling actually held."""
+    packageRule groups them into one PR, and this asserts that coupling actually held.
+    """
     prek = (_REPO / "prek.toml").read_text()
     pyproject = (_REPO / "pyproject.toml").read_text()
     rev = re.search(

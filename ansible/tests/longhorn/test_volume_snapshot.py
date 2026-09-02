@@ -248,8 +248,11 @@ def test_the_listing_jsonpath_parses() -> None:
 
 @pytest.mark.skipif(shutil.which("kubectl") is None, reason="no kubectl on this host")
 def test_the_listing_fields_exist_on_a_real_snapshot() -> None:
-    """The retention decision reads creationTimestamp, markRemoved and name. A field Longhorn
-    renames would make every line unparseable and every prune a no-op, with nothing failing."""
+    """The retention decision reads creationTimestamp, markRemoved and name.
+
+    A field Longhorn renames would make every line unparseable and every prune a no-op, with nothing
+    failing.
+    """
     result = subprocess.run(
         [
             "kubectl",

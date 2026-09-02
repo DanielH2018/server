@@ -48,8 +48,11 @@ AUTOMATIONS_DIR = os.path.join(
 
 
 def automations_source_text(directory: str = AUTOMATIONS_DIR) -> str:
-    """Every *.yaml under the automations directory, concatenated. An empty directory is an
-    error rather than an empty expected set: a gate that expects nothing passes on anything."""
+    """Every *.yaml under the automations directory, concatenated.
+
+    An empty directory is an error rather than an empty expected set: a gate that expects nothing
+    passes on anything.
+    """
     paths = sorted(glob.glob(os.path.join(directory, "*.yaml")))
     if not paths:
         raise FileNotFoundError(f"no *.yaml under {directory}")
@@ -90,8 +93,10 @@ def ha_state_url(base, entity_id):
 
 def ha_get_url(base, path):
     """URL for an arbitrary HA REST path under `base` (scheme://host, no trailing slash).
-    Normalizes a leading `/` and an `api/` prefix so `error_log`, `/error_log`, and
-    `/api/error_log` all work."""
+
+    Normalizes a leading `/` and an `api/` prefix so `error_log`, `/error_log`, and `/api/error_log`
+    all work.
+    """
     path = path.lstrip("/")
     if path.startswith("api/"):
         path = path[len("api/") :]
@@ -161,12 +166,15 @@ def _recv_exact_from(sock):
 
 
 def format_trace(trace) -> str:
-    """Human timeline from a trace/get result: trigger -> each step path (+ PASS/FAIL for a
-    condition step, whose result is {"result": bool}) -> error.
+    """Human timeline from a trace/get result:
 
-    HA's trace/get payload has `trigger` as a plain string description (e.g.
-    "state of binary_sensor.aqara_fp300_presence"); older/nested shapes may be a dict
-    with a `description` key — both are handled."""
+    trigger -> each step path (+ PASS/FAIL for a condition step, whose result is {"result": bool})
+    -> error.
+
+    HA's trace/get payload has `trigger` as a plain string description (e.g. "state of
+    binary_sensor.aqara_fp300_presence"); older/nested shapes may be a dict with a `description` key
+    — both are handled.
+    """
     if not trace:
         return (
             "no stored trace (the automation hasn't run since the last HA restart/deploy; "
@@ -193,8 +201,11 @@ def format_trace(trace) -> str:
 
 
 def expected_automation_ids(text: str) -> set[str]:
-    """The `id:` of every top-level automation in the automations/ source text. Regex over the raw
-    text (no YAML parse) — robust to the HA Jinja inside the file; ids are simple slugs."""
+    """The `id:` of every top-level automation in the automations/ source text.
+
+    Regex over the raw text (no YAML parse) — robust to the HA Jinja inside the file; ids are simple
+    slugs.
+    """
     return set(_AUTOMATION_ID_RE.findall(text))
 
 
@@ -256,12 +267,15 @@ def _ws_recv_json(recv_exact):
 
 
 def ha_trace(host, token, automation_id, timeout=DEFAULT_TIMEOUT, connect_ip=None):
-    """Fetch the latest execution trace for an automation via the HA WebSocket API. Read-only:
-    sends ONLY auth + trace/list + trace/get. Returns the trace dict, or None if no stored trace.
+    """Fetch the latest execution trace for an automation via the HA WebSocket API.
 
-    `host` is the unsuffixed .local hostname (TLS on 443, SNI/Host). `connect_ip` pins the
-    TCP connection to the ingress VIP — since the bridge teardown (slice-7 BT4) the host
-    shell's DNS answer for the name is not the cluster edge (see ha_host)."""
+    Read-only: sends ONLY auth + trace/list + trace/get. Returns the trace dict, or None if no
+    stored trace.
+
+    `host` is the unsuffixed .local hostname (TLS on 443, SNI/Host). `connect_ip` pins the TCP
+    connection to the ingress VIP — since the bridge teardown (slice-7 BT4) the host shell's DNS
+    answer for the name is not the cluster edge (see ha_host).
+    """
     import base64
     import os
 
@@ -393,8 +407,10 @@ def ha_state_rows(states, model):
 
 
 def ha_token():
-    """Decrypt claude_ha_token from the SOPS secrets file. Requires the host's age
-    key (present on daniel-server, where HA runs)."""
+    """Decrypt claude_ha_token from the SOPS secrets file.
+
+    Requires the host's age key (present on daniel-server, where HA runs).
+    """
     return core.sops_extract("claude_ha_token")
 
 

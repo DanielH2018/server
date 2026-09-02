@@ -28,8 +28,11 @@ INSTALL = ROLE / "tasks" / "install.yml"
 
 
 def fingerprint(path: Path) -> str:
-    """The key's SHA256 fingerprint. Never the key body — these are public halves, but the
-    habit is what keeps a private one out of a log by accident."""
+    """The key's SHA256 fingerprint.
+
+    Never the key body — these are public halves, but the habit is what keeps a private one out of a
+    log by accident.
+    """
     out = subprocess.run(
         ["ssh-keygen", "-lf", str(path)],
         capture_output=True,

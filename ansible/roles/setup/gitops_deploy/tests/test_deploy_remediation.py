@@ -231,10 +231,11 @@ def test_a_shared_module_edit_names_every_consumer_role():
 
 
 def test_a_consumer_this_host_does_not_declare_is_not_escalated():
-    """Intersect with `declared` BEFORE the union. A consumer absent from this host's
-    containers_list has no deploy tag here, so folding it in raw would land it in `shared`
-    and escalate a scoped `--tags` into "run a full deploy" -- for a role this host does not
-    deploy at all.
+    """Intersect with `declared` BEFORE the union.
+
+    A consumer absent from this host's containers_list has no deploy tag here, so folding it in raw
+    would land it in `shared` and escalate a scoped `--tags` into "run a full deploy" -- for a role
+    this host does not deploy at all.
     """
     declared = {"monitor-bridge"}
     msg = k8s_remediation({"monitor-bridge"}, declared, {"autofix-bridge"})
@@ -257,28 +258,32 @@ def test_a_scoped_setup_run_fits_the_budget():
 
 
 def test_a_full_deploy_plus_rollback_is_flagged_over_budget():
-    """Measured 2026-08-22: a full deploy.yml is 1212s. 180 + 1212 + 1212 = 2604 against
-    TimeoutStartSec=2700 leaves 96s, so a run four percent slower than measured is
-    SIGTERMed mid-rollback -- which strands the tree at the failed commit with live state
-    half-applied. This is the reject half, and it is the whole argument for forward-only."""
+    """Measured 2026-08-22:
+
+    a full deploy.yml is 1212s. 180 + 1212 + 1212 = 2604 against TimeoutStartSec=2700 leaves 96s, so
+    a run four percent slower than measured is SIGTERMed mid-rollback -- which strands the tree at
+    the failed commit with live state half-applied. This is the reject half, and it is the whole
+    argument for forward-only.
+    """
     assert not broad_budget_ok(
         forward_s=1212, rollback_s=1212, flock_s=180, timeout_s=2700
     )
 
 
 def test_the_budget_predicate_tracks_the_units_real_timeout():
-    """Pins the numbers the forward-only decision rests on. If TimeoutStartSec is raised in
-    gitops-deploy.service.j2, this fails and the decision gets revisited deliberately
-    rather than drifting.
+    """Pins the numbers the forward-only decision rests on.
 
-    It fired as designed on 2026-08-29, when the staging gate's budgets raised the ceiling to
-    60min. Re-derived at that ceiling: 180 + 1212 + 1212 + 300 = 2904 against 3600 now FITS, so
-    the budget is no longer what makes the deploy-plane arm forward-only. Nothing was armed by
-    that — broad_budget_ok has no production caller; it is the reasoning made executable, and
-    gitops_deploy.py's broad arm is forward-only in code either way. Funding a broad rollback is
-    a deliberate change to make on its own evidence (a re-measured deploy.yml, and a decision
-    about a rollback that can still be SIGTERMed), not a side effect of a ceiling raised for an
-    unrelated feature.
+    If TimeoutStartSec is raised in gitops-deploy.service.j2, this fails and the decision gets
+    revisited deliberately rather than drifting.
+
+    It fired as designed on 2026-08-29, when the staging gate's budgets raised the ceiling to 60min.
+    Re-derived at that ceiling: 180 + 1212 + 1212 + 300 = 2904 against 3600 now FITS, so the budget
+    is no longer what makes the deploy-plane arm forward-only. Nothing was armed by that —
+    broad_budget_ok has no production caller; it is the reasoning made executable, and
+    gitops_deploy.py's broad arm is forward-only in code either way. Funding a broad rollback is a
+    deliberate change to make on its own evidence (a re-measured deploy.yml, and a decision about a
+    rollback that can still be SIGTERMed), not a side effect of a ceiling raised for an unrelated
+    feature.
     """
     unit = (
         pathlib.Path(__file__).resolve().parents[1]

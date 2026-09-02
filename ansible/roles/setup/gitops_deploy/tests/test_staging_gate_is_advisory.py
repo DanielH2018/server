@@ -52,8 +52,11 @@ def sys_executable_launches(fn: ast.FunctionDef) -> list[str]:
 
 
 def test_consult_staging_returns_no_verdict(gitops_fn) -> None:
-    """A returned verdict is a verdict something can branch on. Advisory means there is nothing
-    to branch on, enforced here rather than left to a reader's discretion."""
+    """A returned verdict is a verdict something can branch on.
+
+    Advisory means there is nothing to branch on, enforced here rather than left to a reader's
+    discretion.
+    """
     returns = [
         node
         for node in ast.walk(gitops_fn("consult_staging"))

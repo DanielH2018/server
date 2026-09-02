@@ -91,8 +91,11 @@ def portal_host(domain):
 
 
 def cookie_domain(domain):
-    """Leading dot: the cookie is issued for the whole `local.<domain>` cookie-domain, so
-    one login covers every service route, not just the portal it was minted at."""
+    """Leading dot:
+
+    the cookie is issued for the whole `local.<domain>` cookie-domain, so one login covers every
+    service route, not just the portal it was minted at.
+    """
     return f".local.{domain}"
 
 

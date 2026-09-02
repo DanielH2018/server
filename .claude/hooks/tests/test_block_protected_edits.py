@@ -272,7 +272,6 @@ def test_generated_docs_guard_fires_inside_a_worktree(tmp_path):
 
 
 def test_generated_docs_reason_names_the_generator():
-    """A message that only says 'denied' sends the reader looking for the rule instead
-    of the fix."""
+    """A message that only says 'denied' sends the reader looking for the rule instead of the fix."""
     reason = classify("docs/assets/generated/infra-map.svg", REPO)
     assert "gen_infra_map.py" in reason

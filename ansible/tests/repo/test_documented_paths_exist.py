@@ -368,7 +368,9 @@ def cited_tests(line: str) -> list[tuple[str, str]]:
 
 def candidates(cited: str, source: Path) -> list[Path]:
     """The tracked files a cited path could mean, resolved the way `resolves` above does:
-    relative to the citing file, to the repo root, or as a path suffix of a tracked file."""
+
+    relative to the citing file, to the repo root, or as a path suffix of a tracked file.
+    """
     found = [d for d in (source.parent / cited, REPO / cited) if d.is_file()]
     tail = "/" + cited
     found.extend(REPO / known for known in REPO_FILES if known.endswith(tail))
@@ -438,8 +440,11 @@ def test_node_resolution_accepts_a_context_relative_citation():
 
 
 def test_node_resolution_rejects_a_renamed_test_and_a_renamed_file():
-    """The proof this guard can go red: the file the 2026-09-01 split retired, and a test
-    name nothing defines. Matching on the file alone would accept the second."""
+    """The proof this guard can go red:
+
+    the file the 2026-09-01 split retired, and a test name nothing defines. Matching on the file
+    alone would accept the second.
+    """
     source = REPO / "ansible/roles/setup/gitops_deploy/files/deploy_k8s.py"
     assert not node_resolves(
         "test_deploy_logic.py",

@@ -291,9 +291,12 @@ def test_an_unresolvable_claim_var_is_reported_not_dropped(tmp_path: Path) -> No
 
 
 def test_pvc_template_claim_is_resolved_through_defaults(tmp_path: Path) -> None:
-    """A role's own `kind: PersistentVolumeClaim` template, live-shaped: `metadata.name` is a
-    single-var Jinja reference (zigbee2mqtt's and code-server's actual shape), resolved through
-    the role's own defaults rather than left as the literal `{{ ... }}` string."""
+    """A role's own `kind:
+
+    PersistentVolumeClaim` template, live-shaped: `metadata.name` is a single-var Jinja reference
+    (zigbee2mqtt's and code-server's actual shape), resolved through the role's own defaults rather
+    than left as the literal `{{ ... }}` string.
+    """
     role = tmp_path / "widget"
     (role / "templates").mkdir(parents=True)
     (role / "defaults").mkdir(parents=True)
@@ -314,10 +317,13 @@ def test_pvc_template_claim_is_resolved_through_defaults(tmp_path: Path) -> None
 def test_pvc_template_claim_is_found_when_name_is_not_the_first_metadata_key(
     tmp_path: Path,
 ) -> None:
-    """R6: `_PVC_NAME` used to require `name:` on the line immediately after `metadata:`, so a
-    PVC whose metadata carried `labels:` first yielded no claim and no complaint — silently, a
-    declared `k8s_autodeploy_snapshot_pvcs` entry would fail `test_snapshot_pvc_declarations_
-    match_rendered_claims` for a role that was correct."""
+    """R6:
+
+    `_PVC_NAME` used to require `name:` on the line immediately after `metadata:`, so a PVC whose
+    metadata carried `labels:` first yielded no claim and no complaint — silently, a declared
+    `k8s_autodeploy_snapshot_pvcs` entry would fail `test_snapshot_pvc_declarations_
+    match_rendered_claims` for a role that was correct.
+    """
     role = tmp_path / "widget"
     (role / "templates").mkdir(parents=True)
     (role / "defaults").mkdir(parents=True)
@@ -338,13 +344,14 @@ def test_pvc_template_claim_is_found_when_name_is_not_the_first_metadata_key(
 
 
 def test_snapshot_pvc_declarations_match_rendered_claims() -> None:
-    """A declared `k8s_autodeploy_snapshot_pvcs` entry must be a claim the role actually
-    renders. A typo'd claim name snapshots nothing and fails silently at deploy time — the
-    volume simply isn't protected, and nothing says so; this is the only pre-deploy catch for
-    that, since --dry-run never reaches volume-snapshot (see the section comment above).
+    """A declared `k8s_autodeploy_snapshot_pvcs` entry must be a claim the role actually renders.
 
-    Exercised by all thirteen live declarations — see `_rendered_pvc_claims` for why this had
-    to read two sources rather than the brief's single one.
+    A typo'd claim name snapshots nothing and fails silently at deploy time — the volume simply
+    isn't protected, and nothing says so; this is the only pre-deploy catch for that, since
+    --dry-run never reaches volume-snapshot (see the section comment above).
+
+    Exercised by all thirteen live declarations — see `_rendered_pvc_claims` for why this had to
+    read two sources rather than the brief's single one.
     """
     offenders = []
     for role in _roles():

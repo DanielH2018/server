@@ -16,10 +16,13 @@ from _volume_revert import _CLAIM, _GUARD, _MAIN, _guard_of, _index, _named, _ta
 
 
 def test_the_revert_asserts_the_frontend_is_disabled_before_reverting() -> None:
-    """Measured 2026-08-21: a revert with the frontend enabled returns HTTP 500 `failed to
-    revert snapshot for volume ... with frontend enabled`. The assert is the precondition, not
-    a formality — without it the revert fails late, after the workload is already scaled to
-    zero, leaving the service down AND unreverted."""
+    """Measured 2026-08-21:
+
+    a revert with the frontend enabled returns HTTP 500 `failed to revert snapshot for volume ...
+    with frontend enabled`. The assert is the precondition, not a formality — without it the revert
+    fails late, after the workload is already scaled to zero, leaving the service down AND
+    unreverted.
+    """
     tasks = _task_names(_CLAIM)
     assert _index(tasks, "disableFrontend") < _index(tasks, "Revert the volume")
 
@@ -50,10 +53,12 @@ def test_a_dry_run_reports_a_missing_snapshot_instead_of_aborting() -> None:
 
 
 def test_the_snapshot_lookup_precedes_the_scale_down() -> None:
-    """The frontend assert is not the only step whose lateness costs an outage. "No snapshot
-    matches this deploy" is a legitimate outcome — the service's first deploy takes no snapshot
-    at all — and reaching it after `--replicas=0` leaves the workload down with nothing to
-    revert to. The lookup and its failure both belong upstream of the scale-down."""
+    """The frontend assert is not the only step whose lateness costs an outage.
+
+    "No snapshot matches this deploy" is a legitimate outcome — the service's first deploy takes no
+    snapshot at all — and reaching it after `--replicas=0` leaves the workload down with nothing to
+    revert to. The lookup and its failure both belong upstream of the scale-down.
+    """
     tasks = _task_names(_CLAIM)
     assert _index(tasks, "Fail when no snapshot matches this deploy") < _index(
         tasks, "to zero replicas"
@@ -105,9 +110,11 @@ def test_the_whole_sequence_is_in_the_drill_proven_order() -> None:
 
 
 def test_the_api_resolve_precedes_the_first_claim() -> None:
-    """`longhorn_api` is resolved once in main.yml. Resolving it inside claim.yml, or after the
-    loop, would put a failure that has nothing to do with this service (no longhorn-manager on
-    this node) downstream of the scale-down."""
+    """`longhorn_api` is resolved once in main.yml.
+
+    Resolving it inside claim.yml, or after the loop, would put a failure that has nothing to do
+    with this service (no longhorn-manager on this node) downstream of the scale-down.
+    """
     tasks = _task_names(_MAIN)
     assert _index(tasks, "Resolve the node-local Longhorn API") < _index(
         tasks, "Revert every volume"
@@ -143,16 +150,21 @@ def test_neither_attach_nor_detach_sends_an_attachment_id() -> None:
 
 
 def test_the_detach_does_not_pretend_hostid_matters() -> None:
-    """`manager.Detach` at v1.12.1 accepts `hostId` and never reads it. Sending it documents a
-    guarantee the server does not provide, and the next reader would take the detach for
-    host-scoped when it is ticket-scoped."""
+    """`manager.Detach` at v1.12.1 accepts `hostId` and never reads it.
+
+    Sending it documents a guarantee the server does not provide, and the next reader would take the
+    detach for host-scoped when it is ticket-scoped.
+    """
     body = _named(_CLAIM, "Detach the volume")["ansible.builtin.uri"].get("body", {})
     assert "hostId" not in body
 
 
 def test_the_attach_requests_maintenance_mode_on_this_node() -> None:
-    """`disableFrontend: true` is what makes the revert possible at all, and `hostId` is what
-    keeps the attach on the node whose manager is answering."""
+    """`disableFrontend:
+
+    true` is what makes the revert possible at all, and `hostId` is what keeps the attach on the
+    node whose manager is answering.
+    """
     body = _named(_CLAIM, "in maintenance mode")["ansible.builtin.uri"]["body"]
     assert body["disableFrontend"] is True
     assert body["hostId"] == "{{ longhorn_api_node }}"
@@ -163,9 +175,11 @@ def test_every_api_call_pins_a_single_status_code() -> None:
 
 
 def test_the_post_revert_detach_is_verified_by_state() -> None:
-    """The detach returns 200 whether or not it removed a ticket, so its own status proves
-    nothing. The wait on `state: detached` is the only thing that catches a detach that did
-    not detach, and suppressing its failure would restore the silence."""
+    """The detach returns 200 whether or not it removed a ticket, so its own status proves nothing.
+
+    The wait on `state: detached` is the only thing that catches a detach that did not detach, and
+    suppressing its failure would restore the silence.
+    """
     task = _named(_CLAIM, "the detach after the revert")
     dumped = yaml.safe_dump(task)
     assert "failed_when: false" not in dumped

@@ -85,13 +85,15 @@ def _runtime_modules():
 
 
 def _patched_names_by_module(test_files=None, module_names=None):
-    """{module: {name}} for every attribute of a runtime module either suite assigns, patches,
-    or mutates in place.
+    """{module:
+
+    {name}} for every attribute of a runtime module either suite assigns, patches, or mutates in
+    place.
 
     AST walk, not a regex — a line-oriented regex over `monkeypatch.setattr(bridge_common, "X"`
-    misses the wrapped form ruff format produces and misses plain `bridge_common.X = ...`
-    assignment entirely. `ansible/tests/services/test_monitor_bridge_modules.py`'s census hit exactly
-    that hole when first measured; this mirrors its AST shape rather than repeating the mistake.
+    misses the wrapped form ruff format produces and misses plain `bridge_common.X = ...` assignment
+    entirely. `ansible/tests/services/test_monitor_bridge_modules.py`'s census hit exactly that hole
+    when first measured; this mirrors its AST shape rather than repeating the mistake.
     """
     test_files = _test_and_conftest_files() if test_files is None else test_files
     if module_names is None:

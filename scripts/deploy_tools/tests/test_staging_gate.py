@@ -59,7 +59,9 @@ def test_deploy_sh_refusals_are_not_rejections(rc: int) -> None:
 
 def test_prep_failure_is_not_a_rejection() -> None:
     """The remote could not be put at the SHA — a dirty tree, a failed fetch, a missing commit.
-    Staging never saw the change."""
+
+    Staging never saw the change.
+    """
     assert classify(PREP_FAILED) == NO_VERDICT
 
 
@@ -69,8 +71,11 @@ def test_ssh_failure_is_not_a_rejection() -> None:
 
 @pytest.mark.parametrize("rc", [1, 5, 99, 130])
 def test_a_playbook_failure_is_a_rejection(rc: int) -> None:
-    """The rejecting half. A classifier that returned NO_VERDICT for everything would satisfy
-    every test above and make the gate incapable of ever failing a merge."""
+    """The rejecting half.
+
+    A classifier that returned NO_VERDICT for everything would satisfy every test above and make the
+    gate incapable of ever failing a merge.
+    """
     assert classify(rc) == REJECTED, (
         f"exit {rc} is the play itself failing, which is the one outcome the gate exists to "
         f"act on — classifying it as NO_VERDICT makes the gate inert."
@@ -78,8 +83,11 @@ def test_a_playbook_failure_is_a_rejection(rc: int) -> None:
 
 
 def test_the_three_verdicts_are_distinct() -> None:
-    """Pins the premise. If two verdicts ever collapse to the same value, every test above still
-    passes while the alert Decision 4 depends on can no longer be written."""
+    """Pins the premise.
+
+    If two verdicts ever collapse to the same value, every test above still passes while the alert
+    Decision 4 depends on can no longer be written.
+    """
     assert len({PASS, REJECTED, NO_VERDICT}) == 3
     assert {verdict_name(v) for v in (PASS, REJECTED, NO_VERDICT)} == {
         "PASS",
@@ -138,8 +146,11 @@ def test_the_prep_code_matches_the_remote_script() -> None:
 
 
 def test_the_prep_code_cannot_collide_with_a_deploy_sh_code() -> None:
-    """70 is chosen to sit outside deploy.sh's vocabulary. If deploy.sh ever grows an exit that
-    collides, the two meanings become indistinguishable at the far end of an ssh pipe."""
+    """70 is chosen to sit outside deploy.sh's vocabulary.
+
+    If deploy.sh ever grows an exit that collides, the two meanings become indistinguishable at the
+    far end of an ssh pipe.
+    """
     assert PREP_FAILED not in DEPLOY_SH_NO_VERDICT
     assert PREP_FAILED not in (PASS, REJECTED, SSH_FAILURE)
 

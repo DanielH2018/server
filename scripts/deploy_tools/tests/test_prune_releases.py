@@ -43,8 +43,10 @@ def _fleet(tmp_path, count):
 
 
 def test_current_release_is_kept_even_when_oldest(tmp_path):
-    """A group not deployed for months still has its scripts in use. Age must not outrank
-    in-use."""
+    """A group not deployed for months still has its scripts in use.
+
+    Age must not outrank in-use.
+    """
     dirs = _fleet(tmp_path, 8)
     oldest = dirs[-1]
     assert oldest not in select_prunable(dirs, current=oldest, keep=2)
@@ -115,8 +117,10 @@ def test_absent_pointer_resolves_to_none(tmp_path):
 
 
 def test_pointer_to_a_file_resolves_to_none(tmp_path):
-    """A release is a directory. A pointer at a regular file is a broken deploy, not a
-    release."""
+    """A release is a directory.
+
+    A pointer at a regular file is a broken deploy, not a release.
+    """
     f = tmp_path / "notadir"
     f.write_text("")
     link = tmp_path / "current"

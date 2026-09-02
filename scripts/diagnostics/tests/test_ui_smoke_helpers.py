@@ -86,8 +86,11 @@ def test_settled_title_waits_out_a_title_the_app_sets_mid_hydration():
 
 
 def test_settled_title_returns_the_wrong_title_rather_than_hiding_it():
-    """The rejecting half: a title that never becomes the expected one must reach the
-    assertion, or a genuinely renamed page passes forever."""
+    """The rejecting half:
+
+    a title that never becomes the expected one must reach the assertion, or a genuinely renamed
+    page passes forever.
+    """
     client = client_returning(
         *[with_result("Something Else")] * smoke._TITLE_SETTLE_ATTEMPTS
     )

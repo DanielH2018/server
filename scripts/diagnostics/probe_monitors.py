@@ -26,16 +26,17 @@ _MONITOR_STATUS_LABELS = {"0": "DOWN", "1": "UP", "2": "PENDING", "3": "MAINTENA
 
 
 def format_monitor_status(data):
-    """Format Kuma's monitor_status vector (Prometheus job=uptime-kuma) into a down-monitors
-    rollup. Pure: takes the parsed instant-query response, returns (text, exit_code).
+    """Format Kuma's monitor_status vector (Prometheus job=uptime-kuma) into a down-monitors rollup.
 
-    Kuma keeps no history of its own — that's why `alerts` reconstructs the past from Loki
-    instead of asking Kuma for it — but it does hold live state, and Prometheus already
-    scrapes that state (postflight.py's check_kuma_monitors uses the same metric). No new
-    Kuma API credential needed for "what's down right now" when this was already covering it.
+    Pure: takes the parsed instant-query response, returns (text, exit_code).
 
-    exit_code is 0 only when every monitor reports UP (1); PENDING and MAINTENANCE count as
-    not-up too, same as DOWN, since neither means "confirmed healthy".
+    Kuma keeps no history of its own — that's why `alerts` reconstructs the past from Loki instead
+    of asking Kuma for it — but it does hold live state, and Prometheus already scrapes that state
+    (postflight.py's check_kuma_monitors uses the same metric). No new Kuma API credential needed
+    for "what's down right now" when this was already covering it.
+
+    exit_code is 0 only when every monitor reports UP (1); PENDING and MAINTENANCE count as not-up
+    too, same as DOWN, since neither means "confirmed healthy".
     """
     result = data.get("data", {}).get("result", [])
     if not result:

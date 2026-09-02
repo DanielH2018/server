@@ -164,7 +164,8 @@ def cfg() -> dict[str, str]:
 
     A missing file used to crash the import, which paged through the unit's OnFailure. It
     now leaves every constant below at its default and REPO empty, and main() refuses to
-    tick on an empty REPO: the same page, raised from a function a test can call."""
+    tick on an empty REPO: the same page, raised from a function a test can call.
+    """
     try:
         return parse_env_file(CONFIG_PATH)
     except FileNotFoundError:
@@ -420,11 +421,13 @@ def fetch_ci_verdict(sha: str) -> str:
 
 
 def is_ancestor(ancestor: str, descendant: str) -> bool:
-    """True if `ancestor` is an ancestor of (or equal to) `descendant`. Used to
-    decide whether origin is strictly ahead of local — only then is there
-    anything to fast-forward and deploy (see next_action's origin_ahead). A git
-    error (bad object, etc.) is a non-zero exit and conservatively reads False,
-    so the tick degrades into a no-op rather than a mis-fired deploy."""
+    """True if `ancestor` is an ancestor of (or equal to) `descendant`.
+
+    Used to decide whether origin is strictly ahead of local — only then is there anything to
+    fast-forward and deploy (see next_action's origin_ahead). A git error (bad object, etc.) is a
+    non-zero exit and conservatively reads False, so the tick degrades into a no-op rather than a
+    mis-fired deploy.
+    """
     r = subprocess.run(
         ["git", "merge-base", "--is-ancestor", ancestor, descendant],
         cwd=REPO,
@@ -586,9 +589,12 @@ def deliver(key: str, content: str) -> bool:
 
 
 def drain_pending() -> None:
-    """Resend every queued-but-undelivered alert. Runs first thing each tick — BEFORE the
-    noop/hold/dirty short-circuits — so an alert whose original tick ff-merged (local==origin -> the
-    next tick noops) still gets redelivered. Clears each entry on a confirmed 2xx."""
+    """Resend every queued-but-undelivered alert.
+
+    Runs first thing each tick — BEFORE the noop/hold/dirty short-circuits — so an alert whose
+    original tick ff-merged (local==origin -> the next tick noops) still gets redelivered. Clears
+    each entry on a confirmed 2xx.
+    """
     pending = _read_pending()
     if not pending:
         return
@@ -599,11 +605,14 @@ def drain_pending() -> None:
 
 
 def alert_once(marker_file: str, channel: str, origin: str, content: str) -> None:
-    """Deliver a per-SHA-deduped alert on `channel`. No-op if this origin SHA was already
-    alerted (marker == origin). Otherwise mark DETECTION here (advance the marker once per SHA)
-    and hand delivery + retry to deliver()/the pending queue — the marker advances on DETECTION,
-    NOT delivery, so a transient webhook blip is redelivered by drain_pending() rather than
-    silently dropped, and an ff-merged path that noops next tick doesn't re-page."""
+    """Deliver a per-SHA-deduped alert on `channel`.
+
+    No-op if this origin SHA was already alerted (marker == origin). Otherwise mark DETECTION here
+    (advance the marker once per SHA) and hand delivery + retry to deliver()/the pending queue — the
+    marker advances on DETECTION, NOT delivery, so a transient webhook blip is redelivered by
+    drain_pending() rather than silently dropped, and an ff-merged path that noops next tick doesn't
+    re-page.
+    """
     if _read_marker(marker_file) == origin:
         return
     _write_marker(marker_file, origin)
@@ -700,10 +709,12 @@ def alert_deferred(
 
 
 def _inspect(fmt: str, container: str, timeout: float = 15.0) -> str:
-    """One `docker inspect -f` field, or '' if empty/gone — or if the call exceeds
-    `timeout`. The deadline in health_ok() is only checked between calls, so a wedged
-    daemon on an unbounded inspect would block the whole deployer forever; bounding each
-    inspect lets a hang degrade into a failed gate instead."""
+    """One `docker inspect -f` field, or '' if empty/gone — or if the call exceeds `timeout`.
+
+    The deadline in health_ok() is only checked between calls, so a wedged daemon on an unbounded
+    inspect would block the whole deployer forever; bounding each inspect lets a hang degrade into a
+    failed gate instead.
+    """
     try:
         return run(
             ["docker", "inspect", "-f", fmt, container],
@@ -746,12 +757,13 @@ def health_ok(
 
 
 def containers_for(service: str) -> list[str]:
-    """Container names to health-gate for a deployed service, from its rendered
-    compose. Empty when the service isn't deployed on THIS host — its rendered
-    file doesn't exist (dozzle is daniel-pi-only, and the deployer doesn't run
-    on the Pi at all) — so the caller skips it instead of gating a phantom
-    container (see deploy_logic.containers_to_gate). A present compose that declares no
-    container_name falls back to [service]."""
+    """Container names to health-gate for a deployed service, from its rendered compose.
+
+    Empty when the service isn't deployed on THIS host — its rendered file doesn't exist (dozzle is
+    daniel-pi-only, and the deployer doesn't run on the Pi at all) — so the caller skips it instead
+    of gating a phantom container (see deploy_logic.containers_to_gate). A present compose that
+    declares no container_name falls back to [service].
+    """
     path = os.path.join(REPO, "containers", service, "docker-compose.yml")
     try:
         with open(path) as fh:
@@ -1523,9 +1535,12 @@ def main() -> int:
 
 
 def entrypoint() -> int:
-    """One tick as systemd runs it: main() plus the exit-code contract around it. Returns the
-    process exit code; the `__main__` guard below only hands it to sys.exit, so a test can
-    call this directly (test_gitops_deploy_fetch_skip.py)."""
+    """One tick as systemd runs it:
+
+    main() plus the exit-code contract around it. Returns the process exit code; the `__main__`
+    guard below only hands it to sys.exit, so a test can call this directly
+    (test_gitops_deploy_fetch_skip.py).
+    """
     try:
         rc = main()
     except RetryableFetchError as e:

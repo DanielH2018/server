@@ -162,8 +162,11 @@ def k8s_deploy_argv(service, namespace, kind="deploy"):
 
 
 def k8s_pods_argv(service, namespace, selector=None):
-    """kubectl argv for a workload's pods. `selector` overrides the `app=<service>` guess —
-    pass `pod_selector(workload)` whenever the workload document is in hand."""
+    """kubectl argv for a workload's pods.
+
+    `selector` overrides the `app=<service>` guess — pass `pod_selector(workload)` whenever the
+    workload document is in hand.
+    """
     return [
         "k3s",
         "kubectl",
@@ -322,8 +325,11 @@ def resolve_service_ip(name):
 
 
 def resolve_ip(container):
-    """A Docker container's bridge IP. daniel-pi is the only host that still has Docker —
-    on either cluster node this raises FileNotFoundError, so use resolve_service_ip."""
+    """A Docker container's bridge IP.
+
+    daniel-pi is the only host that still has Docker — on either cluster node this raises
+    FileNotFoundError, so use resolve_service_ip.
+    """
     out = subprocess.run(inspect_ip_argv(container), capture_output=True, text=True)
     if out.returncode != 0:
         raise SystemExit(f"docker inspect {container} failed: {out.stderr.strip()}")

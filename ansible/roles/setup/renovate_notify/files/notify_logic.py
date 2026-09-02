@@ -94,9 +94,10 @@ def parse_repository_problems(body: str) -> set[str]:
 
 
 def find_dashboard_problems(issues: list[dict]) -> set[str]:
-    """Parse the dashboard issue's Repository Problems section (see
-    parse_repository_problems). Empty set when the dashboard is absent or has no
-    problems section."""
+    """Parse the dashboard issue's Repository Problems section (see parse_repository_problems).
+
+    Empty set when the dashboard is absent or has no problems section.
+    """
     issue = _find_dashboard_issue(issues)
     if issue is None:
         return set()
@@ -104,9 +105,12 @@ def find_dashboard_problems(issues: list[dict]) -> set[str]:
 
 
 def problems_fingerprint(problems: set[str]) -> str:
-    """Dedupe key for the Repository Problems bucket. Sorted so ordering is stable, but the
-    problem strings themselves are the key — a persistent problem set re-notifies only on
-    change, while a NEW problem (even alongside old ones) changes the string and re-pages."""
+    """Dedupe key for the Repository Problems bucket.
+
+    Sorted so ordering is stable, but the problem strings themselves are the key — a persistent
+    problem set re-notifies only on change, while a NEW problem (even alongside old ones) changes
+    the string and re-pages.
+    """
     return ",".join(sorted(problems))
 
 
@@ -130,7 +134,8 @@ def dashboard_stale(
     `updated_at` is the issue's ISO-8601 timestamp (GitHub uses a trailing 'Z'), or None
     when no dashboard issue exists. A stale/absent dashboard is the fail-loud signal that
     Renovate itself stopped — the case the 'Renovate Notifier — Alive' monitor (which
-    watches the *notifier*, not Renovate) can't see."""
+    watches the *notifier*, not Renovate) can't see.
+    """
     if not updated_at:
         return True
     now = now or datetime.now(timezone.utc)
@@ -141,8 +146,10 @@ def dashboard_stale(
 
 
 def parse_automerge(body: str) -> bool:
-    """True only if Renovate's body explicitly says Automerge Enabled. Absent/unknown
-    -> False, so classify_pr() surfaces it as `manual` (fail toward surfacing)."""
+    """True only if Renovate's body explicitly says Automerge Enabled.
+
+    Absent/unknown -> False, so classify_pr() surfaces it as `manual` (fail toward surfacing).
+    """
     return "Automerge**: Enabled" in (body or "")
 
 
@@ -246,12 +253,14 @@ def _stuck_age_bucket(pr: PR, now: datetime) -> int:
 
 
 def fingerprint(items: list[tuple[PR, str]], now: datetime | None = None) -> str:
-    """Dedupe key for the actionable PR set. `stuck` PRs carry a coarse age dimension
-    (`_stuck_age_bucket`) so a PR that's been stuck for a while re-pages at each threshold
-    crossing instead of paging once on day 1 and then going silent forever while it ages
-    (PR #67, stuck since 2026-08-03, is the case this closes — `manual` PRs don't get one:
-    they're "waiting on your merge", not "broken and getting worse", so there's nothing to
-    escalate on)."""
+    """Dedupe key for the actionable PR set.
+
+    `stuck` PRs carry a coarse age dimension (`_stuck_age_bucket`) so a PR that's been stuck for a
+    while re-pages at each threshold crossing instead of paging once on day 1 and then going silent
+    forever while it ages (PR #67, stuck since 2026-08-03, is the case this closes — `manual` PRs
+    don't get one: they're "waiting on your merge", not "broken and getting worse", so there's
+    nothing to escalate on).
+    """
     now = now or datetime.now(timezone.utc)
     parts = []
     for pr, bucket in items:

@@ -35,9 +35,12 @@ def _pools() -> dict[str, dict]:
 
 
 def test_ingress_pool_is_a_single_address_that_is_never_auto_assigned():
-    """autoAssign: false is the whole reservation. Without it MetalLB hands the ingress
-    address to whichever LoadBalancer Service asks first, and ingress moves — after that
-    address is in DNS and, from slice 6, in the router's port-forward."""
+    """autoAssign:
+
+    false is the whole reservation. Without it MetalLB hands the ingress address to whichever
+    LoadBalancer Service asks first, and ingress moves — after that address is in DNS and, from
+    slice 6, in the router's port-forward.
+    """
     ingress = _pools()["ingress-pool"]
     assert ingress["spec"]["autoAssign"] is False
     assert ingress["spec"]["addresses"] == [f"{ALL_VARS['k3s_metallb_ingress_vip']}/32"]
@@ -101,8 +104,10 @@ def test_metallb_service_annotations_use_the_metallb_io_namespace():
 
 
 def test_the_metallb_annotation_guard_can_go_red():
-    """The rejecting half. A guard that matches nothing is indistinguishable from a passing
-    one, and this file has already held this assertion pointing the wrong way for six days.
+    """The rejecting half.
+
+    A guard that matches nothing is indistinguishable from a passing one, and this file has already
+    held this assertion pointing the wrong way for six days.
     """
     accepted = "    metallb.io/loadBalancerIPs: 10.0.0.240"
     rejected = "    metallb.universe.tf/loadBalancerIPs: 10.0.0.240"
@@ -115,9 +120,10 @@ def test_the_metallb_annotation_guard_can_go_red():
 
 
 def test_metallb_version_still_supports_the_metallb_io_annotations():
-    """metallb.io/ Service annotations are only read from v0.15 onward. A downgrade past that
-    would make every pinned address silently fall back to the auto-assign pool, so tie the
-    assertion above to the version pin rather than leaving the two to drift apart.
+    """metallb.io/ Service annotations are only read from v0.15 onward.
+
+    A downgrade past that would make every pinned address silently fall back to the auto-assign
+    pool, so tie the assertion above to the version pin rather than leaving the two to drift apart.
     """
     pin = K3S_DEFAULTS["k3s_metallb_version"].lstrip("v")
     major, minor = (int(p) for p in pin.split(".")[:2])

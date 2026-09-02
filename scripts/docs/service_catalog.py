@@ -220,10 +220,12 @@ def _resolve_claim_name(expr: str, role_dir: Path) -> str | None:
 def load_longhorn_tier_lists(
     k3s_defaults: Path = K3S_DEFAULTS,
 ) -> tuple[set[str], set[str]]:
-    """(r2_volumes, weekly_volumes) — "namespace/claim" strings, from the k3s role's
-    defaults. Everything else with a PVC falls into the `default` RecurringJob group,
-    which Longhorn applies to any volume with no job of its own (daily, to B2) — see
-    ansible/roles/setup/k3s/templates/longhorn-recurringjob.yaml.j2."""
+    """(r2_volumes, weekly_volumes) — "namespace/claim" strings, from the k3s role's defaults.
+
+    Everything else with a PVC falls into the `default` RecurringJob group, which Longhorn applies
+    to any volume with no job of its own (daily, to B2) — see
+    ansible/roles/setup/k3s/templates/longhorn-recurringjob.yaml.j2.
+    """
     data = _load_yaml(k3s_defaults)
     r2 = set(data.get("k3s_longhorn_r2_volumes") or [])
     weekly = set(data.get("k3s_longhorn_weekly_volumes") or [])

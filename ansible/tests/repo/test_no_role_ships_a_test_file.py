@@ -49,8 +49,11 @@ def _shipped_python_names() -> list[tuple[str, str]]:
 
 
 def test_the_scan_finds_python_files_being_shipped() -> None:
-    """Guard the guard. A pattern that stopped matching would pass the check below vacuously,
-    which is the failure this repo has paid for twice."""
+    """Guard the guard.
+
+    A pattern that stopped matching would pass the check below vacuously, which is the failure this
+    repo has paid for twice.
+    """
     shipped = _shipped_python_names()
     assert len(shipped) >= 5, (
         f"only found {len(shipped)} shipped .py files — the scan broke. Roles copy "

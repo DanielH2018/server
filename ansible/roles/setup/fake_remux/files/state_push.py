@@ -44,8 +44,11 @@ def verdict(state, age_s, max_age_s, label):
 
 
 def read_state(path):
-    """(state, age_s) or (None, reason). A missing or unparseable file is a failure, not a skip —
-    it is indistinguishable from a cron that has never run."""
+    """(state, age_s) or (None, reason).
+
+    A missing or unparseable file is a failure, not a skip — it is indistinguishable from a cron
+    that has never run.
+    """
     if not os.path.exists(path):
         return None, "no state file at %s (never ran?)" % path
     try:

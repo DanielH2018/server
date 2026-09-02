@@ -135,8 +135,11 @@ def test_the_phantom_check_goes_red_on_a_tag_that_references_nothing():
 
 
 def test_the_setup_plane_check_goes_red_when_a_setup_consumer_is_claimed_deployable():
-    """The reject half: sonarr_api_key genuinely has a setup-plane consumer, so claiming it is
-    auto-deployable must be flagged. This is today's incident, replayed."""
+    """The reject half:
+
+    sonarr_api_key genuinely has a setup-plane consumer, so claiming it is auto-deployable must be
+    flagged. This is today's incident, replayed.
+    """
     blind = _setup_plane_blind_spots("sonarr_api_key", ("sonarr",))
 
     assert blind == ["fake_remux"]

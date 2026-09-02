@@ -185,8 +185,11 @@ def test_split_shared_roles_separates_an_undeclared_role(host_vars):
 
 
 def test_split_shared_roles_calls_nothing_shared_when_all_are_declared(host_vars):
-    """The reject half. A splitter that pushed everything into `shared` would derive no tags
-    at all and turn every landing into a full-deploy instruction."""
+    """The reject half.
+
+    A splitter that pushed everything into `shared` would derive no tags at all and turn every
+    landing into a full-deploy instruction.
+    """
     deployable, shared = deploy_tags.split_shared_roles(
         {"sonarr", "jellyfin"}, host_vars
     )
@@ -195,8 +198,11 @@ def test_split_shared_roles_calls_nothing_shared_when_all_are_declared(host_vars
 
 
 def test_changed_drops_a_shared_role_and_deploys_the_rest(capsys, monkeypatch):
-    """PR #617's shape. Emitting `manifests` as a tag makes deploy.sh refuse the whole list
-    (exit 2), so the valid service beside it never deploys."""
+    """PR #617's shape.
+
+    Emitting `manifests` as a tag makes deploy.sh refuse the whole list (exit 2), so the valid
+    service beside it never deploys.
+    """
     monkeypatch.setattr(
         deploy_tags,
         "_git_diff_paths",
@@ -213,8 +219,11 @@ def test_changed_drops_a_shared_role_and_deploys_the_rest(capsys, monkeypatch):
 
 
 def test_changed_refuses_when_only_shared_roles_changed(capsys, monkeypatch):
-    """Exit 3, not 0. An empty tag list returned as success makes deploy.sh exit 0 having
-    deployed nothing, which is the same false green in a different place."""
+    """Exit 3, not 0.
+
+    An empty tag list returned as success makes deploy.sh exit 0 having deployed nothing, which is
+    the same false green in a different place.
+    """
     monkeypatch.setattr(
         deploy_tags,
         "_git_diff_paths",

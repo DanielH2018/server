@@ -152,8 +152,10 @@ def test_a_sentinel_nav_link_resolves_to_the_lan_name():
 
 
 def test_an_ip_literal_leaves_the_sentinel_alone():
-    """mkdocs serve lands here. A dead .invalid link is a better failure than a link to
-    a host assembled out of an octet."""
+    """mkdocs serve lands here.
+
+    A dead .invalid link is a better failure than a link to a host assembled out of an octet.
+    """
     assert _resolve("127.0.0.1", SENTINEL) == SENTINEL
 
 

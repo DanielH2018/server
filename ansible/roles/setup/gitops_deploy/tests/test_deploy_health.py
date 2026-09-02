@@ -257,8 +257,11 @@ def test_apply_drain_result_all_delivered_empties():
 
 
 def test_cap_pending_leaves_a_queue_under_the_cap_alone():
-    """The accepting half. A cap that trimmed unconditionally would pass the rejecting test
-    below while quietly discarding alerts that fit."""
+    """The accepting half.
+
+    A cap that trimmed unconditionally would pass the rejecting test below while quietly discarding
+    alerts that fit.
+    """
     queue = {f"secrets:{i}": "msg" for i in range(5)}
     capped, dropped = cap_pending(dict(queue), max_entries=64)
     assert capped == queue
@@ -266,8 +269,11 @@ def test_cap_pending_leaves_a_queue_under_the_cap_alone():
 
 
 def test_cap_pending_evicts_the_oldest_first():
-    """The rejecting half. Dicts preserve insertion order and json.load preserves it on the way
-    back in, so the queue's own order IS its age order — no timestamps needed."""
+    """The rejecting half.
+
+    Dicts preserve insertion order and json.load preserves it on the way back in, so the queue's own
+    order IS its age order — no timestamps needed.
+    """
     queue = {f"secrets:{i}": f"msg{i}" for i in range(6)}
     capped, dropped = cap_pending(queue, max_entries=4)
     assert dropped == ["secrets:0", "secrets:1"]

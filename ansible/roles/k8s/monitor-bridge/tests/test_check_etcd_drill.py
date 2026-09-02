@@ -59,9 +59,12 @@ def test_etcd_drill_fails_when_it_has_never_run(tmp_path, monkeypatch):
 
 
 def test_etcd_drill_fails_when_the_stamp_is_unreadable(tmp_path, monkeypatch):
-    """Not hypothetical: the first real run wrote 0640 root:root under UMASK 027 while this pod
-    runs as uid 1000. An unreadable stamp and an absent one are otherwise indistinguishable, so
-    they must report distinctly — they need different fixes."""
+    """Not hypothetical:
+
+    the first real run wrote 0640 root:root under UMASK 027 while this pod runs as uid 1000. An
+    unreadable stamp and an absent one are otherwise indistinguishable, so they must report
+    distinctly — they need different fixes.
+    """
     if os.geteuid() == 0:
         pytest.skip("root ignores the mode bits this asserts")
     _stamp(tmp_path, monkeypatch, _stamp_body(1), mode=0o000)
@@ -85,9 +88,11 @@ def test_etcd_drill_fails_on_an_unparseable_stamp(tmp_path, monkeypatch):
 
 
 def test_etcd_drill_never_accepts_the_full_stamp_as_coverage(tmp_path, monkeypatch):
-    """Only the list-only leg is scheduled. Accepting `last-success-full` would report the
-    object-graph restore as proven when nothing on this host has ever proven it — the
-    'one tier hiding behind another tier's evidence' shape."""
+    """Only the list-only leg is scheduled.
+
+    Accepting `last-success-full` would report the object-graph restore as proven when nothing on
+    this host has ever proven it — the 'one tier hiding behind another tier's evidence' shape.
+    """
     _stamp(tmp_path, monkeypatch, _stamp_body(1, mode="full"), name="last-success-full")
     ok, msg = checks_service.check_etcd_restore_drill()
     assert ok is False, "a full-mode stamp must not satisfy the list-only reader"

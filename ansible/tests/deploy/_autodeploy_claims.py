@@ -152,32 +152,33 @@ def _deployment_strategy_is_recreate(role: Path) -> bool:
 
 
 def _migrating_state(role: Path) -> bool:
-    """Whether `role` has the shape volume-snapshot exists for: `strategy: Recreate` against at
-    least one rendered RWO PVC claim.
+    """Whether `role` has the shape volume-snapshot exists for:
+
+    `strategy: Recreate` against at least one rendered RWO PVC claim.
 
     This is the mechanical definition, read off what the role actually renders — NOT off
     `k8s_autodeploy_reason` text.
 
     Measured 2026-08-21: this predicate is true for 31 roles, not the thirteen slice 7a task 3
-    declared `k8s_autodeploy_snapshot_pvcs` for. `_migrating_state` is broad on purpose — it
-    reads `strategy: Recreate` plus a rendered RWO claim off every role, whether or not that
-    role is auto-deployable. Before slice 7b task 7 promoted twelve of those thirteen, the 31
-    roles this predicate flagged and the 14 `_auto_deployable` roles did not intersect at all,
-    which is what made `test_auto_deployable_migrating_state_roles_declare_snapshot_pvcs` below
-    vacuous. Task 7 made the two sets overlap on those twelve; the same-day scope decision then
-    re-denied three of them (zigbee2mqtt, livesync, qbittorrent — state coupled outside the
-    volume, not a snapshot gap), and a later audit re-denied tdarr for the same reason — so the
-    overlap the guard actually exercises today is the remaining eight. Every count along the way
-    is non-empty, so the guard bites instead of matching an empty loop.
+    declared `k8s_autodeploy_snapshot_pvcs` for. `_migrating_state` is broad on purpose — it reads
+    `strategy: Recreate` plus a rendered RWO claim off every role, whether or not that role is
+    auto-deployable. Before slice 7b task 7 promoted twelve of those thirteen, the 31 roles this
+    predicate flagged and the 14 `_auto_deployable` roles did not intersect at all, which is what
+    made `test_auto_deployable_migrating_state_roles_declare_snapshot_pvcs` below vacuous. Task 7
+    made the two sets overlap on those twelve; the same-day scope decision then re-denied three of
+    them (zigbee2mqtt, livesync, qbittorrent — state coupled outside the volume, not a snapshot
+    gap), and a later audit re-denied tdarr for the same reason — so the overlap the guard actually
+    exercises today is the remaining eight. Every count along the way is non-empty, so the guard
+    bites instead of matching an empty loop.
 
-    Almost every PVC `_rendered_pvc_claims` can find in this repo hardcodes
-    `accessModes: [ReadWriteOnce]` (both direct templates and k8s/volume-claim's shared one), so a
-    rendered claim existing at all is normally sufficient without a separate accessModes read.
-    The one exception: `k8s/media-volume`'s own `pvc.yaml.j2` is `ReadWriteMany`. It does not
-    corrupt this predicate today — `media-volume` itself renders no Recreate Deployment, so
-    `_migrating_state` never reaches that claim — but a future Recreate role sharing that RWX
-    volume would be flagged here as if it needed snapshot protection for a migration risk RWX
-    doesn't actually carry the same way RWO does.
+    Almost every PVC `_rendered_pvc_claims` can find in this repo hardcodes `accessModes:
+    [ReadWriteOnce]` (both direct templates and k8s/volume-claim's shared one), so a rendered claim
+    existing at all is normally sufficient without a separate accessModes read. The one exception:
+    `k8s/media-volume`'s own `pvc.yaml.j2` is `ReadWriteMany`. It does not corrupt this predicate
+    today — `media-volume` itself renders no Recreate Deployment, so `_migrating_state` never
+    reaches that claim — but a future Recreate role sharing that RWX volume would be flagged here as
+    if it needed snapshot protection for a migration risk RWX doesn't actually carry the same way
+    RWO does.
     """
     return _deployment_strategy_is_recreate(role) and bool(
         _rendered_pvc_claims(role)[0]

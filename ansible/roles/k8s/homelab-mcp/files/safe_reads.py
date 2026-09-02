@@ -40,8 +40,10 @@ def strip_container_fields(inspect: dict) -> dict:
 
 
 def summarize_container_list(items: list[dict]) -> list[dict]:
-    """Summarize GET /containers/json rows. This endpoint omits Env, but we
-    still project an explicit allowlist rather than trusting that."""
+    """Summarize GET /containers/json rows.
+
+    This endpoint omits Env, but we still project an explicit allowlist rather than trusting that.
+    """
     rows = []
     for it in items:
         names = it.get("Names") or []

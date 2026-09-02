@@ -67,8 +67,10 @@ def test_a_current_tree_is_not_behind(repos):
 
 
 def test_a_tree_ahead_only_is_not_behind(repos):
-    """Normal branch work. A slice deploy runs from a worktree with unmerged commits,
-    so 'ahead' must never trip the guard."""
+    """Normal branch work.
+
+    A slice deploy runs from a worktree with unmerged commits, so 'ahead' must never trip the guard.
+    """
     _origin, clone = repos
     _commit(clone, "mine")
     assert behind_ahead(clone, "origin/master") == (0, 1)

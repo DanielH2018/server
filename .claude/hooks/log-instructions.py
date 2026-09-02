@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
-"""InstructionsLoaded hook (observability only): append one line per CLAUDE.md /
-.claude/rules file as it loads into context, recording WHICH file loaded and WHY
-(`load_reason`): session_start, path_glob_match, nested_traversal, include, compact.
+"""InstructionsLoaded hook (observability only):
 
-The point: verify that path-scoped rules actually fire. Claude Code has known bugs
-where a `paths:`-scoped rule isn't loaded when you edit a matching file (or loads
-globally regardless). With this log you can edit, say, a compose template and check
-that `docker.md` shows up with `load_reason=path_glob_match` and the right trigger.
+append one line per CLAUDE.md / .claude/rules file as it loads into context, recording WHICH file
+loaded and WHY (`load_reason`): session_start, path_glob_match, nested_traversal, include, compact.
 
-Observability only — InstructionsLoaded cannot block, and this swallows all errors and
-always exits 0 so it can never disrupt session startup. Pure stdlib (no third-party
-deps), so the wrapper runs system python3 directly — no uv overhead on the startup path.
+The point: verify that path-scoped rules actually fire. Claude Code has known bugs where a
+`paths:`-scoped rule isn't loaded when you edit a matching file (or loads globally regardless). With
+this log you can edit, say, a compose template and check that `docker.md` shows up with
+`load_reason=path_glob_match` and the right trigger.
 
-Log: .claude/logs/instructions.log (gitignored), bounded by single-backup rotation.
-Inspect: tail -n 40 .claude/logs/instructions.log
+Observability only — InstructionsLoaded cannot block, and this swallows all errors and always exits
+0 so it can never disrupt session startup. Pure stdlib (no third-party deps), so the wrapper runs
+system python3 directly — no uv overhead on the startup path.
+
+Log: .claude/logs/instructions.log (gitignored), bounded by single-backup rotation. Inspect: tail -n
+40 .claude/logs/instructions.log
 """
 
 import json

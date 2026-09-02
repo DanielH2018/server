@@ -393,15 +393,21 @@ def _stable_offset(name: str, span: int) -> int:
 
 
 def today() -> dt.date:
-    """The registry's calendar day. Rotation dates are day-granular and the hosts, the crons
-    and the operator all live in America/Chicago, so the day is pinned to that zone rather than
-    to whichever TZ the invoking shell happens to carry."""
+    """The registry's calendar day.
+
+    Rotation dates are day-granular and the hosts, the crons and the operator all live in
+    America/Chicago, so the day is pinned to that zone rather than to whichever TZ the invoking
+    shell happens to carry.
+    """
     return dt.datetime.now(tz=ZoneInfo("America/Chicago")).date()
 
 
 def seed_last_rotated(name: str, tier: str, today: dt.date) -> str | None:
-    """A staggered seed date: due = seed + cadence lands in [today+lead, today+cadence],
-    so nothing is overdue at registration and the due-dates are spread across the window."""
+    """A staggered seed date:
+
+    due = seed + cadence lands in [today+lead, today+cadence], so nothing is overdue at registration
+    and the due-dates are spread across the window.
+    """
     days = TIER_DAYS[tier]
     if not days:
         return None
@@ -473,8 +479,11 @@ def _git(*args: str) -> str:
 
 
 def ciphertext_at(rev: str) -> dict[str, str]:
-    """name -> stored ciphertext at `rev`. Never decrypts: the `diff=sops` textconv
-    driver rewrites diff output only, so `git show <rev>:<path>` streams the raw blob."""
+    """name -> stored ciphertext at `rev`.
+
+    Never decrypts: the `diff=sops` textconv driver rewrites diff output only, so `git show
+    <rev>:<path>` streams the raw blob.
+    """
     data = yaml.safe_load(_git("show", f"{rev}:{SECRETS_GIT_PATH}")) or {}
     return {k: str(v) for k, v in data.items() if k != "sops"}
 
@@ -516,9 +525,11 @@ def ciphertext_rotation_dates() -> dict[str, dt.date]:
 
 
 def derived_rotation_dates() -> dict[str, dt.date]:
-    """Git-derived dates, or {} when git cannot answer (no checkout, shallow clone, git
-    missing). The daily cron degrades to the recorded dates instead of failing — a broken
-    derivation must not take the monitor down on its own."""
+    """Git-derived dates, or {} when git cannot answer (no checkout, shallow clone, git missing).
+
+    The daily cron degrades to the recorded dates instead of failing — a broken derivation must not
+    take the monitor down on its own.
+    """
     try:
         return ciphertext_rotation_dates()
     except subprocess.CalledProcessError, OSError, yaml.YAMLError, ValueError:
@@ -528,15 +539,16 @@ def derived_rotation_dates() -> dict[str, dt.date]:
 def advance_last_rotated(
     reg: dict, dates: dict[str, dt.date]
 ) -> list[tuple[str, str, str]]:
-    """Move `last_rotated` forward where git shows a later change. Returns (name, old,
-    new) for each row advanced. Mutates `reg` in memory only — the caller never saves it,
-    which is what keeps the audit read-only and git the source of truth.
+    """Move `last_rotated` forward where git shows a later change.
+
+    Returns (name, old, new) for each row advanced. Mutates `reg` in memory only — the caller never
+    saves it, which is what keeps the audit read-only and git the source of truth.
 
     Advance-only, for two reasons. Seed dates are deliberately staggered and backdated
-    (`seed_last_rotated`) and most secrets predate this file's git history, so taking the
-    derived date unconditionally would collapse them onto the same introduction commit
-    and un-stagger every due-date. It also means this can only ever clear an overdue
-    secret that a real rotation already fixed, never create one.
+    (`seed_last_rotated`) and most secrets predate this file's git history, so taking the derived
+    date unconditionally would collapse them onto the same introduction commit and un-stagger every
+    due-date. It also means this can only ever clear an overdue secret that a real rotation already
+    fixed, never create one.
     """
     # DECIDED: git evidence beats the seed even though it can overstate freshness for a
     # credential minted before this file's first commit (2026-01-17) — such a secret dates
@@ -597,10 +609,13 @@ def cmd_sync(args) -> int:
 
 
 def registry_drift(registered: set, present: set) -> tuple[list, list]:
-    """Pure registry-vs-secrets.yml drift. Returns (missing, stale):
+    """Pure registry-vs-secrets.yml drift.
+
+    Returns (missing, stale):
       missing = in secrets.yml but NOT in the registry (a `sync` was forgotten after /add-secret);
       stale   = a registry row whose secret was removed from secrets.yml.
-    Reads plaintext key NAMES only — never decrypts a value, so it's CI-safe."""
+    Reads plaintext key NAMES only — never decrypts a value, so it's CI-safe.
+    """
     return sorted(present - registered), sorted(registered - present)
 
 
@@ -624,7 +639,8 @@ def malformed_push_tokens(values: dict) -> list[tuple[str, str]]:
     `KUMA_PUSH_*` env var, or an `/api/push/` URL; and every var interpolated into one of
     those three positions is so named (62 of each, no exceptions). A Kuma push token added
     under a different name would be invisible here — grep those three positions if this ever
-    needs rechecking."""
+    needs rechecking.
+    """
     bad = []
     for name, value in sorted(values.items()):
         if not name.endswith("_push_token"):
@@ -649,7 +665,8 @@ def decrypted_values(path: str = SECRETS_FILE) -> dict | None:
     None is a legitimate answer, not an error: the audit's other arms are deliberately
     decrypt-free so they run in CI, and this one simply has nothing to say there. Nothing from
     the subprocess is echoed on failure — stdout holds the plaintext, so putting it in a
-    message or a traceback is the one way this helper could leak."""
+    message or a traceback is the one way this helper could leak.
+    """
     try:
         r = subprocess.run(
             ["sops", "--decrypt", path],
@@ -673,11 +690,13 @@ def decrypted_values(path: str = SECRETS_FILE) -> dict | None:
 
 
 def audit_summary(res: dict, missing: list, stale: list) -> str:
-    """The one-line status pushed to the "Secret Rotation" Kuma monitor. NAMES the overdue
-    secrets (most-overdue first, capped) — a bare count read identically whether a genuine cron
-    break stranded a rotatable token or one of the consumer-less known-manual auto tokens
-    (secret_rotation/pi_sd_health/pi_recovery push tokens, which the weekly cron deliberately
-    skips) merely came due, so the operator had to SSH in to tell the two apart (2026-07-15 M1)."""
+    """The one-line status pushed to the "Secret Rotation" Kuma monitor.
+
+    NAMES the overdue secrets (most-overdue first, capped) — a bare count read identically whether a
+    genuine cron break stranded a rotatable token or one of the consumer-less known-manual auto
+    tokens (secret_rotation/pi_sd_health/pi_recovery push tokens, which the weekly cron deliberately
+    skips) merely came due, so the operator had to SSH in to tell the two apart (2026-07-15 M1).
+    """
     n_over = len(res["overdue"])
     parts = ["%d %s" % (c, t) for t, c in sorted(res["by_tier"].items())]
     if n_over:
@@ -778,9 +797,11 @@ def cmd_audit(args) -> int:
 
 
 def unattended_due(rows: list, rotate_all: bool = False) -> list:
-    """Auto-tier rows the unattended weekly cron should rotate: due within
-    ROTATE_LEAD_DAYS (everything auto-tier with rotate_all). Rows are audit()
-    tuples (name, tier, due_date, days_left)."""
+    """Auto-tier rows the unattended weekly cron should rotate:
+
+    due within ROTATE_LEAD_DAYS (everything auto-tier with rotate_all). Rows are audit() tuples
+    (name, tier, due_date, days_left).
+    """
     return [
         r for r in rows if r[1] == "auto" and (rotate_all or r[3] < ROTATE_LEAD_DAYS)
     ]

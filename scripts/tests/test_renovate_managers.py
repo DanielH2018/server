@@ -73,7 +73,8 @@ def test_no_custom_manager_tracks_the_retired_compose_plane() -> None:
     templates for services that now run in the cluster, against pins nothing reads.
 
     Asserted rather than merely deleted, because re-adding a compose manager looks entirely
-    reasonable in isolation — this is the context that makes it wrong."""
+    reasonable in isolation — this is the context that makes it wrong.
+    """
     offenders = []
     for m in _MANAGERS:
         for pattern in m["managerFilePatterns"]:
@@ -94,7 +95,8 @@ def test_ignore_paths_keeps_the_inherited_preset_globs() -> None:
     test fixtures unless the inherited eight are restated alongside it.
 
     renovate-config-validator does not catch this — the shortened array is perfectly valid
-    config, just wider in scope than the author intended."""
+    config, just wider in scope than the author intended.
+    """
     inherited = {
         "**/node_modules/**",
         "**/bower_components/**",
@@ -120,7 +122,8 @@ def test_archived_compose_plane_is_ignored() -> None:
     pinned to a live file (test_no_custom_manager_tracks_the_retired_compose_plane guards
     that), but the BUILT-IN docker-compose manager has no such scoping and scans them anyway
     — which is how PR #42 came to bump getmeili/meilisearch in archive/karakeep while the
-    live pin sits in roles/k8s/karakeep/defaults/main.yml."""
+    live pin sits in roles/k8s/karakeep/defaults/main.yml.
+    """
     assert "ansible/roles/containers/archive/**" in _RENOVATE_CONFIG.get(
         "ignorePaths", []
     ), (
@@ -135,7 +138,8 @@ def test_group_vars_images_are_tracked() -> None:
     crowdsec_k8s_image was hoisted out of its role defaults into group_vars, which put it
     outside the k8s-defaults manager's file patterns AND outside the glob the per-image
     coverage test below uses — so the WAF core, the one image whose staleness is a security
-    problem, was the single pin that neither could see."""
+    problem, was the single pin that neither could see.
+    """
     scanned = [p for m in _MANAGERS for p in m["managerFilePatterns"]]
     assert any("group_vars" in p for p in scanned), (
         "no customManager scans inventory/group_vars/all.yml; an image pinned there "
@@ -157,7 +161,8 @@ def test_control_plane_version_pins_are_tracked() -> None:
 
     Written to read the pins out of the file rather than assert three known names, so a fourth
     component pinned here later (cilium, cert-manager, a k3s addon) fails this test until it is
-    tracked, instead of quietly repeating the same escape."""
+    tracked, instead of quietly repeating the same escape.
+    """
     text = (_REPO / _CONTROL_PLANE_DEFAULTS).read_text()
     pins = re.findall(r"^([a-z0-9_]*_version):\s*\"?(v[^\"\s]+)", text, re.MULTILINE)
     assert pins, (

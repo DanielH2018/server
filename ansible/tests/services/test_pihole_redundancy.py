@@ -43,10 +43,12 @@ def test_two_instances_are_rendered():
 
 
 def test_both_instances_are_selected_by_the_dns_service():
-    """The DNS Service fronts both pods because both carry `app: pihole` and it selects only
-    on that label. (The web Service additionally pins to `instance: pihole` — see
-    test_only_the_web_service_is_pinned_to_one_instance — so it deliberately does NOT select
-    pihole-2; this test covers DNS only.)"""
+    """The DNS Service fronts both pods because both carry `app:
+
+    pihole` and it selects only on that label. (The web Service additionally pins to `instance:
+    pihole` — see test_only_the_web_service_is_pinned_to_one_instance — so it deliberately does NOT
+    select pihole-2; this test covers DNS only.)
+    """
     dns_selector = next(
         doc["spec"]["selector"]
         for role, _tpl, doc in rendered_docs()
@@ -90,10 +92,12 @@ def test_both_instances_pin_to_the_announcing_node():
 
 
 def test_pod_template_carries_a_per_instance_label():
-    """`kubectl exec deploy/<name>` resolves through spec.selector, which is `app: pihole`
-    on both Deployments and can't carry a per-instance value (selector is immutable). The
+    """`kubectl exec deploy/<name>` resolves through spec.selector, which is `app:
+
+    pihole` on both Deployments and can't carry a per-instance value (selector is immutable). The
     pod-only `instance` label is what lets tasks/main.yml and roll_one.yml address a specific
-    instance's pod instead of whichever one the shared selector happens to pick."""
+    instance's pod instead of whichever one the shared selector happens to pick.
+    """
     for name, dep in _pihole_deployments().items():
         assert dep["spec"]["template"]["metadata"]["labels"].get("instance") == name, (
             f"{name}'s pod template is missing its own instance label"
@@ -113,8 +117,11 @@ def _pihole_services() -> dict[str, dict]:
 
 
 def test_only_the_web_service_is_pinned_to_one_instance():
-    """Ruling: web UI pins to instance 1 (Pi-hole v6 keeps sessions in FTL memory), DNS
-    stays load-balanced across both (each query is stateless and redundancy is the point)."""
+    """Ruling:
+
+    web UI pins to instance 1 (Pi-hole v6 keeps sessions in FTL memory), DNS stays load-balanced
+    across both (each query is stateless and redundancy is the point).
+    """
     services = _pihole_services()
     assert services["pihole"]["spec"]["selector"].get("instance") == "pihole", (
         "the web Service must pin to instance 1 or admin sessions 401 at random between "

@@ -48,8 +48,11 @@ def read(path: Path) -> str:
 
 
 def code_lines(path: Path) -> list[str]:
-    """Shell lines only. Both headers document the old direct write at length, and a comment
-    quoting `git push` must not be mistaken for one."""
+    """Shell lines only.
+
+    Both headers document the old direct write at length, and a comment quoting `git push` must not
+    be mistaken for one.
+    """
     return [
         line
         for line in read(path).splitlines()
@@ -126,7 +129,9 @@ def test_secret_rotate_refuses_to_stack_an_unlanded_rotation():
 
 
 def test_secret_rotate_fails_closed_when_origin_is_unreachable():
-    """`git ls-remote ... || true` would read an unreachable origin as "no stale branch" and
+    """`git ls-remote ...
+
+    || true` would read an unreachable origin as "no stale branch" and
     rotate straight into the state the guard exists to refuse. The exit status must be tested.
     """
     text = read(SECRET_ROTATE)
@@ -166,9 +171,10 @@ def test_secret_rotate_never_reverts_a_live_rotation():
 
 
 def test_the_audit_watches_for_an_unlanded_rotation_branch():
-    """The weekly gate refuses to stack, but nothing would REPORT the stuck state between
-    Sundays. The daily audit is the sticky signal, and its two existing arms read only local
-    state -- a clean tree and an unrotated registry are exactly what the failure looks like.
+    """The weekly gate refuses to stack, but nothing would REPORT the stuck state between Sundays.
+
+    The daily audit is the sticky signal, and its two existing arms read only local state -- a clean
+    tree and an unrotated registry are exactly what the failure looks like.
     """
     text = ROTATION_AUDIT.read_text()
     assert "git ls-remote --heads origin" in text, (
@@ -319,8 +325,11 @@ def curl_lines_leaking_a_push_url(text: str) -> list[str]:
 
 
 def test_no_push_token_reaches_curls_argv():
-    """The security property. No exemptions -- an exempt file is one that may write its own
-    curl, not one that may leak the token."""
+    """The security property.
+
+    No exemptions -- an exempt file is one that may write its own curl, not one that may leak the
+    token.
+    """
     offenders = {}
     for path in push_corpus():
         leaks = curl_lines_leaking_a_push_url(path.read_text())
@@ -335,8 +344,11 @@ def test_no_push_token_reaches_curls_argv():
 
 
 def test_every_shell_push_script_sources_the_shared_library():
-    """crons.yml:15-19 asserts this in prose. Two files are honestly exempt; both are named
-    with their reason, and both remain bound by the argv assertion above."""
+    """crons.yml:15-19 asserts this in prose.
+
+    Two files are honestly exempt; both are named with their reason, and both remain bound by the
+    argv assertion above.
+    """
     offenders = []
     for path in push_corpus():
         if path.name in _LIBRARY_EXEMPT or not path.name.endswith(".sh.j2"):
@@ -361,8 +373,11 @@ def test_the_library_exemptions_still_name_live_files():
 
 
 def test_the_push_corpus_never_shrinks():
-    """The point of the whole rewrite. A guard whose corpus quietly narrows is worse than no
-    guard, because it reads green while the class it covers spreads."""
+    """The point of the whole rewrite.
+
+    A guard whose corpus quietly narrows is worse than no guard, because it reads green while the
+    class it covers spreads.
+    """
     found = {str(path.relative_to(REPO)) for path in push_corpus()}
     missing = _EXPECTED_IN_CORPUS - found
     assert not missing, (

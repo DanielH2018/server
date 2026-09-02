@@ -244,8 +244,10 @@ def _labelled_workloads() -> set[tuple[str, str]]:
 
 
 def test_every_pod_producing_doc_in_a_fenced_role_is_labelled() -> None:
-    """A role is not a unit of fencing. claude-otel renders six workloads; five
-    could go unlabelled while the role still looked fenced."""
+    """A role is not a unit of fencing.
+
+    claude-otel renders six workloads; five could go unlabelled while the role still looked fenced.
+    """
     fenced_roles = (
         SLICE_1_ROLES
         | SLICE_2_ROLES

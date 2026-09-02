@@ -146,9 +146,12 @@ def test_a_commit_touching_no_subset_service_is_not_gateable(monkeypatch):
 
 
 def test_a_commit_predating_the_services_staging_support_is_not_gateable(monkeypatch):
-    """The era filter. Such a commit deploys prod-shaped config to a cluster that cannot take
-    it and comes back REJECTED, which has no honest triage answer — it is neither a gate
-    misfire nor a defect in the commit — so it would block the verdict forever."""
+    """The era filter.
+
+    Such a commit deploys prod-shaped config to a cluster that cannot take it and comes back
+    REJECTED, which has no honest triage answer — it is neither a gate misfire nor a defect in the
+    commit — so it would block the verdict forever.
+    """
     monkeypatch.setattr(
         bf,
         "changed_paths",
@@ -261,8 +264,11 @@ def test_the_scheduled_form_refuses_to_replay_history_from_an_empty_ledger(
 
 
 def test_that_refusal_is_not_the_could_not_run_code(tmp_path, monkeypatch):
-    """The rejecting half. COULD_NOT_RUN is not tolerated by the unit, so returning it for an
-    unseeded ledger would page hourly for a state that is merely unstarted."""
+    """The rejecting half.
+
+    COULD_NOT_RUN is not tolerated by the unit, so returning it for an unseeded ledger would page
+    hourly for a state that is merely unstarted.
+    """
     monkeypatch.setattr(
         sys,
         "argv",
@@ -277,8 +283,11 @@ def test_that_refusal_is_not_the_could_not_run_code(tmp_path, monkeypatch):
 
 
 def test_the_subset_comes_from_staging_gate_rather_than_a_local_copy():
-    """Pins the reuse. A fourth copy of the subset here would drift from the three that
-    test_staging_subset_copies_agree.py already keeps in step."""
+    """Pins the reuse.
+
+    A fourth copy of the subset here would drift from the three that
+    test_staging_subset_copies_agree.py already keeps in step.
+    """
     import staging_gate
 
     assert bf.staging_gate.STAGING_SERVICES is staging_gate.STAGING_SERVICES

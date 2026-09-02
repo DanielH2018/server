@@ -172,9 +172,11 @@ def test_a_service_hold_names_the_pr():
 
 
 def test_a_plane_hold_names_the_playbook_instead():
-    """The forward-only broad arm leaves the tree fast-forwarded with a playbook failed
-    partway. Reverting the PR undoes none of that, so the message must name what to re-run
-    instead -- otherwise the monitor prescribes a remediation that cannot work."""
+    """The forward-only broad arm leaves the tree fast-forwarded with a playbook failed partway.
+
+    Reverting the PR undoes none of that, so the message must name what to re-run instead --
+    otherwise the monitor prescribes a remediation that cannot work.
+    """
     ok, msg = checks_service.gitops_status(
         "deadbeefcafe", hold_plane="ansible/initial_setup.yml renovate_notify"
     )
@@ -184,7 +186,9 @@ def test_a_plane_hold_names_the_playbook_instead():
 
 
 def test_a_plane_marker_without_a_hold_does_not_page():
-    """hold_sha is still what decides. A stale hold_plane left behind by a cleared hold
-    must not keep the monitor red on its own."""
+    """hold_sha is still what decides.
+
+    A stale hold_plane left behind by a cleared hold must not keep the monitor red on its own.
+    """
     ok, _ = checks_service.gitops_status(None, hold_plane="ansible/deploy.yml")
     assert ok

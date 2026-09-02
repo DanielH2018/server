@@ -56,9 +56,11 @@ def test_an_unready_snapshot_on_a_detached_volume_is_the_detached_case() -> None
 
 
 def test_an_unread_volume_state_is_treated_as_not_attached() -> None:
-    """The volume-state read only runs once the wait has already failed. An empty read (rc!=0,
-    or a jsonpath that returned nothing) must not be read as 'attached' and fall through to
-    failing the deploy instead of the named skip."""
+    """The volume-state read only runs once the wait has already failed.
+
+    An empty read (rc!=0, or a jsonpath that returned nothing) must not be read as 'attached' and
+    fall through to failing the deploy instead of the named skip.
+    """
     assert _detached("false|false", "") is True
 
 
@@ -111,9 +113,11 @@ def test_the_maintenance_attach_requests_disablefrontend_on_this_node() -> None:
 
 
 def test_the_maintenance_detach_sends_neither_hostid_nor_attachment_id() -> None:
-    """Pairs with the attach on the empty ticket key, same as k8s/volume-revert: sending
-    `attachmentID` on the attach alone would make this detach remove nothing while still
-    returning 200."""
+    """Pairs with the attach on the empty ticket key, same as k8s/volume-revert:
+
+    sending `attachmentID` on the attach alone would make this detach remove nothing while still
+    returning 200.
+    """
     body = _named(_CLAIM, "Detach")["ansible.builtin.uri"].get("body", {})
     assert body == {}
 
@@ -246,25 +250,30 @@ def test_the_retake_uses_the_same_snapshot_name_as_the_original_apply() -> None:
 
 
 def test_the_retaken_snapshot_wait_registers_to_its_own_name() -> None:
-    """INVERTED 2026-08-21 by the task-6 drill. This test previously asserted the OPPOSITE — that
-    the retake wait reuses `volume_snapshot_ready` so the pre-7b fail-task and prune guards
-    "keep working unmodified against whichever attempt actually ran". That design does not work,
-    and this test was pinning the bug in place: **a skipped task still sets the variable it
-    registers to**, to a result with no `stdout`. On the attached path the retake is skipped, so
-    it erased the first wait's real reading and the role failed every normal deploy of all
-    thirteen opted-in services.
+    """INVERTED 2026-08-21 by the task-6 drill.
 
-    Downstream tasks now read the `volume_snapshot_ready_out` fact, which folds the two waits by
-    the path actually taken. `test_skipped_retake_wait_keeps_first_read` in
+    This test previously asserted the OPPOSITE — that the retake wait reuses `volume_snapshot_ready`
+    so the pre-7b fail-task and prune guards "keep working unmodified against whichever attempt
+    actually ran". That design does not work, and this test was pinning the bug in place: **a
+    skipped task still sets the variable it registers to**, to a result with no `stdout`. On the
+    attached path the retake is skipped, so it erased the first wait's real reading and the role
+    failed every normal deploy of all thirteen opted-in services.
+
+    Downstream tasks now read the `volume_snapshot_ready_out` fact, which folds the two waits by the
+    path actually taken. `test_skipped_retake_wait_keeps_first_read` in
     test_volume_snapshot_register.py is the behavioural half — it runs the role and would have
-    caught what this source-text assertion could not."""
+    caught what this source-text assertion could not.
+    """
     task = _named(_CLAIM, "Wait for the retaken snapshot to become usable")
     assert task["register"] == "volume_snapshot_retake_ready"
 
 
 def test_the_downstream_fail_reads_the_folded_readiness_fact() -> None:
-    """The other half of the fix: the fail task must read the folded fact rather than either
-    wait's register directly, or the clobber comes back the moment someone reorders the file."""
+    """The other half of the fix:
+
+    the fail task must read the folded fact rather than either wait's register directly, or the
+    clobber comes back the moment someone reorders the file.
+    """
     task = _named(_CLAIM, "Fail on a snapshot that never became usable")
     conditions = " ".join(task["when"])
     assert "volume_snapshot_ready_out" in conditions
@@ -285,8 +294,10 @@ def test_the_detach_after_maintenance_runs_whenever_the_attach_succeeded_regardl
 
 
 def test_the_maintenance_detach_wait_is_never_suppressed() -> None:
-    """The only proof that a 200 detach actually detached. Suppressing it would let the play
-    continue with the volume attached in maintenance mode."""
+    """The only proof that a 200 detach actually detached.
+
+    Suppressing it would let the play continue with the volume attached in maintenance mode.
+    """
     task = _named(
         _CLAIM, "Wait for the detach after the maintenance-mode snapshot attempt"
     )
@@ -333,10 +344,13 @@ def test_every_maintenance_attach_task_is_guarded_on_detached_and_no_mutate() ->
 
 
 def test_the_maintenance_sequence_runs_in_the_drill_proven_order() -> None:
-    """Mutated 2026-08-21: swapping 'Retake' and 'Attach' (retaking before attaching) and,
-    separately, swapping 'Detach' and 'Wait for the retaken snapshot' both went red under this
-    test — see the fix-round report for the transcript. Every per-task guard test in this file
-    stayed green under both mutations, which is why a positional test exists at all."""
+    """Mutated 2026-08-21:
+
+    swapping 'Retake' and 'Attach' (retaking before attaching) and, separately, swapping 'Detach'
+    and 'Wait for the retaken snapshot' both went red under this test — see the fix-round report for
+    the transcript. Every per-task guard test in this file stayed green under both mutations, which
+    is why a positional test exists at all.
+    """
     positions = [_task_index(fragment) for fragment in _MAINTENANCE_SEQUENCE]
     assert positions == sorted(positions), (
         f"the maintenance-mode sequence ran out of order: "
@@ -381,11 +395,13 @@ def test_the_warning_names_the_service_the_claim_and_that_the_deploy_is_unprotec
 
 
 def test_the_warning_names_the_maintenance_attach_as_the_narrowed_cause() -> None:
-    """7a's warning fired for every plainly-detached volume. 7b tries the maintenance-mode
-    attach first, so by the time this task runs the attach has already failed — the message
-    must say that, not the old blanket 'no running engine' framing that is no longer why the
-    claim is unprotected on a first deploy (that case now takes a snapshot instead, see
-    CLAUDE.md)."""
+    """7a's warning fired for every plainly-detached volume.
+
+    7b tries the maintenance-mode attach first, so by the time this task runs the attach has already
+    failed — the message must say that, not the old blanket 'no running engine' framing that is no
+    longer why the claim is unprotected on a first deploy (that case now takes a snapshot instead,
+    see CLAUDE.md).
+    """
     msg = _named(_CLAIM, "Warn and skip the snapshot for a detached volume")[
         "ansible.builtin.debug"
     ]["msg"]

@@ -107,8 +107,11 @@ def resolution_errors(config: dict, known: set[str]) -> list[str]:
 
 
 def referenced_services(config: dict) -> set[str]:
-    """Every literal service id called in automations + scripts. Skips templated names (no dot ->
-    call_service already returns None; a `domain.{{ }}` form is caught by the _is_templated guard)."""
+    """Every literal service id called in automations + scripts.
+
+    Skips templated names (no dot -> call_service already returns None; a `domain.{{ }}` form is
+    caught by the _is_templated guard).
+    """
     return {
         svc
         for call in _all_service_calls(config)
@@ -118,9 +121,11 @@ def referenced_services(config: dict) -> set[str]:
 
 def service_resolution_errors(config: dict, known_services: set[str]) -> list[str]:
     """A called service absent from `known_services` (= a typo or a stale snapshot — run `refresh`).
+
     Unlike resolution_errors (entities), this checks EVERY domain unconditionally — there is no
     _MANAGED_DOMAINS gate. The live /api/services snapshot is complete, so an un-enumerable domain
-    like `notify` no longer has to be exempted; that is exactly how `notify.<typo>` is caught."""
+    like `notify` no longer has to be exempted; that is exactly how `notify.<typo>` is caught.
+    """
     errs = []
     for svc in sorted(referenced_services(config)):
         if svc not in known_services:
@@ -148,9 +153,12 @@ MEDIATOR_REASONS = {
 
 
 def mediator_reason_errors(config: dict) -> list[str]:
-    """HARD: every call to an actuator mediator passes a `reason` that is a STRING in the mediator's
+    """HARD:
+
+    every call to an actuator mediator passes a `reason` that is a STRING in the mediator's
     vocabulary. Catches a missing data:/reason, a typo, and the unquoted `reason: off` -> YAML
-    `false` -> silent no-op trap (the config is loaded YAML-1.1, so `off` is already a bool here)."""
+    `false` -> silent no-op trap (the config is loaded YAML-1.1, so `off` is already a bool here).
+    """
     errs = []
     for call in _all_service_calls(config):
         svc = call_service(call)
@@ -218,10 +226,12 @@ def _threshold_automation(config: dict) -> dict | None:
 
 
 def _trigger_entity_directions(trig: dict):
-    """Yield (entity_id, to_value) for a state trigger. The real bedroom_threshold_alert groups
-    each category's sensors into ONE bad + ONE ok trigger with a LIST entity_id, so this must
-    handle both list and scalar forms (a scalar-only collector leaves trig_entities empty and
-    false-flags every declared threshold as unwired)."""
+    """Yield (entity_id, to_value) for a state trigger.
+
+    The real bedroom_threshold_alert groups each category's sensors into ONE bad + ONE ok trigger
+    with a LIST entity_id, so this must handle both list and scalar forms (a scalar-only collector
+    leaves trig_entities empty and false-flags every declared threshold as unwired).
+    """
     ent = trig.get("entity_id")
     to_val = trig.get("to")
     ids = [ent] if isinstance(ent, str) else (ent if isinstance(ent, list) else [])
@@ -231,10 +241,13 @@ def _trigger_entity_directions(trig: dict):
 
 
 def threshold_pairing_errors(config: dict) -> list[str]:
-    """HARD: every `<cat>_bad` trigger id has a `<cat>_ok`; every declared threshold sensor is
-    wired into the automation in BOTH directions (on via a _bad list, off via a _ok list); and no
-    triggered threshold-looking sensor is undeclared. Catches a half-added metric (declared but
-    not wired, or wired in only one direction) and a half-added category (a _bad with no _ok)."""
+    """HARD:
+
+    every `<cat>_bad` trigger id has a `<cat>_ok`; every declared threshold sensor is wired into the
+    automation in BOTH directions (on via a _bad list, off via a _ok list); and no triggered
+    threshold-looking sensor is undeclared. Catches a half-added metric (declared but not wired, or
+    wired in only one direction) and a half-added category (a _bad with no _ok).
+    """
     auto = _threshold_automation(config)
     if not auto:
         return []
@@ -278,7 +291,9 @@ def threshold_pairing_errors(config: dict) -> list[str]:
 
 def _threshold_cfg_text(auto: dict) -> str:
     """Raw text of bedroom_threshold_alert's inline Jinja `cfg` routing map, or '' if absent.
-    Used only for a literal key-presence check — never parsed as a dict."""
+
+    Used only for a literal key-presence check — never parsed as a dict.
+    """
     for step in auto.get("action", []) or []:
         if isinstance(step, dict):
             cfg = (step.get("variables") or {}).get("cfg")
@@ -288,12 +303,15 @@ def _threshold_cfg_text(auto: dict) -> str:
 
 
 def threshold_cfg_coverage_errors(config: dict) -> list[str]:
-    """HARD: every category with _bad/_ok triggers must have a key in the inline `cfg` routing map.
-    A category wired into triggers but missing from cfg KeyErrors at runtime on its first crossing
+    """HARD:
+
+    every category with _bad/_ok triggers must have a key in the inline `cfg` routing map. A
+    category wired into triggers but missing from cfg KeyErrors at runtime on its first crossing
     (the pairing check can't see it — it only checks trigger pairing, not the cfg map). Non-brittle:
     checks the category name appears as a quoted key literal ('cat' or "cat") — no dict parse, and a
     prefix like 'airquality' can't satisfy 'airqualitysevere' because the closing quote anchors it.
-    Skipped when there's no cfg block (a structurally different automation)."""
+    Skipped when there's no cfg block (a structurally different automation).
+    """
     auto = _threshold_automation(config)
     if not auto:
         return []
@@ -339,10 +357,12 @@ def load_sanctioned_writers() -> dict:
 
 
 def single_writer_errors(writes: dict, sanctioned: dict) -> list[str]:
-    """HARD + symmetric: the derived writer set of each sanctioned actuator must equal
-    module ∪ exemptions. An unsanctioned writer fails; a sanctioned entry that no longer
-    writes the actuator fails too (a stale entry silently widens the allowed set — remove it).
-    Mirrors override_writer_errors."""
+    """HARD + symmetric:
+
+    the derived writer set of each sanctioned actuator must equal module ∪ exemptions. An
+    unsanctioned writer fails; a sanctioned entry that no longer writes the actuator fails too (a
+    stale entry silently widens the allowed set — remove it). Mirrors override_writer_errors.
+    """
     errs = []
     for actuator, spec in sorted(sanctioned.items()):
         allowed = set(spec.get("module", [])) | set(spec.get("exemptions", []))
@@ -362,11 +382,14 @@ def single_writer_errors(writes: dict, sanctioned: dict) -> list[str]:
 
 
 def system_log_fire_event_errors(config: dict) -> list[str]:
-    """HARD: an automation that triggers on `system_log_event` requires `system_log: fire_event:
-    true` in configuration.yaml. default_config enables system_log WITHOUT it, so the event never
-    fires by default and the trigger never matches (the automation is silently dead). Structured-
-    data check — no Jinja/string parsing. (Found the hard way via the ha_runtime_error_alert
-    live-fire; this turns it into a pre-deploy gate.)"""
+    """HARD:
+
+    an automation that triggers on `system_log_event` requires `system_log: fire_event: true` in
+    configuration.yaml. default_config enables system_log WITHOUT it, so the event never fires by
+    default and the trigger never matches (the automation is silently dead). Structured- data check
+    — no Jinja/string parsing. (Found the hard way via the ha_runtime_error_alert live-fire; this
+    turns it into a pre-deploy gate.)
+    """
     offenders = []
     for auto in config.get("automation") or []:
         trig = auto.get("trigger") or auto.get("triggers") or []

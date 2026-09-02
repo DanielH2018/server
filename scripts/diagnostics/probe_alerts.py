@@ -41,8 +41,10 @@ _CYCLES_SUFFIX_RE = re.compile(r"\s*\(\d+ cycles?\)\s*$")
 
 
 def parse_down_line(line):
-    """(check_name, msg) for a monitor-bridge DOWN log line, else None. The
-    trailing "(N cycles)" consecutive-down counter is stripped from msg."""
+    """(check_name, msg) for a monitor-bridge DOWN log line, else None.
+
+    The trailing "(N cycles)" consecutive-down counter is stripped from msg.
+    """
     m = _DOWN_RE.match(line)
     if not m:
         return None
@@ -136,7 +138,8 @@ def alert_episodes(rows, gap_s=1800):
     same check within `gap_s` seconds are one episode; a longer silence (the check
     recovered, then fired again) starts a new one. Returns episode dicts
     {name, first_ns, last_ns, cycles, msg} newest-episode-first (by last_ns). msg is
-    the latest sample's — check messages evolve as the underlying value drifts."""
+    the latest sample's — check messages evolve as the underlying value drifts.
+    """
     by_name = defaultdict(list)
     for ns, name, msg in rows:
         by_name[name].append((int(ns), msg))
@@ -179,8 +182,11 @@ def _fmt_duration(ns):
 
 
 def format_alert_episodes(episodes, days):
-    """Human view: one aligned row per episode, newest first (America/Chicago, the
-    container-log timezone). Empty -> a clear all-clear line."""
+    """Human view:
+
+    one aligned row per episode, newest first (America/Chicago, the container-log timezone). Empty
+    -> a clear all-clear line.
+    """
     if not episodes:
         return f"no DOWN alerts in the last {days:g}d"
     width = max(len(e["name"]) for e in episodes)

@@ -380,8 +380,10 @@ def test_unchanged_value_dates_to_the_oldest_revision(monkeypatch):
 
 
 def test_reordering_does_not_count_as_a_rotation(monkeypatch):
-    """A regroup rewrites most of the file's lines while changing no value. Comparing the
-    parsed value per key is what stops that marking every secret freshly rotated."""
+    """A regroup rewrites most of the file's lines while changing no value.
+
+    Comparing the parsed value per key is what stops that marking every secret freshly rotated.
+    """
     _fake_history(
         monkeypatch,
         [
@@ -402,8 +404,10 @@ def test_advance_moves_a_stale_date_forward():
 
 
 def test_advance_never_moves_a_date_backward():
-    """Advance-only is what stops this creating an overdue secret: a registry date newer
-    than git's — a rotation recorded before its commit landed — must survive."""
+    """Advance-only is what stops this creating an overdue secret:
+
+    a registry date newer than git's — a rotation recorded before its commit landed — must survive.
+    """
     reg = {"secrets": {"tok": {"tier": "assisted", "last_rotated": "2026-08-25"}}}
     assert sr.advance_last_rotated(reg, {"tok": dt.date(2026, 3, 13)}) == []
     assert reg["secrets"]["tok"]["last_rotated"] == "2026-08-25"
@@ -469,10 +473,11 @@ def test_every_consumer_tag_names_a_role_that_renders_the_token():
 
 
 def test_every_consumer_tag_is_a_real_deploy_tag():
-    """The same failure one step along: `ansible-playbook deploy.yml --tags <unmatched>` runs
-    nothing and exits 0, so the rotation still reads as deployed. Three mis-routed tokens are
-    pushed by SETUP roles with no `containers_list` entry, which is why they decline in
-    CROSS_HOST_PUSH_TOKENS instead of naming their role.
+    """The same failure one step along:
+
+    `ansible-playbook deploy.yml --tags <unmatched>` runs nothing and exits 0, so the rotation still
+    reads as deployed. Three mis-routed tokens are pushed by SETUP roles with no `containers_list`
+    entry, which is why they decline in CROSS_HOST_PUSH_TOKENS instead of naming their role.
     """
     import deploy_tags
 
@@ -492,10 +497,13 @@ def test_every_consumer_tag_is_a_real_deploy_tag():
 
 
 def test_rotate_commit_sends_new_token_on_stdin_not_argv(monkeypatch):
-    """Regression guard for the 2026-08-27 fix: `sops set` used to take the freshly minted
-    token as a CLI argument, which sits in /proc/<pid>/cmdline for the call's lifetime (no
-    hidepid here — see secret-rotate.sh.j2's own argv-avoidance comment for curl). The value
-    must travel on stdin, and --value-stdin still requires the JSON-quoted form."""
+    """Regression guard for the 2026-08-27 fix:
+
+    `sops set` used to take the freshly minted token as a CLI argument, which sits in
+    /proc/<pid>/cmdline for the call's lifetime (no hidepid here — see secret-rotate.sh.j2's own
+    argv-avoidance comment for curl). The value must travel on stdin, and --value-stdin still
+    requires the JSON-quoted form.
+    """
     name = "monitor_bridge_test_token"
     reg = {"secrets": {name: {}}}
     monkeypatch.setattr(sr, "load_registry", lambda: reg)
@@ -623,8 +631,11 @@ def test_rotate_mints_a_token_the_shape_check_accepts():
 
 
 def test_decrypt_without_an_age_key_returns_none(monkeypatch):
-    """CI has no age key. The arm must go quiet there, not raise — `audit --check` is a
-    prek/CI gate over this very file, so a hard failure would fail every secrets PR."""
+    """CI has no age key.
+
+    The arm must go quiet there, not raise — `audit --check` is a prek/CI gate over this very file,
+    so a hard failure would fail every secrets PR.
+    """
 
     def no_key(*a, **kw):
         raise sr.subprocess.CalledProcessError(1, "sops", stderr="no key")

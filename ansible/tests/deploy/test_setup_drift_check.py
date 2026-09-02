@@ -146,8 +146,11 @@ def test_a_current_render_is_clean(tmp_path):
 
 
 def test_a_changed_template_is_reported_stale(tmp_path):
-    """The rejecting half, and the exact live shape: the stamp records what the host rendered,
-    the tree has moved on, and nothing else on daniel-server can see the difference."""
+    """The rejecting half, and the exact live shape:
+
+    the stamp records what the host rendered, the tree has moved on, and nothing else on
+    daniel-server can see the difference.
+    """
     repo = tmp_path / "repo"
     (repo / "ansible/roles/nut_host/templates").mkdir(parents=True)
     tpl = repo / "ansible/roles/nut_host/templates/host-upsmon.conf.j2"
@@ -242,8 +245,11 @@ def test_the_tree_age_arm_reads_the_checkout(tmp_path):
 
 
 def test_an_unreadable_checkout_is_a_fault_not_a_pass(tmp_path):
-    """The rejecting half of the arm above: with no age the arms below it cannot be trusted, so
-    the honest verdict is 'could not read the tree', never 'nothing has drifted'."""
+    """The rejecting half of the arm above:
+
+    with no age the arms below it cannot be trusted, so the honest verdict is 'could not read the
+    tree', never 'nothing has drifted'.
+    """
     script = tmp_path / "age.sh"
     script.write_text(
         f"set -uo pipefail\nREPO_DIR={tmp_path}/nope\nsource {_LIB}\n"
@@ -275,7 +281,8 @@ def test_a_permissive_system_gitconfig_defeats_the_refusal(tmp_path):
     A `safe.directory = *` in the system config makes git accept a repo it would otherwise
     refuse, so the control below reports no refusal and the pair silently stops testing
     anything. That is the shape of the CI failure on 2026-08-30: green on a host with no
-    /etc/gitconfig, red on the GitHub runner."""
+    /etc/gitconfig, red on the GitHub runner.
+    """
     repo, env = _old_repo(tmp_path, permissive_system_config=True)
     env = {**env, "GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"}
     done = subprocess.run(
@@ -296,7 +303,8 @@ def test_a_foreign_owned_checkout_refuses_a_bare_git_read(tmp_path):
     Without it, asserting that the helper returns an age under GIT_TEST_ASSUME_DIFFERENT_OWNER
     proves nothing: an env var that silently did nothing would leave that test green for the
     same bad reason the original pair was green. This pins the simulation by showing the bare
-    read — the code as it shipped — does fail."""
+    read — the code as it shipped — does fail.
+    """
     repo, env = _old_repo(tmp_path)
     env = {**env, "GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"}
     done = subprocess.run(
@@ -316,7 +324,8 @@ def test_the_tree_age_arm_reads_a_foreign_owned_checkout(tmp_path):
     """The accept half: under the same refusal the helper must still return an age.
 
     This is the arm as the cron runs it. It fails against the pre-2026-08-30 helper, which
-    called git with no safe.directory exception."""
+    called git with no safe.directory exception.
+    """
     repo, env = _old_repo(tmp_path)
     env = {**env, "GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"}
     script = tmp_path / "age.sh"
@@ -336,9 +345,11 @@ def test_the_tree_age_arm_reads_a_foreign_owned_checkout(tmp_path):
 
 
 def test_the_reader_is_armed_where_no_manifest_prune_check_runs():
-    """The whole finding is a host that renders and is never read. daniel-server must be in the
-    allowlist, and daniel-box must not be — it already has manifest-prune-check, and a second
-    reader there would page twice for one drift."""
+    """The whole finding is a host that renders and is never read.
+
+    daniel-server must be in the allowlist, and daniel-box must not be — it already has
+    manifest-prune-check, and a second reader there would page twice for one drift.
+    """
     gv = yaml.safe_load(_GROUP_VARS.read_text())
     hosts = gv["setup_drift_check_hosts"]
     assert "daniel-server" in hosts, (

@@ -43,8 +43,11 @@ def test_verdict_down_over_threshold():
 
 
 def test_verdict_treats_a_truncated_walk_as_failure():
-    """Under-reporting is the dangerous direction: a partial sum looks like headroom we do not
-    have, so a truncated listing must page rather than report a smaller number confidently."""
+    """Under-reporting is the dangerous direction:
+
+    a partial sum looks like headroom we do not have, so a truncated listing must page rather than
+    report a smaller number confidently.
+    """
     ok, msg = checks_b2.b2_storage_verdict(1e9, 50000, True, cap=10e9, max_pct=80)
     assert not ok
     assert "FLOOR" in msg
@@ -143,8 +146,10 @@ def test_a_cursor_that_never_clears_reports_truncated(monkeypatch):
 
 
 def test_a_name_only_cursor_still_paginates(monkeypatch):
-    """B2 can return nextFileName without nextFileId. Requiring both would end the walk early and
-    under-count — the silent direction."""
+    """B2 can return nextFileName without nextFileId.
+
+    Requiring both would end the walk early and under-count — the silent direction.
+    """
     fake, sent = _paging_stub([{"files": [], "nextFileName": "b.txt"}, {"files": []}])
     monkeypatch.setattr(bridge_io, "_post_json", fake)
     pages, truncated = checks_b2.b2_list_versions("https://api", "tok", "bkt")
