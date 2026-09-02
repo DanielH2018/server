@@ -4,6 +4,83 @@ Split out of the role's `CLAUDE.md` on 2026-08-15; the content is unchanged.
 Presence detection, the adaptive-lighting stack, the single-guarded-writer mediator,
 and the bedtime/wake routines that drive them.
 
+## The Tap Dial
+- **The button map.** A Hue Tap Dial (RDM002) drives the `light.bedroom_lights` group. The dial
+  adjusts brightness ±12%.
+  - **B1 (Power):** a press smart-toggles — on runs `bedroom_apply_natural` ungated; off turns the
+    lights off and sets manual-off. A hold resets to auto: it clears overrides and re-syncs
+    lux-gated via `bedroom_apply_natural_gated` plus the fan.
+  - **B2 (Sleep, moved from B3 on 2026-07-18):** a press toggles sleep — in sleep mode with the
+    lights on, it turns the lights off (stays in sleep mode, fan quiet); otherwise it calls
+    `scene.bedroom_nightlight` and clears manual-off. A hold runs `script.bedroom_bedtime` (a
+    30-min fade).
+  - **B3 (Fan character):** a press toggles fan oscillation (sweep↔fixed via `fan.oscillate`). A
+    hold stops the fan — engages fan-manual, sets `bedroom_fan_set` off, and cancels fan-dial mode.
+  - **B4 (Fan):** a press sets auto — clears fan-manual, calls `bedroom_apply_fan`, and cancels
+    fan-dial mode. A hold toggles fan-dial mode (`timer.bedroom_fan_dial`, a 5-min sliding window):
+    the dial then steps the fan ±1 level via `script.bedroom_fan_nudge`, auto-reverting to the
+    light dial on expiry. This replaces the old hold-to-boost-100%; max fan is still reachable by
+    dialing to L9.
+
+  Manual taps are ungated by design — the lux gate lives on the presence path and the reset hold
+  (see *The lux gate* below).
+- **Tap Dial gotchas (RDM002, verified live).** Match button actions on the
+  `*_press_release`/`*_hold_release` events, not `*_press`/`*_hold`: a tap fires `button_N_press`
+  → `button_N_press_release`, but a HOLD fires `button_N_press` (!) then repeats `button_N_hold`
+  then `button_N_hold_release`. Matching `*_press`/`*_hold` double-fires the tap before every hold
+  and runs holds roughly 3×; the release events are mutually exclusive, exactly one per gesture.
+
+  The LIGHT button (B1) calls `script.bedroom_exit_sleep` first, clearing `sleep_mode` and AL
+  sleep mode. Using the normal lights releases the night state — the daytime sleep-exit the
+  morning reset otherwise owns — closing the "very red" trap where a stuck `sleep_mode` made B1's
+  `apply_natural` serve the amber nightlight. B2 is the Sleep button and deliberately does NOT
+  exit sleep — that's the point of it.
+
+  The FAN button (B4) is **fan-only**: it clears the `sleep_mode` flag (un-caps `apply_fan` from
+  its L2 sleep cap) but does not touch AL sleep or the lights. Two reasons it stays off the
+  lights: clearing AL sleep makes AL self-on the lights asynchronously (a flash that beat a prompt
+  `light.turn_off`), and the FP300 illuminance is dominated by the bedroom lights themselves
+  (~640 lux on / ~48 off) — anything that turns the lights off makes the in-room sensor read
+  "dark" and `presence_on` re-lights them, a feedback loop the fan button must not get tangled in
+  (see *The lux gate* below).
+- **Fan-dial mode (since 2026-06-20).** A B4 HOLD toggles `timer.bedroom_fan_dial` (a 5-min
+  sliding window). While it is `active`, the dial steps the fan ±1 level
+  (`script.bedroom_fan_nudge`) instead of the lights; it auto-reverts to the light dial on
+  expiry, and a B4 tap cancels it. The timer's `active` state IS the mode — there is no
+  `input_boolean`, so it is off after any HA restart, deliberately sidestepping the
+  stale-override-restore trap below. The nudge drives off the
+  `input_number.bedroom_fan_expected_level` accumulator, not the laggy DREO cloud percentage, so
+  rapid turns accumulate. It engages `bedroom_fan_manual` and ignores the night/sleep caps — you
+  are in control until a B4 tap or the morning reset clears the override. `fan_nudge_level` clamp
+  math is a tested macro.
+- **Stale override restore on deploy.** The LSIO HA's unclean shutdown restores a STALE
+  `input_boolean` snapshot on restart, so this stuck state recurs: every deploy can resurrect an
+  overnight override until the 09:00/alarm morning reset clears it.
+- The dial emits `dial_rotate_<dir>_<slow|fast|step>` (caught by the substring match) alongside
+  harmless `brightness_step_*` no-ops.
+
+## The lux gate
+- Presence (FP300), an `input_boolean` manual-off override, and an alarm-driven morning reset
+  live in the same automations file; `bedroom_presence_on` and the morning reset both call
+  `script.bedroom_apply_natural`.
+- **The gate definition.** The lux gate is window-aware: `in morning window OR T1 illuminance <
+  90` — it waves through regardless of ambient light during the 15-min wake window, then gates on
+  darkness afterward. It lives in ONE place, `binary_sensor.bedroom_auto_light_allowed`
+  (templates.yaml); `bedroom_presence_on`'s darkness condition and
+  `bedroom_apply_natural_gated` both reference that sensor, so the 90-lux threshold and the
+  window get tuned there, once. The window reads `sensor.bedroom_wake_start` — the same shared
+  dynamic-wake source the dispatcher's morning exception uses (see *Manual override, bedtime and
+  wake* below) — so the two stay in sync with no duplicated formula.
+- **Why the gate moved off the FP300.** See *Aqara T1 ambient light sensor* below for the
+  2026-09-01 move to `sensor.aqara_t1_illuminance` and the install-day measurements. An earlier
+  estimate of the same bulb-dominance effect, used for the Tap Dial B4 rationale above, put the
+  FP300 swing at ~640 lux on / ~48 off — a different measurement session, same conclusion: the T1
+  moves only ~30 lux across a light switch, so the circularity that used to feed `presence_on` is
+  now small rather than dominant. *Picking the 90-lux threshold* below covers the tuning
+  constraints, the sample size, and why 90 is a first cut; *`auto_light_allowed` takes a
+  `dark_fallback` argument* below covers the FP300 lag and the T1's `unknown` behavior after a
+  restart.
+
 ## Presence, adaptive lighting and the mediator
 - **Too-bright arrival blip (since 2026-06-19).** `automation.bedroom_presence_blip_too_bright` is a
   sibling of `bedroom_presence_on`: same arrival edge (`binary_sensor.aqara_fp300_presence` -> on),

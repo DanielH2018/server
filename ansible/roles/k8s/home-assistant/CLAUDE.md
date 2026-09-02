@@ -32,7 +32,7 @@ every task in this directory whether or not it is needed.
 | Looking for | Read |
 |---|---|
 | Auth, HACS, `configuration.yaml` templating, entity naming, the PVC, pod networking | [`docs/platform.md`](docs/platform.md) |
-| Presence, adaptive lighting, the light/fan mediator, manual override, bedtime + wake | [`docs/lighting-and-presence.md`](docs/lighting-and-presence.md) |
+| Presence, adaptive lighting, the light/fan mediator, the Tap Dial, the lux gate, manual override, bedtime + wake | [`docs/lighting-and-presence.md`](docs/lighting-and-presence.md) |
 | Threshold alerts, `bedroom_notify` routing, away-hold, UPS/CO2/sensor-offline alerts | [`docs/alerts-and-notifications.md`](docs/alerts-and-notifications.md) |
 | Fan control, the YAML dashboard, outdoor AQI + window advisor | [`docs/climate-and-air.md`](docs/climate-and-air.md) |
 
@@ -50,73 +50,9 @@ every task in this directory whether or not it is needed.
   genuinely templated config file. Git is the source of truth; HA UI edits are overwritten on
   deploy. A config edit changes the rendered ConfigMap, so `k8s/manifests` rolls the Deployment
   (~120s) — the k8s replacement for the old `common_config_changed` wiring. A *new* file ships
-  nothing until `configmap.yaml.j2` and `deployment.yaml.j2`'s init container both name it. First automation: Hue Tap Dial (RDM002) drives the
-  `light.bedroom_lights` group (dial = brightness ±12%; B1 = Power: press = smart toggle [on → `bedroom_apply_natural`
-  ungated, off → off + manual-off], hold = reset-to-auto [clear overrides, re-sync lux-gated
-  via `bedroom_apply_natural_gated` + fan]; B2 = Sleep (moved from B3 2026-07-18): press = sleep TOGGLE
-  [in sleep mode + lights on → lights off (stay in sleep mode, fan quiet); else →
-  `scene.bedroom_nightlight` + clear manual-off], hold = `script.bedroom_bedtime` (30-min fade);
-  B3 = Fan character: press = toggle fan oscillation (sweep↔fixed via `fan.oscillate`), hold = stop the
-  fan [engage fan-manual + `bedroom_fan_set` off + cancel fan-dial mode]; B4 = Fan: press = auto [clear fan-manual + `bedroom_apply_fan`
-  + cancel fan-dial mode], hold = toggle fan-dial mode [`timer.bedroom_fan_dial`, 5-min sliding window:
-  the dial then steps the fan ±1 level via `script.bedroom_fan_nudge`; auto-reverts to light dial on
-  expiry — replaces the old hold-to-boost-100%, max fan still reachable by dialing to L9]). Manual taps
-  are ungated by design — the lux gate lives on the presence
-  path + the reset hold. **Tap Dial gotchas (RDM002, verified live):** match button actions on the
-  `*_press_release`/`*_hold_release` events — a tap fires `button_N_press`→`button_N_press_release`,
-  but a HOLD fires `button_N_press` (!) then repeats `button_N_hold` then `button_N_hold_release`, so
-  matching `*_press`/`*_hold` double-fires the tap before every hold AND runs holds ~3×; the release
-  events are mutually exclusive (exactly one per gesture). The LIGHT button (B1) calls
-  `script.bedroom_exit_sleep` FIRST (clears `sleep_mode` + AL sleep mode) — using the normal lights
-  releases the night state (the daytime sleep-exit the morning reset otherwise owns; closes the "very
-  red" trap where a stuck `sleep_mode` made B1's `apply_natural` serve the amber nightlight). B2 is now
-  the Sleep button and deliberately does NOT exit sleep (that's the point of it). The FAN
-  button (B4) is **fan-only** — it clears the `sleep_mode` flag (un-caps `apply_fan` from its L2 sleep cap)
-  but does NOT touch AL sleep or the lights. Two reasons it stays off the lights: clearing AL sleep makes
-  AL **self-on the lights asynchronously** (a flash that beat a prompt `light.turn_off`), and the FP300
-  illuminance is dominated by the bedroom lights THEMSELVES (~640 lux on / ~48 off), so anything that
-  turns the lights off makes the in-room sensor read "dark" and `presence_on` re-lights them (a feedback
-  loop the fan button must not get tangled in — see the lux-gate note below).
-  **Fan-dial mode (since 2026-06-20):** B4 HOLD toggles `timer.bedroom_fan_dial` (5-min sliding
-  window) — while it's `active` the dial steps the fan ±1 level (`script.bedroom_fan_nudge`) instead
-  of the lights; it auto-reverts to the light dial on expiry, and a B4 tap cancels it. The timer's
-  `active` state IS the mode (no `input_boolean`, so it's off after any HA restart — deliberately
-  sidesteps the stale-override-restore trap below). The nudge drives off the
-  `input_number.bedroom_fan_expected_level` accumulator (not the laggy DREO cloud %) so rapid turns
-  accumulate, engages `bedroom_fan_manual`, and ignores the night/sleep caps (you're in control until
-  a B4 tap / the morning reset clears the override). `fan_nudge_level` clamp math is a tested macro.
-  The
-  stuck state itself recurs because the LSIO HA's unclean shutdown restores a STALE `input_boolean` snapshot
-  on restart — every deploy can resurrect an overnight override until the 09:00/alarm morning reset clears it. The
-  dial emits `dial_rotate_<dir>_<slow|fast|step>` (caught by the substring match) alongside harmless
-  `brightness_step_*` no-ops. Presence
-  (FP300) + an `input_boolean` manual-off override + an alarm-driven morning reset live in the
-  same file; `bedroom_presence_on` and the morning reset BOTH call `script.bedroom_apply_natural`.
-  The lux gate is window-aware (`in morning window OR T1 illuminance < 90` — wake regardless of ambient
-  light during the 15-min window, gate on darkness afterwards) and lives in ONE place:
-  `binary_sensor.bedroom_auto_light_allowed` (templates.yaml). `bedroom_presence_on` (its darkness
-  condition) and `bedroom_apply_natural_gated` reference that sensor — tune the 90-lux threshold / window
-  there, once. The window reads `sensor.bedroom_wake_start` (the shared dynamic-wake source — see below),
-  the SAME sensor the dispatcher's morning exception uses, so the two are inherently in sync (no duplicated
-  formula).
-  **The gate reads `sensor.aqara_t1_illuminance`, not the FP300** (moved 2026-09-01). The FP300 is
-  dominated by the bedroom lights themselves (~640 lux with them on, ~48 off), so the old gate was largely
-  reading its own output — turning the lights off made the room read "dark," which could have
-  `presence_on` re-light it ~30 s later. The T1 is a dedicated ambient sensor clear of the bulbs' cones
-  and moves only ~30 lux across a light switch, so that circularity is now small rather than dominant.
-  **Tuning constraints, both load-bearing:** the threshold must stay clear of the 49-79 band the bulbs
-  alone span on the T1, or the gate becomes self-referential again in miniature; and it must be picked
-  from T1 samples taken while `light.bedroom_lights` was OFF, because any sample with the lights on
-  carries the bleed you are trying to exclude. 90 was picked that way, but from only 23 h of history
-  (43 uncontaminated samples) — it is a first cut, expected to be retuned against a longer window.
-  Derivation, the measurements, and the Z2M runtime settings are in
+  nothing until `configmap.yaml.j2` and `deployment.yaml.j2`'s init container both name it. The
+  Tap Dial button map, fan-dial mode, and the lux gate are documented in
   [`docs/lighting-and-presence.md`](docs/lighting-and-presence.md).
-  Two consumers deliberately still read the FP300 on its own scale and must NOT be resynced to 90: the
-  `natural_brightness` ambient-fill curve (`lux / 75`) and the Hub cast/dismiss pair (60/50).
-  FP300 illuminance also **LAGS** (sleepy battery sensor on `light_sampling: low`, ~100 s to reflect a
-  lights-off drop); the T1 reports on change with a ~5 s detection period, but parks at `unknown` after
-  an HA restart or a Z2M rename — `auto_light_allowed`'s `dark_fallback` argument takes sun-below-horizon
-  for exactly that case. See the sun-aware button-1 HOLD note below.
 
 ## Testing
 - **Bedroom Jinja math is unit-tested** (`tests/`, run via `uv run pytest` / the prek `pytest`
