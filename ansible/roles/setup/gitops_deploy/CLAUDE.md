@@ -420,7 +420,8 @@ that answers git, `ansible-playbook`, the CI verdict, the health gate, the stagi
 and Discord from attributes a test sets, and records every call in order — the merge
 target, hold-before-reset, the rollback's `origin[:8]` snapshot and budget, the diverged
 marker and drain-before-return are assertions on that record), `_timeout_budgets` (the
-cross-file timeout sums) and `_staging_timeouts`. The module imports in CI: `GITOPS_DEPLOY_CONFIG` names its config file
+cross-file timeout sums), `_staging_timeouts` and `_failure_output` (what a failed
+subprocess leaves behind — see *A failed run's error string* below). The module imports in CI: `GITOPS_DEPLOY_CONFIG` names its config file
 and `tests/conftest.py` points it at the canned `tests/config.env` before any import, so no
 test opens the host's 0600 copy. The `gitops_deploy` fixture is that import and `state_dir`
 repoints every `/var/lib/gitops-deploy` marker at `tmp_path`. The parsed tree and the AST
@@ -437,6 +438,28 @@ holds its own reference from import time. Both are the holes monitor-bridge's ch
 hit. ENFORCED by `ansible/tests/deploy/test_gitops_deploy_patch_boundary.py`, which requires every
 patched name to be *defined* (not merely imported) on the module it is patched on — the
 monitor-bridge guard counts an import as bound, which a facade defeats.
+
+## A failed run's error string
+
+`run()` raises a `RuntimeError` carrying the argv, the exit code, then a bounded tail of
+**stdout followed by stderr**. Stdout is the half that matters: `ansible-playbook` writes the
+failing `TASK` header, the `fatal:` line with its `msg` and the `PLAY RECAP` there, and
+reserves stderr for warnings and deprecation notices. The error string was stderr-only until
+2026-09-02, when a broad apply of `ansible/deploy.yml` failed on `2d25ced3` and left a
+deprecation warning's origin as the only surviving detail (issue #871). That arm is
+forward-only, so the alert it produced told an operator to fix forward with nothing to fix
+forward from, and the only route to the diagnosis was re-running a 20-minute `deploy.yml`.
+
+Both tails are capped at `RUN_ERROR_STDOUT_TAIL` / `RUN_ERROR_STDERR_TAIL` (4000 each), and
+the three Discord failure posts trim further through `_alert_excerpt` (`ALERT_EXCERPT_CHARS`,
+700). That second cap is not belt-and-braces: `host_lib.discord_post` cuts a post at
+`message[:1900]` keeping the **head**, so an unbounded error string does not truncate itself —
+it evicts the remediation prose that follows it. `broad_failure_alert()` is a function rather
+than an inline f-string so `tests/test_gitops_deploy_failure_output.py` can assert the
+assembled post stays under 1900 characters with its `**Action:**` line intact.
+
+`_tail` keeps the END of the output. A head slice passes every short-output test and carries
+nothing on a real run, which is the shape of the bug this section documents.
 
 ## Traps
 

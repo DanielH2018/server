@@ -193,6 +193,66 @@ TIMEOUT = int(C.get("HEALTH_TIMEOUT_S", "300"))
 RUN_BUDGET_S = int(C.get("RUN_BUDGET_S", "1020"))
 RUN_START = time.time()
 
+# ansible-playbook writes the failing TASK header, the `fatal:` line carrying its msg and the
+# PLAY RECAP to STDOUT. stderr carries only warnings and deprecation notices, so an error string
+# built from stderr alone says nothing about what broke — the 2026-09-02 broad apply that failed
+# on `2d25ced3` left a deprecation warning's origin as the only surviving detail, and the broad
+# arm is forward-only, so the operator had nothing to fix forward from. Both tails are bounded
+# because a failed run can print megabytes into the journal.
+RUN_ERROR_STDOUT_TAIL = 4000
+RUN_ERROR_STDERR_TAIL = 4000
+# Per-alert budget for an embedded error string. host_lib.discord_post cuts a post at
+# `message[:1900]`, keeping the HEAD — so an unbounded error string does not truncate itself, it
+# evicts the remediation prose that follows it. Sized for the longest of the three failure posts.
+ALERT_EXCERPT_CHARS = 700
+
+
+def _tail(text: str, limit: int) -> str:
+    """Return at most the last ``limit`` characters of ``text``, cut at a line boundary.
+
+    Keeps the tail, never the head: ansible prints its failure detail last, so a head slice
+    would pass every short-output test and carry nothing on a real run.
+    """
+    text = text.strip()
+    if len(text) <= limit:
+        return text
+    cut = text[-limit:]
+    _, newline, rest = cut.partition("\n")
+    return "[...truncated...]\n" + (rest if newline else cut)
+
+
+def _alert_excerpt(exc: BaseException, limit: int = ALERT_EXCERPT_CHARS) -> str:
+    """Render ``exc`` for a Discord post: first line kept, the rest tail-trimmed to ``limit``.
+
+    The first line of a run() RuntimeError is the argv and the exit code, which a plain tail
+    would drop; everything after it is process output, whose end is the diagnostic part.
+    """
+    head, newline, body = str(exc).partition("\n")
+    head = head[:limit]
+    if not newline:
+        return head
+    return f"{head}\n{_tail(body, max(limit - len(head), 0))}"
+
+
+def broad_failure_alert(
+    hostname: str, playbook: str, tags: list[str], origin: str, exc: BaseException
+) -> str:
+    """Build the Discord post for a failed broad apply.
+
+    A function rather than an inline f-string so the 1900-char budget it is sized against is
+    testable — see tests/test_gitops_deploy_failure_output.py.
+    """
+    tag_note = f" --tags `{','.join(tags)}`" if tags else ""
+    return (
+        f"🚨 gitops-deploy: **broad apply failed** on {hostname}.\n"
+        f"`{playbook}`{tag_note} errored on `{origin[:8]}`:\n"
+        f"```\n{_alert_excerpt(exc)}\n```\n"
+        f"The tree is fast-forwarded and the plane is **unapplied**. This arm is "
+        f"forward-only — **nothing was rolled back**, so live state is whatever the "
+        f"failed run left.\n"
+        f"**Action:** fix forward and re-run that playbook by hand."
+    )
+
 
 def run(
     args: list[str],
@@ -263,7 +323,15 @@ def run(
                 raise
         r = subprocess.CompletedProcess(args, proc.returncode, stdout, stderr)
     if check and r.returncode != 0:
-        raise RuntimeError(f"{' '.join(args)} -> {r.returncode}\n{r.stderr}")
+        detail = "\n".join(
+            part
+            for part in (
+                _tail(r.stdout, RUN_ERROR_STDOUT_TAIL),
+                _tail(r.stderr, RUN_ERROR_STDERR_TAIL),
+            )
+            if part
+        )
+        raise RuntimeError(f"{' '.join(args)} -> {r.returncode}\n{detail}")
     return r.stdout.strip()
 
 
@@ -1435,16 +1503,7 @@ def main() -> int:
             log(f"broad apply failed ({playbook} {tags}): {exc}")
             write_hold(origin)
             _write_marker(HOLD_PLANE_FILE, f"{playbook} {','.join(tags)}".strip())
-            posted = discord(
-                f"🚨 gitops-deploy: **broad apply failed** on {HOSTNAME}.\n"
-                f"`{playbook}`"
-                + (f" --tags `{','.join(tags)}`" if tags else "")
-                + f" errored on `{origin[:8]}`:\n`{exc}`\n"
-                f"The tree is fast-forwarded and the plane is **unapplied**. This arm is "
-                f"forward-only — **nothing was rolled back**, so live state is whatever the "
-                f"failed run left.\n"
-                f"**Action:** fix forward and re-run that playbook by hand."
-            )
+            posted = discord(broad_failure_alert(HOSTNAME, playbook, tags, origin, exc))
             # Exit 0 on a delivered detailed post so systemd's OnFailure generic curl doesn't
             # double-page; exit 1 only if the post failed, leaving OnFailure the backstop.
             return 0 if posted else 1
@@ -1542,7 +1601,7 @@ def main() -> int:
             posted = discord(
                 f"🚨 gitops-deploy: **k8s deploy failed** on {HOSTNAME}.\n"
                 f"`{', '.join(sorted(cs.k8s_deploy))}` from `{origin[:8]}` failed its rollout "
-                f"gate:\n`{exc}`\n"
+                f"gate:\n```\n{_alert_excerpt(exc)}\n```\n"
                 f"Rolled back locally to `{local[:8]}`.\n"
                 f"{revert_note}"
                 f"**The bad pin is still live on master.** The hold only skips THIS commit — "
@@ -1607,7 +1666,7 @@ def main() -> int:
         posted = discord(
             f"🚨 gitops-deploy: **deploy failed** on {HOSTNAME}.\n"
             f"`ansible-playbook` errored deploying `{', '.join(sorted(cs.services))}` from "
-            f"`{origin[:8]}`:\n`{exc}`\n"
+            f"`{origin[:8]}`:\n```\n{_alert_excerpt(exc)}\n```\n"
             f"Rolled back to `{local[:8]}`; the bad commit is held until origin advances past it.\n"
             f"**Action:** fix or revert the offending commit."
         )
