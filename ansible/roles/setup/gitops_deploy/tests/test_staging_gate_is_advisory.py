@@ -1,8 +1,7 @@
 """Slice 3's staging gate must be advisory, and must not be able to break a prod deploy.
 
-Source-level guards, matching test_gitops_deploy_main_guards.py: gitops_deploy.py cannot be
-imported in CI (module-level `C = cfg()` reads /etc config that does not exist there — the
-accepted design, see the role CLAUDE.md), so these invariants are asserted against the AST.
+Source-level guards, matching test_gitops_deploy_main_guards.py: these invariants live inside
+main(), which shells out to git and GitHub, so they are asserted against the AST.
 
 WHY THESE THREE. Phase C's whole sequencing rests on slice 3 collecting a false-failure rate
 BEFORE anything depends on the answer (docs/staging-phase-c.md). The slice is also the one most

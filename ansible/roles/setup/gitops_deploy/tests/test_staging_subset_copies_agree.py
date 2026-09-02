@@ -20,35 +20,14 @@ from __future__ import annotations
 
 import ast
 import pathlib
-import sys
 
+import gitops_deploy
 import yaml
 
 _FILES = pathlib.Path(__file__).resolve().parents[1] / "files"
 _REPO = _FILES.parents[4]
 _INVENTORY = _REPO / "ansible" / "inventory" / "host_vars" / "daniel-stage.yml"
 _GATE_SCRIPT = _REPO / "scripts" / "deploy_tools" / "staging_gate.py"
-
-
-# gitops_deploy.py reads /etc/gitops-deploy/config.env at import time (`C = cfg()`), which does
-# not exist in CI. Stub host_lib.parse_env_file with canned values before the only import, the
-# same way test_gitops_deploy_subprocess.py does, so the import behaves identically in CI and on a host —
-# and so this suite never reads the real config.env, which carries the Discord webhook.
-def _import_gitops_deploy():
-    import host_lib
-
-    real_parse_env_file = host_lib.parse_env_file
-    host_lib.parse_env_file = lambda _path: {
-        "REPO_DIR": "/tmp/gitops-test-repo",
-        "HOSTNAME": "test-host",
-        "DISCORD_WEBHOOK": "https://discord.example/webhook",
-    }
-    try:
-        sys.modules.pop("gitops_deploy", None)
-        import gitops_deploy
-    finally:
-        host_lib.parse_env_file = real_parse_env_file
-    return gitops_deploy
 
 
 def inventory_subset() -> set[str]:
@@ -83,7 +62,7 @@ def disagreeing_copies(copies: dict[str, set[str]]) -> dict[str, set[str]]:
 def test_every_copy_of_the_staging_subset_agrees() -> None:
     copies = {
         "daniel-stage.yml containers_list": inventory_subset(),
-        "gitops_deploy.STAGING_SUBSET": set(_import_gitops_deploy().STAGING_SUBSET),
+        "gitops_deploy.STAGING_SUBSET": set(gitops_deploy.STAGING_SUBSET),
         "staging_gate.STAGING_SERVICES": literal_assignment(
             _GATE_SCRIPT.read_text(), "STAGING_SERVICES"
         ),

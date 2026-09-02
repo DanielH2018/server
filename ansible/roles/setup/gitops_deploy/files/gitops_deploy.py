@@ -70,12 +70,12 @@ from host_lib import atomic_write, discord_post, parse_env_file  # noqa: E402
 
 class RetryableFetchError(Exception):
     """A transient git failure — `git fetch origin` (GitHub blip, momentary DNS) or a `git status`
-    that momentarily cannot read the work tree. __main__ turns this into
+    that momentarily cannot read the work tree. entrypoint() turns this into
     a CLEAN skip of the tick — exit 0, NO in-script Discord crash-page, NO OnFailure — that also does
     NOT refresh last_run. So a one-off blip is silently retried next tick, while a PERSISTENT fetch
     failure still surfaces via GitOps-Alive going stale over several missed ticks. Distinct from a
     real crash (unexpected exception), which still pages. Before this, a `run()`-raised fetch error
-    propagated to __main__ and double-paged (the crash Discord + the OnFailure unit) every 30-min
+    propagated to entrypoint() and double-paged (the crash Discord + the OnFailure unit) every 30-min
     tick for the whole duration of a GitHub-side incident."""
 
 
@@ -154,12 +154,25 @@ DIRTY_ALERT_EVENING_HOUR = 20
 CHICAGO = ZoneInfo("America/Chicago")
 
 
+# Overridable so the test suite can import this module against a canned copy
+# (tests/conftest.py sets it) instead of the host's 0600 file, which carries the webhook.
+CONFIG_PATH = os.environ.get("GITOPS_DEPLOY_CONFIG", "/etc/gitops-deploy/config.env")
+
+
 def cfg() -> dict[str, str]:
-    return parse_env_file("/etc/gitops-deploy/config.env")
+    """The deployer's config, or {} when the file is absent.
+
+    A missing file used to crash the import, which paged through the unit's OnFailure. It
+    now leaves every constant below at its default and REPO empty, and main() refuses to
+    tick on an empty REPO: the same page, raised from a function a test can call."""
+    try:
+        return parse_env_file(CONFIG_PATH)
+    except FileNotFoundError:
+        return {}
 
 
 C = cfg()
-REPO = C["REPO_DIR"]
+REPO = C.get("REPO_DIR", "")
 BRANCH = C.get("BRANCH", "master")
 HOSTNAME = C.get("HOSTNAME", "unknown-host")
 TIMEOUT = int(C.get("HEALTH_TIMEOUT_S", "300"))
@@ -997,6 +1010,10 @@ def deploy(services: set[str]) -> None:
 
 
 def main() -> int:
+    if not REPO:
+        # No config, no repo to tick: page via the crash handler rather than run every git
+        # command below against cwd="".
+        raise RuntimeError(f"REPO_DIR is unset: no deployer config at {CONFIG_PATH}")
     # Resend any alert a prior tick failed to deliver, BEFORE any short-circuit below: the ff-merged
     # secrets/tasks/meta/combined paths never re-reach their alert code (local==origin -> noop), so a
     # transient webhook failure is only recoverable here, not by discord()'s per-tick re-eval.
@@ -1031,7 +1048,7 @@ def main() -> int:
     dirty = bool(status.stdout.strip())
 
     # NOT `run(...)` (which raises RuntimeError → the generic crash-page): a transient fetch failure
-    # is retryable, so raise RetryableFetchError and let __main__ skip the tick cleanly. subprocess
+    # is retryable, so raise RetryableFetchError and let entrypoint() skip the tick cleanly. subprocess
     # directly (like is_ancestor) to read the returncode/stderr `run(check=False)` would discard.
     fetch = subprocess.run(
         ["git", "fetch", "origin", BRANCH], cwd=REPO, text=True, capture_output=True
@@ -1418,7 +1435,7 @@ def main() -> int:
     except Exception as exc:  # noqa: BLE001 — any ansible-playbook failure
         # Deploy-EXECUTION failure (ansible-playbook itself errored: bad image manifest, a failed
         # task) — distinct from the health gate below. Without this the exception propagates to
-        # __main__, which alerts but re-raises WITHOUT writing last_run AND leaves the repo
+        # entrypoint(), which alerts but re-raises WITHOUT writing last_run AND leaves the repo
         # ff-merged at the bad commit with no hold + no rollback — so the next tick (local==origin)
         # noops and the deployer silently parks on the broken commit. Mirror the health-gate
         # rollback: reset to the prior HEAD, redeploy the prior (known-good) version (ansible is
@@ -1502,7 +1519,10 @@ def main() -> int:
     return 0 if posted else 1
 
 
-if __name__ == "__main__":
+def entrypoint() -> int:
+    """One tick as systemd runs it: main() plus the exit-code contract around it. Returns the
+    process exit code; the `__main__` guard below only hands it to sys.exit, so a test can
+    call this directly (test_gitops_deploy_fetch_skip.py)."""
     try:
         rc = main()
     except RetryableFetchError as e:
@@ -1511,7 +1531,7 @@ if __name__ == "__main__":
         # blip is invisibly retried next tick, while a persistent fetch break ages last_run and trips
         # GitOps-Alive. Must precede the generic handler below (Python matches except-clauses in order).
         log(f"git fetch failed (retryable) — skipping tick, will retry next run: {e}")
-        sys.exit(0)
+        return 0
     except Exception as e:
         discord(f"🚨 gitops-deploy crashed: {e}")
         raise
@@ -1519,4 +1539,8 @@ if __name__ == "__main__":
     # monitor-bridge reads this; a crash skips the write so the Alive monitor goes stale.
     _record_behind()
     _write_marker(LAST_RUN, str(time.time()))
-    sys.exit(rc)
+    return rc
+
+
+if __name__ == "__main__":
+    sys.exit(entrypoint())

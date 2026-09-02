@@ -1,99 +1,131 @@
-"""A transient `git fetch` failure must be a clean skip, not a page.
+"""A transient git failure must be a clean skip, not a page.
 
-A retryable fetch failure must NOT double-page (crash Discord + OnFailure) and must NOT
-refresh last_run -- else a one-off GitHub blip pages every tick, or a persistent fetch break
-hides behind a green GitOps-Alive. gitops_deploy.py cannot be imported in CI (module-level
-`C = cfg()` reads /etc config that does not exist there), so the handler chain under
-`if __name__ == "__main__"` is pinned at the AST. See RetryableFetchError.
+main() raises RetryableFetchError when `git status` or `git fetch` fails, and entrypoint()
+turns that into exit 0 with no Discord post and NO last_run write: a one-off GitHub blip is
+retried invisibly next tick, while a persistent fetch break ages last_run and trips
+GitOps-Alive. Any other exception still pages and re-raises, and a completed tick, rollback
+included, writes last_run. Before the RetryableFetchError split, a fetch error double-paged
+(the crash Discord plus the OnFailure unit) every 30 minutes for the length of a GitHub
+incident. Each contract here is exercised by calling the function, against the canned config
+and a tmp state dir from conftest.py.
 """
 
 # ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_fetch_skip.py
 
-import ast
+import subprocess
+
+import pytest
 
 
-# A retryable fetch failure raises RetryableFetchError, which __main__ turns into a CLEAN skip:
-# exit 0 (no OnFailure page), no in-script Discord crash-post, and — critically — no last_run
-# refresh (so a persistent fetch break still surfaces via GitOps-Alive going stale).
-
-
-def _main_guard_try(gitops_tree) -> ast.Try:
-    """The `try:` under `if __name__ == '__main__':`."""
-    for node in ast.walk(gitops_tree):
-        if (
-            isinstance(node, ast.If)
-            and isinstance(node.test, ast.Compare)
-            and isinstance(node.test.left, ast.Name)
-            and node.test.left.id == "__name__"
-        ):
-            for child in node.body:
-                if isinstance(child, ast.Try):
-                    return child
-    raise AssertionError("no try/except under `if __name__ == '__main__'`")
-
-
-def _handler(try_node: ast.Try, exc_name: str) -> ast.ExceptHandler:
-    for h in try_node.handlers:
-        if isinstance(h.type, ast.Name) and h.type.id == exc_name:
-            return h
-    raise AssertionError(f"no `except {exc_name}` handler in __main__")
-
-
-def test_retryable_fetch_error_defined(gitops_tree):
-    assert any(
-        isinstance(n, ast.ClassDef) and n.name == "RetryableFetchError"
-        for n in ast.walk(gitops_tree)
-    ), "RetryableFetchError must be defined"
-
-
-def test_fetch_failure_raises_retryable_error(gitops_tree):
-    # The fetch-failure path must raise RetryableFetchError — not fall through run()'s RuntimeError,
-    # which would reach the generic crash-page (the double-page this fix removes).
-    assert any(
-        isinstance(n, ast.Raise)
-        and isinstance(n.exc, ast.Call)
-        and isinstance(n.exc.func, ast.Name)
-        and n.exc.func.id == "RetryableFetchError"
-        for n in ast.walk(gitops_tree)
-    ), "the fetch-failure path must `raise RetryableFetchError(...)`"
-
-
-def test_retryable_handler_does_not_page_or_refresh_liveness(ast_calls, gitops_tree):
-    handler = _handler(_main_guard_try(gitops_tree), "RetryableFetchError")
-    assert not ast_calls(handler, "discord"), (
-        "the retryable-fetch handler must not post a Discord crash alert (no double-page)"
-    )
-    assert not ast_calls(handler, "_write_marker"), (
-        "the retryable-fetch handler must not write last_run — else a persistent fetch break "
-        "hides behind a green GitOps-Alive"
-    )
-    assert any(  # exit 0 → systemd sees success → OnFailure alert unit doesn't fire
-        isinstance(c, ast.Call)
-        and isinstance(c.func, ast.Attribute)
-        and c.func.attr == "exit"
-        and c.args
-        and isinstance(c.args[0], ast.Constant)
-        and c.args[0].value == 0
-        for c in ast.walk(handler)
-    ), "the retryable-fetch handler must sys.exit(0)"
-
-
-def test_retryable_handler_precedes_generic_crash_handler(gitops_tree):
-    # Order matters: except-clauses match top-down, so RetryableFetchError must precede the bare
-    # `except Exception` or it's dead code (Exception would catch it first and page).
-    names = [
-        h.type.id
-        for h in _main_guard_try(gitops_tree).handlers
-        if isinstance(h.type, ast.Name)
-    ]
-    assert names.index("RetryableFetchError") < names.index("Exception"), (
-        "`except RetryableFetchError` must precede `except Exception`"
+# ── main(): the two retryable git failures ────────────────────────────────────────────────────
+def _completed(returncode: int, stderr: str = "") -> subprocess.CompletedProcess:
+    return subprocess.CompletedProcess(
+        args=[], returncode=returncode, stdout="", stderr=stderr
     )
 
 
-def test_generic_crash_handler_still_pages(ast_calls, gitops_tree):
-    # Regression guard: the fix must not have silenced GENUINE crashes — the generic handler must
-    # still Discord-page on an unexpected exception.
-    assert ast_calls(_handler(_main_guard_try(gitops_tree), "Exception"), "discord"), (
-        "the generic crash handler must still post a Discord alert"
+def _quiet_tick_start(gitops_deploy, monkeypatch) -> None:
+    """main() up to its first git call: the two disk-only steps ahead of it become no-ops."""
+    monkeypatch.setattr(gitops_deploy, "drain_pending", lambda: None)
+    monkeypatch.setattr(gitops_deploy, "check_stale_composes", lambda: None)
+
+
+def test_a_failing_git_status_raises_retryable(gitops_deploy, monkeypatch):
+    # 2026-08-17 14:33: `git status --porcelain` exited 128 on a momentarily unreadable work tree
+    # (a parallel `git worktree` operation), the very next tick was fine, and the tick double-paged.
+    _quiet_tick_start(gitops_deploy, monkeypatch)
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *_a, **_k: _completed(
+            128, "fatal: this operation must be run in a work tree"
+        ),
     )
+    with pytest.raises(gitops_deploy.RetryableFetchError, match="work tree"):
+        gitops_deploy.main()
+
+
+def test_a_failing_fetch_raises_retryable(gitops_deploy, monkeypatch):
+    # A clean status, then a fetch that fails: the fetch is `subprocess.run`, not `run()`, so the
+    # failure carries git's stderr and does not fall through run()'s RuntimeError to the crash page.
+    _quiet_tick_start(gitops_deploy, monkeypatch)
+
+    def fake_run(argv, **_kwargs):
+        if argv[:2] == ["git", "status"]:
+            return _completed(0)
+        assert argv[:3] == ["git", "fetch", "origin"], argv
+        return _completed(128, "fatal: unable to access 'https://github.com/'")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    with pytest.raises(gitops_deploy.RetryableFetchError, match="unable to access"):
+        gitops_deploy.main()
+
+
+def test_a_missing_config_refuses_to_tick(gitops_deploy, monkeypatch):
+    # The import survives a missing config so the suite can load the module; the tick must not.
+    # An empty REPO would run every git command below against cwd="" and page from somewhere
+    # confusing, so main() pages from the top and names the file it could not read.
+    _quiet_tick_start(gitops_deploy, monkeypatch)
+    monkeypatch.setattr(gitops_deploy, "REPO", "")
+    with pytest.raises(RuntimeError, match="REPO_DIR is unset"):
+        gitops_deploy.main()
+
+
+# ── entrypoint(): the exit-code contract around main() ────────────────────────────────────────
+def _tick(gitops_deploy, monkeypatch, outcome) -> dict[str, list]:
+    """Run entrypoint() with main() replaced by `outcome` (a return value, or an exception to
+    raise), recording every Discord post and whether the behind-origin marker was refreshed."""
+    seen: dict[str, list] = {"posts": [], "behind": []}
+    monkeypatch.setattr(
+        gitops_deploy, "discord", lambda content: seen["posts"].append(content) or True
+    )
+    monkeypatch.setattr(
+        gitops_deploy, "_record_behind", lambda: seen["behind"].append(True)
+    )
+
+    def fake_main() -> int:
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(gitops_deploy, "main", fake_main)
+    return seen
+
+
+def test_a_retryable_fetch_failure_is_a_clean_skip(
+    gitops_deploy, monkeypatch, state_dir
+):
+    seen = _tick(gitops_deploy, monkeypatch, gitops_deploy.RetryableFetchError("blip"))
+    # exit 0 → systemd sees success → the OnFailure alert unit does not fire
+    assert gitops_deploy.entrypoint() == 0
+    assert seen["posts"] == [], "a retryable fetch failure must not post a crash alert"
+    assert not (state_dir / "last_run").exists(), (
+        "a skipped tick must not refresh last_run — a persistent fetch break would then hide "
+        "behind a green GitOps-Alive"
+    )
+    assert seen["behind"] == []
+
+
+def test_a_genuine_crash_still_pages_and_reraises(
+    gitops_deploy, monkeypatch, state_dir
+):
+    # The fix must not have silenced real crashes: page, re-raise (so OnFailure fires too), and
+    # leave last_run alone so the Alive monitor also goes stale if this keeps happening.
+    seen = _tick(gitops_deploy, monkeypatch, ValueError("boom"))
+    with pytest.raises(ValueError, match="boom"):
+        gitops_deploy.entrypoint()
+    assert seen["posts"] == ["🚨 gitops-deploy crashed: boom"]
+    assert not (state_dir / "last_run").exists()
+
+
+@pytest.mark.parametrize("rc", [0, 1])
+def test_a_completed_tick_writes_last_run_and_returns_mains_rc(
+    gitops_deploy, monkeypatch, state_dir, rc
+):
+    # rc=1 is a rollback: the tick completed, so the liveness marker is written all the same.
+    seen = _tick(gitops_deploy, monkeypatch, rc)
+    assert gitops_deploy.entrypoint() == rc
+    assert seen["posts"] == []
+    assert seen["behind"] == [True], "the behind-origin marker is recorded after main()"
+    stamp = float((state_dir / "last_run").read_text())
+    assert stamp > 0
