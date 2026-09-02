@@ -337,7 +337,7 @@ def test_open_cli_prints_the_created_number(monkeypatch, tmp_path, capsys):
 
 
 def test_open_adds_no_vetted_remediation_and_domain_labels():
-    outcome, _, plans = findings.plan_open(
+    _, _, plans = findings.plan_open(
         None,
         title="T",
         body="B",

@@ -28,8 +28,8 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from dev.findings import issue_rows, load_issues, sort_key  # noqa: E402
-from lib.docs_provenance import finish_generator, generated_banner, md_cell  # noqa: E402
+from dev.findings import issue_rows, load_issues, sort_key
+from lib.docs_provenance import finish_generator, generated_banner, md_cell
 
 SOURCE = "scripts/docs/gen_reference_backlog.py"
 

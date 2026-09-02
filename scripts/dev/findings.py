@@ -44,7 +44,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from lib.gh import gh, gh_json  # noqa: E402
+from lib.gh import gh, gh_json
 
 SEVERITIES = ("high", "medium", "low")
 KINDS = ("gap", "improvement", "addition")

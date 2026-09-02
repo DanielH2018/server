@@ -6,6 +6,7 @@ import json
 import subprocess
 
 import gh as ghmod
+import pytest
 
 
 def test_gh_disables_prompts_and_the_notifier(monkeypatch):
@@ -48,10 +49,7 @@ def test_gh_nonzero_raises_by_default(monkeypatch):
         return subprocess.CompletedProcess(argv, 1, stdout="", stderr="not logged in")
 
     monkeypatch.setattr(ghmod.subprocess, "run", fake_run)
-    try:
+    with pytest.raises(subprocess.CalledProcessError) as excinfo:
         ghmod.gh("auth", "status")
-    except subprocess.CalledProcessError as exc:
-        assert "not logged in" in exc.stderr
-    else:
-        raise AssertionError("expected CalledProcessError")
+    assert "not logged in" in excinfo.value.stderr
     assert ghmod.gh("auth", "status", check=False).returncode == 1
