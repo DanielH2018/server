@@ -76,7 +76,7 @@ from checks.storage import (
 from checks.logs import (
     check_loki_ingestion,
     check_loki_reachable,
-    check_promtail_dropped,
+    check_shipper_dropped,
 )
 
 
@@ -135,9 +135,9 @@ CHECKS = [
     ("speedtest", _env("KUMA_PUSH_SPEEDTEST", ""), check_speedtest),
     ("loki_ingestion", _env("KUMA_PUSH_LOKI", ""), check_loki_ingestion),
     (
-        "promtail_dropped",
-        _env("KUMA_PUSH_PROMTAIL_DROPPED", ""),
-        check_promtail_dropped,
+        "shipper_dropped",
+        _env("KUMA_PUSH_SHIPPER_DROPPED", ""),
+        check_shipper_dropped,
     ),
     ("discord", _env("KUMA_PUSH_DISCORD", ""), check_discord),
     ("r2_usage", _env("KUMA_PUSH_R2_USAGE", ""), check_r2_usage),
@@ -171,7 +171,7 @@ PROM_DEPENDENT = frozenset(
         # Reads node_hwmon_temp_celsius. Its empty-vector branch pages on a blind hwmon
         # collector, so a Prometheus outage must suppress it — same reason as longhorn_volumes.
         "host_temp",
-        "promtail_dropped",  # increase(promtail_dropped_entries_total) instant query
+        "shipper_dropped",  # increase() over both shippers' dropped-entries counters
         # Reads longhorn_volume_robustness. Its own absent-metric branch pages when the
         # longhorn scrape job dies, so it must be suppressed when PROMETHEUS itself is the
         # cause — otherwise a Prometheus outage pages twice for one root cause.
@@ -211,7 +211,7 @@ EXPORTER_DEPENDENT = {
 # -> a 2-monitor storm for one root cause. run_once probes Loki first
 # (check_loki_reachable -> its own "Loki Reachable" monitor) and, when it's unreachable, SUPPRESSES
 # these (pushes `up` with a skip msg so their push heartbeats stay alive) so only Loki Reachable
-# pages. Loki being UP but promtail not shipping is a different signal Loki Log Ingestion still
+# pages. Loki being UP but a shipper not shipping is a different signal Loki Log Ingestion still
 # surfaces (it evaluates whenever Loki is reachable). Guarded by a test against CHECKS.
 LOKI_DEPENDENT = frozenset({"loki_ingestion"})
 

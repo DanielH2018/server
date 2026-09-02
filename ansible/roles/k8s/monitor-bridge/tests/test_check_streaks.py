@@ -1,7 +1,7 @@
 """Hysteresis: a check that has just come up, or has been down once, is not yet evidence.
 
 `down_streak` and `apply_startup_grace` are the two mechanisms, and the run_once tests here
-drive them end to end. The promtail dropped-entries watchdog rides along because it is the
+drive them end to end. The log-shipper dropped-entries watchdog rides along because it is the
 same shape — a counter that must be read over a window rather than instantaneously.
 """
 
@@ -214,7 +214,7 @@ def test_run_once_graced_check_recovers_without_paging(monkeypatch):
     assert out[1] == (True, "queue clean")
 
 
-# ── promtail dropped-entries watchdog (Prometheus counter; partial log loss) ──
+# ── log-shipper dropped-entries watchdog (Prometheus counter; partial log loss) ──
 
 
 @pytest.mark.parametrize(
@@ -230,14 +230,21 @@ def test_run_once_graced_check_recovers_without_paging(monkeypatch):
         pytest.param(1000, True, (), id="at_threshold_is_ok"),
     ],
 )
-def test_promtail_dropped(count, ok, must_contain):
-    result_ok, msg = checks.logs.promtail_dropped(count, "1h", 1000)
+def test_shipper_dropped(count, ok, must_contain):
+    result_ok, msg = checks.logs.shipper_dropped(count, "1h", 1000)
     assert result_ok is ok
     for s in must_contain:
         assert s in msg
 
 
-def test_check_promtail_dropped_uses_increase(monkeypatch):
+def test_check_shipper_dropped_reads_both_shippers_counters(monkeypatch):
+    """One query, both counter names, no reason filter.
+
+    The cluster ships through Alloy (`loki_write_dropped_entries_total`) and daniel-pi still
+    through Promtail (`promtail_dropped_entries_total`). A selector naming only one of them
+    reads the other estate as "0 dropped" forever — the same fail-open shape as a selector on
+    a label nothing emits. No reason filter: every reason is a real drop (M2).
+    """
     queries = []
 
     def fake_scalar(q):
@@ -245,10 +252,12 @@ def test_check_promtail_dropped_uses_increase(monkeypatch):
         return 5000.0
 
     monkeypatch.setattr(bridge.net, "prom_scalar", fake_scalar)
-    ok, _ = checks.logs.check_promtail_dropped()
+    ok, _ = checks.logs.check_shipper_dropped()
     assert not ok
-    # No reason filter — sums drops across ALL reasons (rate_limited/stream_limited/... too, M2).
     assert any(
-        "increase(" in q and "promtail_dropped_entries_total" in q and "reason" not in q
+        "increase(" in q
+        and "loki_write_dropped_entries_total" in q
+        and "promtail_dropped_entries_total" in q
+        and "reason" not in q
         for q in queries
     )

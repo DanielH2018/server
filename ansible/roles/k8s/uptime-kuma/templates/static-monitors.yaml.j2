@@ -408,7 +408,7 @@ stringData:
   monitor-bridge-loki.json: |
     {"type": "push", "name": "Loki Log Ingestion", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_loki_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-promtail-dropped.json: |
-    {"type": "push", "name": "Promtail Dropped Entries", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_promtail_dropped_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Log Shipper Dropped Entries", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_promtail_dropped_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-loki-reachable.json: |
     {"type": "push", "name": "Loki Reachable", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_loki_reachable_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-discord.json: |

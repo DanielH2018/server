@@ -244,21 +244,22 @@ def loki_ingestion_fresh(count, window):
     return True, "%d log lines in %s" % (int(count), window)
 
 
-def promtail_dropped(count, window, threshold):
-    """Pure: did promtail drop more than `threshold` entries over `window`? (ok, msg).
+def shipper_dropped(count, window, threshold):
+    """Pure: did a log shipper drop more than `threshold` entries over `window`? (ok, msg).
 
-    `count` = sum(increase(promtail_dropped_entries_total[window])) over ALL drop reasons
-    (ingester_error / rate_limited / stream_limited / line_too_long), None when the counter has no
-    series (reads as 0). Above the threshold means Loki was rejecting entries and promtail gave up on
-    them — partial log loss the total-silence Loki Log Ingestion check can't see.
+    `count` = sum(increase(<dropped-entries counters>[window])) over ALL drop reasons
+    (ingester_error / rate_limited / stream_limited / line_too_long) and both shippers (Alloy on
+    the cluster, Promtail on the Pi), None when no counter has a series (reads as 0). Above the
+    threshold means Loki was rejecting entries and the shipper gave up on them — partial log loss
+    the total-silence Loki Log Ingestion check can't see.
     """
     n = count or 0.0
     if n > threshold:
         return False, (
-            "promtail dropped %.0f log entries in %s (> %.0f) — partial log loss"
+            "log shipper dropped %.0f entries in %s (> %.0f) — partial log loss"
             % (n, window, threshold)
         )
-    return True, "promtail drops ok (%.0f in %s)" % (n, window)
+    return True, "shipper drops ok (%.0f in %s)" % (n, window)
 
 
 def discord_webhook_ok(status_code, name=None):
