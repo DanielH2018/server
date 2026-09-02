@@ -57,8 +57,15 @@ import subprocess
 import sys
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 import yaml
+
+# Reach the sibling package directories: a directly-invoked script gets only its own
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.git import git  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SECRETS_FILE = os.path.join(REPO, "ansible", "vars", "secrets.yml")
@@ -454,9 +461,7 @@ def due_date(entry: dict) -> dt.date | None:
 
 
 def _git(*args: str) -> str:
-    return subprocess.run(
-        ("git", *args), cwd=REPO, check=True, capture_output=True, text=True
-    ).stdout
+    return git(*args, cwd=REPO).stdout
 
 
 def ciphertext_at(rev: str) -> dict[str, str]:
