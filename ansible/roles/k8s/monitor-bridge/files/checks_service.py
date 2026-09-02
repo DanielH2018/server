@@ -90,8 +90,9 @@ def gitops_status(
         # sentence to print, so a stale marker left by a cleared hold cannot page alone.
         if hold_plane:
             return False, (
-                "broad apply held at %s — %s failed, plane unapplied; "
-                "fix forward and re-run it" % (hold_sha[:8], hold_plane)
+                "broad apply held at %s — %s failed, plane unapplied; fix forward and "
+                "re-run it, then rm hold_sha + hold_plane in /var/lib/gitops-deploy"
+                % (hold_sha[:8], hold_plane)
             )
         return False, "deploy held at %s — revert the offending PR" % hold_sha[:8]
     if diverged_sha:
