@@ -5,6 +5,8 @@ evidence the DATA reached B2. These cover the distinction the command exists to 
 credential-handling that keeps it safe to run, and the Class C budget projection.
 """
 
+import json
+
 import probe
 import probe_longhorn as longhorn
 
@@ -279,3 +281,34 @@ def test_format_backup_budget_does_not_charge_a_day_for_an_unscheduled_volume():
     text, code = longhorn.format_backup_budget(vols, {"pvc-idle": "no-backup"})
     assert code == 0
     assert "never pruned" in text and "pvc-idle" in text
+
+
+def _shard_run(labels):
+    class Result:
+        returncode = 0
+        stdout = json.dumps(
+            {"items": [{"metadata": {"name": "pvc-a", "labels": labels}}]}
+        )
+        stderr = ""
+
+    return lambda argv: Result()
+
+
+def test_volume_shard_labels_reads_the_recurring_job_group():
+    run = _shard_run({"recurring-job-group.longhorn.io/weekly-backup-d5": "enabled"})
+    assert longhorn.volume_shard_labels(_run=run) == {"pvc-a": "weekly-backup-d5"}
+
+
+def test_volume_shard_labels_reads_only_the_exact_label_group():
+    """A neighbouring label group must not be read as a shard membership.
+
+    The group is compared exactly. A `<group>/` prefix test would behave the same here, so
+    this pins which of the two the code performs.
+    """
+    run = _shard_run(
+        {
+            "recurring-job-group.longhorn.io.example.com/spoofed": "enabled",
+            "recurring-job-group.longhorn.io": "enabled",
+        }
+    )
+    assert longhorn.volume_shard_labels(_run=run) == {}

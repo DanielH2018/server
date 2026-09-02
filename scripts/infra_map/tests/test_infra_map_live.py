@@ -214,6 +214,37 @@ def test_parse_kubectl_nodes_reads_readiness_roles_and_address():
     assert parsed["daniel-box"]["ip"] == "10.0.0.1"
 
 
+def test_parse_kubectl_nodes_reads_only_the_exact_node_role_group():
+    """A neighbouring label group must not contribute a role.
+
+    The role filter compares the label key's group exactly. A prefix test would behave the
+    same here, so this pins which of the two the code performs.
+    """
+    payload = json.dumps(
+        {
+            "items": [
+                {
+                    "metadata": {
+                        "name": "daniel-box",
+                        "labels": {
+                            "node-role.kubernetes.io/etcd": "true",
+                            "node-role.kubernetes.io.example.com/spoofed": "true",
+                            "node-role.kubernetes.io": "true",
+                        },
+                    },
+                    "spec": {},
+                    "status": {
+                        "conditions": [{"type": "Ready", "status": "True"}],
+                        "addresses": [{"type": "InternalIP", "address": "10.0.0.1"}],
+                        "nodeInfo": {"kubeletVersion": "v1.36.2+k3s1"},
+                    },
+                }
+            ]
+        }
+    )
+    assert g.parse_kubectl_nodes(payload)["daniel-box"]["roles"] == ["etcd"]
+
+
 def test_parse_kubectl_nodes_marks_a_not_ready_node():
     """A NotReady node reading as healthy is the miss this collection exists to catch."""
     payload = json.dumps({"items": [node("daniel-server", ready=False)]})

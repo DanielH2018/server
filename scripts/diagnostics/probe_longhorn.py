@@ -356,8 +356,11 @@ def volume_shard_labels(_run=None):
     shards = {}
     for item in json.loads(out.stdout).get("items", []):
         for key in item.get("metadata", {}).get("labels", {}):
-            if key.startswith("recurring-job-group.longhorn.io/"):
-                shards[item["metadata"]["name"]] = key.split("/", 1)[1]
+            # Exact group comparison, not a `<group>/` prefix test: see the same rewrite in
+            # scripts/infra_map/live.py for why the prefix form is read as URL sanitization.
+            group, sep, name = key.partition("/")
+            if sep and group == "recurring-job-group.longhorn.io":
+                shards[item["metadata"]["name"]] = name
     return shards
 
 
