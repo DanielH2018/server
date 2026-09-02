@@ -46,11 +46,22 @@ command. The wait tolerates a `mergeable` of `UNKNOWN` — GitHub computes the f
 asynchronously and serves `UNKNOWN` on a freshly opened PR — and bails only after two
 consecutive `CONFLICTING` polls, because the base moving under a PR flips it for one poll.
 
+**A PR whose own CI is red ends the wait too**, exit 1 with `VERDICT: pr-ci-red`, quoting
+what `await_ci.py` said. This is the second state an armed auto-merge never recovers from,
+and GitHub reports it only as `mergeStateStatus: BLOCKED` — the same word it uses while the
+checks are still running. The repo's ruleset requires status checks and signatures and no
+review, so a `BLOCKED` PR here is always about checks; there is no human-review wait to
+preserve. Push a fix and re-run the same `land.sh` command. The wait keeps going while
+`await_ci.py` answers `pending`, which is what it answers until a required check registers —
+that is the grace period, so no landing is cut short for polling before CI started.
+
 Run that command with `run_in_background` and let the session be re-invoked when it exits;
 the `VERDICT:` line is the last line of the logfile. `land.sh` waits for master CI on the merge commit, ticks, deploys what the tick deferred, and prints a
 `VERDICT:` line — `settled`, `unhealthy`, `deploy-failed`, `nothing-to-deploy`, `blocked`,
 `needs-manual-apply`, `deferred`, `merge-conflict` (the PR cannot merge until it is
-rebased), or one of the four give-ups: `merge-timeout` (the PR was
+rebased), `pr-ci-red` (the PR's own CI is red, so the armed auto-merge never fires — as
+against `ci-red`, which is master's CI after the merge), or one of the four give-ups:
+`merge-timeout` (the PR was
 still open after the 2700s merge budget), `ci-red`, `ci-timeout` (no CI verdict inside the
 900s budget) and `lock-busy` (the tree lock stayed busy through every retry).
 

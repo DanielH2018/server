@@ -26,22 +26,25 @@
 #   land.sh --pr 574 --since <sha> --await-merge   # arm `gh pr merge --auto` first, then this
 #   land.sh --pr 574 --tags sonarr,radarr    # skip derivation, scope by hand
 #
-# --await-merge polls the PR's state (never CI) until it is merged, so the session's whole
-# procedure is `gh pr create`, `gh pr merge --squash --auto`, and ONE backgrounded land.sh.
-# Every landing on 2026-09-01 hand-wrote that wait as an `until MERGED; sleep 30` loop.
+# --await-merge polls the PR's state until it is merged, so the session's whole procedure is
+# `gh pr create`, `gh pr merge --squash --auto`, and ONE backgrounded land.sh. Every landing
+# on 2026-09-01 hand-wrote that wait as an `until MERGED; sleep 30` loop. It asks await_ci.py
+# for the PR's own CI verdict alongside that state, which is the opposite of the hand-polling
+# this script replaced: one bounded read that ENDS the wait on a red, rather than a session
+# watching a green arrive.
 #
 # Exit codes:
 #   0   deployed and settled, or there was nothing to deploy
 #   1   CI red, blocked by a change needing a hand, deploy failed, the health gate failed, or
-#       the PR was closed unmerged or conflicts with master
+#       the PR was closed unmerged, conflicts with master, or its own CI is red
 #   2   bad arguments
 #   75  gave up waiting — the merge budget or CI budget elapsed, the deploy lock stayed busy,
 #       the tick was skipped for lock contention every time, or the tick has not yet crossed
 #       origin
 #
 # Verdicts printed on stdout: settled | unhealthy | deploy-failed | nothing-to-deploy |
-# blocked | needs-manual-apply | deferred | merge-conflict | merge-timeout | ci-red |
-# ci-timeout | lock-busy.
+# blocked | needs-manual-apply | deferred | merge-conflict | pr-ci-red | merge-timeout |
+# ci-red | ci-timeout | lock-busy.
 # The last four are the `die` exits that used to reach the Landings board as one `aborted`
 # verdict: the 45 landings before 2026-09-02 held four of them, two at exactly the 2700s
 # merge budget and two at the CI budget, and nothing on the board told them apart from a
@@ -53,16 +56,18 @@
 # — so it is landed but not live. `deferred` means the tick applies this PR itself (a setup
 # role or the deploy plane) and has not crossed origin yet, usually because a newer merge's
 # CI is still running; the next tick does it, and nothing is wrong with this PR.
-# `merge-conflict` is the merge wait ending early: the PR cannot merge until it is rebased,
-# which is a different instruction to the reader than `merge-timeout`'s "nobody merged it yet".
+# `merge-conflict` and `pr-ci-red` are the merge wait ending early, on the two states an
+# armed auto-merge never recovers from: the PR needs a rebase, or its own CI is red. Each
+# names its own remedy, where `merge-timeout` could only say "nobody merged it yet".
+# `pr-ci-red` is the PR's CI before the merge; `ci-red` is master's after it.
 set -uo pipefail
 
 PR=''
 SINCE=''
 TAGS=''
 CI_TIMEOUT=900
-# --await-merge: poll `gh pr view` (not CI) until the PR is merged before doing anything else,
-# so `gh pr create` → `gh pr merge --auto` → one backgrounded land.sh is the whole procedure.
+# --await-merge: poll `gh pr view` until the PR is merged before doing anything else, so
+# `gh pr create` → `gh pr merge --auto` → one backgrounded land.sh is the whole procedure.
 # Sized for a PR run plus queueing behind other PRs' runs; a PR that is still open after this
 # is not being merged, and the session should look at why.
 AWAIT_MERGE=0
@@ -197,10 +202,10 @@ if [ "$AWAIT_MERGE" -eq 1 ]; then
   waited=0
   conflicting=0
   while :; do
-    pr_state=$(gh pr view "$PR" --json state,mergeable --jq '.state + " " + .mergeable') ||
+    pr_state=$(gh pr view "$PR" --json state,mergeable,headRefOid \
+      --jq '.state + " " + .mergeable + " " + .headRefOid') ||
       die "could not read PR #$PR" 1
-    state=${pr_state% *}
-    mergeable=${pr_state#* }
+    read -r state mergeable head_sha <<<"$pr_state"
     case "$state" in
       MERGED) break ;;
       CLOSED) die "PR #$PR was closed without merging — nothing to land" 1 ;;
@@ -222,6 +227,29 @@ if [ "$AWAIT_MERGE" -eq 1 ]; then
       fi
     else
       conflicting=0
+    fi
+    # The other way an armed auto-merge never fires: the PR's own CI goes red. GitHub says
+    # only `mergeStateStatus: BLOCKED`, which is the same word it uses while the checks are
+    # still running, so the state fields alone cannot tell "about to merge" from "never
+    # will". This repo's ruleset requires status checks and signatures and NO review, so a
+    # BLOCKED PR here is always about checks — there is no human-review wait to preserve.
+    #
+    # await_ci.py owns the CI verdict, as it does for master CI after the merge; `--timeout 0`
+    # makes it one-shot. Asking it every poll needs no grace period: it answers `pending`
+    # (exit 75) until a required run registers, which is the grace period, derived rather
+    # than guessed.
+    #
+    # Only exit 1 bails, and the asymmetry is deliberate. await_ci.py requires just `prek`,
+    # narrower than the ruleset's three contexts, so a red prek means the ruleset can never
+    # let this PR merge, while a green prek means only "keep waiting" — never "it will
+    # merge". Do not widen the required set here to match the ruleset: the narrow set is
+    # what makes the red half sound.
+    if [ -n "$head_sha" ] && [ "$head_sha" != "null" ]; then
+      ci_line=$(uv run python scripts/deploy_tools/await_ci.py --timeout 0 "$head_sha" 2>&1)
+      ci_rc=$?
+      if [ "$ci_rc" -eq 1 ]; then
+        die "PR #$PR cannot merge — its own CI is red ($ci_line); fix it, push, and re-run this" 1 pr-ci-red
+      fi
     fi
     if [ "$waited" -ge "$MERGE_TIMEOUT" ]; then
       die "PR #$PR still $state after ${MERGE_TIMEOUT}s — not being merged; look at its checks or the queue" 75 merge-timeout

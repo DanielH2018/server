@@ -196,9 +196,14 @@ def test_land_preflights_before_waiting_on_ci():
 
     Checking blockers AFTER the CI wait would still catch the condition but keep the ~6 wasted
     minutes that motivated it (PR #570, 2026-08-29).
+
+    The anchor is the master-CI call by its argument, not the bare module name. land.sh asks
+    await_ci.py a second question during the merge wait (the PR's own CI, #814), which comes
+    before the preflight by construction -- there is no merge commit to check blockers
+    against yet -- so a bare `await_ci.py` anchor matches that one and fails.
     """
     preflight = _LAND_SH.index("deploy_tags.py blockers")
-    ci_wait = _LAND_SH.index("await_ci.py")
+    ci_wait = _LAND_SH.index('await_ci.py "$MERGE_SHA"')
     assert preflight < ci_wait, "land.sh waits on CI before checking for blockers"
 
 
@@ -316,14 +321,23 @@ def test_land_reads_the_deployers_state_for_a_self_applied_pr():
 
 def test_land_can_wait_for_the_merge_itself_without_reading_ci():
     """`--await-merge` exists so the session's procedure is create → `merge --auto` → one
-    backgrounded land.sh. The wait must poll the PR's STATE, never its checks — a CI read
-    here would be the hand-polling land.sh exists to replace, and the nudge hook denies it."""
+    backgrounded land.sh.
+
+    The wait must not shell out to `gh pr checks` or `gh run`: that is the hand-polling
+    land.sh exists to replace, and the nudge hook denies it. Asking await_ci.py for a
+    one-shot verdict is the opposite of that -- a bounded read that ENDS the wait on a red
+    (#814) rather than a session watching for a green to arrive -- so the ban stays on the
+    two `gh` forms, and the CI question stays delegated rather than reimplemented here.
+    """
     assert "--await-merge" in _LAND_SH
     start = _LAND_SH.index('"$AWAIT_MERGE" -eq 1')
     end = _LAND_SH.index("== 1/6")
     wait_block = _LAND_SH[start:end]
     assert "gh pr view" in wait_block and "--json state" in wait_block
     assert "gh pr checks" not in wait_block and "gh run" not in wait_block
+    assert "await_ci.py --timeout 0" in wait_block, (
+        "the PR's CI verdict must come from await_ci.py, not from logic written here"
+    )
     assert "MERGED" in wait_block and "CLOSED" in wait_block
 
 
