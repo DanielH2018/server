@@ -67,11 +67,11 @@ so it has its own section.
 A change under a **broad prefix** is one that maps to no single service. The deployer splits
 them three ways, by which playbook applies them and whether it may run that playbook at all.
 
-| Class | Prefixes | What the deployer does |
-|---|---|---|
-| Setup, scoped | `ansible/roles/setup/<name>/`, `ansible/requirements.yml` (`_BROAD_SETUP_PREFIXES`) | fast-forwards, then runs `initial_setup.yml --tags <name>` |
-| Deploy plane | `ansible/templates/`, `ansible/inventory/`, `ansible/roles/containers/common/`, `ansible/deploy.yml`, `ansible/filter_plugins/`, `ansible.cfg` (`_BROAD_DEPLOY_PREFIXES`) | fast-forwards, then runs a full `ansible/deploy.yml` |
-| Never applied here | `ansible/bootstrap.yml`, `ansible/k3s-bringup.yml`, `ansible/initial_setup.yml` (`_BROAD_MANUAL_PREFIXES`) | alerts and returns **without fast-forwarding** |
+<!-- The table is generated from deploy_changes.py's three prefix tuples; edit those. -->
+--8<-- "assets/generated/fragments/broad-prefixes.md"
+
+The bring-up playbooks appear in both the setup and the manual class: the manual check runs
+first, so a change to one of them is never applied here.
 
 The setup/deploy split exists because `deploy.yml` is a `containers_list` loop and renders
 nothing for the setup plane, so pointing an operator at it for a `roles/setup/` change is a

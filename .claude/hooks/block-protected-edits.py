@@ -36,7 +36,11 @@ _SOPS_MAC_RE = re.compile(r'(?m)^\s*"?mac"?:\s*"?ENC\[AES256_GCM,')
 # by a docs/ prefix: docs/ is mostly hand-written runbooks that must stay editable.
 _GENERATED_DOC_TREES = (
     ("docs/reference", "the reference generators (scripts/docs/build_docs.py)"),
-    ("docs/assets/generated", "scripts/infra_map/gen_infra_map.py"),
+    (
+        "docs/assets/generated",
+        "scripts/infra_map/gen_infra_map.py (the map) or scripts/docs/gen_doc_fragments.py "
+        "(fragments/)",
+    ),
 )
 
 

@@ -84,12 +84,15 @@ choice in the final `/homelab-review` pass; history: `kopia-disaster-recovery.md
 Tiering is deliberate — see [`longhorn-backup-tiering.md`](longhorn-backup-tiering.md) for
 the per-volume map and each exclusion's rationale:
 
-- **Daily tier** (the four R2 volumes, retain 14): day-old at worst.
-- **Weekly tier** (all 21 B2 volumes since the 2026-08-16 sharding, retain 2): up to a week
+<!-- Generated from the k3s role's Longhorn defaults; edit those. -->
+--8<-- "assets/generated/fragments/longhorn-tiers.md"
+
+- **Daily tier** (the R2 volumes): day-old at worst.
+- **Weekly tier** (the B2 volumes, weekday-sharded since 2026-08-16): up to a week
   old, each volume on its own weekday (~3/day — B2's 2,500/day transaction caps couldn't
   absorb a batch). Acceptable by design — configs, largely regenerable.
 
-  > **Still building depth — counted against the cluster 2026-08-24.** "retain 2" is the
+  > **Still building depth — counted against the cluster 2026-08-24.** The retain above is the
   > steady state; depth builds one backup per volume per week from the volume's first shard
   > run. The tier is producing: 34 completed backups covering all 21 volumes, oldest
   > 2026-08-19, newest the same morning this was checked. Not every volume had reached retain 2 yet —

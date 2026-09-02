@@ -24,13 +24,16 @@ registry, so git stays the source of truth.
 
 ## Tiers
 
-| Tier | Cadence | What it is | Rotation |
-|------|---------|-----------|----------|
-| `auto` | 180 d | locally generated push tokens — no external coupling | `rotate --commit`, then redeploy the consumer |
-| `assisted` | 365 d | app passwords / API keys / OIDC secrets | app-side step (below) |
-| `external` | 365 d | provider-managed (Cloudflare/Discord/Mullvad/SMTP/LLM) | mint in the provider console |
-| `pinned` | 730 d | **must not be naively swapped** | special procedure (below) |
-| `ignore` | — | not a secret (domain, usernames, static addresses) | n/a |
+<!-- Cadences and counts are generated from TIER_DAYS and the registry; edit those. -->
+--8<-- "assets/generated/fragments/secret-tiers.md"
+
+- `auto` — locally generated push tokens with no external coupling. `rotate --commit`, then
+  redeploy the consumer.
+- `assisted` — app passwords, API keys and OIDC secrets. An app-side step, below.
+- `external` — provider-managed (Cloudflare, Discord, Mullvad, SMTP, LLM). Mint in the
+  provider console.
+- `pinned` — **must not be naively swapped**. The special procedure, below.
+- `ignore` — not a secret: the domain, usernames, static addresses.
 
 Classification is by name in `scripts/secrets_mgmt/secret_rotation.py`; override per-secret by editing
 its `tier` in the registry (`sync` preserves overrides).
