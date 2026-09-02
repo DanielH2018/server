@@ -7,7 +7,7 @@ also read a dedicated webhook file, since the role's config.env is exactly what 
 unreadable when the thing they alert for has failed.
 """
 
-# ansible/roles/setup/gitops_deploy/files/test_systemd_unit_secrets.py
+# ansible/roles/setup/gitops_deploy/tests/test_systemd_unit_secrets.py
 
 import pathlib
 import re

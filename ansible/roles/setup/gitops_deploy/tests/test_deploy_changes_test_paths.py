@@ -7,7 +7,7 @@ exemption has to be exact: a test beside a real change must not disarm the chang
 path that merely contains `test` is not a test.
 """
 
-# ansible/roles/setup/gitops_deploy/files/test_deploy_changes_test_paths.py
+# ansible/roles/setup/gitops_deploy/tests/test_deploy_changes_test_paths.py
 
 from deploy_changes import services_from_changed_paths
 
@@ -28,12 +28,12 @@ TEST_ONLY_PATHS = [
     "ansible/tests/k8s/test_k8s_manifests.py",
     "ansible/tests/_helpers.py",
     "ansible/tests/conftest.py",
-    # A test beside the module it covers — the layout every roles/*/*/files/ suite uses.
-    "ansible/roles/setup/gitops_deploy/files/test_deploy_health.py",
+    # A test beside the module it covers — the layout most roles/*/*/files/ suites use.
     "ansible/roles/k8s/qbittorrent/files/test_apply_prefs.py",
     "ansible/roles/k8s/monitor-bridge/files/conftest.py",
     # A role-local tests/ directory.
     "ansible/roles/k8s/home-assistant/tests/test_fan_macros.py",
+    "ansible/roles/setup/gitops_deploy/tests/test_deploy_health.py",
 ]
 
 
@@ -65,7 +65,7 @@ def test_a_test_file_does_not_disarm_a_real_change_beside_it():
     exactly what the arm exists to prevent."""
     cs = services_from_changed_paths(
         [
-            "ansible/roles/setup/gitops_deploy/files/test_deploy_health.py",
+            "ansible/roles/setup/gitops_deploy/tests/test_deploy_health.py",
             "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
         ]
     )

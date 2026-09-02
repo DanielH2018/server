@@ -31,6 +31,7 @@ from _helpers import REPO
 
 ROLE = REPO / "ansible" / "roles" / "setup" / "gitops_deploy"
 FILES = ROLE / "files"
+TESTS = ROLE / "tests"
 ENTRYPOINT = "gitops_deploy.py"
 INSTALL_DIR = "/opt/gitops-deploy"
 COPY_TASK = "Install deployer Python files"
@@ -91,7 +92,8 @@ def test_copy_loop_carries_the_entrypoint():
 
 def test_copy_loop_excludes_the_test_suite():
     shipped = set(_copy_loop())
-    tests = {p.name for p in FILES.glob("test_*.py")} | {"conftest.py"}
+    tests = {p.name for p in TESTS.glob("*.py")}
+    assert tests, "the suite moved again — point TESTS at it"
     assert not (shipped & tests)
 
 

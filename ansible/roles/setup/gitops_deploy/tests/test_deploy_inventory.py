@@ -4,7 +4,7 @@
 workload down the Docker path.
 """
 
-# ansible/roles/setup/gitops_deploy/files/test_deploy_inventory.py
+# ansible/roles/setup/gitops_deploy/tests/test_deploy_inventory.py
 
 from deploy_changes import ChangeSet, services_from_changed_paths
 from deploy_inventory import (

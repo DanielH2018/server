@@ -6,7 +6,7 @@ never a pass. The required context names are read from defaults/main.yml and che
 ci.yml's job names, because a renamed job holds the verdict at pending forever.
 """
 
-# ansible/roles/setup/gitops_deploy/files/test_deploy_git_ci.py
+# ansible/roles/setup/gitops_deploy/tests/test_deploy_git_ci.py
 
 import pathlib
 

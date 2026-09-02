@@ -7,7 +7,7 @@ reads on both branches; `broad_budget_ok` is the forward-only decision written a
 so it fails instead of rotting.
 """
 
-# ansible/roles/setup/gitops_deploy/files/test_deploy_remediation.py
+# ansible/roles/setup/gitops_deploy/tests/test_deploy_remediation.py
 
 import pathlib
 

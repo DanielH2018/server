@@ -6,8 +6,8 @@ parsed source. Each of them used to carry its own copy of the same four helpers.
 
 Fixtures rather than importable functions: `from conftest import x` resolves to whichever
 conftest.py sys.path reached first once the whole repo suite runs, and this repo has three.
-pytest resolves a fixture by directory, so it cannot collide. conftest.py is also exempt from
-the role's ship list (`test_gitops_deploy_ship_list.py`), so nothing here reaches a host.
+pytest resolves a fixture by directory, so it cannot collide. tests/ sits outside files/,
+so nothing here is in the role's ship list and nothing here reaches a host.
 """
 
 import ast
@@ -16,7 +16,7 @@ from collections.abc import Callable
 
 import pytest
 
-GITOPS_SRC = pathlib.Path(__file__).with_name("gitops_deploy.py")
+GITOPS_SRC = pathlib.Path(__file__).resolve().parents[1] / "files" / "gitops_deploy.py"
 
 
 @pytest.fixture(scope="session")

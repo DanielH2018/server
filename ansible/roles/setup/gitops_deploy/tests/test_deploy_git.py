@@ -8,7 +8,7 @@ session. The behind-origin marker is the watchdog for a tick that keeps running 
 catching up. The CI gate has its own file, test_deploy_git_ci.py.
 """
 
-# ansible/roles/setup/gitops_deploy/files/test_deploy_git.py
+# ansible/roles/setup/gitops_deploy/tests/test_deploy_git.py
 
 from datetime import datetime
 

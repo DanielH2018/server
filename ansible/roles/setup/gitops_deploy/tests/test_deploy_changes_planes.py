@@ -8,7 +8,7 @@ case below says which side it lands on. The deploy.yml import guard is here beca
 imported task file that classifies as EMPTY is the same silent ff-merge from the other side.
 """
 
-# ansible/roles/setup/gitops_deploy/files/test_deploy_changes_planes.py
+# ansible/roles/setup/gitops_deploy/tests/test_deploy_changes_planes.py
 
 import pathlib
 

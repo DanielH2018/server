@@ -7,7 +7,7 @@ pin; then two caps bound the batch, because every promoted service shares one pl
 and one timeout, and a rollback resets the whole merged range.
 """
 
-# ansible/roles/setup/gitops_deploy/files/test_deploy_k8s_eligibility.py
+# ansible/roles/setup/gitops_deploy/tests/test_deploy_k8s_eligibility.py
 
 from deploy_changes import services_from_changed_paths
 from deploy_k8s import is_image_only_diff, split_k8s_auto_deploy
