@@ -317,6 +317,12 @@ exclude = ["ansible/collections", "site", ".claude/worktrees"]
 # monkeypatch, and the dominant test-half cluster was the same unnarrowed Optional as the
 # production half.
 #
+# Eleven of the 91 were closed by WIDENING rather than narrowing: six annotations that say
+# `Any` where the value really is heterogeneous — `_state` in the two mkdocs plugins, `hosts` in
+# infra_map, and three dict literals in tests whose bare inference produced a value union that
+# then read as indexing a str. Those make ty stop asking; they do not make anything safer, and
+# each is a place a real type would be better if the shape were ever pinned down.
+#
 # It also found one live annotation bug. `duplicate_dashboard_uids` declared
 # `boards: dict[str, str]` while its body ran `len(paths) > 1` and `", ".join(paths)` — a test
 # that is true for any two-character uid if the value really were a str. Every caller had always
