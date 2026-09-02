@@ -101,6 +101,10 @@ GENERATORS: list[tuple[list[str], str]] = [
         "docs/reference/freshness.md",
     ),
     (
+        ["scripts/docs/gen_reference_backlog.py", "--out", "docs/reference/backlog.md"],
+        "docs/reference/backlog.md",
+    ),
+    (
         [
             "scripts/infra_map/gen_infra_map.py",
             "--format",

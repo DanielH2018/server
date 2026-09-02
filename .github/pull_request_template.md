@@ -7,6 +7,8 @@ Full procedure: CLAUDE.md → "After a PR Merges — Pull, Deploy, Verify".
 
 ## What changed, and why
 
+<!-- Closes #<n> for every findings.py issue this fixes; GitHub closes it on merge. -->
+
 ## Services touched
 
 <!-- The deploy tags this maps to, or "none — docs/tasks only". -->

@@ -129,6 +129,7 @@ nav:
       - Scheduled jobs: reference/crons.md
       - Networking: reference/networking.md
       - Scripts: reference/scripts.md
+      - Backlog: reference/backlog.md
       - Topology: reference/topology.md
       - Doc freshness: reference/freshness.md
   # template.md is deliberately absent — it is a form, not a document. The nav test only

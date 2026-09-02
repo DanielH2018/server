@@ -36,8 +36,9 @@ recording rather than that nobody looked.
 
 `docs/superpowers/plans/` and `docs/superpowers/ledgers/` are **not** in this archive: that
 directory is gitignored (`.gitignore:6`, see commit `eadfdd57`) and untracked, so
-it does not exist in this worktree to move. `docs/superpowers/specs/` stays where it is —
-`PLANS.md:3` names it the authoritative rationale home.
+it does not exist in this worktree to move. `docs/superpowers/specs/` stays where it is as the
+per-feature design-rationale home; the lightweight idea backlog `PLANS.md` used to hold now
+files as GitHub Issues via `scripts/dev/findings.py`.
 
 `docs/networkpolicy-default-deny.md` stays live: its slices shipped, but the document
 describes the enforced end state rather than the plan to reach it, so it reads as current
