@@ -31,6 +31,9 @@ spec:
           containers:
             - name: pull
               image: {{ pi_peer_backup_k8s_image }}
+              # Built in-cluster to a mutable :latest; explicit for the reason terraria's
+              # deployment records.
+              imagePullPolicy: Always
               env:
                 - name: PI_SRC
                   value: "{{ hostvars['daniel-pi'].ansible_user | default('ubuntu') }}@{{ hostvars['daniel-pi'].ansible_host }}:/home/{{ sys_user }}/server/containers/wg-easy/config/"

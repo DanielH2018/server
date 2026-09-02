@@ -28,6 +28,9 @@ spec:
       containers:
         - name: ical-proxy
           image: {{ ical_proxy_k8s_image }}
+          # Built in-cluster to a mutable :latest; explicit for the reason terraria's
+          # deployment records.
+          imagePullPolicy: Always
           ports:
             - containerPort: 5000
           env:

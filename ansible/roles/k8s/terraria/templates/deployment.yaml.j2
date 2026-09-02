@@ -53,6 +53,14 @@ spec:
       containers:
         - name: terraria
           image: {{ terraria_k8s_image }}
+          # Rolling tier: the registry tag is rebuilt in place by image-builder, so pod
+          # creation must re-pull. Explicit rather than left to the `:latest` default, because
+          # the API server defaults this field only when it is ABSENT at create time — this
+          # Deployment was created with an upstream `@sha256:` pin, which defaulted it to
+          # IfNotPresent, and a later apply that changed only `image` left that value in
+          # place. The 2026-09-02 digest bump rebuilt the image, rolled the pod, and the node
+          # reused its cached `:latest`; the drift gate in post_tasks/ caught it.
+          imagePullPolicy: Always
           # The image's console wants a TTY + open stdin (compose parity: stdin_open/tty).
           stdin: true
           tty: true
