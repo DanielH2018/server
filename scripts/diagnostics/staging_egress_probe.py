@@ -51,8 +51,11 @@ from pathlib import Path
 
 import yaml
 
-REPO = Path(__file__).resolve().parents[2]
-INVENTORY = REPO / "ansible" / "inventory"
+# Reach the sibling package directories: a directly-invoked script gets only its own
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.repo_paths import INVENTORY, ROLES  # noqa: E402
 
 SSH_OPTS = [
     "-o",
@@ -119,9 +122,7 @@ def _targets() -> tuple[str, list[tuple[str, str, str | None]]]:
     all_vars = _load(INVENTORY / "group_vars" / "all.yml")
     box = _load(INVENTORY / "host_vars" / "daniel-box.yml")
     pi = _load(INVENTORY / "host_vars" / "daniel-pi.yml")
-    hypervisor = _load(
-        REPO / "ansible" / "roles" / "setup" / "hypervisor" / "defaults" / "main.yml"
-    )
+    hypervisor = _load(ROLES / "setup" / "hypervisor" / "defaults" / "main.yml")
 
     guest = all_vars["staging_vm_ip"]
     gateway = hypervisor["hypervisor_staging_net_gateway"]

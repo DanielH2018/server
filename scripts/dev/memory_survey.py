@@ -40,10 +40,15 @@ import re
 import sys
 from pathlib import Path
 
-# The checkout a memory's cited check paths are resolved against. Taken from this file's own
-# location so the survey works from a worktree, where the primary checkout's paths would be the
-# wrong tree to ask.
-REPO_ROOT = Path(__file__).resolve().parents[2]
+# Reach the sibling package directories: a directly-invoked script gets only its own
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+# The checkout a memory's cited check paths are resolved against. Resolved from this file's
+# own location so the survey works from a worktree, where the primary checkout's paths would
+# be the wrong tree to ask.
+from lib.repo_paths import REPO as REPO_ROOT  # noqa: E402
+
 DEFAULT_MEMORY_DIR = Path.home() / ".claude/projects/-home-ubuntu-server/memory"
 DEFAULT_TRANSCRIPT_DIR = Path.home() / ".claude/projects/-home-ubuntu-server"
 

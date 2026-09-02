@@ -31,10 +31,10 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-_REPO = Path(__file__).resolve().parents[2]
-sys.path.insert(
-    0, str(_REPO / "ansible" / "roles" / "setup" / "gitops_deploy" / "files")
-)
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.repo_paths import GITOPS_DEPLOY_FILES  # noqa: E402
+
+sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 from deploy_logic import (  # noqa: E402 — needs the path insert above
     _CI_NO_VERDICT_CONCLUSIONS,

@@ -31,6 +31,10 @@ DOCS = REPO / "docs"
 ANSIBLE = REPO / "ansible"
 ROLES = ANSIBLE / "roles"
 K8S_ROLES = ROLES / "k8s"
+FILTER_PLUGINS = ANSIBLE / "filter_plugins"
+# deploy_logic.py lives in the role that deploys it, so a script that has to agree with the
+# deployer imports it from here rather than carrying a second derivation.
+GITOPS_DEPLOY_FILES = ROLES / "setup" / "gitops_deploy" / "files"
 SHARED_TPL = (
     ANSIBLE / "templates"
 )  # shared macros (and the labels-macro traefik.yml.j2)

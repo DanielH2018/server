@@ -43,6 +43,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Reach the sibling package directories: a directly-invoked script gets only its own
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.repo_paths import ROLES  # noqa: E402
+
 # Verdicts. These are this script's own exit codes and are what a later slice branches on.
 PASS = 0
 REJECTED = 1
@@ -96,10 +102,7 @@ REMOTE_SCRIPT = Path(__file__).resolve().parent / "staging_gate_remote.sh"
 # roles/setup/gitops_deploy (private, 0600 here) and roles/setup/hypervisor (public, pinned to a
 # forced command there). `identity_problem()` refuses to connect unless these two agree.
 IDENTITY = Path("/etc/gitops-deploy/staging_gate_ed25519")
-AUTHORIZED_PUBKEY = (
-    Path(__file__).resolve().parents[2]
-    / "ansible/roles/setup/hypervisor/files/staging-gate.pub"
-)
+AUTHORIZED_PUBKEY = ROLES / "setup/hypervisor/files/staging-gate.pub"
 
 # The request the dispatcher accepts. Its shape is the interface: an operation name, a full
 # 40-hex object name, and the tags — never a script body, because a forced command does not stop

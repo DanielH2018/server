@@ -35,8 +35,8 @@ import yaml
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-REPO = _Path(__file__).resolve().parents[2]
-ANSIBLE = REPO / "ansible"
+from lib.repo_paths import ANSIBLE  # noqa: E402
+
 REGISTRY = ANSIBLE / "secret_rotation.yml"
 
 # The trees a host script is deployed into. Deliberately two literal prefixes rather than "any

@@ -55,13 +55,14 @@ from lib.render_guard import (  # noqa: E402
     containers_entries,
     host_files,
 )
+from lib.repo_paths import GITOPS_DEPLOY_FILES  # noqa: E402
 
 # deploy_logic.py lives under the gitops_deploy role's files/ because that role's own script
 # (gitops_deploy.py) imports it as a same-directory sibling. scripts/ needs the same pure
 # git-diff-to-service-set logic for `changed`, and copying it would drift the two the first time
 # either changes — so this reaches across the role boundary instead, the same way
 # gitops_deploy.py reaches into its own directory.
-DEPLOY_LOGIC_DIR = REPO / "ansible" / "roles" / "setup" / "gitops_deploy" / "files"
+DEPLOY_LOGIC_DIR = GITOPS_DEPLOY_FILES
 
 # Every container role block-tags its tasks with these (see the role task files and the
 # `--skip-tags deploy` config-only workflow in CLAUDE.md). They are legitimate --tags
