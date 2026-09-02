@@ -296,13 +296,16 @@ healthchecks.io) are excluded rather than given a real key.
 Consequence to accept up front: a role that fails on staging *because* its credential is fake is
 a false failure. The subset in *Decision 6* is chosen partly to avoid that class entirely.
 
-### 6. The staging subset — five services, and the hole this leaves
+### 6. The staging subset, and the hole this leaves
 
-Staging cannot carry all 51 services in 8 GB, and **a gate over a subset gates only that subset.**
+Staging cannot carry every service in 8 GB, and **a gate over a subset gates only that subset.**
 This is stated here, in the spec, because it is the claim most likely to be quietly overread once
 the pipeline is green.
 
-The initial subset is chosen for coverage of **mechanisms**, not importance:
+<!-- Generated from the STAGING_SUBSET default in gitops_deploy.py; edit that. -->
+--8<-- "assets/generated/fragments/staging-subset.md"
+
+The subset is chosen for coverage of **mechanisms**, not importance:
 
 | Service | Mechanism it exercises |
 |---|---|

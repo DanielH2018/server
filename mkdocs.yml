@@ -42,6 +42,14 @@ markdown_extensions:
   - pymdownx.superfences
   - pymdownx.highlight:
       anchor_linenums: true
+  # `--8<-- "assets/generated/fragments/<name>.md"` splices a generated fact table into a
+  # hand-written page, so the prose stays prose and the tunables it sits beside are re-read
+  # from the tree by scripts/docs/gen_doc_fragments.py on every docs-refresh run. check_paths
+  # turns an include naming a fragment nobody generates into a strict-build failure; without
+  # it the include line renders as text and the page reads as if the table were missing.
+  - pymdownx.snippets:
+      base_path: [docs]
+      check_paths: true
 
 plugins:
   - search
@@ -80,6 +88,10 @@ hooks:
 exclude_docs: |
   superpowers/
   adr/template.md
+  # Snippet bodies, not pages: each is spliced into a page above by `--8<--`, and mkdocs
+  # would otherwise build every one as an orphan page of one table. Excluding a file from
+  # the build does not hide it from the snippets extension, which reads base_path from disk.
+  assets/generated/fragments/
 
 # Built and served on purpose, but deliberately absent from the nav. `archive/` is the
 # historical record of executed work — other docs and CLAUDE.md link INTO it, so excluding it
