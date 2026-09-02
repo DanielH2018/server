@@ -281,16 +281,28 @@ NEEDS_DIFF=''
 if [ -z "$TAGS" ]; then
   pr_json=$(gh pr view "$PR" --json files,changedFiles) || die "could not read PR files" 1
   # The PR's OWN diff, so a broad path whose change is comments only can be dropped before
-  # the plane is classified. `$MERGE_SHA^..$MERGE_SHA` and not `$SINCE..`: --since covers
-  # every other session's merged work too, and a quiet path there is not this PR's to judge.
-  # Empty when the parent is not local (a shallow or unfetched checkout), which classifies
-  # every broad path as loud — the direction a wrong answer must fall (issue #848).
+  # the plane is classified. Read from the PULL REF and its merge base, not from
+  # `$MERGE_SHA^..$MERGE_SHA` and not from `$SINCE..`.
+  #
+  # `--since` covers every other session's merged work, and a quiet path there is not this
+  # PR's to judge. `$MERGE_SHA^` is right for a squash merge and WRONG for a rebase merge of
+  # a multi-commit PR, where the parent is the PR's own commit n-1: a broad path changed in
+  # commit 1 then reads identical on both sides of the range and comes back quiet, skipping
+  # a manual apply that was owed. This repo allows all three merge methods, and PR #843 —
+  # the case this exists for — was two commits.
+  #
+  # `refs/pull/<n>/head` is the branch as it was reviewed, and its merge base with the merge
+  # commit is the branch point under every merge method. That range is exactly the file list
+  # `gh pr view --json files` returns. Any step failing leaves the range empty, which
+  # classifies every broad path as loud — the direction a wrong answer must fall (issue #848).
   quiet_range=''
-  if git rev-parse -q --verify "$MERGE_SHA^" >/dev/null; then
-    quiet_range="$MERGE_SHA^..$MERGE_SHA"
-  else
-    say "no local parent for $MERGE_SHA — not reading the diff for comment-only broad paths"
+  if git fetch -q origin "refs/pull/$PR/head" 2>/dev/null; then
+    pr_head=$(git rev-parse FETCH_HEAD)
+    pr_base=$(git merge-base "$pr_head" "$MERGE_SHA" 2>/dev/null) || pr_base=''
+    [ -n "$pr_base" ] && quiet_range="$pr_base..$pr_head"
   fi
+  [ -n "$quiet_range" ] ||
+    say "could not read PR #$PR's own range — every broad path stays owed to a hand"
   # What a deploy tag cannot reach. deploy.yml is a containers_list loop, so a setup-plane
   # change needs initial_setup.yml and derives no tag at all — which land.sh used to report
   # as nothing-to-deploy. A shared k8s role (manifests, volume-claim, …) has no entry in that

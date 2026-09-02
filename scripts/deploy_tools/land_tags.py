@@ -257,11 +257,22 @@ def _quiet_paths(paths: list[str], range_: str) -> set[str]:
     Empty when no range was given, or when the range is malformed, or when git cannot read
     a side of it -- every one of those keeps the path broad, which is the direction a wrong
     answer here must fall (issue #848).
+
+    A RANGE NARROWER THAN THE FILE LIST is the same failure wearing a valid range, and it
+    fails the unsafe way: a broad path substantively changed OUTSIDE the range reads as
+    identical on both sides, so it comes back quiet and its manual apply is skipped. The PR
+    file list is the whole PR; a range covering only part of it cannot answer for the rest.
+    So every path asked about must appear in the range's own diff, or nothing is quiet --
+    the same shape as `derive`'s count assertion, and for the same reason: wider than the
+    truth is recoverable, narrower is not.
     """
     old, sep, new = range_.partition("..")
     if not (sep and old and new):
         return set()
     try:
+        covered = set(deploy_tags.range_paths(old, new))
+        if not set(paths) <= covered:
+            return set()
         return deploy_tags.comment_only_paths(paths, old, new)
     except subprocess.CalledProcessError, OSError:
         return set()
