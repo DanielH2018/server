@@ -44,8 +44,9 @@ the `VERDICT:` line is the last line of the logfile. `land.sh` waits for master 
 `needs-manual-apply` or `deferred`.
 
 If another PR merges during that CI wait, the first `deploy.sh` exits 4 (the tree is behind
-origin) and `land.sh` retries once: it re-runs the blockers check, waits for master CI on the
-new tip (the tick defers until the TIP is green, not just your commit), then ticks and deploys.
+origin) and `land.sh` retries, up to three times: each pass re-runs the blockers check, waits
+for master CI on the new tip (the tick defers until the TIP is green, not just your commit),
+then ticks and deploys. The tip wait is booked under `wait_ci` on the Landings board.
 Before 2026-09-02 that retry skipped the wait and ended `deploy-failed (exit 4)` with nothing
 deployed, three landings in one day.
 
