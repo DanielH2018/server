@@ -6,6 +6,7 @@ the I/O shell (renovate_notify.py) only fetches, persists, and posts.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -100,15 +101,58 @@ def parse_repository_problems(body: str) -> set[str]:
     return problems
 
 
-def find_dashboard_problems(issues: list[dict]) -> set[str]:
-    """Parse the dashboard issue's Repository Problems section (see parse_repository_problems).
+# Renovate renders per-dependency lookup failures OUTSIDE the "## Repository Problems"
+# section, as a blockquote callout appended after the branch lists
+# (`getDepWarningsDashboard` in renovate's lib/workers/repository/errors-warnings.ts). So
+# parse_repository_problems is structurally blind to them: the dashboard stays fresh, the
+# failing dependency gets no PR, and it simply stops being offered an update. Observed
+# 2026-09-02 on ruff and registry.k8s.io/kube-state-metrics (finding #887), where
+# kube-state-metrics vanished from "Pending Status Checks" between two reads with nothing
+# but this callout to say why.
+#
+# The callout's own header has been both `> :warning: **Warning**` (the source above) and
+# `> [!WARNING]` (what the hosted app emitted on 2026-09-02), so match the sentence rather
+# than the callout marker.
+DEP_LOOKUP_MARKER = "renovate failed to look up the following dependencies:"
 
-    Empty set when the dashboard is absent or has no problems section.
+_BACKTICKED = re.compile(r"`([^`]+)`")
+
+# Prefix on each parsed failure, so a digest line says which of the two sources it came from.
+DEP_LOOKUP_PREFIX = "lookup failure: "
+
+
+def parse_dependency_lookup_failures(body: str) -> set[str]:
+    """Parse the dashboard body's dependency-lookup warning callout into a set of problems.
+
+    Renovate lists every failed dependency on ONE line, backtick-wrapped and comma-joined,
+    followed by a separate `Files affected:` line. Only the marker line is scanned:
+    `Files affected` carries backticked spans too, and sweeping the whole callout would
+    fold filenames in as if they were failing dependencies.
+
+    Returns each failure prefixed with DEP_LOOKUP_PREFIX. Absent callout -> empty set.
+    """
+    for line in (body or "").splitlines():
+        lowered = line.lower()
+        if DEP_LOOKUP_MARKER not in lowered:
+            continue
+        tail = line[lowered.index(DEP_LOOKUP_MARKER) + len(DEP_LOOKUP_MARKER) :]
+        return {DEP_LOOKUP_PREFIX + dep.strip() for dep in _BACKTICKED.findall(tail)}
+    return set()
+
+
+def find_dashboard_problems(issues: list[dict]) -> set[str]:
+    """Union of the dashboard's two silent-stall signals, both read off the same issue body.
+
+    The "## Repository Problems" section (see parse_repository_problems) and the
+    dependency-lookup warning callout (see parse_dependency_lookup_failures). Renovate
+    renders them independently and either can appear alone. Empty set when the dashboard is
+    absent or carries neither.
     """
     issue = _find_dashboard_issue(issues)
     if issue is None:
         return set()
-    return parse_repository_problems(issue.get("body") or "")
+    body = issue.get("body") or ""
+    return parse_repository_problems(body) | parse_dependency_lookup_failures(body)
 
 
 def problems_fingerprint(problems: set[str]) -> str:
