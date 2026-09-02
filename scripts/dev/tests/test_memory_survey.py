@@ -429,6 +429,35 @@ def test_a_declaration_that_also_cites_a_live_check_is_a_contradiction(tmp_path)
     assert result["contradictions"] and "test_thing.py" in result["contradictions"][0]
 
 
+def test_a_review_ledger_citing_a_live_check_is_not_a_contradiction(tmp_path):
+    """A ledger cites checks as evidence for its findings, which is not a claim to be enforced."""
+    root = _repo(tmp_path, "ansible/tests/test_thing.py")
+    p = _declared(
+        tmp_path,
+        "review-2026-09-01-state.md",
+        "enforceable: no — a review ledger for one dated run",
+        body="H-1 was confirmed against ansible/tests/test_thing.py.\n",
+    )
+    result = memory_survey.enforcement([p], root)
+    assert result["contradictions"] == []
+    assert result["not_enforceable"] == [
+        "review-2026-09-01-state.md — a review ledger for one dated run"
+    ]
+
+
+def test_a_non_ledger_named_like_one_is_still_a_contradiction(tmp_path):
+    """The reject half: the exemption keys on the ledger naming convention, not on `review`."""
+    root = _repo(tmp_path, "ansible/tests/test_thing.py")
+    p = _declared(
+        tmp_path,
+        "review-skeptics-drop-real-findings.md",
+        "enforceable: no — judgment about a review loop",
+        body="ENFORCED by ansible/tests/test_thing.py.\n",
+    )
+    result = memory_survey.enforcement([p], root)
+    assert result["contradictions"] and "test_thing.py" in result["contradictions"][0]
+
+
 def test_the_field_is_read_from_frontmatter_only(tmp_path):
     """A memory DESCRIBING this convention in its body must not thereby exempt itself."""
     root = _repo(tmp_path, "ansible/tests/test_thing.py")

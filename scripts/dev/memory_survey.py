@@ -339,7 +339,12 @@ def enforcement(files: list[Path], repo_root: Path) -> dict[str, list[str]]:
         resolved = [c for c in cited if _resolves(c, repo_root)]
         declared, reason = declared_unenforceable(text)
 
-        if declared and resolved:
+        # A ledger cites checks as EVIDENCE for the findings it records, never as its own
+        # enforcer, and `_CHECK_PATH` cannot tell the two apart. Both ledgers in the store
+        # read as contradictions on 2026-09-02 and both declarations were correct.
+        is_ledger = path.name.startswith("review-") and path.name.endswith("-state.md")
+
+        if declared and resolved and not is_ledger:
             contradictions.append(
                 f"{path.name} -> declares enforceable: no, cites {resolved[0]}"
             )
