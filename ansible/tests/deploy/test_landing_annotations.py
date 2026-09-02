@@ -167,7 +167,7 @@ def _retry_loop(text: str, call: str) -> str:
 def test_lock_contention_is_recorded_in_both_retry_loops():
     """The tick loop and the deploy loop each retry on contention; each must book the wait."""
     text = _LAND_SH.read_text()
-    tick_loop = _retry_loop(text, "gitops_tick.sh\n  tick_rc=$?")
+    tick_loop = _retry_loop(text, 'gitops_tick.sh"\n  tick_rc=$?')
     deploy_loop = _retry_loop(text, 'deploy.sh --tags "$TAGS"\n  deploy_rc=$?')
     assert "note_lock_contention" in tick_loop, (
         "the tick retry loop does not record its lock wait"
@@ -185,7 +185,7 @@ def test_nothing_to_deploy_is_decided_before_the_ci_wait():
     """
     text = _LAND_SH.read_text()
     shortcut = text.index("LAND_VERDICT=nothing-to-deploy")
-    ci_wait = text.index('await_ci.py "$MERGE_SHA"')
+    ci_wait = text.index('await_ci.py" "$MERGE_SHA"')
     assert shortcut < ci_wait, (
         "the nothing-to-deploy short-circuit sits after the CI wait"
     )

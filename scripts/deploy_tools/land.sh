@@ -76,6 +76,10 @@ MERGE_TIMEOUT=2700
 # temporary checkout and without a 30s sleep per poll. Nothing operational sets them.
 MERGE_POLL=${LAND_MERGE_POLL:-30}
 PRIMARY=${LAND_PRIMARY:-/home/ubuntu/server}
+# The directory this script was invoked FROM, which is not the directory it runs IN. Every
+# helper below is resolved through one or the other, and which one is a per-helper decision
+# with a comment at each call site. See the `LAND_DIR vs PRIMARY` block above `cd "$PRIMARY"`.
+LAND_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 BRANCH=master
 LOCK_RETRIES=5
 LOCK_BACKOFF=60
@@ -195,6 +199,29 @@ done
 # the WORKING DIRECTORY, not from the path it was invoked by. After a squash merge a
 # worktree is behind master, so deploying from one is refused (exit 4) — and would render
 # stale templates if it were not. Everything below therefore runs from the primary checkout.
+#
+# LAND_DIR vs PRIMARY — which checkout each helper comes from, and why it is not one answer.
+#
+# The `cd` makes every RELATIVE path below resolve in the primary checkout, including the
+# helpers. That is a version skew: this script is the copy in the checkout it was invoked
+# from, and until the tick fast-forwards, the primary checkout's helpers are the PREVIOUS
+# release of them. A PR adding a flag to a helper and its call site here therefore failed on
+# its own landing — `land_tags.py: error: unrecognized arguments: --range` (PR #850,
+# 2026-09-02, issue #851), at step 1, before anything had waited or deployed.
+#
+# So a helper whose CODE must match this script is invoked through `$LAND_DIR`:
+#   land_tags.py, await_ci.py, deploy_detach_notify.py, gitops_tick.sh
+# None of them reads the primary checkout's HEAD. await_ci.py and gitops_tick.sh touch no
+# repo state at all, deploy_detach_notify.py takes its tags as an argument, and land_tags.py
+# reads the PR's file list plus `containers_list` — where the invoking checkout is the more
+# correct one, because it carries the PR's own change and the primary checkout does not yet.
+#
+# A helper whose QUESTION is about the primary checkout keeps the relative path:
+#   deploy.sh, deploy_tags.py
+# `deploy_tags.py blockers` reads `HEAD..origin/master` and `changed` reads `<since>...HEAD`,
+# both with the cwd as the repo. Moving that code to this script's checkout would silently
+# re-aim both at the WORKTREE's HEAD — a missed blocker or a wrong tag list, neither of which
+# announces itself. Its checkout is the question, not an implementation detail.
 cd "$PRIMARY" || die "cannot cd to $PRIMARY" 1
 
 if [ "$AWAIT_MERGE" -eq 1 ]; then
@@ -245,7 +272,7 @@ if [ "$AWAIT_MERGE" -eq 1 ]; then
     # merge". Do not widen the required set here to match the ruleset: the narrow set is
     # what makes the red half sound.
     if [ -n "$head_sha" ] && [ "$head_sha" != "null" ]; then
-      ci_line=$(uv run python scripts/deploy_tools/await_ci.py --timeout 0 "$head_sha" 2>&1)
+      ci_line=$(uv run python "$LAND_DIR/await_ci.py" --timeout 0 "$head_sha" 2>&1)
       ci_rc=$?
       if [ "$ci_rc" -eq 1 ]; then
         die "PR #$PR cannot merge — its own CI is red ($ci_line); fix it, push, and re-run this" 1 pr-ci-red
@@ -309,15 +336,15 @@ if [ -z "$TAGS" ]; then
   # list either, so it needs a full deploy. Computed whether or not tags were derived: a PR
   # can touch a deployable role AND one of those planes, and then the deploy succeeds while
   # half the change is unapplied, under a `settled` verdict.
-  PLANE=$(uv run python scripts/deploy_tools/land_tags.py --plane --range "$quiet_range" --json "$pr_json") ||
+  PLANE=$(uv run python "$LAND_DIR/land_tags.py" --plane --range "$quiet_range" --json "$pr_json") ||
     die "plane classification failed" 1
   # `yes` when the tick applies part of this PR itself (a setup role initial_setup.yml
   # includes, or the deploy plane). Only then does the deployer's state after the tick
   # speak to THIS landing — for an ordinary service PR, `behind_since` is somebody else's
   # pending merge and says nothing about the services deploy.sh just rolled out.
-  SELF_APPLIED=$(uv run python scripts/deploy_tools/land_tags.py --self-applied --range "$quiet_range" --json "$pr_json") ||
+  SELF_APPLIED=$(uv run python "$LAND_DIR/land_tags.py" --self-applied --range "$quiet_range" --json "$pr_json") ||
     die "self-applied classification failed" 1
-  derived=$(uv run python scripts/deploy_tools/land_tags.py --json "$pr_json") ||
+  derived=$(uv run python "$LAND_DIR/land_tags.py" --json "$pr_json") ||
     die "tag derivation failed" 1
   source_kind=${derived%% *}
   TAGS=${derived#* }
@@ -355,7 +382,7 @@ case "$pf_rc" in
 esac
 
 echo "== 3/6  waiting for master CI"
-uv run python scripts/deploy_tools/await_ci.py "$MERGE_SHA" --timeout "$CI_TIMEOUT"
+uv run python "$LAND_DIR/await_ci.py" "$MERGE_SHA" --timeout "$CI_TIMEOUT"
 ci_rc=$?
 case "$ci_rc" in
   0) ;;
@@ -370,7 +397,7 @@ tick_rc=0
 attempt=1
 while [ "$attempt" -le "$LOCK_RETRIES" ]; do
   t_attempt=$SECONDS
-  ./scripts/deploy_tools/gitops_tick.sh
+  "$LAND_DIR/gitops_tick.sh"
   tick_rc=$?
   # 3 = lock contention: the unit's own `flock -w 180` gave up, so the tick fast-forwarded
   # NOTHING. Another session's deploy can hold the tree lock for twenty minutes, and a
@@ -517,7 +544,7 @@ while [ "$deploy_rc" -eq 4 ] && [ "$stale_attempt" -lt "$STALE_RETRIES" ]; do
   if [ "$TIP_SHA" != "$MERGE_SHA" ]; then
     say "waiting for master CI on the new tip $TIP_SHA (the tick defers until it is green)"
     t_tip_wait_start=$SECONDS
-    uv run python scripts/deploy_tools/await_ci.py "$TIP_SHA" --timeout "$CI_TIMEOUT"
+    uv run python "$LAND_DIR/await_ci.py" "$TIP_SHA" --timeout "$CI_TIMEOUT"
     tip_ci_rc=$?
     # This wait is CI time, not deploy time, but it runs after the T_TICK stamp. Shifting
     # T_CI and T_TICK forward by the seconds waited books it under wait_ci on the Landings
@@ -533,7 +560,7 @@ while [ "$deploy_rc" -eq 4 ] && [ "$stale_attempt" -lt "$STALE_RETRIES" ]; do
       *) die "await_ci failed on the tip (exit $tip_ci_rc) — nothing deployed" 1 ;;
     esac
   fi
-  ./scripts/deploy_tools/gitops_tick.sh
+  "$LAND_DIR/gitops_tick.sh"
   ./scripts/deploy.sh --tags "$TAGS"
   deploy_rc=$?
 done
@@ -576,7 +603,7 @@ echo "== 6/6  health verdict"
 # gate, which is the half `ansible-playbook` exiting 0 cannot speak to. --no-post keeps the
 # verdict in this session rather than duplicating it onto Discord, where the --detach path
 # already reports.
-uv run python scripts/deploy_tools/deploy_detach_notify.py \
+uv run python "$LAND_DIR/deploy_detach_notify.py" \
   --status 0 --log /dev/null --tags "$TAGS" --no-post
 verdict_rc=$?
 
