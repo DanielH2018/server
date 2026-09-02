@@ -366,6 +366,95 @@ def test_find_dashboard_problems_dashboard_without_section_is_empty():
     assert nl.find_dashboard_problems(issues) == set()
 
 
+# Verbatim from the Dependency Dashboard (issue #3) as quoted in finding #887, observed
+# 2026-09-02 19:35 UTC. Renovate renders lookup failures as this callout, NOT under
+# "## Repository Problems" — the sample is kept literal so the parser is tested against
+# Renovate's own output rather than an approximation of it.
+_LOOKUP_WARNING_BODY = """This issue lists Renovate updates and detected dependencies.
+
+## Pending Status Checks
+
+ - [ ] <!-- approvePr-branch=renovate/k8s-image-python -->Update python:3.14-alpine Docker digest to c6ead21
+
+---
+
+> [!WARNING]
+> Renovate failed to look up the following dependencies: `Failed to look up pypi package ruff: no-result`, `Failed to look up docker package registry.k8s.io/kube-state-metrics/kube-state-metrics: no-result`.
+>
+> Files affected: `pyproject.toml`, `ansible/roles/k8s/claude-otel/defaults/main.yml`
+
+---
+
+## Detected Dependencies
+
+some other section
+"""
+
+_LOOKUP_FAILURES = {
+    "lookup failure: Failed to look up pypi package ruff: no-result",
+    "lookup failure: Failed to look up docker package "
+    "registry.k8s.io/kube-state-metrics/kube-state-metrics: no-result",
+}
+
+
+def test_parse_dependency_lookup_failures_is_flagged():
+    assert nl.parse_dependency_lookup_failures(_LOOKUP_WARNING_BODY) == _LOOKUP_FAILURES
+
+
+def test_parse_dependency_lookup_failures_is_clean_without_callout():
+    # The Repository Problems section alone must not produce lookup-failure items.
+    assert nl.parse_dependency_lookup_failures(_PROBLEMS_BODY) == set()
+    assert nl.parse_dependency_lookup_failures("") == set()
+
+
+def test_parse_dependency_lookup_failures_ignores_files_affected_backticks():
+    # `Files affected:` carries backticked paths on its own line; folding those in would
+    # report two package files as if they were failing dependencies.
+    parsed = nl.parse_dependency_lookup_failures(_LOOKUP_WARNING_BODY)
+    assert not any("pyproject.toml" in p for p in parsed)
+    assert not any("claude-otel" in p for p in parsed)
+
+
+def test_parse_dependency_lookup_failures_matches_the_older_callout_marker():
+    # Renovate's source emits `> :warning: **Warning**`; the hosted app emitted `> [!WARNING]`.
+    # The parser keys off the sentence, so both renderings parse.
+    body = (
+        "\n---\n\n> :warning: **Warning**\n> \n"
+        "> Renovate failed to look up the following dependencies: `Failed to look up "
+        "docker package ghcr.io/x/y: no-result`.\n> \n> Files affected: `a.yml`\n\n"
+    )
+    assert nl.parse_dependency_lookup_failures(body) == {
+        "lookup failure: Failed to look up docker package ghcr.io/x/y: no-result"
+    }
+
+
+def test_find_dashboard_problems_surfaces_lookup_callout():
+    issues = [_issue("Dependency Dashboard")]
+    issues[0]["body"] = _LOOKUP_WARNING_BODY
+    assert nl.find_dashboard_problems(issues) == _LOOKUP_FAILURES
+
+
+def test_find_dashboard_problems_unions_both_sources():
+    issues = [_issue("Dependency Dashboard")]
+    issues[0]["body"] = _PROBLEMS_BODY + _LOOKUP_WARNING_BODY
+    problems = nl.find_dashboard_problems(issues)
+    assert problems == _LOOKUP_FAILURES | {
+        "WARN: Failed to look up docker package ghcr.io/karakeep-app/karakeep",
+        'WARN: Invalid schedule: "on the last day of the month"',
+    }
+
+
+def test_lookup_failure_first_appearing_pages():
+    cur = "|problems:" + nl.problems_fingerprint(_LOOKUP_FAILURES)
+    assert nl.should_notify("", cur) == (True, "digest")
+
+
+def test_render_problems_lists_each_lookup_failure():
+    msg = nl.render_problems(_LOOKUP_FAILURES)
+    assert "registry.k8s.io/kube-state-metrics/kube-state-metrics" in msg
+    assert "ruff" in msg
+
+
 def test_problems_fingerprint_sorted_and_stable():
     a = {"z problem", "a problem"}
     b = {"a problem", "z problem"}
