@@ -74,14 +74,19 @@ def gitops_tree() -> ast.Module:
 
 
 @pytest.fixture(scope="session")
-def gitops_fn(gitops_tree: ast.Module) -> Callable[[str], ast.FunctionDef]:
-    """`gitops_fn("main")` is main()'s FunctionDef; a missing name fails, never returns None."""
+def gitops_fn(
+    gitops_tree: ast.Module,
+) -> Callable[[str, ast.AST | None], ast.FunctionDef]:
+    """`gitops_fn("main")` is main()'s FunctionDef; a missing name fails, never returns None.
 
-    def _fn(name: str) -> ast.FunctionDef:
+    `tree` overrides the parsed module for a rejecting half that parses the pre-fix shape
+    of a function and asserts the check still flags it."""
+
+    def _fn(name: str, tree: ast.AST | None = None) -> ast.FunctionDef:
         fn = next(
             (
                 n
-                for n in ast.walk(gitops_tree)
+                for n in ast.walk(tree if tree is not None else gitops_tree)
                 if isinstance(n, ast.FunctionDef) and n.name == name
             ),
             None,

@@ -199,13 +199,6 @@ def test_diverged_marker_write_is_gated_and_precedes_action_branching(gitops_fn)
 # instead of silently never alerting on it.
 
 
-def test_alert_deferred_handles_k8s_channel(gitops_fn):
-    fn = gitops_fn("alert_deferred")
-    assert any(
-        isinstance(n, ast.Attribute) and n.attr == "k8s" for n in ast.walk(fn)
-    ), "alert_deferred() must alert on cs.k8s (the k8s-role defer-and-alert channel)"
-
-
 def test_the_k8s_autodeploy_branch_alerts_on_a_bundled_secrets_change(gitops_fn):
     """A secrets push riding along with an image bump must not be ff-merged silently.
 
@@ -215,9 +208,8 @@ def test_the_k8s_autodeploy_branch_alerts_on_a_bundled_secrets_change(gitops_fn)
     consumer was never redeployed, and no later tick re-evaluated it because the merge had
     already happened.
 
-    Guarded at the AST rather than behaviourally because gitops_deploy.py cannot be imported in
-    CI (module-level `C = cfg()` reads /etc) — the same constraint the rest of this file works
-    under.
+    Guarded at the AST because the branch is inside main(), which shells out to git; the
+    helper it must call is tested by calling it in test_gitops_deploy_alert_channels.py.
     """
     for node in ast.walk(gitops_fn("main")):
         if not isinstance(node, ast.If):

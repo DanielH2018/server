@@ -390,7 +390,10 @@ several containers and the bumped image's container is usually not the role-name
 `_subprocess` (`deploy_k8s()`'s argv, the rollback call site, `run()`'s process-group kill),
 `_fetch_skip` (`entrypoint()`'s handler chain and the two retryable git failures, by calling
 them), `_alert_delivery` (`discord()`, `deliver()` and `drain_pending()`, by calling them
-against a tmp state dir), `_main_guards` (merge target, hold-before-reset, the diverged
+against a tmp state dir), `_alert_channels` (`alert_once()`, `alert_deferred()`,
+`alert_secrets_deferred()`, `check_stale_composes()` and `_record_behind()`, the same way,
+plus the guard that `state_dir` covers every state path the module names),
+`_main_guards` (merge target, hold-before-reset, the diverged
 marker, drain-before-return — the ordering inside `main()`, pinned at the AST because
 `main()` shells out to git and GitHub), `_timeout_budgets` (the cross-file timeout sums) and
 `_staging_timeouts`. The module imports in CI: `GITOPS_DEPLOY_CONFIG` names its config file
