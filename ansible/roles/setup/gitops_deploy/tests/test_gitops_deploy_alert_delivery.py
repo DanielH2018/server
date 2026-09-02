@@ -9,8 +9,8 @@ baseline trap: comparing the removal against the pre-queue dict makes it a perma
 and drain_pending() reposts forever), an undelivered one must stay, and the queue must be
 capped through the tested cap_pending() with every drop logged. drain_pending() clears
 exactly what it delivered. Every test runs against the canned config and a tmp state dir
-from conftest.py; the ordering of drain_pending() inside main() stays an AST guard in
-test_gitops_deploy_main_guards.py because main() shells out to git.
+from conftest.py; the ordering of drain_pending() inside main() is in
+test_gitops_deploy_main_branches.py.
 """
 
 # ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_alert_delivery.py

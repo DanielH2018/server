@@ -1,13 +1,12 @@
 """What gitops_deploy.py execs, and how it stops what it exec'd.
 
-`deploy_k8s()`'s argv is pinned byte-for-byte, the rollback call site in main() is pinned at
-the AST to pass the FAILED commit's short SHA under its own timeout, and `run()`'s timeout
-must kill the whole process group or a wedged ansible-playbook outlives the tick.
+`deploy_k8s()`'s argv is pinned byte-for-byte, and `run()`'s timeout must kill the whole
+process group or a wedged ansible-playbook outlives the tick. The rollback call site in
+main() is exercised in test_gitops_deploy_main_branches.py.
 """
 
 # ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_subprocess.py
 
-import ast
 import os
 import subprocess
 import time
@@ -71,61 +70,6 @@ def test_deploy_k8s_treats_a_whitespace_only_restore_sha_as_absent(
     calls = _capture_run(gitops_deploy, monkeypatch)
     gitops_deploy.deploy_k8s({"sonarr"}, 900.0, restore_sha="   ")
     assert calls[0].argv == _FORWARD_ARGV
-
-
-# ── the rollback call site in main() ─────────────────────────────────────────────────────────
-# main() shells out to git, queries GitHub for a CI verdict over HTTP, posts to Discord, and
-# touches several state files under /var/lib/gitops-deploy — exercising it end-to-end would mean
-# mocking all of that for one two-line assertion. This parses the ACTUAL call arguments Python
-# executes (not comment text), the same AST-source-guard shape test_gitops_deploy_main_guards.py
-# already uses for the rest of this un-importable-in-CI module.
-def _deploy_k8s_calls_in_main(main_fn: ast.FunctionDef) -> list[ast.Call]:
-    return [
-        n
-        for n in ast.walk(main_fn)
-        if isinstance(n, ast.Call)
-        and isinstance(n.func, ast.Name)
-        and n.func.id == "deploy_k8s"
-    ]
-
-
-def test_the_rollback_redeploy_passes_the_FAILED_sha_not_the_good_one(gitops_fn):
-    """The snapshot worth reverting to was taken before the failed deploy, so it is named for
-    `origin` — the commit being rolled back FROM. Passing `local` here would look correct, find
-    no snapshot for a first-time rollback, and fail the deploy; worse, on a second rollback of
-    the same service it would find a stale snapshot and revert to the wrong point."""
-    calls = _deploy_k8s_calls_in_main(gitops_fn("main"))
-    assert len(calls) == 2, (
-        "expected exactly one forward deploy_k8s call and one rollback redeploy in main()"
-    )
-    forward, rollback = calls
-
-    forward_kwargs = {kw.arg for kw in forward.keywords}
-    assert "restore_sha" not in forward_kwargs, (
-        "the forward deploy must not pass restore_sha"
-    )
-
-    rollback_kwargs = {kw.arg: kw.value for kw in rollback.keywords}
-    assert "restore_sha" in rollback_kwargs, (
-        "the rollback redeploy must pass restore_sha"
-    )
-    # Pin the exact expression, not a prefix: `startswith("origin")` alone is satisfied by the
-    # full 40-char `origin` (volume-snapshot names with `git rev-parse --short=8`, so a 40-char
-    # SHA matches no snapshot and the revert silently never runs) and by an unrelated
-    # `origin_decoy` variable — neither is what this call site must send.
-    sha_expr = ast.unparse(rollback_kwargs["restore_sha"])
-    assert sha_expr == "origin[:8]", (
-        f"rollback restore_sha must be exactly `origin[:8]` — the FAILED commit's short SHA, "
-        f"matching how volume-snapshot names its snapshots — got `{sha_expr}`"
-    )
-
-
-def test_the_rollback_redeploy_uses_its_own_timeout_budget(gitops_fn):
-    """Task 4's addendum: give the rollback redeploy a distinct budget rather than sharing
-    K8S_DEPLOY_TIMEOUT_S, since it does strictly more work than the forward deploy."""
-    forward, rollback = _deploy_k8s_calls_in_main(gitops_fn("main"))
-    assert ast.unparse(forward.args[1]) == "K8S_DEPLOY_TIMEOUT_S"
-    assert ast.unparse(rollback.args[1]) == "K8S_ROLLBACK_TIMEOUT_S"
 
 
 # ── run()'s timeout must kill the whole process group ───────────────────────────────────────────

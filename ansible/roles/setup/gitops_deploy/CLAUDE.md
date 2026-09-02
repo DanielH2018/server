@@ -393,10 +393,12 @@ them), `_alert_delivery` (`discord()`, `deliver()` and `drain_pending()`, by cal
 against a tmp state dir), `_alert_channels` (`alert_once()`, `alert_deferred()`,
 `alert_secrets_deferred()`, `check_stale_composes()` and `_record_behind()`, the same way,
 plus the guard that `state_dir` covers every state path the module names),
-`_main_guards` (merge target, hold-before-reset, the diverged
-marker, drain-before-return — the ordering inside `main()`, pinned at the AST because
-`main()` shells out to git and GitHub), `_timeout_budgets` (the cross-file timeout sums) and
-`_staging_timeouts`. The module imports in CI: `GITOPS_DEPLOY_CONFIG` names its config file
+`_main_branches` (`main()` itself, run against the `tick` fixture: a scripted checkout
+that answers git, `ansible-playbook`, the CI verdict, the health gate, the staging gate
+and Discord from attributes a test sets, and records every call in order — the merge
+target, hold-before-reset, the rollback's `origin[:8]` snapshot and budget, the diverged
+marker and drain-before-return are assertions on that record), `_timeout_budgets` (the
+cross-file timeout sums) and `_staging_timeouts`. The module imports in CI: `GITOPS_DEPLOY_CONFIG` names its config file
 and `tests/conftest.py` points it at the canned `tests/config.env` before any import, so no
 test opens the host's 0600 copy. The `gitops_deploy` fixture is that import and `state_dir`
 repoints every `/var/lib/gitops-deploy` marker at `tmp_path`. The parsed tree and the AST
@@ -499,15 +501,17 @@ every later push while the host stays stale.
 A set difference tells you what diverged, never why, so a remediation inferred from its
 direction is a guess. On a pull-based host origin is the source of truth, so the re-render is
 the right lead in both directions and the push case belongs as a secondary check. Fixed in
-`7f5f629b`. The alert-direction logic lives in `gitops_deploy.py`'s `main()`, which no test
-imports — the `test_deploy_*.py` family covers only the decision modules.
+`7f5f629b`. The alert-direction logic lives in `gitops_deploy.py`'s `main()`; the
+`test_deploy_*.py` family covers only the decision modules, and `main()` itself runs under the
+`tick` fixture in `tests/test_gitops_deploy_main_branches.py`.
 
-`test_gitops_deploy_subprocess.py` covers `deploy_k8s()` and its two call sites inside `main()`.
-The rollback call site itself (inside `main()`, not unit-testable without mocking git/CI/Discord/state-file I/O) is
-covered by an AST source-check pinning that it passes `restore_sha=origin[:8]` EXACTLY (not a
-prefix check — the full 40-char `origin` also starts with `"origin"` and would match no snapshot,
-since volume-snapshot names with `git rev-parse --short=8`) and never `local`, and its own
-`K8S_ROLLBACK_TIMEOUT_S` budget, not the forward deploy's `K8S_DEPLOY_TIMEOUT_S`.
+`test_gitops_deploy_subprocess.py` pins `deploy_k8s()`'s argv. Its two call sites inside
+`main()` are exercised by `test_gitops_deploy_main_branches.py`, which runs the failed-rollout
+branch against the scripted checkout and reads the rollback argv back: it must carry
+`restore_sha=origin[:8]` EXACTLY (not a prefix check — the full 40-char `origin` also starts
+with `"origin"` and would match no snapshot, since volume-snapshot names with `git rev-parse
+--short=8`) and never `local`, under its own `K8S_ROLLBACK_TIMEOUT_S` budget, not the forward
+deploy's `K8S_DEPLOY_TIMEOUT_S`.
 
 **Accepted, docs reconciled rather than code changed: `origin[:8]` is a fixed 8-character slice
 of the full 40-char SHA, and `git rev-parse --short=8` is a MINIMUM width, not a fixed one.**

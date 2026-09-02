@@ -7,8 +7,8 @@ channel and the text; the tasks and meta channels subtract what this tick deploy
 channel never does. check_stale_composes() pages once per distinct stale set and clears its
 marker when the set empties. _record_behind() stamps the behind-origin marker once and keeps
 the first-seen time across later pushes, and never lets a git failure page. Every test runs
-against the canned config and the tmp state dir from conftest.py; the ordering guards inside
-main() stay in test_gitops_deploy_main_guards.py.
+against the canned config and the tmp state dir from conftest.py; main()'s own branches
+are in test_gitops_deploy_main_branches.py.
 """
 
 # ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_alert_channels.py
