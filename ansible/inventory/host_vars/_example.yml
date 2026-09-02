@@ -37,6 +37,14 @@ containers_list: []
 # down the OS-hardening run. Flip to true and re-run `--tags gitops_deploy` afterwards.
 has_gitops: false
 
+# Whether this host holds a checkout of THIS repo at ~/server.
+# Default: true. Set false for a host Ansible drives over ssh that never checks the repo out —
+# daniel-stage is the one such host today. Six setup-plane tasks read `{{ playbook_dir }}` or
+# `~/server/...` on the TARGET; without this gate two fail the run and three install a cron
+# against a path that does not exist, which SUCCEEDS and so reads green.
+# ENFORCED by ansible/tests/setup/test_repo_checkout_gate.py, which censuses those tasks.
+has_repo_checkout: true
+
 # Hardware / capability flags: set only what this host actually has
 
 # Default: false. Intel iGPU present → /dev/dri passthrough for jellyfin/tdarr transcode.

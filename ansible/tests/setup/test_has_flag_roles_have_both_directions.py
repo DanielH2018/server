@@ -22,35 +22,73 @@ Run: uv run pytest ansible/tests/setup/test_has_flag_roles_have_both_directions.
 import re
 
 import pytest
+import yaml
 from _helpers import ANSIBLE
 
 
 SETUP_ROLES = ANSIBLE / "roles" / "setup"
 
-# `when: has_thing` / `when: not has_thing`, as a whole-word match so has_docker does not
-# also satisfy a hypothetical has_docker_extras.
-_POSITIVE = re.compile(r"^\s*when:\s*(has_\w+)\s*$", re.M)
+# The DISPATCH shape: a task that pulls in a whole file on a bare has_* flag. Matching every
+# bare `when: has_*` instead was too loose -- a plain task gated on a capability flag is not a
+# dispatcher and has no teardown half to write. That over-match first bit on 2026-09-02, when
+# sops_setup gated one task on `has_repo_checkout` and was told to write a teardown for a
+# collections install. Read from the parsed YAML rather than by regex, so the include and its
+# `when` are known to belong to the same task.
+_INCLUDE_KEYS = ("ansible.builtin.include_tasks", "ansible.builtin.import_tasks")
 _NEGATIVE = re.compile(r"^\s*when:\s*not\s+(has_\w+)\s*$", re.M)
+
+# The census must keep finding these. Named rather than counted, so narrowing the matcher fails
+# with the member it dropped instead of quietly protecting nothing -- which is the exact way
+# this guard could go green while checking less than it did.
+KNOWN_DISPATCHERS = frozenset(
+    {("docker_install", "has_docker"), ("hypervisor", "has_hypervisor")}
+)
 
 
 def _dispatcher_roles():
-    """Roles whose tasks/main.yml includes something on a bare has_* flag."""
+    """Roles whose tasks/main.yml pulls in a file on a bare has_* flag."""
     found = []
     for role_dir in sorted(SETUP_ROLES.iterdir()):
         main = role_dir / "tasks" / "main.yml"
         if not main.is_file():
             continue
-        flags = set(_POSITIVE.findall(main.read_text()))
-        for flag in sorted(flags):
-            found.append((role_dir.name, flag))
+        try:
+            tasks = yaml.safe_load(main.read_text()) or []
+        except yaml.YAMLError:
+            continue
+        if not isinstance(tasks, list):
+            continue
+        flags = set()
+        for task in tasks:
+            if not isinstance(task, dict):
+                continue
+            if not any(key in task for key in _INCLUDE_KEYS):
+                continue
+            when = task.get("when")
+            if isinstance(when, str) and re.fullmatch(r"has_\w+", when.strip()):
+                flags.add(when.strip())
+        found += [(role_dir.name, flag) for flag in sorted(flags)]
     return found
 
 
 def test_some_dispatcher_roles_exist():
-    """Guard against the discovery regex silently matching nothing."""
+    """Guard against the discovery matcher silently finding nothing."""
     assert _dispatcher_roles(), (
         "found no setup role dispatching on a has_* flag -- check the matcher"
     )
+
+
+def test_the_known_dispatchers_are_still_found():
+    """Non-vacuity by name. `test_some_dispatcher_roles_exist` only proves the set is non-empty,
+    so it would stay green if the matcher dropped one of the two roles this guard exists for."""
+    missing = KNOWN_DISPATCHERS - set(_dispatcher_roles())
+    assert not missing, f"no longer recognised as dispatchers: {sorted(missing)}"
+
+
+def test_a_plain_gated_task_is_not_a_dispatcher():
+    """The rejecting half. sops_setup gates one task on has_repo_checkout and includes no file,
+    so it must not be asked for a teardown branch."""
+    assert ("sops_setup", "has_repo_checkout") not in _dispatcher_roles()
 
 
 @pytest.mark.parametrize("role,flag", _dispatcher_roles())

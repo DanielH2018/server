@@ -480,7 +480,16 @@ Answering that means auditing the role, not patching the task.
 **Audited 2026-08-28. The answer is: the role is remote-safe apart from two tasks, and the
 git-hooks gate alone is not sufficient.** All nine task files under
 `roles/setup/initial_setup/tasks/` were read, plus the two `setup/common` fragments `crons.yml`
-imports. Two hits, and only the first stops the play:
+imports. The hand audit below found two hits; a machine census
+(`ansible/tests/setup/test_repo_checkout_gate.py`, added 2026-09-02) found **six**, because
+grepping a task cannot tell which SIDE reads the path. `template.src` and `copy.src` are read on
+the controller and shipped as content, so they are not hits however they are written; `chdir`,
+`cron.job`, `command.argv` and `copy.dest` resolve on the target and are. Classifying by module
+argument is what separates them. All six are now gated on `has_repo_checkout`, except the
+release-commit read, which was moved to the controller with `delegate_to: localhost` — the
+commit names the code being shipped, so the target's HEAD was never the right answer.
+
+The two the hand audit found, and only the first stops the play:
 
 | task | file:line | what breaks on a remote target |
 |---|---|---|
