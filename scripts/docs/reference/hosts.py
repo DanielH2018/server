@@ -11,7 +11,7 @@ the convention scripts/docs/service_catalog.py sets.
 
 Usage::
 
-    uv run python scripts/docs/gen_reference_hosts.py --out docs/reference/hosts.md
+    uv run python scripts/docs/reference/hosts.py --out docs/reference/hosts.md
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from pathlib import Path
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.render_guard import load_yaml as _load_yaml_mapping
 from lib.repo_paths import ALL_VARS, HOST_VARS, HOSTS_INI
@@ -139,7 +139,7 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
     """
     from lib.docs_provenance import generated_banner
 
-    parts = [generated_banner("scripts/docs/gen_reference_hosts.py")]
+    parts = [generated_banner("scripts/docs/reference/hosts.py")]
     parts.append("# Hosts\n")
     parts.append(f"{len(rows)} host(s) in `ansible/inventory/hosts.ini`.\n")
 
@@ -181,7 +181,7 @@ def main(argv: list[str] | None = None) -> int:
 
     rows = build_rows(args.hosts_ini, args.host_vars)
     return finish_generator(
-        "gen_reference_hosts", args.out, rows, render_markdown, "host"
+        "docs.reference.hosts", args.out, rows, render_markdown, "host"
     )
 
 

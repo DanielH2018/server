@@ -1,11 +1,11 @@
 ---
-generated_from: scripts/docs/gen_reference_crons.py
+generated_from: scripts/docs/reference/crons.py
 generated_at: 2026-08-31 18:17 UTC
 generated_sha: ccc237f5
 ---
 
 !!! warning "Generated file — do not edit"
-    This page is rendered from the Ansible tree by `scripts/docs/gen_reference_crons.py`. Hand edits are
+    This page is rendered from the Ansible tree by `scripts/docs/reference/crons.py`. Hand edits are
     overwritten by the next run, and a prek hook rejects them at commit time.
     To change what appears here, change the generator or the source it reads.
 

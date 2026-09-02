@@ -1,18 +1,18 @@
 ---
-generated_from: scripts/docs/gen_reference_secrets.py
-generated_at: 2026-09-02 06:17 UTC
-generated_sha: f27f93f4
+generated_from: scripts/docs/reference/secrets.py
+generated_at: 2026-09-02 16:56 UTC
+generated_sha: 28398a17
 ---
 
 !!! warning "Generated file — do not edit"
-    This page is rendered from the Ansible tree by `scripts/docs/gen_reference_secrets.py`. Hand edits are
+    This page is rendered from the Ansible tree by `scripts/docs/reference/secrets.py`. Hand edits are
     overwritten by the next run, and a prek hook rejects them at commit time.
     To change what appears here, change the generator or the source it reads.
 
 
 # Secrets
 
-152 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
+153 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
 
 !!! note "Names and dates only"
     This page is generated from the plaintext rotation registry. No secret VALUE is read here, and the generator never opens the encrypted store or invokes the decryption tool — a test enforces that.
@@ -175,6 +175,7 @@ rotated unattended by the weekly secret-rotate cron.
 | `monitor_bridge_restarts_push_token` | 2026-08-30 | 2027-02-26 | 177 |
 | `monitor_bridge_scrutiny_push_token` | 2026-08-30 | 2027-02-26 | 177 |
 | `monitor_bridge_speedtest_push_token` | 2026-04-20 | 2026-10-17 | 45 |
+| `monitor_bridge_staging_backfill_push_token` | 2026-04-11 | 2026-10-08 | 36 |
 | `monitor_bridge_targets_push_token` | 2026-08-30 | 2027-02-26 | 177 |
 | `monitor_bridge_traefik_latency_push_token` | 2026-08-30 | 2027-02-26 | 177 |
 | `monitor_bridge_traefik_push_token` | 2026-08-30 | 2027-02-26 | 177 |

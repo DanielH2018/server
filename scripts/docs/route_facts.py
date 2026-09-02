@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Shared route facts for the reference generators.
 
-WHY THIS IS SEPARATE. service_catalog.py and gen_reference_networking.py both have to
+WHY THIS IS SEPARATE. service_catalog.py and reference/networking.py both have to
 answer "is this service's route public or LAN-only", and both build the FQDN the same way.
 Deriving that twice means the two pages can disagree about the same service, which is worse
 than either being wrong on its own -- a reader has no way to tell which one to believe.

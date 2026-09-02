@@ -1,4 +1,4 @@
-"""Tests for scripts/docs/gen_reference_crons.py.
+"""Tests for scripts/docs/reference/crons.py.
 
 Fixture-driven: synthetic roles under tmp_path, never the real tree, which changes.
 
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import textwrap
 
-import gen_reference_crons as g
+from docs.reference import crons as g
 
 
 def _role(tmp_path, role: str, body: str):
@@ -156,7 +156,7 @@ def test_unresolved_jinja_is_printed_not_guessed(tmp_path):
 def test_markdown_opens_with_the_provenance_banner(tmp_path):
     out = g.render_markdown(g.build_rows(_basic(tmp_path)))
     assert out.startswith("---\n")
-    assert "generated_from: scripts/docs/gen_reference_crons.py" in out
+    assert "generated_from: scripts/docs/reference/crons.py" in out
 
 
 def test_markdown_says_the_state_column_is_a_heuristic(tmp_path):

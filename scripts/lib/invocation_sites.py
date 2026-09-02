@@ -1,6 +1,6 @@
 """Where a `scripts/...` path can be executed from, read once for two different questions.
 
-`scripts/docs/gen_reference_scripts.py` classifies HOW a script is run (scheduled, gated,
+`scripts/docs/reference/scripts.py` classifies HOW a script is run (scheduled, gated,
 library, adhoc) so the generated reference page can say so. `scripts/test_invoker_paths_resolve.py`
 asserts every `scripts/...` token an invoker names still resolves to a real file, so a rename
 that misses one of these sites fails a test instead of a 3am cron. Both walk the same places —
@@ -15,7 +15,7 @@ It does not decide what counts as a reference inside that text; a caller regexes
 text for its own purpose (a bare `scripts/...` token for the guard test, a run-context-aware
 scan that also tolerates comments and mentions for the generator's classifier). Every source
 lives here, but not every source has two consumers: `prek_hook_entries` and `workflow_run_steps`
-are read only by the guard test today. `gen_reference_scripts.py`'s classifier keeps its own
+are read only by the guard test today. `reference/scripts.py`'s classifier keeps its own
 whole-file scan of `prek.toml` and each workflow instead of the field-scoped one, because it
 deliberately reads more than the `entry=`/`run:` field alone — its own test
 (`test_an_argv_element_in_python_source_is_an_invocation`) pins a prek.toml hook keyed

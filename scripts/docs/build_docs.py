@@ -58,27 +58,27 @@ GENERATORS: list[tuple[list[str], str]] = [
         "docs/reference/services.md",
     ),
     (
-        ["scripts/docs/gen_reference_hosts.py", "--out", "docs/reference/hosts.md"],
+        ["scripts/docs/reference/hosts.py", "--out", "docs/reference/hosts.md"],
         "docs/reference/hosts.md",
     ),
     (
-        ["scripts/docs/gen_reference_secrets.py", "--out", "docs/reference/secrets.md"],
+        ["scripts/docs/reference/secrets.py", "--out", "docs/reference/secrets.md"],
         "docs/reference/secrets.md",
     ),
     (
-        ["scripts/docs/gen_reference_crons.py", "--out", "docs/reference/crons.md"],
+        ["scripts/docs/reference/crons.py", "--out", "docs/reference/crons.md"],
         "docs/reference/crons.md",
     ),
     (
         [
-            "scripts/docs/gen_reference_networking.py",
+            "scripts/docs/reference/networking.py",
             "--out",
             "docs/reference/networking.md",
         ],
         "docs/reference/networking.md",
     ),
     (
-        ["scripts/docs/gen_reference_scripts.py", "--out", "docs/reference/scripts.md"],
+        ["scripts/docs/reference/scripts.py", "--out", "docs/reference/scripts.md"],
         "docs/reference/scripts.md",
     ),
     # A directory, not a page: the fact tables the hand-written pages transclude. Listed
@@ -94,14 +94,14 @@ GENERATORS: list[tuple[list[str], str]] = [
     ),
     (
         [
-            "scripts/docs/gen_reference_freshness.py",
+            "scripts/docs/reference/freshness.py",
             "--out",
             "docs/reference/freshness.md",
         ],
         "docs/reference/freshness.md",
     ),
     (
-        ["scripts/docs/gen_reference_backlog.py", "--out", "docs/reference/backlog.md"],
+        ["scripts/docs/reference/backlog.py", "--out", "docs/reference/backlog.md"],
         "docs/reference/backlog.md",
     ),
     (

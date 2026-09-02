@@ -18,7 +18,7 @@ page would then disagree with the audit cron that actually pages.
 
 Usage::
 
-    uv run python scripts/docs/gen_reference_secrets.py --out docs/reference/secrets.md
+    uv run python scripts/docs/reference/secrets.py --out docs/reference/secrets.md
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from pathlib import Path
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.repo_paths import ANSIBLE
 from secrets_mgmt import secret_rotation
@@ -83,7 +83,7 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
     """
     from lib.docs_provenance import generated_banner
 
-    parts = [generated_banner("scripts/docs/gen_reference_secrets.py")]
+    parts = [generated_banner("scripts/docs/reference/secrets.py")]
     parts.append("# Secrets\n")
     parts.append(
         f"{len(rows)} secret(s) in the rotation registry "
@@ -144,7 +144,7 @@ def main(argv: list[str] | None = None) -> int:
 
     rows = build_rows(args.registry)
     return finish_generator(
-        "gen_reference_secrets", args.out, rows, render_markdown, "secret"
+        "docs.reference.secrets", args.out, rows, render_markdown, "secret"
     )
 
 

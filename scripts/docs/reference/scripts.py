@@ -30,7 +30,7 @@ scheduled ones.
 
 Usage::
 
-    uv run python scripts/docs/gen_reference_scripts.py --out docs/reference/scripts.md
+    uv run python scripts/docs/reference/scripts.py --out docs/reference/scripts.md
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ from pathlib import Path
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.docs_provenance import md_cell as _md_cell
 from lib.invocation_sites import (
@@ -582,7 +582,7 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
 
     gaps = [r for r in unattended if uncovered(r)]
 
-    parts = [generated_banner("scripts/docs/gen_reference_scripts.py")]
+    parts = [generated_banner("scripts/docs/reference/scripts.py")]
     parts.append("# Scripts\n")
     parts.append(
         f"{len(rows)} first-party script(s) in `scripts/`. Each summary is the script's own "
@@ -675,7 +675,7 @@ def main(argv: list[str] | None = None) -> int:
 
     rows = build_rows(args.scripts)
     return finish_generator(
-        "gen_reference_scripts", args.out, rows, render_markdown, "script"
+        "docs.reference.scripts", args.out, rows, render_markdown, "script"
     )
 
 

@@ -1,4 +1,4 @@
-"""Tests for scripts/docs/gen_reference_scripts.py.
+"""Tests for scripts/docs/reference/scripts.py.
 
 Fixture-driven: a synthetic scripts/ directory under tmp_path.
 
@@ -11,7 +11,7 @@ import re
 import textwrap
 from pathlib import Path
 
-import gen_reference_scripts as g
+from docs.reference import scripts as g
 
 
 def _write(path, body):
@@ -111,7 +111,7 @@ def test_markdown_opens_with_the_provenance_banner(tmp_path):
     _write(tmp_path / "probe.py", '"""Summary."""\n')
     out = g.render_markdown(g.build_rows(tmp_path))
     assert out.startswith("---\n")
-    assert "generated_from: scripts/docs/gen_reference_scripts.py" in out
+    assert "generated_from: scripts/docs/reference/scripts.py" in out
 
 
 def test_markdown_counts_the_untested_scripts(tmp_path):
@@ -320,9 +320,15 @@ def test_the_live_tree_classifies_the_names_we_already_know():
 
 
 def test_every_reference_generator_is_reached_from_the_docs_cron():
-    """build_docs.py runs them, docs-refresh.sh runs build_docs.py, a cron runs that."""
+    """build_docs.py runs them, docs-refresh.sh runs build_docs.py, a cron runs that.
+
+    The generators are found by DIRECTORY, not by a `gen_reference_` filename prefix. They
+    carried that prefix until they moved into `scripts/docs/reference/`, at which point the
+    prefix match returned an empty list — the `>= 5` below is what said so, since a vacuous
+    `all()` over nothing passes.
+    """
     verdicts = g.classify()
-    generators = [n for n in verdicts if n.startswith("gen_reference_")]
+    generators = [p.name for p in (g.SCRIPTS / "docs" / "reference").glob("*.py")]
     assert len(generators) >= 5
     assert all(verdicts[name][0] == "scheduled" for name in generators)
 

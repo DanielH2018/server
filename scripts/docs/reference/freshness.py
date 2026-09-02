@@ -8,7 +8,7 @@ first, then the oldest. `scripts/lib/doc_freshness.py` defines both numbers.
 
 Usage::
 
-    uv run python scripts/docs/gen_reference_freshness.py --out docs/reference/freshness.md
+    uv run python scripts/docs/reference/freshness.py --out docs/reference/freshness.md
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ import argparse
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.doc_freshness import PageFreshness, survey
 from lib.repo_paths import REPO
@@ -36,7 +36,7 @@ def render_markdown(pages: list[PageFreshness]) -> str:
     """
     from lib.docs_provenance import generated_banner
 
-    parts = [generated_banner("scripts/docs/gen_reference_freshness.py")]
+    parts = [generated_banner("scripts/docs/reference/freshness.py")]
     parts.append("# Doc freshness\n")
     parts.append(
         f"{len(pages)} hand-written page(s). *Changed* is the page's last commit; *moved* "
@@ -72,7 +72,7 @@ def main(argv: list[str] | None = None) -> int:
     from lib.docs_provenance import finish_generator
 
     return finish_generator(
-        "gen_reference_freshness", args.out, survey(REPO), render_markdown, "page"
+        "docs.reference.freshness", args.out, survey(REPO), render_markdown, "page"
     )
 
 

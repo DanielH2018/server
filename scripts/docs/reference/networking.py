@@ -15,17 +15,25 @@ STATIC PARSING ONLY: yaml.safe_load over the inventory, plain regex over templat
 
 Usage::
 
-    uv run python scripts/docs/gen_reference_networking.py --out docs/reference/networking.md
+    uv run python scripts/docs/reference/networking.py --out docs/reference/networking.md
 """
 
 from __future__ import annotations
 
 import argparse
 import re
+import sys as _sys
 from pathlib import Path
+from pathlib import Path as _Path
 
+# Reach the sibling package directories: a directly-invoked script gets only its own
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting. This has to sit
+# ABOVE every import below, `docs.route_facts` included — that one lived in this file's own
+# directory until the reference generators moved down a level, so it resolved from
+# sys.path[0] with no bootstrap at all and broke the moment the directory changed.
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from route_facts import (
+from docs.route_facts import (
     GROUP_VARS,
     LAN,
     ingressroute_templates,
@@ -33,14 +41,6 @@ from route_facts import (
     reachability,
     route_cell,
 )
-
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-
 from lib.render_guard import host_files, load_yaml
 from lib.repo_paths import HOST_VARS, K8S_ROLES
 
@@ -108,7 +108,7 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
     """
     from lib.docs_provenance import generated_banner
 
-    parts = [generated_banner("scripts/docs/gen_reference_networking.py")]
+    parts = [generated_banner("scripts/docs/reference/networking.py")]
     parts.append("# Networking\n")
     parts.append(f"{len(rows)} routed k8s service(s).\n")
     parts.append(
@@ -163,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
 
     rows = build_rows(args.host_vars, args.k8s_roles)
     return finish_generator(
-        "gen_reference_networking", args.out, rows, render_markdown, "route"
+        "docs.reference.networking", args.out, rows, render_markdown, "route"
     )
 
 

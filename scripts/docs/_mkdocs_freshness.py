@@ -3,7 +3,7 @@
 The generated reference pages already say when they were built. This gives the other
 pages the equivalent, computed at build time from git so nothing is committed: the date of
 the page's last change, how many repo files it names, and which of those changed after it.
-`scripts/lib/doc_freshness.py` carries the definitions; `gen_reference_freshness.py` renders
+`scripts/lib/doc_freshness.py` carries the definitions; `reference/freshness.py` renders
 the same numbers as one table across all pages, so a reader can go from "this page looks
 old" to "these are the pages to reread".
 
@@ -30,9 +30,7 @@ from lib.doc_freshness import (
     tracked_files,
 )
 
-TABLE = (
-    "reference/freshness.md"  # src_uri of the page gen_reference_freshness.py writes
-)
+TABLE = "reference/freshness.md"  # src_uri of the page reference/freshness.py writes
 
 _state: dict[str, Any] = {}
 

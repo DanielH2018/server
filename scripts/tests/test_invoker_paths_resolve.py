@@ -16,7 +16,7 @@ wrapper, and `.claude/settings*.json`'s permission strings -- and asserts every 
 token found there names a file that exists on disk.
 
 File discovery and field extraction (WHICH files, WHICH field) live in
-`lib/invocation_sites.py`, shared with `scripts/docs/gen_reference_scripts.py` -- the other
+`lib/invocation_sites.py`, shared with `scripts/docs/reference/scripts.py` -- the other
 place that walks these same sites, to say HOW a script is run rather than whether it exists.
 What stays local to this file is the token regex below and the comment-line filtering: this
 test deliberately takes a conservative superset for the shell categories (the `initial_setup`

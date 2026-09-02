@@ -24,7 +24,7 @@ Two real modules prove it:
 So this test resolves the AST instead of grepping for a pattern: for each cross-directory
 `import`/`from ... import ...` (module-level or deferred inside a function -- some modules bootstrap
 once at module level and do the actual import later, lazily, e.g.
-`scripts/docs/gen_reference_hosts.py`), it finds every `sys.path.insert(...)` call reachable before
+`scripts/docs/reference/hosts.py`), it finds every `sys.path.insert(...)` call reachable before
 that import executes, evaluates what directory each one actually inserts (by walking
 `Path(__file__).resolve().parents[N]`, `/` joins, and simple module-level constants -- crossing into
 another file's own module-level assignment when the value comes from an import, using THAT file's
@@ -350,7 +350,7 @@ def test_known_deferred_bootstraps_are_satisfied():
     missing, unresolvable = find_bootstrap_gaps()
     flagged = {f for f, *_ in missing} | {f for f, *_ in unresolvable}
     for rel in (
-        "scripts/docs/gen_reference_hosts.py",
+        "scripts/docs/reference/hosts.py",
         "scripts/infra_map/gen_infra_map.py",
         "scripts/docs/service_catalog.py",
         "scripts/dev/k8s_autodeploy_counts.py",
