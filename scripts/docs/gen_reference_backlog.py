@@ -35,6 +35,11 @@ SOURCE = "scripts/docs/gen_reference_backlog.py"
 
 
 def render_markdown(rows: list[dict]) -> str:
+    """Renders the backlog page: the provenance banner, intro prose, and the findings table.
+
+    Args:
+        rows: open findings in `issue_rows` shape, as returned by `dev.findings.issue_rows`.
+    """
     parts = [generated_banner(SOURCE), "# Backlog\n"]
     parts.append(
         "Findings Claude confirmed and did not fix in the session that found them, filed "

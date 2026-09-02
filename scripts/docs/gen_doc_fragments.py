@@ -136,6 +136,11 @@ def _code_list(items: list[str]) -> str:
 
 
 def render_longhorn_tiers(d: dict) -> str:
+    """Renders the Longhorn backup-tier markdown table fragment.
+
+    Args:
+        d: the k3s role's defaults, carrying the longhorn tier and schedule tunables.
+    """
     r2 = list(d["k3s_longhorn_r2_volumes"])
     weekly = list(d["k3s_longhorn_weekly_volumes"])
     nobackup = list(d["k3s_longhorn_nobackup_volumes"])
@@ -159,6 +164,13 @@ def render_longhorn_tiers(d: dict) -> str:
 
 
 def render_gitops_prefixes(setup: tuple, deploy: tuple, manual: tuple) -> str:
+    """Renders the GitOps broad-change prefix classification table fragment.
+
+    Args:
+        setup: prefixes the deployer fast-forwards then applies via `initial_setup.yml`.
+        deploy: prefixes the deployer fast-forwards then applies via a full `deploy.yml`.
+        manual: prefixes the deployer never applies automatically.
+    """
     rows = [
         ("Setup, scoped", setup, "_BROAD_SETUP_PREFIXES",
          "fast-forwards, then runs `initial_setup.yml --tags <name>`"),
@@ -184,6 +196,13 @@ def render_staging_subset(csv: str) -> str:
 
 
 def render_secret_tiers(tier_days: dict, lead_days: int, counts: dict[str, int]) -> str:
+    """Renders the secret-rotation tier table fragment.
+
+    Args:
+        tier_days: tier name to rotation cadence in days, or None for no cadence.
+        lead_days: `ROTATE_LEAD_DAYS`, the window the weekly auto rotation takes.
+        counts: tier name to registered secret count.
+    """
     lines = ["| Tier | Cadence | Registered |", "|---|---|---|"]
     for tier, days in tier_days.items():
         cadence = f"{days} d" if days is not None else "—"
@@ -311,6 +330,14 @@ def render_fail2ban_jails(jails: list[dict[str, str]]) -> str:
 def render_lan_addresses(
     ingress_vip: str, dns_vip: str, wg_port: str, pi_wg_port: str
 ) -> str:
+    """Renders the LAN address table fragment.
+
+    Args:
+        ingress_vip: the k3s MetalLB ingress VIP every `.local` service answers on.
+        dns_vip: the Pi-hole DNS MetalLB VIP.
+        wg_port: the WireGuard UDP port for wg-easy on daniel-box.
+        pi_wg_port: the WireGuard UDP port for the Pi's LAN-only wg-easy.
+    """
     rows = [
         ("k3s ingress VIP (MetalLB; every `.local` service answers here)", ingress_vip,
          "`k3s_metallb_ingress_vip`"),
@@ -389,6 +416,11 @@ def write_fragments(out_dir: _Path) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Entry point: writes every fragment and prints how many changed.
+
+    Args:
+        argv: command-line arguments, or None to use `sys.argv`.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--out-dir", default=DEFAULT_OUT_DIR, help="where the fragments go"
