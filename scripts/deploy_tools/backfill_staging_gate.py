@@ -355,6 +355,11 @@ def main() -> int:
     COULD_NOT_RUN (2) when the plan itself could not be built (no gateable commits, a
     stale checkout without `--allow-ancestors`, or `--since-ledger` given with no ledger
     to read).
+
+    `--dry-run` returns as soon as the plan is built and gates nothing, so its exit says
+    only whether the plan is runnable: CONDITION_MET (0) for a plan this run could have
+    gated, COULD_NOT_RUN (2) for one it could not. The clean streak is never evaluated on
+    that path, so a dry-run 0 is NOT the entry condition — the stdout line says so too.
     """
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument(
@@ -372,7 +377,7 @@ def main() -> int:
     ap.add_argument(
         "--dry-run",
         action="store_true",
-        help="list the commits and tags that would be gated, and run nothing",
+        help="list the commits and tags that would be gated, and run nothing. Exits 0 for a runnable plan — that is not the entry condition, which only a real run evaluates",
     )
     ap.add_argument(
         "--required",
@@ -439,6 +444,14 @@ def main() -> int:
             )
             return COULD_NOT_RUN
     if args.dry_run:
+        # CONDITION_MET here means "this plan is runnable", NOT "the entry condition is met" —
+        # nothing was gated and the streak was never read. The exit code is the whole interface
+        # for a caller that does not parse stdout, so say it on stdout as well as in the
+        # docstring rather than leaving 0 to be read as a verdict.
+        print(
+            "\ndry run — nothing was gated and the clean streak was not evaluated. "
+            "Exit 0 means the plan above is runnable, not that the entry condition is met."
+        )
         return CONDITION_MET
 
     runs: list[Run] = load_ledger(args.jsonl) if args.jsonl else []

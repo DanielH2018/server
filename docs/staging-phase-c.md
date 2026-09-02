@@ -262,8 +262,10 @@ measured deliberately. Three parts, all required.
 **1. A backfill of 20 consecutive gate runs against real master SHAs, with zero false failures.**
 
 Run it with `uv run python scripts/deploy_tools/backfill_staging_gate.py`, `--dry-run` first —
-that lists the commits and the tags it would gate and touches staging not at all. It exits 0
-only when the condition below is met, so it is a check rather than a report to interpret.
+that lists the commits and the tags it would gate and touches staging not at all. A real run
+exits 0 only when the condition below is met, so it is a check rather than a report to
+interpret. A `--dry-run` exits 0 for any runnable plan: it gates nothing and never reads the
+streak, so its 0 says the plan is runnable and nothing more.
 
 Two properties of that script are load-bearing rather than tidy. It gates **oldest-first**,
 because the staging checkout only moves forward and asking about a commit older than its HEAD

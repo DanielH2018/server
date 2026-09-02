@@ -291,3 +291,43 @@ def test_the_subset_comes_from_staging_gate_rather_than_a_local_copy():
     import staging_gate
 
     assert bf.staging_gate.STAGING_SERVICES is staging_gate.STAGING_SERVICES
+
+
+# ── --dry-run: an exit 0 that is not the entry condition ─────────────────────────────────
+
+
+def test_a_dry_run_says_on_stdout_that_its_zero_is_not_the_entry_condition(
+    tmp_path, monkeypatch, capsys
+):
+    """A dry run exits CONDITION_MET without gating anything.
+
+    The exit code is the whole interface for a caller that does not parse stdout, so the one
+    place a reader can tell a runnable plan from a met condition is the line printed beside it.
+    """
+    monkeypatch.setattr(
+        bf, "collect", lambda ref, count: [("a" * 40, "s", {"freshrss"})]
+    )
+    monkeypatch.setattr(bf, "staging_head", lambda: "a" * 40)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["backfill_staging_gate.py", "--dry-run", "--jsonl", str(tmp_path / "l.jsonl")],
+    )
+    assert bf.main() == bf.CONDITION_MET
+    out = capsys.readouterr().out
+    assert "dry run" in out
+    assert "not that the entry condition is met" in out
+
+
+def test_a_real_run_does_not_print_the_dry_run_disclaimer(
+    tmp_path, monkeypatch, capsys
+):
+    """The rejecting half.
+
+    A disclaimer printed on every path would be indistinguishable from one printed on none.
+    """
+    monkeypatch.setattr(bf, "collect", lambda ref, count: [])
+    monkeypatch.setattr(bf, "staging_head", lambda: "a" * 40)
+    monkeypatch.setattr(sys, "argv", ["backfill_staging_gate.py"])
+    assert bf.main() == bf.COULD_NOT_RUN
+    assert "dry run" not in capsys.readouterr().out
