@@ -4,7 +4,7 @@
 # its health is reported by a host cron on this node that READS the last Job and pushes Kuma —
 # the same shape as longhorn-backup-health.sh and telemetry-health.sh, and for the same reason
 # (monitor-bridge runs on daniel-server and cannot see this cluster).
-configarr_k8s_image: ghcr.io/raydak-labs/configarr:1.30.0
+configarr_k8s_image: ghcr.io/raydak-labs/configarr:1.30.2
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
