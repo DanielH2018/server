@@ -440,15 +440,27 @@ on the new digest, so the change shipped; the tick that ff-merged it did not pro
 `land.sh` deployed it at step 5 as a deferral instead.
 
 **The reason generalises, and it is what a future attempt has to plan around.** A tick diffs
-`local..origin`, not one commit. Two other PRs merged during #857's CI wait, so the tick's range
-carried 49 files across three PRs — and `split_k8s_auto_deploy` promotes a service only when
-every path the push touched under its role is exactly its `defaults/main.yml`. A bump that shares
-a tick with unrelated work is not a bump as far as the promotion is concerned.
+`local..origin`, not one commit — and **a broad-plane path anywhere in that range pre-empts
+every image-bump promotion in it**. `main()` applies the broad plane and returns before
+`if cs.k8s_deploy:`, so `consult_staging` is never reached.
 
-So forcing a sample needs a **quiet tick**, not just a qualifying commit: merge the bump when no
-other PR is in flight, and do not let the CI wait absorb another session's landing. On a repo where
-several sessions land daily, that is the constraining condition — more than finding something to
-bump.
+That is what happened. `git reflog show master` gives the range the tick fast-forwarded,
+`2d8e2270..b49b867a`, and replaying `services_from_changed_paths` over it returns
+`broad_setup=True` with `setup_roles=['optimize_pi']` beside `k8s=['freshrss',
+'loki-homelab']`. #858 had touched `ansible/roles/setup/optimize_pi/templates/`. freshrss
+stayed in `cs.k8s` and defer-alerted; `land.sh` deployed it at step 5.
+
+**It is the range that has to be clean, not the bump's own role.**
+`split_k8s_auto_deploy`'s path rule is per-role — `changed_here` filters to paths under
+`roles/k8s/<svc>/` — so unrelated files cannot disqualify a service. The broad arm can, and
+does, because it returns first.
+
+Measured 2026-09-02 over the 120 most recent master commits, **28 carry a broad-plane path**,
+so a one-commit range is clean about three times in four and a three-commit range fewer than
+half the time. Forcing a sample therefore means merging the bump and triggering the tick as
+soon as CI is green, so the range is that one commit — `land.sh`'s CI wait is precisely what
+let #858 into #857's range. At those odds the hand-forced route is a coin-flip repeated, which
+is the argument for making a real gated tick ratchet on its own the way part 1 does.
 
 **The second sample needs a second such tick.** `freshrss_k8s_cache_image` — `nginx:alpine`,
 pinned at `4a73073b`, and `db35bfc6` upstream as of 2026-09-02 — is the remaining candidate in
