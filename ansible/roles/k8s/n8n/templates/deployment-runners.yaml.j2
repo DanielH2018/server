@@ -18,6 +18,10 @@ spec:
       labels:
         app: n8n-runners
         netpol-baseline: enforced
+      annotations:
+        # Rolls this pod when the registry digest for n8n-runners moves, including when it moved
+        # in an earlier failed run rather than in this play. Full reasoning in deployment.yaml.j2.
+        checksum/image: "{{ k8s_built_images | default([]) | selectattr('name', 'equalto', 'n8n-runners') | map(attribute='digest') | first | default('unstaged') }}"
     spec:
       enableServiceLinks: false
       initContainers:
