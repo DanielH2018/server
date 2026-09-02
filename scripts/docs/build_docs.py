@@ -94,6 +94,14 @@ GENERATORS: list[tuple[list[str], str]] = [
     ),
     (
         [
+            "scripts/docs/gen_reference_freshness.py",
+            "--out",
+            "docs/reference/freshness.md",
+        ],
+        "docs/reference/freshness.md",
+    ),
+    (
+        [
             "scripts/infra_map/gen_infra_map.py",
             "--format",
             "svg",

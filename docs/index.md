@@ -34,6 +34,11 @@ Two separate signals, because they answer different questions:
 - The **site build time** below says when the refresh cron last ran. A site that has not been
   built in weeks means the cron stopped.
 
+A hand-written page has no `generated_at`, so it carries a footer instead: the date of its
+last commit, and which of the repo files it names changed after that. A moved source does
+not make the page wrong, it makes it the page to reread next. The
+[freshness table](reference/freshness.md) ranks every hand-written page that way.
+
 <p id="build-stamp" class="build-stamp"></p>
 
 <script>
