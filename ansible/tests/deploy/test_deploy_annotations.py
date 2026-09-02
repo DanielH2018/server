@@ -4,14 +4,14 @@ The chain has four links in three languages, and every break in it is SILENT —
 an annotation query that matches nothing exactly as it renders one with no deploys to show:
 
     deploy.sh / gitops_deploy.py  --logger-->  syslog
-    promtail                      --ships-->   loki-homelab
+    alloy                         --ships-->   loki-homelab
     dashboards                    --query-->   that Loki, by datasource uid
 
 So the things worth pinning are the joins, not the parts. A test that only checked "deploy.sh
 calls logger" would pass while the query looked for a different string.
 
 This is the same failure class as HA_BAN_SELECTOR, which shipped selecting on an `app` label
-promtail does not emit and reported "no ip_ban events" through a window containing a real ban.
+the shipper does not emit and reported "no ip_ban events" through a window containing a real ban.
 """
 
 from __future__ import annotations

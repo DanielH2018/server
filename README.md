@@ -144,7 +144,7 @@ playbooks). The manual post-deploy setup Ansible can't do is verified by
   plaintext secrets** — gitleaks runs pre-commit. The age private key is backed up
   out-of-band (single point of recovery).
 - **Observability** — the Prometheus / Grafana / Loki / Tempo stack runs in-cluster from
-  `ansible/roles/k8s/claude-otel/`, alongside `roles/k8s/loki-homelab` (Loki + a Promtail
+  `ansible/roles/k8s/claude-otel/`, alongside `roles/k8s/loki-homelab` (Loki + an Alloy
   DaemonSet) for homelab logs. Prometheus scrapes node-exporter / cAdvisor / Traefik /
   CrowdSec. Grafana dashboards stay provisioned as code from
   [`roles/k8s/claude-otel/files/dashboards/`](ansible/roles/containers/grafana/) — that

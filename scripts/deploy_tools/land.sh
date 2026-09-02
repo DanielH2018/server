@@ -104,7 +104,7 @@ die() {
 }
 say() { printf '  %s\n' "$1"; }
 
-# One logfmt line per landing into syslog, which promtail already ships to Loki — the same
+# One logfmt line per landing into syslog, which the Alloy shipper already ships to Loki — the same
 # path deploy.sh's `deploy-annotation` takes, read by the Landings dashboard. This is the
 # only record of where a landing's time goes: how long the merge took to arrive, how long
 # master CI took after it, the tick, the deploy. Every earlier number here was one PR timed
