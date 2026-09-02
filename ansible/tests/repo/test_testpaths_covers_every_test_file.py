@@ -120,8 +120,6 @@ _LAYOUT_EXCEPTIONS = {
     # each collected file, so it has to sit at the root the subdirectories share.
     "scripts/conftest.py",
 }
-# A suite mid-move. PR #760 moves gitops_deploy's tests into `tests/`; drop this when it lands.
-_LAYOUT_EXCEPTION_PREFIXES = ("ansible/roles/setup/gitops_deploy/files/",)
 
 
 def _tracked_suite_files() -> list[str]:
@@ -143,23 +141,17 @@ def _tracked_suite_files() -> list[str]:
     )
 
 
-def misplaced_suite_files(
-    suite_files, exceptions=(), exception_prefixes=()
-) -> list[str]:
+def misplaced_suite_files(suite_files, exceptions=()) -> list[str]:
     """The suite files with no `tests` directory anywhere on their path."""
     return [
         path
         for path in suite_files
-        if "tests" not in PurePosixPath(path).parts[:-1]
-        and path not in exceptions
-        and not path.startswith(tuple(exception_prefixes))
+        if "tests" not in PurePosixPath(path).parts[:-1] and path not in exceptions
     ]
 
 
 def test_every_suite_file_sits_in_a_tests_directory() -> None:
-    misplaced = misplaced_suite_files(
-        _tracked_suite_files(), _LAYOUT_EXCEPTIONS, _LAYOUT_EXCEPTION_PREFIXES
-    )
+    misplaced = misplaced_suite_files(_tracked_suite_files(), _LAYOUT_EXCEPTIONS)
     assert not misplaced, (
         "these test files sit beside the code they cover; move each into a sibling `tests/` "
         f"directory (a role's `files/` is what the role ships): {misplaced}"
@@ -188,15 +180,5 @@ def test_a_file_named_tests_does_not_count_as_a_directory() -> None:
     assert misplaced_suite_files(["scripts/lib/tests.py"]) == ["scripts/lib/tests.py"]
 
 
-def test_the_named_exceptions_are_clean() -> None:
-    assert (
-        misplaced_suite_files(
-            [
-                "scripts/conftest.py",
-                "ansible/roles/setup/gitops_deploy/files/test_x.py",
-            ],
-            _LAYOUT_EXCEPTIONS,
-            _LAYOUT_EXCEPTION_PREFIXES,
-        )
-        == []
-    )
+def test_the_named_exception_is_clean() -> None:
+    assert misplaced_suite_files(["scripts/conftest.py"], _LAYOUT_EXCEPTIONS) == []

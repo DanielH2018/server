@@ -18,7 +18,7 @@ import ast
 
 def test_discord_delegates_to_shared_discord_post(ast_calls, gitops_fn, str_constants):
     # The Cloudflare-1010 User-Agent + 2xx-only-success contract now lives in host_lib.discord_post,
-    # which IS importable and is behaviourally tested (common/files/test_host_lib.py) — strictly
+    # which IS importable and is behaviourally tested (common/tests/test_host_lib.py) — strictly
     # stronger than the old AST proxy that pinned the "User-Agent"/200/300 constants inside this
     # un-importable module. Guard here only that gitops's discord() still ROUTES through it (a
     # regression inlining a UA-less POST would drop the call) and passes its own User-Agent.

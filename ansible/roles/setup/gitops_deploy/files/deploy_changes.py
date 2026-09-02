@@ -196,12 +196,12 @@ _SECRETS_FILE = "ansible/vars/secrets.yml"
 def _is_test_only_path(path: str) -> bool:
     """Whether a changed path is test-suite material that no role ever ships to a host.
 
-    Four shapes, and the first two are why this is a path check rather than a name check.
-    `ansible/tests/` holds the repo-wide guards plus `_helpers.py`, which matches no name
-    pattern at all. A role-local `tests/` directory (home-assistant's macro tests) is the same
-    case. The other two are name-shaped: a `test_*.py` beside the module it covers, the layout
-    every `roles/*/*/files/` suite uses, and the `conftest.py` that sits with it —
-    monitor-bridge has one, and its ship list already excludes it by name.
+    Two shapes. The directory shape is the one the tree uses: `ansible/tests/` holds the
+    repo-wide guards plus `_helpers.py`, which matches no name pattern at all, and every other
+    suite sits in a role-local or per-script-directory `tests/` — a layout
+    `ansible/tests/repo/test_testpaths_covers_every_test_file.py` enforces. The name shape,
+    a `test_*.py` or `conftest.py` wherever it sits, covers the one deliberate exception,
+    `scripts/conftest.py`, and a test a session adds beside code before that guard catches it.
 
     The invariant this rests on: nothing under `ansible/` copies a test file to a host.
     `ansible/tests/repo/test_no_role_ships_a_test_file.py` is the tree-wide guard, so a role that

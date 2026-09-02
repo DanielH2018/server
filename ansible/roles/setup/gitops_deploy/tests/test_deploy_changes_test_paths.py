@@ -28,7 +28,8 @@ TEST_ONLY_PATHS = [
     "ansible/tests/k8s/test_k8s_manifests.py",
     "ansible/tests/_helpers.py",
     "ansible/tests/conftest.py",
-    # A test beside the module it covers — the layout most roles/*/*/files/ suites use.
+    # A test beside the module it covers. No suite sits this way any more (#764), but the
+    # name-shaped half of the predicate still has to hold for one a session adds there.
     "ansible/roles/k8s/qbittorrent/files/test_apply_prefs.py",
     "ansible/roles/k8s/monitor-bridge/files/conftest.py",
     # A role-local tests/ directory.
