@@ -1,0 +1,44 @@
+---
+# The remote dashboard. It lists ONLY what runs on this node, which is what makes it the
+# "separate layout with only the live services" — there is no detection step and no
+# conditional templating. When the house is dark this page is simply still correct,
+# because nothing on it depends on the house.
+#
+# Widget URLs deliberately use the node-local Docker service names on the `proxy` network
+# rather than public hostnames. That keeps widget traffic off the auth boundary entirely
+# — the cluster's copy has to route its widgets via `-k8s` monitoring hostnames precisely
+# because the public route's Authelia 401s them.
+
+- Reading:
+    - FreshRSS:
+        icon: freshrss.png
+        href: https://freshrss.{{ domain }}/
+        description: RSS link aggregator
+        siteMonitor: http://freshrss:80/
+        widget:
+            type: freshrss
+            url: http://freshrss:80
+            username: {{ freshrss_username }}
+            password: {{ freshrss_password }}
+    - Karakeep:
+        icon: karakeep.png
+        href: https://karakeep.{{ domain }}/
+        description: Bookmark archive
+        siteMonitor: http://karakeep:3000/
+        widget:
+            type: karakeep
+            url: http://karakeep:3000
+            key: {{ karakeep_homepage_api_key }}
+
+- Status:
+    - Uptime Kuma:
+        icon: uptime-kuma.png
+        href: https://uptime-kuma.{{ domain }}/
+        # The watcher outside the house: it is what still answers when daniel-box does not.
+        description: Offsite monitoring
+        siteMonitor: http://uptime-kuma:3001/
+    - Public page:
+        icon: si-aboutdotme.png
+        href: https://www.{{ domain }}/
+        description: littlelink
+        siteMonitor: http://littlelink:3000/

@@ -1,0 +1,23 @@
+---
+# cloudflared ingress map — GENERATED FROM containers_list, not hand-maintained.
+#
+# Every entry on this host that declares a `port` gets a rule, so adding a service to
+# `host_vars/daniel-cloud.yml` routes it automatically and there is no second list to keep
+# in step. A service with no `port` (cloudflared itself) is skipped.
+#
+# The origin is reached by Docker service name on the shared network, so no container
+# publishes a host port and the node opens no inbound port at all.
+tunnel: {{ cloudflared_tunnel_id }}
+credentials-file: /etc/cloudflared/credentials.json
+
+# Keep the connection warm across all four Cloudflare edge colos it dials.
+protocol: quic
+
+ingress:
+{% for svc in containers_list | selectattr('port', 'defined') %}
+  - hostname: {{ svc.hostname | default(svc.name) }}.{{ domain }}
+    service: http://{{ svc.name }}:{{ svc.port }}
+{% endfor %}
+  # Required terminator: cloudflared refuses to start without a catch-all rule, and 404 is
+  # the right answer for a hostname pointed at this tunnel that no rule above claims.
+  - service: http_status:404

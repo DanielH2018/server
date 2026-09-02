@@ -1,11 +1,25 @@
 {# Host-aware web-UI exposure. Driven by `expose_mode` (host var; default 'traefik',
    'lan' on LAN-only hosts like daniel-pi). A per-container `expose_mode` key overrides
-   the host default. Two modes:
+   the host default. Three modes:
 
      traefik — Traefik routes the UI via labels (Authelia-gated when use_authelia);
                no host port is published. (main server)
      lan     — no Traefik labels; the UI port is published bound to the host's LAN IP
                ({{ server_ip }}), reachable only on the local network. (the Pi)
+     tunnel  — NEITHER labels nor published ports. (daniel-cloud, the Oracle node)
+               cloudflared runs as a sibling on the same Docker network and maps each
+               public hostname straight to a container by service name, so there is no
+               Traefik to label for and nothing needs a host port. Deliberately not a
+               variant of 'traefik': that mode's labels name `certresolver=cloudflare`,
+               whose DNS-01 challenge needs a DNS-EDITING Cloudflare token on the host.
+               A tunnel token is scoped to the tunnel, so the node never holds a
+               credential that can rewrite the zone. Emitting inert Traefik labels there
+               would also read as though something on the box were routing.
+
+   Adding a mode: `web_ui_labels` matches 'traefik' explicitly rather than "not lan", so
+   a new mode defaults to emitting NOTHING and has to opt in. That direction is the safe
+   one — a mode that silently inherits Traefik labels would advertise routes no proxy
+   serves.
 
    Invoke BOTH macros at COLUMN 0 on their own line (NOT indented — each bakes in the
    service-block indentation itself, and renders empty, one harmless blank line, in the
@@ -23,7 +37,7 @@
 #}
 {% from 'traefik.yml.j2' import labels with context %}
 {% macro web_ui_labels(internal_port=none) -%}
-{% if (container_item.expose_mode | default(expose_mode | default('traefik'))) != 'lan' %}
+{% if (container_item.expose_mode | default(expose_mode | default('traefik'))) == 'traefik' %}
       {{ labels(
           container_item.hostname | default(container_item.name),
           (internal_port if internal_port is not none else container_item.port) | string,

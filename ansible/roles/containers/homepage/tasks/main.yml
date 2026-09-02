@@ -1,0 +1,37 @@
+---
+- name: Create required directories
+  tags: [config]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    common_dirs_to_create:
+      - "{{ container_item.name }}/config"
+
+- name: Copy Config files
+  tags: [config]
+  ansible.builtin.template:
+    src: "config/{{ item }}.j2"
+    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/config/{{ item }}"
+    # 0600 to match the cluster role: this config carries service URLs and, once widgets
+    # are added, their API keys. Owned by the PUID (1000) the container runs as.
+    mode: "0600"
+  with_items:
+    - settings.yaml
+    - services.yaml
+    - widgets.yaml
+    - bookmarks.yaml
+    - docker.yaml
+  register: homepage_cfg
+  # Keeps a -v/--diff run from printing any key a widget later embeds. register still works.
+  no_log: true
+
+- name: Deploy Container
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_deploy.yml
+  vars:
+    # A bind-mounted config change does not alter the compose hash, so without this the
+    # container keeps serving the old config after a deploy.
+    common_config_changed: "{{ homepage_cfg is changed }}"

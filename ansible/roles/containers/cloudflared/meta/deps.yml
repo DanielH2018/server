@@ -1,0 +1,6 @@
+---
+# cloudflared has no dependency of its own — it dials outbound to Cloudflare and its
+# ingress rules resolve lazily, so it starts cleanly before any origin exists and simply
+# returns 502 for a hostname whose container is not up yet. It is the ROOT of this host's
+# ordering: every other role here declares cloudflared, not the reverse.
+role_deps: []

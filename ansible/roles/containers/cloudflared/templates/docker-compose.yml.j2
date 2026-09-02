@@ -1,0 +1,45 @@
+{% from 'autokuma.yml.j2' import labels as kuma with context %}
+{% from 'networks.yml.j2' import service_networks, external_networks with context %}
+{% from 'resources.yml.j2' import resources %}
+---
+
+services:
+  cloudflared:
+    container_name: cloudflared
+    # Index digest resolved 2026-08-30; carries amd64 and arm64.
+    image: cloudflare/cloudflared:latest@sha256:0aa26e284f05e6c77ae375b8c9c11d9eb6a448fb7bcd8d40f31cb6176189eb38
+    restart: unless-stopped
+    # Locally-managed tunnel: the ingress map lives in this repo (config/config.yml.j2),
+    # not in the Cloudflare dashboard. `--token` would work with fewer moving parts, but it
+    # pulls routing from the dashboard, which puts the hostname-to-service map somewhere
+    # nobody diffs and no deploy reproduces.
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./config/config.yml:/etc/cloudflared/config.yml:ro
+      - ./config/credentials.json:/etc/cloudflared/credentials.json:ro
+    # This container holds the ONLY inbound path to the node — it dials out to Cloudflare
+    # and no port is published or opened in the security list. It therefore needs no
+    # capabilities at all.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    {{ service_networks() }}
+    # cloudflared serves its own metrics endpoint; binding it to localhost inside the
+    # container is enough for the healthcheck and exposes nothing.
+    healthcheck:
+      test: ["CMD", "cloudflared", "--metrics", "127.0.0.1:2000", "tunnel", "ready"]
+      interval: {{ container_healthcheck_interval | default('30s') }}
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    labels:
+      {{ kuma(container_item.name) }}
+    # Resource caps for blast-radius containment; tune from cAdvisor/Grafana. A tunnel
+    # daemon proxying five low-traffic services is not a heavy process.
+    {{ resources('0.50', '256M', '0.05', '32M') }}
+
+{{ external_networks() }}

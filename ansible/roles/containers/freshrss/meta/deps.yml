@@ -1,0 +1,8 @@
+---
+# cloudflared, not traefik: the node terminates no TLS and runs no reverse proxy. The
+# tunnel reaches this container by Docker service name on the shared network, so nothing
+# here publishes a host port and the node opens no inbound port at all.
+# See the design doc, "the node needs no Traefik" — Traefik's certresolver would have
+# needed a DNS-editing Cloudflare token on a machine outside the house.
+role_deps:
+  - cloudflared

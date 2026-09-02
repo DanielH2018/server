@@ -1,0 +1,21 @@
+---
+# Information widgets (the header strip), not service tiles — those live in services.yaml.
+#
+# The cluster's copy carries a `kubernetes:` widget. This node runs Docker, not k3s, so
+# there is nothing equivalent to show; `resources` reads the node itself instead.
+- resources:
+    cpu: true
+    memory: true
+    disk: /
+
+- search:
+    provider: duckduckgo
+    target: _blank
+
+- openmeteo:
+    label: Home
+    latitude: {{ lat }}
+    longitude: {{ long }}
+    timezone: {{ tz }}
+    units: imperial
+    cache: 5

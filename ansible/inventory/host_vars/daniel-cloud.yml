@@ -1,0 +1,85 @@
+---
+# daniel-cloud — Oracle Always Free A1 (VM.Standard.A1.Flex, 2 OCPU / 12 GB, arm64).
+#
+# The remote node from docs "Remote free-tier node — design" (2026-08-30). It hosts the
+# PERMANENT primaries for services that need neither home state nor home hardware, so the
+# house is allowed to be down without taking them with it.
+#
+# NOT YET IN hosts.ini. Adding the inventory entry needs the instance's real IP:
+#   daniel-cloud  ansible_host=<ip> ansible_user=ubuntu ansible_connection=ssh
+# Never `ansible_connection=local` here — that selects this host's vars and then executes
+# on whatever machine you typed the command on, which would install the whole stack on the
+# wrong node behind a green recap.
+#
+# This file is already live for validation purposes: validate_compose_templates.py walks
+# every host_vars file and renders each entry's role, so the roles below are checked on
+# every prek run even before the node exists.
+
+# Cloudflare Tunnel is the only inbound path. `tunnel` emits neither Traefik labels nor
+# published host ports: cloudflared reaches each container by Docker service name on the
+# shared network, so the node opens no inbound port beyond SSH.
+#
+# This is the security property the auth decision was made for. Setting this to `traefik`
+# would put a DNS-editing Cloudflare token on a machine outside the house, because that
+# mode's labels name certresolver=cloudflare and its DNS-01 challenge needs one.
+expose_mode: tunnel
+
+# The GitOps deployer runs on daniel-box against the cluster only. This node is deployed
+# by hand over SSH, like daniel-pi.
+has_gitops: false
+
+# Only read when expose_mode is 'lan', which it never is here. Fill it in with the
+# instance's private IP when the node is provisioned, so a future per-container
+# `expose_mode: lan` override cannot silently render an empty bind address.
+# server_ip: <fill when provisioned>
+
+containers_list:
+  # `use_authelia: false` throughout, and settled rather than pending: Cloudflare Access
+  # terminates identity at the edge, so nothing here forward-auths. The key stays because
+  # the shared Traefik macro reads it, and under expose_mode: tunnel that macro emits
+  # nothing at all.
+  #
+  # Order is not the sequencer — toposort reads each role's meta/deps.yml, and all five
+  # services declare cloudflared — but cloudflared leads the list the way docker-proxy
+  # leads daniel-pi's.
+  #
+  # cloudflared's entry has NO `port`, which is load-bearing: the tunnel's ingress map is
+  # generated from every entry that declares one, so giving it a port would point the
+  # tunnel at itself.
+  - name: cloudflared
+    use_authelia: false
+    networks:
+      - proxy
+
+  - name: homepage
+    port: 3000
+    use_authelia: false
+    networks:
+      - proxy
+
+  - name: freshrss
+    port: 80
+    use_authelia: false
+    networks:
+      - proxy
+
+  - name: karakeep
+    port: 3000
+    use_authelia: false
+    networks:
+      - proxy
+
+  - name: uptime-kuma
+    port: 3001
+    use_authelia: false
+    networks:
+      - proxy
+
+  # `www` rather than `littlelink`: the router name comes from `hostname`, and this is the
+  # public landing page.
+  - name: littlelink
+    hostname: www
+    port: 3000
+    use_authelia: false
+    networks:
+      - proxy

@@ -1,0 +1,5 @@
+---
+# Deliberately empty. Homepage's Docker integration needs a socket, and this node has no
+# docker-proxy — the tiles in services.yaml use `siteMonitor` (an HTTP check, no socket)
+# for liveness instead. Add a docker-proxy service here first if container stats are ever
+# wanted; do not bind the raw socket into Homepage.

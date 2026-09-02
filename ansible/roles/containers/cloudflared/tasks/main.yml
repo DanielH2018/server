@@ -1,0 +1,39 @@
+---
+- name: Create required directories
+  tags: [config]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: setup_dirs.yml
+  vars:
+    common_dirs_to_create:
+      - "{{ container_item.name }}/config"
+
+- name: Copy tunnel config
+  tags: [config]
+  ansible.builtin.template:
+    src: config/config.yml.j2
+    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/config/config.yml"
+    mode: "0644"
+  register: cloudflared_conf
+
+- name: Copy tunnel credentials
+  tags: [config]
+  ansible.builtin.template:
+    src: config/credentials.json.j2
+    dest: "/home/{{ sys_user }}/server/containers/{{ role_name }}/config/credentials.json"
+    # 0600: this file is the tunnel's private credential. Anyone holding it can serve
+    # traffic for every hostname the tunnel routes.
+    mode: "0600"
+  register: cloudflared_creds
+  no_log: true
+
+- name: Deploy Container
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: docker_deploy.yml
+  vars:
+    # Both files are bind-mounted, so neither changes the compose hash. Without this a
+    # newly added service would sit in config.yml with no route serving it until something
+    # else happened to recreate the container.
+    common_config_changed: "{{ cloudflared_conf is changed or cloudflared_creds is changed }}"
