@@ -25,7 +25,11 @@
 # 2026-08-16 that was 24 stranded snapshots across 15 volumes, dated 08-09 to 08-12 — all from
 # before the weekly sharding and the no-backup decisions — and they were why `zigbee2mqtt-data`
 # held 2.7 MiB of live files against 274 MiB of backup. Reaping them is the step that makes a
-# subsequent trim able to do anything at all.
+# subsequent trim able to do anything at all — after a REMOUNT. ext4 skips block groups it has
+# already trimmed since mount, and the nightly trim has trimmed them all while the snapshot still
+# pinned them, so a trim right after the reap reclaims nothing. Scale the workload to 0 until the
+# Volume CR reads `detached`, scale it back, then trim; a rollout restart does not detach. The
+# measurement is in longhorn-trim-volumes.sh.j2's header.
 #
 # THE ALTERNATIVE, REJECTED. Setting remove-snapshots-during-filesystem-trim=true makes trim mark
 # the latest snapshot and its ancestors removed by itself. That reclaims more, cluster-wide,

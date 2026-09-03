@@ -28,6 +28,10 @@
 #
 # It refuses a volume that already has a backup, one in no backup tier, and one routed to a
 # disarmed target. None of those is a fault worth spending a transaction on.
+#
+# The seed is labelled as the owning recurring job's own, so that job's retain prunes the backup
+# and the snapshot on its normal cadence. Seeds made before 2026-09-03 carry no such label: their
+# backups are drop_seed_backups.yml's, and their snapshots have to be deleted by hand.
 - name: Give a Longhorn volume its first backup now
   hosts: daniel-box
   connection: local
@@ -149,12 +153,41 @@
           covers it. Nothing has been changed.
         quiet: true
 
+    # GROUP -> JOB, read from the RecurringJob CRs rather than assumed from the names: the seven
+    # weekly shards name their group after themselves, but the daily tier's group is `default`
+    # and its job is `daily-backup`. The reaper builds the same map for the same reason.
+    - name: Read which recurring job owns the volume's group
+      ansible.builtin.command:
+        argv: [k3s, kubectl, -n, longhorn-system, get, recurringjobs.longhorn.io,
+               -o, "jsonpath={range .items[?(@.spec.groups[0]=='{{ seed_group }}')]}{.metadata.name}{end}"]
+      become: true
+      register: seed_job_lookup
+      changed_when: false
+
+    - name: Refuse a group no recurring job selects
+      ansible.builtin.assert:
+        that: seed_job_lookup.stdout | length > 0
+        fail_msg: >-
+          no RecurringJob lists group '{{ seed_group }}', so nothing would ever prune this seed.
+          Nothing has been changed.
+        quiet: true
+
+    - name: Note the owning job
+      ansible.builtin.set_fact:
+        seed_job: "{{ seed_job_lookup.stdout }}"
+
     - name: Report what is about to be seeded
       ansible.builtin.debug:
         msg: >-
-          seeding {{ seed_claim }} ({{ seed_pv.stdout }}), tier {{ seed_group }},
+          seeding {{ seed_claim }} ({{ seed_pv.stdout }}), tier {{ seed_group }} (job {{ seed_job }}),
           target {{ seed_target }}, robustness {{ seed_robustness }}
 
+    # `RecurringJob: <job>` on BOTH CRs is what makes the seed prunable. Longhorn's retain counts
+    # only backups carrying its own job's label, and auto-cleanup-recurring-job-backup-snapshot
+    # deletes only snapshots carrying it. A seed without the label is unowned: its backup sat in
+    # B2 until drop_seed_backups.yml, and its snapshot pinned every block beneath it against trim
+    # — valheim-config carried 3.5 GB of deleted files into every weekly backup that way
+    # (issue #942). `seeded-by` stays so a seed remains recognisable as one.
     - name: Create the snapshot to back up
       ansible.builtin.command:
         argv: [k3s, kubectl, apply, -f, "-"]
@@ -168,6 +201,7 @@
             volume: {{ seed_pv.stdout }}
             createSnapshot: true
             labels:
+              RecurringJob: {{ seed_job }}
               seeded-by: seed_volume_backup.yml
       become: true
       register: seed_snapshot_applied
@@ -204,6 +238,7 @@
           spec:
             snapshotName: seed-{{ seed_pv.stdout | regex_replace('^pvc-', '') }}
             labels:
+              RecurringJob: {{ seed_job }}
               seeded-by: seed_volume_backup.yml
       become: true
       changed_when: true

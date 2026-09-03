@@ -124,13 +124,18 @@ Two consequences that are easy to get backwards:
   irrelevant, because the job never runs against that volume. `longhorn-reap-orphan-backups.sh`
   is their only owner, and its safety floor means it can only clear them once the volume has
   weekly backups of its own.
-- **A seed is unowned in a way the reaper cannot see.** `seed_volume_backup.yml` makes a backup
-  carrying no `RecurringJob` label at all, so no job's `retain` ever counts or prunes it, and the
-  reaper reads an unlabelled backup as the current tier's own — on 2026-09-02 it listed zero
-  reapable against eleven live seeds. `drop_seed_backups.yml` is their owner. It retires a seed
-  once its volume holds `drop_seed_floor` (default 2, the shards' retain) Completed backups that
-  do carry a job label, dry-runs by default, and takes `drop_seed_claim` to pace the Class C
-  spend one volume at a time.
+- **A seed made before 2026-09-03 is unowned in a way the reaper cannot see.** Until then
+  `seed_volume_backup.yml` made a backup carrying no `RecurringJob` label at all, so no job's
+  `retain` ever counted or pruned it, and the reaper reads an unlabelled backup as the current
+  tier's own — on 2026-09-02 it listed zero reapable against eleven live seeds.
+  `drop_seed_backups.yml` is their owner. It retires a seed once its volume holds
+  `drop_seed_floor` (default 2, the shards' retain) Completed backups that do carry a job label,
+  dry-runs by default, and takes `drop_seed_claim` to pace the Class C spend one volume at a
+  time. The seed's *snapshot* was unowned the same way and outlived the backup: dropping the
+  backup left a `seed-*` snapshot pinning every block beneath it against trim, which is how
+  valheim-config carried 3.5 GB of deleted files into each weekly backup (issue #942). Since
+  2026-09-03 the play labels both CRs `RecurringJob: <owning job>`, so the job's retain prunes
+  the backup and the snapshot auto-cleanup removes the snapshot, on the normal cadence.
 
 `k3s_longhorn_weekly_backup_retain` was lowered 4 → 2 on 2026-08-17. Retention is what costs, so
 holding two rather than four pins fewer blocks and makes every future prune cheaper; the trade is
@@ -176,9 +181,16 @@ sudo fstrim -v /var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/<ha
 ```
 
 `actualSize` then fell to 3.61 GB rather than to the filesystem's 58.6 MB, because two snapshots
-still hold the old bytes: the seed's 1.53 GB and the 2026-09-01 weekly's 2.02 GB. A snapshot that
-a backup is made of cannot be released while that backup exists, so the remainder returns as
-`retain: 2` rotates those backups out — two more weekly runs here, not immediately.
+still hold the old bytes: the seed's 1.53 GB and the 2026-09-01 weekly's 2.02 GB. Rotation would
+not have released them either: `retain: 2` prunes the *backup*, and the weekly snapshot it was
+made from stays as the base of the next incremental, so every new weekly backup kept referencing
+the same 3.5 GB of blocks and the bucket never got them back. What released them on 2026-09-03 was deleting both snapshots, then a remount, then
+a trim — in that order, because ext4 skips block groups it already trimmed since mount and the
+nightly trim had trimmed them all while the snapshots still pinned them. A `rollout restart` is
+not a remount (kubelet keeps the volume staged on the same node); scaling the workload to 0
+until the Volume CR reads `detached` is. `actualSize` went 3.61 GB → 215 MB, the next backup
+was 63 MB, and the bucket went from 7.64 GB billed to 2.68 GB once the hidden versions were
+expired. The measurement is in `longhorn-trim-volumes.sh.j2`'s header.
 
 **A deletion's saving lands seven days later.** The bucket carries one lifecycle rule,
 `daysFromHidingToDeleting: 7`. A delete writes a hide marker over the current version, and B2

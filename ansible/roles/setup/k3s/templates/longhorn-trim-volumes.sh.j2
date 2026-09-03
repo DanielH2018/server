@@ -18,6 +18,16 @@
 # every block beneath it, so on a volume carrying stranded snapshots this reclaims only what was
 # freed since the newest one. That is why longhorn-reap-orphan-snapshots.sh exists and why it
 # should be run first; this script is the second half of that pair, not a substitute for it.
+#
+# REAP, THEN REMOUNT, THEN TRIM. ext4 flags each block group it has trimmed since mount and skips
+# it on later fstrim runs unless blocks were freed there in between. This cron has already
+# trimmed every free group while a snapshot still pinned the blocks beneath, so once that
+# snapshot is deleted the next runs skip exactly the groups that matter. Measured 2026-09-03 on
+# valheim-config (58 MB of files, 3,629 MB actualSize): snapshots deleted plus trim reclaimed
+# 200 MB; a Recreate rollout restart on the same node reclaimed 0 more, because kubelet kept the
+# volume staged; scaling the workload to 0 until the Volume CR read `detached`, back to 1, then
+# trim brought actualSize to 215 MB. `ls -l /dev/longhorn/<vol>` tells the two apart: an mtime
+# older than the restart means no detach happened.
 set -uo pipefail
 
 # Cron's PATH (/usr/bin:/bin) omits /usr/local/bin, where the k3s install script puts the binary,
