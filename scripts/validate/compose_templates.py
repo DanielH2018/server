@@ -33,6 +33,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from lib import yaml_fast
 from lib.render_guard import (
     ALL_VARS,
     ANSIBLE,
@@ -286,7 +287,7 @@ def check_container(host_ctx: dict, ci: dict) -> str | None:
         return err
 
     try:
-        docs = list(yaml.safe_load_all(rendered))
+        docs = list(yaml_fast.safe_load_all(rendered))
     except yaml.YAMLError as exc:
         print(f"\n----- rendered {name}/docker-compose.yml.j2 -----", file=sys.stderr)
         dump_numbered(rendered)
