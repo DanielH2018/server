@@ -1,0 +1,247 @@
+#!/usr/bin/env bash
+# Weekly hermetic homelab-agent eval sweep: run every case under evals/cases/, roll the
+# result into evals/history.json via evals/trend.py, and publish the change.
+#
+# DISARMED UNTIL A SOPS anthropic_api_key SECRET EXISTS. Hermetic grading (evals/README.md
+# "Auth & fidelity") needs ANTHROPIC_API_KEY; without it the chezmoi engine falls back to a
+# non-hermetic subscription run whose numbers are noise, and evals/trend.py refuses to trend
+# a subscription report at all. No such secret exists in ansible/vars/secrets.yml today (see
+# ansible/secret_rotation.yml) and this script cannot mint one -- see the repo's
+# add-secret skill. So this installs and runs on schedule from day one, self-gates on the
+# empty key below, and reports UP with the reason logged: the cron, the wrapper and the Kuma
+# monitor are all in place for review, and adding the secret is the only step left to arm it.
+#
+# WHY GRADING RUNS BEFORE THE GIT-TREE LOCK, unlike docs-refresh.sh's generator. Every case
+# embeds its own input inline (evals/README.md) and hermetic mode strips tools (`--tools ""`),
+# so grading reads nothing from the live repo tree -- it only needs $REPO/evals/cases and
+# $REPO/.claude/{agents,skills} to exist, which a stale-by-one-tick checkout still has. Only
+# the commit step below mutates the tree, so only it needs the lock. Holding the lock across
+# a multi-agent LLM sweep (minutes, not seconds) would block every deploy and the other host
+# crons for no reason docs-refresh's generator actually has.
+#
+# THE COMMIT SEQUENCE FOLLOWS docs-refresh.sh EXACTLY: dirty-tree guard, one-open-PR guard,
+# commit, throwaway branch, push, `gh pr create` + `gh pr merge --auto --squash`, then reset
+# master back to origin. A repository ruleset rejects every direct push to master (see
+# docs-refresh.sh's header for the rejected-push evidence), so a PR is the only path that
+# publishes; committing straight to evals/history.json here would silently stop working the
+# same way docs-refresh's direct commit once did.
+#
+# THE DIRTY-TREE AND OPEN-PR GUARDS APPEAR TWICE ON PURPOSE. A cheap, read-only, no-lock copy
+# runs before the sweep as a pre-filter -- unlike docs-refresh's generator this sweep costs
+# real API dollars (evals/README.md), so a tree already dirty or last week's PR still open
+# should skip BEFORE paying for a run that would just be thrown away. The copies under the
+# lock below are the authoritative check: state can still change during the sweep, and only
+# they gate the actual commit.
+#
+# NODE VIA fnm's `default` ALIAS, NOT $PATH. A Claude Code session's node lives on an
+# ephemeral /run/user/1000/fnm_multishells/<pid>_<ts> path that dies with the shell that made
+# it, and cron inherits neither that nor a login PATH -- same trap scripts/diagnostics/
+# ui_mcp.sh and the archived happy-daemon unit both work around the same way.
+set -uo pipefail
+
+REPO="/home/{{ sys_user }}/server"
+UV="/home/{{ sys_user }}/.local/bin/uv"
+NODE_BIN="/home/{{ sys_user }}/.local/share/fnm/aliases/default/bin"
+ENGINE="/home/{{ sys_user }}/.local/share/chezmoi/evals/run-evals.mjs"
+PR_BRANCH_PREFIX="evals-history/"
+
+ANTHROPIC_API_KEY="{{ anthropic_api_key | default('') }}"
+export ANTHROPIC_API_KEY
+
+# Same `| default('')` gate as docs_refresh_push_token / setup_drift_push_token in
+# static-monitors.yaml.j2: no push_token means no monitor is provisioned there either, so an
+# empty token here and an absent monitor there are the same disarmed state, not a mismatch.
+EVAL_PUSH_TOKEN="{{ homelab_eval_push_token | default('') }}"
+PUSH_URL="https://uptime-kuma.local.{{ domain }}/api/push/${EVAL_PUSH_TOKEN}"
+KUMA_HOST="uptime-kuma.local.{{ domain }}"
+KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
+
+# shellcheck source=/dev/null
+source /usr/local/lib/kuma-push-lib.sh 2>/dev/null \
+  || logger -t eval-run "kuma-push-lib.sh missing — run initial_setup on this host"
+
+REPORT_DIR=""
+LOG=""
+COMBINED=""
+TREND_OUT=""
+
+# DEFAULTS TO down, matching docs-refresh.sh: every exit path that is genuinely fine sets
+# PUSH_STATUS explicitly, so a crash or an unhandled path reports down rather than going
+# silent.
+PUSH_STATUS=down
+PUSH_MSG="eval-run exited without setting a status"
+
+on_exit() {
+  rm -rf "${REPORT_DIR:-}"
+  rm -f "${LOG:-}" "${COMBINED:-}" "${TREND_OUT:-}"
+  logger -t eval-run "status=${PUSH_STATUS} ${PUSH_MSG}"
+  [ -n "$EVAL_PUSH_TOKEN" ] || return 0
+  command -v kuma_push >/dev/null 2>&1 || return 0
+  kuma_push "$PUSH_STATUS" "$PUSH_MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" eval-run
+}
+trap on_exit EXIT
+
+alert() { logger -t eval-run "$1"; PUSH_MSG="$1"; }
+say_failure() { alert "$1: $(tr '\n' ' ' < "$2" | tail -c 400)"; }
+
+if [ -z "$ANTHROPIC_API_KEY" ]; then
+  alert "eval-run: skipped, no anthropic_api_key secret configured (cron installed disarmed)"
+  PUSH_STATUS=up
+  exit 0
+fi
+
+cd "$REPO" || { alert "eval-run: $REPO missing"; exit 1; }
+
+export PATH="$NODE_BIN:/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+export EVAL_CASE_DIRS="$REPO/evals/cases"
+export EVAL_AGENT_DIRS="$REPO/.claude/agents:$REPO/.claude/skills"
+
+# Advisory pre-filter, read-only, no lock needed: both conditions are checked again under the
+# lock below, which is authoritative. Checking them here too means a tree already dirty, or
+# last week's PR still open, skips BEFORE the sweep runs rather than after — unlike
+# docs-refresh's generator this sweep costs real API dollars per evals/README.md, so throwing
+# away a paid run on a guard that could have fired for free is worth avoiding, even though the
+# state could still change during the sweep and get caught by the post-lock copies.
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  alert "eval-run: working tree dirty; skipped before running the sweep"
+  PUSH_STATUS=up
+  exit 0
+fi
+OPEN_PR="$(gh pr list --state open --json number,headRefName \
+  --jq "[.[] | select(.headRefName | startswith(\"$PR_BRANCH_PREFIX\"))][0].number" \
+  2>/dev/null || true)"
+if [ -n "$OPEN_PR" ]; then
+  alert "eval-run: PR #$OPEN_PR still open; skipped before running the sweep"
+  PUSH_STATUS=up
+  exit 0
+fi
+
+# The agent set is read from the case directories rather than hardcoded (unlike the loop in
+# evals/README.md), so an added or removed evals/cases/<agent>/ directory changes what this
+# cron grades on its own -- no second edit to keep in sync.
+REPORT_DIR="$(mktemp -d)"
+LOG="$(mktemp)"
+FAILED_AGENTS=""
+for agent_dir in "$REPO"/evals/cases/*/; do
+  agent="$(basename "$agent_dir")"
+  if ! "$NODE_BIN/node" "$ENGINE" --agent "$agent" --json "$REPORT_DIR/$agent.json" >>"$LOG" 2>&1; then
+    # A non-zero exit here means a case fell below its threshold, which is the regression
+    # signal this cron exists to capture -- not an infra failure. Keep grading the rest.
+    FAILED_AGENTS="$FAILED_AGENTS $agent"
+  fi
+done
+
+# Each --json write is one JSON array (one per agent, run-evals.mjs has no multi-agent flag);
+# `jq -s add` slurps the N arrays and concatenates them into the single flat array
+# evals/trend.py expects. Written OUTSIDE $REPORT_DIR (which the glob above scans) so a
+# second run of this merge can never fold its own prior output back in.
+COMBINED="$(mktemp)"
+if ! jq -s 'add' "$REPORT_DIR"/*.json > "$COMBINED" 2>>"$LOG"; then
+  say_failure "eval-run: could not merge per-agent reports" "$LOG"
+  exit 1
+fi
+
+exec 9>/var/lock/server-git-tree.lock
+flock -w 2700 9 || { alert "eval-run: git-tree lock held >45m; skipped"; exit 1; }
+
+# A dirty tree means a human or another job is mid-edit. The sweep already ran and cost real
+# API dollars; recording it against a tree someone else is changing would misattribute the
+# result, so the run is thrown away rather than committed.
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  alert "eval-run: working tree dirty; ran the sweep but recorded nothing"
+  PUSH_STATUS=up
+  exit 0
+fi
+
+# One open PR at a time, same guard as docs-refresh.sh: a still-open evals-history/* PR means
+# last week's result hasn't landed yet, so recording another would either duplicate it or
+# race it.
+OPEN_PR="$(gh pr list --state open --json number,headRefName \
+  --jq "[.[] | select(.headRefName | startswith(\"$PR_BRANCH_PREFIX\"))][0].number" \
+  2>/dev/null || true)"
+if [ -n "$OPEN_PR" ]; then
+  alert "eval-run: PR #$OPEN_PR still open; ran the sweep but recorded nothing"
+  PUSH_STATUS=up
+  exit 0
+fi
+
+# evals/trend.py flags a regression that lands across a worker-epoch boundary as possibly the
+# worker changing, not the harness (evals/README.md) -- but only if the epoch actually moves.
+# The coding-agent version is the half of that pair this cron can read without an API call;
+# run-evals.mjs's hermetic path pins no model of its own, so that half stays unknown. Recording
+# the real cc- version beats the permanent "unknown" trend.py falls back to, which would leave
+# the epoch-shift annotation dead code forever.
+CLAUDE_EPOCH="cc-$(claude --version 2>/dev/null | awk '{print $1}')"
+TREND_OUT="$(mktemp)"
+"$UV" run --frozen python evals/trend.py "$COMBINED" \
+  --epoch "${CLAUDE_EVAL_EPOCH:-$CLAUDE_EPOCH}" >"$TREND_OUT" 2>&1
+TREND_RC=$?
+
+git add evals/history.json
+
+# A successful hermetic run always appends one entry per graded case and writes atomically
+# (evals/trend.py's record_run/write_json), so an unchanged evals/history.json here is never
+# the benign "nothing to do" docs-refresh's generator can have -- it means trend.py never got
+# that far (a malformed combined.json, an argparse error, a crash). Reporting that up would be
+# GENERATORS_OK's exact failure mode one file over: the trend output IS the reason a real
+# problem happened, so it goes to say_failure and a non-zero exit, not laundered into "no
+# change" (test_every_up_after_a_generator_failure_is_gated_on_generators_ok in the sibling
+# docs-refresh test file exists because this shape already cost a day once).
+if git diff --cached --quiet; then
+  say_failure "eval-run: sweep ran but history.json unchanged (trend.py did not record it)" "$TREND_OUT"
+  exit 1
+fi
+
+# Past the check above, trend.py definitely wrote — its only exit codes are 0 (clean) and 1
+# (a case regressed), so TREND_RC now means exactly that, not "did it crash".
+if [ "$TREND_RC" -ne 0 ]; then
+  REGRESSED=1
+else
+  REGRESSED=0
+fi
+
+if ! git commit -m "evals: record weekly hermetic eval sweep" >"$LOG" 2>&1; then
+  git reset >/dev/null 2>&1
+  say_failure "eval-run: commit failed (hook rejection?); unstaged, nothing published" "$LOG"
+  exit 1
+fi
+
+BRANCH="${PR_BRANCH_PREFIX}$(date -u +%Y-%m-%d-%H%M)"
+if ! git branch "$BRANCH" HEAD >"$LOG" 2>&1; then
+  say_failure "eval-run: could not create $BRANCH; commit is local on master" "$LOG"
+  exit 1
+fi
+
+if ! git push -u origin "$BRANCH" >"$LOG" 2>&1; then
+  say_failure "eval-run: publishing $BRANCH failed; commit is local on master" "$LOG"
+  exit 1
+fi
+
+# From here the commit is safe on the remote, so master gives it up -- same reasoning as
+# docs-refresh.sh: HEAD~1, not origin/master, since this script never fetches.
+git reset --hard HEAD~1 >/dev/null 2>&1
+git branch -D "$BRANCH" >/dev/null 2>&1
+
+PR_BODY="Weekly hermetic homelab-agent eval sweep, rolled into evals/history.json by evals/trend.py. $(tr '\n' ' ' < "$TREND_OUT" | tail -c 800)"
+if ! gh pr create --head "$BRANCH" --title "evals: record weekly hermetic eval sweep" \
+  --body "$PR_BODY" >"$LOG" 2>&1; then
+  say_failure "eval-run: $BRANCH published but PR creation failed" "$LOG"
+  exit 1
+fi
+
+if ! gh pr merge --auto --squash --delete-branch "$BRANCH" >"$LOG" 2>&1; then
+  say_failure "eval-run: PR opened for $BRANCH but auto-merge could not be enabled" "$LOG"
+  exit 1
+fi
+
+logger -t eval-run "regenerated, committed, PR opened for $BRANCH with auto-merge"
+if [ "$REGRESSED" -eq 1 ]; then
+  PUSH_STATUS=down
+  PUSH_MSG="PR opened for $BRANCH; one or more eval cases REGRESSED — see the PR body"
+else
+  PUSH_STATUS=up
+  PUSH_MSG="regenerated, committed, PR opened for $BRANCH with auto-merge"
+fi
+if [ -n "$FAILED_AGENTS" ]; then
+  PUSH_MSG="$PUSH_MSG (below-threshold case in:$FAILED_AGENTS)"
+fi

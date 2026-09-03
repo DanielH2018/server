@@ -440,3 +440,53 @@
     stamp_render_name: docs-refresh
     stamp_render_templates:
       - ansible/roles/setup/initial_setup/templates/docs-refresh.sh.j2
+
+- name: Install the homelab eval sweep script (box only)
+  tags: [crons, evals]
+  when: inventory_hostname == 'daniel-box'
+  ansible.builtin.template:
+    src: eval-run.sh.j2
+    dest: /usr/local/bin/eval-run.sh
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Schedule the weekly homelab eval sweep (box only)
+  tags: [crons, evals]
+  # Grades every homelab-agent/skill eval case and rolls the result into
+  # evals/history.json (evals/trend.py) so a regression shows up across runs instead of
+  # looking like a one-off flake. Sunday 02:00 -- well ahead of the 07:00/07:30 firmware
+  # and restart crons above, so a slow multi-agent sweep is never killed mid-run by the
+  # reboot.
+  #
+  # Installed and scheduled unconditionally: the wrapper self-gates on an empty
+  # anthropic_api_key (see eval-run.sh.j2's header) and reports UP either way, so this
+  # cron runs disarmed until that SOPS secret exists rather than needing a second deploy
+  # to arm it.
+  when: inventory_hostname == 'daniel-box'
+  ansible.builtin.cron:
+    name: "Homelab eval sweep"
+    minute: "0"
+    hour: "2"
+    weekday: "0"
+    # PATH/HOME set explicitly: cron inherits neither, and node (via fnm) plus uv, git and
+    # gh must all resolve without a login shell. eval-run.sh itself narrows PATH further
+    # (fnm's node bin dir first) once it starts.
+    job: "PATH=/usr/local/bin:/usr/bin:/bin HOME=/home/{{ sys_user }} /usr/local/bin/eval-run.sh"
+    user: "{{ sys_user }}"
+    cron_file: eval-run
+  become: true
+
+# Render provenance for manifest-prune-check.sh's stale-script arm, for the same reason as
+# docs-refresh.sh above: this is a STATE-CHANGING cron that commits and pushes, so a stale
+# render would keep committing eval history from old wiring while every repo-side check
+# reads green.
+- name: Stamp the rendered eval-run wrapper (box only)
+  tags: [crons]
+  when: inventory_hostname == 'daniel-box'
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: eval-run
+    stamp_render_templates:
+      - ansible/roles/setup/initial_setup/templates/eval-run.sh.j2
