@@ -27,7 +27,6 @@ import sys
 from pathlib import Path
 
 import pytest
-import yaml
 from _helpers import ANSIBLE
 
 REPO = ANSIBLE.parent
@@ -35,6 +34,8 @@ REPO = ANSIBLE.parent
 # The resolver is shared with scripts/validate/shell_templates.py so the two checks
 # cannot disagree about what a group contains. pytest's `pythonpath` covers the repo root only.
 sys.path.insert(0, str(REPO / "scripts"))
+
+from lib import yaml_fast  # noqa: E402
 
 from lib import release_bin_groups  # noqa: E402
 
@@ -54,7 +55,7 @@ GENERIC_NAMES = frozenset({"domain"})
 
 
 def secret_names():
-    data = yaml.safe_load(REGISTRY.read_text()) or {}
+    data = yaml_fast.safe_load(REGISTRY.read_text()) or {}
     return sorted(set(data.get("secrets", {})) - GENERIC_NAMES)
 
 

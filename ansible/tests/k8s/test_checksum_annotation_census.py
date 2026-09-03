@@ -34,10 +34,11 @@ import sys
 from pathlib import Path
 
 import pytest
-import yaml
 from _helpers import REPO
 
 sys.path.insert(0, str(REPO / "scripts"))
+
+from lib import yaml_fast
 
 from validate.k8s_manifests import (
     SHARED_TPL,
@@ -168,7 +169,7 @@ def test_checksum_annotation_macro_produces_a_detected_annotation():
         "      annotations:\n"
         "        {{ checksum_annotation('demo', value='deadbeef') }}\n"
     )
-    doc = yaml.safe_load(tpl.render())
+    doc = yaml_fast.safe_load(tpl.render())
     assert has_checksum_annotation(doc)
 
 

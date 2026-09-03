@@ -8,13 +8,15 @@ route's TLSOption must exist and not be the one named `default`. None of these f
 
 import re
 
-import yaml
+from lib import yaml_fast
 from _manifest_guards import ALL_VARS, K8S, _k8s_entries, _render
 
 
 def _k8s_authelia_config() -> dict:
     entry = next(c for c in _k8s_entries() if c["name"] == "authelia")
-    defaults = yaml.safe_load((K8S / "authelia" / "defaults" / "main.yml").read_text())
+    defaults = yaml_fast.safe_load(
+        (K8S / "authelia" / "defaults" / "main.yml").read_text()
+    )
     rendered = _render(
         K8S / "authelia" / "templates" / "config-secret.yaml.j2",
         container_item=entry,
@@ -31,8 +33,8 @@ def _k8s_authelia_config() -> dict:
         **ALL_VARS,
         **defaults,
     )
-    doc = yaml.safe_load(rendered)
-    return yaml.safe_load(doc["stringData"]["configuration.yml"])
+    doc = yaml_fast.safe_load(rendered)
+    return yaml_fast.safe_load(doc["stringData"]["configuration.yml"])
 
 
 def test_k8s_session_cookie_name_is_set():
@@ -41,9 +43,9 @@ def test_k8s_session_cookie_name_is_set():
     cookie-collision risk this test used to check is moot. What's left worth pinning: the
     session cookie name actually comes from the intended var, and every cookie variant
     (the `.local.` LAN one and the public one) is named off it."""
-    k8s_name = yaml.safe_load((K8S / "authelia" / "defaults" / "main.yml").read_text())[
-        "authelia_k8s_cookie_name"
-    ]
+    k8s_name = yaml_fast.safe_load(
+        (K8S / "authelia" / "defaults" / "main.yml").read_text()
+    )["authelia_k8s_cookie_name"]
 
     session = _k8s_authelia_config()["session"]
     assert session["name"] == k8s_name
@@ -59,12 +61,14 @@ def test_k8s_authelia_database_is_on_its_own_volume():
     db_path = _k8s_authelia_config()["storage"]["local"]["path"]
     assert db_path.startswith("/config/")
 
-    deployment = yaml.safe_load(
+    deployment = yaml_fast.safe_load(
         _render(
             K8S / "authelia" / "templates" / "deployment.yaml.j2",
             container_item=next(c for c in _k8s_entries() if c["name"] == "authelia"),
             **ALL_VARS,
-            **yaml.safe_load((K8S / "authelia" / "defaults" / "main.yml").read_text()),
+            **yaml_fast.safe_load(
+                (K8S / "authelia" / "defaults" / "main.yml").read_text()
+            ),
         )
     )
     spec = deployment["spec"]["template"]["spec"]
@@ -130,7 +134,7 @@ def test_every_authed_service_carries_forward_auth_and_rate_limit():
             domain="example.com",
             **ALL_VARS,
         )
-        for doc in (d for d in yaml.safe_load_all(rendered) if d):
+        for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
             name = doc["metadata"]["name"]
             for route in doc["spec"]["routes"]:
                 middlewares = [m["name"] for m in route["middlewares"]]
@@ -171,7 +175,7 @@ def test_every_https_route_carries_tls():
                 domain="example.com",
                 **ALL_VARS,
             )
-            for doc in (d for d in yaml.safe_load_all(rendered) if d):
+            for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
                 if "https" not in doc["spec"].get("entryPoints", []):
                     continue
                 assert doc["spec"].get("tls"), (
@@ -189,7 +193,7 @@ def test_the_lapi_route_never_gains_a_public_host_rule():
     rendered = _render(
         route_tpl, container_item=entry, domain="example.com", **ALL_VARS
     )
-    for doc in (d for d in yaml.safe_load_all(rendered) if d):
+    for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
         if doc["metadata"]["name"] != "crowdsec":
             continue
         for route in doc["spec"]["routes"]:
@@ -221,7 +225,7 @@ def test_every_public_host_rule_is_reachable_only_from_the_docker_edge():
         if not route_tpl.exists():
             continue
         rendered = _render(route_tpl, container_item=entry, domain=domain, **ALL_VARS)
-        for doc in (d for d in yaml.safe_load_all(rendered) if d):
+        for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
             for route in doc["spec"]["routes"]:
                 match = route["match"]
                 hosts = re.findall(r"Host\(`([^`]+)`\)", match)
@@ -239,11 +243,11 @@ def _tlsoption_names() -> set:
     rendered = _render(
         K8S / "traefik" / "templates" / "dynamic.yaml.j2",
         **ALL_VARS,
-        **yaml.safe_load((K8S / "traefik" / "defaults" / "main.yml").read_text()),
+        **yaml_fast.safe_load((K8S / "traefik" / "defaults" / "main.yml").read_text()),
     )
     return {
         d["metadata"]["name"]
-        for d in yaml.safe_load_all(rendered)
+        for d in yaml_fast.safe_load_all(rendered)
         if d and d.get("kind") == "TLSOption"
     }
 
@@ -272,7 +276,7 @@ def test_routes_reference_a_tlsoption_that_exists_and_is_not_named_default():
         rendered = _render(tpl, container_item=entry, **ALL_VARS)
         # Every document: a role may ship more than one IngressRoute, and a second one naming
         # a TLSOption that does not exist fails exactly as loudly as the first would.
-        for doc in (d for d in yaml.safe_load_all(rendered) if d):
+        for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
             named = doc["spec"]["tls"]["options"]["name"]
             assert named in defined, (
                 f"{doc['metadata']['name']} references TLS options '{named}', which the "
@@ -312,7 +316,7 @@ def test_no_monitoring_route_serves_a_bare_path_prefix():
                 domain="example.com",
                 **ALL_VARS,
             )
-            for doc in (d for d in yaml.safe_load_all(rendered) if d):
+            for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
                 name = doc["metadata"]["name"]
                 if not name.endswith("-monitoring"):
                     continue
@@ -335,7 +339,7 @@ def _dashboard_route_match() -> str:
         domain="example.com",
         **ALL_VARS,
     )
-    doc = yaml.safe_load(rendered)
+    doc = yaml_fast.safe_load(rendered)
     return doc["spec"]["routes"][0]["match"]
 
 

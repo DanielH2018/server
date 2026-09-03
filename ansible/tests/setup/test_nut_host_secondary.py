@@ -23,7 +23,7 @@ that never fires — indistinguishable from a working one until the power cut it
 Run: uv run pytest ansible/tests/setup/test_nut_host_secondary.py
 """
 
-import yaml
+from lib import yaml_fast
 from _helpers import ANSIBLE
 
 
@@ -66,7 +66,7 @@ def test_the_play_gate_reads_the_arm_flag():
 
 def test_the_usb_half_is_confined_to_the_ups_host():
     """udev rules and the driver belong to the host the UPS is physically attached to."""
-    docs = list(yaml.safe_load_all(TASKS))
+    docs = list(yaml_fast.safe_load_all(TASKS))
     tasks = [t for doc in docs if isinstance(doc, list) for t in doc]
     usb = [
         t
@@ -114,7 +114,7 @@ def test_no_task_is_tagged_so_the_lookup_cannot_be_split_from_its_consumer():
     renders `MONITOR <ups>@` from the `| default('')`, and skips the reachability assert that
     would have caught it — a dead shutdown chain written with no error.
     """
-    docs = list(yaml.safe_load_all(TASKS))
+    docs = list(yaml_fast.safe_load_all(TASKS))
     tasks = [t for doc in docs if isinstance(doc, list) for t in doc]
     tagged = [t.get("name") for t in tasks if t.get("tags")]
     assert not tagged, (
@@ -157,20 +157,22 @@ def onbatt_delay_verdict(delay: int, armed_beyond_ups_host: bool) -> str | None:
 
 
 def _armed_hosts_beyond_ups_host() -> list[str]:
-    ups_host = yaml.safe_load(GROUP_VARS)["ups_host"]
+    ups_host = yaml_fast.safe_load(GROUP_VARS)["ups_host"]
     armed = []
     for path in sorted(HOST_VARS.glob("*.yml")):
         host = path.stem
         if host == ups_host:
             continue
-        if (yaml.safe_load(path.read_text()) or {}).get("nut_host_secondary_armed"):
+        if (yaml_fast.safe_load(path.read_text()) or {}).get(
+            "nut_host_secondary_armed"
+        ):
             armed.append(host)
     return armed
 
 
 def test_the_repos_onbatt_delay_suits_its_arming():
     """The live pairing of arm flags and timer must sit inside the band."""
-    delay = yaml.safe_load(NUT_DEFAULTS.read_text())["nut_onbatt_shutdown_delay"]
+    delay = yaml_fast.safe_load(NUT_DEFAULTS.read_text())["nut_onbatt_shutdown_delay"]
     reason = onbatt_delay_verdict(delay, bool(_armed_hosts_beyond_ups_host()))
     assert reason is None, reason
 
@@ -206,7 +208,7 @@ WATCHDOG_ENV = (ROLE / "templates" / "kuma-push.env.j2").read_text()
 STATIC_MONITORS = (
     ANSIBLE / "roles" / "k8s" / "uptime-kuma" / "templates" / "static-monitors.yaml.j2"
 ).read_text()
-NUT_HOST_DEFAULTS = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
+NUT_HOST_DEFAULTS = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
 
 # A MONITOR line in the shape host-upsmon.conf.j2 renders. The fifth field is a fake stand-in
 # for the credential that sits there in the real file; it exists only to be searched for in the

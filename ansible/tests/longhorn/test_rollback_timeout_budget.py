@@ -54,7 +54,7 @@ batches them).
 from __future__ import annotations
 
 
-import yaml
+from lib import yaml_fast
 from _helpers import REPO as _REPO
 
 
@@ -77,7 +77,7 @@ def _max_declared_claims() -> int:
     past it unnoticed."""
     counts = []
     for defaults in sorted(_K8S_ROLES.glob("*/defaults/main.yml")):
-        declared = (yaml.safe_load(defaults.read_text()) or {}).get(
+        declared = (yaml_fast.safe_load(defaults.read_text()) or {}).get(
             "k8s_autodeploy_snapshot_pvcs"
         )
         if declared:
@@ -89,8 +89,8 @@ def _max_declared_claims() -> int:
 
 
 def test_rollback_timeout_covers_the_worst_case_revert_with_realistic_overhead_margin():
-    revert_defaults = yaml.safe_load(_VOLUME_REVERT_DEFAULTS.read_text())
-    gitops_defaults = yaml.safe_load(_GITOPS_DEPLOY_DEFAULTS.read_text())
+    revert_defaults = yaml_fast.safe_load(_VOLUME_REVERT_DEFAULTS.read_text())
+    gitops_defaults = yaml_fast.safe_load(_GITOPS_DEPLOY_DEFAULTS.read_text())
 
     state_timeout = int(revert_defaults["volume_revert_state_timeout"])
     api_timeout = int(revert_defaults["volume_revert_api_timeout"])
@@ -147,7 +147,7 @@ def _promoted_claim_roles() -> list[tuple[str, int]]:
     """
     out = []
     for defaults_path in sorted(_K8S_ROLES.glob("*/defaults/main.yml")):
-        data = yaml.safe_load(defaults_path.read_text()) or {}
+        data = yaml_fast.safe_load(defaults_path.read_text()) or {}
         if not data.get("k8s_autodeploy"):
             continue
         claims = data.get("k8s_autodeploy_snapshot_pvcs") or []
@@ -168,12 +168,12 @@ def test_batch_of_claim_services_fits_the_rollback_budget():
     cap, which reads as 0 -> treated as unbounded here) fails this test: two co-batched
     single-claim services already come to ~1680s against the 1320s budget.
     """
-    revert_defaults = yaml.safe_load(_VOLUME_REVERT_DEFAULTS.read_text())
-    snapshot_defaults = yaml.safe_load(
+    revert_defaults = yaml_fast.safe_load(_VOLUME_REVERT_DEFAULTS.read_text())
+    snapshot_defaults = yaml_fast.safe_load(
         (_K8S_ROLES / "volume-snapshot/defaults/main.yml").read_text()
     )
-    gitops_defaults = yaml.safe_load(_GITOPS_DEPLOY_DEFAULTS.read_text())
-    all_vars = yaml.safe_load(_ALL_VARS.read_text())
+    gitops_defaults = yaml_fast.safe_load(_GITOPS_DEPLOY_DEFAULTS.read_text())
+    all_vars = yaml_fast.safe_load(_ALL_VARS.read_text())
 
     state_timeout = int(revert_defaults["volume_revert_state_timeout"])
     api_timeout = int(revert_defaults["volume_revert_api_timeout"])

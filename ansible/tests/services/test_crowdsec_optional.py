@@ -26,11 +26,12 @@ from __future__ import annotations
 import sys
 
 import pytest
-import yaml
 from _helpers import REPO
 
 _REPO = REPO
 sys.path.insert(0, str(_REPO / "scripts"))
+
+from lib import yaml_fast  # noqa: E402
 
 from validate.k8s_manifests import (  # noqa: E402 — needs the path insert above
     ALL_VARS,
@@ -76,17 +77,17 @@ def _render(role: str, template: str, **overrides) -> str:
 
 def _docs(role: str, template: str, manage: bool) -> list[dict]:
     text = _render(role, template, **{_FLAGS[role]: manage})
-    return [d for d in yaml.safe_load_all(text) if d is not None]
+    return [d for d in yaml_fast.safe_load_all(text) if d is not None]
 
 
 def _pod_spec(role: str, manage: bool, **extra) -> dict:
     text = _render(role, "deployment.yaml.j2", **{_FLAGS[role]: manage, **extra})
-    return yaml.safe_load(text)["spec"]["template"]["spec"]
+    return yaml_fast.safe_load(text)["spec"]["template"]["spec"]
 
 
 def _static_config(manage: bool) -> dict:
     doc = _docs("traefik", "static-config.yaml.j2", manage)[0]
-    return yaml.safe_load(doc["data"]["traefik.yml"])
+    return yaml_fast.safe_load(doc["data"]["traefik.yml"])
 
 
 @pytest.mark.parametrize(
@@ -354,11 +355,11 @@ def has_bouncer(host: str) -> bool:
     dynamic = _host_render(host, "dynamic.yaml.j2")
     declared = any(
         "crowdsecLapiKeyFile" in str(doc)
-        for doc in yaml.safe_load_all(dynamic)
+        for doc in yaml_fast.safe_load_all(dynamic)
         if doc is not None
     )
-    config = yaml.safe_load(
-        yaml.safe_load(_host_render(host, "static-config.yaml.j2"))["data"][
+    config = yaml_fast.safe_load(
+        yaml_fast.safe_load(_host_render(host, "static-config.yaml.j2"))["data"][
             "traefik.yml"
         ]
     )

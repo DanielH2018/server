@@ -13,7 +13,7 @@ exists and nothing else.
 from __future__ import annotations
 
 import re
-import yaml
+from lib import yaml_fast
 from pathlib import Path
 
 from _autodeploy import (
@@ -47,7 +47,7 @@ def test_auto_deployable_reads_the_declaration_not_the_denylist() -> None:
     for role in _roles():
         if not _declares_autodeploy(role):
             continue
-        data = yaml.safe_load((role / "defaults/main.yml").read_text()) or {}
+        data = yaml_fast.safe_load((role / "defaults/main.yml").read_text()) or {}
         assert _auto_deployable(role) is bool(data.get("k8s_autodeploy"))
 
 

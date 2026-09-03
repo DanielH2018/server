@@ -17,7 +17,7 @@ does not give you.
 Run: uv run pytest ansible/tests/services/test_pi_publishing_containers.py
 """
 
-import yaml
+from lib import yaml_fast
 from _helpers import ANSIBLE
 
 
@@ -34,7 +34,9 @@ EXPECTED_NON_PUBLISHERS = {"docker-proxy", "autoheal", "docker-proxy-lifecycle"}
 
 
 def _pi_entries():
-    return (yaml.safe_load(PI_HOST_VARS.read_text()) or {}).get("containers_list") or []
+    return (yaml_fast.safe_load(PI_HOST_VARS.read_text()) or {}).get(
+        "containers_list"
+    ) or []
 
 
 def _derived():

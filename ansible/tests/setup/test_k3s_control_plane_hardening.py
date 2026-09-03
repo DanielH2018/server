@@ -28,7 +28,7 @@ Run: uv run pytest ansible/tests/setup/test_k3s_control_plane_hardening.py
 import re
 
 import jinja2
-import yaml
+from lib import yaml_fast
 from _helpers import ANSIBLE
 from _helpers import load_yaml
 
@@ -88,7 +88,7 @@ def _rendered_server_args(**overrides) -> str:
 
 
 def _server_tasks() -> list[dict]:
-    return yaml.safe_load((K3S / "tasks" / "server.yml").read_text()) or []
+    return yaml_fast.safe_load((K3S / "tasks" / "server.yml").read_text()) or []
 
 
 def _task_index(predicate) -> int:
@@ -110,7 +110,7 @@ def _audit_policy() -> dict:
             k3s_readonly_sa_namespace=defaults["k3s_readonly_sa_namespace"],
         )
     )
-    return yaml.safe_load(rendered)
+    return yaml_fast.safe_load(rendered)
 
 
 # ── G1: secrets encryption ──────────────────────────────────────────────────────────────

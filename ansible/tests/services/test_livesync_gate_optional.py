@@ -22,11 +22,12 @@ from __future__ import annotations
 import sys
 
 import pytest
-import yaml
 from _helpers import REPO
 
 _REPO = REPO
 sys.path.insert(0, str(_REPO / "scripts"))
+
+from lib import yaml_fast  # noqa: E402
 
 from validate.k8s_manifests import (  # noqa: E402 — needs the path insert above
     ALL_VARS,
@@ -70,20 +71,20 @@ def _render(template: str, manage: bool) -> str:
 
 
 def _pod_spec(manage: bool) -> dict:
-    return yaml.safe_load(_render("deployment.yaml.j2", manage))["spec"]["template"][
-        "spec"
-    ]
+    return yaml_fast.safe_load(_render("deployment.yaml.j2", manage))["spec"][
+        "template"
+    ]["spec"]
 
 
 def _static_config(manage: bool) -> dict:
-    doc = yaml.safe_load(_render("static-config.yaml.j2", manage))
-    return yaml.safe_load(doc["data"]["traefik.yml"])
+    doc = yaml_fast.safe_load(_render("static-config.yaml.j2", manage))
+    return yaml_fast.safe_load(doc["data"]["traefik.yml"])
 
 
 @pytest.mark.parametrize("template", ["deployment.yaml.j2", "static-config.yaml.j2"])
 @pytest.mark.parametrize("manage", [True, False])
 def test_both_branches_parse_as_yaml(template: str, manage: bool) -> None:
-    assert yaml.safe_load(_render(template, manage)) is not None
+    assert yaml_fast.safe_load(_render(template, manage)) is not None
 
 
 def test_the_file_provider_is_declared_with_the_gate_on_and_gone_with_it_off() -> None:

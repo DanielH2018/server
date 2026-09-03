@@ -23,7 +23,7 @@ newer upstream and pasting the parameter back in, which is what these tests catc
 Run: uv run pytest ansible/tests/longhorn/test_longhorn_storageclass.py
 """
 
-import yaml
+from lib import yaml_fast
 
 from _k8s_render import rendered_docs
 
@@ -41,12 +41,12 @@ def _tasks():
     compare task positions, so a wrong order would silently invert what they check.
     """
     tasks: list[dict] = []
-    for entry in yaml.safe_load((K3S / "tasks" / "main.yml").read_text()) or []:
+    for entry in yaml_fast.safe_load((K3S / "tasks" / "main.yml").read_text()) or []:
         imported = entry.get("ansible.builtin.import_tasks")
         if not imported:
             tasks += leaf_tasks([entry])
             continue
-        loaded = yaml.safe_load((K3S / "tasks" / imported).read_text()) or []
+        loaded = yaml_fast.safe_load((K3S / "tasks" / imported).read_text()) or []
         tasks += leaf_tasks(loaded)
     return tasks
 
@@ -69,7 +69,7 @@ def _index_of(commands: list[str], matches) -> int:
 
 def test_storageclass_does_not_pin_a_replica_count():
     """The whole point of shipping our own class — see the module docstring."""
-    sc = yaml.safe_load(STORAGECLASS.read_text())
+    sc = yaml_fast.safe_load(STORAGECLASS.read_text())
     assert "numberOfReplicas" not in sc.get("parameters", {}), (
         "longhorn-storageclass.yaml must not set numberOfReplicas. A StorageClass "
         "parameter overrides the default-replica-count setting the role patches, so "
@@ -86,7 +86,7 @@ def test_storageclass_does_not_pin_a_backup_block_size():
     StorageClass parameters are immutable AND a volume's block size is immutable: correcting a
     wrong value would mean recreating the class and then every volume provisioned through it.
     """
-    sc = yaml.safe_load(STORAGECLASS.read_text())
+    sc = yaml_fast.safe_load(STORAGECLASS.read_text())
     assert "backupBlockSize" not in sc.get("parameters", {}), (
         "longhorn-storageclass.yaml must not set backupBlockSize. A StorageClass parameter "
         "overrides the default-backup-block-size setting the role patches, so pinning it "
@@ -108,7 +108,7 @@ def test_role_patches_the_backup_block_size_setting():
 
 def test_backup_block_size_is_a_value_longhorn_accepts():
     """Longhorn takes 2 or 16 MiB and nothing between; a typo here is silently wrong."""
-    defaults = yaml.safe_load((K3S / "defaults" / "main.yml").read_text())
+    defaults = yaml_fast.safe_load((K3S / "defaults" / "main.yml").read_text())
     assert defaults["k3s_longhorn_backup_block_size"] in (2, 16), (
         "k3s_longhorn_backup_block_size must be 2 or 16 (MiB). Longhorn rejects other "
         "values, and the patch reports success regardless."
@@ -117,7 +117,7 @@ def test_backup_block_size_is_a_value_longhorn_accepts():
 
 def test_storageclass_stays_the_cluster_default():
     """Dropping this annotation breaks every PVC that omits storageClassName."""
-    sc = yaml.safe_load(STORAGECLASS.read_text())
+    sc = yaml_fast.safe_load(STORAGECLASS.read_text())
     assert sc["metadata"]["name"] == "longhorn"
     assert sc["provisioner"] == "driver.longhorn.io"
     annotations = sc["metadata"].get("annotations", {})
@@ -173,7 +173,7 @@ _ROUTING_LISTS = (
 
 
 def _k3s_defaults() -> dict:
-    return yaml.safe_load((K3S / "defaults" / "main.yml").read_text())
+    return yaml_fast.safe_load((K3S / "defaults" / "main.yml").read_text())
 
 
 def _declared_pvcs() -> set[str]:
@@ -196,7 +196,7 @@ def _declared_pvcs() -> set[str]:
         and doc.get("metadata", {}).get("name")
     }
     for defaults_file in K8S_ROLES.glob("*/defaults/main.yml"):
-        values = yaml.safe_load(defaults_file.read_text()) or {}
+        values = yaml_fast.safe_load(defaults_file.read_text()) or {}
         names |= {
             value
             for key, value in values.items()

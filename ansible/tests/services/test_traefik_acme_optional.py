@@ -19,11 +19,12 @@ from __future__ import annotations
 import sys
 
 import pytest
-import yaml
 from _helpers import REPO
 
 _REPO = REPO
 sys.path.insert(0, str(_REPO / "scripts"))
+
+from lib import yaml_fast  # noqa: E402
 
 from validate.k8s_manifests import (  # noqa: E402 — needs the path insert above
     ALL_VARS,
@@ -66,7 +67,7 @@ def _render(template: str, manage_acme: bool) -> str:
 
 
 def _deployment(manage_acme: bool) -> dict:
-    return yaml.safe_load(_render("deployment.yaml.j2", manage_acme))
+    return yaml_fast.safe_load(_render("deployment.yaml.j2", manage_acme))
 
 
 def _pod_spec(manage_acme: bool) -> dict:
@@ -77,16 +78,16 @@ def _pod_spec(manage_acme: bool) -> dict:
 @pytest.mark.parametrize("manage_acme", [True, False])
 def test_both_branches_parse_as_yaml(template: str, manage_acme: bool) -> None:
     """A stray conditional shifts indentation, which shows up here and nowhere else."""
-    assert yaml.safe_load(_render(template, manage_acme)) is not None
+    assert yaml_fast.safe_load(_render(template, manage_acme)) is not None
 
 
 def test_resolver_is_declared_with_acme_on_and_absent_with_it_off() -> None:
-    config = yaml.safe_load(_render("static-config.yaml.j2", True))["data"][
+    config = yaml_fast.safe_load(_render("static-config.yaml.j2", True))["data"][
         "traefik.yml"
     ]
     assert "certificatesResolvers" in config
 
-    config = yaml.safe_load(_render("static-config.yaml.j2", False))["data"][
+    config = yaml_fast.safe_load(_render("static-config.yaml.j2", False))["data"][
         "traefik.yml"
     ]
     assert "certificatesResolvers" not in config

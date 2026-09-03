@@ -13,12 +13,12 @@ from pathlib import Path
 from pathlib import Path as _Path
 from typing import Any
 
-import yaml
 
 # `infra_map` is a namespace package under `scripts/`, so reaching a sibling by package
 # name needs `scripts/` on sys.path: a directly-invoked script gets only its own directory,
 # and pyproject's `pythonpath` is a pytest setting.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from lib import yaml_fast
 
 from infra_map.constants import (
     _CONTAINER_NAME,
@@ -141,13 +141,13 @@ def load_inventory(
     """Return ``(global_vars, {host: host_vars})`` from the Ansible inventory."""
     inventory = repo_root / "ansible" / "inventory"
     global_vars = (
-        yaml.safe_load((inventory / "group_vars" / "all.yml").read_text()) or {}
+        yaml_fast.safe_load((inventory / "group_vars" / "all.yml").read_text()) or {}
     )
     host_vars: dict[str, dict] = {}
     for host in HOSTS:
         path = inventory / "host_vars" / f"{host}.yml"
         host_vars[host] = (
-            (yaml.safe_load(path.read_text()) or {}) if path.exists() else {}
+            (yaml_fast.safe_load(path.read_text()) or {}) if path.exists() else {}
         )
     return global_vars, host_vars
 

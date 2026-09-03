@@ -19,7 +19,7 @@ expression and requires it to name the variable.
 import re
 
 import pytest
-import yaml
+from lib import yaml_fast
 
 from _helpers import ANSIBLE
 
@@ -33,7 +33,7 @@ AGENT_HOST = "daniel-server"
 
 
 def _server_hosts() -> list[str]:
-    return yaml.safe_load(ALL_VARS.read_text())["k3s_server_hosts"]
+    return yaml_fast.safe_load(ALL_VARS.read_text())["k3s_server_hosts"]
 
 
 def _inventory_hosts() -> set[str]:
@@ -48,7 +48,7 @@ def _inventory_hosts() -> set[str]:
 
 def _bringup_assert_expr() -> str:
     """The `that:` expression of the play's server-host guard."""
-    play = yaml.safe_load(BRINGUP.read_text())[0]
+    play = yaml_fast.safe_load(BRINGUP.read_text())[0]
     for task in play.get("pre_tasks", []):
         block = task.get("ansible.builtin.assert") or task.get("assert")
         if block and "k3s_server_hosts" in str(block.get("that", "")):

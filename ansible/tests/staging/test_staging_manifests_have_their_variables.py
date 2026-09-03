@@ -25,12 +25,13 @@ import re
 import sys
 
 import pytest
-import yaml
 from jinja2 import Environment, StrictUndefined
 from _helpers import REPO
 
 _REPO = REPO
 sys.path.insert(0, str(_REPO / "scripts"))
+
+from lib import yaml_fast  # noqa: E402
 
 from validate.k8s_manifests import (  # noqa: E402 — needs the path insert above
     ALL_VARS,
@@ -161,7 +162,9 @@ def _deployed_templates(role: str) -> list[str]:
     register_ansible_filters(env)
 
     names: list[str] = []
-    for task in yaml.safe_load((K8S_ROLES / role / "tasks" / "main.yml").read_text()):
+    for task in yaml_fast.safe_load(
+        (K8S_ROLES / role / "tasks" / "main.yml").read_text()
+    ):
         include = (
             task.get("ansible.builtin.include_role") or task.get("include_role") or {}
         )
@@ -175,7 +178,7 @@ def _deployed_templates(role: str) -> list[str]:
     assert names, f"{role} deploys no manifests — the parse of its tasks file is wrong"
     # Manifests the role renders to disk and applies by shell-out are just as much ours as the
     # ones k8s/manifests applies, and were covered by nothing until this was added.
-    tasks = yaml.safe_load((K8S_ROLES / role / "tasks" / "main.yml").read_text())
+    tasks = yaml_fast.safe_load((K8S_ROLES / role / "tasks" / "main.yml").read_text())
     extra = locally_templated_applies(tasks)
     return list(dict.fromkeys([f"{n}.j2" for n in names] + extra))
 
@@ -296,7 +299,7 @@ def _facts_set_by_the_role(role: str) -> set[str]:
     it in a one-shot pod, then `set_fact`s it. Sentinelling it would report a gap that no
     secrets file can close — the value is deliberately not stored on either cluster.
     """
-    tasks = yaml.safe_load((K8S_ROLES / role / "tasks" / "main.yml").read_text())
+    tasks = yaml_fast.safe_load((K8S_ROLES / role / "tasks" / "main.yml").read_text())
     names: set[str] = set()
     for task in _flatten_tasks(tasks):
         for key in ("ansible.builtin.set_fact", "set_fact"):
@@ -348,7 +351,7 @@ def _names_read_by_the_tasks(role: str) -> set[str]:
     names: set[str] = set()
     for expr in re.findall(r"\{\{(.*?)\}\}|\{%(.*?)%\}", text, re.S):
         names |= set(_REFERENCE.findall(_STRING_LITERAL.sub(" ", "".join(expr))))
-    tasks = yaml.safe_load(text)
+    tasks = yaml_fast.safe_load(text)
     produced = _facts_set_by_the_role(role) | {
         str(task["register"]) for task in _flatten_tasks(tasks) if task.get("register")
     }
@@ -520,7 +523,7 @@ def test_the_role_applies_nothing_outside_the_counted_path(role: str) -> None:
     Zero staging roles do this when the guard landed; the day one does, it fails here instead of
     quietly shrinking the corpus.
     """
-    tasks = yaml.safe_load((K8S_ROLES / role / "tasks" / "main.yml").read_text())
+    tasks = yaml_fast.safe_load((K8S_ROLES / role / "tasks" / "main.yml").read_text())
     uncounted = uncounted_manifest_applications(tasks)
     assert not uncounted, (
         f"{role} applies cluster objects outside `include_role: k8s/manifests` in "

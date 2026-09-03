@@ -38,6 +38,7 @@ import re
 
 import pytest
 import yaml
+from lib import yaml_fast
 from ansible.template import Templar, trust_as_template
 from _helpers import ANSIBLE
 
@@ -82,7 +83,7 @@ def _name_expression() -> str:
     71, because the leading `autodeploy-` is literal and was being thrown away. It passed on
     the exact name that broke production.
     """
-    for task in yaml.safe_load(SNAPSHOT.read_text()):
+    for task in yaml_fast.safe_load(SNAPSHOT.read_text()):
         fact = task.get("ansible.builtin.set_fact") or {}
         if "volume_snapshot_name" in fact:
             return fact["volume_snapshot_name"]
@@ -94,7 +95,7 @@ def _snapshot_pairs() -> list[tuple[str, str]]:
     pairs = []
     for defaults in sorted(K8S_ROLES.glob("*/defaults/main.yml")):
         try:
-            loaded = yaml.safe_load(defaults.read_text()) or {}
+            loaded = yaml_fast.safe_load(defaults.read_text()) or {}
         except yaml.YAMLError:
             continue
         for claim in loaded.get("k8s_autodeploy_snapshot_pvcs") or []:
@@ -167,7 +168,7 @@ def test_the_two_roles_build_the_claim_segment_identically():
 
 def test_the_assert_guards_the_name_before_it_is_created():
     """Shortening fixes today's four; the assert is what stops a fifth arriving unnoticed."""
-    tasks = yaml.safe_load(SNAPSHOT.read_text())
+    tasks = yaml_fast.safe_load(SNAPSHOT.read_text())
     guards = [
         t
         for t in tasks
@@ -184,7 +185,7 @@ def test_the_assert_guards_the_name_before_it_is_created():
 
 
 def test_the_prune_tolerates_only_the_length_rejection():
-    tasks = yaml.safe_load(SNAPSHOT.read_text())
+    tasks = yaml_fast.safe_load(SNAPSHOT.read_text())
     prunes = [t for t in tasks if t.get("name", "").startswith("Prune snapshots")]
     assert len(prunes) == 1, (
         f"expected one prune task in {SNAPSHOT}, found {len(prunes)}"

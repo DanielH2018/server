@@ -9,7 +9,7 @@ means anything. A missing flag makes the run a no-op that still exits 0.
 
 import re
 
-import yaml
+from lib import yaml_fast
 from _helpers import REPO
 
 _REPO = REPO
@@ -155,7 +155,9 @@ def test_the_unit_writes_a_heartbeat_on_every_invocation():
 def test_the_heartbeat_path_is_the_one_the_reader_reads():
     """systemd validates no path here and the reader hardcodes a basename, so a rename on either
     side is silent: the check would report a ratchet that has never run, forever."""
-    defaults = yaml.safe_load((_UNIT.parents[1] / "defaults" / "main.yml").read_text())
+    defaults = yaml_fast.safe_load(
+        (_UNIT.parents[1] / "defaults" / "main.yml").read_text()
+    )
     written = heartbeat_writer(_UNIT.read_text())
     assert written == "{{ gitops_deploy_staging_backfill_heartbeat }}", (
         "the unit hardcodes a path instead of rendering the variable the reader is pinned to"

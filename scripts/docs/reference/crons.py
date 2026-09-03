@@ -34,6 +34,8 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+from lib import yaml_fast
+
 from lib.repo_paths import REPO, ROLES
 
 # Commands that change durable state somewhere. Deliberately over-broad: a job wrongly
@@ -61,7 +63,7 @@ _HOST_RE = re.compile(r"inventory_hostname\s*==\s*'([^']+)'")
 def _cron_tasks(path: Path) -> list[dict]:
     """Every ansible.builtin.cron task in one tasks file."""
     try:
-        loaded = yaml.safe_load(path.read_text())
+        loaded = yaml_fast.safe_load(path.read_text())
     except OSError, yaml.YAMLError:
         return []
     if not isinstance(loaded, list):

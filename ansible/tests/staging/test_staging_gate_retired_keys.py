@@ -18,7 +18,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-import yaml
+from lib import yaml_fast
 from _helpers import REPO, SETUP_ROLES
 
 ROLE = SETUP_ROLES / "hypervisor"
@@ -78,7 +78,7 @@ def test_retired_key_is_not_the_live_key(path: Path):
 
 def test_install_withdraws_every_retired_key():
     """A retired key nothing removes is a key still accepted."""
-    tasks = yaml.safe_load(INSTALL.read_text())
+    tasks = yaml_fast.safe_load(INSTALL.read_text())
     withdrawals = [
         t
         for t in tasks

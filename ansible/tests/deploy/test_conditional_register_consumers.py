@@ -33,6 +33,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from lib import yaml_fast
 
 from _helpers import REPO as _REPO_ROOT
 from _helpers import ROLES as _ROLES
@@ -162,7 +163,7 @@ def _producers(tasks: list[dict]) -> dict[str, list[str]]:
 
 def _offenders(path: Path) -> list[str]:
     try:
-        tasks = list(walk_tasks(yaml.safe_load(path.read_text())))
+        tasks = list(walk_tasks(yaml_fast.safe_load(path.read_text())))
     except yaml.YAMLError:
         return []  # the manifest/lint hooks own YAML validity; this check owns semantics
     conditional = _producers(tasks)

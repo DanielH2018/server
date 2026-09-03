@@ -19,7 +19,7 @@ Three orders carry the weight:
 Run: uv run pytest ansible/tests/longhorn/test_migrate_volume_block_size.py
 """
 
-import yaml
+from lib import yaml_fast
 from _helpers import ANSIBLE
 
 
@@ -36,7 +36,7 @@ def _names(tasks) -> list[str]:
 
 
 def _play() -> dict:
-    return yaml.safe_load(_text())[0]
+    return yaml_fast.safe_load(_text())[0]
 
 
 def _main_tasks() -> list:

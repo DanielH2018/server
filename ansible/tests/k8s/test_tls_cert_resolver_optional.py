@@ -19,7 +19,7 @@ which is the one where the mistake is reachable.
 
 from __future__ import annotations
 
-import yaml
+from lib import yaml_fast
 from jinja2 import Environment
 
 from _helpers import ALL_VARS, ANSIBLE
@@ -47,7 +47,7 @@ def _routes(macro_call: str, resolver: str) -> list[dict]:
         .from_string(source)
         .render({**_CONTEXT, RESOLVER_VAR: resolver})
     )
-    docs = [d for d in yaml.safe_load_all(rendered) if d]
+    docs = [d for d in yaml_fast.safe_load_all(rendered) if d]
     assert docs, (
         f"rendering {macro_call} with {RESOLVER_VAR}={resolver!r} produced no YAML documents. "
         f"The macro is broken, which is a different failure from the one this file guards."
@@ -123,7 +123,7 @@ def test_the_tls_options_are_named_on_both_branches():
 
 def test_production_still_declares_a_resolver():
     """An empty default would disable prod's certificate issuance everywhere, silently."""
-    value = yaml.safe_load(ALL_VARS.read_text())[RESOLVER_VAR]
+    value = yaml_fast.safe_load(ALL_VARS.read_text())[RESOLVER_VAR]
     assert value == "cloudflare", (
         f"{RESOLVER_VAR} in group_vars/all.yml is {value!r}. Production issues through the "
         f"`cloudflare` ACME resolver defined in the traefik role's static config; emptying the "

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
+from lib import yaml_fast
 
 from _helpers import load_tasks
 
@@ -35,6 +35,6 @@ def assert_every_api_call_pins_a_single_status_code(claim_path: Path) -> None:
 def assert_the_role_declares_an_autodeploy_stance(defaults_path: Path) -> None:
     """Every role under roles/k8s/ must declare `k8s_autodeploy`; the denylist is derived from
     those declarations."""
-    defaults = yaml.safe_load(defaults_path.read_text())
+    defaults = yaml_fast.safe_load(defaults_path.read_text())
     assert defaults["k8s_autodeploy"] is False
     assert defaults["k8s_autodeploy_reason"].strip()

@@ -15,7 +15,7 @@ down".
 
 from __future__ import annotations
 
-import yaml
+from lib import yaml_fast
 from _helpers import K8S_ROLES
 
 ROLE = K8S_ROLES / "netpol-baseline"
@@ -26,7 +26,7 @@ TASK_CODE = "\n".join(
     line for line in TASKS.splitlines() if not line.lstrip().startswith("#")
 )
 PROBE = (ROLE / "templates" / "netpol-probe-slice45-job.yaml.j2").read_text()
-TARGETS = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())[
+TARGETS = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())[
     "netpol_baseline_slice45_targets"
 ]
 
@@ -79,7 +79,7 @@ def test_terraria_is_absent_while_it_is_scaled_to_zero() -> None:
     Paired with the probe check below: the list and the rendered leg have to agree, or the gate
     passes and the probe fails on the same fact.
     """
-    terraria = yaml.safe_load(
+    terraria = yaml_fast.safe_load(
         (K8S_ROLES / "terraria" / "defaults" / "main.yml").read_text()
     )
     if int(terraria["terraria_k8s_replicas"]) == 0:

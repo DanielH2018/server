@@ -31,6 +31,8 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from lib import yaml_fast
+
 from home_assistant.validate_ha_config import ROLE_DIR, HAConfigLoader, assemble_config
 # One insert, not two. This carried a second one adding `scripts/diagnostics` itself, because
 # every module there imported its siblings BARE (`import probe_core`) and that resolves only
@@ -407,7 +409,9 @@ def config_services(config: dict) -> set[str]:
 def load_external_services() -> set[str]:
     if not EXTERNAL_SERVICES_YAML.is_file():
         return set()
-    return set(yaml.safe_load(EXTERNAL_SERVICES_YAML.read_text()).get("services", []))
+    return set(
+        yaml_fast.safe_load(EXTERNAL_SERVICES_YAML.read_text()).get("services", [])
+    )
 
 
 def cmd_refresh(get_states=None, get_services=None) -> int:

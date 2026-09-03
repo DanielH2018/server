@@ -26,7 +26,7 @@ Run: uv run pytest ansible/tests/setup/test_unattended_origins_pattern.py
 import re
 
 import pytest
-import yaml
+from lib import yaml_fast
 from _helpers import ANSIBLE
 
 GROUP_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
@@ -54,13 +54,13 @@ MATCHERS = {
 
 
 def patterns() -> list[str]:
-    value = yaml.safe_load(GROUP_VARS.read_text())[VAR]
+    value = yaml_fast.safe_load(GROUP_VARS.read_text())[VAR]
     assert isinstance(value, list), f"{VAR} must be a list, got {type(value).__name__}"
     return value
 
 
 def test_var_is_defined():
-    assert VAR in yaml.safe_load(GROUP_VARS.read_text()), (
+    assert VAR in yaml_fast.safe_load(GROUP_VARS.read_text()), (
         f"{VAR} is missing from group_vars/all.yml; access.yml renders it unconditionally "
         f"and a tag-scoped run would die on the undefined var."
     )

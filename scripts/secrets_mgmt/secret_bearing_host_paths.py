@@ -35,6 +35,8 @@ import yaml
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from lib import yaml_fast
+
 from lib.repo_paths import ANSIBLE
 
 REGISTRY = ANSIBLE / "secret_rotation.yml"
@@ -65,7 +67,7 @@ def secret_names(registry: _Path = REGISTRY) -> list[str]:
     Excludes the `ignore` tier: those entries are tracked for completeness, not because they
     hold a value whose exposure forces a rotation.
     """
-    data = yaml.safe_load(registry.read_text()) or {}
+    data = yaml_fast.safe_load(registry.read_text()) or {}
     tracked = {
         name
         for name, meta in (data.get("secrets") or {}).items()
@@ -127,7 +129,7 @@ def secret_bearing_host_paths(ansible: _Path = ANSIBLE) -> dict[str, list[str]]:
         if "/archive/" in str(task_file):
             continue
         try:
-            doc = yaml.safe_load(task_file.read_text(errors="replace"))
+            doc = yaml_fast.safe_load(task_file.read_text(errors="replace"))
         except yaml.YAMLError:
             # A task file this cannot parse is not evidence of absence, but a census cannot
             # act on it either. Skipping one file beats failing the whole derivation.

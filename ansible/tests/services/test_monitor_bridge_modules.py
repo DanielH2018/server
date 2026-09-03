@@ -27,7 +27,7 @@ Run: uv run pytest ansible/tests/services/test_monitor_bridge_modules.py
 
 import ast
 
-import yaml
+from lib import yaml_fast
 from _helpers import (
     REPO,
     import_bindings,
@@ -45,7 +45,7 @@ ENTRYPOINT = "check.py"
 
 
 def _ship_list():
-    defaults = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
+    defaults = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
     return list(defaults["monitor_bridge_modules"])
 
 

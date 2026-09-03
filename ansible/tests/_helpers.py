@@ -18,7 +18,7 @@ import subprocess
 from pathlib import Path
 from typing import Iterator
 
-import yaml
+from lib import yaml_fast
 from ansible.plugins.filter.core import FilterModule
 from ansible.plugins.filter.mathstuff import FilterModule as _MathFilters
 from ansible.plugins.test.core import TestModule as _AnsibleTests
@@ -43,7 +43,7 @@ _NESTING_KEYS = ("block", "rescue", "always")
 
 def load_yaml(path: Path):
     """The parsed document, or None for an empty file."""
-    return yaml.safe_load(path.read_text())
+    return yaml_fast.safe_load(path.read_text())
 
 
 def load_tasks(path: Path) -> list[dict]:

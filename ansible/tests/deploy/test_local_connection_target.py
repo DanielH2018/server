@@ -19,7 +19,7 @@ indistinguishable from the passing side alone.
 
 import jinja2
 import pytest
-import yaml
+from lib import yaml_fast
 
 from _helpers import ANSIBLE
 
@@ -33,7 +33,7 @@ SSH_HOST = "daniel-pi"
 
 def _guard_expression():
     """The `that:` text of the wrong-machine assert, as written in the preamble."""
-    tasks = yaml.safe_load(PREAMBLE.read_text())
+    tasks = yaml_fast.safe_load(PREAMBLE.read_text())
     matches = [
         t
         for t in tasks
@@ -170,7 +170,7 @@ def test_the_guard_runs_per_host_and_not_run_once():
     play as a whole. This one asks about each host, so sharing one host's answer would let a
     misdirected host through behind a correctly-targeted one.
     """
-    tasks = yaml.safe_load(PREAMBLE.read_text())
+    tasks = yaml_fast.safe_load(PREAMBLE.read_text())
     guard = next(t for t in tasks if "local-connection" in t.get("name", ""))
     assert not guard.get("run_once"), (
         "the wrong-machine assert became run_once; it must evaluate per host, or a mixed play "

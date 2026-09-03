@@ -15,7 +15,7 @@ the allow rule has to declare a top insert rather than rely on task order alone:
 has ever deployed to already carries the `limit` rule, so a plain append lands after it.
 """
 
-import yaml
+from lib import yaml_fast
 from _helpers import REPO
 
 _REPO = REPO
@@ -97,7 +97,7 @@ def ssh_limiter_problems(tasks: list[dict]) -> list[str]:
 
 
 def _tasks_from_disk() -> list[dict]:
-    return yaml.safe_load(_NETWORK.read_text())
+    return yaml_fast.safe_load(_NETWORK.read_text())
 
 
 def test_the_real_network_tasks_exempt_the_lan():

@@ -14,7 +14,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-import yaml
+from lib import yaml_fast
 from _helpers import REPO
 
 
@@ -35,7 +35,7 @@ _JINJA = re.compile(r"\{\{\s*(.*?)\s*\}\}")
 
 
 def _load(path: Path) -> list:
-    return yaml.safe_load(path.read_text()) or []
+    return yaml_fast.safe_load(path.read_text()) or []
 
 
 def _role_vars(role: str) -> dict:
@@ -43,7 +43,7 @@ def _role_vars(role: str) -> dict:
     for relative in ("defaults/main.yml", "vars/main.yml"):
         path = _K8S_ROLES / role / relative
         if path.is_file():
-            data = yaml.safe_load(path.read_text())
+            data = yaml_fast.safe_load(path.read_text())
             if isinstance(data, dict):
                 merged.update(data)
     return merged

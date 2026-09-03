@@ -36,6 +36,8 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from lib import yaml_fast
+
 from lib import release_bin_groups
 from lib.render_guard import (
     ALL_VARS,
@@ -261,7 +263,7 @@ def _cron_targets(roles: Path = ROLES):
         if "archive" in task_file.parts:
             continue
         try:
-            tasks = yaml.safe_load(task_file.read_text())
+            tasks = yaml_fast.safe_load(task_file.read_text())
         except yaml.YAMLError:
             continue
         if not isinstance(tasks, list):

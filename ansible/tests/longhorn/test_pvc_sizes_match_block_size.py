@@ -33,6 +33,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from lib import yaml_fast
 from _helpers import ANSIBLE
 
 K8S_ROLES = ANSIBLE / "roles" / "k8s"
@@ -52,7 +53,9 @@ IDENT_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 
 def block_size_bytes() -> int:
-    mib = yaml.safe_load(K3S_DEFAULTS.read_text())["k3s_longhorn_backup_block_size"]
+    mib = yaml_fast.safe_load(K3S_DEFAULTS.read_text())[
+        "k3s_longhorn_backup_block_size"
+    ]
     return int(mib) * UNITS["Mi"]
 
 
@@ -68,7 +71,7 @@ def _vars() -> dict:
     sources += list((ANSIBLE / "inventory").rglob("*.yml"))
     for path in sources:
         try:
-            loaded = yaml.safe_load(path.read_text())
+            loaded = yaml_fast.safe_load(path.read_text())
         except yaml.YAMLError:
             continue
         if isinstance(loaded, dict):

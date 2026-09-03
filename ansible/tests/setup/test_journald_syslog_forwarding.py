@@ -14,7 +14,7 @@ the records months later.
 from pathlib import Path
 
 import pytest
-import yaml
+from lib import yaml_fast
 from _helpers import ANSIBLE, SETUP_ROLES
 
 ROLE = SETUP_ROLES / "initial_setup"
@@ -43,7 +43,7 @@ def iter_tasks(tasks):
 
 def copy_content(path: Path, dest: str) -> str:
     """The `content:` of the ansible.builtin.copy task writing `dest`."""
-    for task in iter_tasks(yaml.safe_load(path.read_text())):
+    for task in iter_tasks(yaml_fast.safe_load(path.read_text())):
         copy = task.get("ansible.builtin.copy")
         if isinstance(copy, dict) and copy.get("dest") == dest:
             return copy.get("content", "")
@@ -71,7 +71,7 @@ def exempted_facilities(filter_content: str) -> set[str]:
 
 
 def handler_names(path: Path) -> list[str]:
-    plays = yaml.safe_load(path.read_text())
+    plays = yaml_fast.safe_load(path.read_text())
     for play in plays:
         if isinstance(play, dict) and "handlers" in play:
             return [

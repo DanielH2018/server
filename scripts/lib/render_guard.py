@@ -27,10 +27,11 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import yaml
 from jinja2 import ChainableUndefined, Environment, FileSystemLoader
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib import yaml_fast
 from lib.repo_paths import (
     ALL_VARS,
     ANSIBLE,
@@ -104,7 +105,7 @@ def load_yaml(path: Path) -> dict:
     """
     if not path.is_file():
         return {}
-    loaded = yaml.safe_load(path.read_text())
+    loaded = yaml_fast.safe_load(path.read_text())
     return loaded if isinstance(loaded, dict) else {}
 
 

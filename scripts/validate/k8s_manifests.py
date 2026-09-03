@@ -50,6 +50,8 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from lib import yaml_fast
+
 from lib.render_guard import (
     ALL_VARS,
     ANSIBLE,
@@ -324,7 +326,7 @@ def volume_claim_pvc_names(role: str, ctx: dict) -> list[str]:
     env = make_env([SHARED_TPL])
     for task_file in sorted(tasks_dir.glob("*.yml")):
         try:
-            tasks = yaml.safe_load(task_file.read_text())
+            tasks = yaml_fast.safe_load(task_file.read_text())
         except yaml.YAMLError:
             continue
         if not isinstance(tasks, list):

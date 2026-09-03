@@ -16,7 +16,7 @@ Run: uv run pytest ansible/tests/staging/test_staging_vm.py
 
 import xml.etree.ElementTree as ET
 
-import yaml
+from lib import yaml_fast
 from jinja2 import Environment, FileSystemLoader
 from _helpers import ANSIBLE
 
@@ -28,8 +28,8 @@ STUB_SSH_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI000000000000000000000000000
 
 
 def _vars():
-    merged = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
-    all_vars = yaml.safe_load(
+    merged = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
+    all_vars = yaml_fast.safe_load(
         (ANSIBLE / "inventory" / "group_vars" / "all.yml").read_text()
     )
     for key in ("staging_vm_hostname", "staging_vm_mac", "staging_vm_ip", "sys_user"):
@@ -106,7 +106,7 @@ def test_the_user_data_parses_as_cloud_config():
         "cloud-init ignores a user-data file that does not open with the #cloud-config "
         "line, so the guest would boot with no key and no hostname"
     )
-    doc = yaml.safe_load(rendered)
+    doc = yaml_fast.safe_load(rendered)
     assert doc["hostname"] == _vars()["staging_vm_hostname"]
     assert doc["ssh_pwauth"] is False
     keys = doc["users"][0]["ssh_authorized_keys"]
@@ -114,6 +114,6 @@ def test_the_user_data_parses_as_cloud_config():
 
 
 def test_the_meta_data_parses_and_names_the_guest():
-    doc = yaml.safe_load(_render("cloud-init-meta-data.j2"))
+    doc = yaml_fast.safe_load(_render("cloud-init-meta-data.j2"))
     assert doc["local-hostname"] == _vars()["staging_vm_hostname"]
     assert doc["instance-id"]

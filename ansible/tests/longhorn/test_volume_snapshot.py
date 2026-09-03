@@ -44,7 +44,7 @@ import shutil
 import subprocess
 
 import pytest
-import yaml
+from lib import yaml_fast
 from _helpers import load_tasks as _tasks
 from _helpers import render_expr as _render
 from _volume_snapshot import _CLAIM, _DEFAULTS, _GUARD, _MAIN, _MANIFESTS, _ROLE, _named
@@ -162,7 +162,7 @@ def test_the_role_declares_an_autodeploy_stance() -> None:
 
 
 def _manifests_tasks() -> list[dict]:
-    return yaml.safe_load(_MANIFESTS.read_text()) or []
+    return yaml_fast.safe_load(_MANIFESTS.read_text()) or []
 
 
 def _manifests_index(fragment: str) -> int:

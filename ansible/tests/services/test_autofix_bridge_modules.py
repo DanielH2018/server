@@ -22,7 +22,7 @@ Run: uv run pytest ansible/tests/services/test_autofix_bridge_modules.py
 
 import ast
 
-import yaml
+from lib import yaml_fast
 from _helpers import REPO
 
 ROLE = REPO / "ansible" / "roles" / "k8s" / "autofix-bridge"
@@ -31,7 +31,7 @@ ENTRYPOINT = "autofix.py"
 
 
 def _ship_list():
-    defaults = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
+    defaults = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
     return list(defaults["autofix_bridge_modules"])
 
 

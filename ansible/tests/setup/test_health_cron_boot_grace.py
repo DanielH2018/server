@@ -13,11 +13,11 @@ head start. `longhorn-backup-health` and `uptime-kuma-alive` both paged.
 import re
 import subprocess
 
-import yaml
+from lib import yaml_fast
 from _helpers import ANSIBLE
 
 LIB = ANSIBLE / "roles/setup/initial_setup/files/kuma-push-lib.sh"
-K3S_DEFAULTS = yaml.safe_load(
+K3S_DEFAULTS = yaml_fast.safe_load(
     (ANSIBLE / "roles/setup/k3s/defaults/main.yml").read_text()
 )
 

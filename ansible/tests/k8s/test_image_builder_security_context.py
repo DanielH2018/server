@@ -24,11 +24,12 @@ from __future__ import annotations
 
 import sys
 
-import yaml
 from _helpers import REPO
 
 _REPO = REPO
 sys.path.insert(0, str(_REPO / "scripts"))
+
+from lib import yaml_fast  # noqa: E402
 
 from validate.k8s_manifests import (  # noqa: E402 — needs the path insert above
     ALL_VARS,
@@ -68,7 +69,7 @@ def _build_job() -> dict:
     register_ansible_filters(env)
     text, err = render_or_error(env, _TEMPLATE, ctx)
     assert err is None, f"{_TEMPLATE} failed to render: {err}"
-    doc = yaml.safe_load(text)
+    doc = yaml_fast.safe_load(text)
     assert doc and doc.get("kind") == "Job", (
         f"{_TEMPLATE} no longer renders a Job — this guard is measuring nothing"
     )

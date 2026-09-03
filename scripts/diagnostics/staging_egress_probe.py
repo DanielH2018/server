@@ -49,11 +49,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-import yaml
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib import yaml_fast
 
 from lib.repo_paths import INVENTORY, ROLES
 
@@ -79,7 +80,7 @@ LONGHORN_PROBE_URL = "http://10.43.152.244/v1/nodes"
 
 
 def _load(path: Path) -> dict:
-    return yaml.safe_load(path.read_text()) or {}
+    return yaml_fast.safe_load(path.read_text()) or {}
 
 
 def _pod_ip_on_this_host() -> str | None:

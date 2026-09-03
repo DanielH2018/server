@@ -16,7 +16,7 @@ makes the variable safe is still there.
 
 import re
 
-import yaml
+from lib import yaml_fast
 
 from _helpers import ALL_VARS, ANSIBLE, HOST_VARS
 
@@ -29,7 +29,7 @@ STAGING_FILE = "secrets-staging.yml"
 
 
 def _tasks():
-    tasks = yaml.safe_load(PREAMBLE.read_text())
+    tasks = yaml_fast.safe_load(PREAMBLE.read_text())
     assert tasks, f"{PREAMBLE} parsed to no tasks — check the loader, not the playbook."
     return tasks
 
@@ -92,7 +92,7 @@ def test_a_mixed_play_is_refused_before_anything_is_loaded():
 
 
 def test_production_is_the_default():
-    default = yaml.safe_load(ALL_VARS.read_text())[VAR_NAME]
+    default = yaml_fast.safe_load(ALL_VARS.read_text())[VAR_NAME]
     assert default == PRODUCTION_FILE, (
         f"{ALL_VARS} defaults {VAR_NAME} to {default!r}, expected {PRODUCTION_FILE!r}. A host "
         f"nobody thought about should get the production file and fail closed on a missing "
@@ -101,7 +101,7 @@ def test_production_is_the_default():
 
 
 def test_staging_overrides_it():
-    stage = yaml.safe_load((HOST_VARS / "daniel-stage.yml").read_text())
+    stage = yaml_fast.safe_load((HOST_VARS / "daniel-stage.yml").read_text())
     assert stage.get(VAR_NAME) == STAGING_FILE, (
         f"daniel-stage sets {VAR_NAME} to {stage.get(VAR_NAME)!r}, expected {STAGING_FILE!r}. "
         f"Without the override the staging play loads every production credential into scope."
@@ -110,9 +110,9 @@ def test_staging_overrides_it():
 
 def test_every_file_any_host_names_exists():
     """A typo here fails at decrypt time on the host, which is a long way from the edit."""
-    named = {yaml.safe_load(ALL_VARS.read_text())[VAR_NAME]}
+    named = {yaml_fast.safe_load(ALL_VARS.read_text())[VAR_NAME]}
     for host_file in HOST_VARS.glob("*.yml"):
-        value = (yaml.safe_load(host_file.read_text()) or {}).get(VAR_NAME)
+        value = (yaml_fast.safe_load(host_file.read_text()) or {}).get(VAR_NAME)
         if value:
             named.add(value)
     missing = sorted(n for n in named if not (VARS_DIR / n).is_file())
@@ -127,7 +127,7 @@ def test_no_host_shares_a_secrets_file_with_a_host_in_a_different_cluster():
     sharers = [
         f.stem
         for f in HOST_VARS.glob("*.yml")
-        if (yaml.safe_load(f.read_text()) or {}).get(VAR_NAME) == STAGING_FILE
+        if (yaml_fast.safe_load(f.read_text()) or {}).get(VAR_NAME) == STAGING_FILE
     ]
     assert sharers == ["daniel-stage"], (
         f"{sharers} all load {STAGING_FILE}, expected only daniel-stage. That file is encrypted "

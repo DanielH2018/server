@@ -32,7 +32,7 @@ Run: uv run pytest ansible/tests/longhorn/test_longhorn_restore_drill.py
 import re
 from pathlib import Path
 
-import yaml
+from lib import yaml_fast
 from _helpers import ANSIBLE
 from _helpers import load_yaml
 
@@ -90,7 +90,7 @@ def test_drill_rotates_over_the_declared_backup_set() -> None:
     PVC's storageClassName is immutable and still reads `longhorn` on volumes dropped from the
     backup set on 2026-08-08, so filtering by class would drill volumes nothing backs up.
     """
-    defaults = yaml.safe_load((K3S / "defaults" / "main.yml").read_text())
+    defaults = yaml_fast.safe_load((K3S / "defaults" / "main.yml").read_text())
     assert defaults["k3s_longhorn_restore_drill_pvc"] == "", (
         "the drill is pinned to one volume — rotation is disabled and 24 volumes go unproven"
     )
@@ -384,7 +384,7 @@ def test_drill_is_deployed_wherever_the_heartbeat_is() -> None:
 
 def test_drill_runs_daily() -> None:
     """A monthly drill leaves a broken restore path undetected for weeks."""
-    defaults = yaml.safe_load((K3S / "defaults" / "main.yml").read_text())
+    defaults = yaml_fast.safe_load((K3S / "defaults" / "main.yml").read_text())
     minute, hour, dom, month, dow = defaults["k3s_longhorn_restore_drill_cron"].split()
     assert (dom, month, dow) == ("*", "*", "*"), (
         "the drill must run every night for the rotation to cover the fleet"
@@ -401,7 +401,7 @@ def test_cadence_and_staleness_window_move_together() -> None:
     Raising the cadence without lowering the window buys zero detection latency, which is the
     trap this pairing exists to prevent.
     """
-    defaults = yaml.safe_load((K3S / "defaults" / "main.yml").read_text())
+    defaults = yaml_fast.safe_load((K3S / "defaults" / "main.yml").read_text())
     max_age = defaults["k3s_longhorn_restore_drill_max_age_days"]
     assert 2 <= max_age <= 7, (
         f"max_age_days is {max_age}: a nightly drill should tolerate a couple of bad nights, "

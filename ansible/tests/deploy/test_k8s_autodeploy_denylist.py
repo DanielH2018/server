@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 
 import pytest
-import yaml
+from lib import yaml_fast
 from ansible.errors import AnsibleFilterError
 
 from k8s_autodeploy import SHARED_ROLES, k8s_autodeploy_denylist
@@ -269,7 +269,7 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
     # Every derived name must be a real role that really says false — catches a filter that
     # invents, mangles or mis-cases names.
     for role in denied:
-        data = yaml.safe_load(
+        data = yaml_fast.safe_load(
             (_ANSIBLE / "roles/k8s" / role / "defaults/main.yml").read_text()
         )
         assert data["k8s_autodeploy"] is False
@@ -289,7 +289,7 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
         and role_dir.name not in SHARED_ROLES
         and (role_dir / "defaults" / "main.yml").is_file()
         and (
-            yaml.safe_load((role_dir / "defaults" / "main.yml").read_text()) or {}
+            yaml_fast.safe_load((role_dir / "defaults" / "main.yml").read_text()) or {}
         ).get("k8s_autodeploy")
         is False
     ]

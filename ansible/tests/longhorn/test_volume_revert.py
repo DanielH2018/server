@@ -45,7 +45,7 @@ import shutil
 import subprocess
 
 import pytest
-import yaml
+from lib import yaml_fast
 from _helpers import REPO as _REPO
 from _helpers import load_tasks as _tasks
 from _helpers import render_expr as _render
@@ -150,7 +150,7 @@ def test_the_role_is_absent_from_the_dry_run_refusal_list() -> None:
     """`k8s_dry_run_unsupported` keys on `ansible_run_tags` and cannot see a dependency-reached
     role, so listing this one would buy nothing. It guards itself on `k8s_no_mutate` instead —
     the choice volume-claim, image-builder, cronjob-gate and volume-snapshot all make."""
-    listed = yaml.safe_load(
+    listed = yaml_fast.safe_load(
         (_REPO / "ansible/inventory/group_vars/all.yml").read_text()
     )["k8s_dry_run_unsupported"]
     assert "volume-revert" not in listed

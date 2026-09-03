@@ -16,10 +16,11 @@ from __future__ import annotations
 
 import sys
 
-import yaml
 from _helpers import REPO
 
 sys.path.insert(0, str(REPO / "scripts"))
+
+from lib import yaml_fast
 
 from validate.k8s_manifests import (
     ALL_VARS,
@@ -63,7 +64,7 @@ def _render(template: str, built_images: list[dict] | None) -> dict:
     register_ansible_filters(env)
     rendered, err = render_or_error(env, template, ctx)
     assert rendered is not None, f"{template} failed to render: {err}"
-    return yaml.safe_load(rendered)
+    return yaml_fast.safe_load(rendered)
 
 
 def _stamp(doc: dict) -> str:

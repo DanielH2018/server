@@ -15,7 +15,7 @@ Each of them fails green — the deploy succeeds and DNS goes down anyway:
 from __future__ import annotations
 
 
-import yaml
+from lib import yaml_fast
 
 from _k8s_render import rendered_docs
 from _helpers import REPO as _REPO
@@ -139,7 +139,7 @@ def _tasks() -> list[dict]:
 
 
 def _roll_one_tasks() -> list[dict]:
-    return list(_flatten_tasks(yaml.safe_load(_ROLL_ONE.read_text())))
+    return list(_flatten_tasks(yaml_fast.safe_load(_ROLL_ONE.read_text())))
 
 
 def test_the_shared_role_does_not_restart_pihole():
@@ -233,7 +233,7 @@ def test_roll_one_skips_an_instance_this_run_just_created():
     assert any(
         "created" in str(t.get("when", ""))
         and "manifests_apply" in str(t.get("when", ""))
-        for t in yaml.safe_load(_ROLL_ONE.read_text())
+        for t in yaml_fast.safe_load(_ROLL_ONE.read_text())
     ), (
         "roll_one.yml must skip the restart+wait for a Deployment this run just created — "
         "restarting it races the initial rollout"

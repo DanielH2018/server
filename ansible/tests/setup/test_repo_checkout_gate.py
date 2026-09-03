@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import pytest
 import yaml
+from lib import yaml_fast
 
 from _helpers import ALL_VARS, HOST_VARS, SETUP_ROLES
 
@@ -117,7 +118,7 @@ def _census() -> list[tuple[str, str, object, list[str]]]:
     found = []
     for tasks_file in sorted(SETUP_ROLES.glob("*/tasks/*.yml")):
         try:
-            parsed = yaml.safe_load(tasks_file.read_text())
+            parsed = yaml_fast.safe_load(tasks_file.read_text())
         except yaml.YAMLError:
             continue
         for task in _flatten(parsed):
@@ -168,7 +169,7 @@ def test_the_fixed_tasks_still_exist():
     names = set()
     for tasks_file in SETUP_ROLES.glob("*/tasks/*.yml"):
         try:
-            parsed = yaml.safe_load(tasks_file.read_text())
+            parsed = yaml_fast.safe_load(tasks_file.read_text())
         except yaml.YAMLError:
             continue
         names |= {t.get("name") for t in _flatten(parsed)}
@@ -237,9 +238,9 @@ def test_the_gate_is_accepted_in_both_when_forms():
 
 def test_daniel_stage_is_the_host_that_declares_no_checkout():
     """The gate is worthless if no host sets it false."""
-    stage = yaml.safe_load((HOST_VARS / "daniel-stage.yml").read_text())
+    stage = yaml_fast.safe_load((HOST_VARS / "daniel-stage.yml").read_text())
     assert stage[GATE] is False
-    defaults = yaml.safe_load(ALL_VARS.read_text())
+    defaults = yaml_fast.safe_load(ALL_VARS.read_text())
     assert defaults[GATE] is True, (
         "the default must stay true, or every host skips these"
     )
@@ -248,5 +249,5 @@ def test_daniel_stage_is_the_host_that_declares_no_checkout():
 def test_daniel_pi_keeps_its_checkout_despite_being_a_remote_host():
     """Verified against the live host on 2026-09-02: /home/ubuntu/server/ansible exists on the
     Pi. Deriving this gate from `ansible_connection` would have skipped tasks that work there."""
-    pi = yaml.safe_load((HOST_VARS / "daniel-pi.yml").read_text())
+    pi = yaml_fast.safe_load((HOST_VARS / "daniel-pi.yml").read_text())
     assert pi.get(GATE, True) is True

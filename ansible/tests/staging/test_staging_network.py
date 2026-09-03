@@ -23,7 +23,7 @@ import ipaddress
 import xml.etree.ElementTree as ET
 
 import pytest
-import yaml
+from lib import yaml_fast
 from jinja2 import Environment, FileSystemLoader
 from _helpers import ANSIBLE
 
@@ -46,8 +46,8 @@ RESERVED = [
 
 def _vars():
     """Role defaults plus the group_vars the template reads, as Ansible would resolve them."""
-    merged = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
-    all_vars = yaml.safe_load(
+    merged = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
+    all_vars = yaml_fast.safe_load(
         (ANSIBLE / "inventory" / "group_vars" / "all.yml").read_text()
     )
     for key in ("staging_vm_hostname", "staging_vm_mac", "staging_vm_ip"):

@@ -18,7 +18,7 @@ the filenames — must stay unique.
 import json
 import re
 
-import yaml
+from lib import yaml_fast
 from jinja2 import Environment, FileSystemLoader
 from _helpers import ANSIBLE
 
@@ -77,7 +77,7 @@ STUBS = {
 # make every assertion below a statement about this file rather than about what deploys — the
 # same "measured the wrong artifact" shape these guards exist to catch. A stubbed 360 would have
 # reported a healthy resend on a monitor the role actually holds at 0.
-ROLE_DEFAULTS = yaml.safe_load(
+ROLE_DEFAULTS = yaml_fast.safe_load(
     (ANSIBLE / "roles/k8s/uptime-kuma/defaults/main.yml").read_text()
 )
 
@@ -89,7 +89,7 @@ def _entities() -> dict[str, dict]:
         keep_trailing_newline=True,
     )
     rendered = env.get_template(TEMPLATE.name).render(**{**ROLE_DEFAULTS, **STUBS})
-    doc = yaml.safe_load(rendered)
+    doc = yaml_fast.safe_load(rendered)
     return {name: json.loads(body) for name, body in doc["stringData"].items()}
 
 

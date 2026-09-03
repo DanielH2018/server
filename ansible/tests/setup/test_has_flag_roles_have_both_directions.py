@@ -23,6 +23,7 @@ import re
 
 import pytest
 import yaml
+from lib import yaml_fast
 from _helpers import ANSIBLE
 
 
@@ -53,7 +54,7 @@ def _dispatcher_roles():
         if not main.is_file():
             continue
         try:
-            tasks = yaml.safe_load(main.read_text()) or []
+            tasks = yaml_fast.safe_load(main.read_text()) or []
         except yaml.YAMLError:
             continue
         if not isinstance(tasks, list):

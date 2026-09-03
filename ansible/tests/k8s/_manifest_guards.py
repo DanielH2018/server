@@ -7,7 +7,7 @@ serve. Split from `test_k8s_manifests.py` on 2026-09-02.
 
 from pathlib import Path
 
-import yaml
+from lib import yaml_fast
 from jinja2 import Environment, FileSystemLoader
 
 from validate.k8s_manifests import ansible_bool, make_lookup, register_ansible_filters
@@ -18,11 +18,11 @@ K3S = ANSIBLE / "roles" / "setup" / "k3s"
 
 K8S = ANSIBLE / "roles" / "k8s"
 
-ALL_VARS = yaml.safe_load(
+ALL_VARS = yaml_fast.safe_load(
     (ANSIBLE / "inventory" / "group_vars" / "all.yml").read_text()
 )
 
-BOX_VARS = yaml.safe_load(
+BOX_VARS = yaml_fast.safe_load(
     (ANSIBLE / "inventory" / "host_vars" / "daniel-box.yml").read_text()
 )
 
@@ -65,7 +65,7 @@ def _role_defaults(role: str) -> dict:
     """
     values = {
         **ALL_VARS,
-        **yaml.safe_load((K8S / role / "defaults" / "main.yml").read_text()),
+        **yaml_fast.safe_load((K8S / role / "defaults" / "main.yml").read_text()),
     }
     env = Environment(loader=FileSystemLoader([str(ANSIBLE / "templates")]))
     # `bool` is an Ansible filter, not a Jinja builtin — a group_var using it (k8s_no_mutate)
@@ -80,4 +80,4 @@ def _role_defaults(role: str) -> dict:
     return values
 
 
-K3S_DEFAULTS = yaml.safe_load((K3S / "defaults" / "main.yml").read_text())
+K3S_DEFAULTS = yaml_fast.safe_load((K3S / "defaults" / "main.yml").read_text())

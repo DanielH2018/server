@@ -23,7 +23,7 @@ the test is what makes them one value.
 
 import re
 
-import yaml
+from lib import yaml_fast
 from _helpers import REPO
 
 _REPO = REPO
@@ -46,7 +46,7 @@ def shell_assignments(source: str) -> dict[str, str]:
 
 
 def test_the_remote_script_uses_the_paths_the_role_provisions():
-    defaults = yaml.safe_load(_DEFAULTS.read_text())
+    defaults = yaml_fast.safe_load(_DEFAULTS.read_text())
     literals = shell_assignments(_REMOTE.read_text())
     for shell_name, ansible_name in (
         ("REPO", "hypervisor_staging_gate_repo"),
@@ -87,7 +87,7 @@ def test_the_dispatcher_execs_the_installed_runner_not_the_checkouts_copy():
     of the gate, and rewinding that checkout removed the runner outright — eleven backfill runs
     came back 127 and read as an authentication failure.
     """
-    defaults = yaml.safe_load(_DEFAULTS.read_text())
+    defaults = yaml_fast.safe_load(_DEFAULTS.read_text())
     # The exec that hands over the request, not the `exec 0</dev/null` that closes stdin.
     exec_line = next(
         line
@@ -115,7 +115,7 @@ def test_the_gate_does_not_deploy_from_the_hosts_own_checkout():
     # The finding itself, stated as a property rather than as a path comparison: whatever the
     # two files agree on, it must not be daniel-server's production checkout. Agreeing on the
     # wrong value is exactly how M-2 read green for as long as it did.
-    defaults = yaml.safe_load(_DEFAULTS.read_text())
+    defaults = yaml_fast.safe_load(_DEFAULTS.read_text())
     assert defaults["hypervisor_staging_gate_repo"] != "/home/ubuntu/server", (
         "the staging gate must not render from the host's own checkout — it fast-forwards the "
         "tree it deploys from to the SHA under test (2026-08-29 review M-2)"

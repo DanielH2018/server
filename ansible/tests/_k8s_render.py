@@ -12,11 +12,12 @@ from __future__ import annotations
 
 import sys
 
-import yaml
 from _helpers import REPO
 
 _REPO = REPO
 sys.path.insert(0, str(_REPO / "scripts"))
+
+from lib import yaml_fast  # noqa: E402
 
 from validate.k8s_manifests import (  # noqa: E402 — needs the path insert above
     ALL_VARS,
@@ -62,7 +63,7 @@ def _render_all():
             if rendered is None:
                 raise AssertionError(f"{role}/{tpl.name} failed to render: {err}")
             _TEXTS.append((role, tpl.name, rendered))
-            for doc in yaml.safe_load_all(rendered):
+            for doc in yaml_fast.safe_load_all(rendered):
                 if isinstance(doc, dict) and doc.get("kind"):
                     yield role, tpl.name, doc
 

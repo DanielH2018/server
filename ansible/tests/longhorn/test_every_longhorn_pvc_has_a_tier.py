@@ -22,6 +22,7 @@ Run: uv run pytest ansible/tests/longhorn/test_every_longhorn_pvc_has_a_tier.py
 """
 
 import yaml
+from lib import yaml_fast
 
 from _helpers import SETUP_ROLES
 from _k8s_render import (
@@ -65,7 +66,7 @@ _KNOWN_LONGHORN_PVCS = frozenset(
 
 
 def _k3s_defaults() -> dict:
-    return yaml.safe_load((K3S / "defaults" / "main.yml").read_text())
+    return yaml_fast.safe_load((K3S / "defaults" / "main.yml").read_text())
 
 
 def _base_context() -> dict:
@@ -138,7 +139,7 @@ def _volume_claim_longhorn_pvcs(base: dict) -> set[str]:
         namespace = ctx.get("k8s_namespace", "homelab")
         for task_file in sorted(tasks_dir.glob("*.yml")):
             try:
-                tasks = yaml.safe_load(task_file.read_text())
+                tasks = yaml_fast.safe_load(task_file.read_text())
             except yaml.YAMLError:
                 continue
             if not isinstance(tasks, list):

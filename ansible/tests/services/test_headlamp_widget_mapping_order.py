@@ -20,7 +20,7 @@ Run: uv run pytest ansible/tests/services/test_headlamp_widget_mapping_order.py
 
 import re
 
-import yaml
+from lib import yaml_fast
 from _helpers import ANSIBLE
 
 HOMEPAGE = ANSIBLE / "roles" / "k8s" / "homepage"
@@ -42,7 +42,7 @@ MAPPING_RE = re.compile(
 
 def query_names() -> list[str]:
     """The counter names in the order the query's `or` operands produce them."""
-    query = yaml.safe_load(DEFAULTS.read_text())[QUERY_VAR]
+    query = yaml_fast.safe_load(DEFAULTS.read_text())[QUERY_VAR]
     return LABEL_REPLACE_RE.findall(query)
 
 

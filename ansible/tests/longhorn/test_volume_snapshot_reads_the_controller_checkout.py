@@ -22,11 +22,12 @@ from __future__ import annotations
 import sys
 
 import pytest
-import yaml
 from _helpers import REPO
 
 _REPO = REPO
 sys.path.insert(0, str(_REPO / "ansible" / "tests"))
+
+from lib import yaml_fast  # noqa: E402
 
 _ROLE = _REPO / "ansible" / "roles" / "k8s" / "volume-snapshot"
 _CONTROLLER = "localhost"
@@ -78,7 +79,7 @@ def undelegated_checkout_reads(tasks) -> list[str]:
 
 
 def _role_tasks(name: str):
-    return yaml.safe_load((_ROLE / "tasks" / name).read_text())
+    return yaml_fast.safe_load((_ROLE / "tasks" / name).read_text())
 
 
 @pytest.mark.parametrize(

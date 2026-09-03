@@ -31,11 +31,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-import yaml
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib import yaml_fast
 
 from lib.repo_paths import INVENTORY, REPO
 
@@ -82,13 +82,18 @@ def read_domain() -> str:
 
 def load_vars(domain: str | None = None) -> dict:
     """Collect the handful of scalars needed to resolve hostnames and pick addresses."""
-    all_vars = yaml.safe_load((INVENTORY / "group_vars" / "all.yml").read_text()) or {}
+    all_vars = (
+        yaml_fast.safe_load((INVENTORY / "group_vars" / "all.yml").read_text()) or {}
+    )
     out = {
         "domain": domain or read_domain(),
         "k3s_metallb_ingress_vip": all_vars["k3s_metallb_ingress_vip"],
     }
     for host in (*LOCAL_NAME_HOSTS, "daniel-pi"):
-        hv = yaml.safe_load((INVENTORY / "host_vars" / f"{host}.yml").read_text()) or {}
+        hv = (
+            yaml_fast.safe_load((INVENTORY / "host_vars" / f"{host}.yml").read_text())
+            or {}
+        )
         out[f"{host}:server_ip"] = hv["server_ip"]
         out[f"{host}:containers_list"] = hv.get("containers_list", []) or []
     return out

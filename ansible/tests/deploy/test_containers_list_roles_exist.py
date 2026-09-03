@@ -15,7 +15,7 @@ Run: uv run pytest ansible/tests/deploy/test_containers_list_roles_exist.py
 """
 
 import pytest
-import yaml
+from lib import yaml_fast
 from _helpers import ANSIBLE
 
 
@@ -28,7 +28,7 @@ def _entries():
     for path in sorted(
         p for p in HOST_VARS.glob("*.yml") if not p.name.startswith("_")
     ):
-        for entry in (yaml.safe_load(path.read_text()) or {}).get(
+        for entry in (yaml_fast.safe_load(path.read_text()) or {}).get(
             "containers_list"
         ) or []:
             if entry.get("name"):
