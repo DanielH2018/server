@@ -103,6 +103,15 @@ nothing was deployed, and re-running is safe; this one is not a resume point. It
 failed host — the same number as the tag miss, which is how a run whose manifests both applied
 was reported as `a derived tag matched no service, so nothing deployed` (issue #840).
 
+**Another `deploy-failed` line names `deploy_tags.py hosts` itself**: `deploy_tags.py hosts
+failed before any deploy.sh ran; nothing was touched`. That command failing (a crash, a bad
+environment) used to return bare exit 1 from `land.sh`'s `deploy_by_host`, colliding with
+`deploy.sh`'s own rare `cd $repo_root || exit 1` — the two were indistinguishable from
+`land.sh`'s side even though only one of them ever ran a deploy (issue #1016). `land.sh` now
+reserves `HOST_LOOKUP_FAILED=21` for it, the same shape as `PLAYBOOK_FAILED=20` above. Unlike
+that one, this line means exactly what every other `deploy-failed` means — nothing was
+deployed, and re-running is safe.
+
 Every run also writes one logfmt line to syslog on exit (`logger -t landing-annotation`):
 the PR, the merge SHA, the verdict, and seconds spent in each phase — `wait_merge`,
 `wait_ci`, `tick`, `deploy`, `total` — plus `lock`, the seconds spent in tick or deploy
