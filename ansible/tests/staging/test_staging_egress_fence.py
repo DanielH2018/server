@@ -30,8 +30,8 @@ import re
 import xml.etree.ElementTree as ET
 from urllib.parse import urlparse
 
-import staging_egress_probe
 import yaml
+from diagnostics import staging_egress_probe
 
 from _helpers import ALL_VARS, HOST_VARS, ROLES, jinja_env
 

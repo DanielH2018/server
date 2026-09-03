@@ -5,9 +5,9 @@ normally — nothing on disk resolves that name until something loads it by path
 test file used to carry its own `importlib.util.spec_from_file_location` copy of that
 dance; this collapses it to one load per script, done here at collection time (pytest
 imports conftest.py before it collects any test module in this directory), and
-registers each into `sys.modules` so a plain `import probe` / `import postflight` in a
-test file resolves to this same object — standard `importlib` usage, not a special pytest
-hook.
+registers each into `sys.modules` so a plain `import probe` / `import postflight` /
+`import grafana_panel_report` in a test file resolves to this same object — standard
+`importlib` usage, not a special pytest hook.
 """
 
 import importlib.util
@@ -31,9 +31,10 @@ def _load_by_path(name, filename):
     return module
 
 
-# probe.py and postflight.py are flat scripts in `scripts/diagnostics/`, and that directory
-# is deliberately NOT on pythonpath (see pyproject.toml), so nothing on disk resolves the
-# names `probe` / `postflight` until something loads them by path. Their subcommand modules
+# probe.py, postflight.py and grafana_panel_report.py are flat scripts in
+# `scripts/diagnostics/`, and that directory is deliberately NOT on pythonpath (see
+# pyproject.toml), so nothing on disk resolves the names `probe` / `postflight` /
+# `grafana_panel_report` until something loads them by path. Their subcommand modules
 # need no such load: `probe_lib/` is a namespace package under `scripts/` and every caller
 # spells `from diagnostics.probe_lib import core`, so normal import machinery caches one
 # object under one sys.modules key. probe.py loads first because the test suites were
@@ -41,6 +42,14 @@ def _load_by_path(name, filename):
 probe = _load_by_path("probe", "diagnostics/probe.py")
 
 postflight = _load_by_path("postflight", "diagnostics/postflight.py")
+
+# grafana_panel_report.py is imported by bare name from two test modules in that same
+# suite — test_grafana_panel_report.py and test_ui_smoke.py. Until this load existed they
+# resolved only as a side effect of collecting a testpath in `ansible/tests`, so
+# `uv run pytest scripts` failed at collection while the whole suite passed.
+grafana_panel_report = _load_by_path(
+    "grafana_panel_report", "diagnostics/grafana_panel_report.py"
+)
 
 # The validators need no load here. `scripts/` is on pythonpath, `validate/` is a namespace
 # package under it, and `from validate.k8s_manifests import ...` is spelled the same way by
