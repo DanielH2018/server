@@ -35,11 +35,19 @@ spec:
       # reach it — they resolve `.local.` names through Pi-hole — because the gate here is
       # the hostname, not a ClientIP matcher.
       #
-      # Host-only, no PathPrefix, matching the retired router. The documented upstream form
-      # adds (PathPrefix(`/dashboard`) || PathPrefix(`/api`)), which leaves a bare
-      # `https://traefik.local.<domain>/` at 404 — the exact symptom that sent someone
-      # looking for this route in the first place.
-      match: "Host(`traefik.local.{{ domain }}`)"
+      # DECIDED: /api is deliberately NOT routed, and the dashboard SPA is knowingly
+      # non-functional as a result (issue #951). `api@internal`'s `/api/http/routers`
+      # prints every router's `rule` string verbatim — Traefik v3.7.11 does not redact it —
+      # and two file-provider routers in livesync-gate-secret.yaml.j2 embed
+      # `livesync_sync_token` and the `homelab_mcp_token` bearer in `Header()` matchers. A
+      # Host-only match with no PathPrefix at all (the shape this block carried before
+      # #951) routes that same `/api` surface, which is exactly how those two credentials
+      # were readable behind a one_factor Authelia session. The upstream-documented form
+      # `(PathPrefix(`/dashboard`) || PathPrefix(`/api`))` is rejected for the same reason.
+      # This route exists only so `traefik.local.<domain>` does not fall through to a
+      # default backend — restoring `/api` re-exposes both credentials to any Authelia
+      # session, so don't add it back to make the SPA work again.
+      match: "Host(`traefik.local.{{ domain }}`) && PathPrefix(`/dashboard`)"
       middlewares:
         # rate-limit is per-router on this edge, not on the https entrypoint. default-headers
         # is NOT listed: it is already global on the entrypoint (static-config.yaml.j2), so

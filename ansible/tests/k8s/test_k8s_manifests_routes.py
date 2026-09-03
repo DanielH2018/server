@@ -327,3 +327,52 @@ def test_no_monitoring_route_serves_a_bare_path_prefix():
         f"{sorted(offenders)}. Narrow the prefix to the endpoint the caller actually reads, or "
         "add the route to _WIDE_MONITORING_ROUTES with the reason."
     )
+
+
+def _dashboard_route_match() -> str:
+    rendered = _render(
+        K8S / "traefik" / "templates" / "dashboard-ingressroute.yaml.j2",
+        domain="example.com",
+        **ALL_VARS,
+    )
+    doc = yaml.safe_load(rendered)
+    return doc["spec"]["routes"][0]["match"]
+
+
+def _assert_dashboard_match_does_not_serve_api(match: str) -> None:
+    """`api@internal` answers `/api/http/routers` with every router's `rule` string verbatim
+    (issue #951) — two file-provider routers in livesync-gate-secret.yaml.j2 embed
+    `livesync_sync_token` and the `homelab_mcp_token` bearer in `Header()` matchers, so a
+    match that routes `/api` behind this Authelia session reads both credentials back.
+    """
+    assert "PathPrefix(`/dashboard`)" in match, (
+        f"dashboard route match {match!r} does not scope to /dashboard"
+    )
+    assert "/api" not in match, (
+        f"dashboard route match {match!r} routes /api, which reprints the livesync and "
+        "homelab-mcp credentials embedded in livesync-gate-secret.yaml.j2's Header() rules"
+    )
+
+
+def test_dashboard_route_does_not_serve_api():
+    """The rendered dashboard IngressRoute must pass the guard above."""
+    _assert_dashboard_match_does_not_serve_api(_dashboard_route_match())
+
+
+def test_dashboard_route_guard_rejects_an_api_prefix_fixture():
+    """Red-proof: a rule shaped like the pre-#951 route (Host-only, no PathPrefix at all) or
+    the upstream-documented form (`PathPrefix(`/dashboard`) || PathPrefix(`/api`)`) both route
+    `/api` and must fail the guard above, not pass it silently.
+    """
+    for offending_match in [
+        "Host(`traefik.local.example.com`)",
+        "Host(`traefik.local.example.com`) && "
+        "(PathPrefix(`/dashboard`) || PathPrefix(`/api`))",
+    ]:
+        try:
+            _assert_dashboard_match_does_not_serve_api(offending_match)
+        except AssertionError:
+            continue
+        raise AssertionError(
+            f"guard accepted {offending_match!r}, which routes /api and should be rejected"
+        )
