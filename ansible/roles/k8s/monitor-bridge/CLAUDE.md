@@ -634,7 +634,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     itself gave up on. **Arm 2, server-side:**
     `sum by (reason) (increase({__name__=~"loki_discarded_samples_total"}[1h]))` read directly
     from Loki's own distributor (`job=loki-homelab`) — entries Loki rejected that no shipper
-    ever attributed to itself. Measured 2026-09-03: Loki discarded 161,660 samples server-side
+    ever attributed to itself. Measured 2026-09-03: Loki discarded ~161k samples server-side
     under `reason="too_far_behind"` in the trailing 24h, where the client-side counter saw only
     1,027 in the same window, entirely on `job=alloy-pi` under the unrelated
     `reason="ingester_error"` — the client-side arm alone gave no visibility into the
@@ -653,9 +653,11 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     **Reading a `too_far_behind` page:** a shipper's FIRST start re-tails every current file
     from offset 0, and Loki rejects the already-ingested history as "too far behind" — 193,348
     at the 2026-09-02 cluster Alloy cutover, nothing lost, counted client-side under
-    `reason="ingester_error"` (the client-side counter folds `too_far_behind` into
-    `ingester_error` regardless of what Loki itself calls the rejection — the label only ever
-    surfaces as `too_far_behind` on the SERVER-side arm). The 2026-09-03 #993 burst above lines
+    `reason="ingester_error"`. INFERRED from the observed labels, not read from Alloy's source:
+    the client-side counter appears to fold `too_far_behind` into `ingester_error`, since that
+    label only ever surfaces as `too_far_behind` on the SERVER-side arm. Read the shipper's own
+    source before relying on the mapping for anything beyond reading a page.
+    The 2026-09-03 #993 burst above lines
     up with the same shape: `alloy-pi`'s own uptime measured 58,756s (~16.3h) at discovery time,
     inside the 24h window the burst was measured over, and the client-side drops that same
     window were 100% `job=alloy-pi`. A shipper restart in the window is consistent with a
